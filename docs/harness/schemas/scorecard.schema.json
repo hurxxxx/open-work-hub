@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://doowon.local/docs/harness/schemas/scorecard.schema.json",
+  "title": "Scorecard",
+  "type": "object",
+  "required": [
+    "scenario_id",
+    "candidate_version",
+    "baseline_version",
+    "status",
+    "metrics",
+    "regressions",
+    "gate_decision",
+    "generated_at"
+  ],
+  "properties": {
+    "scenario_id": { "type": "string", "minLength": 1 },
+    "candidate_version": { "type": "string", "minLength": 1 },
+    "baseline_version": { "type": "string", "minLength": 1 },
+    "status": {
+      "type": "string",
+      "enum": ["green", "yellow", "red"]
+    },
+    "metrics": {
+      "type": "object",
+      "additionalProperties": { "type": "number" }
+    },
+    "regressions": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "gate_decision": {
+      "type": "string",
+      "enum": ["go", "hold-until-review", "hold", "rollback-candidate"]
+    },
+    "generated_at": { "type": "string", "format": "date-time" }
+  },
+  "additionalProperties": true
+}

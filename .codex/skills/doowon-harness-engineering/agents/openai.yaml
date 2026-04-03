@@ -1,0 +1,4 @@
+interface:
+  display_name: "Doowon Harness"
+  short_description: "Apply the repository's scenario-based harness workflow"
+  default_prompt: "Map this task to a scenario, read the source-of-truth harness docs, and answer with scenario_id, changed surfaces, tests/evals, and open risks."

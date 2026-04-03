@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://doowon.local/docs/harness/schemas/hook-decision.schema.json",
+  "title": "HookDecision",
+  "type": "object",
+  "required": [
+    "kind",
+    "reason"
+  ],
+  "properties": {
+    "kind": {
+      "type": "string",
+      "enum": ["allow", "deny", "async-notice"]
+    },
+    "reason": { "type": "string", "minLength": 1 },
+    "tool_name": { "type": "string" },
+    "path": { "type": "string" },
+    "command": { "type": "string" },
+    "follow_up": {
+      "type": "array",
+      "items": { "type": "string" }
+    }
+  },
+  "additionalProperties": true
+}

@@ -1,2 +1,6 @@
 .DS_Store
 legacy_ai_portal_prototype/
+CLAUDE.local.md
+.claude/settings.local.json
+.claude/state/
+.claude/agent-memory-local/

@@ -1,0 +1,55 @@
+{
+  "autoMemoryEnabled": false,
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/pre_tool_use_bash_guard.py",
+            "timeout": 30,
+            "statusMessage": "Checking command policy"
+          }
+        ]
+      },
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/pre_tool_use_write_guard.py",
+            "timeout": 30,
+            "statusMessage": "Checking edit policy"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/post_tool_use_audit.py",
+            "timeout": 30,
+            "async": true,
+            "statusMessage": "Recording harness-sensitive edits"
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/notify_eval_completion.py",
+            "timeout": 30,
+            "async": true,
+            "statusMessage": "Logging eval completion"
+          }
+        ]
+      }
+    ]
+  }
+}

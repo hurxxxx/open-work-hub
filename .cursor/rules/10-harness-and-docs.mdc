@@ -1,0 +1,16 @@
+---
+description: Rules for harness docs, adapter files, and repository-wide AI consistency.
+globs:
+  - "docs/**/*.md"
+  - ".claude/**/*"
+  - ".github/copilot-instructions.md"
+  - "CLAUDE.md"
+  - "agents.md"
+---
+
+When changing docs or adapter files:
+
+- `docs/*` are the source of truth and adapter files are projections.
+- Keep `CLAUDE.md`, `.github/copilot-instructions.md`, and `.cursor/rules/*` aligned with the same rules.
+- Keep terminology consistent: Korean prose, English identifiers for scenario/type/version keys.
+- Do not create prompt-only or workflow-only changes without matching scenario/eval updates.
