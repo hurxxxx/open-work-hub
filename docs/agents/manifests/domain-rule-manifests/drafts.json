@@ -2,8 +2,8 @@
   "$schema": "https://doowon.local/docs/harness/schemas/domain-rule-manifest.schema.json",
   "domain_id": "drafts",
   "path_prefixes": [
-    "packages/api/drafts/",
-    "packages/web/drafts/",
+    "apps/api/src/ai_portal_api/domains/drafts/",
+    "apps/web/src/domains/drafts/",
     "docs/harness/scenarios/draft-generation.md",
     "docs/harness/manifests/scenarios/draft-generation.json",
     "docs/harness/prompt-bundles/draft-generation/",

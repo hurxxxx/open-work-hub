@@ -8,8 +8,8 @@
 - `apps/web/AGENTS.md`
 - `apps/worker/AGENTS.md`
 - `apps/ops/AGENTS.md`
-- `packages/api/<domain>/AGENTS.md`
-- `packages/web/<domain>/AGENTS.md`
+- `apps/api/src/<python_app>/domains/<domain>/AGENTS.md`
+- `apps/web/src/domains/<domain>/AGENTS.md`
 
 ## 최소 섹션
 

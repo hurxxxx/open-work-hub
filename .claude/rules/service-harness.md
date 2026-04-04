@@ -2,10 +2,12 @@
 paths:
   - "docs/harness/**/*"
   - "apps/ops/**/*"
-  - "packages/api/documents/**/*"
-  - "packages/api/search/**/*"
-  - "packages/api/plm/**/*"
-  - "packages/api/drafts/**/*"
+  - "apps/api/src/ai_portal_api/domains/documents/**/*"
+  - "apps/api/src/ai_portal_api/domains/plm/**/*"
+  - "apps/api/src/ai_portal_api/domains/drafts/**/*"
+  - "apps/api/src/ai_portal_api/domains/ocr/**/*"
+  - "apps/api/src/ai_portal_api/domains/wiki_pms/**/*"
+  - "apps/worker/src/ai_portal_worker/tasks/**/*"
 ---
 
 # Service Harness Rules

@@ -1,0 +1,30 @@
+{
+  "name": "ops",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "apps/ops/src",
+  "projectType": "application",
+  "tags": ["scope:ops", "type:app"],
+  "targets": {
+    "dev": {
+      "executor": "nx:run-commands",
+      "options": {
+        "cwd": "apps/ops",
+        "command": "uv run --python 3.12 python -m ai_portal_ops --help"
+      }
+    },
+    "lint": {
+      "executor": "nx:run-commands",
+      "options": {
+        "cwd": "apps/ops",
+        "command": "uv run --python 3.12 --group dev ruff check ."
+      }
+    },
+    "test": {
+      "executor": "nx:run-commands",
+      "options": {
+        "cwd": "apps/ops",
+        "command": "uv run --python 3.12 python -m compileall src"
+      }
+    }
+  }
+}

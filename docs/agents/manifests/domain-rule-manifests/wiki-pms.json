@@ -2,10 +2,8 @@
   "$schema": "https://doowon.local/docs/harness/schemas/domain-rule-manifest.schema.json",
   "domain_id": "wiki-pms",
   "path_prefixes": [
-    "packages/api/wiki/",
-    "packages/api/pms/",
-    "packages/web/wiki/",
-    "packages/web/pms/",
+    "apps/api/src/ai_portal_api/domains/wiki_pms/",
+    "apps/web/src/domains/wiki-pms/",
     "docs/harness/scenarios/wiki-pms.md",
     "docs/harness/manifests/scenarios/wiki-pms.json",
     "docs/harness/prompt-bundles/wiki-pms/",
