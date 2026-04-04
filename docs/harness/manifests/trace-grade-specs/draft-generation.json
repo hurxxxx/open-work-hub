@@ -1,0 +1,19 @@
+{
+  "$schema": "https://doowon.local/docs/harness/schemas/trace-grade-spec.schema.json",
+  "scenario_id": "draft-generation",
+  "trace_schema": "docs/harness/schemas/trace-event.schema.json",
+  "online_sampling": {
+    "default_rate": 0.1,
+    "always_sample_on": ["fallback", "export_failed"]
+  },
+  "span_grades": [
+    { "span_name": "retrieval", "metrics": ["evidence_coverage"], "mode": "offline" },
+    { "span_name": "generation", "metrics": ["template_field_fill_rate", "unsupported_claim_rate"], "mode": "offline+online-sampled" },
+    { "span_name": "policy-check", "metrics": ["citation_block_attachment"], "mode": "online-blocking" },
+    { "span_name": "export", "metrics": ["export_success_rate"], "mode": "online-sampled" }
+  ],
+  "synchronous_guardrails": [
+    "citation_required",
+    "unsupported_claim_block"
+  ]
+}

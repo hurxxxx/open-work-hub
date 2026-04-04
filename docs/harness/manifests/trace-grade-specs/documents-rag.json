@@ -1,0 +1,20 @@
+{
+  "$schema": "https://doowon.local/docs/harness/schemas/trace-grade-spec.schema.json",
+  "scenario_id": "documents-rag",
+  "trace_schema": "docs/harness/schemas/trace-event.schema.json",
+  "online_sampling": {
+    "default_rate": 0.1,
+    "always_sample_on": ["fallback", "blocked", "user_feedback_negative"]
+  },
+  "span_grades": [
+    { "span_name": "intent-routing", "metrics": ["rewrite_relevance"], "mode": "offline" },
+    { "span_name": "retrieval", "metrics": ["retrieval_relevance", "acl_correctness"], "mode": "offline+online-sampled" },
+    { "span_name": "rerank", "metrics": ["nDCG@10"], "mode": "offline" },
+    { "span_name": "generation", "metrics": ["groundedness", "citation_completeness"], "mode": "offline+online-sampled" },
+    { "span_name": "policy-check", "metrics": ["citation_required"], "mode": "online-blocking" }
+  ],
+  "synchronous_guardrails": [
+    "acl_enforced",
+    "citation_required"
+  ]
+}

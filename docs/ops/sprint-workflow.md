@@ -29,7 +29,7 @@
 
 ### 3. 계약/계획 고정
 
-- `PromptContract`, `WorkflowProfile`, `ServiceGuardrailPolicy` 영향 범위를 적는다.
+- `ScenarioManifest`, `PromptBundle`, `EvalSuite`, `TraceGradeSpec`, `ServiceGuardrailPolicy` 영향 범위를 적는다.
 - release gate가 어떤 지표를 요구하는지 확인한다.
 
 ### 4. 구현

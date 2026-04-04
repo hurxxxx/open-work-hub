@@ -4,6 +4,16 @@
 
 이 문서는 시나리오별 offline eval, 회귀 점검, scorecard 산출, release gate 판단 기준을 정의한다.
 
+## 실행 자산
+
+평가의 실행 원본은 아래 구조화 자산이다.
+
+- 시나리오별 `EvalSuite`: [docs/harness/manifests/eval-suites](/Users/edward/projects/doowon/docs/harness/manifests/eval-suites)
+- 시나리오별 dataset: [docs/harness/evals/datasets](/Users/edward/projects/doowon/docs/harness/evals/datasets)
+- `promptfoo` 설정: [docs/harness/evals/promptfoo/scenarios](/Users/edward/projects/doowon/docs/harness/evals/promptfoo/scenarios)
+
+이 문서는 기준과 해설을 제공하고, 실제 실행 파라미터는 `EvalSuite` 가 담당한다.
+
 ## `EvalCase` 필수 필드
 
 ```yaml
@@ -40,7 +50,7 @@ metadata:
 2. `adversarial` 실행
 3. `shadow` 실행
 4. 필요 시 `drift` 실행
-5. scorecard 생성
+5. `promptfoo` 결과와 rule-based metric 을 합쳐 scorecard 생성
 6. release gate 결정
 
 ## 시나리오별 기본 게이트
@@ -102,6 +112,7 @@ metadata:
 - `workflow_version`이 바뀌면 `golden`과 `adversarial`을 다시 실행한다.
 - OCR 엔진 기본값이 바뀌면 `ocr-pipeline` 전체 scorecard를 재생성한다.
 - PLM validator 정책이 바뀌면 `adversarial` 전체를 재실행한다.
+- `prompt-bundles` 변경은 대응 `promptfoo` config 와 dataset 영향 검토를 포함해야 한다.
 
 ## 점검 산출물
 
@@ -121,3 +132,4 @@ metadata:
 - [trace-event.schema.json](/Users/edward/projects/doowon/docs/harness/schemas/trace-event.schema.json)
 - [scorecard.schema.json](/Users/edward/projects/doowon/docs/harness/schemas/scorecard.schema.json)
 - [release-gate-decision.schema.json](/Users/edward/projects/doowon/docs/harness/schemas/release-gate-decision.schema.json)
+- [eval-suite.schema.json](/Users/edward/projects/doowon/docs/harness/schemas/eval-suite.schema.json)

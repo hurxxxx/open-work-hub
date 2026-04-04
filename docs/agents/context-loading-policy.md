@@ -46,19 +46,22 @@
 
 ### 작업 시작 시
 
-1. 먼저 `scenario_id` 하나를 고른다.
-2. 관련 시나리오 문서 하나만 읽는다.
-3. 필요할 때만 다음 보조 문서를 추가한다.
+1. 변경 대상 경로나 작업 대상 경로가 있으면 먼저 `DomainRuleManifest` 를 찾는다.
+2. 그 다음 `scenario_id` 하나를 고른다.
+3. 관련 `ScenarioManifest` 와 `workflow.json` 을 먼저 읽는다.
+4. 관련 시나리오 문서 하나만 읽는다.
+5. 필요할 때만 다음 보조 문서를 추가한다.
    - `eval-regression-spec`
    - `service-runtime-harness`
    - `release-gates-and-alerts`
    - `system-blueprint`
-4. 관련 없는 다른 시나리오 문서는 기본적으로 읽지 않는다.
+6. 관련 없는 다른 시나리오 문서는 기본적으로 읽지 않는다.
 
 ### 기본적으로 넣지 말아야 하는 것
 
 - 현재 작업과 무관한 다른 도메인 설명
 - 전체 디렉터리 트리 덤프
+- 현재 시점의 상세 패키지/모듈 배치 스냅샷
 - 장황한 프로젝트 배경 설명
 - 바뀌지 않은 API 전체 명세
 - 관련 없는 과거 실험 기록
@@ -67,6 +70,9 @@
 ### 넣어야 하는 정보
 
 - 현재 시나리오 문서
+- 현재 `DomainRuleManifest`
+- 현재 `ScenarioManifest`
+- 현재 stage의 `PromptBundle`
 - 현재 수정 중인 파일/계약
 - 현재 요청의 입력 데이터 또는 질의
 - 현재 release gate 와 eval 기준
@@ -77,16 +83,18 @@
 작업이 막히면 아래 순서로만 컨텍스트를 확장한다.
 
 1. 현재 시나리오 문서
-2. 현재 시나리오의 eval spec
-3. 현재 시나리오의 런타임 하네스
-4. 현재 작업과 직접 연결된 도메인 구조 문서
-5. 정말 필요한 경우에만 cross-domain 문서
+2. 현재 시나리오의 `EvalSuite`
+3. 현재 시나리오의 `TraceGradeSpec`
+4. 현재 시나리오의 런타임 하네스
+5. 현재 작업과 직접 연결된 도메인 구조 문서
+6. 정말 필요한 경우에만 cross-domain 문서
 
 상위 단계로 갈수록 `왜 필요한지`를 먼저 설명하고 로드한다.
 
 ## 서비스 프롬프트 포장 규칙
 
 - system prompt 는 역할, 안전 규칙, 출력 계약만 유지한다.
+- `PromptBundle` 은 고정 지시 파일과 변수 슬롯을 분리한다.
 - retrieved context 는 현재 질의와 ACL 을 통과한 관련 chunk 만 넣는다.
 - 긴 문서 기반 작업은 quote-first 또는 extract-first 후 synthesis 로 나눈다.
 - 관련 없는 문서, 부서, 기능 설명은 retrieval payload 에 넣지 않는다.
@@ -98,6 +106,7 @@
 - Codex skill 은 시나리오 선택 후 필요한 문서만 읽도록 유도한다.
 - Claude Code 명령은 가능하면 `must_read_docs` 와 `do_not_load_by_default` 를 같이 출력한다.
 - Adapter 파일은 원본 문서를 복제하지 않고 최소 참조만 유지한다.
+- helper 스크립트는 하드코딩 목록보다 manifest 를 우선 읽는다.
 
 ## 참조
 

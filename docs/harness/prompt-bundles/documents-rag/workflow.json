@@ -1,0 +1,62 @@
+{
+  "$schema": "https://doowon.local/docs/harness/schemas/prompt-bundle.schema.json",
+  "scenario_id": "documents-rag",
+  "workflow_version": "documents-rag-wf-v1",
+  "prompt_templates": [
+    {
+      "template_id": "documents-rag-intent",
+      "stage": "intent-routing",
+      "prompt_version": "documents-rag-prompt-v1",
+      "fixed_instruction_path": "docs/harness/prompt-bundles/documents-rag/intent.md",
+      "variable_slots": ["user_query", "ui_filters"],
+      "context_contract": {
+        "load": ["current_query", "user_filters"],
+        "avoid": ["other_domain_descriptions", "full_system_overview"]
+      }
+    },
+    {
+      "template_id": "documents-rag-retrieval",
+      "stage": "retrieval",
+      "prompt_version": "documents-rag-prompt-v1",
+      "fixed_instruction_path": "docs/harness/prompt-bundles/documents-rag/retrieval.md",
+      "variable_slots": ["retrieval_intent", "acl_scope", "metadata_filters"],
+      "context_contract": {
+        "load": ["acl_scoped_metadata", "query_terms"],
+        "avoid": ["generation_examples", "unrelated_docs"]
+      }
+    },
+    {
+      "template_id": "documents-rag-grounding",
+      "stage": "grounding",
+      "prompt_version": "documents-rag-prompt-v1",
+      "fixed_instruction_path": "docs/harness/prompt-bundles/documents-rag/grounding.md",
+      "variable_slots": ["query", "reranked_chunks"],
+      "context_contract": {
+        "load": ["reranked_chunks", "citation_metadata"],
+        "avoid": ["hidden_reasoning", "global_history"]
+      }
+    },
+    {
+      "template_id": "documents-rag-synthesis",
+      "stage": "generation",
+      "prompt_version": "documents-rag-prompt-v1",
+      "fixed_instruction_path": "docs/harness/prompt-bundles/documents-rag/synthesis.md",
+      "variable_slots": ["query", "selected_quotes", "citation_blocks"],
+      "context_contract": {
+        "load": ["selected_quotes", "citation_blocks"],
+        "avoid": ["raw_top_k_dump", "unrelated_scenario_docs"]
+      }
+    },
+    {
+      "template_id": "documents-rag-policy",
+      "stage": "policy-check",
+      "prompt_version": "documents-rag-prompt-v1",
+      "fixed_instruction_path": "docs/harness/prompt-bundles/documents-rag/policy.md",
+      "variable_slots": ["candidate_answer", "citation_blocks", "acl_result"],
+      "context_contract": {
+        "load": ["answer_schema", "citation_blocks", "acl_flags"],
+        "avoid": ["retrieval_debug_history"]
+      }
+    }
+  ]
+}

@@ -1,0 +1,9 @@
+description: documents-rag offline regression scaffold
+prompts:
+  - file://../../../prompt-bundles/documents-rag/synthesis.md
+providers:
+  - id: "${PROMPTFOO_PROVIDER}"
+tests:
+  - file://../../datasets/documents-rag/golden.jsonl
+  - file://../../datasets/documents-rag/adversarial.jsonl
+  - file://../../datasets/documents-rag/shadow.jsonl

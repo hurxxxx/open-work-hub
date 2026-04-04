@@ -1,0 +1,1 @@
+{"description":"clean scanned contract page","vars":{"mime_type":"application/pdf","native_extraction_result":"low-confidence","layout_mode":"mixed","asset_uri":"s3://bucket/contract-001.pdf","language_hint":"en"},"metadata":{"scenario_id":"ocr-pipeline","dataset":"golden"}}

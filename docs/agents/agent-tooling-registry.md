@@ -36,10 +36,19 @@
 | --- | --- |
 | `doowon-harness-engineering` | 시나리오 매핑, 문서 우선 탐색, eval 영향 분석, 표준 응답 형식 강제 |
 
+## Helper 스크립트
+
+| 스크립트 | 역할 |
+| --- | --- |
+| `select_scenario.py` | 경로 힌트와 요청을 사용해 `scenario_id` 와 기본 문서 세트를 고른다 |
+| `select_context_docs.py` | `scenario_id`, `domain_id`, 파일 경로를 바탕으로 `must_read_docs` 를 계산한다 |
+| `required_regressions.py` | `EvalSuite` 기준으로 dataset, gate metric, `promptfoo` 설정을 출력한다 |
+
 ## 참조 문서
 
 - 운영 규약: [agent-operating-standard.md](/Users/edward/projects/doowon/docs/agents/agent-operating-standard.md)
 - 컨텍스트 선택 기준: [context-loading-policy.md](/Users/edward/projects/doowon/docs/agents/context-loading-policy.md)
+- 도메인 매핑: [domain-context-mapping.md](/Users/edward/projects/doowon/docs/agents/domain-context-mapping.md)
 - 하네스 개요: [harness-overview.md](/Users/edward/projects/doowon/docs/harness/harness-overview.md)
 - 운영 워크플로: [sprint-workflow.md](/Users/edward/projects/doowon/docs/ops/sprint-workflow.md)
 - 학습/체크포인트: [learnings-and-checkpoints.md](/Users/edward/projects/doowon/docs/ops/learnings-and-checkpoints.md)

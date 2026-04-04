@@ -1,0 +1,18 @@
+{
+  "$schema": "https://doowon.local/docs/harness/schemas/trace-grade-spec.schema.json",
+  "scenario_id": "ocr-pipeline",
+  "trace_schema": "docs/harness/schemas/trace-event.schema.json",
+  "online_sampling": {
+    "default_rate": 0.25,
+    "always_sample_on": ["fallback", "catastrophic_failure", "latency_spike"]
+  },
+  "span_grades": [
+    { "span_name": "ocr", "metrics": ["parse_completeness", "layout_preservation", "table_extraction_f1"], "mode": "offline+online-sampled" },
+    { "span_name": "generation", "metrics": ["quality_judge_accuracy"], "mode": "offline" },
+    { "span_name": "policy-check", "metrics": ["catastrophic_failure_rate"], "mode": "online-blocking" }
+  ],
+  "synchronous_guardrails": [
+    "catastrophic_ocr_failure_block",
+    "fallback_route_required"
+  ]
+}

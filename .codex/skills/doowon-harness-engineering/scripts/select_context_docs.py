@@ -2,61 +2,81 @@
 import json
 import sys
 
-
-BASE_DOCS = [
-    "docs/agents/context-loading-policy.md",
-    "docs/agents/agent-operating-standard.md"
-]
-
-SCENARIO_DOCS = {
-    "documents-rag": "docs/harness/scenarios/documents-rag.md",
-    "plm-query": "docs/harness/scenarios/plm-query.md",
-    "draft-generation": "docs/harness/scenarios/draft-generation.md",
-    "ocr-pipeline": "docs/harness/scenarios/ocr-pipeline.md",
-    "wiki-pms": "docs/harness/scenarios/wiki-pms.md"
-}
-
-OPTIONAL_DOCS = {
-    "eval": "docs/harness/eval-regression-spec.md",
-    "runtime": "docs/harness/service-runtime-harness.md",
-    "release": "docs/ops/release-gates-and-alerts.md",
-    "architecture": "docs/architecture/system-blueprint.md",
-    "workflow": "docs/ops/sprint-workflow.md"
-}
+from manifest_utils import build_context_payload, load_all_domain_manifests, load_all_scenario_manifests, pick_scenario, resolve_domain_for_path
 
 
 def main() -> int:
-    if len(sys.argv) < 2:
-        print("usage: select_context_docs.py <scenario-id> [surface]", file=sys.stderr)
+    args = sys.argv[1:]
+    if not args:
+        print(
+            "usage: select_context_docs.py <scenario-id> [surface] | --path <file-path> [surface] | --domain <domain-id> [request-or-surface]",
+            file=sys.stderr
+        )
         return 1
 
-    scenario_id = sys.argv[1]
-    surface = sys.argv[2] if len(sys.argv) > 2 else ""
-    scenario_doc = SCENARIO_DOCS.get(scenario_id)
-    if scenario_doc is None:
-        print(f"unknown scenario: {scenario_id}", file=sys.stderr)
-        return 2
+    scenario_manifests = load_all_scenario_manifests()
+    domain_manifests = load_all_domain_manifests()
 
-    optional = []
-    lowered = surface.lower()
-    if any(token in lowered for token in ["prompt", "workflow", "retrieval", "guardrail", "trace", "export", "eval"]):
-        optional.append(OPTIONAL_DOCS["eval"])
-    if any(token in lowered for token in ["runtime", "service", "llm", "ocr", "generation", "online-eval"]):
-        optional.append(OPTIONAL_DOCS["runtime"])
-    if any(token in lowered for token in ["release", "gate", "scorecard", "alert", "ops"]):
-        optional.append(OPTIONAL_DOCS["release"])
-    if any(token in lowered for token in ["architecture", "package", "module", "boundary", "repo"]):
-        optional.append(OPTIONAL_DOCS["architecture"])
-    if any(token in lowered for token in ["workflow-habit", "retro", "checkpoint", "learn"]):
-        optional.append(OPTIONAL_DOCS["workflow"])
+    scenario_id = ""
+    domain_id = ""
+    path_hint = ""
+    trailing = []
 
-    avoid = sorted(path for key, path in SCENARIO_DOCS.items() if key != scenario_id)
-    payload = {
-        "scenario_id": scenario_id,
-        "must_read_docs": BASE_DOCS + [scenario_doc],
-        "optional_support_docs": sorted(dict.fromkeys(optional)),
-        "do_not_load_by_default": avoid
-    }
+    i = 0
+    while i < len(args):
+        arg = args[i]
+        if arg == "--path":
+            if i + 1 >= len(args):
+                print("missing value for --path", file=sys.stderr)
+                return 1
+            path_hint = args[i + 1]
+            i += 2
+            continue
+        if arg == "--domain":
+            if i + 1 >= len(args):
+                print("missing value for --domain", file=sys.stderr)
+                return 1
+            domain_id = args[i + 1]
+            i += 2
+            continue
+        if not scenario_id and arg in scenario_manifests:
+            scenario_id = arg
+        else:
+            trailing.append(arg)
+        i += 1
+
+    surface = " ".join(trailing).strip()
+    domain_manifest = None
+    if path_hint:
+        domain_manifest = resolve_domain_for_path(path_hint, domain_manifests)
+    elif domain_id:
+        domain_manifest = domain_manifests.get(domain_id)
+        if domain_manifest is None:
+            print(f"unknown domain: {domain_id}", file=sys.stderr)
+            return 2
+
+    if scenario_id:
+        scenario_manifest = scenario_manifests.get(scenario_id)
+        if scenario_manifest is None:
+            print(f"unknown scenario: {scenario_id}", file=sys.stderr)
+            return 2
+    else:
+        candidate_ids = None if domain_manifest is None else domain_manifest.get("scenario_candidates", [])
+        if domain_manifest is not None and len(candidate_ids) > 1 and not surface:
+            print(
+                f"domain '{domain_manifest['domain_id']}' maps to multiple scenarios; provide a scenario id or request text",
+                file=sys.stderr
+            )
+            return 3
+        scenario_manifest, confidence = pick_scenario(surface, scenario_manifests, candidate_ids=candidate_ids)
+        if domain_manifest is not None and len(candidate_ids) > 1 and confidence == "low":
+            print(
+                f"request is still ambiguous for domain '{domain_manifest['domain_id']}'; provide a scenario id",
+                file=sys.stderr
+            )
+            return 4
+
+    payload = build_context_payload(scenario_manifest, domain_manifest, surface)
     print(json.dumps(payload, ensure_ascii=True, indent=2))
     return 0
 

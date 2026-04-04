@@ -1,0 +1,34 @@
+{
+  "$schema": "https://doowon.local/docs/harness/schemas/domain-rule-manifest.schema.json",
+  "domain_id": "wiki-pms",
+  "path_prefixes": [
+    "packages/api/wiki/",
+    "packages/api/pms/",
+    "packages/web/wiki/",
+    "packages/web/pms/",
+    "docs/harness/scenarios/wiki-pms.md",
+    "docs/harness/manifests/scenarios/wiki-pms.json",
+    "docs/harness/prompt-bundles/wiki-pms/",
+    ".claude/agents/ui-conformance-reviewer.md"
+  ],
+  "responsibility": "위키/작업/이슈 preview-first 생성과 권한 검사, 상태 제안 UI 계약을 소유한다.",
+  "scenario_candidates": [
+    "wiki-pms"
+  ],
+  "must_read_docs": [
+    "docs/agents/context-loading-policy.md",
+    "docs/agents/agent-operating-standard.md",
+    "docs/agents/domain-context-mapping.md",
+    "docs/harness/scenarios/wiki-pms.md",
+    "docs/harness/manifests/scenarios/wiki-pms.json"
+  ],
+  "optional_support_docs": [
+    "docs/harness/eval-regression-spec.md",
+    "docs/harness/service-runtime-harness.md"
+  ],
+  "do_not_load_by_default": [
+    "docs/harness/scenarios/documents-rag.md",
+    "docs/harness/scenarios/plm-query.md"
+  ],
+  "local_rule_template": "docs/agents/local-rule-template.md"
+}

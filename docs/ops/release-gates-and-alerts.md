@@ -53,6 +53,7 @@
 - 시나리오별 scorecard 추세 검토
 - release gate 기준 대비 drift 확인
 - false positive/false negative evaluator 점검
+- `promptfoo` 구성과 dataset drift 를 점검
 
 ## 기본 경보 조건
 
@@ -80,6 +81,7 @@
 - `documents-rag`, `plm-query`, `draft-generation`, `ocr-pipeline`는 각각 독립 release gate를 가진다.
 - 하나의 시나리오가 `hold`여도 다른 시나리오 배포는 가능하지만, 공통 패키지나 공용 모델 프로필 변경이면 전체 게이트를 다시 본다.
 - 공용 LLM profile, reranker, OCR 기본엔진 변경은 모든 관련 시나리오 scorecard를 다시 생성해야 한다.
+- `PromptBundle` 또는 `TraceGradeSpec` 변경도 관련 시나리오 scorecard 재확인의 근거가 된다.
 
 ## 문서 동기화 규칙
 

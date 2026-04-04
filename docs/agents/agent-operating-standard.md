@@ -2,21 +2,25 @@
 
 ## 목적
 
-이 문서는 Codex, Claude Code, Copilot, Cursor 등 어떤 에이전트를 사용하더라도 같은 입력에서 비슷한 결과를 내기 위한 공통 규약이다. 도구별 어댑터는 이 문서를 요약하거나 참조할 수는 있지만, 규칙 자체를 바꾸면 안 된다.
+이 문서는 Codex와 Claude Code가 같은 입력에서 비슷한 결과를 내기 위한 공통 규약이다. 도구별 어댑터는 이 문서를 요약하거나 참조할 수는 있지만, 규칙 자체를 바꾸면 안 된다.
 
 ## 진실원본 우선순위
 
 1. [docs/agents/agent-operating-standard.md](/Users/edward/projects/doowon/docs/agents/agent-operating-standard.md)
 2. [docs/agents/context-loading-policy.md](/Users/edward/projects/doowon/docs/agents/context-loading-policy.md)
-3. 관련 [시나리오 문서](/Users/edward/projects/doowon/docs/harness/scenarios)
-4. [docs/harness/eval-regression-spec.md](/Users/edward/projects/doowon/docs/harness/eval-regression-spec.md)
-5. [docs/harness/service-runtime-harness.md](/Users/edward/projects/doowon/docs/harness/service-runtime-harness.md)
-6. [docs/ops/release-gates-and-alerts.md](/Users/edward/projects/doowon/docs/ops/release-gates-and-alerts.md)
+3. [docs/agents/domain-context-mapping.md](/Users/edward/projects/doowon/docs/agents/domain-context-mapping.md)
+4. 관련 [DomainRuleManifest](/Users/edward/projects/doowon/docs/agents/manifests/domain-rule-manifests)
+5. 관련 [ScenarioManifest](/Users/edward/projects/doowon/docs/harness/manifests/scenarios)
+6. 관련 [시나리오 문서](/Users/edward/projects/doowon/docs/harness/scenarios)
+7. 관련 [EvalSuite](/Users/edward/projects/doowon/docs/harness/manifests/eval-suites)
+8. 관련 [TraceGradeSpec](/Users/edward/projects/doowon/docs/harness/manifests/trace-grade-specs)
+9. [docs/ops/release-gates-and-alerts.md](/Users/edward/projects/doowon/docs/ops/release-gates-and-alerts.md)
 
 ## 모든 작업의 시작 규칙
 
 - 먼저 요청을 하나의 `scenario_id`에 매핑한다.
-- 해당 시나리오 문서를 먼저 읽고, 필요한 경우에만 eval/runtime/ops 문서를 추가로 읽는다.
+- 경로가 있으면 먼저 `DomainRuleManifest` 로 도메인을 좁힌다.
+- 해당 시나리오의 `ScenarioManifest` 와 `workflow.json` 을 먼저 읽고, 필요한 경우에만 문서와 eval/runtime/ops 문서를 추가로 읽는다.
 - `prompt`, `workflow`, `retrieval`, `guardrail`, `trace`, `export` 중 무엇이 바뀌는지 식별한다.
 - 변경 산출물을 `code`, `docs`, `evals`, `ops`로 분류한다.
 - 익숙하지 않은 런타임, 인프라, 라이브러리, 운영 패턴은 바로 설계하지 말고 공식 문서나 저장소를 먼저 탐색한다.
@@ -31,8 +35,8 @@
 
 ## LLM 관련 변경 규칙
 
-- Prompt 변경 시 대응 `EvalCase`를 같이 갱신한다.
-- Workflow 변경 시 trace/span 영향과 release gate 영향을 같이 기록한다.
+- Prompt 변경 시 대응 dataset case 또는 `EvalSuite` 를 같이 갱신한다.
+- Workflow 변경 시 `TraceGradeSpec`, `EvalSuite`, `promptfoo` 영향과 release gate 영향을 같이 기록한다.
 - 서비스 LLM 경로 추가/변경 시 online eval과 fallback 경로를 같이 점검한다.
 - citation 없는 생성 응답을 성공으로 취급하지 않는다.
 - 변경이 사용자 흐름, API, 운영 방법, eval 규칙에 영향을 주면 문서 동기화 여부를 같이 점검한다.
@@ -49,10 +53,11 @@
 ## 파일 소유권 규칙
 
 - `legacy_ai_portal_prototype/`는 수정하지 않는다.
-- 도메인 내부 구현은 해당 도메인 패키지 소유자만 직접 수정한다는 가정으로 접근한다.
-- 조립 계층(`apps/*`)은 wiring만 한다.
-- 공용 계약은 `packages/contracts` 또는 문서 계약에서 먼저 정의한다.
+- 도메인 내부 구현은 해당 도메인 소유자만 직접 수정한다는 가정으로 접근한다.
+- 조립 계층은 wiring만 한다.
+- 공용 계약은 공유 계약 계층 또는 문서 계약에서 먼저 정의한다.
 - 하네스 원본 문서는 `docs/*`에만 둔다.
+- 실제 코드 스캐폴드가 생기면 도메인 루트의 local `AGENTS.md` 를 추가하되, 원본 규약은 문서/manifest 에서 먼저 정의한다.
 
 ## 금지 사항
 
@@ -89,6 +94,4 @@ open risks: ...
 
 - Claude Code: `CLAUDE.md`, `.claude/rules`, `.claude/commands`, `.claude/agents`, hooks
 - Codex: repo-owned skill
-- Copilot: `.github/copilot-instructions.md`
-- Cursor: `.cursor/rules/*.mdc`
 - 명령/도구 카탈로그: `docs/agents/agent-tooling-registry.md`

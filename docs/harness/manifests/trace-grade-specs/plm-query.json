@@ -1,0 +1,20 @@
+{
+  "$schema": "https://doowon.local/docs/harness/schemas/trace-grade-spec.schema.json",
+  "scenario_id": "plm-query",
+  "trace_schema": "docs/harness/schemas/trace-event.schema.json",
+  "online_sampling": {
+    "default_rate": 0.2,
+    "always_sample_on": ["blocked", "validator_failure"]
+  },
+  "span_grades": [
+    { "span_name": "intent-routing", "metrics": ["template_match_accuracy"], "mode": "offline" },
+    { "span_name": "generation", "metrics": ["sql_plan_quality"], "mode": "offline" },
+    { "span_name": "policy-check", "metrics": ["unsafe_sql_block_rate", "allowlist_violation_rate"], "mode": "online-blocking" },
+    { "span_name": "export", "metrics": ["summary_fidelity"], "mode": "offline+online-sampled" }
+  ],
+  "synchronous_guardrails": [
+    "unsafe_sql_block",
+    "allowlist_required",
+    "acl_enforced"
+  ]
+}

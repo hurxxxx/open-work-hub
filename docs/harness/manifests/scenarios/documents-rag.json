@@ -1,0 +1,50 @@
+{
+  "$schema": "https://doowon.local/docs/harness/schemas/scenario-manifest.schema.json",
+  "scenario_id": "documents-rag",
+  "goal": "권한이 있는 문서를 검색하고 citation이 포함된 grounded answer를 생성한다.",
+  "domain_ids": ["documents"],
+  "keywords": ["document", "rag", "search", "citation", "retrieval", "문서", "검색", "근거"],
+  "source_doc": "docs/harness/scenarios/documents-rag.md",
+  "workflow_bundle": "docs/harness/prompt-bundles/documents-rag/workflow.json",
+  "eval_suite": "docs/harness/manifests/eval-suites/documents-rag.json",
+  "trace_grade_spec": "docs/harness/manifests/trace-grade-specs/documents-rag.json",
+  "release_gate": "docs/ops/release-gates-and-alerts.md",
+  "must_read_docs": [
+    "agents.md",
+    "docs/agents/context-loading-policy.md",
+    "docs/agents/agent-operating-standard.md",
+    "docs/harness/scenarios/documents-rag.md",
+    "docs/harness/manifests/scenarios/documents-rag.json",
+    "docs/harness/prompt-bundles/documents-rag/workflow.json"
+  ],
+  "optional_support_docs": [
+    "docs/harness/eval-regression-spec.md",
+    "docs/harness/service-runtime-harness.md",
+    "docs/harness/trace-and-scorecard-spec.md",
+    "docs/ops/release-gates-and-alerts.md"
+  ],
+  "do_not_load_by_default": [
+    "docs/harness/scenarios/plm-query.md",
+    "docs/harness/scenarios/draft-generation.md",
+    "docs/harness/scenarios/ocr-pipeline.md",
+    "docs/harness/scenarios/wiki-pms.md"
+  ],
+  "allowed_tools": [
+    "OpenSearch hybrid search",
+    "Qdrant vector retrieval",
+    "Qwen3-Reranker-8B",
+    "Citation assembler",
+    "ACL filter"
+  ],
+  "guardrail_policies": [
+    "acl_enforced",
+    "citation_required",
+    "grounded_answer_only"
+  ],
+  "expected_artifacts": [
+    "ScenarioManifest update",
+    "Prompt bundle update",
+    "TraceGradeSpec review",
+    "Promptfoo dataset or config review"
+  ]
+}

@@ -13,6 +13,7 @@
 - 이 저장소의 공통 규약 원본은 `docs/agents/agent-operating-standard.md` 입니다.
 - 컨텍스트 최소화 원칙은 `docs/agents/context-loading-policy.md` 를 따릅니다.
 - 모든 LLM 관련 작업은 먼저 `scenario_id` 로 매핑하고, 관련 있는 시나리오 문서만 선택적으로 읽습니다.
+- `docs/harness/manifests/*` 와 `docs/agents/manifests/*` 의 구조화 자산을 문서 원본과 함께 읽습니다.
 - 관련 없는 도메인 설명, 전체 디렉터리 구조, 다른 시나리오 문서는 기본 컨텍스트에 넣지 않습니다.
 - `prompt`, `workflow`, `retrieval`, `guardrail`, `trace`, `export` 중 하나라도 바뀌면 관련 eval 과 release gate 영향을 같이 확인합니다.
 - citation 없는 생성 응답은 성공으로 취급하지 않습니다.

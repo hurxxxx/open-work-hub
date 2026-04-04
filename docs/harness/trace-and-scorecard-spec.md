@@ -145,8 +145,17 @@
 `decision` 값:
 
 - `go`
+- `hold-until-review`
 - `hold`
 - `rollback-candidate`
+
+## `TraceGradeSpec`
+
+trace/span 단위 grading 기준은 시나리오별 `TraceGradeSpec` 으로 분리한다.
+
+- 위치: [docs/harness/manifests/trace-grade-specs](/Users/edward/projects/doowon/docs/harness/manifests/trace-grade-specs)
+- 목적: span별 grader, sampling 비율, blocking guardrail 명시
+- 사용처: online eval sampler, scorecard 보조 지표, release gate 근거
 
 ## 훅 계약
 
@@ -162,3 +171,4 @@
 - [trace-event.schema.json](/Users/edward/projects/doowon/docs/harness/schemas/trace-event.schema.json)
 - [scorecard.schema.json](/Users/edward/projects/doowon/docs/harness/schemas/scorecard.schema.json)
 - [release-gate-decision.schema.json](/Users/edward/projects/doowon/docs/harness/schemas/release-gate-decision.schema.json)
+- [trace-grade-spec.schema.json](/Users/edward/projects/doowon/docs/harness/schemas/trace-grade-spec.schema.json)

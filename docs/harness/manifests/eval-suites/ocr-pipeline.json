@@ -1,0 +1,42 @@
+{
+  "$schema": "https://doowon.local/docs/harness/schemas/eval-suite.schema.json",
+  "scenario_id": "ocr-pipeline",
+  "eval_profile": "ocr-pipeline-eval-v1",
+  "runner": {
+    "primary": "promptfoo",
+    "secondary": ["inspect-ai"]
+  },
+  "datasets": [
+    {
+      "name": "golden",
+      "path": "docs/harness/evals/datasets/ocr-pipeline/golden.jsonl",
+      "required_for_release": true,
+      "purpose": "대표 문서 유형"
+    },
+    {
+      "name": "adversarial",
+      "path": "docs/harness/evals/datasets/ocr-pipeline/adversarial.jsonl",
+      "required_for_release": true,
+      "purpose": "복잡 표/저품질 스캔"
+    },
+    {
+      "name": "shadow",
+      "path": "docs/harness/evals/datasets/ocr-pipeline/shadow.jsonl",
+      "required_for_release": false,
+      "purpose": "운영 회귀 추적"
+    },
+    {
+      "name": "drift",
+      "path": "docs/harness/evals/datasets/ocr-pipeline/drift.jsonl",
+      "required_for_release": false,
+      "purpose": "신규 문서 유형 적응"
+    }
+  ],
+  "graders": [
+    { "metric": "parse_completeness", "type": "ocr-metric", "threshold": 0.95, "blocking": true },
+    { "metric": "table_extraction_f1", "type": "ocr-metric", "threshold": 0.85, "blocking": true },
+    { "metric": "catastrophic_failure_rate", "type": "rule-check", "threshold": 0.01, "blocking": true },
+    { "metric": "page_latency_p95", "type": "latency", "threshold": 8.0, "blocking": true }
+  ],
+  "promptfoo_config": "docs/harness/evals/promptfoo/scenarios/ocr-pipeline.yaml"
+}

@@ -9,15 +9,17 @@ Use this skill whenever a task in this repository affects LLM behavior, service 
 
 ## Workflow
 
-1. Map the request to exactly one `scenario_id`.
+1. Map the request to exactly one `scenario_id`, using a path hint first when the task already points at a file or folder.
 2. Read `docs/agents/context-loading-policy.md`.
 3. Read `docs/agents/agent-operating-standard.md`.
-4. Read only the matching scenario doc under `docs/harness/scenarios/`.
-5. Read `docs/harness/eval-regression-spec.md` only if the task touches prompts, workflows, retrieval, guardrails, trace, exports, or release gates.
-6. If the task changes service behavior, read `docs/harness/service-runtime-harness.md`.
-7. Read `docs/ops/sprint-workflow.md` and `docs/ops/learnings-and-checkpoints.md` only when the task is substantial or introduces a new pattern.
-8. Search official docs or the referenced implementation first before designing unfamiliar runtime, infrastructure, or agent patterns from scratch.
-9. Summarize the work using the repository contract:
+4. Read the matching `DomainRuleManifest` and `ScenarioManifest` first.
+5. Read only the matching scenario doc under `docs/harness/scenarios/`.
+6. Read `docs/harness/eval-regression-spec.md` only if the task touches prompts, workflows, retrieval, guardrails, trace, exports, or release gates.
+7. If the task changes service behavior, read `docs/harness/service-runtime-harness.md`.
+8. If the task changes stage prompts or online scoring, read the matching `workflow.json`, `EvalSuite`, and `TraceGradeSpec`.
+9. Read `docs/ops/sprint-workflow.md` and `docs/ops/learnings-and-checkpoints.md` only when the task is substantial or introduces a new pattern.
+10. Search official docs or the referenced implementation first before designing unfamiliar runtime, infrastructure, or agent patterns from scratch.
+11. Summarize the work using the repository contract:
    - `scenario_id`
    - `changed surfaces`
    - `tests/evals`
@@ -25,7 +27,7 @@ Use this skill whenever a task in this repository affects LLM behavior, service 
 
 ## Required behaviors
 
-- Treat `docs/*` as source of truth and adapter files as projections.
+- Treat `docs/*` plus the structured assets under `docs/harness/manifests`, `docs/harness/prompt-bundles`, and `docs/harness/evals` as source of truth, and adapter files as projections.
 - Keep root context minimal and load only the documents required for the current scenario.
 - Do not read unrelated scenario docs or broad architecture docs unless the current task requires them.
 - Do not make prompt-only or workflow-only changes without matching eval implications.
@@ -41,7 +43,8 @@ Use this skill whenever a task in this repository affects LLM behavior, service 
 
 ## Helper scripts
 
-- `python3 .codex/skills/doowon-harness-engineering/scripts/select_scenario.py "<request>"`
+- `python3 .codex/skills/doowon-harness-engineering/scripts/select_scenario.py [--path <file-path>] "<request>"`
 - `python3 .codex/skills/doowon-harness-engineering/scripts/select_context_docs.py <scenario-id> [surface]`
+- `python3 .codex/skills/doowon-harness-engineering/scripts/select_context_docs.py --path <file-path> [surface]`
 - `python3 .codex/skills/doowon-harness-engineering/scripts/required_regressions.py <scenario-id>`
 - `bash .codex/skills/doowon-harness-engineering/scripts/install_to_codex_home.sh`

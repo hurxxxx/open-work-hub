@@ -1,0 +1,18 @@
+{
+  "$schema": "https://doowon.local/docs/harness/schemas/trace-grade-spec.schema.json",
+  "scenario_id": "wiki-pms",
+  "trace_schema": "docs/harness/schemas/trace-event.schema.json",
+  "online_sampling": {
+    "default_rate": 0.15,
+    "always_sample_on": ["blocked", "preview_mismatch"]
+  },
+  "span_grades": [
+    { "span_name": "intent-routing", "metrics": ["action_classification_accuracy"], "mode": "offline" },
+    { "span_name": "generation", "metrics": ["summary_groundedness", "schema_validity"], "mode": "offline+online-sampled" },
+    { "span_name": "policy-check", "metrics": ["unauthorized_mutation_block_rate"], "mode": "online-blocking" }
+  ],
+  "synchronous_guardrails": [
+    "preview_required",
+    "acl_enforced"
+  ]
+}

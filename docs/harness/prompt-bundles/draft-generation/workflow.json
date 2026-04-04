@@ -1,0 +1,51 @@
+{
+  "$schema": "https://doowon.local/docs/harness/schemas/prompt-bundle.schema.json",
+  "scenario_id": "draft-generation",
+  "workflow_version": "draft-generation-wf-v1",
+  "prompt_templates": [
+    {
+      "template_id": "draft-generation-intent",
+      "stage": "intent-routing",
+      "prompt_version": "draft-generation-prompt-v1",
+      "fixed_instruction_path": "docs/harness/prompt-bundles/draft-generation/intent.md",
+      "variable_slots": ["template_id", "topic", "field_overrides"],
+      "context_contract": {
+        "load": ["template_metadata", "user_topic"],
+        "avoid": ["unrelated_project_context"]
+      }
+    },
+    {
+      "template_id": "draft-generation-evidence",
+      "stage": "retrieval",
+      "prompt_version": "draft-generation-prompt-v1",
+      "fixed_instruction_path": "docs/harness/prompt-bundles/draft-generation/evidence.md",
+      "variable_slots": ["template_sections", "context_doc_ids", "acl_scope"],
+      "context_contract": {
+        "load": ["template_sections", "context_doc_ids", "acl_scope"],
+        "avoid": ["full_corpus_dump"]
+      }
+    },
+    {
+      "template_id": "draft-generation-draft",
+      "stage": "generation",
+      "prompt_version": "draft-generation-prompt-v1",
+      "fixed_instruction_path": "docs/harness/prompt-bundles/draft-generation/draft.md",
+      "variable_slots": ["template_schema", "selected_evidence", "field_values"],
+      "context_contract": {
+        "load": ["template_schema", "selected_evidence", "field_values"],
+        "avoid": ["uncited_supporting_notes"]
+      }
+    },
+    {
+      "template_id": "draft-generation-policy",
+      "stage": "policy-check",
+      "prompt_version": "draft-generation-prompt-v1",
+      "fixed_instruction_path": "docs/harness/prompt-bundles/draft-generation/policy.md",
+      "variable_slots": ["draft_body", "citations", "export_request"],
+      "context_contract": {
+        "load": ["draft_body", "citations", "required_fields"],
+        "avoid": ["raw_retrieval_dump"]
+      }
+    }
+  ]
+}

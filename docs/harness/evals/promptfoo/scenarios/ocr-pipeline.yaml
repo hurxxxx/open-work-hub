@@ -1,0 +1,11 @@
+description: ocr-pipeline offline regression scaffold
+prompts:
+  - file://../../../prompt-bundles/ocr-pipeline/routing.md
+  - file://../../../prompt-bundles/ocr-pipeline/judge.md
+providers:
+  - id: "${PROMPTFOO_PROVIDER}"
+tests:
+  - file://../../datasets/ocr-pipeline/golden.jsonl
+  - file://../../datasets/ocr-pipeline/adversarial.jsonl
+  - file://../../datasets/ocr-pipeline/shadow.jsonl
+  - file://../../datasets/ocr-pipeline/drift.jsonl

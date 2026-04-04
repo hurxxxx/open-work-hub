@@ -1,0 +1,40 @@
+{
+  "$schema": "https://doowon.local/docs/harness/schemas/prompt-bundle.schema.json",
+  "scenario_id": "wiki-pms",
+  "workflow_version": "wiki-pms-wf-v1",
+  "prompt_templates": [
+    {
+      "template_id": "wiki-pms-intent",
+      "stage": "intent-routing",
+      "prompt_version": "wiki-pms-prompt-v1",
+      "fixed_instruction_path": "docs/harness/prompt-bundles/wiki-pms/intent.md",
+      "variable_slots": ["request_type", "instruction"],
+      "context_contract": {
+        "load": ["request_type", "instruction"],
+        "avoid": ["plm_or_documents_context"]
+      }
+    },
+    {
+      "template_id": "wiki-pms-generation",
+      "stage": "generation",
+      "prompt_version": "wiki-pms-prompt-v1",
+      "fixed_instruction_path": "docs/harness/prompt-bundles/wiki-pms/generation.md",
+      "variable_slots": ["source_ids", "target_id", "retrieved_objects"],
+      "context_contract": {
+        "load": ["source_ids", "retrieved_objects", "acl_scope"],
+        "avoid": ["unrelated_history"]
+      }
+    },
+    {
+      "template_id": "wiki-pms-policy",
+      "stage": "policy-check",
+      "prompt_version": "wiki-pms-prompt-v1",
+      "fixed_instruction_path": "docs/harness/prompt-bundles/wiki-pms/policy.md",
+      "variable_slots": ["preview", "change_summary", "acl_result"],
+      "context_contract": {
+        "load": ["preview", "change_summary", "acl_result"],
+        "avoid": ["write_execution_details"]
+      }
+    }
+  ]
+}

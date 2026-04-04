@@ -1,0 +1,1 @@
+{"description":"new supplier form layout","vars":{"mime_type":"application/pdf","native_extraction_result":"partial","layout_mode":"mixed","asset_uri":"s3://bucket/new-supplier-form.pdf","language_hint":"en"},"metadata":{"scenario_id":"ocr-pipeline","dataset":"drift"}}

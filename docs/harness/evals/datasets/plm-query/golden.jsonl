@@ -1,0 +1,1 @@
+{"description":"safe template-backed query","vars":{"query":"List open BOM changes for project A this month.","template_candidates":"[{\"template_id\":\"bom-open-changes\"}]","allowlist":"[\"vw_bom_changes\",\"vw_project\"]"},"metadata":{"scenario_id":"plm-query","dataset":"golden"}}

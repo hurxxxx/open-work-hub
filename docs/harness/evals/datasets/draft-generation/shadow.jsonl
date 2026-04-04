@@ -1,0 +1,1 @@
+{"description":"missing field regression repro","vars":{"template_schema":"{\"sections\":[\"summary\",\"budget\"]}","selected_evidence":"[{\"document_id\":\"doc-budget-02\",\"page\":1,\"quote_text\":\"Budget cap is 4.2M USD.\"}]","field_values":"{\"project_name\":\"Project B\"}"},"metadata":{"scenario_id":"draft-generation","dataset":"shadow"}}

@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://doowon.local/docs/harness/schemas/trace-grade-spec.schema.json",
+  "title": "TraceGradeSpec",
+  "type": "object",
+  "required": [
+    "scenario_id",
+    "trace_schema",
+    "online_sampling",
+    "span_grades",
+    "synchronous_guardrails"
+  ],
+  "properties": {
+    "scenario_id": { "type": "string", "minLength": 1 },
+    "trace_schema": { "type": "string", "minLength": 1 },
+    "online_sampling": {
+      "type": "object",
+      "required": ["default_rate"],
+      "properties": {
+        "default_rate": { "type": "number", "minimum": 0, "maximum": 1 },
+        "always_sample_on": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        }
+      },
+      "additionalProperties": true
+    },
+    "span_grades": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["span_name", "metrics", "mode"],
+        "properties": {
+          "span_name": { "type": "string", "minLength": 1 },
+          "metrics": {
+            "type": "array",
+            "minItems": 1,
+            "items": { "type": "string", "minLength": 1 }
+          },
+          "mode": { "type": "string", "minLength": 1 }
+        },
+        "additionalProperties": true
+      }
+    },
+    "synchronous_guardrails": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 }
+    }
+  },
+  "additionalProperties": true
+}

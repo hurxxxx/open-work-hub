@@ -1,0 +1,37 @@
+{
+  "$schema": "https://doowon.local/docs/harness/schemas/eval-suite.schema.json",
+  "scenario_id": "documents-rag",
+  "eval_profile": "documents-rag-eval-v1",
+  "runner": {
+    "primary": "promptfoo",
+    "secondary": []
+  },
+  "datasets": [
+    {
+      "name": "golden",
+      "path": "docs/harness/evals/datasets/documents-rag/golden.jsonl",
+      "required_for_release": true,
+      "purpose": "대표 검색/답변 경로"
+    },
+    {
+      "name": "adversarial",
+      "path": "docs/harness/evals/datasets/documents-rag/adversarial.jsonl",
+      "required_for_release": true,
+      "purpose": "권한/근거 누락 방지"
+    },
+    {
+      "name": "shadow",
+      "path": "docs/harness/evals/datasets/documents-rag/shadow.jsonl",
+      "required_for_release": true,
+      "purpose": "운영 회귀 재현"
+    }
+  ],
+  "graders": [
+    { "metric": "citation_completeness", "type": "llm-rubric", "threshold": 0.98, "blocking": true },
+    { "metric": "groundedness", "type": "llm-rubric", "threshold": 0.9, "blocking": true },
+    { "metric": "retrieval_relevance", "type": "llm-rubric", "threshold": 0.8, "blocking": true },
+    { "metric": "nDCG@10", "type": "retrieval-metric", "threshold": 0.72, "blocking": true },
+    { "metric": "acl_violations", "type": "rule-check", "threshold": 0, "blocking": true }
+  ],
+  "promptfoo_config": "docs/harness/evals/promptfoo/scenarios/documents-rag.yaml"
+}

@@ -32,6 +32,19 @@
 - 다른 도메인 설명, 전체 서비스 설명, 관련 없는 예시는 기본적으로 넣지 않는다.
 - 긴 문서 기반 작업은 `extract/quote -> synthesize` 의 2단 구성으로 나눈다.
 - 문서 입력이 길면 문서와 메타데이터를 먼저 두고, 사용자 질의와 출력 지시는 뒤에 둔다.
+- 고정 지시는 앞에 두고, 가변 컨텍스트는 뒤에 둔다.
+- retrieval 결과가 필요 없는 단계에는 retrieval payload 를 전달하지 않는다.
+
+## 구조화 런타임 자산
+
+서비스 단계는 prose 문서가 아니라 아래 자산으로 조합한다.
+
+- 시나리오 선택: `ScenarioManifest`
+- stage prompt: `docs/harness/prompt-bundles/<scenario>/workflow.json`
+- offline/CI eval: `EvalSuite` + `promptfoo`
+- runtime span grading: `TraceGradeSpec`
+
+서비스 코드는 위 자산을 참조해 stage별 prompt 와 grader 를 조립해야 한다.
 
 ## 공통 span
 
@@ -141,6 +154,12 @@
 - template fill rate 미달 시: 빈 필드 목록과 보완 요청 반환
 - OCR parse quality 미달 시: 대체 OCR 엔진으로 재시도
 - PLM safety 미달 시: 사전 정의 템플릿 결과만 반환
+
+## 운영 구현 원칙
+
+- trace 저장 형식은 OpenTelemetry 친화적으로 유지한다.
+- 관찰성 UI는 나중에 `Langfuse` 를 붙일 수 있도록 provider-neutral contract를 유지한다.
+- `promptfoo` 는 offline/CI 의 기본 runner 로 사용하고, 고위험 실험만 `Inspect AI` 계열을 보조로 사용한다.
 
 ## 운영 큐
 

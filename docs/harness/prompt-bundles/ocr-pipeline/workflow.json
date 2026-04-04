@@ -1,0 +1,40 @@
+{
+  "$schema": "https://doowon.local/docs/harness/schemas/prompt-bundle.schema.json",
+  "scenario_id": "ocr-pipeline",
+  "workflow_version": "ocr-pipeline-wf-v1",
+  "prompt_templates": [
+    {
+      "template_id": "ocr-pipeline-routing",
+      "stage": "ocr",
+      "prompt_version": "ocr-pipeline-prompt-v1",
+      "fixed_instruction_path": "docs/harness/prompt-bundles/ocr-pipeline/routing.md",
+      "variable_slots": ["mime_type", "native_extraction_result", "layout_mode"],
+      "context_contract": {
+        "load": ["mime_type", "native_extraction_result", "layout_mode"],
+        "avoid": ["other_scenario_context"]
+      }
+    },
+    {
+      "template_id": "ocr-pipeline-parse",
+      "stage": "generation",
+      "prompt_version": "ocr-pipeline-prompt-v1",
+      "fixed_instruction_path": "docs/harness/prompt-bundles/ocr-pipeline/parse.md",
+      "variable_slots": ["asset_uri", "engine_choice", "language_hint"],
+      "context_contract": {
+        "load": ["asset_uri", "engine_choice", "language_hint"],
+        "avoid": ["non_document_context"]
+      }
+    },
+    {
+      "template_id": "ocr-pipeline-judge",
+      "stage": "policy-check",
+      "prompt_version": "ocr-pipeline-prompt-v1",
+      "fixed_instruction_path": "docs/harness/prompt-bundles/ocr-pipeline/judge.md",
+      "variable_slots": ["plain_text", "layout_blocks", "tables", "confidence"],
+      "context_contract": {
+        "load": ["plain_text", "layout_blocks", "tables", "confidence"],
+        "avoid": ["engine_internal_trace"]
+      }
+    }
+  ]
+}

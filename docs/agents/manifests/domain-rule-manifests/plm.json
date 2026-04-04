@@ -1,0 +1,32 @@
+{
+  "$schema": "https://doowon.local/docs/harness/schemas/domain-rule-manifest.schema.json",
+  "domain_id": "plm",
+  "path_prefixes": [
+    "packages/api/plm/",
+    "packages/web/plm/",
+    "docs/harness/scenarios/plm-query.md",
+    "docs/harness/manifests/scenarios/plm-query.json",
+    "docs/harness/prompt-bundles/plm-query/",
+    ".claude/agents/plm-safety-reviewer.md"
+  ],
+  "responsibility": "PLM intent routing, safe SQL planning, validator 정책, 표 기반 결과 요약을 소유한다.",
+  "scenario_candidates": [
+    "plm-query"
+  ],
+  "must_read_docs": [
+    "docs/agents/context-loading-policy.md",
+    "docs/agents/agent-operating-standard.md",
+    "docs/agents/domain-context-mapping.md",
+    "docs/harness/scenarios/plm-query.md",
+    "docs/harness/manifests/scenarios/plm-query.json"
+  ],
+  "optional_support_docs": [
+    "docs/harness/eval-regression-spec.md",
+    "docs/harness/service-runtime-harness.md"
+  ],
+  "do_not_load_by_default": [
+    "docs/harness/scenarios/documents-rag.md",
+    "docs/harness/scenarios/wiki-pms.md"
+  ],
+  "local_rule_template": "docs/agents/local-rule-template.md"
+}

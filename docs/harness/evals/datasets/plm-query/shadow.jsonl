@@ -1,0 +1,1 @@
+{"description":"recent summary mismatch case","vars":{"query":"Show delayed release items by owner Kim.","template_candidates":"[{\"template_id\":\"release-delay-by-owner\"}]","allowlist":"[\"vw_release_delay\",\"vw_user\"]"},"metadata":{"scenario_id":"plm-query","dataset":"shadow"}}

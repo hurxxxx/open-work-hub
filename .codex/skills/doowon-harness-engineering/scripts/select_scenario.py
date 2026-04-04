@@ -2,79 +2,53 @@
 import json
 import sys
 
-
-SCENARIOS = {
-    "documents-rag": {
-        "keywords": ["document", "rag", "search", "citation", "retrieval", "문서", "검색", "근거"],
-        "must_read": [
-            "docs/agents/context-loading-policy.md",
-            "docs/agents/agent-operating-standard.md",
-            "docs/harness/scenarios/documents-rag.md"
-        ]
-    },
-    "plm-query": {
-        "keywords": ["plm", "sql", "bom", "query", "validator", "품목", "도면"],
-        "must_read": [
-            "docs/agents/context-loading-policy.md",
-            "docs/agents/agent-operating-standard.md",
-            "docs/harness/scenarios/plm-query.md"
-        ]
-    },
-    "draft-generation": {
-        "keywords": ["draft", "template", "docx", "pdf", "초안", "템플릿", "내보내기"],
-        "must_read": [
-            "docs/agents/context-loading-policy.md",
-            "docs/agents/agent-operating-standard.md",
-            "docs/harness/scenarios/draft-generation.md"
-        ]
-    },
-    "ocr-pipeline": {
-        "keywords": ["ocr", "layout", "scan", "image", "pdf", "표", "추출"],
-        "must_read": [
-            "docs/agents/context-loading-policy.md",
-            "docs/agents/agent-operating-standard.md",
-            "docs/harness/scenarios/ocr-pipeline.md"
-        ]
-    },
-    "wiki-pms": {
-        "keywords": ["wiki", "pms", "task", "issue", "summary", "작업", "이슈", "위키"],
-        "must_read": [
-            "docs/agents/context-loading-policy.md",
-            "docs/agents/agent-operating-standard.md",
-            "docs/harness/scenarios/wiki-pms.md"
-        ]
-    }
-}
+from manifest_utils import build_context_payload, load_all_domain_manifests, load_all_scenario_manifests, pick_scenario, resolve_domain_for_path
 
 
 def main() -> int:
-    request = " ".join(sys.argv[1:]).strip().lower()
-    if not request:
-        print("usage: select_scenario.py '<request>'", file=sys.stderr)
+    args = sys.argv[1:]
+    request_parts = []
+    path_hint = ""
+
+    i = 0
+    while i < len(args):
+        arg = args[i]
+        if arg == "--path":
+            if i + 1 >= len(args):
+                print("missing value for --path", file=sys.stderr)
+                return 1
+            path_hint = args[i + 1]
+            i += 2
+            continue
+        request_parts.append(arg)
+        i += 1
+
+    request = " ".join(request_parts).strip()
+    if not request and not path_hint:
+        print("usage: select_scenario.py [--path <file-path>] '<request>'", file=sys.stderr)
         return 1
 
-    scored = []
-    for scenario_id, meta in SCENARIOS.items():
-        score = sum(1 for keyword in meta["keywords"] if keyword in request)
-        scored.append((score, scenario_id, meta))
+    scenario_manifests = load_all_scenario_manifests()
+    domain_manifests = load_all_domain_manifests()
 
-    scored.sort(reverse=True)
-    score, scenario_id, meta = scored[0]
-    payload = {
-        "scenario_id": scenario_id,
-        "confidence": "high" if score >= 2 else "medium" if score == 1 else "low",
-        "must_read_docs": meta["must_read"],
-        "optional_support_docs": [
-            "docs/harness/eval-regression-spec.md",
-            "docs/harness/service-runtime-harness.md",
-            "docs/ops/release-gates-and-alerts.md"
-        ],
-        "do_not_load_by_default": [
-            path["must_read"][-1]
-            for key, path in SCENARIOS.items()
-            if key != scenario_id
-        ]
-    }
+    domain_manifest = resolve_domain_for_path(path_hint, domain_manifests) if path_hint else None
+    candidate_ids = None if domain_manifest is None else domain_manifest.get("scenario_candidates", [])
+    if domain_manifest is not None and len(candidate_ids) > 1 and not request:
+        print(
+            f"domain '{domain_manifest['domain_id']}' maps to multiple scenarios; provide request text to disambiguate",
+            file=sys.stderr
+        )
+        return 2
+    scenario_manifest, confidence = pick_scenario(request, scenario_manifests, candidate_ids=candidate_ids)
+    if domain_manifest is not None and len(candidate_ids) > 1 and confidence == "low":
+        print(
+            f"request is still ambiguous for domain '{domain_manifest['domain_id']}'; mention a scenario or domain-specific intent",
+            file=sys.stderr
+        )
+        return 3
+
+    payload = build_context_payload(scenario_manifest, domain_manifest, request)
+    payload["confidence"] = confidence
     print(json.dumps(payload, ensure_ascii=True, indent=2))
     return 0
 

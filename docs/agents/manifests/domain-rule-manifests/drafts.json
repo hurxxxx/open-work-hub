@@ -1,0 +1,32 @@
+{
+  "$schema": "https://doowon.local/docs/harness/schemas/domain-rule-manifest.schema.json",
+  "domain_id": "drafts",
+  "path_prefixes": [
+    "packages/api/drafts/",
+    "packages/web/drafts/",
+    "docs/harness/scenarios/draft-generation.md",
+    "docs/harness/manifests/scenarios/draft-generation.json",
+    "docs/harness/prompt-bundles/draft-generation/",
+    ".claude/agents/doc-architect.md"
+  ],
+  "responsibility": "템플릿 해석, 초안 생성, citation block, export 계약을 소유한다.",
+  "scenario_candidates": [
+    "draft-generation"
+  ],
+  "must_read_docs": [
+    "docs/agents/context-loading-policy.md",
+    "docs/agents/agent-operating-standard.md",
+    "docs/agents/domain-context-mapping.md",
+    "docs/harness/scenarios/draft-generation.md",
+    "docs/harness/manifests/scenarios/draft-generation.json"
+  ],
+  "optional_support_docs": [
+    "docs/harness/eval-regression-spec.md",
+    "docs/harness/service-runtime-harness.md"
+  ],
+  "do_not_load_by_default": [
+    "docs/harness/scenarios/plm-query.md",
+    "docs/harness/scenarios/wiki-pms.md"
+  ],
+  "local_rule_template": "docs/agents/local-rule-template.md"
+}

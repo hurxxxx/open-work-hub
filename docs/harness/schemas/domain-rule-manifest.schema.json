@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://doowon.local/docs/harness/schemas/domain-rule-manifest.schema.json",
+  "title": "DomainRuleManifest",
+  "type": "object",
+  "required": [
+    "domain_id",
+    "path_prefixes",
+    "responsibility",
+    "scenario_candidates",
+    "must_read_docs",
+    "do_not_load_by_default"
+  ],
+  "properties": {
+    "domain_id": { "type": "string", "minLength": 1 },
+    "path_prefixes": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "responsibility": { "type": "string", "minLength": 1 },
+    "scenario_candidates": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "must_read_docs": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "optional_support_docs": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "do_not_load_by_default": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "local_rule_template": { "type": "string", "minLength": 1 }
+  },
+  "additionalProperties": true
+}

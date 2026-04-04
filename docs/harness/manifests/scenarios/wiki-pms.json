@@ -1,0 +1,50 @@
+{
+  "$schema": "https://doowon.local/docs/harness/schemas/scenario-manifest.schema.json",
+  "scenario_id": "wiki-pms",
+  "goal": "위키와 작업 관리 객체에 대해 권한을 지키는 preview-first 생성 기능을 제공한다.",
+  "domain_ids": ["wiki-pms"],
+  "keywords": ["wiki", "pms", "task", "issue", "summary", "작업", "이슈", "위키"],
+  "source_doc": "docs/harness/scenarios/wiki-pms.md",
+  "workflow_bundle": "docs/harness/prompt-bundles/wiki-pms/workflow.json",
+  "eval_suite": "docs/harness/manifests/eval-suites/wiki-pms.json",
+  "trace_grade_spec": "docs/harness/manifests/trace-grade-specs/wiki-pms.json",
+  "release_gate": "docs/ops/release-gates-and-alerts.md",
+  "must_read_docs": [
+    "agents.md",
+    "docs/agents/context-loading-policy.md",
+    "docs/agents/agent-operating-standard.md",
+    "docs/harness/scenarios/wiki-pms.md",
+    "docs/harness/manifests/scenarios/wiki-pms.json",
+    "docs/harness/prompt-bundles/wiki-pms/workflow.json"
+  ],
+  "optional_support_docs": [
+    "docs/harness/eval-regression-spec.md",
+    "docs/harness/service-runtime-harness.md",
+    "docs/harness/trace-and-scorecard-spec.md",
+    "docs/ops/release-gates-and-alerts.md"
+  ],
+  "do_not_load_by_default": [
+    "docs/harness/scenarios/documents-rag.md",
+    "docs/harness/scenarios/plm-query.md",
+    "docs/harness/scenarios/draft-generation.md",
+    "docs/harness/scenarios/ocr-pipeline.md"
+  ],
+  "allowed_tools": [
+    "Intent router",
+    "Wiki reader/writer",
+    "PMS reader/writer",
+    "Policy checker",
+    "Structured generator"
+  ],
+  "guardrail_policies": [
+    "preview_required",
+    "acl_enforced",
+    "grounded_summary_only"
+  ],
+  "expected_artifacts": [
+    "ScenarioManifest update",
+    "Prompt bundle update",
+    "EvalSuite refresh",
+    "Preview policy review"
+  ]
+}

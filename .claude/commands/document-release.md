@@ -13,10 +13,11 @@ Steps:
 1. Read `docs/agents/agent-operating-standard.md`.
 2. Read `docs/agents/agent-tooling-registry.md`.
 3. Read `docs/ops/sprint-workflow.md`.
-4. Identify which source-of-truth docs under `docs/*` are stale after the change.
-5. Identify which adapter files are stale: `agents.md`, `CLAUDE.md`, `.github/copilot-instructions.md`, `.cursor/rules/*`, `.claude/rules/*`.
-6. Update the source-of-truth docs first, then update adapters only if needed.
-7. Summarize which docs changed and which docs should still be reviewed by a human.
+4. Identify which source-of-truth docs or structured assets are stale after the change.
+5. Check `docs/harness/manifests/*`, `docs/harness/prompt-bundles/*`, `docs/harness/evals/*`, `docs/agents/manifests/*`.
+6. Identify which adapter files are stale: `agents.md`, `CLAUDE.md`, `.claude/rules/*`, `.claude/commands/*`, `.codex/skills/doowon-harness-engineering/*`.
+7. Update the source-of-truth docs first, then update adapters only if needed.
+8. Summarize which docs changed and which docs should still be reviewed by a human.
 
 Return:
 

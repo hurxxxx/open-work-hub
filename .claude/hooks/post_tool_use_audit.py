@@ -27,8 +27,10 @@ def main() -> int:
         token in lowered_path for token in [
             "docs/harness/",
             ".claude/",
-            ".github/copilot-instructions.md",
-            ".cursor/rules/",
+            "docs/agents/manifests/",
+            "docs/harness/manifests/",
+            "docs/harness/prompt-bundles/",
+            "docs/harness/evals/",
             "claude.md"
         ]
     ) or any(token in lowered_command for token in ["eval", "pytest", "benchmark", "regression", "scorecard"])

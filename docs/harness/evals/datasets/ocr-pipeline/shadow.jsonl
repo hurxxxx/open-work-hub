@@ -1,0 +1,1 @@
+{"description":"recent catastrophic blank-page failure","vars":{"mime_type":"image/png","native_extraction_result":"empty","layout_mode":"plain","asset_uri":"s3://bucket/scan-blank-regression.png","language_hint":"ko"},"metadata":{"scenario_id":"ocr-pipeline","dataset":"shadow"}}

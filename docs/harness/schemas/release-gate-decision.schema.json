@@ -19,7 +19,7 @@
     },
     "decision": {
       "type": "string",
-      "enum": ["go", "hold", "rollback-candidate"]
+      "enum": ["go", "hold-until-review", "hold", "rollback-candidate"]
     },
     "owner": { "type": "string", "minLength": 1 },
     "summary": { "type": "string", "minLength": 1 },

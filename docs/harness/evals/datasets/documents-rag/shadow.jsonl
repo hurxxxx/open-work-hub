@@ -1,0 +1,1 @@
+{"description":"recent retrieval miss reproduced","vars":{"query":"Show the revision note that changed seal material.","selected_quotes":"[{\"document_id\":\"doc-rev-104\",\"page\":2,\"quote_text\":\"Seal material updated from NBR to FKM.\"}]","citation_blocks":"[{\"document_id\":\"doc-rev-104\",\"page\":2}]"},"metadata":{"scenario_id":"documents-rag","dataset":"shadow"}}

@@ -1,0 +1,50 @@
+{
+  "$schema": "https://doowon.local/docs/harness/schemas/scenario-manifest.schema.json",
+  "scenario_id": "draft-generation",
+  "goal": "템플릿과 근거 문서를 바탕으로 citation block이 유지되는 초안을 생성하고 export 준비를 마친다.",
+  "domain_ids": ["drafts"],
+  "keywords": ["draft", "template", "docx", "pdf", "초안", "템플릿", "내보내기"],
+  "source_doc": "docs/harness/scenarios/draft-generation.md",
+  "workflow_bundle": "docs/harness/prompt-bundles/draft-generation/workflow.json",
+  "eval_suite": "docs/harness/manifests/eval-suites/draft-generation.json",
+  "trace_grade_spec": "docs/harness/manifests/trace-grade-specs/draft-generation.json",
+  "release_gate": "docs/ops/release-gates-and-alerts.md",
+  "must_read_docs": [
+    "agents.md",
+    "docs/agents/context-loading-policy.md",
+    "docs/agents/agent-operating-standard.md",
+    "docs/harness/scenarios/draft-generation.md",
+    "docs/harness/manifests/scenarios/draft-generation.json",
+    "docs/harness/prompt-bundles/draft-generation/workflow.json"
+  ],
+  "optional_support_docs": [
+    "docs/harness/eval-regression-spec.md",
+    "docs/harness/service-runtime-harness.md",
+    "docs/harness/trace-and-scorecard-spec.md",
+    "docs/ops/release-gates-and-alerts.md"
+  ],
+  "do_not_load_by_default": [
+    "docs/harness/scenarios/documents-rag.md",
+    "docs/harness/scenarios/plm-query.md",
+    "docs/harness/scenarios/ocr-pipeline.md",
+    "docs/harness/scenarios/wiki-pms.md"
+  ],
+  "allowed_tools": [
+    "Template resolver",
+    "Documents retrieval",
+    "Citation assembler",
+    "Draft generator",
+    "Export pipeline"
+  ],
+  "guardrail_policies": [
+    "citation_required",
+    "unsupported_claim_block",
+    "export_status_required"
+  ],
+  "expected_artifacts": [
+    "ScenarioManifest update",
+    "Prompt bundle update",
+    "EvalSuite refresh",
+    "Export contract review"
+  ]
+}
