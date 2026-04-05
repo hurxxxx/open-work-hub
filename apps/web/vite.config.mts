@@ -10,11 +10,13 @@ export default defineConfig(() => ({
   cacheDir: '../../node_modules/.vite/apps/web',
   server: {
     port: 4200,
-    host: 'localhost',
+    host: '0.0.0.0',
+    allowedHosts: ['dwdcc.lumejs.com'],
   },
   preview: {
     port: 4200,
-    host: 'localhost',
+    host: '0.0.0.0',
+    allowedHosts: ['dwdcc.lumejs.com'],
   },
   plugins: [react(), tailwindcss(), nxViteTsPaths(), nxCopyAssetsPlugin(['*.md'])],
   // Uncomment this if you are using workers.
