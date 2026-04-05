@@ -1,24 +1,31 @@
+import { LineChartCard, MetricInline, Panel, StatusBadge } from '@doowon/ui';
+
 export function WikiPmsPreview() {
   return (
-    <section className="panel">
-      <div className="panel__header">
-        <div>
-          <p className="eyebrow">Wiki / PMS</p>
-          <h2>Preview-first 제안</h2>
+    <div className="grid gap-5">
+      <Panel
+        eyebrow="Wiki / PMS"
+        title="할당 작업"
+        status={<StatusBadge>preview only</StatusBadge>}
+      >
+        <div className="grid gap-4">
+          <MetricInline label="Issue triage" value="3 open · owner reassignment ready" />
+          <MetricInline label="Wiki summary" value="2 pages updated today" />
+          <MetricInline label="Release notes" value="draft linked to source pages" />
         </div>
-        <span className="status-badge status-badge--muted">preview only</span>
-      </div>
-
-      <ul className="stack-list">
-        <li>
-          <strong>Issue triage</strong>
-          <span>owner reassign preview available</span>
-        </li>
-        <li>
-          <strong>Wiki summary</strong>
-          <span>grounded summary with source links</span>
-        </li>
-      </ul>
-    </section>
+      </Panel>
+      <LineChartCard
+        title="Issue throughput"
+        categories={['Mon', 'Tue', 'Wed', 'Thu', 'Fri']}
+        series={[
+          {
+            key: 'resolved',
+            label: 'Resolved',
+            color: '#1f2d38',
+            data: [3, 5, 4, 6, 5],
+          },
+        ]}
+      />
+    </div>
   );
 }

@@ -6,7 +6,13 @@ export default [
   ...baseConfig,
   {
     files: ['**/*.ts', '**/*.tsx', '**/*.js', '**/*.jsx'],
-    // Override or add rules here
-    rules: {},
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: ['@radix-ui/*', '@tanstack/react-table', 'recharts'],
+        },
+      ],
+    },
   },
 ];

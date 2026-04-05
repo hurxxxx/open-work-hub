@@ -44,6 +44,7 @@ Important preferences:
 - For authenticated product surfaces, prefer an enterprise portal app shell with a persistent left sidebar on desktop.
 - Do not default to hero-first, card-heavy, or marketing-style SPA layouts.
 - Avoid generic AI-generated visual tropes such as purple gradients, glassmorphism, neon glow, and bento-card dashboards.
+- Add a shared UI package and require feature code to check shared components first before creating new UI.
 - Prefer provider-neutral contracts for runtime traces and evals.
 - Default eval runner should be promptfoo unless there is a strong reason not to.
 - Claude Code and Codex should behave consistently from the same source-of-truth docs.
@@ -133,6 +134,12 @@ Then do the following:
 - Define what “AI-looking” anti-patterns to avoid
 - Provide one reusable design prompt for future projects and new screens
 - Use official enterprise design systems and current primary-source references before inventing a house style
+
+8b. Add UI component governance:
+- Create a shared UI package as the source of truth for reusable components
+- Require page and feature code to use shared components first
+- Wrap third-party UI libraries behind the shared UI package
+- Keep app-local CSS limited to layout composition and page-specific exceptions
 
 9. If the project has no real code scaffold yet:
 - Do not fabricate detailed `apps/*` or `packages/*` structure

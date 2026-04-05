@@ -56,6 +56,7 @@
 - 도메인 내부 구현은 해당 도메인 소유자만 직접 수정한다는 가정으로 접근한다.
 - 조립 계층은 wiring만 한다.
 - 공용 계약은 공유 계약 계층 또는 문서 계약에서 먼저 정의한다.
+- 프론트 공통 UI 계약은 `packages/ui` 와 `docs/architecture/ui-component-governance.md` 에서 먼저 정의한다.
 - 하네스 원본 문서는 `docs/*`에만 둔다.
 - 실제 코드 스캐폴드가 생기면 도메인 루트의 local `AGENTS.md` 를 추가하되, 원본 규약은 문서/manifest 에서 먼저 정의한다.
 

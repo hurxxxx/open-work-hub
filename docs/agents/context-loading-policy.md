@@ -56,6 +56,7 @@
    - `release-gates-and-alerts`
    - `system-blueprint`
    - frontend 디자인 작업이면 `enterprise-portal-design-direction`
+   - 공통 UI 작업이면 `ui-component-governance`
 6. 관련 없는 다른 시나리오 문서는 기본적으로 읽지 않는다.
 
 ### 기본적으로 넣지 말아야 하는 것

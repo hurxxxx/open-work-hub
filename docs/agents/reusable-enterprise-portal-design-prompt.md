@@ -43,6 +43,11 @@ Preferred UI patterns:
 - table or list-detail layout
 - split panes
 - right-side drawer for supplemental info
+
+Component governance:
+- Before creating a new UI pattern, check whether a shared component already exists.
+- If it does not exist, add it to the shared UI package first instead of implementing a local one-off version.
+- Do not directly import low-level third-party UI libraries from feature or page code; use the shared UI wrapper layer.
 - badges, breadcrumbs, saved views, inline states
 
 Avoid these patterns:

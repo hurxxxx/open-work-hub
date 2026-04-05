@@ -1,0 +1,84 @@
+@import "tailwindcss";
+
+:root {
+  --ui-font-sans: "IBM Plex Sans KR", "IBM Plex Sans", "Pretendard", sans-serif;
+  --ui-font-mono: "IBM Plex Mono", "JetBrains Mono", monospace;
+  --ui-color-bg: #f3f2ee;
+  --ui-color-surface: #faf9f6;
+  --ui-color-surface-raised: #ffffff;
+  --ui-color-surface-subtle: #f1f1ec;
+  --ui-color-surface-sidebar: #151c20;
+  --ui-color-border: rgba(30, 37, 41, 0.1);
+  --ui-color-border-strong: rgba(30, 37, 41, 0.16);
+  --ui-color-ink: #1e2529;
+  --ui-color-ink-muted: #556169;
+  --ui-color-ink-subtle: #68757d;
+  --ui-color-accent: #1f2d38;
+  --ui-color-accent-weak: #e6ebee;
+  --ui-color-success: #1f6b4d;
+  --ui-color-warning: #9b6b17;
+  --ui-color-danger: #8f2d2d;
+  --ui-radius-sm: 8px;
+  --ui-radius-md: 10px;
+  --ui-radius-lg: 14px;
+  --ui-shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.04);
+  --ui-shadow-lg: 0 20px 48px rgba(15, 23, 42, 0.18);
+  --ui-space-1: 4px;
+  --ui-space-2: 8px;
+  --ui-space-3: 12px;
+  --ui-space-4: 16px;
+  --ui-space-5: 20px;
+  --ui-space-6: 24px;
+  --ui-density-dense: 32px;
+  --ui-density-comfortable: 38px;
+  --ui-motion-fast: 120ms;
+  --ui-motion-base: 180ms;
+  --ui-z-drawer: 40;
+  --ui-z-toast: 50;
+}
+
+@layer base {
+  * {
+    box-sizing: border-box;
+  }
+
+  html,
+  body,
+  #root {
+    min-height: 100%;
+  }
+
+  body {
+    margin: 0;
+    background: var(--ui-color-bg);
+    color: var(--ui-color-ink);
+    font-family: var(--ui-font-sans);
+    line-height: 1.5;
+  }
+
+  button,
+  input,
+  select,
+  textarea {
+    font: inherit;
+  }
+}
+
+@layer utilities {
+  .ui-scrollbar {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(106, 117, 123, 0.5) transparent;
+  }
+
+  .ui-scrollbar::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+
+  .ui-scrollbar::-webkit-scrollbar-thumb {
+    background: rgba(106, 117, 123, 0.4);
+    border-radius: 999px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+  }
+}

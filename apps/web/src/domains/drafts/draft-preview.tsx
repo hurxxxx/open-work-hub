@@ -1,30 +1,17 @@
+import { Button, MetricInline, Panel } from '@doowon/ui';
+
 export function DraftPreview() {
   return (
-    <section className="panel">
-      <div className="panel__header">
-        <div>
-          <p className="eyebrow">Drafts</p>
-          <h2>초안 준비 상태</h2>
-        </div>
-        <button className="ghost-button" type="button">
-          템플릿 보기
-        </button>
+    <Panel
+      eyebrow="Drafts"
+      title="초안 큐"
+      actions={<Button variant="secondary">템플릿 보기</Button>}
+    >
+      <div className="grid gap-4">
+        <MetricInline label="Project A Summary" value="citation blocks ready · review pending" />
+        <MetricInline label="Risk Review Memo" value="2 required fields missing" />
+        <MetricInline label="Export Queue" value="1 waiting · 1 generated" />
       </div>
-
-      <ul className="stack-list">
-        <li>
-          <strong>Project A Summary</strong>
-          <span>citation blocks ready</span>
-        </li>
-        <li>
-          <strong>Risk Review Memo</strong>
-          <span>2 required fields missing</span>
-        </li>
-        <li>
-          <strong>Export Queue</strong>
-          <span>docx/pdf worker not wired yet</span>
-        </li>
-      </ul>
-    </section>
+    </Panel>
   );
 }

@@ -1,31 +1,30 @@
+import { DataTable, Panel, StatusBadge, type DataTableColumn } from '@doowon/ui';
+
+type PlmRow = {
+  template: string;
+  scope: string;
+  lastRun: string;
+};
+
+const rows: PlmRow[] = [
+  { template: 'ECO by project', scope: 'Project A', lastRun: '3 min ago' },
+  { template: 'BOM status snapshot', scope: 'Engineering', lastRun: '12 min ago' },
+];
+
+const columns: DataTableColumn<PlmRow>[] = [
+  { accessorKey: 'template', header: 'Template' },
+  { accessorKey: 'scope', header: 'Scope' },
+  { accessorKey: 'lastRun', header: 'Last run' },
+];
+
 export function PlmPreview() {
   return (
-    <section className="panel">
-      <div className="panel__header">
-        <div>
-          <p className="eyebrow">PLM</p>
-          <h2>읽기 전용 조회</h2>
-        </div>
-        <span className="status-badge">safe preview</span>
-      </div>
-
-      <div className="table-shell">
-        <div className="table-shell__row table-shell__row--header">
-          <span>Item</span>
-          <span>Status</span>
-          <span>Owner</span>
-        </div>
-        <div className="table-shell__row">
-          <span>BOM-214</span>
-          <span>Open</span>
-          <span>Kim</span>
-        </div>
-        <div className="table-shell__row">
-          <span>ECO-991</span>
-          <span>Delayed</span>
-          <span>Lee</span>
-        </div>
-      </div>
-    </section>
+    <Panel
+      eyebrow="PLM"
+      title="승인된 조회 템플릿"
+      status={<StatusBadge>safe preview</StatusBadge>}
+    >
+      <DataTable columns={columns} rows={rows} />
+    </Panel>
   );
 }

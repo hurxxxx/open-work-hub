@@ -1,3 +1,14 @@
+import {
+  AppShell,
+  Button,
+  SidebarNav,
+  SplitPane,
+  StatusBadge,
+  ToastProvider,
+  ToastViewport,
+  Topbar,
+} from '@doowon/ui';
+
 import { SearchWorkbench } from '../domains/documents/search-workbench';
 import { DraftPreview } from '../domains/drafts/draft-preview';
 import { PlmPreview } from '../domains/plm/plm-preview';
@@ -5,79 +16,75 @@ import { WikiPmsPreview } from '../domains/wiki-pms/wiki-pms-preview';
 
 export function App() {
   return (
-    <div className="portal-shell">
-      <aside className="portal-sidebar">
-        <div className="sidebar-brand">
-          <p className="sidebar-brand__eyebrow">Doowon</p>
-          <strong>AI Portal</strong>
-        </div>
-
-        <nav aria-label="Primary" className="sidebar-nav">
-          <div className="sidebar-nav__group">
-            <p className="sidebar-nav__label">Workspace</p>
-            <button className="sidebar-nav__item sidebar-nav__item--active" type="button">
-              Documents
-            </button>
-            <button className="sidebar-nav__item" type="button">
-              PLM
-            </button>
-            <button className="sidebar-nav__item" type="button">
-              Drafts
-            </button>
-            <button className="sidebar-nav__item" type="button">
-              Wiki / PMS
-            </button>
-          </div>
-
-          <div className="sidebar-nav__group">
-            <p className="sidebar-nav__label">Saved Views</p>
-            <button className="sidebar-nav__item" type="button">
-              Latest specs
-            </button>
-            <button className="sidebar-nav__item" type="button">
-              Export queue
-            </button>
-            <button className="sidebar-nav__item" type="button">
-              Open issues
-            </button>
-          </div>
-        </nav>
-
-        <div className="sidebar-footer">
-          <span className="status-badge status-badge--sidebar">Engineering</span>
-          <span className="status-badge status-badge--sidebar">RBAC preview</span>
-        </div>
-      </aside>
-
-      <main className="portal-main">
-        <header className="topbar">
-          <div>
-            <p className="eyebrow">Operations workspace</p>
-            <h1>근거형 검색과 작업면 중심의 AI 업무 포털</h1>
-            <p className="topbar__description">
-              문서 검색, PLM 조회, 초안 준비, 협업 작업면을 하나의 앱 셸 안에서
-              이어가는 초기 스캐폴드입니다.
-            </p>
-          </div>
-          <div className="topbar__meta">
-            <span className="status-badge">React 19 + Vite</span>
-            <span className="status-badge">Nx workspace</span>
-            <span className="status-badge">left sidebar</span>
-          </div>
-        </header>
-
-        <section className="workbench">
-          <div className="workbench__main">
-            <SearchWorkbench />
-          </div>
-          <div className="workbench__side">
-            <PlmPreview />
-            <DraftPreview />
-            <WikiPmsPreview />
-          </div>
-        </section>
-      </main>
-    </div>
+    <ToastProvider>
+      <AppShell
+        sidebar={
+          <SidebarNav
+            brand={{ eyebrow: 'Doowon', title: 'AI Portal' }}
+            launcher={{ label: 'Search everything', hint: '⌘K' }}
+            sections={[
+              {
+                id: 'knowledge',
+                label: 'Knowledge',
+                items: [
+                  { id: 'documents', label: 'Documents', active: true },
+                  { id: 'plm', label: 'PLM' },
+                  { id: 'drafts', label: 'Drafts' },
+                  { id: 'wiki-pms', label: 'Wiki / PMS' },
+                  { id: 'citations', label: 'Citations' },
+                ],
+              },
+              {
+                id: 'execution',
+                label: 'Execution',
+                items: [
+                  { id: 'jobs', label: 'Jobs' },
+                  { id: 'audit-logs', label: 'Audit logs' },
+                ],
+              },
+              {
+                id: 'pinned',
+                label: 'Pinned',
+                items: [
+                  { id: 'specs', label: 'Latest specs' },
+                  { id: 'exports', label: 'Export queue' },
+                  { id: 'issues', label: 'Open issues' },
+                ],
+              },
+            ]}
+            footerBadges={['Engineering', 'RBAC preview']}
+          />
+        }
+        header={
+          <Topbar
+            breadcrumb="Workspace / Documents / Grounded search"
+            title="Engineering knowledge workbench"
+            description="승인된 문서 소스에서 근거를 찾고, 필요한 항목은 초안 작성 흐름으로 바로 넘기는 검색 중심 작업면입니다."
+            actions={
+              <>
+                <Button variant="secondary">Sync docs</Button>
+                <Button variant="secondary">Saved views</Button>
+                <Button variant="primary">New draft</Button>
+                <StatusBadge>React 19 + Vite</StatusBadge>
+                <StatusBadge>Portal shell</StatusBadge>
+              </>
+            }
+          />
+        }
+      >
+        <SplitPane
+          main={<SearchWorkbench />}
+          aside={
+            <>
+              <PlmPreview />
+              <DraftPreview />
+              <WikiPmsPreview />
+            </>
+          }
+        />
+      </AppShell>
+      <ToastViewport />
+    </ToastProvider>
   );
 }
 

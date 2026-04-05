@@ -111,6 +111,8 @@
 - 디자인 레퍼런스는 많아도 2-3개만 준다.
 - 참고 레퍼런스를 주더라도 `브랜드 복제` 가 아니라 `상호작용 패턴과 밀도` 만 가져온다.
 - 프롬프트에는 현재 화면의 사용자, 주요 작업, 밀도, 우선 컴포넌트, 제외 패턴을 같이 적는다.
+- 도메인 화면에서 반복되는 UI는 먼저 `packages/ui` 공통 컴포넌트로 확인하고, 없으면 거기서 먼저 구현한다.
+- 버튼, 배지, 패널, 테이블, 드로어, 토스트, 차트는 로컬 CSS로 다시 만들지 않는다.
 
 ## 재사용 가능한 디자인 지시 블록
 
@@ -175,3 +177,7 @@ If unsure, prefer the interaction discipline of GitHub, GitLab, Microsoft, or IB
 - OpenAI prompt optimizer: https://platform.openai.com/docs/guides/prompt-optimizer/
 - Reddit discussion on avoiding generic AI-looking UI: https://www.reddit.com/r/vibecoding/comments/1rr0dwy/all_ai_websites_and_designs_look_the_same_has/
 - GitHub gist of Claude frontend aesthetics prompt: https://gist.github.com/hashimwarren/b544f89bdb50e4877d0e603ad547e18f
+
+## 관련 규약
+
+- 공통 UI 거버넌스: [docs/architecture/ui-component-governance.md](/Users/edward/projects/doowon/docs/architecture/ui-component-governance.md)
