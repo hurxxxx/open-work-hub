@@ -13,10 +13,7 @@ def _workspace_root() -> Path:
 
 
 WORKSPACE_ROOT = _workspace_root()
-ENV_FILES = (
-    WORKSPACE_ROOT / ".env.local",
-    WORKSPACE_ROOT / ".env",
-)
+ENV_FILE = WORKSPACE_ROOT / ".env"
 
 
 class Settings(BaseSettings):
@@ -26,8 +23,9 @@ class Settings(BaseSettings):
 
     model_config = SettingsConfigDict(
         env_prefix="DOOWON_API_",
-        env_file=tuple(str(path) for path in ENV_FILES),
+        env_file=str(ENV_FILE),
         env_file_encoding="utf-8",
+        extra="ignore",
     )
 
 
