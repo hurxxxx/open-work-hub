@@ -5,6 +5,9 @@ set -Eeuo pipefail
 ROOT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 cd "$ROOT_DIR"
 
+# The Nx daemon is unstable in this environment; use direct Nx execution.
+export NX_DAEMON=false
+
 usage() {
   cat <<'EOF'
 Usage: ./dev.sh [options]
