@@ -1,3 +1,6 @@
+@import "tailwindcss" source(none);
+@source "./";
+@source "../../../packages/ui/src";
 @import "../../../packages/ui/src/styles.css";
 
 body {

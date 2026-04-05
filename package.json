@@ -4,6 +4,7 @@
   "packageManager": "pnpm@10.33.0",
   "scripts": {
     "nx": "nx",
+    "dev": "./dev.sh",
     "dev:web": "nx dev web",
     "dev:api": "nx dev api",
     "dev:worker": "nx dev worker",
