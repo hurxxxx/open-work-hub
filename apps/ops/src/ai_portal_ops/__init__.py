@@ -1,1 +1,1 @@
-"""Operational tooling for the Doowon AI portal."""
+"""Operational tooling for AIDOO."""

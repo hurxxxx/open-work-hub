@@ -1,1 +1,1 @@
-"""Doowon AI Portal API package."""
+"""AIDOO API package."""

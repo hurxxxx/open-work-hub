@@ -17,7 +17,7 @@ ENV_FILE = WORKSPACE_ROOT / ".env"
 
 
 class Settings(BaseSettings):
-    app_name: str = "Doowon AI Portal API"
+    app_name: str = "아이두 API"
     environment: str = "development"
     api_prefix: str = "/api/v1"
 

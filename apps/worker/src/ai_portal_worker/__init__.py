@@ -1,1 +1,1 @@
-"""Doowon AI Portal worker package."""
+"""AIDOO worker package."""

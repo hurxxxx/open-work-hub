@@ -20,8 +20,8 @@ export function App() {
       <AppShell
         sidebar={
           <SidebarNav
-            brand={{ eyebrow: 'Doowon', title: 'AI Portal' }}
-            launcher={{ label: 'Search everything', hint: '⌘K' }}
+            brand={{ eyebrow: '두원공조', title: '아이두' }}
+            launcher={{ label: '아이두 통합검색', hint: '⌘K' }}
             sections={[
               {
                 id: 'knowledge',
@@ -58,15 +58,15 @@ export function App() {
         header={
           <Topbar
             breadcrumb="Workspace / Documents / Grounded search"
-            title="Engineering knowledge workbench"
-            description="승인된 문서 소스에서 근거를 찾고, 필요한 항목은 초안 작성 흐름으로 바로 넘기는 검색 중심 작업면입니다."
+            title="아이두 AI 업무 포털"
+            description="두원공조 업무 문서와 지식 자산에서 근거를 찾고, 필요한 항목은 초안 작성 흐름으로 바로 넘기는 검색 중심 작업면입니다."
             actions={
               <>
                 <Button variant="secondary">Sync docs</Button>
                 <Button variant="secondary">Saved views</Button>
                 <Button variant="primary">New draft</Button>
                 <StatusBadge>React 19 + Vite</StatusBadge>
-                <StatusBadge>Portal shell</StatusBadge>
+                <StatusBadge>아이두 포털</StatusBadge>
               </>
             }
           />

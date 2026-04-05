@@ -15,7 +15,7 @@ def list_scenarios() -> int:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Doowon AI portal ops scaffold")
+    parser = argparse.ArgumentParser(description="AIDOO ops scaffold")
     subparsers = parser.add_subparsers(dest="command")
     subparsers.add_parser("list-scenarios", help="List scenario ids from the harness manifests")
 

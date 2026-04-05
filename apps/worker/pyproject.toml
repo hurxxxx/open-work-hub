@@ -1,7 +1,7 @@
 [project]
 name = "doowon-ai-portal-worker"
 version = "0.1.0"
-description = "Celery worker scaffold for the Doowon AI portal."
+description = "Celery worker scaffold for AIDOO, Doowon's AI work portal."
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
 dependencies = [
