@@ -1,11 +1,11 @@
 from fastapi import FastAPI
 
-from ai_portal_api.core.settings import get_settings
-from ai_portal_api.domains.documents.router import router as documents_router
-from ai_portal_api.domains.drafts.router import router as drafts_router
-from ai_portal_api.domains.ocr.router import router as ocr_router
-from ai_portal_api.domains.plm.router import router as plm_router
-from ai_portal_api.domains.wiki_pms.router import router as wiki_pms_router
+from aidoo_api.core.settings import get_settings
+from aidoo_api.domains.documents.router import router as documents_router
+from aidoo_api.domains.drafts.router import router as drafts_router
+from aidoo_api.domains.ocr.router import router as ocr_router
+from aidoo_api.domains.plm.router import router as plm_router
+from aidoo_api.domains.wiki_pms.router import router as wiki_pms_router
 
 
 def create_app() -> FastAPI:

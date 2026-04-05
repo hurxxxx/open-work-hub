@@ -1,5 +1,5 @@
 [project]
-name = "doowon-ai-portal-ops"
+name = "aidoo-ops"
 version = "0.1.0"
 description = "Operational tooling scaffold for AIDOO, Doowon's AI work portal."
 readme = "README.md"
@@ -22,4 +22,4 @@ line-length = 100
 target-version = "py312"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/ai_portal_ops"]
+packages = ["src/aidoo_ops"]

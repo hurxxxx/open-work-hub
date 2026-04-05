@@ -2,8 +2,8 @@
   "$schema": "https://doowon.local/docs/harness/schemas/domain-rule-manifest.schema.json",
   "domain_id": "ocr",
   "path_prefixes": [
-    "apps/api/src/ai_portal_api/domains/ocr/",
-    "apps/worker/src/ai_portal_worker/tasks/ocr.py",
+    "apps/api/src/aidoo_api/domains/ocr/",
+    "apps/worker/src/aidoo_worker/tasks/ocr.py",
     "apps/ops/",
     "docs/harness/scenarios/ocr-pipeline.md",
     "docs/harness/manifests/scenarios/ocr-pipeline.json",

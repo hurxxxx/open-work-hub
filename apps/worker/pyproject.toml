@@ -1,5 +1,5 @@
 [project]
-name = "doowon-ai-portal-worker"
+name = "aidoo-worker"
 version = "0.1.0"
 description = "Celery worker scaffold for AIDOO, Doowon's AI work portal."
 readme = "README.md"
@@ -24,4 +24,4 @@ line-length = 100
 target-version = "py312"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/ai_portal_worker"]
+packages = ["src/aidoo_worker"]

@@ -9,7 +9,7 @@
       "executor": "nx:run-commands",
       "options": {
         "cwd": "apps/worker",
-        "command": "uv run --python 3.12 celery -A ai_portal_worker.celery_app:celery_app worker --loglevel=info"
+        "command": "uv run --python 3.12 celery -A aidoo_worker.celery_app:celery_app worker --loglevel=info"
       }
     },
     "lint": {

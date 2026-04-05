@@ -2,7 +2,7 @@
   "$schema": "https://doowon.local/docs/harness/schemas/domain-rule-manifest.schema.json",
   "domain_id": "plm",
   "path_prefixes": [
-    "apps/api/src/ai_portal_api/domains/plm/",
+    "apps/api/src/aidoo_api/domains/plm/",
     "apps/web/src/domains/plm/",
     "docs/harness/scenarios/plm-query.md",
     "docs/harness/manifests/scenarios/plm-query.json",

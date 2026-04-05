@@ -111,7 +111,7 @@ wheels = [
 ]
 
 [[package]]
-name = "doowon-ai-portal-worker"
+name = "aidoo-worker"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [

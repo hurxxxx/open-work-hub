@@ -11,7 +11,7 @@ import {
   SearchField,
   type DataTableColumn,
   useToast,
-} from '@doowon/ui';
+} from '@aidoo/ui';
 
 type SearchRow = {
   id: string;

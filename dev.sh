@@ -114,7 +114,7 @@ show_project_status() {
       fi
       ;;
     worker)
-      process_lines="$(pgrep -af "celery -A ai_portal_worker.celery_app:celery_app worker" || true)"
+      process_lines="$(pgrep -af "celery -A aidoo_worker.celery_app:celery_app worker" || true)"
       if [[ -n "$process_lines" ]]; then
         echo "worker running"
         echo "$process_lines"
@@ -164,12 +164,12 @@ stop_project_processes() {
       pkill -TERM -f "nx.js dev web" 2>/dev/null || true
       ;;
     api)
-      pkill -TERM -f "uvicorn ai_portal_api.main:app" 2>/dev/null || true
+      pkill -TERM -f "uvicorn aidoo_api.main:app" 2>/dev/null || true
       pkill -TERM -f "pnpm exec nx dev api" 2>/dev/null || true
       stopped=1
       ;;
     worker)
-      pkill -TERM -f "celery -A ai_portal_worker.celery_app:celery_app worker" 2>/dev/null || true
+      pkill -TERM -f "celery -A aidoo_worker.celery_app:celery_app worker" 2>/dev/null || true
       pkill -TERM -f "pnpm exec nx dev worker" 2>/dev/null || true
       stopped=1
       ;;
@@ -204,7 +204,7 @@ if (( stop_only )); then
 fi
 
 if (( status_only )); then
-  echo "Doowon dev server status"
+  echo "AIDOO dev server status"
   echo "  projects : ${project_csv}"
   echo
   for project in "${projects[@]}"; do
@@ -226,7 +226,7 @@ for project in "${projects[@]}"; do
 done
 
 cat <<EOF
-Starting Doowon development servers
+Starting AIDOO development servers
   projects : ${project_csv}
   web      : http://localhost:4200
   api      : http://127.0.0.1:8000/docs

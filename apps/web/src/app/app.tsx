@@ -7,7 +7,7 @@ import {
   ToastProvider,
   ToastViewport,
   Topbar,
-} from '@doowon/ui';
+} from '@aidoo/ui';
 
 import { SearchWorkbench } from '../domains/documents/search-workbench';
 import { DraftPreview } from '../domains/drafts/draft-preview';

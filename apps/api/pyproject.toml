@@ -1,5 +1,5 @@
 [project]
-name = "doowon-ai-portal-api"
+name = "aidoo-api"
 version = "0.1.0"
 description = "FastAPI composition root for AIDOO, Doowon's AI work portal."
 readme = "README.md"
@@ -31,4 +31,4 @@ line-length = 100
 target-version = "py312"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/ai_portal_api"]
+packages = ["src/aidoo_api"]

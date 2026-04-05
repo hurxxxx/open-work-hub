@@ -14,7 +14,7 @@
     "baseUrl": ".",
     "types": ["node"],
     "paths": {
-      "@doowon/ui": ["packages/ui/src/index.ts"]
+      "@aidoo/ui": ["packages/ui/src/index.ts"]
     }
   },
   "exclude": ["node_modules", "dist"]

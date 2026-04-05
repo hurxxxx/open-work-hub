@@ -9,14 +9,14 @@
       "executor": "nx:run-commands",
       "options": {
         "cwd": "apps/api",
-        "command": "uv run --python 3.12 uvicorn ai_portal_api.main:app --app-dir src --host 127.0.0.1 --port 8000 --reload"
+        "command": "uv run --python 3.12 uvicorn aidoo_api.main:app --app-dir src --host 127.0.0.1 --port 8000 --reload"
       }
     },
     "serve": {
       "executor": "nx:run-commands",
       "options": {
         "cwd": "apps/api",
-        "command": "uv run --python 3.12 uvicorn ai_portal_api.main:app --app-dir src --host 127.0.0.1 --port 8000"
+        "command": "uv run --python 3.12 uvicorn aidoo_api.main:app --app-dir src --host 127.0.0.1 --port 8000"
       }
     },
     "lint": {

@@ -1,4 +1,4 @@
-from ai_portal_worker.celery_app import celery_app
+from aidoo_worker.celery_app import celery_app
 
 
 @celery_app.task(name="drafts.export")

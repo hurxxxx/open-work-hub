@@ -1,6 +1,6 @@
 from fastapi.testclient import TestClient
 
-from ai_portal_api.main import app
+from aidoo_api.main import app
 
 
 client = TestClient(app)

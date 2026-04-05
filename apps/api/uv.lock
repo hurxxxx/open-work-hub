@@ -78,7 +78,7 @@ wheels = [
 ]
 
 [[package]]
-name = "doowon-ai-portal-api"
+name = "aidoo-api"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [

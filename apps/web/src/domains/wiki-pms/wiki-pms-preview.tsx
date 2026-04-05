@@ -1,4 +1,4 @@
-import { LineChartCard, MetricInline, Panel, StatusBadge } from '@doowon/ui';
+import { LineChartCard, MetricInline, Panel, StatusBadge } from '@aidoo/ui';
 
 export function WikiPmsPreview() {
   return (

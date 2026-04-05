@@ -9,7 +9,7 @@
       "executor": "nx:run-commands",
       "options": {
         "cwd": "apps/ops",
-        "command": "uv run --python 3.12 python -m ai_portal_ops --help"
+        "command": "uv run --python 3.12 python -m aidoo_ops --help"
       }
     },
     "lint": {

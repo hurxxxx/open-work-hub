@@ -1,4 +1,4 @@
-import { Button, MetricInline, Panel } from '@doowon/ui';
+import { Button, MetricInline, Panel } from '@aidoo/ui';
 
 export function DraftPreview() {
   return (

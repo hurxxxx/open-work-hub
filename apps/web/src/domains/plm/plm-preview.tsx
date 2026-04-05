@@ -1,4 +1,4 @@
-import { DataTable, Panel, StatusBadge, type DataTableColumn } from '@doowon/ui';
+import { DataTable, Panel, StatusBadge, type DataTableColumn } from '@aidoo/ui';
 
 type PlmRow = {
   template: string;
