@@ -9,5 +9,6 @@ Celery 기반 background worker 스캐폴드다.
 실행:
 
 ```bash
+cp .env.example .env
 pnpm nx dev worker
 ```

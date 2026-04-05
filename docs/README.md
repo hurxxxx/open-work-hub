@@ -8,6 +8,7 @@
 - `docs/agents/`: 에이전트 공통 규약, 컨텍스트 정책, helper 계약
 - `docs/harness/`: scenario manifest, prompt bundle, eval, trace grading
 - `docs/ops/`: release gate, sprint workflow, learn/checkpoint/retro
+- `docs/ops/`: release gate, sprint workflow, learn/checkpoint/retro, 환경변수/시크릿 운영 기준
 
 ## 사람용 참고 문서
 

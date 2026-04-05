@@ -10,5 +10,6 @@ FastAPI 기반의 조립 계층이다. 현재 스캐폴드는 아래를 제공�
 실행:
 
 ```bash
+cp .env.example .env
 pnpm nx dev api
 ```

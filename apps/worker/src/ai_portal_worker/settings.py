@@ -9,7 +9,7 @@ def _workspace_root() -> Path:
     for parent in current.parents:
         if (parent / "pnpm-workspace.yaml").exists():
             return parent
-    return current.parents[5]
+    return current.parents[4]
 
 
 WORKSPACE_ROOT = _workspace_root()
@@ -20,12 +20,11 @@ ENV_FILES = (
 
 
 class Settings(BaseSettings):
-    app_name: str = "Doowon AI Portal API"
-    environment: str = "development"
-    api_prefix: str = "/api/v1"
+    broker_url: str = "redis://127.0.0.1:6379/0"
+    result_backend: str = "redis://127.0.0.1:6379/1"
 
     model_config = SettingsConfigDict(
-        env_prefix="DOOWON_API_",
+        env_prefix="DOOWON_WORKER_",
         env_file=tuple(str(path) for path in ENV_FILES),
         env_file_encoding="utf-8",
     )

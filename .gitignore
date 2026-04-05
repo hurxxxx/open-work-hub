@@ -16,6 +16,10 @@ apps/**/.pytest_cache/
 apps/**/.ruff_cache/
 apps/**/__pycache__/
 *.pyc
+.env
+.env.local
+.env.*
+!.env.example
 
 vite.config.*.timestamp*
 vitest.config.*.timestamp*
