@@ -17,11 +17,12 @@ Options:
   --stop         Stop repo-managed dev servers for the selected projects and exit.
   --restart      Stop repo-managed dev servers for the selected projects, then start them again.
   --reset-nx     Reset the Nx daemon before starting servers.
+  --plain-logs   Use raw Nx stream logs instead of the default readable local format.
   -h, --help     Show this help message.
 
 Defaults:
   - Starts `web` and `api`
-  - Streams logs to the current terminal
+  - Uses `dynamic-legacy` Nx output for readable local logs
   - Stops all child servers when you press Ctrl+C or close the session
 EOF
 }
@@ -32,6 +33,7 @@ status_only=0
 stop_only=0
 restart=0
 reset_nx=0
+output_style="dynamic-legacy"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -55,6 +57,9 @@ while [[ $# -gt 0 ]]; do
       ;;
     --reset-nx)
       reset_nx=1
+      ;;
+    --plain-logs)
+      output_style="stream"
       ;;
     -h|--help)
       usage
@@ -229,15 +234,17 @@ EOF
 cleanup() {
   trap - INT TERM EXIT
 
-  if [[ -n "${runner_pid:-}" ]] && kill -0 "$runner_pid" 2>/dev/null; then
-    kill -TERM "$runner_pid" 2>/dev/null || true
-    wait "$runner_pid" 2>/dev/null || true
-  fi
+  for project in "${projects[@]}"; do
+    stop_project_processes "$project"
+  done
 }
 
-trap cleanup INT TERM EXIT
+handle_interrupt() {
+  cleanup
+  exit 130
+}
 
-pnpm exec nx run-many -t dev --projects="$project_csv" --parallel="$parallelism" --outputStyle=stream &
-runner_pid=$!
+trap handle_interrupt INT TERM
+trap cleanup EXIT
 
-wait "$runner_pid"
+pnpm exec nx run-many -t dev --projects="$project_csv" --parallel="$parallelism" --outputStyle="$output_style"
