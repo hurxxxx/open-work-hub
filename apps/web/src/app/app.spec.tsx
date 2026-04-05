@@ -54,6 +54,7 @@ describe('App', () => {
     container = document.createElement('div');
     document.body.appendChild(container);
     root = createRoot(container);
+    window.history.replaceState({}, '', '/');
     localStorage.clear();
     localStorage.setItem(AUTH_TOKEN_STORAGE_KEY, 'test-token');
     vi.spyOn(globalThis, 'fetch').mockImplementation((input) => {
@@ -73,6 +74,59 @@ describe('App', () => {
       }
       if (url.endsWith('/api/v1/auth/logout')) {
         return Promise.resolve(new Response(null, { status: 204 }));
+      }
+      if (url.endsWith('/api/v1/search/documents')) {
+        return Promise.resolve(
+          jsonResponse({
+            scenario_id: 'documents-rag',
+            query_profile: 'bm25 + vector + rerank',
+            filters_applied: {
+              doc_type: ['spec'],
+              project: [],
+              department: ['Engineering'],
+            },
+            hits: [
+              {
+                document_id: 'doc-spec-001',
+                title: 'KX-21 Compressor Specification',
+                summary: 'Pressure rating and seal material revisions indexed',
+                source_type: 'spec',
+                score: 0.94,
+                updated: '2026-04-02',
+                project: 'Project A',
+                department: 'Engineering',
+                acl: 'engineering',
+                owner: 'Engineering Standards Team',
+                page_reference: 'pp. 4-7',
+                citation:
+                  'Revision R12 updates the approved seal material and tightens the pressure rating requirement for high-temperature operation.',
+                next_actions: ['Open source document', 'Attach citation blocks to draft'],
+              },
+              {
+                document_id: 'doc-revision-002',
+                title: 'Seal Material Change Notice',
+                summary: 'Revision note with page-level citation anchors',
+                source_type: 'revision-note',
+                score: 0.89,
+                updated: '2026-03-28',
+                project: 'Project A',
+                department: 'Engineering',
+                acl: 'engineering',
+                owner: 'Component Review Board',
+                page_reference: 'pp. 2-3',
+                citation:
+                  'Change notice confirms the seal material replacement and links the update to project-specific approval history.',
+                next_actions: ['Review approval chain', 'Compare against current BOM'],
+              },
+            ],
+            next_actions: [
+              'Open top-ranked evidence',
+              'Attach citation blocks',
+              'Switch to grounded answer',
+            ],
+            grounded_answer: null,
+          }),
+        );
       }
       throw new Error(`Unhandled fetch for ${url}`);
     });
@@ -97,6 +151,7 @@ describe('App', () => {
     await renderApp();
     await settle();
     expect(findElementByText(/아이두 AI 업무 포털/i)).toBeTruthy();
+    expect(window.location.pathname).toBe('/documents');
   });
 
   it('should open the document detail drawer from the shared data table', async () => {
@@ -137,5 +192,14 @@ describe('App', () => {
     await settle();
 
     expect(findElementByText(/첫 관리자 계정 생성/i)).toBeTruthy();
+  });
+
+  it('should render the PLM workspace when the pathname points to /plm', async () => {
+    window.history.replaceState({}, '', '/plm');
+    await renderApp();
+    await settle();
+
+    expect(findElementByText(/PLM 조회 작업면/i)).toBeTruthy();
+    expect(findElementByText(/승인된 조회 템플릿/i)).toBeTruthy();
   });
 });

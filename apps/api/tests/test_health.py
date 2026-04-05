@@ -87,3 +87,36 @@ def test_auth_bootstrap_and_protected_search(client: TestClient) -> None:
         headers={"Authorization": f"Bearer {token}"},
     )
     assert expired_response.status_code == 401
+
+
+def test_documents_search_filters_and_grounded_answer(client: TestClient) -> None:
+    setup_response = client.post(
+        "/api/v1/auth/setup",
+        json={
+            "full_name": "AIDOO Admin",
+            "email": "admin@aidoo.local",
+            "password": "supersecret123",
+        },
+    )
+    token = setup_response.json()["token"]
+
+    response = client.post(
+        "/api/v1/search/documents",
+        headers={"Authorization": f"Bearer {token}"},
+        json={
+            "query": "seal material change notice",
+            "filters": {
+                "doc_type": ["revision-note"],
+                "project": ["Project A"],
+                "department": ["Engineering"],
+            },
+            "answer_mode": "grounded-answer",
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["filters_applied"]["doc_type"] == ["revision-note"]
+    assert payload["hits"][0]["document_id"] == "doc-revision-002"
+    assert payload["grounded_answer"]["citations"]
+    assert payload["grounded_answer"]["citations"][0]["page_reference"] == "pp. 2-3"
