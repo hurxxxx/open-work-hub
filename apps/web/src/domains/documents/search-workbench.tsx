@@ -108,13 +108,14 @@ export function SearchWorkbench() {
         </div>
 
         <div className="documents-workbench__search">
-          <div className="flex gap-3">
+          <div className="flex flex-col gap-3 sm:flex-row">
             <SearchField
               aria-label="Global search"
+              className="flex-1"
               defaultValue="compressor specification latest revision"
               shortcut="⌘K"
             />
-            <Button variant="primary" size="comfortable">
+            <Button className="w-full sm:w-auto" variant="primary" size="comfortable">
               검색
             </Button>
           </div>

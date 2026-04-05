@@ -20,7 +20,7 @@ export function SidebarNav({
   return (
     <aside
       className={cn(
-        'ui-scrollbar grid min-h-0 grid-rows-[auto_auto_1fr_auto] gap-3 overflow-y-auto border-r border-r-[var(--ui-color-border)] bg-[var(--ui-color-surface-sidebar)] p-4 text-white max-[980px]:overflow-visible max-[980px]:border-b max-[980px]:border-r-0',
+        'ui-scrollbar grid h-full min-h-0 grid-rows-[auto_auto_1fr_auto] gap-3 overflow-y-auto border-r border-r-[var(--ui-color-border)] bg-[var(--ui-color-surface-sidebar)] p-4 text-white max-[980px]:border-b max-[980px]:border-r-0',
         className,
       )}
     >

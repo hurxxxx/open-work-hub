@@ -17,18 +17,18 @@ export function SearchField({
   return (
     <div
       className={cn(
-        'flex min-h-[var(--ui-density-comfortable)] items-center gap-3 rounded-[var(--ui-radius-md)] border border-[var(--ui-color-border-strong)] bg-white px-3',
+        'flex min-h-[var(--ui-density-comfortable)] min-w-0 items-center gap-3 rounded-[var(--ui-radius-md)] border border-[var(--ui-color-border-strong)] bg-white px-3',
         className,
       )}
     >
       <Input
-        className="h-auto border-0 bg-transparent px-0 shadow-none focus:ring-0"
+        className="h-auto min-w-0 border-0 bg-transparent px-0 shadow-none focus:ring-0"
         type="search"
         {...props}
       />
       {endAdornment}
       {shortcut ? (
-        <span className="shrink-0 text-xs font-medium text-[var(--ui-color-ink-subtle)]">
+        <span className="shrink-0 text-xs font-medium text-[var(--ui-color-ink-subtle)] max-[720px]:hidden">
           {shortcut}
         </span>
       ) : null}

@@ -2,6 +2,11 @@ import type { FormEvent } from 'react';
 import { Button, Input, Panel, StatusBadge } from '@aidoo/ui';
 import { useState } from 'react';
 
+const DEV_ADMIN_PRESET = {
+  email: 'admin@aidoo.local',
+  password: 'AidooAdmin2026',
+};
+
 export interface AuthScreenProps {
   mode: 'loading' | 'login' | 'setup';
   busy?: boolean;
@@ -22,6 +27,7 @@ export function AuthScreen({
   const [password, setPassword] = useState('');
 
   const isSetup = mode === 'setup';
+  const showDevAdminShortcut = import.meta.env.MODE === 'development' && !isSetup;
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -134,6 +140,21 @@ export function AuthScreen({
                 <div className="rounded-[var(--ui-radius-md)] border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
                   {error}
                 </div>
+              ) : null}
+
+              {showDevAdminShortcut ? (
+                <Button
+                  className="justify-center"
+                  disabled={busy}
+                  onClick={() => {
+                    setEmail(DEV_ADMIN_PRESET.email);
+                    setPassword(DEV_ADMIN_PRESET.password);
+                  }}
+                  type="button"
+                  variant="subtle"
+                >
+                  관리자 계정 자동 입력
+                </Button>
               ) : null}
 
               <Button className="mt-2 justify-center" disabled={busy} type="submit">

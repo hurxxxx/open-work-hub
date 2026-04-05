@@ -34,9 +34,16 @@ interface PortalWorkspaceProps {
 }
 
 function PortalWorkspace({ user, onLogout }: PortalWorkspaceProps) {
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+
   return (
     <ToastProvider>
       <AppShell
+        mobileSidebar={{
+          open: mobileSidebarOpen,
+          onOpenChange: setMobileSidebarOpen,
+          label: '업무 메뉴',
+        }}
         sidebar={
           <SidebarNav
             brand={{ eyebrow: '두원공조', title: '아이두' }}
@@ -82,10 +89,16 @@ function PortalWorkspace({ user, onLogout }: PortalWorkspaceProps) {
             actions={
               <>
                 <StatusBadge>{user.full_name}</StatusBadge>
-                <Button variant="secondary">Sync docs</Button>
-                <Button variant="secondary">Saved views</Button>
-                <Button variant="primary">New draft</Button>
-                <StatusBadge>아이두 포털</StatusBadge>
+                <Button className="max-[980px]:hidden" variant="secondary">
+                  Sync docs
+                </Button>
+                <Button className="max-[980px]:hidden" variant="secondary">
+                  Saved views
+                </Button>
+                <Button className="max-[980px]:hidden" variant="primary">
+                  New draft
+                </Button>
+                <StatusBadge className="max-[980px]:hidden">아이두 포털</StatusBadge>
                 <Button variant="secondary" onClick={() => void onLogout()}>
                   로그아웃
                 </Button>
@@ -96,6 +109,7 @@ function PortalWorkspace({ user, onLogout }: PortalWorkspaceProps) {
       >
         <SplitPane
           main={<SearchWorkbench />}
+          mobileAsideLabel="보조 작업 패널 보기"
           aside={
             <>
               <PlmPreview />

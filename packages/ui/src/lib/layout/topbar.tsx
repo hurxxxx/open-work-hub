@@ -14,10 +14,10 @@ export function Topbar({
   actions,
 }: TopbarProps) {
   return (
-    <header className="grid grid-cols-[minmax(0,1.4fr)_auto] gap-4 rounded-[var(--ui-radius-lg)] border border-[var(--ui-color-border)] bg-[var(--ui-color-surface)] p-6 shadow-[var(--ui-shadow-sm)] max-[980px]:grid-cols-1">
+    <header className="grid grid-cols-[minmax(0,1.4fr)_auto] gap-4 rounded-[var(--ui-radius-lg)] border border-[var(--ui-color-border)] bg-[var(--ui-color-surface)] p-6 shadow-[var(--ui-shadow-sm)] max-[980px]:grid-cols-1 max-[720px]:p-4">
       <div className="grid gap-2">
         {breadcrumb ? (
-          <p className="m-0 text-[0.82rem] text-[var(--ui-color-ink-subtle)]">
+          <p className="m-0 text-[0.82rem] text-[var(--ui-color-ink-subtle)] max-[720px]:hidden">
             {breadcrumb}
           </p>
         ) : null}
@@ -30,7 +30,11 @@ export function Topbar({
           </p>
         ) : null}
       </div>
-      {actions ? <div className="flex flex-wrap items-center justify-end gap-2">{actions}</div> : null}
+      {actions ? (
+        <div className="flex flex-wrap items-center justify-end gap-2 max-[980px]:justify-start max-[720px]:w-full">
+          {actions}
+        </div>
+      ) : null}
     </header>
   );
 }

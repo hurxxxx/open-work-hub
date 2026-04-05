@@ -9,7 +9,7 @@ export interface FilterBarProps {
 
 export function FilterBar({ options, className }: FilterBarProps) {
   return (
-    <div className={cn('flex flex-wrap items-center gap-2', className)}>
+    <div className={cn('flex flex-wrap items-center gap-2 max-[720px]:gap-1.5', className)}>
       {options.map((option) => (
         <Button
           key={option.id}
