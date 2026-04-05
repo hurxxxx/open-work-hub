@@ -12,11 +12,21 @@ export default defineConfig(() => ({
     port: 4200,
     host: '0.0.0.0',
     allowedHosts: ['dwdcc.lumejs.com'],
+    proxy: {
+      '/api': {
+        target: 'http://127.0.0.1:8000',
+      },
+    },
   },
   preview: {
     port: 4200,
     host: '0.0.0.0',
     allowedHosts: ['dwdcc.lumejs.com'],
+    proxy: {
+      '/api': {
+        target: 'http://127.0.0.1:8000',
+      },
+    },
   },
   plugins: [react(), tailwindcss(), nxViteTsPaths(), nxCopyAssetsPlugin(['*.md'])],
   // Uncomment this if you are using workers.

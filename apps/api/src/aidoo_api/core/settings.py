@@ -1,6 +1,7 @@
 from functools import lru_cache
 from pathlib import Path
 
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -20,6 +21,11 @@ class Settings(BaseSettings):
     app_name: str = "아이두 API"
     environment: str = "development"
     api_prefix: str = "/api/v1"
+    postgres_dsn: str = Field(
+        default="sqlite+pysqlite:///./aidoo.db",
+        validation_alias=AliasChoices("DOOWON_POSTGRES_DSN"),
+    )
+    session_ttl_hours: int = Field(default=168, ge=1, le=24 * 30)
 
     model_config = SettingsConfigDict(
         env_prefix="DOOWON_API_",

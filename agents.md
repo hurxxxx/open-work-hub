@@ -19,6 +19,13 @@
 - citation 없는 생성 응답은 성공으로 취급하지 않습니다.
 - 익숙하지 않은 패턴은 바로 만들지 말고 공식 문서나 기존 구현을 먼저 탐색합니다.
 
+## Browser QA
+
+- 브라우저 기반 검증이 필요하면 `agent-browser`를 우선 사용합니다.
+- 기본 흐름은 `agent-browser open <url>`, `agent-browser snapshot -i`, `agent-browser fill <selector> <value>`, `agent-browser click <selector>`, `agent-browser console`, `agent-browser screenshot <path>` 입니다.
+- E2E 확인은 특별한 이유가 없으면 긴 스크립트 자동화보다 실제 브라우저에서 단계별로 상호작용하며 상태 변화를 확인하는 방식을 우선합니다.
+- 로그인, 설정, 결제처럼 폼과 상태 전환이 중요한 흐름은 각 단계마다 화면 텍스트, 콘솔 에러, 네트워크 결과를 같이 확인합니다.
+
 ## Root Document Policy
 
 - 루트의 공통 규칙 진입점은 `agents.md` 다.

@@ -53,6 +53,14 @@ cp .env.example .env
 
 그 다음 실제 환경에 맞게 값을 채운다.
 
+## 로컬 계정 인증 메모
+
+- 현재 아이두 개발 서버는 자체 계정 로그인으로 먼저 동작한다.
+- 첫 접속 시 사용자가 하나도 없으면 `/api/v1/auth/bootstrap-status` 가 `requires_setup: true` 를 반환하고, 웹은 첫 관리자 계정 생성 화면을 보여준다.
+- 생성된 첫 계정은 관리자 권한을 가진다.
+- 세션 만료 시간은 `DOOWON_API_SESSION_TTL_HOURS` 로 조정한다.
+- 이후 사내 SSO 도입 시에도 루트 `.env` 기준 관리 원칙은 유지한다.
+
 ## 주의사항
 
 - 프로덕션 시크릿은 `.env` 대신 배포 환경의 secret manager 또는 CI/CD secret store를 우선한다.

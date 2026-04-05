@@ -1,6 +1,9 @@
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 
+from aidoo_api.core.db import init_db
 from aidoo_api.core.settings import get_settings
+from aidoo_api.domains.auth.dependencies import require_current_user
+from aidoo_api.domains.auth.router import router as auth_router
 from aidoo_api.domains.documents.router import router as documents_router
 from aidoo_api.domains.drafts.router import router as drafts_router
 from aidoo_api.domains.ocr.router import router as ocr_router
@@ -10,6 +13,7 @@ from aidoo_api.domains.wiki_pms.router import router as wiki_pms_router
 
 def create_app() -> FastAPI:
     settings = get_settings()
+    init_db()
     app = FastAPI(
         title=settings.app_name,
         version="0.1.0",
@@ -21,9 +25,31 @@ def create_app() -> FastAPI:
     def healthz() -> dict[str, str]:
         return {"status": "ok", "environment": settings.environment}
 
-    app.include_router(documents_router, prefix=settings.api_prefix)
-    app.include_router(plm_router, prefix=settings.api_prefix)
-    app.include_router(drafts_router, prefix=settings.api_prefix)
-    app.include_router(ocr_router, prefix=settings.api_prefix)
-    app.include_router(wiki_pms_router, prefix=settings.api_prefix)
+    app.include_router(auth_router, prefix=settings.api_prefix)
+    protected_dependencies = [Depends(require_current_user)]
+    app.include_router(
+        documents_router,
+        prefix=settings.api_prefix,
+        dependencies=protected_dependencies,
+    )
+    app.include_router(
+        plm_router,
+        prefix=settings.api_prefix,
+        dependencies=protected_dependencies,
+    )
+    app.include_router(
+        drafts_router,
+        prefix=settings.api_prefix,
+        dependencies=protected_dependencies,
+    )
+    app.include_router(
+        ocr_router,
+        prefix=settings.api_prefix,
+        dependencies=protected_dependencies,
+    )
+    app.include_router(
+        wiki_pms_router,
+        prefix=settings.api_prefix,
+        dependencies=protected_dependencies,
+    )
     return app

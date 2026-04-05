@@ -23,3 +23,4 @@ apps/**/__pycache__/
 
 vite.config.*.timestamp*
 vitest.config.*.timestamp*
+.gstack/
