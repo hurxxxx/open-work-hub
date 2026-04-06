@@ -12,6 +12,14 @@
 - 홈 화면도 마케팅형 hero가 아니라 `작업 시작점` 이어야 한다.
 - 시각 스타일은 인위적으로 화려한 AI 스타트업 랜딩보다 `차분하고 명확한 enterprise tool` 쪽을 우선한다.
 
+## 현재 1차 레퍼런스
+
+- 현재 인증 후 업무 포털의 1차 화면 레퍼런스는 `ClickUp` 데스크톱 제품이다.
+- 새 작업면을 설계할 때는 ClickUp의 `좌측 앱 바 + 서브 사이드바 + 상단 작업 헤더 + 중앙 작업면` 구조를 기본 골격으로 본다.
+- 프로젝트/문서/작업 화면은 ClickUp처럼 `높은 정보 밀도`, `짧은 라벨`, `빠른 hover/selection 피드백`, `List / Board / Calendar / Gantt / Table` 같은 뷰 전환을 우선 참고한다.
+- 특히 `PMS`, `Docs`, `Planner` 계열 화면은 카드형 랜딩보다 ClickUp식 workbench 구성을 우선한다.
+- 단, 브랜드 자산, 로고, 제품명, 고유 카피를 그대로 복제하는 것은 이 문서의 범위에 포함하지 않는다. 이 문서는 구조, 밀도, 상호작용 패턴을 맞추기 위한 기준만 다룬다.
+
 ## 공식 레퍼런스에서 채택한 원칙
 
 ### GitHub Primer
@@ -70,6 +78,7 @@
 - 그림자는 얕고 드물게만 사용한다.
 - 색은 `주조색 1개 + 보조 중립색` 중심으로 간다.
 - 강조는 색보다 `위계, 정렬, 선택 상태, border, weight 변화` 로 먼저 해결한다.
+- 선택 상태, active rail, hover tint, tab underline 같은 상호작용 피드백은 ClickUp처럼 `작고 빠르고 반복 가능한 패턴` 으로 통일한다.
 
 ### 타이포그래피
 
@@ -82,6 +91,7 @@
 
 - 우선: sidebar nav, toolbar, filter bar, list, data table, segmented controls, drawer, detail pane, status badge, breadcrumb
 - 후순위: hero block, marketing card mosaic, decorative metric tiles, oversized empty whitespace
+- 우선: dense sidebar sections, work header, view switch tabs, editable row/list, kanban column, table toolbar, quick add modal
 
 ## 피해야 하는 AI스러운 안티패턴
 
@@ -103,13 +113,16 @@
 - `검색 결과 + citation panel + 다음 액션`
 - `상단 유틸리티 바 + 현재 컨텍스트 제목 + 보조 상태`
 - `설정/관리 화면` 은 카드 모음보다 `섹션 리스트 + 폼 + inline help`
+- `앱 바 / 서브 사이드바 / 헤더 / 뷰 탭 / 본문 작업면` 의 5단 구조를 일관되게 유지
+- `Quick Add`, `New Task`, `New Doc` 같은 빠른 생성 액션은 헤더나 사이드 하단의 고정 액션으로 배치
 
 ## 프론트엔드 지시 작성 원칙
 
 - 추상적인 “세련되게” 보다 구체적인 금지/선호 항목을 같이 준다.
 - “무엇을 만들지” 뿐 아니라 “무엇을 만들지 말지” 를 같이 준다.
 - 디자인 레퍼런스는 많아도 2-3개만 준다.
-- 참고 레퍼런스를 주더라도 `브랜드 복제` 가 아니라 `상호작용 패턴과 밀도` 만 가져온다.
+- 현재는 ClickUp을 1차 레퍼런스로 삼되, 문서와 구현 지시에서는 `상호작용 패턴, 화면 밀도, 정보구조, 레이아웃 규칙` 을 우선 명시한다.
+- 참고 레퍼런스를 주더라도 `브랜드 자산 복제` 가 아니라 `상호작용 패턴과 밀도` 를 가져온다.
 - 프롬프트에는 현재 화면의 사용자, 주요 작업, 밀도, 우선 컴포넌트, 제외 패턴을 같이 적는다.
 - 도메인 화면에서 반복되는 UI는 먼저 `packages/ui` 공통 컴포넌트로 확인하고, 없으면 거기서 먼저 구현한다.
 - 버튼, 배지, 패널, 테이블, 드로어, 토스트, 차트는 로컬 CSS로 다시 만들지 않는다.
@@ -130,6 +143,7 @@ Visual direction:
 - Use a calm enterprise product aesthetic: neutral surfaces, crisp borders, restrained radius, minimal shadows, strong hierarchy.
 - Prioritize lists, tables, filters, split views, drawers, status badges, and breadcrumbs over decorative cards.
 - Keep typography practical and distinctive enough to avoid generic AI-generated output; prefer technical or editorially disciplined font pairings over default Inter-style choices.
+- Treat ClickUp as the primary interaction-density reference for authenticated work surfaces, especially for the app rail, sub-sidebar, work header, and view tabs.
 
 Avoid:
 - hero-first layouts
@@ -144,6 +158,7 @@ Interaction rules:
 - Left is for navigation, center is for the main task, right is for details, evidence, and quick actions.
 - Drawers are for supplemental information or short flows, not for long multi-step primary workflows.
 - Keep labels plain and task-oriented.
+- Prefer fast, compact, ClickUp-like workbench interactions over spacious dashboard styling.
 
 If unsure, prefer the interaction discipline of GitHub, GitLab, Microsoft, or IBM enterprise products over flashy startup landing pages.
 </enterprise_portal_design>
@@ -152,9 +167,11 @@ If unsure, prefer the interaction discipline of GitHub, GitLab, Microsoft, or IB
 ## 프론트엔드 리뷰 체크리스트
 
 - 좌측 사이드바가 기본 네비게이션으로 살아 있는가
+- 앱 바와 서브 사이드바가 ClickUp처럼 분리된 역할을 가지는가
 - 검색이 정보구조를 대체하지 않고 보완하는가
 - 홈이 마케팅 랜딩처럼 보이지 않는가
 - 카드 대신 리스트/테이블/패널 중심으로 풀렸는가
+- 헤더와 뷰 탭이 ClickUp식 dense workbench 흐름에 맞는가
 - 우측 pane/drawer가 보조 역할만 하는가
 - 라벨이 짧고 분명한가
 - 색, radius, shadow가 절제되어 있는가
