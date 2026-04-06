@@ -44,5 +44,6 @@ def get_db_session() -> Generator[Session, None, None]:
 
 def init_db() -> None:
     from aidoo_api.domains.auth import models  # noqa: F401
+    from aidoo_api.domains.pms import models as pms_models  # noqa: F401
 
     Base.metadata.create_all(bind=get_engine())

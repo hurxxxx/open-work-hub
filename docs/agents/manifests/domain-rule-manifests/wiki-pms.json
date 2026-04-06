@@ -3,7 +3,8 @@
   "domain_id": "wiki-pms",
   "path_prefixes": [
     "apps/api/src/aidoo_api/domains/wiki_pms/",
-    "apps/web/src/domains/wiki-pms/",
+    "apps/web/src/domains/wiki/",
+    "apps/web/src/domains/pms/",
     "docs/harness/scenarios/wiki-pms.md",
     "docs/harness/manifests/scenarios/wiki-pms.json",
     "docs/harness/prompt-bundles/wiki-pms/",
