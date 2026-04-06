@@ -1,4 +1,5 @@
 /// <reference types='vitest' />
+import path from 'node:path';
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
@@ -26,6 +27,11 @@ export default defineConfig(() => ({
       '/api': {
         target: 'http://127.0.0.1:8000',
       },
+    },
+  },
+  resolve: {
+    alias: {
+      '@/src': path.resolve(import.meta.dirname, 'src'),
     },
   },
   plugins: [react(), tailwindcss(), nxViteTsPaths(), nxCopyAssetsPlugin(['*.md'])],
