@@ -17,7 +17,7 @@ export function SearchField({
   return (
     <div
       className={cn(
-        'flex min-h-[var(--ui-density-comfortable)] min-w-0 items-center gap-3 rounded-[var(--ui-radius-md)] border border-[var(--ui-color-border-strong)] bg-white px-3',
+        'flex min-h-[var(--ui-density-comfortable)] min-w-0 items-center gap-2 rounded-[var(--ui-radius-sm)] border border-[var(--ui-color-border)] bg-white px-3',
         className,
       )}
     >

@@ -11,7 +11,7 @@
       "variable_slots": ["query", "constraints"],
       "context_contract": {
         "load": ["user_query", "constraints"],
-        "avoid": ["documents_rag_context", "wiki_pms_context"]
+        "avoid": ["documents_rag_context", "pms_context"]
       }
     },
     {

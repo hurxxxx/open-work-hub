@@ -417,6 +417,18 @@ export function PmsWorkspace({ token }: PmsWorkspaceProps) {
       .filter((issue) => issue.status === column.id)
       .sort((left, right) => left.board_position - right.board_position),
   }));
+  const showOverviewStrip = Boolean(
+    dashboard &&
+      (dashboard.project_count ||
+        dashboard.active_issue_count ||
+        dashboard.overdue_issue_count ||
+        dashboard.my_issue_count ||
+        dashboard.milestone_due_soon_count),
+  );
+  const showRightRail = Boolean(selectedProject);
+  const workspaceGridClass = showRightRail
+    ? 'grid gap-3 xl:grid-cols-[250px_minmax(0,1fr)_280px]'
+    : 'grid gap-3 xl:grid-cols-[250px_minmax(0,1fr)]';
 
   if (loading) {
     return (
@@ -553,132 +565,315 @@ export function PmsWorkspace({ token }: PmsWorkspaceProps) {
 
   return (
     <>
-      <div className="grid gap-5">
-        <Panel
-          eyebrow="PMS"
-          title="AIDOO 프로젝트 관리"
-          description="프로젝트, 마일스톤, 이슈, 진행률을 한 화면에서 관리하는 API 중심 PMS 작업면입니다."
-          status={<StatusBadge>{selectedProject ? selectedProject.key : 'No project'}</StatusBadge>}
-        >
-          {error ? (
-            <InlineNotice tone="danger" className="mb-4">
-              {error}
-            </InlineNotice>
-          ) : null}
-          <div className="grid gap-4 lg:grid-cols-5">
+      <div className="grid gap-3">
+        {error ? <InlineNotice tone="danger">{error}</InlineNotice> : null}
+
+        {showOverviewStrip ? (
+          <section className="grid gap-3 rounded-[var(--ui-radius-md)] border border-[var(--ui-color-border)] bg-[var(--ui-color-surface)] px-3 py-2 lg:grid-cols-5">
             <MetricInline label="Projects" value={String(dashboard?.project_count ?? 0)} />
-            <MetricInline label="Active issues" value={String(dashboard?.active_issue_count ?? 0)} />
+            <MetricInline
+              label="Active issues"
+              value={String(dashboard?.active_issue_count ?? 0)}
+            />
             <MetricInline label="Overdue" value={String(dashboard?.overdue_issue_count ?? 0)} />
             <MetricInline label="My issues" value={String(dashboard?.my_issue_count ?? 0)} />
             <MetricInline
               label="Milestones due soon"
               value={String(dashboard?.milestone_due_soon_count ?? 0)}
             />
-          </div>
-        </Panel>
+          </section>
+        ) : null}
 
-        <div className="grid gap-5 xl:grid-cols-[minmax(0,1.4fr)_minmax(320px,0.9fr)]">
-          <div className="grid gap-5">
+        <div className={workspaceGridClass}>
+          <div className="grid content-start gap-3">
             <Panel
-              eyebrow="Dashboard"
-              title="프로젝트 진행 상황"
-              description="진행률, 오픈 이슈, 마감 임박 상태를 빠르게 훑는 요약 카드입니다."
+              eyebrow="Projects"
+              title="프로젝트"
+              description="실행 중인 프로젝트를 선택합니다."
             >
-              {dashboard?.projects.length ? (
-                <div className="grid gap-3 md:grid-cols-2">
-                  {dashboard.projects.map((project) => (
+              <div className="grid gap-2.5">
+                {projects.length ? (
+                  projects.map((project) => (
                     <button
-                      key={project.project_id}
+                      key={project.id}
                       type="button"
-                      className={`grid gap-2 rounded-[var(--ui-radius-md)] border px-4 py-4 text-left ${
-                        project.project_id === selectedProjectId
-                          ? 'border-[var(--ui-color-border-strong)] bg-[var(--ui-color-accent-weak)]'
-                          : 'border-[var(--ui-color-border)] bg-white'
+                      className={`grid gap-1 rounded-[var(--ui-radius-md)] border px-3 py-2.5 text-left ${
+                        project.id === selectedProjectId
+                          ? 'border-[var(--ui-color-accent)] bg-[var(--ui-color-accent-weak)]'
+                          : 'border-[var(--ui-color-border)] bg-[var(--ui-color-surface-subtle)]'
                       }`}
-                      onClick={() => setSelectedProjectId(project.project_id)}
+                      onClick={() => setSelectedProjectId(project.id)}
                     >
-                      <div className="flex items-center justify-between gap-3">
-                        <strong>{project.key}</strong>
-                        <span className="text-sm text-[var(--ui-color-ink-subtle)]">
+                      <div className="flex items-center justify-between gap-2">
+                        <strong className="text-[0.84rem]">{project.key}</strong>
+                        <span className="text-[0.76rem] text-[var(--ui-color-ink-subtle)]">
                           {formatPercent(project.progress)}
                         </span>
                       </div>
-                      <span className="text-sm font-semibold">{project.name}</span>
-                      <small className="text-[0.82rem] text-[var(--ui-color-ink-subtle)]">
-                        Open {project.open_issue_count} · Overdue {project.overdue_issue_count} · Next due{' '}
-                        {formatDate(project.next_due_date)}
+                      <span className="text-[0.88rem] font-semibold">{project.name}</span>
+                      <small className="text-[0.76rem] text-[var(--ui-color-ink-subtle)]">
+                        Open {project.issue_count} · Overdue {project.overdue_issue_count}
                       </small>
                     </button>
-                  ))}
+                  ))
+                ) : (
+                  <div className="rounded-[var(--ui-radius-md)] border border-dashed border-[var(--ui-color-border-strong)] bg-[var(--ui-color-surface-subtle)] px-3 py-4 text-center">
+                    <strong className="block text-[0.94rem] text-[var(--ui-color-ink)]">
+                      프로젝트가 없습니다
+                    </strong>
+                    <small className="mt-1 block text-[0.8rem] text-[var(--ui-color-ink-muted)]">
+                      첫 프로젝트를 만들면 보드가 바로 열립니다.
+                    </small>
+                  </div>
+                )}
+
+                <div className="mt-1 border-t border-t-[var(--ui-color-border)] pt-3">
+                  <form className="grid gap-2" onSubmit={(event) => void handleCreateProject(event)}>
+                    <div className="grid grid-cols-[84px_minmax(0,1fr)] gap-2">
+                      <Input
+                        value={projectForm.key}
+                        onChange={(event) =>
+                          setProjectForm((current) => ({
+                            ...current,
+                            key: event.target.value.toUpperCase(),
+                          }))
+                        }
+                        placeholder="KEY"
+                      />
+                      <Input
+                        value={projectForm.name}
+                        onChange={(event) =>
+                          setProjectForm((current) => ({
+                            ...current,
+                            name: event.target.value,
+                          }))
+                        }
+                        placeholder="프로젝트 이름"
+                      />
+                    </div>
+                    <Input
+                      value={projectForm.description}
+                      onChange={(event) =>
+                        setProjectForm((current) => ({
+                          ...current,
+                          description: event.target.value,
+                        }))
+                      }
+                      placeholder="설명"
+                    />
+                    <Button type="submit" variant="secondary">
+                      프로젝트 만들기
+                    </Button>
+                  </form>
                 </div>
-              ) : (
-                <EmptyState
-                  title="프로젝트가 없습니다"
-                  description="첫 프로젝트를 만든 뒤 보드와 마일스톤 운영을 시작합니다."
-                />
-              )}
+              </div>
             </Panel>
 
-            <Panel
-              eyebrow="Projects"
-              title="프로젝트 생성"
-              description="멀티 워크스페이스 대신 프로젝트 멤버십 중심으로 관리합니다."
-            >
-              <form className="grid gap-3 lg:grid-cols-[140px_minmax(0,1fr)]" onSubmit={(event) => void handleCreateProject(event)}>
-                <Input
-                  value={projectForm.key}
-                  onChange={(event) =>
-                    setProjectForm((current) => ({ ...current, key: event.target.value.toUpperCase() }))
-                  }
-                  placeholder="AID"
-                />
-                <Input
-                  value={projectForm.name}
-                  onChange={(event) =>
-                    setProjectForm((current) => ({ ...current, name: event.target.value }))
-                  }
-                  placeholder="프로젝트 이름"
-                />
-                <textarea
-                  className="lg:col-span-2 min-h-24 rounded-[var(--ui-radius-md)] border border-[var(--ui-color-border-strong)] bg-white px-4 py-3 text-sm outline-none"
-                  value={projectForm.description}
-                  onChange={(event) =>
-                    setProjectForm((current) => ({
-                      ...current,
-                      description: event.target.value,
-                    }))
-                  }
-                  placeholder="프로젝트 설명"
-                />
-                <div className="lg:col-span-2 flex justify-end">
-                  <Button type="submit" variant="primary">
-                    프로젝트 만들기
-                  </Button>
-                </div>
-              </form>
-            </Panel>
+            {showRightRail ? (
+              <Panel
+                eyebrow="Members"
+                title="멤버"
+                description="현재 프로젝트의 접근 주체입니다."
+              >
+                {members.length ? (
+                  <div className="grid gap-2">
+                    {members.map((member) => (
+                      <div
+                        key={member.user_id}
+                        className="flex items-center justify-between gap-3 rounded-[var(--ui-radius-md)] border border-[var(--ui-color-border)] bg-[var(--ui-color-surface-subtle)] px-3 py-2"
+                      >
+                        <div className="grid gap-0.5">
+                          <strong className="text-[0.84rem]">{member.full_name}</strong>
+                          <small className="text-[0.74rem] text-[var(--ui-color-ink-subtle)]">
+                            {member.email}
+                          </small>
+                        </div>
+                        <StatusBadge>{member.role}</StatusBadge>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <InlineNotice tone="info">프로젝트 멤버가 아직 없습니다.</InlineNotice>
+                )}
+              </Panel>
+            ) : null}
+          </div>
 
+          <div className="grid content-start gap-3">
             {selectedProject ? (
               <Panel
-                eyebrow="Project detail"
-                title={`${selectedProject.name} 운영면`}
+                eyebrow={selectedProject.key}
+                title={selectedProject.name}
                 description={selectedProject.description || '프로젝트 설명이 아직 없습니다.'}
-                status={
-                  <StatusBadge>
-                    {selectedProject.role} · {formatPercent(selectedProject.progress)}
-                  </StatusBadge>
-                }
+                status={<StatusBadge>{selectedProject.role}</StatusBadge>}
               >
                 <div className="grid gap-4">
-                  <div className="grid gap-3 md:grid-cols-4">
-                    <MetricInline label="Members" value={String(selectedProject.member_count)} />
-                    <MetricInline label="Milestones" value={String(selectedProject.milestone_count)} />
+                  <div className="grid gap-3 rounded-[var(--ui-radius-md)] border border-[var(--ui-color-border)] bg-[var(--ui-color-surface-subtle)] px-3 py-3 md:grid-cols-4">
+                    <MetricInline label="Progress" value={formatPercent(selectedProject.progress)} />
                     <MetricInline label="Issues" value={String(selectedProject.issue_count)} />
+                    <MetricInline
+                      label="Milestones"
+                      value={String(selectedProject.milestone_count)}
+                    />
                     <MetricInline
                       label="Overdue"
                       value={String(selectedProject.overdue_issue_count)}
                     />
                   </div>
+
+                  <div className="flex flex-col gap-2.5 border-b border-b-[var(--ui-color-border)] pb-3 lg:flex-row lg:items-center lg:justify-between">
+                    <form
+                      className="flex flex-col gap-2 sm:flex-row sm:items-center"
+                      onSubmit={(event) => {
+                        event.preventDefault();
+                        setSubmittedIssueSearch(issueSearch.trim());
+                      }}
+                    >
+                      <SearchField
+                        aria-label="PMS issues search"
+                        className="sm:min-w-[260px]"
+                        value={issueSearch}
+                        onChange={(event) => setIssueSearch(event.target.value)}
+                        shortcut="⌘/"
+                      />
+                      <Button type="submit" variant="secondary">
+                        필터 적용
+                      </Button>
+                    </form>
+                    <div className="flex flex-wrap gap-2">
+                      <Select
+                        value={priorityFilter}
+                        onValueChange={setPriorityFilter}
+                        options={[
+                          { value: 'all', label: 'All priorities' },
+                          { value: 'low', label: 'Low' },
+                          { value: 'medium', label: 'Medium' },
+                          { value: 'high', label: 'High' },
+                          { value: 'critical', label: 'Critical' },
+                        ]}
+                      />
+                      <Select
+                        value={statusFilter}
+                        onValueChange={setStatusFilter}
+                        options={[
+                          { value: 'all', label: 'All status' },
+                          ...BOARD_STATUSES.map((status) => ({
+                            value: status.id,
+                            label: status.label,
+                          })),
+                        ]}
+                      />
+                      <Button
+                        variant="ghost"
+                        onClick={() => {
+                          setPriorityFilter('all');
+                          setStatusFilter('all');
+                          setIssueSearch('');
+                          setSubmittedIssueSearch('');
+                        }}
+                      >
+                        초기화
+                      </Button>
+                    </div>
+                  </div>
+
+                  <details className="rounded-[var(--ui-radius-md)] border border-[var(--ui-color-border)] bg-[var(--ui-color-surface-subtle)]">
+                    <summary className="cursor-pointer list-none px-3 py-2 text-[0.84rem] font-semibold text-[var(--ui-color-ink)]">
+                      새 이슈 만들기
+                    </summary>
+                    <form
+                      className="grid gap-2 border-t border-t-[var(--ui-color-border)] px-3 py-3"
+                      onSubmit={(event) => void handleCreateIssue(event)}
+                    >
+                      <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_120px_120px]">
+                        <Input
+                          value={issueForm.title}
+                          onChange={(event) =>
+                            setIssueForm((current) => ({
+                              ...current,
+                              title: event.target.value,
+                            }))
+                          }
+                          placeholder="이슈 제목"
+                        />
+                        <Select
+                          value={issueForm.status}
+                          onValueChange={(value) =>
+                            setIssueForm((current) => ({ ...current, status: value }))
+                          }
+                          options={BOARD_STATUSES.map((status) => ({
+                            value: status.id,
+                            label: status.label,
+                          }))}
+                        />
+                        <Select
+                          value={issueForm.priority}
+                          onValueChange={(value) =>
+                            setIssueForm((current) => ({ ...current, priority: value }))
+                          }
+                          options={[
+                            { value: 'low', label: 'Low' },
+                            { value: 'medium', label: 'Medium' },
+                            { value: 'high', label: 'High' },
+                            { value: 'critical', label: 'Critical' },
+                          ]}
+                        />
+                      </div>
+                      <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_180px_180px_140px]">
+                        <Input
+                          value={issueForm.description}
+                          onChange={(event) =>
+                            setIssueForm((current) => ({
+                              ...current,
+                              description: event.target.value,
+                            }))
+                          }
+                          placeholder="간단 설명"
+                        />
+                        <Select
+                          value={issueForm.assignee_id}
+                          onValueChange={(value) =>
+                            setIssueForm((current) => ({ ...current, assignee_id: value }))
+                          }
+                          options={[
+                            { value: UNASSIGNED_VALUE, label: '미배정' },
+                            ...members.map((member) => ({
+                              value: member.user_id,
+                              label: member.full_name,
+                            })),
+                          ]}
+                        />
+                        <Select
+                          value={issueForm.milestone_id}
+                          onValueChange={(value) =>
+                            setIssueForm((current) => ({ ...current, milestone_id: value }))
+                          }
+                          options={[
+                            { value: NO_MILESTONE_VALUE, label: '마일스톤 없음' },
+                            ...milestones.map((milestone) => ({
+                              value: milestone.id,
+                              label: milestone.title,
+                            })),
+                          ]}
+                        />
+                        <Input
+                          type="date"
+                          value={issueForm.due_date}
+                          onChange={(event) =>
+                            setIssueForm((current) => ({
+                              ...current,
+                              due_date: event.target.value,
+                            }))
+                          }
+                        />
+                      </div>
+                      <div className="flex justify-end">
+                        <Button type="submit" variant="primary">
+                          이슈 만들기
+                        </Button>
+                      </div>
+                    </form>
+                  </details>
 
                   <Tabs defaultValue="board">
                     <TabsList>
@@ -687,124 +882,65 @@ export function PmsWorkspace({ token }: PmsWorkspaceProps) {
                     </TabsList>
 
                     <TabsContent value="board">
-                      <div className="grid gap-3">
-                        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                          <form
-                            className="flex flex-col gap-3 sm:flex-row sm:items-center"
-                            onSubmit={(event) => {
+                      <div className="grid gap-3 xl:grid-cols-4">
+                        {boardGroups.map((column) => (
+                          <section
+                            key={column.id}
+                            className="grid min-h-[280px] gap-2 rounded-[var(--ui-radius-md)] border border-[var(--ui-color-border)] bg-[var(--ui-color-surface-subtle)] p-2.5"
+                            onDragOver={(event) => event.preventDefault()}
+                            onDrop={(event) => {
                               event.preventDefault();
-                              setSubmittedIssueSearch(issueSearch.trim());
+                              const issueId = event.dataTransfer.getData('text/plain');
+                              const issue = issues.find((candidate) => candidate.id === issueId);
+                              if (issue) {
+                                void handleMoveIssue(issue, column.id);
+                              }
                             }}
                           >
-                            <SearchField
-                              aria-label="PMS issues search"
-                              className="sm:min-w-[280px]"
-                              value={issueSearch}
-                              onChange={(event) => setIssueSearch(event.target.value)}
-                              shortcut="⌘/"
-                            />
-                            <Button type="submit" variant="secondary">
-                              필터 적용
-                            </Button>
-                          </form>
-                          <div className="flex flex-wrap gap-2">
-                            <Select
-                              value={priorityFilter}
-                              onValueChange={setPriorityFilter}
-                              options={[
-                                { value: 'all', label: 'All priorities' },
-                                { value: 'low', label: 'Low' },
-                                { value: 'medium', label: 'Medium' },
-                                { value: 'high', label: 'High' },
-                                { value: 'critical', label: 'Critical' },
-                              ]}
-                            />
-                            <Select
-                              value={statusFilter}
-                              onValueChange={setStatusFilter}
-                              options={[
-                                { value: 'all', label: 'All status' },
-                                ...BOARD_STATUSES.map((status) => ({
-                                  value: status.id,
-                                  label: status.label,
-                                })),
-                              ]}
-                            />
-                          </div>
-                        </div>
-                        <div className="grid gap-4 xl:grid-cols-4">
-                          {boardGroups.map((column) => (
-                            <section
-                              key={column.id}
-                              className="grid min-h-[260px] gap-3 rounded-[var(--ui-radius-md)] border border-[var(--ui-color-border)] bg-[var(--ui-color-surface-subtle)] p-3"
-                              onDragOver={(event) => event.preventDefault()}
-                              onDrop={(event) => {
-                                event.preventDefault();
-                                const issueId = event.dataTransfer.getData('text/plain');
-                                const issue = issues.find((candidate) => candidate.id === issueId);
-                                if (issue) {
-                                  void handleMoveIssue(issue, column.id);
-                                }
-                              }}
-                            >
-                              <div className="flex items-center justify-between gap-2">
-                                <strong>{column.label}</strong>
-                                <StatusBadge>{column.items.length}</StatusBadge>
-                              </div>
-                              {column.items.length ? (
-                                column.items.map((issue) => (
-                                  <article
-                                    key={issue.id}
-                                    draggable
-                                    className="grid cursor-pointer gap-2 rounded-[var(--ui-radius-md)] border border-[var(--ui-color-border)] bg-white px-4 py-3"
-                                    onDragStart={(event) =>
-                                      event.dataTransfer.setData('text/plain', issue.id)
+                            <div className="flex items-center justify-between gap-2 border-b border-b-[var(--ui-color-border)] pb-2">
+                              <strong className="text-[0.84rem]">{column.label}</strong>
+                              <StatusBadge>{column.items.length}</StatusBadge>
+                            </div>
+                            {column.items.length ? (
+                              column.items.map((issue) => (
+                                <article
+                                  key={issue.id}
+                                  draggable
+                                  className="grid cursor-pointer gap-1.5 rounded-[var(--ui-radius-sm)] border border-[var(--ui-color-border)] bg-white px-3 py-2.5"
+                                  onDragStart={(event) =>
+                                    event.dataTransfer.setData('text/plain', issue.id)
+                                  }
+                                  onClick={() => {
+                                    setSelectedIssueId(issue.id);
+                                    if (isMobileViewport()) {
+                                      setMobileIssueOpen(true);
                                     }
-                                    onClick={() => {
-                                      setSelectedIssueId(issue.id);
-                                      if (isMobileViewport()) {
-                                        setMobileIssueOpen(true);
-                                      }
-                                    }}
-                                  >
-                                    <div className="flex items-center justify-between gap-2">
-                                      <strong className="text-sm">{issue.reference}</strong>
-                                      <span className="text-[0.72rem] text-[var(--ui-color-ink-subtle)]">
-                                        {issue.priority_label}
-                                      </span>
-                                    </div>
-                                    <span className="text-sm font-semibold">{issue.title}</span>
-                                    <small className="text-[0.8rem] text-[var(--ui-color-ink-subtle)]">
-                                      {issue.assignee_name ?? '미배정'} · Due {formatDate(issue.due_date)}
-                                    </small>
-                                  </article>
-                                ))
-                              ) : (
-                                <InlineNotice tone="info">이 컬럼의 이슈가 없습니다.</InlineNotice>
-                              )}
-                            </section>
-                          ))}
-                        </div>
+                                  }}
+                                >
+                                  <div className="flex items-center justify-between gap-2">
+                                    <strong className="text-[0.78rem]">{issue.reference}</strong>
+                                    <span className="text-[0.68rem] text-[var(--ui-color-ink-subtle)]">
+                                      {issue.priority_label}
+                                    </span>
+                                  </div>
+                                  <span className="text-[0.86rem] font-semibold">{issue.title}</span>
+                                  <small className="text-[0.74rem] text-[var(--ui-color-ink-subtle)]">
+                                    {issue.assignee_name ?? '미배정'} · Due {formatDate(issue.due_date)}
+                                  </small>
+                                </article>
+                              ))
+                            ) : (
+                              <InlineNotice tone="info">이 컬럼의 이슈가 없습니다.</InlineNotice>
+                            )}
+                          </section>
+                        ))}
                       </div>
                     </TabsContent>
 
                     <TabsContent value="list">
                       <DataTableToolbar
                         title="전체 이슈"
-                        meta={`${issues.length} issues`}
-                        actions={
-                          <Button
-                            variant="secondary"
-                            onClick={() => {
-                              setPriorityFilter('all');
-                              setStatusFilter('all');
-                              setIssueSearch('');
-                              setSubmittedIssueSearch('');
-                            }}
-                          >
-                            필터 초기화
-                          </Button>
-                        }
+                        meta={`${issues.length} issues · ${projectLoading ? 'syncing' : 'live'}`}
                       />
                       <DataTable
                         columns={ISSUE_COLUMNS}
@@ -831,109 +967,35 @@ export function PmsWorkspace({ token }: PmsWorkspaceProps) {
                   </Tabs>
                 </div>
               </Panel>
-            ) : null}
+            ) : (
+              <section className="grid gap-2 rounded-[var(--ui-radius-md)] border border-[var(--ui-color-border)] bg-[var(--ui-color-surface)] px-4 py-3">
+                <p className="m-0 text-[0.68rem] font-semibold uppercase tracking-[0.08em] text-[var(--ui-color-ink-subtle)]">
+                  PMS
+                </p>
+                <h2 className="m-0 text-[0.96rem] font-semibold text-[var(--ui-color-ink)]">
+                  시작하려면 프로젝트를 만드세요
+                </h2>
+                <p className="m-0 text-[0.8rem] text-[var(--ui-color-ink-muted)]">
+                  좌측 패널에서 프로젝트를 만들면 보드, 마일스톤, 최근 활동이 작업면에 열립니다.
+                </p>
+                <div className="grid gap-1.5 border-t border-[var(--ui-color-border)] pt-2 text-[0.8rem] text-[var(--ui-color-ink-muted)]">
+                  <span>1. 프로젝트 키와 이름을 입력합니다.</span>
+                  <span>2. 프로젝트를 만든 뒤 이슈 보드를 엽니다.</span>
+                  <span>3. 마일스톤과 담당자를 붙여 운영을 시작합니다.</span>
+                </div>
+              </section>
+            )}
           </div>
 
-          <div className="grid gap-5">
-            <Panel
-              eyebrow="Issue intake"
-              title="새 이슈"
-              description="빠르게 작업을 만들고 보드에 바로 올립니다."
-            >
-              {selectedProject ? (
-                <form className="grid gap-3" onSubmit={(event) => void handleCreateIssue(event)}>
-                  <Input
-                    value={issueForm.title}
-                    onChange={(event) =>
-                      setIssueForm((current) => ({ ...current, title: event.target.value }))
-                    }
-                    placeholder="이슈 제목"
-                  />
-                  <textarea
-                    className="min-h-24 rounded-[var(--ui-radius-md)] border border-[var(--ui-color-border-strong)] bg-white px-4 py-3 text-sm outline-none"
-                    value={issueForm.description}
-                    onChange={(event) =>
-                      setIssueForm((current) => ({
-                        ...current,
-                        description: event.target.value,
-                      }))
-                    }
-                    placeholder="설명"
-                  />
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <Select
-                      value={issueForm.status}
-                      onValueChange={(value) =>
-                        setIssueForm((current) => ({ ...current, status: value }))
-                      }
-                      options={BOARD_STATUSES.map((status) => ({
-                        value: status.id,
-                        label: status.label,
-                      }))}
-                    />
-                    <Select
-                      value={issueForm.priority}
-                      onValueChange={(value) =>
-                        setIssueForm((current) => ({ ...current, priority: value }))
-                      }
-                      options={[
-                        { value: 'low', label: 'Low' },
-                        { value: 'medium', label: 'Medium' },
-                        { value: 'high', label: 'High' },
-                        { value: 'critical', label: 'Critical' },
-                      ]}
-                    />
-                    <Select
-                      value={issueForm.assignee_id}
-                      onValueChange={(value) =>
-                        setIssueForm((current) => ({ ...current, assignee_id: value }))
-                      }
-                      options={[
-                        { value: UNASSIGNED_VALUE, label: '미배정' },
-                        ...members.map((member) => ({
-                          value: member.user_id,
-                          label: member.full_name,
-                        })),
-                      ]}
-                    />
-                    <Select
-                      value={issueForm.milestone_id}
-                      onValueChange={(value) =>
-                        setIssueForm((current) => ({ ...current, milestone_id: value }))
-                      }
-                      options={[
-                        { value: NO_MILESTONE_VALUE, label: '마일스톤 없음' },
-                        ...milestones.map((milestone) => ({
-                          value: milestone.id,
-                          label: milestone.title,
-                        })),
-                      ]}
-                    />
-                  </div>
-                  <Input
-                    type="date"
-                    value={issueForm.due_date}
-                    onChange={(event) =>
-                      setIssueForm((current) => ({ ...current, due_date: event.target.value }))
-                    }
-                  />
-                  <Button type="submit" variant="primary">
-                    이슈 만들기
-                  </Button>
-                </form>
-              ) : (
-                <InlineNotice tone="info">프로젝트를 먼저 생성하세요.</InlineNotice>
-              )}
-            </Panel>
-
-            <Panel
-              eyebrow="Milestones"
-              title="마일스톤"
-              description="간트는 다음 단계로 미루되, 일정 기준 데이터는 지금부터 저장합니다."
-            >
-              {selectedProject ? (
-                <div className="grid gap-4">
-                  <form className="grid gap-3" onSubmit={(event) => void handleCreateMilestone(event)}>
+          {showRightRail ? (
+            <div className="grid content-start gap-3">
+              <Panel
+                eyebrow="Milestones"
+                title="마일스톤"
+                description="일정 기준 데이터와 진행률을 관리합니다."
+              >
+                <div className="grid gap-3">
+                  <form className="grid gap-2" onSubmit={(event) => void handleCreateMilestone(event)}>
                     <Input
                       value={milestoneForm.title}
                       onChange={(event) =>
@@ -944,17 +1006,7 @@ export function PmsWorkspace({ token }: PmsWorkspaceProps) {
                       }
                       placeholder="마일스톤 제목"
                     />
-                    <Input
-                      value={milestoneForm.description}
-                      onChange={(event) =>
-                        setMilestoneForm((current) => ({
-                          ...current,
-                          description: event.target.value,
-                        }))
-                      }
-                      placeholder="설명"
-                    />
-                    <div className="grid gap-3 sm:grid-cols-2">
+                    <div className="grid gap-2 sm:grid-cols-2">
                       <Select
                         value={milestoneForm.status}
                         onValueChange={(value) =>
@@ -980,22 +1032,32 @@ export function PmsWorkspace({ token }: PmsWorkspaceProps) {
                         }
                       />
                     </div>
+                    <Input
+                      value={milestoneForm.description}
+                      onChange={(event) =>
+                        setMilestoneForm((current) => ({
+                          ...current,
+                          description: event.target.value,
+                        }))
+                      }
+                      placeholder="설명"
+                    />
                     <Button type="submit" variant="secondary">
                       마일스톤 추가
                     </Button>
                   </form>
                   {milestones.length ? (
-                    <div className="grid gap-3">
+                    <div className="grid gap-2">
                       {milestones.map((milestone) => (
                         <article
                           key={milestone.id}
-                          className="rounded-[var(--ui-radius-md)] border border-[var(--ui-color-border)] bg-white px-4 py-3"
+                          className="rounded-[var(--ui-radius-md)] border border-[var(--ui-color-border)] bg-[var(--ui-color-surface-subtle)] px-3 py-2.5"
                         >
                           <div className="flex items-center justify-between gap-2">
-                            <strong>{milestone.title}</strong>
+                            <strong className="text-[0.84rem]">{milestone.title}</strong>
                             <StatusBadge>{formatPercent(milestone.progress)}</StatusBadge>
                           </div>
-                          <small className="block text-[0.82rem] text-[var(--ui-color-ink-subtle)]">
+                          <small className="block text-[0.74rem] text-[var(--ui-color-ink-subtle)]">
                             Due {formatDate(milestone.due_date)} · {milestone.issue_count} issues
                           </small>
                         </article>
@@ -1005,63 +1067,34 @@ export function PmsWorkspace({ token }: PmsWorkspaceProps) {
                     <InlineNotice tone="info">등록된 마일스톤이 없습니다.</InlineNotice>
                   )}
                 </div>
-              ) : (
-                <InlineNotice tone="info">프로젝트를 선택하면 마일스톤을 관리할 수 있습니다.</InlineNotice>
-              )}
-            </Panel>
+              </Panel>
 
-            <Panel
-              eyebrow="Members"
-              title="프로젝트 멤버"
-              description="프로젝트 멤버십 기반으로 접근을 통제합니다."
-            >
-              {members.length ? (
-                <div className="grid gap-3">
-                  {members.map((member) => (
-                    <div
-                      key={member.user_id}
-                      className="flex items-center justify-between gap-3 rounded-[var(--ui-radius-md)] border border-[var(--ui-color-border)] bg-white px-4 py-3"
-                    >
-                      <div className="grid gap-1">
-                        <strong className="text-sm">{member.full_name}</strong>
-                        <small className="text-[0.8rem] text-[var(--ui-color-ink-subtle)]">
-                          {member.email}
+              <Panel
+                eyebrow="Recent activity"
+                title="최근 업데이트"
+                description="최근 변경 로그를 빠르게 훑습니다."
+              >
+                {dashboard?.recent_activity.length ? (
+                  <div className="grid gap-2">
+                    {dashboard.recent_activity.map((activity) => (
+                      <div
+                        key={activity.id}
+                        className="rounded-[var(--ui-radius-md)] border border-[var(--ui-color-border)] bg-[var(--ui-color-surface-subtle)] px-3 py-2.5"
+                      >
+                        <strong className="block text-[0.82rem]">{activity.issue_reference}</strong>
+                        <p className="text-[0.82rem] text-[var(--ui-color-ink)]">{activity.message}</p>
+                        <small className="text-[0.72rem] text-[var(--ui-color-ink-subtle)]">
+                          {activity.created_at}
                         </small>
                       </div>
-                      <StatusBadge>{member.role}</StatusBadge>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <InlineNotice tone="info">프로젝트 멤버가 아직 없습니다.</InlineNotice>
-              )}
-            </Panel>
-
-            <Panel
-              eyebrow="Recent activity"
-              title="최근 업데이트"
-              description="대시보드 기준으로 최근 변경을 요약합니다."
-            >
-              {dashboard?.recent_activity.length ? (
-                <div className="grid gap-2">
-                  {dashboard.recent_activity.map((activity) => (
-                    <div
-                      key={activity.id}
-                      className="rounded-[var(--ui-radius-md)] border border-[var(--ui-color-border)] bg-white px-4 py-3"
-                    >
-                      <strong className="block text-sm">{activity.issue_reference}</strong>
-                      <p className="text-sm text-[var(--ui-color-ink)]">{activity.message}</p>
-                      <small className="text-[0.8rem] text-[var(--ui-color-ink-subtle)]">
-                        {activity.created_at}
-                      </small>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <InlineNotice tone="info">표시할 활동 로그가 없습니다.</InlineNotice>
-              )}
-            </Panel>
-          </div>
+                    ))}
+                  </div>
+                ) : (
+                  <InlineNotice tone="info">표시할 활동 로그가 없습니다.</InlineNotice>
+                )}
+              </Panel>
+            </div>
+          ) : null}
         </div>
       </div>
 

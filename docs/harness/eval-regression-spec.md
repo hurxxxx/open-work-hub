@@ -84,7 +84,7 @@ metadata:
 - `catastrophic_failure_rate <= 0.01`
 - `page_latency_p95 <= 8s`
 
-### `wiki-pms`
+### `pms`
 
 - `action_classification_accuracy >= 0.95`
 - `schema_validity >= 0.99`

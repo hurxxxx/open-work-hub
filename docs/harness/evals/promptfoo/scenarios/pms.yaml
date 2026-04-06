@@ -1,0 +1,10 @@
+description: pms offline regression scaffold
+prompts:
+  - file://../../../prompt-bundles/pms/generation.md
+  - file://../../../prompt-bundles/pms/policy.md
+providers:
+  - id: "${PROMPTFOO_PROVIDER}"
+tests:
+  - file://../../datasets/pms/golden.jsonl
+  - file://../../datasets/pms/adversarial.jsonl
+  - file://../../datasets/pms/shadow.jsonl

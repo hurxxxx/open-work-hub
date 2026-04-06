@@ -8,7 +8,6 @@ import {
   EmptyState,
   FilterBar,
   InlineNotice,
-  Panel,
   SearchField,
   type DataTableColumn,
   useToast,
@@ -172,224 +171,230 @@ export function SearchWorkbench({ token }: SearchWorkbenchProps) {
 
   return (
     <>
-      <Panel
-        className="h-full"
-        eyebrow="Documents"
-        title="근거형 검색 작업면"
-        description="문서 질의를 실제 검색 API에 보내고, 반환된 citation-ready 검색 결과를 작업면에서 바로 확인합니다."
-        actions={
-          <>
-            <Button
-              variant="secondary"
-              onClick={() =>
-                applySavedView('engineering-specs')
-              }
-            >
-              기본 뷰
-            </Button>
-            <Button
-              variant="secondary"
-              onClick={() => {
-                setDocType('spec');
-                setScope('engineering');
-                setQueryInput(DEFAULT_QUERY);
-                setSubmittedQuery(DEFAULT_QUERY);
-                toast.info('Filters reset', '문서 검색 필터를 기본 상태로 되돌렸습니다.');
-              }}
-            >
-              필터 초기화
-            </Button>
-          </>
-        }
-      >
-        <div className="documents-workbench__saved">
-          <FilterBar
-            options={[
-              {
-                id: 'engineering-specs',
-                label: 'Engineering specs',
-                active: savedView === 'engineering-specs',
-                onSelect: () => applySavedView('engineering-specs'),
-              },
-              {
-                id: 'revision-notices',
-                label: 'Revision notices',
-                active: savedView === 'revision-notices',
-                onSelect: () => applySavedView('revision-notices'),
-              },
-              {
-                id: 'quality-guides',
-                label: 'Quality guides',
-                active: savedView === 'quality-guides',
-                onSelect: () => applySavedView('quality-guides'),
-              },
-            ]}
-          />
-        </div>
-
-        <div className="documents-workbench__search">
-          <form
-            className="flex flex-col gap-3 sm:flex-row"
-            onSubmit={(event) => {
-              event.preventDefault();
-              submitCurrentQuery();
-            }}
-          >
-            <SearchField
-              aria-label="Global search"
-              className="flex-1"
-              onChange={(event) => setQueryInput(event.target.value)}
-              shortcut="⌘K"
-              value={queryInput}
-            />
-            <Button
-              className="w-full sm:w-auto"
-              size="comfortable"
-              type="submit"
-              variant="primary"
-            >
-              검색
-            </Button>
-          </form>
-        </div>
-
-        <div className="documents-workbench__filters">
-          <FilterBar
-            options={[
-              {
-                id: 'spec',
-                label: 'Spec',
-                active: docType === 'spec',
-                onSelect: () => {
+      <div className="grid gap-3">
+        <section className="rounded-[var(--ui-radius-md)] border border-[var(--ui-color-border)] bg-[var(--ui-color-surface)] p-3.5">
+          <div className="flex flex-col gap-2 border-b border-[var(--ui-color-border)] pb-2.5 lg:flex-row lg:items-start lg:justify-between">
+            <div className="grid gap-0.5">
+              <p className="m-0 text-[0.68rem] font-semibold uppercase tracking-[0.08em] text-[var(--ui-color-ink-subtle)]">
+                Documents
+              </p>
+              <h2 className="m-0 text-[0.96rem] font-semibold text-[var(--ui-color-ink)]">
+                근거형 검색
+              </h2>
+              <p className="m-0 text-[0.8rem] text-[var(--ui-color-ink-muted)]">
+                저장된 질의, 검색식, 필터를 한 툴바에서 다룹니다.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                variant="secondary"
+                onClick={() => applySavedView('engineering-specs')}
+              >
+                기본 뷰
+              </Button>
+              <Button
+                variant="secondary"
+                onClick={() => {
                   setDocType('spec');
-                  submitCurrentQuery();
-                },
-              },
-              {
-                id: 'revision-note',
-                label: 'Revision note',
-                active: docType === 'revision-note',
-                onSelect: () => {
-                  setDocType('revision-note');
-                  submitCurrentQuery();
-                },
-              },
-              {
-                id: 'memo',
-                label: 'Memo',
-                active: docType === 'memo',
-                onSelect: () => {
-                  setDocType('memo');
-                  submitCurrentQuery();
-                },
-              },
-              {
-                id: 'guide',
-                label: 'Guide',
-                active: docType === 'guide',
-                onSelect: () => {
-                  setDocType('guide');
-                  submitCurrentQuery();
-                },
-              },
-              {
-                id: 'engineering',
-                label: 'Engineering',
-                active: scope === 'engineering',
-                onSelect: () => {
                   setScope('engineering');
+                  setQueryInput(DEFAULT_QUERY);
+                  setSubmittedQuery(DEFAULT_QUERY);
+                  toast.info('Filters reset', '문서 검색 필터를 기본 상태로 되돌렸습니다.');
+                }}
+              >
+                필터 초기화
+              </Button>
+            </div>
+          </div>
+
+          <div className="grid gap-2.5 pt-3">
+            <div className="documents-workbench__saved">
+              <FilterBar
+                options={[
+                  {
+                    id: 'engineering-specs',
+                    label: 'Engineering specs',
+                    active: savedView === 'engineering-specs',
+                    onSelect: () => applySavedView('engineering-specs'),
+                  },
+                  {
+                    id: 'revision-notices',
+                    label: 'Revision notices',
+                    active: savedView === 'revision-notices',
+                    onSelect: () => applySavedView('revision-notices'),
+                  },
+                  {
+                    id: 'quality-guides',
+                    label: 'Quality guides',
+                    active: savedView === 'quality-guides',
+                    onSelect: () => applySavedView('quality-guides'),
+                  },
+                ]}
+              />
+            </div>
+
+            <div className="documents-workbench__search">
+              <form
+                className="flex flex-col gap-2 sm:flex-row"
+                onSubmit={(event) => {
+                  event.preventDefault();
                   submitCurrentQuery();
-                },
-              },
-              {
-                id: 'project-a',
-                label: 'Project A',
-                active: scope === 'project-a',
-                onSelect: () => {
-                  setScope('project-a');
-                  submitCurrentQuery();
-                },
-              },
-              {
-                id: 'quality',
-                label: 'Quality',
-                active: scope === 'quality',
-                onSelect: () => {
-                  setScope('quality');
-                  submitCurrentQuery();
-                },
-              },
-              {
-                id: 'supplier-quality',
-                label: 'Supplier quality',
-                active: scope === 'supplier-quality',
-                onSelect: () => {
-                  setScope('supplier-quality');
-                  submitCurrentQuery();
-                },
-              },
-            ]}
-          />
-        </div>
+                }}
+              >
+                <SearchField
+                  aria-label="Global search"
+                  className="flex-1"
+                  onChange={(event) => setQueryInput(event.target.value)}
+                  shortcut="⌘K"
+                  value={queryInput}
+                />
+                <Button
+                  className="w-full sm:w-auto"
+                  size="comfortable"
+                  type="submit"
+                  variant="primary"
+                >
+                  검색
+                </Button>
+              </form>
+            </div>
+
+            <div className="documents-workbench__filters">
+              <FilterBar
+                options={[
+                  {
+                    id: 'spec',
+                    label: 'Spec',
+                    active: docType === 'spec',
+                    onSelect: () => {
+                      setDocType('spec');
+                      submitCurrentQuery();
+                    },
+                  },
+                  {
+                    id: 'revision-note',
+                    label: 'Revision note',
+                    active: docType === 'revision-note',
+                    onSelect: () => {
+                      setDocType('revision-note');
+                      submitCurrentQuery();
+                    },
+                  },
+                  {
+                    id: 'memo',
+                    label: 'Memo',
+                    active: docType === 'memo',
+                    onSelect: () => {
+                      setDocType('memo');
+                      submitCurrentQuery();
+                    },
+                  },
+                  {
+                    id: 'guide',
+                    label: 'Guide',
+                    active: docType === 'guide',
+                    onSelect: () => {
+                      setDocType('guide');
+                      submitCurrentQuery();
+                    },
+                  },
+                  {
+                    id: 'engineering',
+                    label: 'Engineering',
+                    active: scope === 'engineering',
+                    onSelect: () => {
+                      setScope('engineering');
+                      submitCurrentQuery();
+                    },
+                  },
+                  {
+                    id: 'project-a',
+                    label: 'Project A',
+                    active: scope === 'project-a',
+                    onSelect: () => {
+                      setScope('project-a');
+                      submitCurrentQuery();
+                    },
+                  },
+                  {
+                    id: 'quality',
+                    label: 'Quality',
+                    active: scope === 'quality',
+                    onSelect: () => {
+                      setScope('quality');
+                      submitCurrentQuery();
+                    },
+                  },
+                  {
+                    id: 'supplier-quality',
+                    label: 'Supplier quality',
+                    active: scope === 'supplier-quality',
+                    onSelect: () => {
+                      setScope('supplier-quality');
+                      submitCurrentQuery();
+                    },
+                  },
+                ]}
+              />
+            </div>
+          </div>
+        </section>
 
         {searchError ? (
-          <div className="mb-4 rounded-[var(--ui-radius-md)] border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+          <div className="rounded-[var(--ui-radius-md)] border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
             {searchError}
           </div>
         ) : null}
 
         {nextActions.length ? (
-          <div className="mb-4">
-            <InlineNotice title="next actions">
-              {nextActions.join(' · ')}
-            </InlineNotice>
-          </div>
+          <InlineNotice title="next actions">{nextActions.join(' · ')}</InlineNotice>
         ) : null}
 
-        <DataTableToolbar
-          title="Top results"
-          meta={
-            searchState
-              ? `${hits.length} selected sources · ${searchState.query_profile}`
-              : '검색 컨텍스트를 준비 중입니다.'
-          }
-        />
-        <DataTable
-          columns={columns}
-          emptyState={
-            <EmptyState
-              title="검색 결과가 없습니다."
-              description="질의를 구체화하거나 문서 유형과 부서 필터를 조정해보세요."
-              action={{
-                label: '기본 검색으로 되돌리기',
-                onClick: () => applySavedView('engineering-specs'),
-              }}
+        <section className="rounded-[var(--ui-radius-md)] border border-[var(--ui-color-border)] bg-[var(--ui-color-surface)]">
+          <div className="border-b border-[var(--ui-color-border)] px-3.5 py-2.5">
+            <DataTableToolbar
+              title="Top results"
+              meta={
+                searchState
+                  ? `${hits.length} selected sources · ${searchState.query_profile}`
+                  : '검색 컨텍스트를 준비 중입니다.'
+              }
             />
-          }
-          loading={searching}
-          rows={hits}
-          selection={{
-            selectedRowId: selectedRow?.document_id,
-            getRowId: (row) => row.document_id,
-            onRowClick: (row) => {
-              setSelectedRow(row);
-              setDrawerOpen(true);
-            },
-          }}
-        />
-
-        <div className="documents-workbench__footer">
-          <span>
-            Query profile: {searchState?.query_profile ?? 'loading'}
-          </span>
-          <span>
-            Filters: {searchState?.filters_applied.doc_type.join(', ') || 'all'} /{' '}
-            {searchState?.filters_applied.department.join(', ') ||
-              searchState?.filters_applied.project.join(', ') ||
-              'global'}
-          </span>
-        </div>
-      </Panel>
+          </div>
+          <DataTable
+            columns={columns}
+            emptyState={
+              <EmptyState
+                title="검색 결과가 없습니다."
+                description="질의를 구체화하거나 문서 유형과 부서 필터를 조정해보세요."
+                action={{
+                  label: '기본 검색으로 되돌리기',
+                  onClick: () => applySavedView('engineering-specs'),
+                }}
+              />
+            }
+            loading={searching}
+            rows={hits}
+            selection={{
+              selectedRowId: selectedRow?.document_id,
+              getRowId: (row) => row.document_id,
+              onRowClick: (row) => {
+                setSelectedRow(row);
+                setDrawerOpen(true);
+              },
+            }}
+          />
+          <div className="flex flex-wrap items-center justify-between gap-2 border-t border-[var(--ui-color-border)] px-3.5 py-2 text-[0.76rem] text-[var(--ui-color-ink-subtle)]">
+            <span>Query profile: {searchState?.query_profile ?? 'loading'}</span>
+            <span>
+              Filters: {searchState?.filters_applied.doc_type.join(', ') || 'all'} /{' '}
+              {searchState?.filters_applied.department.join(', ') ||
+                searchState?.filters_applied.project.join(', ') ||
+                'global'}
+            </span>
+          </div>
+        </section>
+      </div>
 
       <DetailDrawer
         open={drawerOpen}

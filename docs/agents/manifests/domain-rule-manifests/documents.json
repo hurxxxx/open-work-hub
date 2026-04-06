@@ -27,7 +27,7 @@
   "do_not_load_by_default": [
     "docs/harness/scenarios/plm-query.md",
     "docs/harness/scenarios/draft-generation.md",
-    "docs/harness/scenarios/wiki-pms.md"
+    "docs/harness/scenarios/pms.md"
   ],
   "local_rule_template": "docs/agents/local-rule-template.md"
 }

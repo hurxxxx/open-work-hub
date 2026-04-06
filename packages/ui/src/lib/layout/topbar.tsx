@@ -14,24 +14,24 @@ export function Topbar({
   actions,
 }: TopbarProps) {
   return (
-    <header className="grid grid-cols-[minmax(0,1.4fr)_auto] gap-4 rounded-[var(--ui-radius-lg)] border border-[var(--ui-color-border)] bg-[var(--ui-color-surface)] p-6 shadow-[var(--ui-shadow-sm)] max-[980px]:grid-cols-1 max-[720px]:p-4">
-      <div className="grid gap-2">
+    <header className="sticky top-0 z-20 grid grid-cols-[minmax(0,1fr)_auto] gap-2 border-b border-[var(--ui-color-border)] bg-[color:rgba(244,247,251,0.97)] py-1.5 backdrop-blur max-[980px]:grid-cols-1">
+      <div className="grid gap-0.5 self-center">
         {breadcrumb ? (
-          <p className="m-0 text-[0.82rem] text-[var(--ui-color-ink-subtle)] max-[720px]:hidden">
+          <p className="m-0 text-[0.66rem] font-medium uppercase tracking-[0.06em] text-[var(--ui-color-ink-subtle)] max-[720px]:hidden">
             {breadcrumb}
           </p>
         ) : null}
-        <h1 className="m-0 text-[clamp(1.5rem,2.5vw,2.1rem)] font-semibold tracking-[-0.025em] text-[var(--ui-color-ink)]">
+        <h1 className="m-0 text-[clamp(1rem,1.4vw,1.22rem)] font-semibold tracking-[-0.02em] text-[var(--ui-color-ink)]">
           {title}
         </h1>
         {description ? (
-          <p className="m-0 max-w-[68ch] text-sm text-[var(--ui-color-ink-muted)]">
+          <p className="m-0 max-w-[64ch] text-[0.8rem] text-[var(--ui-color-ink-muted)] max-[820px]:hidden">
             {description}
           </p>
         ) : null}
       </div>
       {actions ? (
-        <div className="flex flex-wrap items-center justify-end gap-2 max-[980px]:justify-start max-[720px]:w-full">
+        <div className="flex flex-wrap items-start justify-end gap-1.5 max-[980px]:justify-start max-[720px]:w-full">
           {actions}
         </div>
       ) : null}

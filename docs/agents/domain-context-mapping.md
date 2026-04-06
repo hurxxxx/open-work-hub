@@ -18,7 +18,7 @@
 | `plm` | 읽기 전용 PLM 조회, SQL safety | `plm-query` |
 | `drafts` | 초안 생성, export, citation block | `draft-generation` |
 | `ocr` | OCR 라우팅, 파싱, 품질 판단 | `ocr-pipeline` |
-| `wiki-pms` | 위키/작업/이슈 preview 생성 | `wiki-pms` |
+| `pms` | 프로젝트/작업/이슈 preview 생성 | `pms` |
 | `shared-harness` | docs/harness, eval, scorecard, adapters | 복수 시나리오 |
 
 ## 원칙

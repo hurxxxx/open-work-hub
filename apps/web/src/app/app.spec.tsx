@@ -365,7 +365,7 @@ describe('App', () => {
     await settle();
 
     expect(findElementByText(/로그인/i)).toBeTruthy();
-    expect(findElementByText(/등록된 자체 계정으로 아이두에 로그인합니다\./i)).toBeTruthy();
+    expect(findElementByText(/등록된 자체 계정으로 업무 포털에 로그인합니다\./i)).toBeTruthy();
     expect(findElementByText(/AIDOO Admin/i)).toBeNull();
   });
 
@@ -403,15 +403,6 @@ describe('App', () => {
     expect(window.location.pathname).toBe('/search');
   });
 
-  it('should normalize the legacy wiki-pms path to /wiki', async () => {
-    window.history.replaceState({}, '', '/wiki-pms');
-    await renderApp();
-    await settle();
-
-    expect(findElementByText(/Wiki 작업면/i)).toBeTruthy();
-    expect(window.location.pathname).toBe('/wiki');
-  });
-
   it('should render the meeting migration page when the pathname points to /meeting', async () => {
     window.history.replaceState({}, '', '/meeting');
     await renderApp();
@@ -428,6 +419,6 @@ describe('App', () => {
     await settle();
 
     expect(findElementByText(/PMS 프로젝트 관리/i)).toBeTruthy();
-    expect(findElementByText(/AIDOO 프로젝트 관리/i)).toBeTruthy();
+    expect(findElementByText(/프로젝트/i)).toBeTruthy();
   });
 });

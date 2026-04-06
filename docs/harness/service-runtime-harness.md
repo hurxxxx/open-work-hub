@@ -130,7 +130,7 @@
 - layout/table preservation
 - catastrophic failure rate
 
-### `wiki-pms`
+### `pms`
 
 `intent routing -> policy check -> structured generation -> mutation preview -> execution`
 

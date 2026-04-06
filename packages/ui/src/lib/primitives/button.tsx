@@ -5,22 +5,22 @@ import { forwardRef } from 'react';
 import { cn } from '../utils/cn';
 
 const buttonVariants = cva(
-  'inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-[var(--ui-radius-md)] border text-sm font-semibold transition-colors duration-[var(--ui-motion-fast)] disabled:cursor-not-allowed disabled:opacity-50',
+  'inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-[var(--ui-radius-sm)] border text-[0.84rem] font-semibold transition-colors duration-[var(--ui-motion-fast)] disabled:cursor-not-allowed disabled:opacity-50',
   {
     variants: {
       variant: {
         primary:
-          'border-[var(--ui-color-accent)] bg-[var(--ui-color-accent)] text-white hover:bg-[#16242e]',
+          'border-[var(--ui-color-accent)] bg-[var(--ui-color-accent)] text-white hover:bg-[#173350]',
         secondary:
-          'border-[var(--ui-color-border-strong)] bg-[var(--ui-color-surface-raised)] text-[var(--ui-color-ink)] hover:bg-[var(--ui-color-surface-subtle)]',
+          'border-[var(--ui-color-border)] bg-[var(--ui-color-surface-raised)] text-[var(--ui-color-ink)] hover:bg-[var(--ui-color-surface-subtle)]',
         ghost:
           'border-transparent bg-transparent text-[var(--ui-color-ink)] hover:bg-[var(--ui-color-surface-subtle)]',
         subtle:
           'border-[var(--ui-color-border)] bg-[var(--ui-color-surface-subtle)] text-[var(--ui-color-ink-muted)] hover:bg-[var(--ui-color-accent-weak)]',
       },
       size: {
-        dense: 'h-[var(--ui-density-dense)] px-3',
-        comfortable: 'h-[var(--ui-density-comfortable)] px-4',
+        dense: 'h-[var(--ui-density-dense)] px-2.5',
+        comfortable: 'h-[var(--ui-density-comfortable)] px-3.5',
         icon: 'size-[var(--ui-density-dense)] p-0',
       },
       fullWidth: {

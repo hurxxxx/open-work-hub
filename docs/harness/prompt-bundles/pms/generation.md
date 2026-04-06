@@ -1,4 +1,4 @@
-# wiki-pms generation
+# pms generation
 
 역할: 권한과 source 를 지키는 preview 를 생성한다.
 

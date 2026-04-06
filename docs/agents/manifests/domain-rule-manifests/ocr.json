@@ -25,7 +25,7 @@
     "docs/harness/service-runtime-harness.md"
   ],
   "do_not_load_by_default": [
-    "docs/harness/scenarios/wiki-pms.md",
+    "docs/harness/scenarios/pms.md",
     "docs/harness/scenarios/plm-query.md"
   ],
   "local_rule_template": "docs/agents/local-rule-template.md"

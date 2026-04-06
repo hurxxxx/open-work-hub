@@ -1,34 +1,34 @@
 :root {
   --ui-font-sans: "IBM Plex Sans KR", "IBM Plex Sans", "Pretendard", sans-serif;
   --ui-font-mono: "IBM Plex Mono", "JetBrains Mono", monospace;
-  --ui-color-bg: #f3f2ee;
-  --ui-color-surface: #faf9f6;
+  --ui-color-bg: #f4f7fb;
+  --ui-color-surface: #ffffff;
   --ui-color-surface-raised: #ffffff;
-  --ui-color-surface-subtle: #f1f1ec;
-  --ui-color-surface-sidebar: #151c20;
-  --ui-color-border: rgba(30, 37, 41, 0.1);
-  --ui-color-border-strong: rgba(30, 37, 41, 0.16);
-  --ui-color-ink: #1e2529;
-  --ui-color-ink-muted: #556169;
-  --ui-color-ink-subtle: #68757d;
-  --ui-color-accent: #1f2d38;
-  --ui-color-accent-weak: #e6ebee;
-  --ui-color-success: #1f6b4d;
-  --ui-color-warning: #9b6b17;
-  --ui-color-danger: #8f2d2d;
-  --ui-radius-sm: 8px;
-  --ui-radius-md: 10px;
-  --ui-radius-lg: 14px;
-  --ui-shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.04);
-  --ui-shadow-lg: 0 20px 48px rgba(15, 23, 42, 0.18);
+  --ui-color-surface-subtle: #f8fafc;
+  --ui-color-surface-sidebar: #121922;
+  --ui-color-border: rgba(15, 23, 42, 0.1);
+  --ui-color-border-strong: rgba(15, 23, 42, 0.16);
+  --ui-color-ink: #17212b;
+  --ui-color-ink-muted: #546171;
+  --ui-color-ink-subtle: #708092;
+  --ui-color-accent: #1b3b61;
+  --ui-color-accent-weak: #e9f0f8;
+  --ui-color-success: #0f766e;
+  --ui-color-warning: #a16207;
+  --ui-color-danger: #b42318;
+  --ui-radius-sm: 6px;
+  --ui-radius-md: 8px;
+  --ui-radius-lg: 10px;
+  --ui-shadow-sm: 0 1px 1px rgba(15, 23, 42, 0.03);
+  --ui-shadow-lg: 0 16px 32px rgba(15, 23, 42, 0.12);
   --ui-space-1: 4px;
   --ui-space-2: 8px;
   --ui-space-3: 12px;
   --ui-space-4: 16px;
   --ui-space-5: 20px;
   --ui-space-6: 24px;
-  --ui-density-dense: 32px;
-  --ui-density-comfortable: 38px;
+  --ui-density-dense: 30px;
+  --ui-density-comfortable: 34px;
   --ui-motion-fast: 120ms;
   --ui-motion-base: 180ms;
   --ui-z-drawer: 40;
@@ -51,7 +51,9 @@
     background: var(--ui-color-bg);
     color: var(--ui-color-ink);
     font-family: var(--ui-font-sans);
-    line-height: 1.5;
+    line-height: 1.45;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
   }
 
   button,

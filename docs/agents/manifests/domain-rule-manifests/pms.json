@@ -1,25 +1,24 @@
 {
   "$schema": "https://doowon.local/docs/harness/schemas/domain-rule-manifest.schema.json",
-  "domain_id": "wiki-pms",
+  "domain_id": "pms",
   "path_prefixes": [
-    "apps/api/src/aidoo_api/domains/wiki_pms/",
-    "apps/web/src/domains/wiki/",
+    "apps/api/src/aidoo_api/domains/pms/",
     "apps/web/src/domains/pms/",
-    "docs/harness/scenarios/wiki-pms.md",
-    "docs/harness/manifests/scenarios/wiki-pms.json",
-    "docs/harness/prompt-bundles/wiki-pms/",
+    "docs/harness/scenarios/pms.md",
+    "docs/harness/manifests/scenarios/pms.json",
+    "docs/harness/prompt-bundles/pms/",
     ".claude/agents/ui-conformance-reviewer.md"
   ],
-  "responsibility": "위키/작업/이슈 preview-first 생성과 권한 검사, 상태 제안 UI 계약을 소유한다.",
+  "responsibility": "PMS 프로젝트/마일스톤/이슈 preview-first 제안과 권한 검사, 상태 제안 UI 계약을 소유한다.",
   "scenario_candidates": [
-    "wiki-pms"
+    "pms"
   ],
   "must_read_docs": [
     "docs/agents/context-loading-policy.md",
     "docs/agents/agent-operating-standard.md",
     "docs/agents/domain-context-mapping.md",
-    "docs/harness/scenarios/wiki-pms.md",
-    "docs/harness/manifests/scenarios/wiki-pms.json"
+    "docs/harness/scenarios/pms.md",
+    "docs/harness/manifests/scenarios/pms.json"
   ],
   "optional_support_docs": [
     "docs/harness/eval-regression-spec.md",

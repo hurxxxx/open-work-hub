@@ -85,4 +85,4 @@ Before coding, briefly explain how your proposal avoids generic AI-generated UI 
 ## 메모
 
 - 이 프롬프트는 `보기 좋은 AI 데모` 보다 `실제로 오래 쓰는 업무 툴`을 만들기 위한 프롬프트다.
-- 필요하면 도메인별로 `documents-rag`, `plm-query`, `draft-generation`, `wiki-pms` 맥락을 추가한다.
+- 필요하면 도메인별로 `documents-rag`, `plm-query`, `draft-generation`, `pms` 맥락을 추가한다.

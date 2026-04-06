@@ -163,4 +163,4 @@
 - [plm-query](/Users/edward/projects/doowon/docs/harness/scenarios/plm-query.md)
 - [draft-generation](/Users/edward/projects/doowon/docs/harness/scenarios/draft-generation.md)
 - [ocr-pipeline](/Users/edward/projects/doowon/docs/harness/scenarios/ocr-pipeline.md)
-- [wiki-pms](/Users/edward/projects/doowon/docs/harness/scenarios/wiki-pms.md)
+- [pms](/Users/edward/projects/doowon/docs/harness/scenarios/pms.md)

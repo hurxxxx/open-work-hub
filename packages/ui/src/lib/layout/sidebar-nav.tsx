@@ -20,34 +20,34 @@ export function SidebarNav({
   return (
     <aside
       className={cn(
-        'ui-scrollbar grid h-full min-h-0 grid-rows-[auto_auto_1fr_auto] gap-3 overflow-y-auto border-r border-r-[var(--ui-color-border)] bg-[var(--ui-color-surface-sidebar)] p-4 text-white max-[980px]:border-b max-[980px]:border-r-0',
+        'ui-scrollbar grid h-full min-h-0 grid-rows-[auto_auto_1fr_auto] gap-2 overflow-y-auto border-r border-r-white/6 bg-[var(--ui-color-surface-sidebar)] p-2.5 text-white max-[980px]:border-b max-[980px]:border-r-0',
         className,
       )}
     >
-      <div className="grid gap-1 border-b border-b-white/12 px-2.5 pb-3 pt-1">
-        <p className="m-0 text-xs font-semibold uppercase tracking-[0.08em] text-white/70">
+      <div className="grid gap-1 border-b border-b-white/10 px-1.5 pb-2 pt-1">
+        <p className="m-0 text-[0.68rem] font-semibold uppercase tracking-[0.08em] text-white/56">
           {brand.eyebrow}
         </p>
-        <strong className="text-[1.08rem] tracking-[-0.01em]">{brand.title}</strong>
+        <strong className="text-[1rem] tracking-[-0.01em] text-white">{brand.title}</strong>
       </div>
 
       {launcher ? (
         <button
           type="button"
           onClick={launcher.onSelect}
-          className="flex min-h-[34px] items-center justify-between rounded-[var(--ui-radius-md)] border border-white/14 bg-white/6 px-3 text-left text-sm font-medium text-white/90"
+          className="flex min-h-[32px] items-center justify-between rounded-[var(--ui-radius-sm)] border border-white/10 bg-white/5 px-2.5 text-left text-[0.86rem] font-medium text-white/88"
         >
           <span>{launcher.label}</span>
-          {launcher.hint ? <span className="text-xs text-white/55">{launcher.hint}</span> : null}
+          {launcher.hint ? <span className="text-[0.72rem] text-white/48">{launcher.hint}</span> : null}
         </button>
       ) : (
         <div />
       )}
 
-      <nav aria-label="Primary" className="flex flex-col gap-3 self-start">
+      <nav aria-label="Primary" className="flex flex-col gap-2.5 self-start">
         {sections.map((section) => (
           <div key={section.id} className="grid content-start gap-1">
-            <p className="m-0 px-2.5 text-[0.7rem] font-semibold uppercase tracking-[0.08em] text-white/55">
+            <p className="m-0 px-2 text-[0.64rem] font-semibold uppercase tracking-[0.08em] text-white/42">
               {section.label}
             </p>
             {section.items.map((item) => (
@@ -56,19 +56,19 @@ export function SidebarNav({
                 type="button"
                 onClick={item.onSelect}
                 className={cn(
-                  'flex min-h-[32px] items-center justify-between rounded-[var(--ui-radius-md)] px-2.5 text-left text-[0.93rem] text-white/86 transition-colors duration-[var(--ui-motion-fast)] hover:bg-white/6',
-                  item.active ? 'bg-white/12 text-white' : '',
+                  'flex min-h-[30px] items-center justify-between rounded-[var(--ui-radius-sm)] px-2 text-left text-[0.86rem] text-white/76 transition-colors duration-[var(--ui-motion-fast)] hover:bg-white/7 hover:text-white',
+                  item.active ? 'bg-white/10 text-white' : '',
                 )}
               >
                 <span>{item.label}</span>
-                {item.hint ? <span className="text-xs text-white/50">{item.hint}</span> : null}
+                {item.hint ? <span className="text-[0.68rem] text-white/38">{item.hint}</span> : null}
               </button>
             ))}
           </div>
         ))}
       </nav>
 
-      <div className="flex flex-wrap gap-1.5 px-2.5">
+      <div className="flex flex-wrap gap-1 px-2">
         {footerBadges?.map((badge) => (
           <Badge key={badge} tone="inverse">
             {badge}

@@ -2,7 +2,6 @@ import type { AuthUser } from './auth-api';
 import {
   AppShell,
   Button,
-  EmptyState,
   MetricInline,
   Panel,
   SidebarNav,
@@ -29,7 +28,6 @@ import { DraftPreview } from '../domains/drafts/draft-preview';
 import { PmsPreview } from '../domains/pms/pms-preview';
 import { PmsWorkspace } from '../domains/pms/pms-workspace';
 import { PlmPreview } from '../domains/plm/plm-preview';
-import { WikiPreview } from '../domains/wiki/wiki-preview';
 
 type AuthPhase = 'loading' | 'login' | 'setup' | 'authenticated';
 type PortalRouteId =
@@ -50,7 +48,6 @@ type PortalRouteId =
   | 'meal'
   | 'requests'
   | 'plm'
-  | 'wiki'
   | 'pms'
   | 'admin-features'
   | 'admin-monitor'
@@ -266,18 +263,6 @@ const PORTAL_ROUTES: PortalRoute[] = [
     hint: 'preview',
   },
   {
-    id: 'wiki',
-    path: '/wiki',
-    aliases: ['/wiki-pms'],
-    label: 'Wiki',
-    breadcrumb: 'Platform / Wiki / Preview',
-    title: 'Wiki 작업면',
-    description:
-      '위키 문서 요약, 개정 초안, 근거 인용을 preview-first로 검토하는 작업면입니다.',
-    section: 'platform',
-    hint: 'preview',
-  },
-  {
     id: 'pms',
     path: '/pms',
     label: 'PMS',
@@ -362,11 +347,19 @@ function PlaceholderPage({
 }) {
   return (
     <Panel eyebrow={eyebrow} title={title} description={description}>
-      <EmptyState
-        title={`${title} 연결 준비 중`}
-        description={description}
-        action={actionLabel ? { label: actionLabel } : undefined}
-      />
+      <div className="grid gap-3">
+        <div className="grid gap-1.5 rounded-[var(--ui-radius-md)] border border-dashed border-[var(--ui-color-border-strong)] bg-[var(--ui-color-surface-subtle)] px-4 py-4">
+          <strong className="text-[0.92rem] text-[var(--ui-color-ink)]">
+            {title} 연결 준비 중
+          </strong>
+          <p className="m-0 text-[0.84rem] text-[var(--ui-color-ink-muted)]">{description}</p>
+        </div>
+        {actionLabel ? (
+          <div className="flex justify-end">
+            <Button variant="secondary">{actionLabel}</Button>
+          </div>
+        ) : null}
+      </div>
     </Panel>
   );
 }
@@ -389,28 +382,45 @@ function MigrationPage({
   metrics: Array<{ label: string; value: string }>;
 }) {
   return (
-    <div className="grid gap-5">
+    <div className="grid gap-4">
       <Panel
         eyebrow={eyebrow}
         title={title}
         description={description}
         status={<StatusBadge>{status}</StatusBadge>}
       >
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {metrics.map((metric) => (
-            <MetricInline key={metric.label} label={metric.label} value={metric.value} />
-          ))}
-        </div>
-      </Panel>
-      <Panel
-        eyebrow="Migration notes"
-        title="현재 이관 메모"
-        description="레거시 프로토타입의 흐름을 새 AIDOO 포털로 옮기기 위한 연결 포인트입니다."
-      >
-        <div className="grid gap-4 md:grid-cols-3">
-          <MetricInline label="Legacy source" value={legacyRefs.join(' · ')} />
-          <MetricInline label="Current surface" value="AIDOO 포털 스캐폴드" />
-          <MetricInline label="Next connection" value={nextConnection} />
+        <div className="grid gap-4">
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+            {metrics.map((metric) => (
+              <MetricInline key={metric.label} label={metric.label} value={metric.value} />
+            ))}
+          </div>
+          <div className="overflow-hidden rounded-[var(--ui-radius-md)] border border-[var(--ui-color-border)] bg-[var(--ui-color-surface-subtle)]">
+            <div className="grid grid-cols-[140px_minmax(0,1fr)] gap-3 border-b border-b-[var(--ui-color-border)] px-4 py-3">
+              <strong className="text-[0.72rem] font-semibold uppercase tracking-[0.08em] text-[var(--ui-color-ink-subtle)]">
+                Legacy source
+              </strong>
+              <span className="text-[0.86rem] text-[var(--ui-color-ink)]">
+                {legacyRefs.join(' · ')}
+              </span>
+            </div>
+            <div className="grid grid-cols-[140px_minmax(0,1fr)] gap-3 border-b border-b-[var(--ui-color-border)] px-4 py-3">
+              <strong className="text-[0.72rem] font-semibold uppercase tracking-[0.08em] text-[var(--ui-color-ink-subtle)]">
+                Current surface
+              </strong>
+              <span className="text-[0.86rem] text-[var(--ui-color-ink)]">
+                AIDOO workspace scaffold
+              </span>
+            </div>
+            <div className="grid grid-cols-[140px_minmax(0,1fr)] gap-3 px-4 py-3">
+              <strong className="text-[0.72rem] font-semibold uppercase tracking-[0.08em] text-[var(--ui-color-ink-subtle)]">
+                Next connection
+              </strong>
+              <span className="text-[0.86rem] text-[var(--ui-color-ink)]">
+                {nextConnection}
+              </span>
+            </div>
+          </div>
         </div>
       </Panel>
     </div>
@@ -428,7 +438,6 @@ function renderWorkspaceContent(routeId: PortalRouteId, token: string) {
             <>
               <PlmPreview />
               <DraftPreview />
-              <WikiPreview />
               <PmsPreview />
             </>
           }
@@ -731,8 +740,6 @@ function renderWorkspaceContent(routeId: PortalRouteId, token: string) {
           />
         </div>
       );
-    case 'wiki':
-      return <WikiPreview />;
     case 'pms':
       return <PmsWorkspace token={token} />;
     case 'admin-features':
@@ -950,7 +957,6 @@ function PortalWorkspace({ user, token, onLogout }: PortalWorkspaceProps) {
           <Topbar
             breadcrumb={currentRoute.breadcrumb}
             title={currentRoute.title}
-            description={currentRoute.description}
             actions={
               <>
                 <StatusBadge>{user.full_name}</StatusBadge>

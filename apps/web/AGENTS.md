@@ -11,4 +11,4 @@
 - 마케팅 hero, 과한 카드 구성, glassmorphism, neon glow, 보라 gradient 같은 AI스러운 기본값을 피한다.
 - 디자인 상세 기준은 `docs/architecture/enterprise-portal-design-direction.md` 를 따른다.
 - 공통 UI 기준은 `docs/architecture/ui-component-governance.md` 를 따른다.
-- 관련 시나리오는 `documents-rag`, `plm-query`, `draft-generation`, `wiki-pms`다.
+- 관련 시나리오는 `documents-rag`, `plm-query`, `draft-generation`, `pms`다.

@@ -37,11 +37,11 @@ export function DataTableToolbar({
   actions,
 }: DataTableToolbarProps) {
   return (
-    <div className="mb-3 flex items-center justify-between gap-3 max-[720px]:flex-col max-[720px]:items-start">
+    <div className="mb-2.5 flex items-center justify-between gap-3 max-[720px]:flex-col max-[720px]:items-start">
       <div className="grid gap-1">
-        <strong className="text-sm text-[var(--ui-color-ink)]">{title}</strong>
+        <strong className="text-[0.9rem] text-[var(--ui-color-ink)]">{title}</strong>
         {meta ? (
-          <span className="text-xs text-[var(--ui-color-ink-subtle)]">{meta}</span>
+          <span className="text-[0.74rem] text-[var(--ui-color-ink-subtle)]">{meta}</span>
         ) : null}
       </div>
       {actions ? <div className="flex flex-wrap items-center gap-2">{actions}</div> : null}
@@ -59,7 +59,7 @@ export function DataTable<TData extends object>({
 }: DataTableProps<TData>) {
   const [sorting, setSorting] = useState<SortingState>([]);
   const rowPadding =
-    density === 'dense' ? 'px-4 py-2.5 text-sm' : 'px-4 py-3.5 text-sm';
+    density === 'dense' ? 'px-3 py-2 text-[0.84rem]' : 'px-4 py-3 text-[0.86rem]';
 
   const table = useReactTable({
     data: rows,
@@ -109,7 +109,7 @@ export function DataTable<TData extends object>({
             <article
               key={row.id}
               className={cn(
-                'grid gap-3 rounded-[var(--ui-radius-md)] border border-[var(--ui-color-border)] bg-white px-4 py-3',
+                'grid gap-3 rounded-[var(--ui-radius-md)] border border-[var(--ui-color-border)] bg-white px-3 py-2.5',
                 selection?.onRowClick ? 'cursor-pointer active:scale-[0.995]' : '',
                 isSelected ? 'border-[var(--ui-color-border-strong)] bg-[var(--ui-color-accent-weak)]' : '',
               )}
@@ -120,12 +120,12 @@ export function DataTable<TData extends object>({
 
                 return (
                   <div key={cell.id} className="grid gap-1.5">
-                    <span className="text-[0.68rem] font-semibold uppercase tracking-[0.08em] text-[var(--ui-color-ink-subtle)]">
+                    <span className="text-[0.62rem] font-semibold uppercase tracking-[0.08em] text-[var(--ui-color-ink-subtle)]">
                       {header
                         ? flexRender(header.column.columnDef.header, header.getContext())
                         : cell.column.id}
                     </span>
-                    <div className="text-sm text-[var(--ui-color-ink)]">
+                    <div className="text-[0.84rem] text-[var(--ui-color-ink)]">
                       {flexRender(cell.column.columnDef.cell, cell.getContext())}
                     </div>
                   </div>
@@ -140,13 +140,13 @@ export function DataTable<TData extends object>({
         <table className="w-full border-collapse">
           <thead>
             {table.getHeaderGroups().map((headerGroup) => (
-              <tr key={headerGroup.id} className="border-b border-b-[var(--ui-color-border)]">
+              <tr key={headerGroup.id} className="border-b border-b-[var(--ui-color-border)] bg-[var(--ui-color-surface-subtle)]">
                 {headerGroup.headers.map((header) => (
                   <th
                     key={header.id}
                     className={cn(
                       rowPadding,
-                      'text-left text-xs font-semibold uppercase tracking-[0.08em] text-[var(--ui-color-ink-subtle)]',
+                      'text-left text-[0.68rem] font-semibold uppercase tracking-[0.08em] text-[var(--ui-color-ink-subtle)]',
                     )}
                     onClick={header.column.getToggleSortingHandler()}
                   >

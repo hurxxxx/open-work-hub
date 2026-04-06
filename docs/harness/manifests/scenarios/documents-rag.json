@@ -27,7 +27,7 @@
     "docs/harness/scenarios/plm-query.md",
     "docs/harness/scenarios/draft-generation.md",
     "docs/harness/scenarios/ocr-pipeline.md",
-    "docs/harness/scenarios/wiki-pms.md"
+    "docs/harness/scenarios/pms.md"
   ],
   "allowed_tools": [
     "OpenSearch hybrid search",

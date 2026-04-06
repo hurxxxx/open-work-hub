@@ -1,6 +1,6 @@
 {
   "$schema": "https://doowon.local/docs/harness/schemas/trace-grade-spec.schema.json",
-  "scenario_id": "wiki-pms",
+  "scenario_id": "pms",
   "trace_schema": "docs/harness/schemas/trace-event.schema.json",
   "online_sampling": {
     "default_rate": 0.15,

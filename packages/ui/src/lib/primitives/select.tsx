@@ -23,10 +23,10 @@ export function Select({
   className,
 }: SelectProps) {
   return (
-    <SelectPrimitive.Root value={value} onValueChange={onValueChange}>
+      <SelectPrimitive.Root value={value} onValueChange={onValueChange}>
         <SelectPrimitive.Trigger
         className={cn(
-          'inline-flex h-[var(--ui-density-dense)] min-w-[160px] items-center justify-between gap-2 rounded-[var(--ui-radius-md)] border border-[var(--ui-color-border-strong)] bg-[var(--ui-color-surface-raised)] px-3 text-sm text-[var(--ui-color-ink)]',
+          'inline-flex h-[var(--ui-density-dense)] min-w-[148px] items-center justify-between gap-2 rounded-[var(--ui-radius-sm)] border border-[var(--ui-color-border)] bg-[var(--ui-color-surface-raised)] px-3 text-[0.84rem] text-[var(--ui-color-ink)]',
           className,
         )}
         >
@@ -37,7 +37,7 @@ export function Select({
         </SelectPrimitive.Trigger>
       <SelectPrimitive.Portal>
         <SelectPrimitive.Content
-          className="z-[var(--ui-z-drawer)] overflow-hidden rounded-[var(--ui-radius-md)] border border-[var(--ui-color-border)] bg-[var(--ui-color-surface-raised)] shadow-[var(--ui-shadow-lg)]"
+          className="z-[var(--ui-z-drawer)] overflow-hidden rounded-[var(--ui-radius-sm)] border border-[var(--ui-color-border)] bg-[var(--ui-color-surface-raised)] shadow-[var(--ui-shadow-lg)]"
           position="popper"
         >
           <SelectPrimitive.Viewport className="p-1">
@@ -45,7 +45,7 @@ export function Select({
               <SelectPrimitive.Item
                 key={option.value}
                 value={option.value}
-                className="relative flex min-h-[32px] cursor-pointer select-none items-center rounded-[calc(var(--ui-radius-md)-2px)] px-3 text-sm text-[var(--ui-color-ink)] outline-none data-[highlighted]:bg-[var(--ui-color-accent-weak)]"
+                className="relative flex min-h-[30px] cursor-pointer select-none items-center rounded-[calc(var(--ui-radius-sm)-1px)] px-3 text-[0.84rem] text-[var(--ui-color-ink)] outline-none data-[highlighted]:bg-[var(--ui-color-accent-weak)]"
               >
                 <SelectPrimitive.ItemText>{option.label}</SelectPrimitive.ItemText>
               </SelectPrimitive.Item>

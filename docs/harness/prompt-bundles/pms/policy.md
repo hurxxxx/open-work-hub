@@ -1,4 +1,4 @@
-# wiki-pms policy
+# pms policy
 
 역할: preview 가 권한과 schema 를 만족하는지 판정한다.
 

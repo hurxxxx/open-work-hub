@@ -22,7 +22,7 @@
     "plm-query",
     "draft-generation",
     "ocr-pipeline",
-    "wiki-pms"
+    "pms"
   ],
   "must_read_docs": [
     "docs/agents/context-loading-policy.md",

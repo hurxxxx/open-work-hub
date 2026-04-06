@@ -4,7 +4,7 @@ import type { HTMLAttributes } from 'react';
 import { cn } from '../utils/cn';
 
 const badgeVariants = cva(
-  'inline-flex items-center gap-1 rounded-[var(--ui-radius-md)] border px-2.5 py-1 text-xs font-semibold',
+  'inline-flex items-center gap-1 rounded-[var(--ui-radius-sm)] border px-2 py-0.5 text-[0.72rem] font-semibold leading-none',
   {
     variants: {
       tone: {
@@ -19,7 +19,7 @@ const badgeVariants = cva(
         danger:
           'border-transparent bg-[color-mix(in_oklab,var(--ui-color-danger)_14%,white)] text-[var(--ui-color-danger)]',
         inverse:
-          'border-white/15 bg-white/8 text-white/85',
+          'border-white/10 bg-white/6 text-white/76',
       },
     },
     defaultVariants: {
@@ -37,5 +37,11 @@ export function Badge({ className, tone, ...props }: BadgeProps) {
 }
 
 export function StatusBadge(props: BadgeProps) {
-  return <Badge tone="neutral" {...props} />;
+  return (
+    <Badge
+      tone="neutral"
+      className={cn('h-[var(--ui-density-dense)] px-2.5', props.className)}
+      {...props}
+    />
+  );
 }
