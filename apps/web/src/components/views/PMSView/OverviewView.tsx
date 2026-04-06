@@ -96,8 +96,8 @@ export const OverviewView = () => {
             <LayoutDashboard size={16} className="text-clickup-purple" />
             Status Distribution
           </h3>
-          <div className="h-48">
-            <ResponsiveContainer width="100%" height="100%">
+          <div className="h-48 w-full min-w-0">
+            <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={192}>
               <PieChart>
                 <Pie
                   data={statusData}
@@ -171,8 +171,8 @@ export const OverviewView = () => {
           <User size={16} className="text-clickup-purple" />
           Team Workload
         </h3>
-        <div className="h-64">
-          <ResponsiveContainer width="100%" height="100%">
+        <div className="h-64 w-full min-w-0">
+          <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={256}>
             <BarChart data={[
               { name: 'John', tasks: 12, completed: 8 },
               { name: 'Jane', tasks: 15, completed: 10 },
