@@ -12,7 +12,10 @@ export const TabsList = forwardRef<
 >(({ className, ...props }, ref) => (
   <TabsPrimitive.List
     ref={ref}
-    className={cn('inline-flex flex-wrap items-center gap-2', className)}
+    className={cn(
+      'inline-flex flex-wrap items-center gap-1 rounded-[calc(var(--ui-radius-md)-2px)] border border-[var(--ui-color-border)] bg-[var(--ui-color-surface-subtle)] p-1',
+      className,
+    )}
     {...props}
   />
 ));
@@ -26,7 +29,7 @@ export const TabsTrigger = forwardRef<
   <TabsPrimitive.Trigger
     ref={ref}
     className={cn(
-      'inline-flex min-h-[var(--ui-density-dense)] items-center rounded-[var(--ui-radius-md)] border border-[var(--ui-color-border)] bg-[var(--ui-color-surface-subtle)] px-3 text-sm font-semibold text-[var(--ui-color-ink-muted)] transition-colors duration-[var(--ui-motion-fast)] data-[state=active]:bg-[var(--ui-color-accent-weak)] data-[state=active]:text-[var(--ui-color-accent)]',
+      'inline-flex h-[calc(var(--ui-density-dense)-2px)] items-center rounded-[calc(var(--ui-radius-md)-3px)] border border-transparent bg-transparent px-3 text-[0.82rem] font-semibold leading-none text-[var(--ui-color-ink-muted)] transition-colors duration-[var(--ui-motion-fast)] data-[state=active]:border-[var(--ui-color-border)] data-[state=active]:bg-white data-[state=active]:text-[var(--ui-color-ink)]',
       className,
     )}
     {...props}
@@ -39,7 +42,7 @@ export const TabsContent = forwardRef<
   ElementRef<typeof TabsPrimitive.Content>,
   ComponentPropsWithoutRef<typeof TabsPrimitive.Content>
 >(({ className, ...props }, ref) => (
-  <TabsPrimitive.Content ref={ref} className={cn('mt-4', className)} {...props} />
+  <TabsPrimitive.Content ref={ref} className={cn('mt-3', className)} {...props} />
 ));
 
 TabsContent.displayName = TabsPrimitive.Content.displayName;

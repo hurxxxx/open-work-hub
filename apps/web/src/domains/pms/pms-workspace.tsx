@@ -4,7 +4,6 @@ import {
   DataTableToolbar,
   DetailDrawer,
   EmptyState,
-  FilterBar,
   InlineNotice,
   Input,
   MetricInline,
@@ -48,12 +47,14 @@ const ISSUE_COLUMNS: DataTableColumn<PmsIssue>[] = [
     accessorKey: 'reference',
     header: 'Issue',
     cell: ({ row }) => (
-      <div className="grid gap-1">
-        <strong className="text-sm">{row.original.reference}</strong>
-        <span className="text-[0.94rem] font-semibold text-[var(--ui-color-ink)]">
+      <div className="grid gap-0.5">
+        <strong className="text-[0.76rem] text-[var(--ui-color-ink-subtle)]">
+          {row.original.reference}
+        </strong>
+        <span className="text-[0.88rem] font-semibold text-[var(--ui-color-ink)]">
           {row.original.title}
         </span>
-        <small className="text-[0.82rem] text-[var(--ui-color-ink-subtle)]">
+        <small className="text-[0.76rem] text-[var(--ui-color-ink-subtle)]">
           {row.original.description || '설명 없음'}
         </small>
       </div>
@@ -95,9 +96,12 @@ function isMobileViewport() {
 
 export interface PmsWorkspaceProps {
   token: string;
+  projectId: string;
+  onOpenProject: (projectId: string) => void;
+  onGoHome: () => void;
 }
 
-export function PmsWorkspace({ token }: PmsWorkspaceProps) {
+export function PmsWorkspace({ token, projectId, onOpenProject, onGoHome }: PmsWorkspaceProps) {
   const toast = useToast();
   const [dashboard, setDashboard] = useState<PmsDashboardSummary | null>(null);
   const [projects, setProjects] = useState<PmsProject[]>([]);
@@ -143,6 +147,7 @@ export function PmsWorkspace({ token }: PmsWorkspaceProps) {
     assignee_id: UNASSIGNED_VALUE,
     milestone_id: NO_MILESTONE_VALUE,
   });
+  const [activeView, setActiveView] = useState<'list' | 'board'>('list');
 
   const selectedProject = useMemo(
     () => projects.find((project) => project.id === selectedProjectId) ?? null,
@@ -232,12 +237,22 @@ export function PmsWorkspace({ token }: PmsWorkspaceProps) {
   }
 
   useEffect(() => {
-    void loadOverview();
-  }, [token]);
+    void loadOverview(projectId);
+  }, [projectId, token]);
 
   useEffect(() => {
     void loadProject(selectedProjectId);
   }, [priorityFilter, selectedProjectId, statusFilter, submittedIssueSearch, token]);
+
+  useEffect(() => {
+    if (
+      projectId &&
+      projectId !== selectedProjectId &&
+      projects.some((project) => project.id === projectId)
+    ) {
+      setSelectedProjectId(projectId);
+    }
+  }, [projectId, projects, selectedProjectId]);
 
   useEffect(() => {
     if (!selectedIssueId) {
@@ -276,6 +291,7 @@ export function PmsWorkspace({ token }: PmsWorkspaceProps) {
       setProjectForm({ key: '', name: '', description: '' });
       toast.success('Project created', `${nextProject.name} 프로젝트를 만들었습니다.`);
       await loadOverview(nextProject.id);
+      onOpenProject(nextProject.id);
     } catch (caughtError) {
       toast.error(
         'Create failed',
@@ -417,18 +433,19 @@ export function PmsWorkspace({ token }: PmsWorkspaceProps) {
       .filter((issue) => issue.status === column.id)
       .sort((left, right) => left.board_position - right.board_position),
   }));
-  const showOverviewStrip = Boolean(
-    dashboard &&
-      (dashboard.project_count ||
-        dashboard.active_issue_count ||
-        dashboard.overdue_issue_count ||
-        dashboard.my_issue_count ||
-        dashboard.milestone_due_soon_count),
-  );
+  const showOverviewStrip = false;
   const showRightRail = Boolean(selectedProject);
   const workspaceGridClass = showRightRail
     ? 'grid gap-3 xl:grid-cols-[250px_minmax(0,1fr)_280px]'
     : 'grid gap-3 xl:grid-cols-[250px_minmax(0,1fr)]';
+  const projectSummaryItems = selectedProject
+    ? [
+        `Progress ${formatPercent(selectedProject.progress)}`,
+        `Issues ${selectedProject.issue_count}`,
+        `Milestones ${selectedProject.milestone_count}`,
+        `Overdue ${selectedProject.overdue_issue_count}`,
+      ]
+    : [];
 
   if (loading) {
     return (
@@ -586,11 +603,7 @@ export function PmsWorkspace({ token }: PmsWorkspaceProps) {
 
         <div className={workspaceGridClass}>
           <div className="grid content-start gap-3">
-            <Panel
-              eyebrow="Projects"
-              title="프로젝트"
-              description="실행 중인 프로젝트를 선택합니다."
-            >
+            <Panel eyebrow="Projects" title="프로젝트" description="프로젝트 전환">
               <div className="grid gap-2.5">
                 {projects.length ? (
                   projects.map((project) => (
@@ -602,7 +615,7 @@ export function PmsWorkspace({ token }: PmsWorkspaceProps) {
                           ? 'border-[var(--ui-color-accent)] bg-[var(--ui-color-accent-weak)]'
                           : 'border-[var(--ui-color-border)] bg-[var(--ui-color-surface-subtle)]'
                       }`}
-                      onClick={() => setSelectedProjectId(project.id)}
+                      onClick={() => onOpenProject(project.id)}
                     >
                       <div className="flex items-center justify-between gap-2">
                         <strong className="text-[0.84rem]">{project.key}</strong>
@@ -622,7 +635,7 @@ export function PmsWorkspace({ token }: PmsWorkspaceProps) {
                       프로젝트가 없습니다
                     </strong>
                     <small className="mt-1 block text-[0.8rem] text-[var(--ui-color-ink-muted)]">
-                      첫 프로젝트를 만들면 보드가 바로 열립니다.
+                      홈에서 프로젝트를 만든 뒤 작업면으로 들어오세요.
                     </small>
                   </div>
                 )}
@@ -670,11 +683,7 @@ export function PmsWorkspace({ token }: PmsWorkspaceProps) {
             </Panel>
 
             {showRightRail ? (
-              <Panel
-                eyebrow="Members"
-                title="멤버"
-                description="현재 프로젝트의 접근 주체입니다."
-              >
+              <Panel eyebrow="Members" title="멤버" description="접근 주체">
                 {members.length ? (
                   <div className="grid gap-2">
                     {members.map((member) => (
@@ -704,26 +713,42 @@ export function PmsWorkspace({ token }: PmsWorkspaceProps) {
               <Panel
                 eyebrow={selectedProject.key}
                 title={selectedProject.name}
-                description={selectedProject.description || '프로젝트 설명이 아직 없습니다.'}
+                description="프로젝트 작업면"
                 status={<StatusBadge>{selectedProject.role}</StatusBadge>}
               >
-                <div className="grid gap-4">
-                  <div className="grid gap-3 rounded-[var(--ui-radius-md)] border border-[var(--ui-color-border)] bg-[var(--ui-color-surface-subtle)] px-3 py-3 md:grid-cols-4">
-                    <MetricInline label="Progress" value={formatPercent(selectedProject.progress)} />
-                    <MetricInline label="Issues" value={String(selectedProject.issue_count)} />
-                    <MetricInline
-                      label="Milestones"
-                      value={String(selectedProject.milestone_count)}
-                    />
-                    <MetricInline
-                      label="Overdue"
-                      value={String(selectedProject.overdue_issue_count)}
-                    />
-                  </div>
+                <div className="grid gap-3">
+                  <div className="grid gap-2 border-b border-b-[var(--ui-color-border)] pb-3">
+                    <div className="flex flex-col gap-2 xl:flex-row xl:items-center xl:justify-between">
+                      <div className="grid gap-1">
+                        {selectedProject.description ? (
+                          <p className="m-0 text-[0.8rem] text-[var(--ui-color-ink-muted)]">
+                            {selectedProject.description}
+                          </p>
+                        ) : null}
+                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[0.73rem] text-[var(--ui-color-ink-subtle)]">
+                          {projectSummaryItems.map((item) => (
+                            <span key={item}>{item}</span>
+                          ))}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Button variant="ghost" onClick={onGoHome}>
+                          홈으로
+                        </Button>
+                        <Tabs
+                          value={activeView}
+                          onValueChange={(value) => setActiveView(value as 'list' | 'board')}
+                        >
+                          <TabsList>
+                            <TabsTrigger value="list">List</TabsTrigger>
+                            <TabsTrigger value="board">Board</TabsTrigger>
+                          </TabsList>
+                        </Tabs>
+                      </div>
+                    </div>
 
-                  <div className="flex flex-col gap-2.5 border-b border-b-[var(--ui-color-border)] pb-3 lg:flex-row lg:items-center lg:justify-between">
                     <form
-                      className="flex flex-col gap-2 sm:flex-row sm:items-center"
+                      className="flex flex-wrap items-center gap-2"
                       onSubmit={(event) => {
                         event.preventDefault();
                         setSubmittedIssueSearch(issueSearch.trim());
@@ -731,17 +756,14 @@ export function PmsWorkspace({ token }: PmsWorkspaceProps) {
                     >
                       <SearchField
                         aria-label="PMS issues search"
-                        className="sm:min-w-[260px]"
+                        className="min-w-[240px] flex-[1_1_280px]"
+                        placeholder="이슈 검색"
                         value={issueSearch}
                         onChange={(event) => setIssueSearch(event.target.value)}
                         shortcut="⌘/"
                       />
-                      <Button type="submit" variant="secondary">
-                        필터 적용
-                      </Button>
-                    </form>
-                    <div className="flex flex-wrap gap-2">
                       <Select
+                        className="w-[156px]"
                         value={priorityFilter}
                         onValueChange={setPriorityFilter}
                         options={[
@@ -753,6 +775,7 @@ export function PmsWorkspace({ token }: PmsWorkspaceProps) {
                         ]}
                       />
                       <Select
+                        className="w-[156px]"
                         value={statusFilter}
                         onValueChange={setStatusFilter}
                         options={[
@@ -763,18 +786,24 @@ export function PmsWorkspace({ token }: PmsWorkspaceProps) {
                           })),
                         ]}
                       />
-                      <Button
-                        variant="ghost"
-                        onClick={() => {
-                          setPriorityFilter('all');
-                          setStatusFilter('all');
-                          setIssueSearch('');
-                          setSubmittedIssueSearch('');
-                        }}
-                      >
-                        초기화
-                      </Button>
-                    </div>
+                      <div className="ml-auto flex flex-wrap gap-2">
+                        <Button type="submit" variant="secondary">
+                          적용
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          onClick={() => {
+                            setPriorityFilter('all');
+                            setStatusFilter('all');
+                            setIssueSearch('');
+                            setSubmittedIssueSearch('');
+                          }}
+                        >
+                          초기화
+                        </Button>
+                      </div>
+                    </form>
                   </div>
 
                   <details className="rounded-[var(--ui-radius-md)] border border-[var(--ui-color-border)] bg-[var(--ui-color-surface-subtle)]">
@@ -875,11 +904,42 @@ export function PmsWorkspace({ token }: PmsWorkspaceProps) {
                     </form>
                   </details>
 
-                  <Tabs defaultValue="board">
-                    <TabsList>
-                      <TabsTrigger value="board">Board</TabsTrigger>
-                      <TabsTrigger value="list">List</TabsTrigger>
-                    </TabsList>
+                  <Tabs
+                    value={activeView}
+                    onValueChange={(value) => setActiveView(value as 'list' | 'board')}
+                  >
+                    <TabsContent value="list">
+                      <DataTableToolbar
+                        title="Issues"
+                        meta={`${issues.length} issues · ${projectLoading ? 'syncing' : 'live'} · ${selectedProject.key}`}
+                        actions={
+                          <Button variant="secondary" onClick={() => void refreshCurrentProject()}>
+                            새로고침
+                          </Button>
+                        }
+                      />
+                      <DataTable
+                        columns={ISSUE_COLUMNS}
+                        rows={issues}
+                        loading={projectLoading}
+                        selection={{
+                          selectedRowId: selectedIssueId ?? undefined,
+                          onRowClick: (issue) => {
+                            setSelectedIssueId(issue.id);
+                            if (isMobileViewport()) {
+                              setMobileIssueOpen(true);
+                            }
+                          },
+                          getRowId: (issue) => issue.id,
+                        }}
+                        emptyState={
+                          <EmptyState
+                            title="이슈가 없습니다"
+                            description="새 이슈를 만들거나 필터를 완화해보세요."
+                          />
+                        }
+                      />
+                    </TabsContent>
 
                     <TabsContent value="board">
                       <div className="grid gap-3 xl:grid-cols-4">
@@ -906,7 +966,7 @@ export function PmsWorkspace({ token }: PmsWorkspaceProps) {
                                 <article
                                   key={issue.id}
                                   draggable
-                                  className="grid cursor-pointer gap-1.5 rounded-[var(--ui-radius-sm)] border border-[var(--ui-color-border)] bg-white px-3 py-2.5"
+                                  className="grid cursor-pointer gap-1 rounded-[var(--ui-radius-sm)] border border-[var(--ui-color-border)] bg-white px-3 py-2"
                                   onDragStart={(event) =>
                                     event.dataTransfer.setData('text/plain', issue.id)
                                   }
@@ -919,12 +979,12 @@ export function PmsWorkspace({ token }: PmsWorkspaceProps) {
                                 >
                                   <div className="flex items-center justify-between gap-2">
                                     <strong className="text-[0.78rem]">{issue.reference}</strong>
-                                    <span className="text-[0.68rem] text-[var(--ui-color-ink-subtle)]">
+                                    <span className="text-[0.66rem] text-[var(--ui-color-ink-subtle)]">
                                       {issue.priority_label}
                                     </span>
                                   </div>
-                                  <span className="text-[0.86rem] font-semibold">{issue.title}</span>
-                                  <small className="text-[0.74rem] text-[var(--ui-color-ink-subtle)]">
+                                  <span className="text-[0.84rem] font-semibold">{issue.title}</span>
+                                  <small className="text-[0.72rem] text-[var(--ui-color-ink-subtle)]">
                                     {issue.assignee_name ?? '미배정'} · Due {formatDate(issue.due_date)}
                                   </small>
                                 </article>
@@ -937,33 +997,6 @@ export function PmsWorkspace({ token }: PmsWorkspaceProps) {
                       </div>
                     </TabsContent>
 
-                    <TabsContent value="list">
-                      <DataTableToolbar
-                        title="전체 이슈"
-                        meta={`${issues.length} issues · ${projectLoading ? 'syncing' : 'live'}`}
-                      />
-                      <DataTable
-                        columns={ISSUE_COLUMNS}
-                        rows={issues}
-                        loading={projectLoading}
-                        selection={{
-                          selectedRowId: selectedIssueId ?? undefined,
-                          onRowClick: (issue) => {
-                            setSelectedIssueId(issue.id);
-                            if (isMobileViewport()) {
-                              setMobileIssueOpen(true);
-                            }
-                          },
-                          getRowId: (issue) => issue.id,
-                        }}
-                        emptyState={
-                          <EmptyState
-                            title="이슈가 없습니다"
-                            description="새 이슈를 만들거나 필터를 완화해보세요."
-                          />
-                        }
-                      />
-                    </TabsContent>
                   </Tabs>
                 </div>
               </Panel>
@@ -976,12 +1009,12 @@ export function PmsWorkspace({ token }: PmsWorkspaceProps) {
                   시작하려면 프로젝트를 만드세요
                 </h2>
                 <p className="m-0 text-[0.8rem] text-[var(--ui-color-ink-muted)]">
-                  좌측 패널에서 프로젝트를 만들면 보드, 마일스톤, 최근 활동이 작업면에 열립니다.
+                  좌측 패널에서 프로젝트를 만들면 이슈 리스트와 프로젝트 작업면이 바로 열립니다.
                 </p>
                 <div className="grid gap-1.5 border-t border-[var(--ui-color-border)] pt-2 text-[0.8rem] text-[var(--ui-color-ink-muted)]">
                   <span>1. 프로젝트 키와 이름을 입력합니다.</span>
-                  <span>2. 프로젝트를 만든 뒤 이슈 보드를 엽니다.</span>
-                  <span>3. 마일스톤과 담당자를 붙여 운영을 시작합니다.</span>
+                  <span>2. 생성 직후 리스트 뷰를 기준으로 이슈를 추가합니다.</span>
+                  <span>3. 상태, 담당자, 마일스톤을 조정하며 진행을 관리합니다.</span>
                 </div>
               </section>
             )}
@@ -992,7 +1025,7 @@ export function PmsWorkspace({ token }: PmsWorkspaceProps) {
               <Panel
                 eyebrow="Milestones"
                 title="마일스톤"
-                description="일정 기준 데이터와 진행률을 관리합니다."
+                description="체크포인트"
               >
                 <div className="grid gap-3">
                   <form className="grid gap-2" onSubmit={(event) => void handleCreateMilestone(event)}>
@@ -1072,7 +1105,7 @@ export function PmsWorkspace({ token }: PmsWorkspaceProps) {
               <Panel
                 eyebrow="Recent activity"
                 title="최근 업데이트"
-                description="최근 변경 로그를 빠르게 훑습니다."
+                description="최근 변경"
               >
                 {dashboard?.recent_activity.length ? (
                   <div className="grid gap-2">

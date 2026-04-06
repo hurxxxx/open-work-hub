@@ -37,11 +37,11 @@ export function DataTableToolbar({
   actions,
 }: DataTableToolbarProps) {
   return (
-    <div className="mb-2.5 flex items-center justify-between gap-3 max-[720px]:flex-col max-[720px]:items-start">
-      <div className="grid gap-1">
-        <strong className="text-[0.9rem] text-[var(--ui-color-ink)]">{title}</strong>
+    <div className="mb-2 flex items-center justify-between gap-3 max-[720px]:flex-col max-[720px]:items-start">
+      <div className="grid gap-0.5">
+        <strong className="text-[0.84rem] text-[var(--ui-color-ink)]">{title}</strong>
         {meta ? (
-          <span className="text-[0.74rem] text-[var(--ui-color-ink-subtle)]">{meta}</span>
+          <span className="text-[0.72rem] text-[var(--ui-color-ink-subtle)]">{meta}</span>
         ) : null}
       </div>
       {actions ? <div className="flex flex-wrap items-center gap-2">{actions}</div> : null}
@@ -59,7 +59,7 @@ export function DataTable<TData extends object>({
 }: DataTableProps<TData>) {
   const [sorting, setSorting] = useState<SortingState>([]);
   const rowPadding =
-    density === 'dense' ? 'px-3 py-2 text-[0.84rem]' : 'px-4 py-3 text-[0.86rem]';
+    density === 'dense' ? 'px-3 py-1.5 text-[0.82rem]' : 'px-4 py-3 text-[0.86rem]';
 
   const table = useReactTable({
     data: rows,

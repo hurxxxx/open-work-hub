@@ -25,6 +25,7 @@ import { AuthScreen } from './auth-screen';
 
 import { SearchWorkbench } from '../domains/documents/search-workbench';
 import { DraftPreview } from '../domains/drafts/draft-preview';
+import { PmsHome } from '../domains/pms/pms-home';
 import { PmsPreview } from '../domains/pms/pms-preview';
 import { PmsWorkspace } from '../domains/pms/pms-workspace';
 import { PlmPreview } from '../domains/plm/plm-preview';
@@ -313,6 +314,31 @@ const PORTAL_ROUTES: PortalRoute[] = [
 
 const DEFAULT_PORTAL_PATH = '/search';
 
+function normalizeStaticPath(pathname: string): string {
+  return pathname.length > 1 && pathname.endsWith('/') ? pathname.slice(0, -1) : pathname;
+}
+
+function isPmsProjectPath(pathname: string): boolean {
+  return /^\/pms\/projects\/[^/]+$/.test(normalizeStaticPath(pathname));
+}
+
+function getPmsProjectId(pathname: string): string | null {
+  const match = normalizeStaticPath(pathname).match(/^\/pms\/projects\/([^/]+)$/);
+  return match ? decodeURIComponent(match[1]) : null;
+}
+
+function getPmsProjectPath(projectId: string): string {
+  return `/pms/projects/${encodeURIComponent(projectId)}`;
+}
+
+function getPortalRoutePath(pathname: string): string {
+  const normalized = normalizeStaticPath(pathname);
+  if (isPmsProjectPath(normalized)) {
+    return '/pms';
+  }
+  return normalized;
+}
+
 interface PortalWorkspaceProps {
   user: AuthUser;
   token: string;
@@ -320,11 +346,14 @@ interface PortalWorkspaceProps {
 }
 
 function normalizePortalPath(pathname: string): string {
-  const normalized =
-    pathname.length > 1 && pathname.endsWith('/') ? pathname.slice(0, -1) : pathname;
+  const normalized = normalizeStaticPath(pathname);
 
   if (!normalized || normalized === '/') {
     return DEFAULT_PORTAL_PATH;
+  }
+
+  if (isPmsProjectPath(normalized)) {
+    return normalized;
   }
 
   return (
@@ -427,7 +456,12 @@ function MigrationPage({
   );
 }
 
-function renderWorkspaceContent(routeId: PortalRouteId, token: string) {
+function renderWorkspaceContent(
+  routeId: PortalRouteId,
+  token: string,
+  currentPath: string,
+  navigateTo: (path: string) => void,
+) {
   switch (routeId) {
     case 'search':
       return (
@@ -741,7 +775,19 @@ function renderWorkspaceContent(routeId: PortalRouteId, token: string) {
         </div>
       );
     case 'pms':
-      return <PmsWorkspace token={token} />;
+      return getPmsProjectId(currentPath) ? (
+        <PmsWorkspace
+          token={token}
+          projectId={getPmsProjectId(currentPath) ?? ''}
+          onOpenProject={(projectId) => navigateTo(getPmsProjectPath(projectId))}
+          onGoHome={() => navigateTo('/pms')}
+        />
+      ) : (
+        <PmsHome
+          token={token}
+          onOpenProject={(projectId) => navigateTo(getPmsProjectPath(projectId))}
+        />
+      );
     case 'admin-features':
       return (
         <MigrationPage
@@ -833,10 +879,24 @@ function PortalWorkspace({ user, token, onLogout }: PortalWorkspaceProps) {
   }, [currentPath]);
 
   const currentRoute =
-    visibleRoutes.find((route) => route.path === currentPath) ?? visibleRoutes[0];
+    visibleRoutes.find((route) => route.path === getPortalRoutePath(currentPath)) ??
+    visibleRoutes[0];
+  const pmsProjectId = getPmsProjectId(currentPath);
+  const headerBreadcrumb =
+    currentRoute.id === 'pms'
+      ? pmsProjectId
+        ? 'PMS / Project'
+        : 'PMS / Team space'
+      : currentRoute.breadcrumb;
+  const headerTitle =
+    currentRoute.id === 'pms'
+      ? pmsProjectId
+        ? '프로젝트 작업면'
+        : '팀 스페이스'
+      : currentRoute.title;
 
   useEffect(() => {
-    if (!visibleRoutes.some((route) => route.path === currentPath)) {
+    if (!visibleRoutes.some((route) => route.path === getPortalRoutePath(currentPath))) {
       const fallbackPath = visibleRoutes[0]?.path ?? DEFAULT_PORTAL_PATH;
       window.history.replaceState({}, '', fallbackPath);
       setCurrentPath(fallbackPath);
@@ -955,8 +1015,8 @@ function PortalWorkspace({ user, token, onLogout }: PortalWorkspaceProps) {
         }
         header={
           <Topbar
-            breadcrumb={currentRoute.breadcrumb}
-            title={currentRoute.title}
+            breadcrumb={headerBreadcrumb}
+            title={headerTitle}
             actions={
               <>
                 <StatusBadge>{user.full_name}</StatusBadge>
@@ -973,7 +1033,9 @@ function PortalWorkspace({ user, token, onLogout }: PortalWorkspaceProps) {
                     </Button>
                   </>
                 ) : null}
-                <StatusBadge className="max-[980px]:hidden">{currentRoute.label}</StatusBadge>
+                {currentRoute.id !== 'pms' ? (
+                  <StatusBadge className="max-[980px]:hidden">{currentRoute.label}</StatusBadge>
+                ) : null}
                 <Button variant="secondary" onClick={() => void onLogout()}>
                   로그아웃
                 </Button>
@@ -982,7 +1044,7 @@ function PortalWorkspace({ user, token, onLogout }: PortalWorkspaceProps) {
           />
         }
       >
-        {renderWorkspaceContent(currentRoute.id, token)}
+        {renderWorkspaceContent(currentRoute.id, token, currentPath, navigateTo)}
       </AppShell>
       <ToastViewport />
     </ToastProvider>

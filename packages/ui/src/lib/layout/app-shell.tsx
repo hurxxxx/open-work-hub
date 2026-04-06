@@ -87,7 +87,7 @@ export function AppShell({
           </div>
         </>
       ) : null}
-      <main className="ui-scrollbar grid min-h-0 gap-0 overflow-y-auto px-5 pb-5 pt-0 max-[980px]:overflow-visible max-[980px]:px-4 max-[980px]:pb-4 max-[980px]:pt-0">
+      <main className="ui-scrollbar grid min-h-0 gap-0 overflow-y-auto px-4 pb-4 pt-0 max-[980px]:overflow-visible max-[980px]:px-4 max-[980px]:pb-4 max-[980px]:pt-0">
         {mobileSidebar ? (
           <div className="sticky top-0 z-30 -mx-4 hidden items-center justify-between border-b border-[var(--ui-color-border)] bg-[color:rgba(244,247,251,0.94)] px-4 py-2.5 backdrop-blur max-[980px]:flex">
             <div>
@@ -108,7 +108,7 @@ export function AppShell({
             </button>
           </div>
         ) : null}
-        <div className="grid w-full max-w-[1500px] gap-3 pt-3 max-[980px]:gap-3 max-[980px]:pt-0">
+        <div className="grid w-full max-w-[1500px] gap-2 pt-1.5 max-[980px]:gap-2 max-[980px]:pt-0">
           {header}
           {children}
         </div>

@@ -412,13 +412,23 @@ describe('App', () => {
     expect(findElementByText(/WhisperX STT/i)).toBeTruthy();
   });
 
-  it('should render the PMS workspace when the pathname points to /pms', async () => {
+  it('should render the PMS home when the pathname points to /pms', async () => {
     window.history.replaceState({}, '', '/pms');
     await renderApp();
     await settle();
     await settle();
 
-    expect(findElementByText(/PMS 프로젝트 관리/i)).toBeTruthy();
-    expect(findElementByText(/프로젝트/i)).toBeTruthy();
+    expect(findElementByText(/팀 스페이스/i)).toBeTruthy();
+    expect(findElementByText(/프로젝트 허브/i)).toBeTruthy();
+  });
+
+  it('should render the project workspace when the pathname points to /pms/projects/project-1', async () => {
+    window.history.replaceState({}, '', '/pms/projects/project-1');
+    await renderApp();
+    await settle();
+    await settle();
+
+    expect(findElementByText(/Portal Refinement|AIDOO PMS/i)).toBeTruthy();
+    expect(findElementByText(/프로젝트 작업면/i)).toBeTruthy();
   });
 });
