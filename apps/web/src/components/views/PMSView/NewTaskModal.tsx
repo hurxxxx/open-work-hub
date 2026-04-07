@@ -1,5 +1,5 @@
+import { useState } from 'react';
 import {
-  Layout,
   ChevronDown,
   Circle,
   FileText,
@@ -14,15 +14,54 @@ import {
   Paperclip,
   Bell,
 } from 'lucide-react';
-import { Dialog, Button, Badge } from '@aidoo/ui';
+import { Dialog, Button, Badge, BlockEditor } from '@aidoo/ui';
+import type { BlockContent } from '@aidoo/ui';
+import { useAuth } from '@/src/domains/auth/auth-provider';
+import { createProjectIssue } from '@/src/domains/pms/pms-api';
 
 export const NewTaskModal = ({
   isOpen,
   onClose,
+  projectId,
+  onCreated,
 }: {
   isOpen: boolean;
   onClose: () => void;
+  projectId: string;
+  onCreated?: () => void;
 }) => {
+  const { token } = useAuth();
+  const [title, setTitle] = useState('');
+  const [status, setStatus] = useState('backlog');
+  const [priority, setPriority] = useState('medium');
+  const [dueDate, setDueDate] = useState('');
+  const [showDescription, setShowDescription] = useState(false);
+  const [descriptionBlocks, setDescriptionBlocks] = useState<BlockContent | undefined>(undefined);
+  const [submitting, setSubmitting] = useState(false);
+
+  async function handleCreate() {
+    if (!token || !title.trim() || !projectId) return;
+    setSubmitting(true);
+    try {
+      await createProjectIssue(token, projectId, {
+        title: title.trim(),
+        description: '',
+        description_blocks: descriptionBlocks as any ?? null,
+        status,
+        priority,
+        assignee_id: null,
+        milestone_id: null,
+        due_date: dueDate || null,
+      });
+      onCreated?.();
+      onClose();
+    } catch {
+      // TODO: toast error
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
   return (
     <Dialog
       open={isOpen}
@@ -40,12 +79,16 @@ export const NewTaskModal = ({
               <Paperclip size={20} className="cursor-pointer hover:text-clickup-text transition-colors" />
               <div className="flex items-center gap-1 cursor-pointer hover:text-clickup-text transition-colors">
                 <Bell size={20} />
-                <span className="text-xs font-bold">1</span>
               </div>
             </div>
             <div className="flex items-center">
-              <Button variant="primary" onClick={onClose} className="rounded-r-none">
-                Create Task
+              <Button
+                variant="primary"
+                onClick={handleCreate}
+                disabled={!title.trim() || submitting}
+                className="rounded-r-none"
+              >
+                {submitting ? 'Creating...' : 'Create Task'}
               </Button>
               <Button variant="primary" size="icon" className="rounded-l-none border-l border-white/20">
                 <ChevronDown size={20} />
@@ -56,71 +99,69 @@ export const NewTaskModal = ({
       }
     >
       <div className="space-y-6 text-clickup-text">
-        {/* Selectors */}
-        <div className="flex items-center gap-3">
-          <Button variant="secondary" className="gap-2">
-            <Layout size={16} className="text-clickup-text/50" />
-            Project 1
-            <ChevronDown size={14} className="text-clickup-text/50" />
-          </Button>
-          <Button variant="secondary" className="gap-2">
-            <Circle size={16} className="text-clickup-text/50" />
-            Task
-            <ChevronDown size={14} className="text-clickup-text/50" />
-          </Button>
-        </div>
-
         {/* Task Name Input */}
         <input
           type="text"
-          placeholder="Task Name or type '/' for commands"
+          placeholder="Task Name"
+          value={title}
+          onChange={e => setTitle(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter' && !e.nativeEvent.isComposing && title.trim() && !submitting) handleCreate(); }}
           className="w-full bg-transparent text-xl font-medium text-clickup-text placeholder:text-clickup-text/40 focus:outline-none border border-clickup-border rounded-lg px-4 py-3 focus:border-clickup-purple transition-all"
           autoFocus
         />
 
-        {/* Description & AI */}
+        {/* Description */}
         <div className="space-y-4">
-          <button className="flex items-center gap-2 text-clickup-text/50 hover:text-clickup-text transition-colors text-sm">
-            <FileText size={18} />
-            <span>Add description</span>
-          </button>
-          <button className="flex items-center gap-2 text-clickup-purple hover:opacity-80 transition-opacity text-sm font-medium">
-            <Sparkles size={18} />
-            <span>Write with AI</span>
-          </button>
+          {showDescription ? (
+            <div className="rounded-lg border border-clickup-border bg-clickup-sidebar overflow-hidden">
+              <BlockEditor
+                initialContent={descriptionBlocks}
+                onChange={setDescriptionBlocks}
+                placeholder="Add a description..."
+                className="[&_.bn-editor]:min-h-[80px] [&_.bn-editor]:px-2"
+              />
+            </div>
+          ) : (
+            <button
+              className="flex items-center gap-2 text-clickup-text/50 hover:text-clickup-text transition-colors text-sm"
+              onClick={() => setShowDescription(true)}
+            >
+              <FileText size={18} />
+              <span>Add description</span>
+            </button>
+          )}
         </div>
 
         {/* Quick Actions */}
         <div className="flex flex-wrap items-center gap-2">
-          <Badge tone="neutral" className="uppercase tracking-wider font-bold">TO DO</Badge>
-          <Button variant="secondary" size="dense" className="gap-2">
-            <User size={16} />
-            Assignee
-          </Button>
-          <Button variant="secondary" size="dense" className="gap-2">
-            <Calendar size={16} />
-            Due date
-          </Button>
-          <Button variant="secondary" size="dense" className="gap-2">
-            <Flag size={16} />
-            Priority
-          </Button>
-          <Button variant="secondary" size="dense" className="gap-2">
-            <Tag size={16} />
-            Tags
-          </Button>
-          <Button variant="ghost" size="icon">
-            <MoreHorizontal size={16} />
-          </Button>
-        </div>
+          <select
+            value={status}
+            onChange={e => setStatus(e.target.value)}
+            className="bg-clickup-sidebar border border-clickup-border rounded-md px-2 py-1 text-xs text-clickup-text focus:outline-none"
+          >
+            <option value="backlog">Backlog</option>
+            <option value="todo">To Do</option>
+            <option value="in_progress">In Progress</option>
+            <option value="done">Done</option>
+          </select>
 
-        {/* Fields Section */}
-        <div className="space-y-3 pt-4">
-          <h4 className="text-xs font-bold text-clickup-text/50 uppercase tracking-widest">Fields</h4>
-          <Button variant="secondary" className="gap-2">
-            <Plus size={16} />
-            Create new field
-          </Button>
+          <select
+            value={priority}
+            onChange={e => setPriority(e.target.value)}
+            className="bg-clickup-sidebar border border-clickup-border rounded-md px-2 py-1 text-xs text-clickup-text focus:outline-none"
+          >
+            <option value="low">Low</option>
+            <option value="medium">Medium</option>
+            <option value="high">High</option>
+            <option value="critical">Critical</option>
+          </select>
+
+          <input
+            type="date"
+            value={dueDate}
+            onChange={e => setDueDate(e.target.value)}
+            className="bg-clickup-sidebar border border-clickup-border rounded-md px-2 py-1 text-xs text-clickup-text focus:outline-none"
+          />
         </div>
       </div>
     </Dialog>

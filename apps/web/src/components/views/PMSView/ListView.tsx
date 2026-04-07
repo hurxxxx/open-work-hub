@@ -1,24 +1,15 @@
 import { Activity, Plus, Layout, ChevronDown, Circle, User2 } from 'lucide-react';
 import { Badge, Button } from '@aidoo/ui';
-import { Task } from '@/src/types';
-import { PRIORITY_COLORS } from '@/src/mockData';
-
-const STATUS_TONE: Record<string, 'neutral' | 'accent' | 'success' | 'warning' | 'danger'> = {
-  'TO DO': 'neutral',
-  'IN PROGRESS': 'accent',
-  'REVIEW': 'warning',
-  'DONE': 'success',
-};
+import type { PmsIssue } from '@/src/domains/pms/pms-api';
+import { ISSUE_STATUSES, STATUS_TONE, PRIORITY_COLOR, initials, formatDate } from './pms-constants';
 
 export const ListView = ({
-  tasks,
-  onSelectTask,
+  issues,
+  onSelectIssue,
 }: {
-  tasks: Task[];
-  onSelectTask: (t: Task) => void;
+  issues: PmsIssue[];
+  onSelectIssue: (issue: PmsIssue) => void;
 }) => {
-  const groups = ['TO DO', 'IN PROGRESS', 'REVIEW', 'DONE'] as const;
-
   return (
     <div className="space-y-8">
       <div className="flex items-center gap-4 text-xs font-medium text-clickup-text/50 bg-clickup-sidebar/30 p-2 rounded-md border border-clickup-border">
@@ -36,16 +27,17 @@ export const ListView = ({
         </Button>
       </div>
 
-      {groups.map((status) => {
-        const statusTasks = tasks.filter((t) => t.status === status);
+      {ISSUE_STATUSES.map((status) => {
+        const statusIssues = issues.filter((i) => i.status === status);
+        if (statusIssues.length === 0) return null;
 
         return (
           <div key={status} className="space-y-2">
             <div className="flex items-center gap-2 px-2 py-1">
               <ChevronDown size={14} className="text-clickup-text/50" />
-              <Badge tone={STATUS_TONE[status] ?? 'neutral'}>{status}</Badge>
+              <Badge tone={STATUS_TONE[status] ?? 'neutral'}>{statusIssues[0]?.status_label ?? status}</Badge>
               <span className="text-[10px] text-clickup-text/40 font-bold">
-                {statusTasks.length}
+                {statusIssues.length}
               </span>
             </div>
 
@@ -66,40 +58,43 @@ export const ListView = ({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-clickup-border">
-                  {statusTasks.map((task) => (
+                  {statusIssues.map((issue) => (
                     <tr
-                      key={task.id}
-                      onClick={() => onSelectTask(task)}
+                      key={issue.id}
+                      onClick={() => onSelectIssue(issue)}
                       className="hover:bg-clickup-hover transition-colors group cursor-pointer"
                     >
                       <td className="py-2 px-4">
                         <Circle size={14} className="text-clickup-text/40" />
                       </td>
                       <td className="py-2 px-4">
-                        <span className="text-clickup-text font-medium">{task.name}</span>
+                        <div className="flex items-center gap-2">
+                          <span className="text-clickup-text/40 text-[10px]">{issue.reference}</span>
+                          <span className="text-clickup-text font-medium">{issue.title}</span>
+                        </div>
                       </td>
                       <td className="py-2 px-4">
-                        {task.assignee ? (
+                        {issue.assignee_name ? (
                           <div className="w-5 h-5 rounded-full bg-blue-500 flex items-center justify-center text-[8px] font-bold text-white border border-clickup-border">
-                            {task.assignee.avatar}
+                            {initials(issue.assignee_name)}
                           </div>
                         ) : (
                           <User2 size={14} className="text-clickup-text/30" />
                         )}
                       </td>
                       <td className="py-2 px-4">
-                        <span className="text-clickup-text/50">{task.dueDate || 'Not set'}</span>
+                        <span className="text-clickup-text/50">{formatDate(issue.due_date) || 'Not set'}</span>
                       </td>
                       <td className="py-2 px-4">
-                        <span className={`text-[10px] font-bold ${PRIORITY_COLORS[task.priority]}`}>
-                          {task.priority}
+                        <span className={`text-[10px] font-bold ${PRIORITY_COLOR[issue.priority] ?? ''}`}>
+                          {issue.priority_label}
                         </span>
                       </td>
                       <td className="py-2 px-4">
-                        <Badge tone={STATUS_TONE[task.status] ?? 'neutral'}>{task.status}</Badge>
+                        <Badge tone={STATUS_TONE[issue.status] ?? 'neutral'}>{issue.status_label}</Badge>
                       </td>
                       <td className="py-2 px-4">
-                        <span className="text-clickup-text/40">0</span>
+                        <span className="text-clickup-text/40">{issue.comments_count}</span>
                       </td>
                       <td className="py-2 px-4 text-right">
                         <Plus

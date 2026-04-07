@@ -25,3 +25,4 @@ export * from './lib/data-display/metric-inline';
 export * from './lib/data-display/charts';
 export * from './lib/feedback/inline-notice';
 export * from './lib/providers/toast-provider';
+export * from './lib/editor';

@@ -67,6 +67,9 @@ def _apply_postgres_schema_compat(engine) -> None:
         "ALTER TABLE auth_sessions ADD COLUMN IF NOT EXISTS last_seen_at TIMESTAMP",
         "ALTER TABLE auth_sessions ADD COLUMN IF NOT EXISTS user_agent VARCHAR(255)",
         "ALTER TABLE auth_sessions ADD COLUMN IF NOT EXISTS ip_address VARCHAR(64)",
+        "ALTER TABLE pms_issues ADD COLUMN IF NOT EXISTS parent_id VARCHAR(36) REFERENCES pms_issues(id)",
+        "ALTER TABLE pms_issues ADD COLUMN IF NOT EXISTS description_blocks JSON",
+        "ALTER TABLE pms_issue_comments ADD COLUMN IF NOT EXISTS body_blocks JSON",
     ]
 
     with engine.begin() as connection:

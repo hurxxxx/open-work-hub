@@ -1,10 +1,35 @@
+import { useMemo } from 'react';
 import { cn } from '@/src/lib/utils';
-import { Task } from '@/src/types';
-import { STATUS_COLORS } from '@/src/mockData';
+import type { PmsIssue } from '@/src/domains/pms/pms-api';
+import { STATUS_DOT_COLOR } from './pms-constants';
 
-export const CalendarView = ({ tasks }: { tasks: Task[] }) => {
+export const CalendarView = ({ issues }: { issues: PmsIssue[] }) => {
   const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-  const dates = Array.from({ length: 35 }, (_, i) => i - 3); // Mock dates for a month view
+
+  const { calendarDays, issuesByDate } = useMemo(() => {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = now.getMonth();
+    const firstDay = new Date(year, month, 1).getDay();
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+    const calDays: (number | null)[] = [];
+    for (let i = 0; i < firstDay; i++) calDays.push(null);
+    for (let d = 1; d <= daysInMonth; d++) calDays.push(d);
+    while (calDays.length < 35) calDays.push(null);
+
+    const byDate: Record<number, PmsIssue[]> = {};
+    for (const issue of issues) {
+      if (!issue.due_date) continue;
+      const d = new Date(issue.due_date);
+      if (d.getFullYear() === year && d.getMonth() === month) {
+        const day = d.getDate();
+        (byDate[day] ??= []).push(issue);
+      }
+    }
+
+    return { calendarDays: calDays, issuesByDate: byDate };
+  }, [issues]);
 
   return (
     <div className="h-full flex flex-col card p-0 overflow-hidden">
@@ -16,26 +41,25 @@ export const CalendarView = ({ tasks }: { tasks: Task[] }) => {
         ))}
       </div>
       <div className="flex-1 grid grid-cols-7 grid-rows-5 overflow-y-auto custom-scrollbar">
-        {dates.map((date, i) => (
-          <div 
-            key={i} 
+        {calendarDays.map((date, i) => (
+          <div
+            key={i}
             className={cn(
-              "p-2 border-r border-b border-clickup-border last:border-r-0 min-h-[120px] hover:bg-clickup-hover/50 transition-colors group",
-              (date < 1 || date > 31) && "bg-clickup-sidebar/20"
+              "p-2 border-r border-b border-clickup-border last:border-r-0 min-h-[120px] hover:bg-clickup-hover/50 transition-colors",
+              date === null && "bg-clickup-sidebar/20"
             )}
           >
             <div className="text-[10px] font-bold text-gray-600 mb-2">
-              {date > 0 && date <= 31 ? date : ''}
+              {date ?? ''}
             </div>
-            
             <div className="space-y-1">
-              {tasks.filter(t => t.dueDate === `Apr ${date < 10 ? '0' + date : date}`).map((task, idx) => (
-                <div key={idx} className={cn(
-                  "px-1.5 py-1 rounded text-[9px] truncate border-l-2 shadow-sm",
-                  STATUS_COLORS[task.status],
-                  "bg-opacity-20 text-white border-opacity-100"
-                )} style={{ borderLeftColor: 'currentColor' }}>
-                  {task.name}
+              {date && issuesByDate[date]?.map(issue => (
+                <div
+                  key={issue.id}
+                  className="px-1.5 py-1 rounded text-[9px] truncate border-l-2 bg-clickup-sidebar/60 text-clickup-text"
+                  style={{ borderLeftColor: STATUS_DOT_COLOR[issue.status]?.replace('bg-', '') || '#6b7280' }}
+                >
+                  {issue.reference} {issue.title}
                 </div>
               ))}
             </div>

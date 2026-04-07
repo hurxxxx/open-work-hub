@@ -109,10 +109,12 @@ class MilestoneUpdateRequest(BaseModel):
 class IssueCreateRequest(BaseModel):
     title: str = Field(..., min_length=2, max_length=180)
     description: str = Field(default="", max_length=4000)
+    description_blocks: list[dict] | None = None
     status: Literal["backlog", "todo", "in_progress", "done", "canceled"] = "backlog"
     priority: Literal["low", "medium", "high", "critical"] = "medium"
     assignee_id: str | None = None
     milestone_id: str | None = None
+    parent_id: str | None = None
     start_date: date | None = None
     due_date: date | None = None
     label_ids: list[str] = Field(default_factory=list)
@@ -121,6 +123,8 @@ class IssueCreateRequest(BaseModel):
 class IssueUpdateRequest(BaseModel):
     title: str | None = Field(default=None, min_length=2, max_length=180)
     description: str | None = Field(default=None, max_length=4000)
+    description_blocks: list[dict] | None = None
+    parent_id: str | None = None
     status: Literal["backlog", "todo", "in_progress", "done", "canceled"] | None = None
     priority: Literal["low", "medium", "high", "critical"] | None = None
     assignee_id: str | None = None
@@ -133,7 +137,8 @@ class IssueUpdateRequest(BaseModel):
 
 
 class IssueCommentCreateRequest(BaseModel):
-    body: str = Field(..., min_length=1, max_length=4000)
+    body: str = Field(default="", max_length=4000)
+    body_blocks: list[dict] | None = None
 
 
 class DependencyCreateRequest(BaseModel):
@@ -212,12 +217,32 @@ class LabelItem(BaseModel):
     color: str
 
 
+class LabelListResponse(BaseModel):
+    items: list[LabelItem]
+    total: int
+    page: int
+    page_size: int
+
+
+class LabelCreateRequest(BaseModel):
+    name: str = Field(..., min_length=1, max_length=48)
+    color: str = Field(default="#1f2d38", max_length=24)
+
+
+class LabelUpdateRequest(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=48)
+    color: str | None = Field(default=None, max_length=24)
+
+
 class IssueListItem(BaseModel):
     id: str
     project_id: str
     reference: str
     title: str
     description: str
+    description_blocks: list[dict] | None = None
+    parent_id: str | None = None
+    subtask_count: int = 0
     status: str
     status_label: str
     priority: str
@@ -260,6 +285,7 @@ class IssueCommentItem(BaseModel):
     author_id: str
     author_name: str
     body: str
+    body_blocks: list[dict] | None = None
     created_at: datetime
 
 
@@ -287,6 +313,7 @@ class IssueDetailResponse(BaseModel):
     issue: IssueListItem
     comments: list[IssueCommentItem]
     dependencies: list[DependencyItem]
+    subtasks: list[IssueListItem] = []
 
 
 class StatusCountItem(BaseModel):
@@ -417,6 +444,9 @@ def _serialize_issue(issue: Issue) -> IssueListItem:
         reference=_issue_reference(issue),
         title=issue.title,
         description=issue.description,
+        description_blocks=issue.description_blocks,
+        parent_id=issue.parent_id,
+        subtask_count=len(issue.subtasks) if issue.subtasks else 0,
         status=issue.status,
         status_label=ISSUE_STATUS_LABELS[issue.status],
         priority=issue.priority,
@@ -493,6 +523,7 @@ def _serialize_comment(comment: IssueComment) -> IssueCommentItem:
         author_id=comment.author_id,
         author_name=comment.author.full_name,
         body=comment.body,
+        body_blocks=comment.body_blocks,
         created_at=comment.created_at,
     )
 
@@ -607,6 +638,12 @@ def _get_issue_for_user(db: Session, user: User, issue_id: str) -> tuple[Issue, 
             selectinload(Issue.comments).selectinload(IssueComment.author),
             selectinload(Issue.activity_logs).selectinload(IssueActivityLog.actor),
             selectinload(Issue.label_links).selectinload(IssueLabel.label),
+            selectinload(Issue.subtasks).selectinload(Issue.assignee),
+            selectinload(Issue.subtasks).selectinload(Issue.reporter),
+            selectinload(Issue.subtasks).selectinload(Issue.milestone),
+            selectinload(Issue.subtasks).selectinload(Issue.comments),
+            selectinload(Issue.subtasks).selectinload(Issue.label_links).selectinload(IssueLabel.label),
+            selectinload(Issue.subtasks).selectinload(Issue.subtasks),
         )
         .where(Issue.id == issue_id)
     )
@@ -634,6 +671,7 @@ def list_projects(
                 selectinload(Project.members).selectinload(ProjectMember.user),
                 selectinload(Project.milestones),
                 selectinload(Project.issues).selectinload(Issue.comments),
+                selectinload(Project.issues).selectinload(Issue.subtasks),
             )
         )
     )
@@ -886,6 +924,75 @@ def update_milestone(
     return _serialize_milestone(milestone)
 
 
+@router.get("/projects/{project_id}/labels", response_model=LabelListResponse)
+def list_project_labels(
+    project_id: str,
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=100, ge=1, le=200),
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+) -> LabelListResponse:
+    _ensure_project_access(db, current_user, project_id)
+    labels = list(db.scalars(select(Label).where(Label.project_id == project_id).order_by(Label.name)))
+    items = [LabelItem(id=label.id, name=label.name, color=label.color) for label in labels]
+    page_items, total = _paginate(items, page, page_size)
+    return LabelListResponse(items=page_items, total=total, page=page, page_size=page_size)
+
+
+@router.post("/projects/{project_id}/labels", response_model=LabelItem, status_code=status.HTTP_201_CREATED)
+def create_project_label(
+    project_id: str,
+    payload: LabelCreateRequest,
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+) -> LabelItem:
+    _ensure_project_owner(db, current_user, project_id)
+    existing = db.scalar(
+        select(Label).where(Label.project_id == project_id, func.lower(Label.name) == payload.name.strip().lower())
+    )
+    if existing is not None:
+        raise HTTPException(status_code=409, detail="Label name already exists in this project.")
+    label = Label(id=new_id(), project_id=project_id, name=payload.name.strip(), color=payload.color)
+    db.add(label)
+    db.commit()
+    db.refresh(label)
+    return LabelItem(id=label.id, name=label.name, color=label.color)
+
+
+@router.patch("/labels/{label_id}", response_model=LabelItem)
+def update_label(
+    label_id: str,
+    payload: LabelUpdateRequest,
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+) -> LabelItem:
+    label = db.scalar(select(Label).where(Label.id == label_id))
+    if label is None:
+        raise HTTPException(status_code=404, detail="Label not found.")
+    _ensure_project_owner(db, current_user, label.project_id)
+    if payload.name is not None:
+        label.name = payload.name.strip()
+    if payload.color is not None:
+        label.color = payload.color
+    db.commit()
+    db.refresh(label)
+    return LabelItem(id=label.id, name=label.name, color=label.color)
+
+
+@router.delete("/labels/{label_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_label(
+    label_id: str,
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+) -> None:
+    label = db.scalar(select(Label).where(Label.id == label_id))
+    if label is None:
+        raise HTTPException(status_code=404, detail="Label not found.")
+    _ensure_project_owner(db, current_user, label.project_id)
+    db.delete(label)
+    db.commit()
+
+
 @router.get("/projects/{project_id}/issues", response_model=IssueListResponse)
 def list_issues(
     project_id: str,
@@ -914,6 +1021,7 @@ def list_issues(
                 selectinload(Issue.reporter),
                 selectinload(Issue.comments),
                 selectinload(Issue.label_links).selectinload(IssueLabel.label),
+                selectinload(Issue.subtasks),
             )
             .where(Issue.project_id == project_id)
         )
@@ -985,6 +1093,8 @@ def create_issue(
         issue_number=_next_issue_number(db, project.id),
         title=payload.title.strip(),
         description=payload.description.strip(),
+        description_blocks=payload.description_blocks,
+        parent_id=payload.parent_id,
         status=payload.status,
         priority=payload.priority,
         assignee_id=payload.assignee_id,
@@ -1014,6 +1124,7 @@ def create_issue(
             selectinload(Issue.reporter),
             selectinload(Issue.comments),
             selectinload(Issue.label_links).selectinload(IssueLabel.label),
+            selectinload(Issue.subtasks),
         )
         .where(Issue.id == issue.id)
     )
@@ -1052,6 +1163,7 @@ def get_issue(
             )
             for dependency in dependencies
         ],
+        subtasks=[_serialize_issue(sub) for sub in sorted(issue.subtasks, key=lambda s: s.created_at)],
     )
 
 
@@ -1098,6 +1210,32 @@ def update_issue(
             to_value=str(value) if value is not None else None,
         )
 
+    if "parent_id" in payload.model_fields_set:
+        previous = issue.parent_id
+        issue.parent_id = payload.parent_id
+        if previous != payload.parent_id:
+            _log_issue_activity(
+                db,
+                issue.id,
+                current_user.id,
+                "updated",
+                f"{current_user.full_name} {'removed parent' if payload.parent_id is None else 'changed parent'} for {_issue_reference(issue)}.",
+                field_name="parent_id",
+                from_value=previous,
+                to_value=payload.parent_id,
+            )
+
+    if payload.description_blocks is not None:
+        issue.description_blocks = payload.description_blocks
+        _log_issue_activity(
+            db,
+            issue.id,
+            current_user.id,
+            "updated",
+            f"{current_user.full_name} updated description for {_issue_reference(issue)}.",
+            field_name="description_blocks",
+        )
+
     if payload.label_ids is not None:
         _set_issue_labels(db, issue, payload.label_ids, project)
         _log_issue_activity(
@@ -1130,10 +1268,22 @@ def update_issue(
             selectinload(Issue.reporter),
             selectinload(Issue.comments),
             selectinload(Issue.label_links).selectinload(IssueLabel.label),
+            selectinload(Issue.subtasks),
         )
         .where(Issue.id == issue.id)
     )
     return _serialize_issue(issue)
+
+
+@router.delete("/issues/{issue_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_issue(
+    issue_id: str,
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+) -> None:
+    issue, _project = _get_issue_for_user(db, current_user, issue_id)
+    db.delete(issue)
+    db.commit()
 
 
 @router.post(
@@ -1153,6 +1303,7 @@ def create_issue_comment(
         issue_id=issue.id,
         author_id=current_user.id,
         body=payload.body.strip(),
+        body_blocks=payload.body_blocks,
     )
     db.add(comment)
     _log_issue_activity(

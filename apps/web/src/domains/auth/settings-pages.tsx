@@ -140,7 +140,7 @@ function SectionHeader({ title, description }: { title: string; description?: st
 
 /* ── Main ── */
 
-function ProfilePage({ initialTab }: { initialTab: SettingsSection }) {
+export function ProfilePage({ initialTab }: { initialTab: SettingsSection }) {
   const auth = useAuth();
   const navigate = useNavigate();
   const user = auth.user;

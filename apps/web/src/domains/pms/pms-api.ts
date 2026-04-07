@@ -72,6 +72,9 @@ export interface PmsIssue {
   reference: string;
   title: string;
   description: string;
+  description_blocks: Record<string, unknown>[] | null;
+  parent_id: string | null;
+  subtask_count: number;
   status: string;
   status_label: string;
   priority: string;
@@ -114,6 +117,7 @@ export interface PmsComment {
   author_id: string;
   author_name: string;
   body: string;
+  body_blocks: Record<string, unknown>[] | null;
   created_at: string;
 }
 
@@ -141,6 +145,14 @@ export interface PmsIssueDetail {
   issue: PmsIssue;
   comments: PmsComment[];
   dependencies: PmsDependency[];
+  subtasks: PmsIssue[];
+}
+
+export interface PmsLabelsResponse {
+  items: PmsLabel[];
+  total: number;
+  page: number;
+  page_size: number;
 }
 
 export interface PmsDashboardStatusCount {
@@ -315,11 +327,13 @@ export function createProjectIssue(
   payload: {
     title: string;
     description: string;
+    description_blocks?: Record<string, unknown>[] | null;
     status: string;
     priority: string;
     assignee_id: string | null;
     milestone_id: string | null;
     due_date: string | null;
+    parent_id?: string | null;
   },
 ): Promise<PmsIssue> {
   return request<PmsIssue>(`/api/v1/pms/projects/${projectId}/issues`, token, {
@@ -347,10 +361,49 @@ export function createIssueComment(
   token: string,
   issueId: string,
   body: string,
+  bodyBlocks?: Record<string, unknown>[] | null,
 ): Promise<PmsComment> {
   return request<PmsComment>(`/api/v1/pms/issues/${issueId}/comments`, token, {
     method: 'POST',
-    body: JSON.stringify({ body }),
+    body: JSON.stringify({ body, body_blocks: bodyBlocks ?? null }),
+  });
+}
+
+export function listProjectLabels(token: string, projectId: string): Promise<PmsLabelsResponse> {
+  return request<PmsLabelsResponse>(`/api/v1/pms/projects/${projectId}/labels?page=1&page_size=100`, token);
+}
+
+export function createProjectLabel(
+  token: string,
+  projectId: string,
+  payload: { name: string; color: string },
+): Promise<PmsLabel> {
+  return request<PmsLabel>(`/api/v1/pms/projects/${projectId}/labels`, token, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function updateLabel(
+  token: string,
+  labelId: string,
+  payload: { name?: string; color?: string },
+): Promise<PmsLabel> {
+  return request<PmsLabel>(`/api/v1/pms/labels/${labelId}`, token, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function deleteLabel(token: string, labelId: string): Promise<void> {
+  return request<void>(`/api/v1/pms/labels/${labelId}`, token, {
+    method: 'DELETE',
+  });
+}
+
+export function deleteIssue(token: string, issueId: string): Promise<void> {
+  return request<void>(`/api/v1/pms/issues/${issueId}`, token, {
+    method: 'DELETE',
   });
 }
 

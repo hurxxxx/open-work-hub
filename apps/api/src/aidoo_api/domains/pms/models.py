@@ -8,6 +8,7 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     Integer,
+    JSON,
     String,
     Text,
     UniqueConstraint,
@@ -136,10 +137,16 @@ class Issue(Base):
     issue_number: Mapped[int] = mapped_column(Integer, nullable=False)
     title: Mapped[str] = mapped_column(String(180), index=True)
     description: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    description_blocks: Mapped[list[dict] | None] = mapped_column(JSON, nullable=True)
     status: Mapped[str] = mapped_column(String(24), default="backlog", index=True)
     priority: Mapped[str] = mapped_column(String(24), default="medium", index=True)
     assignee_id: Mapped[str | None] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)
     reporter_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
+    parent_id: Mapped[str | None] = mapped_column(
+        ForeignKey("pms_issues.id"),
+        nullable=True,
+        index=True,
+    )
     milestone_id: Mapped[str | None] = mapped_column(
         ForeignKey("pms_milestones.id"),
         nullable=True,
@@ -161,6 +168,14 @@ class Issue(Base):
         nullable=False,
     )
     project: Mapped[Project] = relationship(back_populates="issues")
+    parent: Mapped["Issue | None"] = relationship(
+        back_populates="subtasks",
+        remote_side="Issue.id",
+    )
+    subtasks: Mapped[list["Issue"]] = relationship(
+        back_populates="parent",
+        cascade="all, delete-orphan",
+    )
     milestone: Mapped[Milestone | None] = relationship(back_populates="issues")
     assignee = relationship("User", foreign_keys=[assignee_id])
     reporter = relationship("User", foreign_keys=[reporter_id])
@@ -196,6 +211,7 @@ class IssueComment(Base):
     issue_id: Mapped[str] = mapped_column(ForeignKey("pms_issues.id"), index=True)
     author_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
     body: Mapped[str] = mapped_column(Text)
+    body_blocks: Mapped[list[dict] | None] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime,
         default=utcnow_naive,

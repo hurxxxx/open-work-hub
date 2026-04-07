@@ -26,11 +26,7 @@ import {
   Clock,
   Link as LinkIcon
 } from 'lucide-react';
-import { MantineProvider } from "@mantine/core";
-import { BlockNoteView } from "@blocknote/mantine";
-import { useCreateBlockNote } from "@blocknote/react";
-import "@blocknote/core/fonts/inter.css";
-import "@blocknote/mantine/style.css";
+import { BlockEditor } from '@aidoo/ui';
 import { cn } from '@/src/lib/utils';
 
 interface Page {
@@ -121,7 +117,6 @@ export const DocsView = () => {
   const navigate = useNavigate();
   const [selectedPageId, setSelectedPageId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
-  const editor = useCreateBlockNote();
 
   const categories = [
     { id: 'docs-all', title: 'All Docs', icon: Files },
@@ -339,7 +334,7 @@ export const DocsView = () => {
                   </div>
 
                   <div className="prose prose-invert max-w-none pt-8">
-                    <BlockNoteView editor={editor} theme="dark" />
+                    <BlockEditor placeholder="Start writing..." />
                   </div>
                 </div>
               </div>

@@ -1,38 +1,58 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Task } from '@/src/types';
-import { MOCK_TASKS } from '@/src/mockData';
+import { Loader2 } from 'lucide-react';
+import { useAuth } from '@/src/domains/auth/auth-provider';
+import { listPmsProjects, listProjectIssues, type PmsIssue } from '@/src/domains/pms/pms-api';
 import { ListView } from './ListView';
 import { TaskDetail } from './TaskDetail';
 
 export const AssignedToMeView = () => {
-  const [selectedTask, setSelectedTask] = useState<Task | null>(null);
+  const { token, user } = useAuth();
+  const [selectedIssue, setSelectedIssue] = useState<PmsIssue | null>(null);
+  const [issues, setIssues] = useState<PmsIssue[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  // Filter tasks assigned to "John Doe" (or any mock user)
-  const assignedTasks = MOCK_TASKS.filter(task => task.assignee?.name === 'John Doe');
+  useEffect(() => {
+    if (!token || !user) return;
+    setLoading(true);
+    listPmsProjects(token)
+      .then(async (res) => {
+        const allIssues: PmsIssue[] = [];
+        for (const project of res.items) {
+          const issueRes = await listProjectIssues(token, project.id);
+          allIssues.push(...issueRes.items.filter(i => i.assignee_id === user.id));
+        }
+        setIssues(allIssues);
+      })
+      .finally(() => setLoading(false));
+  }, [token, user]);
 
   return (
     <div className="h-full flex flex-col relative">
       <header className="bg-clickup-bg border-b border-clickup-border px-8 pt-6 pb-4">
         <h1 className="text-2xl font-bold text-clickup-text">Assigned to me</h1>
-        <p className="text-gray-500 text-sm mt-1">Tasks assigned to you across all spaces</p>
+        <p className="text-gray-500 text-sm mt-1">Tasks assigned to you across all projects</p>
       </header>
 
       <main className="flex-1 overflow-y-auto p-8 custom-scrollbar">
-        <ListView tasks={assignedTasks} onSelectTask={setSelectedTask} />
+        {loading ? (
+          <div className="flex justify-center py-16"><Loader2 size={24} className="animate-spin text-clickup-purple" /></div>
+        ) : (
+          <ListView issues={issues} onSelectIssue={setSelectedIssue} />
+        )}
       </main>
 
       <AnimatePresence>
-        {selectedTask && (
+        {selectedIssue && (
           <>
-            <motion.div 
+            <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              onClick={() => setSelectedTask(null)}
+              onClick={() => setSelectedIssue(null)}
               className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40"
             />
-            <TaskDetail task={selectedTask} onClose={() => setSelectedTask(null)} />
+            <TaskDetail issue={selectedIssue} onClose={() => setSelectedIssue(null)} />
           </>
         )}
       </AnimatePresence>

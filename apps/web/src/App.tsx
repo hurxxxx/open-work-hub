@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import {
   BrowserRouter as Router,
   Navigate,
@@ -36,8 +36,7 @@ import {
 import type { ThemePreference } from './domains/auth/auth-api';
 import {
   AccessDeniedView,
-  AccountSettingsView,
-  SecuritySettingsView,
+  ProfilePage,
 } from './domains/auth/settings-pages';
 
 const FEATURE_BY_APP_ID: Partial<Record<'home' | 'ai' | 'pms' | 'docs' | 'planner' | 'settings', string>> = {
@@ -131,6 +130,7 @@ const AppContent = () => {
   const [activeAppId, setActiveAppId] = useState<'home' | 'ai' | 'pms' | 'docs' | 'planner' | 'settings' | 'profile'>('home');
   const [activeNavItemId, setActiveNavItemId] = useState('');
   const [systemDarkMode, setSystemDarkMode] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
 
   if (!auth.user) {
     return <Navigate replace to="/login" />;
@@ -190,12 +190,6 @@ const AppContent = () => {
       return;
     }
 
-    if (path === '/settings/account' || path === '/settings/security') {
-      setActiveAppId('profile');
-      setActiveNavItemId('');
-      return;
-    }
-
     if (path === '/admin' || path.startsWith('/admin/')) {
       setActiveAppId('settings');
       if (path === '/admin' || path === '/admin/') {
@@ -223,7 +217,7 @@ const AppContent = () => {
       <AppBar
         activeAppId={activeAppId}
         currentUser={auth.user}
-        onOpenAccount={() => navigate('/settings/account')}
+        onOpenAccount={() => setProfileOpen(true)}
       />
 
       <div className="flex-1 flex overflow-hidden">
@@ -277,8 +271,6 @@ const AppContent = () => {
             />
             <Route path="/tool/:toolId" element={<ToolViewWrapper />} />
             <Route path="/tool/:toolId/:docId" element={<ToolViewWrapper />} />
-            <Route path="/settings/account" element={<AccountSettingsView />} />
-            <Route path="/settings/security" element={<SecuritySettingsView />} />
             <Route path="/admin" element={<Navigate replace to="/admin/people" />} />
             <Route path="/admin/users" element={<Navigate replace to="/admin/people" />} />
             <Route path="/admin/groups" element={<Navigate replace to="/admin/security" />} />
@@ -334,6 +326,27 @@ const AppContent = () => {
           </Routes>
         </main>
       </div>
+
+      {/* Profile modal overlay — renders on top of current page, no route change */}
+      {profileOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div
+            className="absolute inset-0 bg-black/50 backdrop-blur-[2px]"
+            onClick={() => setProfileOpen(false)}
+          />
+          <div className="relative z-10 w-full max-w-4xl h-[85vh] bg-clickup-bg border border-clickup-border rounded-2xl shadow-2xl overflow-hidden">
+            <button
+              onClick={() => setProfileOpen(false)}
+              className="absolute top-4 right-4 z-20 w-8 h-8 flex items-center justify-center rounded-lg text-clickup-text/50 hover:text-clickup-text hover:bg-clickup-hover transition-colors"
+            >
+              ✕
+            </button>
+            <div className="h-full overflow-y-auto">
+              <ProfilePage initialTab="profile" />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

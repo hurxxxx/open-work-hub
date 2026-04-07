@@ -9,12 +9,8 @@ import {
   Plus,
   MoreHorizontal
 } from 'lucide-react';
-import { MantineProvider } from "@mantine/core";
-import { BlockNoteView } from "@blocknote/mantine";
-import { useCreateBlockNote } from "@blocknote/react";
+import { BlockEditor } from '@aidoo/ui';
 import { cn } from '@/src/lib/utils';
-import "@blocknote/core/fonts/inter.css";
-import "@blocknote/mantine/style.css";
 
 export const TeamDocsView = () => {
   const [pages, setPages] = useState([
@@ -23,12 +19,10 @@ export const TeamDocsView = () => {
   ]);
   const [activePageId, setActivePageId] = useState('page-1');
   
-  const editor = useCreateBlockNote();
-
   const activePage = pages.find(p => p.id === activePageId) || pages[0];
 
   return (
-    <MantineProvider defaultColorScheme="dark">
+    <div>
       <div className="h-full flex bg-white dark:bg-[#1e1e24]">
         {/* Local Sidebar for Pages */}
         <div className="w-64 border-r border-clickup-border bg-clickup-sidebar flex flex-col">
@@ -108,12 +102,12 @@ export const TeamDocsView = () => {
               </div>
 
               <div className="prose prose-invert max-w-none">
-                <BlockNoteView editor={editor} theme="dark" />
+                <BlockEditor placeholder="Start writing..." />
               </div>
             </div>
           </div>
         </div>
       </div>
-    </MantineProvider>
+    </div>
   );
 };
