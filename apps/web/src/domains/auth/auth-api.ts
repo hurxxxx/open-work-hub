@@ -29,6 +29,8 @@ export interface AuthUser {
   visible_features: string[];
   must_change_password: boolean;
   is_admin: boolean;
+  last_login_at?: string | null;
+  created_at?: string;
 }
 
 export interface BootstrapStatusResponse {

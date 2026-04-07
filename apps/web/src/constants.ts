@@ -41,11 +41,12 @@ export interface NavItem {
   icon: any;
   description?: string;
   category: string;
-  appId: 'home' | 'ai' | 'pms' | 'docs' | 'planner';
+  appId: 'home' | 'ai' | 'pms' | 'docs' | 'planner' | 'settings';
+  path?: string;
 }
 
 export interface AppBarItem {
-  id: 'home' | 'ai' | 'pms' | 'docs' | 'planner';
+  id: 'home' | 'ai' | 'pms' | 'docs' | 'planner' | 'settings';
   title: string;
   icon: any;
   path: string;
@@ -57,6 +58,7 @@ export const APP_BAR_ITEMS: AppBarItem[] = [
   { id: 'pms', title: 'PMS', icon: FolderKanban, path: '/pms' },
   { id: 'docs', title: 'DOCS', icon: Files, path: '/docs' },
   { id: 'planner', title: 'Planner', icon: Calendar, path: '/planner' },
+  { id: 'settings', title: 'Settings', icon: Settings, path: '/admin/people' },
 ];
 
 export const NAV_ITEMS: NavItem[] = [
@@ -103,4 +105,12 @@ export const NAV_ITEMS: NavItem[] = [
   // Planner
   { id: 'planner-calendar', title: '캘린더', icon: Calendar, category: 'Schedule', appId: 'planner' },
   { id: 'planner-timeline', title: '타임라인', icon: Activity, category: 'Schedule', appId: 'planner' },
+
+  // Settings
+  { id: 'settings-general', title: 'General', icon: Settings, category: 'Admin', appId: 'settings', path: '/admin/general' },
+  { id: 'settings-people', title: 'People', icon: User, category: 'Admin', appId: 'settings', path: '/admin/people' },
+  { id: 'settings-teams', title: 'Teams', icon: Layout, category: 'Admin', appId: 'settings', path: '/admin/teams' },
+  { id: 'settings-workspaces', title: 'Workspaces', icon: Database, category: 'Admin', appId: 'settings', path: '/admin/workspaces' },
+  { id: 'settings-security', title: 'Security & Permissions', icon: Lock, category: 'Security & Permissions', appId: 'settings', path: '/admin/security' },
+  { id: 'settings-audit', title: 'Audit Logs', icon: Activity, category: 'Security & Permissions', appId: 'settings', path: '/admin/audit' },
 ];

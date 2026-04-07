@@ -62,6 +62,8 @@ class AuthUserResponse(BaseModel):
     visible_features: list[str]
     must_change_password: bool
     is_admin: bool
+    last_login_at: datetime | None
+    created_at: datetime
 
 
 class AuthSessionResponse(BaseModel):

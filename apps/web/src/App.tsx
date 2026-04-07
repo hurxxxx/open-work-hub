@@ -26,6 +26,7 @@ import { PlannerView } from './components/views/PlannerView';
 import { PMSView } from './components/views/PMSView/PMSView';
 import { ToolView } from './components/views/ToolView';
 import { NAV_ITEMS } from './constants';
+import { AdminConsoleView } from './domains/admin/admin-console';
 import {
   AuthProvider,
   LoginRoute,
@@ -39,12 +40,22 @@ import {
   SecuritySettingsView,
 } from './domains/auth/settings-pages';
 
-const FEATURE_BY_APP_ID: Partial<Record<'home' | 'ai' | 'pms' | 'docs' | 'planner', string>> = {
+const FEATURE_BY_APP_ID: Partial<Record<'home' | 'ai' | 'pms' | 'docs' | 'planner' | 'settings', string>> = {
   ai: 'nav.ai',
   docs: 'nav.docs',
   pms: 'nav.pms',
   planner: 'nav.planner',
+  settings: 'nav.admin',
 };
+
+const ADMIN_SECTION_PERMISSIONS = {
+  general: 'admin.access',
+  people: 'user.read',
+  teams: 'team.read',
+  workspaces: 'workspace.read',
+  security: 'group.read',
+  audit: 'audit.read',
+} as const;
 
 function resolveThemePreference(themePreference: ThemePreference, systemDarkMode: boolean) {
   if (themePreference === 'system') {
@@ -67,6 +78,21 @@ function WorkspaceGate({
     return (
       <AccessDeniedView description="현재 계정에는 이 워크스페이스에 대한 노출 권한이 없습니다." />
     );
+  }
+
+  return <>{children}</>;
+}
+
+function AdminGate({
+  section,
+  children,
+}: {
+  section: keyof typeof ADMIN_SECTION_PERMISSIONS;
+  children: React.ReactNode;
+}) {
+  const auth = useAuth();
+  if (!auth.hasPermission('admin.access') && !auth.hasPermission(ADMIN_SECTION_PERMISSIONS[section])) {
+    return <AccessDeniedView description="현재 계정에는 이 관리자 섹션을 볼 권한이 없습니다." />;
   }
 
   return <>{children}</>;
@@ -102,7 +128,7 @@ const AppContent = () => {
   const auth = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
-  const [activeAppId, setActiveAppId] = useState<'home' | 'ai' | 'pms' | 'docs' | 'planner'>('home');
+  const [activeAppId, setActiveAppId] = useState<'home' | 'ai' | 'pms' | 'docs' | 'planner' | 'settings' | 'profile'>('home');
   const [activeNavItemId, setActiveNavItemId] = useState('');
   const [systemDarkMode, setSystemDarkMode] = useState(false);
 
@@ -161,6 +187,24 @@ const AppContent = () => {
     if (path === '/planner') {
       setActiveAppId('planner');
       setActiveNavItemId('');
+      return;
+    }
+
+    if (path === '/settings/account' || path === '/settings/security') {
+      setActiveAppId('profile');
+      setActiveNavItemId('');
+      return;
+    }
+
+    if (path === '/admin' || path.startsWith('/admin/')) {
+      setActiveAppId('settings');
+      if (path === '/admin' || path === '/admin/') {
+        setActiveNavItemId('settings-people');
+        return;
+      }
+      const slug = path.split('/')[2];
+      const mappedId = `settings-${slug === 'users' ? 'people' : slug === 'groups' || slug === 'feature-access' ? 'security' : slug}`;      
+      setActiveNavItemId(mappedId);
       return;
     }
 
@@ -235,7 +279,58 @@ const AppContent = () => {
             <Route path="/tool/:toolId/:docId" element={<ToolViewWrapper />} />
             <Route path="/settings/account" element={<AccountSettingsView />} />
             <Route path="/settings/security" element={<SecuritySettingsView />} />
-            <Route path="/admin/*" element={<Navigate replace to="/settings/account" />} />
+            <Route path="/admin" element={<Navigate replace to="/admin/people" />} />
+            <Route path="/admin/users" element={<Navigate replace to="/admin/people" />} />
+            <Route path="/admin/groups" element={<Navigate replace to="/admin/security" />} />
+            <Route path="/admin/feature-access" element={<Navigate replace to="/admin/security" />} />
+            <Route
+              path="/admin/general"
+              element={(
+                <AdminGate section="general">
+                  <AdminConsoleView section="general" />
+                </AdminGate>
+              )}
+            />
+            <Route
+              path="/admin/people"
+              element={(
+                <AdminGate section="people">
+                  <AdminConsoleView section="people" />
+                </AdminGate>
+              )}
+            />
+            <Route
+              path="/admin/teams"
+              element={(
+                <AdminGate section="teams">
+                  <AdminConsoleView section="teams" />
+                </AdminGate>
+              )}
+            />
+            <Route
+              path="/admin/workspaces"
+              element={(
+                <AdminGate section="workspaces">
+                  <AdminConsoleView section="workspaces" />
+                </AdminGate>
+              )}
+            />
+            <Route
+              path="/admin/security"
+              element={(
+                <AdminGate section="security">
+                  <AdminConsoleView section="security" />
+                </AdminGate>
+              )}
+            />
+            <Route
+              path="/admin/audit"
+              element={(
+                <AdminGate section="audit">
+                  <AdminConsoleView section="audit" />
+                </AdminGate>
+              )}
+            />
           </Routes>
         </main>
       </div>

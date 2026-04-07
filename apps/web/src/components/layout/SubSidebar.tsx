@@ -26,13 +26,46 @@ export const SubSidebar = ({ activeAppId, activeNavItemId }: { activeAppId: stri
     );
   };
 
-  if (activeAppId === 'home' || isDocEditor) return null;
+  if (activeAppId === 'home' || activeAppId === 'profile' || isDocEditor) return null;
+
+  if (activeAppId === 'settings') {
+    return (
+      <div className="w-60 h-full bg-clickup-sidebar border-r border-clickup-border flex flex-col overflow-hidden">
+        <div className="p-4 border-b border-clickup-border">
+          <h2 className="text-sm font-semibold text-clickup-text">All settings</h2>
+        </div>
+
+        <div className="flex-1 overflow-y-auto py-4 px-3 space-y-6 custom-scrollbar">
+          {categories.map((category) => (
+            <div key={category} className="space-y-1.5">
+              <div className="px-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-gray-500">
+                {category}
+              </div>
+              {filteredItems.filter((item) => item.category === category).map((item) => (
+                <Link
+                  key={item.id}
+                  to={item.path ?? `/tool/${item.id}`}
+                  className={cn(
+                    'sidebar-item ml-0 gap-2.5 rounded-lg px-2.5 py-2 text-[13px]',
+                    activeNavItemId === item.id && 'active',
+                  )}
+                >
+                  <item.icon size={14} className="text-gray-400" />
+                  <span className="truncate">{item.title}</span>
+                </Link>
+              ))}
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="w-60 h-full bg-clickup-sidebar border-r border-clickup-border flex flex-col overflow-hidden">
       <div className="p-4 border-b border-clickup-border">
         <h2 className="text-xs font-bold uppercase tracking-widest text-gray-500">
-          {APP_BAR_ITEMS.find(a => a.id === activeAppId)?.title}
+          {activeAppId === 'settings' ? 'All settings' : APP_BAR_ITEMS.find(a => a.id === activeAppId)?.title}
         </h2>
       </div>
 
@@ -126,7 +159,7 @@ export const SubSidebar = ({ activeAppId, activeNavItemId }: { activeAppId: stri
                     return (
                       <Link 
                         key={item.id} 
-                        to={`/tool/${item.id}`}
+                        to={item.path ?? `/tool/${item.id}`}
                         className={cn("sidebar-item ml-1", activeNavItemId === item.id && "active")}
                       >
                         <item.icon size={16} className="text-gray-400" />
@@ -141,12 +174,14 @@ export const SubSidebar = ({ activeAppId, activeNavItemId }: { activeAppId: stri
         ))}
       </div>
 
-      <div className="p-4 border-t border-clickup-border">
-        <button className="w-full flex items-center gap-2 px-3 py-2 bg-clickup-purple hover:bg-opacity-90 text-white rounded-md text-sm font-medium transition-all">
-          <Plus size={18} />
-          <span>Quick Add</span>
-        </button>
-      </div>
+      {activeAppId !== 'settings' ? (
+        <div className="p-4 border-t border-clickup-border">
+          <button className="w-full flex items-center gap-2 px-3 py-2 bg-clickup-purple hover:bg-opacity-90 text-white rounded-md text-sm font-medium transition-all">
+            <Plus size={18} />
+            <span>Quick Add</span>
+          </button>
+        </div>
+      ) : null}
     </div>
   );
 };

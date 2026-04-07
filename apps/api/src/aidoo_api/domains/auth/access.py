@@ -384,6 +384,8 @@ def serialize_auth_user(db: Session, user: User) -> dict[str, Any]:
         "visible_features": resolve_visible_features(db, user),
         "must_change_password": user.must_change_password,
         "is_admin": is_admin_compat,
+        "last_login_at": user.last_login_at,
+        "created_at": user.created_at,
     }
 
 

@@ -4,11 +4,12 @@ import { APP_BAR_ITEMS } from '@/src/constants';
 import type { AuthUser } from '@/src/domains/auth/auth-api';
 import { cn } from '@/src/lib/utils';
 
-const featureByAppId: Partial<Record<'home' | 'ai' | 'pms' | 'docs' | 'planner', string>> = {
+const featureByAppId: Partial<Record<'home' | 'ai' | 'pms' | 'docs' | 'planner' | 'settings', string>> = {
   ai: 'nav.ai',
   docs: 'nav.docs',
   pms: 'nav.pms',
   planner: 'nav.planner',
+  settings: 'nav.admin',
 };
 
 function getUserInitials(fullName: string): string {

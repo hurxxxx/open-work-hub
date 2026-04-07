@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime
 import secrets
 from typing import Literal
 
@@ -117,6 +118,8 @@ class AdminUserItemResponse(BaseModel):
     visible_features: list[str]
     must_change_password: bool
     is_admin: bool
+    last_login_at: datetime | None
+    created_at: datetime
 
 
 class AdminUsersResponse(BaseModel):

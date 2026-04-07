@@ -1,7 +1,18 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import {
+  Activity,
+  Building2,
+  KeyRound,
+  LockKeyhole,
+  Search,
+  Shield,
+  Sparkles,
+  UserPlus,
+  Users,
+  Workflow,
+} from 'lucide-react';
 
-import { Button, InlineNotice, Input, Panel, Select } from '@aidoo/ui';
+import { Button, InlineNotice, Select } from '@aidoo/ui';
 
 import {
   createAdminUser,
@@ -29,21 +40,47 @@ import {
   type WorkspaceBindingItem,
   type WorkspaceItem,
 } from './admin-api';
+import type { AuthUser } from '@/src/domains/auth/auth-api';
 import { useAuth } from '@/src/domains/auth/auth-provider';
 import { AccessDeniedView } from '@/src/domains/auth/settings-pages';
-import type { AuthUser } from '@/src/domains/auth/auth-api';
 
-type AdminSection = 'users' | 'groups' | 'workspaces' | 'teams' | 'feature-access' | 'audit';
+type AdminSection = 'general' | 'people' | 'teams' | 'workspaces' | 'security' | 'audit';
 
-const adminTabs: Array<{ id: AdminSection; label: string; path: string }> = [
-  { id: 'users', label: '사용자', path: '/admin/users' },
-  { id: 'groups', label: '그룹', path: '/admin/groups' },
-  { id: 'workspaces', label: '워크스페이스', path: '/admin/workspaces' },
-  { id: 'teams', label: '팀', path: '/admin/teams' },
-  { id: 'feature-access', label: '기능 접근', path: '/admin/feature-access' },
-  { id: 'audit', label: '감사로그', path: '/admin/audit' },
-];
 const NONE_OPTION_VALUE = '__none__';
+const fieldClassName =
+  'w-full rounded-lg border border-clickup-border bg-clickup-bg px-3 py-2 text-sm text-clickup-text outline-none transition-colors focus:border-clickup-purple';
+
+const sectionMeta: Record<
+  AdminSection,
+  { title: string; description: string; learnMoreLabel?: string }
+> = {
+  general: {
+    title: 'General settings',
+    description: '공통 사용자, 팀, 워크스페이스, 권한 정책의 현재 상태를 한곳에서 확인합니다.',
+  },
+  people: {
+    title: 'Manage people',
+    description: '',
+    learnMoreLabel: 'Learn more',
+  },
+  teams: {
+    title: 'Teams',
+    description: 'View-only users added to Teams will be converted to paid users.',
+    learnMoreLabel: 'Learn more',
+  },
+  workspaces: {
+    title: 'Manage workspaces',
+    description: '업무 영역과 접근 바인딩을 관리합니다.',
+  },
+  security: {
+    title: 'Security & permissions',
+    description: '권한 그룹과 기능 노출 정책을 운영합니다.',
+  },
+  audit: {
+    title: 'Audit logs',
+    description: '관리 작업과 인증 이벤트를 시간순으로 추적합니다.',
+  },
+};
 
 function getErrorMessage(error: unknown, fallback: string): string {
   if (error instanceof Error && error.message) {
@@ -53,74 +90,359 @@ function getErrorMessage(error: unknown, fallback: string): string {
   return fallback;
 }
 
-function AdminLayout({
+function getInitials(label: string): string {
+  const value = label
+    .trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() ?? '')
+    .join('');
+
+  return value || 'TM';
+}
+
+function formatDateLabel(value?: string | null): string {
+  if (!value) {
+    return '-';
+  }
+
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return '-';
+  }
+
+  return parsed.toLocaleDateString('en-US', {
+    month: '2-digit',
+    day: '2-digit',
+    year: 'numeric',
+  });
+}
+
+function SettingsShell({
   section,
   children,
+  actions,
 }: {
   section: AdminSection;
   children: React.ReactNode;
+  actions?: React.ReactNode;
 }) {
+  const meta = sectionMeta[section];
+
   return (
-    <div className="grid gap-4 p-6">
-      <Panel
-        eyebrow="Admin"
-        title="관리 콘솔"
-        description="공통 사용자, 그룹, 워크스페이스, 팀, 기능 노출 정책을 관리합니다."
-      >
-        <div className="flex flex-wrap gap-2">
-          {adminTabs.map((tab) => (
-            <Link
-              key={tab.id}
-              className={
-                section === tab.id
-                  ? 'rounded-[var(--ui-radius-sm)] bg-[var(--ui-color-accent)] px-3 py-2 text-sm font-semibold text-white no-underline'
-                  : 'rounded-[var(--ui-radius-sm)] border border-[var(--ui-color-border)] px-3 py-2 text-sm font-semibold text-[var(--ui-color-ink)] no-underline'
-              }
-              to={tab.path}
-            >
-              {tab.label}
-            </Link>
-          ))}
-        </div>
-      </Panel>
-      {children}
+    <div className="custom-scrollbar h-full overflow-y-auto p-8">
+      <div className="mx-auto max-w-7xl space-y-6">
+        <header className="flex flex-col gap-4 border-b border-clickup-border pb-6 lg:flex-row lg:items-start lg:justify-between">
+          <div className="space-y-3">
+            <div className="flex flex-wrap items-center gap-3">
+              <h1 className="text-[1.7rem] font-semibold tracking-tight text-clickup-text">{meta.title}</h1>
+              {meta.learnMoreLabel ? (
+                <button className="text-xs font-medium text-clickup-purple hover:underline" type="button">
+                  {meta.learnMoreLabel}
+                </button>
+              ) : null}
+            </div>
+            {meta.description ? <p className="max-w-3xl text-sm text-gray-500">{meta.description}</p> : null}
+          </div>
+          {actions ? <div className="flex shrink-0 items-center gap-3">{actions}</div> : null}
+        </header>
+        {children}
+      </div>
     </div>
   );
 }
 
+function SurfaceCard({
+  title,
+  description,
+  children,
+  actions,
+  className = '',
+}: {
+  title: string;
+  description?: string;
+  children: React.ReactNode;
+  actions?: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <section className={`space-y-4 border-t border-clickup-border pt-5 ${className}`.trim()}>
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div>
+          <h2 className="text-lg font-semibold text-clickup-text">{title}</h2>
+          {description ? <p className="mt-1 text-sm text-gray-500">{description}</p> : null}
+        </div>
+        {actions ? <div className="flex items-center gap-2">{actions}</div> : null}
+      </div>
+      <div>{children}</div>
+    </section>
+  );
+}
+
+function StatCard({
+  label,
+  value,
+  helper,
+  icon: Icon,
+  accentClass,
+}: {
+  label: string;
+  value: string;
+  helper: string;
+  icon: React.ComponentType<{ size?: number; className?: string }>;
+  accentClass: string;
+}) {
+  return (
+    <div className="border-b border-clickup-border py-4 last:border-b-0">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <div className="text-xs font-semibold uppercase tracking-[0.18em] text-gray-500">{label}</div>
+          <div className="mt-2 text-3xl font-bold text-clickup-text">{value}</div>
+          <div className="mt-1 text-sm text-gray-500">{helper}</div>
+        </div>
+        <div className={`flex h-10 w-10 items-center justify-center rounded-full ${accentClass}`}>
+          <Icon size={20} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ToolbarField({ children, className = '' }: { children: React.ReactNode; className?: string }) {
+  return <div className={`min-w-0 ${className}`.trim()}>{children}</div>;
+}
+
 function TableShell({ children }: { children: React.ReactNode }) {
   return (
-    <div className="overflow-x-auto">
-      <table className="min-w-full border-collapse text-sm">
-        {children}
-      </table>
+    <div className="overflow-x-auto rounded-xl border border-clickup-border bg-clickup-card">
+      <table className="min-w-full border-collapse text-sm">{children}</table>
     </div>
   );
 }
 
 function HeadCell({ children }: { children: React.ReactNode }) {
   return (
-    <th className="border-b border-[var(--ui-color-border)] px-3 py-2 text-left font-semibold text-[var(--ui-color-ink-muted)]">
+    <th className="border-b border-clickup-border px-4 py-3 text-left text-xs font-medium text-gray-500">
       {children}
     </th>
   );
 }
 
-function BodyCell({ children }: { children: React.ReactNode }) {
+function BodyCell({ children, className = '' }: { children: React.ReactNode; className?: string }) {
   return (
-    <td className="border-b border-[var(--ui-color-border)] px-3 py-2 align-top text-[var(--ui-color-ink)]">
+    <td className={`border-b border-clickup-border px-4 py-3 align-top text-sm text-clickup-text ${className}`.trim()}>
       {children}
     </td>
   );
 }
 
-function UsersSection({ token }: { token: string }) {
+function EmptyRow({
+  colSpan,
+  title,
+  description,
+}: {
+  colSpan: number;
+  title: string;
+  description: string;
+}) {
+  return (
+    <tr>
+      <td className="px-3 py-10 text-center" colSpan={colSpan}>
+        <div className="space-y-1">
+          <div className="text-sm font-medium text-clickup-text">{title}</div>
+          <div className="text-sm text-gray-500">{description}</div>
+        </div>
+      </td>
+    </tr>
+  );
+}
+
+function Badge({
+  children,
+  tone = 'default',
+}: {
+  children: React.ReactNode;
+  tone?: 'default' | 'purple' | 'green' | 'amber';
+}) {
+  const toneClassName =
+    tone === 'purple'
+      ? 'border-clickup-purple/20 bg-clickup-purple/10 text-clickup-purple'
+      : tone === 'green'
+        ? 'border-green-500/20 bg-green-500/10 text-green-600 dark:text-green-400'
+        : tone === 'amber'
+          ? 'border-amber-500/20 bg-amber-500/10 text-amber-600 dark:text-amber-300'
+          : 'border-clickup-border bg-clickup-sidebar text-gray-500';
+
+  return (
+    <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-medium ${toneClassName}`.trim()}>
+      {children}
+    </span>
+  );
+}
+
+function SectionMessage({
+  message,
+  error,
+}: {
+  message: string | null;
+  error: string | null;
+}) {
+  if (!message && !error) {
+    return null;
+  }
+
+  return (
+    <div className="space-y-3">
+      {message ? <InlineNotice tone="success">{message}</InlineNotice> : null}
+      {error ? <InlineNotice tone="danger">{error}</InlineNotice> : null}
+    </div>
+  );
+}
+
+function GeneralSection({ token }: { token: string }) {
+  const [summary, setSummary] = useState({
+    userCount: 0,
+    adminCount: 0,
+    groupCount: 0,
+    workspaceCount: 0,
+    teamCount: 0,
+    policyCount: 0,
+    enabledPolicyCount: 0,
+    auditCount: 0,
+  });
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function load() {
+      try {
+        const [users, groups, workspaces, teams, policies, audits] = await Promise.all([
+          listAdminUsers(token),
+          listGroups(token),
+          listWorkspaces(token),
+          listTeams(token),
+          listFeaturePolicies(token),
+          listAuditLogs(token),
+        ]);
+        if (cancelled) {
+          return;
+        }
+        setSummary({
+          userCount: users.items.length,
+          adminCount: users.items.filter((item) => item.is_admin).length,
+          groupCount: groups.length,
+          workspaceCount: workspaces.length,
+          teamCount: teams.length,
+          policyCount: policies.length,
+          enabledPolicyCount: policies.filter((item) => item.enabled).length,
+          auditCount: audits.length,
+        });
+      } catch (caughtError) {
+        if (!cancelled) {
+          setError(getErrorMessage(caughtError, '관리자 요약 정보를 불러오지 못했습니다.'));
+        }
+      }
+    }
+
+    void load();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [token]);
+
+  return (
+    <div className="space-y-6">
+      {error ? <InlineNotice tone="danger">{error}</InlineNotice> : null}
+
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <StatCard
+          accentClass="bg-clickup-purple/10 text-clickup-purple"
+          helper={`${summary.adminCount}명의 관리자 계정`}
+          icon={Users}
+          label="People"
+          value={String(summary.userCount)}
+        />
+        <StatCard
+          accentClass="bg-blue-500/10 text-blue-600 dark:text-blue-400"
+          helper="권한 그룹과 바인딩 운영"
+          icon={Shield}
+          label="Security"
+          value={String(summary.groupCount)}
+        />
+        <StatCard
+          accentClass="bg-green-500/10 text-green-600 dark:text-green-400"
+          helper={`${summary.teamCount}개 팀이 연결됨`}
+          icon={Building2}
+          label="Workspaces"
+          value={String(summary.workspaceCount)}
+        />
+        <StatCard
+          accentClass="bg-amber-500/10 text-amber-600 dark:text-amber-300"
+          helper={`${summary.enabledPolicyCount}개 정책 활성`}
+          icon={Activity}
+          label="Audit"
+          value={String(summary.auditCount)}
+        />
+      </div>
+
+      <div className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
+        <SurfaceCard
+          title="Current operating model"
+          description="현재 공통 계정 체계와 작업 영역 운영 방식을 한 번에 확인할 수 있는 요약입니다."
+        >
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="rounded-xl border border-clickup-border bg-clickup-sidebar p-4">
+              <div className="text-sm font-semibold text-clickup-text">Identity</div>
+              <div className="mt-3 space-y-2 text-sm text-gray-500">
+                <div>사용자 계정 {summary.userCount}개</div>
+                <div>관리자 {summary.adminCount}명</div>
+                <div>권한 그룹 {summary.groupCount}개</div>
+              </div>
+            </div>
+            <div className="rounded-xl border border-clickup-border bg-clickup-sidebar p-4">
+              <div className="text-sm font-semibold text-clickup-text">Work model</div>
+              <div className="mt-3 space-y-2 text-sm text-gray-500">
+                <div>워크스페이스 {summary.workspaceCount}개</div>
+                <div>실행 팀 {summary.teamCount}개</div>
+                <div>기능 정책 {summary.policyCount}개</div>
+              </div>
+            </div>
+          </div>
+        </SurfaceCard>
+
+        <SurfaceCard
+          title="Admin notes"
+          description="설정 앱과 마이페이지의 역할을 분리한 현재 UX 원칙입니다."
+        >
+          <div className="space-y-3 text-sm text-gray-500">
+            <div className="rounded-xl border border-clickup-border bg-clickup-sidebar p-4">
+              프로필 아바타는 개인 설정으로만 이동하고, 조직 운영 기능은 모두 Settings 앱 안에서 다룹니다.
+            </div>
+            <div className="rounded-xl border border-clickup-border bg-clickup-sidebar p-4">
+              사용자, 팀, 워크스페이스, 권한 정책은 좌측 서브사이드바를 기준으로 분리합니다.
+            </div>
+            <div className="rounded-xl border border-clickup-border bg-clickup-sidebar p-4">
+              관리자 이벤트와 인증 이벤트는 Audit 섹션에서 시간순으로 확인합니다.
+            </div>
+          </div>
+        </SurfaceCard>
+      </div>
+    </div>
+  );
+}
+
+function PeopleSection({ token }: { token: string }) {
   const [users, setUsers] = useState<AuthUser[]>([]);
   const [groups, setGroups] = useState<AccessGroupItem[]>([]);
   const [orgUnits, setOrgUnits] = useState<OrgUnitItem[]>([]);
+  const [inviteOpen, setInviteOpen] = useState(false);
   const [email, setEmail] = useState('');
   const [fullName, setFullName] = useState('');
   const [displayName, setDisplayName] = useState('');
+  const [search, setSearch] = useState('');
+  const [roleFilter, setRoleFilter] = useState<'all' | 'admin' | 'member'>('all');
   const [selectedOrgUnitId, setSelectedOrgUnitId] = useState('');
   const [selectedGroupId, setSelectedGroupId] = useState(NONE_OPTION_VALUE);
   const [message, setMessage] = useState<string | null>(null);
@@ -136,8 +458,13 @@ function UsersSection({ token }: { token: string }) {
       setUsers(userResponse.items);
       setGroups(groupItems);
       setOrgUnits(orgUnitItems);
-      setSelectedOrgUnitId(orgUnitItems[0]?.id ?? '');
-      setSelectedGroupId(groupItems[0]?.id ?? NONE_OPTION_VALUE);
+      setSelectedOrgUnitId((current) => current || orgUnitItems[0]?.id || '');
+      setSelectedGroupId((current) => {
+        if (current !== NONE_OPTION_VALUE && groupItems.some((item) => item.id === current)) {
+          return current;
+        }
+        return groupItems[0]?.id ?? NONE_OPTION_VALUE;
+      });
     } catch (caughtError) {
       setError(getErrorMessage(caughtError, '사용자 정보를 불러오지 못했습니다.'));
     }
@@ -146,6 +473,24 @@ function UsersSection({ token }: { token: string }) {
   useEffect(() => {
     void load();
   }, [token]);
+
+  const filteredUsers = useMemo(() => {
+    const normalizedQuery = search.trim().toLowerCase();
+    return users.filter((user) => {
+      const matchesQuery =
+        normalizedQuery.length === 0 ||
+        user.email.toLowerCase().includes(normalizedQuery) ||
+        user.display_name.toLowerCase().includes(normalizedQuery) ||
+        user.full_name.toLowerCase().includes(normalizedQuery) ||
+        (user.primary_org_unit?.name ?? '').toLowerCase().includes(normalizedQuery);
+
+      const matchesRole =
+        roleFilter === 'all' ||
+        (roleFilter === 'admin' ? user.is_admin : !user.is_admin);
+
+      return matchesQuery && matchesRole;
+    });
+  }, [roleFilter, search, users]);
 
   async function handleCreateUser(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -163,6 +508,7 @@ function UsersSection({ token }: { token: string }) {
       setEmail('');
       setFullName('');
       setDisplayName('');
+      setInviteOpen(false);
       setMessage(`사용자를 생성했습니다. 임시 비밀번호: ${response.temporary_password}`);
       await load();
     } catch (caughtError) {
@@ -182,95 +528,242 @@ function UsersSection({ token }: { token: string }) {
     }
   }
 
-  return (
-    <>
-      <Panel
-        eyebrow="Users"
-        title="사용자 생성"
-        description="관리자가 계정을 만들고 임시 비밀번호를 발급합니다."
-      >
-        {message ? <InlineNotice tone="success">{message}</InlineNotice> : null}
-        {error ? <InlineNotice className="mb-3" tone="danger">{error}</InlineNotice> : null}
-        <form className="grid gap-3 md:grid-cols-5" onSubmit={(event) => void handleCreateUser(event)}>
-          <Input onChange={(event) => setEmail(event.target.value)} placeholder="email" value={email} />
-          <Input onChange={(event) => setFullName(event.target.value)} placeholder="성명" value={fullName} />
-          <Input onChange={(event) => setDisplayName(event.target.value)} placeholder="표시 이름" value={displayName} />
-          <Select
-            onValueChange={setSelectedOrgUnitId}
-            options={orgUnits.map((item) => ({ value: item.id, label: item.name }))}
-            value={selectedOrgUnitId}
-          />
-          <Select
-            onValueChange={setSelectedGroupId}
-            options={[
-              { value: NONE_OPTION_VALUE, label: '그룹 없음' },
-              ...groups.map((item) => ({ value: item.id, label: item.name })),
-            ]}
-            value={selectedGroupId}
-          />
-          <div className="md:col-span-5">
-            <Button type="submit" variant="primary">사용자 생성</Button>
-          </div>
-        </form>
-      </Panel>
+  function handleExport() {
+    const header = ['Name', 'Email', 'Role', 'Last active', 'Invited by', 'Invited on', 'Teams'];
+    const rows = filteredUsers.map((user) => [
+      user.display_name || user.full_name,
+      user.email,
+      user.is_admin ? 'Owner' : 'Member',
+      formatDateLabel(user.last_login_at),
+      'System',
+      formatDateLabel(user.created_at),
+      user.workspace_roles.map((item) => item.name).join(', ') || '-',
+    ]);
+    const csv = [header, ...rows]
+      .map((row) =>
+        row
+          .map((item) => `"${String(item).replaceAll('"', '""')}"`)
+          .join(','),
+      )
+      .join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = 'aidoo-people.csv';
+    anchor.click();
+    URL.revokeObjectURL(url);
+  }
 
-      <Panel
-        eyebrow="Users"
-        title="사용자 목록"
-        description="현재 등록된 사용자와 그룹/권한 상태입니다."
-      >
-        <TableShell>
+  return (
+    <div className="space-y-6">
+      <SectionMessage error={error} message={message} />
+
+      <div className="flex justify-end">
+        <button
+          className="rounded-lg border border-clickup-border bg-clickup-card px-3 py-2 text-sm font-medium text-clickup-text transition-colors hover:bg-clickup-hover"
+          onClick={handleExport}
+          type="button"
+        >
+          Export
+        </button>
+      </div>
+
+      <div className="rounded-xl border border-clickup-border bg-clickup-card">
+        <div className="flex flex-wrap items-center gap-3 border-b border-clickup-border px-4 py-3">
+          <ToolbarField className="min-w-[280px] flex-1">
+            <label className="relative block">
+              <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" size={16} />
+              <input
+                className={`${fieldClassName} pl-9`}
+                onChange={(event) => setSearch(event.target.value)}
+                placeholder="Search or invite by email"
+                value={search}
+              />
+            </label>
+          </ToolbarField>
+          <button
+            className="inline-flex items-center gap-2 rounded-lg border border-[#1f2022] bg-[#1f2022] px-3 py-2 text-sm font-medium text-white transition-opacity hover:opacity-90 dark:border-white dark:bg-white dark:text-clickup-bg"
+            onClick={() => {
+              setInviteOpen((current) => !current);
+              requestAnimationFrame(() => {
+                document.getElementById('admin-user-email')?.focus();
+              });
+            }}
+            type="button"
+          >
+            <span>+</span>
+            <span>Invite people</span>
+          </button>
+        </div>
+        <div className="border-b border-clickup-border px-4 py-2">
+          <button
+            className="inline-flex items-center gap-2 rounded-full border border-clickup-border bg-clickup-sidebar px-3 py-1.5 text-xs font-medium text-clickup-text"
+            type="button"
+          >
+            <span>{`All Users (${users.length})`}</span>
+            <span className="text-[10px] text-gray-500">▾</span>
+          </button>
+        </div>
+
+        <table className="min-w-full border-collapse text-sm">
           <thead>
             <tr>
-              <HeadCell>이메일</HeadCell>
-              <HeadCell>이름</HeadCell>
-              <HeadCell>조직</HeadCell>
-              <HeadCell>그룹</HeadCell>
-              <HeadCell>상태</HeadCell>
-              <HeadCell>동작</HeadCell>
+              <HeadCell>Name</HeadCell>
+              <HeadCell>Email</HeadCell>
+              <HeadCell>Role</HeadCell>
+              <HeadCell>Last active</HeadCell>
+              <HeadCell>Invited by</HeadCell>
+              <HeadCell>Invited on</HeadCell>
+              <HeadCell>Teams</HeadCell>
+              <HeadCell>Actions</HeadCell>
             </tr>
           </thead>
           <tbody>
-            {users.map((user) => (
-              <tr key={user.id}>
-                <BodyCell>{user.email}</BodyCell>
-                <BodyCell>{user.display_name}</BodyCell>
-                <BodyCell>{user.primary_org_unit?.name ?? '미지정'}</BodyCell>
-                <BodyCell>{user.group_slugs.join(', ') || '없음'}</BodyCell>
-                <BodyCell>{user.status}</BodyCell>
-                <BodyCell>
-                  <Button
-                    onClick={() => {
-                      void handleResetPassword(user.id);
-                    }}
-                    size="dense"
-                    variant="secondary"
-                  >
-                    비밀번호 초기화
-                  </Button>
-                </BodyCell>
-              </tr>
-            ))}
+            <tr>
+              <td className="border-b border-clickup-border px-4 py-3 text-sm text-gray-500" colSpan={8}>
+                <button
+                  className="transition-colors hover:text-clickup-text"
+                  onClick={() => setInviteOpen(true)}
+                  type="button"
+                >
+                  + Invite people
+                </button>
+              </td>
+            </tr>
+            {filteredUsers.length === 0 ? (
+              <EmptyRow
+                colSpan={8}
+                description="검색어를 바꾸거나 초대 버튼으로 사용자를 추가하세요."
+                title="조건에 맞는 사용자가 없습니다."
+              />
+            ) : (
+              filteredUsers.map((user) => (
+                <tr key={user.id}>
+                  <BodyCell>
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-8 w-8 items-center justify-center rounded-full bg-clickup-sidebar text-[11px] font-semibold text-gray-500">
+                        {getInitials(user.display_name || user.full_name)}
+                      </div>
+                      <div>
+                        <div className="font-medium text-clickup-text">{user.display_name || user.full_name}</div>
+                        {user.is_admin ? (
+                          <div className="mt-0.5">
+                            <Badge tone="default">Owner</Badge>
+                          </div>
+                        ) : null}
+                      </div>
+                    </div>
+                  </BodyCell>
+                  <BodyCell>{user.email}</BodyCell>
+                  <BodyCell>{user.is_admin ? 'Owner' : 'Member'}</BodyCell>
+                  <BodyCell>{formatDateLabel(user.last_login_at)}</BodyCell>
+                  <BodyCell>System</BodyCell>
+                  <BodyCell>{formatDateLabel(user.created_at)}</BodyCell>
+                  <BodyCell>{user.workspace_roles.length > 0 ? user.workspace_roles.map((item) => item.name).join(', ') : '-'}</BodyCell>
+                  <BodyCell className="w-14 text-right">
+                    <button
+                      className="rounded-md px-2 py-1 text-gray-500 transition-colors hover:bg-clickup-hover hover:text-clickup-text"
+                      onClick={() => {
+                        void handleResetPassword(user.id);
+                      }}
+                      type="button"
+                    >
+                      ...
+                    </button>
+                  </BodyCell>
+                </tr>
+              ))
+            )}
           </tbody>
-        </TableShell>
-      </Panel>
-    </>
+        </table>
+      </div>
+
+      {inviteOpen ? (
+        <div className="rounded-xl border border-clickup-border bg-clickup-card px-5 py-5">
+          <div className="mb-4">
+            <div className="text-sm font-semibold text-clickup-text">Invite people</div>
+            <div className="mt-1 text-sm text-gray-500">관리자가 계정을 만들고 기본 조직과 그룹을 함께 배정합니다.</div>
+          </div>
+          <form className="grid gap-3 xl:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)_minmax(0,1fr)_220px_220px_auto]" onSubmit={(event) => void handleCreateUser(event)}>
+            <input
+              className={fieldClassName}
+              id="admin-user-email"
+              onChange={(event) => setEmail(event.target.value)}
+              placeholder="Email"
+              value={email}
+            />
+            <input
+              className={fieldClassName}
+              onChange={(event) => setFullName(event.target.value)}
+              placeholder="Full name"
+              value={fullName}
+            />
+            <input
+              className={fieldClassName}
+              onChange={(event) => setDisplayName(event.target.value)}
+              placeholder="Display name"
+              value={displayName}
+            />
+            <Select
+              onValueChange={setSelectedOrgUnitId}
+              options={orgUnits.map((item) => ({ value: item.id, label: item.name }))}
+              value={selectedOrgUnitId}
+            />
+            <Select
+              onValueChange={setSelectedGroupId}
+              options={[
+                { value: NONE_OPTION_VALUE, label: 'No group' },
+                ...groups.map((item) => ({ value: item.id, label: item.name })),
+              ]}
+              value={selectedGroupId}
+            />
+            <div className="flex justify-end">
+              <Button type="submit" variant="primary">Invite</Button>
+            </div>
+          </form>
+        </div>
+      ) : null}
+    </div>
   );
 }
 
-function GroupsSection({ token }: { token: string }) {
-  const [groups, setGroups] = useState<AccessGroupItem[]>([]);
+function TeamsSection({ token }: { token: string }) {
+  const [workspaces, setWorkspaces] = useState<WorkspaceItem[]>([]);
+  const [teams, setTeams] = useState<TeamItem[]>([]);
+  const [users, setUsers] = useState<AuthUser[]>([]);
+  const [selectedWorkspaceId, setSelectedWorkspaceId] = useState('');
+  const [selectedTeamId, setSelectedTeamId] = useState('');
+  const [selectedUserId, setSelectedUserId] = useState(NONE_OPTION_VALUE);
+  const [createOpen, setCreateOpen] = useState(false);
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
-  const [permissions, setPermissions] = useState('group.read,workspace.read');
+  const [teamMembers, setTeamMembers] = useState<AuthUser[]>([]);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   async function load() {
     try {
-      setGroups(await listGroups(token));
+      const [workspaceItems, teamItems, userResponse] = await Promise.all([
+        listWorkspaces(token),
+        listTeams(token),
+        listAdminUsers(token),
+      ]);
+      setWorkspaces(workspaceItems);
+      setTeams(teamItems);
+      setUsers(userResponse.items);
+      setSelectedWorkspaceId((current) => current || workspaceItems[0]?.id || '');
+      setSelectedUserId((current) => current || NONE_OPTION_VALUE);
     } catch (caughtError) {
-      setError(getErrorMessage(caughtError, '그룹 목록을 불러오지 못했습니다.'));
+      setError(getErrorMessage(caughtError, '팀 정보를 불러오지 못했습니다.'));
+    }
+  }
+
+  async function loadMembers(teamId: string) {
+    try {
+      setTeamMembers(await listTeamMembers(token, teamId));
+    } catch (caughtError) {
+      setError(getErrorMessage(caughtError, '팀 멤버를 불러오지 못했습니다.'));
     }
   }
 
@@ -278,67 +771,233 @@ function GroupsSection({ token }: { token: string }) {
     void load();
   }, [token]);
 
-  async function handleCreateGroup(event: React.FormEvent<HTMLFormElement>) {
+  useEffect(() => {
+    if (!selectedTeamId) {
+      setTeamMembers([]);
+      return;
+    }
+    void loadMembers(selectedTeamId);
+  }, [selectedTeamId, token]);
+  const selectedTeam = useMemo(
+    () => teams.find((item) => item.id === selectedTeamId) ?? null,
+    [selectedTeamId, teams],
+  );
+
+  async function handleCreateTeam(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (!selectedWorkspaceId) {
+      return;
+    }
+
     setMessage(null);
     setError(null);
 
     try {
-      await createGroup(token, {
+      await createTeam(token, selectedWorkspaceId, {
         name: name.trim(),
         description: description.trim(),
-        permissions: permissions
-          .split(',')
-          .map((item) => item.trim())
-          .filter(Boolean),
       });
       setName('');
       setDescription('');
-      setMessage('그룹을 생성했습니다.');
+      setMessage('팀을 생성했습니다.');
+      setCreateOpen(false);
       await load();
     } catch (caughtError) {
-      setError(getErrorMessage(caughtError, '그룹을 생성하지 못했습니다.'));
+      setError(getErrorMessage(caughtError, '팀을 생성하지 못했습니다.'));
+    }
+  }
+
+  async function handleAddTeamMember() {
+    if (!selectedTeamId || !selectedUserId || selectedUserId === NONE_OPTION_VALUE) {
+      return;
+    }
+
+    setMessage(null);
+    setError(null);
+
+    try {
+      const nextIds = Array.from(new Set([...teamMembers.map((item) => item.id), selectedUserId]));
+      const members = await replaceTeamMembers(token, selectedTeamId, nextIds);
+      setTeamMembers(members);
+      setMessage('팀 멤버를 저장했습니다.');
+    } catch (caughtError) {
+      setError(getErrorMessage(caughtError, '팀 멤버를 저장하지 못했습니다.'));
     }
   }
 
   return (
-    <>
-      <Panel eyebrow="Groups" title="권한 그룹 생성" description="전사 공통 접근 그룹을 관리합니다.">
-        {message ? <InlineNotice tone="success">{message}</InlineNotice> : null}
-        {error ? <InlineNotice className="mb-3" tone="danger">{error}</InlineNotice> : null}
-        <form className="grid gap-3 md:grid-cols-3" onSubmit={(event) => void handleCreateGroup(event)}>
-          <Input onChange={(event) => setName(event.target.value)} placeholder="그룹 이름" value={name} />
-          <Input onChange={(event) => setDescription(event.target.value)} placeholder="설명" value={description} />
-          <Input onChange={(event) => setPermissions(event.target.value)} placeholder="perm,perm" value={permissions} />
-          <div className="md:col-span-3">
-            <Button type="submit" variant="primary">그룹 생성</Button>
-          </div>
-        </form>
-      </Panel>
+    <div className="space-y-6">
+      <SectionMessage error={error} message={message} />
 
-      <Panel eyebrow="Groups" title="그룹 목록">
-        <TableShell>
+      <div className="flex justify-end">
+        <button
+          className="inline-flex items-center gap-2 rounded-lg border border-[#1f2022] bg-[#1f2022] px-3 py-2 text-sm font-medium text-white transition-opacity hover:opacity-90 dark:border-white dark:bg-white dark:text-clickup-bg"
+          onClick={() => setCreateOpen((current) => !current)}
+          type="button"
+        >
+          <span>+</span>
+          <span>{createOpen ? 'Close' : 'Create Team'}</span>
+        </button>
+      </div>
+
+      <div className="rounded-xl border border-clickup-border bg-clickup-card">
+        <table className="min-w-full border-collapse text-sm">
           <thead>
             <tr>
-              <HeadCell>이름</HeadCell>
-              <HeadCell>슬러그</HeadCell>
-              <HeadCell>권한</HeadCell>
-              <HeadCell>멤버 수</HeadCell>
+              <HeadCell>Name</HeadCell>
+              <HeadCell>Alias</HeadCell>
+              <HeadCell>Source</HeadCell>
+              <HeadCell>Members</HeadCell>
+              <HeadCell>Actions</HeadCell>
             </tr>
           </thead>
           <tbody>
-            {groups.map((group) => (
-              <tr key={group.id}>
-                <BodyCell>{group.name}</BodyCell>
-                <BodyCell>{group.slug}</BodyCell>
-                <BodyCell>{group.permissions.join(', ')}</BodyCell>
-                <BodyCell>{group.member_count}</BodyCell>
-              </tr>
-            ))}
+            {teams.length === 0 ? (
+              <EmptyRow
+                colSpan={5}
+                description="상단의 Create Team 버튼으로 첫 팀을 추가하세요."
+                title="등록된 팀이 없습니다."
+              />
+            ) : (
+              teams.map((team) => (
+                <tr
+                  key={team.id}
+                  className={selectedTeamId === team.id ? 'bg-clickup-hover/70' : undefined}
+                >
+                  <BodyCell>
+                    <button
+                      className="flex items-center gap-3 text-left"
+                      onClick={() => setSelectedTeamId(team.id)}
+                      type="button"
+                    >
+                      <div className="flex h-8 w-8 items-center justify-center rounded-full bg-clickup-sidebar text-[11px] font-semibold text-gray-500">
+                        {getInitials(team.name)}
+                      </div>
+                      <div>
+                        <div className="font-medium text-clickup-text">{team.name}</div>
+                        <div className="mt-0.5 text-xs text-gray-500">{team.member_count} members</div>
+                      </div>
+                    </button>
+                  </BodyCell>
+                  <BodyCell>@{team.key}</BodyCell>
+                  <BodyCell>
+                    <Badge tone="green">Manual</Badge>
+                  </BodyCell>
+                  <BodyCell>{team.member_count}</BodyCell>
+                  <BodyCell className="w-12 text-right">
+                    <button
+                      className="rounded-md px-2 py-1 text-gray-500 transition-colors hover:bg-clickup-hover hover:text-clickup-text"
+                      onClick={() => setSelectedTeamId(team.id)}
+                      type="button"
+                    >
+                      ...
+                    </button>
+                  </BodyCell>
+                </tr>
+              ))
+            )}
+            <tr>
+              <td className="px-4 py-3 text-sm text-gray-500" colSpan={5}>
+                <button
+                  className="transition-colors hover:text-clickup-text"
+                  onClick={() => setCreateOpen(true)}
+                  type="button"
+                >
+                  + Create Team
+                </button>
+              </td>
+            </tr>
           </tbody>
-        </TableShell>
-      </Panel>
-    </>
+        </table>
+      </div>
+
+      {createOpen ? (
+        <div className="rounded-xl border border-clickup-border bg-clickup-card px-5 py-5">
+          <div className="mb-4">
+            <div className="text-sm font-semibold text-clickup-text">Create team</div>
+            <div className="mt-1 text-sm text-gray-500">팀은 항상 하나의 워크스페이스에 속합니다.</div>
+          </div>
+          <form className="grid gap-3 lg:grid-cols-[220px_minmax(0,1fr)_minmax(0,1fr)_auto]" onSubmit={(event) => void handleCreateTeam(event)}>
+            <Select
+              onValueChange={setSelectedWorkspaceId}
+              options={workspaces.map((item) => ({ value: item.id, label: item.name }))}
+              value={selectedWorkspaceId}
+            />
+            <input
+              className={fieldClassName}
+              onChange={(event) => setName(event.target.value)}
+              placeholder="Team name"
+              value={name}
+            />
+            <input
+              className={fieldClassName}
+              onChange={(event) => setDescription(event.target.value)}
+              placeholder="Description"
+              value={description}
+            />
+            <div className="flex justify-end">
+              <Button type="submit" variant="primary">Create</Button>
+            </div>
+          </form>
+        </div>
+      ) : null}
+
+      {selectedTeam ? (
+        <div className="rounded-xl border border-clickup-border bg-clickup-card px-5 py-5">
+          <div className="flex flex-col gap-3 border-b border-clickup-border pb-4 lg:flex-row lg:items-start lg:justify-between">
+            <div>
+              <div className="text-sm font-semibold text-clickup-text">{selectedTeam.name}</div>
+              <div className="mt-1 text-sm text-gray-500">
+                Workspace {selectedTeam.workspace_key} / Alias @{selectedTeam.key}
+              </div>
+            </div>
+            <Badge tone="green">Manual</Badge>
+          </div>
+
+          <div className="mt-4 grid gap-4 lg:grid-cols-[260px_auto]">
+            <Select
+              onValueChange={setSelectedUserId}
+              options={[
+                { value: NONE_OPTION_VALUE, label: 'Add member by email' },
+                ...users.map((item) => ({ value: item.id, label: item.email })),
+              ]}
+              value={selectedUserId}
+            />
+            <div className="flex justify-end lg:justify-start">
+              <Button onClick={() => { void handleAddTeamMember(); }} variant="secondary">Add member</Button>
+            </div>
+          </div>
+
+          <div className="mt-4 grid gap-2">
+            {teamMembers.length === 0 ? (
+              <div className="rounded-lg border border-dashed border-clickup-border px-4 py-5 text-sm text-gray-500">
+                아직 팀 멤버가 없습니다.
+              </div>
+            ) : (
+              teamMembers.map((member) => (
+                <div
+                  key={member.id}
+                  className="flex items-center justify-between border-b border-clickup-border py-3 last:border-b-0"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-clickup-sidebar text-[11px] font-semibold text-gray-500">
+                      {getInitials(member.display_name || member.full_name)}
+                    </div>
+                    <div>
+                      <div className="font-medium text-clickup-text">{member.display_name || member.full_name}</div>
+                      <div className="mt-0.5 text-xs text-gray-500">{member.email}</div>
+                    </div>
+                  </div>
+                  <Badge tone={member.is_admin ? 'purple' : 'default'}>
+                    {member.is_admin ? 'Admin' : 'Member'}
+                  </Badge>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      ) : null}
+    </div>
   );
 }
 
@@ -350,7 +1009,7 @@ function WorkspacesSection({ token }: { token: string }) {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [selectedWorkspaceId, setSelectedWorkspaceId] = useState('');
-  const [selectedUserId, setSelectedUserId] = useState('');
+  const [selectedUserId, setSelectedUserId] = useState(NONE_OPTION_VALUE);
   const [selectedGroupId, setSelectedGroupId] = useState(NONE_OPTION_VALUE);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -369,6 +1028,8 @@ function WorkspacesSection({ token }: { token: string }) {
       setSelectedWorkspaceId(workspaceId);
       if (workspaceId) {
         setBindings(await listWorkspaceBindings(token, workspaceId));
+      } else {
+        setBindings([]);
       }
     } catch (caughtError) {
       setError(getErrorMessage(caughtError, '워크스페이스 정보를 불러오지 못했습니다.'));
@@ -410,7 +1071,7 @@ function WorkspacesSection({ token }: { token: string }) {
       const nextUsers = [...bindings.filter((item) => item.subject_type === 'user')];
       const nextGroups = [...bindings.filter((item) => item.subject_type === 'group')];
 
-      if (selectedUserId && selectedUserId !== NONE_OPTION_VALUE) {
+      if (selectedUserId !== NONE_OPTION_VALUE) {
         nextUsers.push({
           subject_id: selectedUserId,
           subject_type: 'user',
@@ -418,7 +1079,7 @@ function WorkspacesSection({ token }: { token: string }) {
           role: 'member',
         });
       }
-      if (selectedGroupId && selectedGroupId !== NONE_OPTION_VALUE) {
+      if (selectedGroupId !== NONE_OPTION_VALUE) {
         nextGroups.push({
           subject_id: selectedGroupId,
           subject_type: 'group',
@@ -439,105 +1100,187 @@ function WorkspacesSection({ token }: { token: string }) {
       });
       setBindings(response);
       setMessage('워크스페이스 바인딩을 저장했습니다.');
+      setSelectedUserId(NONE_OPTION_VALUE);
+      setSelectedGroupId(NONE_OPTION_VALUE);
     } catch (caughtError) {
       setError(getErrorMessage(caughtError, '워크스페이스 바인딩을 저장하지 못했습니다.'));
     }
   }
 
   return (
-    <>
-      <Panel eyebrow="Workspaces" title="워크스페이스 생성">
-        {message ? <InlineNotice tone="success">{message}</InlineNotice> : null}
-        {error ? <InlineNotice className="mb-3" tone="danger">{error}</InlineNotice> : null}
-        <form className="grid gap-3 md:grid-cols-3" onSubmit={(event) => void handleCreateWorkspace(event)}>
-          <Input onChange={(event) => setName(event.target.value)} placeholder="워크스페이스 이름" value={name} />
-          <Input onChange={(event) => setDescription(event.target.value)} placeholder="설명" value={description} />
-          <div className="flex items-center">
-            <Button type="submit" variant="primary">워크스페이스 생성</Button>
-          </div>
-        </form>
-      </Panel>
+    <div className="space-y-6">
+      <div className="grid gap-4 md:grid-cols-3">
+        <StatCard
+          accentClass="bg-clickup-purple/10 text-clickup-purple"
+          helper="현재 등록된 작업 영역"
+          icon={Building2}
+          label="Workspaces"
+          value={String(workspaces.length)}
+        />
+        <StatCard
+          accentClass="bg-blue-500/10 text-blue-600 dark:text-blue-400"
+          helper="선택한 작업 영역의 바인딩 수"
+          icon={Shield}
+          label="Bindings"
+          value={String(bindings.length)}
+        />
+        <StatCard
+          accentClass="bg-green-500/10 text-green-600 dark:text-green-400"
+          helper="사용자와 그룹 모두 바인딩 가능"
+          icon={Users}
+          label="Subjects"
+          value={String(users.length + groups.length)}
+        />
+      </div>
 
-      <Panel eyebrow="Bindings" title="워크스페이스 접근 바인딩">
-        <div className="grid gap-3 md:grid-cols-3">
-          <Select
-            onValueChange={async (value) => {
-              setSelectedWorkspaceId(value);
-              setBindings(await listWorkspaceBindings(token, value));
-            }}
-            options={workspaces.map((item) => ({ value: item.id, label: item.name }))}
-            value={selectedWorkspaceId}
-          />
-          <Select
-            onValueChange={setSelectedUserId}
-            options={[
-              { value: NONE_OPTION_VALUE, label: '사용자 선택 안 함' },
-              ...users.map((item) => ({ value: item.id, label: item.email })),
-            ]}
-            value={selectedUserId || NONE_OPTION_VALUE}
-          />
-          <Select
-            onValueChange={setSelectedGroupId}
-            options={[
-              { value: NONE_OPTION_VALUE, label: '그룹 선택 안 함' },
-              ...groups.map((item) => ({ value: item.id, label: item.name })),
-            ]}
-            value={selectedGroupId}
-          />
-        </div>
-        <div className="mt-3 flex items-center gap-2">
-          <Button onClick={() => { void handleAddBindings(); }} variant="primary">바인딩 저장</Button>
-        </div>
-        <div className="mt-4 grid gap-2">
-          {bindings.map((binding) => (
-            <div
-              key={`${binding.subject_type}-${binding.subject_id}`}
-              className="rounded-[var(--ui-radius-sm)] border border-[var(--ui-color-border)] px-3 py-2 text-sm text-[var(--ui-color-ink)]"
-            >
-              {binding.subject_type}: {binding.subject_label} ({binding.role})
+      <SectionMessage error={error} message={message} />
+
+      <div className="grid gap-6 xl:grid-cols-[0.95fr_1.05fr]">
+        <SurfaceCard
+          description="업무 영역 이름과 설명을 정의합니다."
+          title="Create workspace"
+        >
+          <form className="grid gap-3" onSubmit={(event) => void handleCreateWorkspace(event)}>
+            <input
+              className={fieldClassName}
+              onChange={(event) => setName(event.target.value)}
+              placeholder="Workspace name"
+              value={name}
+            />
+            <input
+              className={fieldClassName}
+              onChange={(event) => setDescription(event.target.value)}
+              placeholder="Description"
+              value={description}
+            />
+            <div className="flex justify-end">
+              <Button type="submit" variant="primary">Create workspace</Button>
             </div>
-          ))}
-        </div>
-      </Panel>
-    </>
+          </form>
+        </SurfaceCard>
+
+        <SurfaceCard
+          description="사용자 또는 그룹을 선택한 워크스페이스에 연결합니다."
+          title="Workspace access bindings"
+        >
+          <div className="grid gap-3">
+            <Select
+              onValueChange={async (value) => {
+                setSelectedWorkspaceId(value);
+                setBindings(await listWorkspaceBindings(token, value));
+              }}
+              options={workspaces.map((item) => ({ value: item.id, label: item.name }))}
+              value={selectedWorkspaceId}
+            />
+            <div className="grid gap-3 md:grid-cols-2">
+              <Select
+                onValueChange={setSelectedUserId}
+                options={[
+                  { value: NONE_OPTION_VALUE, label: 'No user selected' },
+                  ...users.map((item) => ({ value: item.id, label: item.email })),
+                ]}
+                value={selectedUserId}
+              />
+              <Select
+                onValueChange={setSelectedGroupId}
+                options={[
+                  { value: NONE_OPTION_VALUE, label: 'No group selected' },
+                  ...groups.map((item) => ({ value: item.id, label: item.name })),
+                ]}
+                value={selectedGroupId}
+              />
+            </div>
+            <div className="flex justify-end">
+              <Button onClick={() => { void handleAddBindings(); }} variant="primary">Save bindings</Button>
+            </div>
+            <div className="grid gap-2">
+              {bindings.length === 0 ? (
+                <div className="rounded-xl border border-dashed border-clickup-border bg-clickup-sidebar px-4 py-6 text-sm text-gray-500">
+                  아직 바인딩이 없습니다.
+                </div>
+              ) : (
+                bindings.map((binding) => (
+                  <div
+                    key={`${binding.subject_type}-${binding.subject_id}`}
+                    className="flex items-center justify-between rounded-xl border border-clickup-border bg-clickup-sidebar px-4 py-3"
+                  >
+                    <div>
+                      <div className="font-medium text-clickup-text">{binding.subject_label}</div>
+                      <div className="mt-1 text-xs text-gray-500">{binding.subject_type}</div>
+                    </div>
+                    <Badge tone="purple">{binding.role}</Badge>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </SurfaceCard>
+      </div>
+
+      <SurfaceCard
+        description="등록된 워크스페이스와 연결된 팀 수를 요약합니다."
+        title="Workspace directory"
+      >
+        <TableShell>
+          <thead>
+            <tr>
+              <HeadCell>Name</HeadCell>
+              <HeadCell>Key</HeadCell>
+              <HeadCell>Description</HeadCell>
+              <HeadCell>Teams</HeadCell>
+              <HeadCell>Status</HeadCell>
+            </tr>
+          </thead>
+          <tbody>
+            {workspaces.length === 0 ? (
+              <EmptyRow
+                colSpan={5}
+                description="새 워크스페이스를 만들어 시작하세요."
+                title="등록된 워크스페이스가 없습니다."
+              />
+            ) : (
+              workspaces.map((workspace) => (
+                <tr key={workspace.id}>
+                  <BodyCell>
+                    <div className="font-medium text-clickup-text">{workspace.name}</div>
+                  </BodyCell>
+                  <BodyCell>{workspace.key}</BodyCell>
+                  <BodyCell>{workspace.description || '설명 없음'}</BodyCell>
+                  <BodyCell>{workspace.team_count}</BodyCell>
+                  <BodyCell>
+                    <Badge tone={workspace.active ? 'green' : 'amber'}>
+                      {workspace.active ? 'active' : 'inactive'}
+                    </Badge>
+                  </BodyCell>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </TableShell>
+      </SurfaceCard>
+    </div>
   );
 }
 
-function TeamsSection({ token }: { token: string }) {
-  const [workspaces, setWorkspaces] = useState<WorkspaceItem[]>([]);
-  const [teams, setTeams] = useState<TeamItem[]>([]);
-  const [users, setUsers] = useState<AuthUser[]>([]);
-  const [selectedWorkspaceId, setSelectedWorkspaceId] = useState('');
-  const [selectedTeamId, setSelectedTeamId] = useState('');
-  const [selectedUserId, setSelectedUserId] = useState('');
+function SecuritySection({ token }: { token: string }) {
+  const [groups, setGroups] = useState<AccessGroupItem[]>([]);
+  const [policies, setPolicies] = useState<FeaturePolicyItem[]>([]);
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
-  const [teamMembers, setTeamMembers] = useState<AuthUser[]>([]);
+  const [permissions, setPermissions] = useState('group.read,workspace.read');
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   async function load() {
     try {
-      const [workspaceItems, teamItems, userResponse] = await Promise.all([
-        listWorkspaces(token),
-        listTeams(token),
-        listAdminUsers(token),
+      const [groupItems, policyItems] = await Promise.all([
+        listGroups(token),
+        listFeaturePolicies(token),
       ]);
-      setWorkspaces(workspaceItems);
-      setTeams(teamItems);
-      setUsers(userResponse.items);
-      setSelectedWorkspaceId((current) => current || workspaceItems[0]?.id || '');
-      setSelectedTeamId((current) => current || teamItems[0]?.id || '');
+      setGroups(groupItems);
+      setPolicies(policyItems);
     } catch (caughtError) {
-      setError(getErrorMessage(caughtError, '팀 정보를 불러오지 못했습니다.'));
-    }
-  }
-
-  async function loadMembers(teamId: string) {
-    try {
-      setTeamMembers(await listTeamMembers(token, teamId));
-    } catch (caughtError) {
-      setError(getErrorMessage(caughtError, '팀 멤버를 불러오지 못했습니다.'));
+      setError(getErrorMessage(caughtError, '권한 설정을 불러오지 못했습니다.'));
     }
   }
 
@@ -545,123 +1288,30 @@ function TeamsSection({ token }: { token: string }) {
     void load();
   }, [token]);
 
-  useEffect(() => {
-    if (!selectedTeamId) {
-      setTeamMembers([]);
-      return;
-    }
-    void loadMembers(selectedTeamId);
-  }, [selectedTeamId, token]);
-
-  async function handleCreateTeam(event: React.FormEvent<HTMLFormElement>) {
+  async function handleCreateGroup(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!selectedWorkspaceId) {
-      return;
-    }
-
     setMessage(null);
     setError(null);
 
     try {
-      await createTeam(token, selectedWorkspaceId, {
+      await createGroup(token, {
         name: name.trim(),
         description: description.trim(),
+        permissions: permissions
+          .split(',')
+          .map((item) => item.trim())
+          .filter(Boolean),
       });
       setName('');
       setDescription('');
-      setMessage('팀을 생성했습니다.');
+      setMessage('그룹을 생성했습니다.');
       await load();
     } catch (caughtError) {
-      setError(getErrorMessage(caughtError, '팀을 생성하지 못했습니다.'));
+      setError(getErrorMessage(caughtError, '그룹을 생성하지 못했습니다.'));
     }
   }
 
-  async function handleAddTeamMember() {
-    if (!selectedTeamId || !selectedUserId) {
-      return;
-    }
-
-    setMessage(null);
-    setError(null);
-
-    try {
-      const nextIds = Array.from(new Set([...teamMembers.map((item) => item.id), selectedUserId]));
-      const members = await replaceTeamMembers(token, selectedTeamId, nextIds);
-      setTeamMembers(members);
-      setMessage('팀 멤버를 저장했습니다.');
-    } catch (caughtError) {
-      setError(getErrorMessage(caughtError, '팀 멤버를 저장하지 못했습니다.'));
-    }
-  }
-
-  return (
-    <>
-      <Panel eyebrow="Teams" title="팀 생성">
-        {message ? <InlineNotice tone="success">{message}</InlineNotice> : null}
-        {error ? <InlineNotice className="mb-3" tone="danger">{error}</InlineNotice> : null}
-        <form className="grid gap-3 md:grid-cols-3" onSubmit={(event) => void handleCreateTeam(event)}>
-          <Select
-            onValueChange={setSelectedWorkspaceId}
-            options={workspaces.map((item) => ({ value: item.id, label: item.name }))}
-            value={selectedWorkspaceId}
-          />
-          <Input onChange={(event) => setName(event.target.value)} placeholder="팀 이름" value={name} />
-          <Input onChange={(event) => setDescription(event.target.value)} placeholder="설명" value={description} />
-          <div className="md:col-span-3">
-            <Button type="submit" variant="primary">팀 생성</Button>
-          </div>
-        </form>
-      </Panel>
-
-      <Panel eyebrow="Teams" title="팀 멤버십">
-        <div className="grid gap-3 md:grid-cols-3">
-          <Select
-            onValueChange={setSelectedTeamId}
-            options={teams.map((item) => ({ value: item.id, label: `${item.name} (${item.workspace_key})` }))}
-            value={selectedTeamId}
-          />
-          <Select
-            onValueChange={setSelectedUserId}
-            options={users.map((item) => ({ value: item.id, label: item.email }))}
-            value={selectedUserId}
-          />
-          <div className="flex items-center">
-            <Button onClick={() => { void handleAddTeamMember(); }} variant="primary">멤버 추가</Button>
-          </div>
-        </div>
-        <div className="mt-4 grid gap-2">
-          {teamMembers.map((member) => (
-            <div
-              key={member.id}
-              className="rounded-[var(--ui-radius-sm)] border border-[var(--ui-color-border)] px-3 py-2 text-sm text-[var(--ui-color-ink)]"
-            >
-              {member.email} / {member.display_name}
-            </div>
-          ))}
-        </div>
-      </Panel>
-    </>
-  );
-}
-
-function FeaturePoliciesSection({ token }: { token: string }) {
-  const [policies, setPolicies] = useState<FeaturePolicyItem[]>([]);
-  const [message, setMessage] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  async function load() {
-    try {
-      setPolicies(await listFeaturePolicies(token));
-    } catch (caughtError) {
-      setError(getErrorMessage(caughtError, '기능 정책을 불러오지 못했습니다.'));
-    }
-  }
-
-  useEffect(() => {
-    void load();
-  }, [token]);
-
-  async function handleSave() {
+  async function handleSavePolicies() {
     setMessage(null);
     setError(null);
 
@@ -684,40 +1334,144 @@ function FeaturePoliciesSection({ token }: { token: string }) {
   }
 
   return (
-    <Panel eyebrow="Feature Access" title="기능 노출 정책">
-      {message ? <InlineNotice tone="success">{message}</InlineNotice> : null}
-      {error ? <InlineNotice className="mb-3" tone="danger">{error}</InlineNotice> : null}
-      <div className="grid gap-3">
-        {policies.map((policy) => (
-          <label
-            key={policy.id}
-            className="flex items-start gap-3 rounded-[var(--ui-radius-md)] border border-[var(--ui-color-border)] p-3 text-sm text-[var(--ui-color-ink)]"
-          >
-            <input
-              checked={policy.enabled}
-              onChange={(event) => {
-                setPolicies((current) =>
-                  current.map((item) =>
-                    item.id === policy.id ? { ...item, enabled: event.target.checked } : item,
-                  ),
-                );
-              }}
-              type="checkbox"
-            />
-            <div className="grid gap-1">
-              <strong>{policy.name}</strong>
-              <span>{policy.description}</span>
-              <span className="text-[var(--ui-color-ink-muted)]">
-                code: {policy.code}
-              </span>
-            </div>
-          </label>
-        ))}
-        <div>
-          <Button onClick={() => { void handleSave(); }} variant="primary">정책 저장</Button>
-        </div>
+    <div className="space-y-6">
+      <div className="grid gap-4 md:grid-cols-3">
+        <StatCard
+          accentClass="bg-clickup-purple/10 text-clickup-purple"
+          helper="전역 접근 그룹"
+          icon={Shield}
+          label="Groups"
+          value={String(groups.length)}
+        />
+        <StatCard
+          accentClass="bg-blue-500/10 text-blue-600 dark:text-blue-400"
+          helper="화면 및 기능 노출 제어"
+          icon={LockKeyhole}
+          label="Policies"
+          value={String(policies.length)}
+        />
+        <StatCard
+          accentClass="bg-green-500/10 text-green-600 dark:text-green-400"
+          helper="현재 활성화된 정책 수"
+          icon={Sparkles}
+          label="Enabled"
+          value={String(policies.filter((policy) => policy.enabled).length)}
+        />
       </div>
-    </Panel>
+
+      <SectionMessage error={error} message={message} />
+
+      <div className="grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
+        <SurfaceCard
+          description="권한 코드를 쉼표로 입력해 그룹 권한을 빠르게 정의합니다."
+          title="Create access group"
+        >
+          <form className="grid gap-3" onSubmit={(event) => void handleCreateGroup(event)}>
+            <input
+              className={fieldClassName}
+              onChange={(event) => setName(event.target.value)}
+              placeholder="Group name"
+              value={name}
+            />
+            <input
+              className={fieldClassName}
+              onChange={(event) => setDescription(event.target.value)}
+              placeholder="Description"
+              value={description}
+            />
+            <input
+              className={fieldClassName}
+              onChange={(event) => setPermissions(event.target.value)}
+              placeholder="permission.read, permission.write"
+              value={permissions}
+            />
+            <div className="flex justify-end">
+              <Button type="submit" variant="primary">Create group</Button>
+            </div>
+          </form>
+        </SurfaceCard>
+
+        <SurfaceCard
+          description="그룹에 부여된 권한과 현재 멤버 수를 확인합니다."
+          title="Access groups"
+        >
+          <TableShell>
+            <thead>
+              <tr>
+                <HeadCell>Name</HeadCell>
+                <HeadCell>Slug</HeadCell>
+                <HeadCell>Permissions</HeadCell>
+                <HeadCell>Members</HeadCell>
+              </tr>
+            </thead>
+            <tbody>
+              {groups.length === 0 ? (
+                <EmptyRow
+                  colSpan={4}
+                  description="새 권한 그룹을 만들어 시작하세요."
+                  title="등록된 권한 그룹이 없습니다."
+                />
+              ) : (
+                groups.map((group) => (
+                  <tr key={group.id}>
+                    <BodyCell>
+                      <div className="font-medium text-clickup-text">{group.name}</div>
+                      <div className="mt-1 text-xs text-gray-500">{group.description || '설명 없음'}</div>
+                    </BodyCell>
+                    <BodyCell>{group.slug}</BodyCell>
+                    <BodyCell>{group.permissions.join(', ') || 'None'}</BodyCell>
+                    <BodyCell>{group.member_count}</BodyCell>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </TableShell>
+        </SurfaceCard>
+      </div>
+
+      <SurfaceCard
+        actions={<Button onClick={() => { void handleSavePolicies(); }} variant="primary">Save policies</Button>}
+        description="각 워크스페이스와 도구 노출을 개별 정책으로 토글합니다."
+        title="Feature access policies"
+      >
+        <div className="grid gap-3">
+          {policies.map((policy) => (
+            <label
+              key={policy.id}
+              className="flex items-start gap-4 rounded-xl border border-clickup-border bg-clickup-sidebar px-4 py-4"
+            >
+              <input
+                checked={policy.enabled}
+                className="mt-1"
+                onChange={(event) => {
+                  setPolicies((current) =>
+                    current.map((item) =>
+                      item.id === policy.id ? { ...item, enabled: event.target.checked } : item,
+                    ),
+                  );
+                }}
+                type="checkbox"
+              />
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <strong className="text-sm text-clickup-text">{policy.name}</strong>
+                  <Badge tone={policy.enabled ? 'green' : 'default'}>
+                    {policy.enabled ? 'enabled' : 'disabled'}
+                  </Badge>
+                </div>
+                <div className="mt-1 text-sm text-gray-500">{policy.description}</div>
+                <div className="mt-3 flex flex-wrap gap-2 text-xs">
+                  <Badge>{policy.code}</Badge>
+                  {policy.required_permissions.map((permission) => (
+                    <Badge key={`${policy.id}-${permission}`}>{permission}</Badge>
+                  ))}
+                </div>
+              </div>
+            </label>
+          ))}
+        </div>
+      </SurfaceCard>
+    </div>
   );
 }
 
@@ -734,27 +1488,68 @@ function AuditSection({ token }: { token: string }) {
   }, [token]);
 
   return (
-    <Panel eyebrow="Audit" title="감사로그">
-      {error ? <InlineNotice className="mb-3" tone="danger">{error}</InlineNotice> : null}
-      <div className="grid gap-2">
-        {items.map((item) => (
-          <div
-            key={item.id}
-            className="rounded-[var(--ui-radius-md)] border border-[var(--ui-color-border)] bg-[var(--ui-color-surface-subtle)] p-3"
-          >
-            <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
-              <strong>{item.summary}</strong>
-              <span className="text-[var(--ui-color-ink-muted)]">
-                {new Date(item.created_at).toLocaleString()}
-              </span>
-            </div>
-            <div className="mt-1 text-xs text-[var(--ui-color-ink-muted)]">
-              {item.action} / {item.entity_kind} / {item.actor_name ?? 'system'}
-            </div>
-          </div>
-        ))}
+    <div className="space-y-6">
+      {error ? <InlineNotice tone="danger">{error}</InlineNotice> : null}
+
+      <div className="grid gap-4 md:grid-cols-3">
+        <StatCard
+          accentClass="bg-clickup-purple/10 text-clickup-purple"
+          helper="현재 조회된 이벤트 수"
+          icon={Activity}
+          label="Events"
+          value={String(items.length)}
+        />
+        <StatCard
+          accentClass="bg-blue-500/10 text-blue-600 dark:text-blue-400"
+          helper="사용자 또는 시스템 액터"
+          icon={Users}
+          label="Actors"
+          value={String(new Set(items.map((item) => item.actor_name ?? 'system')).size)}
+        />
+        <StatCard
+          accentClass="bg-green-500/10 text-green-600 dark:text-green-400"
+          helper="감사 추적용 최신 기록"
+          icon={Sparkles}
+          label="Latest"
+          value={items[0] ? new Date(items[0].created_at).toLocaleDateString() : '-'}
+        />
       </div>
-    </Panel>
+
+      <SurfaceCard
+        description="최신 순으로 정렬된 운영 로그입니다."
+        title="Recent activity"
+      >
+        <div className="space-y-3">
+          {items.length === 0 ? (
+            <div className="rounded-xl border border-dashed border-clickup-border bg-clickup-sidebar px-4 py-8 text-center text-sm text-gray-500">
+              표시할 감사 이벤트가 없습니다.
+            </div>
+          ) : (
+            items.map((item) => (
+              <div
+                key={item.id}
+                className="rounded-xl border border-clickup-border bg-clickup-sidebar px-5 py-4"
+              >
+                <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                  <div className="space-y-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <div className="font-medium text-clickup-text">{item.summary}</div>
+                      <Badge tone="purple">{item.action}</Badge>
+                    </div>
+                    <div className="text-sm text-gray-500">
+                      {item.entity_kind} / {item.entity_id ?? 'n/a'} / {item.actor_name ?? 'system'}
+                    </div>
+                  </div>
+                  <div className="text-sm text-gray-500">
+                    {new Date(item.created_at).toLocaleString()}
+                  </div>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      </SurfaceCard>
+    </div>
   );
 }
 
@@ -784,21 +1579,25 @@ export function AdminConsoleView({ section }: { section: AdminSection }) {
   }
 
   let content: React.ReactNode;
+  let actions: React.ReactNode;
+
   switch (section) {
-    case 'users':
-      content = <UsersSection token={token} />;
+    case 'general':
+      content = <GeneralSection token={token} />;
       break;
-    case 'groups':
-      content = <GroupsSection token={token} />;
-      break;
-    case 'workspaces':
-      content = <WorkspacesSection token={token} />;
+    case 'people':
+      content = <PeopleSection token={token} />;
+      actions = <Badge tone="purple">Admin only</Badge>;
       break;
     case 'teams':
       content = <TeamsSection token={token} />;
       break;
-    case 'feature-access':
-      content = <FeaturePoliciesSection token={token} />;
+    case 'workspaces':
+      content = <WorkspacesSection token={token} />;
+      break;
+    case 'security':
+      content = <SecuritySection token={token} />;
+      actions = <Badge tone="purple">Restricted</Badge>;
       break;
     case 'audit':
       content = <AuditSection token={token} />;
@@ -807,5 +1606,9 @@ export function AdminConsoleView({ section }: { section: AdminSection }) {
       content = null;
   }
 
-  return <AdminLayout section={section}>{content}</AdminLayout>;
+  return (
+    <SettingsShell actions={actions} section={section}>
+      {content}
+    </SettingsShell>
+  );
 }
