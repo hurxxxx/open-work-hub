@@ -4,6 +4,7 @@ import { Navigate, useLocation } from 'react-router-dom';
 
 import {
   changePassword as changePasswordRequest,
+  developmentAdminLogin as developmentAdminLoginRequest,
   getBootstrapStatus,
   getCurrentUser,
   login as loginRequest,
@@ -38,6 +39,7 @@ export interface AuthContextValue {
   requiresSetup: boolean;
   bootstrapError: string | null;
   login: (payload: LoginPayload) => Promise<void>;
+  loginAsDevelopmentAdmin: () => Promise<void>;
   setupFirstUser: (payload: SetupFirstUserPayload) => Promise<void>;
   logout: () => Promise<void>;
   refreshSession: () => Promise<void>;
@@ -208,6 +210,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setState(nextAuthenticatedState(session.user, session.token));
   }
 
+  async function loginAsDevelopmentAdmin() {
+    const requestId = ++requestIdRef.current;
+    const session = await developmentAdminLoginRequest();
+
+    if (!mountedRef.current || requestIdRef.current !== requestId) {
+      return;
+    }
+
+    persistAuthToken(session.token);
+    setState(nextAuthenticatedState(session.user, session.token));
+  }
+
   async function setupFirstUser(payload: SetupFirstUserPayload) {
     const requestId = ++requestIdRef.current;
     const session = await setupFirstUserRequest(payload);
@@ -307,6 +321,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       value={{
         ...state,
         login,
+        loginAsDevelopmentAdmin,
         setupFirstUser,
         logout,
         refreshSession,

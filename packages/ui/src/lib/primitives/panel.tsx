@@ -26,26 +26,26 @@ export function Panel({
   return (
     <section
       className={cn(
-        'rounded-[var(--ui-radius-md)] border border-[var(--ui-color-border)] bg-[var(--ui-color-surface)] p-3 max-[720px]:p-2.5',
+        'rounded-xl border border-clickup-border bg-clickup-card p-4 shadow-sm text-clickup-text',
         className,
       )}
       {...props}
     >
       {hasHeader ? (
-        <header className="mb-2 flex items-start justify-between gap-3 border-b border-[var(--ui-color-border)] pb-2 max-[720px]:flex-col">
-          <div className="grid gap-1">
+        <header className="mb-4 flex items-start justify-between gap-3 border-b border-clickup-border pb-3 max-[720px]:flex-col">
+          <div className="grid gap-1.5">
             {eyebrow ? (
-              <p className="m-0 text-[0.68rem] font-semibold uppercase tracking-[0.08em] text-[var(--ui-color-ink-subtle)]">
+              <p className="m-0 text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
                 {eyebrow}
               </p>
             ) : null}
             {title ? (
-              <h2 className="m-0 text-[0.96rem] font-semibold tracking-[-0.015em] text-[var(--ui-color-ink)] max-[720px]:text-[0.92rem]">
+              <h2 className="m-0 text-lg font-semibold tracking-tight text-clickup-text max-[720px]:text-base">
                 {title}
               </h2>
             ) : null}
             {description ? (
-              <p className="m-0 max-w-[72ch] text-[0.8rem] leading-5 text-[var(--ui-color-ink-muted)]">
+              <p className="m-0 max-w-[72ch] text-sm leading-relaxed text-gray-500 dark:text-gray-400">
                 {description}
               </p>
             ) : null}

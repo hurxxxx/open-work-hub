@@ -27,7 +27,7 @@
 | --- | --- |
 | `rag-evaluator` | `documents-rag` 품질/인용/ACL 리뷰 |
 | `plm-safety-reviewer` | `plm-query` SQL 안전성과 권한 리뷰 |
-| `ui-conformance-reviewer` | 검색 우선, 저카드, 고밀도 UI 리뷰 |
+| `ui-conformance-reviewer` | 대표 화면과 공통 컴포넌트 기준의 UI 일관성 리뷰 |
 | `doc-architect` | 문서 원본과 어댑터 정합성 리뷰 |
 
 ## Codex skill

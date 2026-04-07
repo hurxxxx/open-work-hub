@@ -99,6 +99,25 @@ def test_auth_login_success_and_invalid_password(client: TestClient) -> None:
     assert invalid_password_response.status_code == 401
 
 
+def test_dev_admin_login_shortcut(client: TestClient) -> None:
+    setup_response = client.post(
+        "/api/v1/auth/setup",
+        json={
+            "full_name": "AIDOO Admin",
+            "email": "admin@aidoo.local",
+            "password": "supersecret123",
+        },
+    )
+    assert setup_response.status_code == 201
+
+    dev_login_response = client.post("/api/v1/auth/dev-admin-login")
+    assert dev_login_response.status_code == 200
+    payload = dev_login_response.json()
+    assert payload["user"]["email"] == "admin@aidoo.local"
+    assert payload["user"]["is_admin"] is True
+    assert payload["token"]
+
+
 def test_auth_preferences_password_and_sessions(client: TestClient) -> None:
     token = _bootstrap_admin(client)
 

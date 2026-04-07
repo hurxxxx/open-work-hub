@@ -170,6 +170,15 @@ def _ensure_active_user(user: User) -> None:
         )
 
 
+def _ensure_development_environment() -> None:
+    settings = get_settings()
+    if settings.environment.lower() == "production":
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Not found.",
+        )
+
+
 @router.get("/bootstrap-status", response_model=BootstrapStatusResponse)
 def bootstrap_status(db: Session = Depends(get_db_session)) -> BootstrapStatusResponse:
     ensure_seed_data(db)
@@ -253,6 +262,40 @@ def login(
         entity_kind="session",
         entity_id=user.id,
         summary=f"User logged in: {user.email}",
+        payload={"group_slugs": resolve_group_slugs(load_user_graph(db, user.id) or user)},
+    )
+    db.commit()
+    return _issue_auth_response(db, user, request)
+
+
+@router.post("/dev-admin-login", response_model=AuthSessionResponse)
+def dev_admin_login(
+    request: Request,
+    db: Session = Depends(get_db_session),
+) -> AuthSessionResponse:
+    _ensure_development_environment()
+    ensure_seed_data(db)
+
+    user = db.scalar(
+        select(User)
+        .where(User.status == "active")
+        .where((User.is_admin.is_(True)) | (User.email == "admin@aidoo.local"))
+        .order_by(User.created_at.asc())
+    )
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No active administrator account is available.",
+        )
+
+    _ensure_active_user(user)
+    record_audit_log(
+        db,
+        actor_user_id=user.id,
+        action="auth.dev_admin_login",
+        entity_kind="session",
+        entity_id=user.id,
+        summary=f"Development admin quick login: {user.email}",
         payload={"group_slugs": resolve_group_slugs(load_user_graph(db, user.id) or user)},
     )
     db.commit()

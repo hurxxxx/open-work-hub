@@ -1,8 +1,6 @@
 import { Link } from 'react-router-dom';
-import { DropdownMenu } from '@aidoo/ui';
 
 import { APP_BAR_ITEMS } from '@/src/constants';
-import type { ThemePreference } from '@/src/domains/auth/auth-api';
 import type { AuthUser } from '@/src/domains/auth/auth-api';
 import { cn } from '@/src/lib/utils';
 
@@ -27,21 +25,11 @@ function getUserInitials(fullName: string): string {
 export function AppBar({
   activeAppId,
   currentUser,
-  currentThemePreference,
-  onLogout,
   onOpenAccount,
-  onOpenSecurity,
-  onOpenAdmin,
-  onThemePreferenceChange,
 }: {
   activeAppId: string;
   currentUser: AuthUser;
-  currentThemePreference: ThemePreference;
-  onLogout: () => Promise<void>;
   onOpenAccount: () => void;
-  onOpenSecurity: () => void;
-  onOpenAdmin?: () => void;
-  onThemePreferenceChange: (value: ThemePreference) => void;
 }) {
   const visibleItems = APP_BAR_ITEMS.filter((item) => {
     const featureCode = featureByAppId[item.id];
@@ -76,82 +64,15 @@ export function AppBar({
       ))}
 
       <div className="mt-auto">
-        <DropdownMenu
-          items={[
-            {
-              id: 'profile-summary',
-              label: (
-                <div className="grid gap-0.5 py-1">
-                  <strong className="text-[0.95rem] text-[var(--ui-color-ink)]">
-                    {currentUser.display_name}
-                  </strong>
-                  <span className="text-[0.78rem] text-[var(--ui-color-ink-muted)]">
-                    {currentUser.email}
-                  </span>
-                  <span className="text-[0.72rem] uppercase tracking-[0.08em] text-[var(--ui-color-ink-subtle)]">
-                    {currentUser.primary_org_unit?.name ?? '조직 미지정'}
-                  </span>
-                </div>
-              ),
-              disabled: true,
-            },
-            {
-              id: 'account',
-              label: '내 계정',
-              onSelect: onOpenAccount,
-              separatorBefore: true,
-            },
-            {
-              id: 'security',
-              label: '보안 설정',
-              onSelect: onOpenSecurity,
-            },
-            {
-              id: 'theme-system',
-              label: `${currentThemePreference === 'system' ? '✓ ' : ''}테마: 시스템`,
-              onSelect: () => onThemePreferenceChange('system'),
-              separatorBefore: true,
-            },
-            {
-              id: 'theme-light',
-              label: `${currentThemePreference === 'light' ? '✓ ' : ''}테마: 라이트`,
-              onSelect: () => onThemePreferenceChange('light'),
-            },
-            {
-              id: 'theme-dark',
-              label: `${currentThemePreference === 'dark' ? '✓ ' : ''}테마: 다크`,
-              onSelect: () => onThemePreferenceChange('dark'),
-            },
-            ...(onOpenAdmin
-              ? [
-                  {
-                    id: 'admin',
-                    label: '관리 콘솔',
-                    onSelect: onOpenAdmin,
-                    separatorBefore: true,
-                  },
-                ]
-              : []),
-            {
-              id: 'logout',
-              label: '로그아웃',
-              onSelect: () => {
-                void onLogout();
-              },
-              separatorBefore: true,
-              tone: 'danger',
-            },
-          ]}
-          trigger={(
-            <button
-              aria-label="사용자 메뉴"
-              className="w-10 h-10 bg-orange-500 rounded-full flex items-center justify-center text-white text-[0.95rem] font-semibold cursor-pointer border-2 border-white/60 shadow-lg shadow-orange-500/25"
-              type="button"
-            >
-              {getUserInitials(currentUser.display_name || currentUser.full_name)}
-            </button>
-          )}
-        />
+        <button
+          aria-label="마이페이지"
+          className="w-10 h-10 bg-gradient-to-br from-clickup-purple to-purple-500 rounded-full flex items-center justify-center text-white text-[13px] font-bold cursor-pointer shadow-md shadow-clickup-purple/20 ring-2 ring-transparent hover:ring-clickup-purple/40 transition-all outline-none"
+          onClick={onOpenAccount}
+          title={`${currentUser.display_name || currentUser.full_name} · 마이페이지`}
+          type="button"
+        >
+          {getUserInitials(currentUser.display_name || currentUser.full_name)}
+        </button>
       </div>
     </div>
   );

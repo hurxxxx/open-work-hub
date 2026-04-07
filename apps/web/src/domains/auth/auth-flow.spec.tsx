@@ -183,9 +183,10 @@ describe('auth flow', () => {
     expect(window.localStorage.getItem(AUTH_TOKEN_STORAGE_KEY)).toBe('login-token');
   });
 
-  it('fills local admin credentials from the quick action button', async () => {
-    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+  it('logs in through the development admin shortcut button', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
       const path = String(input);
+      const method = init?.method ?? 'GET';
 
       if (path === '/api/v1/auth/bootstrap-status') {
         return new Response(JSON.stringify({ requires_setup: false }), {
@@ -194,16 +195,37 @@ describe('auth flow', () => {
         });
       }
 
-      throw new Error(`Unhandled request: GET ${path}`);
+      if (path === '/api/v1/auth/dev-admin-login' && method === 'POST') {
+        return new Response(
+          JSON.stringify({
+            token: 'dev-admin-token',
+            user: buildUser({
+              email: 'admin@aidoo.local',
+              full_name: 'AIDOO Admin',
+              display_name: 'AIDOO Admin',
+              group_slugs: ['platform-admin'],
+              permissions: ['admin.access'],
+              is_admin: true,
+            }),
+          }),
+          {
+            headers: { 'Content-Type': 'application/json' },
+            status: 200,
+          },
+        );
+      }
+
+      throw new Error(`Unhandled request: ${method} ${path}`);
     });
 
     renderAuthFlow(['/login']);
 
     await screen.findByRole('heading', { name: '로그인' });
-    fireEvent.click(screen.getByRole('button', { name: '관리자 계정 자동 입력' }));
+    fireEvent.click(screen.getByRole('button', { name: '개발용 관리자 바로 로그인' }));
 
-    expect(screen.getByDisplayValue('admin@aidoo.local')).toBeTruthy();
-    expect(screen.getByDisplayValue('supersecret123')).toBeTruthy();
+    await screen.findByText('Protected Shell');
+    expect(screen.getByText('admin@aidoo.local')).toBeTruthy();
+    expect(window.localStorage.getItem(AUTH_TOKEN_STORAGE_KEY)).toBe('dev-admin-token');
   });
 
   it('restores an existing session from localStorage', async () => {

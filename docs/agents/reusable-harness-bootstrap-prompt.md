@@ -41,9 +41,7 @@ Important preferences:
 - Use scenario-first design.
 - Use path/domain-scoped context loading.
 - Split service prompts by stage instead of one giant prompt.
-- For authenticated product surfaces, prefer an enterprise portal app shell with a persistent left sidebar on desktop.
-- Do not default to hero-first, card-heavy, or marketing-style SPA layouts.
-- Avoid generic AI-generated visual tropes such as purple gradients, glassmorphism, neon glow, and bento-card dashboards.
+- For frontend work, inspect representative screens and shared components first, then keep new work visually consistent with them.
 - Add a shared UI package and require feature code to check shared components first before creating new UI.
 - Prefer provider-neutral contracts for runtime traces and evals.
 - Default eval runner should be promptfoo unless there is a strong reason not to.
@@ -130,10 +128,9 @@ Then do the following:
 - A repo-owned Codex skill
 
 8a. Add a dedicated frontend design direction that is loaded only for UI work:
-- Make it explicit that authenticated enterprise product screens should default to a left-sidebar app shell on desktop
-- Define what “AI-looking” anti-patterns to avoid
-- Provide one reusable design prompt for future projects and new screens
-- Use official enterprise design systems and current primary-source references before inventing a house style
+- Tell agents to inspect representative screens and shared components first
+- Tell agents to keep layout and visual language consistent with the current product
+- Keep the design instruction short and avoid inventing a separate house style
 
 8b. Add UI component governance:
 - Create a shared UI package as the source of truth for reusable components

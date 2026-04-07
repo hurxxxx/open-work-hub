@@ -26,7 +26,6 @@ import { PlannerView } from './components/views/PlannerView';
 import { PMSView } from './components/views/PMSView/PMSView';
 import { ToolView } from './components/views/ToolView';
 import { NAV_ITEMS } from './constants';
-import { AdminConsoleView } from './domains/admin/admin-console';
 import {
   AuthProvider,
   LoginRoute,
@@ -46,15 +45,6 @@ const FEATURE_BY_APP_ID: Partial<Record<'home' | 'ai' | 'pms' | 'docs' | 'planne
   pms: 'nav.pms',
   planner: 'nav.planner',
 };
-
-const ADMIN_SECTION_PERMISSIONS = {
-  users: 'user.read',
-  groups: 'group.read',
-  workspaces: 'workspace.read',
-  teams: 'team.read',
-  'feature-access': 'feature_policy.read',
-  audit: 'audit.read',
-} as const;
 
 function resolveThemePreference(themePreference: ThemePreference, systemDarkMode: boolean) {
   if (themePreference === 'system') {
@@ -77,21 +67,6 @@ function WorkspaceGate({
     return (
       <AccessDeniedView description="현재 계정에는 이 워크스페이스에 대한 노출 권한이 없습니다." />
     );
-  }
-
-  return <>{children}</>;
-}
-
-function AdminGate({
-  section,
-  children,
-}: {
-  section: keyof typeof ADMIN_SECTION_PERMISSIONS;
-  children: React.ReactNode;
-}) {
-  const auth = useAuth();
-  if (!auth.hasPermission('admin.access') && !auth.hasPermission(ADMIN_SECTION_PERMISSIONS[section])) {
-    return <AccessDeniedView description="현재 계정에는 이 관리자 섹션을 볼 권한이 없습니다." />;
   }
 
   return <>{children}</>;
@@ -137,15 +112,6 @@ const AppContent = () => {
 
   const themePreference = auth.user.theme_preference;
   const resolvedTheme = resolveThemePreference(themePreference, systemDarkMode);
-  const showAdminConsole = [
-    'admin.access',
-    'user.read',
-    'group.read',
-    'workspace.read',
-    'team.read',
-    'feature_policy.read',
-    'audit.read',
-  ].some((permission) => auth.hasPermission(permission));
 
   useEffect(() => {
     const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
@@ -212,15 +178,8 @@ const AppContent = () => {
     <div className="flex h-screen bg-clickup-sidebar text-clickup-text overflow-hidden transition-colors">
       <AppBar
         activeAppId={activeAppId}
-        currentThemePreference={themePreference}
         currentUser={auth.user}
-        onLogout={auth.logout}
         onOpenAccount={() => navigate('/settings/account')}
-        onOpenSecurity={() => navigate('/settings/security')}
-        onOpenAdmin={showAdminConsole ? () => navigate('/admin/users') : undefined}
-        onThemePreferenceChange={(value) => {
-          void auth.updatePreferences({ theme_preference: value });
-        }}
       />
 
       <div className="flex-1 flex overflow-hidden">
@@ -276,54 +235,7 @@ const AppContent = () => {
             <Route path="/tool/:toolId/:docId" element={<ToolViewWrapper />} />
             <Route path="/settings/account" element={<AccountSettingsView />} />
             <Route path="/settings/security" element={<SecuritySettingsView />} />
-            <Route
-              path="/admin/users"
-              element={(
-                <AdminGate section="users">
-                  <AdminConsoleView section="users" />
-                </AdminGate>
-              )}
-            />
-            <Route
-              path="/admin/groups"
-              element={(
-                <AdminGate section="groups">
-                  <AdminConsoleView section="groups" />
-                </AdminGate>
-              )}
-            />
-            <Route
-              path="/admin/workspaces"
-              element={(
-                <AdminGate section="workspaces">
-                  <AdminConsoleView section="workspaces" />
-                </AdminGate>
-              )}
-            />
-            <Route
-              path="/admin/teams"
-              element={(
-                <AdminGate section="teams">
-                  <AdminConsoleView section="teams" />
-                </AdminGate>
-              )}
-            />
-            <Route
-              path="/admin/feature-access"
-              element={(
-                <AdminGate section="feature-access">
-                  <AdminConsoleView section="feature-access" />
-                </AdminGate>
-              )}
-            />
-            <Route
-              path="/admin/audit"
-              element={(
-                <AdminGate section="audit">
-                  <AdminConsoleView section="audit" />
-                </AdminGate>
-              )}
-            />
+            <Route path="/admin/*" element={<Navigate replace to="/settings/account" />} />
           </Routes>
         </main>
       </div>

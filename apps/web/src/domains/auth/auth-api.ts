@@ -133,6 +133,12 @@ export function login(payload: LoginPayload): Promise<AuthSessionResponse> {
   });
 }
 
+export function developmentAdminLogin(): Promise<AuthSessionResponse> {
+  return request<AuthSessionResponse>('/api/v1/auth/dev-admin-login', {
+    method: 'POST',
+  });
+}
+
 export function setupFirstUser(
   payload: SetupFirstUserPayload,
 ): Promise<AuthSessionResponse> {
