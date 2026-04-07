@@ -166,7 +166,7 @@ function SurfaceCard({
   className?: string;
 }) {
   return (
-    <section className={`space-y-4 border-t border-clickup-border pt-5 ${className}`.trim()}>
+    <section className={`space-y-4 ${className}`.trim()}>
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div>
           <h2 className="text-lg font-semibold text-clickup-text">{title}</h2>
@@ -179,34 +179,7 @@ function SurfaceCard({
   );
 }
 
-function StatCard({
-  label,
-  value,
-  helper,
-  icon: Icon,
-  accentClass,
-}: {
-  label: string;
-  value: string;
-  helper: string;
-  icon: React.ComponentType<{ size?: number; className?: string }>;
-  accentClass: string;
-}) {
-  return (
-    <div className="border-b border-clickup-border py-4 last:border-b-0">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <div className="text-xs font-semibold uppercase tracking-[0.18em] text-gray-500">{label}</div>
-          <div className="mt-2 text-3xl font-bold text-clickup-text">{value}</div>
-          <div className="mt-1 text-sm text-gray-500">{helper}</div>
-        </div>
-        <div className={`flex h-10 w-10 items-center justify-center rounded-full ${accentClass}`}>
-          <Icon size={20} />
-        </div>
-      </div>
-    </div>
-  );
-}
+
 
 function ToolbarField({ children, className = '' }: { children: React.ReactNode; className?: string }) {
   return <div className={`min-w-0 ${className}`.trim()}>{children}</div>;
@@ -214,7 +187,7 @@ function ToolbarField({ children, className = '' }: { children: React.ReactNode;
 
 function TableShell({ children }: { children: React.ReactNode }) {
   return (
-    <div className="overflow-x-auto rounded-xl border border-clickup-border bg-clickup-card">
+    <div className="overflow-x-auto w-full">
       <table className="min-w-full border-collapse text-sm">{children}</table>
     </div>
   );
@@ -356,36 +329,7 @@ function GeneralSection({ token }: { token: string }) {
     <div className="space-y-6">
       {error ? <InlineNotice tone="danger">{error}</InlineNotice> : null}
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <StatCard
-          accentClass="bg-clickup-purple/10 text-clickup-purple"
-          helper={`${summary.adminCount}명의 관리자 계정`}
-          icon={Users}
-          label="People"
-          value={String(summary.userCount)}
-        />
-        <StatCard
-          accentClass="bg-blue-500/10 text-blue-600 dark:text-blue-400"
-          helper="권한 그룹과 바인딩 운영"
-          icon={Shield}
-          label="Security"
-          value={String(summary.groupCount)}
-        />
-        <StatCard
-          accentClass="bg-green-500/10 text-green-600 dark:text-green-400"
-          helper={`${summary.teamCount}개 팀이 연결됨`}
-          icon={Building2}
-          label="Workspaces"
-          value={String(summary.workspaceCount)}
-        />
-        <StatCard
-          accentClass="bg-amber-500/10 text-amber-600 dark:text-amber-300"
-          helper={`${summary.enabledPolicyCount}개 정책 활성`}
-          icon={Activity}
-          label="Audit"
-          value={String(summary.auditCount)}
-        />
-      </div>
+
 
       <div className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
         <SurfaceCard
@@ -559,31 +503,28 @@ function PeopleSection({ token }: { token: string }) {
     <div className="space-y-6">
       <SectionMessage error={error} message={message} />
 
-      <div className="flex justify-end">
-        <button
-          className="rounded-lg border border-clickup-border bg-clickup-card px-3 py-2 text-sm font-medium text-clickup-text transition-colors hover:bg-clickup-hover"
-          onClick={handleExport}
-          type="button"
-        >
-          Export
-        </button>
-      </div>
-
-      <div className="rounded-xl border border-clickup-border bg-clickup-card">
-        <div className="flex flex-wrap items-center gap-3 border-b border-clickup-border px-4 py-3">
-          <ToolbarField className="min-w-[280px] flex-1">
-            <label className="relative block">
-              <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" size={16} />
-              <input
-                className={`${fieldClassName} pl-9`}
-                onChange={(event) => setSearch(event.target.value)}
-                placeholder="Search or invite by email"
-                value={search}
-              />
-            </label>
-          </ToolbarField>
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-clickup-border pb-4">
+        <ToolbarField className="min-w-[280px] max-w-md flex-1">
+          <label className="relative block">
+            <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" size={16} />
+            <input
+              className={`w-full rounded-md border border-transparent bg-transparent pl-9 py-1.5 text-sm text-clickup-text outline-none transition-colors hover:border-clickup-border focus:border-clickup-purple focus:bg-clickup-bg`}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="Search or invite by email"
+              value={search}
+            />
+          </label>
+        </ToolbarField>
+        <div className="flex items-center gap-2">
           <button
-            className="inline-flex items-center gap-2 rounded-lg border border-[#1f2022] bg-[#1f2022] px-3 py-2 text-sm font-medium text-white transition-opacity hover:opacity-90 dark:border-white dark:bg-white dark:text-clickup-bg"
+            className="rounded-md border border-transparent px-3 py-1.5 text-sm font-medium text-gray-500 transition-colors hover:border-clickup-border hover:bg-clickup-hover hover:text-clickup-text"
+            onClick={handleExport}
+            type="button"
+          >
+            Export
+          </button>
+          <button
+            className="inline-flex items-center gap-1.5 rounded-md bg-clickup-text px-3 py-1.5 text-sm font-medium text-clickup-bg transition-opacity hover:opacity-90 dark:bg-white dark:text-black"
             onClick={() => {
               setInviteOpen((current) => !current);
               requestAnimationFrame(() => {
@@ -596,15 +537,19 @@ function PeopleSection({ token }: { token: string }) {
             <span>Invite people</span>
           </button>
         </div>
-        <div className="border-b border-clickup-border px-4 py-2">
-          <button
-            className="inline-flex items-center gap-2 rounded-full border border-clickup-border bg-clickup-sidebar px-3 py-1.5 text-xs font-medium text-clickup-text"
-            type="button"
-          >
-            <span>{`All Users (${users.length})`}</span>
-            <span className="text-[10px] text-gray-500">▾</span>
-          </button>
-        </div>
+      </div>
+
+      <div className="flex items-center gap-2 py-2">
+        <button
+          className="inline-flex items-center gap-1.5 rounded p-1 text-sm font-medium text-clickup-text hover:bg-clickup-hover"
+          type="button"
+        >
+          <span>All Users ({users.length})</span>
+          <span className="text-[10px] text-gray-500">▾</span>
+        </button>
+      </div>
+
+      <div className="w-full">
 
         <table className="min-w-full border-collapse text-sm">
           <thead>
@@ -829,18 +774,24 @@ function TeamsSection({ token }: { token: string }) {
     <div className="space-y-6">
       <SectionMessage error={error} message={message} />
 
-      <div className="flex justify-end">
-        <button
-          className="inline-flex items-center gap-2 rounded-lg border border-[#1f2022] bg-[#1f2022] px-3 py-2 text-sm font-medium text-white transition-opacity hover:opacity-90 dark:border-white dark:bg-white dark:text-clickup-bg"
-          onClick={() => setCreateOpen((current) => !current)}
-          type="button"
-        >
-          <span>+</span>
-          <span>{createOpen ? 'Close' : 'Create Team'}</span>
-        </button>
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-clickup-border pb-4">
+        <div>
+          <div className="text-sm font-semibold text-clickup-text">Create team</div>
+          <div className="text-[13px] text-gray-500">팀은 항상 워크스페이스에 속합니다. View-only users added to Teams will be converted to paid users.</div>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            className="inline-flex items-center gap-1.5 rounded-md bg-clickup-text px-3 py-1.5 text-sm font-medium text-clickup-bg transition-opacity hover:opacity-90 dark:bg-white dark:text-black"
+            onClick={() => setCreateOpen((current) => !current)}
+            type="button"
+          >
+            <span>+</span>
+            <span>{createOpen ? 'Close' : 'Create Team'}</span>
+          </button>
+        </div>
       </div>
 
-      <div className="rounded-xl border border-clickup-border bg-clickup-card">
+      <div className="w-full">
         <table className="min-w-full border-collapse text-sm">
           <thead>
             <tr>
@@ -912,11 +863,7 @@ function TeamsSection({ token }: { token: string }) {
       </div>
 
       {createOpen ? (
-        <div className="rounded-xl border border-clickup-border bg-clickup-card px-5 py-5">
-          <div className="mb-4">
-            <div className="text-sm font-semibold text-clickup-text">Create team</div>
-            <div className="mt-1 text-sm text-gray-500">팀은 항상 하나의 워크스페이스에 속합니다.</div>
-          </div>
+        <div className="border-t border-b border-clickup-border px-5 py-5 mb-6">
           <form className="grid gap-3 lg:grid-cols-[220px_minmax(0,1fr)_minmax(0,1fr)_auto]" onSubmit={(event) => void handleCreateTeam(event)}>
             <Select
               onValueChange={setSelectedWorkspaceId}
@@ -1109,29 +1056,7 @@ function WorkspacesSection({ token }: { token: string }) {
 
   return (
     <div className="space-y-6">
-      <div className="grid gap-4 md:grid-cols-3">
-        <StatCard
-          accentClass="bg-clickup-purple/10 text-clickup-purple"
-          helper="현재 등록된 작업 영역"
-          icon={Building2}
-          label="Workspaces"
-          value={String(workspaces.length)}
-        />
-        <StatCard
-          accentClass="bg-blue-500/10 text-blue-600 dark:text-blue-400"
-          helper="선택한 작업 영역의 바인딩 수"
-          icon={Shield}
-          label="Bindings"
-          value={String(bindings.length)}
-        />
-        <StatCard
-          accentClass="bg-green-500/10 text-green-600 dark:text-green-400"
-          helper="사용자와 그룹 모두 바인딩 가능"
-          icon={Users}
-          label="Subjects"
-          value={String(users.length + groups.length)}
-        />
-      </div>
+
 
       <SectionMessage error={error} message={message} />
 
@@ -1335,29 +1260,7 @@ function SecuritySection({ token }: { token: string }) {
 
   return (
     <div className="space-y-6">
-      <div className="grid gap-4 md:grid-cols-3">
-        <StatCard
-          accentClass="bg-clickup-purple/10 text-clickup-purple"
-          helper="전역 접근 그룹"
-          icon={Shield}
-          label="Groups"
-          value={String(groups.length)}
-        />
-        <StatCard
-          accentClass="bg-blue-500/10 text-blue-600 dark:text-blue-400"
-          helper="화면 및 기능 노출 제어"
-          icon={LockKeyhole}
-          label="Policies"
-          value={String(policies.length)}
-        />
-        <StatCard
-          accentClass="bg-green-500/10 text-green-600 dark:text-green-400"
-          helper="현재 활성화된 정책 수"
-          icon={Sparkles}
-          label="Enabled"
-          value={String(policies.filter((policy) => policy.enabled).length)}
-        />
-      </div>
+
 
       <SectionMessage error={error} message={message} />
 
@@ -1491,29 +1394,7 @@ function AuditSection({ token }: { token: string }) {
     <div className="space-y-6">
       {error ? <InlineNotice tone="danger">{error}</InlineNotice> : null}
 
-      <div className="grid gap-4 md:grid-cols-3">
-        <StatCard
-          accentClass="bg-clickup-purple/10 text-clickup-purple"
-          helper="현재 조회된 이벤트 수"
-          icon={Activity}
-          label="Events"
-          value={String(items.length)}
-        />
-        <StatCard
-          accentClass="bg-blue-500/10 text-blue-600 dark:text-blue-400"
-          helper="사용자 또는 시스템 액터"
-          icon={Users}
-          label="Actors"
-          value={String(new Set(items.map((item) => item.actor_name ?? 'system')).size)}
-        />
-        <StatCard
-          accentClass="bg-green-500/10 text-green-600 dark:text-green-400"
-          helper="감사 추적용 최신 기록"
-          icon={Sparkles}
-          label="Latest"
-          value={items[0] ? new Date(items[0].created_at).toLocaleDateString() : '-'}
-        />
-      </div>
+
 
       <SurfaceCard
         description="최신 순으로 정렬된 운영 로그입니다."

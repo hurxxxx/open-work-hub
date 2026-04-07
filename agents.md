@@ -8,6 +8,11 @@
 - 프로토타입 요약은 `legacy_ai_portal_prototype/CLAUDE.md`를 먼저 확인합니다.
 - 사용자의 별도 지시가 없으면 `git commit` 과 `git push` 는 수행하지 않습니다.
 
+## Design Philosophy
+
+- 어드민 콘솔 및 설정 페이지의 UI는 `docs/product/ui-design-principles.md`를 엄격히 따릅니다.
+- 과도한 대시보드 통계 카드, BoxShadow 카드, 두꺼운 외곽선은 배제하고 ClickUp, Jira 등 글로벌 SaaS 표준(평면적, 여백 극대화, Dense Typography)을 우선합니다.
+
 ## Shared Standards
 
 - 이 저장소의 공통 규약 원본은 `docs/agents/agent-operating-standard.md` 입니다.
