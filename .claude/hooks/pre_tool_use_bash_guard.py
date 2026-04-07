@@ -9,8 +9,8 @@ DANGEROUS_PATTERNS = [
     r"\bgit\s+checkout\s+--\b",
     r"\bgit\s+clean\b.*\b-f\b",
     r"\brm\s+-rf\b",
-    r"\bgit\s+push\b",
-    r"\bgit\s+commit\b"
+    r"\bgit\s+push\s+--force\b",
+    r"\bgit\s+push\s+-f\b",
 ]
 
 

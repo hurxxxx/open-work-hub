@@ -26,26 +26,26 @@ export function Panel({
   return (
     <section
       className={cn(
-        'rounded-xl border border-clickup-border bg-clickup-card p-4 shadow-sm text-clickup-text',
+        'rounded-xl border border-[var(--ui-color-border)] bg-[var(--ui-color-surface-raised)] p-4 shadow-[var(--ui-shadow-sm)] text-[var(--ui-color-ink)]',
         className,
       )}
       {...props}
     >
       {hasHeader ? (
-        <header className="mb-4 flex items-start justify-between gap-3 border-b border-clickup-border pb-3 max-[720px]:flex-col">
+        <header className="mb-4 flex items-start justify-between gap-3 border-b border-[var(--ui-color-border)] pb-3 max-[720px]:flex-col">
           <div className="grid gap-1.5">
             {eyebrow ? (
-              <p className="m-0 text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+              <p className="m-0 text-xs font-semibold uppercase tracking-wider text-[var(--ui-color-ink-subtle)]">
                 {eyebrow}
               </p>
             ) : null}
             {title ? (
-              <h2 className="m-0 text-lg font-semibold tracking-tight text-clickup-text max-[720px]:text-base">
+              <h2 className="m-0 text-lg font-semibold tracking-tight text-[var(--ui-color-ink)] max-[720px]:text-base">
                 {title}
               </h2>
             ) : null}
             {description ? (
-              <p className="m-0 max-w-[72ch] text-sm leading-relaxed text-gray-500 dark:text-gray-400">
+              <p className="m-0 max-w-[72ch] text-sm leading-relaxed text-[var(--ui-color-ink-muted)]">
                 {description}
               </p>
             ) : null}

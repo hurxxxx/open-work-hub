@@ -1,18 +1,17 @@
 import { useEffect, useState } from 'react';
-import { motion } from 'motion/react';
 import {
   Bell,
-  Camera,
-  Calendar,
-  CheckCircle,
   LogOut,
-  Settings,
+  Monitor,
+  Moon,
+  Palette,
   Shield,
+  Sun,
   User,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
-import { Button, InlineNotice, Panel, Select } from '@aidoo/ui';
+import { Button, InlineNotice } from '@aidoo/ui';
 
 import { cn } from '@/src/lib/utils';
 
@@ -27,16 +26,18 @@ function getErrorMessage(error: unknown, fallback: string): string {
   return fallback;
 }
 
-const themeOptions = [
-  { value: 'system', label: '시스템 기본값' },
-  { value: 'light', label: '라이트' },
-  { value: 'dark', label: '다크' },
+const themeOptions: { value: ThemePreference; label: string; icon: typeof Sun }[] = [
+  { value: 'system', label: '시스템', icon: Monitor },
+  { value: 'light', label: '라이트', icon: Sun },
+  { value: 'dark', label: '다크', icon: Moon },
 ];
 
 const fieldClassName =
-  'w-full rounded-lg border border-clickup-border bg-clickup-bg px-4 py-2 text-sm text-clickup-text focus:border-clickup-purple focus:outline-none';
+  'w-full rounded-md border border-clickup-border bg-clickup-bg px-3 py-2 text-sm text-clickup-text focus:border-clickup-purple focus:outline-none transition-colors';
 
-type ProfileTab = 'overview' | 'settings' | 'security' | 'notifications';
+type SettingsSection = 'profile' | 'appearance' | 'security' | 'notifications';
+
+/* ── Access Denied ── */
 
 export function AccessDeniedView({
   title = '접근 권한 없음',
@@ -47,29 +48,18 @@ export function AccessDeniedView({
 }) {
   return (
     <div className="p-6">
-      <Panel
-        eyebrow="Access"
-        title={title}
-        description={description}
-      >
+      <div className="rounded-xl border border-clickup-border bg-clickup-sidebar p-6">
+        <h2 className="text-lg font-semibold text-clickup-text mb-2">{title}</h2>
+        <p className="text-sm text-gray-500 mb-4">{description}</p>
         <InlineNotice tone="warning">
           관리자에게 필요한 권한과 워크스페이스 바인딩을 요청하세요.
         </InlineNotice>
-      </Panel>
+      </div>
     </div>
   );
 }
 
-function getUserInitials(fullName: string) {
-  const initials = fullName
-    .trim()
-    .split(/\s+/)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase() ?? '')
-    .join('');
-
-  return initials || 'ID';
-}
+/* ── Session Card ── */
 
 function SessionCard({
   session,
@@ -79,46 +69,79 @@ function SessionCard({
   onRevoke: (sessionId: string) => Promise<void>;
 }) {
   return (
-    <div className="rounded-xl border border-clickup-border bg-clickup-bg p-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div>
-          <div className="text-sm font-medium text-clickup-text">
-            {session.is_current ? '현재 세션' : '저장된 세션'}
-          </div>
-          <div className="mt-1 text-xs text-gray-500">
-            생성: {new Date(session.created_at).toLocaleString()}
-          </div>
-        </div>
-        {!session.is_current && !session.revoked_at ? (
-          <Button
-            onClick={() => {
-              void onRevoke(session.id);
-            }}
-            size="dense"
-            variant="secondary"
-          >
-            세션 종료
-          </Button>
-        ) : null}
-      </div>
-      <div className="mt-3 grid gap-1 text-xs text-gray-500">
-        <span>만료: {new Date(session.expires_at).toLocaleString()}</span>
-        <span>
-          최근 사용:{' '}
-          {session.last_seen_at ? new Date(session.last_seen_at).toLocaleString() : '없음'}
+    <div className="flex items-start justify-between gap-4 rounded-md border border-clickup-border bg-clickup-bg px-4 py-3">
+      <div className="grid gap-1 text-sm">
+        <span className="font-medium text-clickup-text">
+          {session.is_current ? '현재 세션' : '저장된 세션'}
         </span>
-        <span>에이전트: {session.user_agent ?? '알 수 없음'}</span>
-        <span>IP: {session.ip_address ?? '알 수 없음'}</span>
+        <span className="text-xs text-gray-500">
+          생성: {new Date(session.created_at).toLocaleString()}
+        </span>
+        <span className="text-xs text-gray-500">
+          만료: {new Date(session.expires_at).toLocaleString()}
+        </span>
+        <span className="text-xs text-gray-500">
+          최근 사용: {session.last_seen_at ? new Date(session.last_seen_at).toLocaleString() : '없음'}
+        </span>
+        <span className="text-xs text-gray-500 truncate max-w-[360px]">
+          {session.user_agent ?? '알 수 없음'}
+        </span>
+        <span className="text-xs text-gray-500">IP: {session.ip_address ?? '알 수 없음'}</span>
       </div>
+      {!session.is_current && !session.revoked_at ? (
+        <Button
+          onClick={() => { void onRevoke(session.id); }}
+          size="dense"
+          variant="secondary"
+        >
+          종료
+        </Button>
+      ) : null}
     </div>
   );
 }
 
-function ProfilePage({ initialTab }: { initialTab: ProfileTab }) {
+/* ── Inline Field Row ── */
+
+function FieldRow({
+  label,
+  children,
+  description,
+}: {
+  label: string;
+  children: React.ReactNode;
+  description?: string;
+}) {
+  return (
+    <div className="grid grid-cols-[180px_1fr] items-start gap-6 py-4 border-b border-clickup-border last:border-b-0 max-[720px]:grid-cols-1 max-[720px]:gap-2">
+      <div>
+        <label className="text-sm font-medium text-clickup-text">{label}</label>
+        {description ? <p className="text-xs text-gray-500 mt-0.5">{description}</p> : null}
+      </div>
+      <div className="max-w-md">{children}</div>
+    </div>
+  );
+}
+
+/* ── Section Header ── */
+
+function SectionHeader({ title, description }: { title: string; description?: string }) {
+  return (
+    <div className="mb-6">
+      <h2 className="text-lg font-semibold text-clickup-text">{title}</h2>
+      {description ? <p className="text-sm text-gray-500 mt-1">{description}</p> : null}
+    </div>
+  );
+}
+
+/* ── Main ── */
+
+function ProfilePage({ initialTab }: { initialTab: SettingsSection }) {
   const auth = useAuth();
   const navigate = useNavigate();
   const user = auth.user;
-  const [activeTab, setActiveTab] = useState<ProfileTab>(initialTab);
+
+  const [activeSection, setActiveSection] = useState<SettingsSection>(initialTab);
   const [displayName, setDisplayName] = useState(user?.display_name ?? '');
   const [fullName, setFullName] = useState(user?.full_name ?? '');
   const [jobTitle, setJobTitle] = useState('');
@@ -133,62 +156,42 @@ function ProfilePage({ initialTab }: { initialTab: ProfileTab }) {
   const [sessions, setSessions] = useState<AuthSessionItem[]>([]);
   const [loadingSessions, setLoadingSessions] = useState(false);
 
-  useEffect(() => {
-    setActiveTab(initialTab);
-  }, [initialTab]);
+  useEffect(() => { setActiveSection(initialTab); }, [initialTab]);
 
   useEffect(() => {
-    if (!user) {
-      return;
-    }
-
+    if (!user) return;
     setDisplayName(user.display_name);
     setFullName(user.full_name);
     setThemePreference(user.theme_preference);
   }, [user]);
 
   useEffect(() => {
-    if (activeTab !== 'security') {
-      return;
-    }
-
+    if (activeSection !== 'security') return;
     let cancelled = false;
 
     async function loadSessions() {
       setLoadingSessions(true);
       try {
         const items = await auth.listSessions();
-        if (!cancelled) {
-          setSessions(items);
-        }
+        if (!cancelled) setSessions(items);
       } catch (caughtError) {
-        if (!cancelled) {
-          setError(getErrorMessage(caughtError, '세션 목록을 불러오지 못했습니다.'));
-        }
+        if (!cancelled) setError(getErrorMessage(caughtError, '세션 목록을 불러오지 못했습니다.'));
       } finally {
-        if (!cancelled) {
-          setLoadingSessions(false);
-        }
+        if (!cancelled) setLoadingSessions(false);
       }
     }
 
     void loadSessions();
+    return () => { cancelled = true; };
+  }, [activeSection]);
 
-    return () => {
-      cancelled = true;
-    };
-  }, [activeTab]);
-
-  if (!user) {
-    return null;
-  }
+  if (!user) return null;
 
   async function handleProfileSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setSubmitting(true);
     setMessage(null);
     setError(null);
-
     try {
       await auth.updatePreferences({
         display_name: displayName.trim(),
@@ -196,9 +199,9 @@ function ProfilePage({ initialTab }: { initialTab: ProfileTab }) {
         job_title: jobTitle.trim(),
         theme_preference: themePreference,
       });
-      setMessage('프로필 설정을 저장했습니다.');
+      setMessage('변경사항을 저장했습니다.');
     } catch (caughtError) {
-      setError(getErrorMessage(caughtError, '프로필 설정을 저장하지 못했습니다.'));
+      setError(getErrorMessage(caughtError, '저장하지 못했습니다.'));
     } finally {
       setSubmitting(false);
     }
@@ -208,12 +211,8 @@ function ProfilePage({ initialTab }: { initialTab: ProfileTab }) {
     event.preventDefault();
     setMessage(null);
     setError(null);
-
     try {
-      await auth.changePassword({
-        current_password: currentPassword,
-        new_password: newPassword,
-      });
+      await auth.changePassword({ current_password: currentPassword, new_password: newPassword });
       setCurrentPassword('');
       setNewPassword('');
       setMessage('비밀번호를 변경했습니다.');
@@ -225,7 +224,6 @@ function ProfilePage({ initialTab }: { initialTab: ProfileTab }) {
   async function handleRevoke(sessionId: string) {
     setMessage(null);
     setError(null);
-
     try {
       await auth.revokeSession(sessionId);
       const items = await auth.listSessions();
@@ -236,449 +234,296 @@ function ProfilePage({ initialTab }: { initialTab: ProfileTab }) {
     }
   }
 
-  function handleTabChange(tab: ProfileTab) {
-    setActiveTab(tab);
-    if (tab === 'security') {
+  function handleSectionChange(section: SettingsSection) {
+    setActiveSection(section);
+    setMessage(null);
+    setError(null);
+    if (section === 'security') {
       navigate('/settings/security');
-      return;
+    } else {
+      navigate('/settings/account');
     }
-
-    navigate('/settings/account');
   }
 
-  const tabs = [
-    { id: 'overview', label: 'Overview', icon: User },
-    { id: 'settings', label: 'Settings', icon: Settings },
-    { id: 'security', label: 'Security', icon: Shield },
-    { id: 'notifications', label: 'Notifications', icon: Bell },
-  ] as const;
+  function getUserInitials(name: string) {
+    return name.trim().split(/\s+/).slice(0, 2).map((p) => p[0]?.toUpperCase() ?? '').join('') || 'ID';
+  }
 
-  const stats = [
-    {
-      label: 'Workspaces',
-      value: String(user.workspace_roles.length),
-      icon: CheckCircle,
-      color: 'text-green-500',
-      bg: 'bg-green-500/10',
-    },
-    {
-      label: 'Permissions',
-      value: String(user.permissions.length),
-      icon: Shield,
-      color: 'text-blue-500',
-      bg: 'bg-blue-500/10',
-    },
-    {
-      label: 'Groups',
-      value: String(user.group_slugs.length),
-      icon: Calendar,
-      color: 'text-purple-500',
-      bg: 'bg-purple-500/10',
-    },
-  ];
-
-  const recentActivities = [
-    {
-      id: 1,
-      action: '기본 조직',
-      target: user.primary_org_unit?.name ?? '미지정',
-      time: 'Organization',
-    },
-    {
-      id: 2,
-      action: '테마 설정',
-      target:
-        themeOptions.find((option) => option.value === user.theme_preference)?.label ??
-        '시스템 기본값',
-      time: 'Preference',
-    },
-    {
-      id: 3,
-      action: '워크스페이스',
-      target: user.workspace_roles.map((workspace) => workspace.name).join(', ') || '없음',
-      time: 'Access',
-    },
-    {
-      id: 4,
-      action: '그룹',
-      target: user.group_slugs.join(', ') || '없음',
-      time: 'Membership',
-    },
+  const navItems = [
+    { id: 'profile' as const, label: 'Profile', icon: User },
+    { id: 'appearance' as const, label: 'Appearance', icon: Palette },
+    { id: 'security' as const, label: 'Security', icon: Shield },
+    { id: 'notifications' as const, label: 'Notifications', icon: Bell },
   ];
 
   return (
-    <div className="custom-scrollbar h-full overflow-y-auto p-8">
-      <div className="mx-auto max-w-6xl">
-        <div className="mb-8 flex items-center justify-between">
-          <h1 className="text-2xl font-bold text-clickup-text">My Profile</h1>
+    <div className="h-full overflow-y-auto custom-scrollbar">
+      <div className="mx-auto max-w-5xl px-8 py-8">
+        {/* Header */}
+        <div className="flex items-center justify-between mb-8">
+          <h1 className="text-xl font-semibold text-clickup-text">My Settings</h1>
           <button
-            className="flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium text-red-500 transition-colors hover:bg-red-500/10"
-            onClick={() => {
-              void auth.logout();
-            }}
+            className="flex items-center gap-2 rounded-md px-3 py-1.5 text-sm text-red-500 transition-colors hover:bg-red-500/10"
+            onClick={() => { void auth.logout(); }}
             type="button"
           >
-            <LogOut size={16} />
+            <LogOut size={15} />
             Sign Out
           </button>
         </div>
 
-        {message ? (
-          <div className="mb-4">
-            <InlineNotice tone="success">{message}</InlineNotice>
-          </div>
-        ) : null}
-        {error ? (
-          <div className="mb-4">
-            <InlineNotice tone="danger">{error}</InlineNotice>
-          </div>
-        ) : null}
+        {/* Feedback */}
+        {message ? <div className="mb-4"><InlineNotice tone="success">{message}</InlineNotice></div> : null}
+        {error ? <div className="mb-4"><InlineNotice tone="danger">{error}</InlineNotice></div> : null}
 
-        <div className="grid grid-cols-1 gap-8 lg:grid-cols-4">
-          <div className="space-y-6 lg:col-span-1">
-            <div className="relative overflow-hidden rounded-xl border border-clickup-border bg-clickup-sidebar p-6 text-center">
-              <div className="absolute top-0 left-0 right-0 h-24 bg-gradient-to-r from-clickup-purple/20 to-blue-500/20" />
+        <div className="grid grid-cols-[200px_1fr] gap-10 max-[820px]:grid-cols-1 max-[820px]:gap-6">
+          {/* Left Nav */}
+          <nav className="space-y-1">
+            {navItems.map((item) => (
+              <button
+                key={item.id}
+                onClick={() => handleSectionChange(item.id)}
+                type="button"
+                className={cn(
+                  'w-full flex items-center gap-2.5 rounded-md px-3 py-2 text-sm transition-colors text-left',
+                  activeSection === item.id
+                    ? 'bg-clickup-hover text-clickup-text font-medium'
+                    : 'text-gray-500 hover:text-clickup-text hover:bg-clickup-hover/50',
+                )}
+              >
+                <item.icon size={15} />
+                {item.label}
+              </button>
+            ))}
+          </nav>
 
-              <div className="relative mt-8 mb-4">
-                <div className="mx-auto flex h-24 w-24 items-center justify-center rounded-full bg-orange-500 text-3xl font-bold text-white shadow-lg">
-                  {getUserInitials(user.display_name || user.full_name)}
-                </div>
-                <button
-                  aria-label="아바타 업로드 준비 중"
-                  className="absolute right-1/2 bottom-0 translate-x-10 rounded-full border border-clickup-border bg-clickup-bg p-1.5 text-gray-400 opacity-70"
-                  disabled
-                  title="아바타 업로드 준비 중"
-                  type="button"
-                >
-                  <Camera size={14} />
-                </button>
+          {/* Content */}
+          <div className="min-w-0">
+
+            {/* ── Profile ── */}
+            {activeSection === 'profile' && (
+              <div>
+                <SectionHeader title="Profile" description="Manage your personal information." />
+
+                <form onSubmit={(event) => void handleProfileSubmit(event)}>
+                  <div className="border-t border-clickup-border">
+                    <FieldRow label="Avatar">
+                      <div className="flex items-center gap-4">
+                        <div className="w-12 h-12 rounded-full bg-orange-500 flex items-center justify-center text-lg font-bold text-white">
+                          {getUserInitials(user.display_name || user.full_name)}
+                        </div>
+                        <div className="text-sm">
+                          <p className="font-medium text-clickup-text">{user.display_name || user.full_name}</p>
+                          <p className="text-xs text-gray-500">{user.email}</p>
+                        </div>
+                      </div>
+                    </FieldRow>
+
+                    <FieldRow label="Display Name">
+                      <input
+                        className={fieldClassName}
+                        onChange={(e) => setDisplayName(e.target.value)}
+                        value={displayName}
+                      />
+                    </FieldRow>
+
+                    <FieldRow label="Full Name">
+                      <input
+                        className={fieldClassName}
+                        onChange={(e) => setFullName(e.target.value)}
+                        value={fullName}
+                      />
+                    </FieldRow>
+
+                    <FieldRow label="Email Address" description="Contact your admin to change.">
+                      <input className={cn(fieldClassName, 'opacity-60')} disabled value={user.email} />
+                    </FieldRow>
+
+                    <FieldRow label="Job Title">
+                      <input
+                        className={fieldClassName}
+                        onChange={(e) => setJobTitle(e.target.value)}
+                        placeholder="e.g. Platform Owner"
+                        value={jobTitle}
+                      />
+                    </FieldRow>
+
+                    <FieldRow label="Organization">
+                      <input className={cn(fieldClassName, 'opacity-60')} disabled value={user.primary_org_unit?.name ?? '미지정'} />
+                    </FieldRow>
+
+                    <FieldRow label="Role">
+                      <span className="text-sm text-clickup-text">{user.is_admin ? 'Admin' : 'Member'}</span>
+                    </FieldRow>
+
+                    <FieldRow label="Groups">
+                      <span className="text-sm text-clickup-text">{user.group_slugs.join(', ') || '없음'}</span>
+                    </FieldRow>
+                  </div>
+
+                  <div className="flex justify-end gap-3 pt-6">
+                    <Button
+                      variant="ghost"
+                      type="button"
+                      onClick={() => {
+                        setDisplayName(user.display_name);
+                        setFullName(user.full_name);
+                        setJobTitle('');
+                        setMessage(null);
+                        setError(null);
+                      }}
+                    >
+                      Reset
+                    </Button>
+                    <Button variant="primary" type="submit" disabled={submitting}>
+                      {submitting ? 'Saving...' : 'Save Changes'}
+                    </Button>
+                  </div>
+                </form>
               </div>
+            )}
 
-              <h2 className="text-xl font-bold text-clickup-text">
-                {user.display_name || user.full_name}
-              </h2>
-              <p className="mb-4 text-sm text-gray-500">
-                {jobTitle || user.workspace_roles[0]?.role || 'Workspace Member'}
-              </p>
+            {/* ── Appearance ── */}
+            {activeSection === 'appearance' && (
+              <div>
+                <SectionHeader title="Appearance" description="Customize how the app looks." />
 
-              <div className="mb-6 flex flex-wrap justify-center gap-2">
-                <span className="rounded-full border border-clickup-border bg-clickup-bg px-2.5 py-1 text-xs text-gray-400">
-                  {user.primary_org_unit?.name ?? '조직 미지정'}
-                </span>
-                <span className="rounded-full border border-clickup-border bg-clickup-bg px-2.5 py-1 text-xs text-gray-400">
-                  {user.is_admin ? 'Admin' : 'Member'}
-                </span>
-              </div>
-
-              <div className="space-y-4 border-t border-clickup-border pt-6">
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-500">Email</span>
-                  <span className="font-medium text-clickup-text">{user.email}</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-500">Theme</span>
-                  <span className="font-medium text-clickup-text">
-                    {themeOptions.find((option) => option.value === user.theme_preference)?.label ??
-                      '시스템 기본값'}
-                  </span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-500">Status</span>
-                  <span className="font-medium text-clickup-text">{user.status}</span>
-                </div>
-              </div>
-            </div>
-
-            <div className="rounded-xl border border-clickup-border bg-clickup-sidebar p-2">
-              {tabs.map((tab) => (
-                <button
-                  key={tab.id}
-                  className={cn(
-                    'w-full flex items-center gap-3 rounded-lg px-4 py-2.5 text-sm font-medium transition-colors',
-                    activeTab === tab.id
-                      ? 'bg-clickup-hover text-clickup-text'
-                      : 'text-gray-500 hover:bg-clickup-bg hover:text-clickup-text',
-                  )}
-                  onClick={() => handleTabChange(tab.id)}
-                  type="button"
-                >
-                  <tab.icon size={16} />
-                  {tab.label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="lg:col-span-3">
-            <motion.div
-              key={activeTab}
-              animate={{ opacity: 1, y: 0 }}
-              initial={{ opacity: 0, y: 10 }}
-              transition={{ duration: 0.2 }}
-            >
-              {activeTab === 'overview' && (
-                <div className="space-y-6">
-                  <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-                    {stats.map((stat) => (
-                      <div
-                        key={stat.label}
-                        className="flex items-center gap-4 rounded-xl border border-clickup-border bg-clickup-sidebar p-6"
-                      >
-                        <div
+                <div className="border-t border-clickup-border">
+                  <FieldRow label="Theme" description="Select your preferred color scheme.">
+                    <div className="flex gap-2">
+                      {themeOptions.map((opt) => (
+                        <button
+                          key={opt.value}
+                          type="button"
+                          onClick={() => {
+                            setThemePreference(opt.value);
+                            void auth.updatePreferences({ theme_preference: opt.value });
+                          }}
                           className={cn(
-                            'flex h-12 w-12 items-center justify-center rounded-xl',
-                            stat.bg,
-                            stat.color,
+                            'flex items-center gap-2 rounded-md border px-4 py-2.5 text-sm font-medium transition-colors',
+                            themePreference === opt.value
+                              ? 'border-clickup-purple bg-clickup-purple/10 text-clickup-purple'
+                              : 'border-clickup-border bg-clickup-bg text-clickup-text hover:border-clickup-text/30',
                           )}
                         >
-                          <stat.icon size={24} />
-                        </div>
-                        <div>
-                          <div className="text-2xl font-bold text-clickup-text">{stat.value}</div>
-                          <div className="text-sm text-gray-500">{stat.label}</div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-
-                  <div className="rounded-xl border border-clickup-border bg-clickup-sidebar p-6">
-                    <h3 className="mb-6 text-lg font-bold text-clickup-text">Access Snapshot</h3>
-                    <div className="space-y-6">
-                      {recentActivities.map((activity, index) => (
-                        <div key={activity.id} className="relative flex gap-4">
-                          {index !== recentActivities.length - 1 ? (
-                            <div className="absolute top-8 bottom-[-24px] left-4 w-px bg-clickup-border" />
-                          ) : null}
-                          <div className="z-10 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-clickup-border bg-clickup-bg">
-                            <div className="h-2 w-2 rounded-full bg-clickup-purple" />
-                          </div>
-                          <div className="pt-1.5">
-                            <p className="text-sm text-clickup-text">
-                              <span className="text-gray-400">{activity.action}</span>{' '}
-                              <span className="font-medium">{activity.target}</span>
-                            </p>
-                            <p className="mt-1 text-xs text-gray-500">{activity.time}</p>
-                          </div>
-                        </div>
+                          <opt.icon size={15} />
+                          {opt.label}
+                        </button>
                       ))}
                     </div>
-                  </div>
+                  </FieldRow>
                 </div>
-              )}
+              </div>
+            )}
 
-              {activeTab === 'settings' && (
-                <div className="space-y-6 rounded-xl border border-clickup-border bg-clickup-sidebar p-6">
-                  <h3 className="mb-6 text-lg font-bold text-clickup-text">Personal Information</h3>
+            {/* ── Security ── */}
+            {activeSection === 'security' && (
+              <div>
+                <SectionHeader title="Security" description="Manage your password and sessions." />
 
-                  <form className="space-y-6" onSubmit={(event) => void handleProfileSubmit(event)}>
-                    <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-                      <div className="space-y-2">
-                        <label className="text-sm font-medium text-gray-400">Display Name</label>
-                        <input
-                          className={fieldClassName}
-                          onChange={(event) => setDisplayName(event.target.value)}
-                          value={displayName}
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <label className="text-sm font-medium text-gray-400">Full Name</label>
-                        <input
-                          className={fieldClassName}
-                          onChange={(event) => setFullName(event.target.value)}
-                          value={fullName}
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <label className="text-sm font-medium text-gray-400">Email Address</label>
-                        <input
-                          className={cn(fieldClassName, 'opacity-70')}
-                          disabled
-                          value={user.email}
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <label className="text-sm font-medium text-gray-400">Job Title</label>
-                        <input
-                          className={fieldClassName}
-                          onChange={(event) => setJobTitle(event.target.value)}
-                          placeholder="Platform Owner"
-                          value={jobTitle}
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <label className="text-sm font-medium text-gray-400">Organization</label>
-                        <input
-                          className={cn(fieldClassName, 'opacity-70')}
-                          disabled
-                          value={user.primary_org_unit?.name ?? '미지정'}
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <label className="text-sm font-medium text-gray-400">Theme</label>
-                        <Select
-                          onValueChange={(value) => setThemePreference(value as ThemePreference)}
-                          options={themeOptions}
-                          value={themePreference}
-                        />
-                      </div>
-                      <div className="space-y-2 md:col-span-2">
-                        <label className="text-sm font-medium text-gray-400">Groups</label>
-                        <textarea
-                          className="w-full resize-none rounded-lg border border-clickup-border bg-clickup-bg px-4 py-2 text-sm text-clickup-text focus:border-clickup-purple focus:outline-none"
-                          disabled
-                          rows={4}
-                          value={user.group_slugs.join(', ') || '없음'}
-                        />
-                      </div>
+                <div className="border-t border-clickup-border">
+                  {auth.user?.must_change_password ? (
+                    <div className="py-4">
+                      <InlineNotice tone="warning">
+                        비밀번호 변경이 필요합니다.
+                      </InlineNotice>
                     </div>
+                  ) : null}
 
-                    <div className="flex justify-end gap-3 border-t border-clickup-border pt-6">
-                      <button
-                        className="px-4 py-2 text-sm font-medium text-gray-400 transition-colors hover:text-clickup-text"
-                        onClick={() => {
-                          setDisplayName(user.display_name);
-                          setFullName(user.full_name);
-                          setThemePreference(user.theme_preference);
-                          setJobTitle('');
-                          setMessage(null);
-                          setError(null);
-                        }}
-                        type="button"
-                      >
-                        Reset
-                      </button>
-                      <button
-                        className="rounded-lg bg-clickup-purple px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-opacity-90"
-                        disabled={submitting}
-                        type="submit"
-                      >
-                        {submitting ? 'Saving...' : 'Save Changes'}
-                      </button>
+                  <form onSubmit={(event) => void handlePasswordSubmit(event)}>
+                    <FieldRow label="Current Password">
+                      <input
+                        className={fieldClassName}
+                        onChange={(e) => setCurrentPassword(e.target.value)}
+                        placeholder="••••••••"
+                        type="password"
+                        value={currentPassword}
+                      />
+                    </FieldRow>
+
+                    <FieldRow label="New Password">
+                      <input
+                        className={fieldClassName}
+                        onChange={(e) => setNewPassword(e.target.value)}
+                        placeholder="••••••••"
+                        type="password"
+                        value={newPassword}
+                      />
+                    </FieldRow>
+
+                    <div className="py-4">
+                      <Button variant="primary" type="submit">
+                        Update Password
+                      </Button>
                     </div>
                   </form>
                 </div>
-              )}
 
-              {activeTab === 'security' && (
-                <div className="space-y-8 rounded-xl border border-clickup-border bg-clickup-sidebar p-6">
-                  <div>
-                    <h3 className="mb-2 text-lg font-bold text-clickup-text">Change Password</h3>
-                    <p className="mb-6 text-sm text-gray-500">
-                      Update your password associated with your account.
-                    </p>
-
-                    <form className="max-w-md space-y-4" onSubmit={(event) => void handlePasswordSubmit(event)}>
-                      {auth.user?.must_change_password ? (
-                        <InlineNotice tone="warning">
-                          현재 계정은 다음 로그인 전에 비밀번호 변경이 필요합니다.
-                        </InlineNotice>
-                      ) : null}
-                      <div className="space-y-2">
-                        <label className="text-sm font-medium text-gray-400">Current Password</label>
-                        <input
-                          className={fieldClassName}
-                          onChange={(event) => setCurrentPassword(event.target.value)}
-                          placeholder="••••••••"
-                          type="password"
-                          value={currentPassword}
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <label className="text-sm font-medium text-gray-400">New Password</label>
-                        <input
-                          className={fieldClassName}
-                          onChange={(event) => setNewPassword(event.target.value)}
-                          placeholder="••••••••"
-                          type="password"
-                          value={newPassword}
-                        />
-                      </div>
-                      <button
-                        className="mt-2 rounded-lg bg-clickup-purple px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-opacity-90"
-                        type="submit"
-                      >
-                        Update Password
-                      </button>
-                    </form>
-                  </div>
-
-                  <div className="border-t border-clickup-border pt-8">
-                    <h3 className="mb-2 text-lg font-bold text-clickup-text">Active Sessions</h3>
-                    <p className="mb-6 text-sm text-gray-500">
-                      Review browser sessions and revoke the ones you no longer trust.
-                    </p>
-                    {loadingSessions ? (
-                      <p className="m-0 text-sm text-gray-500">세션을 불러오는 중입니다.</p>
-                    ) : (
-                      <div className="grid gap-3">
-                        {sessions.map((session) => (
-                          <SessionCard key={session.id} onRevoke={handleRevoke} session={session} />
-                        ))}
-                      </div>
-                    )}
-                  </div>
+                <div className="mt-8">
+                  <h3 className="text-sm font-semibold text-clickup-text mb-1">Active Sessions</h3>
+                  <p className="text-xs text-gray-500 mb-4">
+                    Review and revoke browser sessions.
+                  </p>
+                  {loadingSessions ? (
+                    <p className="text-sm text-gray-500">불러오는 중...</p>
+                  ) : (
+                    <div className="grid gap-2">
+                      {sessions.map((session) => (
+                        <SessionCard key={session.id} onRevoke={handleRevoke} session={session} />
+                      ))}
+                    </div>
+                  )}
                 </div>
-              )}
+              </div>
+            )}
 
-              {activeTab === 'notifications' && (
-                <div className="space-y-6 rounded-xl border border-clickup-border bg-clickup-sidebar p-6">
-                  <h3 className="mb-6 text-lg font-bold text-clickup-text">Notification Preferences</h3>
-                  <InlineNotice tone="warning">
-                    이 탭은 템플릿 화면을 먼저 적용한 상태이며, 저장 기능은 아직 연결되지 않았습니다.
+            {/* ── Notifications ── */}
+            {activeSection === 'notifications' && (
+              <div>
+                <SectionHeader title="Notifications" description="Choose what you get notified about." />
+
+                <div className="border-t border-clickup-border">
+                  <InlineNotice tone="warning" className="mt-4">
+                    알림 설정은 아직 연결되지 않았습니다.
                   </InlineNotice>
-                  <div className="space-y-6">
-                    {[
-                      {
-                        title: 'Workspace Updates',
-                        desc: 'Important changes in your assigned workspaces',
-                        email: true,
-                        push: true,
-                      },
-                      {
-                        title: 'Security Events',
-                        desc: 'Password changes and suspicious login attempts',
-                        email: true,
-                        push: true,
-                      },
-                      {
-                        title: 'Weekly Digest',
-                        desc: 'Summary of your current access and workspaces',
-                        email: true,
-                        push: false,
-                      },
-                    ].map((item) => (
-                      <div
-                        key={item.title}
-                        className="flex items-center justify-between border-b border-clickup-border py-4 last:border-0 last:pb-0"
-                      >
-                        <div>
-                          <div className="font-medium text-clickup-text">{item.title}</div>
-                          <div className="text-sm text-gray-500">{item.desc}</div>
-                        </div>
-                        <div className="flex items-center gap-6">
-                          <label className="flex cursor-pointer items-center gap-2">
-                            <input
-                              className="h-4 w-4 rounded border-clickup-border bg-clickup-bg text-clickup-purple"
-                              defaultChecked={item.email}
-                              type="checkbox"
-                            />
-                            <span className="text-sm text-gray-400">Email</span>
-                          </label>
-                          <label className="flex cursor-pointer items-center gap-2">
-                            <input
-                              className="h-4 w-4 rounded border-clickup-border bg-clickup-bg text-clickup-purple"
-                              defaultChecked={item.push}
-                              type="checkbox"
-                            />
-                            <span className="text-sm text-gray-400">Push</span>
-                          </label>
-                        </div>
+
+                  {[
+                    { title: 'Workspace Updates', desc: 'Important changes in your assigned workspaces', email: true, push: true },
+                    { title: 'Security Events', desc: 'Password changes and suspicious login attempts', email: true, push: true },
+                    { title: 'Weekly Digest', desc: 'Summary of your access and workspaces', email: true, push: false },
+                  ].map((item) => (
+                    <div
+                      key={item.title}
+                      className="flex items-center justify-between py-4 border-b border-clickup-border last:border-b-0"
+                    >
+                      <div>
+                        <div className="text-sm font-medium text-clickup-text">{item.title}</div>
+                        <div className="text-xs text-gray-500 mt-0.5">{item.desc}</div>
                       </div>
-                    ))}
-                  </div>
+                      <div className="flex items-center gap-5">
+                        <label className="flex items-center gap-1.5 cursor-pointer">
+                          <input
+                            className="h-3.5 w-3.5 rounded border-clickup-border bg-clickup-bg accent-clickup-purple"
+                            defaultChecked={item.email}
+                            type="checkbox"
+                          />
+                          <span className="text-xs text-gray-500">Email</span>
+                        </label>
+                        <label className="flex items-center gap-1.5 cursor-pointer">
+                          <input
+                            className="h-3.5 w-3.5 rounded border-clickup-border bg-clickup-bg accent-clickup-purple"
+                            defaultChecked={item.push}
+                            type="checkbox"
+                          />
+                          <span className="text-xs text-gray-500">Push</span>
+                        </label>
+                      </div>
+                    </div>
+                  ))}
                 </div>
-              )}
-            </motion.div>
+              </div>
+            )}
+
           </div>
         </div>
       </div>
@@ -687,7 +532,7 @@ function ProfilePage({ initialTab }: { initialTab: ProfileTab }) {
 }
 
 export function AccountSettingsView() {
-  return <ProfilePage initialTab="overview" />;
+  return <ProfilePage initialTab="profile" />;
 }
 
 export function SecuritySettingsView() {

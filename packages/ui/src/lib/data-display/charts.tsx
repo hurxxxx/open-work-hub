@@ -155,7 +155,7 @@ export function DonutChartCard({
   const data = categories.map((category, index) => ({
     name: category,
     value: series[0]?.data[index] ?? 0,
-    color: series[index]?.color ?? series[0]?.color ?? '#1f2d38',
+    color: series[index]?.color ?? series[0]?.color ?? 'var(--ui-color-accent)',
   }));
 
   return (

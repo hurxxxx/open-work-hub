@@ -80,7 +80,7 @@ export function AppShell({
                 <span aria-hidden="true">×</span>
                 <span className="sr-only">메뉴 닫기</span>
               </button>
-              <div className="h-full overflow-hidden shadow-[0_16px_40px_rgba(15,23,42,0.22)]">
+              <div className="h-full overflow-hidden shadow-[var(--ui-shadow-lg)]">
                 {sidebar}
               </div>
             </div>
@@ -89,7 +89,7 @@ export function AppShell({
       ) : null}
       <main className="ui-scrollbar grid min-h-0 gap-0 overflow-y-auto px-4 pb-4 pt-0 max-[980px]:overflow-visible max-[980px]:px-4 max-[980px]:pb-4 max-[980px]:pt-0">
         {mobileSidebar ? (
-          <div className="sticky top-0 z-30 -mx-4 hidden items-center justify-between border-b border-[var(--ui-color-border)] bg-[color:rgba(244,247,251,0.94)] px-4 py-2.5 backdrop-blur max-[980px]:flex">
+          <div className="sticky top-0 z-30 -mx-4 hidden items-center justify-between border-b border-[var(--ui-color-border)] bg-[var(--ui-color-bg)]/94 px-4 py-2.5 backdrop-blur max-[980px]:flex">
             <div>
               <div className="text-[0.68rem] font-semibold uppercase tracking-[0.08em] text-[var(--ui-color-ink-subtle)]">
                 두원공조

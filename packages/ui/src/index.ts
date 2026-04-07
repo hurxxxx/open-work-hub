@@ -10,6 +10,7 @@ export * from './lib/primitives/filter-bar';
 export * from './lib/primitives/tabs';
 export * from './lib/primitives/select';
 export * from './lib/primitives/tooltip';
+export * from './lib/primitives/dialog';
 export * from './lib/primitives/dropdown-menu';
 export * from './lib/primitives/scroll-area';
 export * from './lib/layout/app-shell';

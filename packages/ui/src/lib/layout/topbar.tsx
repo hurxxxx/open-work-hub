@@ -14,7 +14,7 @@ export function Topbar({
   actions,
 }: TopbarProps) {
   return (
-    <header className="sticky top-0 z-20 grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 border-b border-[var(--ui-color-border)] bg-[color:rgba(244,247,251,0.97)] py-1 backdrop-blur max-[980px]:grid-cols-1">
+    <header className="sticky top-0 z-20 grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 border-b border-[var(--ui-color-border)] bg-[var(--ui-color-bg)]/97 py-1 backdrop-blur max-[980px]:grid-cols-1">
       <div className="grid gap-0 self-center">
         {breadcrumb ? (
           <p className="m-0 text-[0.62rem] font-medium uppercase tracking-[0.05em] text-[var(--ui-color-ink-subtle)] max-[720px]:hidden">
