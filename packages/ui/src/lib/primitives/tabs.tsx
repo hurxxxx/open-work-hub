@@ -13,7 +13,7 @@ export const TabsList = forwardRef<
   <TabsPrimitive.List
     ref={ref}
     className={cn(
-      'inline-flex flex-wrap items-center gap-1 rounded-[calc(var(--ui-radius-md)-2px)] border border-[var(--ui-color-border)] bg-[var(--ui-color-surface-subtle)] p-1',
+      'inline-flex flex-wrap items-center gap-1 rounded-[calc(var(--ui-radius-md)-2px)] border border-[var(--ui-color-border)] bg-ui-surface-subtle p-1',
       className,
     )}
     {...props}

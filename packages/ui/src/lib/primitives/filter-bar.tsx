@@ -11,7 +11,7 @@ export function FilterBar({ options, className }: FilterBarProps) {
   return (
     <div
       className={cn(
-        'flex flex-wrap items-center gap-1.5 rounded-[var(--ui-radius-sm)] border border-[var(--ui-color-border)] bg-[var(--ui-color-surface-subtle)] p-1',
+        'flex flex-wrap items-center gap-1.5 rounded-[var(--ui-radius-sm)] border border-[var(--ui-color-border)] bg-ui-surface-subtle p-1',
         className,
       )}
     >

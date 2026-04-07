@@ -23,6 +23,10 @@ function getErrorMessage(error: unknown, fallback: string): string {
     return error.message;
   }
 
+  if (typeof error === 'string') {
+    return error;
+  }
+
   return fallback;
 }
 
@@ -273,8 +277,8 @@ function ProfilePage({ initialTab }: { initialTab: SettingsSection }) {
         </div>
 
         {/* Feedback */}
-        {message ? <div className="mb-4"><InlineNotice tone="success">{message}</InlineNotice></div> : null}
-        {error ? <div className="mb-4"><InlineNotice tone="danger">{error}</InlineNotice></div> : null}
+        {message ? <div className="mb-4"><InlineNotice tone="success">{String(message)}</InlineNotice></div> : null}
+        {error ? <div className="mb-4"><InlineNotice tone="danger">{String(error)}</InlineNotice></div> : null}
 
         <div className="grid grid-cols-[200px_1fr] gap-10 max-[820px]:grid-cols-1 max-[820px]:gap-6">
           {/* Left Nav */}
@@ -466,13 +470,26 @@ function ProfilePage({ initialTab }: { initialTab: SettingsSection }) {
                   </p>
                   {loadingSessions ? (
                     <p className="text-sm text-gray-500">불러오는 중...</p>
-                  ) : (
-                    <div className="grid gap-2">
-                      {sessions.map((session) => (
-                        <SessionCard key={session.id} onRevoke={handleRevoke} session={session} />
-                      ))}
-                    </div>
-                  )}
+                  ) : (() => {
+                    const active = sessions.filter((s) => !s.revoked_at);
+                    const current = active.filter((s) => s.is_current);
+                    const others = active.filter((s) => !s.is_current).slice(0, 3);
+                    const shown = [...current, ...others];
+                    const hiddenCount = active.length - shown.length;
+
+                    return (
+                      <div className="grid gap-2">
+                        {shown.map((session) => (
+                          <SessionCard key={session.id} onRevoke={handleRevoke} session={session} />
+                        ))}
+                        {hiddenCount > 0 && (
+                          <p className="text-xs text-gray-500 text-center py-2">
+                            외 {hiddenCount}개 세션
+                          </p>
+                        )}
+                      </div>
+                    );
+                  })()}
                 </div>
               </div>
             )}

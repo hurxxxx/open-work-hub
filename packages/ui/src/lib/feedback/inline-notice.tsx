@@ -5,7 +5,7 @@ import { cn } from '../utils/cn';
 type NoticeTone = 'info' | 'success' | 'warning' | 'danger';
 
 const toneClasses: Record<NoticeTone, string> = {
-  info: 'border-[var(--ui-color-border)] bg-[var(--ui-color-surface-subtle)] text-[var(--ui-color-ink-muted)]',
+  info: 'border-[var(--ui-color-border)] bg-ui-surface-subtle text-[var(--ui-color-ink-muted)]',
   success:
     'border-transparent bg-[color-mix(in_oklab,var(--ui-color-success)_12%,white)] text-[var(--ui-color-success)]',
   warning:

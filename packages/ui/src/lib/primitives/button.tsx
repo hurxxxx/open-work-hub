@@ -10,13 +10,13 @@ const buttonVariants = cva(
     variants: {
       variant: {
         primary:
-          'border-[var(--ui-color-accent)] bg-[var(--ui-color-accent)] text-white hover:bg-[var(--ui-color-accent-hover)]',
+          'border-[var(--ui-color-accent)] bg-ui-accent text-white hover:bg-ui-accent-hover',
         secondary:
-          'border-[var(--ui-color-border)] bg-[var(--ui-color-surface-raised)] text-[var(--ui-color-ink)] hover:bg-[var(--ui-color-surface-subtle)]',
+          'border-[var(--ui-color-border)] bg-ui-surface-raised text-[var(--ui-color-ink)] hover:bg-ui-surface-subtle',
         ghost:
-          'border-transparent bg-transparent text-[var(--ui-color-ink)] hover:bg-[var(--ui-color-surface-subtle)]',
+          'border-transparent bg-transparent text-[var(--ui-color-ink)] hover:bg-ui-surface-subtle',
         subtle:
-          'border-[var(--ui-color-border)] bg-[var(--ui-color-surface-subtle)] text-[var(--ui-color-ink-muted)] hover:bg-[var(--ui-color-accent-weak)]',
+          'border-[var(--ui-color-border)] bg-ui-surface-subtle text-[var(--ui-color-ink-muted)] hover:bg-ui-accent-weak',
       },
       size: {
         dense: 'h-[var(--ui-density-dense)] px-2.5',

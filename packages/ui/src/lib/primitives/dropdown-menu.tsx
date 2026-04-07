@@ -27,18 +27,18 @@ export function DropdownMenu({ trigger, items }: DropdownMenuProps) {
           collisionPadding={12}
           side="right"
           sideOffset={10}
-          className="z-[9999] min-w-[240px] max-w-[280px] rounded-xl border border-[var(--ui-color-border)] bg-[var(--ui-color-surface-raised)] p-1.5 shadow-xl text-[var(--ui-color-ink)]"
+          className="z-[9999] min-w-[240px] max-w-[280px] rounded-xl border border-[var(--ui-color-border)] bg-ui-surface-raised p-1.5 shadow-xl text-[var(--ui-color-ink)]"
         >
           {items.map((item) => (
             <Fragment key={item.id}>
               {item.separatorBefore ? (
-                <DropdownMenuPrimitive.Separator className="my-1.5 h-px bg-[var(--ui-color-border)]" />
+                <DropdownMenuPrimitive.Separator className="my-1.5 h-px bg-ui-border" />
               ) : null}
               <DropdownMenuPrimitive.Item
                 disabled={item.disabled}
                 onSelect={item.onSelect}
                 className={cn(
-                  'flex min-h-[36px] items-center rounded-lg px-3 py-2 text-sm text-left outline-none data-[highlighted]:bg-[var(--ui-color-surface-subtle)] data-[highlighted]:text-[var(--ui-color-accent)] data-[disabled]:cursor-default data-[disabled]:opacity-100 transition-colors',
+                  'flex min-h-[36px] items-center rounded-lg px-3 py-2 text-sm text-left outline-none data-[highlighted]:bg-ui-surface-subtle data-[highlighted]:text-[var(--ui-color-accent)] data-[disabled]:cursor-default data-[disabled]:opacity-100 transition-colors',
                   item.disabled
                     ? 'text-[var(--ui-color-ink-subtle)]'
                     : 'cursor-pointer text-[var(--ui-color-ink)]',

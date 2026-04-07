@@ -1,5 +1,6 @@
 @import "tailwindcss";
 @plugin "@tailwindcss/typography";
+@source "../../../packages/ui/src";
 
 @theme {
   --font-sans: "IBM Plex Sans KR", "IBM Plex Sans", "Pretendard", sans-serif;
@@ -10,7 +11,25 @@
   --color-clickup-purple: #7b68ee;
   --color-clickup-hover: var(--clickup-hover);
   --color-clickup-card: var(--clickup-card);
-  --color-clickup-dark: #1e1f21; /* Keep for specific dark elements if needed */
+  --color-clickup-dark: #1e1f21;
+
+  /* Register --ui-* tokens so Tailwind v4 resolves bg-[var(--ui-*)] as colors */
+  --color-ui-bg: var(--ui-color-bg);
+  --color-ui-surface: var(--ui-color-surface);
+  --color-ui-surface-raised: var(--ui-color-surface-raised);
+  --color-ui-surface-subtle: var(--ui-color-surface-subtle);
+  --color-ui-surface-sidebar: var(--ui-color-surface-sidebar);
+  --color-ui-border: var(--ui-color-border);
+  --color-ui-border-strong: var(--ui-color-border-strong);
+  --color-ui-ink: var(--ui-color-ink);
+  --color-ui-ink-muted: var(--ui-color-ink-muted);
+  --color-ui-ink-subtle: var(--ui-color-ink-subtle);
+  --color-ui-accent: var(--ui-color-accent);
+  --color-ui-accent-hover: var(--ui-color-accent-hover);
+  --color-ui-accent-weak: var(--ui-color-accent-weak);
+  --color-ui-success: var(--ui-color-success);
+  --color-ui-warning: var(--ui-color-warning);
+  --color-ui-danger: var(--ui-color-danger);
 }
 
 @layer base {

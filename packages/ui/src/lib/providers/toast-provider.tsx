@@ -27,7 +27,7 @@ function toneClass(tone: ToastTone) {
     case 'error':
       return 'border-transparent bg-[color-mix(in_oklab,var(--ui-color-danger)_14%,white)] text-[var(--ui-color-danger)]';
     default:
-      return 'border-[var(--ui-color-border)] bg-[var(--ui-color-surface-raised)] text-[var(--ui-color-ink)]';
+      return 'border-[var(--ui-color-border)] bg-ui-surface-raised text-[var(--ui-color-ink)]';
   }
 }
 

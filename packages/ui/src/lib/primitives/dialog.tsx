@@ -31,7 +31,7 @@ export function Dialog({
         <DialogPrimitive.Content
           className={cn(
             'fixed left-1/2 top-1/2 z-[var(--ui-z-drawer)] w-[calc(100vw-2rem)] -translate-x-1/2 -translate-y-1/2',
-            'flex max-h-[85vh] flex-col rounded-[var(--ui-radius-lg)] border border-[var(--ui-color-border)] bg-[var(--ui-color-surface-raised)] shadow-[var(--ui-shadow-lg)] outline-none',
+            'flex max-h-[85vh] flex-col rounded-[var(--ui-radius-lg)] border border-[var(--ui-color-border)] bg-ui-surface-raised shadow-[var(--ui-shadow-lg)] outline-none',
             maxWidth,
           )}
         >

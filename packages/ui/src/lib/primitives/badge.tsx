@@ -9,9 +9,9 @@ const badgeVariants = cva(
     variants: {
       tone: {
         neutral:
-          'border-[var(--ui-color-border)] bg-[var(--ui-color-surface-subtle)] text-[var(--ui-color-ink-muted)]',
+          'border-[var(--ui-color-border)] bg-ui-surface-subtle text-[var(--ui-color-ink-muted)]',
         accent:
-          'border-[var(--ui-color-border)] bg-[var(--ui-color-accent-weak)] text-[var(--ui-color-accent)]',
+          'border-[var(--ui-color-border)] bg-ui-accent-weak text-[var(--ui-color-accent)]',
         success:
           'border-transparent bg-[color-mix(in_oklab,var(--ui-color-success)_12%,white)] text-[var(--ui-color-success)]',
         warning:

@@ -115,10 +115,16 @@ async function request<T>(
 
   const payload = await response.json().catch(() => null);
   if (!response.ok) {
-    throw new AuthApiError(
-      response.status,
-      payload?.detail ?? `Request failed with ${response.status}.`,
-    );
+    const detail = payload?.detail;
+    let message: string;
+    if (typeof detail === 'string') {
+      message = detail;
+    } else if (Array.isArray(detail)) {
+      message = detail.map((d: { msg?: string }) => d.msg ?? String(d)).join(', ');
+    } else {
+      message = `Request failed with ${response.status}.`;
+    }
+    throw new AuthApiError(response.status, message);
   }
 
   return payload as T;

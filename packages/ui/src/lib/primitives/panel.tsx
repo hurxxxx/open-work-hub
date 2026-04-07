@@ -26,7 +26,7 @@ export function Panel({
   return (
     <section
       className={cn(
-        'rounded-xl border border-[var(--ui-color-border)] bg-[var(--ui-color-surface-raised)] p-4 shadow-[var(--ui-shadow-sm)] text-[var(--ui-color-ink)]',
+        'rounded-xl border border-[var(--ui-color-border)] bg-ui-surface-raised p-4 shadow-[var(--ui-shadow-sm)] text-[var(--ui-color-ink)]',
         className,
       )}
       {...props}

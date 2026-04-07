@@ -76,7 +76,7 @@ export function DataTable<TData extends object>({
 
   if (loading) {
     return (
-      <div className="grid gap-2 rounded-[var(--ui-radius-md)] border border-[var(--ui-color-border)] bg-[var(--ui-color-surface-raised)] p-4">
+      <div className="grid gap-2 rounded-[var(--ui-radius-md)] border border-[var(--ui-color-border)] bg-ui-surface-raised p-4">
         <Skeleton className="h-8 w-full" />
         <Skeleton className="h-12 w-full" />
         <Skeleton className="h-12 w-full" />
@@ -86,7 +86,7 @@ export function DataTable<TData extends object>({
 
   if (!rows.length) {
     return (
-      <div className="rounded-[var(--ui-radius-md)] border border-[var(--ui-color-border)] bg-[var(--ui-color-surface-raised)] p-4">
+      <div className="rounded-[var(--ui-radius-md)] border border-[var(--ui-color-border)] bg-ui-surface-raised p-4">
         {emptyState ?? (
           <EmptyState
             title="No results"
@@ -98,7 +98,7 @@ export function DataTable<TData extends object>({
   }
 
   return (
-    <div className="overflow-hidden rounded-[var(--ui-radius-md)] border border-[var(--ui-color-border)] bg-[var(--ui-color-surface-raised)]">
+    <div className="overflow-hidden rounded-[var(--ui-radius-md)] border border-[var(--ui-color-border)] bg-ui-surface-raised">
       <div className="grid gap-3 p-3 min-[721px]:hidden">
         {table.getRowModel().rows.map((row) => {
           const rowId = selection?.getRowId?.(row.original);
@@ -111,7 +111,7 @@ export function DataTable<TData extends object>({
               className={cn(
                 'grid gap-3 rounded-[var(--ui-radius-md)] border border-[var(--ui-color-border)] bg-white px-3 py-2.5',
                 selection?.onRowClick ? 'cursor-pointer active:scale-[0.995]' : '',
-                isSelected ? 'border-[var(--ui-color-border-strong)] bg-[var(--ui-color-accent-weak)]' : '',
+                isSelected ? 'border-[var(--ui-color-border-strong)] bg-ui-accent-weak' : '',
               )}
               onClick={() => selection?.onRowClick?.(row.original)}
             >
@@ -140,7 +140,7 @@ export function DataTable<TData extends object>({
         <table className="w-full border-collapse">
           <thead>
             {table.getHeaderGroups().map((headerGroup) => (
-              <tr key={headerGroup.id} className="border-b border-b-[var(--ui-color-border)] bg-[var(--ui-color-surface-subtle)]">
+              <tr key={headerGroup.id} className="border-b border-b-[var(--ui-color-border)] bg-ui-surface-subtle">
                 {headerGroup.headers.map((header) => (
                   <th
                     key={header.id}
@@ -171,8 +171,8 @@ export function DataTable<TData extends object>({
                   key={row.id}
                   className={cn(
                     'border-b border-b-[var(--ui-color-border)] last:border-b-0',
-                    selection?.onRowClick ? 'cursor-pointer hover:bg-[var(--ui-color-surface-subtle)]' : '',
-                    isSelected ? 'bg-[var(--ui-color-accent-weak)]' : '',
+                    selection?.onRowClick ? 'cursor-pointer hover:bg-ui-surface-subtle' : '',
+                    isSelected ? 'bg-ui-accent-weak' : '',
                   )}
                   onClick={() => selection?.onRowClick?.(row.original)}
                 >

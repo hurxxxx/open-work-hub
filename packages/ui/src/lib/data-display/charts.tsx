@@ -58,7 +58,7 @@ export function ChartFrame({
     );
 
   return (
-    <section className="rounded-[var(--ui-radius-lg)] border border-[var(--ui-color-border)] bg-[var(--ui-color-surface)] p-5 shadow-[var(--ui-shadow-sm)]">
+    <section className="rounded-[var(--ui-radius-lg)] border border-[var(--ui-color-border)] bg-ui-surface p-5 shadow-[var(--ui-shadow-sm)]">
       <div className="mb-4 grid gap-1">
         <h3 className="m-0 text-base font-semibold text-[var(--ui-color-ink)]">{title}</h3>
         {description ? (
