@@ -31,6 +31,7 @@ export default defineConfig(() => ({
   },
   resolve: {
     alias: {
+      '@aidoo/ui/styles.css': path.resolve(import.meta.dirname, '../../packages/ui/styles.css'),
       '@/src': path.resolve(import.meta.dirname, 'src'),
     },
   },

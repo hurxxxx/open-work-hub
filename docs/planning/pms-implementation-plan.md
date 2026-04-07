@@ -37,9 +37,10 @@
 ## 구현 원칙
 
 - AIDOO 단일 테넌트 구조로 시작한다.
-- `workspace` 계층은 두지 않는다.
-- 접근 제어는 프로젝트 멤버십 기반으로 한다.
-- 전역 `is_admin`은 모든 프로젝트를 볼 수 있다.
+- PMS는 공통 identity 계층의 `workspace` 아래에 놓는다. 기본 workspace key 는 `pms` 다.
+- 협업 경계는 장기적으로 `Workspace > Team > Project` 로 정렬한다.
+- 현재 PMS REST API는 기존 `project membership(owner/member)` 과 공존한다.
+- 전역 관리자 호환 필드는 유지하되, 장기적으로는 `platform-admin` 과 permission 기반으로 수렴한다.
 - 챗봇이 PMS를 조작하게 되더라도 별도 백도어를 만들지 않고 공식 PMS REST API만 사용한다.
 
 ## 데이터 모델
@@ -64,6 +65,7 @@
 - `status`
 - `archived`
 - `created_by_id`
+- 장기 확장: `workspace_id`, `team_id`
 
 ### 프로젝트 멤버
 
@@ -252,6 +254,7 @@
 - 프로젝트/마일스톤/이슈/댓글/활동 로그 UI 연결
 - 보드 드래그 이동
 - 프로젝트/마일스톤/이슈/대시보드 테스트 추가
+- 공통 auth/admin foundation 과 함께 workspace/team/group 문서 기준 추가
 
 ## 2차 확장 포인트
 

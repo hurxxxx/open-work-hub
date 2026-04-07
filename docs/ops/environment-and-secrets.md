@@ -53,11 +53,25 @@ cp .env.example .env
 
 그 다음 실제 환경에 맞게 값을 채운다.
 
+## 로컬 PostgreSQL 18 개발 기준
+
+- API는 `DOOWON_POSTGRES_DSN` 없이는 시작하지 않는다.
+- 로컬 기본값은 `compose.postgres.yml` 을 사용한다.
+- 예시 DSN: `postgresql+psycopg://aidoo_db:aidoo_db@127.0.0.1:5432/doowon_ai_portal`
+
+```bash
+docker compose -f compose.postgres.yml up -d
+```
+
+- 저장소 루트 `.env` 에 이미 별도 개발 DB DSN이 있으면 그 값을 우선 사용한다.
+- SQLite fallback은 더 이상 지원하지 않는다.
+
 ## 로컬 계정 인증 메모
 
 - 현재 아이두 개발 서버는 자체 계정 로그인으로 먼저 동작한다.
 - 첫 접속 시 사용자가 하나도 없으면 `/api/v1/auth/bootstrap-status` 가 `requires_setup: true` 를 반환하고, 웹은 첫 관리자 계정 생성 화면을 보여준다.
-- 생성된 첫 계정은 관리자 권한을 가진다.
+- 생성된 첫 계정은 `platform-admin` 그룹과 관리자 호환 권한을 가진다.
+- 로그인 후 프로필 메뉴에서 `내 계정`, `보안 설정`, `테마`, `로그아웃`, `관리 콘솔` 로 진입한다.
 - 세션 만료 시간은 `DOOWON_API_SESSION_TTL_HOURS` 로 조정한다.
 - 이후 사내 SSO 도입 시에도 루트 `.env` 기준 관리 원칙은 유지한다.
 

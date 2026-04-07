@@ -37,7 +37,7 @@ export function Select({
         </SelectPrimitive.Trigger>
       <SelectPrimitive.Portal>
         <SelectPrimitive.Content
-          className="z-[var(--ui-z-drawer)] overflow-hidden rounded-[var(--ui-radius-sm)] border border-[var(--ui-color-border)] bg-[var(--ui-color-surface-raised)] shadow-[var(--ui-shadow-lg)]"
+          className="z-[var(--ui-z-popover)] overflow-hidden rounded-[var(--ui-radius-sm)] border border-[var(--ui-color-border)] bg-[var(--ui-color-surface-raised)] shadow-[var(--ui-shadow-lg)]"
           position="popper"
         >
           <SelectPrimitive.Viewport className="p-1">

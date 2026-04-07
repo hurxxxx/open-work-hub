@@ -2,7 +2,7 @@
 @plugin "@tailwindcss/typography";
 
 @theme {
-  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "IBM Plex Sans KR", "IBM Plex Sans", "Pretendard", sans-serif;
   --color-clickup-bg: var(--clickup-bg);
   --color-clickup-sidebar: var(--clickup-sidebar);
   --color-clickup-border: var(--clickup-border);

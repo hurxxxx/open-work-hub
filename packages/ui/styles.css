@@ -32,7 +32,8 @@
   --ui-motion-fast: 120ms;
   --ui-motion-base: 180ms;
   --ui-z-drawer: 40;
-  --ui-z-toast: 50;
+  --ui-z-popover: 70;
+  --ui-z-toast: 80;
 }
 
 @layer base {

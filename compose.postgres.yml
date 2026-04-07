@@ -1,0 +1,21 @@
+services:
+  postgres:
+    image: postgres:18
+    container_name: doowon-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: aidoo_db
+      POSTGRES_PASSWORD: aidoo_db
+      POSTGRES_DB: doowon_ai_portal
+    ports:
+      - "5432:5432"
+    volumes:
+      - doowon-postgres-data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U aidoo_db -d doowon_ai_portal"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  doowon-postgres-data:

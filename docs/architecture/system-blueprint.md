@@ -7,7 +7,7 @@
 ## 기준 기술 스택
 
 - 모노레포: `Nx + pnpm`
-- 프론트엔드: `React 19`, `TypeScript`, `Vite`, `TanStack Router`, `TanStack Query`, `React Hook Form`, `Zod`, `Tailwind CSS`, `Radix UI`, `Milkdown`
+- 프론트엔드: `React 19`, `TypeScript`, `Vite`, `react-router-dom`, `Tailwind CSS`, `Radix UI`, `Mantine`, `Milkdown`
 - 백엔드: `Python 3.12`, `FastAPI`, `Pydantic v2`, `SQLAlchemy 2`, `Alembic`
 - 작업 워커: `Celery + Redis`
 - 데이터: `PostgreSQL 18`, `MinIO`
@@ -33,12 +33,13 @@
 
 ## 책임 단위
 
-- `auth`: 로그인, 세션, 사용자/역할, 기능 노출
+- `auth`: 로그인, 세션, 내 계정, 비밀번호 변경, 사용자 환경설정
+- `identity`: `Tenant / Workspace / Team / Project / User / OrgUnit / AccessGroup` 관계와 RBAC 계산
 - `documents`: 문서 동기화, 메타데이터, 원문 조회
 - `search`: 검색, RAG, 인용, 리랭크
 - `plm`: 질의 템플릿, SQL 안전성, 결과 요약
 - `drafts`: 템플릿, 초안, 내보내기
-- `admin`: 감사로그, 기능 토글, 운영 제어
+- `admin`: 사용자/그룹/워크스페이스/팀 관리, 기능 정책, 감사로그, 운영 제어
 - `pms`: 작업, 이슈, 상태 흐름
 - `wiki`: 문서 편집, 버전, 참조 링크
 
@@ -53,6 +54,15 @@
 - FastAPI `APIRouter`는 각 도메인이 소유하고, 상위 조립 계층은 등록만 수행한다.
 - Alembic migration은 도메인별 version directory를 사용한다.
 - Prompt, workflow, eval 규약은 코드 안에 흩뿌리지 않고 `docs/harness`와 시나리오 문서에서 먼저 정의한다.
+
+## Identity 기준 계층
+
+- `Tenant`: 회사 전체 보안 경계. v1은 single-tenant로 운영한다.
+- `Workspace`: PMS, Docs, AI, Planner, Admin 같은 업무영역.
+- `Team`: 한 workspace 안의 실제 협업 단위.
+- `Project`: 실행 단위. 현재 PMS는 legacy project membership과 공존하며 점진적으로 `Workspace > Team > Project`로 정렬한다.
+- `OrgUnit`: 전사 조직 메타데이터. 협업의 주 경계가 아니라 사용자 속성과 정책 필터에 사용한다.
+- `AccessGroup`: tenant 전역 권한 그룹. workspace 접근은 binding으로 따로 부여한다.
 
 ## 충돌 최소화 규칙
 
