@@ -7,6 +7,8 @@ export interface PmsProject {
   archived: boolean;
   team_id: string | null;
   team_name: string | null;
+  folder_id: string | null;
+  folder_name: string | null;
   role: string;
   progress: number;
   member_count: number;
@@ -244,6 +246,73 @@ export interface PmsDashboardSummary {
   recent_activity: PmsDashboardRecentActivity[];
 }
 
+// ── Docs (Wiki) ─────────────────────────────────────────────────────
+
+export interface PmsDoc {
+  id: string;
+  project_id: string;
+  title: string;
+  content_blocks: Record<string, unknown>[] | null;
+  created_by_id: string;
+  created_by_name: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PmsDocsResponse {
+  items: PmsDoc[];
+}
+
+// ── Goals / OKR ─────────────────────────────────────────────────────
+
+export interface PmsGoal {
+  id: string;
+  project_id: string;
+  name: string;
+  description: string;
+  target: number;
+  progress: number;
+  status: string;
+  due_date: string | null;
+  linked_issue_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PmsGoalsResponse {
+  items: PmsGoal[];
+}
+
+// ── Automations ─────────────────────────────────────────────────────
+
+export interface PmsAutomation {
+  id: string;
+  project_id: string;
+  name: string;
+  enabled: boolean;
+  trigger: string;
+  condition: Record<string, unknown> | null;
+  action: Record<string, unknown>;
+}
+
+export interface PmsAutomationsResponse {
+  items: PmsAutomation[];
+}
+
+// ── Folders ─────────────────────────────────────────────────────────
+
+export interface PmsFolder {
+  id: string;
+  team_id: string | null;
+  name: string;
+  sort_order: number;
+  project_count: number;
+}
+
+export interface PmsFoldersResponse {
+  items: PmsFolder[];
+}
+
 // ── Task Templates ──────────────────────────────────────────────────
 
 export interface PmsTaskTemplate {
@@ -364,6 +433,22 @@ export function listProjectMembers(
     `/api/v1/pms/projects/${projectId}/members?page=1&page_size=20`,
     token,
   );
+}
+
+export function updateMemberRole(
+  token: string,
+  projectId: string,
+  userId: string,
+  role: string,
+): Promise<PmsProjectMember> {
+  return request<PmsProjectMember>(`/api/v1/pms/projects/${projectId}/members/${userId}/role`, token, {
+    method: 'PATCH',
+    body: JSON.stringify({ role }),
+  });
+}
+
+export function removeProjectMember(token: string, projectId: string, userId: string): Promise<void> {
+  return request<void>(`/api/v1/pms/projects/${projectId}/members/${userId}`, token, { method: 'DELETE' });
 }
 
 export function listProjectMilestones(
@@ -840,4 +925,147 @@ export function setIssueAssignees(
     method: 'PUT',
     body: JSON.stringify({ user_ids: userIds }),
   });
+}
+
+// ── Folders ─────────────────────────────────────────────────────────
+
+export function listFolders(token: string, teamId?: string): Promise<PmsFoldersResponse> {
+  const params = teamId ? `?team_id=${encodeURIComponent(teamId)}` : '';
+  return request<PmsFoldersResponse>(`/api/v1/pms/folders${params}`, token);
+}
+
+export function createFolder(
+  token: string,
+  payload: { name: string; team_id?: string | null; sort_order?: number },
+): Promise<PmsFolder> {
+  return request<PmsFolder>('/api/v1/pms/folders', token, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function updateFolder(
+  token: string,
+  folderId: string,
+  payload: { name?: string; sort_order?: number },
+): Promise<PmsFolder> {
+  return request<PmsFolder>(`/api/v1/pms/folders/${folderId}`, token, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function deleteFolder(token: string, folderId: string): Promise<void> {
+  return request<void>(`/api/v1/pms/folders/${folderId}`, token, { method: 'DELETE' });
+}
+
+// ── Automations ─────────────────────────────────────────────────────
+
+export function listAutomations(token: string, projectId: string): Promise<PmsAutomationsResponse> {
+  return request<PmsAutomationsResponse>(`/api/v1/pms/projects/${projectId}/automations`, token);
+}
+
+export function createAutomation(
+  token: string,
+  projectId: string,
+  payload: { name: string; trigger: string; condition?: Record<string, unknown> | null; action: Record<string, unknown> },
+): Promise<PmsAutomation> {
+  return request<PmsAutomation>(`/api/v1/pms/projects/${projectId}/automations`, token, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function updateAutomation(
+  token: string,
+  automationId: string,
+  payload: { name?: string; enabled?: boolean; trigger?: string; condition?: Record<string, unknown> | null; action?: Record<string, unknown> },
+): Promise<PmsAutomation> {
+  return request<PmsAutomation>(`/api/v1/pms/automations/${automationId}`, token, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function deleteAutomation(token: string, automationId: string): Promise<void> {
+  return request<void>(`/api/v1/pms/automations/${automationId}`, token, { method: 'DELETE' });
+}
+
+// ── Goals / OKR ─────────────────────────────────────────────────────
+
+export function listGoals(token: string, projectId: string): Promise<PmsGoalsResponse> {
+  return request<PmsGoalsResponse>(`/api/v1/pms/projects/${projectId}/goals`, token);
+}
+
+export function createGoal(
+  token: string,
+  projectId: string,
+  payload: { name: string; description?: string; target?: number; due_date?: string | null },
+): Promise<PmsGoal> {
+  return request<PmsGoal>(`/api/v1/pms/projects/${projectId}/goals`, token, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function updateGoal(
+  token: string,
+  goalId: string,
+  payload: { name?: string; description?: string; target?: number; progress?: number; status?: string; due_date?: string | null },
+): Promise<PmsGoal> {
+  return request<PmsGoal>(`/api/v1/pms/goals/${goalId}`, token, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function deleteGoal(token: string, goalId: string): Promise<void> {
+  return request<void>(`/api/v1/pms/goals/${goalId}`, token, { method: 'DELETE' });
+}
+
+export function linkIssueToGoal(token: string, goalId: string, issueId: string): Promise<void> {
+  return request<void>(`/api/v1/pms/goals/${goalId}/links`, token, {
+    method: 'POST',
+    body: JSON.stringify({ issue_id: issueId }),
+  });
+}
+
+export function unlinkIssueFromGoal(token: string, goalId: string, issueId: string): Promise<void> {
+  return request<void>(`/api/v1/pms/goals/${goalId}/links/${issueId}`, token, { method: 'DELETE' });
+}
+
+// ── Docs (Wiki) ─────────────────────────────────────────────────────
+
+export function listDocs(token: string, projectId: string): Promise<PmsDocsResponse> {
+  return request<PmsDocsResponse>(`/api/v1/pms/projects/${projectId}/docs`, token);
+}
+
+export function createDoc(
+  token: string,
+  projectId: string,
+  payload: { title: string; content_blocks?: Record<string, unknown>[] | null },
+): Promise<PmsDoc> {
+  return request<PmsDoc>(`/api/v1/pms/projects/${projectId}/docs`, token, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function getDoc(token: string, docId: string): Promise<PmsDoc> {
+  return request<PmsDoc>(`/api/v1/pms/docs/${docId}`, token);
+}
+
+export function updateDoc(
+  token: string,
+  docId: string,
+  payload: { title?: string; content_blocks?: Record<string, unknown>[] | null },
+): Promise<PmsDoc> {
+  return request<PmsDoc>(`/api/v1/pms/docs/${docId}`, token, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function deleteDoc(token: string, docId: string): Promise<void> {
+  return request<void>(`/api/v1/pms/docs/${docId}`, token, { method: 'DELETE' });
 }

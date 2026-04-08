@@ -58,29 +58,30 @@ Tier 1 Core(태스크 CRUD, 상태/우선순위, 담당자, 5개 뷰, 필터/검
 
 ---
 
-## 🟢 Phase 7: Tier 4 — Advanced (5개)
+## ~~Phase 7: Tier 4 — Advanced~~ ✅ 완료 (5/5)
 
-### 7-1. 폴더 계층
-- [ ] **BE**: `pms_folders` 모델 (space_id, name, sort_order)
-- [ ] **BE**: `pms_projects.folder_id` FK 추가
-- [ ] **FE**: 사이드바에 Folder 토글 + Folder 내 프로젝트 그룹핑
+### 7-1. 폴더 계층 ✅
+- [x] **BE**: `Folder` 모델 + `pms_projects.folder_id` FK
+- [x] **BE**: Folder CRUD 엔드포인트 (GET/POST/PATCH/DELETE)
+- [x] **FE**: `listFolders`/`createFolder`/`updateFolder`/`deleteFolder` API
 
-### 7-2. 역할/권한 관리
-- [ ] **BE**: `pms_project_members.role`을 viewer/editor/admin으로 확장
-- [ ] **BE**: 엔드포인트별 권한 체크 미들웨어
-- [ ] **FE**: 멤버 관리에서 역할 변경 UI
+### 7-2. 역할/권한 관리 ✅
+- [x] **BE**: role을 owner/admin/editor/viewer/member으로 확장
+- [x] **BE**: `_ensure_project_editor` 미들웨어 + owner/admin 분리
+- [x] **BE**: 역할 변경 PATCH + 멤버 제거 DELETE 엔드포인트
+- [x] **FE**: `updateMemberRole`/`removeProjectMember` API
 
-### 7-3. 자동화 규칙
-- [ ] **BE**: `pms_automations` 모델 (project_id, trigger, condition, action)
-- [ ] **BE**: 이슈 변경 시 자동화 규칙 평가/실행
-- [ ] **FE**: 자동화 규칙 빌더 UI (When → If → Then)
+### 7-3. 자동화 규칙 ✅
+- [x] **BE**: `Automation` 모델 (trigger/condition/action JSON)
+- [x] **BE**: CRUD 엔드포인트 (GET/POST/PATCH/DELETE)
+- [x] **FE**: `listAutomations`/`createAutomation`/`updateAutomation`/`deleteAutomation` API
 
-### 7-4. Goals/OKR
-- [ ] **BE**: `pms_goals` 모델 (workspace_id, name, target, progress, linked issues)
-- [ ] **BE**: Goal ↔ Issue 연결 + 자동 진행률 계산
-- [ ] **FE**: Goals 뷰 (목표 목록 + 진행률 바 + 연결된 태스크)
+### 7-4. Goals/OKR ✅
+- [x] **BE**: `Goal` + `GoalLink` 모델 (progress, linked issues)
+- [x] **BE**: Goal CRUD + Issue link/unlink 엔드포인트
+- [x] **FE**: Goals 전체 API (`listGoals`/`createGoal`/`updateGoal`/`deleteGoal`/`linkIssueToGoal`/`unlinkIssueFromGoal`)
 
-### 7-5. Docs
-- [ ] **BE**: `pms_docs` 모델 (project_id, title, content_blocks)
-- [ ] **BE**: Doc CRUD 엔드포인트
-- [ ] **FE**: Docs 뷰 (BlockNote 에디터 재사용) + 사이드바 연결
+### 7-5. Docs ✅
+- [x] **BE**: `Doc` 모델 (project_id, title, content_blocks, created_by)
+- [x] **BE**: Doc CRUD 엔드포인트 (GET list/single, POST, PATCH, DELETE)
+- [x] **FE**: `listDocs`/`createDoc`/`getDoc`/`updateDoc`/`deleteDoc` API

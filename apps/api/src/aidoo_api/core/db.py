@@ -156,6 +156,71 @@ def _apply_postgres_schema_compat(engine) -> None:
         """,
         "CREATE INDEX IF NOT EXISTS ix_pms_issue_assignees_issue_id ON pms_issue_assignees (issue_id)",
         "CREATE INDEX IF NOT EXISTS ix_pms_issue_assignees_user_id ON pms_issue_assignees (user_id)",
+        # ── pms_folders table + pms_projects.folder_id ──
+        """
+        CREATE TABLE IF NOT EXISTS pms_folders (
+            id VARCHAR(36) PRIMARY KEY,
+            team_id VARCHAR(36) REFERENCES teams(id),
+            name VARCHAR(140) NOT NULL,
+            sort_order INTEGER NOT NULL DEFAULT 0,
+            created_at TIMESTAMP NOT NULL DEFAULT now()
+        )
+        """,
+        "CREATE INDEX IF NOT EXISTS ix_pms_folders_team_id ON pms_folders (team_id)",
+        "ALTER TABLE pms_projects ADD COLUMN IF NOT EXISTS folder_id VARCHAR(36)",
+        "CREATE INDEX IF NOT EXISTS ix_pms_projects_folder_id ON pms_projects (folder_id)",
+        # ── pms_automations table ──
+        """
+        CREATE TABLE IF NOT EXISTS pms_automations (
+            id VARCHAR(36) PRIMARY KEY,
+            project_id VARCHAR(36) NOT NULL REFERENCES pms_projects(id),
+            name VARCHAR(140) NOT NULL,
+            enabled BOOLEAN NOT NULL DEFAULT TRUE,
+            trigger VARCHAR(40) NOT NULL,
+            condition JSON,
+            action JSON NOT NULL,
+            created_at TIMESTAMP NOT NULL DEFAULT now()
+        )
+        """,
+        "CREATE INDEX IF NOT EXISTS ix_pms_automations_project_id ON pms_automations (project_id)",
+        # ── pms_goals + pms_goal_links tables ──
+        """
+        CREATE TABLE IF NOT EXISTS pms_goals (
+            id VARCHAR(36) PRIMARY KEY,
+            project_id VARCHAR(36) NOT NULL REFERENCES pms_projects(id),
+            name VARCHAR(200) NOT NULL,
+            description TEXT NOT NULL DEFAULT '',
+            target REAL NOT NULL DEFAULT 100.0,
+            progress REAL NOT NULL DEFAULT 0.0,
+            status VARCHAR(24) NOT NULL DEFAULT 'active',
+            due_date DATE,
+            created_at TIMESTAMP NOT NULL DEFAULT now(),
+            updated_at TIMESTAMP NOT NULL DEFAULT now()
+        )
+        """,
+        "CREATE INDEX IF NOT EXISTS ix_pms_goals_project_id ON pms_goals (project_id)",
+        """
+        CREATE TABLE IF NOT EXISTS pms_goal_links (
+            id VARCHAR(36) PRIMARY KEY,
+            goal_id VARCHAR(36) NOT NULL REFERENCES pms_goals(id),
+            issue_id VARCHAR(36) NOT NULL REFERENCES pms_issues(id),
+            CONSTRAINT uq_pms_goal_link UNIQUE (goal_id, issue_id)
+        )
+        """,
+        "CREATE INDEX IF NOT EXISTS ix_pms_goal_links_goal_id ON pms_goal_links (goal_id)",
+        # ── pms_docs table ──
+        """
+        CREATE TABLE IF NOT EXISTS pms_docs (
+            id VARCHAR(36) PRIMARY KEY,
+            project_id VARCHAR(36) NOT NULL REFERENCES pms_projects(id),
+            title VARCHAR(200) NOT NULL,
+            content_blocks JSON,
+            created_by_id VARCHAR(36) NOT NULL REFERENCES users(id),
+            created_at TIMESTAMP NOT NULL DEFAULT now(),
+            updated_at TIMESTAMP NOT NULL DEFAULT now()
+        )
+        """,
+        "CREATE INDEX IF NOT EXISTS ix_pms_docs_project_id ON pms_docs (project_id)",
     ]
 
     with engine.begin() as connection:

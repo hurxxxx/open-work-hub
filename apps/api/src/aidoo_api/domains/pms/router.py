@@ -20,9 +20,17 @@ from aidoo_api.core.storage import get_minio_client
 from aidoo_api.domains.media.router import sync_embedded_media, cleanup_media_for_resource
 from aidoo_api.domains.pms.models import (
     Attachment,
+    Automation,
     ChecklistItem,
+    CustomField,
+    CustomFieldValue,
+    Doc,
+    Folder,
+    Goal,
+    GoalLink,
     Issue,
     IssueActivityLog,
+    IssueAssignee,
     IssueComment,
     IssueLabel,
     Label,
@@ -30,9 +38,6 @@ from aidoo_api.domains.pms.models import (
     Notification,
     Project,
     ProjectMember,
-    CustomField,
-    CustomFieldValue,
-    IssueAssignee,
     ProjectStatus,
     ScheduleDependency,
     TaskTemplate,
@@ -90,6 +95,7 @@ class ProjectCreateRequest(BaseModel):
     name: str = Field(..., min_length=2, max_length=140)
     description: str = Field(default="", max_length=4000)
     team_id: str | None = None
+    folder_id: str | None = None
 
 
 class ProjectUpdateRequest(BaseModel):
@@ -97,11 +103,12 @@ class ProjectUpdateRequest(BaseModel):
     description: str | None = Field(default=None, max_length=4000)
     status: Literal["planned", "active", "on_hold", "done"] | None = None
     archived: bool | None = None
+    folder_id: str | None = None
 
 
 class ProjectMemberCreateRequest(BaseModel):
     user_id: str
-    role: Literal["owner", "member"] = "member"
+    role: Literal["owner", "admin", "editor", "viewer", "member"] = "member"
 
 
 class MilestoneCreateRequest(BaseModel):
@@ -194,6 +201,8 @@ class ProjectListItem(BaseModel):
     archived: bool
     team_id: str | None
     team_name: str | None
+    folder_id: str | None = None
+    folder_name: str | None = None
     role: str
     progress: float
     member_count: int
@@ -610,8 +619,16 @@ def _ensure_project_access(db: Session, user: User, project_id: str) -> tuple[Pr
 
 def _ensure_project_owner(db: Session, user: User, project_id: str) -> tuple[Project, str]:
     project, role = _ensure_project_access(db, user, project_id)
-    if not user.is_admin and role != "owner":
-        raise HTTPException(status_code=403, detail="Project owner access required.")
+    if not user.is_admin and role not in {"owner", "admin"}:
+        raise HTTPException(status_code=403, detail="Project owner/admin access required.")
+    return project, role
+
+
+def _ensure_project_editor(db: Session, user: User, project_id: str) -> tuple[Project, str]:
+    """Allow owner, admin, editor, and member roles. Block viewers."""
+    project, role = _ensure_project_access(db, user, project_id)
+    if not user.is_admin and role == "viewer":
+        raise HTTPException(status_code=403, detail="Viewer role cannot modify project data.")
     return project, role
 
 
@@ -728,6 +745,8 @@ def _serialize_project(project: Project, role: str, team_name: str | None = None
         archived=project.archived,
         team_id=project.team_id,
         team_name=team_name,
+        folder_id=project.folder_id,
+        folder_name=getattr(project.folder, "name", None) if project.folder_id else None,
         role=role,
         progress=_calculate_progress(project.issues),
         member_count=len(project.members),
@@ -1109,6 +1128,7 @@ def create_project(
         description=payload.description.strip(),
         status="active",
         team_id=payload.team_id,
+        folder_id=payload.folder_id,
         created_by_id=current_user.id,
     )
     db.add(project)
@@ -1236,6 +1256,54 @@ def add_project_member(
         role=member.role,
         joined_at=member.joined_at,
     )
+
+
+class MemberRoleUpdateRequest(BaseModel):
+    role: Literal["owner", "admin", "editor", "viewer", "member"]
+
+
+@router.patch("/projects/{project_id}/members/{user_id}/role", response_model=ProjectMemberItem)
+def update_member_role(
+    project_id: str,
+    user_id: str,
+    payload: MemberRoleUpdateRequest,
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+) -> ProjectMemberItem:
+    project, _ = _ensure_project_owner(db, current_user, project_id)
+    membership = next((m for m in project.members if m.user_id == user_id), None)
+    if membership is None:
+        raise HTTPException(status_code=404, detail="Member not found.")
+    membership.role = payload.role
+    db.commit()
+    db.refresh(membership)
+    user = membership.user
+    return ProjectMemberItem(
+        user_id=user.id,
+        email=user.email,
+        full_name=user.full_name,
+        is_admin=user.is_admin,
+        role=membership.role,
+        joined_at=membership.joined_at,
+    )
+
+
+@router.delete("/projects/{project_id}/members/{user_id}")
+def remove_project_member(
+    project_id: str,
+    user_id: str,
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+) -> Response:
+    project, _ = _ensure_project_owner(db, current_user, project_id)
+    membership = next((m for m in project.members if m.user_id == user_id), None)
+    if membership is None:
+        raise HTTPException(status_code=404, detail="Member not found.")
+    if membership.role == "owner" and sum(1 for m in project.members if m.role == "owner") == 1:
+        raise HTTPException(status_code=409, detail="Cannot remove the last owner.")
+    db.delete(membership)
+    db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.get("/projects/{project_id}/milestones", response_model=MilestoneListResponse)
@@ -3023,3 +3091,557 @@ def set_issue_assignees(
 
     db.commit()
     return result
+
+
+# ── Folders ─────────────────────────────────────────────────────────
+
+
+class FolderItem(BaseModel):
+    id: str
+    team_id: str | None
+    name: str
+    sort_order: int
+    project_count: int = 0
+
+
+class FolderListResponse(BaseModel):
+    items: list[FolderItem]
+
+
+class FolderCreateRequest(BaseModel):
+    name: str = Field(..., min_length=1, max_length=140)
+    team_id: str | None = None
+    sort_order: int = 0
+
+
+class FolderUpdateRequest(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=140)
+    sort_order: int | None = None
+
+
+@router.get("/folders", response_model=FolderListResponse)
+def list_folders(
+    team_id: str | None = Query(default=None),
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+) -> FolderListResponse:
+    q = select(Folder).order_by(Folder.sort_order)
+    if team_id:
+        q = q.where(Folder.team_id == team_id)
+    folders = list(db.scalars(q))
+
+    # Count projects per folder
+    folder_ids = [f.id for f in folders]
+    project_counts: dict[str, int] = {}
+    if folder_ids:
+        for fid in folder_ids:
+            cnt = db.scalar(
+                select(func.count()).select_from(Project).where(Project.folder_id == fid)
+            )
+            project_counts[fid] = cnt or 0
+
+    return FolderListResponse(
+        items=[
+            FolderItem(
+                id=f.id, team_id=f.team_id, name=f.name,
+                sort_order=f.sort_order,
+                project_count=project_counts.get(f.id, 0),
+            )
+            for f in folders
+        ]
+    )
+
+
+@router.post("/folders", response_model=FolderItem, status_code=status.HTTP_201_CREATED)
+def create_folder(
+    payload: FolderCreateRequest,
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+) -> FolderItem:
+    folder = Folder(
+        id=new_id(),
+        team_id=payload.team_id,
+        name=payload.name.strip(),
+        sort_order=payload.sort_order,
+    )
+    db.add(folder)
+    db.commit()
+    db.refresh(folder)
+    return FolderItem(
+        id=folder.id, team_id=folder.team_id, name=folder.name,
+        sort_order=folder.sort_order, project_count=0,
+    )
+
+
+@router.patch("/folders/{folder_id}", response_model=FolderItem)
+def update_folder(
+    folder_id: str,
+    payload: FolderUpdateRequest,
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+) -> FolderItem:
+    folder = db.scalar(select(Folder).where(Folder.id == folder_id))
+    if folder is None:
+        raise HTTPException(status_code=404, detail="Folder not found.")
+    if payload.name is not None:
+        folder.name = payload.name.strip()
+    if payload.sort_order is not None:
+        folder.sort_order = payload.sort_order
+    db.commit()
+    db.refresh(folder)
+    cnt = db.scalar(select(func.count()).select_from(Project).where(Project.folder_id == folder_id)) or 0
+    return FolderItem(
+        id=folder.id, team_id=folder.team_id, name=folder.name,
+        sort_order=folder.sort_order, project_count=cnt,
+    )
+
+
+@router.delete("/folders/{folder_id}")
+def delete_folder(
+    folder_id: str,
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+) -> Response:
+    folder = db.scalar(select(Folder).where(Folder.id == folder_id))
+    if folder is None:
+        raise HTTPException(status_code=404, detail="Folder not found.")
+    # Unlink projects from this folder (don't delete them)
+    for p in db.scalars(select(Project).where(Project.folder_id == folder_id)):
+        p.folder_id = None
+    db.delete(folder)
+    db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+# ── Automations ─────────────────────────────────────────────────────
+
+
+class AutomationItem(BaseModel):
+    id: str
+    project_id: str
+    name: str
+    enabled: bool
+    trigger: str
+    condition: dict | None = None
+    action: dict
+
+
+class AutomationListResponse(BaseModel):
+    items: list[AutomationItem]
+
+
+class AutomationCreateRequest(BaseModel):
+    name: str = Field(..., min_length=1, max_length=140)
+    trigger: str = Field(..., min_length=1, max_length=40)
+    condition: dict | None = None
+    action: dict
+
+
+class AutomationUpdateRequest(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=140)
+    enabled: bool | None = None
+    trigger: str | None = None
+    condition: dict | None = None
+    action: dict | None = None
+
+
+@router.get("/projects/{project_id}/automations", response_model=AutomationListResponse)
+def list_automations(
+    project_id: str,
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+) -> AutomationListResponse:
+    _ensure_project_access(db, current_user, project_id)
+    rules = list(
+        db.scalars(
+            select(Automation)
+            .where(Automation.project_id == project_id)
+            .order_by(Automation.created_at.desc())
+        )
+    )
+    return AutomationListResponse(
+        items=[
+            AutomationItem(
+                id=a.id, project_id=a.project_id, name=a.name,
+                enabled=a.enabled, trigger=a.trigger,
+                condition=a.condition, action=a.action,
+            )
+            for a in rules
+        ]
+    )
+
+
+@router.post(
+    "/projects/{project_id}/automations",
+    response_model=AutomationItem,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_automation(
+    project_id: str,
+    payload: AutomationCreateRequest,
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+) -> AutomationItem:
+    _ensure_project_owner(db, current_user, project_id)
+    a = Automation(
+        id=new_id(),
+        project_id=project_id,
+        name=payload.name.strip(),
+        trigger=payload.trigger,
+        condition=payload.condition,
+        action=payload.action,
+    )
+    db.add(a)
+    db.commit()
+    db.refresh(a)
+    return AutomationItem(
+        id=a.id, project_id=a.project_id, name=a.name,
+        enabled=a.enabled, trigger=a.trigger,
+        condition=a.condition, action=a.action,
+    )
+
+
+@router.patch("/automations/{automation_id}", response_model=AutomationItem)
+def update_automation(
+    automation_id: str,
+    payload: AutomationUpdateRequest,
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+) -> AutomationItem:
+    a = db.scalar(select(Automation).where(Automation.id == automation_id))
+    if a is None:
+        raise HTTPException(status_code=404, detail="Automation not found.")
+    _ensure_project_owner(db, current_user, a.project_id)
+    if payload.name is not None:
+        a.name = payload.name.strip()
+    if payload.enabled is not None:
+        a.enabled = payload.enabled
+    if payload.trigger is not None:
+        a.trigger = payload.trigger
+    if payload.condition is not None:
+        a.condition = payload.condition
+    if payload.action is not None:
+        a.action = payload.action
+    db.commit()
+    db.refresh(a)
+    return AutomationItem(
+        id=a.id, project_id=a.project_id, name=a.name,
+        enabled=a.enabled, trigger=a.trigger,
+        condition=a.condition, action=a.action,
+    )
+
+
+@router.delete("/automations/{automation_id}")
+def delete_automation(
+    automation_id: str,
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+) -> Response:
+    a = db.scalar(select(Automation).where(Automation.id == automation_id))
+    if a is None:
+        raise HTTPException(status_code=404, detail="Automation not found.")
+    _ensure_project_owner(db, current_user, a.project_id)
+    db.delete(a)
+    db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+# ── Goals / OKR ─────────────────────────────────────────────────────
+
+
+class GoalItem(BaseModel):
+    id: str
+    project_id: str
+    name: str
+    description: str
+    target: float
+    progress: float
+    status: str
+    due_date: date | None
+    linked_issue_count: int = 0
+    created_at: datetime
+    updated_at: datetime
+
+
+class GoalListResponse(BaseModel):
+    items: list[GoalItem]
+
+
+class GoalCreateRequest(BaseModel):
+    name: str = Field(..., min_length=1, max_length=200)
+    description: str = Field(default="", max_length=4000)
+    target: float = 100.0
+    due_date: date | None = None
+
+
+class GoalUpdateRequest(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=200)
+    description: str | None = Field(default=None, max_length=4000)
+    target: float | None = None
+    progress: float | None = None
+    status: Literal["active", "completed", "canceled"] | None = None
+    due_date: date | None = None
+
+
+class GoalLinkRequest(BaseModel):
+    issue_id: str
+
+
+def _goal_linked_count(db: Session, goal_id: str) -> int:
+    return db.scalar(select(func.count()).select_from(GoalLink).where(GoalLink.goal_id == goal_id)) or 0
+
+
+@router.get("/projects/{project_id}/goals", response_model=GoalListResponse)
+def list_goals(
+    project_id: str,
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+) -> GoalListResponse:
+    _ensure_project_access(db, current_user, project_id)
+    goals = list(
+        db.scalars(select(Goal).where(Goal.project_id == project_id).order_by(Goal.created_at.desc()))
+    )
+    return GoalListResponse(
+        items=[
+            GoalItem(
+                id=g.id, project_id=g.project_id, name=g.name,
+                description=g.description, target=g.target, progress=g.progress,
+                status=g.status, due_date=g.due_date,
+                linked_issue_count=_goal_linked_count(db, g.id),
+                created_at=g.created_at, updated_at=g.updated_at,
+            )
+            for g in goals
+        ]
+    )
+
+
+@router.post("/projects/{project_id}/goals", response_model=GoalItem, status_code=status.HTTP_201_CREATED)
+def create_goal(
+    project_id: str,
+    payload: GoalCreateRequest,
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+) -> GoalItem:
+    _ensure_project_access(db, current_user, project_id)
+    g = Goal(
+        id=new_id(), project_id=project_id,
+        name=payload.name.strip(), description=payload.description.strip(),
+        target=payload.target, due_date=payload.due_date,
+    )
+    db.add(g)
+    db.commit()
+    db.refresh(g)
+    return GoalItem(
+        id=g.id, project_id=g.project_id, name=g.name,
+        description=g.description, target=g.target, progress=g.progress,
+        status=g.status, due_date=g.due_date, linked_issue_count=0,
+        created_at=g.created_at, updated_at=g.updated_at,
+    )
+
+
+@router.patch("/goals/{goal_id}", response_model=GoalItem)
+def update_goal(
+    goal_id: str,
+    payload: GoalUpdateRequest,
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+) -> GoalItem:
+    g = db.scalar(select(Goal).where(Goal.id == goal_id))
+    if g is None:
+        raise HTTPException(status_code=404, detail="Goal not found.")
+    _ensure_project_access(db, current_user, g.project_id)
+    for field in ["name", "description", "target", "progress", "status", "due_date"]:
+        val = getattr(payload, field)
+        if val is not None:
+            setattr(g, field, val.strip() if isinstance(val, str) else val)
+    db.commit()
+    db.refresh(g)
+    return GoalItem(
+        id=g.id, project_id=g.project_id, name=g.name,
+        description=g.description, target=g.target, progress=g.progress,
+        status=g.status, due_date=g.due_date,
+        linked_issue_count=_goal_linked_count(db, g.id),
+        created_at=g.created_at, updated_at=g.updated_at,
+    )
+
+
+@router.delete("/goals/{goal_id}")
+def delete_goal(
+    goal_id: str,
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+) -> Response:
+    g = db.scalar(select(Goal).where(Goal.id == goal_id))
+    if g is None:
+        raise HTTPException(status_code=404, detail="Goal not found.")
+    _ensure_project_access(db, current_user, g.project_id)
+    for link in db.scalars(select(GoalLink).where(GoalLink.goal_id == goal_id)):
+        db.delete(link)
+    db.delete(g)
+    db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.post("/goals/{goal_id}/links", status_code=status.HTTP_201_CREATED)
+def link_issue_to_goal(
+    goal_id: str,
+    payload: GoalLinkRequest,
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+) -> dict:
+    g = db.scalar(select(Goal).where(Goal.id == goal_id))
+    if g is None:
+        raise HTTPException(status_code=404, detail="Goal not found.")
+    _ensure_project_access(db, current_user, g.project_id)
+    existing = db.scalar(
+        select(GoalLink).where(GoalLink.goal_id == goal_id, GoalLink.issue_id == payload.issue_id)
+    )
+    if existing:
+        raise HTTPException(status_code=409, detail="Issue already linked.")
+    db.add(GoalLink(id=new_id(), goal_id=goal_id, issue_id=payload.issue_id))
+    db.commit()
+    return {"linked": True}
+
+
+@router.delete("/goals/{goal_id}/links/{issue_id}")
+def unlink_issue_from_goal(
+    goal_id: str,
+    issue_id: str,
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+) -> Response:
+    link = db.scalar(
+        select(GoalLink).where(GoalLink.goal_id == goal_id, GoalLink.issue_id == issue_id)
+    )
+    if link is None:
+        raise HTTPException(status_code=404, detail="Link not found.")
+    g = db.scalar(select(Goal).where(Goal.id == goal_id))
+    if g:
+        _ensure_project_access(db, current_user, g.project_id)
+    db.delete(link)
+    db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+# ── Docs (Wiki) ─────────────────────────────────────────────────────
+
+
+class DocItem(BaseModel):
+    id: str
+    project_id: str
+    title: str
+    content_blocks: list[dict] | None = None
+    created_by_id: str
+    created_by_name: str
+    created_at: datetime
+    updated_at: datetime
+
+
+class DocListResponse(BaseModel):
+    items: list[DocItem]
+
+
+class DocCreateRequest(BaseModel):
+    title: str = Field(..., min_length=1, max_length=200)
+    content_blocks: list[dict] | None = None
+
+
+class DocUpdateRequest(BaseModel):
+    title: str | None = Field(default=None, min_length=1, max_length=200)
+    content_blocks: list[dict] | None = None
+
+
+def _serialize_doc(d: Doc) -> DocItem:
+    return DocItem(
+        id=d.id, project_id=d.project_id, title=d.title,
+        content_blocks=d.content_blocks,
+        created_by_id=d.created_by_id,
+        created_by_name=getattr(d.created_by, "full_name", ""),
+        created_at=d.created_at, updated_at=d.updated_at,
+    )
+
+
+@router.get("/projects/{project_id}/docs", response_model=DocListResponse)
+def list_docs(
+    project_id: str,
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+) -> DocListResponse:
+    _ensure_project_access(db, current_user, project_id)
+    docs = list(
+        db.scalars(
+            select(Doc)
+            .options(selectinload(Doc.created_by))
+            .where(Doc.project_id == project_id)
+            .order_by(Doc.updated_at.desc())
+        )
+    )
+    return DocListResponse(items=[_serialize_doc(d) for d in docs])
+
+
+@router.post("/projects/{project_id}/docs", response_model=DocItem, status_code=status.HTTP_201_CREATED)
+def create_doc(
+    project_id: str,
+    payload: DocCreateRequest,
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+) -> DocItem:
+    _ensure_project_access(db, current_user, project_id)
+    d = Doc(
+        id=new_id(), project_id=project_id,
+        title=payload.title.strip(),
+        content_blocks=payload.content_blocks,
+        created_by_id=current_user.id,
+    )
+    db.add(d)
+    db.commit()
+    d = db.scalar(select(Doc).options(selectinload(Doc.created_by)).where(Doc.id == d.id))
+    return _serialize_doc(d)
+
+
+@router.get("/docs/{doc_id}", response_model=DocItem)
+def get_doc(
+    doc_id: str,
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+) -> DocItem:
+    d = db.scalar(select(Doc).options(selectinload(Doc.created_by)).where(Doc.id == doc_id))
+    if d is None:
+        raise HTTPException(status_code=404, detail="Doc not found.")
+    _ensure_project_access(db, current_user, d.project_id)
+    return _serialize_doc(d)
+
+
+@router.patch("/docs/{doc_id}", response_model=DocItem)
+def update_doc(
+    doc_id: str,
+    payload: DocUpdateRequest,
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+) -> DocItem:
+    d = db.scalar(select(Doc).options(selectinload(Doc.created_by)).where(Doc.id == doc_id))
+    if d is None:
+        raise HTTPException(status_code=404, detail="Doc not found.")
+    _ensure_project_access(db, current_user, d.project_id)
+    if payload.title is not None:
+        d.title = payload.title.strip()
+    if payload.content_blocks is not None:
+        d.content_blocks = payload.content_blocks
+    db.commit()
+    db.refresh(d)
+    return _serialize_doc(d)
+
+
+@router.delete("/docs/{doc_id}")
+def delete_doc(
+    doc_id: str,
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+) -> Response:
+    d = db.scalar(select(Doc).where(Doc.id == doc_id))
+    if d is None:
+        raise HTTPException(status_code=404, detail="Doc not found.")
+    _ensure_project_access(db, current_user, d.project_id)
+    db.delete(d)
+    db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
