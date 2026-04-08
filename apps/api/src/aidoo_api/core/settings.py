@@ -26,6 +26,22 @@ class Settings(BaseSettings):
         validation_alias=AliasChoices("DOOWON_POSTGRES_DSN"),
     )
     session_ttl_hours: int = Field(default=168, ge=1, le=24 * 30)
+    minio_endpoint: str = Field(
+        default="http://127.0.0.1:9000",
+        validation_alias=AliasChoices("DOOWON_MINIO_ENDPOINT"),
+    )
+    minio_access_key: str = Field(
+        default="minioadmin",
+        validation_alias=AliasChoices("DOOWON_MINIO_ACCESS_KEY"),
+    )
+    minio_secret_key: str = Field(
+        default="minioadmin",
+        validation_alias=AliasChoices("DOOWON_MINIO_SECRET_KEY"),
+    )
+    minio_bucket: str = Field(
+        default="aidoo-portal",
+        validation_alias=AliasChoices("DOOWON_MINIO_BUCKET"),
+    )
 
     model_config = SettingsConfigDict(
         env_prefix="DOOWON_API_",

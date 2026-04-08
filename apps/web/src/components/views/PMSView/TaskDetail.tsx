@@ -13,6 +13,9 @@ import {
   Tag,
   Check,
   Unlink,
+  Paperclip,
+  Download,
+  FileIcon,
 } from 'lucide-react';
 import { Badge, Button, BlockEditor, BlockViewer } from '@aidoo/ui';
 import type { BlockContent } from '@aidoo/ui';
@@ -24,9 +27,12 @@ import {
   createIssueComment,
   createProjectIssue,
   listIssueActivityLogs,
+  uploadAttachment,
+  deleteAttachment,
   type PmsIssue,
   type PmsComment,
   type PmsActivityLog,
+  type PmsAttachment,
   type PmsProjectMember,
   type PmsMilestone,
   type PmsLabel,
@@ -68,6 +74,10 @@ export const TaskDetail = ({
   const [commentDraft, setCommentDraft] = useState('');
   const [newSubtaskTitle, setNewSubtaskTitle] = useState('');
   const [addingSubtask, setAddingSubtask] = useState(false);
+  const [attachments, setAttachments] = useState<PmsAttachment[]>([]);
+  const [uploading, setUploading] = useState(false);
+  const [dragOver, setDragOver] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [descFullscreen, setDescFullscreen] = useState(false);
   const [subtaskMenuOpen, setSubtaskMenuOpen] = useState<string | null>(null);
   const [labelPickerOpen, setLabelPickerOpen] = useState(false);
@@ -96,6 +106,7 @@ export const TaskDetail = ({
         setComments(detail.comments);
         setActivityLogs(logs.items);
         setSubtasks(detail.subtasks);
+        setAttachments(detail.attachments ?? []);
       })
       .finally(() => setLoading(false));
   }, [token, issue.id]);
@@ -244,6 +255,36 @@ export const TaskDetail = ({
         setSaveError(getErrorMessage(error, '댓글을 등록하지 못했습니다.'));
       });
   }, [token, issue.id, commentDraft, onUpdate]);
+
+  const handleFileUpload = useCallback(async (files: FileList | File[]) => {
+    if (!token) return;
+    setUploading(true);
+    setSaveError(null);
+    try {
+      for (const file of Array.from(files)) {
+        const att = await uploadAttachment(token, issue.id, file);
+        setAttachments(prev => [...prev, att]);
+      }
+      await Promise.resolve(onUpdate?.());
+    } catch (error) {
+      setSaveError(getErrorMessage(error, '파일을 업로드하지 못했습니다.'));
+    } finally {
+      setUploading(false);
+      setDragOver(false);
+    }
+  }, [token, issue.id, onUpdate]);
+
+  const handleDeleteAttachment = useCallback(async (attachmentId: string) => {
+    if (!token) return;
+    setSaveError(null);
+    try {
+      await deleteAttachment(token, attachmentId);
+      setAttachments(prev => prev.filter(a => a.id !== attachmentId));
+      await Promise.resolve(onUpdate?.());
+    } catch (error) {
+      setSaveError(getErrorMessage(error, '첨부파일을 삭제하지 못했습니다.'));
+    }
+  }, [token, onUpdate]);
 
   // Description fullscreen mode
   if (descFullscreen) {
@@ -490,11 +531,80 @@ export const TaskDetail = ({
 
             <hr className="border-clickup-border" />
 
-            {/* Attachments placeholder (Phase 4) */}
+            {/* Attachments */}
             <div className="space-y-2">
-              <h3 className="text-sm font-semibold text-clickup-text">Attachments</h3>
-              <div className="border-2 border-dashed border-clickup-border rounded-lg py-6 text-center text-sm text-clickup-text/40">
-                Drop your files here to upload
+              <div className="flex items-center gap-2">
+                <Paperclip size={14} className="text-clickup-text/50" />
+                <h3 className="text-sm font-semibold text-clickup-text">Attachments</h3>
+                <span className="text-xs text-clickup-text/40">{attachments.length}</span>
+              </div>
+
+              {attachments.length > 0 && (
+                <div className="space-y-1">
+                  {attachments.map(att => {
+                    const isImage = att.content_type.startsWith('image/');
+                    return (
+                      <div key={att.id} className="flex items-center gap-3 py-1.5 px-2 rounded-md hover:bg-clickup-hover group transition-colors">
+                        {isImage ? (
+                          <img
+                            src={att.download_url}
+                            alt={att.filename}
+                            className="w-8 h-8 rounded object-cover border border-clickup-border"
+                          />
+                        ) : (
+                          <div className="w-8 h-8 rounded bg-clickup-sidebar border border-clickup-border flex items-center justify-center">
+                            <FileIcon size={14} className="text-clickup-text/40" />
+                          </div>
+                        )}
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm text-clickup-text truncate">{att.filename}</p>
+                          <p className="text-[10px] text-clickup-text/40">
+                            {att.size_bytes < 1024 ? `${att.size_bytes} B` : att.size_bytes < 1048576 ? `${(att.size_bytes / 1024).toFixed(1)} KB` : `${(att.size_bytes / 1048576).toFixed(1)} MB`}
+                            {' · '}{att.uploaded_by_name}
+                          </p>
+                        </div>
+                        <a
+                          href={att.download_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          aria-label={`${att.filename} 다운로드`}
+                          className="opacity-0 group-hover:opacity-100 text-clickup-text/40 hover:text-clickup-text transition-all"
+                        >
+                          <Download size={14} />
+                        </a>
+                        <button
+                          onClick={() => handleDeleteAttachment(att.id)}
+                          className="opacity-0 group-hover:opacity-100 text-clickup-text/40 hover:text-red-400 transition-all"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              <div
+                onDragOver={e => { e.preventDefault(); setDragOver(true); }}
+                onDragLeave={() => setDragOver(false)}
+                onDrop={e => { e.preventDefault(); if (e.dataTransfer.files.length) handleFileUpload(e.dataTransfer.files); }}
+                onClick={() => fileInputRef.current?.click()}
+                className={`border-2 border-dashed rounded-lg py-4 text-center text-sm cursor-pointer transition-colors ${
+                  dragOver ? 'border-clickup-purple bg-clickup-purple/5 text-clickup-purple' : 'border-clickup-border text-clickup-text/40 hover:border-clickup-text/30'
+                }`}
+              >
+                {uploading ? (
+                  <Loader2 size={16} className="animate-spin mx-auto text-clickup-purple" />
+                ) : (
+                  <span>{dragOver ? 'Drop to upload' : 'Click or drag files to upload'}</span>
+                )}
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  multiple
+                  className="hidden"
+                  onChange={e => { if (e.target.files?.length) { handleFileUpload(e.target.files); e.target.value = ''; } }}
+                />
               </div>
             </div>
           </div>

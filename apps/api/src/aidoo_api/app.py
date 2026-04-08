@@ -2,6 +2,7 @@ from fastapi import Depends, FastAPI
 
 from aidoo_api.core.db import init_db
 from aidoo_api.core.settings import get_settings
+from aidoo_api.core.storage import ensure_bucket
 from aidoo_api.domains.admin.router import router as admin_router
 from aidoo_api.domains.auth.dependencies import require_current_user
 from aidoo_api.domains.auth.router import router as auth_router
@@ -16,6 +17,7 @@ from aidoo_api.domains.wiki_pms.router import router as wiki_pms_router
 def create_app() -> FastAPI:
     settings = get_settings()
     init_db()
+    ensure_bucket()
     app = FastAPI(
         title=settings.app_name,
         version="0.1.0",

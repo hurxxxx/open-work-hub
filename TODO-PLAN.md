@@ -86,7 +86,7 @@ PMSView.tsx에서 `useAuth()` → `token` 획득, `listPmsProjects` / `listProje
 
 ---
 
-### Phase 4: 첨부파일 (MinIO)
+### Phase 4: 첨부파일 (MinIO) ✅ 완료
 
 이슈/댓글에 파일 첨부. MinIO를 오브젝트 스토리지로 사용.
 
@@ -120,7 +120,7 @@ PMSView.tsx에서 `useAuth()` → `token` 획득, `listPmsProjects` / `listProje
 
 ---
 
-### Phase 5: 인앱 알림
+### Phase 5: 인앱 알림 ✅ 완료
 
 이슈 변경 시 관련자에게 알림.
 
@@ -144,10 +144,12 @@ PMSView.tsx에서 `useAuth()` → `token` 획득, `listPmsProjects` / `listProje
 
 ---
 
-### Phase 6: 정리
+### Phase 6: 정리 ✅ 완료
 
 - `MOCK_TASKS`, `Task` 타입, `mockData.ts` PMS 관련 mock 제거
 - `pms-home.tsx`, `pms-workspace.tsx` — PMSView에 통합됐으므로 삭제
+- `types.ts` — Task 타입 전용, 미사용으로 삭제
+- `constants.ts`에서 `pms-home` nav item 제거
 - 미사용 import 정리
 
 ---

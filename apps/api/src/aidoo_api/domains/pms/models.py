@@ -191,6 +191,10 @@ class Issue(Base):
         back_populates="issue",
         cascade="all, delete-orphan",
     )
+    attachments: Mapped[list["Attachment"]] = relationship(
+        back_populates="issue",
+        cascade="all, delete-orphan",
+    )
 
 
 class IssueLabel(Base):
@@ -257,3 +261,40 @@ class ScheduleDependency(Base):
         nullable=False,
     )
     project: Mapped[Project] = relationship(back_populates="dependencies")
+
+
+class Attachment(Base):
+    __tablename__ = "pms_attachments"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    issue_id: Mapped[str] = mapped_column(ForeignKey("pms_issues.id"), index=True)
+    filename: Mapped[str] = mapped_column(String(255))
+    content_type: Mapped[str] = mapped_column(String(120), default="application/octet-stream")
+    size_bytes: Mapped[int] = mapped_column(Integer, default=0)
+    storage_key: Mapped[str] = mapped_column(String(512), unique=True)
+    uploaded_by_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        default=utcnow_naive,
+        nullable=False,
+    )
+    issue: Mapped[Issue] = relationship(back_populates="attachments")
+    uploaded_by = relationship("User")
+
+
+class Notification(Base):
+    __tablename__ = "pms_notifications"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
+    type: Mapped[str] = mapped_column(String(40), index=True)
+    title: Mapped[str] = mapped_column(String(255))
+    body: Mapped[str] = mapped_column(Text, default="")
+    reference_type: Mapped[str] = mapped_column(String(24), default="issue")
+    reference_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
+    is_read: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        default=utcnow_naive,
+        nullable=False,
+    )

@@ -83,7 +83,6 @@ export const NAV_ITEMS: NavItem[] = [
   { id: 'patent-report', title: 'AI 특허 보고서', icon: FileBarChart, category: 'Patent', appId: 'ai', description: '특허 분석 결과를 보고서 형태로 정리' },
 
   // PMS
-  { id: 'pms-home', title: 'Home', icon: Home, category: 'Personal', appId: 'pms' },
   { id: 'pms-inbox', title: 'Inbox', icon: Inbox, category: 'Personal', appId: 'pms' },
   { id: 'pms-tasks', title: 'My Tasks', icon: CheckCircle2, category: 'Personal', appId: 'pms' },
   { id: 'pms-tasks-assigned', title: 'Assigned to me', icon: User, category: 'Personal', appId: 'pms' },

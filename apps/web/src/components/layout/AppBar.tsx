@@ -1,4 +1,7 @@
-import { Link } from 'react-router-dom';
+import { useState, useEffect, useCallback } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { Bell } from 'lucide-react';
+import { AnimatePresence } from 'motion/react';
 
 import { APP_BAR_ITEMS } from '@/src/constants';
 import {
@@ -6,7 +9,10 @@ import {
   hasAnyAdminReadPermission,
 } from '@/src/domains/admin/admin-permissions';
 import type { AuthUser } from '@/src/domains/auth/auth-api';
+import { useAuth } from '@/src/domains/auth/auth-provider';
+import { getUnreadNotificationCount } from '@/src/domains/pms/pms-api';
 import { cn } from '@/src/lib/utils';
+import { NotificationPanel } from './NotificationPanel';
 
 const featureByAppId: Partial<Record<'home' | 'ai' | 'pms' | 'docs' | 'planner' | 'settings', string>> = {
   ai: 'nav.ai',
@@ -36,6 +42,49 @@ export function AppBar({
   currentUser: AuthUser;
   onOpenAccount: () => void;
 }) {
+  const { token } = useAuth();
+  const navigate = useNavigate();
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [notifOpen, setNotifOpen] = useState(false);
+
+  useEffect(() => {
+    if (!token) {
+      setUnreadCount(0);
+      return;
+    }
+
+    let active = true;
+
+    const syncUnreadCount = async () => {
+      try {
+        const res = await getUnreadNotificationCount(token);
+        if (active) {
+          setUnreadCount(res.count);
+        }
+      } catch {
+        return;
+      }
+    };
+
+    void syncUnreadCount();
+    const interval = window.setInterval(() => {
+      void syncUnreadCount();
+    }, 30000);
+
+    return () => {
+      active = false;
+      window.clearInterval(interval);
+    };
+  }, [token]);
+
+  const handleCountChange = useCallback((delta: number) => {
+    setUnreadCount(prev => Math.max(0, prev + delta));
+  }, []);
+
+  const handleNavigateToIssue = useCallback((issueId: string) => {
+    navigate(`/pms?issue=${encodeURIComponent(issueId)}`);
+  }, [navigate]);
+
   const visibleItems = APP_BAR_ITEMS.filter((item) => {
     if (item.id === 'settings') {
       return (
@@ -75,7 +124,31 @@ export function AppBar({
         </Link>
       ))}
 
-      <div className="mt-auto">
+      <div className="mt-auto flex flex-col items-center gap-3 relative">
+        <button
+          aria-label="알림"
+          className="relative p-2 rounded-xl text-gray-500 hover:text-gray-300 hover:bg-clickup-hover transition-all"
+          onClick={() => setNotifOpen(prev => !prev)}
+          type="button"
+        >
+          <Bell size={20} />
+          {unreadCount > 0 && (
+            <span className="absolute -top-0.5 -right-0.5 w-4 h-4 bg-red-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center">
+              {unreadCount > 9 ? '9+' : unreadCount}
+            </span>
+          )}
+        </button>
+
+        <AnimatePresence>
+          {notifOpen && (
+            <NotificationPanel
+              onClose={() => setNotifOpen(false)}
+              onNavigateToIssue={handleNavigateToIssue}
+              onCountChange={handleCountChange}
+            />
+          )}
+        </AnimatePresence>
+
         <button
           aria-label="마이페이지"
           className="w-10 h-10 bg-gradient-to-br from-clickup-purple to-purple-500 rounded-full flex items-center justify-center text-white text-[13px] font-bold cursor-pointer shadow-md shadow-clickup-purple/20 ring-2 ring-transparent hover:ring-clickup-purple/40 transition-all outline-none"

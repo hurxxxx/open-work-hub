@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   Layout,
@@ -27,6 +27,7 @@ import {
   listProjectMembers,
   listProjectMilestones,
   listProjectLabels,
+  getIssueDetail,
   updateIssue,
   type PmsProject,
   type PmsIssue,
@@ -51,6 +52,7 @@ import { ProjectSettingsPanel } from './ProjectSettingsPanel';
 
 export const PMSView = () => {
   const { toolId } = useParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { token } = useAuth();
   const [activeTab, setActiveTab] = useState<'Overview' | 'Team Docs' | 'List' | 'Board' | 'Calendar' | 'Gantt' | 'Table'>('List');
   const [selectedIssue, setSelectedIssue] = useState<PmsIssue | null>(null);
@@ -74,6 +76,7 @@ export const PMSView = () => {
   const currentProject = NAV_ITEMS.find(item => item.id === toolId);
   const projectName = currentProject?.title || 'Team Space';
   const selectedProject = projects.find(p => p.id === selectedProjectId);
+  const requestedIssueId = searchParams.get('issue');
 
   const getErrorMessage = useCallback(
     (error: unknown, fallback: string) => (error instanceof Error ? error.message : fallback),
@@ -90,6 +93,17 @@ export const PMSView = () => {
       return nextIssues.find((item) => item.id === current.id) ?? null;
     });
   }, []);
+
+  const clearSelectedIssue = useCallback(() => {
+    setSelectedIssue(null);
+    if (!requestedIssueId) {
+      return;
+    }
+
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.delete('issue');
+    setSearchParams(nextParams, { replace: true });
+  }, [requestedIssueId, searchParams, setSearchParams]);
 
   // Load projects on mount
   useEffect(() => {
@@ -172,8 +186,46 @@ export const PMSView = () => {
   }, [toolId, isTeamSpace]);
 
   useEffect(() => {
-    setSelectedIssue(null);
+    setSelectedIssue((current) => {
+      if (!current) {
+        return null;
+      }
+
+      return current.project_id === selectedProjectId ? current : null;
+    });
   }, [selectedProjectId]);
+
+  useEffect(() => {
+    if (!token || !requestedIssueId) {
+      return;
+    }
+
+    let cancelled = false;
+    setError(null);
+    setActiveTab('List');
+    setSearchQuery('');
+
+    getIssueDetail(token, requestedIssueId)
+      .then((detail) => {
+        if (cancelled) {
+          return;
+        }
+
+        setSelectedProjectId(detail.issue.project_id);
+        setSelectedIssue(detail.issue);
+      })
+      .catch((caughtError) => {
+        if (cancelled) {
+          return;
+        }
+
+        setError(getErrorMessage(caughtError, '요청한 이슈를 불러오지 못했습니다.'));
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [getErrorMessage, requestedIssueId, token]);
 
   if (isAssignedTasksView) return <AssignedToMeView />;
   if (isTodayView) return <TodayOverdueView />;
@@ -213,7 +265,10 @@ export const PMSView = () => {
             {projects.length > 1 && (
               <select
                 value={selectedProjectId}
-                onChange={e => setSelectedProjectId(e.target.value)}
+                onChange={e => {
+                  clearSelectedIssue();
+                  setSelectedProjectId(e.target.value);
+                }}
                 className="bg-clickup-sidebar border border-clickup-border rounded-md px-3 py-1.5 text-xs text-clickup-text focus:outline-none focus:border-clickup-purple"
               >
                 {projects.map(p => (
@@ -339,7 +394,7 @@ export const PMSView = () => {
             exit={{ opacity: 0 }}
             className="fixed inset-0 z-50 flex items-stretch"
           >
-            <div className="absolute inset-0 bg-black/40" onClick={() => setSelectedIssue(null)} />
+            <div className="absolute inset-0 bg-black/40" onClick={clearSelectedIssue} />
             <motion.div
               initial={{ y: 30, opacity: 0 }}
               animate={{ y: 0, opacity: 1 }}
@@ -352,7 +407,7 @@ export const PMSView = () => {
                 members={members}
                 milestones={milestones}
                 projectLabels={labels}
-                onClose={() => setSelectedIssue(null)}
+                onClose={clearSelectedIssue}
                 onUpdate={reloadIssues}
               />
             </motion.div>

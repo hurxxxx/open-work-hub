@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+from io import BytesIO
 from datetime import UTC, date, datetime, timedelta
 from typing import Annotated, Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, UploadFile, status
+from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session, selectinload
@@ -12,13 +14,17 @@ from aidoo_api.core.db import get_db_session
 from aidoo_api.domains.auth.dependencies import require_current_user
 from aidoo_api.domains.auth.models import User
 from aidoo_api.domains.auth.security import new_id
+from aidoo_api.core.settings import get_settings
+from aidoo_api.core.storage import get_minio_client
 from aidoo_api.domains.pms.models import (
+    Attachment,
     Issue,
     IssueActivityLog,
     IssueComment,
     IssueLabel,
     Label,
     Milestone,
+    Notification,
     Project,
     ProjectMember,
     ScheduleDependency,
@@ -309,11 +315,46 @@ class ActivityLogListResponse(BaseModel):
     page_size: int
 
 
+class AttachmentItem(BaseModel):
+    id: str
+    issue_id: str
+    filename: str
+    content_type: str
+    size_bytes: int
+    download_url: str
+    uploaded_by_id: str
+    uploaded_by_name: str
+    created_at: datetime
+
+
+class NotificationItem(BaseModel):
+    id: str
+    type: str
+    title: str
+    body: str
+    reference_type: str
+    reference_id: str | None
+    is_read: bool
+    created_at: datetime
+
+
+class NotificationListResponse(BaseModel):
+    items: list[NotificationItem]
+    total: int
+    page: int
+    page_size: int
+
+
+class UnreadCountResponse(BaseModel):
+    count: int
+
+
 class IssueDetailResponse(BaseModel):
     issue: IssueListItem
     comments: list[IssueCommentItem]
     dependencies: list[DependencyItem]
     subtasks: list[IssueListItem] = []
+    attachments: list[AttachmentItem] = []
 
 
 class StatusCountItem(BaseModel):
@@ -584,6 +625,38 @@ def _log_issue_activity(
     )
 
 
+def _create_notification(
+    db: Session,
+    user_id: str,
+    ntype: str,
+    title: str,
+    body: str,
+    reference_type: str = "issue",
+    reference_id: str | None = None,
+) -> None:
+    db.add(
+        Notification(
+            id=new_id(),
+            user_id=user_id,
+            type=ntype,
+            title=title,
+            body=body,
+            reference_type=reference_type,
+            reference_id=reference_id,
+        )
+    )
+
+
+def _build_attachment_download_url(storage_key: str) -> str:
+    settings = get_settings()
+    client = get_minio_client()
+    return client.presigned_get_object(
+        settings.minio_bucket,
+        storage_key,
+        expires=timedelta(hours=1),
+    )
+
+
 def _next_issue_number(db: Session, project_id: str) -> int:
     current = db.scalar(select(func.max(Issue.issue_number)).where(Issue.project_id == project_id))
     return int(current or 0) + 1
@@ -675,6 +748,7 @@ def _get_issue_for_user(db: Session, user: User, issue_id: str) -> tuple[Issue, 
             selectinload(Issue.subtasks).selectinload(Issue.comments),
             selectinload(Issue.subtasks).selectinload(Issue.label_links).selectinload(IssueLabel.label),
             selectinload(Issue.subtasks).selectinload(Issue.subtasks),
+            selectinload(Issue.attachments).selectinload(Attachment.uploaded_by),
         )
         .where(Issue.id == issue_id)
     )
@@ -1206,6 +1280,20 @@ def get_issue(
             for dependency in dependencies
         ],
         subtasks=[_serialize_issue(sub) for sub in sorted(issue.subtasks, key=lambda s: s.created_at)],
+        attachments=[
+            AttachmentItem(
+                id=att.id,
+                issue_id=att.issue_id,
+                filename=att.filename,
+                content_type=att.content_type,
+                size_bytes=att.size_bytes,
+                download_url=_build_attachment_download_url(att.storage_key),
+                uploaded_by_id=att.uploaded_by_id,
+                uploaded_by_name=att.uploaded_by.full_name,
+                created_at=att.created_at,
+            )
+            for att in sorted(issue.attachments, key=lambda a: a.created_at)
+        ],
     )
 
 
@@ -1302,6 +1390,23 @@ def update_issue(
             or 0
         ) + 1
 
+    # Notification triggers
+    ref = _issue_reference(issue)
+    if payload.assignee_id is not None and payload.assignee_id != current_user.id:
+        _create_notification(
+            db, payload.assignee_id, "assigned",
+            f"{ref} assigned to you",
+            f"{current_user.full_name} assigned {ref} ({issue.title}) to you.",
+            reference_id=issue.id,
+        )
+    if payload.status is not None and payload.status != old_status and issue.assignee_id and issue.assignee_id != current_user.id:
+        _create_notification(
+            db, issue.assignee_id, "status_changed",
+            f"{ref} status → {ISSUE_STATUS_LABELS.get(payload.status, payload.status)}",
+            f"{current_user.full_name} changed status of {ref} to {ISSUE_STATUS_LABELS.get(payload.status, payload.status)}.",
+            reference_id=issue.id,
+        )
+
     db.commit()
     issue = db.scalar(
         select(Issue)
@@ -1359,6 +1464,16 @@ def create_issue_comment(
         "commented",
         f"{current_user.full_name} added a comment to {_issue_reference(issue)}.",
     )
+    # Notify assignee and reporter (excluding comment author)
+    ref = _issue_reference(issue)
+    notify_ids = {uid for uid in [issue.assignee_id, issue.reporter_id] if uid and uid != current_user.id}
+    for uid in notify_ids:
+        _create_notification(
+            db, uid, "commented",
+            f"New comment on {ref}",
+            f"{current_user.full_name} commented on {ref} ({issue.title}).",
+            reference_id=issue.id,
+        )
     db.commit()
     comment = db.scalar(
         select(IssueComment).options(selectinload(IssueComment.author)).where(IssueComment.id == comment.id)
@@ -1557,3 +1672,201 @@ def get_dashboard_summary(
         projects=project_cards,
         recent_activity=recent_activity,
     )
+
+
+MAX_UPLOAD_SIZE = 50 * 1024 * 1024  # 50 MB
+
+
+@router.post(
+    "/issues/{issue_id}/attachments",
+    response_model=AttachmentItem,
+    status_code=status.HTTP_201_CREATED,
+)
+async def upload_attachment(
+    issue_id: str,
+    file: UploadFile,
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+) -> AttachmentItem:
+    issue, project = _get_issue_for_user(db, current_user, issue_id)
+    data = await file.read()
+    if len(data) > MAX_UPLOAD_SIZE:
+        raise HTTPException(status_code=413, detail="File size exceeds 50 MB limit.")
+
+    settings = get_settings()
+    client = get_minio_client()
+    attachment_id = new_id()
+    storage_key = f"pms/{project.id}/{issue.id}/{attachment_id}/{file.filename}"
+    client.put_object(
+        settings.minio_bucket,
+        storage_key,
+        BytesIO(data),
+        length=len(data),
+        content_type=file.content_type or "application/octet-stream",
+    )
+    attachment = Attachment(
+        id=attachment_id,
+        issue_id=issue.id,
+        filename=file.filename or "unnamed",
+        content_type=file.content_type or "application/octet-stream",
+        size_bytes=len(data),
+        storage_key=storage_key,
+        uploaded_by_id=current_user.id,
+    )
+    db.add(attachment)
+    _log_issue_activity(
+        db,
+        issue.id,
+        current_user.id,
+        "attachment_added",
+        f"{current_user.full_name} attached {file.filename} to {_issue_reference(issue)}.",
+    )
+    db.commit()
+    db.refresh(attachment)
+    return AttachmentItem(
+        id=attachment.id,
+        issue_id=attachment.issue_id,
+        filename=attachment.filename,
+        content_type=attachment.content_type,
+        size_bytes=attachment.size_bytes,
+        download_url=_build_attachment_download_url(attachment.storage_key),
+        uploaded_by_id=attachment.uploaded_by_id,
+        uploaded_by_name=current_user.full_name,
+        created_at=attachment.created_at,
+    )
+
+
+@router.get("/attachments/{attachment_id}/download")
+def download_attachment(
+    attachment_id: str,
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+) -> RedirectResponse:
+    attachment = db.scalar(select(Attachment).where(Attachment.id == attachment_id))
+    if attachment is None:
+        raise HTTPException(status_code=404, detail="Attachment not found.")
+    _ensure_project_access(db, current_user, db.scalar(select(Issue.project_id).where(Issue.id == attachment.issue_id)))
+
+    url = _build_attachment_download_url(attachment.storage_key)
+    return RedirectResponse(url=url, status_code=302)
+
+
+@router.delete("/attachments/{attachment_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_attachment(
+    attachment_id: str,
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+) -> Response:
+    attachment = db.scalar(
+        select(Attachment).options(selectinload(Attachment.issue).selectinload(Issue.project)).where(Attachment.id == attachment_id)
+    )
+    if attachment is None:
+        raise HTTPException(status_code=404, detail="Attachment not found.")
+    _ensure_project_access(db, current_user, attachment.issue.project_id)
+
+    settings = get_settings()
+    client = get_minio_client()
+    client.remove_object(settings.minio_bucket, attachment.storage_key)
+
+    _log_issue_activity(
+        db,
+        attachment.issue_id,
+        current_user.id,
+        "attachment_removed",
+        f"{current_user.full_name} removed {attachment.filename} from {_issue_reference(attachment.issue)}.",
+    )
+    db.delete(attachment)
+    db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+# ── Notifications ────────────────────────────────────────────────────
+
+
+@router.get("/notifications", response_model=NotificationListResponse)
+def list_notifications(
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=100),
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+) -> NotificationListResponse:
+    rows = list(
+        db.scalars(
+            select(Notification)
+            .where(Notification.user_id == current_user.id)
+            .order_by(Notification.created_at.desc())
+        )
+    )
+    page_items, total = _paginate(
+        [
+            NotificationItem(
+                id=n.id,
+                type=n.type,
+                title=n.title,
+                body=n.body,
+                reference_type=n.reference_type,
+                reference_id=n.reference_id,
+                is_read=n.is_read,
+                created_at=n.created_at,
+            )
+            for n in rows
+        ],
+        page,
+        page_size,
+    )
+    return NotificationListResponse(items=page_items, total=total, page=page, page_size=page_size)
+
+
+@router.get("/notifications/unread-count", response_model=UnreadCountResponse)
+def get_unread_count(
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+) -> UnreadCountResponse:
+    count = db.scalar(
+        select(func.count(Notification.id)).where(
+            Notification.user_id == current_user.id,
+            Notification.is_read == False,  # noqa: E712
+        )
+    ) or 0
+    return UnreadCountResponse(count=count)
+
+
+@router.patch("/notifications/{notification_id}/read", response_model=NotificationItem)
+def mark_notification_read(
+    notification_id: str,
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+) -> NotificationItem:
+    notification = db.scalar(
+        select(Notification).where(Notification.id == notification_id, Notification.user_id == current_user.id)
+    )
+    if notification is None:
+        raise HTTPException(status_code=404, detail="Notification not found.")
+    notification.is_read = True
+    db.commit()
+    return NotificationItem(
+        id=notification.id,
+        type=notification.type,
+        title=notification.title,
+        body=notification.body,
+        reference_type=notification.reference_type,
+        reference_id=notification.reference_id,
+        is_read=notification.is_read,
+        created_at=notification.created_at,
+    )
+
+
+@router.patch("/notifications/read-all", status_code=status.HTTP_204_NO_CONTENT)
+def mark_all_notifications_read(
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+) -> Response:
+    from sqlalchemy import update as sa_update
+
+    db.execute(
+        sa_update(Notification)
+        .where(Notification.user_id == current_user.id, Notification.is_read == False)  # noqa: E712
+        .values(is_read=True)
+    )
+    db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

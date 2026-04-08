@@ -141,11 +141,24 @@ export interface PmsActivityLogsResponse {
   page_size: number;
 }
 
+export interface PmsAttachment {
+  id: string;
+  issue_id: string;
+  filename: string;
+  content_type: string;
+  size_bytes: number;
+  download_url: string;
+  uploaded_by_id: string;
+  uploaded_by_name: string;
+  created_at: string;
+}
+
 export interface PmsIssueDetail {
   issue: PmsIssue;
   comments: PmsComment[];
   dependencies: PmsDependency[];
   subtasks: PmsIssue[];
+  attachments: PmsAttachment[];
 }
 
 export interface PmsLabelsResponse {
@@ -415,4 +428,67 @@ export function listIssueActivityLogs(
     `/api/v1/pms/issues/${issueId}/activity-logs?page=1&page_size=50`,
     token,
   );
+}
+
+export async function uploadAttachment(
+  token: string,
+  issueId: string,
+  file: File,
+): Promise<PmsAttachment> {
+  const formData = new FormData();
+  formData.append('file', file);
+  const response = await fetch(`/api/v1/pms/issues/${issueId}/attachments`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+    body: formData,
+  });
+  const payload = await response.json().catch(() => null);
+  if (!response.ok) {
+    throw new PmsApiError(response.status, payload?.detail ?? `Upload failed with ${response.status}.`);
+  }
+  return payload as PmsAttachment;
+}
+
+export function deleteAttachment(token: string, attachmentId: string): Promise<void> {
+  return request<void>(`/api/v1/pms/attachments/${attachmentId}`, token, { method: 'DELETE' });
+}
+
+// ── Notifications ───────────────────────────────────────────────────
+
+export interface PmsNotification {
+  id: string;
+  type: string;
+  title: string;
+  body: string;
+  reference_type: string;
+  reference_id: string | null;
+  is_read: boolean;
+  created_at: string;
+}
+
+export interface PmsNotificationsResponse {
+  items: PmsNotification[];
+  total: number;
+  page: number;
+  page_size: number;
+}
+
+export interface PmsUnreadCountResponse {
+  count: number;
+}
+
+export function listNotifications(token: string, page = 1): Promise<PmsNotificationsResponse> {
+  return request<PmsNotificationsResponse>(`/api/v1/pms/notifications?page=${page}&page_size=20`, token);
+}
+
+export function getUnreadNotificationCount(token: string): Promise<PmsUnreadCountResponse> {
+  return request<PmsUnreadCountResponse>('/api/v1/pms/notifications/unread-count', token);
+}
+
+export function markNotificationRead(token: string, notificationId: string): Promise<PmsNotification> {
+  return request<PmsNotification>(`/api/v1/pms/notifications/${notificationId}/read`, token, { method: 'PATCH' });
+}
+
+export function markAllNotificationsRead(token: string): Promise<void> {
+  return request<void>('/api/v1/pms/notifications/read-all', token, { method: 'PATCH' });
 }

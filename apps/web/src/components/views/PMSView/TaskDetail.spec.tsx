@@ -11,6 +11,8 @@ const mockUpdateIssue = vi.fn();
 const mockDeleteIssue = vi.fn();
 const mockCreateIssueComment = vi.fn();
 const mockCreateProjectIssue = vi.fn();
+const mockUploadAttachment = vi.fn();
+const mockDeleteAttachment = vi.fn();
 
 vi.mock('@aidoo/ui', () => ({
   Badge: ({ children }: { children: ReactNode }) => <span>{children}</span>,
@@ -46,6 +48,8 @@ vi.mock('@/src/domains/pms/pms-api', () => ({
   deleteIssue: (...args: unknown[]) => mockDeleteIssue(...args),
   createIssueComment: (...args: unknown[]) => mockCreateIssueComment(...args),
   createProjectIssue: (...args: unknown[]) => mockCreateProjectIssue(...args),
+  uploadAttachment: (...args: unknown[]) => mockUploadAttachment(...args),
+  deleteAttachment: (...args: unknown[]) => mockDeleteAttachment(...args),
 }));
 
 function buildIssue(overrides: Partial<PmsIssue> = {}): PmsIssue {
@@ -87,11 +91,14 @@ describe('TaskDetail', () => {
       comments: [],
       dependencies: [],
       subtasks: [],
+      attachments: [],
     });
     mockListIssueActivityLogs.mockResolvedValue({ items: [], total: 0, page: 1, page_size: 50 });
     mockDeleteIssue.mockResolvedValue(undefined);
     mockCreateIssueComment.mockResolvedValue(undefined);
     mockCreateProjectIssue.mockResolvedValue(buildIssue({ id: 'issue-2', reference: 'AID-2' }));
+    mockUploadAttachment.mockResolvedValue(undefined);
+    mockDeleteAttachment.mockResolvedValue(undefined);
   });
 
   afterEach(() => {
@@ -141,5 +148,47 @@ describe('TaskDetail', () => {
       expect(onUpdate).toHaveBeenCalledTimes(1);
     });
     expect((statusSelect as HTMLSelectElement).value).toBe('done');
+  });
+
+  it('renders attachment links from presigned download urls', async () => {
+    mockGetIssueDetail.mockResolvedValueOnce({
+      issue: buildIssue(),
+      comments: [],
+      dependencies: [],
+      subtasks: [],
+      attachments: [
+        {
+          id: 'attachment-1',
+          issue_id: 'issue-1',
+          filename: 'spec-image.png',
+          content_type: 'image/png',
+          size_bytes: 2048,
+          download_url: 'https://minio.example/spec-image.png?signature=test',
+          uploaded_by_id: 'user-1',
+          uploaded_by_name: 'Reporter',
+          created_at: '2026-04-08T00:00:00Z',
+        },
+      ],
+    });
+
+    render(
+      <TaskDetail
+        issue={buildIssue()}
+        members={[]}
+        milestones={[]}
+        projectLabels={[]}
+        onClose={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(
+        screen.getByAltText('spec-image.png').getAttribute('src'),
+      ).toBe('https://minio.example/spec-image.png?signature=test');
+    });
+
+    expect(
+      screen.getByRole('link', { name: 'spec-image.png 다운로드' }).getAttribute('href'),
+    ).toBe('https://minio.example/spec-image.png?signature=test');
   });
 });
