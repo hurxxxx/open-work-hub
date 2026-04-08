@@ -72,6 +72,24 @@ def _apply_postgres_schema_compat(engine) -> None:
         "ALTER TABLE pms_issues ADD COLUMN IF NOT EXISTS description_blocks JSON",
         "ALTER TABLE pms_issue_comments ADD COLUMN IF NOT EXISTS body_blocks JSON",
         "ALTER TABLE pms_issues ADD COLUMN IF NOT EXISTS estimate_hours REAL",
+        "ALTER TABLE pms_projects ADD COLUMN IF NOT EXISTS team_id VARCHAR(36)",
+        "CREATE INDEX IF NOT EXISTS ix_pms_projects_team_id ON pms_projects (team_id)",
+        """
+        DO $$
+        BEGIN
+            IF NOT EXISTS (
+                SELECT 1
+                FROM pg_constraint
+                WHERE conname = 'pms_projects_team_id_fkey'
+                  AND conrelid = 'pms_projects'::regclass
+            ) THEN
+                ALTER TABLE pms_projects
+                ADD CONSTRAINT pms_projects_team_id_fkey
+                FOREIGN KEY (team_id) REFERENCES teams(id);
+            END IF;
+        END
+        $$;
+        """,
     ]
 
     with engine.begin() as connection:

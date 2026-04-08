@@ -89,8 +89,6 @@ export const NAV_ITEMS: NavItem[] = [
   { id: 'pms-tasks-today', title: 'Today & Overdue', icon: Calendar, category: 'Personal', appId: 'pms' },
   { id: 'pms-tasks-personal', title: 'Personal List', icon: ListIcon, category: 'Personal', appId: 'pms' },
   { id: 'pms-space-team', title: 'Team Space', icon: Layout, category: 'Spaces', appId: 'pms' },
-  { id: 'pms-space-project1', title: 'Project 1', icon: FolderKanban, category: 'Spaces', appId: 'pms' },
-  { id: 'pms-space-project2', title: 'Project 2', icon: FolderKanban, category: 'Spaces', appId: 'pms' },
 
   // DOCS
   { id: 'docs-all', title: 'All Docs', icon: Files, category: 'Library', appId: 'docs' },

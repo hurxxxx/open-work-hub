@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { useParams, Link, useSearchParams } from 'react-router-dom';
+import { useParams, Link, useSearchParams, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   Layout,
@@ -19,7 +19,6 @@ import {
   Loader2,
 } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
-import { NAV_ITEMS } from '@/src/constants';
 import { useAuth } from '@/src/domains/auth/auth-provider';
 import {
   listPmsProjects,
@@ -59,6 +58,7 @@ import { BulkActionBar } from './BulkActionBar';
 
 export const PMSView = () => {
   const { toolId } = useParams();
+  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { token } = useAuth();
   const [activeTab, setActiveTab] = useState<'Overview' | 'Team Docs' | 'List' | 'Board' | 'Calendar' | 'Gantt' | 'Table'>('List');
@@ -80,10 +80,10 @@ export const PMSView = () => {
   const isAssignedTasksView = toolId === 'pms-tasks' || toolId === 'pms-tasks-assigned';
   const isTodayView = toolId === 'pms-tasks-today';
   const isPersonalView = toolId === 'pms-tasks-personal';
-  const isTeamSpace = toolId === 'pms-space-team' || !toolId;
-  const currentProject = NAV_ITEMS.find(item => item.id === toolId);
-  const projectName = currentProject?.title || 'Team Space';
+  const routeProjectId = toolId?.startsWith('pms-project-') ? toolId.replace('pms-project-', '') : null;
+  const isTeamSpace = !routeProjectId && (toolId === 'pms-space-team' || !toolId);
   const selectedProject = projects.find(p => p.id === selectedProjectId);
+  const projectName = selectedProject?.name || (isTeamSpace ? 'Team Space' : 'Project');
   const requestedIssueId = searchParams.get('issue');
 
   const getErrorMessage = useCallback(
@@ -114,19 +114,40 @@ export const PMSView = () => {
     setSearchParams(nextParams, { replace: true });
   }, [requestedIssueId, searchParams, setSearchParams]);
 
-  // Load projects on mount
+  // Keep project catalog in sync with the route so newly created projects open immediately.
   useEffect(() => {
     if (!token) return;
+    let cancelled = false;
     setLoading(true);
     setError(null);
     listPmsProjects(token)
       .then(res => {
+        if (cancelled) return;
         setProjects(res.items);
-        setSelectedProjectId(prev => prev || res.items[0]?.id || '');
+        setSelectedProjectId((current) => {
+          if (routeProjectId && res.items.some((project) => project.id === routeProjectId)) {
+            return routeProjectId;
+          }
+          if (current && res.items.some((project) => project.id === current)) {
+            return current;
+          }
+          return res.items[0]?.id || '';
+        });
       })
-      .catch(err => setError(getErrorMessage(err, '프로젝트를 불러오지 못했습니다.')))
-      .finally(() => setLoading(false));
-  }, [getErrorMessage, token]);
+      .catch(err => {
+        if (cancelled) return;
+        setError(getErrorMessage(err, '프로젝트를 불러오지 못했습니다.'));
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [getErrorMessage, routeProjectId, token]);
 
   const reloadIssues = useCallback(async () => {
     if (!token || !selectedProjectId) return;
@@ -217,6 +238,7 @@ export const PMSView = () => {
       return current.project_id === selectedProjectId ? current : null;
     });
     setSelectedIssueIds(new Set());
+    setFilterParams(createDefaultIssueFilterParams());
   }, [selectedProjectId]);
 
   useEffect(() => {
@@ -291,12 +313,12 @@ export const PMSView = () => {
           </div>
           <div className="flex items-center gap-3">
             {/* Project Selector */}
-            {projects.length > 1 && (
+            {projects.length > 1 && !isTeamSpace && (
               <select
                 value={selectedProjectId}
                 onChange={e => {
                   clearSelectedIssue();
-                  setSelectedProjectId(e.target.value);
+                  navigate(`/tool/pms-project-${e.target.value}`);
                 }}
                 className="bg-clickup-sidebar border border-clickup-border rounded-md px-3 py-1.5 text-xs text-clickup-text focus:outline-none focus:border-clickup-purple"
               >

@@ -1,70 +1,95 @@
 # PMS 구현 계획
 
-## 이전 완료 (Phase 1~6)
+## 완료된 기능 (Tier 1 + Tier 2)
 
-PMSView 실제 API 연결, 서브태스크, 라벨 CRUD, 첨부파일(MinIO), 인앱 알림, mock 정리 모두 완료.
-상세 이력은 git log 참조: `ebb9cd8` ~ `b180f5d`
-
----
-
-## Tier 1: ClickUp 핵심 기능 추가 ✅ 완료
-
-### Phase 1: Checklist (체크리스트) ✅
-
-이슈 내부에 서브태스크보다 가벼운 체크리스트 항목 관리. 카드에 "3/5" 진행률 표시.
-
-**Backend**
-- [x] `ChecklistItem` 모델 (id, issue_id FK, text, completed, sort_order, created_at)
-- [x] Issue에 `checklist_items` relationship 추가
-- [x] 4개 엔드포인트: POST create, PATCH update, DELETE, PATCH reorder
-- [x] `_serialize_issue()`에 `checklist_total`, `checklist_done` 추가
-- [x] `IssueDetailResponse`에 `checklist_items` 추가
-
-**Frontend**
-- [x] `pms-api.ts`: PmsChecklistItem 타입 + CRUD 함수 3개
-- [x] `TaskDetail.tsx`: Description~Subtasks 사이 Checklist 섹션
-- [x] `ListView/BoardView/TableView`: checklist badge ("3/5")
+Tier 1 Core(태스크 CRUD, 상태/우선순위, 담당자, 5개 뷰, 필터/검색, 서브태스크, 코멘트, 마일스톤)
++ Tier 2 Productivity(라벨, 체크리스트, 첨부파일, 시간추적, 일괄작업, 활동로그, 대시보드) 완료.
+상세 이력은 git log 참조: `ebb9cd8` ~ `745afe8`
 
 ---
 
-### Phase 2: Advanced Filters (고급 필터 + 저장) ✅
+## 🔴 Phase 5: 필수 보완 (2개)
 
-다중 조건 필터 패널 + localStorage 프리셋 저장.
+### 5-1. 계층 구조 — Space > Project > Task
+- [ ] **BE**: `pms_projects.team_id` FK 추가 (nullable), 스키마/필터/직렬화 수정
+- [ ] **FE**: `pms-api.ts`에 team_id 타입 + 필터 파라미터
+- [ ] **FE**: `SubSidebar.tsx` — Space별 프로젝트 그룹핑, +/... 메뉴
+- [ ] **FE**: `CreateProjectModal.tsx` — teamId prop, 폼 리셋
+- [ ] **FE**: `CreateSpaceModal.tsx` — 폼 리셋
 
-**Backend**
-- [x] `list_issues`에 `due_date_from/to`, `start_date_from/to` 파라미터 추가
-
-**Frontend**
-- [x] `FilterBar.tsx` (신규): Status/Priority/Assignee/Label/Milestone/DateRange 드롭다운
-- [x] 활성 필터 pill + Clear all + Save/Load filter (localStorage)
-- [x] `PMSView.tsx`: searchQuery → FilterParams 교체, FilterBar 렌더링
-
----
-
-### Phase 3: Bulk Operations (일괄 작업) ✅
-
-다중 선택 → 일괄 상태/우선순위/담당자/라벨 변경, 삭제.
-
-**Backend**
-- [x] `PATCH /projects/{project_id}/issues/bulk` 엔드포인트
-
-**Frontend**
-- [x] `BulkActionBar.tsx` (신규): 하단 플로팅 바
-- [x] `PMSView.tsx`: selectedIssueIds 상태
-- [x] `ListView/TableView`: checkbox 컬럼, `BoardView`: hover checkbox
+### 5-2. 알림 UI
+- [ ] **FE**: 헤더에 벨 아이콘 + unread count 뱃지
+- [ ] **FE**: 알림 드롭다운 (목록, 읽음 처리, 전체 읽음)
+- [ ] **FE**: 알림 클릭 시 해당 이슈로 이동
 
 ---
 
-### Phase 4: Time Tracking (시간 추적) ✅
+## 🟡 Phase 6: Tier 3 — Professional (8개)
 
-작업별 예상 시간 + 실제 투입 시간 기록.
+### 6-1. 프로젝트별 커스텀 상태
+- [ ] **BE**: `pms_project_statuses` 모델 (project_id, name, color, category, sort_order)
+- [ ] **BE**: Issue 상태를 enum → FK로 전환 (또는 string + 프로젝트별 허용 목록)
+- [ ] **FE**: 프로젝트 설정에서 상태 관리 UI (추가/수정/삭제/재정렬)
+- [ ] **FE**: 보드/리스트 등 모든 뷰에서 커스텀 상태 반영
 
-**Backend**
-- [x] `TimeEntry` 모델 + Issue에 `estimate_hours` 컬럼
-- [x] `db.py` schema compat 업데이트
-- [x] 3개 엔드포인트: POST create, PATCH update, DELETE
+### 6-2. 반복 태스크
+- [ ] **BE**: Issue에 `recurrence_rule` 필드 (cron 또는 rrule 형식)
+- [ ] **BE**: 반복 생성 로직 (스케줄러 또는 API 호출 시 체크)
+- [ ] **FE**: 태스크 상세에서 반복 설정 UI (매일/매주/매월/커스텀)
 
-**Frontend**
-- [x] `pms-api.ts`: PmsTimeEntry 타입 + CRUD 함수 3개
-- [x] `TaskDetail.tsx`: Time Tracking 섹션 (예상/실제/진행률)
-- [x] `ListView/BoardView/TableView`: time badge
+### 6-3. 태스크 템플릿
+- [ ] **BE**: `pms_task_templates` 모델 (project_id, name, default fields, checklist items)
+- [ ] **BE**: 템플릿 CRUD 엔드포인트 + 템플릿에서 이슈 생성
+- [ ] **FE**: 템플릿 관리 UI + NewTaskModal에서 템플릿 선택
+
+### 6-4. @멘션
+- [ ] **BE**: 코멘트 body에서 `@user_id` 파싱 → 알림 생성
+- [ ] **FE**: 코멘트 에디터에 멘션 자동완성 (팀원 목록)
+
+### 6-5. 태스크 의존성 시각화
+- [ ] **FE**: 간트 차트에서 의존성 화살표 렌더링
+- [ ] **FE**: 태스크 상세에서 의존성 추가/삭제 UI (이미 API 있음)
+
+### 6-6. 커스텀 필드
+- [ ] **BE**: `pms_custom_fields` 모델 (project_id, name, type: text/number/date/select)
+- [ ] **BE**: `pms_custom_field_values` 모델 (issue_id, field_id, value)
+- [ ] **BE**: CRUD 엔드포인트 + 이슈 직렬화에 포함
+- [ ] **FE**: 프로젝트 설정에서 필드 관리 + 태스크 상세에서 값 입력
+
+### 6-7. 다중 담당자
+- [ ] **BE**: `pms_issue_assignees` junction 테이블 (issue_id, user_id)
+- [ ] **BE**: 기존 `assignee_id` → 다중 관계로 마이그레이션
+- [ ] **FE**: 태스크 상세/필터에서 다중 담당자 선택
+
+### 6-8. 내보내기
+- [ ] **BE**: `GET /projects/{id}/export?format=csv` 엔드포인트
+- [ ] **FE**: 프로젝트 메뉴에 "Export CSV" 버튼
+
+---
+
+## 🟢 Phase 7: Tier 4 — Advanced (5개)
+
+### 7-1. 폴더 계층
+- [ ] **BE**: `pms_folders` 모델 (space_id, name, sort_order)
+- [ ] **BE**: `pms_projects.folder_id` FK 추가
+- [ ] **FE**: 사이드바에 Folder 토글 + Folder 내 프로젝트 그룹핑
+
+### 7-2. 역할/권한 관리
+- [ ] **BE**: `pms_project_members.role`을 viewer/editor/admin으로 확장
+- [ ] **BE**: 엔드포인트별 권한 체크 미들웨어
+- [ ] **FE**: 멤버 관리에서 역할 변경 UI
+
+### 7-3. 자동화 규칙
+- [ ] **BE**: `pms_automations` 모델 (project_id, trigger, condition, action)
+- [ ] **BE**: 이슈 변경 시 자동화 규칙 평가/실행
+- [ ] **FE**: 자동화 규칙 빌더 UI (When → If → Then)
+
+### 7-4. Goals/OKR
+- [ ] **BE**: `pms_goals` 모델 (workspace_id, name, target, progress, linked issues)
+- [ ] **BE**: Goal ↔ Issue 연결 + 자동 진행률 계산
+- [ ] **FE**: Goals 뷰 (목표 목록 + 진행률 바 + 연결된 태스크)
+
+### 7-5. Docs
+- [ ] **BE**: `pms_docs` 모델 (project_id, title, content_blocks)
+- [ ] **BE**: Doc CRUD 엔드포인트
+- [ ] **FE**: Docs 뷰 (BlockNote 에디터 재사용) + 사이드바 연결

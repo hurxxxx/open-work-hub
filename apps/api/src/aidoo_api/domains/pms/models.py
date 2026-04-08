@@ -31,6 +31,9 @@ class Project(Base):
     description: Mapped[str] = mapped_column(Text, default="", nullable=False)
     status: Mapped[str] = mapped_column(String(24), default="active", index=True)
     archived: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    team_id: Mapped[str | None] = mapped_column(
+        ForeignKey("teams.id"), nullable=True, index=True
+    )
     created_by_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime,

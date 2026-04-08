@@ -104,6 +104,18 @@ function AdminLandingRedirect() {
 const ToolViewWrapper = () => {
   const auth = useAuth();
   const { toolId } = useParams();
+
+  // Dynamic PMS project routes: pms-project-{id}
+  if (toolId?.startsWith('pms-project-')) {
+    const featureCode = FEATURE_BY_APP_ID['pms'];
+    if (featureCode && !auth.hasFeature(featureCode)) {
+      return (
+        <AccessDeniedView description="현재 계정에는 이 도구가 속한 워크스페이스 접근 권한이 없습니다." />
+      );
+    }
+    return <PMSView />;
+  }
+
   const item = NAV_ITEMS.find((entry) => entry.id === toolId);
   if (!item) {
     return <div className="p-8 text-gray-500">Tool not found</div>;
@@ -203,6 +215,12 @@ const AppContent = () => {
 
     if (path.startsWith('/tool/')) {
       const toolId = path.split('/')[2];
+      // Dynamic PMS project routes
+      if (toolId?.startsWith('pms-project-')) {
+        setActiveAppId('pms');
+        setActiveNavItemId(toolId);
+        return;
+      }
       const item = NAV_ITEMS.find((entry) => entry.id === toolId);
       if (item) {
         setActiveAppId(item.appId);

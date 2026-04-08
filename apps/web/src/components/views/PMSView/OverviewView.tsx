@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Filter,
   History,
@@ -18,12 +19,21 @@ import {
   type PmsDashboardSummary,
   type PmsProject,
 } from '@/src/domains/pms/pms-api';
+import { CreateProjectModal } from './CreateProjectModal';
+
+function upsertProject(projects: PmsProject[], project: PmsProject): PmsProject[] {
+  return [project, ...projects.filter((item) => item.id !== project.id)].sort(
+    (left, right) => right.updated_at.localeCompare(left.updated_at),
+  );
+}
 
 export const OverviewView = () => {
   const { token, user } = useAuth();
+  const navigate = useNavigate();
   const [dashboard, setDashboard] = useState<PmsDashboardSummary | null>(null);
   const [projects, setProjects] = useState<PmsProject[]>([]);
   const [loading, setLoading] = useState(true);
+  const [createProjectOpen, setCreateProjectOpen] = useState(false);
 
   useEffect(() => {
     if (!token) return;
@@ -73,11 +83,19 @@ export const OverviewView = () => {
               <History size={16} className="text-clickup-purple" />
               Projects
             </div>
+            <button
+              onClick={() => setCreateProjectOpen(true)}
+              className="flex items-center gap-1 text-xs text-clickup-purple hover:text-clickup-purple/80 transition-colors"
+            >
+              <Plus size={14} />
+              <span>New</span>
+            </button>
           </h3>
           <div className="space-y-3">
             {projects.map((project) => (
               <div
                 key={project.id}
+                onClick={() => navigate(`/tool/pms-project-${project.id}`)}
                 className="flex items-center gap-3 p-2 hover:bg-clickup-hover rounded-md transition-colors group cursor-pointer"
               >
                 <div className="w-8 h-8 bg-blue-500/10 rounded flex items-center justify-center">
@@ -88,6 +106,7 @@ export const OverviewView = () => {
                     {project.name}
                   </div>
                   <div className="text-[10px] text-clickup-text/40">
+                    {project.team_name && <span>{project.team_name} · </span>}
                     {project.issue_count} issues · {Math.round(project.progress * 100)}% done
                   </div>
                 </div>
@@ -151,6 +170,19 @@ export const OverviewView = () => {
           </div>
         </Panel>
       </div>
+
+      <CreateProjectModal
+        isOpen={createProjectOpen}
+        onClose={() => setCreateProjectOpen(false)}
+        onCreated={(project) => {
+          setProjects((current) => upsertProject(current, project));
+          navigate(`/tool/pms-project-${project.id}`);
+          if (!token) return;
+          void getPmsDashboardSummary(token).then((dash) => {
+            setDashboard(dash);
+          });
+        }}
+      />
     </div>
   );
 };

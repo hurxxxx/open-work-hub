@@ -5,6 +5,8 @@ export interface PmsProject {
   description: string;
   status: string;
   archived: boolean;
+  team_id: string | null;
+  team_name: string | null;
   role: string;
   progress: number;
   member_count: number;
@@ -275,13 +277,15 @@ async function request<T>(path: string, token: string, init: RequestInit = {}): 
   return payload as T;
 }
 
-export function listPmsProjects(token: string): Promise<PmsProjectsResponse> {
-  return request<PmsProjectsResponse>('/api/v1/pms/projects?page=1&page_size=20', token);
+export function listPmsProjects(token: string, teamId?: string): Promise<PmsProjectsResponse> {
+  const params = new URLSearchParams({ page: '1', page_size: '50' });
+  if (teamId) params.set('team_id', teamId);
+  return request<PmsProjectsResponse>(`/api/v1/pms/projects?${params}`, token);
 }
 
 export function createPmsProject(
   token: string,
-  payload: { key: string; name: string; description: string },
+  payload: { key: string; name: string; description: string; team_id?: string | null },
 ): Promise<PmsProject> {
   return request<PmsProject>('/api/v1/pms/projects', token, {
     method: 'POST',

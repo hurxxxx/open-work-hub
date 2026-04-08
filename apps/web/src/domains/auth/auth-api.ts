@@ -34,6 +34,13 @@ export interface AuthUser {
   created_at?: string;
 }
 
+export function getWorkspaceRoleByKey(
+  user: Pick<AuthUser, 'workspace_roles'> | null | undefined,
+  key: string,
+): WorkspaceRole | null {
+  return user?.workspace_roles.find((role) => role.key === key) ?? null;
+}
+
 export interface BootstrapStatusResponse {
   requires_setup: boolean;
 }

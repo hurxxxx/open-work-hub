@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from aidoo_api.core.db import get_db_session
 from aidoo_api.domains.auth.dependencies import require_current_user
-from aidoo_api.domains.auth.models import User
+from aidoo_api.domains.auth.models import Team, User
 from aidoo_api.domains.auth.security import new_id
 from aidoo_api.core.settings import get_settings
 from aidoo_api.core.storage import get_minio_client
@@ -83,6 +83,7 @@ class ProjectCreateRequest(BaseModel):
     key: str = Field(..., min_length=2, max_length=24, pattern=r"^[A-Za-z0-9_-]+$")
     name: str = Field(..., min_length=2, max_length=140)
     description: str = Field(default="", max_length=4000)
+    team_id: str | None = None
 
 
 class ProjectUpdateRequest(BaseModel):
@@ -183,6 +184,8 @@ class ProjectListItem(BaseModel):
     description: str
     status: str
     archived: bool
+    team_id: str | None
+    team_name: str | None
     role: str
     progress: float
     member_count: int
@@ -587,7 +590,7 @@ def _serialize_issue(issue: Issue) -> IssueListItem:
     )
 
 
-def _serialize_project(project: Project, role: str) -> ProjectListItem:
+def _serialize_project(project: Project, role: str, team_name: str | None = None) -> ProjectListItem:
     overdue_issue_count = sum(
         1
         for issue in project.issues
@@ -605,6 +608,8 @@ def _serialize_project(project: Project, role: str) -> ProjectListItem:
         description=project.description,
         status=project.status,
         archived=project.archived,
+        team_id=project.team_id,
+        team_name=team_name,
         role=role,
         progress=_calculate_progress(project.issues),
         member_count=len(project.members),
@@ -859,6 +864,7 @@ def list_projects(
     sort_dir: Literal["asc", "desc"] = Query(default="desc"),
     q: str = Query(default=""),
     archived: bool | None = None,
+    team_id: str | None = Query(default=None),
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
 ) -> ProjectListResponse:
@@ -876,6 +882,8 @@ def list_projects(
     q_lower = q.strip().lower()
     if archived is not None:
         projects = [project for project in projects if project.archived is archived]
+    if team_id is not None:
+        projects = [project for project in projects if project.team_id == team_id]
     if q_lower:
         projects = [
             project
@@ -895,7 +903,17 @@ def list_projects(
     else:
         projects.sort(key=lambda project: project.updated_at, reverse=reverse)
 
-    serialized = [_serialize_project(project, _project_role(project, current_user)) for project in projects]
+    # Build team name lookup
+    team_ids = {p.team_id for p in projects if p.team_id}
+    team_names: dict[str, str] = {}
+    if team_ids:
+        teams = db.scalars(select(Team).where(Team.id.in_(team_ids)))
+        team_names = {t.id: t.name for t in teams}
+
+    serialized = [
+        _serialize_project(project, _project_role(project, current_user), team_names.get(project.team_id, None) if project.team_id else None)
+        for project in projects
+    ]
     page_items, total = _paginate(serialized, page, page_size)
     return ProjectListResponse(items=page_items, total=total, page=page, page_size=page_size)
 
@@ -910,12 +928,21 @@ def create_project(
     if existing is not None:
         raise HTTPException(status_code=409, detail="Project key already exists.")
 
+    # Validate team_id if provided
+    resolved_team_name: str | None = None
+    if payload.team_id:
+        team = db.scalar(select(Team).where(Team.id == payload.team_id))
+        if team is None:
+            raise HTTPException(status_code=404, detail="Team not found.")
+        resolved_team_name = team.name
+
     project = Project(
         id=new_id(),
         key=payload.key.upper(),
         name=payload.name.strip(),
         description=payload.description.strip(),
         status="active",
+        team_id=payload.team_id,
         created_by_id=current_user.id,
     )
     db.add(project)
@@ -939,7 +966,7 @@ def create_project(
         )
         .where(Project.id == project.id)
     )
-    return _serialize_project(project, "owner")
+    return _serialize_project(project, "owner", resolved_team_name)
 
 
 @router.get("/projects/{project_id}", response_model=ProjectListItem)
@@ -958,7 +985,8 @@ def get_project(
         )
         .where(Project.id == project.id)
     )
-    return _serialize_project(project, role)
+    t_name = db.scalar(select(Team.name).where(Team.id == project.team_id)) if project.team_id else None
+    return _serialize_project(project, role, t_name)
 
 
 @router.patch("/projects/{project_id}", response_model=ProjectListItem)
@@ -984,7 +1012,8 @@ def update_project(
         )
         .where(Project.id == project.id)
     )
-    return _serialize_project(project, role)
+    t_name = db.scalar(select(Team.name).where(Team.id == project.team_id)) if project.team_id else None
+    return _serialize_project(project, role, t_name)
 
 
 @router.get("/projects/{project_id}/members", response_model=ProjectMemberListResponse)
