@@ -10,6 +10,7 @@
     "dev:worker": "nx dev worker",
     "dev:ops": "nx dev ops",
     "build:web": "nx build web",
+    "fix:codex-issue-16849": "bash ./scripts/apply-codex-issue-16849-fix.sh",
     "lint": "nx run-many -t lint --all",
     "test": "nx run-many -t test --all"
   },
