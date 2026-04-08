@@ -39,6 +39,10 @@ const STATUS_LABELS: Record<string, string> = { backlog: 'Backlog', todo: 'Todo'
 
 const selectClass = 'bg-transparent text-sm text-clickup-text border border-clickup-border rounded-md px-2 py-1 focus:outline-none focus:border-clickup-purple cursor-pointer hover:border-clickup-text/30 transition-colors';
 
+function getErrorMessage(error: unknown, fallback: string): string {
+  return error instanceof Error && error.message ? error.message : fallback;
+}
+
 export const TaskDetail = ({
   issue,
   members = [],
@@ -52,21 +56,34 @@ export const TaskDetail = ({
   milestones?: PmsMilestone[];
   projectLabels?: PmsLabel[];
   onClose: () => void;
-  onUpdate?: () => void;
+  onUpdate?: () => void | Promise<void>;
 }) => {
   const { token } = useAuth();
+  const [issueState, setIssueState] = useState(issue);
   const [comments, setComments] = useState<PmsComment[]>([]);
   const [activityLogs, setActivityLogs] = useState<PmsActivityLog[]>([]);
   const [subtasks, setSubtasks] = useState<PmsIssue[]>([]);
   const [loading, setLoading] = useState(true);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [commentDraft, setCommentDraft] = useState('');
   const [newSubtaskTitle, setNewSubtaskTitle] = useState('');
   const [addingSubtask, setAddingSubtask] = useState(false);
   const [descFullscreen, setDescFullscreen] = useState(false);
   const [subtaskMenuOpen, setSubtaskMenuOpen] = useState<string | null>(null);
   const [labelPickerOpen, setLabelPickerOpen] = useState(false);
-  const [currentLabelIds, setCurrentLabelIds] = useState<string[]>(() => issue.labels.map(l => l.id));
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const selectedLabelIds = issueState.labels.map((label) => label.id);
+
+  useEffect(() => {
+    setIssueState(issue);
+    setSaveError(null);
+  }, [issue]);
+
+  useEffect(() => () => {
+    if (saveTimerRef.current) {
+      clearTimeout(saveTimerRef.current);
+    }
+  }, []);
 
   useEffect(() => {
     if (!token) return;
@@ -83,51 +100,104 @@ export const TaskDetail = ({
       .finally(() => setLoading(false));
   }, [token, issue.id]);
 
-  const patchField = useCallback(
-    (field: string, value: unknown) => {
-      if (!token) return;
-      updateIssue(token, issue.id, { [field]: value }).then(() => onUpdate?.());
+  const persistIssueUpdate = useCallback(
+    async (
+      payload: Record<string, unknown>,
+      applyOptimistic: (current: PmsIssue) => PmsIssue,
+      fallbackMessage: string,
+    ) => {
+      if (!token) return null;
+
+      const previousIssue = issueState;
+      setSaveError(null);
+      setIssueState((current) => applyOptimistic(current));
+
+      try {
+        const updatedIssue = await updateIssue(token, issueState.id, payload);
+        setIssueState(updatedIssue);
+        await Promise.resolve(onUpdate?.());
+        return updatedIssue;
+      } catch (error) {
+        setIssueState(previousIssue);
+        setSaveError(getErrorMessage(error, fallbackMessage));
+        return null;
+      }
     },
-    [token, issue.id, onUpdate],
+    [issueState, onUpdate, token],
+  );
+
+  const patchField = useCallback(
+    (field: keyof PmsIssue | 'label_ids' | 'description_blocks' | 'parent_id' | 'archived', value: unknown) => {
+      void persistIssueUpdate(
+        { [field]: value },
+        (current) => ({ ...current, [field]: value } as PmsIssue),
+        '이슈 변경사항을 저장하지 못했습니다.',
+      );
+    },
+    [persistIssueUpdate],
   );
 
   const handleDescriptionChange = useCallback(
     (content: BlockContent) => {
       if (!token) return;
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+      setSaveError(null);
       saveTimerRef.current = setTimeout(() => {
-        updateIssue(token, issue.id, { description_blocks: content }).then(() => onUpdate?.());
+        updateIssue(token, issueState.id, { description_blocks: content })
+          .then(async (updatedIssue) => {
+            setIssueState(updatedIssue);
+            await Promise.resolve(onUpdate?.());
+          })
+          .catch((error) => {
+            setSaveError(getErrorMessage(error, '설명을 저장하지 못했습니다.'));
+          });
       }, 500);
     },
-    [token, issue.id, onUpdate],
+    [issueState.id, onUpdate, token],
   );
 
   const handleUnlinkSubtask = useCallback(async (subtaskId: string) => {
     if (!token) return;
-    await updateIssue(token, subtaskId, { parent_id: null });
-    setSubtasks(prev => prev.filter(s => s.id !== subtaskId));
-    onUpdate?.();
+    setSaveError(null);
+    try {
+      await updateIssue(token, subtaskId, { parent_id: null });
+      setSubtasks(prev => prev.filter(s => s.id !== subtaskId));
+      await Promise.resolve(onUpdate?.());
+    } catch (error) {
+      setSaveError(getErrorMessage(error, '서브태스크 연결을 해제하지 못했습니다.'));
+    }
   }, [token, onUpdate]);
 
   const handleArchiveSubtask = useCallback(async (subtaskId: string) => {
     if (!token) return;
-    await updateIssue(token, subtaskId, { archived: true });
-    setSubtasks(prev => prev.filter(s => s.id !== subtaskId));
-    setSubtaskMenuOpen(null);
-    onUpdate?.();
+    setSaveError(null);
+    try {
+      await updateIssue(token, subtaskId, { archived: true });
+      setSubtasks(prev => prev.filter(s => s.id !== subtaskId));
+      setSubtaskMenuOpen(null);
+      await Promise.resolve(onUpdate?.());
+    } catch (error) {
+      setSaveError(getErrorMessage(error, '서브태스크를 보관하지 못했습니다.'));
+    }
   }, [token, onUpdate]);
 
   const handleDeleteSubtask = useCallback(async (subtaskId: string) => {
     if (!token) return;
-    await deleteIssue(token, subtaskId);
-    setSubtasks(prev => prev.filter(s => s.id !== subtaskId));
-    setSubtaskMenuOpen(null);
-    onUpdate?.();
+    setSaveError(null);
+    try {
+      await deleteIssue(token, subtaskId);
+      setSubtasks(prev => prev.filter(s => s.id !== subtaskId));
+      setSubtaskMenuOpen(null);
+      await Promise.resolve(onUpdate?.());
+    } catch (error) {
+      setSaveError(getErrorMessage(error, '서브태스크를 삭제하지 못했습니다.'));
+    }
   }, [token, onUpdate]);
 
   const handleAddSubtask = useCallback(async () => {
     if (!token || !newSubtaskTitle.trim()) return;
     setAddingSubtask(true);
+    setSaveError(null);
     try {
       const sub = await createProjectIssue(token, issue.project_id, {
         title: newSubtaskTitle.trim(),
@@ -141,28 +211,38 @@ export const TaskDetail = ({
       });
       setSubtasks(prev => [...prev, sub]);
       setNewSubtaskTitle('');
-      onUpdate?.();
+      await Promise.resolve(onUpdate?.());
+    } catch (error) {
+      setSaveError(getErrorMessage(error, '서브태스크를 생성하지 못했습니다.'));
     } finally {
       setAddingSubtask(false);
     }
   }, [token, issue.id, issue.project_id, newSubtaskTitle, onUpdate]);
 
   const handleToggleLabel = useCallback((labelId: string) => {
-    if (!token) return;
-    setCurrentLabelIds(prev => {
-      const next = prev.includes(labelId) ? prev.filter(id => id !== labelId) : [...prev, labelId];
-      updateIssue(token, issue.id, { label_ids: next }).then(() => onUpdate?.());
-      return next;
-    });
-  }, [token, issue.id, onUpdate]);
+    const nextLabelIds = selectedLabelIds.includes(labelId)
+      ? selectedLabelIds.filter(id => id !== labelId)
+      : [...selectedLabelIds, labelId];
+    const nextLabels = projectLabels.filter((label) => nextLabelIds.includes(label.id));
+    void persistIssueUpdate(
+      { label_ids: nextLabelIds },
+      (current) => ({ ...current, labels: nextLabels }),
+      '라벨을 저장하지 못했습니다.',
+    );
+  }, [persistIssueUpdate, projectLabels, selectedLabelIds]);
 
   const handleCommentSubmit = useCallback(() => {
     if (!token || !commentDraft.trim()) return;
-    createIssueComment(token, issue.id, commentDraft.trim()).then((newComment) => {
-      setComments(prev => [...prev, newComment]);
-      setCommentDraft('');
-      onUpdate?.();
-    });
+    setSaveError(null);
+    createIssueComment(token, issue.id, commentDraft.trim())
+      .then(async (newComment) => {
+        setComments(prev => [...prev, newComment]);
+        setCommentDraft('');
+        await Promise.resolve(onUpdate?.());
+      })
+      .catch((error) => {
+        setSaveError(getErrorMessage(error, '댓글을 등록하지 못했습니다.'));
+      });
   }, [token, issue.id, commentDraft, onUpdate]);
 
   // Description fullscreen mode
@@ -176,13 +256,13 @@ export const TaskDetail = ({
           >
             ← Back to task
           </button>
-          <span className="text-sm font-medium text-clickup-text">{issue.title}</span>
+          <span className="text-sm font-medium text-clickup-text">{issueState.title}</span>
           <Button variant="ghost" size="icon" onClick={() => setDescFullscreen(false)}><Minimize2 size={16} /></Button>
         </div>
         <div className="flex-1 overflow-y-auto custom-scrollbar px-8 py-6 max-w-4xl mx-auto w-full">
-          <h1 className="text-2xl font-bold text-clickup-text mb-6">{issue.title}</h1>
+          <h1 className="text-2xl font-bold text-clickup-text mb-6">{issueState.title}</h1>
           <BlockEditor
-            initialContent={issue.description_blocks as BlockContent | undefined}
+            initialContent={issueState.description_blocks as BlockContent | undefined}
             onChange={handleDescriptionChange}
             placeholder="Start writing..."
             className="[&_.bn-editor]:min-h-[400px] [&_.bn-editor]:px-1"
@@ -199,7 +279,7 @@ export const TaskDetail = ({
         <div className="flex items-center gap-2 text-xs text-clickup-text/50">
           <span>Team Space</span>
           <ChevronRight size={12} />
-          <span className="text-clickup-text/70">{issue.reference}</span>
+          <span className="text-clickup-text/70">{issueState.reference}</span>
         </div>
         <div className="flex items-center gap-1">
           <Button variant="ghost" size="icon"><Share2 size={16} /></Button>
@@ -214,31 +294,33 @@ export const TaskDetail = ({
         <div className="flex-1 overflow-y-auto custom-scrollbar border-r border-clickup-border">
           <div className="px-8 py-6 max-w-3xl mx-auto space-y-6">
             {/* Title */}
-            <h1 className="text-xl font-bold text-clickup-text">{issue.title}</h1>
+            <h1 className="text-xl font-bold text-clickup-text">{issueState.title}</h1>
+
+            {saveError ? <InlineSaveError message={saveError} /> : null}
 
             {/* Meta fields — 2-column grid like ClickUp */}
             <div className="grid grid-cols-[auto_1fr_auto_1fr] items-center gap-x-6 gap-y-3">
               <MetaLabel>Status</MetaLabel>
-              <select value={issue.status} onChange={e => patchField('status', e.target.value)} className={selectClass}>
+              <select value={issueState.status} onChange={e => patchField('status', e.target.value)} className={selectClass}>
                 {ISSUE_STATUSES.map(s => <option key={s} value={s}>{STATUS_LABELS[s] ?? s}</option>)}
               </select>
               <MetaLabel>Assignee</MetaLabel>
-              <select value={issue.assignee_id ?? ''} onChange={e => patchField('assignee_id', e.target.value || null)} className={selectClass}>
+              <select value={issueState.assignee_id ?? ''} onChange={e => patchField('assignee_id', e.target.value || null)} className={selectClass}>
                 <option value="">Unassigned</option>
                 {members.map(m => <option key={m.user_id} value={m.user_id}>{m.full_name}</option>)}
               </select>
 
               <MetaLabel>Start</MetaLabel>
-              <input type="date" value={issue.start_date ?? ''} onChange={e => patchField('start_date', e.target.value || null)} className={selectClass} />
+              <input type="date" value={issueState.start_date ?? ''} onChange={e => patchField('start_date', e.target.value || null)} className={selectClass} />
               <MetaLabel>Due</MetaLabel>
-              <input type="date" value={issue.due_date ?? ''} onChange={e => patchField('due_date', e.target.value || null)} className={selectClass} />
+              <input type="date" value={issueState.due_date ?? ''} onChange={e => patchField('due_date', e.target.value || null)} className={selectClass} />
 
               <MetaLabel>Priority</MetaLabel>
-              <select value={issue.priority} onChange={e => patchField('priority', e.target.value)} className={selectClass}>
+              <select value={issueState.priority} onChange={e => patchField('priority', e.target.value)} className={selectClass}>
                 {PRIORITIES.map(p => <option key={p} value={p}>{PRIORITY_LABELS[p]}</option>)}
               </select>
               <MetaLabel>Milestone</MetaLabel>
-              <select value={issue.milestone_id ?? ''} onChange={e => patchField('milestone_id', e.target.value || null)} className={selectClass}>
+              <select value={issueState.milestone_id ?? ''} onChange={e => patchField('milestone_id', e.target.value || null)} className={selectClass}>
                 <option value="">None</option>
                 {milestones.map(m => <option key={m.id} value={m.id}>{m.title}</option>)}
               </select>
@@ -249,8 +331,8 @@ export const TaskDetail = ({
                   onClick={() => setLabelPickerOpen(prev => !prev)}
                   className="flex flex-wrap gap-1 min-h-[28px] items-center hover:bg-clickup-hover/50 rounded px-1 py-0.5 transition-colors w-full text-left"
                 >
-                  {currentLabelIds.length > 0 ? (
-                    currentLabelIds.map(id => {
+                  {selectedLabelIds.length > 0 ? (
+                    selectedLabelIds.map(id => {
                       const label = projectLabels.find(l => l.id === id);
                       return label ? (
                         <span
@@ -284,7 +366,7 @@ export const TaskDetail = ({
                               style={{ backgroundColor: label.color }}
                             />
                             <span className="flex-1 text-left">{label.name}</span>
-                            {currentLabelIds.includes(label.id) && <Check size={12} className="text-clickup-purple" />}
+                            {selectedLabelIds.includes(label.id) && <Check size={12} className="text-clickup-purple" />}
                           </button>
                         ))
                       )}
@@ -306,7 +388,7 @@ export const TaskDetail = ({
               </div>
               <div className="rounded-lg border border-clickup-border overflow-hidden">
                 <BlockEditor
-                  initialContent={issue.description_blocks as BlockContent | undefined}
+                  initialContent={issueState.description_blocks as BlockContent | undefined}
                   onChange={handleDescriptionChange}
                   placeholder="Add a description..."
                   className="[&_.bn-editor]:min-h-[120px] [&_.bn-editor]:px-3 [&_.bn-editor]:py-2"
@@ -492,5 +574,13 @@ export const TaskDetail = ({
 function MetaLabel({ children }: { children: React.ReactNode }) {
   return (
     <span className="text-[11px] font-medium text-clickup-text/50 uppercase tracking-wider whitespace-nowrap">{children}</span>
+  );
+}
+
+function InlineSaveError({ message }: { message: string }) {
+  return (
+    <div className="rounded-md border border-red-500/20 bg-red-500/10 px-3 py-2 text-sm text-red-300">
+      {message}
+    </div>
   );
 }

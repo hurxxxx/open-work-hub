@@ -9,7 +9,6 @@ import {
   Sun,
   User,
 } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
 
 import { Button, InlineNotice } from '@aidoo/ui';
 
@@ -142,13 +141,12 @@ function SectionHeader({ title, description }: { title: string; description?: st
 
 export function ProfilePage({ initialTab }: { initialTab: SettingsSection }) {
   const auth = useAuth();
-  const navigate = useNavigate();
   const user = auth.user;
 
   const [activeSection, setActiveSection] = useState<SettingsSection>(initialTab);
   const [displayName, setDisplayName] = useState(user?.display_name ?? '');
   const [fullName, setFullName] = useState(user?.full_name ?? '');
-  const [jobTitle, setJobTitle] = useState('');
+  const [jobTitle, setJobTitle] = useState(user?.job_title ?? '');
   const [themePreference, setThemePreference] = useState<ThemePreference>(
     user?.theme_preference ?? 'system',
   );
@@ -166,6 +164,7 @@ export function ProfilePage({ initialTab }: { initialTab: SettingsSection }) {
     if (!user) return;
     setDisplayName(user.display_name);
     setFullName(user.full_name);
+    setJobTitle(user.job_title ?? '');
     setThemePreference(user.theme_preference);
   }, [user]);
 
@@ -242,11 +241,6 @@ export function ProfilePage({ initialTab }: { initialTab: SettingsSection }) {
     setActiveSection(section);
     setMessage(null);
     setError(null);
-    if (section === 'security') {
-      navigate('/settings/security');
-    } else {
-      navigate('/settings/account');
-    }
   }
 
   function getUserInitials(name: string) {
@@ -372,7 +366,7 @@ export function ProfilePage({ initialTab }: { initialTab: SettingsSection }) {
                       onClick={() => {
                         setDisplayName(user.display_name);
                         setFullName(user.full_name);
-                        setJobTitle('');
+                        setJobTitle(user.job_title ?? '');
                         setMessage(null);
                         setError(null);
                       }}

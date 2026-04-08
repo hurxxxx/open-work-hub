@@ -73,26 +73,56 @@ export const PMSView = () => {
   const isTeamSpace = toolId === 'pms-space-team' || !toolId;
   const currentProject = NAV_ITEMS.find(item => item.id === toolId);
   const projectName = currentProject?.title || 'Team Space';
+  const selectedProject = projects.find(p => p.id === selectedProjectId);
+
+  const getErrorMessage = useCallback(
+    (error: unknown, fallback: string) => (error instanceof Error ? error.message : fallback),
+    [],
+  );
+
+  const applyIssueCollection = useCallback((nextIssues: PmsIssue[]) => {
+    setIssues(nextIssues);
+    setSelectedIssue((current) => {
+      if (!current) {
+        return null;
+      }
+
+      return nextIssues.find((item) => item.id === current.id) ?? null;
+    });
+  }, []);
 
   // Load projects on mount
   useEffect(() => {
     if (!token) return;
     setLoading(true);
+    setError(null);
     listPmsProjects(token)
       .then(res => {
         setProjects(res.items);
-        if (res.items.length > 0 && !selectedProjectId) {
-          setSelectedProjectId(res.items[0].id);
-        }
+        setSelectedProjectId(prev => prev || res.items[0]?.id || '');
       })
-      .catch(err => setError(err.message))
+      .catch(err => setError(getErrorMessage(err, '프로젝트를 불러오지 못했습니다.')))
       .finally(() => setLoading(false));
-  }, [token]);
+  }, [getErrorMessage, token]);
+
+  const reloadIssues = useCallback(async () => {
+    if (!token || !selectedProjectId) return;
+
+    try {
+      setError(null);
+      const res = await listProjectIssues(token, selectedProjectId, { q: searchQuery });
+      applyIssueCollection(res.items);
+    } catch (err) {
+      setError(getErrorMessage(err, '이슈 목록을 불러오지 못했습니다.'));
+    }
+  }, [applyIssueCollection, getErrorMessage, searchQuery, selectedProjectId, token]);
 
   // Load issues + members + milestones when project changes
   useEffect(() => {
     if (!token || !selectedProjectId) return;
+    let cancelled = false;
     setLoading(true);
+    setError(null);
     Promise.all([
       listProjectIssues(token, selectedProjectId, { q: searchQuery }),
       listProjectMembers(token, selectedProjectId),
@@ -100,29 +130,37 @@ export const PMSView = () => {
       listProjectLabels(token, selectedProjectId),
     ])
       .then(([issueRes, memberRes, milestoneRes, labelRes]) => {
-        setIssues(issueRes.items);
+        if (cancelled) return;
+        applyIssueCollection(issueRes.items);
         setMembers(memberRes.items);
         setMilestones(milestoneRes.items);
         setLabels(labelRes.items);
       })
-      .catch(err => setError(err.message))
-      .finally(() => setLoading(false));
-  }, [token, selectedProjectId, searchQuery]);
+      .catch(err => {
+        if (cancelled) return;
+        setError(getErrorMessage(err, '프로젝트 데이터를 불러오지 못했습니다.'));
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      });
 
-  const reloadIssues = useCallback(() => {
-    if (!token || !selectedProjectId) return;
-    listProjectIssues(token, selectedProjectId, { q: searchQuery })
-      .then(res => setIssues(res.items))
-      .catch(err => setError(err.message));
-  }, [token, selectedProjectId, searchQuery]);
+    return () => {
+      cancelled = true;
+    };
+  }, [applyIssueCollection, getErrorMessage, token, selectedProjectId, searchQuery]);
 
   const handleUpdateIssue = useCallback(
     async (issueId: string, payload: Record<string, unknown>) => {
       if (!token) return;
-      await updateIssue(token, issueId, payload);
-      reloadIssues();
+      const updatedIssue = await updateIssue(token, issueId, payload);
+      applyIssueCollection(
+        issues.map((item) => (item.id === updatedIssue.id ? updatedIssue : item)),
+      );
+      await reloadIssues();
     },
-    [token, reloadIssues],
+    [applyIssueCollection, issues, reloadIssues, token],
   );
 
   useEffect(() => {
@@ -133,11 +171,13 @@ export const PMSView = () => {
     }
   }, [toolId, isTeamSpace]);
 
+  useEffect(() => {
+    setSelectedIssue(null);
+  }, [selectedProjectId]);
+
   if (isAssignedTasksView) return <AssignedToMeView />;
   if (isTodayView) return <TodayOverdueView />;
   if (isPersonalView) return <PersonalListView />;
-
-  const selectedProject = projects.find(p => p.id === selectedProjectId);
 
   return (
     <div className="h-full flex flex-col relative">
@@ -211,7 +251,7 @@ export const PMSView = () => {
           {(isTeamSpace ? ['Overview', 'Team Docs', 'List', 'Board', 'Calendar', 'Gantt', 'Table'] : ['List', 'Board', 'Calendar', 'Gantt', 'Table']).map(tab => (
             <button
               key={tab}
-              onClick={() => setActiveTab(tab as any)}
+              onClick={() => setActiveTab(tab as typeof activeTab)}
               className={cn(
                 "text-sm font-medium pb-3 transition-all relative",
                 activeTab === tab ? "text-clickup-text" : "text-gray-500 hover:text-clickup-text"

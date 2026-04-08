@@ -19,6 +19,7 @@ export interface AuthUser {
   email: string;
   full_name: string;
   display_name: string;
+  job_title?: string | null;
   status: string;
   theme_preference: ThemePreference;
   primary_org_unit: OrgUnitSummary | null;

@@ -52,6 +52,7 @@ class AuthUserResponse(BaseModel):
     email: str
     full_name: str
     display_name: str
+    job_title: str | None
     status: str
     theme_preference: str
     primary_org_unit: OrgUnitSummaryResponse | None

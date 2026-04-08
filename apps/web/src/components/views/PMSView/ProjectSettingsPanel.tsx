@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { motion } from 'motion/react';
 import { X, Plus, Pencil, Trash2, Check, Loader2 } from 'lucide-react';
-import { Button } from '@aidoo/ui';
+import { Button, InlineNotice } from '@aidoo/ui';
 import { useAuth } from '@/src/domains/auth/auth-provider';
 import {
   listProjectLabels,
@@ -34,21 +34,36 @@ export function ProjectSettingsPanel({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState('');
   const [editColor, setEditColor] = useState('');
-
-  useEffect(() => {
-    if (!token) return;
-    listProjectLabels(token, projectId)
-      .then(res => setLabels(res.items))
-      .finally(() => setLoading(false));
-  }, [token, projectId]);
+  const [error, setError] = useState<string | null>(null);
 
   const notifyParent = useCallback((updated: PmsLabel[]) => {
     onLabelsChanged?.(updated);
   }, [onLabelsChanged]);
 
+  const loadLabels = useCallback(async () => {
+    if (!token) return;
+
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await listProjectLabels(token, projectId);
+      setLabels(res.items);
+      notifyParent(res.items);
+    } catch (caughtError) {
+      setError(caughtError instanceof Error ? caughtError.message : '라벨을 불러오지 못했습니다.');
+    } finally {
+      setLoading(false);
+    }
+  }, [notifyParent, projectId, token]);
+
+  useEffect(() => {
+    void loadLabels();
+  }, [loadLabels]);
+
   const handleCreate = useCallback(async () => {
     if (!token || !newName.trim()) return;
     setCreating(true);
+    setError(null);
     try {
       const label = await createProjectLabel(token, projectId, { name: newName.trim(), color: newColor });
       const updated = [...labels, label];
@@ -56,6 +71,8 @@ export function ProjectSettingsPanel({
       notifyParent(updated);
       setNewName('');
       setNewColor(PRESET_COLORS[0]);
+    } catch (caughtError) {
+      setError(caughtError instanceof Error ? caughtError.message : '라벨을 생성하지 못했습니다.');
     } finally {
       setCreating(false);
     }
@@ -68,20 +85,30 @@ export function ProjectSettingsPanel({
   };
 
   const handleSaveEdit = useCallback(async () => {
-    if (!token || !editingId) return;
-    const updated_label = await updateLabel(token, editingId, { name: editName.trim(), color: editColor });
-    const updated = labels.map(l => l.id === editingId ? updated_label : l);
-    setLabels(updated);
-    notifyParent(updated);
-    setEditingId(null);
+    if (!token || !editingId || !editName.trim()) return;
+    setError(null);
+    try {
+      const updatedLabel = await updateLabel(token, editingId, { name: editName.trim(), color: editColor });
+      const updated = labels.map(l => l.id === editingId ? updatedLabel : l);
+      setLabels(updated);
+      notifyParent(updated);
+      setEditingId(null);
+    } catch (caughtError) {
+      setError(caughtError instanceof Error ? caughtError.message : '라벨을 수정하지 못했습니다.');
+    }
   }, [token, editingId, editName, editColor, labels, notifyParent]);
 
   const handleDelete = useCallback(async (labelId: string) => {
     if (!token) return;
-    await deleteLabel(token, labelId);
-    const updated = labels.filter(l => l.id !== labelId);
-    setLabels(updated);
-    notifyParent(updated);
+    setError(null);
+    try {
+      await deleteLabel(token, labelId);
+      const updated = labels.filter(l => l.id !== labelId);
+      setLabels(updated);
+      notifyParent(updated);
+    } catch (caughtError) {
+      setError(caughtError instanceof Error ? caughtError.message : '라벨을 삭제하지 못했습니다.');
+    }
   }, [token, labels, notifyParent]);
 
   return (
@@ -104,6 +131,8 @@ export function ProjectSettingsPanel({
           {/* Labels section */}
           <section className="space-y-3">
             <h3 className="text-xs font-semibold uppercase tracking-wider text-clickup-text/50">Labels</h3>
+
+            {error ? <InlineNotice tone="danger">{error}</InlineNotice> : null}
 
             {loading ? (
               <div className="flex justify-center py-6"><Loader2 size={18} className="animate-spin text-clickup-text/40" /></div>

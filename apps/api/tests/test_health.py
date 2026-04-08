@@ -285,6 +285,49 @@ def _create_direct_user(
     return user_id, session_token.plain_text
 
 
+def _create_pms_project(
+    client: TestClient,
+    token: str,
+    *,
+    key: str,
+    name: str,
+) -> dict[str, object]:
+    response = client.post(
+        "/api/v1/pms/projects",
+        headers={"Authorization": f"Bearer {token}"},
+        json={
+            "key": key,
+            "name": name,
+            "description": f"{name} description",
+        },
+    )
+    assert response.status_code == 201
+    return response.json()
+
+
+def _create_pms_issue(
+    client: TestClient,
+    token: str,
+    project_id: str,
+    *,
+    title: str,
+    parent_id: str | None = None,
+) -> dict[str, object]:
+    response = client.post(
+        f"/api/v1/pms/projects/{project_id}/issues",
+        headers={"Authorization": f"Bearer {token}"},
+        json={
+            "title": title,
+            "description": f"{title} description",
+            "status": "todo",
+            "priority": "medium",
+            "parent_id": parent_id,
+        },
+    )
+    assert response.status_code == 201
+    return response.json()
+
+
 def test_admin_identity_management_endpoints(client: TestClient) -> None:
     admin_token = _bootstrap_admin(client)
     headers = {"Authorization": f"Bearer {admin_token}"}
@@ -580,3 +623,66 @@ def test_pms_membership_permissions(client: TestClient) -> None:
     )
     assert member_project_response.status_code == 200
     assert member_project_response.json()["role"] == "member"
+
+
+def test_pms_parent_issue_validation_and_label_conflicts(client: TestClient) -> None:
+    token = _bootstrap_admin(client)
+    primary_project = _create_pms_project(client, token, key="PARENT", name="Parent Project")
+    secondary_project = _create_pms_project(client, token, key="OTHER", name="Other Project")
+
+    parent_issue = _create_pms_issue(client, token, str(primary_project["id"]), title="Parent issue")
+    child_issue = _create_pms_issue(
+        client,
+        token,
+        str(primary_project["id"]),
+        title="Child issue",
+        parent_id=str(parent_issue["id"]),
+    )
+    assert child_issue["parent_id"] == parent_issue["id"]
+
+    detail_response = client.get(
+        f"/api/v1/pms/issues/{parent_issue['id']}",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert detail_response.status_code == 200
+    assert len(detail_response.json()["subtasks"]) == 1
+
+    self_parent_response = client.patch(
+        f"/api/v1/pms/issues/{child_issue['id']}",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"parent_id": child_issue["id"]},
+    )
+    assert self_parent_response.status_code == 409
+
+    cycle_response = client.patch(
+        f"/api/v1/pms/issues/{parent_issue['id']}",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"parent_id": child_issue["id"]},
+    )
+    assert cycle_response.status_code == 409
+
+    cross_project_response = client.post(
+        f"/api/v1/pms/projects/{secondary_project['id']}/issues",
+        headers={"Authorization": f"Bearer {token}"},
+        json={
+            "title": "Cross project child",
+            "description": "Should fail",
+            "status": "todo",
+            "priority": "medium",
+            "parent_id": parent_issue["id"],
+        },
+    )
+    assert cross_project_response.status_code == 400
+
+    labels_response = client.get(
+        f"/api/v1/pms/projects/{primary_project['id']}/labels",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert labels_response.status_code == 200
+    labels = labels_response.json()["items"]
+    rename_conflict_response = client.patch(
+        f"/api/v1/pms/labels/{labels[0]['id']}",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"name": labels[1]["name"]},
+    )
+    assert rename_conflict_response.status_code == 409

@@ -1,13 +1,13 @@
 import { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
-import { ChevronDown, ChevronRight, Plus, FileText } from 'lucide-react';
+import { ChevronDown, ChevronRight, Plus } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 import { NAV_ITEMS, APP_BAR_ITEMS } from '@/src/constants';
 
 export const SubSidebar = ({ activeAppId, activeNavItemId }: { activeAppId: string, activeNavItemId: string }) => {
   const location = useLocation();
-  const isDocEditor = location.pathname.match(/^\/tool\/[^\/]+\/[^\/]+$/) || location.pathname.match(/^\/docs\/[^\/]+$/);
+  const isDocEditor = location.pathname.match(/^\/tool\/[^/]+\/[^/]+$/) || location.pathname.match(/^\/docs\/[^/]+$/);
   
   const [expandedCategories, setExpandedCategories] = useState<string[]>([]);
   

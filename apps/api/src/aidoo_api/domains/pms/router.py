@@ -612,6 +612,37 @@ def _validate_milestone(project: Project, milestone_id: str | None) -> None:
         raise HTTPException(status_code=400, detail="Milestone does not belong to this project.")
 
 
+def _validate_parent_issue(
+    db: Session,
+    project: Project,
+    parent_id: str | None,
+    *,
+    issue_id: str | None = None,
+) -> None:
+    if parent_id is None:
+        return
+
+    parent = db.scalar(select(Issue).where(Issue.id == parent_id))
+    if parent is None:
+        raise HTTPException(status_code=404, detail="Parent issue not found.")
+    if parent.project_id != project.id:
+        raise HTTPException(status_code=400, detail="Parent issue must belong to the same project.")
+    if issue_id is not None and parent.id == issue_id:
+        raise HTTPException(status_code=409, detail="Issue cannot be its own parent.")
+
+    visited: set[str] = set()
+    ancestor: Issue | None = parent
+    while ancestor is not None:
+        if ancestor.id in visited:
+            raise HTTPException(status_code=409, detail="Issue parent relationship cannot contain a cycle.")
+        visited.add(ancestor.id)
+        if issue_id is not None and ancestor.parent_id == issue_id:
+            raise HTTPException(status_code=409, detail="Issue parent relationship cannot contain a cycle.")
+        if ancestor.parent_id is None:
+            break
+        ancestor = db.scalar(select(Issue).where(Issue.id == ancestor.parent_id))
+
+
 def _set_issue_labels(db: Session, issue: Issue, label_ids: list[str], project: Project) -> None:
     if not label_ids:
         issue.label_links.clear()
@@ -971,7 +1002,17 @@ def update_label(
         raise HTTPException(status_code=404, detail="Label not found.")
     _ensure_project_owner(db, current_user, label.project_id)
     if payload.name is not None:
-        label.name = payload.name.strip()
+        normalized_name = payload.name.strip()
+        existing = db.scalar(
+            select(Label).where(
+                Label.project_id == label.project_id,
+                Label.id != label.id,
+                func.lower(Label.name) == normalized_name.lower(),
+            )
+        )
+        if existing is not None:
+            raise HTTPException(status_code=409, detail="Label name already exists in this project.")
+        label.name = normalized_name
     if payload.color is not None:
         label.color = payload.color
     db.commit()
@@ -1078,6 +1119,7 @@ def create_issue(
     project, _ = _ensure_project_access(db, current_user, project_id)
     _validate_issue_assignee(project, payload.assignee_id)
     _validate_milestone(project, payload.milestone_id)
+    _validate_parent_issue(db, project, payload.parent_id)
     next_position = (
         db.scalar(
             select(func.max(Issue.board_position)).where(
@@ -1177,6 +1219,8 @@ def update_issue(
     issue, project = _get_issue_for_user(db, current_user, issue_id)
     _validate_issue_assignee(project, payload.assignee_id)
     _validate_milestone(project, payload.milestone_id)
+    if "parent_id" in payload.model_fields_set:
+        _validate_parent_issue(db, project, payload.parent_id, issue_id=issue.id)
 
     old_status = issue.status
     field_specs = [
@@ -1282,6 +1326,8 @@ def delete_issue(
     current_user: User = Depends(require_current_user),
 ) -> None:
     issue, _project = _get_issue_for_user(db, current_user, issue_id)
+    for child in issue.subtasks:
+        child.parent_id = None
     db.delete(issue)
     db.commit()
 

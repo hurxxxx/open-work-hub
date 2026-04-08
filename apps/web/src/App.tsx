@@ -3,14 +3,13 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState } from 'react';
 import {
   BrowserRouter as Router,
   Navigate,
   Route,
   Routes,
   useLocation,
-  useNavigate,
   useParams,
 } from 'react-router-dom';
 import { MantineProvider } from '@mantine/core';
@@ -27,6 +26,10 @@ import { PMSView } from './components/views/PMSView/PMSView';
 import { ToolView } from './components/views/ToolView';
 import { NAV_ITEMS } from './constants';
 import { AdminConsoleView } from './domains/admin/admin-console';
+import {
+  getDefaultAdminPath,
+  hasAdminSectionAccess,
+} from './domains/admin/admin-permissions';
 import {
   AuthProvider,
   LoginRoute,
@@ -46,15 +49,6 @@ const FEATURE_BY_APP_ID: Partial<Record<'home' | 'ai' | 'pms' | 'docs' | 'planne
   planner: 'nav.planner',
   settings: 'nav.admin',
 };
-
-const ADMIN_SECTION_PERMISSIONS = {
-  general: 'admin.access',
-  people: 'user.read',
-  teams: 'team.read',
-  workspaces: 'workspace.read',
-  security: 'group.read',
-  audit: 'audit.read',
-} as const;
 
 function resolveThemePreference(themePreference: ThemePreference, systemDarkMode: boolean) {
   if (themePreference === 'system') {
@@ -86,15 +80,25 @@ function AdminGate({
   section,
   children,
 }: {
-  section: keyof typeof ADMIN_SECTION_PERMISSIONS;
+  section: 'general' | 'people' | 'teams' | 'workspaces' | 'security' | 'audit';
   children: React.ReactNode;
 }) {
   const auth = useAuth();
-  if (!auth.hasPermission('admin.access') && !auth.hasPermission(ADMIN_SECTION_PERMISSIONS[section])) {
+  if (!hasAdminSectionAccess(auth.user?.permissions ?? [], section)) {
     return <AccessDeniedView description="현재 계정에는 이 관리자 섹션을 볼 권한이 없습니다." />;
   }
 
   return <>{children}</>;
+}
+
+function AdminLandingRedirect() {
+  const auth = useAuth();
+
+  if (!auth.user) {
+    return <Navigate replace to="/login" />;
+  }
+
+  return <Navigate replace to={getDefaultAdminPath(auth.user.permissions)} />;
 }
 
 const ToolViewWrapper = () => {
@@ -126,17 +130,12 @@ const ToolViewWrapper = () => {
 const AppContent = () => {
   const auth = useAuth();
   const location = useLocation();
-  const navigate = useNavigate();
   const [activeAppId, setActiveAppId] = useState<'home' | 'ai' | 'pms' | 'docs' | 'planner' | 'settings' | 'profile'>('home');
   const [activeNavItemId, setActiveNavItemId] = useState('');
   const [systemDarkMode, setSystemDarkMode] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
-
-  if (!auth.user) {
-    return <Navigate replace to="/login" />;
-  }
-
-  const themePreference = auth.user.theme_preference;
+  const currentUser = auth.user;
+  const themePreference = currentUser?.theme_preference ?? 'system';
   const resolvedTheme = resolveThemePreference(themePreference, systemDarkMode);
 
   useEffect(() => {
@@ -212,11 +211,15 @@ const AppContent = () => {
     }
   }, [location]);
 
+  if (!currentUser) {
+    return <Navigate replace to="/login" />;
+  }
+
   return (
     <div className="flex h-screen bg-clickup-sidebar text-clickup-text overflow-hidden transition-colors">
       <AppBar
         activeAppId={activeAppId}
-        currentUser={auth.user}
+        currentUser={currentUser}
         onOpenAccount={() => setProfileOpen(true)}
       />
 
@@ -271,7 +274,7 @@ const AppContent = () => {
             />
             <Route path="/tool/:toolId" element={<ToolViewWrapper />} />
             <Route path="/tool/:toolId/:docId" element={<ToolViewWrapper />} />
-            <Route path="/admin" element={<Navigate replace to="/admin/people" />} />
+            <Route path="/admin" element={<AdminLandingRedirect />} />
             <Route path="/admin/users" element={<Navigate replace to="/admin/people" />} />
             <Route path="/admin/groups" element={<Navigate replace to="/admin/security" />} />
             <Route path="/admin/feature-access" element={<Navigate replace to="/admin/security" />} />

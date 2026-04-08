@@ -40,11 +40,13 @@ import {
   type WorkspaceBindingItem,
   type WorkspaceItem,
 } from './admin-api';
+import {
+  hasAnyAdminReadPermission,
+  type AdminSection,
+} from './admin-permissions';
 import type { AuthUser } from '@/src/domains/auth/auth-api';
 import { useAuth } from '@/src/domains/auth/auth-provider';
 import { AccessDeniedView } from '@/src/domains/auth/settings-pages';
-
-type AdminSection = 'general' | 'people' | 'teams' | 'workspaces' | 'security' | 'audit';
 
 const NONE_OPTION_VALUE = '__none__';
 const fieldClassName =
@@ -1187,7 +1189,19 @@ function WorkspacesSection({ token }: { token: string }) {
   );
 }
 
-function SecuritySection({ token }: { token: string }) {
+function SecuritySection({
+  token,
+  canReadGroups,
+  canWriteGroups,
+  canReadPolicies,
+  canWritePolicies,
+}: {
+  token: string;
+  canReadGroups: boolean;
+  canWriteGroups: boolean;
+  canReadPolicies: boolean;
+  canWritePolicies: boolean;
+}) {
   const [groups, setGroups] = useState<AccessGroupItem[]>([]);
   const [policies, setPolicies] = useState<FeaturePolicyItem[]>([]);
   const [name, setName] = useState('');
@@ -1197,13 +1211,25 @@ function SecuritySection({ token }: { token: string }) {
   const [error, setError] = useState<string | null>(null);
 
   async function load() {
+    setError(null);
     try {
-      const [groupItems, policyItems] = await Promise.all([
-        listGroups(token),
-        listFeaturePolicies(token),
+      const results = await Promise.allSettled([
+        canReadGroups ? listGroups(token) : Promise.resolve<AccessGroupItem[]>([]),
+        canReadPolicies ? listFeaturePolicies(token) : Promise.resolve<FeaturePolicyItem[]>([]),
       ]);
-      setGroups(groupItems);
-      setPolicies(policyItems);
+      const [groupResult, policyResult] = results;
+
+      if (groupResult.status === 'fulfilled') {
+        setGroups(groupResult.value);
+      } else if (canReadGroups) {
+        setError(getErrorMessage(groupResult.reason, '권한 그룹을 불러오지 못했습니다.'));
+      }
+
+      if (policyResult.status === 'fulfilled') {
+        setPolicies(policyResult.value);
+      } else if (canReadPolicies) {
+        setError((current) => current ?? getErrorMessage(policyResult.reason, '기능 정책을 불러오지 못했습니다.'));
+      }
     } catch (caughtError) {
       setError(getErrorMessage(caughtError, '권한 설정을 불러오지 못했습니다.'));
     }
@@ -1211,10 +1237,11 @@ function SecuritySection({ token }: { token: string }) {
 
   useEffect(() => {
     void load();
-  }, [token]);
+  }, [canReadGroups, canReadPolicies, token]);
 
   async function handleCreateGroup(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (!canWriteGroups) return;
     setMessage(null);
     setError(null);
 
@@ -1237,6 +1264,7 @@ function SecuritySection({ token }: { token: string }) {
   }
 
   async function handleSavePolicies() {
+    if (!canWritePolicies) return;
     setMessage(null);
     setError(null);
 
@@ -1269,110 +1297,132 @@ function SecuritySection({ token }: { token: string }) {
           description="권한 코드를 쉼표로 입력해 그룹 권한을 빠르게 정의합니다."
           title="Create access group"
         >
-          <form className="grid gap-3" onSubmit={(event) => void handleCreateGroup(event)}>
-            <input
-              className={fieldClassName}
-              onChange={(event) => setName(event.target.value)}
-              placeholder="Group name"
-              value={name}
-            />
-            <input
-              className={fieldClassName}
-              onChange={(event) => setDescription(event.target.value)}
-              placeholder="Description"
-              value={description}
-            />
-            <input
-              className={fieldClassName}
-              onChange={(event) => setPermissions(event.target.value)}
-              placeholder="permission.read, permission.write"
-              value={permissions}
-            />
-            <div className="flex justify-end">
-              <Button type="submit" variant="primary">Create group</Button>
-            </div>
-          </form>
+          {canWriteGroups ? (
+            <form className="grid gap-3" onSubmit={(event) => void handleCreateGroup(event)}>
+              <input
+                className={fieldClassName}
+                onChange={(event) => setName(event.target.value)}
+                placeholder="Group name"
+                value={name}
+              />
+              <input
+                className={fieldClassName}
+                onChange={(event) => setDescription(event.target.value)}
+                placeholder="Description"
+                value={description}
+              />
+              <input
+                className={fieldClassName}
+                onChange={(event) => setPermissions(event.target.value)}
+                placeholder="permission.read, permission.write"
+                value={permissions}
+              />
+              <div className="flex justify-end">
+                <Button type="submit" variant="primary">Create group</Button>
+              </div>
+            </form>
+          ) : (
+            <InlineNotice tone="warning">
+              그룹 생성 권한이 없어 이 섹션은 읽기 전용입니다.
+            </InlineNotice>
+          )}
         </SurfaceCard>
 
         <SurfaceCard
           description="그룹에 부여된 권한과 현재 멤버 수를 확인합니다."
           title="Access groups"
         >
-          <TableShell>
-            <thead>
-              <tr>
-                <HeadCell>Name</HeadCell>
-                <HeadCell>Slug</HeadCell>
-                <HeadCell>Permissions</HeadCell>
-                <HeadCell>Members</HeadCell>
-              </tr>
-            </thead>
-            <tbody>
-              {groups.length === 0 ? (
-                <EmptyRow
-                  colSpan={4}
-                  description="새 권한 그룹을 만들어 시작하세요."
-                  title="등록된 권한 그룹이 없습니다."
-                />
-              ) : (
-                groups.map((group) => (
-                  <tr key={group.id}>
-                    <BodyCell>
-                      <div className="font-medium text-clickup-text">{group.name}</div>
-                      <div className="mt-1 text-xs text-gray-500">{group.description || '설명 없음'}</div>
-                    </BodyCell>
-                    <BodyCell>{group.slug}</BodyCell>
-                    <BodyCell>{group.permissions.join(', ') || 'None'}</BodyCell>
-                    <BodyCell>{group.member_count}</BodyCell>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </TableShell>
+          {canReadGroups ? (
+            <TableShell>
+              <thead>
+                <tr>
+                  <HeadCell>Name</HeadCell>
+                  <HeadCell>Slug</HeadCell>
+                  <HeadCell>Permissions</HeadCell>
+                  <HeadCell>Members</HeadCell>
+                </tr>
+              </thead>
+              <tbody>
+                {groups.length === 0 ? (
+                  <EmptyRow
+                    colSpan={4}
+                    description="새 권한 그룹을 만들어 시작하세요."
+                    title="등록된 권한 그룹이 없습니다."
+                  />
+                ) : (
+                  groups.map((group) => (
+                    <tr key={group.id}>
+                      <BodyCell>
+                        <div className="font-medium text-clickup-text">{group.name}</div>
+                        <div className="mt-1 text-xs text-gray-500">{group.description || '설명 없음'}</div>
+                      </BodyCell>
+                      <BodyCell>{group.slug}</BodyCell>
+                      <BodyCell>{group.permissions.join(', ') || 'None'}</BodyCell>
+                      <BodyCell>{group.member_count}</BodyCell>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </TableShell>
+          ) : (
+            <InlineNotice tone="warning">
+              그룹 조회 권한이 없어 권한 그룹 목록을 볼 수 없습니다.
+            </InlineNotice>
+          )}
         </SurfaceCard>
       </div>
 
       <SurfaceCard
-        actions={<Button onClick={() => { void handleSavePolicies(); }} variant="primary">Save policies</Button>}
+        actions={canReadPolicies && canWritePolicies ? <Button onClick={() => { void handleSavePolicies(); }} variant="primary">Save policies</Button> : undefined}
         description="각 워크스페이스와 도구 노출을 개별 정책으로 토글합니다."
         title="Feature access policies"
       >
-        <div className="grid gap-3">
-          {policies.map((policy) => (
-            <label
-              key={policy.id}
-              className="flex items-start gap-4 rounded-xl border border-clickup-border bg-clickup-sidebar px-4 py-4"
-            >
-              <input
-                checked={policy.enabled}
-                className="mt-1"
-                onChange={(event) => {
-                  setPolicies((current) =>
-                    current.map((item) =>
-                      item.id === policy.id ? { ...item, enabled: event.target.checked } : item,
-                    ),
-                  );
-                }}
-                type="checkbox"
-              />
-              <div className="min-w-0 flex-1">
-                <div className="flex flex-wrap items-center gap-2">
-                  <strong className="text-sm text-clickup-text">{policy.name}</strong>
-                  <Badge tone={policy.enabled ? 'green' : 'default'}>
-                    {policy.enabled ? 'enabled' : 'disabled'}
-                  </Badge>
+        {canReadPolicies ? (
+          <div className="grid gap-3">
+            {policies.map((policy) => (
+              <label
+                key={policy.id}
+                className="flex items-start gap-4 rounded-xl border border-clickup-border bg-clickup-sidebar px-4 py-4"
+              >
+                <input
+                  checked={policy.enabled}
+                  className="mt-1"
+                  disabled={!canWritePolicies}
+                  onChange={(event) => {
+                    setPolicies((current) =>
+                      current.map((item) =>
+                        item.id === policy.id ? { ...item, enabled: event.target.checked } : item,
+                      ),
+                    );
+                  }}
+                  type="checkbox"
+                />
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <strong className="text-sm text-clickup-text">{policy.name}</strong>
+                    <Badge tone={policy.enabled ? 'green' : 'default'}>
+                      {policy.enabled ? 'enabled' : 'disabled'}
+                    </Badge>
+                  </div>
+                  <div className="mt-1 text-sm text-gray-500">{policy.description}</div>
+                  <div className="mt-3 flex flex-wrap gap-2 text-xs">
+                    <Badge>{policy.code}</Badge>
+                    {policy.required_permissions.map((permission) => (
+                      <Badge key={`${policy.id}-${permission}`}>{permission}</Badge>
+                    ))}
+                  </div>
+                  {!canWritePolicies ? (
+                    <div className="mt-3 text-xs text-gray-500">읽기 전용 정책입니다.</div>
+                  ) : null}
                 </div>
-                <div className="mt-1 text-sm text-gray-500">{policy.description}</div>
-                <div className="mt-3 flex flex-wrap gap-2 text-xs">
-                  <Badge>{policy.code}</Badge>
-                  {policy.required_permissions.map((permission) => (
-                    <Badge key={`${policy.id}-${permission}`}>{permission}</Badge>
-                  ))}
-                </div>
-              </div>
-            </label>
-          ))}
-        </div>
+              </label>
+            ))}
+          </div>
+        ) : (
+          <InlineNotice tone="warning">
+            기능 정책 조회 권한이 없어 정책 목록을 볼 수 없습니다.
+          </InlineNotice>
+        )}
       </SurfaceCard>
     </div>
   );
@@ -1438,17 +1488,8 @@ export function AdminConsoleView({ section }: { section: AdminSection }) {
   const auth = useAuth();
   const token = auth.token;
   const hasAdminReadPermission = useMemo(
-    () =>
-      [
-        'admin.access',
-        'user.read',
-        'group.read',
-        'workspace.read',
-        'team.read',
-        'feature_policy.read',
-        'audit.read',
-      ].some((permission) => auth.hasPermission(permission)),
-    [auth],
+    () => hasAnyAdminReadPermission(auth.user?.permissions ?? []),
+    [auth.user],
   );
 
   if (!token) {
@@ -1477,7 +1518,15 @@ export function AdminConsoleView({ section }: { section: AdminSection }) {
       content = <WorkspacesSection token={token} />;
       break;
     case 'security':
-      content = <SecuritySection token={token} />;
+      content = (
+        <SecuritySection
+          canReadGroups={auth.hasPermission('group.read')}
+          canReadPolicies={auth.hasPermission('feature_policy.read')}
+          canWriteGroups={auth.hasPermission('group.write')}
+          canWritePolicies={auth.hasPermission('feature_policy.write')}
+          token={token}
+        />
+      );
       actions = <Badge tone="purple">Restricted</Badge>;
       break;
     case 'audit':

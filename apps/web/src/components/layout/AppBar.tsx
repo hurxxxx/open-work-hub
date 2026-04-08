@@ -1,6 +1,10 @@
 import { Link } from 'react-router-dom';
 
 import { APP_BAR_ITEMS } from '@/src/constants';
+import {
+  getDefaultAdminPath,
+  hasAnyAdminReadPermission,
+} from '@/src/domains/admin/admin-permissions';
 import type { AuthUser } from '@/src/domains/auth/auth-api';
 import { cn } from '@/src/lib/utils';
 
@@ -33,6 +37,13 @@ export function AppBar({
   onOpenAccount: () => void;
 }) {
   const visibleItems = APP_BAR_ITEMS.filter((item) => {
+    if (item.id === 'settings') {
+      return (
+        currentUser.visible_features.includes('nav.admin')
+        || hasAnyAdminReadPermission(currentUser.permissions)
+      );
+    }
+
     const featureCode = featureByAppId[item.id];
     return !featureCode || currentUser.visible_features.includes(featureCode);
   });
@@ -46,7 +57,7 @@ export function AppBar({
       {visibleItems.map((item) => (
         <Link
           key={item.id}
-          to={item.path}
+          to={item.id === 'settings' ? getDefaultAdminPath(currentUser.permissions) : item.path}
           className={cn(
             'p-3 rounded-xl transition-all group relative',
             activeAppId === item.id
