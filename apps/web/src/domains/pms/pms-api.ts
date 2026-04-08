@@ -194,6 +194,8 @@ export interface PmsLabelsResponse {
   page_size: number;
 }
 
+export type IssueArchivedState = 'active' | 'archived' | 'all';
+
 export interface PmsDashboardStatusCount {
   status: string;
   label: string;
@@ -342,6 +344,7 @@ export interface IssueFilterParams {
   due_date_to?: string;
   start_date_from?: string;
   start_date_to?: string;
+  archived_state?: IssueArchivedState;
 }
 
 export function listProjectIssues(
@@ -364,6 +367,8 @@ export function listProjectIssues(
   if (params.due_date_to) search.set('due_date_to', params.due_date_to);
   if (params.start_date_from) search.set('start_date_from', params.start_date_from);
   if (params.start_date_to) search.set('start_date_to', params.start_date_to);
+  if (params.archived_state === 'active') search.set('archived', 'false');
+  if (params.archived_state === 'archived') search.set('archived', 'true');
   params.status?.forEach((value) => search.append('status', value));
 
   return request<PmsIssuesResponse>(

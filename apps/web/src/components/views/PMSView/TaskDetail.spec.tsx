@@ -13,6 +13,11 @@ const mockCreateIssueComment = vi.fn();
 const mockCreateProjectIssue = vi.fn();
 const mockUploadAttachment = vi.fn();
 const mockDeleteAttachment = vi.fn();
+const mockCreateChecklistItem = vi.fn();
+const mockUpdateChecklistItem = vi.fn();
+const mockDeleteChecklistItem = vi.fn();
+const mockCreateTimeEntry = vi.fn();
+const mockDeleteTimeEntry = vi.fn();
 
 vi.mock('@aidoo/ui', () => ({
   Badge: ({ children }: { children: ReactNode }) => <span>{children}</span>,
@@ -50,6 +55,11 @@ vi.mock('@/src/domains/pms/pms-api', () => ({
   createProjectIssue: (...args: unknown[]) => mockCreateProjectIssue(...args),
   uploadAttachment: (...args: unknown[]) => mockUploadAttachment(...args),
   deleteAttachment: (...args: unknown[]) => mockDeleteAttachment(...args),
+  createChecklistItem: (...args: unknown[]) => mockCreateChecklistItem(...args),
+  updateChecklistItem: (...args: unknown[]) => mockUpdateChecklistItem(...args),
+  deleteChecklistItem: (...args: unknown[]) => mockDeleteChecklistItem(...args),
+  createTimeEntry: (...args: unknown[]) => mockCreateTimeEntry(...args),
+  deleteTimeEntry: (...args: unknown[]) => mockDeleteTimeEntry(...args),
 }));
 
 function buildIssue(overrides: Partial<PmsIssue> = {}): PmsIssue {
@@ -78,6 +88,10 @@ function buildIssue(overrides: Partial<PmsIssue> = {}): PmsIssue {
     archived: false,
     progress: 0,
     comments_count: 0,
+    checklist_total: 0,
+    checklist_done: 0,
+    estimate_hours: null,
+    time_spent_minutes: 0,
     labels: [],
     updated_at: '2026-04-08T00:00:00Z',
     ...overrides,
@@ -92,6 +106,8 @@ describe('TaskDetail', () => {
       dependencies: [],
       subtasks: [],
       attachments: [],
+      checklist_items: [],
+      time_entries: [],
     });
     mockListIssueActivityLogs.mockResolvedValue({ items: [], total: 0, page: 1, page_size: 50 });
     mockDeleteIssue.mockResolvedValue(undefined);
@@ -99,6 +115,11 @@ describe('TaskDetail', () => {
     mockCreateProjectIssue.mockResolvedValue(buildIssue({ id: 'issue-2', reference: 'AID-2' }));
     mockUploadAttachment.mockResolvedValue(undefined);
     mockDeleteAttachment.mockResolvedValue(undefined);
+    mockCreateChecklistItem.mockResolvedValue(undefined);
+    mockUpdateChecklistItem.mockResolvedValue(undefined);
+    mockDeleteChecklistItem.mockResolvedValue(undefined);
+    mockCreateTimeEntry.mockResolvedValue(undefined);
+    mockDeleteTimeEntry.mockResolvedValue(undefined);
   });
 
   afterEach(() => {
@@ -169,6 +190,8 @@ describe('TaskDetail', () => {
           created_at: '2026-04-08T00:00:00Z',
         },
       ],
+      checklist_items: [],
+      time_entries: [],
     });
 
     render(
@@ -190,5 +213,24 @@ describe('TaskDetail', () => {
     expect(
       screen.getByRole('link', { name: 'spec-image.png 다운로드' }).getAttribute('href'),
     ).toBe('https://minio.example/spec-image.png?signature=test');
+  });
+
+  it('shows restore action for archived issues', async () => {
+    render(
+      <TaskDetail
+        issue={buildIssue({ archived: true })}
+        members={[]}
+        milestones={[]}
+        projectLabels={[]}
+        onClose={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(mockGetIssueDetail).toHaveBeenCalled();
+    });
+
+    expect(screen.getByRole('button', { name: 'Restore' })).toBeTruthy();
+    expect(screen.getByText('Archived')).toBeTruthy();
   });
 });

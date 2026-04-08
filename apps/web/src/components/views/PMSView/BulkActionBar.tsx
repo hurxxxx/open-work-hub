@@ -208,6 +208,14 @@ export const BulkActionBar = ({
         <Archive size={13} />
         Archive
       </button>
+      <button
+        onClick={() => exec({ archived: false })}
+        disabled={loading}
+        className="flex items-center gap-1 px-3 py-1.5 text-xs text-white/60 hover:text-emerald-400 hover:bg-white/10 rounded transition-colors"
+      >
+        <Archive size={13} />
+        Restore
+      </button>
 
       {/* Delete */}
       {confirmDelete ? (

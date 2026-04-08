@@ -739,6 +739,16 @@ def _next_issue_number(db: Session, project_id: str) -> int:
     return int(current or 0) + 1
 
 
+def _next_issue_board_position(db: Session, project_id: str, status_value: str) -> int:
+    current = db.scalar(
+        select(func.max(Issue.board_position)).where(
+            Issue.project_id == project_id,
+            Issue.status == status_value,
+        )
+    )
+    return int(current or 0) + 1
+
+
 def _validate_member_user(db: Session, project: Project, user_id: str) -> User:
     user = db.scalar(select(User).where(User.id == user_id))
     if user is None:
@@ -1289,15 +1299,7 @@ def create_issue(
     _validate_issue_assignee(project, payload.assignee_id)
     _validate_milestone(project, payload.milestone_id)
     _validate_parent_issue(db, project, payload.parent_id)
-    next_position = (
-        db.scalar(
-            select(func.max(Issue.board_position)).where(
-                Issue.project_id == project_id,
-                Issue.status == payload.status,
-            )
-        )
-        or 0
-    ) + 1
+    next_position = _next_issue_board_position(db, project_id, payload.status)
     issue = Issue(
         id=new_id(),
         project_id=project.id,
@@ -1377,7 +1379,11 @@ def get_issue(
             )
             for dependency in dependencies
         ],
-        subtasks=[_serialize_issue(sub) for sub in sorted(issue.subtasks, key=lambda s: s.created_at)],
+        subtasks=[
+            _serialize_issue(sub)
+            for sub in sorted(issue.subtasks, key=lambda s: s.created_at)
+            if not sub.archived
+        ],
         attachments=[
             AttachmentItem(
                 id=att.id,
@@ -1503,15 +1509,7 @@ def update_issue(
         )
 
     if payload.status is not None and payload.status != old_status and payload.board_position is None:
-        issue.board_position = (
-            db.scalar(
-                select(func.max(Issue.board_position)).where(
-                    Issue.project_id == issue.project_id,
-                    Issue.status == payload.status,
-                )
-            )
-            or 0
-        ) + 1
+        issue.board_position = _next_issue_board_position(db, issue.project_id, payload.status)
 
     # Notification triggers
     ref = _issue_reference(issue)
@@ -1557,8 +1555,9 @@ def bulk_update_issues(
     current_user: User = Depends(require_current_user),
 ) -> BulkUpdateResponse:
     project, _role = _ensure_project_access(db, current_user, project_id)
-    issues = list(
-        db.scalars(
+    issue_map = {
+        issue.id: issue
+        for issue in db.scalars(
             select(Issue)
             .options(
                 selectinload(Issue.project),
@@ -1567,25 +1566,33 @@ def bulk_update_issues(
             )
             .where(Issue.id.in_(payload.issue_ids), Issue.project_id == project_id)
         )
-    )
-    if not issues:
+    }
+    ordered_issues = [issue_map[issue_id] for issue_id in payload.issue_ids if issue_id in issue_map]
+    if not ordered_issues:
         raise HTTPException(status_code=404, detail="No matching issues found.")
 
     if payload.delete:
-        for issue in issues:
+        for issue in ordered_issues:
             for child in getattr(issue, "subtasks", []):
                 child.parent_id = None
             db.delete(issue)
         db.commit()
-        return BulkUpdateResponse(updated_count=0, deleted_count=len(issues))
+        return BulkUpdateResponse(updated_count=0, deleted_count=len(ordered_issues))
 
     label_map = {label.id: label for label in project.labels}
     updated = 0
-    for issue in issues:
+    next_position = None
+    if payload.status is not None:
+        next_position = _next_issue_board_position(db, project_id, payload.status)
+
+    for issue in ordered_issues:
         changed = False
         if payload.status is not None and issue.status != payload.status:
             _log_issue_activity(db, issue.id, current_user.id, "updated", f"{current_user.full_name} updated status.", field_name="status", from_value=issue.status, to_value=payload.status)
             issue.status = payload.status
+            if next_position is not None:
+                issue.board_position = next_position
+                next_position += 1
             changed = True
         if payload.priority is not None and issue.priority != payload.priority:
             _log_issue_activity(db, issue.id, current_user.id, "updated", f"{current_user.full_name} updated priority.", field_name="priority", from_value=issue.priority, to_value=payload.priority)

@@ -46,6 +46,7 @@ import {
   type PmsMilestone,
   type PmsLabel,
 } from '@/src/domains/pms/pms-api';
+import { toLocalDateInputValue } from '@/src/domains/pms/pms-filters';
 import { ISSUE_STATUSES, STATUS_TONE, initials, formatDate } from './pms-constants';
 
 const PRIORITIES = ['low', 'medium', 'high', 'critical'] as const;
@@ -123,7 +124,7 @@ export const TaskDetail = ({
       .then(([detail, logs]) => {
         setComments(detail.comments);
         setActivityLogs(logs.items);
-        setSubtasks(detail.subtasks);
+        setSubtasks((detail.subtasks ?? []).filter((subtask) => !subtask.archived));
         setAttachments(detail.attachments ?? []);
         setChecklistItems(detail.checklist_items ?? []);
         setTimeEntries(detail.time_entries ?? []);
@@ -224,6 +225,15 @@ export const TaskDetail = ({
       setSaveError(getErrorMessage(error, '서브태스크를 삭제하지 못했습니다.'));
     }
   }, [token, onUpdate]);
+
+  const handleToggleIssueArchive = useCallback(() => {
+    const nextArchived = !issueState.archived;
+    void persistIssueUpdate(
+      { archived: nextArchived },
+      (current) => ({ ...current, archived: nextArchived }),
+      nextArchived ? '이슈를 보관하지 못했습니다.' : '이슈를 복구하지 못했습니다.',
+    );
+  }, [issueState.archived, persistIssueUpdate]);
 
   const handleAddSubtask = useCallback(async () => {
     if (!token || !newSubtaskTitle.trim()) return;
@@ -331,14 +341,14 @@ export const TaskDetail = ({
       const entry = await createTimeEntry(token, issue.id, {
         duration_minutes: mins,
         description: timeLogDesc.trim(),
-        entry_date: new Date().toISOString().split('T')[0],
+        entry_date: toLocalDateInputValue(),
       });
       setTimeEntries(prev => [entry, ...prev]);
       setTimeLogMinutes('');
       setTimeLogDesc('');
       await Promise.resolve(onUpdate?.());
     } catch (error) {
-      setSaveError(getErrorMessage(error, '시간을 기록하지 못했습���다.'));
+      setSaveError(getErrorMessage(error, '시간을 기록하지 못했습니다.'));
     } finally {
       setLoggingTime(false);
     }
@@ -351,7 +361,7 @@ export const TaskDetail = ({
       setTimeEntries(prev => prev.filter(te => te.id !== entryId));
       await Promise.resolve(onUpdate?.());
     } catch (error) {
-      setSaveError(getErrorMessage(error, '시간 기록을 삭제���지 못했습니다.'));
+      setSaveError(getErrorMessage(error, '시간 기록을 삭제하지 못했습니다.'));
     }
   }, [token, onUpdate]);
 
@@ -448,6 +458,13 @@ export const TaskDetail = ({
           <span className="text-clickup-text/70">{issueState.reference}</span>
         </div>
         <div className="flex items-center gap-1">
+          <button
+            type="button"
+            onClick={handleToggleIssueArchive}
+            className="rounded-md border border-clickup-border px-2.5 py-1 text-xs text-clickup-text/60 hover:border-clickup-text/30 hover:text-clickup-text transition-colors"
+          >
+            {issueState.archived ? 'Restore' : 'Archive'}
+          </button>
           <Button variant="ghost" size="icon"><Share2 size={16} /></Button>
           <Button variant="ghost" size="icon"><MoreHorizontal size={16} /></Button>
           <Button variant="ghost" size="icon" onClick={onClose}><X size={16} /></Button>
@@ -460,7 +477,14 @@ export const TaskDetail = ({
         <div className="flex-1 overflow-y-auto custom-scrollbar border-r border-clickup-border">
           <div className="px-8 py-6 max-w-3xl mx-auto space-y-6">
             {/* Title */}
-            <h1 className="text-xl font-bold text-clickup-text">{issueState.title}</h1>
+            <div className="flex items-center gap-2">
+              <h1 className="text-xl font-bold text-clickup-text">{issueState.title}</h1>
+              {issueState.archived && (
+                <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider text-amber-300">
+                  Archived
+                </span>
+              )}
+            </div>
 
             {saveError ? <InlineSaveError message={saveError} /> : null}
 

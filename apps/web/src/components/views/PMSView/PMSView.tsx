@@ -36,6 +36,10 @@ import {
   type PmsMilestone,
   type PmsLabel,
 } from '@/src/domains/pms/pms-api';
+import {
+  createDefaultIssueFilterParams,
+  reconcileSelectedIssueIds,
+} from '@/src/domains/pms/pms-filters';
 
 import { OverviewView } from './OverviewView';
 import { ListView } from './ListView';
@@ -69,7 +73,7 @@ export const PMSView = () => {
   const [labels, setLabels] = useState<PmsLabel[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [filterParams, setFilterParams] = useState<IssueFilterParams>({});
+  const [filterParams, setFilterParams] = useState<IssueFilterParams>(createDefaultIssueFilterParams());
   const [selectedIssueIds, setSelectedIssueIds] = useState<Set<string>>(new Set());
   const [settingsOpen, setSettingsOpen] = useState(false);
 
@@ -89,6 +93,7 @@ export const PMSView = () => {
 
   const applyIssueCollection = useCallback((nextIssues: PmsIssue[]) => {
     setIssues(nextIssues);
+    setSelectedIssueIds((current) => reconcileSelectedIssueIds(current, nextIssues));
     setSelectedIssue((current) => {
       if (!current) {
         return null;
@@ -211,6 +216,7 @@ export const PMSView = () => {
 
       return current.project_id === selectedProjectId ? current : null;
     });
+    setSelectedIssueIds(new Set());
   }, [selectedProjectId]);
 
   useEffect(() => {
@@ -221,7 +227,7 @@ export const PMSView = () => {
     let cancelled = false;
     setError(null);
     setActiveTab('List');
-    setFilterParams({});
+    setSelectedIssueIds(new Set());
 
     getIssueDetail(token, requestedIssueId)
       .then((detail) => {
@@ -229,6 +235,11 @@ export const PMSView = () => {
           return;
         }
 
+        setFilterParams(
+          createDefaultIssueFilterParams({
+            archived_state: detail.issue.archived ? 'archived' : 'active',
+          }),
+        );
         setSelectedProjectId(detail.issue.project_id);
         setSelectedIssue(detail.issue);
       })

@@ -1,6 +1,10 @@
 import { useState, useRef, useEffect } from 'react';
 import { X, Filter, ChevronDown, Save, BookmarkCheck } from 'lucide-react';
 import type { IssueFilterParams, PmsProjectMember, PmsMilestone, PmsLabel } from '@/src/domains/pms/pms-api';
+import {
+  createDefaultIssueFilterParams,
+  DEFAULT_ISSUE_ARCHIVED_STATE,
+} from '@/src/domains/pms/pms-filters';
 
 const STATUS_OPTIONS = [
   { value: 'backlog', label: 'Backlog' },
@@ -15,6 +19,12 @@ const PRIORITY_OPTIONS = [
   { value: 'medium', label: 'Medium' },
   { value: 'high', label: 'High' },
   { value: 'critical', label: 'Critical' },
+] as const;
+
+const ARCHIVE_OPTIONS = [
+  { value: 'active', label: 'Active' },
+  { value: 'archived', label: 'Archived' },
+  { value: 'all', label: 'All' },
 ] as const;
 
 interface SavedFilter {
@@ -46,8 +56,11 @@ function isFilterActive(params: IssueFilterParams): boolean {
     params.assignee_id ||
     params.label_id ||
     params.milestone_id ||
+    params.start_date_from ||
+    params.start_date_to ||
     params.due_date_from ||
-    params.due_date_to
+    params.due_date_to ||
+    (params.archived_state && params.archived_state !== DEFAULT_ISSUE_ARCHIVED_STATE)
   );
 }
 
@@ -120,12 +133,18 @@ export const FilterBar = ({
   const active = isFilterActive(filterParams);
 
   const clearAll = () => {
-    setFilterParams({ q: filterParams.q });
+    setFilterParams(createDefaultIssueFilterParams({ q: filterParams.q }));
   };
 
   const handleSave = () => {
     if (!filterName.trim()) return;
-    const next = [...savedFilters, { name: filterName.trim(), params: { ...filterParams, q: undefined } }];
+    const next = [
+      ...savedFilters,
+      {
+        name: filterName.trim(),
+        params: createDefaultIssueFilterParams({ ...filterParams, q: undefined }),
+      },
+    ];
     saveSavedFilters(projectId, next);
     setSavedFilters(next);
     setFilterName('');
@@ -139,7 +158,7 @@ export const FilterBar = ({
   };
 
   const handleLoadSaved = (saved: SavedFilter) => {
-    setFilterParams({ ...saved.params, q: filterParams.q });
+    setFilterParams(createDefaultIssueFilterParams({ ...saved.params, q: filterParams.q }));
   };
 
   // Active filter pills
@@ -164,10 +183,22 @@ export const FilterBar = ({
     const name = milestones.find(m => m.id === filterParams.milestone_id)?.title ?? 'Unknown';
     pills.push({ label: `Milestone: ${name}`, clear: () => setFilterParams({ ...filterParams, milestone_id: undefined }) });
   }
+  if (filterParams.start_date_from || filterParams.start_date_to) {
+    const from = filterParams.start_date_from ?? '...';
+    const to = filterParams.start_date_to ?? '...';
+    pills.push({ label: `Start: ${from} ~ ${to}`, clear: () => setFilterParams({ ...filterParams, start_date_from: undefined, start_date_to: undefined }) });
+  }
   if (filterParams.due_date_from || filterParams.due_date_to) {
     const from = filterParams.due_date_from ?? '...';
     const to = filterParams.due_date_to ?? '...';
     pills.push({ label: `Due: ${from} ~ ${to}`, clear: () => setFilterParams({ ...filterParams, due_date_from: undefined, due_date_to: undefined }) });
+  }
+  if (filterParams.archived_state && filterParams.archived_state !== DEFAULT_ISSUE_ARCHIVED_STATE) {
+    const archiveLabel = ARCHIVE_OPTIONS.find((option) => option.value === filterParams.archived_state)?.label ?? filterParams.archived_state;
+    pills.push({
+      label: `Archive: ${archiveLabel}`,
+      clear: () => setFilterParams({ ...filterParams, archived_state: DEFAULT_ISSUE_ARCHIVED_STATE }),
+    });
   }
 
   return (
@@ -295,6 +326,28 @@ export const FilterBar = ({
         </Dropdown>
       )}
 
+      {/* Start Date Range */}
+      <Dropdown label="Start Date" active={!!(filterParams.start_date_from || filterParams.start_date_to)}>
+        {() => (
+          <div className="px-3 py-2 space-y-2">
+            <label className="block text-[10px] text-clickup-text/50 uppercase font-bold">From</label>
+            <input
+              type="date"
+              value={filterParams.start_date_from ?? ''}
+              onChange={e => setFilterParams({ ...filterParams, start_date_from: e.target.value || undefined })}
+              className="w-full bg-clickup-sidebar border border-clickup-border rounded px-2 py-1 text-xs text-clickup-text focus:outline-none focus:border-clickup-purple"
+            />
+            <label className="block text-[10px] text-clickup-text/50 uppercase font-bold">To</label>
+            <input
+              type="date"
+              value={filterParams.start_date_to ?? ''}
+              onChange={e => setFilterParams({ ...filterParams, start_date_to: e.target.value || undefined })}
+              className="w-full bg-clickup-sidebar border border-clickup-border rounded px-2 py-1 text-xs text-clickup-text focus:outline-none focus:border-clickup-purple"
+            />
+          </div>
+        )}
+      </Dropdown>
+
       {/* Due Date Range */}
       <Dropdown label="Due Date" active={!!(filterParams.due_date_from || filterParams.due_date_to)}>
         {() => (
@@ -314,6 +367,33 @@ export const FilterBar = ({
               className="w-full bg-clickup-sidebar border border-clickup-border rounded px-2 py-1 text-xs text-clickup-text focus:outline-none focus:border-clickup-purple"
             />
           </div>
+        )}
+      </Dropdown>
+
+      {/* Archived visibility */}
+      <Dropdown
+        label="Archive"
+        active={!!(filterParams.archived_state && filterParams.archived_state !== DEFAULT_ISSUE_ARCHIVED_STATE)}
+      >
+        {(close) => (
+          <>
+            {ARCHIVE_OPTIONS.map((option) => (
+              <button
+                key={option.value}
+                onClick={() => {
+                  setFilterParams({ ...filterParams, archived_state: option.value });
+                  close();
+                }}
+                className={`w-full text-left px-3 py-1.5 text-xs hover:bg-clickup-hover ${
+                  (filterParams.archived_state ?? DEFAULT_ISSUE_ARCHIVED_STATE) === option.value
+                    ? 'text-clickup-purple font-medium'
+                    : 'text-clickup-text'
+                }`}
+              >
+                {option.label}
+              </button>
+            ))}
+          </>
         )}
       </Dropdown>
 
