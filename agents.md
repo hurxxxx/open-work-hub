@@ -1,43 +1,31 @@
-# Agent Notes
+# Project Agent Rules
 
-- `legacy_ai_portal_prototype/` 는 신규 구축 전에 남겨두는 레거시 프로토타입 보관본입니다.
-- 이 폴더는 Git 추적 대상이 아니며, 새 프로젝트의 기준 구조로 사용하지 않습니다.
-- 필요할 때만 기능 흐름, 화면 구성, 프롬프트, 연동 방식, 샘플 데이터 확인용으로 참고합니다.
-- 프로토타입 코드는 Windows/PowerShell/로컬 파일 저장 전제가 강하므로 그대로 재사용하지 말고 의도와 동작만 참고합니다.
-- 특별히 요청받지 않은 한 `legacy_ai_portal_prototype/` 내부 파일은 수정하지 않습니다.
-- 프로토타입 요약은 `legacy_ai_portal_prototype/CLAUDE.md`를 먼저 확인합니다.
-- 사용자의 별도 지시가 없으면 `git commit` 과 `git push` 는 수행하지 않습니다.
+이 파일은 이 저장소의 유일한 활성 에이전트 지시 진입점이다.
 
-## Design Philosophy
+## Single Source
 
-- 어드민 콘솔 및 설정 페이지의 UI는 `docs/product/ui-design-principles.md`를 엄격히 따릅니다.
-- 과도한 대시보드 통계 카드, BoxShadow 카드, 두꺼운 외곽선은 배제하고 ClickUp, Jira 등 글로벌 SaaS 표준(평면적, 여백 극대화, Dense Typography)을 우선합니다.
+- 활성 규칙 원본은 루트 `agents.md` 하나만 사용한다.
+- 새 `AGENTS.md`, `CLAUDE.md`, `.claude/`, `.codex/` 같은 도구별 지시 경로를 다시 활성 경로에 만들지 않는다.
+- 과거 지시 파일은 작업 트리에 남기지 않는다. 필요하면 Git 히스토리에서 복원한다.
+- 복원이 필요할 때는 `git log --all -- '**/AGENTS.md' 'CLAUDE.md' '.claude' '.codex'` 로 커밋을 찾고 `git restore --source <commit> -- <path>` 를 사용한다.
+- 삭제한 문서도 같은 방식으로 복원한다. 예: `git log -- docs/architecture docs/harness docs/ops` 후 `git restore --source <commit> -- <path>`.
 
-## Shared Standards
+## Project Invariants
 
-- 이 저장소의 공통 규약 원본은 `docs/agents/agent-operating-standard.md` 입니다.
-- 컨텍스트 최소화 원칙은 `docs/agents/context-loading-policy.md` 를 따릅니다.
-- 모든 LLM 관련 작업은 먼저 `scenario_id` 로 매핑하고, 관련 있는 시나리오 문서만 선택적으로 읽습니다.
-- `docs/harness/manifests/*` 와 `docs/agents/manifests/*` 의 구조화 자산을 문서 원본과 함께 읽습니다.
-- 관련 없는 도메인 설명, 전체 디렉터리 구조, 다른 시나리오 문서는 기본 컨텍스트에 넣지 않습니다.
-- `prompt`, `workflow`, `retrieval`, `guardrail`, `trace`, `export` 중 하나라도 바뀌면 관련 eval 과 release gate 영향을 같이 확인합니다.
-- citation 없는 생성 응답은 성공으로 취급하지 않습니다.
-- 익숙하지 않은 패턴은 바로 만들지 말고 공식 문서나 기존 구현을 먼저 탐색합니다.
+- 사용자의 별도 요청이 없으면 `git commit` 과 `git push` 를 하지 않는다.
+- `legacy_ai_portal_prototype/` 는 레거시 보관본이다. 새 구현의 기준 구조나 재사용 소스로 삼지 않는다.
+- 레거시 프로토타입은 기능 흐름, 화면 구성, 프롬프트, 샘플 데이터 확인이 필요할 때만 참고한다.
+- 특별히 요청받지 않은 한 `legacy_ai_portal_prototype/` 내부 파일은 수정하지 않는다.
+- 익숙하지 않은 패턴은 바로 만들지 말고 공식 문서나 기존 구현을 먼저 확인한다.
 
-## Browser QA
+## UI Invariants
 
-- 브라우저 기반 검증이 필요하면 `agent-browser`를 우선 사용합니다.
-- 기본 흐름은 `agent-browser open <url>`, `agent-browser snapshot -i`, `agent-browser fill <selector> <value>`, `agent-browser click <selector>`, `agent-browser console`, `agent-browser screenshot <path>` 입니다.
-- E2E 확인은 특별한 이유가 없으면 긴 스크립트 자동화보다 실제 브라우저에서 단계별로 상호작용하며 상태 변화를 확인하는 방식을 우선합니다.
-- 로그인, 설정, 결제처럼 폼과 상태 전환이 중요한 흐름은 각 단계마다 화면 텍스트, 콘솔 에러, 네트워크 결과를 같이 확인합니다.
+- 과도한 대시보드 통계 카드, BoxShadow 카드, 두꺼운 외곽선은 피한다.
+- ClickUp, Jira 같은 글로벌 SaaS 스타일의 평면적 레이아웃, 넉넉한 여백, Dense Typography 를 우선한다.
 
-## Root Document Policy
+## Context Policy
 
-- 루트의 공통 규칙 진입점은 `agents.md` 다.
-- `CLAUDE.md` 는 Claude Code 전용의 얇은 어댑터로만 유지한다.
-- 사람용 문서는 루트에 쌓지 않고 `docs/` 아래로 분류한다.
-- `docs/planning/` 는 킥오프, 과업범위, 제안/추진 계획 같은 사업/범위 문서를 둔다.
-- `docs/product/` 는 제품 방향, 기능 메모, 아이디어 문서를 둔다.
-- `docs/meetings/` 는 발표 스크립트, 회의 준비 자료, 회의록 문서를 둔다.
-- `docs/architecture/`, `docs/agents/`, `docs/harness/`, `docs/ops/` 는 실행 기준 문서만 둔다.
-- `docs/planning/`, `docs/product/`, `docs/meetings/` 문서는 요청이 직접 관련될 때만 읽고, 기본 컨텍스트에는 넣지 않는다.
+- 기본 컨텍스트는 코드와 현재 작업 파일만 사용한다.
+- `/docs` 아래 문서는 모두 보관용 참고 자료로 취급한다.
+- `docs/planning/`, `docs/product/`, `docs/meetings/` 는 사용자가 특정 문서를 보라고 지시할 때만 읽는다.
+- 사용자가 명시하지 않으면 문서보다 현재 코드와 테스트를 우선한다.

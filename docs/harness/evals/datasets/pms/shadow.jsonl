@@ -1,1 +1,0 @@
-{"description":"recent preview schema mismatch","vars":{"request_type":"issue-triage","instruction":"Propose triage fields for issue ISSUE-144.","source_ids":"[\"ISSUE-144\"]","target_id":"ISSUE-144","retrieved_objects":"[{\"id\":\"ISSUE-144\",\"summary\":\"Intermittent export timeout.\"}]"},"metadata":{"scenario_id":"pms","dataset":"shadow"}}

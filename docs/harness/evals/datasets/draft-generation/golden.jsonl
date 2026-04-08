@@ -1,1 +1,0 @@
-{"description":"generate cited draft from template","vars":{"template_schema":"{\"sections\":[\"summary\",\"risks\"]}","selected_evidence":"[{\"document_id\":\"doc-risk-10\",\"page\":3,\"quote_text\":\"Risk remains on supplier lead time.\"}]","field_values":"{\"project_name\":\"Project A\"}"},"metadata":{"scenario_id":"draft-generation","dataset":"golden"}}

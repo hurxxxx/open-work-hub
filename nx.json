@@ -19,9 +19,7 @@
       "!{projectRoot}/src/test-setup.[jt]s"
     ],
     "sharedGlobals": [
-      "{workspaceRoot}/agents.md",
-      "{workspaceRoot}/CLAUDE.md",
-      "{workspaceRoot}/docs/**/*"
+      "{workspaceRoot}/agents.md"
     ]
   },
   "targetDefaults": {

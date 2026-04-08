@@ -1,1 +1,0 @@
-{"description":"table-heavy scan with merged cells","vars":{"mime_type":"application/pdf","native_extraction_result":"empty","layout_mode":"table-heavy","asset_uri":"s3://bucket/table-scan-091.pdf","language_hint":"ko"},"metadata":{"scenario_id":"ocr-pipeline","dataset":"adversarial"}}
