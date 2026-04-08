@@ -66,6 +66,36 @@ class Project(Base):
         back_populates="project",
         cascade="all, delete-orphan",
     )
+    statuses: Mapped[list["ProjectStatus"]] = relationship(
+        back_populates="project",
+        cascade="all, delete-orphan",
+        order_by="ProjectStatus.sort_order",
+    )
+
+
+class ProjectStatus(Base):
+    """Custom workflow statuses per project."""
+
+    __tablename__ = "pms_project_statuses"
+    __table_args__ = (
+        UniqueConstraint("project_id", "slug", name="uq_pms_project_status_slug"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    project_id: Mapped[str] = mapped_column(ForeignKey("pms_projects.id"), index=True)
+    slug: Mapped[str] = mapped_column(String(40), index=True)
+    name: Mapped[str] = mapped_column(String(60))
+    color: Mapped[str] = mapped_column(String(24), default="#6b7280")
+    category: Mapped[str] = mapped_column(
+        String(24), default="active"
+    )  # backlog | active | done | canceled
+    sort_order: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        default=utcnow_naive,
+        nullable=False,
+    )
+    project: Mapped[Project] = relationship(back_populates="statuses")
 
 
 class ProjectMember(Base):
@@ -159,6 +189,7 @@ class Issue(Base):
     due_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     board_position: Mapped[int] = mapped_column(Integer, default=0)
     estimate_hours: Mapped[float | None] = mapped_column(nullable=True)
+    recurrence_rule: Mapped[str | None] = mapped_column(String(120), nullable=True)
     archived: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime,
@@ -205,6 +236,9 @@ class Issue(Base):
     )
     time_entries: Mapped[list["TimeEntry"]] = relationship(
         back_populates="issue",
+        cascade="all, delete-orphan",
+    )
+    assignee_links: Mapped[list["IssueAssignee"]] = relationship(
         cascade="all, delete-orphan",
     )
 
@@ -344,3 +378,68 @@ class Notification(Base):
         default=utcnow_naive,
         nullable=False,
     )
+
+
+class TaskTemplate(Base):
+    """Reusable issue templates per project."""
+
+    __tablename__ = "pms_task_templates"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    project_id: Mapped[str] = mapped_column(ForeignKey("pms_projects.id"), index=True)
+    name: Mapped[str] = mapped_column(String(140))
+    description: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    default_status: Mapped[str] = mapped_column(String(40), default="backlog")
+    default_priority: Mapped[str] = mapped_column(String(24), default="medium")
+    checklist_items: Mapped[list[dict] | None] = mapped_column(JSON, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        default=utcnow_naive,
+        nullable=False,
+    )
+
+
+class CustomField(Base):
+    """Custom fields per project (text, number, date, select)."""
+
+    __tablename__ = "pms_custom_fields"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    project_id: Mapped[str] = mapped_column(ForeignKey("pms_projects.id"), index=True)
+    name: Mapped[str] = mapped_column(String(100))
+    field_type: Mapped[str] = mapped_column(String(24))  # text | number | date | select
+    options: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)  # for select type
+    sort_order: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        default=utcnow_naive,
+        nullable=False,
+    )
+
+
+class CustomFieldValue(Base):
+    """Custom field values per issue."""
+
+    __tablename__ = "pms_custom_field_values"
+    __table_args__ = (
+        UniqueConstraint("issue_id", "field_id", name="uq_pms_cf_value"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    issue_id: Mapped[str] = mapped_column(ForeignKey("pms_issues.id"), index=True)
+    field_id: Mapped[str] = mapped_column(ForeignKey("pms_custom_fields.id"), index=True)
+    value: Mapped[str] = mapped_column(Text, default="")
+
+
+class IssueAssignee(Base):
+    """Multiple assignees per issue (junction table)."""
+
+    __tablename__ = "pms_issue_assignees"
+    __table_args__ = (
+        UniqueConstraint("issue_id", "user_id", name="uq_pms_issue_assignee"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    issue_id: Mapped[str] = mapped_column(ForeignKey("pms_issues.id"), index=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
+    user = relationship("User")

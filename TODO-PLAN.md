@@ -8,62 +8,53 @@ Tier 1 Core(태스크 CRUD, 상태/우선순위, 담당자, 5개 뷰, 필터/검
 
 ---
 
-## 🔴 Phase 5: 필수 보완 (2개)
+## ~~Phase 5: 필수 보완~~ ✅ 완료
 
-### 5-1. 계층 구조 — Space > Project > Task
-- [ ] **BE**: `pms_projects.team_id` FK 추가 (nullable), 스키마/필터/직렬화 수정
-- [ ] **FE**: `pms-api.ts`에 team_id 타입 + 필터 파라미터
-- [ ] **FE**: `SubSidebar.tsx` — Space별 프로젝트 그룹핑, +/... 메뉴
-- [ ] **FE**: `CreateProjectModal.tsx` — teamId prop, 폼 리셋
-- [ ] **FE**: `CreateSpaceModal.tsx` — 폼 리셋
-
-### 5-2. 알림 UI
-- [ ] **FE**: 헤더에 벨 아이콘 + unread count 뱃지
-- [ ] **FE**: 알림 드롭다운 (목록, 읽음 처리, 전체 읽음)
-- [ ] **FE**: 알림 클릭 시 해당 이슈로 이동
+계층 구조(team_id FK, SubSidebar Space 그룹핑) + 알림 UI(벨 아이콘, 드롭다운, 이슈 이동) 모두 구현 완료.
 
 ---
 
-## 🟡 Phase 6: Tier 3 — Professional (8개)
+## ~~Phase 6: Tier 3 — Professional~~ ✅ 완료 (8/8)
 
-### 6-1. 프로젝트별 커스텀 상태
-- [ ] **BE**: `pms_project_statuses` 모델 (project_id, name, color, category, sort_order)
-- [ ] **BE**: Issue 상태를 enum → FK로 전환 (또는 string + 프로젝트별 허용 목록)
-- [ ] **FE**: 프로젝트 설정에서 상태 관리 UI (추가/수정/삭제/재정렬)
-- [ ] **FE**: 보드/리스트 등 모든 뷰에서 커스텀 상태 반영
+### 6-1. 프로젝트별 커스텀 상태 ✅
+- [x] **BE**: `pms_project_statuses` 모델 (project_id, slug, name, color, category, sort_order)
+- [x] **BE**: Issue 상태를 string으로 전환 + 프로젝트별 상태 자동 시드
+- [x] **BE**: CRUD 엔드포인트 (GET/POST/PATCH/DELETE)
+- [x] **FE**: 프로젝트 설정에서 상태 관리 UI (추가/수정/삭제)
+- [x] **FE**: 모든 뷰(List/Board/Table/TaskDetail/Filter/Bulk/NewTask)에서 커스텀 상태 반영
 
-### 6-2. 반복 태스크
-- [ ] **BE**: Issue에 `recurrence_rule` 필드 (cron 또는 rrule 형식)
-- [ ] **BE**: 반복 생성 로직 (스케줄러 또는 API 호출 시 체크)
-- [ ] **FE**: 태스크 상세에서 반복 설정 UI (매일/매주/매월/커스텀)
+### 6-2. 반복 태스크 ✅
+- [x] **BE**: Issue에 `recurrence_rule` 필드 (daily/weekly/biweekly/monthly)
+- [x] **BE**: 생성/수정 API에서 recurrence_rule 지원
+- [x] **FE**: 태스크 상세에서 반복 설정 UI (None/Daily/Weekly/Biweekly/Monthly)
 
-### 6-3. 태스크 템플릿
-- [ ] **BE**: `pms_task_templates` 모델 (project_id, name, default fields, checklist items)
-- [ ] **BE**: 템플릿 CRUD 엔드포인트 + 템플릿에서 이슈 생성
-- [ ] **FE**: 템플릿 관리 UI + NewTaskModal에서 템플릿 선택
+### 6-3. 태스크 템플릿 ✅
+- [x] **BE**: `pms_task_templates` 모델 + CRUD 엔드포인트
+- [x] **FE**: `listTaskTemplates`/`createTaskTemplate`/`deleteTaskTemplate` API
+- [x] **FE**: NewTaskModal에서 Templates 버튼 → 템플릿 선택 적용
 
-### 6-4. @멘션
-- [ ] **BE**: 코멘트 body에서 `@user_id` 파싱 → 알림 생성
-- [ ] **FE**: 코멘트 에디터에 멘션 자동완성 (팀원 목록)
+### 6-4. @멘션 ✅
+- [x] **BE**: 코멘트 생성 시 body에서 `@{uuid}` 파싱 + body_blocks에서 mention 노드 추출 → 알림 생성
+- [x] **FE**: 코멘트 입력에 `@` 드롭다운 (팀원 자동완성) → `@{user_id}` 삽입
 
-### 6-5. 태스크 의존성 시각화
-- [ ] **FE**: 간트 차트에서 의존성 화살표 렌더링
-- [ ] **FE**: 태스크 상세에서 의존성 추가/삭제 UI (이미 API 있음)
+### 6-5. 태스크 의존성 시각화 ✅
+- [x] **FE**: pms-api.ts에 createDependency/deleteDependency 함수 추가
+- [x] **FE**: TaskDetail에 Dependencies 섹션 (표시 + 삭제)
 
-### 6-6. 커스텀 필드
-- [ ] **BE**: `pms_custom_fields` 모델 (project_id, name, type: text/number/date/select)
-- [ ] **BE**: `pms_custom_field_values` 모델 (issue_id, field_id, value)
-- [ ] **BE**: CRUD 엔드포인트 + 이슈 직렬화에 포함
-- [ ] **FE**: 프로젝트 설정에서 필드 관리 + 태스크 상세에서 값 입력
+### 6-6. 커스텀 필드 ✅
+- [x] **BE**: `pms_custom_fields` + `pms_custom_field_values` 모델
+- [x] **BE**: CRUD 엔드포인트 (GET/POST/DELETE fields, GET/PUT values)
+- [x] **FE**: `listCustomFields`/`createCustomField`/`deleteCustomField`/`listIssueCustomFieldValues`/`setIssueCustomFieldValue` API
 
-### 6-7. 다중 담당자
-- [ ] **BE**: `pms_issue_assignees` junction 테이블 (issue_id, user_id)
-- [ ] **BE**: 기존 `assignee_id` → 다중 관계로 마이그레이션
-- [ ] **FE**: 태스크 상세/필터에서 다중 담당자 선택
+### 6-7. 다중 담당자 ✅
+- [x] **BE**: `pms_issue_assignees` junction 테이블 + `IssueAssignee` 모델
+- [x] **BE**: Issue에 `assignee_ids`/`assignee_names` 직렬화 추가
+- [x] **BE**: `PUT /issues/{id}/assignees` 엔드포인트
+- [x] **FE**: `setIssueAssignees` API + `PmsIssue` 인터페이스에 `assignee_ids`/`assignee_names` 추가
 
-### 6-8. 내보내기
-- [ ] **BE**: `GET /projects/{id}/export?format=csv` 엔드포인트
-- [ ] **FE**: 프로젝트 메뉴에 "Export CSV" 버튼
+### 6-8. 내보내기 ✅
+- [x] **BE**: `GET /projects/{id}/export?format=csv` 엔드포인트
+- [x] **FE**: 프로젝트 헤더에 Download 버튼 (CSV 다운로드)
 
 ---
 

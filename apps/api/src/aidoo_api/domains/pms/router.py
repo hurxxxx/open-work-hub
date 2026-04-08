@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from io import BytesIO
+import csv
+from io import BytesIO, StringIO
 from datetime import UTC, date, datetime, timedelta
 from typing import Annotated, Literal
 
@@ -29,7 +30,12 @@ from aidoo_api.domains.pms.models import (
     Notification,
     Project,
     ProjectMember,
+    CustomField,
+    CustomFieldValue,
+    IssueAssignee,
+    ProjectStatus,
     ScheduleDependency,
+    TaskTemplate,
     TimeEntry,
 )
 
@@ -120,7 +126,7 @@ class IssueCreateRequest(BaseModel):
     title: str = Field(..., min_length=2, max_length=180)
     description: str = Field(default="", max_length=4000)
     description_blocks: list[dict] | None = None
-    status: Literal["backlog", "todo", "in_progress", "done", "canceled"] = "backlog"
+    status: str = "backlog"
     priority: Literal["low", "medium", "high", "critical"] = "medium"
     assignee_id: str | None = None
     milestone_id: str | None = None
@@ -128,6 +134,7 @@ class IssueCreateRequest(BaseModel):
     start_date: date | None = None
     due_date: date | None = None
     estimate_hours: float | None = None
+    recurrence_rule: str | None = None
     label_ids: list[str] = Field(default_factory=list)
 
 
@@ -136,7 +143,7 @@ class IssueUpdateRequest(BaseModel):
     description: str | None = Field(default=None, max_length=4000)
     description_blocks: list[dict] | None = None
     parent_id: str | None = None
-    status: Literal["backlog", "todo", "in_progress", "done", "canceled"] | None = None
+    status: str | None = None
     priority: Literal["low", "medium", "high", "critical"] | None = None
     assignee_id: str | None = None
     milestone_id: str | None = None
@@ -145,6 +152,7 @@ class IssueUpdateRequest(BaseModel):
     board_position: int | None = None
     archived: bool | None = None
     estimate_hours: float | None = None
+    recurrence_rule: str | None = None
     label_ids: list[str] | None = None
 
 
@@ -163,7 +171,7 @@ class DependencyCreateRequest(BaseModel):
 
 class BulkUpdateRequest(BaseModel):
     issue_ids: list[str] = Field(..., min_length=1, max_length=50)
-    status: Literal["backlog", "todo", "in_progress", "done", "canceled"] | None = None
+    status: str | None = None
     priority: Literal["low", "medium", "high", "critical"] | None = None
     assignee_id: str | None = None
     add_label_ids: list[str] = Field(default_factory=list)
@@ -254,6 +262,94 @@ class LabelListResponse(BaseModel):
     page_size: int
 
 
+class ProjectStatusItem(BaseModel):
+    id: str
+    slug: str
+    name: str
+    color: str
+    category: str
+    sort_order: int
+
+
+class ProjectStatusListResponse(BaseModel):
+    items: list[ProjectStatusItem]
+
+
+class ProjectStatusCreateRequest(BaseModel):
+    name: str = Field(..., min_length=1, max_length=60)
+    color: str = Field(default="#6b7280", max_length=24)
+    category: Literal["backlog", "active", "done", "canceled"] = "active"
+    sort_order: int = 0
+
+
+class ProjectStatusUpdateRequest(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=60)
+    color: str | None = Field(default=None, max_length=24)
+    category: Literal["backlog", "active", "done", "canceled"] | None = None
+    sort_order: int | None = None
+
+
+class TaskTemplateItem(BaseModel):
+    id: str
+    project_id: str
+    name: str
+    description: str
+    default_status: str
+    default_priority: str
+    checklist_items: list[dict] | None = None
+    created_at: datetime
+
+
+class TaskTemplateListResponse(BaseModel):
+    items: list[TaskTemplateItem]
+
+
+class TaskTemplateCreateRequest(BaseModel):
+    name: str = Field(..., min_length=1, max_length=140)
+    description: str = Field(default="", max_length=4000)
+    default_status: str = "backlog"
+    default_priority: Literal["low", "medium", "high", "critical"] = "medium"
+    checklist_items: list[dict] | None = None
+
+
+class TaskTemplateUpdateRequest(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=140)
+    description: str | None = Field(default=None, max_length=4000)
+    default_status: str | None = None
+    default_priority: Literal["low", "medium", "high", "critical"] | None = None
+    checklist_items: list[dict] | None = None
+
+
+class CustomFieldItem(BaseModel):
+    id: str
+    project_id: str
+    name: str
+    field_type: str
+    options: list[str] | None = None
+    sort_order: int
+
+
+class CustomFieldListResponse(BaseModel):
+    items: list[CustomFieldItem]
+
+
+class CustomFieldCreateRequest(BaseModel):
+    name: str = Field(..., min_length=1, max_length=100)
+    field_type: Literal["text", "number", "date", "select"] = "text"
+    options: list[str] | None = None
+    sort_order: int = 0
+
+
+class CustomFieldValueItem(BaseModel):
+    field_id: str
+    value: str
+
+
+class SetCustomFieldValueRequest(BaseModel):
+    field_id: str
+    value: str = ""
+
+
 class LabelCreateRequest(BaseModel):
     name: str = Field(..., min_length=1, max_length=48)
     color: str = Field(default="#1f2d38", max_length=24)
@@ -326,6 +422,8 @@ class IssueListItem(BaseModel):
     priority_label: str
     assignee_id: str | None
     assignee_name: str | None
+    assignee_ids: list[str] = []
+    assignee_names: list[str] = []
     reporter_id: str
     reporter_name: str
     milestone_id: str | None
@@ -340,6 +438,7 @@ class IssueListItem(BaseModel):
     checklist_done: int = 0
     estimate_hours: float | None = None
     time_spent_minutes: int = 0
+    recurrence_rule: str | None = None
     labels: list[LabelItem]
     updated_at: datetime
 
@@ -527,8 +626,24 @@ def _accessible_projects_query(user: User):
     )
 
 
-def _issue_progress(status_value: str) -> float | None:
-    return ISSUE_STATUS_PROGRESS.get(status_value)
+CATEGORY_PROGRESS = {
+    "backlog": 0.0,
+    "active": 0.5,
+    "done": 1.0,
+    "canceled": None,
+}
+
+
+def _issue_progress(status_value: str, project: Project | None = None) -> float | None:
+    result = ISSUE_STATUS_PROGRESS.get(status_value)
+    if result is not None or status_value in ISSUE_STATUS_PROGRESS:
+        return result
+    # Fallback: look up category from project custom statuses
+    if project is not None:
+        for ps in getattr(project, "statuses", []):
+            if ps.slug == status_value:
+                return CATEGORY_PROGRESS.get(ps.category, 0.5)
+    return 0.5  # Unknown status defaults to active
 
 
 def _calculate_progress(issues: list[Issue]) -> float:
@@ -566,11 +681,13 @@ def _serialize_issue(issue: Issue) -> IssueListItem:
         parent_id=issue.parent_id,
         subtask_count=len(issue.subtasks) if issue.subtasks else 0,
         status=issue.status,
-        status_label=ISSUE_STATUS_LABELS[issue.status],
+        status_label=ISSUE_STATUS_LABELS.get(issue.status, issue.status.replace("_", " ").title()),
         priority=issue.priority,
         priority_label=PRIORITY_LABELS[issue.priority],
         assignee_id=issue.assignee_id,
         assignee_name=getattr(issue.assignee, "full_name", None),
+        assignee_ids=[link.user_id for link in getattr(issue, "assignee_links", [])],
+        assignee_names=[getattr(link.user, "full_name", "") for link in getattr(issue, "assignee_links", [])],
         reporter_id=issue.reporter_id,
         reporter_name=issue.reporter.full_name,
         milestone_id=issue.milestone_id,
@@ -579,12 +696,13 @@ def _serialize_issue(issue: Issue) -> IssueListItem:
         due_date=issue.due_date,
         board_position=issue.board_position,
         archived=issue.archived,
-        progress=_issue_progress(issue.status),
+        progress=_issue_progress(issue.status, issue.project),
         comments_count=len(issue.comments),
         checklist_total=len(issue.checklist_items) if issue.checklist_items else 0,
         checklist_done=sum(1 for ci in issue.checklist_items if ci.completed) if issue.checklist_items else 0,
         estimate_hours=issue.estimate_hours,
         time_spent_minutes=sum(te.duration_minutes for te in issue.time_entries) if issue.time_entries else 0,
+        recurrence_rule=issue.recurrence_rule,
         labels=_serialize_labels(issue),
         updated_at=issue.updated_at,
     )
@@ -674,6 +792,31 @@ def _project_role(project: Project, user: User) -> str:
     return membership.role if membership is not None else "member"
 
 
+DEFAULT_PROJECT_STATUSES: list[tuple[str, str, str, str, int]] = [
+    # (slug, name, color, category, sort_order)
+    ("backlog", "Backlog", "#6b7280", "backlog", 0),
+    ("todo", "Todo", "#3b82f6", "active", 1),
+    ("in_progress", "In Progress", "#f59e0b", "active", 2),
+    ("done", "Done", "#22c55e", "done", 3),
+    ("canceled", "Canceled", "#ef4444", "canceled", 4),
+]
+
+
+def _create_default_statuses(db: Session, project_id: str) -> None:
+    for slug, name, color, category, sort_order in DEFAULT_PROJECT_STATUSES:
+        db.add(
+            ProjectStatus(
+                id=new_id(),
+                project_id=project_id,
+                slug=slug,
+                name=name,
+                color=color,
+                category=category,
+                sort_order=sort_order,
+            )
+        )
+
+
 def _create_default_labels(db: Session, project_id: str) -> None:
     for name, color in [
         ("blocked", "#b45309"),
@@ -728,6 +871,28 @@ def _create_notification(
             reference_id=reference_id,
         )
     )
+
+
+def _extract_mentions_from_blocks(blocks: list[dict], out: set[str]) -> None:
+    """Recursively extract @mention user IDs from BlockNote-style content blocks."""
+    import re
+
+    for block in blocks:
+        if isinstance(block, dict):
+            # Check inline content for mention-type nodes
+            for content_item in block.get("content", []):
+                if isinstance(content_item, dict):
+                    if content_item.get("type") == "mention":
+                        uid = content_item.get("props", {}).get("user_id") or content_item.get("attrs", {}).get("id")
+                        if uid:
+                            out.add(uid)
+                    text = content_item.get("text", "")
+                    if text:
+                        out.update(re.findall(r"@([0-9a-f-]{36})", text))
+            # Recurse into children
+            for child in block.get("children", []):
+                if isinstance(child, dict):
+                    _extract_mentions_from_blocks([child], out)
 
 
 def _build_attachment_download_url(storage_key: str) -> str:
@@ -846,6 +1011,7 @@ def _get_issue_for_user(db: Session, user: User, issue_id: str) -> tuple[Issue, 
             selectinload(Issue.attachments).selectinload(Attachment.uploaded_by),
             selectinload(Issue.checklist_items),
             selectinload(Issue.time_entries).selectinload(TimeEntry.user),
+            selectinload(Issue.assignee_links).selectinload(IssueAssignee.user),
         )
         .where(Issue.id == issue_id)
     )
@@ -955,6 +1121,7 @@ def create_project(
         )
     )
     _create_default_labels(db, project.id)
+    _create_default_statuses(db, project.id)
     db.commit()
     db.refresh(project)
     project = db.scalar(
@@ -1264,6 +1431,7 @@ def list_issues(
                 selectinload(Issue.subtasks),
                 selectinload(Issue.checklist_items),
                 selectinload(Issue.time_entries),
+                selectinload(Issue.assignee_links).selectinload(IssueAssignee.user),
             )
             .where(Issue.project_id == project_id)
         )
@@ -1346,6 +1514,7 @@ def create_issue(
         start_date=payload.start_date,
         due_date=payload.due_date,
         estimate_hours=payload.estimate_hours,
+        recurrence_rule=payload.recurrence_rule,
         board_position=next_position,
     )
     db.add(issue)
@@ -1483,6 +1652,7 @@ def update_issue(
         ("board_position", "reordered board position"),
         ("archived", "changed archive state"),
         ("estimate_hours", "updated estimate"),
+        ("recurrence_rule", "updated recurrence"),
     ]
     for field_name, message in field_specs:
         value = getattr(payload, field_name)
@@ -1727,6 +1897,27 @@ def create_issue_comment(
             f"{current_user.full_name} commented on {ref} ({issue.title}).",
             reference_id=issue.id,
         )
+
+    # Parse @mentions from comment body and body_blocks
+    import re
+
+    mentioned_ids: set[str] = set()
+    if payload.body:
+        mentioned_ids.update(re.findall(r"@([0-9a-f-]{36})", payload.body))
+    if payload.body_blocks:
+        _extract_mentions_from_blocks(payload.body_blocks, mentioned_ids)
+    mentioned_ids -= notify_ids
+    mentioned_ids.discard(current_user.id)
+    for uid in mentioned_ids:
+        user = db.scalar(select(User).where(User.id == uid))
+        if user is not None:
+            _create_notification(
+                db, uid, "mentioned",
+                f"Mentioned in {ref}",
+                f"{current_user.full_name} mentioned you in a comment on {ref}.",
+                reference_id=issue.id,
+            )
+
     db.commit()
     comment = db.scalar(
         select(IssueComment).options(selectinload(IssueComment.author)).where(IssueComment.id == comment.id)
@@ -2351,3 +2542,484 @@ def delete_time_entry(
     db.delete(entry)
     db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+# ── Project Statuses (Custom Workflow) ──────────────────────────────
+
+
+def _slugify(name: str) -> str:
+    return name.strip().lower().replace(" ", "_")[:40]
+
+
+def _serialize_status(s: ProjectStatus) -> ProjectStatusItem:
+    return ProjectStatusItem(
+        id=s.id,
+        slug=s.slug,
+        name=s.name,
+        color=s.color,
+        category=s.category,
+        sort_order=s.sort_order,
+    )
+
+
+@router.get("/projects/{project_id}/statuses", response_model=ProjectStatusListResponse)
+def list_project_statuses(
+    project_id: str,
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+) -> ProjectStatusListResponse:
+    project, _ = _ensure_project_access(db, current_user, project_id)
+    statuses = list(
+        db.scalars(
+            select(ProjectStatus)
+            .where(ProjectStatus.project_id == project_id)
+            .order_by(ProjectStatus.sort_order)
+        )
+    )
+    # Auto-seed default statuses for existing projects that don't have any
+    if not statuses:
+        _create_default_statuses(db, project_id)
+        db.commit()
+        statuses = list(
+            db.scalars(
+                select(ProjectStatus)
+                .where(ProjectStatus.project_id == project_id)
+                .order_by(ProjectStatus.sort_order)
+            )
+        )
+    return ProjectStatusListResponse(items=[_serialize_status(s) for s in statuses])
+
+
+@router.post(
+    "/projects/{project_id}/statuses",
+    response_model=ProjectStatusItem,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_project_status(
+    project_id: str,
+    payload: ProjectStatusCreateRequest,
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+) -> ProjectStatusItem:
+    _ensure_project_owner(db, current_user, project_id)
+    slug = _slugify(payload.name)
+    existing = db.scalar(
+        select(ProjectStatus).where(
+            ProjectStatus.project_id == project_id,
+            ProjectStatus.slug == slug,
+        )
+    )
+    if existing is not None:
+        raise HTTPException(status_code=409, detail="Status with this name already exists.")
+
+    ps = ProjectStatus(
+        id=new_id(),
+        project_id=project_id,
+        slug=slug,
+        name=payload.name.strip(),
+        color=payload.color,
+        category=payload.category,
+        sort_order=payload.sort_order,
+    )
+    db.add(ps)
+    db.commit()
+    db.refresh(ps)
+    return _serialize_status(ps)
+
+
+@router.patch("/project-statuses/{status_id}", response_model=ProjectStatusItem)
+def update_project_status(
+    status_id: str,
+    payload: ProjectStatusUpdateRequest,
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+) -> ProjectStatusItem:
+    ps = db.scalar(select(ProjectStatus).where(ProjectStatus.id == status_id))
+    if ps is None:
+        raise HTTPException(status_code=404, detail="Status not found.")
+    _ensure_project_owner(db, current_user, ps.project_id)
+
+    if payload.name is not None:
+        ps.name = payload.name.strip()
+        ps.slug = _slugify(payload.name)
+    if payload.color is not None:
+        ps.color = payload.color
+    if payload.category is not None:
+        ps.category = payload.category
+    if payload.sort_order is not None:
+        ps.sort_order = payload.sort_order
+
+    db.commit()
+    db.refresh(ps)
+    return _serialize_status(ps)
+
+
+@router.delete("/project-statuses/{status_id}")
+def delete_project_status(
+    status_id: str,
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+) -> Response:
+    ps = db.scalar(select(ProjectStatus).where(ProjectStatus.id == status_id))
+    if ps is None:
+        raise HTTPException(status_code=404, detail="Status not found.")
+    _ensure_project_owner(db, current_user, ps.project_id)
+
+    # Prevent deleting if issues use this status
+    count = db.scalar(
+        select(func.count())
+        .select_from(Issue)
+        .where(Issue.project_id == ps.project_id, Issue.status == ps.slug)
+    )
+    if count and count > 0:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Cannot delete status: {count} issue(s) are using it.",
+        )
+
+    db.delete(ps)
+    db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+# ── CSV Export ──────────────────────────────────────────────────────
+
+
+@router.get("/projects/{project_id}/export")
+def export_project_issues(
+    project_id: str,
+    format: str = Query(default="csv"),
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+) -> Response:
+    project, _ = _ensure_project_access(db, current_user, project_id)
+
+    issues = list(
+        db.scalars(
+            select(Issue)
+            .options(
+                selectinload(Issue.project),
+                selectinload(Issue.assignee),
+                selectinload(Issue.reporter),
+                selectinload(Issue.milestone),
+                selectinload(Issue.label_links).selectinload(IssueLabel.label),
+                selectinload(Issue.comments),
+                selectinload(Issue.checklist_items),
+                selectinload(Issue.time_entries),
+                selectinload(Issue.subtasks),
+            )
+            .where(Issue.project_id == project_id)
+            .order_by(Issue.issue_number)
+        )
+    )
+
+    buf = StringIO()
+    writer = csv.writer(buf)
+    writer.writerow([
+        "Reference", "Title", "Status", "Priority",
+        "Assignee", "Reporter", "Milestone",
+        "Start Date", "Due Date", "Labels",
+        "Estimate Hours", "Time Spent (min)",
+        "Checklist Done/Total", "Comments",
+        "Created", "Updated",
+    ])
+    for issue in issues:
+        ref = f"{project.key}-{issue.issue_number}"
+        label_str = ", ".join(link.label.name for link in issue.label_links)
+        checklist_str = f"{sum(1 for c in issue.checklist_items if c.completed)}/{len(issue.checklist_items)}" if issue.checklist_items else ""
+        writer.writerow([
+            ref,
+            issue.title,
+            issue.status,
+            issue.priority,
+            getattr(issue.assignee, "full_name", ""),
+            getattr(issue.reporter, "full_name", ""),
+            getattr(issue.milestone, "title", ""),
+            str(issue.start_date or ""),
+            str(issue.due_date or ""),
+            label_str,
+            issue.estimate_hours or "",
+            sum(te.duration_minutes for te in issue.time_entries) if issue.time_entries else 0,
+            checklist_str,
+            len(issue.comments),
+            issue.created_at.isoformat(),
+            issue.updated_at.isoformat(),
+        ])
+
+    content = buf.getvalue()
+    return Response(
+        content=content,
+        media_type="text/csv",
+        headers={
+            "Content-Disposition": f'attachment; filename="{project.key}_issues.csv"',
+        },
+    )
+
+
+# ── Task Templates ──────────────────────────────────────────────────
+
+
+def _serialize_template(t: TaskTemplate) -> TaskTemplateItem:
+    return TaskTemplateItem(
+        id=t.id,
+        project_id=t.project_id,
+        name=t.name,
+        description=t.description,
+        default_status=t.default_status,
+        default_priority=t.default_priority,
+        checklist_items=t.checklist_items,
+        created_at=t.created_at,
+    )
+
+
+@router.get("/projects/{project_id}/templates", response_model=TaskTemplateListResponse)
+def list_templates(
+    project_id: str,
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+) -> TaskTemplateListResponse:
+    _ensure_project_access(db, current_user, project_id)
+    templates = list(
+        db.scalars(
+            select(TaskTemplate)
+            .where(TaskTemplate.project_id == project_id)
+            .order_by(TaskTemplate.created_at.desc())
+        )
+    )
+    return TaskTemplateListResponse(items=[_serialize_template(t) for t in templates])
+
+
+@router.post(
+    "/projects/{project_id}/templates",
+    response_model=TaskTemplateItem,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_template(
+    project_id: str,
+    payload: TaskTemplateCreateRequest,
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+) -> TaskTemplateItem:
+    _ensure_project_access(db, current_user, project_id)
+    t = TaskTemplate(
+        id=new_id(),
+        project_id=project_id,
+        name=payload.name.strip(),
+        description=payload.description.strip(),
+        default_status=payload.default_status,
+        default_priority=payload.default_priority,
+        checklist_items=payload.checklist_items,
+    )
+    db.add(t)
+    db.commit()
+    db.refresh(t)
+    return _serialize_template(t)
+
+
+@router.patch("/templates/{template_id}", response_model=TaskTemplateItem)
+def update_template(
+    template_id: str,
+    payload: TaskTemplateUpdateRequest,
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+) -> TaskTemplateItem:
+    t = db.scalar(select(TaskTemplate).where(TaskTemplate.id == template_id))
+    if t is None:
+        raise HTTPException(status_code=404, detail="Template not found.")
+    _ensure_project_access(db, current_user, t.project_id)
+
+    if payload.name is not None:
+        t.name = payload.name.strip()
+    if payload.description is not None:
+        t.description = payload.description.strip()
+    if payload.default_status is not None:
+        t.default_status = payload.default_status
+    if payload.default_priority is not None:
+        t.default_priority = payload.default_priority
+    if payload.checklist_items is not None:
+        t.checklist_items = payload.checklist_items
+
+    db.commit()
+    db.refresh(t)
+    return _serialize_template(t)
+
+
+@router.delete("/templates/{template_id}")
+def delete_template(
+    template_id: str,
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+) -> Response:
+    t = db.scalar(select(TaskTemplate).where(TaskTemplate.id == template_id))
+    if t is None:
+        raise HTTPException(status_code=404, detail="Template not found.")
+    _ensure_project_access(db, current_user, t.project_id)
+    db.delete(t)
+    db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+# ── Custom Fields ───────────────────────────────────────────────────
+
+
+@router.get("/projects/{project_id}/custom-fields", response_model=CustomFieldListResponse)
+def list_custom_fields(
+    project_id: str,
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+) -> CustomFieldListResponse:
+    _ensure_project_access(db, current_user, project_id)
+    fields = list(
+        db.scalars(
+            select(CustomField)
+            .where(CustomField.project_id == project_id)
+            .order_by(CustomField.sort_order)
+        )
+    )
+    return CustomFieldListResponse(
+        items=[
+            CustomFieldItem(
+                id=f.id,
+                project_id=f.project_id,
+                name=f.name,
+                field_type=f.field_type,
+                options=f.options,
+                sort_order=f.sort_order,
+            )
+            for f in fields
+        ]
+    )
+
+
+@router.post(
+    "/projects/{project_id}/custom-fields",
+    response_model=CustomFieldItem,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_custom_field(
+    project_id: str,
+    payload: CustomFieldCreateRequest,
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+) -> CustomFieldItem:
+    _ensure_project_owner(db, current_user, project_id)
+    f = CustomField(
+        id=new_id(),
+        project_id=project_id,
+        name=payload.name.strip(),
+        field_type=payload.field_type,
+        options=payload.options,
+        sort_order=payload.sort_order,
+    )
+    db.add(f)
+    db.commit()
+    db.refresh(f)
+    return CustomFieldItem(
+        id=f.id, project_id=f.project_id, name=f.name,
+        field_type=f.field_type, options=f.options, sort_order=f.sort_order,
+    )
+
+
+@router.delete("/custom-fields/{field_id}")
+def delete_custom_field(
+    field_id: str,
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+) -> Response:
+    f = db.scalar(select(CustomField).where(CustomField.id == field_id))
+    if f is None:
+        raise HTTPException(status_code=404, detail="Custom field not found.")
+    _ensure_project_owner(db, current_user, f.project_id)
+    # Delete all values for this field
+    db.execute(
+        select(CustomFieldValue).where(CustomFieldValue.field_id == field_id)
+    )
+    for v in db.scalars(select(CustomFieldValue).where(CustomFieldValue.field_id == field_id)):
+        db.delete(v)
+    db.delete(f)
+    db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.get("/issues/{issue_id}/custom-field-values", response_model=list[CustomFieldValueItem])
+def list_issue_custom_field_values(
+    issue_id: str,
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+) -> list[CustomFieldValueItem]:
+    issue = db.scalar(select(Issue).where(Issue.id == issue_id))
+    if issue is None:
+        raise HTTPException(status_code=404, detail="Issue not found.")
+    _ensure_project_access(db, current_user, issue.project_id)
+    values = list(
+        db.scalars(select(CustomFieldValue).where(CustomFieldValue.issue_id == issue_id))
+    )
+    return [CustomFieldValueItem(field_id=v.field_id, value=v.value) for v in values]
+
+
+@router.put("/issues/{issue_id}/custom-field-values")
+def set_issue_custom_field_value(
+    issue_id: str,
+    payload: SetCustomFieldValueRequest,
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+) -> CustomFieldValueItem:
+    issue = db.scalar(select(Issue).where(Issue.id == issue_id))
+    if issue is None:
+        raise HTTPException(status_code=404, detail="Issue not found.")
+    _ensure_project_access(db, current_user, issue.project_id)
+
+    existing = db.scalar(
+        select(CustomFieldValue).where(
+            CustomFieldValue.issue_id == issue_id,
+            CustomFieldValue.field_id == payload.field_id,
+        )
+    )
+    if existing:
+        existing.value = payload.value
+    else:
+        db.add(CustomFieldValue(id=new_id(), issue_id=issue_id, field_id=payload.field_id, value=payload.value))
+    db.commit()
+    return CustomFieldValueItem(field_id=payload.field_id, value=payload.value)
+
+
+# ── Issue Assignees (Multiple) ──────────────────────────────────────
+
+
+class IssueAssigneeItem(BaseModel):
+    user_id: str
+    full_name: str
+
+
+class SetIssueAssigneesRequest(BaseModel):
+    user_ids: list[str] = Field(..., max_length=20)
+
+
+@router.put("/issues/{issue_id}/assignees", response_model=list[IssueAssigneeItem])
+def set_issue_assignees(
+    issue_id: str,
+    payload: SetIssueAssigneesRequest,
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+) -> list[IssueAssigneeItem]:
+    issue, project = _get_issue_for_user(db, current_user, issue_id)
+
+    # Clear existing assignee links
+    for link in list(issue.assignee_links):
+        db.delete(link)
+    db.flush()
+
+    # Add new ones
+    result: list[IssueAssigneeItem] = []
+    for uid in payload.user_ids:
+        user = db.scalar(select(User).where(User.id == uid))
+        if user is None:
+            continue
+        db.add(IssueAssignee(id=new_id(), issue_id=issue_id, user_id=uid))
+        result.append(IssueAssigneeItem(user_id=uid, full_name=user.full_name))
+
+    # Update primary assignee_id to the first in the list (or clear)
+    issue.assignee_id = payload.user_ids[0] if payload.user_ids else None
+
+    db.commit()
+    return result

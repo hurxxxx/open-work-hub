@@ -1,18 +1,20 @@
 import { MessageSquare, Flag, MoreHorizontal, CheckSquare, Clock } from 'lucide-react';
 import { Badge, Button } from '@aidoo/ui';
-import type { PmsIssue } from '@/src/domains/pms/pms-api';
-import { STATUS_TONE, PRIORITY_COLOR, initials, formatDate } from './pms-constants';
+import type { PmsIssue, PmsProjectStatus } from '@/src/domains/pms/pms-api';
+import { getStatusTone, PRIORITY_COLOR, initials, formatDate } from './pms-constants';
 
 export const TableView = ({
   issues,
   onSelectIssue,
   selectedIds,
   onToggleSelect,
+  projectStatuses,
 }: {
   issues: PmsIssue[];
   onSelectIssue: (issue: PmsIssue) => void;
   selectedIds?: Set<string>;
   onToggleSelect?: (issueId: string) => void;
+  projectStatuses?: PmsProjectStatus[];
 }) => {
   return (
     <div className="overflow-hidden rounded-lg border border-clickup-border bg-clickup-card">
@@ -74,7 +76,7 @@ export const TableView = ({
                   </div>
                 </td>
                 <td className="py-3 px-4">
-                  <Badge tone={STATUS_TONE[issue.status] ?? 'neutral'}>{issue.status_label}</Badge>
+                  <Badge tone={getStatusTone(issue.status, projectStatuses)}>{issue.status_label}</Badge>
                 </td>
                 <td className="py-3 px-4">
                   {issue.assignee_name ? (

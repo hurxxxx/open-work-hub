@@ -72,6 +72,7 @@ def _apply_postgres_schema_compat(engine) -> None:
         "ALTER TABLE pms_issues ADD COLUMN IF NOT EXISTS description_blocks JSON",
         "ALTER TABLE pms_issue_comments ADD COLUMN IF NOT EXISTS body_blocks JSON",
         "ALTER TABLE pms_issues ADD COLUMN IF NOT EXISTS estimate_hours REAL",
+        "ALTER TABLE pms_issues ADD COLUMN IF NOT EXISTS recurrence_rule VARCHAR(120)",
         "ALTER TABLE pms_projects ADD COLUMN IF NOT EXISTS team_id VARCHAR(36)",
         "CREATE INDEX IF NOT EXISTS ix_pms_projects_team_id ON pms_projects (team_id)",
         """
@@ -90,6 +91,71 @@ def _apply_postgres_schema_compat(engine) -> None:
         END
         $$;
         """,
+        # ── pms_project_statuses table ──
+        """
+        CREATE TABLE IF NOT EXISTS pms_project_statuses (
+            id VARCHAR(36) PRIMARY KEY,
+            project_id VARCHAR(36) NOT NULL REFERENCES pms_projects(id),
+            slug VARCHAR(40) NOT NULL,
+            name VARCHAR(60) NOT NULL,
+            color VARCHAR(24) NOT NULL DEFAULT '#6b7280',
+            category VARCHAR(24) NOT NULL DEFAULT 'active',
+            sort_order INTEGER NOT NULL DEFAULT 0,
+            created_at TIMESTAMP NOT NULL DEFAULT now(),
+            CONSTRAINT uq_pms_project_status_slug UNIQUE (project_id, slug)
+        )
+        """,
+        "CREATE INDEX IF NOT EXISTS ix_pms_project_statuses_project_id ON pms_project_statuses (project_id)",
+        "CREATE INDEX IF NOT EXISTS ix_pms_project_statuses_slug ON pms_project_statuses (slug)",
+        # ── pms_task_templates table ──
+        """
+        CREATE TABLE IF NOT EXISTS pms_task_templates (
+            id VARCHAR(36) PRIMARY KEY,
+            project_id VARCHAR(36) NOT NULL REFERENCES pms_projects(id),
+            name VARCHAR(140) NOT NULL,
+            description TEXT NOT NULL DEFAULT '',
+            default_status VARCHAR(40) NOT NULL DEFAULT 'backlog',
+            default_priority VARCHAR(24) NOT NULL DEFAULT 'medium',
+            checklist_items JSON,
+            created_at TIMESTAMP NOT NULL DEFAULT now()
+        )
+        """,
+        "CREATE INDEX IF NOT EXISTS ix_pms_task_templates_project_id ON pms_task_templates (project_id)",
+        # ── pms_custom_fields + pms_custom_field_values tables ──
+        """
+        CREATE TABLE IF NOT EXISTS pms_custom_fields (
+            id VARCHAR(36) PRIMARY KEY,
+            project_id VARCHAR(36) NOT NULL REFERENCES pms_projects(id),
+            name VARCHAR(100) NOT NULL,
+            field_type VARCHAR(24) NOT NULL,
+            options JSON,
+            sort_order INTEGER NOT NULL DEFAULT 0,
+            created_at TIMESTAMP NOT NULL DEFAULT now()
+        )
+        """,
+        "CREATE INDEX IF NOT EXISTS ix_pms_custom_fields_project_id ON pms_custom_fields (project_id)",
+        """
+        CREATE TABLE IF NOT EXISTS pms_custom_field_values (
+            id VARCHAR(36) PRIMARY KEY,
+            issue_id VARCHAR(36) NOT NULL REFERENCES pms_issues(id),
+            field_id VARCHAR(36) NOT NULL REFERENCES pms_custom_fields(id),
+            value TEXT NOT NULL DEFAULT '',
+            CONSTRAINT uq_pms_cf_value UNIQUE (issue_id, field_id)
+        )
+        """,
+        "CREATE INDEX IF NOT EXISTS ix_pms_custom_field_values_issue_id ON pms_custom_field_values (issue_id)",
+        "CREATE INDEX IF NOT EXISTS ix_pms_custom_field_values_field_id ON pms_custom_field_values (field_id)",
+        # ── pms_issue_assignees table ──
+        """
+        CREATE TABLE IF NOT EXISTS pms_issue_assignees (
+            id VARCHAR(36) PRIMARY KEY,
+            issue_id VARCHAR(36) NOT NULL REFERENCES pms_issues(id),
+            user_id VARCHAR(36) NOT NULL REFERENCES users(id),
+            CONSTRAINT uq_pms_issue_assignee UNIQUE (issue_id, user_id)
+        )
+        """,
+        "CREATE INDEX IF NOT EXISTS ix_pms_issue_assignees_issue_id ON pms_issue_assignees (issue_id)",
+        "CREATE INDEX IF NOT EXISTS ix_pms_issue_assignees_user_id ON pms_issue_assignees (user_id)",
     ]
 
     with engine.begin() as connection:

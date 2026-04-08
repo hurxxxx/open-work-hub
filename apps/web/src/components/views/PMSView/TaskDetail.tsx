@@ -38,22 +38,25 @@ import {
   deleteChecklistItem,
   createTimeEntry,
   deleteTimeEntry,
+  createDependency,
+  deleteDependency,
   type PmsIssue,
   type PmsComment,
   type PmsActivityLog,
   type PmsAttachment,
   type PmsChecklistItem,
   type PmsTimeEntry,
+  type PmsDependency,
   type PmsProjectMember,
   type PmsMilestone,
   type PmsLabel,
+  type PmsProjectStatus,
 } from '@/src/domains/pms/pms-api';
 import { toLocalDateInputValue } from '@/src/domains/pms/pms-filters';
-import { ISSUE_STATUSES, STATUS_TONE, initials, formatDate } from './pms-constants';
+import { getStatusSlugs, getStatusTone, getStatusLabel, initials, formatDate } from './pms-constants';
 
 const PRIORITIES = ['low', 'medium', 'high', 'critical'] as const;
 const PRIORITY_LABELS: Record<string, string> = { low: 'Low', medium: 'Medium', high: 'High', critical: 'Critical' };
-const STATUS_LABELS: Record<string, string> = { backlog: 'Backlog', todo: 'Todo', in_progress: 'In Progress', done: 'Done', canceled: 'Canceled' };
 
 const selectClass = 'bg-transparent text-sm text-clickup-text border border-clickup-border rounded-md px-2 py-1 focus:outline-none focus:border-clickup-purple cursor-pointer hover:border-clickup-text/30 transition-colors';
 
@@ -66,6 +69,7 @@ export const TaskDetail = ({
   members = [],
   milestones = [],
   projectLabels = [],
+  projectStatuses,
   onClose,
   onUpdate,
 }: {
@@ -73,6 +77,7 @@ export const TaskDetail = ({
   members?: PmsProjectMember[];
   milestones?: PmsMilestone[];
   projectLabels?: PmsLabel[];
+  projectStatuses?: PmsProjectStatus[];
   onClose: () => void;
   onUpdate?: () => void | Promise<void>;
 }) => {
@@ -97,12 +102,15 @@ export const TaskDetail = ({
   const [timeLogDesc, setTimeLogDesc] = useState('');
   const [loggingTime, setLoggingTime] = useState(false);
   const [attachments, setAttachments] = useState<PmsAttachment[]>([]);
+  const [dependencies, setDependencies] = useState<PmsDependency[]>([]);
   const [uploading, setUploading] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [descFullscreen, setDescFullscreen] = useState(false);
   const [subtaskMenuOpen, setSubtaskMenuOpen] = useState<string | null>(null);
   const [labelPickerOpen, setLabelPickerOpen] = useState(false);
+  const [mentionOpen, setMentionOpen] = useState(false);
+  const [mentionQuery, setMentionQuery] = useState('');
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const selectedLabelIds = issueState.labels.map((label) => label.id);
 
@@ -129,6 +137,7 @@ export const TaskDetail = ({
         setActivityLogs(logs.items);
         setSubtasks((detail.subtasks ?? []).filter((subtask) => !subtask.archived));
         setAttachments(detail.attachments ?? []);
+        setDependencies(detail.dependencies ?? []);
         setChecklistItems(detail.checklist_items ?? []);
         setTimeEntries(detail.time_entries ?? []);
       })
@@ -501,7 +510,7 @@ export const TaskDetail = ({
             <div className="grid grid-cols-[auto_1fr_auto_1fr] items-center gap-x-6 gap-y-3">
               <MetaLabel>Status</MetaLabel>
               <select value={issueState.status} onChange={e => patchField('status', e.target.value)} className={selectClass}>
-                {ISSUE_STATUSES.map(s => <option key={s} value={s}>{STATUS_LABELS[s] ?? s}</option>)}
+                {getStatusSlugs(projectStatuses).map(s => <option key={s} value={s}>{getStatusLabel(s, projectStatuses)}</option>)}
               </select>
               <MetaLabel>Assignee</MetaLabel>
               <select value={issueState.assignee_id ?? ''} onChange={e => patchField('assignee_id', e.target.value || null)} className={selectClass}>
@@ -524,6 +533,18 @@ export const TaskDetail = ({
                 {milestones.map(m => <option key={m.id} value={m.id}>{m.title}</option>)}
               </select>
 
+              <MetaLabel>Repeat</MetaLabel>
+              <select
+                value={issueState.recurrence_rule ?? ''}
+                onChange={e => patchField('recurrence_rule', e.target.value || null)}
+                className={selectClass}
+              >
+                <option value="">None</option>
+                <option value="daily">Daily</option>
+                <option value="weekly">Weekly</option>
+                <option value="biweekly">Biweekly</option>
+                <option value="monthly">Monthly</option>
+              </select>
               <MetaLabel>Labels</MetaLabel>
               <div className="col-span-3 relative">
                 <button
@@ -709,7 +730,7 @@ export const TaskDetail = ({
                       <span className={`text-sm flex-1 ${sub.status === 'done' ? 'line-through text-clickup-text/40' : 'text-clickup-text'}`}>
                         {sub.title}
                       </span>
-                      <Badge tone={STATUS_TONE[sub.status] ?? 'neutral'}>{sub.status_label}</Badge>
+                      <Badge tone={getStatusTone(sub.status, projectStatuses)}>{sub.status_label}</Badge>
                       {sub.assignee_name && (
                         <div className="w-5 h-5 rounded-full bg-blue-500 flex items-center justify-center text-[8px] font-bold text-white">
                           {initials(sub.assignee_name)}
@@ -775,6 +796,42 @@ export const TaskDetail = ({
                 )}
               </div>
             </div>
+
+            <hr className="border-clickup-border" />
+
+            {/* Dependencies */}
+            {dependencies.length > 0 && (
+              <div className="space-y-2">
+                <h3 className="text-sm font-semibold text-clickup-text">
+                  Dependencies <span className="text-clickup-text/40 font-normal">({dependencies.length})</span>
+                </h3>
+                <div className="space-y-1">
+                  {dependencies.map(dep => {
+                    const isBlocking = dep.predecessor_id === issue.id;
+                    const linkedId = isBlocking ? dep.successor_id : dep.predecessor_id;
+                    return (
+                      <div key={dep.id} className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-clickup-hover group text-sm">
+                        <span className="text-[10px] font-medium text-clickup-text/50 uppercase w-16 shrink-0">
+                          {isBlocking ? 'Blocks' : 'Blocked by'}
+                        </span>
+                        <span className="text-clickup-text/60 font-mono text-xs truncate flex-1">{linkedId.slice(0, 8)}…</span>
+                        <button
+                          onClick={async () => {
+                            if (!token) return;
+                            await deleteDependency(token, dep.id);
+                            setDependencies(prev => prev.filter(d => d.id !== dep.id));
+                          }}
+                          className="opacity-0 group-hover:opacity-100 text-clickup-text/30 hover:text-red-400 transition-all"
+                          title="Remove dependency"
+                        >
+                          <X size={13} />
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
 
             <hr className="border-clickup-border" />
 
@@ -994,18 +1051,63 @@ export const TaskDetail = ({
           </div>
 
           {/* Comment input — sticky bottom */}
-          <div className="flex items-center gap-2 px-4 py-3 border-t border-clickup-border shrink-0">
+          <div className="relative flex items-center gap-2 px-4 py-3 border-t border-clickup-border shrink-0">
             <div className="w-6 h-6 rounded-full bg-clickup-purple flex items-center justify-center text-[8px] font-bold text-white shrink-0">
               ME
             </div>
-            <input
-              type="text"
-              value={commentDraft}
-              onChange={e => setCommentDraft(e.target.value)}
-              onKeyDown={e => { if (e.key === 'Enter' && !e.nativeEvent.isComposing) handleCommentSubmit(); }}
-              placeholder="Write a comment..."
-              className="flex-1 bg-transparent border border-clickup-border rounded-lg px-3 py-1.5 text-sm text-clickup-text placeholder:text-clickup-text/40 focus:outline-none focus:border-clickup-purple transition-colors"
-            />
+            <div className="flex-1 relative">
+              <input
+                type="text"
+                value={commentDraft}
+                onChange={e => {
+                  setCommentDraft(e.target.value);
+                  // Show mention dropdown when @ is typed
+                  const val = e.target.value;
+                  const atIdx = val.lastIndexOf('@');
+                  if (atIdx >= 0 && atIdx === val.length - 1) {
+                    setMentionOpen(true);
+                    setMentionQuery('');
+                  } else if (atIdx >= 0 && !val.slice(atIdx + 1).includes(' ')) {
+                    setMentionOpen(true);
+                    setMentionQuery(val.slice(atIdx + 1).toLowerCase());
+                  } else {
+                    setMentionOpen(false);
+                  }
+                }}
+                onKeyDown={e => { if (e.key === 'Enter' && !e.nativeEvent.isComposing && !mentionOpen) handleCommentSubmit(); if (e.key === 'Escape') setMentionOpen(false); }}
+                placeholder="Write a comment... (type @ to mention)"
+                className="w-full bg-transparent border border-clickup-border rounded-lg px-3 py-1.5 text-sm text-clickup-text placeholder:text-clickup-text/40 focus:outline-none focus:border-clickup-purple transition-colors"
+              />
+              {mentionOpen && (
+                <>
+                  <div className="fixed inset-0 z-10" onClick={() => setMentionOpen(false)} />
+                  <div className="absolute bottom-full left-0 mb-1 z-20 w-56 bg-clickup-bg border border-clickup-border rounded-lg shadow-xl py-1 max-h-40 overflow-y-auto">
+                    {members
+                      .filter(m => !mentionQuery || m.full_name.toLowerCase().includes(mentionQuery))
+                      .map(m => (
+                        <button
+                          key={m.user_id}
+                          onClick={() => {
+                            const atIdx = commentDraft.lastIndexOf('@');
+                            const before = commentDraft.slice(0, atIdx);
+                            setCommentDraft(`${before}@${m.user_id} `);
+                            setMentionOpen(false);
+                          }}
+                          className="w-full text-left px-3 py-1.5 text-sm text-clickup-text hover:bg-clickup-hover transition-colors flex items-center gap-2"
+                        >
+                          <div className="w-5 h-5 rounded-full bg-blue-500 flex items-center justify-center text-[8px] font-bold text-white">
+                            {initials(m.full_name)}
+                          </div>
+                          {m.full_name}
+                        </button>
+                      ))}
+                    {members.filter(m => !mentionQuery || m.full_name.toLowerCase().includes(mentionQuery)).length === 0 && (
+                      <p className="px-3 py-2 text-xs text-clickup-text/40">No matches</p>
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
             <Button variant="ghost" size="icon" className="shrink-0" onClick={handleCommentSubmit}>
               <Send size={14} />
             </Button>

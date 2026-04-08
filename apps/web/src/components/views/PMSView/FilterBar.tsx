@@ -1,12 +1,12 @@
 import { useState, useRef, useEffect } from 'react';
 import { X, Filter, ChevronDown, Save, BookmarkCheck } from 'lucide-react';
-import type { IssueFilterParams, PmsProjectMember, PmsMilestone, PmsLabel } from '@/src/domains/pms/pms-api';
+import type { IssueFilterParams, PmsProjectMember, PmsMilestone, PmsLabel, PmsProjectStatus } from '@/src/domains/pms/pms-api';
 import {
   createDefaultIssueFilterParams,
   DEFAULT_ISSUE_ARCHIVED_STATE,
 } from '@/src/domains/pms/pms-filters';
 
-const STATUS_OPTIONS = [
+const DEFAULT_statusOptions = [
   { value: 'backlog', label: 'Backlog' },
   { value: 'todo', label: 'Todo' },
   { value: 'in_progress', label: 'In Progress' },
@@ -114,6 +114,7 @@ export const FilterBar = ({
   members,
   milestones,
   labels,
+  projectStatuses,
 }: {
   projectId: string;
   filterParams: IssueFilterParams;
@@ -121,7 +122,11 @@ export const FilterBar = ({
   members: PmsProjectMember[];
   milestones: PmsMilestone[];
   labels: PmsLabel[];
+  projectStatuses?: PmsProjectStatus[];
 }) => {
+  const statusOptions = projectStatuses && projectStatuses.length > 0
+    ? projectStatuses.map(s => ({ value: s.slug, label: s.name }))
+    : [...DEFAULT_statusOptions];
   const [savedFilters, setSavedFilters] = useState<SavedFilter[]>(() => loadSavedFilters(projectId));
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
   const [filterName, setFilterName] = useState('');
@@ -164,7 +169,7 @@ export const FilterBar = ({
   // Active filter pills
   const pills: { label: string; clear: () => void }[] = [];
   if (filterParams.status && filterParams.status.length > 0) {
-    const statusLabels = filterParams.status.map(s => STATUS_OPTIONS.find(o => o.value === s)?.label ?? s).join(', ');
+    const statusLabels = filterParams.status.map(s => statusOptions.find(o => o.value === s)?.label ?? s).join(', ');
     pills.push({ label: `Status: ${statusLabels}`, clear: () => setFilterParams({ ...filterParams, status: undefined }) });
   }
   if (filterParams.priority) {
@@ -209,7 +214,7 @@ export const FilterBar = ({
       <Dropdown label="Status" active={!!(filterParams.status && filterParams.status.length > 0)}>
         {() => (
           <>
-            {STATUS_OPTIONS.map(opt => {
+            {statusOptions.map(opt => {
               const checked = filterParams.status?.includes(opt.value) ?? false;
               return (
                 <label key={opt.value} className="flex items-center gap-2 px-3 py-1.5 hover:bg-clickup-hover cursor-pointer text-xs text-clickup-text">

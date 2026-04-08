@@ -17,6 +17,7 @@ import {
   Table,
   FileText,
   Loader2,
+  Download,
 } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 import { useAuth } from '@/src/domains/auth/auth-provider';
@@ -26,14 +27,17 @@ import {
   listProjectMembers,
   listProjectMilestones,
   listProjectLabels,
+  listProjectStatuses,
   getIssueDetail,
   updateIssue,
+  exportProjectCsv,
   type IssueFilterParams,
   type PmsProject,
   type PmsIssue,
   type PmsProjectMember,
   type PmsMilestone,
   type PmsLabel,
+  type PmsProjectStatus,
 } from '@/src/domains/pms/pms-api';
 import {
   createDefaultIssueFilterParams,
@@ -71,6 +75,7 @@ export const PMSView = () => {
   const [members, setMembers] = useState<PmsProjectMember[]>([]);
   const [milestones, setMilestones] = useState<PmsMilestone[]>([]);
   const [labels, setLabels] = useState<PmsLabel[]>([]);
+  const [projectStatuses, setProjectStatuses] = useState<PmsProjectStatus[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [filterParams, setFilterParams] = useState<IssueFilterParams>(createDefaultIssueFilterParams());
@@ -172,13 +177,15 @@ export const PMSView = () => {
       listProjectMembers(token, selectedProjectId),
       listProjectMilestones(token, selectedProjectId),
       listProjectLabels(token, selectedProjectId),
+      listProjectStatuses(token, selectedProjectId),
     ])
-      .then(([issueRes, memberRes, milestoneRes, labelRes]) => {
+      .then(([issueRes, memberRes, milestoneRes, labelRes, statusRes]) => {
         if (cancelled) return;
         applyIssueCollection(issueRes.items);
         setMembers(memberRes.items);
         setMilestones(milestoneRes.items);
         setLabels(labelRes.items);
+        setProjectStatuses(statusRes.items);
       })
       .catch(err => {
         if (cancelled) return;
@@ -337,6 +344,15 @@ export const PMSView = () => {
                 className="bg-transparent text-xs text-clickup-text focus:outline-none w-32"
               />
             </div>
+            {!isTeamSpace && selectedProjectId && (
+              <button
+                onClick={() => { if (token) void exportProjectCsv(token, selectedProjectId); }}
+                className="p-2 hover:bg-clickup-hover rounded border border-clickup-border text-gray-500 dark:text-gray-400"
+                title="Export CSV"
+              >
+                <Download size={16} />
+              </button>
+            )}
             <button
               onClick={() => setSettingsOpen(true)}
               className="p-2 hover:bg-clickup-hover rounded border border-clickup-border text-gray-500 dark:text-gray-400"
@@ -392,6 +408,7 @@ export const PMSView = () => {
           members={members}
           milestones={milestones}
           labels={labels}
+          projectStatuses={projectStatuses}
         />
       )}
 
@@ -419,12 +436,12 @@ export const PMSView = () => {
             )}
             {activeTab === 'List' && (
               <motion.div key="list" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}>
-                <ListView issues={issues} onSelectIssue={setSelectedIssue} selectedIds={selectedIssueIds} onToggleSelect={toggleIssueSelection} />
+                <ListView issues={issues} onSelectIssue={setSelectedIssue} selectedIds={selectedIssueIds} onToggleSelect={toggleIssueSelection} projectStatuses={projectStatuses} />
               </motion.div>
             )}
             {activeTab === 'Board' && (
               <motion.div key="board" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="h-full">
-                <BoardView issues={issues} onSelectIssue={setSelectedIssue} onUpdateIssue={handleUpdateIssue} selectedIds={selectedIssueIds} onToggleSelect={toggleIssueSelection} />
+                <BoardView issues={issues} onSelectIssue={setSelectedIssue} onUpdateIssue={handleUpdateIssue} selectedIds={selectedIssueIds} onToggleSelect={toggleIssueSelection} projectStatuses={projectStatuses} />
               </motion.div>
             )}
             {activeTab === 'Calendar' && (
@@ -439,7 +456,7 @@ export const PMSView = () => {
             )}
             {activeTab === 'Table' && (
               <motion.div key="table" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="h-full">
-                <TableView issues={issues} onSelectIssue={setSelectedIssue} selectedIds={selectedIssueIds} onToggleSelect={toggleIssueSelection} />
+                <TableView issues={issues} onSelectIssue={setSelectedIssue} selectedIds={selectedIssueIds} onToggleSelect={toggleIssueSelection} projectStatuses={projectStatuses} />
               </motion.div>
             )}
           </AnimatePresence>
@@ -469,6 +486,7 @@ export const PMSView = () => {
                 members={members}
                 milestones={milestones}
                 projectLabels={labels}
+                projectStatuses={projectStatuses}
                 onClose={clearSelectedIssue}
                 onUpdate={reloadIssues}
               />
@@ -484,6 +502,7 @@ export const PMSView = () => {
             onClose={() => setIsNewTaskModalOpen(false)}
             projectId={selectedProjectId}
             onCreated={reloadIssues}
+            projectStatuses={projectStatuses}
           />
         )}
       </AnimatePresence>
@@ -494,6 +513,7 @@ export const PMSView = () => {
             projectId={selectedProjectId}
             onClose={() => setSettingsOpen(false)}
             onLabelsChanged={(updated) => setLabels(updated)}
+            onStatusesChanged={(updated) => setProjectStatuses(updated)}
           />
         )}
       </AnimatePresence>
@@ -508,6 +528,7 @@ export const PMSView = () => {
           onDone={handleBulkDone}
           members={members}
           labels={labels}
+          projectStatuses={projectStatuses}
         />
       )}
     </div>

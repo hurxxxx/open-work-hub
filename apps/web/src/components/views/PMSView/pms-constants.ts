@@ -1,5 +1,7 @@
 /** PMS status/priority display constants shared across views. */
 
+import type { PmsProjectStatus } from '@/src/domains/pms/pms-api';
+
 export const ISSUE_STATUSES = ['backlog', 'todo', 'in_progress', 'done', 'canceled'] as const;
 
 export const STATUS_TONE: Record<string, 'neutral' | 'accent' | 'success' | 'warning' | 'danger'> = {
@@ -17,6 +19,46 @@ export const STATUS_DOT_COLOR: Record<string, string> = {
   done: 'bg-green-500',
   canceled: 'bg-red-500',
 };
+
+const CATEGORY_TONE: Record<string, 'neutral' | 'accent' | 'success' | 'warning' | 'danger'> = {
+  backlog: 'neutral',
+  active: 'accent',
+  done: 'success',
+  canceled: 'danger',
+};
+
+/** Resolve tone for a status slug, falling back to custom status category */
+export function getStatusTone(
+  slug: string,
+  projectStatuses?: PmsProjectStatus[],
+): 'neutral' | 'accent' | 'success' | 'warning' | 'danger' {
+  if (STATUS_TONE[slug]) return STATUS_TONE[slug];
+  const ps = projectStatuses?.find(s => s.slug === slug);
+  return ps ? (CATEGORY_TONE[ps.category] ?? 'neutral') : 'neutral';
+}
+
+/** Resolve dot color for a status slug */
+export function getStatusDotColor(slug: string, projectStatuses?: PmsProjectStatus[]): string {
+  if (STATUS_DOT_COLOR[slug]) return STATUS_DOT_COLOR[slug];
+  const ps = projectStatuses?.find(s => s.slug === slug);
+  if (ps) return ''; // will use inline style with ps.color instead
+  return 'bg-gray-500';
+}
+
+/** Get ordered status slugs from project statuses, falling back to defaults */
+export function getStatusSlugs(projectStatuses?: PmsProjectStatus[]): string[] {
+  if (projectStatuses && projectStatuses.length > 0) {
+    return projectStatuses.map(s => s.slug);
+  }
+  return [...ISSUE_STATUSES];
+}
+
+/** Get status display name */
+export function getStatusLabel(slug: string, projectStatuses?: PmsProjectStatus[]): string {
+  const ps = projectStatuses?.find(s => s.slug === slug);
+  if (ps) return ps.name;
+  return slug.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+}
 
 export const PRIORITY_COLOR: Record<string, string> = {
   critical: 'text-red-500',

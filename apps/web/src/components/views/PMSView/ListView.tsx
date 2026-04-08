@@ -1,18 +1,20 @@
 import { Activity, Plus, Layout, ChevronDown, Circle, User2, CheckSquare, Clock } from 'lucide-react';
 import { Badge, Button } from '@aidoo/ui';
-import type { PmsIssue } from '@/src/domains/pms/pms-api';
-import { ISSUE_STATUSES, STATUS_TONE, PRIORITY_COLOR, initials, formatDate } from './pms-constants';
+import type { PmsIssue, PmsProjectStatus } from '@/src/domains/pms/pms-api';
+import { getStatusSlugs, getStatusTone, PRIORITY_COLOR, initials, formatDate } from './pms-constants';
 
 export const ListView = ({
   issues,
   onSelectIssue,
   selectedIds,
   onToggleSelect,
+  projectStatuses,
 }: {
   issues: PmsIssue[];
   onSelectIssue: (issue: PmsIssue) => void;
   selectedIds?: Set<string>;
   onToggleSelect?: (issueId: string) => void;
+  projectStatuses?: PmsProjectStatus[];
 }) => {
   return (
     <div className="space-y-8">
@@ -31,7 +33,7 @@ export const ListView = ({
         </Button>
       </div>
 
-      {ISSUE_STATUSES.map((status) => {
+      {getStatusSlugs(projectStatuses).map((status) => {
         const statusIssues = issues.filter((i) => i.status === status);
         if (statusIssues.length === 0) return null;
 
@@ -39,7 +41,7 @@ export const ListView = ({
           <div key={status} className="space-y-2">
             <div className="flex items-center gap-2 px-2 py-1">
               <ChevronDown size={14} className="text-clickup-text/50" />
-              <Badge tone={STATUS_TONE[status] ?? 'neutral'}>{statusIssues[0]?.status_label ?? status}</Badge>
+              <Badge tone={getStatusTone(status, projectStatuses)}>{statusIssues[0]?.status_label ?? status}</Badge>
               <span className="text-[10px] text-clickup-text/40 font-bold">
                 {statusIssues.length}
               </span>
@@ -105,7 +107,7 @@ export const ListView = ({
                         </span>
                       </td>
                       <td className="py-2 px-4">
-                        <Badge tone={STATUS_TONE[issue.status] ?? 'neutral'}>{issue.status_label}</Badge>
+                        <Badge tone={getStatusTone(issue.status, projectStatuses)}>{issue.status_label}</Badge>
                       </td>
                       <td className="py-2 px-4">
                         <span className="text-clickup-text/40">{issue.comments_count}</span>

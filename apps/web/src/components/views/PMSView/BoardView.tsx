@@ -1,8 +1,8 @@
 import { motion } from 'motion/react';
 import { Plus, MoreHorizontal, Flag, Calendar, User2, CheckSquare, Clock } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
-import type { PmsIssue } from '@/src/domains/pms/pms-api';
-import { ISSUE_STATUSES, STATUS_DOT_COLOR, PRIORITY_COLOR, initials, formatDate } from './pms-constants';
+import type { PmsIssue, PmsProjectStatus } from '@/src/domains/pms/pms-api';
+import { getStatusSlugs, STATUS_DOT_COLOR, PRIORITY_COLOR, initials, formatDate } from './pms-constants';
 
 export const BoardView = ({
   issues,
@@ -10,14 +10,20 @@ export const BoardView = ({
   onUpdateIssue,
   selectedIds,
   onToggleSelect,
+  projectStatuses,
 }: {
   issues: PmsIssue[];
   onSelectIssue: (issue: PmsIssue) => void;
   onUpdateIssue?: (issueId: string, payload: Record<string, unknown>) => void;
   selectedIds?: Set<string>;
   onToggleSelect?: (issueId: string) => void;
+  projectStatuses?: PmsProjectStatus[];
 }) => {
-  const visibleStatuses = ISSUE_STATUSES.filter(s => s !== 'canceled');
+  const allSlugs = getStatusSlugs(projectStatuses);
+  const visibleStatuses = allSlugs.filter(s => {
+    const ps = projectStatuses?.find(st => st.slug === s);
+    return ps ? ps.category !== 'canceled' : s !== 'canceled';
+  });
 
   function handleDrop(e: React.DragEvent, targetStatus: string) {
     e.preventDefault();
@@ -48,7 +54,10 @@ export const BoardView = ({
           >
             <div className="flex items-center justify-between px-2">
               <div className="flex items-center gap-2">
-                <div className={cn("w-2 h-2 rounded-full", STATUS_DOT_COLOR[status])} />
+                <div
+                  className={cn("w-2 h-2 rounded-full", STATUS_DOT_COLOR[status])}
+                  style={!STATUS_DOT_COLOR[status] && projectStatuses?.find(s => s.slug === status)?.color ? { backgroundColor: projectStatuses.find(s => s.slug === status)!.color } : undefined}
+                />
                 <h3 className="text-xs font-bold text-clickup-text uppercase tracking-wider">{label}</h3>
                 <span className="text-[10px] text-gray-600 font-bold">{statusIssues.length}</span>
               </div>

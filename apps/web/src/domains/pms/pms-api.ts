@@ -97,6 +97,9 @@ export interface PmsIssue {
   checklist_done: number;
   estimate_hours: number | null;
   time_spent_minutes: number;
+  recurrence_rule: string | null;
+  assignee_ids: string[];
+  assignee_names: string[];
   labels: PmsLabel[];
   updated_at: string;
 }
@@ -239,6 +242,58 @@ export interface PmsDashboardSummary {
   priority_counts: PmsDashboardPriorityCount[];
   projects: PmsDashboardProject[];
   recent_activity: PmsDashboardRecentActivity[];
+}
+
+// ── Task Templates ──────────────────────────────────────────────────
+
+export interface PmsTaskTemplate {
+  id: string;
+  project_id: string;
+  name: string;
+  description: string;
+  default_status: string;
+  default_priority: string;
+  checklist_items: { text: string }[] | null;
+  created_at: string;
+}
+
+export interface PmsTaskTemplatesResponse {
+  items: PmsTaskTemplate[];
+}
+
+// ── Custom Fields ───────────────────────────────────────────────────
+
+export interface PmsCustomField {
+  id: string;
+  project_id: string;
+  name: string;
+  field_type: 'text' | 'number' | 'date' | 'select';
+  options: string[] | null;
+  sort_order: number;
+}
+
+export interface PmsCustomFieldsResponse {
+  items: PmsCustomField[];
+}
+
+export interface PmsCustomFieldValue {
+  field_id: string;
+  value: string;
+}
+
+// ── Project Custom Statuses ─────────────────────────────────────────
+
+export interface PmsProjectStatus {
+  id: string;
+  slug: string;
+  name: string;
+  color: string;
+  category: 'backlog' | 'active' | 'done' | 'canceled';
+  sort_order: number;
+}
+
+export interface PmsProjectStatusesResponse {
+  items: PmsProjectStatus[];
 }
 
 class PmsApiError extends Error {
@@ -500,6 +555,22 @@ export function deleteAttachment(token: string, attachmentId: string): Promise<v
   return request<void>(`/api/v1/pms/attachments/${attachmentId}`, token, { method: 'DELETE' });
 }
 
+// ── Dependencies ────────────────────────────────────────────────────
+
+export function createDependency(
+  token: string,
+  payload: { predecessor_id: string; successor_id: string },
+): Promise<PmsDependency> {
+  return request<PmsDependency>('/api/v1/pms/dependencies', token, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function deleteDependency(token: string, dependencyId: string): Promise<void> {
+  return request<void>(`/api/v1/pms/dependencies/${dependencyId}`, token, { method: 'DELETE' });
+}
+
 // ── Bulk Operations ─────────────────────────────────────────────────
 
 export interface BulkUpdatePayload {
@@ -623,4 +694,150 @@ export function markNotificationRead(token: string, notificationId: string): Pro
 
 export function markAllNotificationsRead(token: string): Promise<void> {
   return request<void>('/api/v1/pms/notifications/read-all', token, { method: 'PATCH' });
+}
+
+// ── Project Statuses (Custom Workflow) ─────────────────────────────
+
+export function listProjectStatuses(
+  token: string,
+  projectId: string,
+): Promise<PmsProjectStatusesResponse> {
+  return request<PmsProjectStatusesResponse>(
+    `/api/v1/pms/projects/${projectId}/statuses`,
+    token,
+  );
+}
+
+export function createProjectStatus(
+  token: string,
+  projectId: string,
+  payload: { name: string; color?: string; category?: string; sort_order?: number },
+): Promise<PmsProjectStatus> {
+  return request<PmsProjectStatus>(`/api/v1/pms/projects/${projectId}/statuses`, token, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function updateProjectStatus(
+  token: string,
+  statusId: string,
+  payload: { name?: string; color?: string; category?: string; sort_order?: number },
+): Promise<PmsProjectStatus> {
+  return request<PmsProjectStatus>(`/api/v1/pms/project-statuses/${statusId}`, token, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function deleteProjectStatus(token: string, statusId: string): Promise<void> {
+  return request<void>(`/api/v1/pms/project-statuses/${statusId}`, token, { method: 'DELETE' });
+}
+
+// ── Export ──────────────────────────────────────────────────────────
+
+export async function exportProjectCsv(token: string, projectId: string): Promise<void> {
+  const response = await fetch(`/api/v1/pms/projects/${projectId}/export?format=csv`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!response.ok) throw new PmsApiError(response.status, 'Export failed.');
+  const blob = await response.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `issues_export.csv`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+// ── Task Templates ─────────────────────────────────────────────────
+
+export function listTaskTemplates(
+  token: string,
+  projectId: string,
+): Promise<PmsTaskTemplatesResponse> {
+  return request<PmsTaskTemplatesResponse>(`/api/v1/pms/projects/${projectId}/templates`, token);
+}
+
+export function createTaskTemplate(
+  token: string,
+  projectId: string,
+  payload: {
+    name: string;
+    description?: string;
+    default_status?: string;
+    default_priority?: string;
+    checklist_items?: { text: string }[];
+  },
+): Promise<PmsTaskTemplate> {
+  return request<PmsTaskTemplate>(`/api/v1/pms/projects/${projectId}/templates`, token, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function deleteTaskTemplate(token: string, templateId: string): Promise<void> {
+  return request<void>(`/api/v1/pms/templates/${templateId}`, token, { method: 'DELETE' });
+}
+
+// ── Custom Fields ──────────────────────────────────────────────────
+
+export function listCustomFields(
+  token: string,
+  projectId: string,
+): Promise<PmsCustomFieldsResponse> {
+  return request<PmsCustomFieldsResponse>(`/api/v1/pms/projects/${projectId}/custom-fields`, token);
+}
+
+export function createCustomField(
+  token: string,
+  projectId: string,
+  payload: { name: string; field_type: string; options?: string[]; sort_order?: number },
+): Promise<PmsCustomField> {
+  return request<PmsCustomField>(`/api/v1/pms/projects/${projectId}/custom-fields`, token, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function deleteCustomField(token: string, fieldId: string): Promise<void> {
+  return request<void>(`/api/v1/pms/custom-fields/${fieldId}`, token, { method: 'DELETE' });
+}
+
+export function listIssueCustomFieldValues(
+  token: string,
+  issueId: string,
+): Promise<PmsCustomFieldValue[]> {
+  return request<PmsCustomFieldValue[]>(`/api/v1/pms/issues/${issueId}/custom-field-values`, token);
+}
+
+export function setIssueCustomFieldValue(
+  token: string,
+  issueId: string,
+  payload: { field_id: string; value: string },
+): Promise<PmsCustomFieldValue> {
+  return request<PmsCustomFieldValue>(`/api/v1/pms/issues/${issueId}/custom-field-values`, token, {
+    method: 'PUT',
+    body: JSON.stringify(payload),
+  });
+}
+
+// ── Issue Assignees (Multiple) ─────────────────────────────────────
+
+export interface PmsIssueAssignee {
+  user_id: string;
+  full_name: string;
+}
+
+export function setIssueAssignees(
+  token: string,
+  issueId: string,
+  userIds: string[],
+): Promise<PmsIssueAssignee[]> {
+  return request<PmsIssueAssignee[]>(`/api/v1/pms/issues/${issueId}/assignees`, token, {
+    method: 'PUT',
+    body: JSON.stringify({ user_ids: userIds }),
+  });
 }

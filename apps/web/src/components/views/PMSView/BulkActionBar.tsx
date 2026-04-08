@@ -1,9 +1,9 @@
 import { useState, useRef, useEffect } from 'react';
 import { X, ChevronDown, Trash2, Archive } from 'lucide-react';
-import { bulkUpdateIssues, type PmsProjectMember, type PmsLabel } from '@/src/domains/pms/pms-api';
+import { bulkUpdateIssues, type PmsProjectMember, type PmsLabel, type PmsProjectStatus } from '@/src/domains/pms/pms-api';
 import { useAuth } from '@/src/domains/auth/auth-provider';
 
-const STATUS_OPTIONS = [
+const DEFAULT_STATUS_OPTIONS = [
   { value: 'backlog', label: 'Backlog' },
   { value: 'todo', label: 'Todo' },
   { value: 'in_progress', label: 'In Progress' },
@@ -63,6 +63,7 @@ export const BulkActionBar = ({
   onDone,
   members,
   labels,
+  projectStatuses,
 }: {
   projectId: string;
   selectedIds: Set<string>;
@@ -72,7 +73,11 @@ export const BulkActionBar = ({
   onDone: () => void;
   members: PmsProjectMember[];
   labels: PmsLabel[];
+  projectStatuses?: PmsProjectStatus[];
 }) => {
+  const statusOptions = projectStatuses && projectStatuses.length > 0
+    ? projectStatuses.map(s => ({ value: s.slug, label: s.name }))
+    : [...DEFAULT_STATUS_OPTIONS];
   const { token } = useAuth();
   const [loading, setLoading] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -111,7 +116,7 @@ export const BulkActionBar = ({
       <ActionDropdown label="Status">
         {(close) => (
           <>
-            {STATUS_OPTIONS.map(opt => (
+            {statusOptions.map(opt => (
               <button
                 key={opt.value}
                 onClick={() => { exec({ status: opt.value }); close(); }}
