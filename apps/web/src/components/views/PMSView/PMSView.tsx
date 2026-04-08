@@ -446,12 +446,12 @@ export const PMSView = () => {
             )}
             {activeTab === 'Calendar' && (
               <motion.div key="calendar" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="h-full">
-                <CalendarView issues={issues} />
+                <CalendarView issues={issues} projectStatuses={projectStatuses} />
               </motion.div>
             )}
             {activeTab === 'Gantt' && (
               <motion.div key="gantt" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="h-full">
-                <GanttView issues={issues} />
+                <GanttView issues={issues} projectStatuses={projectStatuses} />
               </motion.div>
             )}
             {activeTab === 'Table' && (

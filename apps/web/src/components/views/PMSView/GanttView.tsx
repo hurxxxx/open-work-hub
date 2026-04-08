@@ -1,9 +1,20 @@
 import { useMemo } from 'react';
 import { cn } from '@/src/lib/utils';
-import type { PmsIssue } from '@/src/domains/pms/pms-api';
+import type { PmsIssue, PmsProjectStatus } from '@/src/domains/pms/pms-api';
 import { STATUS_DOT_COLOR } from './pms-constants';
 
-export const GanttView = ({ issues }: { issues: PmsIssue[] }) => {
+function getGanttDotColor(slug: string, projectStatuses?: PmsProjectStatus[]): string {
+  if (STATUS_DOT_COLOR[slug]) return STATUS_DOT_COLOR[slug];
+  return '';
+}
+
+function getGanttDotStyle(slug: string, projectStatuses?: PmsProjectStatus[]): React.CSSProperties | undefined {
+  if (STATUS_DOT_COLOR[slug]) return undefined;
+  const ps = projectStatuses?.find(s => s.slug === slug);
+  return ps ? { backgroundColor: ps.color } : { backgroundColor: '#6b7280' };
+}
+
+export const GanttView = ({ issues, projectStatuses }: { issues: PmsIssue[]; projectStatuses?: PmsProjectStatus[] }) => {
   const { dates, startDate } = useMemo(() => {
     const now = new Date();
     const start = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -45,7 +56,7 @@ export const GanttView = ({ issues }: { issues: PmsIssue[] }) => {
           return (
             <div key={issue.id} className="flex border-b border-clickup-border hover:bg-clickup-hover transition-colors">
               <div className="w-64 border-r border-clickup-border p-4 flex items-center gap-3 shrink-0">
-                <div className={cn("w-2 h-2 rounded-full shrink-0", STATUS_DOT_COLOR[issue.status])} />
+                <div className={cn("w-2 h-2 rounded-full shrink-0", getGanttDotColor(issue.status, projectStatuses))} style={getGanttDotStyle(issue.status, projectStatuses)} />
                 <span className="text-xs text-clickup-text truncate font-medium">{issue.title}</span>
               </div>
               <div className="flex-1 flex relative" style={{ minWidth: `${dates.length * 40}px` }}>
@@ -53,7 +64,7 @@ export const GanttView = ({ issues }: { issues: PmsIssue[] }) => {
                   <div
                     className={cn(
                       "absolute top-1/2 -translate-y-1/2 h-5 rounded-full flex items-center px-2 text-[9px] font-bold text-white",
-                      STATUS_DOT_COLOR[issue.status] ?? 'bg-gray-500',
+                      getGanttDotColor(issue.status, projectStatuses) || 'bg-gray-500',
                     )}
                     style={barStyle}
                   >

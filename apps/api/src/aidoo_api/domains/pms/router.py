@@ -663,12 +663,34 @@ def _issue_progress(status_value: str, project: Project | None = None) -> float 
     return 0.5  # Unknown status defaults to active
 
 
-def _calculate_progress(issues: list[Issue]) -> float:
+def _is_closed_status(status_value: str, project: Project | None = None) -> bool:
+    """Check if a status represents a closed state (done or canceled)."""
+    if status_value in {"done", "canceled"}:
+        return True
+    if project is not None:
+        for ps in getattr(project, "statuses", []):
+            if ps.slug == status_value:
+                return ps.category in {"done", "canceled"}
+    return False
+
+
+def _is_done_status(status_value: str, project: Project | None = None) -> bool:
+    """Check if a status represents a completed state."""
+    if status_value == "done":
+        return True
+    if project is not None:
+        for ps in getattr(project, "statuses", []):
+            if ps.slug == status_value:
+                return ps.category == "done"
+    return False
+
+
+def _calculate_progress(issues: list[Issue], project: Project | None = None) -> float:
     progress_values = [
         progress
         for issue in issues
         if not issue.archived
-        for progress in [_issue_progress(issue.status)]
+        for progress in [_issue_progress(issue.status, project)]
         if progress is not None
     ]
     if not progress_values:
@@ -731,7 +753,7 @@ def _serialize_project(project: Project, role: str, team_name: str | None = None
         for issue in project.issues
         if (
             not issue.archived
-            and issue.status not in {"done", "canceled"}
+            and not _is_closed_status(issue.status, project)
             and issue.due_date is not None
             and issue.due_date < date.today()
         )
@@ -748,7 +770,7 @@ def _serialize_project(project: Project, role: str, team_name: str | None = None
         folder_id=project.folder_id,
         folder_name=getattr(project.folder, "name", None) if project.folder_id else None,
         role=role,
-        progress=_calculate_progress(project.issues),
+        progress=_calculate_progress(project.issues, project),
         member_count=len(project.members),
         milestone_count=len(project.milestones),
         issue_count=len(project.issues),
@@ -760,7 +782,7 @@ def _serialize_project(project: Project, role: str, team_name: str | None = None
 
 def _serialize_milestone(milestone: Milestone) -> MilestoneItem:
     issues = list(milestone.issues)
-    completed_issue_count = sum(1 for issue in issues if issue.status == "done")
+    completed_issue_count = sum(1 for issue in issues if _is_done_status(issue.status))
     return MilestoneItem(
         id=milestone.id,
         project_id=milestone.project_id,
@@ -1184,7 +1206,7 @@ def update_project(
     current_user: User = Depends(require_current_user),
 ) -> ProjectListItem:
     project, role = _ensure_project_owner(db, current_user, project_id)
-    for field_name in ["name", "description", "status", "archived"]:
+    for field_name in ["name", "description", "status", "archived", "folder_id"]:
         value = getattr(payload, field_name)
         if value is not None:
             setattr(project, field_name, value.strip() if isinstance(value, str) else value)
@@ -1561,7 +1583,7 @@ def create_issue(
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
 ) -> IssueListItem:
-    project, _ = _ensure_project_access(db, current_user, project_id)
+    project, _ = _ensure_project_editor(db, current_user, project_id)
     _validate_issue_assignee(project, payload.assignee_id)
     _validate_milestone(project, payload.milestone_id)
     _validate_parent_issue(db, project, payload.parent_id)
@@ -1825,7 +1847,7 @@ def bulk_update_issues(
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
 ) -> BulkUpdateResponse:
-    project, _role = _ensure_project_access(db, current_user, project_id)
+    project, _role = _ensure_project_editor(db, current_user, project_id)
     issue_map = {
         issue.id: issue
         for issue in db.scalars(
@@ -2064,7 +2086,7 @@ def delete_dependency(
     dependency = db.scalar(select(ScheduleDependency).where(ScheduleDependency.id == dependency_id))
     if dependency is None:
         raise HTTPException(status_code=404, detail="Dependency not found.")
-    _ensure_project_access(db, current_user, dependency.project_id)
+    _ensure_project_editor(db, current_user, dependency.project_id)
     db.delete(dependency)
     db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
@@ -2868,7 +2890,7 @@ def create_template(
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
 ) -> TaskTemplateItem:
-    _ensure_project_access(db, current_user, project_id)
+    _ensure_project_editor(db, current_user, project_id)
     t = TaskTemplate(
         id=new_id(),
         project_id=project_id,
@@ -2894,7 +2916,7 @@ def update_template(
     t = db.scalar(select(TaskTemplate).where(TaskTemplate.id == template_id))
     if t is None:
         raise HTTPException(status_code=404, detail="Template not found.")
-    _ensure_project_access(db, current_user, t.project_id)
+    _ensure_project_editor(db, current_user, t.project_id)
 
     if payload.name is not None:
         t.name = payload.name.strip()
@@ -2921,7 +2943,7 @@ def delete_template(
     t = db.scalar(select(TaskTemplate).where(TaskTemplate.id == template_id))
     if t is None:
         raise HTTPException(status_code=404, detail="Template not found.")
-    _ensure_project_access(db, current_user, t.project_id)
+    _ensure_project_editor(db, current_user, t.project_id)
     db.delete(t)
     db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
@@ -2999,9 +3021,6 @@ def delete_custom_field(
         raise HTTPException(status_code=404, detail="Custom field not found.")
     _ensure_project_owner(db, current_user, f.project_id)
     # Delete all values for this field
-    db.execute(
-        select(CustomFieldValue).where(CustomFieldValue.field_id == field_id)
-    )
     for v in db.scalars(select(CustomFieldValue).where(CustomFieldValue.field_id == field_id)):
         db.delete(v)
     db.delete(f)
@@ -3035,7 +3054,12 @@ def set_issue_custom_field_value(
     issue = db.scalar(select(Issue).where(Issue.id == issue_id))
     if issue is None:
         raise HTTPException(status_code=404, detail="Issue not found.")
-    _ensure_project_access(db, current_user, issue.project_id)
+    _ensure_project_editor(db, current_user, issue.project_id)
+
+    # Validate field belongs to same project
+    field = db.scalar(select(CustomField).where(CustomField.id == payload.field_id))
+    if field is None or field.project_id != issue.project_id:
+        raise HTTPException(status_code=400, detail="Custom field does not belong to this project.")
 
     existing = db.scalar(
         select(CustomFieldValue).where(
@@ -3077,17 +3101,19 @@ def set_issue_assignees(
         db.delete(link)
     db.flush()
 
-    # Add new ones
+    # Add new ones (validate all users first)
     result: list[IssueAssigneeItem] = []
+    validated_user_ids: list[str] = []
     for uid in payload.user_ids:
         user = db.scalar(select(User).where(User.id == uid))
         if user is None:
             continue
         db.add(IssueAssignee(id=new_id(), issue_id=issue_id, user_id=uid))
         result.append(IssueAssigneeItem(user_id=uid, full_name=user.full_name))
+        validated_user_ids.append(uid)
 
-    # Update primary assignee_id to the first in the list (or clear)
-    issue.assignee_id = payload.user_ids[0] if payload.user_ids else None
+    # Update primary assignee_id to the first validated user (or clear)
+    issue.assignee_id = validated_user_ids[0] if validated_user_ids else None
 
     db.commit()
     return result
@@ -3125,9 +3151,21 @@ def list_folders(
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
 ) -> FolderListResponse:
+    # Only return folders for teams the user has access to
     q = select(Folder).order_by(Folder.sort_order)
     if team_id:
         q = q.where(Folder.team_id == team_id)
+    if not current_user.is_admin:
+        accessible_team_ids = {
+            m.project.team_id
+            for m in db.scalars(
+                select(ProjectMember)
+                .options(selectinload(ProjectMember.project))
+                .where(ProjectMember.user_id == current_user.id)
+            )
+            if m.project.team_id
+        }
+        q = q.where(Folder.team_id.in_(accessible_team_ids) | Folder.team_id.is_(None))
     folders = list(db.scalars(q))
 
     # Count projects per folder
@@ -3158,6 +3196,10 @@ def create_folder(
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
 ) -> FolderItem:
+    if payload.team_id and not current_user.is_admin:
+        team = db.scalar(select(Team).where(Team.id == payload.team_id))
+        if team is None:
+            raise HTTPException(status_code=404, detail="Team not found.")
     folder = Folder(
         id=new_id(),
         team_id=payload.team_id,
@@ -3422,7 +3464,7 @@ def create_goal(
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
 ) -> GoalItem:
-    _ensure_project_access(db, current_user, project_id)
+    _ensure_project_editor(db, current_user, project_id)
     g = Goal(
         id=new_id(), project_id=project_id,
         name=payload.name.strip(), description=payload.description.strip(),
@@ -3449,7 +3491,7 @@ def update_goal(
     g = db.scalar(select(Goal).where(Goal.id == goal_id))
     if g is None:
         raise HTTPException(status_code=404, detail="Goal not found.")
-    _ensure_project_access(db, current_user, g.project_id)
+    _ensure_project_editor(db, current_user, g.project_id)
     for field in ["name", "description", "target", "progress", "status", "due_date"]:
         val = getattr(payload, field)
         if val is not None:
@@ -3474,7 +3516,7 @@ def delete_goal(
     g = db.scalar(select(Goal).where(Goal.id == goal_id))
     if g is None:
         raise HTTPException(status_code=404, detail="Goal not found.")
-    _ensure_project_access(db, current_user, g.project_id)
+    _ensure_project_editor(db, current_user, g.project_id)
     for link in db.scalars(select(GoalLink).where(GoalLink.goal_id == goal_id)):
         db.delete(link)
     db.delete(g)
@@ -3492,7 +3534,11 @@ def link_issue_to_goal(
     g = db.scalar(select(Goal).where(Goal.id == goal_id))
     if g is None:
         raise HTTPException(status_code=404, detail="Goal not found.")
-    _ensure_project_access(db, current_user, g.project_id)
+    _ensure_project_editor(db, current_user, g.project_id)
+    # Validate issue belongs to the same project
+    linked_issue = db.scalar(select(Issue).where(Issue.id == payload.issue_id))
+    if linked_issue is None or linked_issue.project_id != g.project_id:
+        raise HTTPException(status_code=400, detail="Issue must belong to the same project as the goal.")
     existing = db.scalar(
         select(GoalLink).where(GoalLink.goal_id == goal_id, GoalLink.issue_id == payload.issue_id)
     )
@@ -3516,8 +3562,9 @@ def unlink_issue_from_goal(
     if link is None:
         raise HTTPException(status_code=404, detail="Link not found.")
     g = db.scalar(select(Goal).where(Goal.id == goal_id))
-    if g:
-        _ensure_project_access(db, current_user, g.project_id)
+    if g is None:
+        raise HTTPException(status_code=404, detail="Goal not found.")
+    _ensure_project_editor(db, current_user, g.project_id)
     db.delete(link)
     db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
@@ -3586,7 +3633,7 @@ def create_doc(
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
 ) -> DocItem:
-    _ensure_project_access(db, current_user, project_id)
+    _ensure_project_editor(db, current_user, project_id)
     d = Doc(
         id=new_id(), project_id=project_id,
         title=payload.title.strip(),
@@ -3594,6 +3641,9 @@ def create_doc(
         created_by_id=current_user.id,
     )
     db.add(d)
+    db.flush()
+    if payload.content_blocks:
+        sync_embedded_media(db, "doc", d.id, payload.content_blocks)
     db.commit()
     d = db.scalar(select(Doc).options(selectinload(Doc.created_by)).where(Doc.id == d.id))
     return _serialize_doc(d)
@@ -3622,11 +3672,12 @@ def update_doc(
     d = db.scalar(select(Doc).options(selectinload(Doc.created_by)).where(Doc.id == doc_id))
     if d is None:
         raise HTTPException(status_code=404, detail="Doc not found.")
-    _ensure_project_access(db, current_user, d.project_id)
+    _ensure_project_editor(db, current_user, d.project_id)
     if payload.title is not None:
         d.title = payload.title.strip()
     if payload.content_blocks is not None:
         d.content_blocks = payload.content_blocks
+        sync_embedded_media(db, "doc", d.id, payload.content_blocks)
     db.commit()
     db.refresh(d)
     return _serialize_doc(d)
@@ -3641,7 +3692,8 @@ def delete_doc(
     d = db.scalar(select(Doc).where(Doc.id == doc_id))
     if d is None:
         raise HTTPException(status_code=404, detail="Doc not found.")
-    _ensure_project_access(db, current_user, d.project_id)
+    _ensure_project_editor(db, current_user, d.project_id)
+    cleanup_media_for_resource(db, "doc", d.id)
     db.delete(d)
     db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)

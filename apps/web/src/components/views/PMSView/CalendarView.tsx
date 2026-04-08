@@ -1,9 +1,22 @@
 import { useMemo } from 'react';
 import { cn } from '@/src/lib/utils';
-import type { PmsIssue } from '@/src/domains/pms/pms-api';
-import { STATUS_DOT_COLOR } from './pms-constants';
+import type { PmsIssue, PmsProjectStatus } from '@/src/domains/pms/pms-api';
 
-export const CalendarView = ({ issues }: { issues: PmsIssue[] }) => {
+const STATUS_COLORS: Record<string, string> = {
+  backlog: '#6b7280',
+  todo: '#9ca3af',
+  in_progress: '#3b82f6',
+  done: '#22c55e',
+  canceled: '#ef4444',
+};
+
+function getStatusColor(slug: string, projectStatuses?: PmsProjectStatus[]): string {
+  if (STATUS_COLORS[slug]) return STATUS_COLORS[slug];
+  const ps = projectStatuses?.find(s => s.slug === slug);
+  return ps?.color ?? '#6b7280';
+}
+
+export const CalendarView = ({ issues, projectStatuses }: { issues: PmsIssue[]; projectStatuses?: PmsProjectStatus[] }) => {
   const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
   const { calendarDays, issuesByDate } = useMemo(() => {
@@ -57,7 +70,7 @@ export const CalendarView = ({ issues }: { issues: PmsIssue[] }) => {
                 <div
                   key={issue.id}
                   className="px-1.5 py-1 rounded text-[9px] truncate border-l-2 bg-clickup-sidebar/60 text-clickup-text"
-                  style={{ borderLeftColor: STATUS_DOT_COLOR[issue.status]?.replace('bg-', '') || '#6b7280' }}
+                  style={{ borderLeftColor: getStatusColor(issue.status, projectStatuses) }}
                 >
                   {issue.reference} {issue.title}
                 </div>

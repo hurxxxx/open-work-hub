@@ -94,6 +94,21 @@ class Project(Base):
         order_by="ProjectStatus.sort_order",
     )
     folder: Mapped[Folder | None] = relationship(back_populates="projects")
+    task_templates: Mapped[list["TaskTemplate"]] = relationship(
+        cascade="all, delete-orphan",
+    )
+    custom_fields: Mapped[list["CustomField"]] = relationship(
+        cascade="all, delete-orphan",
+    )
+    automations: Mapped[list["Automation"]] = relationship(
+        cascade="all, delete-orphan",
+    )
+    goals: Mapped[list["Goal"]] = relationship(
+        cascade="all, delete-orphan",
+    )
+    docs: Mapped[list["Doc"]] = relationship(
+        cascade="all, delete-orphan",
+    )
 
 
 class ProjectStatus(Base):
