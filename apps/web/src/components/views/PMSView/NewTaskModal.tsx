@@ -17,6 +17,7 @@ import {
 import { Dialog, Button, Badge, BlockEditor } from '@aidoo/ui';
 import type { BlockContent } from '@aidoo/ui';
 import { useAuth } from '@/src/domains/auth/auth-provider';
+import { useMediaUpload } from '@/src/domains/media/use-media-upload';
 import { createProjectIssue } from '@/src/domains/pms/pms-api';
 
 export const NewTaskModal = ({
@@ -31,6 +32,7 @@ export const NewTaskModal = ({
   onCreated?: () => void;
 }) => {
   const { token } = useAuth();
+  const { uploadFile, resolveFileUrl } = useMediaUpload();
   const [title, setTitle] = useState('');
   const [status, setStatus] = useState('backlog');
   const [priority, setPriority] = useState('medium');
@@ -119,6 +121,8 @@ export const NewTaskModal = ({
                 onChange={setDescriptionBlocks}
                 placeholder="Add a description..."
                 className="[&_.bn-editor]:min-h-[80px] [&_.bn-editor]:px-2"
+                uploadFile={uploadFile}
+                resolveFileUrl={resolveFileUrl}
               />
             </div>
           ) : (

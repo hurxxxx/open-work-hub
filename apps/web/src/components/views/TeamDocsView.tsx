@@ -10,9 +10,11 @@ import {
   MoreHorizontal
 } from 'lucide-react';
 import { BlockEditor } from '@aidoo/ui';
+import { useMediaUpload } from '@/src/domains/media/use-media-upload';
 import { cn } from '@/src/lib/utils';
 
 export const TeamDocsView = () => {
+  const { uploadFile, resolveFileUrl } = useMediaUpload();
   const [pages, setPages] = useState([
     { id: 'page-1', title: 'Page 1', icon: FileText },
     { id: 'page-21', title: 'Page 21', icon: FileText },
@@ -102,7 +104,7 @@ export const TeamDocsView = () => {
               </div>
 
               <div className="prose prose-invert max-w-none">
-                <BlockEditor placeholder="Start writing..." />
+                <BlockEditor placeholder="Start writing..." uploadFile={uploadFile} resolveFileUrl={resolveFileUrl} />
               </div>
             </div>
           </div>

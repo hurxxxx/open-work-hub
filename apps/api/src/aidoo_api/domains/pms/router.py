@@ -16,6 +16,7 @@ from aidoo_api.domains.auth.models import User
 from aidoo_api.domains.auth.security import new_id
 from aidoo_api.core.settings import get_settings
 from aidoo_api.core.storage import get_minio_client
+from aidoo_api.domains.media.router import sync_embedded_media, cleanup_media_for_resource
 from aidoo_api.domains.pms.models import (
     Attachment,
     ChecklistItem,
@@ -1321,6 +1322,8 @@ def create_issue(
     db.add(issue)
     db.flush()
     _set_issue_labels(db, issue, payload.label_ids, project)
+    if payload.description_blocks:
+        sync_embedded_media(db, payload.description_blocks, "issue", issue.id, current_user)
     _log_issue_activity(
         db,
         issue.id,
@@ -1488,6 +1491,7 @@ def update_issue(
 
     if payload.description_blocks is not None:
         issue.description_blocks = payload.description_blocks
+        sync_embedded_media(db, payload.description_blocks, "issue", issue.id, current_user)
         _log_issue_activity(
             db,
             issue.id,
@@ -1572,11 +1576,21 @@ def bulk_update_issues(
         raise HTTPException(status_code=404, detail="No matching issues found.")
 
     if payload.delete:
+        media_keys: list[str] = []
         for issue in ordered_issues:
             for child in getattr(issue, "subtasks", []):
                 child.parent_id = None
+            media_keys.extend(cleanup_media_for_resource(db, "issue", issue.id))
             db.delete(issue)
         db.commit()
+        if media_keys:
+            settings = get_settings()
+            client = get_minio_client()
+            for key in media_keys:
+                try:
+                    client.remove_object(settings.minio_bucket, key)
+                except Exception:
+                    pass
         return BulkUpdateResponse(updated_count=0, deleted_count=len(ordered_issues))
 
     label_map = {label.id: label for label in project.labels}
@@ -1633,8 +1647,18 @@ def delete_issue(
     issue, _project = _get_issue_for_user(db, current_user, issue_id)
     for child in issue.subtasks:
         child.parent_id = None
+    media_keys = cleanup_media_for_resource(db, "issue", issue.id)
     db.delete(issue)
     db.commit()
+    # Post-commit MinIO cleanup — DB is authoritative, best-effort storage delete
+    if media_keys:
+        settings = get_settings()
+        client = get_minio_client()
+        for key in media_keys:
+            try:
+                client.remove_object(settings.minio_bucket, key)
+            except Exception:
+                pass
 
 
 @router.post(

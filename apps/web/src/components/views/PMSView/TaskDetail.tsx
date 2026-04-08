@@ -22,6 +22,8 @@ import {
 import { Badge, Button, BlockEditor, BlockViewer } from '@aidoo/ui';
 import type { BlockContent } from '@aidoo/ui';
 import { useAuth } from '@/src/domains/auth/auth-provider';
+import { useMediaUpload } from '@/src/domains/media/use-media-upload';
+import { linkMedia, extractMediaIds } from '@/src/domains/media/media-api';
 import {
   getIssueDetail,
   updateIssue,
@@ -75,6 +77,7 @@ export const TaskDetail = ({
   onUpdate?: () => void | Promise<void>;
 }) => {
   const { token } = useAuth();
+  const { uploadFile, resolveFileUrl } = useMediaUpload();
   const [issueState, setIssueState] = useState(issue);
   const [comments, setComments] = useState<PmsComment[]>([]);
   const [activityLogs, setActivityLogs] = useState<PmsActivityLog[]>([]);
@@ -179,6 +182,10 @@ export const TaskDetail = ({
           .then(async (updatedIssue) => {
             setIssueState(updatedIssue);
             await Promise.resolve(onUpdate?.());
+            const mediaIds = extractMediaIds(content);
+            if (mediaIds.length > 0) {
+              linkMedia(token, mediaIds, 'issue', issueState.id).catch(() => {});
+            }
           })
           .catch((error) => {
             setSaveError(getErrorMessage(error, '설명을 저장하지 못했습니다.'));
@@ -442,6 +449,8 @@ export const TaskDetail = ({
             onChange={handleDescriptionChange}
             placeholder="Start writing..."
             className="[&_.bn-editor]:min-h-[400px] [&_.bn-editor]:px-1"
+            uploadFile={uploadFile}
+            resolveFileUrl={resolveFileUrl}
           />
         </div>
       </div>
@@ -582,6 +591,8 @@ export const TaskDetail = ({
                   onChange={handleDescriptionChange}
                   placeholder="Add a description..."
                   className="[&_.bn-editor]:min-h-[120px] [&_.bn-editor]:px-3 [&_.bn-editor]:py-2"
+                  uploadFile={uploadFile}
+                  resolveFileUrl={resolveFileUrl}
                 />
               </div>
             </div>
@@ -966,7 +977,7 @@ export const TaskDetail = ({
                     <div className="flex-1 min-w-0">
                       <span className="text-xs font-bold text-clickup-text">{comment.author_name}</span>
                       {comment.body_blocks ? (
-                        <BlockViewer content={comment.body_blocks as BlockContent} className="mt-0.5 text-xs" />
+                        <BlockViewer content={comment.body_blocks as BlockContent} className="mt-0.5 text-xs" resolveFileUrl={resolveFileUrl} />
                       ) : (
                         <p className="text-xs text-clickup-text/60 mt-0.5">{comment.body}</p>
                       )}

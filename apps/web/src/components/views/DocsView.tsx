@@ -27,6 +27,7 @@ import {
   Link as LinkIcon
 } from 'lucide-react';
 import { BlockEditor } from '@aidoo/ui';
+import { useMediaUpload } from '@/src/domains/media/use-media-upload';
 import { cn } from '@/src/lib/utils';
 
 interface Page {
@@ -115,6 +116,7 @@ const MOCK_DOCS: DocCollection[] = [
 export const DocsView = () => {
   const { toolId, docId } = useParams();
   const navigate = useNavigate();
+  const { uploadFile, resolveFileUrl } = useMediaUpload();
   const [selectedPageId, setSelectedPageId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -334,7 +336,7 @@ export const DocsView = () => {
                   </div>
 
                   <div className="prose prose-invert max-w-none pt-8">
-                    <BlockEditor placeholder="Start writing..." />
+                    <BlockEditor placeholder="Start writing..." uploadFile={uploadFile} resolveFileUrl={resolveFileUrl} />
                   </div>
                 </div>
               </div>

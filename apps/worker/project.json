@@ -9,7 +9,11 @@
       "executor": "nx:run-commands",
       "options": {
         "cwd": "apps/worker",
-        "command": "uv run --python 3.12 celery -A aidoo_worker.celery_app:celery_app worker --loglevel=info"
+        "commands": [
+          "uv run --python 3.12 celery -A aidoo_worker.celery_app:celery_app worker --loglevel=info",
+          "uv run --python 3.12 celery -A aidoo_worker.celery_app:celery_app beat --loglevel=info"
+        ],
+        "parallel": true
       }
     },
     "lint": {

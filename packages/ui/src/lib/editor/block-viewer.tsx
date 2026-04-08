@@ -10,18 +10,20 @@ import type { BlockContent } from './types';
 export interface BlockViewerProps {
   content?: BlockContent;
   className?: string;
+  resolveFileUrl?: (url: string) => Promise<string>;
 }
 
 /**
  * Read-only block content renderer.
  * Used in list views, board cards, activity feeds.
  */
-export function BlockViewer({ content, className }: BlockViewerProps) {
+export function BlockViewer({ content, className, resolveFileUrl }: BlockViewerProps) {
   const theme = useResolvedTheme();
 
   const editor = useCreateBlockNote({
     schema: fullSchema,
     initialContent: content?.length ? content as any : undefined,
+    resolveFileUrl,
   });
 
   return (

@@ -11,3 +11,10 @@ celery_app = Celery(
     backend=settings.result_backend,
 )
 celery_app.autodiscover_tasks(["aidoo_worker.tasks"])
+
+celery_app.conf.beat_schedule = {
+    "cleanup-orphan-media": {
+        "task": "media.cleanup_orphans",
+        "schedule": 3600.0,
+    },
+}

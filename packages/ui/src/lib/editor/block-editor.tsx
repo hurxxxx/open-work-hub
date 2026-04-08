@@ -14,6 +14,8 @@ export interface BlockEditorProps {
   editable?: boolean;
   placeholder?: string;
   className?: string;
+  uploadFile?: (file: File) => Promise<string>;
+  resolveFileUrl?: (url: string) => Promise<string>;
 }
 
 export function BlockEditor({
@@ -22,6 +24,8 @@ export function BlockEditor({
   editable = true,
   placeholder,
   className,
+  uploadFile,
+  resolveFileUrl,
 }: BlockEditorProps) {
   const theme = useResolvedTheme();
 
@@ -29,6 +33,8 @@ export function BlockEditor({
     schema: fullSchema,
     initialContent: initialContent?.length ? initialContent as any : undefined,
     ...(placeholder ? { placeholders: { default: placeholder } } : {}),
+    uploadFile,
+    resolveFileUrl,
   });
 
   useEffect(() => {

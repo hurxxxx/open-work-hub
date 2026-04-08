@@ -8,6 +8,7 @@ from aidoo_api.domains.auth.dependencies import require_current_user
 from aidoo_api.domains.auth.router import router as auth_router
 from aidoo_api.domains.documents.router import router as documents_router
 from aidoo_api.domains.drafts.router import router as drafts_router
+from aidoo_api.domains.media.router import router as media_router
 from aidoo_api.domains.ocr.router import router as ocr_router
 from aidoo_api.domains.pms.router import router as pms_router
 from aidoo_api.domains.plm.router import router as plm_router
@@ -63,6 +64,11 @@ def create_app() -> FastAPI:
     )
     app.include_router(
         pms_router,
+        prefix=settings.api_prefix,
+        dependencies=protected_dependencies,
+    )
+    app.include_router(
+        media_router,
         prefix=settings.api_prefix,
         dependencies=protected_dependencies,
     )
