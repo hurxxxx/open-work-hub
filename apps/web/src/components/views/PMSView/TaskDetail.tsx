@@ -12,6 +12,8 @@ import {
   Trash2,
   Tag,
   Check,
+  CheckSquare,
+  Clock,
   Unlink,
   Paperclip,
   Download,
@@ -29,10 +31,17 @@ import {
   listIssueActivityLogs,
   uploadAttachment,
   deleteAttachment,
+  createChecklistItem,
+  updateChecklistItem,
+  deleteChecklistItem,
+  createTimeEntry,
+  deleteTimeEntry,
   type PmsIssue,
   type PmsComment,
   type PmsActivityLog,
   type PmsAttachment,
+  type PmsChecklistItem,
+  type PmsTimeEntry,
   type PmsProjectMember,
   type PmsMilestone,
   type PmsLabel,
@@ -74,6 +83,15 @@ export const TaskDetail = ({
   const [commentDraft, setCommentDraft] = useState('');
   const [newSubtaskTitle, setNewSubtaskTitle] = useState('');
   const [addingSubtask, setAddingSubtask] = useState(false);
+  const [checklistItems, setChecklistItems] = useState<PmsChecklistItem[]>([]);
+  const [newChecklistText, setNewChecklistText] = useState('');
+  const [addingChecklist, setAddingChecklist] = useState(false);
+  const [editingChecklistId, setEditingChecklistId] = useState<string | null>(null);
+  const [editingChecklistText, setEditingChecklistText] = useState('');
+  const [timeEntries, setTimeEntries] = useState<PmsTimeEntry[]>([]);
+  const [timeLogMinutes, setTimeLogMinutes] = useState('');
+  const [timeLogDesc, setTimeLogDesc] = useState('');
+  const [loggingTime, setLoggingTime] = useState(false);
   const [attachments, setAttachments] = useState<PmsAttachment[]>([]);
   const [uploading, setUploading] = useState(false);
   const [dragOver, setDragOver] = useState(false);
@@ -107,6 +125,8 @@ export const TaskDetail = ({
         setActivityLogs(logs.items);
         setSubtasks(detail.subtasks);
         setAttachments(detail.attachments ?? []);
+        setChecklistItems(detail.checklist_items ?? []);
+        setTimeEntries(detail.time_entries ?? []);
       })
       .finally(() => setLoading(false));
   }, [token, issue.id]);
@@ -229,6 +249,111 @@ export const TaskDetail = ({
       setAddingSubtask(false);
     }
   }, [token, issue.id, issue.project_id, newSubtaskTitle, onUpdate]);
+
+  // ── Checklist handlers ──────────────────────────────────────────
+
+  const handleAddChecklistItem = useCallback(async () => {
+    if (!token || !newChecklistText.trim()) return;
+    setAddingChecklist(true);
+    setSaveError(null);
+    try {
+      const item = await createChecklistItem(token, issue.id, {
+        text: newChecklistText.trim(),
+        sort_order: checklistItems.length,
+      });
+      setChecklistItems(prev => [...prev, item]);
+      setNewChecklistText('');
+      await Promise.resolve(onUpdate?.());
+    } catch (error) {
+      setSaveError(getErrorMessage(error, '체크리스트 항목을 추가하지 못했습니다.'));
+    } finally {
+      setAddingChecklist(false);
+    }
+  }, [token, issue.id, newChecklistText, checklistItems.length, onUpdate]);
+
+  const handleToggleChecklistItem = useCallback(async (item: PmsChecklistItem) => {
+    if (!token) return;
+    const newCompleted = !item.completed;
+    setChecklistItems(prev => prev.map(ci => ci.id === item.id ? { ...ci, completed: newCompleted } : ci));
+    try {
+      await updateChecklistItem(token, item.id, { completed: newCompleted });
+      await Promise.resolve(onUpdate?.());
+    } catch (error) {
+      setChecklistItems(prev => prev.map(ci => ci.id === item.id ? { ...ci, completed: !newCompleted } : ci));
+      setSaveError(getErrorMessage(error, '체크리스트 항목을 변경하지 못했습니다.'));
+    }
+  }, [token, onUpdate]);
+
+  const handleSaveChecklistEdit = useCallback(async (itemId: string) => {
+    if (!token || !editingChecklistText.trim()) return;
+    try {
+      await updateChecklistItem(token, itemId, { text: editingChecklistText.trim() });
+      setChecklistItems(prev => prev.map(ci => ci.id === itemId ? { ...ci, text: editingChecklistText.trim() } : ci));
+      setEditingChecklistId(null);
+    } catch (error) {
+      setSaveError(getErrorMessage(error, '체크리스트 항목을 수정하지 못했습니다.'));
+    }
+  }, [token, editingChecklistText]);
+
+  const handleDeleteChecklistItem = useCallback(async (itemId: string) => {
+    if (!token) return;
+    try {
+      await deleteChecklistItem(token, itemId);
+      setChecklistItems(prev => prev.filter(ci => ci.id !== itemId));
+      await Promise.resolve(onUpdate?.());
+    } catch (error) {
+      setSaveError(getErrorMessage(error, '체크리스트 항목을 삭제하지 못했습니다.'));
+    }
+  }, [token, onUpdate]);
+
+  const checklistDone = checklistItems.filter(ci => ci.completed).length;
+  const checklistTotal = checklistItems.length;
+
+  // ── Time tracking helpers ───────────────────────────────────────
+
+  const formatDuration = (minutes: number): string => {
+    const h = Math.floor(minutes / 60);
+    const m = minutes % 60;
+    if (h === 0) return `${m}m`;
+    if (m === 0) return `${h}h`;
+    return `${h}h ${m}m`;
+  };
+
+  const totalTimeSpent = timeEntries.reduce((sum, te) => sum + te.duration_minutes, 0);
+
+  const handleLogTime = useCallback(async () => {
+    if (!token || !timeLogMinutes) return;
+    const mins = Math.round(parseFloat(timeLogMinutes) * 60);
+    if (isNaN(mins) || mins <= 0) return;
+    setLoggingTime(true);
+    setSaveError(null);
+    try {
+      const entry = await createTimeEntry(token, issue.id, {
+        duration_minutes: mins,
+        description: timeLogDesc.trim(),
+        entry_date: new Date().toISOString().split('T')[0],
+      });
+      setTimeEntries(prev => [entry, ...prev]);
+      setTimeLogMinutes('');
+      setTimeLogDesc('');
+      await Promise.resolve(onUpdate?.());
+    } catch (error) {
+      setSaveError(getErrorMessage(error, '시간을 기록하지 못했습���다.'));
+    } finally {
+      setLoggingTime(false);
+    }
+  }, [token, issue.id, timeLogMinutes, timeLogDesc, onUpdate]);
+
+  const handleDeleteTimeEntry = useCallback(async (entryId: string) => {
+    if (!token) return;
+    try {
+      await deleteTimeEntry(token, entryId);
+      setTimeEntries(prev => prev.filter(te => te.id !== entryId));
+      await Promise.resolve(onUpdate?.());
+    } catch (error) {
+      setSaveError(getErrorMessage(error, '시간 기록을 삭제���지 못했습니다.'));
+    }
+  }, [token, onUpdate]);
 
   const handleToggleLabel = useCallback((labelId: string) => {
     const nextLabelIds = selectedLabelIds.includes(labelId)
@@ -439,6 +564,93 @@ export const TaskDetail = ({
 
             <hr className="border-clickup-border" />
 
+            {/* Checklist */}
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <CheckSquare size={14} className="text-clickup-text/50" />
+                <h3 className="text-sm font-semibold text-clickup-text">
+                  Checklist
+                  {checklistTotal > 0 && (
+                    <span className="text-clickup-text/40 font-normal ml-1">
+                      ({checklistDone}/{checklistTotal})
+                    </span>
+                  )}
+                </h3>
+              </div>
+
+              {checklistTotal > 0 && (
+                <>
+                  <div className="w-full h-1.5 bg-clickup-border rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-emerald-500 rounded-full transition-all duration-300"
+                      style={{ width: `${checklistTotal > 0 ? (checklistDone / checklistTotal) * 100 : 0}%` }}
+                    />
+                  </div>
+                  <div className="border border-clickup-border rounded-lg">
+                    {checklistItems.map(ci => (
+                      <div
+                        key={ci.id}
+                        className="flex items-center gap-3 px-3 py-2 border-b border-clickup-border last:border-b-0 hover:bg-clickup-hover/50 transition-colors group first:rounded-t-lg last:rounded-b-lg"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={ci.completed}
+                          onChange={() => handleToggleChecklistItem(ci)}
+                          className="h-3.5 w-3.5 rounded border-clickup-border accent-clickup-purple cursor-pointer shrink-0"
+                        />
+                        {editingChecklistId === ci.id ? (
+                          <input
+                            type="text"
+                            value={editingChecklistText}
+                            onChange={e => setEditingChecklistText(e.target.value)}
+                            onKeyDown={e => {
+                              if (e.key === 'Enter' && !e.nativeEvent.isComposing) handleSaveChecklistEdit(ci.id);
+                              if (e.key === 'Escape') setEditingChecklistId(null);
+                            }}
+                            onBlur={() => handleSaveChecklistEdit(ci.id)}
+                            autoFocus
+                            className="flex-1 bg-transparent text-sm text-clickup-text focus:outline-none border-b border-clickup-purple py-0.5"
+                          />
+                        ) : (
+                          <span
+                            className={`text-sm flex-1 cursor-pointer ${ci.completed ? 'line-through text-clickup-text/40' : 'text-clickup-text'}`}
+                            onClick={() => { setEditingChecklistId(ci.id); setEditingChecklistText(ci.text); }}
+                          >
+                            {ci.text}
+                          </span>
+                        )}
+                        <button
+                          onClick={() => handleDeleteChecklistItem(ci.id)}
+                          className="opacity-0 group-hover:opacity-100 text-clickup-text/30 hover:text-red-400 transition-all p-0.5 rounded"
+                          title="Delete"
+                        >
+                          <X size={13} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  value={newChecklistText}
+                  onChange={e => setNewChecklistText(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter' && !e.nativeEvent.isComposing && newChecklistText.trim()) handleAddChecklistItem(); }}
+                  placeholder="+ Add checklist item..."
+                  className="flex-1 bg-transparent text-sm text-clickup-text placeholder:text-clickup-text/40 focus:outline-none border-b border-transparent focus:border-clickup-purple py-1 transition-colors"
+                />
+                {newChecklistText.trim() && (
+                  <Button variant="ghost" size="icon" onClick={handleAddChecklistItem} disabled={addingChecklist}>
+                    <Send size={14} />
+                  </Button>
+                )}
+              </div>
+            </div>
+
+            <hr className="border-clickup-border" />
+
             {/* Subtasks */}
             <div className="space-y-2">
               <h3 className="text-sm font-semibold text-clickup-text">
@@ -605,6 +817,94 @@ export const TaskDetail = ({
                   className="hidden"
                   onChange={e => { if (e.target.files?.length) { handleFileUpload(e.target.files); e.target.value = ''; } }}
                 />
+              </div>
+            </div>
+
+            <hr className="border-clickup-border" />
+
+            {/* Time Tracking */}
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <Clock size={14} className="text-clickup-text/50" />
+                <h3 className="text-sm font-semibold text-clickup-text">Time Tracking</h3>
+              </div>
+
+              {/* Estimate + Progress */}
+              <div className="flex items-center gap-3 text-xs">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-clickup-text/50">Estimate:</span>
+                  <input
+                    type="number"
+                    step="0.5"
+                    min="0"
+                    value={issueState.estimate_hours ?? ''}
+                    onChange={e => {
+                      const v = e.target.value ? parseFloat(e.target.value) : null;
+                      patchField('estimate_hours', v);
+                    }}
+                    placeholder="—"
+                    className="w-14 bg-transparent text-clickup-text border-b border-clickup-border focus:border-clickup-purple focus:outline-none text-center py-0.5"
+                  />
+                  <span className="text-clickup-text/40">h</span>
+                </div>
+                <span className="text-clickup-text/30">|</span>
+                <span className="text-clickup-text/60">
+                  Spent: <span className="text-clickup-text font-medium">{formatDuration(totalTimeSpent)}</span>
+                </span>
+              </div>
+
+              {issueState.estimate_hours && issueState.estimate_hours > 0 && (
+                <div className="w-full h-1.5 bg-clickup-border rounded-full overflow-hidden">
+                  <div
+                    className={`h-full rounded-full transition-all duration-300 ${totalTimeSpent > issueState.estimate_hours * 60 ? 'bg-red-500' : 'bg-blue-500'}`}
+                    style={{ width: `${Math.min((totalTimeSpent / (issueState.estimate_hours * 60)) * 100, 100)}%` }}
+                  />
+                </div>
+              )}
+
+              {/* Time entries list */}
+              {timeEntries.length > 0 && (
+                <div className="border border-clickup-border rounded-lg max-h-32 overflow-y-auto custom-scrollbar">
+                  {timeEntries.map(te => (
+                    <div key={te.id} className="flex items-center gap-2 px-3 py-1.5 border-b border-clickup-border last:border-b-0 text-[11px] group hover:bg-clickup-hover/50">
+                      <span className="text-clickup-text font-medium">{formatDuration(te.duration_minutes)}</span>
+                      <span className="text-clickup-text/40">{te.entry_date}</span>
+                      <span className="text-clickup-text/50 flex-1 truncate">{te.description || te.user_name}</span>
+                      <button
+                        onClick={() => handleDeleteTimeEntry(te.id)}
+                        className="opacity-0 group-hover:opacity-100 text-clickup-text/30 hover:text-red-400 transition-all p-0.5"
+                      >
+                        <X size={11} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Log time input */}
+              <div className="flex items-center gap-2">
+                <input
+                  type="number"
+                  step="0.25"
+                  min="0"
+                  value={timeLogMinutes}
+                  onChange={e => setTimeLogMinutes(e.target.value)}
+                  placeholder="Hours..."
+                  className="w-20 bg-transparent text-sm text-clickup-text placeholder:text-clickup-text/40 focus:outline-none border-b border-transparent focus:border-clickup-purple py-1 transition-colors"
+                />
+                <input
+                  type="text"
+                  value={timeLogDesc}
+                  onChange={e => setTimeLogDesc(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter' && !e.nativeEvent.isComposing && timeLogMinutes) handleLogTime(); }}
+                  placeholder="Description..."
+                  className="flex-1 bg-transparent text-sm text-clickup-text placeholder:text-clickup-text/40 focus:outline-none border-b border-transparent focus:border-clickup-purple py-1 transition-colors"
+                />
+                {timeLogMinutes && (
+                  <Button variant="ghost" size="icon" onClick={handleLogTime} disabled={loggingTime}>
+                    <Send size={14} />
+                  </Button>
+                )}
               </div>
             </div>
           </div>

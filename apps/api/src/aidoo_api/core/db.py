@@ -70,6 +70,7 @@ def _apply_postgres_schema_compat(engine) -> None:
         "ALTER TABLE pms_issues ADD COLUMN IF NOT EXISTS parent_id VARCHAR(36) REFERENCES pms_issues(id)",
         "ALTER TABLE pms_issues ADD COLUMN IF NOT EXISTS description_blocks JSON",
         "ALTER TABLE pms_issue_comments ADD COLUMN IF NOT EXISTS body_blocks JSON",
+        "ALTER TABLE pms_issues ADD COLUMN IF NOT EXISTS estimate_hours REAL",
     ]
 
     with engine.begin() as connection:

@@ -155,6 +155,7 @@ class Issue(Base):
     start_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     due_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     board_position: Mapped[int] = mapped_column(Integer, default=0)
+    estimate_hours: Mapped[float | None] = mapped_column(nullable=True)
     archived: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime,
@@ -192,6 +193,14 @@ class Issue(Base):
         cascade="all, delete-orphan",
     )
     attachments: Mapped[list["Attachment"]] = relationship(
+        back_populates="issue",
+        cascade="all, delete-orphan",
+    )
+    checklist_items: Mapped[list["ChecklistItem"]] = relationship(
+        back_populates="issue",
+        cascade="all, delete-orphan",
+    )
+    time_entries: Mapped[list["TimeEntry"]] = relationship(
         back_populates="issue",
         cascade="all, delete-orphan",
     )
@@ -280,6 +289,40 @@ class Attachment(Base):
     )
     issue: Mapped[Issue] = relationship(back_populates="attachments")
     uploaded_by = relationship("User")
+
+
+class ChecklistItem(Base):
+    __tablename__ = "pms_checklist_items"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    issue_id: Mapped[str] = mapped_column(ForeignKey("pms_issues.id"), index=True)
+    text: Mapped[str] = mapped_column(String(500))
+    completed: Mapped[bool] = mapped_column(Boolean, default=False)
+    sort_order: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        default=utcnow_naive,
+        nullable=False,
+    )
+    issue: Mapped[Issue] = relationship(back_populates="checklist_items")
+
+
+class TimeEntry(Base):
+    __tablename__ = "pms_time_entries"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    issue_id: Mapped[str] = mapped_column(ForeignKey("pms_issues.id"), index=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
+    duration_minutes: Mapped[int] = mapped_column(Integer)
+    description: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    entry_date: Mapped[date] = mapped_column(Date)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        default=utcnow_naive,
+        nullable=False,
+    )
+    issue: Mapped[Issue] = relationship(back_populates="time_entries")
+    user = relationship("User")
 
 
 class Notification(Base):

@@ -91,6 +91,10 @@ export interface PmsIssue {
   archived: boolean;
   progress: number | null;
   comments_count: number;
+  checklist_total: number;
+  checklist_done: number;
+  estimate_hours: number | null;
+  time_spent_minutes: number;
   labels: PmsLabel[];
   updated_at: string;
 }
@@ -153,12 +157,34 @@ export interface PmsAttachment {
   created_at: string;
 }
 
+export interface PmsChecklistItem {
+  id: string;
+  issue_id: string;
+  text: string;
+  completed: boolean;
+  sort_order: number;
+  created_at: string;
+}
+
+export interface PmsTimeEntry {
+  id: string;
+  issue_id: string;
+  user_id: string;
+  user_name: string;
+  duration_minutes: number;
+  description: string;
+  entry_date: string;
+  created_at: string;
+}
+
 export interface PmsIssueDetail {
   issue: PmsIssue;
   comments: PmsComment[];
   dependencies: PmsDependency[];
   subtasks: PmsIssue[];
   attachments: PmsAttachment[];
+  checklist_items: PmsChecklistItem[];
+  time_entries: PmsTimeEntry[];
 }
 
 export interface PmsLabelsResponse {
@@ -305,14 +331,23 @@ export function createProjectMilestone(
   });
 }
 
+export interface IssueFilterParams {
+  q?: string;
+  status?: string[];
+  priority?: string;
+  assignee_id?: string;
+  label_id?: string;
+  milestone_id?: string;
+  due_date_from?: string;
+  due_date_to?: string;
+  start_date_from?: string;
+  start_date_to?: string;
+}
+
 export function listProjectIssues(
   token: string,
   projectId: string,
-  params: {
-    q?: string;
-    status?: string[];
-    priority?: string;
-  } = {},
+  params: IssueFilterParams = {},
 ): Promise<PmsIssuesResponse> {
   const search = new URLSearchParams({
     page: '1',
@@ -320,12 +355,15 @@ export function listProjectIssues(
     sort_by: 'board_position',
     sort_dir: 'asc',
   });
-  if (params.q) {
-    search.set('q', params.q);
-  }
-  if (params.priority && params.priority !== 'all') {
-    search.set('priority', params.priority);
-  }
+  if (params.q) search.set('q', params.q);
+  if (params.priority && params.priority !== 'all') search.set('priority', params.priority);
+  if (params.assignee_id) search.set('assignee_id', params.assignee_id);
+  if (params.label_id) search.set('label_id', params.label_id);
+  if (params.milestone_id) search.set('milestone_id', params.milestone_id);
+  if (params.due_date_from) search.set('due_date_from', params.due_date_from);
+  if (params.due_date_to) search.set('due_date_to', params.due_date_to);
+  if (params.start_date_from) search.set('start_date_from', params.start_date_from);
+  if (params.start_date_to) search.set('start_date_to', params.start_date_to);
   params.status?.forEach((value) => search.append('status', value));
 
   return request<PmsIssuesResponse>(
@@ -451,6 +489,91 @@ export async function uploadAttachment(
 
 export function deleteAttachment(token: string, attachmentId: string): Promise<void> {
   return request<void>(`/api/v1/pms/attachments/${attachmentId}`, token, { method: 'DELETE' });
+}
+
+// ── Bulk Operations ─────────────────────────────────────────────────
+
+export interface BulkUpdatePayload {
+  issue_ids: string[];
+  status?: string;
+  priority?: string;
+  assignee_id?: string | null;
+  add_label_ids?: string[];
+  remove_label_ids?: string[];
+  archived?: boolean;
+  delete?: boolean;
+}
+
+export interface BulkUpdateResult {
+  updated_count: number;
+  deleted_count: number;
+}
+
+export function bulkUpdateIssues(
+  token: string,
+  projectId: string,
+  payload: BulkUpdatePayload,
+): Promise<BulkUpdateResult> {
+  return request<BulkUpdateResult>(`/api/v1/pms/projects/${projectId}/issues/bulk`, token, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  });
+}
+
+// ── Checklist ───────────────────────────────────────────────────────
+
+export function createChecklistItem(
+  token: string,
+  issueId: string,
+  payload: { text: string; sort_order?: number },
+): Promise<PmsChecklistItem> {
+  return request<PmsChecklistItem>(`/api/v1/pms/issues/${issueId}/checklist`, token, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function updateChecklistItem(
+  token: string,
+  itemId: string,
+  payload: { text?: string; completed?: boolean; sort_order?: number },
+): Promise<PmsChecklistItem> {
+  return request<PmsChecklistItem>(`/api/v1/pms/checklist/${itemId}`, token, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function deleteChecklistItem(token: string, itemId: string): Promise<void> {
+  return request<void>(`/api/v1/pms/checklist/${itemId}`, token, { method: 'DELETE' });
+}
+
+// ── Time Tracking ───────────────────────────────────────────────────
+
+export function createTimeEntry(
+  token: string,
+  issueId: string,
+  payload: { duration_minutes: number; description: string; entry_date: string },
+): Promise<PmsTimeEntry> {
+  return request<PmsTimeEntry>(`/api/v1/pms/issues/${issueId}/time-entries`, token, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function updateTimeEntry(
+  token: string,
+  entryId: string,
+  payload: { duration_minutes?: number; description?: string; entry_date?: string },
+): Promise<PmsTimeEntry> {
+  return request<PmsTimeEntry>(`/api/v1/pms/time-entries/${entryId}`, token, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function deleteTimeEntry(token: string, entryId: string): Promise<void> {
+  return request<void>(`/api/v1/pms/time-entries/${entryId}`, token, { method: 'DELETE' });
 }
 
 // ── Notifications ───────────────────────────────────────────────────

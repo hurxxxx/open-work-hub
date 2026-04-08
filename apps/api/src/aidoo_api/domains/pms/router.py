@@ -18,6 +18,7 @@ from aidoo_api.core.settings import get_settings
 from aidoo_api.core.storage import get_minio_client
 from aidoo_api.domains.pms.models import (
     Attachment,
+    ChecklistItem,
     Issue,
     IssueActivityLog,
     IssueComment,
@@ -28,6 +29,7 @@ from aidoo_api.domains.pms.models import (
     Project,
     ProjectMember,
     ScheduleDependency,
+    TimeEntry,
 )
 
 
@@ -123,6 +125,7 @@ class IssueCreateRequest(BaseModel):
     parent_id: str | None = None
     start_date: date | None = None
     due_date: date | None = None
+    estimate_hours: float | None = None
     label_ids: list[str] = Field(default_factory=list)
 
 
@@ -139,6 +142,7 @@ class IssueUpdateRequest(BaseModel):
     due_date: date | None = None
     board_position: int | None = None
     archived: bool | None = None
+    estimate_hours: float | None = None
     label_ids: list[str] | None = None
 
 
@@ -153,6 +157,22 @@ class DependencyCreateRequest(BaseModel):
     successor_kind: Literal["issue"] = "issue"
     successor_id: str
     relation_type: Literal["blocks"] = "blocks"
+
+
+class BulkUpdateRequest(BaseModel):
+    issue_ids: list[str] = Field(..., min_length=1, max_length=50)
+    status: Literal["backlog", "todo", "in_progress", "done", "canceled"] | None = None
+    priority: Literal["low", "medium", "high", "critical"] | None = None
+    assignee_id: str | None = None
+    add_label_ids: list[str] = Field(default_factory=list)
+    remove_label_ids: list[str] = Field(default_factory=list)
+    archived: bool | None = None
+    delete: bool = False
+
+
+class BulkUpdateResponse(BaseModel):
+    updated_count: int
+    deleted_count: int
 
 
 class ProjectListItem(BaseModel):
@@ -240,6 +260,53 @@ class LabelUpdateRequest(BaseModel):
     color: str | None = Field(default=None, max_length=24)
 
 
+class ChecklistItemCreateRequest(BaseModel):
+    text: str = Field(..., min_length=1, max_length=500)
+    sort_order: int = 0
+
+
+class ChecklistItemUpdateRequest(BaseModel):
+    text: str | None = Field(default=None, min_length=1, max_length=500)
+    completed: bool | None = None
+    sort_order: int | None = None
+
+
+class ChecklistReorderRequest(BaseModel):
+    item_ids: list[str]
+
+
+class ChecklistItemResponse(BaseModel):
+    id: str
+    issue_id: str
+    text: str
+    completed: bool
+    sort_order: int
+    created_at: datetime
+
+
+class TimeEntryCreateRequest(BaseModel):
+    duration_minutes: int = Field(..., ge=1, le=1440)
+    description: str = Field(default="", max_length=500)
+    entry_date: date
+
+
+class TimeEntryUpdateRequest(BaseModel):
+    duration_minutes: int | None = Field(default=None, ge=1, le=1440)
+    description: str | None = Field(default=None, max_length=500)
+    entry_date: date | None = None
+
+
+class TimeEntryItem(BaseModel):
+    id: str
+    issue_id: str
+    user_id: str
+    user_name: str
+    duration_minutes: int
+    description: str
+    entry_date: date
+    created_at: datetime
+
+
 class IssueListItem(BaseModel):
     id: str
     project_id: str
@@ -265,6 +332,10 @@ class IssueListItem(BaseModel):
     archived: bool
     progress: float | None
     comments_count: int
+    checklist_total: int = 0
+    checklist_done: int = 0
+    estimate_hours: float | None = None
+    time_spent_minutes: int = 0
     labels: list[LabelItem]
     updated_at: datetime
 
@@ -355,6 +426,8 @@ class IssueDetailResponse(BaseModel):
     dependencies: list[DependencyItem]
     subtasks: list[IssueListItem] = []
     attachments: list[AttachmentItem] = []
+    checklist_items: list[ChecklistItemResponse] = []
+    time_entries: list[TimeEntryItem] = []
 
 
 class StatusCountItem(BaseModel):
@@ -504,6 +577,10 @@ def _serialize_issue(issue: Issue) -> IssueListItem:
         archived=issue.archived,
         progress=_issue_progress(issue.status),
         comments_count=len(issue.comments),
+        checklist_total=len(issue.checklist_items) if issue.checklist_items else 0,
+        checklist_done=sum(1 for ci in issue.checklist_items if ci.completed) if issue.checklist_items else 0,
+        estimate_hours=issue.estimate_hours,
+        time_spent_minutes=sum(te.duration_minutes for te in issue.time_entries) if issue.time_entries else 0,
         labels=_serialize_labels(issue),
         updated_at=issue.updated_at,
     )
@@ -748,7 +825,11 @@ def _get_issue_for_user(db: Session, user: User, issue_id: str) -> tuple[Issue, 
             selectinload(Issue.subtasks).selectinload(Issue.comments),
             selectinload(Issue.subtasks).selectinload(Issue.label_links).selectinload(IssueLabel.label),
             selectinload(Issue.subtasks).selectinload(Issue.subtasks),
+            selectinload(Issue.subtasks).selectinload(Issue.checklist_items),
+            selectinload(Issue.subtasks).selectinload(Issue.time_entries),
             selectinload(Issue.attachments).selectinload(Attachment.uploaded_by),
+            selectinload(Issue.checklist_items),
+            selectinload(Issue.time_entries).selectinload(TimeEntry.user),
         )
         .where(Issue.id == issue_id)
     )
@@ -1122,6 +1203,10 @@ def list_issues(
     label_id: str | None = None,
     milestone_id: str | None = None,
     archived: bool | None = None,
+    due_date_from: date | None = None,
+    due_date_to: date | None = None,
+    start_date_from: date | None = None,
+    start_date_to: date | None = None,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
 ) -> IssueListResponse:
@@ -1137,6 +1222,8 @@ def list_issues(
                 selectinload(Issue.comments),
                 selectinload(Issue.label_links).selectinload(IssueLabel.label),
                 selectinload(Issue.subtasks),
+                selectinload(Issue.checklist_items),
+                selectinload(Issue.time_entries),
             )
             .where(Issue.project_id == project_id)
         )
@@ -1154,6 +1241,14 @@ def list_issues(
         issues = [issue for issue in issues if any(link.label_id == label_id for link in issue.label_links)]
     if milestone_id:
         issues = [issue for issue in issues if issue.milestone_id == milestone_id]
+    if due_date_from:
+        issues = [issue for issue in issues if issue.due_date and issue.due_date >= due_date_from]
+    if due_date_to:
+        issues = [issue for issue in issues if issue.due_date and issue.due_date <= due_date_to]
+    if start_date_from:
+        issues = [issue for issue in issues if issue.start_date and issue.start_date >= start_date_from]
+    if start_date_to:
+        issues = [issue for issue in issues if issue.start_date and issue.start_date <= start_date_to]
     if q_lower:
         issues = [
             issue
@@ -1218,6 +1313,7 @@ def create_issue(
         milestone_id=payload.milestone_id,
         start_date=payload.start_date,
         due_date=payload.due_date,
+        estimate_hours=payload.estimate_hours,
         board_position=next_position,
     )
     db.add(issue)
@@ -1241,6 +1337,8 @@ def create_issue(
             selectinload(Issue.comments),
             selectinload(Issue.label_links).selectinload(IssueLabel.label),
             selectinload(Issue.subtasks),
+            selectinload(Issue.checklist_items),
+            selectinload(Issue.time_entries),
         )
         .where(Issue.id == issue.id)
     )
@@ -1294,6 +1392,30 @@ def get_issue(
             )
             for att in sorted(issue.attachments, key=lambda a: a.created_at)
         ],
+        checklist_items=[
+            ChecklistItemResponse(
+                id=ci.id,
+                issue_id=ci.issue_id,
+                text=ci.text,
+                completed=ci.completed,
+                sort_order=ci.sort_order,
+                created_at=ci.created_at,
+            )
+            for ci in sorted(issue.checklist_items, key=lambda c: c.sort_order)
+        ],
+        time_entries=[
+            TimeEntryItem(
+                id=te.id,
+                issue_id=te.issue_id,
+                user_id=te.user_id,
+                user_name=te.user.full_name,
+                duration_minutes=te.duration_minutes,
+                description=te.description,
+                entry_date=te.entry_date,
+                created_at=te.created_at,
+            )
+            for te in sorted(issue.time_entries, key=lambda t: t.created_at, reverse=True)
+        ],
     )
 
 
@@ -1322,6 +1444,7 @@ def update_issue(
         ("due_date", "updated due date"),
         ("board_position", "reordered board position"),
         ("archived", "changed archive state"),
+        ("estimate_hours", "updated estimate"),
     ]
     for field_name, message in field_specs:
         value = getattr(payload, field_name)
@@ -1418,10 +1541,80 @@ def update_issue(
             selectinload(Issue.comments),
             selectinload(Issue.label_links).selectinload(IssueLabel.label),
             selectinload(Issue.subtasks),
+            selectinload(Issue.checklist_items),
+            selectinload(Issue.time_entries),
         )
         .where(Issue.id == issue.id)
     )
     return _serialize_issue(issue)
+
+
+@router.patch("/projects/{project_id}/issues/bulk", response_model=BulkUpdateResponse)
+def bulk_update_issues(
+    project_id: str,
+    payload: BulkUpdateRequest,
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+) -> BulkUpdateResponse:
+    project, _role = _ensure_project_access(db, current_user, project_id)
+    issues = list(
+        db.scalars(
+            select(Issue)
+            .options(
+                selectinload(Issue.project),
+                selectinload(Issue.label_links).selectinload(IssueLabel.label),
+                selectinload(Issue.assignee),
+            )
+            .where(Issue.id.in_(payload.issue_ids), Issue.project_id == project_id)
+        )
+    )
+    if not issues:
+        raise HTTPException(status_code=404, detail="No matching issues found.")
+
+    if payload.delete:
+        for issue in issues:
+            for child in getattr(issue, "subtasks", []):
+                child.parent_id = None
+            db.delete(issue)
+        db.commit()
+        return BulkUpdateResponse(updated_count=0, deleted_count=len(issues))
+
+    label_map = {label.id: label for label in project.labels}
+    updated = 0
+    for issue in issues:
+        changed = False
+        if payload.status is not None and issue.status != payload.status:
+            _log_issue_activity(db, issue.id, current_user.id, "updated", f"{current_user.full_name} updated status.", field_name="status", from_value=issue.status, to_value=payload.status)
+            issue.status = payload.status
+            changed = True
+        if payload.priority is not None and issue.priority != payload.priority:
+            _log_issue_activity(db, issue.id, current_user.id, "updated", f"{current_user.full_name} updated priority.", field_name="priority", from_value=issue.priority, to_value=payload.priority)
+            issue.priority = payload.priority
+            changed = True
+        if "assignee_id" in payload.model_fields_set and payload.assignee_id != issue.assignee_id:
+            _validate_issue_assignee(project, payload.assignee_id)
+            old_name = getattr(issue.assignee, "full_name", "Unassigned")
+            issue.assignee_id = payload.assignee_id
+            _log_issue_activity(db, issue.id, current_user.id, "updated", f"{current_user.full_name} updated assignee.", field_name="assignee", from_value=old_name, to_value=payload.assignee_id or "Unassigned")
+            changed = True
+        if payload.archived is not None and issue.archived != payload.archived:
+            issue.archived = payload.archived
+            _log_issue_activity(db, issue.id, current_user.id, "updated", f"{current_user.full_name} {'archived' if payload.archived else 'unarchived'} issue.", field_name="archived", from_value=str(not payload.archived), to_value=str(payload.archived))
+            changed = True
+        if payload.add_label_ids:
+            existing_ids = {link.label_id for link in issue.label_links}
+            for lid in payload.add_label_ids:
+                if lid not in existing_ids and lid in label_map:
+                    issue.label_links.append(IssueLabel(id=new_id(), label_id=lid))
+                    changed = True
+        if payload.remove_label_ids:
+            issue.label_links = [link for link in issue.label_links if link.label_id not in payload.remove_label_ids]
+            changed = True
+        if changed:
+            updated += 1
+
+    db.commit()
+    return BulkUpdateResponse(updated_count=updated, deleted_count=0)
 
 
 @router.delete("/issues/{issue_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -1868,5 +2061,233 @@ def mark_all_notifications_read(
         .where(Notification.user_id == current_user.id, Notification.is_read == False)  # noqa: E712
         .values(is_read=True)
     )
+    db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+# ── Checklist ────────────────────────────────────────────────────────────────
+
+
+@router.post("/issues/{issue_id}/checklist", response_model=ChecklistItemResponse, status_code=status.HTTP_201_CREATED)
+def create_checklist_item(
+    issue_id: str,
+    payload: ChecklistItemCreateRequest,
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+) -> ChecklistItemResponse:
+    issue, _project = _get_issue_for_user(db, current_user, issue_id)
+    item = ChecklistItem(
+        id=new_id(),
+        issue_id=issue.id,
+        text=payload.text,
+        sort_order=payload.sort_order,
+    )
+    db.add(item)
+    _log_issue_activity(
+        db,
+        issue.id,
+        current_user.id,
+        "checklist_added",
+        f"{current_user.full_name} added checklist item.",
+    )
+    db.commit()
+    return ChecklistItemResponse(
+        id=item.id,
+        issue_id=item.issue_id,
+        text=item.text,
+        completed=item.completed,
+        sort_order=item.sort_order,
+        created_at=item.created_at,
+    )
+
+
+@router.patch("/checklist/{item_id}", response_model=ChecklistItemResponse)
+def update_checklist_item(
+    item_id: str,
+    payload: ChecklistItemUpdateRequest,
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+) -> ChecklistItemResponse:
+    item = db.scalar(
+        select(ChecklistItem)
+        .options(selectinload(ChecklistItem.issue).selectinload(Issue.project))
+        .where(ChecklistItem.id == item_id)
+    )
+    if item is None:
+        raise HTTPException(status_code=404, detail="Checklist item not found.")
+    _ensure_project_access(db, current_user, item.issue.project_id)
+
+    if payload.text is not None:
+        item.text = payload.text
+    if payload.completed is not None and payload.completed != item.completed:
+        item.completed = payload.completed
+        action = "checklist_checked" if payload.completed else "checklist_unchecked"
+        _log_issue_activity(
+            db,
+            item.issue_id,
+            current_user.id,
+            action,
+            f"{current_user.full_name} {'checked' if payload.completed else 'unchecked'} \"{item.text}\".",
+        )
+    if payload.sort_order is not None:
+        item.sort_order = payload.sort_order
+
+    db.commit()
+    return ChecklistItemResponse(
+        id=item.id,
+        issue_id=item.issue_id,
+        text=item.text,
+        completed=item.completed,
+        sort_order=item.sort_order,
+        created_at=item.created_at,
+    )
+
+
+@router.delete("/checklist/{item_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_checklist_item(
+    item_id: str,
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+) -> Response:
+    item = db.scalar(
+        select(ChecklistItem)
+        .options(selectinload(ChecklistItem.issue).selectinload(Issue.project))
+        .where(ChecklistItem.id == item_id)
+    )
+    if item is None:
+        raise HTTPException(status_code=404, detail="Checklist item not found.")
+    _ensure_project_access(db, current_user, item.issue.project_id)
+    _log_issue_activity(
+        db,
+        item.issue_id,
+        current_user.id,
+        "checklist_removed",
+        f"{current_user.full_name} removed checklist item \"{item.text}\".",
+    )
+    db.delete(item)
+    db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.patch("/issues/{issue_id}/checklist/reorder", status_code=status.HTTP_204_NO_CONTENT)
+def reorder_checklist(
+    issue_id: str,
+    payload: ChecklistReorderRequest,
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+) -> Response:
+    _get_issue_for_user(db, current_user, issue_id)
+    items = list(
+        db.scalars(
+            select(ChecklistItem).where(ChecklistItem.issue_id == issue_id)
+        )
+    )
+    item_map = {item.id: item for item in items}
+    for idx, item_id in enumerate(payload.item_ids):
+        if item_id in item_map:
+            item_map[item_id].sort_order = idx
+    db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+# ── Time Tracking ────────────────────────────────────────────────────────────
+
+
+@router.post("/issues/{issue_id}/time-entries", response_model=TimeEntryItem, status_code=status.HTTP_201_CREATED)
+def create_time_entry(
+    issue_id: str,
+    payload: TimeEntryCreateRequest,
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+) -> TimeEntryItem:
+    issue, _project = _get_issue_for_user(db, current_user, issue_id)
+    entry = TimeEntry(
+        id=new_id(),
+        issue_id=issue.id,
+        user_id=current_user.id,
+        duration_minutes=payload.duration_minutes,
+        description=payload.description.strip(),
+        entry_date=payload.entry_date,
+    )
+    db.add(entry)
+    hours = payload.duration_minutes / 60
+    _log_issue_activity(
+        db,
+        issue.id,
+        current_user.id,
+        "time_tracked",
+        f"{current_user.full_name} logged {hours:.1f}h.",
+    )
+    db.commit()
+    return TimeEntryItem(
+        id=entry.id,
+        issue_id=entry.issue_id,
+        user_id=entry.user_id,
+        user_name=current_user.full_name,
+        duration_minutes=entry.duration_minutes,
+        description=entry.description,
+        entry_date=entry.entry_date,
+        created_at=entry.created_at,
+    )
+
+
+@router.patch("/time-entries/{entry_id}", response_model=TimeEntryItem)
+def update_time_entry(
+    entry_id: str,
+    payload: TimeEntryUpdateRequest,
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+) -> TimeEntryItem:
+    entry = db.scalar(
+        select(TimeEntry)
+        .options(selectinload(TimeEntry.issue).selectinload(Issue.project), selectinload(TimeEntry.user))
+        .where(TimeEntry.id == entry_id)
+    )
+    if entry is None:
+        raise HTTPException(status_code=404, detail="Time entry not found.")
+    _ensure_project_access(db, current_user, entry.issue.project_id)
+
+    if payload.duration_minutes is not None:
+        entry.duration_minutes = payload.duration_minutes
+    if payload.description is not None:
+        entry.description = payload.description.strip()
+    if payload.entry_date is not None:
+        entry.entry_date = payload.entry_date
+
+    db.commit()
+    return TimeEntryItem(
+        id=entry.id,
+        issue_id=entry.issue_id,
+        user_id=entry.user_id,
+        user_name=entry.user.full_name,
+        duration_minutes=entry.duration_minutes,
+        description=entry.description,
+        entry_date=entry.entry_date,
+        created_at=entry.created_at,
+    )
+
+
+@router.delete("/time-entries/{entry_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_time_entry(
+    entry_id: str,
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+) -> Response:
+    entry = db.scalar(
+        select(TimeEntry)
+        .options(selectinload(TimeEntry.issue).selectinload(Issue.project))
+        .where(TimeEntry.id == entry_id)
+    )
+    if entry is None:
+        raise HTTPException(status_code=404, detail="Time entry not found.")
+    _ensure_project_access(db, current_user, entry.issue.project_id)
+    _log_issue_activity(
+        db,
+        entry.issue_id,
+        current_user.id,
+        "time_removed",
+        f"{current_user.full_name} removed time entry.",
+    )
+    db.delete(entry)
     db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)

@@ -1,4 +1,4 @@
-import { MessageSquare, Flag, MoreHorizontal } from 'lucide-react';
+import { MessageSquare, Flag, MoreHorizontal, CheckSquare, Clock } from 'lucide-react';
 import { Badge, Button } from '@aidoo/ui';
 import type { PmsIssue } from '@/src/domains/pms/pms-api';
 import { STATUS_TONE, PRIORITY_COLOR, initials, formatDate } from './pms-constants';
@@ -6,9 +6,13 @@ import { STATUS_TONE, PRIORITY_COLOR, initials, formatDate } from './pms-constan
 export const TableView = ({
   issues,
   onSelectIssue,
+  selectedIds,
+  onToggleSelect,
 }: {
   issues: PmsIssue[];
   onSelectIssue: (issue: PmsIssue) => void;
+  selectedIds?: Set<string>;
+  onToggleSelect?: (issueId: string) => void;
 }) => {
   return (
     <div className="overflow-hidden rounded-lg border border-clickup-border bg-clickup-card">
@@ -16,6 +20,7 @@ export const TableView = ({
         <table className="w-full text-left text-xs">
           <thead>
             <tr className="bg-clickup-sidebar/50 border-b border-clickup-border text-clickup-text/50 uppercase tracking-wider font-bold">
+              {onToggleSelect && <th className="py-3 px-4 w-10"></th>}
               <th className="py-3 px-4 w-12">#</th>
               <th className="py-3 px-4 min-w-[250px]">Task Name</th>
               <th className="py-3 px-4">Status</th>
@@ -33,6 +38,17 @@ export const TableView = ({
                 onClick={() => onSelectIssue(issue)}
                 className="hover:bg-clickup-hover transition-colors group cursor-pointer"
               >
+                {onToggleSelect && (
+                  <td className="py-3 px-4">
+                    <input
+                      type="checkbox"
+                      checked={selectedIds?.has(issue.id) ?? false}
+                      onChange={(e) => { e.stopPropagation(); onToggleSelect(issue.id); }}
+                      onClick={(e) => e.stopPropagation()}
+                      className="h-3.5 w-3.5 rounded accent-clickup-purple cursor-pointer"
+                    />
+                  </td>
+                )}
                 <td className="py-3 px-4 text-clickup-text/40">{issue.reference}</td>
                 <td className="py-3 px-4">
                   <div className="flex items-center gap-2">
@@ -41,6 +57,18 @@ export const TableView = ({
                       <div className="flex items-center gap-1 text-clickup-text/40">
                         <MessageSquare size={12} />
                         <span className="text-[10px]">{issue.comments_count}</span>
+                      </div>
+                    )}
+                    {issue.checklist_total > 0 && (
+                      <div className="flex items-center gap-0.5 text-clickup-text/40">
+                        <CheckSquare size={11} />
+                        <span className="text-[10px]">{issue.checklist_done}/{issue.checklist_total}</span>
+                      </div>
+                    )}
+                    {issue.estimate_hours != null && issue.estimate_hours > 0 && (
+                      <div className="flex items-center gap-0.5 text-clickup-text/40">
+                        <Clock size={11} />
+                        <span className="text-[10px]">{Math.round(issue.time_spent_minutes / 60 * 10) / 10}/{issue.estimate_hours}h</span>
                       </div>
                     )}
                   </div>

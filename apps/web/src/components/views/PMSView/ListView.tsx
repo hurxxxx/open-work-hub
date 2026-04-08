@@ -1,4 +1,4 @@
-import { Activity, Plus, Layout, ChevronDown, Circle, User2 } from 'lucide-react';
+import { Activity, Plus, Layout, ChevronDown, Circle, User2, CheckSquare, Clock } from 'lucide-react';
 import { Badge, Button } from '@aidoo/ui';
 import type { PmsIssue } from '@/src/domains/pms/pms-api';
 import { ISSUE_STATUSES, STATUS_TONE, PRIORITY_COLOR, initials, formatDate } from './pms-constants';
@@ -6,9 +6,13 @@ import { ISSUE_STATUSES, STATUS_TONE, PRIORITY_COLOR, initials, formatDate } fro
 export const ListView = ({
   issues,
   onSelectIssue,
+  selectedIds,
+  onToggleSelect,
 }: {
   issues: PmsIssue[];
   onSelectIssue: (issue: PmsIssue) => void;
+  selectedIds?: Set<string>;
+  onToggleSelect?: (issueId: string) => void;
 }) => {
   return (
     <div className="space-y-8">
@@ -65,7 +69,17 @@ export const ListView = ({
                       className="hover:bg-clickup-hover transition-colors group cursor-pointer"
                     >
                       <td className="py-2 px-4">
-                        <Circle size={14} className="text-clickup-text/40" />
+                        {onToggleSelect ? (
+                          <input
+                            type="checkbox"
+                            checked={selectedIds?.has(issue.id) ?? false}
+                            onChange={(e) => { e.stopPropagation(); onToggleSelect(issue.id); }}
+                            onClick={(e) => e.stopPropagation()}
+                            className="h-3.5 w-3.5 rounded accent-clickup-purple cursor-pointer"
+                          />
+                        ) : (
+                          <Circle size={14} className="text-clickup-text/40" />
+                        )}
                       </td>
                       <td className="py-2 px-4">
                         <div className="flex items-center gap-2">
@@ -95,6 +109,18 @@ export const ListView = ({
                       </td>
                       <td className="py-2 px-4">
                         <span className="text-clickup-text/40">{issue.comments_count}</span>
+                        {issue.checklist_total > 0 && (
+                          <span className="inline-flex items-center gap-0.5 ml-2 text-clickup-text/40">
+                            <CheckSquare size={11} />
+                            <span className="text-[10px]">{issue.checklist_done}/{issue.checklist_total}</span>
+                          </span>
+                        )}
+                        {issue.estimate_hours != null && issue.estimate_hours > 0 && (
+                          <span className="inline-flex items-center gap-0.5 ml-2 text-clickup-text/40">
+                            <Clock size={11} />
+                            <span className="text-[10px]">{Math.round(issue.time_spent_minutes / 60 * 10) / 10}/{issue.estimate_hours}h</span>
+                          </span>
+                        )}
                       </td>
                       <td className="py-2 px-4 text-right">
                         <Plus

@@ -29,6 +29,7 @@ import {
   listProjectLabels,
   getIssueDetail,
   updateIssue,
+  type IssueFilterParams,
   type PmsProject,
   type PmsIssue,
   type PmsProjectMember,
@@ -49,6 +50,8 @@ import { AssignedToMeView } from './AssignedToMeView';
 import { TodayOverdueView } from './TodayOverdueView';
 import { PersonalListView } from './PersonalListView';
 import { ProjectSettingsPanel } from './ProjectSettingsPanel';
+import { FilterBar } from './FilterBar';
+import { BulkActionBar } from './BulkActionBar';
 
 export const PMSView = () => {
   const { toolId } = useParams();
@@ -66,7 +69,8 @@ export const PMSView = () => {
   const [labels, setLabels] = useState<PmsLabel[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [searchQuery, setSearchQuery] = useState('');
+  const [filterParams, setFilterParams] = useState<IssueFilterParams>({});
+  const [selectedIssueIds, setSelectedIssueIds] = useState<Set<string>>(new Set());
   const [settingsOpen, setSettingsOpen] = useState(false);
 
   const isAssignedTasksView = toolId === 'pms-tasks' || toolId === 'pms-tasks-assigned';
@@ -124,12 +128,12 @@ export const PMSView = () => {
 
     try {
       setError(null);
-      const res = await listProjectIssues(token, selectedProjectId, { q: searchQuery });
+      const res = await listProjectIssues(token, selectedProjectId, filterParams);
       applyIssueCollection(res.items);
     } catch (err) {
       setError(getErrorMessage(err, '이슈 목록을 불러오지 못했습니다.'));
     }
-  }, [applyIssueCollection, getErrorMessage, searchQuery, selectedProjectId, token]);
+  }, [applyIssueCollection, getErrorMessage, filterParams, selectedProjectId, token]);
 
   // Load issues + members + milestones when project changes
   useEffect(() => {
@@ -138,7 +142,7 @@ export const PMSView = () => {
     setLoading(true);
     setError(null);
     Promise.all([
-      listProjectIssues(token, selectedProjectId, { q: searchQuery }),
+      listProjectIssues(token, selectedProjectId, filterParams),
       listProjectMembers(token, selectedProjectId),
       listProjectMilestones(token, selectedProjectId),
       listProjectLabels(token, selectedProjectId),
@@ -163,7 +167,21 @@ export const PMSView = () => {
     return () => {
       cancelled = true;
     };
-  }, [applyIssueCollection, getErrorMessage, token, selectedProjectId, searchQuery]);
+  }, [applyIssueCollection, getErrorMessage, token, selectedProjectId, filterParams]);
+
+  const toggleIssueSelection = useCallback((issueId: string) => {
+    setSelectedIssueIds(prev => {
+      const next = new Set(prev);
+      if (next.has(issueId)) next.delete(issueId);
+      else next.add(issueId);
+      return next;
+    });
+  }, []);
+
+  const handleBulkDone = useCallback(async () => {
+    setSelectedIssueIds(new Set());
+    await reloadIssues();
+  }, [reloadIssues]);
 
   const handleUpdateIssue = useCallback(
     async (issueId: string, payload: Record<string, unknown>) => {
@@ -203,7 +221,7 @@ export const PMSView = () => {
     let cancelled = false;
     setError(null);
     setActiveTab('List');
-    setSearchQuery('');
+    setFilterParams({});
 
     getIssueDetail(token, requestedIssueId)
       .then((detail) => {
@@ -281,8 +299,8 @@ export const PMSView = () => {
               <input
                 type="text"
                 placeholder="Search..."
-                value={searchQuery}
-                onChange={e => setSearchQuery(e.target.value)}
+                value={filterParams.q ?? ''}
+                onChange={e => setFilterParams(prev => ({ ...prev, q: e.target.value || undefined }))}
                 className="bg-transparent text-xs text-clickup-text focus:outline-none w-32"
               />
             </div>
@@ -333,6 +351,17 @@ export const PMSView = () => {
         </div>
       </header>
 
+      {selectedProjectId && !isTeamSpace && (
+        <FilterBar
+          projectId={selectedProjectId}
+          filterParams={filterParams}
+          setFilterParams={setFilterParams}
+          members={members}
+          milestones={milestones}
+          labels={labels}
+        />
+      )}
+
       <main className={cn(
         "flex-1 custom-scrollbar",
         activeTab === 'Team Docs' ? "overflow-hidden" : "overflow-y-auto p-8"
@@ -357,12 +386,12 @@ export const PMSView = () => {
             )}
             {activeTab === 'List' && (
               <motion.div key="list" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}>
-                <ListView issues={issues} onSelectIssue={setSelectedIssue} />
+                <ListView issues={issues} onSelectIssue={setSelectedIssue} selectedIds={selectedIssueIds} onToggleSelect={toggleIssueSelection} />
               </motion.div>
             )}
             {activeTab === 'Board' && (
               <motion.div key="board" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="h-full">
-                <BoardView issues={issues} onSelectIssue={setSelectedIssue} onUpdateIssue={handleUpdateIssue} />
+                <BoardView issues={issues} onSelectIssue={setSelectedIssue} onUpdateIssue={handleUpdateIssue} selectedIds={selectedIssueIds} onToggleSelect={toggleIssueSelection} />
               </motion.div>
             )}
             {activeTab === 'Calendar' && (
@@ -377,7 +406,7 @@ export const PMSView = () => {
             )}
             {activeTab === 'Table' && (
               <motion.div key="table" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="h-full">
-                <TableView issues={issues} onSelectIssue={setSelectedIssue} />
+                <TableView issues={issues} onSelectIssue={setSelectedIssue} selectedIds={selectedIssueIds} onToggleSelect={toggleIssueSelection} />
               </motion.div>
             )}
           </AnimatePresence>
@@ -435,6 +464,19 @@ export const PMSView = () => {
           />
         )}
       </AnimatePresence>
+
+      {selectedIssueIds.size > 0 && selectedProjectId && (
+        <BulkActionBar
+          projectId={selectedProjectId}
+          selectedIds={selectedIssueIds}
+          totalCount={issues.length}
+          onSelectAll={() => setSelectedIssueIds(new Set(issues.map(i => i.id)))}
+          onDeselectAll={() => setSelectedIssueIds(new Set())}
+          onDone={handleBulkDone}
+          members={members}
+          labels={labels}
+        />
+      )}
     </div>
   );
 };

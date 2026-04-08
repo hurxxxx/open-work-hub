@@ -1,5 +1,5 @@
 import { motion } from 'motion/react';
-import { Plus, MoreHorizontal, Flag, Calendar, User2 } from 'lucide-react';
+import { Plus, MoreHorizontal, Flag, Calendar, User2, CheckSquare, Clock } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 import type { PmsIssue } from '@/src/domains/pms/pms-api';
 import { ISSUE_STATUSES, STATUS_DOT_COLOR, PRIORITY_COLOR, initials, formatDate } from './pms-constants';
@@ -8,10 +8,14 @@ export const BoardView = ({
   issues,
   onSelectIssue,
   onUpdateIssue,
+  selectedIds,
+  onToggleSelect,
 }: {
   issues: PmsIssue[];
   onSelectIssue: (issue: PmsIssue) => void;
   onUpdateIssue?: (issueId: string, payload: Record<string, unknown>) => void;
+  selectedIds?: Set<string>;
+  onToggleSelect?: (issueId: string) => void;
 }) => {
   const visibleStatuses = ISSUE_STATUSES.filter(s => s !== 'canceled');
 
@@ -64,8 +68,19 @@ export const BoardView = ({
                     if (e.dataTransfer) e.dataTransfer.setData('text/plain', issue.id);
                   }}
                   onClick={() => onSelectIssue(issue)}
-                  className="card p-4 hover:border-clickup-purple transition-all cursor-pointer group space-y-4"
+                  className="card p-4 hover:border-clickup-purple transition-all cursor-pointer group space-y-4 relative"
                 >
+                  {onToggleSelect && (
+                    <div className={`absolute top-2 left-2 z-10 ${selectedIds?.has(issue.id) ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'} transition-opacity`}>
+                      <input
+                        type="checkbox"
+                        checked={selectedIds?.has(issue.id) ?? false}
+                        onChange={(e) => { e.stopPropagation(); onToggleSelect(issue.id); }}
+                        onClick={(e) => e.stopPropagation()}
+                        className="h-3.5 w-3.5 rounded accent-clickup-purple cursor-pointer"
+                      />
+                    </div>
+                  )}
                   <div className="flex flex-wrap gap-1">
                     {issue.labels.map(label => (
                       <span
@@ -86,6 +101,18 @@ export const BoardView = ({
                   <div className="flex items-center justify-between pt-2 border-t border-clickup-border/50">
                     <div className="flex items-center gap-3">
                       <Flag size={14} className={PRIORITY_COLOR[issue.priority] ?? 'text-gray-500'} />
+                      {issue.checklist_total > 0 && (
+                        <span className="flex items-center gap-0.5 text-[10px] text-gray-500">
+                          <CheckSquare size={11} />
+                          {issue.checklist_done}/{issue.checklist_total}
+                        </span>
+                      )}
+                      {issue.estimate_hours != null && issue.estimate_hours > 0 && (
+                        <span className="flex items-center gap-0.5 text-[10px] text-gray-500">
+                          <Clock size={11} />
+                          {Math.round(issue.time_spent_minutes / 60 * 10) / 10}/{issue.estimate_hours}h
+                        </span>
+                      )}
                       {issue.due_date && (
                         <div className="flex items-center gap-1 text-[10px] text-gray-500">
                           <Calendar size={10} />
