@@ -48,7 +48,7 @@ export const CalendarView = ({ issues, projectStatuses }: { issues: PmsIssue[]; 
     <div className="h-full flex flex-col card p-0 overflow-hidden">
       <div className="grid grid-cols-7 border-b border-clickup-border bg-clickup-sidebar/30">
         {days.map(day => (
-          <div key={day} className="py-3 text-center text-[10px] font-bold uppercase tracking-widest text-gray-500 border-r border-clickup-border last:border-r-0">
+          <div key={day} className="app-text-overline border-r border-clickup-border py-3 text-center text-gray-500 last:border-r-0">
             {day}
           </div>
         ))}
@@ -62,14 +62,14 @@ export const CalendarView = ({ issues, projectStatuses }: { issues: PmsIssue[]; 
               date === null && "bg-clickup-sidebar/20"
             )}
           >
-            <div className="text-[10px] font-bold text-gray-600 mb-2">
+            <div className="app-text-micro mb-2 font-bold text-gray-600">
               {date ?? ''}
             </div>
             <div className="space-y-1">
               {date && issuesByDate[date]?.map(issue => (
                 <div
                   key={issue.id}
-                  className="px-1.5 py-1 rounded text-[9px] truncate border-l-2 bg-clickup-sidebar/60 text-clickup-text"
+                  className="app-text-micro truncate rounded border-l-2 bg-clickup-sidebar/60 px-1.5 py-1 text-clickup-text"
                   style={{ borderLeftColor: getStatusColor(issue.status, projectStatuses) }}
                 >
                   {issue.reference} {issue.title}

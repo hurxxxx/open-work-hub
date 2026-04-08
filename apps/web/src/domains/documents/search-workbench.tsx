@@ -355,7 +355,7 @@ export function SearchWorkbench({ token }: SearchWorkbenchProps) {
         </section>
 
         {searchError ? (
-          <div className="rounded-[var(--ui-radius-md)] border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+          <div className="app-text-body rounded-[var(--ui-radius-md)] border border-rose-200 bg-rose-50 px-3 py-2 text-rose-700">
             {searchError}
           </div>
         ) : null}
@@ -450,7 +450,7 @@ export function SearchWorkbench({ token }: SearchWorkbenchProps) {
             </InlineNotice>
 
             <div className="rounded-[var(--ui-radius-md)] border border-[var(--ui-color-border)] bg-[var(--ui-color-surface)] p-4">
-              <div className="mb-3 text-sm text-[var(--ui-color-ink-subtle)]">
+              <div className="app-text-body mb-3 text-[var(--ui-color-ink-subtle)]">
                 {selectedRow.title} · {selectedRow.page_reference}
               </div>
               <strong className="block text-base text-[var(--ui-color-ink)]">

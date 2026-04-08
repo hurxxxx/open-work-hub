@@ -19,12 +19,16 @@ export interface PmsProject {
   updated_at: string;
 }
 
+export type PmsList = PmsProject;
+
 export interface PmsProjectsResponse {
   items: PmsProject[];
   total: number;
   page: number;
   page_size: number;
 }
+
+export type PmsListsResponse = PmsProjectsResponse;
 
 export interface PmsProjectMember {
   user_id: string;
@@ -263,6 +267,37 @@ export interface PmsDocsResponse {
   items: PmsDoc[];
 }
 
+export interface PmsSpaceDoc {
+  id: string;
+  team_id: string;
+  title: string;
+  created_by_id: string;
+  created_by_name: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PmsSpaceDocsResponse {
+  items: PmsSpaceDoc[];
+}
+
+export interface PmsSpaceDocPage {
+  id: string;
+  team_id: string;
+  parent_id: string | null;
+  title: string;
+  content_blocks: Record<string, unknown>[] | null;
+  sort_order: number;
+  created_by_id: string;
+  created_by_name: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PmsSpaceDocPagesResponse {
+  items: PmsSpaceDocPage[];
+}
+
 // ── Goals / OKR ─────────────────────────────────────────────────────
 
 export interface PmsGoal {
@@ -404,18 +439,21 @@ async function request<T>(path: string, token: string, init: RequestInit = {}): 
 export function listPmsProjects(token: string, teamId?: string): Promise<PmsProjectsResponse> {
   const params = new URLSearchParams({ page: '1', page_size: '50' });
   if (teamId) params.set('team_id', teamId);
-  return request<PmsProjectsResponse>(`/api/v1/pms/projects?${params}`, token);
+  return request<PmsProjectsResponse>(`/api/v1/pms/lists?${params}`, token);
 }
 
 export function createPmsProject(
   token: string,
-  payload: { key: string; name: string; description: string; team_id?: string | null },
+  payload: { key?: string; name: string; description?: string; team_id?: string | null; folder_id?: string | null },
 ): Promise<PmsProject> {
-  return request<PmsProject>('/api/v1/pms/projects', token, {
+  return request<PmsProject>('/api/v1/pms/lists', token, {
     method: 'POST',
     body: JSON.stringify(payload),
   });
 }
+
+export const listPmsLists = listPmsProjects;
+export const createPmsList = createPmsProject;
 
 export function getPmsDashboardSummary(
   token: string,
@@ -430,7 +468,7 @@ export function listProjectMembers(
   projectId: string,
 ): Promise<PmsProjectMembersResponse> {
   return request<PmsProjectMembersResponse>(
-    `/api/v1/pms/projects/${projectId}/members?page=1&page_size=20`,
+    `/api/v1/pms/lists/${projectId}/members?page=1&page_size=20`,
     token,
   );
 }
@@ -441,14 +479,14 @@ export function updateMemberRole(
   userId: string,
   role: string,
 ): Promise<PmsProjectMember> {
-  return request<PmsProjectMember>(`/api/v1/pms/projects/${projectId}/members/${userId}/role`, token, {
+  return request<PmsProjectMember>(`/api/v1/pms/lists/${projectId}/members/${userId}/role`, token, {
     method: 'PATCH',
     body: JSON.stringify({ role }),
   });
 }
 
 export function removeProjectMember(token: string, projectId: string, userId: string): Promise<void> {
-  return request<void>(`/api/v1/pms/projects/${projectId}/members/${userId}`, token, { method: 'DELETE' });
+  return request<void>(`/api/v1/pms/lists/${projectId}/members/${userId}`, token, { method: 'DELETE' });
 }
 
 export function listProjectMilestones(
@@ -456,7 +494,7 @@ export function listProjectMilestones(
   projectId: string,
 ): Promise<PmsMilestonesResponse> {
   return request<PmsMilestonesResponse>(
-    `/api/v1/pms/projects/${projectId}/milestones?page=1&page_size=20`,
+    `/api/v1/pms/lists/${projectId}/milestones?page=1&page_size=20`,
     token,
   );
 }
@@ -471,7 +509,7 @@ export function createProjectMilestone(
     due_date: string | null;
   },
 ): Promise<PmsMilestone> {
-  return request<PmsMilestone>(`/api/v1/pms/projects/${projectId}/milestones`, token, {
+  return request<PmsMilestone>(`/api/v1/pms/lists/${projectId}/milestones`, token, {
     method: 'POST',
     body: JSON.stringify(payload),
   });
@@ -516,7 +554,7 @@ export function listProjectIssues(
   params.status?.forEach((value) => search.append('status', value));
 
   return request<PmsIssuesResponse>(
-    `/api/v1/pms/projects/${projectId}/issues?${search.toString()}`,
+    `/api/v1/pms/lists/${projectId}/issues?${search.toString()}`,
     token,
   );
 }
@@ -536,7 +574,7 @@ export function createProjectIssue(
     parent_id?: string | null;
   },
 ): Promise<PmsIssue> {
-  return request<PmsIssue>(`/api/v1/pms/projects/${projectId}/issues`, token, {
+  return request<PmsIssue>(`/api/v1/pms/lists/${projectId}/issues`, token, {
     method: 'POST',
     body: JSON.stringify(payload),
   });
@@ -570,7 +608,7 @@ export function createIssueComment(
 }
 
 export function listProjectLabels(token: string, projectId: string): Promise<PmsLabelsResponse> {
-  return request<PmsLabelsResponse>(`/api/v1/pms/projects/${projectId}/labels?page=1&page_size=100`, token);
+  return request<PmsLabelsResponse>(`/api/v1/pms/lists/${projectId}/labels?page=1&page_size=100`, token);
 }
 
 export function createProjectLabel(
@@ -578,7 +616,7 @@ export function createProjectLabel(
   projectId: string,
   payload: { name: string; color: string },
 ): Promise<PmsLabel> {
-  return request<PmsLabel>(`/api/v1/pms/projects/${projectId}/labels`, token, {
+  return request<PmsLabel>(`/api/v1/pms/lists/${projectId}/labels`, token, {
     method: 'POST',
     body: JSON.stringify(payload),
   });
@@ -679,7 +717,7 @@ export function bulkUpdateIssues(
   projectId: string,
   payload: BulkUpdatePayload,
 ): Promise<BulkUpdateResult> {
-  return request<BulkUpdateResult>(`/api/v1/pms/projects/${projectId}/issues/bulk`, token, {
+  return request<BulkUpdateResult>(`/api/v1/pms/lists/${projectId}/issues/bulk`, token, {
     method: 'PATCH',
     body: JSON.stringify(payload),
   });
@@ -788,7 +826,7 @@ export function listProjectStatuses(
   projectId: string,
 ): Promise<PmsProjectStatusesResponse> {
   return request<PmsProjectStatusesResponse>(
-    `/api/v1/pms/projects/${projectId}/statuses`,
+    `/api/v1/pms/lists/${projectId}/statuses`,
     token,
   );
 }
@@ -798,7 +836,7 @@ export function createProjectStatus(
   projectId: string,
   payload: { name: string; color?: string; category?: string; sort_order?: number },
 ): Promise<PmsProjectStatus> {
-  return request<PmsProjectStatus>(`/api/v1/pms/projects/${projectId}/statuses`, token, {
+  return request<PmsProjectStatus>(`/api/v1/pms/lists/${projectId}/statuses`, token, {
     method: 'POST',
     body: JSON.stringify(payload),
   });
@@ -822,7 +860,7 @@ export function deleteProjectStatus(token: string, statusId: string): Promise<vo
 // ── Export ──────────────────────────────────────────────────────────
 
 export async function exportProjectCsv(token: string, projectId: string): Promise<void> {
-  const response = await fetch(`/api/v1/pms/projects/${projectId}/export?format=csv`, {
+  const response = await fetch(`/api/v1/pms/lists/${projectId}/export?format=csv`, {
     headers: { Authorization: `Bearer ${token}` },
   });
   if (!response.ok) throw new PmsApiError(response.status, 'Export failed.');
@@ -843,7 +881,7 @@ export function listTaskTemplates(
   token: string,
   projectId: string,
 ): Promise<PmsTaskTemplatesResponse> {
-  return request<PmsTaskTemplatesResponse>(`/api/v1/pms/projects/${projectId}/templates`, token);
+  return request<PmsTaskTemplatesResponse>(`/api/v1/pms/lists/${projectId}/templates`, token);
 }
 
 export function createTaskTemplate(
@@ -857,7 +895,7 @@ export function createTaskTemplate(
     checklist_items?: { text: string }[];
   },
 ): Promise<PmsTaskTemplate> {
-  return request<PmsTaskTemplate>(`/api/v1/pms/projects/${projectId}/templates`, token, {
+  return request<PmsTaskTemplate>(`/api/v1/pms/lists/${projectId}/templates`, token, {
     method: 'POST',
     body: JSON.stringify(payload),
   });
@@ -873,7 +911,7 @@ export function listCustomFields(
   token: string,
   projectId: string,
 ): Promise<PmsCustomFieldsResponse> {
-  return request<PmsCustomFieldsResponse>(`/api/v1/pms/projects/${projectId}/custom-fields`, token);
+  return request<PmsCustomFieldsResponse>(`/api/v1/pms/lists/${projectId}/custom-fields`, token);
 }
 
 export function createCustomField(
@@ -881,7 +919,7 @@ export function createCustomField(
   projectId: string,
   payload: { name: string; field_type: string; options?: string[]; sort_order?: number },
 ): Promise<PmsCustomField> {
-  return request<PmsCustomField>(`/api/v1/pms/projects/${projectId}/custom-fields`, token, {
+  return request<PmsCustomField>(`/api/v1/pms/lists/${projectId}/custom-fields`, token, {
     method: 'POST',
     body: JSON.stringify(payload),
   });
@@ -962,7 +1000,7 @@ export function deleteFolder(token: string, folderId: string): Promise<void> {
 // ── Automations ─────────────────────────────────────────────────────
 
 export function listAutomations(token: string, projectId: string): Promise<PmsAutomationsResponse> {
-  return request<PmsAutomationsResponse>(`/api/v1/pms/projects/${projectId}/automations`, token);
+  return request<PmsAutomationsResponse>(`/api/v1/pms/lists/${projectId}/automations`, token);
 }
 
 export function createAutomation(
@@ -970,7 +1008,7 @@ export function createAutomation(
   projectId: string,
   payload: { name: string; trigger: string; condition?: Record<string, unknown> | null; action: Record<string, unknown> },
 ): Promise<PmsAutomation> {
-  return request<PmsAutomation>(`/api/v1/pms/projects/${projectId}/automations`, token, {
+  return request<PmsAutomation>(`/api/v1/pms/lists/${projectId}/automations`, token, {
     method: 'POST',
     body: JSON.stringify(payload),
   });
@@ -994,7 +1032,7 @@ export function deleteAutomation(token: string, automationId: string): Promise<v
 // ── Goals / OKR ─────────────────────────────────────────────────────
 
 export function listGoals(token: string, projectId: string): Promise<PmsGoalsResponse> {
-  return request<PmsGoalsResponse>(`/api/v1/pms/projects/${projectId}/goals`, token);
+  return request<PmsGoalsResponse>(`/api/v1/pms/lists/${projectId}/goals`, token);
 }
 
 export function createGoal(
@@ -1002,7 +1040,7 @@ export function createGoal(
   projectId: string,
   payload: { name: string; description?: string; target?: number; due_date?: string | null },
 ): Promise<PmsGoal> {
-  return request<PmsGoal>(`/api/v1/pms/projects/${projectId}/goals`, token, {
+  return request<PmsGoal>(`/api/v1/pms/lists/${projectId}/goals`, token, {
     method: 'POST',
     body: JSON.stringify(payload),
   });
@@ -1037,7 +1075,7 @@ export function unlinkIssueFromGoal(token: string, goalId: string, issueId: stri
 // ── Docs (Wiki) ─────────────────────────────────────────────────────
 
 export function listDocs(token: string, projectId: string): Promise<PmsDocsResponse> {
-  return request<PmsDocsResponse>(`/api/v1/pms/projects/${projectId}/docs`, token);
+  return request<PmsDocsResponse>(`/api/v1/pms/lists/${projectId}/docs`, token);
 }
 
 export function createDoc(
@@ -1045,7 +1083,7 @@ export function createDoc(
   projectId: string,
   payload: { title: string; content_blocks?: Record<string, unknown>[] | null },
 ): Promise<PmsDoc> {
-  return request<PmsDoc>(`/api/v1/pms/projects/${projectId}/docs`, token, {
+  return request<PmsDoc>(`/api/v1/pms/lists/${projectId}/docs`, token, {
     method: 'POST',
     body: JSON.stringify(payload),
   });
@@ -1068,4 +1106,38 @@ export function updateDoc(
 
 export function deleteDoc(token: string, docId: string): Promise<void> {
   return request<void>(`/api/v1/pms/docs/${docId}`, token, { method: 'DELETE' });
+}
+
+export function listSpaceDocPages(token: string, spaceId: string): Promise<PmsSpaceDocPagesResponse> {
+  return request<PmsSpaceDocPagesResponse>(`/api/v1/pms/spaces/${spaceId}/docs/pages`, token);
+}
+
+export function createSpaceDocPage(
+  token: string,
+  spaceId: string,
+  payload: { title: string; parent_id?: string | null; content_blocks?: Record<string, unknown>[] | null; sort_order?: number | null },
+): Promise<PmsSpaceDocPage> {
+  return request<PmsSpaceDocPage>(`/api/v1/pms/spaces/${spaceId}/docs/pages`, token, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function getSpaceDocPage(token: string, pageId: string): Promise<PmsSpaceDocPage> {
+  return request<PmsSpaceDocPage>(`/api/v1/pms/space-doc-pages/${pageId}`, token);
+}
+
+export function updateSpaceDocPage(
+  token: string,
+  pageId: string,
+  payload: { title?: string; parent_id?: string | null; content_blocks?: Record<string, unknown>[] | null; sort_order?: number | null },
+): Promise<PmsSpaceDocPage> {
+  return request<PmsSpaceDocPage>(`/api/v1/pms/space-doc-pages/${pageId}`, token, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function deleteSpaceDocPage(token: string, pageId: string): Promise<void> {
+  return request<void>(`/api/v1/pms/space-doc-pages/${pageId}`, token, { method: 'DELETE' });
 }

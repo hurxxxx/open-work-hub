@@ -221,6 +221,22 @@ def _apply_postgres_schema_compat(engine) -> None:
         )
         """,
         "CREATE INDEX IF NOT EXISTS ix_pms_docs_project_id ON pms_docs (project_id)",
+        # ── pms_space_doc_pages table ──
+        """
+        CREATE TABLE IF NOT EXISTS pms_space_doc_pages (
+            id VARCHAR(36) PRIMARY KEY,
+            team_id VARCHAR(36) NOT NULL REFERENCES teams(id),
+            parent_id VARCHAR(36) REFERENCES pms_space_doc_pages(id),
+            title VARCHAR(200) NOT NULL,
+            content_blocks JSON,
+            sort_order INTEGER NOT NULL DEFAULT 0,
+            created_by_id VARCHAR(36) NOT NULL REFERENCES users(id),
+            created_at TIMESTAMP NOT NULL DEFAULT now(),
+            updated_at TIMESTAMP NOT NULL DEFAULT now()
+        )
+        """,
+        "CREATE INDEX IF NOT EXISTS ix_pms_space_doc_pages_team_id ON pms_space_doc_pages (team_id)",
+        "CREATE INDEX IF NOT EXISTS ix_pms_space_doc_pages_parent_id ON pms_space_doc_pages (parent_id)",
     ]
 
     with engine.begin() as connection:

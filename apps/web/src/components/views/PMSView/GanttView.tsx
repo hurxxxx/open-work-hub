@@ -3,7 +3,7 @@ import { cn } from '@/src/lib/utils';
 import type { PmsIssue, PmsProjectStatus } from '@/src/domains/pms/pms-api';
 import { STATUS_DOT_COLOR } from './pms-constants';
 
-function getGanttDotColor(slug: string, projectStatuses?: PmsProjectStatus[]): string {
+function getGanttDotColor(slug: string): string {
   if (STATUS_DOT_COLOR[slug]) return STATUS_DOT_COLOR[slug];
   return '';
 }
@@ -40,11 +40,11 @@ export const GanttView = ({ issues, projectStatuses }: { issues: PmsIssue[]; pro
   return (
     <div className="h-full flex flex-col card p-0 overflow-hidden">
       <div className="flex border-b border-clickup-border bg-clickup-sidebar/30">
-        <div className="w-64 border-r border-clickup-border p-4 text-[10px] font-bold text-gray-500 uppercase tracking-widest shrink-0">Task Name</div>
+        <div className="app-text-overline w-64 shrink-0 border-r border-clickup-border p-4 text-gray-500">Task Name</div>
         <div className="flex-1 flex overflow-x-auto custom-scrollbar">
           {dates.map(date => (
             <div key={date} className="flex-shrink-0 w-10 py-3 text-center border-r border-clickup-border last:border-r-0">
-              <div className="text-[10px] font-bold text-clickup-text">{date}</div>
+              <div className="app-text-micro font-bold text-clickup-text">{date}</div>
             </div>
           ))}
         </div>
@@ -56,15 +56,15 @@ export const GanttView = ({ issues, projectStatuses }: { issues: PmsIssue[]; pro
           return (
             <div key={issue.id} className="flex border-b border-clickup-border hover:bg-clickup-hover transition-colors">
               <div className="w-64 border-r border-clickup-border p-4 flex items-center gap-3 shrink-0">
-                <div className={cn("w-2 h-2 rounded-full shrink-0", getGanttDotColor(issue.status, projectStatuses))} style={getGanttDotStyle(issue.status, projectStatuses)} />
-                <span className="text-xs text-clickup-text truncate font-medium">{issue.title}</span>
+	                <div className={cn("w-2 h-2 rounded-full shrink-0", getGanttDotColor(issue.status))} style={getGanttDotStyle(issue.status, projectStatuses)} />
+                <span className="app-text-body-sm truncate font-medium text-clickup-text">{issue.title}</span>
               </div>
               <div className="flex-1 flex relative" style={{ minWidth: `${dates.length * 40}px` }}>
                 {barStyle && (
                   <div
                     className={cn(
-                      "absolute top-1/2 -translate-y-1/2 h-5 rounded-full flex items-center px-2 text-[9px] font-bold text-white",
-                      getGanttDotColor(issue.status, projectStatuses) || 'bg-gray-500',
+                      "app-text-micro absolute top-1/2 flex h-5 items-center rounded-full px-2 font-bold text-white -translate-y-1/2",
+	                      getGanttDotColor(issue.status) || 'bg-gray-500',
                     )}
                     style={barStyle}
                   >

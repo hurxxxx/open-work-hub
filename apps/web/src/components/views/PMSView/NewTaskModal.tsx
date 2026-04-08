@@ -1,20 +1,12 @@
 import { useState } from 'react';
 import {
   ChevronDown,
-  Circle,
   FileText,
-  Sparkles,
-  User,
-  Calendar,
-  Flag,
-  Tag,
-  MoreHorizontal,
-  Plus,
   LayoutTemplate,
   Paperclip,
   Bell,
 } from 'lucide-react';
-import { Dialog, Button, Badge, BlockEditor } from '@aidoo/ui';
+import { Dialog, Button, BlockEditor } from '@aidoo/ui';
 import type { BlockContent } from '@aidoo/ui';
 import { useAuth } from '@/src/domains/auth/auth-provider';
 import { useMediaUpload } from '@/src/domains/media/use-media-upload';
@@ -72,7 +64,7 @@ export const NewTaskModal = ({
       await createProjectIssue(token, projectId, {
         title: title.trim(),
         description: '',
-        description_blocks: descriptionBlocks as any ?? null,
+        description_blocks: descriptionBlocks ?? null,
         status,
         priority,
         assignee_id: null,
@@ -106,13 +98,13 @@ export const NewTaskModal = ({
                 <div className="fixed inset-0 z-10" onClick={() => setTemplateMenuOpen(false)} />
                 <div className="absolute bottom-full left-0 mb-1 z-20 w-56 bg-clickup-bg border border-clickup-border rounded-lg shadow-xl py-1 max-h-48 overflow-y-auto">
                   {templates.length === 0 ? (
-                    <p className="px-3 py-2 text-xs text-clickup-text/40">No templates yet</p>
+                    <p className="app-text-caption px-3 py-2 text-clickup-text/40">No templates yet</p>
                   ) : (
                     templates.map(t => (
                       <button
                         key={t.id}
                         onClick={() => applyTemplate(t)}
-                        className="w-full text-left px-3 py-2 text-sm text-clickup-text hover:bg-clickup-hover transition-colors"
+                        className="app-text-body w-full px-3 py-2 text-left text-clickup-text transition-colors hover:bg-clickup-hover"
                       >
                         {t.name}
                       </button>
@@ -154,7 +146,7 @@ export const NewTaskModal = ({
           value={title}
           onChange={e => setTitle(e.target.value)}
           onKeyDown={e => { if (e.key === 'Enter' && !e.nativeEvent.isComposing && title.trim() && !submitting) handleCreate(); }}
-          className="w-full bg-transparent text-xl font-medium text-clickup-text placeholder:text-clickup-text/40 focus:outline-none border border-clickup-border rounded-lg px-4 py-3 focus:border-clickup-purple transition-all"
+          className="app-text-title-md w-full rounded-lg border border-clickup-border bg-transparent px-4 py-3 font-medium text-clickup-text placeholder:text-clickup-text/40 transition-all focus:border-clickup-purple focus:outline-none"
           autoFocus
         />
 
@@ -173,7 +165,7 @@ export const NewTaskModal = ({
             </div>
           ) : (
             <button
-              className="flex items-center gap-2 text-clickup-text/50 hover:text-clickup-text transition-colors text-sm"
+              className="app-text-body flex items-center gap-2 text-clickup-text/50 transition-colors hover:text-clickup-text"
               onClick={() => setShowDescription(true)}
             >
               <FileText size={18} />
@@ -187,7 +179,7 @@ export const NewTaskModal = ({
           <select
             value={status}
             onChange={e => setStatus(e.target.value)}
-            className="bg-clickup-sidebar border border-clickup-border rounded-md px-2 py-1 text-xs text-clickup-text focus:outline-none"
+            className="app-text-body-sm rounded-md border border-clickup-border bg-clickup-sidebar px-2 py-1 text-clickup-text focus:outline-none"
           >
             {getStatusSlugs(projectStatuses).map(s => (
               <option key={s} value={s}>{getStatusLabel(s, projectStatuses)}</option>
@@ -197,7 +189,7 @@ export const NewTaskModal = ({
           <select
             value={priority}
             onChange={e => setPriority(e.target.value)}
-            className="bg-clickup-sidebar border border-clickup-border rounded-md px-2 py-1 text-xs text-clickup-text focus:outline-none"
+            className="app-text-body-sm rounded-md border border-clickup-border bg-clickup-sidebar px-2 py-1 text-clickup-text focus:outline-none"
           >
             <option value="low">Low</option>
             <option value="medium">Medium</option>
@@ -209,7 +201,7 @@ export const NewTaskModal = ({
             type="date"
             value={dueDate}
             onChange={e => setDueDate(e.target.value)}
-            className="bg-clickup-sidebar border border-clickup-border rounded-md px-2 py-1 text-xs text-clickup-text focus:outline-none"
+            className="app-text-body-sm rounded-md border border-clickup-border bg-clickup-sidebar px-2 py-1 text-clickup-text focus:outline-none"
           />
         </div>
       </div>

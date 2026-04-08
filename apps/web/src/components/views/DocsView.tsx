@@ -8,7 +8,6 @@ import {
   Lock, 
   Mic, 
   History, 
-  ChevronLeft, 
   FileText, 
   Sparkles, 
   Star, 
@@ -19,11 +18,8 @@ import {
   FileSearch,
   Search,
   MoreHorizontal,
-  ChevronRight,
-  ChevronDown,
   Settings,
   Trash2,
-  Clock,
   Link as LinkIcon
 } from 'lucide-react';
 import { BlockEditor } from '@aidoo/ui';
@@ -33,7 +29,7 @@ import { cn } from '@/src/lib/utils';
 interface Page {
   id: string;
   title: string;
-  content: any;
+  content: unknown;
   parentId?: string;
 }
 
@@ -167,9 +163,9 @@ export const DocsView = () => {
       <div className="flex-1 flex items-center justify-center text-gray-500 bg-clickup-bg">
         <div className="text-center">
           <FileSearch size={48} className="mx-auto mb-4 opacity-20" />
-          <h2 className="text-lg font-bold text-clickup-text">Document not found</h2>
-          <p className="text-sm text-gray-500">ID: {docId}</p>
-          <button onClick={handleBack} className="mt-4 text-clickup-purple hover:underline">Go back</button>
+          <h2 className="app-text-title-md text-clickup-text">Document not found</h2>
+          <p className="app-text-body text-gray-500">ID: {docId}</p>
+          <button onClick={handleBack} className="app-text-control mt-4 text-clickup-purple hover:underline">Go back</button>
         </div>
       </div>
     );
@@ -178,12 +174,12 @@ export const DocsView = () => {
       <div className="h-full flex flex-col bg-clickup-bg overflow-hidden">
           {/* Top Header (Breadcrumbs + Search + Actions) */}
           <div className="h-12 border-b border-clickup-border flex items-center justify-between px-4 bg-clickup-sidebar">
-            <div className="flex items-center gap-2 text-xs">
-              <span className="text-gray-500 hover:text-gray-300 cursor-pointer" onClick={handleBack}>Docs</span>
+            <div className="app-text-caption flex items-center gap-2">
+              <span className="cursor-pointer text-gray-500 hover:text-gray-300" onClick={handleBack}>Docs</span>
               <span className="text-gray-600">/</span>
               <div className="flex items-center gap-2 px-2 py-1 hover:bg-clickup-hover rounded cursor-pointer">
                 <FileText size={14} className="text-clickup-purple" />
-                <span className="font-medium text-clickup-text">{selectedDoc.title}</span>
+                <span className="app-text-control text-clickup-text">{selectedDoc.title}</span>
                 <Star size={12} className={cn("text-gray-600", selectedDoc.favorite && "text-yellow-500 fill-yellow-500")} />
               </div>
             </div>
@@ -194,7 +190,7 @@ export const DocsView = () => {
                 <input 
                   type="text" 
                   placeholder="Search K"
-                  className="w-full pl-9 pr-4 py-1.5 bg-clickup-bg border border-clickup-border rounded-md text-xs text-clickup-text focus:outline-none focus:border-clickup-purple"
+                  className="app-text-body-sm w-full rounded-md border border-clickup-border bg-clickup-bg py-1.5 pl-9 pr-4 text-clickup-text focus:border-clickup-purple focus:outline-none"
                 />
               </div>
             </div>
@@ -203,18 +199,18 @@ export const DocsView = () => {
               <button className="p-1.5 hover:bg-clickup-hover rounded text-gray-500">
                 <Settings size={16} />
               </button>
-              <button className="flex items-center gap-1.5 text-xs text-clickup-purple font-medium px-3 py-1.5 hover:bg-clickup-purple/10 rounded-md transition-colors">
+              <button className="app-text-control-sm flex items-center gap-1.5 rounded-md px-3 py-1.5 text-clickup-purple transition-colors hover:bg-clickup-purple/10">
                 <Sparkles size={14} />
                 <span>Ask AI</span>
               </button>
-              <button className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-white px-2 py-1.5 hover:bg-clickup-hover rounded">
+              <button className="app-text-control-sm flex items-center gap-1.5 rounded px-2 py-1.5 text-gray-400 hover:bg-clickup-hover hover:text-white">
                 <Share2 size={14} />
                 <span>Share</span>
               </button>
               <button className="p-1.5 hover:bg-clickup-hover rounded text-gray-500">
                 <MoreHorizontal size={18} />
               </button>
-              <div className="w-6 h-6 rounded-full bg-clickup-purple flex items-center justify-center text-[10px] font-bold text-white">
+              <div className="app-text-micro flex h-6 w-6 items-center justify-center rounded-full bg-clickup-purple font-bold text-white">
                 {selectedDoc.owner.split(' ').map(n => n[0]).join('')}
               </div>
               <div className="h-4 w-[1px] bg-clickup-border mx-1" />
@@ -229,13 +225,13 @@ export const DocsView = () => {
             <div className="w-60 border-r border-clickup-border bg-clickup-sidebar flex flex-col overflow-hidden">
               <div className="p-4 space-y-6">
                 <div className="space-y-1">
-                  <h2 className="text-sm font-bold text-clickup-text px-2">{selectedDoc.title}</h2>
+                  <h2 className="app-text-title-md px-2 text-clickup-text">{selectedDoc.title}</h2>
                 </div>
                 
                 <div className="space-y-4">
                   <div className="space-y-1">
                     <div className="flex items-center justify-between px-2 mb-2">
-                      <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Pages</span>
+                      <span className="app-text-overline text-gray-500">Pages</span>
                     </div>
                     <div className="space-y-0.5 overflow-y-auto custom-scrollbar max-h-[calc(100vh-250px)]">
                       {selectedDoc.pages.map(page => (
@@ -243,9 +239,9 @@ export const DocsView = () => {
                           key={page.id}
                           onClick={() => setSelectedPageId(page.id)}
                           className={cn(
-                            "w-full flex items-center gap-2 px-3 py-1.5 text-xs rounded transition-all group",
+                            "app-text-body-sm group flex w-full items-center gap-2 rounded px-3 py-1.5 transition-all",
                             selectedPageId === page.id 
-                              ? "bg-clickup-purple/10 text-clickup-purple font-medium" 
+                              ? "bg-clickup-purple/10 text-clickup-purple" 
                               : "text-gray-400 hover:bg-clickup-hover hover:text-gray-200"
                           )}
                         >
@@ -254,7 +250,7 @@ export const DocsView = () => {
                           <MoreHorizontal size={14} className="opacity-0 group-hover:opacity-100 text-gray-500" />
                         </button>
                       ))}
-                      <button className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-gray-500 hover:text-clickup-purple hover:bg-clickup-hover rounded transition-all">
+                      <button className="app-text-body-sm flex w-full items-center gap-2 rounded px-3 py-1.5 text-gray-500 transition-all hover:bg-clickup-hover hover:text-clickup-purple">
                         <Plus size={14} />
                         <span>Add page</span>
                       </button>
@@ -264,11 +260,11 @@ export const DocsView = () => {
               </div>
 
               <div className="mt-auto p-4 border-t border-clickup-border space-y-1">
-                <button className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-gray-500 hover:bg-clickup-hover rounded">
+                <button className="app-text-body-sm flex w-full items-center gap-2 rounded px-3 py-1.5 text-gray-500 hover:bg-clickup-hover">
                   <Settings size={14} />
                   <span>Doc Settings</span>
                 </button>
-                <button className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-gray-500 hover:bg-clickup-hover rounded">
+                <button className="app-text-body-sm flex w-full items-center gap-2 rounded px-3 py-1.5 text-gray-500 hover:bg-clickup-hover">
                   <Trash2 size={14} />
                   <span>Archive Doc</span>
                 </button>
@@ -279,22 +275,22 @@ export const DocsView = () => {
             <div className="flex-1 flex flex-col min-w-0 bg-white dark:bg-[#1e1e24] overflow-y-auto custom-scrollbar">
               <div className="max-w-4xl mx-auto py-12 px-12 w-full">
                 <div className="space-y-6">
-                  <div className="flex items-center gap-2 text-xs text-gray-500">
+                  <div className="app-text-caption flex items-center gap-2 text-gray-500">
                     <LinkIcon size={12} className="rotate-45" />
                     <span>Link Task or Doc</span>
                   </div>
                   
                   <div className="space-y-4">
-                    <h1 className="text-4xl font-bold text-clickup-text outline-none" contentEditable suppressContentEditableWarning>
+                    <h1 className="app-text-title-xl text-clickup-text outline-none" contentEditable suppressContentEditableWarning>
                       {activePage?.title}
                     </h1>
                     
-                    <div className="flex items-center gap-3 text-xs text-gray-500">
+                    <div className="app-text-caption flex items-center gap-3 text-gray-500">
                       <div className="flex items-center gap-1.5">
-                        <div className="w-5 h-5 rounded-full bg-clickup-purple flex items-center justify-center text-[10px] font-bold text-white">
+                        <div className="app-text-micro flex h-5 w-5 items-center justify-center rounded-full bg-clickup-purple font-bold text-white">
                           {selectedDoc.owner.split(' ').map(n => n[0]).join('')}
                         </div>
-                        <span className="text-clickup-text font-medium">{selectedDoc.owner}</span>
+                        <span className="app-text-control text-clickup-text">{selectedDoc.owner}</span>
                       </div>
                       <span>•</span>
                       <div className="flex items-center gap-1">
@@ -304,22 +300,22 @@ export const DocsView = () => {
                   </div>
 
                   <div className="flex flex-wrap gap-4 pt-4">
-                    <button className="flex items-center gap-2 text-xs text-gray-500 hover:text-gray-300">
+                    <button className="app-text-control-sm flex items-center gap-2 text-gray-500 hover:text-gray-300">
                       <FileText size={14} />
                       <span>Start writing</span>
                     </button>
-                    <button className="flex items-center gap-2 text-xs text-gray-500 hover:text-gray-300">
+                    <button className="app-text-control-sm flex items-center gap-2 text-gray-500 hover:text-gray-300">
                       <Files size={14} />
                       <span>Blank wiki</span>
                     </button>
-                    <button className="flex items-center gap-2 text-xs text-clickup-purple hover:opacity-80">
+                    <button className="app-text-control-sm flex items-center gap-2 text-clickup-purple hover:opacity-80">
                       <Sparkles size={14} />
                       <span>Write with AI</span>
                     </button>
                   </div>
 
                   <div className="space-y-4 pt-8">
-                    <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Add new</span>
+                    <span className="app-text-overline text-gray-500">Add new</span>
                     <div className="grid grid-cols-2 gap-2">
                       {[
                         { icon: Files, label: 'Table' },
@@ -327,7 +323,7 @@ export const DocsView = () => {
                         { icon: Files, label: 'ClickUp List' },
                         { icon: FileText, label: 'Subpage' },
                       ].map(item => (
-                        <button key={item.label} className="flex items-center gap-3 p-2 hover:bg-clickup-hover rounded-md text-xs text-gray-400 transition-colors">
+                        <button key={item.label} className="app-text-body-sm flex items-center gap-3 rounded-md p-2 text-gray-400 transition-colors hover:bg-clickup-hover">
                           <item.icon size={14} />
                           <span>{item.label}</span>
                         </button>
@@ -335,7 +331,7 @@ export const DocsView = () => {
                     </div>
                   </div>
 
-                  <div className="prose prose-invert max-w-none pt-8">
+                  <div className="prose dark:prose-invert max-w-none pt-8">
                     <BlockEditor placeholder="Start writing..." uploadFile={uploadFile} resolveFileUrl={resolveFileUrl} />
                   </div>
                 </div>
@@ -361,8 +357,8 @@ export const DocsView = () => {
             <div className="p-8 space-y-6 overflow-y-auto h-full custom-scrollbar">
               <div className="flex items-center justify-between">
                 <div className="space-y-1">
-                  <h1 className="text-xl font-bold text-clickup-text">{activeCategory}</h1>
-                  <p className="text-xs text-gray-500">Manage and organize your documents and wikis</p>
+                  <h1 className="app-text-title-lg text-clickup-text">{activeCategory}</h1>
+                  <p className="app-text-caption text-gray-500">Manage and organize your documents and wikis</p>
                 </div>
                 <div className="flex items-center gap-2">
                   <div className="relative mr-2">
@@ -372,29 +368,29 @@ export const DocsView = () => {
                       placeholder="Search docs..."
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
-                      className="pl-9 pr-4 py-2 bg-clickup-sidebar border border-clickup-border rounded-md text-xs text-clickup-text focus:outline-none focus:border-clickup-purple w-64"
+                      className="app-text-body-sm w-64 rounded-md border border-clickup-border bg-clickup-sidebar py-2 pl-9 pr-4 text-clickup-text focus:border-clickup-purple focus:outline-none"
                     />
                   </div>
-                  <button className="flex items-center gap-2 px-4 py-2 bg-clickup-purple text-white rounded-md text-sm font-medium shadow-lg shadow-purple-500/20 hover:opacity-90 transition-opacity">
+                  <button className="app-text-control flex items-center gap-2 rounded-md bg-clickup-purple px-4 py-2 text-white shadow-lg shadow-purple-500/20 transition-opacity hover:opacity-90">
                     <Plus size={16} />
                     <span>New Doc</span>
                   </button>
-                  <button className="px-4 py-2 border border-clickup-border rounded-md text-sm font-medium text-clickup-text hover:bg-clickup-hover transition-colors">
+                  <button className="app-text-control rounded-md border border-clickup-border px-4 py-2 text-clickup-text transition-colors hover:bg-clickup-hover">
                     New Wiki
                   </button>
                 </div>
               </div>
 
               <div className="flex items-center gap-4 border-b border-clickup-border pb-2">
-                <button className="flex items-center gap-1.5 text-xs font-medium text-gray-500 hover:text-clickup-text px-2 py-1 rounded hover:bg-clickup-hover">
+                <button className="app-text-control-sm flex items-center gap-1.5 rounded px-2 py-1 text-gray-500 hover:bg-clickup-hover hover:text-clickup-text">
                   <Filter size={14} />
                   <span>Filters</span>
                 </button>
-                <button className="flex items-center gap-1.5 text-xs font-medium text-gray-500 hover:text-clickup-text px-2 py-1 rounded hover:bg-clickup-hover">
+                <button className="app-text-control-sm flex items-center gap-1.5 rounded px-2 py-1 text-gray-500 hover:bg-clickup-hover hover:text-clickup-text">
                   <Activity size={14} />
                   <span>Sort</span>
                 </button>
-                <div className="flex items-center gap-2 text-xs text-gray-500 ml-auto">
+                <div className="app-text-caption ml-auto flex items-center gap-2 text-gray-500">
                   <span>Tags:</span>
                   <button className="px-2 py-0.5 bg-clickup-sidebar border border-clickup-border rounded hover:bg-clickup-hover">View all</button>
                 </div>
@@ -418,19 +414,19 @@ export const DocsView = () => {
                       </div>
                       <div>
                         <div className="flex items-start justify-between gap-2">
-                          <h3 className="font-medium text-clickup-text text-sm truncate">{doc.title}</h3>
-                          <span className="text-[10px] px-1.5 py-0.5 bg-clickup-sidebar border border-clickup-border rounded text-gray-500">
+                          <h3 className="app-text-control truncate text-clickup-text">{doc.title}</h3>
+                          <span className="app-text-micro rounded border border-clickup-border bg-clickup-sidebar px-1.5 py-0.5 text-gray-500">
                             {doc.pages.length} {doc.pages.length === 1 ? 'page' : 'pages'}
                           </span>
                         </div>
                         <div className="flex items-center justify-between mt-2">
                           <div className="flex items-center gap-1.5">
-                            <div className="w-4 h-4 rounded-full bg-clickup-purple flex items-center justify-center text-[8px] font-bold text-white">
+                            <div className="app-text-micro flex h-4 w-4 items-center justify-center rounded-full bg-clickup-purple font-bold text-white">
                               {doc.owner.split(' ').map(n => n[0]).join('')}
                             </div>
-                            <span className="text-[10px] text-gray-500">{doc.owner}</span>
+                            <span className="app-text-micro text-gray-500">{doc.owner}</span>
                           </div>
-                          <span className="text-[10px] text-gray-600">{doc.date}</span>
+                          <span className="app-text-micro text-gray-600">{doc.date}</span>
                         </div>
                       </div>
                     </motion.div>
@@ -441,15 +437,15 @@ export const DocsView = () => {
                   <div className="w-24 h-24 bg-clickup-sidebar rounded-full flex items-center justify-center mb-6">
                     <FileSearch size={48} className="text-gray-600 opacity-20" />
                   </div>
-                  <h2 className="text-lg font-bold text-clickup-text mb-2">No Docs found</h2>
-                  <p className="text-sm text-gray-500 max-w-xs mx-auto mb-8">
+                  <h2 className="app-text-title-md mb-2 text-clickup-text">No Docs found</h2>
+                  <p className="app-text-body mb-8 max-w-xs mx-auto text-gray-500">
                     Create anything from project plans to knowledge bases with Docs
                   </p>
                   <div className="flex items-center gap-3">
-                    <button className="px-6 py-2 bg-clickup-purple text-white rounded-md font-bold hover:opacity-90 transition-opacity">
+                    <button className="app-text-control rounded-md bg-clickup-purple px-6 py-2 font-bold text-white transition-opacity hover:opacity-90">
                       New Doc
                     </button>
-                    <button className="px-6 py-2 border border-clickup-border rounded-md font-bold text-clickup-text hover:bg-clickup-hover transition-colors">
+                    <button className="app-text-control rounded-md border border-clickup-border px-6 py-2 font-bold text-clickup-text transition-colors hover:bg-clickup-hover">
                       New Wiki
                     </button>
                   </div>

@@ -12,8 +12,9 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
 from aidoo_api.core.db import get_db_session
+from aidoo_api.domains.auth.access import get_or_create_default_pms_space
 from aidoo_api.domains.auth.dependencies import require_current_user
-from aidoo_api.domains.auth.models import Team, User
+from aidoo_api.domains.auth.models import Team, TeamMember, User
 from aidoo_api.domains.auth.security import new_id
 from aidoo_api.core.settings import get_settings
 from aidoo_api.core.storage import get_minio_client
@@ -40,6 +41,8 @@ from aidoo_api.domains.pms.models import (
     ProjectMember,
     ProjectStatus,
     ScheduleDependency,
+    SpaceDoc,
+    SpaceDocPage,
     TaskTemplate,
     TimeEntry,
 )
@@ -91,7 +94,7 @@ class ListParams(BaseModel):
 
 
 class ProjectCreateRequest(BaseModel):
-    key: str = Field(..., min_length=2, max_length=24, pattern=r"^[A-Za-z0-9_-]+$")
+    key: str | None = Field(default=None, min_length=2, max_length=24, pattern=r"^[A-Za-z0-9_-]+$")
     name: str = Field(..., min_length=2, max_length=140)
     description: str = Field(default="", max_length=4000)
     team_id: str | None = None
@@ -595,6 +598,115 @@ def _paginate[T](items: list[T], page: int, page_size: int) -> tuple[list[T], in
     return items[start:end], total
 
 
+PROJECT_ROLE_RANK = {
+    "viewer": 0,
+    "member": 1,
+    "editor": 2,
+    "admin": 3,
+    "owner": 4,
+}
+SPACE_TEAM_EDITOR_ROLES = {"member", "team_admin", "workspace_admin", "admin", "owner", "editor"}
+SPACE_TEAM_MANAGER_ROLES = {"team_admin", "workspace_admin", "admin", "owner"}
+PROJECT_EDITOR_ROLES = {"member", "editor", "admin", "owner"}
+PROJECT_MANAGER_ROLES = {"admin", "owner"}
+
+
+def _best_project_role(db: Session, user: User, space_id: str) -> str | None:
+    roles = list(
+        db.scalars(
+            select(ProjectMember.role)
+            .join(Project, Project.id == ProjectMember.project_id)
+            .where(
+                ProjectMember.user_id == user.id,
+                Project.team_id == space_id,
+            )
+        )
+    )
+    if not roles:
+        return None
+    return max(roles, key=lambda role: PROJECT_ROLE_RANK.get(role, -1))
+
+
+def _ensure_space_access(db: Session, user: User, space_id: str) -> tuple[Team, str]:
+    team = db.scalar(
+        select(Team)
+        .options(selectinload(Team.members))
+        .where(Team.id == space_id)
+    )
+    if team is None:
+        raise HTTPException(status_code=404, detail="Space not found.")
+
+    if user.is_admin:
+        return team, "owner"
+
+    team_membership = next((member for member in team.members if member.user_id == user.id), None)
+    if team_membership is not None:
+        return team, team_membership.role
+
+    project_role = _best_project_role(db, user, space_id)
+    if project_role is not None:
+        return team, project_role
+
+    raise HTTPException(status_code=403, detail="Space access required.")
+
+
+def _ensure_space_editor(db: Session, user: User, space_id: str) -> tuple[Team, str]:
+    team, role = _ensure_space_access(db, user, space_id)
+    if user.is_admin:
+        return team, role
+
+    if role in SPACE_TEAM_EDITOR_ROLES or role in PROJECT_EDITOR_ROLES:
+        return team, role
+
+    raise HTTPException(status_code=403, detail="Viewer role cannot modify space data.")
+
+
+def _ensure_space_manager(db: Session, user: User, space_id: str) -> tuple[Team, str]:
+    team, role = _ensure_space_access(db, user, space_id)
+    if user.is_admin:
+        return team, role
+
+    if role in SPACE_TEAM_MANAGER_ROLES or role in PROJECT_MANAGER_ROLES:
+        return team, role
+
+    raise HTTPException(status_code=403, detail="Space owner/admin access required.")
+
+
+def _accessible_space_ids(db: Session, user: User) -> set[str]:
+    if user.is_admin:
+        return set(db.scalars(select(Team.id)))
+
+    space_ids = set(
+        db.scalars(
+            select(TeamMember.team_id).where(TeamMember.user_id == user.id)
+        )
+    )
+    space_ids.update(
+        team_id
+        for team_id in db.scalars(
+            select(Project.team_id)
+            .join(ProjectMember, ProjectMember.project_id == Project.id)
+            .where(
+                ProjectMember.user_id == user.id,
+                Project.team_id.is_not(None),
+            )
+        )
+        if team_id is not None
+    )
+    return space_ids
+
+
+def _validate_folder_membership(db: Session, team_id: str, folder_id: str | None) -> None:
+    if folder_id is None:
+        return
+
+    folder = db.scalar(select(Folder).where(Folder.id == folder_id))
+    if folder is None:
+        raise HTTPException(status_code=404, detail="Folder not found.")
+    if folder.team_id != team_id:
+        raise HTTPException(status_code=400, detail="Folder must belong to the same space.")
+
+
 def _ensure_project_access(db: Session, user: User, project_id: str) -> tuple[Project, str]:
     project = db.scalar(
         select(Project)
@@ -843,6 +955,33 @@ DEFAULT_PROJECT_STATUSES: list[tuple[str, str, str, str, int]] = [
 ]
 
 
+def _auto_key_from_name(name: str) -> str:
+    """Generate a short key from name (initials of words, or romanized first chars)."""
+    import re as _re
+    import unicodedata as _ud
+
+    cleaned = _ud.normalize("NFKD", name).encode("ascii", "ignore").decode()
+    cleaned = _re.sub(r"[^A-Za-z0-9\\s]", "", cleaned).strip()
+    if cleaned:
+        words = cleaned.upper().split()
+        key = "".join(w[0] for w in words if w)[:6]
+        if len(key) >= 2:
+            return key
+        return cleaned[:6].upper()
+    return "LS"
+
+
+def _unique_key(db: Session, base_name: str) -> str:
+    """Generate a unique project key from a name."""
+    resolved = _auto_key_from_name(base_name)
+    base = resolved
+    counter = 1
+    while db.scalar(select(Project).where(func.lower(Project.key) == resolved.lower())):
+        resolved = f"{base}{counter}"
+        counter += 1
+    return resolved
+
+
 def _create_default_statuses(db: Session, project_id: str) -> None:
     for slug, name, color, category, sort_order in DEFAULT_PROJECT_STATUSES:
         db.add(
@@ -1029,7 +1168,13 @@ def _set_issue_labels(db: Session, issue: Issue, label_ids: list[str], project: 
         issue.label_links.append(IssueLabel(id=new_id(), label_id=label_id))
 
 
-def _get_issue_for_user(db: Session, user: User, issue_id: str) -> tuple[Issue, Project]:
+def _get_issue_for_user(
+    db: Session,
+    user: User,
+    issue_id: str,
+    *,
+    require_editor: bool = False,
+) -> tuple[Issue, Project]:
     issue = db.scalar(
         select(Issue)
         .options(
@@ -1059,11 +1204,15 @@ def _get_issue_for_user(db: Session, user: User, issue_id: str) -> tuple[Issue, 
     if issue is None:
         raise HTTPException(status_code=404, detail="Issue not found.")
 
-    project, _ = _ensure_project_access(db, user, issue.project_id)
+    if require_editor:
+        project, _ = _ensure_project_editor(db, user, issue.project_id)
+    else:
+        project, _ = _ensure_project_access(db, user, issue.project_id)
     return issue, project
 
 
 @router.get("/projects", response_model=ProjectListResponse)
+@router.get("/lists", response_model=ProjectListResponse)
 def list_projects(
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
@@ -1125,31 +1274,60 @@ def list_projects(
     return ProjectListResponse(items=page_items, total=total, page=page, page_size=page_size)
 
 
+@router.get("/spaces/{space_id}/lists", response_model=ProjectListResponse)
+def list_space_lists(
+    space_id: str,
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=100),
+    sort_by: str = Query(default="updated_at"),
+    sort_dir: Literal["asc", "desc"] = Query(default="desc"),
+    q: str = Query(default=""),
+    archived: bool | None = None,
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+) -> ProjectListResponse:
+    _ensure_space_access(db, current_user, space_id)
+    return list_projects(
+        page=page,
+        page_size=page_size,
+        sort_by=sort_by,
+        sort_dir=sort_dir,
+        q=q,
+        archived=archived,
+        team_id=space_id,
+        db=db,
+        current_user=current_user,
+    )
+
+
 @router.post("/projects", response_model=ProjectListItem, status_code=status.HTTP_201_CREATED)
+@router.post("/lists", response_model=ProjectListItem, status_code=status.HTTP_201_CREATED)
 def create_project(
     payload: ProjectCreateRequest,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
 ) -> ProjectListItem:
-    existing = db.scalar(select(Project).where(func.lower(Project.key) == payload.key.lower()))
-    if existing is not None:
-        raise HTTPException(status_code=409, detail="Project key already exists.")
+    resolved_key = payload.key.upper() if payload.key else _unique_key(db, payload.name)
 
-    # Validate team_id if provided
     resolved_team_name: str | None = None
-    if payload.team_id:
-        team = db.scalar(select(Team).where(Team.id == payload.team_id))
-        if team is None:
-            raise HTTPException(status_code=404, detail="Team not found.")
+    resolved_team_id = payload.team_id
+    if resolved_team_id:
+        team, _role = _ensure_space_editor(db, current_user, resolved_team_id)
         resolved_team_name = team.name
+    else:
+        team = get_or_create_default_pms_space(db)
+        resolved_team_id = team.id
+        resolved_team_name = team.name
+
+    _validate_folder_membership(db, resolved_team_id, payload.folder_id)
 
     project = Project(
         id=new_id(),
-        key=payload.key.upper(),
+        key=resolved_key,
         name=payload.name.strip(),
         description=payload.description.strip(),
         status="active",
-        team_id=payload.team_id,
+        team_id=resolved_team_id,
         folder_id=payload.folder_id,
         created_by_id=current_user.id,
     )
@@ -1179,6 +1357,7 @@ def create_project(
 
 
 @router.get("/projects/{project_id}", response_model=ProjectListItem)
+@router.get("/lists/{project_id}", response_model=ProjectListItem)
 def get_project(
     project_id: str,
     db: Session = Depends(get_db_session),
@@ -1199,6 +1378,7 @@ def get_project(
 
 
 @router.patch("/projects/{project_id}", response_model=ProjectListItem)
+@router.patch("/lists/{project_id}", response_model=ProjectListItem)
 def update_project(
     project_id: str,
     payload: ProjectUpdateRequest,
@@ -1206,10 +1386,17 @@ def update_project(
     current_user: User = Depends(require_current_user),
 ) -> ProjectListItem:
     project, role = _ensure_project_owner(db, current_user, project_id)
-    for field_name in ["name", "description", "status", "archived", "folder_id"]:
+    if "folder_id" in payload.model_fields_set:
+        _validate_folder_membership(db, project.team_id, payload.folder_id)
+        project.folder_id = payload.folder_id
+
+    for field_name in ["name", "description", "status", "archived"]:
+        if field_name not in payload.model_fields_set:
+            continue
         value = getattr(payload, field_name)
-        if value is not None:
-            setattr(project, field_name, value.strip() if isinstance(value, str) else value)
+        if value is None:
+            continue
+        setattr(project, field_name, value.strip() if isinstance(value, str) else value)
     db.commit()
     db.refresh(project)
     project = db.scalar(
@@ -1226,6 +1413,7 @@ def update_project(
 
 
 @router.get("/projects/{project_id}/members", response_model=ProjectMemberListResponse)
+@router.get("/lists/{project_id}/members", response_model=ProjectMemberListResponse)
 def list_project_members(
     project_id: str,
     page: int = Query(default=1, ge=1),
@@ -1251,6 +1439,11 @@ def list_project_members(
 
 @router.post(
     "/projects/{project_id}/members",
+    response_model=ProjectMemberItem,
+    status_code=status.HTTP_201_CREATED,
+)
+@router.post(
+    "/lists/{project_id}/members",
     response_model=ProjectMemberItem,
     status_code=status.HTTP_201_CREATED,
 )
@@ -1285,6 +1478,7 @@ class MemberRoleUpdateRequest(BaseModel):
 
 
 @router.patch("/projects/{project_id}/members/{user_id}/role", response_model=ProjectMemberItem)
+@router.patch("/lists/{project_id}/members/{user_id}/role", response_model=ProjectMemberItem)
 def update_member_role(
     project_id: str,
     user_id: str,
@@ -1311,6 +1505,7 @@ def update_member_role(
 
 
 @router.delete("/projects/{project_id}/members/{user_id}")
+@router.delete("/lists/{project_id}/members/{user_id}")
 def remove_project_member(
     project_id: str,
     user_id: str,
@@ -1329,6 +1524,7 @@ def remove_project_member(
 
 
 @router.get("/projects/{project_id}/milestones", response_model=MilestoneListResponse)
+@router.get("/lists/{project_id}/milestones", response_model=MilestoneListResponse)
 def list_milestones(
     project_id: str,
     page: int = Query(default=1, ge=1),
@@ -1354,6 +1550,11 @@ def list_milestones(
 
 @router.post(
     "/projects/{project_id}/milestones",
+    response_model=MilestoneItem,
+    status_code=status.HTTP_201_CREATED,
+)
+@router.post(
+    "/lists/{project_id}/milestones",
     response_model=MilestoneItem,
     status_code=status.HTTP_201_CREATED,
 )
@@ -1408,6 +1609,7 @@ def update_milestone(
 
 
 @router.get("/projects/{project_id}/labels", response_model=LabelListResponse)
+@router.get("/lists/{project_id}/labels", response_model=LabelListResponse)
 def list_project_labels(
     project_id: str,
     page: int = Query(default=1, ge=1),
@@ -1423,6 +1625,7 @@ def list_project_labels(
 
 
 @router.post("/projects/{project_id}/labels", response_model=LabelItem, status_code=status.HTTP_201_CREATED)
+@router.post("/lists/{project_id}/labels", response_model=LabelItem, status_code=status.HTTP_201_CREATED)
 def create_project_label(
     project_id: str,
     payload: LabelCreateRequest,
@@ -1487,6 +1690,7 @@ def delete_label(
 
 
 @router.get("/projects/{project_id}/issues", response_model=IssueListResponse)
+@router.get("/lists/{project_id}/issues", response_model=IssueListResponse)
 def list_issues(
     project_id: str,
     page: int = Query(default=1, ge=1),
@@ -1574,6 +1778,11 @@ def list_issues(
 
 @router.post(
     "/projects/{project_id}/issues",
+    response_model=IssueListItem,
+    status_code=status.HTTP_201_CREATED,
+)
+@router.post(
+    "/lists/{project_id}/issues",
     response_model=IssueListItem,
     status_code=status.HTTP_201_CREATED,
 )
@@ -1723,13 +1932,22 @@ def update_issue(
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
 ) -> IssueListItem:
-    issue, project = _get_issue_for_user(db, current_user, issue_id)
-    _validate_issue_assignee(project, payload.assignee_id)
-    _validate_milestone(project, payload.milestone_id)
+    issue, project = _get_issue_for_user(db, current_user, issue_id, require_editor=True)
+    if "assignee_id" in payload.model_fields_set:
+        _validate_issue_assignee(project, payload.assignee_id)
+    if "milestone_id" in payload.model_fields_set:
+        _validate_milestone(project, payload.milestone_id)
     if "parent_id" in payload.model_fields_set:
         _validate_parent_issue(db, project, payload.parent_id, issue_id=issue.id)
 
     old_status = issue.status
+    nullable_fields = {
+        "assignee_id",
+        "milestone_id",
+        "start_date",
+        "due_date",
+        "recurrence_rule",
+    }
     field_specs = [
         ("title", "updated title"),
         ("description", "updated description"),
@@ -1745,13 +1963,16 @@ def update_issue(
         ("recurrence_rule", "updated recurrence"),
     ]
     for field_name, message in field_specs:
+        if field_name not in payload.model_fields_set:
+            continue
         value = getattr(payload, field_name)
-        if value is None:
+        if value is None and field_name not in nullable_fields:
             continue
         previous = getattr(issue, field_name)
-        if previous == value:
+        normalized_value = value.strip() if isinstance(value, str) else value
+        if previous == normalized_value:
             continue
-        setattr(issue, field_name, value.strip() if isinstance(value, str) else value)
+        setattr(issue, field_name, normalized_value)
         _log_issue_activity(
             db,
             issue.id,
@@ -1760,7 +1981,7 @@ def update_issue(
             f"{current_user.full_name} {message} for {_issue_reference(issue)}.",
             field_name=field_name,
             from_value=str(previous) if previous is not None else None,
-            to_value=str(value) if value is not None else None,
+            to_value=str(normalized_value) if normalized_value is not None else None,
         )
 
     if "parent_id" in payload.model_fields_set:
@@ -1778,7 +1999,7 @@ def update_issue(
                 to_value=payload.parent_id,
             )
 
-    if payload.description_blocks is not None:
+    if "description_blocks" in payload.model_fields_set:
         issue.description_blocks = payload.description_blocks
         sync_embedded_media(db, payload.description_blocks, "issue", issue.id, current_user)
         _log_issue_activity(
@@ -1841,6 +2062,7 @@ def update_issue(
 
 
 @router.patch("/projects/{project_id}/issues/bulk", response_model=BulkUpdateResponse)
+@router.patch("/lists/{project_id}/issues/bulk", response_model=BulkUpdateResponse)
 def bulk_update_issues(
     project_id: str,
     payload: BulkUpdateRequest,
@@ -1933,7 +2155,7 @@ def delete_issue(
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
 ) -> None:
-    issue, _project = _get_issue_for_user(db, current_user, issue_id)
+    issue, _project = _get_issue_for_user(db, current_user, issue_id, require_editor=True)
     for child in issue.subtasks:
         child.parent_id = None
     media_keys = cleanup_media_for_resource(db, "issue", issue.id)
@@ -1961,7 +2183,7 @@ def create_issue_comment(
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
 ) -> IssueCommentItem:
-    issue, _ = _get_issue_for_user(db, current_user, issue_id)
+    issue, _ = _get_issue_for_user(db, current_user, issue_id, require_editor=True)
     comment = IssueComment(
         id=new_id(),
         issue_id=issue.id,
@@ -2044,8 +2266,8 @@ def create_dependency(
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
 ) -> DependencyItem:
-    predecessor_issue, predecessor_project = _get_issue_for_user(db, current_user, payload.predecessor_id)
-    successor_issue, successor_project = _get_issue_for_user(db, current_user, payload.successor_id)
+    predecessor_issue, predecessor_project = _get_issue_for_user(db, current_user, payload.predecessor_id, require_editor=True)
+    successor_issue, successor_project = _get_issue_for_user(db, current_user, payload.successor_id, require_editor=True)
     if predecessor_project.id != successor_project.id:
         raise HTTPException(status_code=400, detail="Dependencies must stay within the same project.")
 
@@ -2222,7 +2444,7 @@ async def upload_attachment(
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
 ) -> AttachmentItem:
-    issue, project = _get_issue_for_user(db, current_user, issue_id)
+    issue, project = _get_issue_for_user(db, current_user, issue_id, require_editor=True)
     data = await file.read()
     if len(data) > MAX_UPLOAD_SIZE:
         raise HTTPException(status_code=413, detail="File size exceeds 50 MB limit.")
@@ -2296,7 +2518,7 @@ def delete_attachment(
     )
     if attachment is None:
         raise HTTPException(status_code=404, detail="Attachment not found.")
-    _ensure_project_access(db, current_user, attachment.issue.project_id)
+    _ensure_project_editor(db, current_user, attachment.issue.project_id)
 
     settings = get_settings()
     client = get_minio_client()
@@ -2416,7 +2638,7 @@ def create_checklist_item(
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
 ) -> ChecklistItemResponse:
-    issue, _project = _get_issue_for_user(db, current_user, issue_id)
+    issue, _project = _get_issue_for_user(db, current_user, issue_id, require_editor=True)
     item = ChecklistItem(
         id=new_id(),
         issue_id=issue.id,
@@ -2456,7 +2678,7 @@ def update_checklist_item(
     )
     if item is None:
         raise HTTPException(status_code=404, detail="Checklist item not found.")
-    _ensure_project_access(db, current_user, item.issue.project_id)
+    _ensure_project_editor(db, current_user, item.issue.project_id)
 
     if payload.text is not None:
         item.text = payload.text
@@ -2497,7 +2719,7 @@ def delete_checklist_item(
     )
     if item is None:
         raise HTTPException(status_code=404, detail="Checklist item not found.")
-    _ensure_project_access(db, current_user, item.issue.project_id)
+    _ensure_project_editor(db, current_user, item.issue.project_id)
     _log_issue_activity(
         db,
         item.issue_id,
@@ -2517,7 +2739,7 @@ def reorder_checklist(
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
 ) -> Response:
-    _get_issue_for_user(db, current_user, issue_id)
+    _get_issue_for_user(db, current_user, issue_id, require_editor=True)
     items = list(
         db.scalars(
             select(ChecklistItem).where(ChecklistItem.issue_id == issue_id)
@@ -2541,7 +2763,7 @@ def create_time_entry(
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
 ) -> TimeEntryItem:
-    issue, _project = _get_issue_for_user(db, current_user, issue_id)
+    issue, _project = _get_issue_for_user(db, current_user, issue_id, require_editor=True)
     entry = TimeEntry(
         id=new_id(),
         issue_id=issue.id,
@@ -2586,7 +2808,7 @@ def update_time_entry(
     )
     if entry is None:
         raise HTTPException(status_code=404, detail="Time entry not found.")
-    _ensure_project_access(db, current_user, entry.issue.project_id)
+    _ensure_project_editor(db, current_user, entry.issue.project_id)
 
     if payload.duration_minutes is not None:
         entry.duration_minutes = payload.duration_minutes
@@ -2621,7 +2843,7 @@ def delete_time_entry(
     )
     if entry is None:
         raise HTTPException(status_code=404, detail="Time entry not found.")
-    _ensure_project_access(db, current_user, entry.issue.project_id)
+    _ensure_project_editor(db, current_user, entry.issue.project_id)
     _log_issue_activity(
         db,
         entry.issue_id,
@@ -2653,6 +2875,7 @@ def _serialize_status(s: ProjectStatus) -> ProjectStatusItem:
 
 
 @router.get("/projects/{project_id}/statuses", response_model=ProjectStatusListResponse)
+@router.get("/lists/{project_id}/statuses", response_model=ProjectStatusListResponse)
 def list_project_statuses(
     project_id: str,
     db: Session = Depends(get_db_session),
@@ -2682,6 +2905,11 @@ def list_project_statuses(
 
 @router.post(
     "/projects/{project_id}/statuses",
+    response_model=ProjectStatusItem,
+    status_code=status.HTTP_201_CREATED,
+)
+@router.post(
+    "/lists/{project_id}/statuses",
     response_model=ProjectStatusItem,
     status_code=status.HTTP_201_CREATED,
 )
@@ -2730,8 +2958,17 @@ def update_project_status(
     _ensure_project_owner(db, current_user, ps.project_id)
 
     if payload.name is not None:
-        ps.name = payload.name.strip()
-        ps.slug = _slugify(payload.name)
+        normalized_name = payload.name.strip()
+        existing = db.scalar(
+            select(ProjectStatus).where(
+                ProjectStatus.project_id == ps.project_id,
+                ProjectStatus.id != ps.id,
+                func.lower(ProjectStatus.name) == normalized_name.lower(),
+            )
+        )
+        if existing is not None:
+            raise HTTPException(status_code=409, detail="Status with this name already exists.")
+        ps.name = normalized_name
     if payload.color is not None:
         ps.color = payload.color
     if payload.category is not None:
@@ -2776,6 +3013,7 @@ def delete_project_status(
 
 
 @router.get("/projects/{project_id}/export")
+@router.get("/lists/{project_id}/export")
 def export_project_issues(
     project_id: str,
     format: str = Query(default="csv"),
@@ -2863,6 +3101,7 @@ def _serialize_template(t: TaskTemplate) -> TaskTemplateItem:
 
 
 @router.get("/projects/{project_id}/templates", response_model=TaskTemplateListResponse)
+@router.get("/lists/{project_id}/templates", response_model=TaskTemplateListResponse)
 def list_templates(
     project_id: str,
     db: Session = Depends(get_db_session),
@@ -2881,6 +3120,11 @@ def list_templates(
 
 @router.post(
     "/projects/{project_id}/templates",
+    response_model=TaskTemplateItem,
+    status_code=status.HTTP_201_CREATED,
+)
+@router.post(
+    "/lists/{project_id}/templates",
     response_model=TaskTemplateItem,
     status_code=status.HTTP_201_CREATED,
 )
@@ -2953,6 +3197,7 @@ def delete_template(
 
 
 @router.get("/projects/{project_id}/custom-fields", response_model=CustomFieldListResponse)
+@router.get("/lists/{project_id}/custom-fields", response_model=CustomFieldListResponse)
 def list_custom_fields(
     project_id: str,
     db: Session = Depends(get_db_session),
@@ -2983,6 +3228,11 @@ def list_custom_fields(
 
 @router.post(
     "/projects/{project_id}/custom-fields",
+    response_model=CustomFieldItem,
+    status_code=status.HTTP_201_CREATED,
+)
+@router.post(
+    "/lists/{project_id}/custom-fields",
     response_model=CustomFieldItem,
     status_code=status.HTTP_201_CREATED,
 )
@@ -3094,7 +3344,8 @@ def set_issue_assignees(
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
 ) -> list[IssueAssigneeItem]:
-    issue, project = _get_issue_for_user(db, current_user, issue_id)
+    issue, project = _get_issue_for_user(db, current_user, issue_id, require_editor=True)
+    member_ids = {member.user_id for member in project.members}
 
     # Clear existing assignee links
     for link in list(issue.assignee_links):
@@ -3105,9 +3356,11 @@ def set_issue_assignees(
     result: list[IssueAssigneeItem] = []
     validated_user_ids: list[str] = []
     for uid in payload.user_ids:
+        if uid not in member_ids:
+            raise HTTPException(status_code=400, detail="Assignees must be project members.")
         user = db.scalar(select(User).where(User.id == uid))
         if user is None:
-            continue
+            raise HTTPException(status_code=404, detail="User not found.")
         db.add(IssueAssignee(id=new_id(), issue_id=issue_id, user_id=uid))
         result.append(IssueAssigneeItem(user_id=uid, full_name=user.full_name))
         validated_user_ids.append(uid)
@@ -3151,21 +3404,16 @@ def list_folders(
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
 ) -> FolderListResponse:
-    # Only return folders for teams the user has access to
     q = select(Folder).order_by(Folder.sort_order)
     if team_id:
+        _ensure_space_access(db, current_user, team_id)
         q = q.where(Folder.team_id == team_id)
-    if not current_user.is_admin:
-        accessible_team_ids = {
-            m.project.team_id
-            for m in db.scalars(
-                select(ProjectMember)
-                .options(selectinload(ProjectMember.project))
-                .where(ProjectMember.user_id == current_user.id)
-            )
-            if m.project.team_id
-        }
-        q = q.where(Folder.team_id.in_(accessible_team_ids) | Folder.team_id.is_(None))
+    elif not current_user.is_admin:
+        accessible_team_ids = _accessible_space_ids(db, current_user)
+        if accessible_team_ids:
+            q = q.where(Folder.team_id.in_(accessible_team_ids))
+        else:
+            q = q.where(Folder.id == "__none__")
     folders = list(db.scalars(q))
 
     # Count projects per folder
@@ -3196,22 +3444,40 @@ def create_folder(
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
 ) -> FolderItem:
-    if payload.team_id and not current_user.is_admin:
-        team = db.scalar(select(Team).where(Team.id == payload.team_id))
-        if team is None:
-            raise HTTPException(status_code=404, detail="Team not found.")
+    resolved_team_id = payload.team_id
+    if resolved_team_id is None:
+        resolved_team_id = get_or_create_default_pms_space(db).id
+    _ensure_space_manager(db, current_user, resolved_team_id)
     folder = Folder(
         id=new_id(),
-        team_id=payload.team_id,
+        team_id=resolved_team_id,
         name=payload.name.strip(),
         sort_order=payload.sort_order,
     )
     db.add(folder)
+
+    # Auto-create a default list inside the new folder
+    default_key = _unique_key(db, "List")
+    default_project = Project(
+        id=new_id(),
+        key=default_key,
+        name="List",
+        description="",
+        status="active",
+        team_id=resolved_team_id,
+        folder_id=folder.id,
+        created_by_id=current_user.id,
+    )
+    db.add(default_project)
+    db.add(ProjectMember(id=new_id(), project_id=default_project.id, user_id=current_user.id, role="owner"))
+    _create_default_statuses(db, default_project.id)
+    _create_default_labels(db, default_project.id)
+
     db.commit()
     db.refresh(folder)
     return FolderItem(
         id=folder.id, team_id=folder.team_id, name=folder.name,
-        sort_order=folder.sort_order, project_count=0,
+        sort_order=folder.sort_order, project_count=1,
     )
 
 
@@ -3225,6 +3491,9 @@ def update_folder(
     folder = db.scalar(select(Folder).where(Folder.id == folder_id))
     if folder is None:
         raise HTTPException(status_code=404, detail="Folder not found.")
+    if folder.team_id is None:
+        raise HTTPException(status_code=409, detail="Folder space is not set.")
+    _ensure_space_manager(db, current_user, folder.team_id)
     if payload.name is not None:
         folder.name = payload.name.strip()
     if payload.sort_order is not None:
@@ -3247,6 +3516,9 @@ def delete_folder(
     folder = db.scalar(select(Folder).where(Folder.id == folder_id))
     if folder is None:
         raise HTTPException(status_code=404, detail="Folder not found.")
+    if folder.team_id is None:
+        raise HTTPException(status_code=409, detail="Folder space is not set.")
+    _ensure_space_manager(db, current_user, folder.team_id)
     # Unlink projects from this folder (don't delete them)
     for p in db.scalars(select(Project).where(Project.folder_id == folder_id)):
         p.folder_id = None
@@ -3288,6 +3560,7 @@ class AutomationUpdateRequest(BaseModel):
 
 
 @router.get("/projects/{project_id}/automations", response_model=AutomationListResponse)
+@router.get("/lists/{project_id}/automations", response_model=AutomationListResponse)
 def list_automations(
     project_id: str,
     db: Session = Depends(get_db_session),
@@ -3315,6 +3588,11 @@ def list_automations(
 
 @router.post(
     "/projects/{project_id}/automations",
+    response_model=AutomationItem,
+    status_code=status.HTTP_201_CREATED,
+)
+@router.post(
+    "/lists/{project_id}/automations",
     response_model=AutomationItem,
     status_code=status.HTTP_201_CREATED,
 )
@@ -3434,6 +3712,7 @@ def _goal_linked_count(db: Session, goal_id: str) -> int:
 
 
 @router.get("/projects/{project_id}/goals", response_model=GoalListResponse)
+@router.get("/lists/{project_id}/goals", response_model=GoalListResponse)
 def list_goals(
     project_id: str,
     db: Session = Depends(get_db_session),
@@ -3458,6 +3737,7 @@ def list_goals(
 
 
 @router.post("/projects/{project_id}/goals", response_model=GoalItem, status_code=status.HTTP_201_CREATED)
+@router.post("/lists/{project_id}/goals", response_model=GoalItem, status_code=status.HTTP_201_CREATED)
 def create_goal(
     project_id: str,
     payload: GoalCreateRequest,
@@ -3608,7 +3888,200 @@ def _serialize_doc(d: Doc) -> DocItem:
     )
 
 
+# ── Space Docs (collections) ─────────────────────────────────────────
+
+
+class SpaceDocItem(BaseModel):
+    id: str
+    team_id: str
+    title: str
+    created_by_id: str
+    created_by_name: str
+    created_at: datetime
+    updated_at: datetime
+
+
+class SpaceDocListResponse(BaseModel):
+    items: list[SpaceDocItem]
+
+
+class SpaceDocCreateRequest(BaseModel):
+    title: str = Field(..., min_length=1, max_length=200)
+
+
+class SpaceDocUpdateRequest(BaseModel):
+    title: str | None = Field(default=None, min_length=1, max_length=200)
+
+
+def _serialize_space_doc(doc: SpaceDoc) -> SpaceDocItem:
+    return SpaceDocItem(
+        id=doc.id,
+        team_id=doc.team_id,
+        title=doc.title,
+        created_by_id=doc.created_by_id,
+        created_by_name=doc.created_by.name if doc.created_by else "",
+        created_at=doc.created_at,
+        updated_at=doc.updated_at,
+    )
+
+
+@router.get("/spaces/{space_id}/docs", response_model=SpaceDocListResponse)
+def list_space_docs(
+    space_id: str,
+    context: AuthContext = Depends(require_team_access(lambda space_id=None, **_: space_id)),
+    db: Session = Depends(get_db_session),
+) -> SpaceDocListResponse:
+    items = db.scalars(
+        select(SpaceDoc)
+        .options(joinedload(SpaceDoc.created_by))
+        .where(SpaceDoc.team_id == space_id)
+        .order_by(SpaceDoc.updated_at.desc())
+    ).all()
+    return SpaceDocListResponse(items=[_serialize_space_doc(d) for d in items])
+
+
+@router.post("/spaces/{space_id}/docs", response_model=SpaceDocItem, status_code=status.HTTP_201_CREATED)
+def create_space_doc(
+    space_id: str,
+    payload: SpaceDocCreateRequest,
+    context: AuthContext = Depends(require_team_editor(lambda space_id=None, **_: space_id)),
+    db: Session = Depends(get_db_session),
+) -> SpaceDocItem:
+    doc = SpaceDoc(
+        id=_uuid(),
+        team_id=space_id,
+        title=payload.title.strip(),
+        created_by_id=context.user.id,
+    )
+    db.add(doc)
+    db.commit()
+    db.refresh(doc, ["created_by"])
+    return _serialize_space_doc(doc)
+
+
+@router.get("/space-docs/{doc_id}", response_model=SpaceDocItem)
+def get_space_doc(
+    doc_id: str,
+    context: AuthContext = Depends(require_permission("pms.read")),
+    db: Session = Depends(get_db_session),
+) -> SpaceDocItem:
+    doc = db.scalar(
+        select(SpaceDoc).options(joinedload(SpaceDoc.created_by)).where(SpaceDoc.id == doc_id)
+    )
+    if doc is None:
+        raise HTTPException(status_code=404, detail="SpaceDoc not found.")
+    return _serialize_space_doc(doc)
+
+
+@router.patch("/space-docs/{doc_id}", response_model=SpaceDocItem)
+def update_space_doc(
+    doc_id: str,
+    payload: SpaceDocUpdateRequest,
+    context: AuthContext = Depends(require_permission("pms.write")),
+    db: Session = Depends(get_db_session),
+) -> SpaceDocItem:
+    doc = db.scalar(
+        select(SpaceDoc).options(joinedload(SpaceDoc.created_by)).where(SpaceDoc.id == doc_id)
+    )
+    if doc is None:
+        raise HTTPException(status_code=404, detail="SpaceDoc not found.")
+    if payload.title is not None:
+        doc.title = payload.title.strip()
+    db.add(doc)
+    db.commit()
+    db.refresh(doc)
+    return _serialize_space_doc(doc)
+
+
+@router.delete("/space-docs/{doc_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_space_doc(
+    doc_id: str,
+    context: AuthContext = Depends(require_permission("pms.write")),
+    db: Session = Depends(get_db_session),
+) -> None:
+    doc = db.scalar(select(SpaceDoc).where(SpaceDoc.id == doc_id))
+    if doc is None:
+        raise HTTPException(status_code=404, detail="SpaceDoc not found.")
+    db.delete(doc)
+    db.commit()
+
+
+# ── Space Doc Pages ──────────────────────────────────────────────────
+
+
+class SpaceDocPageItem(BaseModel):
+    id: str
+    team_id: str
+    parent_id: str | None = None
+    title: str
+    content_blocks: list[dict] | None = None
+    sort_order: int
+    created_by_id: str
+    created_by_name: str
+    created_at: datetime
+    updated_at: datetime
+
+
+class SpaceDocPageListResponse(BaseModel):
+    items: list[SpaceDocPageItem]
+
+
+class SpaceDocPageCreateRequest(BaseModel):
+    title: str = Field(..., min_length=1, max_length=200)
+    parent_id: str | None = None
+    content_blocks: list[dict] | None = None
+    sort_order: int | None = None
+
+
+class SpaceDocPageUpdateRequest(BaseModel):
+    title: str | None = Field(default=None, min_length=1, max_length=200)
+    parent_id: str | None = None
+    content_blocks: list[dict] | None = None
+    sort_order: int | None = None
+
+
+def _serialize_space_doc_page(page: SpaceDocPage) -> SpaceDocPageItem:
+    return SpaceDocPageItem(
+        id=page.id,
+        team_id=page.team_id,
+        parent_id=page.parent_id,
+        title=page.title,
+        content_blocks=page.content_blocks,
+        sort_order=page.sort_order,
+        created_by_id=page.created_by_id,
+        created_by_name=getattr(page.created_by, "full_name", ""),
+        created_at=page.created_at,
+        updated_at=page.updated_at,
+    )
+
+
+def _validate_space_doc_parent(db: Session, team_id: str, parent_id: str | None, *, page_id: str | None = None) -> None:
+    if parent_id is None:
+        return
+
+    parent = db.scalar(select(SpaceDocPage).where(SpaceDocPage.id == parent_id))
+    if parent is None:
+        raise HTTPException(status_code=404, detail="Parent page not found.")
+    if parent.team_id != team_id:
+        raise HTTPException(status_code=400, detail="Parent page must belong to the same space.")
+    if page_id is not None and parent.id == page_id:
+        raise HTTPException(status_code=409, detail="Page cannot be its own parent.")
+
+    visited: set[str] = set()
+    ancestor: SpaceDocPage | None = parent
+    while ancestor is not None:
+        if ancestor.id in visited:
+            raise HTTPException(status_code=409, detail="Page parent relationship cannot contain a cycle.")
+        visited.add(ancestor.id)
+        if page_id is not None and ancestor.parent_id == page_id:
+            raise HTTPException(status_code=409, detail="Page parent relationship cannot contain a cycle.")
+        if ancestor.parent_id is None:
+            break
+        ancestor = db.scalar(select(SpaceDocPage).where(SpaceDocPage.id == ancestor.parent_id))
+
+
 @router.get("/projects/{project_id}/docs", response_model=DocListResponse)
+@router.get("/lists/{project_id}/docs", response_model=DocListResponse)
 def list_docs(
     project_id: str,
     db: Session = Depends(get_db_session),
@@ -3627,6 +4100,7 @@ def list_docs(
 
 
 @router.post("/projects/{project_id}/docs", response_model=DocItem, status_code=status.HTTP_201_CREATED)
+@router.post("/lists/{project_id}/docs", response_model=DocItem, status_code=status.HTTP_201_CREATED)
 def create_doc(
     project_id: str,
     payload: DocCreateRequest,
@@ -3643,7 +4117,7 @@ def create_doc(
     db.add(d)
     db.flush()
     if payload.content_blocks:
-        sync_embedded_media(db, "doc", d.id, payload.content_blocks)
+        sync_embedded_media(db, payload.content_blocks, "doc", d.id, current_user)
     db.commit()
     d = db.scalar(select(Doc).options(selectinload(Doc.created_by)).where(Doc.id == d.id))
     return _serialize_doc(d)
@@ -3675,9 +4149,9 @@ def update_doc(
     _ensure_project_editor(db, current_user, d.project_id)
     if payload.title is not None:
         d.title = payload.title.strip()
-    if payload.content_blocks is not None:
+    if "content_blocks" in payload.model_fields_set:
         d.content_blocks = payload.content_blocks
-        sync_embedded_media(db, "doc", d.id, payload.content_blocks)
+        sync_embedded_media(db, payload.content_blocks, "doc", d.id, current_user)
     db.commit()
     db.refresh(d)
     return _serialize_doc(d)
@@ -3693,7 +4167,149 @@ def delete_doc(
     if d is None:
         raise HTTPException(status_code=404, detail="Doc not found.")
     _ensure_project_editor(db, current_user, d.project_id)
-    cleanup_media_for_resource(db, "doc", d.id)
+    media_keys = cleanup_media_for_resource(db, "doc", d.id)
     db.delete(d)
     db.commit()
+    if media_keys:
+        settings = get_settings()
+        client = get_minio_client()
+        for key in media_keys:
+            try:
+                client.remove_object(settings.minio_bucket, key)
+            except Exception:
+                pass
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.get("/spaces/{space_id}/docs/pages", response_model=SpaceDocPageListResponse)
+def list_space_doc_pages(
+    space_id: str,
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+) -> SpaceDocPageListResponse:
+    _ensure_space_access(db, current_user, space_id)
+    pages = list(
+        db.scalars(
+            select(SpaceDocPage)
+            .options(selectinload(SpaceDocPage.created_by))
+            .where(SpaceDocPage.team_id == space_id)
+            .order_by(SpaceDocPage.parent_id, SpaceDocPage.sort_order, SpaceDocPage.created_at)
+        )
+    )
+    return SpaceDocPageListResponse(items=[_serialize_space_doc_page(page) for page in pages])
+
+
+@router.post("/spaces/{space_id}/docs/pages", response_model=SpaceDocPageItem, status_code=status.HTTP_201_CREATED)
+def create_space_doc_page(
+    space_id: str,
+    payload: SpaceDocPageCreateRequest,
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+) -> SpaceDocPageItem:
+    _ensure_space_editor(db, current_user, space_id)
+    _validate_space_doc_parent(db, space_id, payload.parent_id)
+    sort_order = payload.sort_order
+    if sort_order is None:
+        sibling_count = db.scalar(
+            select(func.count())
+            .select_from(SpaceDocPage)
+            .where(
+                SpaceDocPage.team_id == space_id,
+                SpaceDocPage.parent_id == payload.parent_id,
+            )
+        ) or 0
+        sort_order = sibling_count
+
+    page = SpaceDocPage(
+        id=new_id(),
+        team_id=space_id,
+        parent_id=payload.parent_id,
+        title=payload.title.strip(),
+        content_blocks=payload.content_blocks,
+        sort_order=sort_order,
+        created_by_id=current_user.id,
+    )
+    db.add(page)
+    db.flush()
+    if payload.content_blocks:
+        sync_embedded_media(db, payload.content_blocks, "space_doc_page", page.id, current_user)
+    db.commit()
+    page = db.scalar(
+        select(SpaceDocPage)
+        .options(selectinload(SpaceDocPage.created_by))
+        .where(SpaceDocPage.id == page.id)
+    )
+    return _serialize_space_doc_page(page)
+
+
+@router.get("/space-doc-pages/{page_id}", response_model=SpaceDocPageItem)
+def get_space_doc_page(
+    page_id: str,
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+) -> SpaceDocPageItem:
+    page = db.scalar(
+        select(SpaceDocPage)
+        .options(selectinload(SpaceDocPage.created_by))
+        .where(SpaceDocPage.id == page_id)
+    )
+    if page is None:
+        raise HTTPException(status_code=404, detail="Space doc page not found.")
+    _ensure_space_access(db, current_user, page.team_id)
+    return _serialize_space_doc_page(page)
+
+
+@router.patch("/space-doc-pages/{page_id}", response_model=SpaceDocPageItem)
+def update_space_doc_page(
+    page_id: str,
+    payload: SpaceDocPageUpdateRequest,
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+) -> SpaceDocPageItem:
+    page = db.scalar(
+        select(SpaceDocPage)
+        .options(selectinload(SpaceDocPage.created_by))
+        .where(SpaceDocPage.id == page_id)
+    )
+    if page is None:
+        raise HTTPException(status_code=404, detail="Space doc page not found.")
+    _ensure_space_editor(db, current_user, page.team_id)
+    if "parent_id" in payload.model_fields_set:
+        _validate_space_doc_parent(db, page.team_id, payload.parent_id, page_id=page.id)
+        page.parent_id = payload.parent_id
+    if "title" in payload.model_fields_set and payload.title is not None:
+        page.title = payload.title.strip()
+    if "content_blocks" in payload.model_fields_set:
+        page.content_blocks = payload.content_blocks
+        sync_embedded_media(db, payload.content_blocks, "space_doc_page", page.id, current_user)
+    if "sort_order" in payload.model_fields_set and payload.sort_order is not None:
+        page.sort_order = payload.sort_order
+    db.commit()
+    db.refresh(page)
+    return _serialize_space_doc_page(page)
+
+
+@router.delete("/space-doc-pages/{page_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_space_doc_page(
+    page_id: str,
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+) -> Response:
+    page = db.scalar(select(SpaceDocPage).where(SpaceDocPage.id == page_id))
+    if page is None:
+        raise HTTPException(status_code=404, detail="Space doc page not found.")
+    _ensure_space_editor(db, current_user, page.team_id)
+    media_keys = cleanup_media_for_resource(db, "space_doc_page", page.id)
+    for child in db.scalars(select(SpaceDocPage).where(SpaceDocPage.parent_id == page.id)):
+        child.parent_id = None
+    db.delete(page)
+    db.commit()
+    if media_keys:
+        settings = get_settings()
+        client = get_minio_client()
+        for key in media_keys:
+            try:
+                client.remove_object(settings.minio_bucket, key)
+            except Exception:
+                pass
     return Response(status_code=status.HTTP_204_NO_CONTENT)

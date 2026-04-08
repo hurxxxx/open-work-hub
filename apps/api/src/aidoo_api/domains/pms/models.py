@@ -563,3 +563,74 @@ class Doc(Base):
         nullable=False,
     )
     created_by = relationship("User")
+
+
+class SpaceDoc(Base):
+    """A named document collection within a space (team)."""
+
+    __tablename__ = "pms_space_docs"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    team_id: Mapped[str] = mapped_column(ForeignKey("teams.id"), index=True)
+    title: Mapped[str] = mapped_column(String(200))
+    created_by_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        default=utcnow_naive,
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        default=utcnow_naive,
+        onupdate=utcnow_naive,
+        nullable=False,
+    )
+    created_by = relationship("User")
+    pages: Mapped[list["SpaceDocPage"]] = relationship(
+        back_populates="doc",
+        cascade="all, delete-orphan",
+    )
+
+
+class SpaceDocPage(Base):
+    """Pages within a SpaceDoc collection."""
+
+    __tablename__ = "pms_space_doc_pages"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    team_id: Mapped[str] = mapped_column(ForeignKey("teams.id"), index=True)
+    space_doc_id: Mapped[str | None] = mapped_column(
+        ForeignKey("pms_space_docs.id"),
+        nullable=True,
+        index=True,
+    )
+    parent_id: Mapped[str | None] = mapped_column(
+        ForeignKey("pms_space_doc_pages.id"),
+        nullable=True,
+        index=True,
+    )
+    title: Mapped[str] = mapped_column(String(200))
+    content_blocks: Mapped[list[dict] | None] = mapped_column(JSON, nullable=True)
+    sort_order: Mapped[int] = mapped_column(Integer, default=0)
+    created_by_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        default=utcnow_naive,
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        default=utcnow_naive,
+        onupdate=utcnow_naive,
+        nullable=False,
+    )
+    created_by = relationship("User")
+    doc: Mapped["SpaceDoc | None"] = relationship(back_populates="pages")
+    parent: Mapped["SpaceDocPage | None"] = relationship(
+        remote_side="SpaceDocPage.id",
+        back_populates="children",
+    )
+    children: Mapped[list["SpaceDocPage"]] = relationship(
+        back_populates="parent",
+        cascade="all, delete-orphan",
+    )

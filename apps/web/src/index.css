@@ -3,7 +3,7 @@
 @source "../../../packages/ui/src";
 
 @theme {
-  --font-sans: "IBM Plex Sans KR", "IBM Plex Sans", "Pretendard", sans-serif;
+  --font-sans: "Pretendard Variable", "Pretendard", "IBM Plex Sans KR", "IBM Plex Sans", sans-serif;
   --color-clickup-bg: var(--clickup-bg);
   --color-clickup-sidebar: var(--clickup-sidebar);
   --color-clickup-border: var(--clickup-border);
@@ -55,6 +55,13 @@
     @apply bg-clickup-bg text-clickup-text font-sans antialiased transition-colors duration-300;
   }
 
+  button,
+  input,
+  select,
+  textarea {
+    font: inherit;
+  }
+
   /* Custom scrollbar */
   .custom-scrollbar::-webkit-scrollbar {
     width: 6px;
@@ -79,6 +86,93 @@
   
   .sidebar-item.active {
     @apply bg-clickup-hover text-clickup-text font-medium;
+  }
+
+  .sidebar-submenu-item {
+    @apply flex min-h-8 items-center gap-2 rounded-md px-3 py-1.5 text-left text-[12px] leading-5 text-gray-500 transition-colors hover:bg-clickup-hover hover:text-gray-300 no-underline;
+  }
+
+  .sidebar-submenu-item-active {
+    @apply bg-clickup-hover text-clickup-text;
+  }
+
+  .sidebar-submenu-group {
+    @apply flex min-h-8 items-center gap-2 rounded-md px-3 py-1.5 text-[12px] leading-5 text-gray-500;
+  }
+
+  .sidebar-submenu-label {
+    @apply min-w-0 flex-1 truncate text-[12px] leading-5;
+  }
+
+  .sidebar-submenu-meta {
+    @apply shrink-0 text-[11px] leading-5 text-clickup-text/30;
+  }
+
+  .app-text-title-lg {
+    font-size: var(--ui-text-h2);
+    line-height: 1.25;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+  }
+
+  .app-text-title-xl {
+    font-size: var(--ui-text-h1);
+    line-height: 1.1;
+    font-weight: 700;
+    letter-spacing: -0.03em;
+  }
+
+  .app-text-title-md {
+    font-size: var(--ui-text-h3);
+    line-height: 1.3;
+    font-weight: 600;
+    letter-spacing: -0.015em;
+  }
+
+  .app-text-body {
+    font-size: var(--ui-text-body);
+    line-height: 1.45;
+  }
+
+  .app-text-body-sm {
+    font-size: var(--ui-text-body-sm);
+    line-height: 1.45;
+  }
+
+  .app-text-caption {
+    font-size: var(--ui-text-caption);
+    line-height: 1.4;
+  }
+
+  .app-text-micro {
+    font-size: var(--ui-text-micro);
+    line-height: 1.35;
+  }
+
+  .app-text-label {
+    font-size: var(--ui-text-label);
+    line-height: 1.35;
+    font-weight: 600;
+  }
+
+  .app-text-overline {
+    font-size: var(--ui-text-overline);
+    line-height: 1.3;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .app-text-control {
+    font-size: var(--ui-text-body);
+    line-height: 1.4;
+    font-weight: 500;
+  }
+
+  .app-text-control-sm {
+    font-size: var(--ui-text-body-sm);
+    line-height: 1.4;
+    font-weight: 500;
   }
 
   .card {

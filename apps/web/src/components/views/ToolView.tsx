@@ -25,8 +25,8 @@ export const ToolView = ({ item }: { item: NavItem }) => {
               <item.icon size={32} className="text-clickup-purple" />
             </div>
             <div>
-              <h1 className="text-3xl font-bold text-clickup-text mb-2">{item.title}</h1>
-              <p className="text-gray-500 dark:text-gray-400">{item.description}</p>
+              <h1 className="app-text-title-lg mb-2 text-clickup-text">{item.title}</h1>
+              <p className="app-text-body text-gray-500 dark:text-gray-400">{item.description}</p>
             </div>
           </div>
           <div className="flex gap-2">
@@ -42,24 +42,24 @@ export const ToolView = ({ item }: { item: NavItem }) => {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <div className="md:col-span-2 space-y-6">
             <div className="space-y-4">
-              <label className="text-sm font-medium text-gray-500 dark:text-gray-400">Input Content</label>
+              <label className="app-text-control text-gray-500 dark:text-gray-400">Input Content</label>
               <textarea 
-                className="w-full h-64 bg-clickup-bg border border-clickup-border rounded-xl p-6 text-clickup-text focus:outline-none focus:border-clickup-purple transition-all resize-none leading-relaxed"
+                className="app-text-body h-64 w-full resize-none rounded-xl border border-clickup-border bg-clickup-bg p-6 leading-relaxed text-clickup-text transition-all focus:border-clickup-purple focus:outline-none"
                 placeholder="여기에 내용을 입력하거나 파일을 업로드하세요..."
               />
             </div>
             <div className="flex items-center justify-between">
               <div className="flex gap-2">
-                <button className="flex items-center gap-2 px-4 py-2 bg-clickup-sidebar border border-clickup-border hover:bg-clickup-hover text-clickup-text rounded-lg text-sm font-medium transition-all">
+                <button className="app-text-control flex items-center gap-2 rounded-lg border border-clickup-border bg-clickup-sidebar px-4 py-2 text-clickup-text transition-all hover:bg-clickup-hover">
                   <FilePlus size={18} />
                   <span>파일 업로드</span>
                 </button>
-                <button className="flex items-center gap-2 px-4 py-2 bg-clickup-sidebar border border-clickup-border hover:bg-clickup-hover text-clickup-text rounded-lg text-sm font-medium transition-all">
+                <button className="app-text-control flex items-center gap-2 rounded-lg border border-clickup-border bg-clickup-sidebar px-4 py-2 text-clickup-text transition-all hover:bg-clickup-hover">
                   <Mic size={18} />
                   <span>음성 입력</span>
                 </button>
               </div>
-              <button className="flex items-center gap-2 px-8 py-2.5 bg-clickup-purple hover:bg-opacity-90 text-white rounded-lg font-semibold transition-all shadow-lg shadow-purple-500/20">
+              <button className="app-text-control flex items-center gap-2 rounded-lg bg-clickup-purple px-8 py-2.5 font-semibold text-white shadow-lg shadow-purple-500/20 transition-all hover:bg-opacity-90">
                 <Brain size={18} />
                 <span>AI 실행하기</span>
               </button>
@@ -68,7 +68,7 @@ export const ToolView = ({ item }: { item: NavItem }) => {
 
           <div className="space-y-6">
             <div className="card bg-clickup-bg/50 border-dashed">
-              <h3 className="text-sm font-semibold text-clickup-text mb-4 flex items-center gap-2">
+              <h3 className="app-text-title-md mb-4 flex items-center gap-2 text-clickup-text">
                 <Activity size={16} className="text-clickup-purple" />
                 최근 작업 내역
               </h3>
@@ -79,8 +79,8 @@ export const ToolView = ({ item }: { item: NavItem }) => {
                       <FileText size={14} className="text-gray-500 group-hover:text-clickup-purple" />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <div className="text-xs text-clickup-text truncate">작업 문서 #{i}</div>
-                      <div className="text-[10px] text-gray-500">2시간 전</div>
+                      <div className="app-text-caption truncate text-clickup-text">작업 문서 #{i}</div>
+                      <div className="app-text-micro text-gray-500">2시간 전</div>
                     </div>
                   </div>
                 ))}
@@ -88,11 +88,11 @@ export const ToolView = ({ item }: { item: NavItem }) => {
             </div>
 
             <div className="card bg-clickup-bg/50 border-dashed">
-              <h3 className="text-sm font-semibold text-clickup-text mb-4 flex items-center gap-2">
+              <h3 className="app-text-title-md mb-4 flex items-center gap-2 text-clickup-text">
                 <HelpCircle size={16} className="text-clickup-purple" />
                 도움말
               </h3>
-              <p className="text-xs text-gray-500 leading-relaxed">
+              <p className="app-text-caption leading-relaxed text-gray-500">
                 이 도구는 사내 문서를 기반으로 최적의 결과물을 생성합니다. 
                 더 정확한 결과를 위해 상세한 컨텍스트를 제공해 주세요.
               </p>

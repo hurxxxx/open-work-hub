@@ -227,6 +227,21 @@ export function createTeam(
   });
 }
 
+export function updateTeam(
+  token: string,
+  teamId: string,
+  payload: { name: string; description?: string },
+): Promise<TeamItem> {
+  return request<TeamItem>(token, `/api/v1/admin/teams/${teamId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function deleteTeam(token: string, teamId: string): Promise<void> {
+  return request<void>(token, `/api/v1/admin/teams/${teamId}`, { method: 'DELETE' });
+}
+
 export function listTeamMembers(token: string, teamId: string): Promise<AuthUser[]> {
   return request<AuthUser[]>(token, `/api/v1/admin/teams/${teamId}/members`);
 }

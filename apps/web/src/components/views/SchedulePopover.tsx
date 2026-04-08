@@ -32,7 +32,7 @@ export const SchedulePopover = ({ isOpen, onClose, position, initialDate, initia
               key={tab}
               onClick={() => setActiveTab(tab)}
               className={cn(
-                "px-3 py-1.5 text-xs font-medium rounded-md transition-colors",
+                "app-text-control-sm rounded-md px-3 py-1.5 transition-colors",
                 activeTab === tab ? "bg-clickup-bg text-clickup-text shadow-sm" : "text-gray-500 hover:text-clickup-text hover:bg-clickup-hover"
               )}
             >
@@ -49,36 +49,36 @@ export const SchedulePopover = ({ isOpen, onClose, position, initialDate, initia
         <input
           type="text"
           placeholder="Add title, @ for people, @@ for tasks"
-          className="w-full bg-transparent border border-clickup-border rounded-md px-3 py-2 text-sm text-clickup-text focus:outline-none focus:border-clickup-purple transition-colors"
+          className="app-text-body w-full rounded-md border border-clickup-border bg-transparent px-3 py-2 text-clickup-text transition-colors focus:border-clickup-purple focus:outline-none"
           autoFocus
         />
 
-        <div className="flex items-center gap-2 text-xs text-clickup-text">
+        <div className="app-text-caption flex items-center gap-2 text-clickup-text">
           <span>{initialDate || 'Apr 7, 2026'}</span>
           <span className="text-gray-500">{initialStartTime || '6:45 AM'}</span>
           <span className="text-gray-500">→</span>
           <span className="text-gray-500">{initialEndTime || '10:30 AM'}</span>
         </div>
 
-        <button className="w-full flex items-center justify-center gap-2 py-2 bg-clickup-sidebar hover:bg-clickup-hover border border-clickup-border rounded-md text-sm text-clickup-text transition-colors">
+        <button className="app-text-control flex w-full items-center justify-center gap-2 rounded-md border border-clickup-border bg-clickup-sidebar py-2 text-clickup-text transition-colors hover:bg-clickup-hover">
           <Video size={16} />
           <span>Add video call</span>
         </button>
 
         <div className="space-y-3">
-          <button className="flex items-center gap-3 text-sm text-gray-500 hover:text-clickup-text transition-colors w-full text-left">
+          <button className="app-text-body flex w-full items-center gap-3 text-left text-gray-500 transition-colors hover:text-clickup-text">
             <Users size={16} />
             <span>Add participants</span>
           </button>
-          <button className="flex items-center gap-3 text-sm text-gray-500 hover:text-clickup-text transition-colors w-full text-left">
+          <button className="app-text-body flex w-full items-center gap-3 text-left text-gray-500 transition-colors hover:text-clickup-text">
             <LinkIcon size={16} />
             <span>Add ClickUp tasks and docs</span>
           </button>
-          <button className="flex items-center gap-3 text-sm text-gray-500 hover:text-clickup-text transition-colors w-full text-left">
+          <button className="app-text-body flex w-full items-center gap-3 text-left text-gray-500 transition-colors hover:text-clickup-text">
             <MapPin size={16} />
             <span>Add location or room</span>
           </button>
-          <button className="flex items-center gap-3 text-sm text-gray-500 hover:text-clickup-text transition-colors w-full text-left">
+          <button className="app-text-body flex w-full items-center gap-3 text-left text-gray-500 transition-colors hover:text-clickup-text">
             <AlignLeft size={16} />
             <span>Add description</span>
           </button>
@@ -86,10 +86,10 @@ export const SchedulePopover = ({ isOpen, onClose, position, initialDate, initia
       </div>
 
       <div className="p-3 border-t border-clickup-border bg-clickup-sidebar/30 flex items-center gap-4">
-        <button className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-clickup-text">
+        <button className="app-text-caption flex items-center gap-1.5 text-gray-500 hover:text-clickup-text">
           <CalendarIcon size={14} />
         </button>
-        <div className="flex items-center gap-3 text-xs text-gray-500">
+        <div className="app-text-caption flex items-center gap-3 text-gray-500">
           <button className="flex items-center gap-1.5 hover:text-clickup-text">
             <div className="w-2 h-2 rounded-full bg-blue-500"></div>
             Default
@@ -103,7 +103,7 @@ export const SchedulePopover = ({ isOpen, onClose, position, initialDate, initia
           </button>
         </div>
         <div className="flex-1"></div>
-        <button className="px-4 py-1.5 bg-clickup-purple text-white text-xs font-medium rounded-md hover:bg-opacity-90 transition-colors">
+        <button className="app-text-control-sm rounded-md bg-clickup-purple px-4 py-1.5 text-white transition-colors hover:bg-opacity-90">
           Save
         </button>
       </div>

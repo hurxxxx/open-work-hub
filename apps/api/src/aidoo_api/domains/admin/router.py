@@ -862,6 +862,15 @@ def create_team(
         active=payload.active,
     )
     db.add(team)
+    db.flush()
+    db.add(
+        TeamMember(
+            id=new_id(),
+            team_id=team.id,
+            user_id=context.user.id,
+            role="team_admin",
+        )
+    )
     record_audit_log(
         db,
         actor_user_id=context.user.id,
@@ -879,7 +888,7 @@ def create_team(
         name=team.name,
         description=team.description,
         active=team.active,
-        member_count=0,
+        member_count=1,
     )
 
 
@@ -918,6 +927,27 @@ def update_team(
         active=team.active,
         member_count=len(team.members),
     )
+
+
+@router.delete("/teams/{team_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_team(
+    team_id: str,
+    context: AuthContext = Depends(require_permission("team.write")),
+    db: Session = Depends(get_db_session),
+) -> None:
+    team = db.scalar(select(Team).where(Team.id == team_id))
+    if team is None:
+        raise HTTPException(status_code=404, detail="Team not found.")
+    record_audit_log(
+        db,
+        actor_user_id=context.user.id,
+        action="admin.team.delete",
+        entity_kind="team",
+        entity_id=team.id,
+        summary=f"Deleted team {team.name}",
+    )
+    db.delete(team)
+    db.commit()
 
 
 @router.get("/teams/{team_id}/members", response_model=list[AdminUserItemResponse])

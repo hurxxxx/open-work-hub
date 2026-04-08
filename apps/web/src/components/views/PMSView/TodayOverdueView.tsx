@@ -37,8 +37,8 @@ export const TodayOverdueView = () => {
   return (
     <div className="h-full flex flex-col relative">
       <header className="bg-clickup-bg border-b border-clickup-border px-8 pt-6 pb-4">
-        <h1 className="text-2xl font-bold text-clickup-text">Today & Overdue</h1>
-        <p className="text-gray-500 text-sm mt-1">Focus on what's important right now</p>
+        <h1 className="app-text-title-lg text-clickup-text">Today & Overdue</h1>
+        <p className="app-text-body mt-1 text-gray-500">Focus on what's important right now</p>
       </header>
 
       <main className="flex-1 overflow-y-auto p-8 custom-scrollbar">
@@ -50,14 +50,14 @@ export const TodayOverdueView = () => {
             <section>
               <div className="flex items-center gap-2 mb-4 text-red-500">
                 <AlertCircle size={18} />
-                <h2 className="text-lg font-semibold">Overdue</h2>
-                <span className="bg-red-500/10 text-red-500 text-xs px-2 py-0.5 rounded-full">{overdue.length}</span>
+                <h2 className="app-text-title-md">Overdue</h2>
+                <span className="app-text-label rounded-full bg-red-500/10 px-2 py-0.5 text-red-500">{overdue.length}</span>
               </div>
               <div className="space-y-2">
                 {overdue.map(issue => (
                   <IssueAgendaItem key={issue.id} issue={issue} isOverdue />
                 ))}
-                {overdue.length === 0 && <p className="text-sm text-clickup-text/40">No overdue tasks</p>}
+                {overdue.length === 0 && <p className="app-text-body text-clickup-text/40">No overdue tasks</p>}
               </div>
             </section>
 
@@ -65,14 +65,14 @@ export const TodayOverdueView = () => {
             <section>
               <div className="flex items-center gap-2 mb-4 text-blue-400">
                 <Calendar size={18} />
-                <h2 className="text-lg font-semibold">Today</h2>
-                <span className="bg-blue-400/10 text-blue-400 text-xs px-2 py-0.5 rounded-full">{todayIssues.length}</span>
+                <h2 className="app-text-title-md">Today</h2>
+                <span className="app-text-label rounded-full bg-blue-400/10 px-2 py-0.5 text-blue-400">{todayIssues.length}</span>
               </div>
               <div className="space-y-2">
                 {todayIssues.map(issue => (
                   <IssueAgendaItem key={issue.id} issue={issue} />
                 ))}
-                {todayIssues.length === 0 && <p className="text-sm text-clickup-text/40">No tasks due today</p>}
+                {todayIssues.length === 0 && <p className="app-text-body text-clickup-text/40">No tasks due today</p>}
               </div>
             </section>
           </div>
@@ -90,10 +90,10 @@ const IssueAgendaItem = ({ issue, isOverdue = false }: { issue: PmsIssue; isOver
       </button>
       <div>
         <div className="flex items-center gap-2">
-          <span className="text-[10px] text-clickup-text/40">{issue.reference}</span>
-          <h3 className="text-sm font-medium text-clickup-text group-hover:text-clickup-purple transition-colors">{issue.title}</h3>
+          <span className="app-text-micro text-clickup-text/40">{issue.reference}</span>
+          <h3 className="app-text-body font-medium text-clickup-text transition-colors group-hover:text-clickup-purple">{issue.title}</h3>
         </div>
-        <div className="flex items-center gap-3 mt-1 text-xs text-gray-500">
+        <div className="app-text-caption mt-1 flex items-center gap-3 text-gray-500">
           <span className={cn("flex items-center gap-1", isOverdue ? "text-red-500" : "")}>
             <Calendar size={12} />
             {formatDate(issue.due_date)}
@@ -108,7 +108,7 @@ const IssueAgendaItem = ({ issue, isOverdue = false }: { issue: PmsIssue; isOver
       </div>
     </div>
     {issue.assignee_name && (
-      <div className="w-6 h-6 rounded-full bg-indigo-500 flex items-center justify-center text-[10px] text-white font-medium">
+      <div className="app-text-micro flex h-6 w-6 items-center justify-center rounded-full bg-indigo-500 font-medium text-white">
         {initials(issue.assignee_name)}
       </div>
     )}

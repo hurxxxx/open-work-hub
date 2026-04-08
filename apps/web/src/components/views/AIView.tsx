@@ -11,8 +11,8 @@ export const AIView = () => {
       className="p-8 max-w-6xl mx-auto space-y-12"
     >
       <header className="space-y-2">
-        <h1 className="text-3xl font-bold text-clickup-text">AI Tools Hub</h1>
-        <p className="text-gray-400">사내 AI 솔루션을 활용하여 업무 효율을 높이세요.</p>
+        <h1 className="app-text-title-lg text-clickup-text">AI Tools Hub</h1>
+        <p className="app-text-body text-gray-400">사내 AI 솔루션을 활용하여 업무 효율을 높이세요.</p>
       </header>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -28,8 +28,8 @@ export const AIView = () => {
               </div>
               <ChevronRight size={16} className="text-gray-600 group-hover:text-clickup-text transition-colors" />
             </div>
-            <h3 className="text-lg font-semibold text-clickup-text mb-2">{item.title}</h3>
-            <p className="text-xs text-gray-500 leading-relaxed">{item.description}</p>
+            <h3 className="app-text-title-md mb-2 text-clickup-text">{item.title}</h3>
+            <p className="app-text-caption leading-relaxed text-gray-500">{item.description}</p>
           </Link>
         ))}
       </div>

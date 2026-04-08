@@ -1,16 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import {
-  Activity,
-  Building2,
-  KeyRound,
-  LockKeyhole,
-  Search,
-  Shield,
-  Sparkles,
-  UserPlus,
-  Users,
-  Workflow,
-} from 'lucide-react';
+import { Search } from 'lucide-react';
 
 import { Button, InlineNotice, Select } from '@aidoo/ui';
 
@@ -50,7 +39,7 @@ import { AccessDeniedView } from '@/src/domains/auth/settings-pages';
 
 const NONE_OPTION_VALUE = '__none__';
 const fieldClassName =
-  'w-full rounded-lg border border-clickup-border bg-clickup-bg px-3 py-2 text-sm text-clickup-text outline-none transition-colors focus:border-clickup-purple';
+  'app-text-body w-full rounded-lg border border-clickup-border bg-clickup-bg px-3 py-2 text-clickup-text outline-none transition-colors focus:border-clickup-purple';
 
 const sectionMeta: Record<
   AdminSection,
@@ -137,14 +126,14 @@ function SettingsShell({
         <header className="flex flex-col gap-4 border-b border-clickup-border pb-6 lg:flex-row lg:items-start lg:justify-between">
           <div className="space-y-3">
             <div className="flex flex-wrap items-center gap-3">
-              <h1 className="text-[1.7rem] font-semibold tracking-tight text-clickup-text">{meta.title}</h1>
+              <h1 className="app-text-title-lg text-clickup-text">{meta.title}</h1>
               {meta.learnMoreLabel ? (
-                <button className="text-xs font-medium text-clickup-purple hover:underline" type="button">
+                <button className="app-text-control-sm text-clickup-purple hover:underline" type="button">
                   {meta.learnMoreLabel}
                 </button>
               ) : null}
             </div>
-            {meta.description ? <p className="max-w-3xl text-sm text-gray-500">{meta.description}</p> : null}
+            {meta.description ? <p className="app-text-body max-w-3xl text-gray-500">{meta.description}</p> : null}
           </div>
           {actions ? <div className="flex shrink-0 items-center gap-3">{actions}</div> : null}
         </header>
@@ -171,8 +160,8 @@ function SurfaceCard({
     <section className={`space-y-4 ${className}`.trim()}>
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div>
-          <h2 className="text-lg font-semibold text-clickup-text">{title}</h2>
-          {description ? <p className="mt-1 text-sm text-gray-500">{description}</p> : null}
+          <h2 className="app-text-title-md text-clickup-text">{title}</h2>
+          {description ? <p className="app-text-body mt-1 text-gray-500">{description}</p> : null}
         </div>
         {actions ? <div className="flex items-center gap-2">{actions}</div> : null}
       </div>
@@ -190,14 +179,14 @@ function ToolbarField({ children, className = '' }: { children: React.ReactNode;
 function TableShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="overflow-x-auto w-full">
-      <table className="min-w-full border-collapse text-sm">{children}</table>
+      <table className="app-text-body min-w-full border-collapse">{children}</table>
     </div>
   );
 }
 
 function HeadCell({ children }: { children: React.ReactNode }) {
   return (
-    <th className="border-b border-clickup-border px-4 py-3 text-left text-xs font-medium text-gray-500">
+    <th className="app-text-overline border-b border-clickup-border px-4 py-3 text-left text-gray-500">
       {children}
     </th>
   );
@@ -205,7 +194,7 @@ function HeadCell({ children }: { children: React.ReactNode }) {
 
 function BodyCell({ children, className = '' }: { children: React.ReactNode; className?: string }) {
   return (
-    <td className={`border-b border-clickup-border px-4 py-3 align-top text-sm text-clickup-text ${className}`.trim()}>
+    <td className={`app-text-body border-b border-clickup-border px-4 py-3 align-top text-clickup-text ${className}`.trim()}>
       {children}
     </td>
   );
@@ -224,8 +213,8 @@ function EmptyRow({
     <tr>
       <td className="px-3 py-10 text-center" colSpan={colSpan}>
         <div className="space-y-1">
-          <div className="text-sm font-medium text-clickup-text">{title}</div>
-          <div className="text-sm text-gray-500">{description}</div>
+          <div className="app-text-body font-medium text-clickup-text">{title}</div>
+          <div className="app-text-body text-gray-500">{description}</div>
         </div>
       </td>
     </tr>
@@ -249,7 +238,7 @@ function Badge({
           : 'border-clickup-border bg-clickup-sidebar text-gray-500';
 
   return (
-    <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-medium ${toneClassName}`.trim()}>
+    <span className={`app-text-label inline-flex items-center rounded-full border px-2.5 py-1 ${toneClassName}`.trim()}>
       {children}
     </span>
   );
@@ -340,16 +329,16 @@ function GeneralSection({ token }: { token: string }) {
         >
           <div className="grid gap-4 md:grid-cols-2">
             <div className="rounded-xl border border-clickup-border bg-clickup-sidebar p-4">
-              <div className="text-sm font-semibold text-clickup-text">Identity</div>
-              <div className="mt-3 space-y-2 text-sm text-gray-500">
+              <div className="app-text-title-md text-clickup-text">Identity</div>
+              <div className="app-text-body mt-3 space-y-2 text-gray-500">
                 <div>사용자 계정 {summary.userCount}개</div>
                 <div>관리자 {summary.adminCount}명</div>
                 <div>권한 그룹 {summary.groupCount}개</div>
               </div>
             </div>
             <div className="rounded-xl border border-clickup-border bg-clickup-sidebar p-4">
-              <div className="text-sm font-semibold text-clickup-text">Work model</div>
-              <div className="mt-3 space-y-2 text-sm text-gray-500">
+              <div className="app-text-title-md text-clickup-text">Work model</div>
+              <div className="app-text-body mt-3 space-y-2 text-gray-500">
                 <div>워크스페이스 {summary.workspaceCount}개</div>
                 <div>실행 팀 {summary.teamCount}개</div>
                 <div>기능 정책 {summary.policyCount}개</div>
@@ -362,7 +351,7 @@ function GeneralSection({ token }: { token: string }) {
           title="Admin notes"
           description="설정 앱과 마이페이지의 역할을 분리한 현재 UX 원칙입니다."
         >
-          <div className="space-y-3 text-sm text-gray-500">
+          <div className="app-text-body space-y-3 text-gray-500">
             <div className="rounded-xl border border-clickup-border bg-clickup-sidebar p-4">
               프로필 아바타는 개인 설정으로만 이동하고, 조직 운영 기능은 모두 Settings 앱 안에서 다룹니다.
             </div>
@@ -388,7 +377,7 @@ function PeopleSection({ token }: { token: string }) {
   const [fullName, setFullName] = useState('');
   const [displayName, setDisplayName] = useState('');
   const [search, setSearch] = useState('');
-  const [roleFilter, setRoleFilter] = useState<'all' | 'admin' | 'member'>('all');
+  const [roleFilter] = useState<'all' | 'admin' | 'member'>('all');
   const [selectedOrgUnitId, setSelectedOrgUnitId] = useState('');
   const [selectedGroupId, setSelectedGroupId] = useState(NONE_OPTION_VALUE);
   const [message, setMessage] = useState<string | null>(null);
@@ -510,7 +499,7 @@ function PeopleSection({ token }: { token: string }) {
           <label className="relative block">
             <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" size={16} />
             <input
-              className={`w-full rounded-md border border-transparent bg-transparent pl-9 py-1.5 text-sm text-clickup-text outline-none transition-colors hover:border-clickup-border focus:border-clickup-purple focus:bg-clickup-bg`}
+              className="app-text-body w-full rounded-md border border-transparent bg-transparent py-1.5 pl-9 text-clickup-text outline-none transition-colors hover:border-clickup-border focus:border-clickup-purple focus:bg-clickup-bg"
               onChange={(event) => setSearch(event.target.value)}
               placeholder="Search or invite by email"
               value={search}
@@ -519,14 +508,14 @@ function PeopleSection({ token }: { token: string }) {
         </ToolbarField>
         <div className="flex items-center gap-2">
           <button
-            className="rounded-md border border-transparent px-3 py-1.5 text-sm font-medium text-gray-500 transition-colors hover:border-clickup-border hover:bg-clickup-hover hover:text-clickup-text"
+            className="app-text-control rounded-md border border-transparent px-3 py-1.5 text-gray-500 transition-colors hover:border-clickup-border hover:bg-clickup-hover hover:text-clickup-text"
             onClick={handleExport}
             type="button"
           >
             Export
           </button>
           <button
-            className="inline-flex items-center gap-1.5 rounded-md bg-clickup-text px-3 py-1.5 text-sm font-medium text-clickup-bg transition-opacity hover:opacity-90 dark:bg-white dark:text-black"
+            className="app-text-control inline-flex items-center gap-1.5 rounded-md bg-clickup-text px-3 py-1.5 text-clickup-bg transition-opacity hover:opacity-90 dark:bg-white dark:text-black"
             onClick={() => {
               setInviteOpen((current) => !current);
               requestAnimationFrame(() => {
@@ -543,17 +532,17 @@ function PeopleSection({ token }: { token: string }) {
 
       <div className="flex items-center gap-2 py-2">
         <button
-          className="inline-flex items-center gap-1.5 rounded p-1 text-sm font-medium text-clickup-text hover:bg-clickup-hover"
+          className="app-text-control inline-flex items-center gap-1.5 rounded p-1 text-clickup-text hover:bg-clickup-hover"
           type="button"
         >
           <span>All Users ({users.length})</span>
-          <span className="text-[10px] text-gray-500">▾</span>
+          <span className="app-text-micro text-gray-500">▾</span>
         </button>
       </div>
 
       <div className="w-full">
 
-        <table className="min-w-full border-collapse text-sm">
+        <table className="app-text-body min-w-full border-collapse">
           <thead>
             <tr>
               <HeadCell>Name</HeadCell>
@@ -568,7 +557,7 @@ function PeopleSection({ token }: { token: string }) {
           </thead>
           <tbody>
             <tr>
-              <td className="border-b border-clickup-border px-4 py-3 text-sm text-gray-500" colSpan={8}>
+              <td className="app-text-body border-b border-clickup-border px-4 py-3 text-gray-500" colSpan={8}>
                 <button
                   className="transition-colors hover:text-clickup-text"
                   onClick={() => setInviteOpen(true)}
@@ -589,7 +578,7 @@ function PeopleSection({ token }: { token: string }) {
                 <tr key={user.id}>
                   <BodyCell>
                     <div className="flex items-center gap-3">
-                      <div className="flex h-8 w-8 items-center justify-center rounded-full bg-clickup-sidebar text-[11px] font-semibold text-gray-500">
+                      <div className="app-text-label flex h-8 w-8 items-center justify-center rounded-full bg-clickup-sidebar text-gray-500">
                         {getInitials(user.display_name || user.full_name)}
                       </div>
                       <div>
@@ -629,8 +618,8 @@ function PeopleSection({ token }: { token: string }) {
       {inviteOpen ? (
         <div className="rounded-xl border border-clickup-border bg-clickup-card px-5 py-5">
           <div className="mb-4">
-            <div className="text-sm font-semibold text-clickup-text">Invite people</div>
-            <div className="mt-1 text-sm text-gray-500">관리자가 계정을 만들고 기본 조직과 그룹을 함께 배정합니다.</div>
+            <div className="app-text-title-md text-clickup-text">Invite people</div>
+            <div className="app-text-body mt-1 text-gray-500">관리자가 계정을 만들고 기본 조직과 그룹을 함께 배정합니다.</div>
           </div>
           <form className="grid gap-3 xl:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)_minmax(0,1fr)_220px_220px_auto]" onSubmit={(event) => void handleCreateUser(event)}>
             <input
@@ -778,12 +767,12 @@ function TeamsSection({ token }: { token: string }) {
 
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-clickup-border pb-4">
         <div>
-          <div className="text-sm font-semibold text-clickup-text">Create team</div>
-          <div className="text-[13px] text-gray-500">팀은 항상 워크스페이스에 속합니다. View-only users added to Teams will be converted to paid users.</div>
+          <div className="app-text-title-md text-clickup-text">Create team</div>
+          <div className="app-text-body text-gray-500">팀은 항상 워크스페이스에 속합니다. View-only users added to Teams will be converted to paid users.</div>
         </div>
         <div className="flex items-center gap-2">
           <button
-            className="inline-flex items-center gap-1.5 rounded-md bg-clickup-text px-3 py-1.5 text-sm font-medium text-clickup-bg transition-opacity hover:opacity-90 dark:bg-white dark:text-black"
+            className="app-text-control inline-flex items-center gap-1.5 rounded-md bg-clickup-text px-3 py-1.5 text-clickup-bg transition-opacity hover:opacity-90 dark:bg-white dark:text-black"
             onClick={() => setCreateOpen((current) => !current)}
             type="button"
           >
@@ -794,7 +783,7 @@ function TeamsSection({ token }: { token: string }) {
       </div>
 
       <div className="w-full">
-        <table className="min-w-full border-collapse text-sm">
+        <table className="app-text-body min-w-full border-collapse">
           <thead>
             <tr>
               <HeadCell>Name</HeadCell>
@@ -823,12 +812,12 @@ function TeamsSection({ token }: { token: string }) {
                       onClick={() => setSelectedTeamId(team.id)}
                       type="button"
                     >
-                      <div className="flex h-8 w-8 items-center justify-center rounded-full bg-clickup-sidebar text-[11px] font-semibold text-gray-500">
+                      <div className="app-text-label flex h-8 w-8 items-center justify-center rounded-full bg-clickup-sidebar text-gray-500">
                         {getInitials(team.name)}
                       </div>
                       <div>
                         <div className="font-medium text-clickup-text">{team.name}</div>
-                        <div className="mt-0.5 text-xs text-gray-500">{team.member_count} members</div>
+                        <div className="app-text-caption mt-0.5 text-gray-500">{team.member_count} members</div>
                       </div>
                     </button>
                   </BodyCell>
@@ -850,7 +839,7 @@ function TeamsSection({ token }: { token: string }) {
               ))
             )}
             <tr>
-              <td className="px-4 py-3 text-sm text-gray-500" colSpan={5}>
+              <td className="app-text-body px-4 py-3 text-gray-500" colSpan={5}>
                 <button
                   className="transition-colors hover:text-clickup-text"
                   onClick={() => setCreateOpen(true)}
@@ -895,8 +884,8 @@ function TeamsSection({ token }: { token: string }) {
         <div className="rounded-xl border border-clickup-border bg-clickup-card px-5 py-5">
           <div className="flex flex-col gap-3 border-b border-clickup-border pb-4 lg:flex-row lg:items-start lg:justify-between">
             <div>
-              <div className="text-sm font-semibold text-clickup-text">{selectedTeam.name}</div>
-              <div className="mt-1 text-sm text-gray-500">
+              <div className="app-text-title-md text-clickup-text">{selectedTeam.name}</div>
+              <div className="app-text-body mt-1 text-gray-500">
                 Workspace {selectedTeam.workspace_key} / Alias @{selectedTeam.key}
               </div>
             </div>
@@ -919,7 +908,7 @@ function TeamsSection({ token }: { token: string }) {
 
           <div className="mt-4 grid gap-2">
             {teamMembers.length === 0 ? (
-              <div className="rounded-lg border border-dashed border-clickup-border px-4 py-5 text-sm text-gray-500">
+              <div className="app-text-body rounded-lg border border-dashed border-clickup-border px-4 py-5 text-gray-500">
                 아직 팀 멤버가 없습니다.
               </div>
             ) : (
@@ -929,12 +918,12 @@ function TeamsSection({ token }: { token: string }) {
                   className="flex items-center justify-between border-b border-clickup-border py-3 last:border-b-0"
                 >
                   <div className="flex items-center gap-3">
-                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-clickup-sidebar text-[11px] font-semibold text-gray-500">
+                    <div className="app-text-label flex h-8 w-8 items-center justify-center rounded-full bg-clickup-sidebar text-gray-500">
                       {getInitials(member.display_name || member.full_name)}
                     </div>
                     <div>
                       <div className="font-medium text-clickup-text">{member.display_name || member.full_name}</div>
-                      <div className="mt-0.5 text-xs text-gray-500">{member.email}</div>
+                      <div className="app-text-caption mt-0.5 text-gray-500">{member.email}</div>
                     </div>
                   </div>
                   <Badge tone={member.is_admin ? 'purple' : 'default'}>
@@ -1122,7 +1111,7 @@ function WorkspacesSection({ token }: { token: string }) {
             </div>
             <div className="grid gap-2">
               {bindings.length === 0 ? (
-                <div className="rounded-xl border border-dashed border-clickup-border bg-clickup-sidebar px-4 py-6 text-sm text-gray-500">
+                <div className="app-text-body rounded-xl border border-dashed border-clickup-border bg-clickup-sidebar px-4 py-6 text-gray-500">
                   아직 바인딩이 없습니다.
                 </div>
               ) : (
@@ -1133,7 +1122,7 @@ function WorkspacesSection({ token }: { token: string }) {
                   >
                     <div>
                       <div className="font-medium text-clickup-text">{binding.subject_label}</div>
-                      <div className="mt-1 text-xs text-gray-500">{binding.subject_type}</div>
+                      <div className="app-text-caption mt-1 text-gray-500">{binding.subject_type}</div>
                     </div>
                     <Badge tone="purple">{binding.role}</Badge>
                   </div>
@@ -1354,7 +1343,7 @@ function SecuritySection({
                     <tr key={group.id}>
                       <BodyCell>
                         <div className="font-medium text-clickup-text">{group.name}</div>
-                        <div className="mt-1 text-xs text-gray-500">{group.description || '설명 없음'}</div>
+                        <div className="app-text-caption mt-1 text-gray-500">{group.description || '설명 없음'}</div>
                       </BodyCell>
                       <BodyCell>{group.slug}</BodyCell>
                       <BodyCell>{group.permissions.join(', ') || 'None'}</BodyCell>
@@ -1399,20 +1388,20 @@ function SecuritySection({
                 />
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
-                    <strong className="text-sm text-clickup-text">{policy.name}</strong>
+                    <strong className="app-text-body text-clickup-text">{policy.name}</strong>
                     <Badge tone={policy.enabled ? 'green' : 'default'}>
                       {policy.enabled ? 'enabled' : 'disabled'}
                     </Badge>
                   </div>
-                  <div className="mt-1 text-sm text-gray-500">{policy.description}</div>
-                  <div className="mt-3 flex flex-wrap gap-2 text-xs">
+                  <div className="app-text-body mt-1 text-gray-500">{policy.description}</div>
+                  <div className="app-text-caption mt-3 flex flex-wrap gap-2">
                     <Badge>{policy.code}</Badge>
                     {policy.required_permissions.map((permission) => (
                       <Badge key={`${policy.id}-${permission}`}>{permission}</Badge>
                     ))}
                   </div>
                   {!canWritePolicies ? (
-                    <div className="mt-3 text-xs text-gray-500">읽기 전용 정책입니다.</div>
+                    <div className="app-text-caption mt-3 text-gray-500">읽기 전용 정책입니다.</div>
                   ) : null}
                 </div>
               </label>
@@ -1452,7 +1441,7 @@ function AuditSection({ token }: { token: string }) {
       >
         <div className="space-y-3">
           {items.length === 0 ? (
-            <div className="rounded-xl border border-dashed border-clickup-border bg-clickup-sidebar px-4 py-8 text-center text-sm text-gray-500">
+            <div className="app-text-body rounded-xl border border-dashed border-clickup-border bg-clickup-sidebar px-4 py-8 text-center text-gray-500">
               표시할 감사 이벤트가 없습니다.
             </div>
           ) : (
@@ -1467,11 +1456,11 @@ function AuditSection({ token }: { token: string }) {
                       <div className="font-medium text-clickup-text">{item.summary}</div>
                       <Badge tone="purple">{item.action}</Badge>
                     </div>
-                    <div className="text-sm text-gray-500">
+                    <div className="app-text-body text-gray-500">
                       {item.entity_kind} / {item.entity_id ?? 'n/a'} / {item.actor_name ?? 'system'}
                     </div>
                   </div>
-                  <div className="text-sm text-gray-500">
+                  <div className="app-text-body text-gray-500">
                     {new Date(item.created_at).toLocaleString()}
                   </div>
                 </div>

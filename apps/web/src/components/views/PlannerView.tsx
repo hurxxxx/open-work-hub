@@ -113,7 +113,7 @@ export const PlannerView = () => {
     >
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
-          <h1 className="text-2xl font-bold text-clickup-text">Planner</h1>
+          <h1 className="app-text-title-lg text-clickup-text">Planner</h1>
           <div className="flex items-center bg-clickup-sidebar border border-clickup-border rounded-md p-1">
             {(['Month', 'Week', 'Day'] as const).map((mode) => (
               <button 
@@ -123,7 +123,7 @@ export const PlannerView = () => {
                   setPopoverState(prev => ({ ...prev, isOpen: false }));
                 }}
                 className={cn(
-                  "px-3 py-1 text-xs rounded transition-all",
+                  "app-text-control-sm rounded px-3 py-1 transition-all",
                   viewMode === mode 
                     ? "bg-clickup-hover text-clickup-text shadow-sm" 
                     : "text-gray-500 hover:text-clickup-text"
@@ -138,7 +138,7 @@ export const PlannerView = () => {
               setSelectedDate(20);
               setViewMode('Month');
             }}
-            className="px-3 py-1 text-xs text-gray-500 hover:text-clickup-text border border-clickup-border rounded-md transition-colors"
+            className="app-text-control-sm rounded-md border border-clickup-border px-3 py-1 text-gray-500 transition-colors hover:text-clickup-text"
           >
             Today
           </button>
@@ -146,12 +146,12 @@ export const PlannerView = () => {
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-1 bg-clickup-sidebar border border-clickup-border rounded-md px-3 py-1.5">
             <ChevronLeft size={16} className="text-gray-500 cursor-pointer hover:text-clickup-text" />
-            <span className="text-sm font-medium text-clickup-text px-2">
+            <span className="app-text-control px-2 text-clickup-text">
               {viewMode === 'Day' ? `May ${selectedDate}, 2024` : 'May 2024'}
             </span>
             <ChevronRight size={16} className="text-gray-500 cursor-pointer hover:text-clickup-text" />
           </div>
-          <button className="flex items-center gap-2 px-4 py-2 bg-clickup-purple text-white rounded-md text-sm font-medium">
+          <button className="app-text-control flex items-center gap-2 rounded-md bg-clickup-purple px-4 py-2 text-white">
             <Plus size={16} />
             <span>Add Event</span>
           </button>
@@ -170,7 +170,7 @@ export const PlannerView = () => {
             >
               <div className="grid grid-cols-7 border-b border-clickup-border">
                 {days.map(day => (
-                  <div key={day} className="py-2 text-center text-[10px] font-bold uppercase tracking-widest text-gray-500 border-r border-clickup-border last:border-r-0">
+                  <div key={day} className="app-text-overline border-r border-clickup-border py-2 text-center text-gray-500 last:border-r-0">
                     {day}
                   </div>
                 ))}
@@ -186,7 +186,7 @@ export const PlannerView = () => {
                     )}
                   >
                     <div className={cn(
-                      "text-xs font-medium mb-2",
+                      "app-text-control-sm mb-2",
                       date === selectedDate ? "w-6 h-6 bg-clickup-purple text-white rounded-full flex items-center justify-center -mt-1 -ml-1" : "text-gray-500"
                     )}>
                       {date > 0 && date <= 31 ? date : ''}
@@ -194,7 +194,7 @@ export const PlannerView = () => {
                     
                     {events.filter(e => e.date === date).map((event, idx) => (
                       <div key={idx} className={cn(
-                        "px-1.5 py-0.5 border-l-2 text-[10px] truncate mb-1",
+                        "app-text-micro mb-1 truncate border-l-2 px-1.5 py-0.5",
                         event.color === 'blue' && "bg-blue-500/20 border-blue-500 text-blue-400",
                         event.color === 'purple' && "bg-purple-500/20 border-purple-500 text-purple-400",
                         event.color === 'green' && "bg-green-500/20 border-green-500 text-green-400"
@@ -228,9 +228,9 @@ export const PlannerView = () => {
                       }}
                       className="py-3 text-center border-r border-clickup-border last:border-r-0 hover:bg-clickup-hover cursor-pointer transition-colors"
                     >
-                      <div className="text-[10px] font-bold uppercase tracking-widest text-gray-500 mb-1">{day}</div>
+                      <div className="app-text-overline mb-1 text-gray-500">{day}</div>
                       <div className={cn(
-                        "text-lg font-bold",
+                        "app-text-title-md font-bold",
                         weekDates[i] === selectedDate ? "text-clickup-purple" : "text-clickup-text"
                       )}>
                         {weekDates[i]}
@@ -242,7 +242,7 @@ export const PlannerView = () => {
               <div className="flex-1 overflow-y-auto custom-scrollbar relative">
                 {Array.from({ length: 12 }, (_, i) => i + 8).map(hour => (
                   <div key={hour} className="flex">
-                    <div className="w-16 shrink-0 text-right text-[10px] font-bold text-gray-600 py-2 pr-4 relative -top-3">
+                    <div className="app-text-overline relative -top-3 w-16 shrink-0 py-2 pr-4 text-right text-gray-600">
                       {hour === 12 ? '12 PM' : hour > 12 ? `${hour - 12} PM` : `${hour} AM`}
                     </div>
                     <div className="flex-1 grid grid-cols-7">
@@ -261,7 +261,7 @@ export const PlannerView = () => {
                           {/* Render events */}
                           {events.filter(e => e.date === date && e.startHour === hour).map((event, idx) => (
                             <div key={idx} className={cn(
-                              "absolute top-1 left-1 right-1 p-1.5 border-l-2 rounded text-[10px] shadow-sm z-20 overflow-hidden",
+                              "app-text-micro absolute top-1 left-1 right-1 z-20 overflow-hidden rounded border-l-2 p-1.5 shadow-sm",
                               event.color === 'blue' && "bg-blue-500/10 border-blue-500 text-blue-400",
                               event.color === 'purple' && "bg-purple-500/10 border-purple-500 text-purple-400",
                               event.color === 'green' && "bg-green-500/10 border-green-500 text-green-400"
@@ -291,14 +291,14 @@ export const PlannerView = () => {
             >
               <div className="p-6 border-b border-clickup-border flex items-center gap-6">
                 <div className="w-16 h-16 bg-clickup-purple rounded-xl flex flex-col items-center justify-center text-white shadow-lg shadow-purple-500/20">
-                  <span className="text-[10px] font-bold uppercase">May</span>
-                  <span className="text-2xl font-black">{selectedDate}</span>
+                  <span className="app-text-overline">May</span>
+                  <span className="app-text-title-lg font-black">{selectedDate}</span>
                 </div>
                 <div>
-                  <h2 className="text-xl font-bold text-clickup-text">
+                  <h2 className="app-text-title-lg text-clickup-text">
                     {days[weekDates.indexOf(selectedDate) !== -1 ? weekDates.indexOf(selectedDate) : 1]}day
                   </h2>
-                  <p className="text-sm text-gray-500">
+                  <p className="app-text-body text-gray-500">
                     You have {events.filter(e => e.date === selectedDate).length} event(s) scheduled for today.
                   </p>
                 </div>
@@ -308,7 +308,7 @@ export const PlannerView = () => {
                 <div className="max-w-4xl mx-auto">
                   {Array.from({ length: 12 }, (_, i) => i + 8).map(hour => (
                     <div key={hour} className="flex group">
-                      <div className="w-20 shrink-0 text-right text-xs font-bold text-gray-600 py-2 pr-6 relative -top-3">
+                      <div className="app-text-label relative -top-3 w-20 shrink-0 py-2 pr-6 text-right text-gray-600">
                         {hour === 12 ? '12 PM' : hour > 12 ? `${hour - 12} PM` : `${hour} AM`}
                       </div>
                       <div 
@@ -323,7 +323,7 @@ export const PlannerView = () => {
                         
                         {events.filter(e => e.date === selectedDate && e.startHour === hour).map((event, idx) => (
                           <div key={idx} className={cn(
-                            "absolute top-2 left-2 right-4 p-3 border-l-4 rounded text-xs shadow-sm z-20",
+                            "app-text-caption absolute top-2 left-2 right-4 z-20 rounded border-l-4 p-3 shadow-sm",
                             event.color === 'blue' && "bg-blue-500/10 border-blue-500 text-blue-400",
                             event.color === 'purple' && "bg-purple-500/10 border-purple-500 text-purple-400",
                             event.color === 'green' && "bg-green-500/10 border-green-500 text-green-400"

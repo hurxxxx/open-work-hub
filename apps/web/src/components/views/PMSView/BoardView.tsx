@@ -54,12 +54,17 @@ export const BoardView = ({
           >
             <div className="flex items-center justify-between px-2">
               <div className="flex items-center gap-2">
-                <div
-                  className={cn("w-2 h-2 rounded-full", STATUS_DOT_COLOR[status])}
-                  style={!STATUS_DOT_COLOR[status] && projectStatuses?.find(s => s.slug === status)?.color ? { backgroundColor: projectStatuses.find(s => s.slug === status)!.color } : undefined}
-                />
-                <h3 className="text-xs font-bold text-clickup-text uppercase tracking-wider">{label}</h3>
-                <span className="text-[10px] text-gray-600 font-bold">{statusIssues.length}</span>
+	                <div
+	                  className={cn("w-2 h-2 rounded-full", STATUS_DOT_COLOR[status])}
+	                  style={!STATUS_DOT_COLOR[status]
+	                    ? (() => {
+	                        const matchedStatus = projectStatuses?.find((projectStatus) => projectStatus.slug === status);
+	                        return matchedStatus?.color ? { backgroundColor: matchedStatus.color } : undefined;
+	                      })()
+	                    : undefined}
+	                />
+                <h3 className="app-text-overline text-clickup-text">{label}</h3>
+                <span className="app-text-micro font-bold text-gray-600">{statusIssues.length}</span>
               </div>
               <div className="flex items-center gap-1 text-gray-600">
                 <Plus size={14} className="cursor-pointer hover:text-white" />
@@ -73,9 +78,9 @@ export const BoardView = ({
                   key={issue.id}
                   layoutId={issue.id}
                   draggable
-                  onDragStart={(e: any) => {
-                    if (e.dataTransfer) e.dataTransfer.setData('text/plain', issue.id);
-                  }}
+	                  onDragStart={(e: React.DragEvent<HTMLDivElement>) => {
+	                    if (e.dataTransfer) e.dataTransfer.setData('text/plain', issue.id);
+	                  }}
                   onClick={() => onSelectIssue(issue)}
                   className="card p-4 hover:border-clickup-purple transition-all cursor-pointer group space-y-4 relative"
                 >
@@ -94,7 +99,7 @@ export const BoardView = ({
                     {issue.labels.map(label => (
                       <span
                         key={label.id}
-                        className="px-1.5 py-0.5 bg-clickup-sidebar border border-clickup-border rounded text-[9px] text-gray-500"
+                        className="app-text-micro rounded border border-clickup-border bg-clickup-sidebar px-1.5 py-0.5 text-gray-500"
                         style={label.color !== '#1f2d38' ? { borderColor: label.color, color: label.color } : undefined}
                       >
                         {label.name}
@@ -102,8 +107,8 @@ export const BoardView = ({
                     ))}
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className="text-[10px] text-clickup-text/40">{issue.reference}</span>
-                    <h4 className="text-sm font-medium text-clickup-text leading-tight group-hover:text-clickup-purple transition-colors">
+                    <span className="app-text-micro text-clickup-text/40">{issue.reference}</span>
+                    <h4 className="app-text-body font-medium leading-tight text-clickup-text transition-colors group-hover:text-clickup-purple">
                       {issue.title}
                     </h4>
                   </div>
@@ -111,19 +116,19 @@ export const BoardView = ({
                     <div className="flex items-center gap-3">
                       <Flag size={14} className={PRIORITY_COLOR[issue.priority] ?? 'text-gray-500'} />
                       {issue.checklist_total > 0 && (
-                        <span className="flex items-center gap-0.5 text-[10px] text-gray-500">
+                        <span className="app-text-micro flex items-center gap-0.5 text-gray-500">
                           <CheckSquare size={11} />
                           {issue.checklist_done}/{issue.checklist_total}
                         </span>
                       )}
                       {issue.estimate_hours != null && issue.estimate_hours > 0 && (
-                        <span className="flex items-center gap-0.5 text-[10px] text-gray-500">
+                        <span className="app-text-micro flex items-center gap-0.5 text-gray-500">
                           <Clock size={11} />
                           {Math.round(issue.time_spent_minutes / 60 * 10) / 10}/{issue.estimate_hours}h
                         </span>
                       )}
                       {issue.due_date && (
-                        <div className="flex items-center gap-1 text-[10px] text-gray-500">
+                        <div className="app-text-micro flex items-center gap-1 text-gray-500">
                           <Calendar size={10} />
                           <span>{formatDate(issue.due_date)}</span>
                         </div>
@@ -131,7 +136,7 @@ export const BoardView = ({
                     </div>
                     <div className="flex items-center -space-x-2">
                       {issue.assignee_name ? (
-                        <div className="w-6 h-6 rounded-full bg-blue-500 flex items-center justify-center text-[9px] font-bold text-white border-2 border-clickup-bg">
+                        <div className="app-text-micro flex h-6 w-6 items-center justify-center rounded-full border-2 border-clickup-bg bg-blue-500 font-bold text-white">
                           {initials(issue.assignee_name)}
                         </div>
                       ) : (
@@ -143,7 +148,7 @@ export const BoardView = ({
                   </div>
                 </motion.div>
               ))}
-              <button className="w-full py-2 border border-dashed border-clickup-border rounded-lg text-[10px] text-gray-600 hover:text-gray-400 hover:border-gray-400 transition-all">
+              <button className="app-text-micro w-full rounded-lg border border-dashed border-clickup-border py-2 text-gray-600 transition-all hover:border-gray-400 hover:text-gray-400">
                 + Add Task
               </button>
             </div>

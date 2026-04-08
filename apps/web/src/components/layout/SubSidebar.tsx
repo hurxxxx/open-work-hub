@@ -1,4 +1,5 @@
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import {
@@ -8,17 +9,22 @@ import {
   Layout,
   Loader2,
   List as ListIcon,
+  FolderOpen,
+  FileText,
+  MoreHorizontal,
+  Pencil,
+  Trash2,
 } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 import { NAV_ITEMS, APP_BAR_ITEMS } from '@/src/constants';
 import { useAuth } from '@/src/domains/auth/auth-provider';
 import { getWorkspaceRoleByKey } from '@/src/domains/auth/auth-api';
-import { listPmsProjects, type PmsProject } from '@/src/domains/pms/pms-api';
-import { listTeams, type TeamItem } from '@/src/domains/admin/admin-api';
+import { listPmsLists, listFolders, createSpaceDocPage, listSpaceDocPages, updateSpaceDocPage, deleteSpaceDocPage, updateFolder, deleteFolder, type PmsFolder, type PmsList, type PmsSpaceDocPage } from '@/src/domains/pms/pms-api';
+import { listTeams, updateTeam, deleteTeam, type TeamItem } from '@/src/domains/admin/admin-api';
 import { CreateProjectModal } from '@/src/components/views/PMSView/CreateProjectModal';
 import { CreateSpaceModal } from '@/src/components/views/PMSView/CreateSpaceModal';
+import { CreateFolderModal } from '@/src/components/views/PMSView/CreateFolderModal';
 
-const DEFAULT_SPACE_ID = '__default__';
 const PMS_WORKSPACE_KEY = 'pms';
 const SPACE_COLORS = [
   'bg-emerald-500',
@@ -28,8 +34,8 @@ const SPACE_COLORS = [
   'bg-violet-500',
 ];
 
-function upsertProject(projects: PmsProject[], project: PmsProject): PmsProject[] {
-  return [project, ...projects.filter((item) => item.id !== project.id)].sort(
+function upsertList(lists: PmsList[], item: PmsList): PmsList[] {
+  return [item, ...lists.filter((current) => current.id !== item.id)].sort(
     (left, right) => right.updated_at.localeCompare(left.updated_at),
   );
 }
@@ -40,22 +46,34 @@ function upsertTeam(teams: TeamItem[], team: TeamItem): TeamItem[] {
   );
 }
 
-// ── Space "+" popover (ClickUp-style) ────────────────────────────────
 const SpaceAddPopover = ({
   open,
+  anchorRef,
   onClose,
   onCreateList,
+  onCreateFolder,
+  onOpenDocs,
 }: {
   open: boolean;
+  anchorRef: React.RefObject<HTMLButtonElement | null>;
   onClose: () => void;
   onCreateList: () => void;
+  onCreateFolder: () => void;
+  onOpenDocs: () => void;
 }) => {
   const ref = useRef<HTMLDivElement>(null);
+  const [pos, setPos] = useState({ top: 0, left: 0 });
+
+  useEffect(() => {
+    if (!open || !anchorRef.current) return;
+    const rect = anchorRef.current.getBoundingClientRect();
+    setPos({ top: rect.top, left: rect.right + 4 });
+  }, [open, anchorRef]);
 
   useEffect(() => {
     if (!open) return;
-    const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) onClose();
+    const handler = (event: MouseEvent) => {
+      if (ref.current && !ref.current.contains(event.target as Node)) onClose();
     };
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
@@ -63,12 +81,13 @@ const SpaceAddPopover = ({
 
   if (!open) return null;
 
-  return (
+  return createPortal(
     <div
       ref={ref}
-      className="absolute left-full top-0 ml-1 z-50 w-52 bg-clickup-bg border border-clickup-border rounded-lg shadow-xl py-1"
+      style={{ top: pos.top, left: pos.left }}
+      className="fixed z-[9999] w-52 bg-clickup-bg border border-clickup-border rounded-lg shadow-xl py-1"
     >
-      <div className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-gray-500">
+      <div className="app-text-overline px-3 py-1.5 text-gray-500">
         Create
       </div>
       <button
@@ -77,75 +96,388 @@ const SpaceAddPopover = ({
       >
         <ListIcon size={16} className="text-gray-400" />
         <div className="text-left">
-          <div className="text-xs font-medium text-clickup-text">List</div>
-          <div className="text-[10px] text-clickup-text/40">Track tasks, projects & more</div>
+          <div className="app-text-control-sm text-clickup-text">List</div>
+          <div className="app-text-micro text-clickup-text/40">Track tasks, projects, people & more</div>
         </div>
       </button>
-    </div>
+      <button
+        onClick={() => { onCreateFolder(); onClose(); }}
+        className="w-full flex items-center gap-3 px-3 py-2 hover:bg-clickup-hover transition-colors"
+      >
+        <FolderOpen size={16} className="text-gray-400" />
+        <div className="text-left">
+          <div className="app-text-control-sm text-clickup-text">Folder</div>
+          <div className="app-text-micro text-clickup-text/40">Group Lists, Docs & more</div>
+        </div>
+      </button>
+      <button
+        onClick={() => { onOpenDocs(); onClose(); }}
+        className="w-full flex items-center gap-3 px-3 py-2 hover:bg-clickup-hover transition-colors"
+      >
+        <FileText size={16} className="text-gray-400" />
+        <div className="text-left">
+          <div className="app-text-control-sm text-clickup-text">Doc</div>
+          <div className="app-text-micro text-clickup-text/40">Write and organize documents</div>
+        </div>
+      </button>
+    </div>,
+    document.body,
   );
 };
 
-// ── Space item in sidebar ─────────────────────────────────────────────
+const FolderAddPopover = ({
+  open,
+  anchorRef,
+  onClose,
+  onCreateList,
+  onCreateDoc,
+}: {
+  open: boolean;
+  anchorRef: React.RefObject<HTMLButtonElement | null>;
+  onClose: () => void;
+  onCreateList: () => void;
+  onCreateDoc: () => void;
+}) => {
+  const ref = useRef<HTMLDivElement>(null);
+  const [pos, setPos] = useState({ top: 0, left: 0 });
+
+  useEffect(() => {
+    if (!open || !anchorRef.current) return;
+    const rect = anchorRef.current.getBoundingClientRect();
+    setPos({ top: rect.top, left: rect.right + 4 });
+  }, [open, anchorRef]);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (event: MouseEvent) => {
+      if (ref.current && !ref.current.contains(event.target as Node)) onClose();
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [open, onClose]);
+
+  if (!open) return null;
+
+  return createPortal(
+    <div
+      ref={ref}
+      style={{ top: pos.top, left: pos.left }}
+      className="fixed z-[9999] w-48 bg-clickup-bg border border-clickup-border rounded-lg shadow-xl py-1"
+    >
+      <div className="app-text-overline px-3 py-1.5 text-gray-500">
+        Create
+      </div>
+      <button
+        onClick={() => { onCreateList(); onClose(); }}
+        className="w-full flex items-center gap-3 px-3 py-2 hover:bg-clickup-hover transition-colors"
+      >
+        <ListIcon size={14} className="text-gray-400" />
+        <div className="app-text-control-sm text-clickup-text">List</div>
+      </button>
+      <button
+        onClick={() => { onCreateDoc(); onClose(); }}
+        className="w-full flex items-center gap-3 px-3 py-2 hover:bg-clickup-hover transition-colors"
+      >
+        <FileText size={14} className="text-gray-400" />
+        <div className="app-text-control-sm text-clickup-text">Doc</div>
+      </button>
+    </div>,
+    document.body,
+  );
+};
+
+const FolderContextMenu = ({
+  open,
+  anchorRef,
+  onClose,
+  onRename,
+  onDelete,
+}: {
+  open: boolean;
+  anchorRef: React.RefObject<HTMLButtonElement | null>;
+  onClose: () => void;
+  onRename: () => void;
+  onDelete: () => void;
+}) => {
+  const ref = useRef<HTMLDivElement>(null);
+  const [pos, setPos] = useState({ top: 0, left: 0 });
+
+  useEffect(() => {
+    if (!open || !anchorRef.current) return;
+    const rect = anchorRef.current.getBoundingClientRect();
+    setPos({ top: rect.top, left: rect.right + 4 });
+  }, [open, anchorRef]);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (event: MouseEvent) => {
+      if (ref.current && !ref.current.contains(event.target as Node)) onClose();
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [open, onClose]);
+
+  if (!open) return null;
+
+  return createPortal(
+    <div
+      ref={ref}
+      style={{ top: pos.top, left: pos.left }}
+      className="fixed z-[9999] w-44 bg-clickup-bg border border-clickup-border rounded-lg shadow-xl py-1"
+    >
+      <button
+        onClick={() => { onRename(); onClose(); }}
+        className="w-full flex items-center gap-3 px-3 py-2 hover:bg-clickup-hover transition-colors"
+      >
+        <Pencil size={14} className="text-gray-400" />
+        <span className="app-text-control-sm text-clickup-text">Rename</span>
+      </button>
+      <button
+        onClick={() => { onDelete(); onClose(); }}
+        className="w-full flex items-center gap-3 px-3 py-2 hover:bg-clickup-hover transition-colors"
+      >
+        <Trash2 size={14} className="text-red-400" />
+        <span className="app-text-control-sm text-red-400">Delete</span>
+      </button>
+    </div>,
+    document.body,
+  );
+};
+
+const SpaceContextMenu = ({
+  open,
+  anchorRef,
+  onClose,
+  onRename,
+  onDelete,
+}: {
+  open: boolean;
+  anchorRef: React.RefObject<HTMLButtonElement | null>;
+  onClose: () => void;
+  onRename: () => void;
+  onDelete: () => void;
+}) => {
+  const ref = useRef<HTMLDivElement>(null);
+  const [pos, setPos] = useState({ top: 0, left: 0 });
+
+  useEffect(() => {
+    if (!open || !anchorRef.current) return;
+    const rect = anchorRef.current.getBoundingClientRect();
+    setPos({ top: rect.top, left: rect.right + 4 });
+  }, [open, anchorRef]);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (event: MouseEvent) => {
+      if (ref.current && !ref.current.contains(event.target as Node)) onClose();
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [open, onClose]);
+
+  if (!open) return null;
+
+  return createPortal(
+    <div
+      ref={ref}
+      style={{ top: pos.top, left: pos.left }}
+      className="fixed z-[9999] w-44 bg-clickup-bg border border-clickup-border rounded-lg shadow-xl py-1"
+    >
+      <button
+        onClick={() => { onRename(); onClose(); }}
+        className="w-full flex items-center gap-3 px-3 py-2 hover:bg-clickup-hover transition-colors"
+      >
+        <Pencil size={14} className="text-gray-400" />
+        <span className="app-text-control-sm text-clickup-text">Rename</span>
+      </button>
+      <button
+        onClick={() => { onDelete(); onClose(); }}
+        className="w-full flex items-center gap-3 px-3 py-2 hover:bg-clickup-hover transition-colors"
+      >
+        <Trash2 size={14} className="text-red-400" />
+        <span className="app-text-control-sm text-red-400">Delete</span>
+      </button>
+    </div>,
+    document.body,
+  );
+};
+
+type FolderWithLists = {
+  folder: PmsFolder;
+  lists: PmsList[];
+};
+
 const SpaceItem = ({
+  spaceId,
   name,
   iconColor,
-  projects,
+  rootLists,
+  folders,
   expanded,
   onToggle,
+  onNavigate,
   onAddList,
+  onAddListToFolder,
+  onAddFolder,
+  onOpenDocs,
+  onRenameFolder,
+  onDeleteFolder,
+  onRenameSpace,
+  onDeleteSpace,
+  docPages,
+  onRenameDoc,
+  onDeleteDoc,
   activeNavItemId,
-  linkPath,
-  isActive,
 }: {
+  spaceId: string;
   name: string;
   iconColor: string;
-  projects: PmsProject[];
+  rootLists: PmsList[];
+  folders: FolderWithLists[];
   expanded: boolean;
   onToggle: () => void;
+  onNavigate: () => void;
   onAddList: () => void;
+  onAddListToFolder: (folderId: string) => void;
+  onAddFolder: () => void;
+  onOpenDocs: () => void;
+  onRenameFolder: (folderId: string, currentName: string) => void;
+  onDeleteFolder: (folderId: string) => void;
+  onRenameSpace: (newName: string) => void;
+  onDeleteSpace: () => void;
+  docPages: PmsSpaceDocPage[];
+  onRenameDoc: (pageId: string, newTitle: string) => void;
+  onDeleteDoc: (pageId: string) => void;
   activeNavItemId: string;
-  linkPath?: string;
-  isActive?: boolean;
 }) => {
   const [addPopoverOpen, setAddPopoverOpen] = useState(false);
-
-  const headerClassName = cn(
-    'sidebar-item flex-1 min-w-0 px-2',
-    isActive && 'active',
+  const [spaceMenuOpen, setSpaceMenuOpen] = useState(false);
+  const [renaming, setRenaming] = useState(false);
+  const [renameValue, setRenameValue] = useState(name);
+  const renameInputRef = useRef<HTMLInputElement>(null);
+  const addBtnRef = useRef<HTMLButtonElement>(null);
+  const spaceMenuBtnRef = useRef<HTMLButtonElement>(null);
+  const [expandedFolders, setExpandedFolders] = useState<Set<string>>(
+    () => new Set(folders.map((f) => f.folder.id)),
   );
+  const [folderPopoverOpen, setFolderPopoverOpen] = useState<string | null>(null);
+  const [folderMenuOpen, setFolderMenuOpen] = useState<string | null>(null);
+  const folderMenuBtnRefs = useRef<Map<string, HTMLButtonElement>>(new Map());
+  const folderAddBtnRefs = useRef<Map<string, HTMLButtonElement>>(new Map());
+  const [docMenuOpen, setDocMenuOpen] = useState<string | null>(null);
+  const docMenuBtnRefs = useRef<Map<string, HTMLButtonElement>>(new Map());
+  const [renamingDocId, setRenamingDocId] = useState<string | null>(null);
+  const [docRenameValue, setDocRenameValue] = useState('');
+  const docRenameInputRef = useRef<HTMLInputElement>(null);
+
+
+  const docsToolId = `pms-space-${spaceId}-docs`;
+  const spaceOverviewToolId = `pms-space-${spaceId}`;
+  const spaceActive = activeNavItemId === docsToolId || activeNavItemId === spaceOverviewToolId
+    || rootLists.some((list) => activeNavItemId === `pms-list-${list.id}`)
+    || folders.some(({ lists }) => lists.some((list) => activeNavItemId === `pms-list-${list.id}`));
+
+  useEffect(() => {
+    setExpandedFolders((prev) => {
+      const next = new Set(prev);
+      for (const { folder } of folders) {
+        if (!prev.has(folder.id)) next.add(folder.id);
+      }
+      return next.size === prev.size ? prev : next;
+    });
+  }, [folders]);
+
+  const toggleFolder = (folderId: string) => {
+    setExpandedFolders((prev) => {
+      const next = new Set(prev);
+      if (next.has(folderId)) next.delete(folderId);
+      else next.add(folderId);
+      return next;
+    });
+  };
 
   return (
     <div className="space-y-0.5">
       <div className="group relative flex items-center gap-1">
-        <button
-          onClick={onToggle}
-          className="ml-1 flex h-7 w-6 items-center justify-center rounded text-gray-500 transition-colors hover:bg-clickup-hover hover:text-gray-300"
-          title={expanded ? 'Collapse Space' : 'Expand Space'}
+        <div
+          className={cn(
+            'flex min-w-0 flex-1 items-center gap-1 rounded-md transition-colors',
+            spaceActive ? 'bg-clickup-hover' : 'hover:bg-clickup-hover',
+          )}
         >
-          {expanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
-        </button>
-
-        {linkPath ? (
-          <Link to={linkPath} className={headerClassName}>
-            <div className={cn('w-5 h-5 rounded flex items-center justify-center shrink-0', iconColor)}>
-              <Layout size={12} className="text-white" />
-            </div>
-            <span className="truncate text-xs font-medium">{name}</span>
-          </Link>
-        ) : (
-          <button onClick={onToggle} className={headerClassName}>
-            <div className={cn('w-5 h-5 rounded flex items-center justify-center shrink-0', iconColor)}>
-              <Layout size={12} className="text-white" />
-            </div>
-            <span className="truncate text-xs font-medium">{name}</span>
-          </button>
-        )}
-
-        <div className="hidden group-hover:flex items-center gap-0.5 pr-1 shrink-0">
           <button
-            onClick={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
+            onClick={onToggle}
+            className={cn(
+              'ml-1 flex h-7 w-6 shrink-0 items-center justify-center rounded transition-colors',
+              spaceActive ? 'text-clickup-text/50' : 'text-gray-500 hover:text-gray-300',
+            )}
+            title={expanded ? 'Collapse Space' : 'Expand Space'}
+          >
+            {expanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+          </button>
+
+          {renaming ? (
+            <div className="flex min-w-0 flex-1 items-center gap-2 py-1.5 pl-0.5 pr-2">
+              <div className={cn('h-5 w-5 shrink-0 rounded flex items-center justify-center', iconColor)}>
+                <Layout size={12} className="text-white" />
+              </div>
+              <input
+                ref={renameInputRef}
+                value={renameValue}
+                onChange={(e) => setRenameValue(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    const trimmed = renameValue.trim();
+                    if (trimmed && trimmed !== name) onRenameSpace(trimmed);
+                    setRenaming(false);
+                  } else if (e.key === 'Escape') {
+                    setRenameValue(name);
+                    setRenaming(false);
+                  }
+                }}
+                onBlur={() => {
+                  const trimmed = renameValue.trim();
+                  if (trimmed && trimmed !== name) onRenameSpace(trimmed);
+                  setRenaming(false);
+                }}
+                className="app-text-control-sm flex-1 min-w-0 rounded border border-blue-500 bg-transparent px-1 py-0.5 text-clickup-text outline-none"
+                autoFocus
+              />
+            </div>
+          ) : (
+            <button
+              onClick={() => { if (!expanded) onToggle(); onNavigate(); }}
+              className={cn(
+                'flex min-w-0 flex-1 items-center gap-2 py-1.5 pl-0.5 pr-2 text-left',
+                spaceActive ? 'text-clickup-text' : 'text-gray-500 group-hover:text-gray-300',
+              )}
+            >
+              <div className={cn('h-5 w-5 shrink-0 rounded flex items-center justify-center', iconColor)}>
+                <Layout size={12} className="text-white" />
+              </div>
+              <span className={cn('app-text-control-sm truncate', spaceActive && 'font-medium')}>{name}</span>
+            </button>
+          )}
+        </div>
+
+        <div className={cn('items-center gap-0.5 pr-1 shrink-0', addPopoverOpen || spaceMenuOpen ? 'flex' : 'hidden group-hover:flex')}>
+          <button
+            ref={spaceMenuBtnRef}
+            onClick={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              setSpaceMenuOpen((current) => !current);
+            }}
+            className="p-0.5 hover:bg-clickup-hover rounded text-gray-500 hover:text-gray-300 transition-colors"
+            title="More"
+          >
+            <MoreHorizontal size={14} />
+          </button>
+          <button
+            ref={addBtnRef}
+            onClick={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
               setAddPopoverOpen((current) => !current);
             }}
             className="p-0.5 hover:bg-clickup-hover rounded text-gray-500 hover:text-gray-300 transition-colors"
@@ -155,10 +487,20 @@ const SpaceItem = ({
           </button>
         </div>
 
+        <SpaceContextMenu
+          open={spaceMenuOpen}
+          anchorRef={spaceMenuBtnRef}
+          onClose={() => setSpaceMenuOpen(false)}
+          onRename={() => { setRenameValue(name); setRenaming(true); }}
+          onDelete={onDeleteSpace}
+        />
         <SpaceAddPopover
           open={addPopoverOpen}
+          anchorRef={addBtnRef}
           onClose={() => setAddPopoverOpen(false)}
           onCreateList={onAddList}
+          onCreateFolder={onAddFolder}
+          onOpenDocs={onOpenDocs}
         />
       </div>
 
@@ -170,30 +512,179 @@ const SpaceItem = ({
             exit={{ height: 0, opacity: 0 }}
             className="overflow-hidden"
           >
-            <div className="ml-4 pl-3 border-l border-clickup-border space-y-0.5">
-              {projects.map((project) => (
+            <div className="ml-4 pl-3 border-l border-clickup-border space-y-1">
+              {docPages.map((page) => {
+                const docPageNavId = `${docsToolId}/${page.id}`;
+                const isDocMenuOpen = docMenuOpen === page.id;
+                const isDocRenaming = renamingDocId === page.id;
+                return (
+                  <div key={page.id} className="group/doc flex items-center">
+                    {isDocRenaming ? (
+                      <div className="sidebar-submenu-item flex-1 min-w-0">
+                        <FileText size={13} className="text-gray-500 shrink-0" />
+                        <input
+                          ref={docRenameInputRef}
+                          value={docRenameValue}
+                          onChange={(e) => setDocRenameValue(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              const trimmed = docRenameValue.trim();
+                              if (trimmed && trimmed !== page.title) onRenameDoc(page.id, trimmed);
+                              setRenamingDocId(null);
+                            } else if (e.key === 'Escape') {
+                              setRenamingDocId(null);
+                            }
+                          }}
+                          onBlur={() => {
+                            const trimmed = docRenameValue.trim();
+                            if (trimmed && trimmed !== page.title) onRenameDoc(page.id, trimmed);
+                            setRenamingDocId(null);
+                          }}
+                          className="flex-1 min-w-0 bg-transparent text-xs text-clickup-text outline-none border border-blue-500 rounded px-1 py-0.5"
+                          autoFocus
+                        />
+                      </div>
+                    ) : (
+                      <Link
+                        to={`/tool/${docPageNavId}`}
+                        className={cn('sidebar-submenu-item flex-1 min-w-0', activeNavItemId === docPageNavId && 'sidebar-submenu-item-active')}
+                      >
+                        <FileText size={13} className="text-gray-500 shrink-0" />
+                        <span className="sidebar-submenu-label">{page.title || 'Untitled'}</span>
+                      </Link>
+                    )}
+                    <div className={cn('items-center gap-0.5 pr-1 shrink-0', isDocMenuOpen ? 'flex' : 'hidden group-hover/doc:flex')}>
+                      <button
+                        ref={(el) => { if (el) docMenuBtnRefs.current.set(page.id, el); }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setDocMenuOpen((c) => (c === page.id ? null : page.id));
+                        }}
+                        className="p-0.5 hover:bg-clickup-hover rounded text-gray-500 hover:text-gray-300 transition-colors"
+                        title="Doc options"
+                      >
+                        <MoreHorizontal size={12} />
+                      </button>
+                    </div>
+                    <FolderContextMenu
+                      open={isDocMenuOpen}
+                      anchorRef={{ current: docMenuBtnRefs.current.get(page.id) ?? null }}
+                      onClose={() => setDocMenuOpen(null)}
+                      onRename={() => { setDocRenameValue(page.title); setRenamingDocId(page.id); }}
+                      onDelete={() => onDeleteDoc(page.id)}
+                    />
+                  </div>
+                );
+              })}
+
+              {folders.map(({ folder, lists }) => {
+                const isFolderExpanded = expandedFolders.has(folder.id);
+                const isFolderPopoverOpen = folderPopoverOpen === folder.id;
+                const isFolderMenuOpen = folderMenuOpen === folder.id;
+                const hasAnyPopup = isFolderPopoverOpen || isFolderMenuOpen;
+                return (
+                  <div key={folder.id}>
+                    <div className="group/folder flex items-center">
+                      <button
+                        onClick={() => toggleFolder(folder.id)}
+                        className="sidebar-submenu-item flex-1 min-w-0"
+                      >
+                        <span className="relative flex h-[13px] w-[13px] shrink-0 items-center justify-center text-gray-500">
+                          <FolderOpen size={13} className="transition-opacity group-hover/folder:opacity-0" />
+                          <span className="absolute inset-0 flex items-center justify-center opacity-0 transition-opacity group-hover/folder:opacity-100">
+                            {isFolderExpanded ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
+                          </span>
+                        </span>
+                        <span className="sidebar-submenu-label">{folder.name}</span>
+                      </button>
+                      <div className={cn('items-center gap-0.5 pr-1 shrink-0', hasAnyPopup ? 'flex' : 'hidden group-hover/folder:flex')}>
+                        <button
+                          ref={(el) => { if (el) folderMenuBtnRefs.current.set(folder.id, el); }}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            setFolderMenuOpen((current) => (current === folder.id ? null : folder.id));
+                          }}
+                          className="p-0.5 hover:bg-clickup-hover rounded text-gray-500 hover:text-gray-300 transition-colors"
+                          title="Folder options"
+                        >
+                          <MoreHorizontal size={12} />
+                        </button>
+                        <button
+                          ref={(el) => { if (el) folderAddBtnRefs.current.set(folder.id, el); }}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            setFolderPopoverOpen((current) => (current === folder.id ? null : folder.id));
+                          }}
+                          className="p-0.5 hover:bg-clickup-hover rounded text-gray-500 hover:text-gray-300 transition-colors"
+                          title="Add to folder"
+                        >
+                          <Plus size={12} />
+                        </button>
+                      </div>
+                      <FolderAddPopover
+                        open={isFolderPopoverOpen}
+                        anchorRef={{ current: folderAddBtnRefs.current.get(folder.id) ?? null }}
+                        onClose={() => setFolderPopoverOpen(null)}
+                        onCreateList={() => onAddListToFolder(folder.id)}
+                        onCreateDoc={onOpenDocs}
+                      />
+                      <FolderContextMenu
+                        open={isFolderMenuOpen}
+                        anchorRef={{ current: folderMenuBtnRefs.current.get(folder.id) ?? null }}
+                        onClose={() => setFolderMenuOpen(null)}
+                        onRename={() => onRenameFolder(folder.id, folder.name)}
+                        onDelete={() => onDeleteFolder(folder.id)}
+                      />
+                    </div>
+                    <AnimatePresence initial={false}>
+                      {isFolderExpanded && (
+                        <motion.div
+                          initial={{ height: 0, opacity: 0 }}
+                          animate={{ height: 'auto', opacity: 1 }}
+                          exit={{ height: 0, opacity: 0 }}
+                          className="overflow-hidden"
+                        >
+                          <div className="ml-4 space-y-0.5">
+                            {lists.map((list) => (
+                              <Link
+                                key={list.id}
+                                to={`/tool/pms-list-${list.id}`}
+                                className={cn(
+                                  'sidebar-submenu-item',
+                                  activeNavItemId === `pms-list-${list.id}` && 'sidebar-submenu-item-active',
+                                )}
+                              >
+                                <ListIcon size={13} className="text-gray-500 shrink-0" />
+                                <span className="sidebar-submenu-label">{list.name}</span>
+                                <span className="sidebar-submenu-meta">
+                                  ({list.issue_count})
+                                </span>
+                              </Link>
+                            ))}
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
+                );
+              })}
+
+              {rootLists.map((list) => (
                 <Link
-                  key={project.id}
-                  to={`/tool/pms-project-${project.id}`}
+                  key={list.id}
+                  to={`/tool/pms-list-${list.id}`}
                   className={cn(
-                    'sidebar-item text-[11px] py-1 group/proj',
-                    activeNavItemId === `pms-project-${project.id}` && 'active',
+                    'sidebar-submenu-item',
+                    activeNavItemId === `pms-list-${list.id}` && 'sidebar-submenu-item-active',
                   )}
                 >
                   <ListIcon size={13} className="text-gray-500 shrink-0" />
-                  <span className="truncate flex-1">{project.name}</span>
-                  <span className="text-[10px] text-clickup-text/30 shrink-0">
-                    ({project.issue_count})
+                  <span className="sidebar-submenu-label">{list.name}</span>
+                  <span className="sidebar-submenu-meta">
+                    ({list.issue_count})
                   </span>
                 </Link>
               ))}
-              <button
-                onClick={onAddList}
-                className="w-full flex items-center gap-2 px-2 py-1 text-[11px] text-gray-500 hover:text-gray-300 hover:bg-clickup-hover rounded transition-colors"
-              >
-                <Plus size={11} />
-                <span>Add List</span>
-              </button>
             </div>
           </motion.div>
         )}
@@ -202,33 +693,41 @@ const SpaceItem = ({
   );
 };
 
-// ── Main SubSidebar ───────────────────────────────────────────────────
 export const SubSidebar = ({ activeAppId, activeNavItemId }: { activeAppId: string, activeNavItemId: string }) => {
   const location = useLocation();
   const navigate = useNavigate();
   const { token, user, hasPermission } = useAuth();
-  const isDocEditor = location.pathname.match(/^\/tool\/[^/]+\/[^/]+$/) || location.pathname.match(/^\/docs\/[^/]+$/);
+  const isSpaceDocs = /^\/tool\/pms-space-.+-docs(\/|$)/.test(location.pathname);
+  const isDocEditor = !isSpaceDocs && (location.pathname.match(/^\/tool\/[^/]+\/[^/]+$/) || location.pathname.match(/^\/docs\/[^/]+$/));
   const pmsWorkspaceId = getWorkspaceRoleByKey(user, PMS_WORKSPACE_KEY)?.workspace_id ?? null;
   const canReadTeams = hasPermission('team.read');
   const canWriteTeams = hasPermission('team.write') && Boolean(pmsWorkspaceId);
 
   const [expandedCategories, setExpandedCategories] = useState<string[]>([]);
-  const [pmsProjects, setPmsProjects] = useState<PmsProject[]>([]);
+  const [pmsLists, setPmsLists] = useState<PmsList[]>([]);
+  const [pmsFolders, setPmsFolders] = useState<PmsFolder[]>([]);
   const [pmsTeams, setPmsTeams] = useState<TeamItem[]>([]);
   const [pmsLoading, setPmsLoading] = useState(false);
   const [createProjectOpen, setCreateProjectOpen] = useState(false);
   const [createProjectTeamId, setCreateProjectTeamId] = useState<string | null>(null);
+  const [createProjectFolderId, setCreateProjectFolderId] = useState<string | null>(null);
   const [createSpaceOpen, setCreateSpaceOpen] = useState(false);
-  const [expandedSpaces, setExpandedSpaces] = useState<Set<string>>(new Set([DEFAULT_SPACE_ID]));
+  const [expandedSpaces, setExpandedSpaces] = useState<Set<string>>(new Set());
 
-  const knownSpaceIdsRef = useRef(new Set<string>([DEFAULT_SPACE_ID]));
+  const knownSpaceIdsRef = useRef(new Set<string>());
 
-  const filteredItems = NAV_ITEMS.filter(item => item.appId === activeAppId);
-  const categories = Array.from(new Set(filteredItems.map(item => item.category)));
+  const filteredItems = useMemo(
+    () => NAV_ITEMS.filter((item) => item.appId === activeAppId),
+    [activeAppId],
+  );
+  const categories = useMemo(
+    () => Array.from(new Set(filteredItems.map((item) => item.category))),
+    [filteredItems],
+  );
 
   useEffect(() => {
     setExpandedCategories(categories);
-  }, [activeAppId]);
+  }, [categories]);
 
   useEffect(() => {
     if (activeAppId !== 'pms' || !token) return;
@@ -236,10 +735,20 @@ export const SubSidebar = ({ activeAppId, activeNavItemId }: { activeAppId: stri
 
     setPmsLoading(true);
 
-    const projectRequest = listPmsProjects(token)
-      .then((projectRes) => {
+    const listRequest = listPmsLists(token)
+      .then((response) => {
         if (cancelled) return;
-        setPmsProjects(projectRes.items);
+        setPmsLists(response.items);
+      });
+
+    const folderRequest = listFolders(token)
+      .then((response) => {
+        if (cancelled) return;
+        setPmsFolders(response.items);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setPmsFolders([]);
       });
 
     const teamRequest = canReadTeams && pmsWorkspaceId
@@ -257,7 +766,7 @@ export const SubSidebar = ({ activeAppId, activeNavItemId }: { activeAppId: stri
           setPmsTeams([]);
         });
 
-    Promise.allSettled([projectRequest, teamRequest]).finally(() => {
+    Promise.allSettled([listRequest, folderRequest, teamRequest]).finally(() => {
       if (!cancelled) {
         setPmsLoading(false);
       }
@@ -269,13 +778,13 @@ export const SubSidebar = ({ activeAppId, activeNavItemId }: { activeAppId: stri
   }, [activeAppId, canReadTeams, pmsWorkspaceId, token]);
 
   const toggleCategory = (category: string) => {
-    setExpandedCategories(prev =>
-      prev.includes(category) ? prev.filter(c => c !== category) : [...prev, category]
-    );
+    setExpandedCategories((prev) => (
+      prev.includes(category) ? prev.filter((current) => current !== category) : [...prev, category]
+    ));
   };
 
   const toggleSpace = (spaceId: string) => {
-    setExpandedSpaces(prev => {
+    setExpandedSpaces((prev) => {
       const next = new Set(prev);
       if (next.has(spaceId)) next.delete(spaceId);
       else next.add(spaceId);
@@ -285,50 +794,179 @@ export const SubSidebar = ({ activeAppId, activeNavItemId }: { activeAppId: stri
 
   const openCreateProject = (teamId: string | null) => {
     setCreateProjectTeamId(teamId);
+    setCreateProjectFolderId(null);
     setCreateProjectOpen(true);
   };
 
-  const teamSpaceActive = activeNavItemId === 'pms-space-team' || location.pathname === '/pms';
+  const [createFolderOpen, setCreateFolderOpen] = useState(false);
+  const [createFolderTeamId, setCreateFolderTeamId] = useState<string | null>(null);
+
+  const openCreateFolder = (teamId: string) => {
+    setCreateFolderTeamId(teamId);
+    setCreateFolderOpen(true);
+  };
+
+  const handleCreateDoc = useCallback(async (spaceId: string) => {
+    if (!token) return;
+    try {
+      const page = await createSpaceDocPage(token, spaceId, { title: 'Untitled Page' });
+      navigate(`/tool/pms-space-${spaceId}-docs/${page.id}`);
+    } catch {
+      navigate(`/tool/pms-space-${spaceId}-docs`);
+    }
+  }, [navigate, token]);
+
+  const [spaceDocPages, setSpaceDocPages] = useState<Map<string, PmsSpaceDocPage[]>>(new Map());
+
+  useEffect(() => {
+    if (!token) return;
+    for (const team of pmsTeams) {
+      listSpaceDocPages(token, team.id)
+        .then((res) => setSpaceDocPages((prev) => new Map(prev).set(team.id, res.items.filter((p) => !p.parent_id))))
+        .catch(() => undefined);
+    }
+  }, [token, pmsTeams]);
+
+  const handleRenameDoc = useCallback(async (pageId: string, newTitle: string) => {
+    if (!token) return;
+    try {
+      const updated = await updateSpaceDocPage(token, pageId, { title: newTitle });
+      setSpaceDocPages((prev) => {
+        const next = new Map(prev);
+        const pages = next.get(updated.team_id) ?? [];
+        next.set(updated.team_id, pages.map((p) => (p.id === updated.id ? updated : p)));
+        return next;
+      });
+    } catch { /* ignore */ }
+  }, [token]);
+
+  const handleDeleteDoc = useCallback(async (pageId: string) => {
+    if (!token) return;
+    if (!window.confirm('Delete this document?')) return;
+    try {
+      await deleteSpaceDocPage(token, pageId);
+      setSpaceDocPages((prev) => {
+        const next = new Map(prev);
+        for (const [teamId, pages] of next) {
+          next.set(teamId, pages.filter((p) => p.id !== pageId));
+        }
+        return next;
+      });
+    } catch { /* ignore */ }
+  }, [token]);
+
+  const handleRenameFolder = useCallback(async (folderId: string, currentName: string) => {
+    if (!token) return;
+    const newName = window.prompt('Folder name', currentName);
+    if (!newName?.trim() || newName.trim() === currentName) return;
+    try {
+      const updated = await updateFolder(token, folderId, { name: newName.trim() });
+      setPmsFolders((current) => current.map((f) => (f.id === updated.id ? updated : f)));
+    } catch { /* ignore */ }
+  }, [token]);
+
+  const handleDeleteFolder = useCallback(async (folderId: string) => {
+    if (!token) return;
+    if (!window.confirm('Delete this folder? Lists inside will be moved to the space root.')) return;
+    try {
+      await deleteFolder(token, folderId);
+      setPmsFolders((current) => current.filter((f) => f.id !== folderId));
+      if (token) listPmsLists(token).then((res) => setPmsLists(res.items)).catch(() => undefined);
+    } catch { /* ignore */ }
+  }, [token]);
+
+  const handleRenameSpace = useCallback(async (spaceId: string, newName: string) => {
+    if (!token) return;
+    try {
+      const updated = await updateTeam(token, spaceId, { name: newName });
+      setPmsTeams((current) => current.map((t) => (t.id === updated.id ? updated : t)));
+    } catch { /* ignore */ }
+  }, [token]);
+
+  const handleDeleteSpace = useCallback(async (spaceId: string) => {
+    if (!token) return;
+    if (!window.confirm('Delete this space? All lists and folders inside will be deleted.')) return;
+    try {
+      await deleteTeam(token, spaceId);
+      setPmsTeams((current) => current.filter((t) => t.id !== spaceId));
+      setPmsLists((current) => current.filter((l) => l.team_id !== spaceId));
+      setPmsFolders((current) => current.filter((f) => f.team_id !== spaceId));
+    } catch { /* ignore */ }
+  }, [token]);
 
   const groupedSpaces = useMemo(() => {
-    const defaultProjects: PmsProject[] = [];
-    const byTeam = new Map<string, { id: string; name: string; projects: PmsProject[] }>();
+    const folderMap = new Map(pmsFolders.map((folder) => [folder.id, folder]));
+    const spaces = new Map<string, { id: string; name: string; rootLists: PmsList[]; folders: Map<string, FolderWithLists> }>();
 
-    for (const project of pmsProjects) {
-      if (!project.team_id) {
-        defaultProjects.push(project);
+    for (const team of pmsTeams) {
+      spaces.set(team.id, {
+        id: team.id,
+        name: team.name,
+        rootLists: [],
+        folders: new Map(),
+      });
+    }
+
+    for (const list of pmsLists) {
+      if (!list.team_id) {
         continue;
       }
 
-      const current = byTeam.get(project.team_id) ?? {
-        id: project.team_id,
-        name: project.team_name ?? 'Untitled Space',
-        projects: [],
+      const current = spaces.get(list.team_id) ?? {
+        id: list.team_id,
+        name: list.team_name ?? 'Untitled Space',
+        rootLists: [],
+        folders: new Map<string, FolderWithLists>(),
       };
-      current.name = project.team_name ?? current.name;
-      current.projects.push(project);
-      byTeam.set(project.team_id, current);
-    }
-
-    for (const team of pmsTeams) {
-      const current = byTeam.get(team.id);
-      if (current) {
-        current.name = team.name;
+      if (list.folder_id && folderMap.has(list.folder_id)) {
+        const folder = folderMap.get(list.folder_id);
+        if (folder) {
+          const folderEntry = current.folders.get(folder.id) ?? { folder, lists: [] };
+          folderEntry.lists.push(list);
+          current.folders.set(folder.id, folderEntry);
+        } else {
+          current.rootLists.push(list);
+        }
       } else {
-        byTeam.set(team.id, { id: team.id, name: team.name, projects: [] });
+        current.rootLists.push(list);
       }
+
+      spaces.set(current.id, current);
     }
 
-    return {
-      defaultProjects,
-      teamSpaces: Array.from(byTeam.values()).sort((left, right) => left.name.localeCompare(right.name, 'ko')),
-    };
-  }, [pmsProjects, pmsTeams]);
+    for (const folder of pmsFolders) {
+      if (!folder.team_id) continue;
+      const current = spaces.get(folder.team_id) ?? {
+        id: folder.team_id,
+        name: 'Untitled Space',
+        rootLists: [],
+        folders: new Map<string, FolderWithLists>(),
+      };
+      if (!current.folders.has(folder.id)) {
+        current.folders.set(folder.id, { folder, lists: [] });
+      }
+      spaces.set(current.id, current);
+    }
+
+    return Array.from(spaces.values())
+      .map((space) => ({
+        id: space.id,
+        name: space.name,
+        rootLists: [...space.rootLists].sort((left, right) => left.name.localeCompare(right.name, 'ko')),
+        folders: Array.from(space.folders.values())
+          .map((entry) => ({
+            folder: entry.folder,
+            lists: [...entry.lists].sort((left, right) => left.name.localeCompare(right.name, 'ko')),
+          }))
+          .sort((left, right) => left.folder.sort_order - right.folder.sort_order || left.folder.name.localeCompare(right.folder.name, 'ko')),
+      }))
+      .sort((left, right) => left.name.localeCompare(right.name, 'ko'));
+  }, [pmsFolders, pmsLists, pmsTeams]);
 
   useEffect(() => {
     setExpandedSpaces((current) => {
       const next = new Set(current);
-      for (const space of groupedSpaces.teamSpaces) {
+      for (const space of groupedSpaces) {
         if (!knownSpaceIdsRef.current.has(space.id)) {
           knownSpaceIdsRef.current.add(space.id);
           next.add(space.id);
@@ -336,7 +974,7 @@ export const SubSidebar = ({ activeAppId, activeNavItemId }: { activeAppId: stri
       }
       return next;
     });
-  }, [groupedSpaces.teamSpaces]);
+  }, [groupedSpaces]);
 
   if (activeAppId === 'home' || activeAppId === 'profile' || isDocEditor) return null;
 
@@ -348,7 +986,7 @@ export const SubSidebar = ({ activeAppId, activeNavItemId }: { activeAppId: stri
         <div className="w-full flex items-center justify-between px-3 py-1">
           <button
             onClick={() => toggleCategory('Spaces')}
-            className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-gray-500 hover:text-gray-300 transition-colors"
+            className="app-text-overline flex items-center gap-1 text-gray-500 transition-colors hover:text-gray-300"
           >
             <span>Spaces</span>
             {isExpanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
@@ -378,27 +1016,28 @@ export const SubSidebar = ({ activeAppId, activeNavItemId }: { activeAppId: stri
                 </div>
               ) : (
                 <>
-                  <SpaceItem
-                    name="Team Space"
-                    iconColor="bg-clickup-purple"
-                    projects={groupedSpaces.defaultProjects}
-                    expanded={expandedSpaces.has(DEFAULT_SPACE_ID)}
-                    onToggle={() => toggleSpace(DEFAULT_SPACE_ID)}
-                    onAddList={() => openCreateProject(null)}
-                    activeNavItemId={activeNavItemId}
-                    linkPath="/tool/pms-space-team"
-                    isActive={teamSpaceActive}
-                  />
-
-                  {groupedSpaces.teamSpaces.map((space, index) => (
+                  {groupedSpaces.map((space, index) => (
                     <SpaceItem
                       key={space.id}
+                      spaceId={space.id}
                       name={space.name}
                       iconColor={SPACE_COLORS[index % SPACE_COLORS.length]}
-                      projects={space.projects}
+                      rootLists={space.rootLists}
+                      folders={space.folders}
                       expanded={expandedSpaces.has(space.id)}
                       onToggle={() => toggleSpace(space.id)}
+                      onNavigate={() => navigate(`/tool/pms-space-${space.id}`)}
                       onAddList={() => openCreateProject(space.id)}
+                      onAddListToFolder={(folderId) => { setCreateProjectTeamId(space.id); setCreateProjectFolderId(folderId); setCreateProjectOpen(true); }}
+                      onAddFolder={() => openCreateFolder(space.id)}
+                      onOpenDocs={() => { void handleCreateDoc(space.id); }}
+                      onRenameFolder={(folderId, currentName) => { void handleRenameFolder(folderId, currentName); }}
+                      onDeleteFolder={(folderId) => { void handleDeleteFolder(folderId); }}
+                      onRenameSpace={(newName) => { void handleRenameSpace(space.id, newName); }}
+                      onDeleteSpace={() => { void handleDeleteSpace(space.id); }}
+                      docPages={spaceDocPages.get(space.id) ?? []}
+                      onRenameDoc={(pageId, newTitle) => { void handleRenameDoc(pageId, newTitle); }}
+                      onDeleteDoc={(pageId) => { void handleDeleteDoc(pageId); }}
                       activeNavItemId={activeNavItemId}
                     />
                   ))}
@@ -406,10 +1045,10 @@ export const SubSidebar = ({ activeAppId, activeNavItemId }: { activeAppId: stri
                   {canWriteTeams && (
                     <button
                       onClick={() => setCreateSpaceOpen(true)}
-                      className="w-full flex items-center gap-2 px-3 py-1.5 text-[11px] text-gray-500 hover:text-gray-300 hover:bg-clickup-hover rounded transition-colors ml-1"
+                      className="sidebar-submenu-item ml-1 w-full"
                     >
                       <Plus size={13} />
-                      <span>New Space</span>
+                      <span className="sidebar-submenu-label">New Space</span>
                     </button>
                   )}
                 </>
@@ -425,13 +1064,13 @@ export const SubSidebar = ({ activeAppId, activeNavItemId }: { activeAppId: stri
     <>
       <div className="w-60 h-full bg-clickup-sidebar border-r border-clickup-border flex flex-col overflow-hidden">
         <div className="p-4 border-b border-clickup-border">
-          <h2 className="text-xs font-bold uppercase tracking-widest text-gray-500">
-            {activeAppId === 'settings' ? 'All settings' : APP_BAR_ITEMS.find(a => a.id === activeAppId)?.title}
+          <h2 className="app-text-overline text-gray-500">
+            {activeAppId === 'settings' ? 'All settings' : APP_BAR_ITEMS.find((item) => item.id === activeAppId)?.title}
           </h2>
         </div>
 
         <div className="flex-1 overflow-y-auto py-4 px-2 space-y-6 custom-scrollbar">
-          {categories.map(category => {
+          {categories.map((category) => {
             if (activeAppId === 'pms' && category === 'Spaces') {
               return <div key={category}>{renderPmsSpaces()}</div>;
             }
@@ -440,7 +1079,7 @@ export const SubSidebar = ({ activeAppId, activeNavItemId }: { activeAppId: stri
               <div key={category} className="space-y-1">
                 <button
                   onClick={() => toggleCategory(category)}
-                  className="w-full flex items-center justify-between px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-gray-500 hover:text-gray-300 transition-colors"
+                  className="app-text-overline w-full flex items-center justify-between px-3 py-1 text-gray-500 transition-colors hover:text-gray-300"
                 >
                   <span>{category}</span>
                   {expandedCategories.includes(category) ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
@@ -454,27 +1093,26 @@ export const SubSidebar = ({ activeAppId, activeNavItemId }: { activeAppId: stri
                       exit={{ height: 0, opacity: 0 }}
                       className="overflow-hidden"
                     >
-                      {filteredItems.filter(item => item.category === category).map(item => {
-                        // PMS Personal hierarchy (My Tasks)
+                      {filteredItems.filter((item) => item.category === category).map((item) => {
                         if (activeAppId === 'pms' && category === 'Personal') {
                           if (item.id === 'pms-tasks') {
-                            const subTasks = filteredItems.filter(i => i.category === 'Personal' && i.id.startsWith('pms-tasks-'));
+                            const subTasks = filteredItems.filter((entry) => entry.category === 'Personal' && entry.id.startsWith('pms-tasks-'));
                             const isMyTasksActive = activeNavItemId === 'pms-tasks' || activeNavItemId.startsWith('pms-tasks-');
                             return (
                               <div key={item.id} className="space-y-1">
-                                <div className={cn("sidebar-item ml-1 cursor-default", isMyTasksActive && "text-clickup-text")}>
-                                  <item.icon size={16} className={cn("text-gray-400", isMyTasksActive && "text-clickup-purple")} />
-                                  <span className="truncate font-semibold">{item.title}</span>
+                                <div className={cn('sidebar-submenu-group ml-1 cursor-default', isMyTasksActive && 'sidebar-submenu-item-active')}>
+                                  <item.icon size={16} className={cn('text-gray-400', isMyTasksActive && 'text-clickup-purple')} />
+                                  <span className="sidebar-submenu-label">{item.title}</span>
                                 </div>
                                 <div className="ml-6 border-l border-clickup-border pl-2 space-y-1">
-                                  {subTasks.map(sub => (
+                                  {subTasks.map((sub) => (
                                     <Link
                                       key={sub.id}
                                       to={`/tool/${sub.id}`}
-                                      className={cn("sidebar-item text-[11px] py-1", activeNavItemId === sub.id && "active")}
+                                      className={cn('sidebar-submenu-item', activeNavItemId === sub.id && 'sidebar-submenu-item-active')}
                                     >
                                       <sub.icon size={14} className="text-gray-500" />
-                                      <span className="truncate">{sub.title}</span>
+                                      <span className="sidebar-submenu-label">{sub.title}</span>
                                     </Link>
                                   ))}
                                 </div>
@@ -484,14 +1122,18 @@ export const SubSidebar = ({ activeAppId, activeNavItemId }: { activeAppId: stri
                           if (item.id.startsWith('pms-tasks-')) return null;
                         }
 
+                        if (activeAppId === 'pms' && item.id === 'pms-space-team') {
+                          return null;
+                        }
+
                         return (
                           <Link
                             key={item.id}
                             to={item.path ?? `/tool/${item.id}`}
-                            className={cn("sidebar-item ml-1", activeNavItemId === item.id && "active")}
+                            className={cn('sidebar-submenu-item ml-1', activeNavItemId === item.id && 'sidebar-submenu-item-active')}
                           >
                             <item.icon size={16} className="text-gray-400" />
-                            <span className="truncate">{item.title}</span>
+                            <span className="sidebar-submenu-label">{item.title}</span>
                           </Link>
                         );
                       })}
@@ -507,7 +1149,7 @@ export const SubSidebar = ({ activeAppId, activeNavItemId }: { activeAppId: stri
           <div className="p-4 border-t border-clickup-border">
             <button
               onClick={() => openCreateProject(null)}
-              className="w-full flex items-center gap-2 px-3 py-2 bg-clickup-purple hover:bg-opacity-90 text-white rounded-md text-sm font-medium transition-all"
+              className="app-text-control flex w-full items-center gap-2 rounded-md bg-clickup-purple px-3 py-2 text-white transition-all hover:bg-opacity-90"
             >
               <Plus size={18} />
               <span>Quick Add</span>
@@ -520,14 +1162,18 @@ export const SubSidebar = ({ activeAppId, activeNavItemId }: { activeAppId: stri
         isOpen={createProjectOpen}
         onClose={() => setCreateProjectOpen(false)}
         teamId={createProjectTeamId}
-        onCreated={(project) => {
-          setPmsProjects((current) => upsertProject(current, project));
-          const teamId = project.team_id;
-          if (teamId) {
-            knownSpaceIdsRef.current.add(teamId);
-            setExpandedSpaces((current) => new Set(current).add(teamId));
+        folderId={createProjectFolderId}
+        onCreated={(list) => {
+          setPmsLists((current) => upsertList(current, list));
+          if (list.team_id) {
+            knownSpaceIdsRef.current.add(list.team_id);
+            setExpandedSpaces((current) => {
+              const next = new Set(current);
+              next.add(list.team_id);
+              return next;
+            });
           }
-          navigate(`/tool/pms-project-${project.id}`);
+          navigate(`/tool/pms-list-${list.id}`);
         }}
       />
 
@@ -540,6 +1186,20 @@ export const SubSidebar = ({ activeAppId, activeNavItemId }: { activeAppId: stri
           setExpandedSpaces((current) => new Set(current).add(team.id));
         }}
       />
+
+      {createFolderTeamId && (
+        <CreateFolderModal
+          isOpen={createFolderOpen}
+          onClose={() => setCreateFolderOpen(false)}
+          teamId={createFolderTeamId}
+          onCreated={(folder) => {
+            setPmsFolders((current) => [...current, folder]);
+            if (token) {
+              listPmsLists(token).then((res) => setPmsLists(res.items)).catch(() => undefined);
+            }
+          }}
+        />
+      )}
     </>
   );
 };

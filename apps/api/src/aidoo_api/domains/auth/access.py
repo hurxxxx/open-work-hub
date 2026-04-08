@@ -90,6 +90,10 @@ DEFAULT_WORKSPACES = [
     {"key": "admin", "name": "Admin Console", "description": "Identity and operations control."},
 ]
 
+DEFAULT_PMS_SPACE_KEY = "team-space"
+DEFAULT_PMS_SPACE_NAME = "Team Space"
+DEFAULT_PMS_SPACE_DESCRIPTION = "Default PMS space for shared lists and docs."
+
 DEFAULT_FEATURE_POLICIES = [
     {
         "code": "nav.ai",
@@ -224,6 +228,16 @@ def ensure_seed_data(db: Session) -> None:
         workspace.active = True
         db.add(workspace)
 
+    db.flush()
+
+    default_pms_space = get_or_create_default_pms_space(db)
+
+    # Migrate legacy PMS records without a space into the default PMS space.
+    from aidoo_api.domains.pms.models import Project
+
+    for project in db.scalars(select(Project).where(Project.team_id.is_(None))).all():
+        project.team_id = default_pms_space.id
+
     existing_policies = {
         policy.code: policy for policy in db.scalars(select(FeaturePolicy)).all()
     }
@@ -252,6 +266,36 @@ def ensure_seed_data(db: Session) -> None:
         db.add(policy)
 
     db.commit()
+
+
+def get_or_create_default_pms_space(db: Session) -> Team:
+    workspace = db.scalar(select(Workspace).where(Workspace.key == "pms"))
+    if workspace is None:
+        raise RuntimeError("PMS workspace must exist before creating the default PMS space.")
+
+    team = db.scalar(
+        select(Team).where(
+            Team.workspace_id == workspace.id,
+            Team.key == DEFAULT_PMS_SPACE_KEY,
+        )
+    )
+    if team is not None:
+        team.active = True
+        db.add(team)
+        db.flush()
+        return team
+
+    team = Team(
+        id=new_id(),
+        workspace_id=workspace.id,
+        key=DEFAULT_PMS_SPACE_KEY,
+        name=DEFAULT_PMS_SPACE_NAME,
+        description=DEFAULT_PMS_SPACE_DESCRIPTION,
+        active=True,
+    )
+    db.add(team)
+    db.flush()
+    return team
 
 
 def resolve_user_permissions(user: User) -> list[str]:

@@ -103,10 +103,15 @@ function AdminLandingRedirect() {
 
 const ToolViewWrapper = () => {
   const auth = useAuth();
+  const location = useLocation();
   const { toolId } = useParams();
 
-  // Dynamic PMS project routes: pms-project-{id}
   if (toolId?.startsWith('pms-project-')) {
+    const listId = toolId.replace('pms-project-', '');
+    return <Navigate replace to={{ pathname: `/tool/pms-list-${listId}`, search: location.search }} />;
+  }
+
+  if (toolId?.startsWith('pms-list-') || /^pms-space-.+/.test(toolId ?? '')) {
     const featureCode = FEATURE_BY_APP_ID['pms'];
     if (featureCode && !auth.hasFeature(featureCode)) {
       return (
@@ -215,10 +220,13 @@ const AppContent = () => {
 
     if (path.startsWith('/tool/')) {
       const toolId = path.split('/')[2];
-      // Dynamic PMS project routes
-      if (toolId?.startsWith('pms-project-')) {
+      if (
+        toolId?.startsWith('pms-project-')
+        || toolId?.startsWith('pms-list-')
+        || /^pms-space-.+/.test(toolId ?? '')
+      ) {
         setActiveAppId('pms');
-        setActiveNavItemId(toolId);
+        setActiveNavItemId(toolId.startsWith('pms-project-') ? toolId.replace('pms-project-', 'pms-list-') : toolId);
         return;
       }
       const item = NAV_ITEMS.find((entry) => entry.id === toolId);

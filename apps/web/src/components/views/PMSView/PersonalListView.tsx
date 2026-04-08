@@ -40,8 +40,8 @@ export const PersonalListView = () => {
   return (
     <div className="h-full flex flex-col relative max-w-3xl mx-auto w-full">
       <header className="px-8 pt-10 pb-6">
-        <h1 className="text-3xl font-bold text-clickup-text">Personal List</h1>
-        <p className="text-gray-500 text-sm mt-2">Your private to-do list</p>
+        <h1 className="app-text-title-lg text-clickup-text">Personal List</h1>
+        <p className="app-text-body mt-2 text-gray-500">Your private to-do list</p>
       </header>
 
       <main className="flex-1 overflow-y-auto px-8 custom-scrollbar">
@@ -82,7 +82,7 @@ export const PersonalListView = () => {
                   {todo.completed ? <Check size={14} /> : <Circle size={14} className="opacity-0 group-hover:opacity-50 text-green-500" />}
                 </button>
                 <span className={cn(
-                  "text-sm transition-all",
+                  "app-text-body transition-all",
                   todo.completed ? "text-gray-500 line-through" : "text-clickup-text"
                 )}>
                   {todo.text}

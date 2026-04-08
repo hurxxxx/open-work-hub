@@ -27,6 +27,13 @@ const ARCHIVE_OPTIONS = [
   { value: 'all', label: 'All' },
 ] as const;
 
+const FILTER_TRIGGER_CLASS = 'app-text-body-sm flex items-center gap-1 rounded-md border px-3 py-2 transition-colors';
+const FILTER_MENU_ITEM_CLASS = 'app-text-body-sm w-full px-3 py-2 text-left hover:bg-clickup-hover';
+const FILTER_CHECKBOX_ITEM_CLASS = 'app-text-body-sm flex cursor-pointer items-center gap-2 px-3 py-2 text-clickup-text hover:bg-clickup-hover';
+const FILTER_FIELD_CLASS = 'app-text-body-sm w-full rounded border border-clickup-border bg-clickup-sidebar px-2.5 py-2 text-clickup-text focus:border-clickup-purple focus:outline-none';
+const FILTER_META_LABEL_CLASS = 'app-text-overline block text-clickup-text/50';
+const FILTER_INLINE_ACTION_CLASS = 'app-text-caption text-clickup-text/50 transition-colors';
+
 interface SavedFilter {
   name: string;
   params: IssueFilterParams;
@@ -89,7 +96,7 @@ function Dropdown({
     <div ref={ref} className="relative">
       <button
         onClick={() => setOpen(o => !o)}
-        className={`flex items-center gap-1 px-2.5 py-1 text-[11px] rounded-md border transition-colors ${
+        className={`${FILTER_TRIGGER_CLASS} ${
           active
             ? 'border-clickup-purple text-clickup-purple bg-clickup-purple/10'
             : 'border-clickup-border text-clickup-text/60 hover:border-clickup-text/30 hover:text-clickup-text'
@@ -217,7 +224,7 @@ export const FilterBar = ({
             {statusOptions.map(opt => {
               const checked = filterParams.status?.includes(opt.value) ?? false;
               return (
-                <label key={opt.value} className="flex items-center gap-2 px-3 py-1.5 hover:bg-clickup-hover cursor-pointer text-xs text-clickup-text">
+                <label key={opt.value} className={FILTER_CHECKBOX_ITEM_CLASS}>
                   <input
                     type="checkbox"
                     checked={checked}
@@ -242,7 +249,7 @@ export const FilterBar = ({
           <>
             <button
               onClick={() => { setFilterParams({ ...filterParams, priority: undefined }); close(); }}
-              className={`w-full text-left px-3 py-1.5 text-xs hover:bg-clickup-hover ${!filterParams.priority ? 'text-clickup-purple font-medium' : 'text-clickup-text'}`}
+              className={`${FILTER_MENU_ITEM_CLASS} ${!filterParams.priority ? 'font-medium text-clickup-purple' : 'text-clickup-text'}`}
             >
               All
             </button>
@@ -250,7 +257,7 @@ export const FilterBar = ({
               <button
                 key={opt.value}
                 onClick={() => { setFilterParams({ ...filterParams, priority: opt.value }); close(); }}
-                className={`w-full text-left px-3 py-1.5 text-xs hover:bg-clickup-hover ${filterParams.priority === opt.value ? 'text-clickup-purple font-medium' : 'text-clickup-text'}`}
+                className={`${FILTER_MENU_ITEM_CLASS} ${filterParams.priority === opt.value ? 'font-medium text-clickup-purple' : 'text-clickup-text'}`}
               >
                 {opt.label}
               </button>
@@ -265,7 +272,7 @@ export const FilterBar = ({
           <>
             <button
               onClick={() => { setFilterParams({ ...filterParams, assignee_id: undefined }); close(); }}
-              className={`w-full text-left px-3 py-1.5 text-xs hover:bg-clickup-hover ${!filterParams.assignee_id ? 'text-clickup-purple font-medium' : 'text-clickup-text'}`}
+              className={`${FILTER_MENU_ITEM_CLASS} ${!filterParams.assignee_id ? 'font-medium text-clickup-purple' : 'text-clickup-text'}`}
             >
               All
             </button>
@@ -273,7 +280,7 @@ export const FilterBar = ({
               <button
                 key={m.user_id}
                 onClick={() => { setFilterParams({ ...filterParams, assignee_id: m.user_id }); close(); }}
-                className={`w-full text-left px-3 py-1.5 text-xs hover:bg-clickup-hover ${filterParams.assignee_id === m.user_id ? 'text-clickup-purple font-medium' : 'text-clickup-text'}`}
+                className={`${FILTER_MENU_ITEM_CLASS} ${filterParams.assignee_id === m.user_id ? 'font-medium text-clickup-purple' : 'text-clickup-text'}`}
               >
                 {m.full_name}
               </button>
@@ -288,7 +295,7 @@ export const FilterBar = ({
           <>
             <button
               onClick={() => { setFilterParams({ ...filterParams, label_id: undefined }); close(); }}
-              className={`w-full text-left px-3 py-1.5 text-xs hover:bg-clickup-hover ${!filterParams.label_id ? 'text-clickup-purple font-medium' : 'text-clickup-text'}`}
+              className={`${FILTER_MENU_ITEM_CLASS} ${!filterParams.label_id ? 'font-medium text-clickup-purple' : 'text-clickup-text'}`}
             >
               All
             </button>
@@ -296,7 +303,7 @@ export const FilterBar = ({
               <button
                 key={l.id}
                 onClick={() => { setFilterParams({ ...filterParams, label_id: l.id }); close(); }}
-                className={`w-full text-left px-3 py-1.5 text-xs hover:bg-clickup-hover flex items-center gap-2 ${filterParams.label_id === l.id ? 'text-clickup-purple font-medium' : 'text-clickup-text'}`}
+                className={`${FILTER_MENU_ITEM_CLASS} flex items-center gap-2 ${filterParams.label_id === l.id ? 'font-medium text-clickup-purple' : 'text-clickup-text'}`}
               >
                 <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: l.color }} />
                 {l.name}
@@ -313,7 +320,7 @@ export const FilterBar = ({
             <>
               <button
                 onClick={() => { setFilterParams({ ...filterParams, milestone_id: undefined }); close(); }}
-                className={`w-full text-left px-3 py-1.5 text-xs hover:bg-clickup-hover ${!filterParams.milestone_id ? 'text-clickup-purple font-medium' : 'text-clickup-text'}`}
+                className={`${FILTER_MENU_ITEM_CLASS} ${!filterParams.milestone_id ? 'font-medium text-clickup-purple' : 'text-clickup-text'}`}
               >
                 All
               </button>
@@ -321,7 +328,7 @@ export const FilterBar = ({
                 <button
                   key={m.id}
                   onClick={() => { setFilterParams({ ...filterParams, milestone_id: m.id }); close(); }}
-                  className={`w-full text-left px-3 py-1.5 text-xs hover:bg-clickup-hover ${filterParams.milestone_id === m.id ? 'text-clickup-purple font-medium' : 'text-clickup-text'}`}
+                  className={`${FILTER_MENU_ITEM_CLASS} ${filterParams.milestone_id === m.id ? 'font-medium text-clickup-purple' : 'text-clickup-text'}`}
                 >
                   {m.title}
                 </button>
@@ -335,19 +342,19 @@ export const FilterBar = ({
       <Dropdown label="Start Date" active={!!(filterParams.start_date_from || filterParams.start_date_to)}>
         {() => (
           <div className="px-3 py-2 space-y-2">
-            <label className="block text-[10px] text-clickup-text/50 uppercase font-bold">From</label>
+            <label className={FILTER_META_LABEL_CLASS}>From</label>
             <input
               type="date"
               value={filterParams.start_date_from ?? ''}
               onChange={e => setFilterParams({ ...filterParams, start_date_from: e.target.value || undefined })}
-              className="w-full bg-clickup-sidebar border border-clickup-border rounded px-2 py-1 text-xs text-clickup-text focus:outline-none focus:border-clickup-purple"
+              className={FILTER_FIELD_CLASS}
             />
-            <label className="block text-[10px] text-clickup-text/50 uppercase font-bold">To</label>
+            <label className={FILTER_META_LABEL_CLASS}>To</label>
             <input
               type="date"
               value={filterParams.start_date_to ?? ''}
               onChange={e => setFilterParams({ ...filterParams, start_date_to: e.target.value || undefined })}
-              className="w-full bg-clickup-sidebar border border-clickup-border rounded px-2 py-1 text-xs text-clickup-text focus:outline-none focus:border-clickup-purple"
+              className={FILTER_FIELD_CLASS}
             />
           </div>
         )}
@@ -357,19 +364,19 @@ export const FilterBar = ({
       <Dropdown label="Due Date" active={!!(filterParams.due_date_from || filterParams.due_date_to)}>
         {() => (
           <div className="px-3 py-2 space-y-2">
-            <label className="block text-[10px] text-clickup-text/50 uppercase font-bold">From</label>
+            <label className={FILTER_META_LABEL_CLASS}>From</label>
             <input
               type="date"
               value={filterParams.due_date_from ?? ''}
               onChange={e => setFilterParams({ ...filterParams, due_date_from: e.target.value || undefined })}
-              className="w-full bg-clickup-sidebar border border-clickup-border rounded px-2 py-1 text-xs text-clickup-text focus:outline-none focus:border-clickup-purple"
+              className={FILTER_FIELD_CLASS}
             />
-            <label className="block text-[10px] text-clickup-text/50 uppercase font-bold">To</label>
+            <label className={FILTER_META_LABEL_CLASS}>To</label>
             <input
               type="date"
               value={filterParams.due_date_to ?? ''}
               onChange={e => setFilterParams({ ...filterParams, due_date_to: e.target.value || undefined })}
-              className="w-full bg-clickup-sidebar border border-clickup-border rounded px-2 py-1 text-xs text-clickup-text focus:outline-none focus:border-clickup-purple"
+              className={FILTER_FIELD_CLASS}
             />
           </div>
         )}
@@ -389,9 +396,9 @@ export const FilterBar = ({
                   setFilterParams({ ...filterParams, archived_state: option.value });
                   close();
                 }}
-                className={`w-full text-left px-3 py-1.5 text-xs hover:bg-clickup-hover ${
+                className={`${FILTER_MENU_ITEM_CLASS} ${
                   (filterParams.archived_state ?? DEFAULT_ISSUE_ARCHIVED_STATE) === option.value
-                    ? 'text-clickup-purple font-medium'
+                    ? 'font-medium text-clickup-purple'
                     : 'text-clickup-text'
                 }`}
               >
@@ -406,12 +413,12 @@ export const FilterBar = ({
       {active && (
         <>
           <div className="h-4 w-px bg-clickup-border mx-1" />
-          <button onClick={clearAll} className="text-[11px] text-clickup-text/50 hover:text-clickup-text transition-colors">
+          <button onClick={clearAll} className={`${FILTER_INLINE_ACTION_CLASS} hover:text-clickup-text`}>
             Clear all
           </button>
           <button
             onClick={() => setSaveDialogOpen(true)}
-            className="flex items-center gap-1 text-[11px] text-clickup-text/50 hover:text-clickup-purple transition-colors"
+            className={`${FILTER_INLINE_ACTION_CLASS} flex items-center gap-1 hover:text-clickup-purple`}
           >
             <Save size={11} />
             Save
@@ -428,7 +435,7 @@ export const FilterBar = ({
                 <div key={idx} className="flex items-center justify-between px-3 py-1.5 hover:bg-clickup-hover group">
                   <button
                     onClick={() => { handleLoadSaved(sf); close(); }}
-                    className="flex items-center gap-2 text-xs text-clickup-text flex-1 text-left"
+                    className="app-text-body-sm flex flex-1 items-center gap-2 text-left text-clickup-text"
                   >
                     <BookmarkCheck size={12} className="text-clickup-purple shrink-0" />
                     {sf.name}
@@ -456,12 +463,12 @@ export const FilterBar = ({
             onKeyDown={e => { if (e.key === 'Enter') handleSave(); if (e.key === 'Escape') setSaveDialogOpen(false); }}
             placeholder="Filter name..."
             autoFocus
-            className="bg-clickup-sidebar border border-clickup-border rounded px-2 py-1 text-xs text-clickup-text focus:outline-none focus:border-clickup-purple w-32"
+            className={`${FILTER_FIELD_CLASS} w-32`}
           />
-          <button onClick={handleSave} className="text-[11px] text-clickup-purple hover:text-clickup-purple/80 font-medium">
+          <button onClick={handleSave} className="app-text-body-sm font-medium text-clickup-purple hover:text-clickup-purple/80">
             Save
           </button>
-          <button onClick={() => setSaveDialogOpen(false)} className="text-[11px] text-clickup-text/40 hover:text-clickup-text">
+          <button onClick={() => setSaveDialogOpen(false)} className="app-text-body-sm text-clickup-text/40 hover:text-clickup-text">
             Cancel
           </button>
         </div>
@@ -471,7 +478,7 @@ export const FilterBar = ({
       {pills.length > 0 && (
         <div className="flex items-center gap-1.5 ml-2 flex-wrap">
           {pills.map((pill, idx) => (
-            <span key={idx} className="inline-flex items-center gap-1 px-2 py-0.5 bg-clickup-purple/10 text-clickup-purple text-[10px] rounded-full">
+            <span key={idx} className="app-text-caption inline-flex items-center gap-1 rounded-full bg-clickup-purple/10 px-2 py-0.5 text-clickup-purple">
               {pill.label}
               <button onClick={pill.clear} className="hover:text-clickup-text transition-colors">
                 <X size={10} />

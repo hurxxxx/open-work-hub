@@ -8,11 +8,15 @@ import {
   createProjectLabel,
   updateLabel,
   deleteLabel,
+  listProjectMembers,
   listProjectStatuses,
   createProjectStatus,
   updateProjectStatus,
   deleteProjectStatus,
+  updateMemberRole,
+  removeProjectMember,
   type PmsLabel,
+  type PmsProjectMember,
   type PmsProjectStatus,
 } from '@/src/domains/pms/pms-api';
 
@@ -28,6 +32,14 @@ const CATEGORY_OPTIONS: { value: string; label: string }[] = [
   { value: 'canceled', label: 'Canceled' },
 ];
 
+const ROLE_OPTIONS = [
+  { value: 'owner', label: 'Owner' },
+  { value: 'admin', label: 'Admin' },
+  { value: 'editor', label: 'Editor' },
+  { value: 'member', label: 'Member' },
+  { value: 'viewer', label: 'Viewer' },
+];
+
 export function ProjectSettingsPanel({
   projectId,
   onClose,
@@ -40,6 +52,7 @@ export function ProjectSettingsPanel({
   onStatusesChanged?: (statuses: PmsProjectStatus[]) => void;
 }) {
   const { token } = useAuth();
+  const [members, setMembers] = useState<PmsProjectMember[]>([]);
   const [labels, setLabels] = useState<PmsLabel[]>([]);
   const [statuses, setStatuses] = useState<PmsProjectStatus[]>([]);
   const [loading, setLoading] = useState(true);
@@ -75,10 +88,12 @@ export function ProjectSettingsPanel({
     setLoading(true);
     setError(null);
     try {
-      const [labelRes, statusRes] = await Promise.all([
+      const [memberRes, labelRes, statusRes] = await Promise.all([
+        listProjectMembers(token, projectId),
         listProjectLabels(token, projectId),
         listProjectStatuses(token, projectId),
       ]);
+      setMembers(memberRes.items);
       setLabels(labelRes.items);
       notifyParent(labelRes.items);
       setStatuses(statusRes.items);
@@ -208,6 +223,30 @@ export function ProjectSettingsPanel({
     }
   }, [token, statuses, notifyStatusParent]);
 
+  const handleRoleChange = useCallback(async (userId: string, role: string) => {
+    if (!token) return;
+    setError(null);
+    try {
+      const updatedMember = await updateMemberRole(token, projectId, userId, role);
+      setMembers((current) => current.map((member) => (
+        member.user_id === userId ? updatedMember : member
+      )));
+    } catch (caughtError) {
+      setError(caughtError instanceof Error ? caughtError.message : '멤버 역할을 변경하지 못했습니다.');
+    }
+  }, [projectId, token]);
+
+  const handleRemoveMember = useCallback(async (userId: string) => {
+    if (!token) return;
+    setError(null);
+    try {
+      await removeProjectMember(token, projectId, userId);
+      setMembers((current) => current.filter((member) => member.user_id !== userId));
+    } catch (caughtError) {
+      setError(caughtError instanceof Error ? caughtError.message : '멤버를 제거하지 못했습니다.');
+    }
+  }, [projectId, token]);
+
   return (
     <>
       <div className="fixed inset-0 z-40 bg-black/30" onClick={onClose} />
@@ -220,16 +259,58 @@ export function ProjectSettingsPanel({
       >
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-clickup-border shrink-0">
-          <h2 className="text-sm font-semibold text-clickup-text">Project Settings</h2>
+          <h2 className="app-text-title-md text-clickup-text">List Settings</h2>
           <Button variant="ghost" size="icon" onClick={onClose}><X size={16} /></Button>
         </div>
 
         <div className="flex-1 overflow-y-auto custom-scrollbar px-5 py-4 space-y-6">
-          {/* Labels section */}
           <section className="space-y-3">
-            <h3 className="text-xs font-semibold uppercase tracking-wider text-clickup-text/50">Labels</h3>
+            <h3 className="app-text-overline text-clickup-text/50">Members</h3>
 
             {error ? <InlineNotice tone="danger">{error}</InlineNotice> : null}
+
+            {loading ? (
+              <div className="flex justify-center py-6"><Loader2 size={18} className="animate-spin text-clickup-text/40" /></div>
+            ) : (
+              <div className="space-y-2">
+                {members.map((member) => (
+                  <div key={member.user_id} className="rounded-lg border border-clickup-border bg-clickup-sidebar px-3 py-2">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="app-text-body truncate font-medium text-clickup-text">{member.full_name}</div>
+                        <div className="app-text-caption truncate text-clickup-text/45">{member.email}</div>
+                      </div>
+                      <button
+                        onClick={() => { void handleRemoveMember(member.user_id); }}
+                        className="text-clickup-text/35 hover:text-red-400 transition-colors"
+                        title="Remove member"
+                      >
+                        <Trash2 size={13} />
+                      </button>
+                    </div>
+                    <div className="mt-2 flex items-center justify-between gap-2">
+                      <div className="app-text-micro text-clickup-text/35">
+                        Joined {new Date(member.joined_at).toLocaleDateString()}
+                      </div>
+                      <select
+                        value={member.role}
+                        onChange={(event) => { void handleRoleChange(member.user_id, event.target.value); }}
+                        className="app-text-caption rounded border border-clickup-border bg-clickup-bg px-2 py-1 text-clickup-text focus:outline-none"
+                      >
+                        {ROLE_OPTIONS.map((option) => (
+                          <option key={option.value} value={option.value}>{option.label}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+
+          {/* Labels section */}
+          <section className="space-y-3">
+            <h3 className="app-text-overline text-clickup-text/50">Labels</h3>
 
             {loading ? (
               <div className="flex justify-center py-6"><Loader2 size={18} className="animate-spin text-clickup-text/40" /></div>
@@ -245,7 +326,7 @@ export function ProjectSettingsPanel({
                           value={editName}
                           onChange={e => setEditName(e.target.value)}
                           onKeyDown={e => { if (e.key === 'Enter') handleSaveEdit(); if (e.key === 'Escape') setEditingId(null); }}
-                          className="flex-1 bg-clickup-sidebar border border-clickup-border rounded px-2 py-0.5 text-sm text-clickup-text focus:outline-none focus:border-clickup-purple"
+                          className="app-text-body flex-1 rounded border border-clickup-border bg-clickup-sidebar px-2 py-0.5 text-clickup-text focus:border-clickup-purple focus:outline-none"
                         />
                         <ColorPicker value={editColor} onChange={setEditColor} />
                         <button onClick={handleSaveEdit} className="text-clickup-purple hover:opacity-80">
@@ -255,7 +336,7 @@ export function ProjectSettingsPanel({
                     ) : (
                       <>
                         <ColorDot color={label.color} />
-                        <span className="flex-1 text-sm text-clickup-text">{label.name}</span>
+                        <span className="app-text-body flex-1 text-clickup-text">{label.name}</span>
                         <button
                           onClick={() => startEdit(label)}
                           className="opacity-0 group-hover:opacity-100 text-clickup-text/40 hover:text-clickup-text transition-all"
@@ -283,7 +364,7 @@ export function ProjectSettingsPanel({
                 onChange={e => setNewName(e.target.value)}
                 onKeyDown={e => { if (e.key === 'Enter' && newName.trim()) handleCreate(); }}
                 placeholder="New label name..."
-                className="flex-1 bg-transparent border-b border-clickup-border text-sm text-clickup-text placeholder:text-clickup-text/40 focus:outline-none focus:border-clickup-purple py-0.5 transition-colors"
+                className="app-text-body flex-1 border-b border-clickup-border bg-transparent py-0.5 text-clickup-text placeholder:text-clickup-text/40 transition-colors focus:border-clickup-purple focus:outline-none"
               />
               <ColorPicker value={newColor} onChange={setNewColor} />
               {newName.trim() && (
@@ -300,7 +381,7 @@ export function ProjectSettingsPanel({
 
           {/* Statuses section */}
           <section className="space-y-3">
-            <h3 className="text-xs font-semibold uppercase tracking-wider text-clickup-text/50">Workflow Statuses</h3>
+            <h3 className="app-text-overline text-clickup-text/50">Workflow Statuses</h3>
 
             {!loading && (
               <div className="space-y-1">
@@ -314,12 +395,12 @@ export function ProjectSettingsPanel({
                           value={editStatusName}
                           onChange={e => setEditStatusName(e.target.value)}
                           onKeyDown={e => { if (e.key === 'Enter') handleSaveEditStatus(); if (e.key === 'Escape') setEditingStatusId(null); }}
-                          className="flex-1 bg-clickup-sidebar border border-clickup-border rounded px-2 py-0.5 text-sm text-clickup-text focus:outline-none focus:border-clickup-purple"
+                          className="app-text-body flex-1 rounded border border-clickup-border bg-clickup-sidebar px-2 py-0.5 text-clickup-text focus:border-clickup-purple focus:outline-none"
                         />
                         <select
                           value={editStatusCategory}
                           onChange={e => setEditStatusCategory(e.target.value)}
-                          className="bg-clickup-sidebar border border-clickup-border rounded px-1 py-0.5 text-[10px] text-clickup-text focus:outline-none"
+                          className="app-text-micro rounded border border-clickup-border bg-clickup-sidebar px-1 py-0.5 text-clickup-text focus:outline-none"
                         >
                           {CATEGORY_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                         </select>
@@ -331,8 +412,8 @@ export function ProjectSettingsPanel({
                     ) : (
                       <>
                         <ColorDot color={ps.color} />
-                        <span className="flex-1 text-sm text-clickup-text">{ps.name}</span>
-                        <span className="text-[9px] text-clickup-text/30 uppercase">{ps.category}</span>
+                        <span className="app-text-body flex-1 text-clickup-text">{ps.name}</span>
+                        <span className="app-text-micro uppercase text-clickup-text/30">{ps.category}</span>
                         <button
                           onClick={() => startEditStatus(ps)}
                           className="opacity-0 group-hover:opacity-100 text-clickup-text/40 hover:text-clickup-text transition-all"
@@ -361,12 +442,12 @@ export function ProjectSettingsPanel({
                   onChange={e => setNewStatusName(e.target.value)}
                   onKeyDown={e => { if (e.key === 'Enter' && newStatusName.trim()) handleCreateStatus(); }}
                   placeholder="New status name..."
-                  className="flex-1 bg-transparent border-b border-clickup-border text-sm text-clickup-text placeholder:text-clickup-text/40 focus:outline-none focus:border-clickup-purple py-0.5 transition-colors"
+                  className="app-text-body flex-1 border-b border-clickup-border bg-transparent py-0.5 text-clickup-text placeholder:text-clickup-text/40 transition-colors focus:border-clickup-purple focus:outline-none"
                 />
                 <select
                   value={newStatusCategory}
                   onChange={e => setNewStatusCategory(e.target.value)}
-                  className="bg-clickup-sidebar border border-clickup-border rounded px-1 py-0.5 text-[10px] text-clickup-text focus:outline-none"
+                  className="app-text-micro rounded border border-clickup-border bg-clickup-sidebar px-1 py-0.5 text-clickup-text focus:outline-none"
                 >
                   {CATEGORY_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                 </select>

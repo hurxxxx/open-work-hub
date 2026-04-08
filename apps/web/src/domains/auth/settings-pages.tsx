@@ -36,7 +36,7 @@ const themeOptions: { value: ThemePreference; label: string; icon: typeof Sun }[
 ];
 
 const fieldClassName =
-  'w-full rounded-md border border-clickup-border bg-clickup-bg px-3 py-2 text-sm text-clickup-text focus:border-clickup-purple focus:outline-none transition-colors';
+  'app-text-body w-full rounded-md border border-clickup-border bg-clickup-bg px-3 py-2 text-clickup-text transition-colors focus:border-clickup-purple focus:outline-none';
 
 type SettingsSection = 'profile' | 'appearance' | 'security' | 'notifications';
 
@@ -52,8 +52,8 @@ export function AccessDeniedView({
   return (
     <div className="p-6">
       <div className="rounded-xl border border-clickup-border bg-clickup-sidebar p-6">
-        <h2 className="text-lg font-semibold text-clickup-text mb-2">{title}</h2>
-        <p className="text-sm text-gray-500 mb-4">{description}</p>
+        <h2 className="app-text-title-md mb-2 text-clickup-text">{title}</h2>
+        <p className="app-text-body mb-4 text-gray-500">{description}</p>
         <InlineNotice tone="warning">
           관리자에게 필요한 권한과 워크스페이스 바인딩을 요청하세요.
         </InlineNotice>
@@ -73,23 +73,23 @@ function SessionCard({
 }) {
   return (
     <div className="flex items-start justify-between gap-4 rounded-md border border-clickup-border bg-clickup-bg px-4 py-3">
-      <div className="grid gap-1 text-sm">
+      <div className="app-text-body grid gap-1">
         <span className="font-medium text-clickup-text">
           {session.is_current ? '현재 세션' : '저장된 세션'}
         </span>
-        <span className="text-xs text-gray-500">
+        <span className="app-text-caption text-gray-500">
           생성: {new Date(session.created_at).toLocaleString()}
         </span>
-        <span className="text-xs text-gray-500">
+        <span className="app-text-caption text-gray-500">
           만료: {new Date(session.expires_at).toLocaleString()}
         </span>
-        <span className="text-xs text-gray-500">
+        <span className="app-text-caption text-gray-500">
           최근 사용: {session.last_seen_at ? new Date(session.last_seen_at).toLocaleString() : '없음'}
         </span>
-        <span className="text-xs text-gray-500 truncate max-w-[360px]">
+        <span className="app-text-caption max-w-[360px] truncate text-gray-500">
           {session.user_agent ?? '알 수 없음'}
         </span>
-        <span className="text-xs text-gray-500">IP: {session.ip_address ?? '알 수 없음'}</span>
+        <span className="app-text-caption text-gray-500">IP: {session.ip_address ?? '알 수 없음'}</span>
       </div>
       {!session.is_current && !session.revoked_at ? (
         <Button
@@ -118,8 +118,8 @@ function FieldRow({
   return (
     <div className="grid grid-cols-[180px_1fr] items-start gap-6 py-4 border-b border-clickup-border last:border-b-0 max-[720px]:grid-cols-1 max-[720px]:gap-2">
       <div>
-        <label className="text-sm font-medium text-clickup-text">{label}</label>
-        {description ? <p className="text-xs text-gray-500 mt-0.5">{description}</p> : null}
+        <label className="app-text-control text-clickup-text">{label}</label>
+        {description ? <p className="app-text-caption mt-0.5 text-gray-500">{description}</p> : null}
       </div>
       <div className="max-w-md">{children}</div>
     </div>
@@ -131,8 +131,8 @@ function FieldRow({
 function SectionHeader({ title, description }: { title: string; description?: string }) {
   return (
     <div className="mb-6">
-      <h2 className="text-lg font-semibold text-clickup-text">{title}</h2>
-      {description ? <p className="text-sm text-gray-500 mt-1">{description}</p> : null}
+      <h2 className="app-text-title-md text-clickup-text">{title}</h2>
+      {description ? <p className="app-text-body mt-1 text-gray-500">{description}</p> : null}
     </div>
   );
 }
@@ -259,9 +259,9 @@ export function ProfilePage({ initialTab }: { initialTab: SettingsSection }) {
       <div className="mx-auto max-w-5xl px-8 py-8">
         {/* Header */}
         <div className="flex items-center justify-between mb-8">
-          <h1 className="text-xl font-semibold text-clickup-text">My Settings</h1>
+          <h1 className="app-text-title-lg text-clickup-text">My Settings</h1>
           <button
-            className="flex items-center gap-2 rounded-md px-3 py-1.5 text-sm text-red-500 transition-colors hover:bg-red-500/10"
+            className="app-text-control flex items-center gap-2 rounded-md px-3 py-1.5 text-red-500 transition-colors hover:bg-red-500/10"
             onClick={() => { void auth.logout(); }}
             type="button"
           >
@@ -283,7 +283,7 @@ export function ProfilePage({ initialTab }: { initialTab: SettingsSection }) {
                 onClick={() => handleSectionChange(item.id)}
                 type="button"
                 className={cn(
-                  'w-full flex items-center gap-2.5 rounded-md px-3 py-2 text-sm transition-colors text-left',
+                  'app-text-control w-full flex items-center gap-2.5 rounded-md px-3 py-2 text-left transition-colors',
                   activeSection === item.id
                     ? 'bg-clickup-hover text-clickup-text font-medium'
                     : 'text-gray-500 hover:text-clickup-text hover:bg-clickup-hover/50',
@@ -307,12 +307,12 @@ export function ProfilePage({ initialTab }: { initialTab: SettingsSection }) {
                   <div className="border-t border-clickup-border">
                     <FieldRow label="Avatar">
                       <div className="flex items-center gap-4">
-                        <div className="w-12 h-12 rounded-full bg-orange-500 flex items-center justify-center text-lg font-bold text-white">
+                        <div className="app-text-title-md flex h-12 w-12 items-center justify-center rounded-full bg-orange-500 font-bold text-white">
                           {getUserInitials(user.display_name || user.full_name)}
                         </div>
-                        <div className="text-sm">
+                        <div className="app-text-body">
                           <p className="font-medium text-clickup-text">{user.display_name || user.full_name}</p>
-                          <p className="text-xs text-gray-500">{user.email}</p>
+                          <p className="app-text-caption text-gray-500">{user.email}</p>
                         </div>
                       </div>
                     </FieldRow>
@@ -351,11 +351,11 @@ export function ProfilePage({ initialTab }: { initialTab: SettingsSection }) {
                     </FieldRow>
 
                     <FieldRow label="Role">
-                      <span className="text-sm text-clickup-text">{user.is_admin ? 'Admin' : 'Member'}</span>
+                      <span className="app-text-body text-clickup-text">{user.is_admin ? 'Admin' : 'Member'}</span>
                     </FieldRow>
 
                     <FieldRow label="Groups">
-                      <span className="text-sm text-clickup-text">{user.group_slugs.join(', ') || '없음'}</span>
+                      <span className="app-text-body text-clickup-text">{user.group_slugs.join(', ') || '없음'}</span>
                     </FieldRow>
                   </div>
 
@@ -398,7 +398,7 @@ export function ProfilePage({ initialTab }: { initialTab: SettingsSection }) {
                             void auth.updatePreferences({ theme_preference: opt.value });
                           }}
                           className={cn(
-                            'flex items-center gap-2 rounded-md border px-4 py-2.5 text-sm font-medium transition-colors',
+                            'app-text-control flex items-center gap-2 rounded-md border px-4 py-2.5 transition-colors',
                             themePreference === opt.value
                               ? 'border-clickup-purple bg-clickup-purple/10 text-clickup-purple'
                               : 'border-clickup-border bg-clickup-bg text-clickup-text hover:border-clickup-text/30',
@@ -458,12 +458,12 @@ export function ProfilePage({ initialTab }: { initialTab: SettingsSection }) {
                 </div>
 
                 <div className="mt-8">
-                  <h3 className="text-sm font-semibold text-clickup-text mb-1">Active Sessions</h3>
-                  <p className="text-xs text-gray-500 mb-4">
+                  <h3 className="app-text-title-md mb-1 text-clickup-text">Active Sessions</h3>
+                  <p className="app-text-caption mb-4 text-gray-500">
                     Review and revoke browser sessions.
                   </p>
                   {loadingSessions ? (
-                    <p className="text-sm text-gray-500">불러오는 중...</p>
+                    <p className="app-text-body text-gray-500">불러오는 중...</p>
                   ) : (() => {
                     const active = sessions.filter((s) => !s.revoked_at);
                     const current = active.filter((s) => s.is_current);
@@ -477,7 +477,7 @@ export function ProfilePage({ initialTab }: { initialTab: SettingsSection }) {
                           <SessionCard key={session.id} onRevoke={handleRevoke} session={session} />
                         ))}
                         {hiddenCount > 0 && (
-                          <p className="text-xs text-gray-500 text-center py-2">
+                          <p className="app-text-caption py-2 text-center text-gray-500">
                             외 {hiddenCount}개 세션
                           </p>
                         )}
@@ -508,8 +508,8 @@ export function ProfilePage({ initialTab }: { initialTab: SettingsSection }) {
                       className="flex items-center justify-between py-4 border-b border-clickup-border last:border-b-0"
                     >
                       <div>
-                        <div className="text-sm font-medium text-clickup-text">{item.title}</div>
-                        <div className="text-xs text-gray-500 mt-0.5">{item.desc}</div>
+                        <div className="app-text-body font-medium text-clickup-text">{item.title}</div>
+                        <div className="app-text-caption mt-0.5 text-gray-500">{item.desc}</div>
                       </div>
                       <div className="flex items-center gap-5">
                         <label className="flex items-center gap-1.5 cursor-pointer">
@@ -518,7 +518,7 @@ export function ProfilePage({ initialTab }: { initialTab: SettingsSection }) {
                             defaultChecked={item.email}
                             type="checkbox"
                           />
-                          <span className="text-xs text-gray-500">Email</span>
+                          <span className="app-text-caption text-gray-500">Email</span>
                         </label>
                         <label className="flex items-center gap-1.5 cursor-pointer">
                           <input
@@ -526,7 +526,7 @@ export function ProfilePage({ initialTab }: { initialTab: SettingsSection }) {
                             defaultChecked={item.push}
                             type="checkbox"
                           />
-                          <span className="text-xs text-gray-500">Push</span>
+                          <span className="app-text-caption text-gray-500">Push</span>
                         </label>
                       </div>
                     </div>

@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { motion } from 'motion/react';
 import { 
   FileText, 
   Link as LinkIcon, 
@@ -15,7 +14,7 @@ import { cn } from '@/src/lib/utils';
 
 export const TeamDocsView = () => {
   const { uploadFile, resolveFileUrl } = useMediaUpload();
-  const [pages, setPages] = useState([
+  const [pages] = useState([
     { id: 'page-1', title: 'Page 1', icon: FileText },
     { id: 'page-21', title: 'Page 21', icon: FileText },
   ]);
@@ -29,7 +28,7 @@ export const TeamDocsView = () => {
         {/* Local Sidebar for Pages */}
         <div className="w-64 border-r border-clickup-border bg-clickup-sidebar flex flex-col">
           <div className="p-4 flex items-center justify-between">
-            <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider">Pages</h3>
+            <h3 className="app-text-overline text-gray-500">Pages</h3>
           </div>
           <div className="flex-1 overflow-y-auto px-2 space-y-1">
             {pages.map(page => (
@@ -37,7 +36,7 @@ export const TeamDocsView = () => {
                 key={page.id}
                 onClick={() => setActivePageId(page.id)}
                 className={cn(
-                  "w-full flex items-center justify-between px-3 py-2 rounded-md text-sm transition-colors group",
+                  "app-text-body group flex w-full items-center justify-between rounded-md px-3 py-2 transition-colors",
                   activePageId === page.id 
                     ? "bg-clickup-hover text-clickup-text" 
                     : "text-gray-400 hover:bg-clickup-hover hover:text-gray-300"
@@ -56,7 +55,7 @@ export const TeamDocsView = () => {
                 </div>
               </button>
             ))}
-            <button className="w-full flex items-center gap-2 px-3 py-2 rounded-md text-sm text-gray-500 hover:bg-clickup-hover hover:text-gray-300 transition-colors mt-2">
+            <button className="app-text-body mt-2 flex w-full items-center gap-2 rounded-md px-3 py-2 text-gray-500 transition-colors hover:bg-clickup-hover hover:text-gray-300">
               <Plus size={16} />
               <span>Add page</span>
             </button>
@@ -67,16 +66,16 @@ export const TeamDocsView = () => {
         <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
           {/* Editor Header */}
           <div className="h-12 border-b border-clickup-border flex items-center justify-between px-4">
-            <div className="flex items-center gap-2 text-xs text-gray-500">
+            <div className="app-text-caption flex items-center gap-2 text-gray-500">
               <LinkIcon size={12} />
               <span>Link Task or Doc</span>
             </div>
             <div className="flex items-center gap-4">
-              <button className="flex items-center gap-1.5 text-xs text-clickup-purple font-medium">
+              <button className="app-text-control-sm flex items-center gap-1.5 text-clickup-purple">
                 <Sparkles size={14} />
                 <span>Ask AI</span>
               </button>
-              <button className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-white">
+              <button className="app-text-control-sm flex items-center gap-1.5 text-gray-400 hover:text-white">
                 <Share2 size={14} />
                 <span>Share</span>
               </button>
@@ -90,12 +89,12 @@ export const TeamDocsView = () => {
           <div className="flex-1 overflow-y-auto custom-scrollbar">
             <div className="max-w-4xl mx-auto py-12 px-12 space-y-8">
               <div className="space-y-4">
-                <h1 className="text-4xl font-bold text-clickup-text outline-none" contentEditable suppressContentEditableWarning>
+                <h1 className="app-text-title-xl text-clickup-text outline-none" contentEditable suppressContentEditableWarning>
                   {activePage.title}
                 </h1>
-                <div className="flex items-center gap-3 text-xs text-gray-500">
+                <div className="app-text-caption flex items-center gap-3 text-gray-500">
                   <div className="flex items-center gap-1.5">
-                    <div className="w-5 h-5 rounded-full bg-clickup-purple flex items-center justify-center text-[10px] font-bold text-white">GH</div>
+                    <div className="app-text-micro flex h-5 w-5 items-center justify-center rounded-full bg-clickup-purple font-bold text-white">GH</div>
                     <span>Gunwoo Hur</span>
                   </div>
                   <span>•</span>
@@ -103,7 +102,7 @@ export const TeamDocsView = () => {
                 </div>
               </div>
 
-              <div className="prose prose-invert max-w-none">
+              <div className="prose dark:prose-invert max-w-none">
                 <BlockEditor placeholder="Start writing..." uploadFile={uploadFile} resolveFileUrl={resolveFileUrl} />
               </div>
             </div>

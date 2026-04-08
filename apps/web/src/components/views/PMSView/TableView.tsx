@@ -19,9 +19,9 @@ export const TableView = ({
   return (
     <div className="overflow-hidden rounded-lg border border-clickup-border bg-clickup-card">
       <div className="overflow-x-auto custom-scrollbar">
-        <table className="w-full text-left text-xs">
+        <table className="app-text-body-sm w-full text-left">
           <thead>
-            <tr className="bg-clickup-sidebar/50 border-b border-clickup-border text-clickup-text/50 uppercase tracking-wider font-bold">
+            <tr className="app-text-overline border-b border-clickup-border bg-clickup-sidebar/50 text-clickup-text/50">
               {onToggleSelect && <th className="py-3 px-4 w-10"></th>}
               <th className="py-3 px-4 w-12">#</th>
               <th className="py-3 px-4 min-w-[250px]">Task Name</th>
@@ -34,7 +34,7 @@ export const TableView = ({
             </tr>
           </thead>
           <tbody className="divide-y divide-clickup-border">
-            {issues.map((issue, i) => (
+            {issues.map((issue) => (
               <tr
                 key={issue.id}
                 onClick={() => onSelectIssue(issue)}
@@ -58,19 +58,19 @@ export const TableView = ({
                     {issue.comments_count > 0 && (
                       <div className="flex items-center gap-1 text-clickup-text/40">
                         <MessageSquare size={12} />
-                        <span className="text-[10px]">{issue.comments_count}</span>
+                        <span className="app-text-micro">{issue.comments_count}</span>
                       </div>
                     )}
                     {issue.checklist_total > 0 && (
                       <div className="flex items-center gap-0.5 text-clickup-text/40">
                         <CheckSquare size={11} />
-                        <span className="text-[10px]">{issue.checklist_done}/{issue.checklist_total}</span>
+                        <span className="app-text-micro">{issue.checklist_done}/{issue.checklist_total}</span>
                       </div>
                     )}
                     {issue.estimate_hours != null && issue.estimate_hours > 0 && (
                       <div className="flex items-center gap-0.5 text-clickup-text/40">
                         <Clock size={11} />
-                        <span className="text-[10px]">{Math.round(issue.time_spent_minutes / 60 * 10) / 10}/{issue.estimate_hours}h</span>
+                        <span className="app-text-micro">{Math.round(issue.time_spent_minutes / 60 * 10) / 10}/{issue.estimate_hours}h</span>
                       </div>
                     )}
                   </div>
@@ -81,7 +81,7 @@ export const TableView = ({
                 <td className="py-3 px-4">
                   {issue.assignee_name ? (
                     <div className="flex items-center gap-2">
-                      <div className="w-6 h-6 rounded-full bg-blue-500 flex items-center justify-center text-[10px] font-bold text-white border border-clickup-border">
+                      <div className="app-text-micro flex h-6 w-6 items-center justify-center rounded-full border border-clickup-border bg-blue-500 font-bold text-white">
                         {initials(issue.assignee_name)}
                       </div>
                       <span className="text-clickup-text/60">{issue.assignee_name}</span>

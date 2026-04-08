@@ -30,8 +30,8 @@ export const AssignedToMeView = () => {
   return (
     <div className="h-full flex flex-col relative">
       <header className="bg-clickup-bg border-b border-clickup-border px-8 pt-6 pb-4">
-        <h1 className="text-2xl font-bold text-clickup-text">Assigned to me</h1>
-        <p className="text-gray-500 text-sm mt-1">Tasks assigned to you across all projects</p>
+        <h1 className="app-text-title-lg text-clickup-text">Assigned to me</h1>
+        <p className="app-text-body mt-1 text-gray-500">Tasks assigned to you across all projects</p>
       </header>
 
       <main className="flex-1 overflow-y-auto p-8 custom-scrollbar">

@@ -18,16 +18,16 @@ export const ListView = ({
 }) => {
   return (
     <div className="space-y-8">
-      <div className="flex items-center gap-4 text-xs font-medium text-clickup-text/50 bg-clickup-sidebar/30 p-2 rounded-md border border-clickup-border">
-        <Button variant="subtle" size="dense" className="gap-1">
+      <div className="app-text-body-sm flex items-center gap-4 rounded-md border border-clickup-border bg-clickup-sidebar/30 p-2 text-clickup-text/60">
+        <Button variant="subtle" size="dense" className="app-text-body-sm gap-1 font-medium">
           <Activity size={14} />
           Group: Status
         </Button>
-        <Button variant="ghost" size="dense" className="gap-1">
+        <Button variant="ghost" size="dense" className="app-text-body-sm gap-1 font-medium">
           <Plus size={14} />
           Subtasks
         </Button>
-        <Button variant="ghost" size="dense" className="gap-1">
+        <Button variant="ghost" size="dense" className="app-text-body-sm gap-1 font-medium">
           <Layout size={14} />
           Columns
         </Button>
@@ -42,23 +42,23 @@ export const ListView = ({
             <div className="flex items-center gap-2 px-2 py-1">
               <ChevronDown size={14} className="text-clickup-text/50" />
               <Badge tone={getStatusTone(status, projectStatuses)}>{statusIssues[0]?.status_label ?? status}</Badge>
-              <span className="text-[10px] text-clickup-text/40 font-bold">
+              <span className="app-text-label text-clickup-text/40">
                 {statusIssues.length}
               </span>
             </div>
 
             <div className="border border-clickup-border rounded-lg overflow-hidden bg-clickup-sidebar/20">
-              <table className="w-full text-left text-[11px]">
+              <table className="app-text-body-sm w-full text-left">
                 <thead>
-                  <tr className="bg-clickup-sidebar/50 border-b border-clickup-border text-clickup-text/50">
+                  <tr className="app-text-overline border-b border-clickup-border bg-clickup-sidebar/50 text-clickup-text/50">
                     <th className="w-10 py-2 px-4"></th>
-                    <th className="py-2 px-4 font-medium w-1/3">NAME</th>
-                    <th className="py-2 px-4 font-medium">ASSIGNEE</th>
-                    <th className="py-2 px-4 font-medium">DUE DATE</th>
-                    <th className="py-2 px-4 font-medium">PRIORITY</th>
-                    <th className="py-2 px-4 font-medium">STATUS</th>
-                    <th className="py-2 px-4 font-medium">COMMENTS</th>
-                    <th className="py-2 px-4 font-medium text-right">
+                    <th className="w-1/3 px-4 py-2">Name</th>
+                    <th className="px-4 py-2">Assignee</th>
+                    <th className="px-4 py-2">Due Date</th>
+                    <th className="px-4 py-2">Priority</th>
+                    <th className="px-4 py-2">Status</th>
+                    <th className="px-4 py-2">Comments</th>
+                    <th className="px-4 py-2 text-right">
                       <Plus size={14} className="inline cursor-pointer" />
                     </th>
                   </tr>
@@ -85,7 +85,7 @@ export const ListView = ({
                       </td>
                       <td className="py-2 px-4">
                         <div className="flex items-center gap-2">
-                          <span className="text-clickup-text/40 text-[10px]">{issue.reference}</span>
+                          <span className="app-text-caption text-clickup-text/40">{issue.reference}</span>
                           <span className="text-clickup-text font-medium">{issue.title}</span>
                         </div>
                       </td>
@@ -102,7 +102,7 @@ export const ListView = ({
                         <span className="text-clickup-text/50">{formatDate(issue.due_date) || 'Not set'}</span>
                       </td>
                       <td className="py-2 px-4">
-                        <span className={`text-[10px] font-bold ${PRIORITY_COLOR[issue.priority] ?? ''}`}>
+                        <span className={`app-text-caption font-semibold ${PRIORITY_COLOR[issue.priority] ?? ''}`}>
                           {issue.priority_label}
                         </span>
                       </td>
@@ -112,15 +112,15 @@ export const ListView = ({
                       <td className="py-2 px-4">
                         <span className="text-clickup-text/40">{issue.comments_count}</span>
                         {issue.checklist_total > 0 && (
-                          <span className="inline-flex items-center gap-0.5 ml-2 text-clickup-text/40">
+                          <span className="app-text-caption ml-2 inline-flex items-center gap-0.5 text-clickup-text/40">
                             <CheckSquare size={11} />
-                            <span className="text-[10px]">{issue.checklist_done}/{issue.checklist_total}</span>
+                            <span>{issue.checklist_done}/{issue.checklist_total}</span>
                           </span>
                         )}
                         {issue.estimate_hours != null && issue.estimate_hours > 0 && (
-                          <span className="inline-flex items-center gap-0.5 ml-2 text-clickup-text/40">
+                          <span className="app-text-caption ml-2 inline-flex items-center gap-0.5 text-clickup-text/40">
                             <Clock size={11} />
-                            <span className="text-[10px]">{Math.round(issue.time_spent_minutes / 60 * 10) / 10}/{issue.estimate_hours}h</span>
+                            <span>{Math.round(issue.time_spent_minutes / 60 * 10) / 10}/{issue.estimate_hours}h</span>
                           </span>
                         )}
                       </td>

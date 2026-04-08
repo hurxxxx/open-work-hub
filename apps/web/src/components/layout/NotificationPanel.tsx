@@ -75,7 +75,7 @@ export function NotificationPanel({
         className="absolute left-16 bottom-16 z-50 w-80 max-h-[480px] bg-clickup-bg border border-clickup-border rounded-xl shadow-2xl flex flex-col overflow-hidden"
       >
         <div className="flex items-center justify-between px-4 py-3 border-b border-clickup-border shrink-0">
-          <h3 className="text-sm font-semibold text-clickup-text">Notifications</h3>
+          <h3 className="app-text-title-md text-clickup-text">Notifications</h3>
           <div className="flex items-center gap-1">
             <Button variant="ghost" size="icon" onClick={handleReadAll} title="Mark all as read">
               <CheckCheck size={14} />
@@ -92,7 +92,7 @@ export function NotificationPanel({
               <Loader2 size={18} className="animate-spin text-clickup-text/40" />
             </div>
           ) : notifications.length === 0 ? (
-            <p className="text-sm text-clickup-text/30 text-center py-8">No notifications</p>
+            <p className="app-text-body text-center text-clickup-text/30 py-8">No notifications</p>
           ) : (
             notifications.map(n => (
               <button
@@ -105,9 +105,9 @@ export function NotificationPanel({
                 <div className="flex items-start gap-2">
                   {!n.is_read && <span className="w-2 h-2 rounded-full bg-clickup-purple shrink-0 mt-1.5" />}
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm text-clickup-text font-medium truncate">{n.title}</p>
-                    <p className="text-xs text-clickup-text/50 truncate mt-0.5">{n.body}</p>
-                    <span className="text-[10px] text-clickup-text/30">{timeAgo(n.created_at)}</span>
+                    <p className="app-text-body truncate font-medium text-clickup-text">{n.title}</p>
+                    <p className="app-text-caption mt-0.5 truncate text-clickup-text/50">{n.body}</p>
+                    <span className="app-text-micro text-clickup-text/30">{timeAgo(n.created_at)}</span>
                   </div>
                   {!n.is_read && (
                     <button

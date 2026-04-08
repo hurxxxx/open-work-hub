@@ -1,5 +1,5 @@
 :root {
-  --ui-font-sans: "IBM Plex Sans KR", "IBM Plex Sans", "Pretendard", sans-serif;
+  --ui-font-sans: "Pretendard Variable", "Pretendard", "IBM Plex Sans KR", "IBM Plex Sans", sans-serif;
   --ui-font-mono: "IBM Plex Mono", "JetBrains Mono", monospace;
 
   /* ── Surface & Background (aligned with --clickup-* palette) ── */
@@ -59,15 +59,15 @@
   --ui-z-toast: 80;
 
   /* ── Typography Scale ── */
-  --ui-text-h1: 1.12rem;
-  --ui-text-h2: 1rem;
-  --ui-text-h3: 0.92rem;
-  --ui-text-body: 0.86rem;
-  --ui-text-body-sm: 0.82rem;
-  --ui-text-caption: 0.76rem;
-  --ui-text-label: 0.72rem;
-  --ui-text-overline: 0.68rem;
-  --ui-text-micro: 0.62rem;
+  --ui-text-h1: 2rem;
+  --ui-text-h2: 1.375rem;
+  --ui-text-h3: 1rem;
+  --ui-text-body: 0.875rem;
+  --ui-text-body-sm: 0.8125rem;
+  --ui-text-caption: 0.75rem;
+  --ui-text-label: 0.6875rem;
+  --ui-text-overline: 0.625rem;
+  --ui-text-micro: 0.5625rem;
 }
 
 .dark {

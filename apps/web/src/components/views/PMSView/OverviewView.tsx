@@ -1,27 +1,24 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  Filter,
   History,
   FolderKanban,
   ChevronRight,
   Plus,
-  FileText,
-  User,
   LayoutDashboard,
   Loader2,
 } from 'lucide-react';
-import { DonutChartCard, BarChartCard, Panel } from '@aidoo/ui';
+import { DonutChartCard, Panel } from '@aidoo/ui';
 import { useAuth } from '@/src/domains/auth/auth-provider';
 import {
   getPmsDashboardSummary,
-  listPmsProjects,
+  listPmsLists,
   type PmsDashboardSummary,
-  type PmsProject,
+  type PmsList,
 } from '@/src/domains/pms/pms-api';
 import { CreateProjectModal } from './CreateProjectModal';
 
-function upsertProject(projects: PmsProject[], project: PmsProject): PmsProject[] {
+function upsertProject(projects: PmsList[], project: PmsList): PmsList[] {
   return [project, ...projects.filter((item) => item.id !== project.id)].sort(
     (left, right) => right.updated_at.localeCompare(left.updated_at),
   );
@@ -31,7 +28,7 @@ export const OverviewView = () => {
   const { token, user } = useAuth();
   const navigate = useNavigate();
   const [dashboard, setDashboard] = useState<PmsDashboardSummary | null>(null);
-  const [projects, setProjects] = useState<PmsProject[]>([]);
+  const [projects, setProjects] = useState<PmsList[]>([]);
   const [loading, setLoading] = useState(true);
   const [createProjectOpen, setCreateProjectOpen] = useState(false);
 
@@ -40,7 +37,7 @@ export const OverviewView = () => {
     setLoading(true);
     Promise.all([
       getPmsDashboardSummary(token),
-      listPmsProjects(token),
+      listPmsLists(token),
     ])
       .then(([dash, projs]) => {
         setDashboard(dash);
@@ -65,10 +62,10 @@ export const OverviewView = () => {
     <div className="space-y-8 max-w-6xl mx-auto">
       {/* Welcome Section */}
       <div className="rounded-xl border border-clickup-border bg-clickup-card p-8">
-        <h2 className="text-2xl font-bold text-clickup-text mb-2">
+        <h2 className="app-text-title-lg mb-2 text-clickup-text">
           {user?.full_name ? `Hello, ${user.full_name.split(' ')[0]}!` : 'Welcome!'}
         </h2>
-        <p className="text-clickup-text/60 text-sm max-w-xl">
+        <p className="app-text-body max-w-xl text-clickup-text/60">
           {dashboard
             ? `${dashboard.project_count} projects · ${dashboard.active_issue_count} active issues · ${dashboard.overdue_issue_count} overdue`
             : 'Loading summary...'}
@@ -76,16 +73,16 @@ export const OverviewView = () => {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        {/* Projects */}
+      {/* Lists */}
         <Panel>
-          <h3 className="text-sm font-bold text-clickup-text flex items-center justify-between mb-4">
+          <h3 className="app-text-title-md mb-4 flex items-center justify-between text-clickup-text">
             <div className="flex items-center gap-2">
               <History size={16} className="text-clickup-purple" />
-              Projects
+              Lists
             </div>
             <button
               onClick={() => setCreateProjectOpen(true)}
-              className="flex items-center gap-1 text-xs text-clickup-purple hover:text-clickup-purple/80 transition-colors"
+              className="app-text-control-sm flex items-center gap-1 text-clickup-purple transition-colors hover:text-clickup-purple/80"
             >
               <Plus size={14} />
               <span>New</span>
@@ -95,17 +92,17 @@ export const OverviewView = () => {
             {projects.map((project) => (
               <div
                 key={project.id}
-                onClick={() => navigate(`/tool/pms-project-${project.id}`)}
+                onClick={() => navigate(`/tool/pms-list-${project.id}`)}
                 className="flex items-center gap-3 p-2 hover:bg-clickup-hover rounded-md transition-colors group cursor-pointer"
               >
                 <div className="w-8 h-8 bg-blue-500/10 rounded flex items-center justify-center">
                   <FolderKanban size={16} className="text-blue-400" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="text-xs font-medium text-clickup-text truncate group-hover:text-clickup-purple transition-colors">
+                  <div className="app-text-body-sm truncate font-medium text-clickup-text transition-colors group-hover:text-clickup-purple">
                     {project.name}
                   </div>
-                  <div className="text-[10px] text-clickup-text/40">
+                  <div className="app-text-micro text-clickup-text/40">
                     {project.team_name && <span>{project.team_name} · </span>}
                     {project.issue_count} issues · {Math.round(project.progress * 100)}% done
                   </div>
@@ -117,7 +114,7 @@ export const OverviewView = () => {
               </div>
             ))}
             {projects.length === 0 && (
-              <p className="text-sm text-clickup-text/40">No projects yet</p>
+              <p className="app-text-body text-clickup-text/40">No lists yet</p>
             )}
           </div>
         </Panel>
@@ -126,7 +123,7 @@ export const OverviewView = () => {
         {statusCategories.length > 0 && (
           <DonutChartCard
             title={
-              <span className="flex items-center gap-2 text-sm font-bold text-clickup-text">
+              <span className="app-text-title-md flex items-center gap-2 text-clickup-text">
                 <LayoutDashboard size={16} className="text-clickup-purple" />
                 Status Distribution
               </span>
@@ -143,7 +140,7 @@ export const OverviewView = () => {
 
         {/* Recent Activity */}
         <Panel>
-          <h3 className="text-sm font-bold text-clickup-text flex items-center justify-between mb-4">
+          <h3 className="app-text-title-md mb-4 flex items-center justify-between text-clickup-text">
             <div className="flex items-center gap-2">
               <History size={16} className="text-clickup-purple" />
               Recent Activity
@@ -159,13 +156,13 @@ export const OverviewView = () => {
                   {activity.actor_name?.[0] ?? '?'}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="text-xs text-clickup-text/70 truncate">{activity.message}</div>
-                  <div className="text-[10px] text-clickup-text/40">{activity.issue_reference}</div>
+                  <div className="app-text-caption truncate text-clickup-text/70">{activity.message}</div>
+                  <div className="app-text-micro text-clickup-text/40">{activity.issue_reference}</div>
                 </div>
               </div>
             ))}
             {(!dashboard?.recent_activity || dashboard.recent_activity.length === 0) && (
-              <p className="text-sm text-clickup-text/40">No recent activity</p>
+              <p className="app-text-body text-clickup-text/40">No recent activity</p>
             )}
           </div>
         </Panel>
@@ -176,7 +173,7 @@ export const OverviewView = () => {
         onClose={() => setCreateProjectOpen(false)}
         onCreated={(project) => {
           setProjects((current) => upsertProject(current, project));
-          navigate(`/tool/pms-project-${project.id}`);
+          navigate(`/tool/pms-list-${project.id}`);
           if (!token) return;
           void getPmsDashboardSummary(token).then((dash) => {
             setDashboard(dash);

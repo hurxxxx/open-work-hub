@@ -115,7 +115,7 @@ export function AppBar({
           )}
         >
           <item.icon size={22} />
-          <div className="absolute left-full ml-2 px-2 py-1 bg-black text-white text-[10px] rounded opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap z-50">
+          <div className="app-text-micro absolute left-full ml-2 rounded bg-black px-2 py-1 text-white opacity-0 pointer-events-none whitespace-nowrap z-50 group-hover:opacity-100">
             {item.title}
           </div>
           {activeAppId === item.id ? (
@@ -133,7 +133,7 @@ export function AppBar({
         >
           <Bell size={20} />
           {unreadCount > 0 && (
-            <span className="absolute -top-0.5 -right-0.5 w-4 h-4 bg-red-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center">
+            <span className="app-text-micro absolute -top-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 font-bold text-white">
               {unreadCount > 9 ? '9+' : unreadCount}
             </span>
           )}
@@ -151,7 +151,7 @@ export function AppBar({
 
         <button
           aria-label="마이페이지"
-          className="w-10 h-10 bg-gradient-to-br from-clickup-purple to-purple-500 rounded-full flex items-center justify-center text-white text-[13px] font-bold cursor-pointer shadow-md shadow-clickup-purple/20 ring-2 ring-transparent hover:ring-clickup-purple/40 transition-all outline-none"
+          className="app-text-body-sm flex h-10 w-10 cursor-pointer items-center justify-center rounded-full bg-gradient-to-br from-clickup-purple to-purple-500 font-bold text-white shadow-md shadow-clickup-purple/20 outline-none ring-2 ring-transparent transition-all hover:ring-clickup-purple/40"
           onClick={onOpenAccount}
           title={`${currentUser.display_name || currentUser.full_name} · 마이페이지`}
           type="button"

@@ -38,7 +38,6 @@ import {
   deleteChecklistItem,
   createTimeEntry,
   deleteTimeEntry,
-  createDependency,
   deleteDependency,
   type PmsIssue,
   type PmsComment,
@@ -58,7 +57,7 @@ import { getStatusSlugs, getStatusTone, getStatusLabel, initials, formatDate } f
 const PRIORITIES = ['low', 'medium', 'high', 'critical'] as const;
 const PRIORITY_LABELS: Record<string, string> = { low: 'Low', medium: 'Medium', high: 'High', critical: 'Critical' };
 
-const selectClass = 'bg-transparent text-sm text-clickup-text border border-clickup-border rounded-md px-2 py-1 focus:outline-none focus:border-clickup-purple cursor-pointer hover:border-clickup-text/30 transition-colors';
+const selectClass = 'app-text-body bg-transparent text-clickup-text border border-clickup-border rounded-md px-2 py-1 focus:outline-none focus:border-clickup-purple cursor-pointer hover:border-clickup-text/30 transition-colors';
 
 function getErrorMessage(error: unknown, fallback: string): string {
   return error instanceof Error && error.message ? error.message : fallback;
@@ -193,7 +192,7 @@ export const TaskDetail = ({
             await Promise.resolve(onUpdate?.());
             const mediaIds = extractMediaIds(content);
             if (mediaIds.length > 0) {
-              linkMedia(token, mediaIds, 'issue', issueState.id).catch(() => {});
+              linkMedia(token, mediaIds, 'issue', issueState.id).catch(() => undefined);
             }
           })
           .catch((error) => {
@@ -444,15 +443,15 @@ export const TaskDetail = ({
         <div className="flex items-center justify-between px-6 py-3 border-b border-clickup-border shrink-0">
           <button
             onClick={() => setDescFullscreen(false)}
-            className="flex items-center gap-2 text-sm text-clickup-text/60 hover:text-clickup-text transition-colors"
+            className="app-text-body flex items-center gap-2 text-clickup-text/60 transition-colors hover:text-clickup-text"
           >
             ← Back to task
           </button>
-          <span className="text-sm font-medium text-clickup-text">{issueState.title}</span>
+          <span className="app-text-control text-clickup-text">{issueState.title}</span>
           <Button variant="ghost" size="icon" onClick={() => setDescFullscreen(false)}><Minimize2 size={16} /></Button>
         </div>
         <div className="flex-1 overflow-y-auto custom-scrollbar px-8 py-6 max-w-4xl mx-auto w-full">
-          <h1 className="text-2xl font-bold text-clickup-text mb-6">{issueState.title}</h1>
+          <h1 className="app-text-title-lg mb-6 text-clickup-text">{issueState.title}</h1>
           <BlockEditor
             initialContent={issueState.description_blocks as BlockContent | undefined}
             onChange={handleDescriptionChange}
@@ -470,7 +469,7 @@ export const TaskDetail = ({
     <div className="flex flex-col h-full">
       {/* Top bar */}
       <div className="flex items-center justify-between px-5 py-3 border-b border-clickup-border shrink-0">
-        <div className="flex items-center gap-2 text-xs text-clickup-text/50">
+        <div className="app-text-caption flex items-center gap-2 text-clickup-text/50">
           <span>Team Space</span>
           <ChevronRight size={12} />
           <span className="text-clickup-text/70">{issueState.reference}</span>
@@ -479,7 +478,7 @@ export const TaskDetail = ({
           <button
             type="button"
             onClick={handleToggleIssueArchive}
-            className="rounded-md border border-clickup-border px-2.5 py-1 text-xs text-clickup-text/60 hover:border-clickup-text/30 hover:text-clickup-text transition-colors"
+            className="app-text-control-sm rounded-md border border-clickup-border px-2.5 py-1 text-clickup-text/60 transition-colors hover:border-clickup-text/30 hover:text-clickup-text"
           >
             {issueState.archived ? 'Restore' : 'Archive'}
           </button>
@@ -496,9 +495,9 @@ export const TaskDetail = ({
           <div className="px-8 py-6 max-w-3xl mx-auto space-y-6">
             {/* Title */}
             <div className="flex items-center gap-2">
-              <h1 className="text-xl font-bold text-clickup-text">{issueState.title}</h1>
+              <h1 className="app-text-title-lg text-clickup-text">{issueState.title}</h1>
               {issueState.archived && (
-                <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider text-amber-300">
+                <span className="app-text-overline rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-amber-300">
                   Archived
                 </span>
               )}
@@ -557,7 +556,7 @@ export const TaskDetail = ({
                       return label ? (
                         <span
                           key={id}
-                          className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium text-white"
+                          className="app-text-caption inline-flex items-center rounded px-2 py-0.5 font-medium text-white"
                           style={{ backgroundColor: label.color }}
                         >
                           {label.name}
@@ -565,7 +564,7 @@ export const TaskDetail = ({
                       ) : null;
                     })
                   ) : (
-                    <span className="flex items-center gap-1 text-sm text-clickup-text/40"><Tag size={12} /> Add labels...</span>
+                    <span className="app-text-body flex items-center gap-1 text-clickup-text/40"><Tag size={12} /> Add labels...</span>
                   )}
                 </button>
                 {labelPickerOpen && (
@@ -573,13 +572,13 @@ export const TaskDetail = ({
                     <div className="fixed inset-0 z-10" onClick={() => setLabelPickerOpen(false)} />
                     <div className="absolute left-0 top-8 z-20 w-48 bg-clickup-bg border border-clickup-border rounded-lg shadow-xl py-1">
                       {projectLabels.length === 0 ? (
-                        <p className="px-3 py-2 text-xs text-clickup-text/40">No labels in this project</p>
+                        <p className="app-text-caption px-3 py-2 text-clickup-text/40">No labels in this project</p>
                       ) : (
                         projectLabels.map(label => (
                           <button
                             key={label.id}
                             onClick={() => handleToggleLabel(label.id)}
-                            className="flex items-center gap-2 w-full px-3 py-1.5 text-sm text-clickup-text hover:bg-clickup-hover transition-colors"
+                            className="app-text-body flex w-full items-center gap-2 px-3 py-1.5 text-clickup-text transition-colors hover:bg-clickup-hover"
                           >
                             <span
                               className="w-3 h-3 rounded-full shrink-0"
@@ -601,7 +600,7 @@ export const TaskDetail = ({
             {/* Description with fullscreen button */}
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <h3 className="text-sm font-semibold text-clickup-text">Description</h3>
+                <h3 className="app-text-title-md text-clickup-text">Description</h3>
                 <Button variant="ghost" size="icon" onClick={() => setDescFullscreen(true)} title="Full screen">
                   <Maximize2 size={14} />
                 </Button>
@@ -624,7 +623,7 @@ export const TaskDetail = ({
             <div className="space-y-2">
               <div className="flex items-center gap-2">
                 <CheckSquare size={14} className="text-clickup-text/50" />
-                <h3 className="text-sm font-semibold text-clickup-text">
+                <h3 className="app-text-title-md text-clickup-text">
                   Checklist
                   {checklistTotal > 0 && (
                     <span className="text-clickup-text/40 font-normal ml-1">
@@ -665,11 +664,11 @@ export const TaskDetail = ({
                             }}
                             onBlur={() => handleSaveChecklistEdit(ci.id)}
                             autoFocus
-                            className="flex-1 bg-transparent text-sm text-clickup-text focus:outline-none border-b border-clickup-purple py-0.5"
+                            className="app-text-body flex-1 border-b border-clickup-purple bg-transparent py-0.5 text-clickup-text focus:outline-none"
                           />
                         ) : (
                           <span
-                            className={`text-sm flex-1 cursor-pointer ${ci.completed ? 'line-through text-clickup-text/40' : 'text-clickup-text'}`}
+                            className={`app-text-body flex-1 cursor-pointer ${ci.completed ? 'line-through text-clickup-text/40' : 'text-clickup-text'}`}
                             onClick={() => { setEditingChecklistId(ci.id); setEditingChecklistText(ci.text); }}
                           >
                             {ci.text}
@@ -695,7 +694,7 @@ export const TaskDetail = ({
                   onChange={e => setNewChecklistText(e.target.value)}
                   onKeyDown={e => { if (e.key === 'Enter' && !e.nativeEvent.isComposing && newChecklistText.trim()) handleAddChecklistItem(); }}
                   placeholder="+ Add checklist item..."
-                  className="flex-1 bg-transparent text-sm text-clickup-text placeholder:text-clickup-text/40 focus:outline-none border-b border-transparent focus:border-clickup-purple py-1 transition-colors"
+                  className="app-text-body flex-1 border-b border-transparent bg-transparent py-1 text-clickup-text placeholder:text-clickup-text/40 transition-colors focus:border-clickup-purple focus:outline-none"
                 />
                 {newChecklistText.trim() && (
                   <Button variant="ghost" size="icon" onClick={handleAddChecklistItem} disabled={addingChecklist}>
@@ -709,7 +708,7 @@ export const TaskDetail = ({
 
             {/* Subtasks */}
             <div className="space-y-2">
-              <h3 className="text-sm font-semibold text-clickup-text">
+              <h3 className="app-text-title-md text-clickup-text">
                 Subtasks {subtasks.length > 0 && <span className="text-clickup-text/40 font-normal">({subtasks.length})</span>}
               </h3>
 
@@ -726,8 +725,8 @@ export const TaskDetail = ({
                         readOnly
                         className="h-3.5 w-3.5 rounded border-clickup-border accent-clickup-purple cursor-pointer"
                       />
-                      <span className="text-xs text-clickup-text/40 font-mono">{sub.reference}</span>
-                      <span className={`text-sm flex-1 ${sub.status === 'done' ? 'line-through text-clickup-text/40' : 'text-clickup-text'}`}>
+                      <span className="app-text-caption font-mono text-clickup-text/40">{sub.reference}</span>
+                      <span className={`app-text-body flex-1 ${sub.status === 'done' ? 'line-through text-clickup-text/40' : 'text-clickup-text'}`}>
                         {sub.title}
                       </span>
                       <Badge tone={getStatusTone(sub.status, projectStatuses)}>{sub.status_label}</Badge>
@@ -748,7 +747,7 @@ export const TaskDetail = ({
                         {subtaskMenuOpen === sub.id && (
                           <>
                             <div className="fixed inset-0 z-10" onClick={() => setSubtaskMenuOpen(null)} />
-                            <div className="absolute right-0 top-full z-20 w-36 bg-clickup-bg border border-clickup-border rounded-lg shadow-xl py-1 text-sm">
+                            <div className="app-text-body absolute right-0 top-full z-20 w-36 rounded-lg border border-clickup-border bg-clickup-bg py-1 shadow-xl">
                               <button
                                 onClick={(e) => { e.stopPropagation(); handleUnlinkSubtask(sub.id); setSubtaskMenuOpen(null); }}
                                 className="flex items-center gap-2 w-full px-3 py-1.5 text-clickup-text/70 hover:bg-clickup-hover hover:text-clickup-text transition-colors"
@@ -787,7 +786,7 @@ export const TaskDetail = ({
                   onChange={e => setNewSubtaskTitle(e.target.value)}
                   onKeyDown={e => { if (e.key === 'Enter' && !e.nativeEvent.isComposing && newSubtaskTitle.trim()) handleAddSubtask(); }}
                   placeholder="+ Add subtask..."
-                  className="flex-1 bg-transparent text-sm text-clickup-text placeholder:text-clickup-text/40 focus:outline-none border-b border-transparent focus:border-clickup-purple py-1 transition-colors"
+                  className="app-text-body flex-1 border-b border-transparent bg-transparent py-1 text-clickup-text placeholder:text-clickup-text/40 transition-colors focus:border-clickup-purple focus:outline-none"
                 />
                 {newSubtaskTitle.trim() && (
                   <Button variant="ghost" size="icon" onClick={handleAddSubtask} disabled={addingSubtask}>
@@ -802,7 +801,7 @@ export const TaskDetail = ({
             {/* Dependencies */}
             {dependencies.length > 0 && (
               <div className="space-y-2">
-                <h3 className="text-sm font-semibold text-clickup-text">
+                <h3 className="app-text-title-md text-clickup-text">
                   Dependencies <span className="text-clickup-text/40 font-normal">({dependencies.length})</span>
                 </h3>
                 <div className="space-y-1">
@@ -810,11 +809,11 @@ export const TaskDetail = ({
                     const isBlocking = dep.predecessor_id === issue.id;
                     const linkedId = isBlocking ? dep.successor_id : dep.predecessor_id;
                     return (
-                      <div key={dep.id} className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-clickup-hover group text-sm">
-                        <span className="text-[10px] font-medium text-clickup-text/50 uppercase w-16 shrink-0">
+                      <div key={dep.id} className="app-text-body flex items-center gap-2 rounded-md px-2 py-1.5 group hover:bg-clickup-hover">
+                        <span className="app-text-overline w-16 shrink-0 text-clickup-text/50">
                           {isBlocking ? 'Blocks' : 'Blocked by'}
                         </span>
-                        <span className="text-clickup-text/60 font-mono text-xs truncate flex-1">{linkedId.slice(0, 8)}…</span>
+                        <span className="app-text-caption flex-1 truncate font-mono text-clickup-text/60">{linkedId.slice(0, 8)}…</span>
                         <button
                           onClick={async () => {
                             if (!token) return;
@@ -839,8 +838,8 @@ export const TaskDetail = ({
             <div className="space-y-2">
               <div className="flex items-center gap-2">
                 <Paperclip size={14} className="text-clickup-text/50" />
-                <h3 className="text-sm font-semibold text-clickup-text">Attachments</h3>
-                <span className="text-xs text-clickup-text/40">{attachments.length}</span>
+                <h3 className="app-text-title-md text-clickup-text">Attachments</h3>
+                <span className="app-text-caption text-clickup-text/40">{attachments.length}</span>
               </div>
 
               {attachments.length > 0 && (
@@ -861,8 +860,8 @@ export const TaskDetail = ({
                           </div>
                         )}
                         <div className="flex-1 min-w-0">
-                          <p className="text-sm text-clickup-text truncate">{att.filename}</p>
-                          <p className="text-[10px] text-clickup-text/40">
+                          <p className="app-text-body truncate text-clickup-text">{att.filename}</p>
+                          <p className="app-text-micro text-clickup-text/40">
                             {att.size_bytes < 1024 ? `${att.size_bytes} B` : att.size_bytes < 1048576 ? `${(att.size_bytes / 1024).toFixed(1)} KB` : `${(att.size_bytes / 1048576).toFixed(1)} MB`}
                             {' · '}{att.uploaded_by_name}
                           </p>
@@ -893,7 +892,7 @@ export const TaskDetail = ({
                 onDragLeave={() => setDragOver(false)}
                 onDrop={e => { e.preventDefault(); if (e.dataTransfer.files.length) handleFileUpload(e.dataTransfer.files); }}
                 onClick={() => fileInputRef.current?.click()}
-                className={`border-2 border-dashed rounded-lg py-4 text-center text-sm cursor-pointer transition-colors ${
+                className={`app-text-body cursor-pointer rounded-lg border-2 border-dashed py-4 text-center transition-colors ${
                   dragOver ? 'border-clickup-purple bg-clickup-purple/5 text-clickup-purple' : 'border-clickup-border text-clickup-text/40 hover:border-clickup-text/30'
                 }`}
               >
@@ -918,11 +917,11 @@ export const TaskDetail = ({
             <div className="space-y-2">
               <div className="flex items-center gap-2">
                 <Clock size={14} className="text-clickup-text/50" />
-                <h3 className="text-sm font-semibold text-clickup-text">Time Tracking</h3>
+                <h3 className="app-text-title-md text-clickup-text">Time Tracking</h3>
               </div>
 
               {/* Estimate + Progress */}
-              <div className="flex items-center gap-3 text-xs">
+              <div className="app-text-caption flex items-center gap-3">
                 <div className="flex items-center gap-1.5">
                   <span className="text-clickup-text/50">Estimate:</span>
                   <input
@@ -958,7 +957,7 @@ export const TaskDetail = ({
               {timeEntries.length > 0 && (
                 <div className="border border-clickup-border rounded-lg max-h-32 overflow-y-auto custom-scrollbar">
                   {timeEntries.map(te => (
-                    <div key={te.id} className="flex items-center gap-2 px-3 py-1.5 border-b border-clickup-border last:border-b-0 text-[11px] group hover:bg-clickup-hover/50">
+                    <div key={te.id} className="app-text-caption flex items-center gap-2 border-b border-clickup-border px-3 py-1.5 group last:border-b-0 hover:bg-clickup-hover/50">
                       <span className="text-clickup-text font-medium">{formatDuration(te.duration_minutes)}</span>
                       <span className="text-clickup-text/40">{te.entry_date}</span>
                       <span className="text-clickup-text/50 flex-1 truncate">{te.description || te.user_name}</span>
@@ -982,7 +981,7 @@ export const TaskDetail = ({
                   value={timeLogMinutes}
                   onChange={e => setTimeLogMinutes(e.target.value)}
                   placeholder="Hours..."
-                  className="w-20 bg-transparent text-sm text-clickup-text placeholder:text-clickup-text/40 focus:outline-none border-b border-transparent focus:border-clickup-purple py-1 transition-colors"
+                  className="app-text-body w-20 border-b border-transparent bg-transparent py-1 text-clickup-text placeholder:text-clickup-text/40 transition-colors focus:border-clickup-purple focus:outline-none"
                 />
                 <input
                   type="text"
@@ -990,7 +989,7 @@ export const TaskDetail = ({
                   onChange={e => setTimeLogDesc(e.target.value)}
                   onKeyDown={e => { if (e.key === 'Enter' && !e.nativeEvent.isComposing && timeLogMinutes) handleLogTime(); }}
                   placeholder="Description..."
-                  className="flex-1 bg-transparent text-sm text-clickup-text placeholder:text-clickup-text/40 focus:outline-none border-b border-transparent focus:border-clickup-purple py-1 transition-colors"
+                  className="app-text-body flex-1 border-b border-transparent bg-transparent py-1 text-clickup-text placeholder:text-clickup-text/40 transition-colors focus:border-clickup-purple focus:outline-none"
                 />
                 {timeLogMinutes && (
                   <Button variant="ghost" size="icon" onClick={handleLogTime} disabled={loggingTime}>
@@ -1005,7 +1004,7 @@ export const TaskDetail = ({
         {/* Right: Activity sidebar */}
         <div className="w-[340px] shrink-0 flex flex-col bg-clickup-bg">
           <div className="px-4 py-3 border-b border-clickup-border">
-            <h3 className="text-sm font-semibold text-clickup-text">Activity</h3>
+            <h3 className="app-text-title-md text-clickup-text">Activity</h3>
           </div>
 
           {/* Activity list */}
@@ -1020,8 +1019,8 @@ export const TaskDetail = ({
                       {initials(log.actor_name)}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-xs text-clickup-text/60">{log.message}</p>
-                      <span className="text-[10px] text-clickup-text/30">{formatDate(log.created_at)}</span>
+                      <p className="app-text-caption text-clickup-text/60">{log.message}</p>
+                      <span className="app-text-micro text-clickup-text/30">{formatDate(log.created_at)}</span>
                     </div>
                   </div>
                 ))}
@@ -1032,19 +1031,19 @@ export const TaskDetail = ({
                       {initials(comment.author_name)}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <span className="text-xs font-bold text-clickup-text">{comment.author_name}</span>
+                      <span className="app-text-caption font-bold text-clickup-text">{comment.author_name}</span>
                       {comment.body_blocks ? (
-                        <BlockViewer content={comment.body_blocks as BlockContent} className="mt-0.5 text-xs" resolveFileUrl={resolveFileUrl} />
+                        <BlockViewer content={comment.body_blocks as BlockContent} className="app-text-caption mt-0.5" resolveFileUrl={resolveFileUrl} />
                       ) : (
-                        <p className="text-xs text-clickup-text/60 mt-0.5">{comment.body}</p>
+                        <p className="app-text-caption mt-0.5 text-clickup-text/60">{comment.body}</p>
                       )}
-                      <span className="text-[10px] text-clickup-text/30">{formatDate(comment.created_at)}</span>
+                      <span className="app-text-micro text-clickup-text/30">{formatDate(comment.created_at)}</span>
                     </div>
                   </div>
                 ))}
 
                 {activityLogs.length === 0 && comments.length === 0 && (
-                  <p className="text-sm text-clickup-text/30 text-center py-8">No activity yet</p>
+                  <p className="app-text-body py-8 text-center text-clickup-text/30">No activity yet</p>
                 )}
               </>
             )}
@@ -1076,7 +1075,7 @@ export const TaskDetail = ({
                 }}
                 onKeyDown={e => { if (e.key === 'Enter' && !e.nativeEvent.isComposing && !mentionOpen) handleCommentSubmit(); if (e.key === 'Escape') setMentionOpen(false); }}
                 placeholder="Write a comment... (type @ to mention)"
-                className="w-full bg-transparent border border-clickup-border rounded-lg px-3 py-1.5 text-sm text-clickup-text placeholder:text-clickup-text/40 focus:outline-none focus:border-clickup-purple transition-colors"
+                className="app-text-body w-full rounded-lg border border-clickup-border bg-transparent px-3 py-1.5 text-clickup-text placeholder:text-clickup-text/40 transition-colors focus:border-clickup-purple focus:outline-none"
               />
               {mentionOpen && (
                 <>
@@ -1093,7 +1092,7 @@ export const TaskDetail = ({
                             setCommentDraft(`${before}@${m.user_id} `);
                             setMentionOpen(false);
                           }}
-                          className="w-full text-left px-3 py-1.5 text-sm text-clickup-text hover:bg-clickup-hover transition-colors flex items-center gap-2"
+                          className="app-text-body flex w-full items-center gap-2 px-3 py-1.5 text-left text-clickup-text transition-colors hover:bg-clickup-hover"
                         >
                           <div className="w-5 h-5 rounded-full bg-blue-500 flex items-center justify-center text-[8px] font-bold text-white">
                             {initials(m.full_name)}
@@ -1102,7 +1101,7 @@ export const TaskDetail = ({
                         </button>
                       ))}
                     {members.filter(m => !mentionQuery || m.full_name.toLowerCase().includes(mentionQuery)).length === 0 && (
-                      <p className="px-3 py-2 text-xs text-clickup-text/40">No matches</p>
+                      <p className="app-text-caption px-3 py-2 text-clickup-text/40">No matches</p>
                     )}
                   </div>
                 </>
@@ -1120,13 +1119,13 @@ export const TaskDetail = ({
 
 function MetaLabel({ children }: { children: React.ReactNode }) {
   return (
-    <span className="text-[11px] font-medium text-clickup-text/50 uppercase tracking-wider whitespace-nowrap">{children}</span>
+    <span className="app-text-overline whitespace-nowrap text-clickup-text/50">{children}</span>
   );
 }
 
 function InlineSaveError({ message }: { message: string }) {
   return (
-    <div className="rounded-md border border-red-500/20 bg-red-500/10 px-3 py-2 text-sm text-red-300">
+    <div className="app-text-body rounded-md border border-red-500/20 bg-red-500/10 px-3 py-2 text-red-300">
       {message}
     </div>
   );

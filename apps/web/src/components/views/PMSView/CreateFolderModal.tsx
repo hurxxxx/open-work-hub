@@ -1,31 +1,28 @@
 import { useState, useEffect } from 'react';
+import { FolderOpen } from 'lucide-react';
 import { Dialog, Button } from '@aidoo/ui';
 import { useAuth } from '@/src/domains/auth/auth-provider';
-import { createPmsList, type PmsList } from '@/src/domains/pms/pms-api';
+import { createFolder, type PmsFolder } from '@/src/domains/pms/pms-api';
 
-export const CreateProjectModal = ({
+export const CreateFolderModal = ({
   isOpen,
   onClose,
-  teamId = null,
-  folderId = null,
+  teamId,
   onCreated,
 }: {
   isOpen: boolean;
   onClose: () => void;
-  teamId?: string | null;
-  folderId?: string | null;
-  onCreated?: (project: PmsList) => void;
+  teamId: string;
+  onCreated?: (folder: PmsFolder) => void;
 }) => {
   const { token } = useAuth();
   const [name, setName] = useState('');
-  const [description, setDescription] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
 
   useEffect(() => {
     if (isOpen) {
       setName('');
-      setDescription('');
       setError('');
       setSubmitting(false);
     }
@@ -36,16 +33,11 @@ export const CreateProjectModal = ({
     setSubmitting(true);
     setError('');
     try {
-      const project = await createPmsList(token, {
-        name: name.trim(),
-        description: description.trim(),
-        team_id: teamId,
-        folder_id: folderId,
-      });
-      onCreated?.(project);
+      const folder = await createFolder(token, { name: name.trim(), team_id: teamId });
+      onCreated?.(folder);
       onClose();
     } catch (err) {
-      setError(err instanceof Error ? err.message : '리스트 생성에 실패했습니다.');
+      setError(err instanceof Error ? err.message : '폴더 생성에 실패했습니다.');
     } finally {
       setSubmitting(false);
     }
@@ -55,7 +47,7 @@ export const CreateProjectModal = ({
     <Dialog
       open={isOpen}
       onOpenChange={(open) => { if (!open) onClose(); }}
-      title="Create List"
+      title="New Folder"
       maxWidth="max-w-lg"
       actions={
         <div className="flex items-center justify-end gap-3 w-full">
@@ -65,14 +57,19 @@ export const CreateProjectModal = ({
             onClick={handleCreate}
             disabled={!name.trim() || submitting}
           >
-            {submitting ? 'Creating...' : 'Create'}
+            {submitting ? 'Creating...' : 'Create Folder'}
           </Button>
         </div>
       }
     >
       <div className="space-y-5 text-clickup-text">
-        <div className="app-text-body text-clickup-text/60">
-          All Lists are located within a Space. Lists can house any type of task.
+        <div className="flex items-center gap-3 p-4 rounded-lg bg-clickup-sidebar border border-clickup-border">
+          <div className="w-10 h-10 bg-amber-500/20 rounded-lg flex items-center justify-center">
+            <FolderOpen size={20} className="text-amber-400" />
+          </div>
+          <div className="app-text-body text-clickup-text/60">
+            폴더를 생성하면 리스트와 문서를 그룹으로 묶어 관리할 수 있습니다.
+          </div>
         </div>
 
         {error && (
@@ -82,28 +79,15 @@ export const CreateProjectModal = ({
         )}
 
         <div className="space-y-1">
-          <label className="app-text-control-sm text-clickup-text/70">
-            Name <span className="text-red-400">*</span>
-          </label>
+          <label className="app-text-control-sm text-clickup-text/70">Folder Name</label>
           <input
             type="text"
-            placeholder="e.g. Project, List of items, Campaign"
+            placeholder="e.g. Sprint 1"
             value={name}
             onChange={e => setName(e.target.value)}
             onKeyDown={e => { if (e.key === 'Enter' && !e.nativeEvent.isComposing && name.trim() && !submitting) handleCreate(); }}
             className="app-text-body w-full rounded-md border border-clickup-border bg-clickup-sidebar px-3 py-2 text-clickup-text placeholder:text-clickup-text/30 transition-all focus:border-clickup-purple focus:outline-none"
             autoFocus
-          />
-        </div>
-
-        <div className="space-y-1">
-          <label className="app-text-control-sm text-clickup-text/70">Description <span className="text-clickup-text/30">(optional)</span></label>
-          <textarea
-            placeholder="리스트에 대한 간단한 설명"
-            value={description}
-            onChange={e => setDescription(e.target.value)}
-            rows={3}
-            className="app-text-body w-full resize-none rounded-md border border-clickup-border bg-clickup-sidebar px-3 py-2 text-clickup-text placeholder:text-clickup-text/30 transition-all focus:border-clickup-purple focus:outline-none"
           />
         </div>
       </div>
