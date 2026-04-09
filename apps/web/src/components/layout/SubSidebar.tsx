@@ -19,7 +19,7 @@ import { cn } from '@/src/lib/utils';
 import { NAV_ITEMS, APP_BAR_ITEMS } from '@/src/constants';
 import { useAuth } from '@/src/domains/auth/auth-provider';
 import { getWorkspaceRoleByKey } from '@/src/domains/auth/auth-api';
-import { listPmsLists, listFolders, createSpaceDocPage, listSpaceDocPages, updateSpaceDocPage, deleteSpaceDocPage, updateFolder, deleteFolder, type PmsFolder, type PmsList, type PmsSpaceDocPage } from '@/src/domains/pms/pms-api';
+import { listPmsLists, listFolders, listSpaceDocs, createSpaceDoc, updateSpaceDoc, deleteSpaceDoc, updateFolder, deleteFolder, type PmsFolder, type PmsList, type PmsSpaceDoc } from '@/src/domains/pms/pms-api';
 import { listTeams, updateTeam, deleteTeam, type TeamItem } from '@/src/domains/admin/admin-api';
 import { CreateProjectModal } from '@/src/components/views/PMSView/CreateProjectModal';
 import { CreateSpaceModal } from '@/src/components/views/PMSView/CreateSpaceModal';
@@ -324,7 +324,7 @@ const SpaceItem = ({
   onDeleteFolder,
   onRenameSpace,
   onDeleteSpace,
-  docPages,
+  spaceDocs,
   onRenameDoc,
   onDeleteDoc,
   activeNavItemId,
@@ -345,9 +345,9 @@ const SpaceItem = ({
   onDeleteFolder: (folderId: string) => void;
   onRenameSpace: (newName: string) => void;
   onDeleteSpace: () => void;
-  docPages: PmsSpaceDocPage[];
-  onRenameDoc: (pageId: string, newTitle: string) => void;
-  onDeleteDoc: (pageId: string) => void;
+  spaceDocs: PmsSpaceDoc[];
+  onRenameDoc: (docId: string, newTitle: string) => void;
+  onDeleteDoc: (docId: string) => void;
   activeNavItemId: string;
 }) => {
   const [addPopoverOpen, setAddPopoverOpen] = useState(false);
@@ -373,7 +373,8 @@ const SpaceItem = ({
 
   const docsToolId = `pms-space-${spaceId}-docs`;
   const spaceOverviewToolId = `pms-space-${spaceId}`;
-  const spaceActive = activeNavItemId === docsToolId || activeNavItemId === spaceOverviewToolId
+  const docsActive = activeNavItemId === docsToolId || activeNavItemId.startsWith(`${docsToolId}-`);
+  const spaceActive = docsActive || activeNavItemId === spaceOverviewToolId
     || rootLists.some((list) => activeNavItemId === `pms-list-${list.id}`)
     || folders.some(({ lists }) => lists.some((list) => activeNavItemId === `pms-list-${list.id}`));
 
@@ -513,69 +514,81 @@ const SpaceItem = ({
             className="overflow-hidden"
           >
             <div className="ml-4 pl-3 border-l border-clickup-border space-y-1">
-              {docPages.map((page) => {
-                const docPageNavId = `${docsToolId}/${page.id}`;
-                const isDocMenuOpen = docMenuOpen === page.id;
-                const isDocRenaming = renamingDocId === page.id;
-                return (
-                  <div key={page.id} className="group/doc flex items-center">
-                    {isDocRenaming ? (
-                      <div className="sidebar-submenu-item flex-1 min-w-0">
-                        <FileText size={13} className="text-gray-500 shrink-0" />
-                        <input
-                          ref={docRenameInputRef}
-                          value={docRenameValue}
-                          onChange={(e) => setDocRenameValue(e.target.value)}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter') {
-                              const trimmed = docRenameValue.trim();
-                              if (trimmed && trimmed !== page.title) onRenameDoc(page.id, trimmed);
-                              setRenamingDocId(null);
-                            } else if (e.key === 'Escape') {
-                              setRenamingDocId(null);
-                            }
-                          }}
-                          onBlur={() => {
-                            const trimmed = docRenameValue.trim();
-                            if (trimmed && trimmed !== page.title) onRenameDoc(page.id, trimmed);
-                            setRenamingDocId(null);
-                          }}
-                          className="flex-1 min-w-0 bg-transparent text-xs text-clickup-text outline-none border border-blue-500 rounded px-1 py-0.5"
-                          autoFocus
+              <Link
+                to={`/tool/${docsToolId}`}
+                className={cn('sidebar-submenu-item flex-1 min-w-0', activeNavItemId === docsToolId && 'sidebar-submenu-item-active')}
+              >
+                <FileText size={13} className="text-gray-500 shrink-0" />
+                <span className="sidebar-submenu-label">Docs</span>
+              </Link>
+
+              {spaceDocs.length > 0 ? (
+                <div className="ml-4 space-y-0.5">
+                  {spaceDocs.map((doc) => {
+                    const docNavId = `pms-space-${spaceId}-docs-${doc.id}`;
+                    const isDocMenuOpen = docMenuOpen === doc.id;
+                    const isDocRenaming = renamingDocId === doc.id;
+                    return (
+                      <div key={doc.id} className="group/doc flex items-center">
+                        {isDocRenaming ? (
+                          <div className="sidebar-submenu-item flex-1 min-w-0">
+                            <FileText size={13} className="text-gray-500 shrink-0" />
+                            <input
+                              ref={docRenameInputRef}
+                              value={docRenameValue}
+                              onChange={(e) => setDocRenameValue(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  const trimmed = docRenameValue.trim();
+                                  if (trimmed && trimmed !== doc.title) onRenameDoc(doc.id, trimmed);
+                                  setRenamingDocId(null);
+                                } else if (e.key === 'Escape') {
+                                  setRenamingDocId(null);
+                                }
+                              }}
+                              onBlur={() => {
+                                const trimmed = docRenameValue.trim();
+                                if (trimmed && trimmed !== doc.title) onRenameDoc(doc.id, trimmed);
+                                setRenamingDocId(null);
+                              }}
+                              className="app-text-body-sm flex-1 min-w-0 rounded border border-blue-500 bg-transparent px-1 py-0.5 text-clickup-text outline-none"
+                              autoFocus
+                            />
+                          </div>
+                        ) : (
+                          <Link
+                            to={`/tool/${docNavId}`}
+                            className={cn('sidebar-submenu-item flex-1 min-w-0', activeNavItemId === docNavId && 'sidebar-submenu-item-active')}
+                          >
+                            <FileText size={13} className="text-gray-500 shrink-0" />
+                            <span className="sidebar-submenu-label">{doc.title || 'Untitled'}</span>
+                          </Link>
+                        )}
+                        <div className={cn('items-center gap-0.5 pr-1 shrink-0', isDocMenuOpen ? 'flex' : 'hidden group-hover/doc:flex')}>
+                          <button
+                            ref={(el) => { if (el) docMenuBtnRefs.current.set(doc.id, el); }}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setDocMenuOpen((c) => (c === doc.id ? null : doc.id));
+                            }}
+                            className="p-0.5 hover:bg-clickup-hover rounded text-gray-500 hover:text-gray-300 transition-colors"
+                            title="Doc options"
+                          >
+                            <MoreHorizontal size={12} />
+                          </button>
+                        </div>
+                        <FolderContextMenu
+                          open={isDocMenuOpen}
+                          anchorRef={{ current: docMenuBtnRefs.current.get(doc.id) ?? null }}
+                          onClose={() => setDocMenuOpen(null)}
+                          onRename={() => { setDocRenameValue(doc.title); setRenamingDocId(doc.id); }}
+                          onDelete={() => onDeleteDoc(doc.id)}
                         />
                       </div>
-                    ) : (
-                      <Link
-                        to={`/tool/${docPageNavId}`}
-                        className={cn('sidebar-submenu-item flex-1 min-w-0', activeNavItemId === docPageNavId && 'sidebar-submenu-item-active')}
-                      >
-                        <FileText size={13} className="text-gray-500 shrink-0" />
-                        <span className="sidebar-submenu-label">{page.title || 'Untitled'}</span>
-                      </Link>
-                    )}
-                    <div className={cn('items-center gap-0.5 pr-1 shrink-0', isDocMenuOpen ? 'flex' : 'hidden group-hover/doc:flex')}>
-                      <button
-                        ref={(el) => { if (el) docMenuBtnRefs.current.set(page.id, el); }}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setDocMenuOpen((c) => (c === page.id ? null : page.id));
-                        }}
-                        className="p-0.5 hover:bg-clickup-hover rounded text-gray-500 hover:text-gray-300 transition-colors"
-                        title="Doc options"
-                      >
-                        <MoreHorizontal size={12} />
-                      </button>
-                    </div>
-                    <FolderContextMenu
-                      open={isDocMenuOpen}
-                      anchorRef={{ current: docMenuBtnRefs.current.get(page.id) ?? null }}
-                      onClose={() => setDocMenuOpen(null)}
-                      onRename={() => { setDocRenameValue(page.title); setRenamingDocId(page.id); }}
-                      onDelete={() => onDeleteDoc(page.id)}
-                    />
-                  </div>
-                );
-              })}
+                    );
+                  })}
+                </div>
+              ) : null}
 
               {folders.map(({ folder, lists }) => {
                 const isFolderExpanded = expandedFolders.has(folder.id);
@@ -697,7 +710,7 @@ export const SubSidebar = ({ activeAppId, activeNavItemId }: { activeAppId: stri
   const location = useLocation();
   const navigate = useNavigate();
   const { token, user, hasPermission } = useAuth();
-  const isSpaceDocs = /^\/tool\/pms-space-.+-docs(\/|$)/.test(location.pathname);
+  const isSpaceDocs = /^\/tool\/pms-space-[0-9a-f-]+-docs/.test(location.pathname);
   const isDocEditor = !isSpaceDocs && (location.pathname.match(/^\/tool\/[^/]+\/[^/]+$/) || location.pathname.match(/^\/docs\/[^/]+$/));
   const pmsWorkspaceId = getWorkspaceRoleByKey(user, PMS_WORKSPACE_KEY)?.workspace_id ?? null;
   const canReadTeams = hasPermission('team.read');
@@ -809,51 +822,58 @@ export const SubSidebar = ({ activeAppId, activeNavItemId }: { activeAppId: stri
   const handleCreateDoc = useCallback(async (spaceId: string) => {
     if (!token) return;
     try {
-      const page = await createSpaceDocPage(token, spaceId, { title: 'Untitled Page' });
-      navigate(`/tool/pms-space-${spaceId}-docs/${page.id}`);
-    } catch {
-      navigate(`/tool/pms-space-${spaceId}-docs`);
-    }
+      const doc = await createSpaceDoc(token, spaceId, { title: 'Untitled' });
+      setSpaceDocsMap((prev) => {
+        const next = new Map(prev);
+        next.set(spaceId, [...(next.get(spaceId) ?? []), doc]);
+        return next;
+      });
+      navigate(`/tool/pms-space-${spaceId}-docs-${doc.id}`);
+    } catch { /* ignore */ }
   }, [navigate, token]);
 
-  const [spaceDocPages, setSpaceDocPages] = useState<Map<string, PmsSpaceDocPage[]>>(new Map());
+  const [spaceDocsMap, setSpaceDocsMap] = useState<Map<string, PmsSpaceDoc[]>>(new Map());
 
   useEffect(() => {
     if (!token) return;
     for (const team of pmsTeams) {
-      listSpaceDocPages(token, team.id)
-        .then((res) => setSpaceDocPages((prev) => new Map(prev).set(team.id, res.items.filter((p) => !p.parent_id))))
+      listSpaceDocs(token, team.id)
+        .then((res) => setSpaceDocsMap((prev) => new Map(prev).set(team.id, res.items)))
         .catch(() => undefined);
     }
   }, [token, pmsTeams]);
 
-  const handleRenameDoc = useCallback(async (pageId: string, newTitle: string) => {
+  const handleRenameDoc = useCallback(async (docId: string, newTitle: string) => {
     if (!token) return;
     try {
-      const updated = await updateSpaceDocPage(token, pageId, { title: newTitle });
-      setSpaceDocPages((prev) => {
+      const updated = await updateSpaceDoc(token, docId, { title: newTitle });
+      setSpaceDocsMap((prev) => {
         const next = new Map(prev);
-        const pages = next.get(updated.team_id) ?? [];
-        next.set(updated.team_id, pages.map((p) => (p.id === updated.id ? updated : p)));
+        const docs = next.get(updated.team_id) ?? [];
+        next.set(updated.team_id, docs.map((d) => (d.id === updated.id ? updated : d)));
         return next;
       });
     } catch { /* ignore */ }
   }, [token]);
 
-  const handleDeleteDoc = useCallback(async (pageId: string) => {
+  const handleDeleteDoc = useCallback(async (docId: string) => {
     if (!token) return;
-    if (!window.confirm('Delete this document?')) return;
+    if (!window.confirm('Move this document collection and all its pages to Trash?')) return;
+    const deletedTeamId = [...spaceDocsMap.entries()].find(([, docs]) => docs.some((doc) => doc.id === docId))?.[0] ?? null;
     try {
-      await deleteSpaceDocPage(token, pageId);
-      setSpaceDocPages((prev) => {
+      await deleteSpaceDoc(token, docId);
+      setSpaceDocsMap((prev) => {
         const next = new Map(prev);
-        for (const [teamId, pages] of next) {
-          next.set(teamId, pages.filter((p) => p.id !== pageId));
+        for (const [teamId, docs] of next) {
+          next.set(teamId, docs.filter((d) => d.id !== docId));
         }
         return next;
       });
+      if (deletedTeamId && activeNavItemId === `pms-space-${deletedTeamId}-docs-${docId}`) {
+        navigate(`/tool/pms-space-${deletedTeamId}-docs`);
+      }
     } catch { /* ignore */ }
-  }, [token]);
+  }, [activeNavItemId, navigate, spaceDocsMap, token]);
 
   const handleRenameFolder = useCallback(async (folderId: string, currentName: string) => {
     if (!token) return;
@@ -1035,7 +1055,7 @@ export const SubSidebar = ({ activeAppId, activeNavItemId }: { activeAppId: stri
                       onDeleteFolder={(folderId) => { void handleDeleteFolder(folderId); }}
                       onRenameSpace={(newName) => { void handleRenameSpace(space.id, newName); }}
                       onDeleteSpace={() => { void handleDeleteSpace(space.id); }}
-                      docPages={spaceDocPages.get(space.id) ?? []}
+                      spaceDocs={spaceDocsMap.get(space.id) ?? []}
                       onRenameDoc={(pageId, newTitle) => { void handleRenameDoc(pageId, newTitle); }}
                       onDeleteDoc={(pageId) => { void handleDeleteDoc(pageId); }}
                       activeNavItemId={activeNavItemId}
@@ -1165,11 +1185,12 @@ export const SubSidebar = ({ activeAppId, activeNavItemId }: { activeAppId: stri
         folderId={createProjectFolderId}
         onCreated={(list) => {
           setPmsLists((current) => upsertList(current, list));
-          if (list.team_id) {
-            knownSpaceIdsRef.current.add(list.team_id);
+          const teamId = list.team_id;
+          if (teamId) {
+            knownSpaceIdsRef.current.add(teamId);
             setExpandedSpaces((current) => {
               const next = new Set(current);
-              next.add(list.team_id);
+              next.add(teamId);
               return next;
             });
           }

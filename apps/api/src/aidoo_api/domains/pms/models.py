@@ -585,6 +585,7 @@ class SpaceDoc(Base):
         onupdate=utcnow_naive,
         nullable=False,
     )
+    trashed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, index=True)
     created_by = relationship("User")
     pages: Mapped[list["SpaceDocPage"]] = relationship(
         back_populates="doc",
@@ -599,9 +600,9 @@ class SpaceDocPage(Base):
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     team_id: Mapped[str] = mapped_column(ForeignKey("teams.id"), index=True)
-    space_doc_id: Mapped[str | None] = mapped_column(
+    space_doc_id: Mapped[str] = mapped_column(
         ForeignKey("pms_space_docs.id"),
-        nullable=True,
+        nullable=False,
         index=True,
     )
     parent_id: Mapped[str | None] = mapped_column(
@@ -624,8 +625,9 @@ class SpaceDocPage(Base):
         onupdate=utcnow_naive,
         nullable=False,
     )
+    trashed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, index=True)
     created_by = relationship("User")
-    doc: Mapped["SpaceDoc | None"] = relationship(back_populates="pages")
+    doc: Mapped["SpaceDoc"] = relationship(back_populates="pages")
     parent: Mapped["SpaceDocPage | None"] = relationship(
         remote_side="SpaceDocPage.id",
         back_populates="children",

@@ -3899,6 +3899,7 @@ class SpaceDocItem(BaseModel):
     created_by_name: str
     created_at: datetime
     updated_at: datetime
+    trashed_at: datetime | None = None
 
 
 class SpaceDocListResponse(BaseModel):
@@ -3919,22 +3920,81 @@ def _serialize_space_doc(doc: SpaceDoc) -> SpaceDocItem:
         team_id=doc.team_id,
         title=doc.title,
         created_by_id=doc.created_by_id,
-        created_by_name=doc.created_by.name if doc.created_by else "",
+        created_by_name=getattr(doc.created_by, "full_name", ""),
         created_at=doc.created_at,
         updated_at=doc.updated_at,
+        trashed_at=doc.trashed_at,
     )
+
+
+def _get_active_space_doc(
+    db: Session,
+    doc_id: str,
+    *,
+    with_created_by: bool = False,
+) -> SpaceDoc | None:
+    query = select(SpaceDoc).where(
+        SpaceDoc.id == doc_id,
+        SpaceDoc.trashed_at.is_(None),
+    )
+    if with_created_by:
+        query = query.options(selectinload(SpaceDoc.created_by))
+    return db.scalar(query)
+
+
+def _get_active_space_doc_page(
+    db: Session,
+    page_id: str,
+    *,
+    with_created_by: bool = False,
+) -> SpaceDocPage | None:
+    query = select(SpaceDocPage).where(
+        SpaceDocPage.id == page_id,
+        SpaceDocPage.trashed_at.is_(None),
+    )
+    if with_created_by:
+        query = query.options(selectinload(SpaceDocPage.created_by))
+    return db.scalar(query)
+
+
+def _require_space_doc_access(
+    db: Session,
+    current_user: User,
+    doc_id: str,
+    *,
+    write: bool = False,
+) -> SpaceDoc:
+    doc = _get_active_space_doc(db, doc_id, with_created_by=True)
+    if doc is None:
+        raise HTTPException(status_code=404, detail="SpaceDoc not found.")
+    if write:
+        _ensure_space_editor(db, current_user, doc.team_id)
+    else:
+        _ensure_space_access(db, current_user, doc.team_id)
+    return doc
+
+
+def _require_space_doc_in_space(db: Session, space_id: str, doc_id: str) -> SpaceDoc:
+    doc = _get_active_space_doc(db, doc_id)
+    if doc is None or doc.team_id != space_id:
+        raise HTTPException(status_code=404, detail="SpaceDoc not found.")
+    return doc
 
 
 @router.get("/spaces/{space_id}/docs", response_model=SpaceDocListResponse)
 def list_space_docs(
     space_id: str,
-    context: AuthContext = Depends(require_team_access(lambda space_id=None, **_: space_id)),
     db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
 ) -> SpaceDocListResponse:
+    _ensure_space_access(db, current_user, space_id)
     items = db.scalars(
         select(SpaceDoc)
-        .options(joinedload(SpaceDoc.created_by))
-        .where(SpaceDoc.team_id == space_id)
+        .options(selectinload(SpaceDoc.created_by))
+        .where(
+            SpaceDoc.team_id == space_id,
+            SpaceDoc.trashed_at.is_(None),
+        )
         .order_by(SpaceDoc.updated_at.desc())
     ).all()
     return SpaceDocListResponse(items=[_serialize_space_doc(d) for d in items])
@@ -3944,14 +4004,15 @@ def list_space_docs(
 def create_space_doc(
     space_id: str,
     payload: SpaceDocCreateRequest,
-    context: AuthContext = Depends(require_team_editor(lambda space_id=None, **_: space_id)),
     db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
 ) -> SpaceDocItem:
+    _ensure_space_editor(db, current_user, space_id)
     doc = SpaceDoc(
-        id=_uuid(),
+        id=new_id(),
         team_id=space_id,
         title=payload.title.strip(),
-        created_by_id=context.user.id,
+        created_by_id=current_user.id,
     )
     db.add(doc)
     db.commit()
@@ -3962,14 +4023,10 @@ def create_space_doc(
 @router.get("/space-docs/{doc_id}", response_model=SpaceDocItem)
 def get_space_doc(
     doc_id: str,
-    context: AuthContext = Depends(require_permission("pms.read")),
     db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
 ) -> SpaceDocItem:
-    doc = db.scalar(
-        select(SpaceDoc).options(joinedload(SpaceDoc.created_by)).where(SpaceDoc.id == doc_id)
-    )
-    if doc is None:
-        raise HTTPException(status_code=404, detail="SpaceDoc not found.")
+    doc = _require_space_doc_access(db, current_user, doc_id)
     return _serialize_space_doc(doc)
 
 
@@ -3977,32 +4034,39 @@ def get_space_doc(
 def update_space_doc(
     doc_id: str,
     payload: SpaceDocUpdateRequest,
-    context: AuthContext = Depends(require_permission("pms.write")),
     db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
 ) -> SpaceDocItem:
-    doc = db.scalar(
-        select(SpaceDoc).options(joinedload(SpaceDoc.created_by)).where(SpaceDoc.id == doc_id)
-    )
-    if doc is None:
-        raise HTTPException(status_code=404, detail="SpaceDoc not found.")
+    doc = _require_space_doc_access(db, current_user, doc_id, write=True)
     if payload.title is not None:
         doc.title = payload.title.strip()
     db.add(doc)
     db.commit()
-    db.refresh(doc)
+    db.refresh(doc, ["created_by"])
     return _serialize_space_doc(doc)
 
 
 @router.delete("/space-docs/{doc_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_space_doc(
     doc_id: str,
-    context: AuthContext = Depends(require_permission("pms.write")),
     db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
 ) -> None:
-    doc = db.scalar(select(SpaceDoc).where(SpaceDoc.id == doc_id))
-    if doc is None:
-        raise HTTPException(status_code=404, detail="SpaceDoc not found.")
-    db.delete(doc)
+    doc = _require_space_doc_access(db, current_user, doc_id, write=True)
+    deleted_at = _utcnow()
+    doc.trashed_at = deleted_at
+    pages = list(
+        db.scalars(
+            select(SpaceDocPage).where(
+                SpaceDocPage.space_doc_id == doc.id,
+                SpaceDocPage.trashed_at.is_(None),
+            )
+        )
+    )
+    for page in pages:
+        page.trashed_at = deleted_at
+        db.add(page)
+    db.add(doc)
     db.commit()
 
 
@@ -4012,6 +4076,7 @@ def delete_space_doc(
 class SpaceDocPageItem(BaseModel):
     id: str
     team_id: str
+    space_doc_id: str
     parent_id: str | None = None
     title: str
     content_blocks: list[dict] | None = None
@@ -4020,6 +4085,7 @@ class SpaceDocPageItem(BaseModel):
     created_by_name: str
     created_at: datetime
     updated_at: datetime
+    trashed_at: datetime | None = None
 
 
 class SpaceDocPageListResponse(BaseModel):
@@ -4028,6 +4094,7 @@ class SpaceDocPageListResponse(BaseModel):
 
 class SpaceDocPageCreateRequest(BaseModel):
     title: str = Field(..., min_length=1, max_length=200)
+    space_doc_id: str
     parent_id: str | None = None
     content_blocks: list[dict] | None = None
     sort_order: int | None = None
@@ -4044,6 +4111,7 @@ def _serialize_space_doc_page(page: SpaceDocPage) -> SpaceDocPageItem:
     return SpaceDocPageItem(
         id=page.id,
         team_id=page.team_id,
+        space_doc_id=page.space_doc_id,
         parent_id=page.parent_id,
         title=page.title,
         content_blocks=page.content_blocks,
@@ -4052,18 +4120,28 @@ def _serialize_space_doc_page(page: SpaceDocPage) -> SpaceDocPageItem:
         created_by_name=getattr(page.created_by, "full_name", ""),
         created_at=page.created_at,
         updated_at=page.updated_at,
+        trashed_at=page.trashed_at,
     )
 
 
-def _validate_space_doc_parent(db: Session, team_id: str, parent_id: str | None, *, page_id: str | None = None) -> None:
+def _validate_space_doc_parent(
+    db: Session,
+    team_id: str,
+    space_doc_id: str,
+    parent_id: str | None,
+    *,
+    page_id: str | None = None,
+) -> None:
     if parent_id is None:
         return
 
-    parent = db.scalar(select(SpaceDocPage).where(SpaceDocPage.id == parent_id))
+    parent = _get_active_space_doc_page(db, parent_id)
     if parent is None:
         raise HTTPException(status_code=404, detail="Parent page not found.")
     if parent.team_id != team_id:
         raise HTTPException(status_code=400, detail="Parent page must belong to the same space.")
+    if parent.space_doc_id != space_doc_id:
+        raise HTTPException(status_code=409, detail="Parent page must belong to the same document collection.")
     if page_id is not None and parent.id == page_id:
         raise HTTPException(status_code=409, detail="Page cannot be its own parent.")
 
@@ -4077,7 +4155,36 @@ def _validate_space_doc_parent(db: Session, team_id: str, parent_id: str | None,
             raise HTTPException(status_code=409, detail="Page parent relationship cannot contain a cycle.")
         if ancestor.parent_id is None:
             break
-        ancestor = db.scalar(select(SpaceDocPage).where(SpaceDocPage.id == ancestor.parent_id))
+        ancestor = _get_active_space_doc_page(db, ancestor.parent_id)
+
+
+def _collect_active_space_doc_page_subtree(
+    db: Session,
+    root_page: SpaceDocPage,
+) -> list[SpaceDocPage]:
+    pages = list(
+        db.scalars(
+            select(SpaceDocPage).where(
+                SpaceDocPage.space_doc_id == root_page.space_doc_id,
+                SpaceDocPage.trashed_at.is_(None),
+            )
+        )
+    )
+    by_parent: dict[str | None, list[SpaceDocPage]] = {}
+    for page in pages:
+        by_parent.setdefault(page.parent_id, []).append(page)
+
+    subtree: list[SpaceDocPage] = []
+    stack = [root_page]
+    seen: set[str] = set()
+    while stack:
+        current = stack.pop()
+        if current.id in seen:
+            continue
+        seen.add(current.id)
+        subtree.append(current)
+        stack.extend(by_parent.get(current.id, []))
+    return subtree
 
 
 @router.get("/projects/{project_id}/docs", response_model=DocListResponse)
@@ -4184,16 +4291,30 @@ def delete_doc(
 @router.get("/spaces/{space_id}/docs/pages", response_model=SpaceDocPageListResponse)
 def list_space_doc_pages(
     space_id: str,
+    space_doc_id: str | None = Query(default=None),
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
 ) -> SpaceDocPageListResponse:
     _ensure_space_access(db, current_user, space_id)
+    if space_doc_id is None:
+        raise HTTPException(status_code=400, detail="space_doc_id is required.")
+    _require_space_doc_in_space(db, space_id, space_doc_id)
+    query = (
+        select(SpaceDocPage)
+        .options(selectinload(SpaceDocPage.created_by))
+        .where(
+            SpaceDocPage.team_id == space_id,
+            SpaceDocPage.space_doc_id == space_doc_id,
+            SpaceDocPage.trashed_at.is_(None),
+        )
+    )
     pages = list(
         db.scalars(
-            select(SpaceDocPage)
-            .options(selectinload(SpaceDocPage.created_by))
-            .where(SpaceDocPage.team_id == space_id)
-            .order_by(SpaceDocPage.parent_id, SpaceDocPage.sort_order, SpaceDocPage.created_at)
+            query.order_by(
+                SpaceDocPage.parent_id.nullsfirst(),
+                SpaceDocPage.sort_order,
+                SpaceDocPage.created_at,
+            )
         )
     )
     return SpaceDocPageListResponse(items=[_serialize_space_doc_page(page) for page in pages])
@@ -4207,7 +4328,8 @@ def create_space_doc_page(
     current_user: User = Depends(require_current_user),
 ) -> SpaceDocPageItem:
     _ensure_space_editor(db, current_user, space_id)
-    _validate_space_doc_parent(db, space_id, payload.parent_id)
+    _require_space_doc_in_space(db, space_id, payload.space_doc_id)
+    _validate_space_doc_parent(db, space_id, payload.space_doc_id, payload.parent_id)
     sort_order = payload.sort_order
     if sort_order is None:
         sibling_count = db.scalar(
@@ -4215,7 +4337,9 @@ def create_space_doc_page(
             .select_from(SpaceDocPage)
             .where(
                 SpaceDocPage.team_id == space_id,
+                SpaceDocPage.space_doc_id == payload.space_doc_id,
                 SpaceDocPage.parent_id == payload.parent_id,
+                SpaceDocPage.trashed_at.is_(None),
             )
         ) or 0
         sort_order = sibling_count
@@ -4224,6 +4348,7 @@ def create_space_doc_page(
         id=new_id(),
         team_id=space_id,
         parent_id=payload.parent_id,
+        space_doc_id=payload.space_doc_id,
         title=payload.title.strip(),
         content_blocks=payload.content_blocks,
         sort_order=sort_order,
@@ -4248,11 +4373,7 @@ def get_space_doc_page(
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
 ) -> SpaceDocPageItem:
-    page = db.scalar(
-        select(SpaceDocPage)
-        .options(selectinload(SpaceDocPage.created_by))
-        .where(SpaceDocPage.id == page_id)
-    )
+    page = _get_active_space_doc_page(db, page_id, with_created_by=True)
     if page is None:
         raise HTTPException(status_code=404, detail="Space doc page not found.")
     _ensure_space_access(db, current_user, page.team_id)
@@ -4266,16 +4387,12 @@ def update_space_doc_page(
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
 ) -> SpaceDocPageItem:
-    page = db.scalar(
-        select(SpaceDocPage)
-        .options(selectinload(SpaceDocPage.created_by))
-        .where(SpaceDocPage.id == page_id)
-    )
+    page = _get_active_space_doc_page(db, page_id, with_created_by=True)
     if page is None:
         raise HTTPException(status_code=404, detail="Space doc page not found.")
     _ensure_space_editor(db, current_user, page.team_id)
     if "parent_id" in payload.model_fields_set:
-        _validate_space_doc_parent(db, page.team_id, payload.parent_id, page_id=page.id)
+        _validate_space_doc_parent(db, page.team_id, page.space_doc_id, payload.parent_id, page_id=page.id)
         page.parent_id = payload.parent_id
     if "title" in payload.model_fields_set and payload.title is not None:
         page.title = payload.title.strip()
@@ -4295,21 +4412,13 @@ def delete_space_doc_page(
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
 ) -> Response:
-    page = db.scalar(select(SpaceDocPage).where(SpaceDocPage.id == page_id))
+    page = _get_active_space_doc_page(db, page_id)
     if page is None:
         raise HTTPException(status_code=404, detail="Space doc page not found.")
     _ensure_space_editor(db, current_user, page.team_id)
-    media_keys = cleanup_media_for_resource(db, "space_doc_page", page.id)
-    for child in db.scalars(select(SpaceDocPage).where(SpaceDocPage.parent_id == page.id)):
-        child.parent_id = None
-    db.delete(page)
+    deleted_at = _utcnow()
+    for descendant in _collect_active_space_doc_page_subtree(db, page):
+        descendant.trashed_at = deleted_at
+        db.add(descendant)
     db.commit()
-    if media_keys:
-        settings = get_settings()
-        client = get_minio_client()
-        for key in media_keys:
-            try:
-                client.remove_object(settings.minio_bucket, key)
-            except Exception:
-                pass
     return Response(status_code=status.HTTP_204_NO_CONTENT)

@@ -2,23 +2,31 @@ import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { motion } from 'motion/react';
 import {
+  ChevronDown,
+  ChevronRight,
   FileText,
+  Loader2,
+  MoreHorizontal,
   Plus,
   Trash2,
-  ChevronRight,
-  ChevronDown,
-  Loader2,
 } from 'lucide-react';
 import { BlockEditor } from '@aidoo/ui';
 import type { BlockContent } from '@aidoo/ui';
+
 import { cn } from '@/src/lib/utils';
 import { useAuth } from '@/src/domains/auth/auth-provider';
 import { useMediaUpload } from '@/src/domains/media/use-media-upload';
 import {
+  createSpaceDoc,
   createSpaceDocPage,
+  deleteSpaceDoc,
   deleteSpaceDocPage,
+  getSpaceDocPage,
   listSpaceDocPages,
+  listSpaceDocs,
+  updateSpaceDoc,
   updateSpaceDocPage,
+  type PmsSpaceDoc,
   type PmsSpaceDocPage,
 } from '@/src/domains/pms/pms-api';
 
@@ -122,63 +130,114 @@ const PageTreeItem = ({
   );
 };
 
-export const SpaceDocsView = ({ spaceId, spaceName }: { spaceId: string; spaceName?: string | null }) => {
+export const SpaceDocsView = ({ spaceId, spaceName, docId: spaceDocId }: { spaceId: string; spaceName?: string | null; docId?: string | null }) => {
   const navigate = useNavigate();
-  const { docId } = useParams();
+  const { docId: pageId } = useParams();
   const { token } = useAuth();
   const { uploadFile, resolveFileUrl } = useMediaUpload();
+  const [collections, setCollections] = useState<PmsSpaceDoc[]>([]);
   const [pages, setPages] = useState<PmsSpaceDocPage[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loadingCollections, setLoadingCollections] = useState(true);
+  const [loadingPages, setLoadingPages] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [titleDraft, setTitleDraft] = useState('');
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const pageTree = useMemo(() => buildTree(pages), [pages]);
-  const selectedPage = pages.find((page) => page.id === docId) ?? null;
+  const basePath = `/tool/pms-space-${spaceId}-docs`;
+  const collectionPath = useCallback((docId: string) => `${basePath}-${docId}`, [basePath]);
+  const pagePath = useCallback((docId: string, currentPageId: string) => `${collectionPath(docId)}/${currentPageId}`, [collectionPath]);
 
-  const loadPages = useCallback(async () => {
+  const selectedCollection = collections.find((doc) => doc.id === spaceDocId) ?? null;
+  const selectedPage = pages.find((page) => page.id === pageId) ?? null;
+  const pageTree = useMemo(() => buildTree(pages), [pages]);
+
+  const loadCollections = useCallback(async () => {
     if (!token) return;
-    setLoading(true);
-    setError(null);
+    setLoadingCollections(true);
     try {
-      const response = await listSpaceDocPages(token, spaceId);
+      const response = await listSpaceDocs(token, spaceId);
+      setCollections(response.items);
+    } catch (caughtError) {
+      setError(getErrorMessage(caughtError, '문서 컬렉션을 불러오지 못했습니다.'));
+    } finally {
+      setLoadingCollections(false);
+    }
+  }, [spaceId, token]);
+
+  const loadPages = useCallback(async (docId: string) => {
+    if (!token) return;
+    setLoadingPages(true);
+    try {
+      const response = await listSpaceDocPages(token, spaceId, docId);
       setPages(response.items);
     } catch (caughtError) {
       setError(getErrorMessage(caughtError, '문서 페이지를 불러오지 못했습니다.'));
     } finally {
-      setLoading(false);
+      setLoadingPages(false);
     }
   }, [spaceId, token]);
 
   useEffect(() => {
-    void loadPages();
-  }, [loadPages]);
+    void loadCollections();
+  }, [loadCollections]);
 
   useEffect(() => {
-    if (loading) return;
-    if (!pages.length) return;
-    if (!docId || !pages.some((page) => page.id === docId)) {
-      navigate(`/tool/pms-space-${spaceId}-docs/${pages[0].id}`, { replace: true });
+    if (!selectedCollection) {
+      setPages([]);
+      setLoadingPages(false);
+      return;
     }
-  }, [docId, loading, navigate, pages, spaceId]);
+    void loadPages(selectedCollection.id);
+  }, [loadPages, selectedCollection]);
+
+  useEffect(() => {
+    if (!spaceDocId || !pageId || loadingCollections) return;
+    if (selectedCollection) return;
+    navigate(basePath, { replace: true });
+  }, [basePath, loadingCollections, navigate, pageId, selectedCollection, spaceDocId]);
+
+  useEffect(() => {
+    if (!token || spaceDocId || !pageId) return;
+    let cancelled = false;
+
+    void getSpaceDocPage(token, pageId)
+      .then((page) => {
+        if (cancelled) return;
+        if (page.team_id !== spaceId || !page.space_doc_id) {
+          navigate(basePath, { replace: true });
+          return;
+        }
+        navigate(pagePath(page.space_doc_id, page.id), { replace: true });
+      })
+      .catch(() => {
+        if (!cancelled) navigate(basePath, { replace: true });
+      });
+
+    return () => { cancelled = true; };
+  }, [basePath, navigate, pageId, pagePath, spaceDocId, spaceId, token]);
+
+  useEffect(() => {
+    if (!selectedCollection || loadingPages) return;
+    if (!pageId || !pages.some((page) => page.id === pageId)) {
+      if (pages[0]) navigate(pagePath(selectedCollection.id, pages[0].id), { replace: true });
+    }
+  }, [loadingPages, navigate, pageId, pagePath, pages, selectedCollection]);
 
   useEffect(() => {
     setTitleDraft(selectedPage?.title ?? '');
   }, [selectedPage]);
 
   useEffect(() => () => {
-    if (saveTimerRef.current) {
-      clearTimeout(saveTimerRef.current);
-    }
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
   }, []);
 
-  const patchPage = useCallback(async (pageId: string, payload: Record<string, unknown>, fallbackMessage: string) => {
+  const patchPage = useCallback(async (targetPageId: string, payload: Record<string, unknown>, fallbackMessage: string) => {
     if (!token) return null;
     setSaving(true);
     setError(null);
     try {
-      const updated = await updateSpaceDocPage(token, pageId, payload);
+      const updated = await updateSpaceDocPage(token, targetPageId, payload);
       setPages((current) => current.map((page) => (page.id === updated.id ? updated : page)));
       return updated;
     } catch (caughtError) {
@@ -189,42 +248,94 @@ export const SpaceDocsView = ({ spaceId, spaceName }: { spaceId: string; spaceNa
     }
   }, [token]);
 
-  const handleCreatePage = useCallback(async (parentId: string | null = null) => {
+  const handleCreateCollection = useCallback(async () => {
     if (!token) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const created = await createSpaceDoc(token, spaceId, { title: 'Untitled' });
+      setCollections((current) => [created, ...current]);
+      navigate(collectionPath(created.id));
+    } catch (caughtError) {
+      setError(getErrorMessage(caughtError, '문서 컬렉션을 만들지 못했습니다.'));
+    } finally {
+      setSaving(false);
+    }
+  }, [collectionPath, navigate, spaceId, token]);
+
+  const handleRenameCollection = useCallback(async (doc: PmsSpaceDoc) => {
+    if (!token) return;
+    const nextTitle = window.prompt('Document collection name', doc.title);
+    if (!nextTitle?.trim() || nextTitle.trim() === doc.title) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const updated = await updateSpaceDoc(token, doc.id, { title: nextTitle.trim() });
+      setCollections((current) => current.map((item) => (item.id === updated.id ? updated : item)));
+    } catch (caughtError) {
+      setError(getErrorMessage(caughtError, '문서 컬렉션 이름을 저장하지 못했습니다.'));
+    } finally {
+      setSaving(false);
+    }
+  }, [token]);
+
+  const handleDeleteCollection = useCallback(async (doc: PmsSpaceDoc) => {
+    if (!token) return;
+    if (!window.confirm('Move this document collection and all its pages to Trash?')) return;
+    setSaving(true);
+    setError(null);
+    try {
+      await deleteSpaceDoc(token, doc.id);
+      setCollections((current) => current.filter((item) => item.id !== doc.id));
+      if (spaceDocId === doc.id) {
+        setPages([]);
+        navigate(basePath, { replace: true });
+      }
+    } catch (caughtError) {
+      setError(getErrorMessage(caughtError, '문서 컬렉션을 휴지통으로 옮기지 못했습니다.'));
+    } finally {
+      setSaving(false);
+    }
+  }, [basePath, navigate, spaceDocId, token]);
+
+  const handleCreatePage = useCallback(async (parentId: string | null = null) => {
+    if (!token || !selectedCollection) return;
     setSaving(true);
     setError(null);
     try {
       const created = await createSpaceDocPage(token, spaceId, {
         title: parentId ? 'Untitled Subpage' : 'Untitled Page',
         parent_id: parentId,
+        space_doc_id: selectedCollection.id,
       });
       setPages((current) => [...current, created]);
-      navigate(`/tool/pms-space-${spaceId}-docs/${created.id}`);
+      navigate(pagePath(selectedCollection.id, created.id));
     } catch (caughtError) {
       setError(getErrorMessage(caughtError, '페이지를 생성하지 못했습니다.'));
     } finally {
       setSaving(false);
     }
-  }, [navigate, spaceId, token]);
+  }, [navigate, pagePath, selectedCollection, spaceId, token]);
 
-  const handleDeletePage = useCallback(async (pageId: string) => {
-    if (!token) return;
+  const handleDeletePage = useCallback(async (targetPageId: string) => {
+    if (!token || !selectedCollection) return;
+    if (!window.confirm('Move this page and its subpages to Trash?')) return;
     setSaving(true);
     setError(null);
     try {
-      await deleteSpaceDocPage(token, pageId);
-      const remaining = pages.filter((page) => page.id !== pageId);
-      setPages(remaining);
-      if (docId === pageId) {
-        if (remaining[0]) navigate(`/tool/pms-space-${spaceId}-docs/${remaining[0].id}`, { replace: true });
-        else navigate(`/tool/pms-space-${spaceId}-docs`, { replace: true });
+      await deleteSpaceDocPage(token, targetPageId);
+      const response = await listSpaceDocPages(token, spaceId, selectedCollection.id);
+      setPages(response.items);
+      if (selectedPage?.id === targetPageId) {
+        if (response.items[0]) navigate(pagePath(selectedCollection.id, response.items[0].id), { replace: true });
+        else navigate(collectionPath(selectedCollection.id), { replace: true });
       }
     } catch (caughtError) {
-      setError(getErrorMessage(caughtError, '페이지를 삭제하지 못했습니다.'));
+      setError(getErrorMessage(caughtError, '페이지를 휴지통으로 옮기지 못했습니다.'));
     } finally {
       setSaving(false);
     }
-  }, [docId, navigate, pages, spaceId, token]);
+  }, [collectionPath, navigate, pagePath, selectedCollection, selectedPage, spaceId, token]);
 
   const handleTitleSave = useCallback(async () => {
     if (!selectedPage || titleDraft.trim() === selectedPage.title) return;
@@ -239,25 +350,117 @@ export const SpaceDocsView = ({ spaceId, spaceName }: { spaceId: string; spaceNa
     }, 500);
   }, [patchPage, selectedPage]);
 
+  if (!spaceDocId) {
+    return (
+      <div className="h-full flex flex-col bg-clickup-bg">
+        <header className="border-b border-clickup-border px-8 py-6">
+          <div className="flex items-start justify-between gap-4">
+            <div className="space-y-2">
+              <div className="app-text-overline text-gray-500">Space Docs</div>
+              <div className="app-text-title-lg text-clickup-text">{spaceName ?? 'Space'}</div>
+              <div className="app-text-body text-gray-500">문서 컬렉션 단위로 페이지를 정리하고 관리합니다.</div>
+            </div>
+            <button
+              onClick={() => { void handleCreateCollection(); }}
+              className="app-text-control flex items-center gap-2 rounded-md bg-clickup-purple px-4 py-2 text-white"
+            >
+              <Plus size={16} />
+              <span>New Collection</span>
+            </button>
+          </div>
+        </header>
+
+        {error ? (
+          <div className="app-text-body border-b border-red-500/20 bg-red-500/10 px-8 py-3 text-red-300">{error}</div>
+        ) : null}
+
+        <main className="custom-scrollbar flex-1 overflow-y-auto px-8 py-8">
+          {loadingCollections ? (
+            <div className="flex h-64 items-center justify-center">
+              <Loader2 size={20} className="animate-spin text-gray-500" />
+            </div>
+          ) : collections.length > 0 ? (
+            <div className="mx-auto max-w-4xl space-y-3">
+              {collections.map((doc) => (
+                <div key={doc.id} className="group flex items-center gap-3 rounded-lg border border-clickup-border bg-clickup-sidebar px-4 py-3">
+                  <button
+                    onClick={() => navigate(collectionPath(doc.id))}
+                    className="flex min-w-0 flex-1 items-center gap-3 text-left"
+                  >
+                    <div className="flex h-10 w-10 items-center justify-center rounded-md border border-clickup-border bg-clickup-bg text-clickup-purple">
+                      <FileText size={18} />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="app-text-title-md truncate text-clickup-text">{doc.title}</div>
+                      <div className="app-text-caption text-gray-500">
+                        Updated {new Date(doc.updated_at).toLocaleString()}
+                      </div>
+                    </div>
+                  </button>
+                  <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+                    <button
+                      onClick={() => { void handleRenameCollection(doc); }}
+                      className="rounded p-1.5 text-gray-500 transition-colors hover:bg-clickup-hover hover:text-clickup-text"
+                      title="Rename collection"
+                    >
+                      <MoreHorizontal size={14} />
+                    </button>
+                    <button
+                      onClick={() => { void handleDeleteCollection(doc); }}
+                      className="rounded p-1.5 text-gray-500 transition-colors hover:bg-red-500/10 hover:text-red-400"
+                      title="Move to Trash"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="mx-auto flex max-w-xl flex-col items-center justify-center rounded-xl border border-dashed border-clickup-border bg-clickup-sidebar px-8 py-12 text-center">
+              <FileText size={24} className="mb-4 text-gray-400" />
+              <div className="app-text-title-md text-clickup-text">No document collections yet</div>
+              <div className="app-text-body mt-2 text-gray-500">첫 번째 컬렉션을 만들고 그 안에서 페이지를 관리하세요.</div>
+              <button
+                onClick={() => { void handleCreateCollection(); }}
+                className="app-text-control mt-6 inline-flex items-center gap-2 rounded-md bg-clickup-purple px-4 py-2 text-white"
+              >
+                <Plus size={16} />
+                <span>Create Collection</span>
+              </button>
+            </div>
+          )}
+        </main>
+      </div>
+    );
+  }
+
   return (
     <div className="h-full flex bg-clickup-bg">
-      <div className="w-72 border-r border-clickup-border bg-clickup-sidebar flex flex-col">
-        <div className="px-4 py-4 border-b border-clickup-border flex items-center justify-between">
-          <div>
-            <div className="app-text-overline text-gray-500">Space Docs</div>
-            <div className="app-text-title-md text-clickup-text">{spaceName ?? 'Docs'}</div>
+      <div className="flex w-72 flex-col border-r border-clickup-border bg-clickup-sidebar">
+        <div className="flex items-center justify-between border-b border-clickup-border px-4 py-4">
+          <div className="min-w-0">
+            <button
+              onClick={() => navigate(basePath)}
+              className="app-text-overline text-gray-500 transition-colors hover:text-clickup-text"
+            >
+              Space Docs
+            </button>
+            <div className="app-text-title-md truncate text-clickup-text">
+              {selectedCollection?.title ?? 'Collection'}
+            </div>
           </div>
           <button
             onClick={() => { void handleCreatePage(null); }}
-            className="p-1 rounded hover:bg-clickup-hover text-gray-500 hover:text-clickup-text"
+            className="rounded p-1 text-gray-500 transition-colors hover:bg-clickup-hover hover:text-clickup-text"
             title="Add page"
           >
             <Plus size={14} />
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto px-2 py-3 custom-scrollbar space-y-1">
-          {loading ? (
+        <div className="custom-scrollbar flex-1 overflow-y-auto px-2 py-3 space-y-1">
+          {loadingPages ? (
             <div className="flex items-center justify-center py-8">
               <Loader2 size={16} className="animate-spin text-gray-500" />
             </div>
@@ -267,9 +470,11 @@ export const SpaceDocsView = ({ spaceId, spaceName }: { spaceId: string; spaceNa
                 key={node.id}
                 node={node}
                 selectedPageId={selectedPage?.id ?? null}
-                onSelect={(pageId) => navigate(`/tool/pms-space-${spaceId}-docs/${pageId}`)}
+                onSelect={(nextPageId) => {
+                  if (selectedCollection) navigate(pagePath(selectedCollection.id, nextPageId));
+                }}
                 onCreateChild={(parentId) => { void handleCreatePage(parentId); }}
-                onDelete={(pageId) => { void handleDeletePage(pageId); }}
+                onDelete={(targetPageId) => { void handleDeletePage(targetPageId); }}
               />
             ))
           ) : (
@@ -283,7 +488,7 @@ export const SpaceDocsView = ({ spaceId, spaceName }: { spaceId: string; spaceNa
         </div>
       </div>
 
-      <div className="flex-1 min-w-0 flex flex-col">
+      <div className="flex min-w-0 flex-1 flex-col">
         {error ? (
           <div className="app-text-body border-b border-red-500/20 bg-red-500/10 px-6 py-3 text-red-300">{error}</div>
         ) : null}
@@ -293,7 +498,7 @@ export const SpaceDocsView = ({ spaceId, spaceName }: { spaceId: string; spaceNa
             <div className="app-text-caption flex h-12 items-center justify-between border-b border-clickup-border px-6 text-gray-500">
               <div className="flex items-center gap-2">
                 <FileText size={12} />
-                <span>{spaceName ?? 'Space'} Docs</span>
+                <span>{selectedCollection?.title ?? 'Collection'}</span>
               </div>
               <div className="flex items-center gap-3">
                 {saving ? <Loader2 size={12} className="animate-spin" /> : null}
@@ -301,12 +506,12 @@ export const SpaceDocsView = ({ spaceId, spaceName }: { spaceId: string; spaceNa
               </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto custom-scrollbar">
+            <div className="custom-scrollbar flex-1 overflow-y-auto">
               <motion.div
                 key={selectedPage.id}
                 initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="max-w-4xl mx-auto px-12 py-12 space-y-6"
+                className="mx-auto max-w-4xl space-y-6 px-12 py-12"
               >
                 <div className="space-y-3">
                   <input
@@ -330,7 +535,7 @@ export const SpaceDocsView = ({ spaceId, spaceName }: { spaceId: string; spaceNa
                 <div className="prose max-w-none dark:prose-invert">
                   <BlockEditor
                     key={selectedPage.id}
-                    initialContent={selectedPage.content_blocks ?? undefined}
+                    initialContent={(selectedPage.content_blocks as BlockContent | null) ?? undefined}
                     placeholder="Start writing..."
                     uploadFile={uploadFile}
                     resolveFileUrl={resolveFileUrl}
@@ -341,8 +546,8 @@ export const SpaceDocsView = ({ spaceId, spaceName }: { spaceId: string; spaceNa
             </div>
           </>
         ) : (
-          <div className="app-text-body flex-1 flex items-center justify-center text-gray-500">
-            {loading ? <Loader2 size={18} className="animate-spin" /> : 'Select a page'}
+          <div className="app-text-body flex flex-1 items-center justify-center text-gray-500">
+            {loadingPages ? <Loader2 size={18} className="animate-spin" /> : 'Select a page'}
           </div>
         )}
       </div>

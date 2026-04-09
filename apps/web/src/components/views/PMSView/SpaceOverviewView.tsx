@@ -14,10 +14,10 @@ import { useAuth } from '@/src/domains/auth/auth-provider';
 import {
   listPmsLists,
   listFolders,
-  listSpaceDocPages,
+  listSpaceDocs,
   type PmsList,
   type PmsFolder,
-  type PmsSpaceDocPage,
+  type PmsSpaceDoc,
 } from '@/src/domains/pms/pms-api';
 import { CreateProjectModal } from './CreateProjectModal';
 
@@ -32,7 +32,7 @@ export const SpaceOverviewView = ({
   const navigate = useNavigate();
   const [lists, setLists] = useState<PmsList[]>([]);
   const [folders, setFolders] = useState<PmsFolder[]>([]);
-  const [docPages, setDocPages] = useState<PmsSpaceDocPage[]>([]);
+  const [spaceDocs, setSpaceDocs] = useState<PmsSpaceDoc[]>([]);
   const [loading, setLoading] = useState(true);
   const [createListOpen, setCreateListOpen] = useState(false);
 
@@ -44,13 +44,13 @@ export const SpaceOverviewView = ({
     Promise.all([
       listPmsLists(token, spaceId),
       listFolders(token, spaceId),
-      listSpaceDocPages(token, spaceId).catch(() => ({ items: [] as PmsSpaceDocPage[] })),
+      listSpaceDocs(token, spaceId).catch(() => ({ items: [] as PmsSpaceDoc[] })),
     ])
-      .then(([listRes, folderRes, docRes]) => {
+      .then(([listRes, folderRes, docsRes]) => {
         if (cancelled) return;
         setLists(listRes.items);
         setFolders(folderRes.items);
-        setDocPages(docRes.items);
+        setSpaceDocs(docsRes.items);
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -88,7 +88,7 @@ export const SpaceOverviewView = ({
           <div>
             <h1 className="app-text-title-lg text-clickup-text">{spaceName ?? 'Space'}</h1>
             <div className="app-text-micro text-gray-500">
-              {lists.length} lists · {folders.length} folders · {docPages.length} docs
+              {lists.length} lists · {folders.length} folders · {spaceDocs.length} doc collections
             </div>
           </div>
         </div>
@@ -103,27 +103,27 @@ export const SpaceOverviewView = ({
               Docs
             </h3>
             <div className="space-y-2">
-              {docPages.slice(0, 8).map((page) => (
+              {spaceDocs.slice(0, 8).map((doc) => (
                 <div
-                  key={page.id}
-                  onClick={() => navigate(`/tool/pms-space-${spaceId}-docs/${page.id}`)}
+                  key={doc.id}
+                  onClick={() => navigate(`/tool/pms-space-${spaceId}-docs-${doc.id}`)}
                   className="flex items-center gap-3 p-2 hover:bg-clickup-hover rounded-md cursor-pointer group"
                 >
                   <FileText size={14} className="text-gray-500 shrink-0" />
                   <span className="app-text-body-sm flex-1 truncate text-clickup-text transition-colors group-hover:text-clickup-purple">
-                    {page.title}
+                    {doc.title}
                   </span>
                 </div>
               ))}
-              {docPages.length === 0 && (
-                <p className="app-text-body text-clickup-text/40">No docs yet</p>
+              {spaceDocs.length === 0 && (
+                <p className="app-text-body text-clickup-text/40">No doc collections yet</p>
               )}
-              {docPages.length > 0 && (
+              {spaceDocs.length > 0 && (
                 <button
                   onClick={() => navigate(`/tool/pms-space-${spaceId}-docs`)}
                   className="app-text-control-sm text-clickup-purple transition-colors hover:text-clickup-purple/80"
                 >
-                  View all docs
+                  View all collections
                 </button>
               )}
             </div>

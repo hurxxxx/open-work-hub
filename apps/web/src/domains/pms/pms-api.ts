@@ -275,6 +275,7 @@ export interface PmsSpaceDoc {
   created_by_name: string;
   created_at: string;
   updated_at: string;
+  trashed_at: string | null;
 }
 
 export interface PmsSpaceDocsResponse {
@@ -284,6 +285,7 @@ export interface PmsSpaceDocsResponse {
 export interface PmsSpaceDocPage {
   id: string;
   team_id: string;
+  space_doc_id: string;
   parent_id: string | null;
   title: string;
   content_blocks: Record<string, unknown>[] | null;
@@ -292,6 +294,7 @@ export interface PmsSpaceDocPage {
   created_by_name: string;
   created_at: string;
   updated_at: string;
+  trashed_at: string | null;
 }
 
 export interface PmsSpaceDocPagesResponse {
@@ -1108,14 +1111,49 @@ export function deleteDoc(token: string, docId: string): Promise<void> {
   return request<void>(`/api/v1/pms/docs/${docId}`, token, { method: 'DELETE' });
 }
 
-export function listSpaceDocPages(token: string, spaceId: string): Promise<PmsSpaceDocPagesResponse> {
-  return request<PmsSpaceDocPagesResponse>(`/api/v1/pms/spaces/${spaceId}/docs/pages`, token);
+// ── Space Docs (collections) ────────────────────────────────────────
+
+export function listSpaceDocs(token: string, spaceId: string): Promise<PmsSpaceDocsResponse> {
+  return request<PmsSpaceDocsResponse>(`/api/v1/pms/spaces/${spaceId}/docs`, token);
+}
+
+export function createSpaceDoc(
+  token: string,
+  spaceId: string,
+  payload: { title: string },
+): Promise<PmsSpaceDoc> {
+  return request<PmsSpaceDoc>(`/api/v1/pms/spaces/${spaceId}/docs`, token, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function updateSpaceDoc(
+  token: string,
+  docId: string,
+  payload: { title?: string },
+): Promise<PmsSpaceDoc> {
+  return request<PmsSpaceDoc>(`/api/v1/pms/space-docs/${docId}`, token, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function deleteSpaceDoc(token: string, docId: string): Promise<void> {
+  return request<void>(`/api/v1/pms/space-docs/${docId}`, token, { method: 'DELETE' });
+}
+
+// ── Space Doc Pages ─────────────────────────────────────────────────
+
+export function listSpaceDocPages(token: string, spaceId: string, spaceDocId: string): Promise<PmsSpaceDocPagesResponse> {
+  const params = `?space_doc_id=${encodeURIComponent(spaceDocId)}`;
+  return request<PmsSpaceDocPagesResponse>(`/api/v1/pms/spaces/${spaceId}/docs/pages${params}`, token);
 }
 
 export function createSpaceDocPage(
   token: string,
   spaceId: string,
-  payload: { title: string; parent_id?: string | null; content_blocks?: Record<string, unknown>[] | null; sort_order?: number | null },
+  payload: { title: string; parent_id?: string | null; space_doc_id: string; content_blocks?: Record<string, unknown>[] | null; sort_order?: number | null },
 ): Promise<PmsSpaceDocPage> {
   return request<PmsSpaceDocPage>(`/api/v1/pms/spaces/${spaceId}/docs/pages`, token, {
     method: 'POST',

@@ -105,8 +105,9 @@ export const PMSView = () => {
     : toolId?.startsWith('pms-project-')
       ? toolId.replace('pms-project-', '')
       : null;
-  const spaceDocsMatch = toolId?.match(/^pms-space-(.+)-docs$/);
+  const spaceDocsMatch = toolId?.match(/^pms-space-([0-9a-f-]+)-docs(?:-([0-9a-f-]+))?$/);
   const spaceDocsSpaceId = spaceDocsMatch?.[1] ?? null;
+  const spaceDocsDocId = spaceDocsMatch?.[2] ?? null;
   const spaceOverviewId = (toolId && /^pms-space-.+$/.test(toolId) && !spaceDocsMatch) ? toolId.replace('pms-space-', '') : null;
   const isOverviewRoute = !toolId || toolId === 'pms-space-team';
   const selectedProject = projects.find(p => p.id === selectedProjectId);
@@ -308,7 +309,7 @@ export const PMSView = () => {
   if (isPersonalView) return <PersonalListView />;
   if (spaceDocsSpaceId) {
     const spaceName = projects.find((project) => project.team_id === spaceDocsSpaceId)?.team_name ?? null;
-    return <SpaceDocsView spaceId={spaceDocsSpaceId} spaceName={spaceName} />;
+    return <SpaceDocsView spaceId={spaceDocsSpaceId} spaceName={spaceName} docId={spaceDocsDocId} />;
   }
   if (spaceOverviewId) {
     const spaceName = projects.find((project) => project.team_id === spaceOverviewId)?.team_name ?? null;

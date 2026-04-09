@@ -221,22 +221,57 @@ def _apply_postgres_schema_compat(engine) -> None:
         )
         """,
         "CREATE INDEX IF NOT EXISTS ix_pms_docs_project_id ON pms_docs (project_id)",
+        # ── pms_space_docs table ──
+        """
+        CREATE TABLE IF NOT EXISTS pms_space_docs (
+            id VARCHAR(36) PRIMARY KEY,
+            team_id VARCHAR(36) NOT NULL REFERENCES teams(id),
+            title VARCHAR(200) NOT NULL,
+            created_by_id VARCHAR(36) NOT NULL REFERENCES users(id),
+            created_at TIMESTAMP NOT NULL DEFAULT now(),
+            updated_at TIMESTAMP NOT NULL DEFAULT now(),
+            trashed_at TIMESTAMP
+        )
+        """,
+        "CREATE INDEX IF NOT EXISTS ix_pms_space_docs_team_id ON pms_space_docs (team_id)",
+        "CREATE INDEX IF NOT EXISTS ix_pms_space_docs_trashed_at ON pms_space_docs (trashed_at)",
         # ── pms_space_doc_pages table ──
         """
         CREATE TABLE IF NOT EXISTS pms_space_doc_pages (
             id VARCHAR(36) PRIMARY KEY,
             team_id VARCHAR(36) NOT NULL REFERENCES teams(id),
+            space_doc_id VARCHAR(36) NOT NULL REFERENCES pms_space_docs(id),
             parent_id VARCHAR(36) REFERENCES pms_space_doc_pages(id),
             title VARCHAR(200) NOT NULL,
             content_blocks JSON,
             sort_order INTEGER NOT NULL DEFAULT 0,
             created_by_id VARCHAR(36) NOT NULL REFERENCES users(id),
             created_at TIMESTAMP NOT NULL DEFAULT now(),
-            updated_at TIMESTAMP NOT NULL DEFAULT now()
+            updated_at TIMESTAMP NOT NULL DEFAULT now(),
+            trashed_at TIMESTAMP
         )
         """,
+        "ALTER TABLE pms_space_docs ADD COLUMN IF NOT EXISTS trashed_at TIMESTAMP",
+        "ALTER TABLE pms_space_doc_pages ADD COLUMN IF NOT EXISTS space_doc_id VARCHAR(36) REFERENCES pms_space_docs(id)",
+        "ALTER TABLE pms_space_doc_pages ADD COLUMN IF NOT EXISTS trashed_at TIMESTAMP",
         "CREATE INDEX IF NOT EXISTS ix_pms_space_doc_pages_team_id ON pms_space_doc_pages (team_id)",
+        "CREATE INDEX IF NOT EXISTS ix_pms_space_doc_pages_space_doc_id ON pms_space_doc_pages (space_doc_id)",
         "CREATE INDEX IF NOT EXISTS ix_pms_space_doc_pages_parent_id ON pms_space_doc_pages (parent_id)",
+        "CREATE INDEX IF NOT EXISTS ix_pms_space_doc_pages_trashed_at ON pms_space_doc_pages (trashed_at)",
+        """
+        WITH RECURSIVE orphan_pages AS (
+            SELECT id
+            FROM pms_space_doc_pages
+            WHERE space_doc_id IS NULL
+            UNION
+            SELECT child.id
+            FROM pms_space_doc_pages child
+            JOIN orphan_pages orphan ON child.parent_id = orphan.id
+        )
+        DELETE FROM pms_space_doc_pages
+        WHERE id IN (SELECT id FROM orphan_pages)
+        """,
+        "ALTER TABLE pms_space_doc_pages ALTER COLUMN space_doc_id SET NOT NULL",
     ]
 
     with engine.begin() as connection:
