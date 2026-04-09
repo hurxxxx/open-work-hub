@@ -91,6 +91,29 @@ class AdminApiError extends Error {
   }
 }
 
+function defaultAdminErrorMessage(path: string, status: number, method: string): string {
+  if (method === 'DELETE' && path.startsWith('/api/v1/admin/teams/')) {
+    return status >= 500
+      ? '팀 스페이스를 휴지통으로 옮기지 못했습니다. 잠시 후 다시 시도해 주세요.'
+      : '팀 스페이스를 휴지통으로 옮기지 못했습니다.';
+  }
+
+  return status >= 500
+    ? '요청을 처리하지 못했습니다. 잠시 후 다시 시도해 주세요.'
+    : `요청에 실패했습니다. (${status})`;
+}
+
+function resolveAdminErrorMessage(path: string, status: number, method: string, payload: unknown): string {
+  if (payload && typeof payload === 'object' && 'detail' in payload) {
+    const detail = (payload as { detail?: unknown }).detail;
+    if (typeof detail === 'string' && detail.trim()) {
+      return detail;
+    }
+  }
+
+  return defaultAdminErrorMessage(path, status, method);
+}
+
 async function request<T>(token: string, path: string, init: RequestInit = {}): Promise<T> {
   const headers = new Headers(init.headers);
   headers.set('Accept', 'application/json');
@@ -100,11 +123,20 @@ async function request<T>(token: string, path: string, init: RequestInit = {}): 
     headers.set('Content-Type', 'application/json');
   }
 
-  const response = await fetch(path, {
-    ...init,
-    headers,
-    cache: 'no-store',
-  });
+  const method = init.method ?? 'GET';
+  let response: Response;
+  try {
+    response = await fetch(path, {
+      ...init,
+      headers,
+      cache: 'no-store',
+    });
+  } catch {
+    throw new AdminApiError(
+      0,
+      '관리자 API 서버에 연결하지 못했습니다. 서버 상태를 확인해 주세요.',
+    );
+  }
 
   if (response.status === 204) {
     return undefined as T;
@@ -114,7 +146,7 @@ async function request<T>(token: string, path: string, init: RequestInit = {}): 
   if (!response.ok) {
     throw new AdminApiError(
       response.status,
-      payload?.detail ?? `Request failed with ${response.status}.`,
+      resolveAdminErrorMessage(path, response.status, method, payload),
     );
   }
 

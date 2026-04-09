@@ -8,7 +8,7 @@
   --color-clickup-sidebar: var(--clickup-sidebar);
   --color-clickup-border: var(--clickup-border);
   --color-clickup-text: var(--clickup-text);
-  --color-clickup-purple: #7b68ee;
+  --color-clickup-purple: var(--clickup-purple);
   --color-clickup-hover: var(--clickup-hover);
   --color-clickup-card: var(--clickup-card);
   --color-clickup-dark: #1e1f21;
@@ -40,6 +40,7 @@
     --clickup-text: #2a2b2d;
     --clickup-hover: #f0f1f4;
     --clickup-card: #ffffff;
+    --clickup-purple: #1a1a1a;
   }
 
   .dark {
@@ -49,6 +50,7 @@
     --clickup-text: #d5d6d7;
     --clickup-hover: #353638;
     --clickup-card: #2a2b2d;
+    --clickup-purple: #e8e8e8;
   }
 
   body {

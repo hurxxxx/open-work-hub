@@ -100,12 +100,6 @@ class Project(Base):
     custom_fields: Mapped[list["CustomField"]] = relationship(
         cascade="all, delete-orphan",
     )
-    automations: Mapped[list["Automation"]] = relationship(
-        cascade="all, delete-orphan",
-    )
-    goals: Mapped[list["Goal"]] = relationship(
-        cascade="all, delete-orphan",
-    )
     docs: Mapped[list["Doc"]] = relationship(
         cascade="all, delete-orphan",
     )
@@ -481,64 +475,6 @@ class IssueAssignee(Base):
     issue_id: Mapped[str] = mapped_column(ForeignKey("pms_issues.id"), index=True)
     user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
     user = relationship("User")
-
-
-class Automation(Base):
-    """Rule-based automation: When trigger → If condition → Then action."""
-
-    __tablename__ = "pms_automations"
-
-    id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    project_id: Mapped[str] = mapped_column(ForeignKey("pms_projects.id"), index=True)
-    name: Mapped[str] = mapped_column(String(140))
-    enabled: Mapped[bool] = mapped_column(Boolean, default=True)
-    trigger: Mapped[str] = mapped_column(String(40))  # status_changed | assignee_changed | created | ...
-    condition: Mapped[dict | None] = mapped_column(JSON, nullable=True)  # e.g. {"field":"status","value":"done"}
-    action: Mapped[dict] = mapped_column(JSON)  # e.g. {"type":"notify","user_id":"..."}
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime,
-        default=utcnow_naive,
-        nullable=False,
-    )
-
-
-class Goal(Base):
-    """OKR / Goal tracking linked to issues."""
-
-    __tablename__ = "pms_goals"
-
-    id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    project_id: Mapped[str] = mapped_column(ForeignKey("pms_projects.id"), index=True)
-    name: Mapped[str] = mapped_column(String(200))
-    description: Mapped[str] = mapped_column(Text, default="", nullable=False)
-    target: Mapped[float] = mapped_column(default=100.0)
-    progress: Mapped[float] = mapped_column(default=0.0)
-    status: Mapped[str] = mapped_column(String(24), default="active")  # active | completed | canceled
-    due_date: Mapped[date | None] = mapped_column(Date, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime,
-        default=utcnow_naive,
-        nullable=False,
-    )
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime,
-        default=utcnow_naive,
-        onupdate=utcnow_naive,
-        nullable=False,
-    )
-
-
-class GoalLink(Base):
-    """Links goals to issues for automatic progress tracking."""
-
-    __tablename__ = "pms_goal_links"
-    __table_args__ = (
-        UniqueConstraint("goal_id", "issue_id", name="uq_pms_goal_link"),
-    )
-
-    id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    goal_id: Mapped[str] = mapped_column(ForeignKey("pms_goals.id"), index=True)
-    issue_id: Mapped[str] = mapped_column(ForeignKey("pms_issues.id"), index=True)
 
 
 class Doc(Base):

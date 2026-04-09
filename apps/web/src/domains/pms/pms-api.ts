@@ -301,42 +301,6 @@ export interface PmsSpaceDocPagesResponse {
   items: PmsSpaceDocPage[];
 }
 
-// ── Goals / OKR ─────────────────────────────────────────────────────
-
-export interface PmsGoal {
-  id: string;
-  project_id: string;
-  name: string;
-  description: string;
-  target: number;
-  progress: number;
-  status: string;
-  due_date: string | null;
-  linked_issue_count: number;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface PmsGoalsResponse {
-  items: PmsGoal[];
-}
-
-// ── Automations ─────────────────────────────────────────────────────
-
-export interface PmsAutomation {
-  id: string;
-  project_id: string;
-  name: string;
-  enabled: boolean;
-  trigger: string;
-  condition: Record<string, unknown> | null;
-  action: Record<string, unknown>;
-}
-
-export interface PmsAutomationsResponse {
-  items: PmsAutomation[];
-}
-
 // ── Folders ─────────────────────────────────────────────────────────
 
 export interface PmsFolder {
@@ -998,81 +962,6 @@ export function updateFolder(
 
 export function deleteFolder(token: string, folderId: string): Promise<void> {
   return request<void>(`/api/v1/pms/folders/${folderId}`, token, { method: 'DELETE' });
-}
-
-// ── Automations ─────────────────────────────────────────────────────
-
-export function listAutomations(token: string, projectId: string): Promise<PmsAutomationsResponse> {
-  return request<PmsAutomationsResponse>(`/api/v1/pms/lists/${projectId}/automations`, token);
-}
-
-export function createAutomation(
-  token: string,
-  projectId: string,
-  payload: { name: string; trigger: string; condition?: Record<string, unknown> | null; action: Record<string, unknown> },
-): Promise<PmsAutomation> {
-  return request<PmsAutomation>(`/api/v1/pms/lists/${projectId}/automations`, token, {
-    method: 'POST',
-    body: JSON.stringify(payload),
-  });
-}
-
-export function updateAutomation(
-  token: string,
-  automationId: string,
-  payload: { name?: string; enabled?: boolean; trigger?: string; condition?: Record<string, unknown> | null; action?: Record<string, unknown> },
-): Promise<PmsAutomation> {
-  return request<PmsAutomation>(`/api/v1/pms/automations/${automationId}`, token, {
-    method: 'PATCH',
-    body: JSON.stringify(payload),
-  });
-}
-
-export function deleteAutomation(token: string, automationId: string): Promise<void> {
-  return request<void>(`/api/v1/pms/automations/${automationId}`, token, { method: 'DELETE' });
-}
-
-// ── Goals / OKR ─────────────────────────────────────────────────────
-
-export function listGoals(token: string, projectId: string): Promise<PmsGoalsResponse> {
-  return request<PmsGoalsResponse>(`/api/v1/pms/lists/${projectId}/goals`, token);
-}
-
-export function createGoal(
-  token: string,
-  projectId: string,
-  payload: { name: string; description?: string; target?: number; due_date?: string | null },
-): Promise<PmsGoal> {
-  return request<PmsGoal>(`/api/v1/pms/lists/${projectId}/goals`, token, {
-    method: 'POST',
-    body: JSON.stringify(payload),
-  });
-}
-
-export function updateGoal(
-  token: string,
-  goalId: string,
-  payload: { name?: string; description?: string; target?: number; progress?: number; status?: string; due_date?: string | null },
-): Promise<PmsGoal> {
-  return request<PmsGoal>(`/api/v1/pms/goals/${goalId}`, token, {
-    method: 'PATCH',
-    body: JSON.stringify(payload),
-  });
-}
-
-export function deleteGoal(token: string, goalId: string): Promise<void> {
-  return request<void>(`/api/v1/pms/goals/${goalId}`, token, { method: 'DELETE' });
-}
-
-export function linkIssueToGoal(token: string, goalId: string, issueId: string): Promise<void> {
-  return request<void>(`/api/v1/pms/goals/${goalId}/links`, token, {
-    method: 'POST',
-    body: JSON.stringify({ issue_id: issueId }),
-  });
-}
-
-export function unlinkIssueFromGoal(token: string, goalId: string, issueId: string): Promise<void> {
-  return request<void>(`/api/v1/pms/goals/${goalId}/links/${issueId}`, token, { method: 'DELETE' });
 }
 
 // ── Docs (Wiki) ─────────────────────────────────────────────────────

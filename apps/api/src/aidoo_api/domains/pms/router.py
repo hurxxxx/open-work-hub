@@ -21,14 +21,11 @@ from aidoo_api.core.storage import get_minio_client
 from aidoo_api.domains.media.router import sync_embedded_media, cleanup_media_for_resource
 from aidoo_api.domains.pms.models import (
     Attachment,
-    Automation,
     ChecklistItem,
     CustomField,
     CustomFieldValue,
     Doc,
     Folder,
-    Goal,
-    GoalLink,
     Issue,
     IssueActivityLog,
     IssueAssignee,
@@ -616,9 +613,11 @@ def _best_project_role(db: Session, user: User, space_id: str) -> str | None:
         db.scalars(
             select(ProjectMember.role)
             .join(Project, Project.id == ProjectMember.project_id)
+            .join(Team, Team.id == Project.team_id)
             .where(
                 ProjectMember.user_id == user.id,
                 Project.team_id == space_id,
+                Team.trashed_at.is_(None),
             )
         )
     )
@@ -627,11 +626,26 @@ def _best_project_role(db: Session, user: User, space_id: str) -> str | None:
     return max(roles, key=lambda role: PROJECT_ROLE_RANK.get(role, -1))
 
 
+def _is_active_space_id(db: Session, space_id: str) -> bool:
+    return (
+        db.scalar(
+            select(Team.id).where(
+                Team.id == space_id,
+                Team.trashed_at.is_(None),
+            )
+        )
+        is not None
+    )
+
+
 def _ensure_space_access(db: Session, user: User, space_id: str) -> tuple[Team, str]:
     team = db.scalar(
         select(Team)
         .options(selectinload(Team.members))
-        .where(Team.id == space_id)
+        .where(
+            Team.id == space_id,
+            Team.trashed_at.is_(None),
+        )
     )
     if team is None:
         raise HTTPException(status_code=404, detail="Space not found.")
@@ -674,11 +688,16 @@ def _ensure_space_manager(db: Session, user: User, space_id: str) -> tuple[Team,
 
 def _accessible_space_ids(db: Session, user: User) -> set[str]:
     if user.is_admin:
-        return set(db.scalars(select(Team.id)))
+        return set(db.scalars(select(Team.id).where(Team.trashed_at.is_(None))))
 
     space_ids = set(
         db.scalars(
-            select(TeamMember.team_id).where(TeamMember.user_id == user.id)
+            select(TeamMember.team_id)
+            .join(Team, Team.id == TeamMember.team_id)
+            .where(
+                TeamMember.user_id == user.id,
+                Team.trashed_at.is_(None),
+            )
         )
     )
     space_ids.update(
@@ -686,9 +705,11 @@ def _accessible_space_ids(db: Session, user: User) -> set[str]:
         for team_id in db.scalars(
             select(Project.team_id)
             .join(ProjectMember, ProjectMember.project_id == Project.id)
+            .join(Team, Team.id == Project.team_id)
             .where(
                 ProjectMember.user_id == user.id,
                 Project.team_id.is_not(None),
+                Team.trashed_at.is_(None),
             )
         )
         if team_id is not None
@@ -718,6 +739,8 @@ def _ensure_project_access(db: Session, user: User, project_id: str) -> tuple[Pr
     )
     if project is None:
         raise HTTPException(status_code=404, detail="Project not found.")
+    if project.team_id is not None and not _is_active_space_id(db, project.team_id):
+        raise HTTPException(status_code=404, detail="Project not found.")
 
     if user.is_admin:
         return project, "owner"
@@ -745,13 +768,25 @@ def _ensure_project_editor(db: Session, user: User, project_id: str) -> tuple[Pr
 
 
 def _accessible_projects_query(user: User):
+    active_space_ids = select(Team.id).where(Team.trashed_at.is_(None))
     if user.is_admin:
-        return select(Project)
+        return select(Project).where(
+            or_(
+                Project.team_id.is_(None),
+                Project.team_id.in_(active_space_ids),
+            )
+        )
 
     return (
         select(Project)
         .join(ProjectMember, ProjectMember.project_id == Project.id)
-        .where(ProjectMember.user_id == user.id)
+        .where(
+            ProjectMember.user_id == user.id,
+            or_(
+                Project.team_id.is_(None),
+                Project.team_id.in_(active_space_ids),
+            ),
+        )
     )
 
 
@@ -1224,6 +1259,9 @@ def list_projects(
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
 ) -> ProjectListResponse:
+    if team_id is not None:
+        _ensure_space_access(db, current_user, team_id)
+
     projects = list(
         db.scalars(
             _accessible_projects_query(current_user).options(
@@ -1263,7 +1301,12 @@ def list_projects(
     team_ids = {p.team_id for p in projects if p.team_id}
     team_names: dict[str, str] = {}
     if team_ids:
-        teams = db.scalars(select(Team).where(Team.id.in_(team_ids)))
+        teams = db.scalars(
+            select(Team).where(
+                Team.id.in_(team_ids),
+                Team.trashed_at.is_(None),
+            )
+        )
         team_names = {t.id: t.name for t in teams}
 
     serialized = [
@@ -3408,6 +3451,13 @@ def list_folders(
     if team_id:
         _ensure_space_access(db, current_user, team_id)
         q = q.where(Folder.team_id == team_id)
+    elif current_user.is_admin:
+        q = q.where(
+            or_(
+                Folder.team_id.is_(None),
+                Folder.team_id.in_(select(Team.id).where(Team.trashed_at.is_(None))),
+            )
+        )
     elif not current_user.is_admin:
         accessible_team_ids = _accessible_space_ids(db, current_user)
         if accessible_team_ids:
@@ -3523,329 +3573,6 @@ def delete_folder(
     for p in db.scalars(select(Project).where(Project.folder_id == folder_id)):
         p.folder_id = None
     db.delete(folder)
-    db.commit()
-    return Response(status_code=status.HTTP_204_NO_CONTENT)
-
-
-# ── Automations ─────────────────────────────────────────────────────
-
-
-class AutomationItem(BaseModel):
-    id: str
-    project_id: str
-    name: str
-    enabled: bool
-    trigger: str
-    condition: dict | None = None
-    action: dict
-
-
-class AutomationListResponse(BaseModel):
-    items: list[AutomationItem]
-
-
-class AutomationCreateRequest(BaseModel):
-    name: str = Field(..., min_length=1, max_length=140)
-    trigger: str = Field(..., min_length=1, max_length=40)
-    condition: dict | None = None
-    action: dict
-
-
-class AutomationUpdateRequest(BaseModel):
-    name: str | None = Field(default=None, min_length=1, max_length=140)
-    enabled: bool | None = None
-    trigger: str | None = None
-    condition: dict | None = None
-    action: dict | None = None
-
-
-@router.get("/projects/{project_id}/automations", response_model=AutomationListResponse)
-@router.get("/lists/{project_id}/automations", response_model=AutomationListResponse)
-def list_automations(
-    project_id: str,
-    db: Session = Depends(get_db_session),
-    current_user: User = Depends(require_current_user),
-) -> AutomationListResponse:
-    _ensure_project_access(db, current_user, project_id)
-    rules = list(
-        db.scalars(
-            select(Automation)
-            .where(Automation.project_id == project_id)
-            .order_by(Automation.created_at.desc())
-        )
-    )
-    return AutomationListResponse(
-        items=[
-            AutomationItem(
-                id=a.id, project_id=a.project_id, name=a.name,
-                enabled=a.enabled, trigger=a.trigger,
-                condition=a.condition, action=a.action,
-            )
-            for a in rules
-        ]
-    )
-
-
-@router.post(
-    "/projects/{project_id}/automations",
-    response_model=AutomationItem,
-    status_code=status.HTTP_201_CREATED,
-)
-@router.post(
-    "/lists/{project_id}/automations",
-    response_model=AutomationItem,
-    status_code=status.HTTP_201_CREATED,
-)
-def create_automation(
-    project_id: str,
-    payload: AutomationCreateRequest,
-    db: Session = Depends(get_db_session),
-    current_user: User = Depends(require_current_user),
-) -> AutomationItem:
-    _ensure_project_owner(db, current_user, project_id)
-    a = Automation(
-        id=new_id(),
-        project_id=project_id,
-        name=payload.name.strip(),
-        trigger=payload.trigger,
-        condition=payload.condition,
-        action=payload.action,
-    )
-    db.add(a)
-    db.commit()
-    db.refresh(a)
-    return AutomationItem(
-        id=a.id, project_id=a.project_id, name=a.name,
-        enabled=a.enabled, trigger=a.trigger,
-        condition=a.condition, action=a.action,
-    )
-
-
-@router.patch("/automations/{automation_id}", response_model=AutomationItem)
-def update_automation(
-    automation_id: str,
-    payload: AutomationUpdateRequest,
-    db: Session = Depends(get_db_session),
-    current_user: User = Depends(require_current_user),
-) -> AutomationItem:
-    a = db.scalar(select(Automation).where(Automation.id == automation_id))
-    if a is None:
-        raise HTTPException(status_code=404, detail="Automation not found.")
-    _ensure_project_owner(db, current_user, a.project_id)
-    if payload.name is not None:
-        a.name = payload.name.strip()
-    if payload.enabled is not None:
-        a.enabled = payload.enabled
-    if payload.trigger is not None:
-        a.trigger = payload.trigger
-    if payload.condition is not None:
-        a.condition = payload.condition
-    if payload.action is not None:
-        a.action = payload.action
-    db.commit()
-    db.refresh(a)
-    return AutomationItem(
-        id=a.id, project_id=a.project_id, name=a.name,
-        enabled=a.enabled, trigger=a.trigger,
-        condition=a.condition, action=a.action,
-    )
-
-
-@router.delete("/automations/{automation_id}")
-def delete_automation(
-    automation_id: str,
-    db: Session = Depends(get_db_session),
-    current_user: User = Depends(require_current_user),
-) -> Response:
-    a = db.scalar(select(Automation).where(Automation.id == automation_id))
-    if a is None:
-        raise HTTPException(status_code=404, detail="Automation not found.")
-    _ensure_project_owner(db, current_user, a.project_id)
-    db.delete(a)
-    db.commit()
-    return Response(status_code=status.HTTP_204_NO_CONTENT)
-
-
-# ── Goals / OKR ─────────────────────────────────────────────────────
-
-
-class GoalItem(BaseModel):
-    id: str
-    project_id: str
-    name: str
-    description: str
-    target: float
-    progress: float
-    status: str
-    due_date: date | None
-    linked_issue_count: int = 0
-    created_at: datetime
-    updated_at: datetime
-
-
-class GoalListResponse(BaseModel):
-    items: list[GoalItem]
-
-
-class GoalCreateRequest(BaseModel):
-    name: str = Field(..., min_length=1, max_length=200)
-    description: str = Field(default="", max_length=4000)
-    target: float = 100.0
-    due_date: date | None = None
-
-
-class GoalUpdateRequest(BaseModel):
-    name: str | None = Field(default=None, min_length=1, max_length=200)
-    description: str | None = Field(default=None, max_length=4000)
-    target: float | None = None
-    progress: float | None = None
-    status: Literal["active", "completed", "canceled"] | None = None
-    due_date: date | None = None
-
-
-class GoalLinkRequest(BaseModel):
-    issue_id: str
-
-
-def _goal_linked_count(db: Session, goal_id: str) -> int:
-    return db.scalar(select(func.count()).select_from(GoalLink).where(GoalLink.goal_id == goal_id)) or 0
-
-
-@router.get("/projects/{project_id}/goals", response_model=GoalListResponse)
-@router.get("/lists/{project_id}/goals", response_model=GoalListResponse)
-def list_goals(
-    project_id: str,
-    db: Session = Depends(get_db_session),
-    current_user: User = Depends(require_current_user),
-) -> GoalListResponse:
-    _ensure_project_access(db, current_user, project_id)
-    goals = list(
-        db.scalars(select(Goal).where(Goal.project_id == project_id).order_by(Goal.created_at.desc()))
-    )
-    return GoalListResponse(
-        items=[
-            GoalItem(
-                id=g.id, project_id=g.project_id, name=g.name,
-                description=g.description, target=g.target, progress=g.progress,
-                status=g.status, due_date=g.due_date,
-                linked_issue_count=_goal_linked_count(db, g.id),
-                created_at=g.created_at, updated_at=g.updated_at,
-            )
-            for g in goals
-        ]
-    )
-
-
-@router.post("/projects/{project_id}/goals", response_model=GoalItem, status_code=status.HTTP_201_CREATED)
-@router.post("/lists/{project_id}/goals", response_model=GoalItem, status_code=status.HTTP_201_CREATED)
-def create_goal(
-    project_id: str,
-    payload: GoalCreateRequest,
-    db: Session = Depends(get_db_session),
-    current_user: User = Depends(require_current_user),
-) -> GoalItem:
-    _ensure_project_editor(db, current_user, project_id)
-    g = Goal(
-        id=new_id(), project_id=project_id,
-        name=payload.name.strip(), description=payload.description.strip(),
-        target=payload.target, due_date=payload.due_date,
-    )
-    db.add(g)
-    db.commit()
-    db.refresh(g)
-    return GoalItem(
-        id=g.id, project_id=g.project_id, name=g.name,
-        description=g.description, target=g.target, progress=g.progress,
-        status=g.status, due_date=g.due_date, linked_issue_count=0,
-        created_at=g.created_at, updated_at=g.updated_at,
-    )
-
-
-@router.patch("/goals/{goal_id}", response_model=GoalItem)
-def update_goal(
-    goal_id: str,
-    payload: GoalUpdateRequest,
-    db: Session = Depends(get_db_session),
-    current_user: User = Depends(require_current_user),
-) -> GoalItem:
-    g = db.scalar(select(Goal).where(Goal.id == goal_id))
-    if g is None:
-        raise HTTPException(status_code=404, detail="Goal not found.")
-    _ensure_project_editor(db, current_user, g.project_id)
-    for field in ["name", "description", "target", "progress", "status", "due_date"]:
-        val = getattr(payload, field)
-        if val is not None:
-            setattr(g, field, val.strip() if isinstance(val, str) else val)
-    db.commit()
-    db.refresh(g)
-    return GoalItem(
-        id=g.id, project_id=g.project_id, name=g.name,
-        description=g.description, target=g.target, progress=g.progress,
-        status=g.status, due_date=g.due_date,
-        linked_issue_count=_goal_linked_count(db, g.id),
-        created_at=g.created_at, updated_at=g.updated_at,
-    )
-
-
-@router.delete("/goals/{goal_id}")
-def delete_goal(
-    goal_id: str,
-    db: Session = Depends(get_db_session),
-    current_user: User = Depends(require_current_user),
-) -> Response:
-    g = db.scalar(select(Goal).where(Goal.id == goal_id))
-    if g is None:
-        raise HTTPException(status_code=404, detail="Goal not found.")
-    _ensure_project_editor(db, current_user, g.project_id)
-    for link in db.scalars(select(GoalLink).where(GoalLink.goal_id == goal_id)):
-        db.delete(link)
-    db.delete(g)
-    db.commit()
-    return Response(status_code=status.HTTP_204_NO_CONTENT)
-
-
-@router.post("/goals/{goal_id}/links", status_code=status.HTTP_201_CREATED)
-def link_issue_to_goal(
-    goal_id: str,
-    payload: GoalLinkRequest,
-    db: Session = Depends(get_db_session),
-    current_user: User = Depends(require_current_user),
-) -> dict:
-    g = db.scalar(select(Goal).where(Goal.id == goal_id))
-    if g is None:
-        raise HTTPException(status_code=404, detail="Goal not found.")
-    _ensure_project_editor(db, current_user, g.project_id)
-    # Validate issue belongs to the same project
-    linked_issue = db.scalar(select(Issue).where(Issue.id == payload.issue_id))
-    if linked_issue is None or linked_issue.project_id != g.project_id:
-        raise HTTPException(status_code=400, detail="Issue must belong to the same project as the goal.")
-    existing = db.scalar(
-        select(GoalLink).where(GoalLink.goal_id == goal_id, GoalLink.issue_id == payload.issue_id)
-    )
-    if existing:
-        raise HTTPException(status_code=409, detail="Issue already linked.")
-    db.add(GoalLink(id=new_id(), goal_id=goal_id, issue_id=payload.issue_id))
-    db.commit()
-    return {"linked": True}
-
-
-@router.delete("/goals/{goal_id}/links/{issue_id}")
-def unlink_issue_from_goal(
-    goal_id: str,
-    issue_id: str,
-    db: Session = Depends(get_db_session),
-    current_user: User = Depends(require_current_user),
-) -> Response:
-    link = db.scalar(
-        select(GoalLink).where(GoalLink.goal_id == goal_id, GoalLink.issue_id == issue_id)
-    )
-    if link is None:
-        raise HTTPException(status_code=404, detail="Link not found.")
-    g = db.scalar(select(Goal).where(Goal.id == goal_id))
-    if g is None:
-        raise HTTPException(status_code=404, detail="Goal not found.")
-    _ensure_project_editor(db, current_user, g.project_id)
-    db.delete(link)
     db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 

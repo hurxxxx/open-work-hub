@@ -315,4 +315,24 @@ describe('auth flow', () => {
     });
     await screen.findByRole('heading', { name: '로그인' });
   });
+
+  it('shows a friendly bootstrap error when the auth API is unavailable', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const path = String(input);
+
+      if (path === '/api/v1/auth/bootstrap-status') {
+        return new Response(null, {
+          status: 500,
+          statusText: 'Internal Server Error',
+        });
+      }
+
+      throw new Error(`Unhandled request: GET ${path}`);
+    });
+
+    renderAuthFlow(['/login']);
+
+    await screen.findByRole('heading', { name: '로그인' });
+    await screen.findByText('인증 서비스를 확인하지 못했습니다. API 서버 상태를 확인해 주세요.');
+  });
 });

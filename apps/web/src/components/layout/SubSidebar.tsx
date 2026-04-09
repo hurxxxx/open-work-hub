@@ -15,6 +15,7 @@ import {
   Pencil,
   Trash2,
 } from 'lucide-react';
+import { InlineNotice, useConfirm, usePrompt } from '@aidoo/ui';
 import { cn } from '@/src/lib/utils';
 import { NAV_ITEMS, APP_BAR_ITEMS } from '@/src/constants';
 import { useAuth } from '@/src/domains/auth/auth-provider';
@@ -44,6 +45,10 @@ function upsertTeam(teams: TeamItem[], team: TeamItem): TeamItem[] {
   return [team, ...teams.filter((item) => item.id !== team.id)].sort(
     (left, right) => left.name.localeCompare(right.name, 'ko'),
   );
+}
+
+function getErrorMessage(error: unknown, fallback: string): string {
+  return error instanceof Error && error.message ? error.message : fallback;
 }
 
 const SpaceAddPopover = ({
@@ -710,6 +715,8 @@ export const SubSidebar = ({ activeAppId, activeNavItemId }: { activeAppId: stri
   const location = useLocation();
   const navigate = useNavigate();
   const { token, user, hasPermission } = useAuth();
+  const { confirm, confirmDialog } = useConfirm();
+  const { prompt, promptDialog } = usePrompt();
   const isSpaceDocs = /^\/tool\/pms-space-[0-9a-f-]+-docs/.test(location.pathname);
   const isDocEditor = !isSpaceDocs && (location.pathname.match(/^\/tool\/[^/]+\/[^/]+$/) || location.pathname.match(/^\/docs\/[^/]+$/));
   const pmsWorkspaceId = getWorkspaceRoleByKey(user, PMS_WORKSPACE_KEY)?.workspace_id ?? null;
@@ -721,6 +728,7 @@ export const SubSidebar = ({ activeAppId, activeNavItemId }: { activeAppId: stri
   const [pmsFolders, setPmsFolders] = useState<PmsFolder[]>([]);
   const [pmsTeams, setPmsTeams] = useState<TeamItem[]>([]);
   const [pmsLoading, setPmsLoading] = useState(false);
+  const [pmsError, setPmsError] = useState<string | null>(null);
   const [createProjectOpen, setCreateProjectOpen] = useState(false);
   const [createProjectTeamId, setCreateProjectTeamId] = useState<string | null>(null);
   const [createProjectFolderId, setCreateProjectFolderId] = useState<string | null>(null);
@@ -747,6 +755,7 @@ export const SubSidebar = ({ activeAppId, activeNavItemId }: { activeAppId: stri
     let cancelled = false;
 
     setPmsLoading(true);
+    setPmsError(null);
 
     const listRequest = listPmsLists(token)
       .then((response) => {
@@ -858,7 +867,7 @@ export const SubSidebar = ({ activeAppId, activeNavItemId }: { activeAppId: stri
 
   const handleDeleteDoc = useCallback(async (docId: string) => {
     if (!token) return;
-    if (!window.confirm('Move this document collection and all its pages to Trash?')) return;
+    if (!await confirm({ title: 'Delete Collection', description: 'Move this document collection and all its pages to Trash?', confirmLabel: 'Move to Trash', variant: 'danger' })) return;
     const deletedTeamId = [...spaceDocsMap.entries()].find(([, docs]) => docs.some((doc) => doc.id === docId))?.[0] ?? null;
     try {
       await deleteSpaceDoc(token, docId);
@@ -877,17 +886,17 @@ export const SubSidebar = ({ activeAppId, activeNavItemId }: { activeAppId: stri
 
   const handleRenameFolder = useCallback(async (folderId: string, currentName: string) => {
     if (!token) return;
-    const newName = window.prompt('Folder name', currentName);
-    if (!newName?.trim() || newName.trim() === currentName) return;
+    const newName = await prompt({ title: 'Rename Folder', defaultValue: currentName, placeholder: 'Folder name' });
+    if (!newName || newName === currentName) return;
     try {
-      const updated = await updateFolder(token, folderId, { name: newName.trim() });
+      const updated = await updateFolder(token, folderId, { name: newName });
       setPmsFolders((current) => current.map((f) => (f.id === updated.id ? updated : f)));
     } catch { /* ignore */ }
   }, [token]);
 
   const handleDeleteFolder = useCallback(async (folderId: string) => {
     if (!token) return;
-    if (!window.confirm('Delete this folder? Lists inside will be moved to the space root.')) return;
+    if (!await confirm({ title: 'Delete Folder', description: 'Delete this folder? Lists inside will be moved to the space root.', confirmLabel: 'Delete', variant: 'danger' })) return;
     try {
       await deleteFolder(token, folderId);
       setPmsFolders((current) => current.filter((f) => f.id !== folderId));
@@ -905,14 +914,38 @@ export const SubSidebar = ({ activeAppId, activeNavItemId }: { activeAppId: stri
 
   const handleDeleteSpace = useCallback(async (spaceId: string) => {
     if (!token) return;
-    if (!window.confirm('Delete this space? All lists and folders inside will be deleted.')) return;
+    if (!await confirm({ title: 'Delete Space', description: 'Move this space and its contents to Trash?', confirmLabel: 'Move to Trash', variant: 'danger' })) return;
+    setPmsError(null);
     try {
       await deleteTeam(token, spaceId);
+      const activeListInSpace = pmsLists.some((list) => (
+        list.team_id === spaceId && activeNavItemId === `pms-list-${list.id}`
+      ));
+      const activeSpaceRoute = activeNavItemId === `pms-space-${spaceId}`
+        || activeNavItemId.startsWith(`pms-space-${spaceId}-docs`);
+
       setPmsTeams((current) => current.filter((t) => t.id !== spaceId));
       setPmsLists((current) => current.filter((l) => l.team_id !== spaceId));
       setPmsFolders((current) => current.filter((f) => f.team_id !== spaceId));
-    } catch { /* ignore */ }
-  }, [token]);
+      setSpaceDocsMap((current) => {
+        const next = new Map(current);
+        next.delete(spaceId);
+        return next;
+      });
+      knownSpaceIdsRef.current.delete(spaceId);
+      setExpandedSpaces((current) => {
+        const next = new Set(current);
+        next.delete(spaceId);
+        return next;
+      });
+
+      if (activeSpaceRoute || activeListInSpace) {
+        navigate('/tool/pms-space-team');
+      }
+    } catch (error) {
+      setPmsError(getErrorMessage(error, '팀 스페이스를 휴지통으로 옮기지 못했습니다.'));
+    }
+  }, [activeNavItemId, navigate, pmsLists, token]);
 
   const groupedSpaces = useMemo(() => {
     const folderMap = new Map(pmsFolders.map((folder) => [folder.id, folder]));
@@ -1036,6 +1069,11 @@ export const SubSidebar = ({ activeAppId, activeNavItemId }: { activeAppId: stri
                 </div>
               ) : (
                 <>
+                  {pmsError ? (
+                    <div className="px-2">
+                      <InlineNotice tone="danger">{pmsError}</InlineNotice>
+                    </div>
+                  ) : null}
                   {groupedSpaces.map((space, index) => (
                     <SpaceItem
                       key={space.id}
@@ -1082,6 +1120,8 @@ export const SubSidebar = ({ activeAppId, activeNavItemId }: { activeAppId: stri
 
   return (
     <>
+      {confirmDialog}
+      {promptDialog}
       <div className="w-60 h-full bg-clickup-sidebar border-r border-clickup-border flex flex-col overflow-hidden">
         <div className="p-4 border-b border-clickup-border">
           <h2 className="app-text-overline text-gray-500">

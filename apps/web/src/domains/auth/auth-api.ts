@@ -95,6 +95,66 @@ export class AuthApiError extends Error {
   }
 }
 
+function defaultAuthErrorMessage(path: string, status: number): string {
+  if (path === '/api/v1/auth/bootstrap-status') {
+    return status >= 500
+      ? '인증 서비스를 확인하지 못했습니다. API 서버 상태를 확인해 주세요.'
+      : '초기 인증 상태를 확인하지 못했습니다.';
+  }
+
+  if (path === '/api/v1/auth/login') {
+    return status >= 500
+      ? '로그인 요청을 처리하지 못했습니다. 잠시 후 다시 시도해 주세요.'
+      : '로그인하지 못했습니다.';
+  }
+
+  if (path === '/api/v1/auth/dev-admin-login') {
+    return status >= 500
+      ? '개발용 관리자 로그인을 처리하지 못했습니다. API 서버 상태를 확인해 주세요.'
+      : '개발용 관리자 바로 로그인을 실행하지 못했습니다.';
+  }
+
+  if (path === '/api/v1/auth/setup') {
+    return status >= 500
+      ? '최초 관리자 계정 생성을 처리하지 못했습니다. 잠시 후 다시 시도해 주세요.'
+      : '최초 관리자 계정을 만들지 못했습니다.';
+  }
+
+  return status >= 500
+    ? '요청을 처리하지 못했습니다. 잠시 후 다시 시도해 주세요.'
+    : `요청에 실패했습니다. (${status})`;
+}
+
+function resolveAuthErrorMessage(path: string, status: number, payload: unknown): string {
+  if (
+    payload &&
+    typeof payload === 'object' &&
+    'detail' in payload
+  ) {
+    const detail = (payload as { detail?: unknown }).detail;
+    if (typeof detail === 'string' && detail.trim()) {
+      return detail;
+    }
+
+    if (Array.isArray(detail)) {
+      const messages = detail
+        .map((item) => {
+          if (item && typeof item === 'object' && 'msg' in item && typeof item.msg === 'string') {
+            return item.msg;
+          }
+          return typeof item === 'string' ? item : null;
+        })
+        .filter((message): message is string => Boolean(message && message.trim()));
+
+      if (messages.length > 0) {
+        return messages.join(', ');
+      }
+    }
+  }
+
+  return defaultAuthErrorMessage(path, status);
+}
+
 async function request<T>(
   path: string,
   init: RequestInit = {},
@@ -111,11 +171,19 @@ async function request<T>(
     headers.set('Content-Type', 'application/json');
   }
 
-  const response = await fetch(path, {
-    ...init,
-    headers,
-    cache: 'no-store',
-  });
+  let response: Response;
+  try {
+    response = await fetch(path, {
+      ...init,
+      headers,
+      cache: 'no-store',
+    });
+  } catch {
+    throw new AuthApiError(
+      0,
+      '인증 서버에 연결하지 못했습니다. API 서버가 실행 중인지 확인해 주세요.',
+    );
+  }
 
   if (response.status === 204) {
     return undefined as T;
@@ -123,16 +191,10 @@ async function request<T>(
 
   const payload = await response.json().catch(() => null);
   if (!response.ok) {
-    const detail = payload?.detail;
-    let message: string;
-    if (typeof detail === 'string') {
-      message = detail;
-    } else if (Array.isArray(detail)) {
-      message = detail.map((d: { msg?: string }) => d.msg ?? String(d)).join(', ');
-    } else {
-      message = `Request failed with ${response.status}.`;
-    }
-    throw new AuthApiError(response.status, message);
+    throw new AuthApiError(
+      response.status,
+      resolveAuthErrorMessage(path, response.status, payload),
+    );
   }
 
   return payload as T;

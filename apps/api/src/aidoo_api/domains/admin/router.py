@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 import secrets
 from typing import Literal
 
@@ -78,6 +78,32 @@ class TeamItemResponse(BaseModel):
     description: str
     active: bool
     member_count: int
+
+
+def _utcnow() -> datetime:
+    return datetime.now(UTC).replace(tzinfo=None)
+
+
+def _visible_team_count(workspace: Workspace) -> int:
+    return sum(1 for team in workspace.teams if team.trashed_at is None)
+
+
+def _get_active_team(
+    db: Session,
+    team_id: str,
+    *,
+    include_workspace: bool = False,
+    include_members: bool = False,
+) -> Team | None:
+    query = select(Team).where(
+        Team.id == team_id,
+        Team.trashed_at.is_(None),
+    )
+    if include_workspace:
+        query = query.options(joinedload(Team.workspace))
+    if include_members:
+        query = query.options(selectinload(Team.members))
+    return db.scalar(query)
 
 
 class FeaturePolicyItemResponse(BaseModel):
@@ -626,7 +652,7 @@ def list_workspaces(
             name=item.name,
             description=item.description,
             active=item.active,
-            team_count=len(item.teams),
+            team_count=_visible_team_count(item),
         )
         for item in items
     ]
@@ -700,7 +726,7 @@ def update_workspace(
         name=workspace.name,
         description=workspace.description,
         active=workspace.active,
-        team_count=len(workspace.teams),
+        team_count=_visible_team_count(workspace),
     )
 
 
@@ -819,7 +845,11 @@ def list_teams(
     context: AuthContext = Depends(require_permission("team.read")),
     db: Session = Depends(get_db_session),
 ) -> list[TeamItemResponse]:
-    query = select(Team).options(joinedload(Team.workspace), selectinload(Team.members))
+    query = (
+        select(Team)
+        .options(joinedload(Team.workspace), selectinload(Team.members))
+        .where(Team.trashed_at.is_(None))
+    )
     if workspace_id:
         query = query.where(Team.workspace_id == workspace_id)
     items = db.scalars(query.order_by(Team.name.asc())).all()
@@ -899,7 +929,7 @@ def update_team(
     context: AuthContext = Depends(require_permission("team.write")),
     db: Session = Depends(get_db_session),
 ) -> TeamItemResponse:
-    team = db.scalar(select(Team).options(joinedload(Team.workspace), selectinload(Team.members)).where(Team.id == team_id))
+    team = _get_active_team(db, team_id, include_workspace=True, include_members=True)
     if team is None:
         raise HTTPException(status_code=404, detail="Team not found.")
 
@@ -935,18 +965,19 @@ def delete_team(
     context: AuthContext = Depends(require_permission("team.write")),
     db: Session = Depends(get_db_session),
 ) -> None:
-    team = db.scalar(select(Team).where(Team.id == team_id))
+    team = _get_active_team(db, team_id)
     if team is None:
         raise HTTPException(status_code=404, detail="Team not found.")
+    team.trashed_at = _utcnow()
+    db.add(team)
     record_audit_log(
         db,
         actor_user_id=context.user.id,
         action="admin.team.delete",
         entity_kind="team",
         entity_id=team.id,
-        summary=f"Deleted team {team.name}",
+        summary=f"Moved team {team.name} to trash",
     )
-    db.delete(team)
     db.commit()
 
 
@@ -956,7 +987,7 @@ def list_team_members(
     context: AuthContext = Depends(require_permission("team.read")),
     db: Session = Depends(get_db_session),
 ) -> list[AdminUserItemResponse]:
-    team = db.scalar(select(Team).options(selectinload(Team.members)).where(Team.id == team_id))
+    team = _get_active_team(db, team_id, include_members=True)
     if team is None:
         raise HTTPException(status_code=404, detail="Team not found.")
     members = db.scalars(
@@ -975,7 +1006,7 @@ def replace_team_members(
     context: AuthContext = Depends(require_permission("team.write")),
     db: Session = Depends(get_db_session),
 ) -> list[AdminUserItemResponse]:
-    team = db.scalar(select(Team).options(selectinload(Team.members)).where(Team.id == team_id))
+    team = _get_active_team(db, team_id, include_members=True)
     if team is None:
         raise HTTPException(status_code=404, detail="Team not found.")
 

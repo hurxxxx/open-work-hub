@@ -13,6 +13,8 @@ import {
 import { BlockEditor } from '@aidoo/ui';
 import type { BlockContent } from '@aidoo/ui';
 
+import { useConfirm, usePrompt } from '@aidoo/ui';
+
 import { cn } from '@/src/lib/utils';
 import { useAuth } from '@/src/domains/auth/auth-provider';
 import { useMediaUpload } from '@/src/domains/media/use-media-upload';
@@ -135,6 +137,8 @@ export const SpaceDocsView = ({ spaceId, spaceName, docId: spaceDocId }: { space
   const { docId: pageId } = useParams();
   const { token } = useAuth();
   const { uploadFile, resolveFileUrl } = useMediaUpload();
+  const { confirm, confirmDialog } = useConfirm();
+  const { prompt, promptDialog } = usePrompt();
   const [collections, setCollections] = useState<PmsSpaceDoc[]>([]);
   const [pages, setPages] = useState<PmsSpaceDocPage[]>([]);
   const [loadingCollections, setLoadingCollections] = useState(true);
@@ -265,12 +269,12 @@ export const SpaceDocsView = ({ spaceId, spaceName, docId: spaceDocId }: { space
 
   const handleRenameCollection = useCallback(async (doc: PmsSpaceDoc) => {
     if (!token) return;
-    const nextTitle = window.prompt('Document collection name', doc.title);
-    if (!nextTitle?.trim() || nextTitle.trim() === doc.title) return;
+    const nextTitle = await prompt({ title: 'Rename Collection', defaultValue: doc.title, placeholder: 'Collection name' });
+    if (!nextTitle || nextTitle === doc.title) return;
     setSaving(true);
     setError(null);
     try {
-      const updated = await updateSpaceDoc(token, doc.id, { title: nextTitle.trim() });
+      const updated = await updateSpaceDoc(token, doc.id, { title: nextTitle });
       setCollections((current) => current.map((item) => (item.id === updated.id ? updated : item)));
     } catch (caughtError) {
       setError(getErrorMessage(caughtError, '문서 컬렉션 이름을 저장하지 못했습니다.'));
@@ -281,7 +285,7 @@ export const SpaceDocsView = ({ spaceId, spaceName, docId: spaceDocId }: { space
 
   const handleDeleteCollection = useCallback(async (doc: PmsSpaceDoc) => {
     if (!token) return;
-    if (!window.confirm('Move this document collection and all its pages to Trash?')) return;
+    if (!await confirm({ title: 'Delete Collection', description: 'Move this document collection and all its pages to Trash?', confirmLabel: 'Move to Trash', variant: 'danger' })) return;
     setSaving(true);
     setError(null);
     try {
@@ -319,7 +323,7 @@ export const SpaceDocsView = ({ spaceId, spaceName, docId: spaceDocId }: { space
 
   const handleDeletePage = useCallback(async (targetPageId: string) => {
     if (!token || !selectedCollection) return;
-    if (!window.confirm('Move this page and its subpages to Trash?')) return;
+    if (!await confirm({ title: 'Delete Page', description: 'Move this page and its subpages to Trash?', confirmLabel: 'Move to Trash', variant: 'danger' })) return;
     setSaving(true);
     setError(null);
     try {
@@ -353,6 +357,8 @@ export const SpaceDocsView = ({ spaceId, spaceName, docId: spaceDocId }: { space
   if (!spaceDocId) {
     return (
       <div className="h-full flex flex-col bg-clickup-bg">
+        {confirmDialog}
+        {promptDialog}
         <header className="border-b border-clickup-border px-8 py-6">
           <div className="flex items-start justify-between gap-4">
             <div className="space-y-2">
@@ -437,6 +443,8 @@ export const SpaceDocsView = ({ spaceId, spaceName, docId: spaceDocId }: { space
 
   return (
     <div className="h-full flex bg-clickup-bg">
+      {confirmDialog}
+      {promptDialog}
       <div className="flex w-72 flex-col border-r border-clickup-border bg-clickup-sidebar">
         <div className="flex items-center justify-between border-b border-clickup-border px-4 py-4">
           <div className="min-w-0">

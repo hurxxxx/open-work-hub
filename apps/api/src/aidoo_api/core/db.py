@@ -68,6 +68,8 @@ def _apply_postgres_schema_compat(engine) -> None:
         "ALTER TABLE auth_sessions ADD COLUMN IF NOT EXISTS last_seen_at TIMESTAMP",
         "ALTER TABLE auth_sessions ADD COLUMN IF NOT EXISTS user_agent VARCHAR(255)",
         "ALTER TABLE auth_sessions ADD COLUMN IF NOT EXISTS ip_address VARCHAR(64)",
+        "ALTER TABLE teams ADD COLUMN IF NOT EXISTS trashed_at TIMESTAMP",
+        "CREATE INDEX IF NOT EXISTS ix_teams_trashed_at ON teams (trashed_at)",
         "ALTER TABLE pms_issues ADD COLUMN IF NOT EXISTS parent_id VARCHAR(36) REFERENCES pms_issues(id)",
         "ALTER TABLE pms_issues ADD COLUMN IF NOT EXISTS description_blocks JSON",
         "ALTER TABLE pms_issue_comments ADD COLUMN IF NOT EXISTS body_blocks JSON",
@@ -169,45 +171,10 @@ def _apply_postgres_schema_compat(engine) -> None:
         "CREATE INDEX IF NOT EXISTS ix_pms_folders_team_id ON pms_folders (team_id)",
         "ALTER TABLE pms_projects ADD COLUMN IF NOT EXISTS folder_id VARCHAR(36)",
         "CREATE INDEX IF NOT EXISTS ix_pms_projects_folder_id ON pms_projects (folder_id)",
-        # ── pms_automations table ──
-        """
-        CREATE TABLE IF NOT EXISTS pms_automations (
-            id VARCHAR(36) PRIMARY KEY,
-            project_id VARCHAR(36) NOT NULL REFERENCES pms_projects(id),
-            name VARCHAR(140) NOT NULL,
-            enabled BOOLEAN NOT NULL DEFAULT TRUE,
-            trigger VARCHAR(40) NOT NULL,
-            condition JSON,
-            action JSON NOT NULL,
-            created_at TIMESTAMP NOT NULL DEFAULT now()
-        )
-        """,
-        "CREATE INDEX IF NOT EXISTS ix_pms_automations_project_id ON pms_automations (project_id)",
-        # ── pms_goals + pms_goal_links tables ──
-        """
-        CREATE TABLE IF NOT EXISTS pms_goals (
-            id VARCHAR(36) PRIMARY KEY,
-            project_id VARCHAR(36) NOT NULL REFERENCES pms_projects(id),
-            name VARCHAR(200) NOT NULL,
-            description TEXT NOT NULL DEFAULT '',
-            target REAL NOT NULL DEFAULT 100.0,
-            progress REAL NOT NULL DEFAULT 0.0,
-            status VARCHAR(24) NOT NULL DEFAULT 'active',
-            due_date DATE,
-            created_at TIMESTAMP NOT NULL DEFAULT now(),
-            updated_at TIMESTAMP NOT NULL DEFAULT now()
-        )
-        """,
-        "CREATE INDEX IF NOT EXISTS ix_pms_goals_project_id ON pms_goals (project_id)",
-        """
-        CREATE TABLE IF NOT EXISTS pms_goal_links (
-            id VARCHAR(36) PRIMARY KEY,
-            goal_id VARCHAR(36) NOT NULL REFERENCES pms_goals(id),
-            issue_id VARCHAR(36) NOT NULL REFERENCES pms_issues(id),
-            CONSTRAINT uq_pms_goal_link UNIQUE (goal_id, issue_id)
-        )
-        """,
-        "CREATE INDEX IF NOT EXISTS ix_pms_goal_links_goal_id ON pms_goal_links (goal_id)",
+        # ── drop removed feature tables ──
+        "DROP TABLE IF EXISTS pms_goal_links",
+        "DROP TABLE IF EXISTS pms_goals",
+        "DROP TABLE IF EXISTS pms_automations",
         # ── pms_docs table ──
         """
         CREATE TABLE IF NOT EXISTS pms_docs (
@@ -233,6 +200,7 @@ def _apply_postgres_schema_compat(engine) -> None:
             trashed_at TIMESTAMP
         )
         """,
+        "ALTER TABLE pms_space_docs ADD COLUMN IF NOT EXISTS trashed_at TIMESTAMP",
         "CREATE INDEX IF NOT EXISTS ix_pms_space_docs_team_id ON pms_space_docs (team_id)",
         "CREATE INDEX IF NOT EXISTS ix_pms_space_docs_trashed_at ON pms_space_docs (trashed_at)",
         # ── pms_space_doc_pages table ──
@@ -251,7 +219,6 @@ def _apply_postgres_schema_compat(engine) -> None:
             trashed_at TIMESTAMP
         )
         """,
-        "ALTER TABLE pms_space_docs ADD COLUMN IF NOT EXISTS trashed_at TIMESTAMP",
         "ALTER TABLE pms_space_doc_pages ADD COLUMN IF NOT EXISTS space_doc_id VARCHAR(36) REFERENCES pms_space_docs(id)",
         "ALTER TABLE pms_space_doc_pages ADD COLUMN IF NOT EXISTS trashed_at TIMESTAMP",
         "CREATE INDEX IF NOT EXISTS ix_pms_space_doc_pages_team_id ON pms_space_doc_pages (team_id)",

@@ -181,6 +181,7 @@ class Team(Base):
     name: Mapped[str] = mapped_column(String(120), index=True)
     description: Mapped[str] = mapped_column(Text, default="", nullable=False)
     active: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
+    trashed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow_naive, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime,

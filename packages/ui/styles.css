@@ -18,10 +18,10 @@
   --ui-color-ink-muted: #6b7280;
   --ui-color-ink-subtle: #9ca3af;
 
-  /* ── Accent (ClickUp purple) ── */
-  --ui-color-accent: #7b68ee;
-  --ui-color-accent-hover: #6c5ce7;
-  --ui-color-accent-weak: #f0edfe;
+  /* ── Accent ── */
+  --ui-color-accent: #1a1a1a;
+  --ui-color-accent-hover: #000000;
+  --ui-color-accent-weak: #f0f1f4;
 
   /* ── Semantic ── */
   --ui-color-success: #22c55e;
@@ -81,9 +81,9 @@
   --ui-color-ink: #d5d6d7;
   --ui-color-ink-muted: #9ca3af;
   --ui-color-ink-subtle: #6b7280;
-  --ui-color-accent: #7b68ee;
-  --ui-color-accent-hover: #8b7cf0;
-  --ui-color-accent-weak: #2d2a3e;
+  --ui-color-accent: #e8e8e8;
+  --ui-color-accent-hover: #ffffff;
+  --ui-color-accent-weak: #3a3b3d;
   --ui-color-success: #22c55e;
   --ui-color-warning: #f97316;
   --ui-color-danger: #ef4444;

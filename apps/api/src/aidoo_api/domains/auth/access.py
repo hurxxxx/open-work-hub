@@ -281,6 +281,7 @@ def get_or_create_default_pms_space(db: Session) -> Team:
     )
     if team is not None:
         team.active = True
+        team.trashed_at = None
         db.add(team)
         db.flush()
         return team
@@ -348,7 +349,11 @@ def resolve_workspace_roles(db: Session, user: User) -> list[dict[str, str]]:
                     role_map[binding.workspace_id] = binding.role
 
         for membership in user.team_memberships:
-            if not membership.team.active or not membership.team.workspace.active:
+            if (
+                not membership.team.active
+                or membership.team.trashed_at is not None
+                or not membership.team.workspace.active
+            ):
                 continue
             workspace_id = membership.team.workspace_id
             current = role_map.get(workspace_id)

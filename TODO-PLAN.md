@@ -47,17 +47,10 @@
   - `/api/v1/pms/spaces/{space_id}/lists`
 - [x] 프론트 API 레이어를 `lists`/`space docs` 계약으로 전환
 
-## API만 존재
+## 제거된 기능
 
-- [ ] Automations UI
-  - 백엔드/프론트 API는 존재
-  - 리스트 화면 관리 UI는 아직 없음
-- [ ] Goals UI
-  - 백엔드/프론트 API는 존재
-  - 리스트 화면 관리 UI는 아직 없음
-- [ ] Folder 관리 UI
-  - 사이드바 렌더링은 반영됨
-  - 생성/수정/삭제 전용 화면은 아직 없음
+- [x] Automations — 코드·DB 스키마·프론트 API 전체 제거 (불필요)
+- [x] Goals / OKR — 코드·DB 스키마·프론트 API 전체 제거 (불필요)
 
 ## 호환용 유지
 

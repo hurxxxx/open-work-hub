@@ -49,6 +49,14 @@ def test_postgres_schema_compat_adds_team_id_guards() -> None:
         "ADD CONSTRAINT pms_projects_team_id_fkey" in statement
         for statement in statements
     )
+    assert any(
+        "ALTER TABLE teams ADD COLUMN IF NOT EXISTS trashed_at TIMESTAMP" in statement
+        for statement in statements
+    )
+    assert any(
+        "CREATE INDEX IF NOT EXISTS ix_teams_trashed_at ON teams (trashed_at)" in statement
+        for statement in statements
+    )
 
 
 def test_postgres_schema_compat_skips_non_postgres() -> None:

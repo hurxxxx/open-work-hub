@@ -396,6 +396,133 @@ def test_space_docs_collection_permissions_and_soft_delete(client: TestClient) -
     assert deleted_collection_pages_response.status_code == 404
 
 
+def test_team_soft_delete_hides_space_data_and_untrashes_default_space(client: TestClient) -> None:
+    admin_session = _bootstrap_admin_session(client)
+    headers = _auth_headers(admin_session["token"])
+    project = _create_project(client, admin_session["token"])
+    space_id = project["team_id"]
+    assert space_id is not None
+
+    workspaces_response = client.get("/api/v1/admin/workspaces", headers=headers)
+    assert workspaces_response.status_code == 200
+    pms_workspace = next(item for item in workspaces_response.json() if item["key"] == "pms")
+    assert pms_workspace["team_count"] == 1
+
+    folder_response = client.post(
+        "/api/v1/pms/folders",
+        headers=headers,
+        json={"name": "Operations", "team_id": space_id},
+    )
+    assert folder_response.status_code == 201
+
+    collection_response = client.post(
+        f"/api/v1/pms/spaces/{space_id}/docs",
+        headers=headers,
+        json={"title": "Runbook"},
+    )
+    assert collection_response.status_code == 201
+    collection = collection_response.json()
+
+    page_response = client.post(
+        f"/api/v1/pms/spaces/{space_id}/docs/pages",
+        headers=headers,
+        json={"title": "Overview", "space_doc_id": collection["id"]},
+    )
+    assert page_response.status_code == 201
+    page = page_response.json()
+
+    delete_response = client.delete(
+        f"/api/v1/admin/teams/{space_id}",
+        headers=headers,
+    )
+    assert delete_response.status_code == 204
+
+    teams_response = client.get(
+        "/api/v1/admin/teams",
+        headers=headers,
+        params={"workspace_id": pms_workspace["id"]},
+    )
+    assert teams_response.status_code == 200
+    assert teams_response.json() == []
+
+    deleted_team_update_response = client.patch(
+        f"/api/v1/admin/teams/{space_id}",
+        headers=headers,
+        json={"name": "Archived Space", "description": ""},
+    )
+    assert deleted_team_update_response.status_code == 404
+
+    deleted_team_members_response = client.get(
+        f"/api/v1/admin/teams/{space_id}/members",
+        headers=headers,
+    )
+    assert deleted_team_members_response.status_code == 404
+
+    visible_lists_response = client.get(
+        "/api/v1/pms/lists",
+        headers=headers,
+    )
+    assert visible_lists_response.status_code == 200
+    assert [item for item in visible_lists_response.json()["items"] if item["team_id"] == space_id] == []
+
+    deleted_space_lists_response = client.get(
+        "/api/v1/pms/lists",
+        headers=headers,
+        params={"team_id": space_id},
+    )
+    assert deleted_space_lists_response.status_code == 404
+
+    deleted_space_folders_response = client.get(
+        "/api/v1/pms/folders",
+        headers=headers,
+        params={"team_id": space_id},
+    )
+    assert deleted_space_folders_response.status_code == 404
+
+    deleted_space_docs_response = client.get(
+        f"/api/v1/pms/spaces/{space_id}/docs",
+        headers=headers,
+    )
+    assert deleted_space_docs_response.status_code == 404
+
+    deleted_page_response = client.get(
+        f"/api/v1/pms/space-doc-pages/{page['id']}",
+        headers=headers,
+    )
+    assert deleted_page_response.status_code == 404
+
+    workspaces_after_delete_response = client.get("/api/v1/admin/workspaces", headers=headers)
+    assert workspaces_after_delete_response.status_code == 200
+    pms_workspace_after_delete = next(item for item in workspaces_after_delete_response.json() if item["key"] == "pms")
+    assert pms_workspace_after_delete["team_count"] == 0
+
+    recreated_project_response = client.post(
+        "/api/v1/pms/projects",
+        headers=headers,
+        json={
+            "key": "PMS2",
+            "name": "Recovered Project",
+            "description": "Project after untrash",
+        },
+    )
+    assert recreated_project_response.status_code == 201
+    recreated_project = recreated_project_response.json()
+    assert recreated_project["team_id"] == space_id
+
+    teams_after_restore_response = client.get(
+        "/api/v1/admin/teams",
+        headers=headers,
+        params={"workspace_id": pms_workspace["id"]},
+    )
+    assert teams_after_restore_response.status_code == 200
+    assert [item["id"] for item in teams_after_restore_response.json()] == [space_id]
+
+    workspaces_after_restore_response = client.get("/api/v1/admin/workspaces", headers=headers)
+    assert workspaces_after_restore_response.status_code == 200
+    pms_workspace_after_restore = next(item for item in workspaces_after_restore_response.json() if item["key"] == "pms")
+    assert pms_workspace_after_restore["team_count"] == 1
+
+
 def _bootstrap_admin(client: TestClient) -> str:
     return _bootstrap_admin_session(client)["token"]
 
@@ -413,13 +540,19 @@ def _bootstrap_admin_session(client: TestClient) -> dict:
     return response.json()
 
 
-def _create_project(client: TestClient, token: str) -> dict:
+def _create_project(
+    client: TestClient,
+    token: str,
+    *,
+    key: str = "PMS",
+    name: str = "PMS Project",
+) -> dict:
     response = client.post(
         "/api/v1/pms/projects",
         headers=_auth_headers(token),
         json={
-            "key": "PMS",
-            "name": "PMS Project",
+            "key": key,
+            "name": name,
             "description": "Project for PMS issue tests",
         },
     )
