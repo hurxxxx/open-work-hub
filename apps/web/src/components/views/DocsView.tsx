@@ -1,58 +1,99 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
-import { motion, AnimatePresence } from 'motion/react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
 import {
-  Files,
-  FileText,
-  Sparkles,
-  Star,
-  X,
-  Plus,
-  Filter,
-  Search,
-  MoreHorizontal,
-  Settings,
-  Trash2,
-  Link as LinkIcon,
-  Lock,
-  Globe,
   ChevronDown,
   ChevronRight,
+  Copy,
+  FileText,
+  Filter,
+  Globe,
   Loader2,
+  Lock,
+  MoreHorizontal,
   Pencil,
+  Plus,
+  Search,
+  Share2,
+  Sparkles,
+  Star,
+  Trash2,
+  X,
 } from 'lucide-react';
-import { BlockEditor, useConfirm, usePrompt } from '@aidoo/ui';
+import { BlockEditor, BlockViewer, useConfirm, usePrompt } from '@aidoo/ui';
+
 import { useMediaUpload } from '@/src/domains/media/use-media-upload';
 import { useAuth } from '@/src/domains/auth/auth-provider';
 import { cn } from '@/src/lib/utils';
 import {
-  listSpaces,
+  createDocPage,
+  createNativeDoc,
+  deleteDocPage,
+  deleteDocsItem,
+  deleteDocLinkShare,
+  deleteDocUserShare,
+  getDocsItem,
+  getDocSharing,
+  listDocPages,
   listDocsHub,
-  toggleDocFavorite,
-  toggleDocPrivate,
+  listShareableUsers,
   recordDocView,
-  createSpaceDoc,
-  listSpaceDocPages,
-  createSpaceDocPage,
-  updateSpaceDocPage,
-  deleteSpaceDocPage,
-  deleteSpaceDoc,
-  updateSpaceDoc,
+  resolveSharedLink,
+  toggleDocFavorite,
+  updateDocPage,
+  updateDocsItem,
+  upsertDocLinkShare,
+  upsertDocUserShare,
   type DocsHubItem,
-  type PmsSpace,
-  type PmsSpaceDocPage,
-} from '@/src/domains/pms/pms-api';
+  type DocsPageItem,
+  type NativeDocSharingResponse,
+  type ShareableUserItem,
+} from '@/src/domains/docs/docs-api';
 
-// Category mapping from toolId to API category param
 const CATEGORY_MAP: Record<string, string> = {
   'docs-all': 'all',
   'docs-my': 'my',
   'docs-shared': 'shared',
   'docs-private': 'private',
-  'docs-notes': 'all', // Phase 2: tag-based filter
+  'docs-notes': 'all',
   'docs-recent': 'recent',
   'docs-archived': 'archived',
 };
+
+const CATEGORY_LABELS: Record<string, string> = {
+  'docs-all': 'All Docs',
+  'docs-my': 'My Docs',
+  'docs-shared': 'Shared with me',
+  'docs-private': 'Private',
+  'docs-notes': 'Meeting Notes',
+  'docs-recent': 'Recent Pages',
+  'docs-archived': 'Archived',
+};
+
+const TEMPLATES = [
+  { title: 'Project Overview', desc: 'Summarize goals, scope, and milestones', icon: '📋' },
+  { title: 'Meeting Notes', desc: 'Capture an agenda, notes, and action items', icon: '📝' },
+  { title: 'Wiki', desc: 'Organize information in one place', icon: '📚' },
+];
+
+type TreeNode = DocsPageItem & { children: TreeNode[] };
+
+function buildTree(pages: DocsPageItem[]): TreeNode[] {
+  const roots: TreeNode[] = [];
+  const byId = new Map<string, TreeNode>();
+  for (const page of pages) {
+    byId.set(page.id, { ...page, children: [] });
+  }
+  for (const page of pages) {
+    const node = byId.get(page.id);
+    if (!node) continue;
+    if (page.parent_id && byId.has(page.parent_id)) {
+      byId.get(page.parent_id)?.children.push(node);
+    } else {
+      roots.push(node);
+    }
+  }
+  return roots.sort((left, right) => left.sort_order - right.sort_order || left.title.localeCompare(right.title, 'ko'));
+}
 
 function timeAgo(dateStr: string): string {
   const diff = Date.now() - new Date(dateStr).getTime();
@@ -66,401 +107,462 @@ function timeAgo(dateStr: string): string {
   return new Date(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
-type TreeNode = PmsSpaceDocPage & { children: TreeNode[] };
-
-function buildTree(pages: PmsSpaceDocPage[]): TreeNode[] {
-  const byId = new Map<string, TreeNode>();
-  const roots: TreeNode[] = [];
-  for (const page of pages) {
-    byId.set(page.id, { ...page, children: [] });
+function sharingLabel(item: DocsHubItem): string {
+  if (item.source_type !== 'native_doc') {
+    return item.source_app.toUpperCase();
   }
-  for (const page of pages) {
-    const node = byId.get(page.id)!;
-    if (page.parent_id && byId.has(page.parent_id)) {
-      byId.get(page.parent_id)!.children.push(node);
-    } else {
-      roots.push(node);
-    }
+  if (item.sharing_summary?.visibility === 'private') {
+    return 'Private';
   }
-  return roots.sort((a, b) => a.sort_order - b.sort_order);
+  const parts = [];
+  if ((item.sharing_summary?.user_share_count ?? 0) > 0) {
+    parts.push(`${item.sharing_summary?.user_share_count} users`);
+  }
+  if (item.sharing_summary?.link_active) {
+    parts.push(`Link (${item.sharing_summary.link_access_level})`);
+  }
+  return parts.join(' · ') || 'Shared';
 }
 
-// Templates data (Phase 1: just titles, Phase 3: real templates)
-const TEMPLATES = [
-  { title: 'Project Overview', desc: 'Summarize goals, scope, and milestones', icon: '📋' },
-  { title: 'Meeting Notes', desc: 'Capture an agenda, notes, and action items', icon: '📝' },
-  { title: 'Wiki', desc: 'Organize information in one place', icon: '📚' },
-];
-
 export const DocsView = () => {
-  const { toolId, docId } = useParams();
+  const { toolId, docId, shareToken } = useParams();
   const navigate = useNavigate();
-  const { token } = useAuth();
+  const auth = useAuth();
+  const { token } = auth;
   const { uploadFile, resolveFileUrl } = useMediaUpload();
   const { confirm, confirmDialog } = useConfirm();
   const { prompt, promptDialog } = usePrompt();
 
-  // List view state
   const [docs, setDocs] = useState<DocsHubItem[]>([]);
   const [total, setTotal] = useState(0);
-  const [loading, setLoading] = useState(true);
+  const [loadingList, setLoadingList] = useState(true);
+  const [editorLoading, setEditorLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
   const [sortBy, setSortBy] = useState('updated_at');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
   const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
 
-  // Create doc modal state
   const [showCreateModal, setShowCreateModal] = useState(false);
-  const [teams, setTeams] = useState<PmsSpace[]>([]);
-  const [selectedTeamId, setSelectedTeamId] = useState('');
   const [newDocTitle, setNewDocTitle] = useState('');
   const [creating, setCreating] = useState(false);
 
-  // Editor view state
-  const [pages, setPages] = useState<PmsSpaceDocPage[]>([]);
-  const [selectedPageId, setSelectedPageId] = useState<string | null>(null);
-  const [pageContent, setPageContent] = useState<Record<string, unknown>[] | null>(null);
-  const [editorLoading, setEditorLoading] = useState(true);
   const [selectedDoc, setSelectedDoc] = useState<DocsHubItem | null>(null);
+  const [pages, setPages] = useState<DocsPageItem[]>([]);
+  const [selectedPageId, setSelectedPageId] = useState<string | null>(null);
   const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set());
+  const [resolvedSharedDocId, setResolvedSharedDocId] = useState<string | null>(null);
 
-  const searchTimerRef = useRef<ReturnType<typeof setTimeout>>(null);
+  const [showShareModal, setShowShareModal] = useState(false);
+  const [sharingState, setSharingState] = useState<NativeDocSharingResponse | null>(null);
+  const [shareableUsers, setShareableUsers] = useState<ShareableUserItem[]>([]);
+  const [shareUserId, setShareUserId] = useState('');
+  const [shareAccessLevel, setShareAccessLevel] = useState<'read' | 'edit'>('read');
+  const [shareLoading, setShareLoading] = useState(false);
 
-  const activeCategory = toolId
-    ? (CATEGORY_MAP[toolId] || 'all')
-    : 'all';
+  const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const categoryLabels: Record<string, string> = {
-    'docs-all': 'All Docs',
-    'docs-my': 'My Docs',
-    'docs-shared': 'Shared with me',
-    'docs-private': 'Private',
-    'docs-notes': 'Meeting Notes',
-    'docs-recent': 'Recent Pages',
-    'docs-archived': 'Archived',
-  };
-  const activeCategoryLabel = (toolId && categoryLabels[toolId]) || 'All Docs';
+  const activeCategory = toolId ? (CATEGORY_MAP[toolId] ?? 'all') : 'all';
+  const activeCategoryLabel = (toolId && CATEGORY_LABELS[toolId]) || 'All Docs';
+  const activeItemId = docId ?? resolvedSharedDocId;
+  const tree = useMemo(() => buildTree(pages), [pages]);
+  const activePage = pages.find((page) => page.id === selectedPageId) ?? pages[0] ?? null;
+  const isListView = !activeItemId && !shareToken;
+  const hasDocsWorkspace = auth.hasFeature('nav.docs');
 
-  // Fetch docs list
   const fetchDocs = useCallback(async () => {
     if (!token) return;
-    setLoading(true);
+    setLoadingList(true);
     try {
-      const res = await listDocsHub(token, {
+      const response = await listDocsHub(token, {
         category: activeCategory,
         q: searchQuery || undefined,
         sort_by: sortBy,
         sort_dir: sortDir,
       });
-      setDocs(res.items);
-      setTotal(res.total);
+      setDocs(response.items);
+      setTotal(response.total);
     } catch {
       setDocs([]);
       setTotal(0);
     } finally {
-      setLoading(false);
+      setLoadingList(false);
     }
-  }, [token, activeCategory, searchQuery, sortBy, sortDir]);
+  }, [activeCategory, searchQuery, sortBy, sortDir, token]);
+
+  const loadDoc = useCallback(async (itemId: string, currentShareToken?: string | null) => {
+    if (!token) return;
+    setEditorLoading(true);
+    try {
+      const [item, pageResponse] = await Promise.all([
+        getDocsItem(token, itemId, currentShareToken),
+        listDocPages(token, itemId, currentShareToken),
+      ]);
+      setSelectedDoc(item);
+      setPages(pageResponse.items);
+      const preferredPage = pageResponse.items[0]?.id ?? null;
+      setSelectedPageId((current) => (
+        current && pageResponse.items.some((page) => page.id === current)
+          ? current
+          : preferredPage
+      ));
+      setExpandedNodes(new Set(pageResponse.items.filter((page) => page.parent_id === null).map((page) => page.id)));
+    } catch {
+      setSelectedDoc(null);
+      setPages([]);
+      setSelectedPageId(null);
+    } finally {
+      setEditorLoading(false);
+    }
+  }, [token]);
 
   useEffect(() => {
-    if (!docId) fetchDocs();
-  }, [fetchDocs, docId]);
+    if (!token) return;
+    if (isListView) {
+      void fetchDocs();
+    }
+  }, [fetchDocs, isListView, token]);
 
-  // Debounced search
-  const handleSearchChange = (val: string) => {
-    if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
-    searchTimerRef.current = setTimeout(() => setSearchQuery(val), 300);
+  useEffect(() => {
+    if (!token) return;
+    if (!shareToken) {
+      setResolvedSharedDocId(null);
+      return;
+    }
+    setEditorLoading(true);
+    void resolveSharedLink(token, shareToken)
+      .then(async (response) => {
+        setResolvedSharedDocId(response.item.id);
+        await loadDoc(response.item.id, shareToken);
+      })
+      .catch(() => {
+        setResolvedSharedDocId(null);
+        setSelectedDoc(null);
+        setPages([]);
+        setSelectedPageId(null);
+        setEditorLoading(false);
+      });
+  }, [loadDoc, shareToken, token]);
+
+  useEffect(() => {
+    if (!token || !docId || shareToken) return;
+    void loadDoc(docId, null);
+  }, [docId, loadDoc, shareToken, token]);
+
+  useEffect(() => {
+    if (!token || !selectedDoc || !activePage) return;
+    void recordDocView(token, selectedDoc.id, activePage.id, shareToken);
+  }, [activePage, selectedDoc, shareToken, token]);
+
+  const handleSearchChange = (value: string) => {
+    if (searchTimerRef.current) {
+      clearTimeout(searchTimerRef.current);
+    }
+    searchTimerRef.current = setTimeout(() => setSearchQuery(value), 250);
   };
 
-  // Fetch teams for create modal
-  const openCreateModal = async (templateTitle?: string) => {
-    if (!token) return;
-    try {
-      const t = await listSpaces(token);
-      const activeTeams = t.filter((item) => item.current_user_role);
-      setTeams(activeTeams);
-      if (activeTeams.length === 1) setSelectedTeamId(activeTeams[0].id);
-      else setSelectedTeamId('');
-    } catch {
-      setTeams([]);
+  const openDoc = (itemId: string) => {
+    navigate(toolId ? `/tool/${toolId}/${itemId}` : `/docs/${itemId}`);
+  };
+
+  const handleBack = () => {
+    if (shareToken && !hasDocsWorkspace) {
+      navigate('/');
+      return;
     }
-    setNewDocTitle(templateTitle || '');
+    navigate(toolId ? `/tool/${toolId}` : '/docs');
+  };
+
+  const openCreateModal = (templateTitle?: string) => {
+    setNewDocTitle(templateTitle ?? '');
     setShowCreateModal(true);
   };
 
   const handleCreateDoc = async () => {
-    if (!token || !selectedTeamId || !newDocTitle.trim()) return;
+    if (!token || !newDocTitle.trim()) return;
     setCreating(true);
     try {
-      const doc = await createSpaceDoc(token, selectedTeamId, { title: newDocTitle.trim() });
+      const item = await createNativeDoc(token, { title: newDocTitle.trim() });
       setShowCreateModal(false);
       setNewDocTitle('');
-      // Pre-set selectedDoc so the editor useEffect can load pages immediately
-      const teamName = teams.find(t => t.id === selectedTeamId)?.name ?? '';
-      setSelectedDoc({
-        id: doc.id,
-        team_id: doc.team_id,
-        space_name: teamName,
-        title: doc.title,
-        page_count: 0,
-        created_by_id: doc.created_by_id,
-        created_by_name: doc.created_by_name,
-        is_favorite: false,
-        is_private: false,
-        last_viewed_at: null,
-        created_at: doc.created_at,
-        updated_at: doc.updated_at,
-        trashed_at: null,
-      });
-      navigate(toolId ? `/tool/${toolId}/${doc.id}` : `/docs/${doc.id}`);
-    } catch {
-      // error
+      openDoc(item.id);
     } finally {
       setCreating(false);
     }
   };
 
-  // Favorite toggle
-  const handleToggleFavorite = async (e: React.MouseEvent, docItem: DocsHubItem) => {
-    e.stopPropagation();
+  const handleToggleFavorite = async (event: React.MouseEvent, item: DocsHubItem) => {
+    event.stopPropagation();
     if (!token) return;
     try {
-      const res = await toggleDocFavorite(token, docItem.id);
-      setDocs(prev =>
-        prev.map(d => (d.id === docItem.id ? { ...d, is_favorite: res.is_favorite } : d)),
-      );
-    } catch { /* */ }
-  };
-
-  // Click doc row → navigate to editor
-  const handleDocClick = (doc: DocsHubItem) => {
-    navigate(toolId ? `/tool/${toolId}/${doc.id}` : `/docs/${doc.id}`);
-  };
-
-  const handleBack = () => {
-    navigate(toolId ? `/tool/${toolId}` : '/docs');
-  };
-
-  // Column sort
-  const handleSort = (col: string) => {
-    if (sortBy === col) {
-      setSortDir(prev => (prev === 'asc' ? 'desc' : 'asc'));
-    } else {
-      setSortBy(col);
-      setSortDir('desc');
-    }
-  };
-
-  // Context menu actions
-  const handleRename = async (doc: DocsHubItem) => {
-    setMenuOpenId(null);
-    if (!token) return;
-    const newTitle = await prompt({ title: 'Rename Document', defaultValue: doc.title });
-    if (newTitle && newTitle.trim() && newTitle.trim() !== doc.title) {
-      try {
-        await updateSpaceDoc(token, doc.id, { title: newTitle.trim() });
-        fetchDocs();
-      } catch { /* */ }
-    }
-  };
-
-  const handleDelete = async (doc: DocsHubItem) => {
-    setMenuOpenId(null);
-    if (!token) return;
-    const ok = await confirm({ title: `Delete "${doc.title}"?`, description: 'This document will be moved to trash.' });
-    if (ok) {
-      try {
-        await deleteSpaceDoc(token, doc.id);
-        fetchDocs();
-      } catch { /* */ }
-    }
-  };
-
-  const handleTogglePrivate = async (doc: DocsHubItem) => {
-    setMenuOpenId(null);
-    if (!token) return;
-    try {
-      const res = await toggleDocPrivate(token, doc.id);
-      setDocs(prev =>
-        prev.map(d => (d.id === doc.id ? { ...d, is_private: res.is_private } : d)),
-      );
-    } catch { /* */ }
-  };
-
-  // ── Editor View ──────────────────────────────────────────────────
-
-  // Load doc pages when docId changes
-  useEffect(() => {
-    if (!docId || !token) return;
-    setEditorLoading(true);
-    setSelectedPageId(null);
-    setPageContent(null);
-
-    // Find doc info: pre-set selectedDoc (from create), docs list, or hub fetch
-    const docInfo = docs.find(d => d.id === docId) ?? (selectedDoc?.id === docId ? selectedDoc : null);
-    if (docInfo) {
-      setSelectedDoc(docInfo);
-      recordDocView(token, docInfo.id).catch(() => {});
-      loadPages(docInfo.team_id, docInfo.id);
-    } else {
-      // Direct URL load → fetch from hub
-      listDocsHub(token, { category: 'all', page_size: 100 })
-        .then(async (allRes) => {
-          const found = allRes.items.find(d => d.id === docId);
-          if (found) {
-            setSelectedDoc(found);
-            recordDocView(token, found.id).catch(() => {});
-            loadPages(found.team_id, found.id);
-          } else {
-            // Also check archived
-            const archRes = await listDocsHub(token, { category: 'archived', page_size: 100 });
-            const archFound = archRes.items.find(d => d.id === docId);
-            if (archFound) {
-              setSelectedDoc(archFound);
-              recordDocView(token, archFound.id).catch(() => {});
-              loadPages(archFound.team_id, archFound.id);
-            } else {
-              setEditorLoading(false);
-            }
-          }
-        })
-        .catch(() => setEditorLoading(false));
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [docId, token]);
-
-  const loadPages = async (teamId: string, spaceDocId: string) => {
-    if (!token) return;
-    try {
-      const res = await listSpaceDocPages(token, teamId, spaceDocId);
-      const pgs = res.items ?? [];
-      setPages(pgs);
-      if (pgs.length > 0) {
-        setSelectedPageId(pgs[0].id);
-        setPageContent(pgs[0].content_blocks ?? null);
+      const response = await toggleDocFavorite(token, item.id);
+      setDocs((current) => current.map((doc) => (
+        doc.id === item.id ? { ...doc, is_favorite: response.is_favorite } : doc
+      )));
+      if (selectedDoc?.id === item.id) {
+        setSelectedDoc({ ...item, is_favorite: response.is_favorite });
       }
-    } catch { /* */ }
-    setEditorLoading(false);
-  };
-
-  // Load page content when selectedPageId changes
-  useEffect(() => {
-    const pg = pages.find(p => p.id === selectedPageId);
-    if (pg) {
-      setPageContent(pg.content_blocks ?? null);
+    } catch {
+      // no-op
     }
-  }, [selectedPageId, pages]);
-
-  // Save page content on editor change (debounced)
-  const saveTimerRef = useRef<ReturnType<typeof setTimeout>>(null);
-  const handleEditorChange = (blocks: Record<string, unknown>[]) => {
-    if (!token || !selectedPageId) return;
-    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-    saveTimerRef.current = setTimeout(async () => {
-      try {
-        await updateSpaceDocPage(token, selectedPageId, { content_blocks: blocks });
-      } catch { /* */ }
-    }, 1000);
   };
 
-  // Add page
+  const handleRenameDoc = async (item: DocsHubItem) => {
+    setMenuOpenId(null);
+    if (!token || !item.can_manage) return;
+    const nextTitle = await prompt({ title: 'Rename Document', defaultValue: item.title });
+    if (!nextTitle || nextTitle.trim() === item.title) return;
+    try {
+      const updated = await updateDocsItem(token, item.id, { title: nextTitle.trim() }, shareToken);
+      setDocs((current) => current.map((doc) => (doc.id === updated.id ? updated : doc)));
+      if (selectedDoc?.id === updated.id) {
+        setSelectedDoc(updated);
+      }
+    } catch {
+      // no-op
+    }
+  };
+
+  const handleDeleteDoc = async (item: DocsHubItem) => {
+    setMenuOpenId(null);
+    if (!token || !item.can_manage) return;
+    const ok = await confirm({
+      title: `Delete "${item.title}"?`,
+      description: item.source_type === 'native_doc'
+        ? 'This document will be moved to trash.'
+        : 'This removes the source document from its origin.',
+      confirmLabel: 'Delete',
+      variant: 'danger',
+    });
+    if (!ok) return;
+    try {
+      await deleteDocsItem(token, item.id, shareToken);
+      if (selectedDoc?.id === item.id) {
+        handleBack();
+      } else {
+        void fetchDocs();
+      }
+    } catch {
+      // no-op
+    }
+  };
+
   const handleAddPage = async (parentId?: string | null) => {
-    if (!token || !selectedDoc) return;
+    if (!token || !selectedDoc || !selectedDoc.can_edit || selectedDoc.structure_kind !== 'page_tree') return;
     const title = await prompt({ title: 'New Page', defaultValue: 'Untitled' });
     if (!title || !title.trim()) return;
     try {
-      const pg = await createSpaceDocPage(token, selectedDoc.team_id, {
+      const page = await createDocPage(token, selectedDoc.id, {
         title: title.trim(),
-        space_doc_id: selectedDoc.id,
         parent_id: parentId ?? null,
-      });
-      setPages(prev => [...prev, pg]);
-      setSelectedPageId(pg.id);
-    } catch { /* */ }
+      }, shareToken);
+      setPages((current) => [...current, page]);
+      setSelectedPageId(page.id);
+      if (parentId) {
+        setExpandedNodes((current) => new Set(current).add(parentId));
+      }
+    } catch {
+      // no-op
+    }
   };
 
-  // Delete page
-  const handleDeletePage = async (pageId: string) => {
-    if (!token) return;
-    const pg = pages.find(p => p.id === pageId);
-    const ok = await confirm({ title: `Delete "${pg?.title || 'this page'}"?`, description: 'This action cannot be undone.' });
+  const handleDeletePage = async (page: DocsPageItem) => {
+    if (!token || !page.can_edit) return;
+    const ok = await confirm({
+      title: `Delete "${page.title}"?`,
+      description: 'This page and its child pages will be removed from the document tree.',
+      confirmLabel: 'Delete',
+      variant: 'danger',
+    });
     if (!ok) return;
     try {
-      await deleteSpaceDocPage(token, pageId);
-      setPages(prev => prev.filter(p => p.id !== pageId));
-      if (selectedPageId === pageId) {
-        const remaining = pages.filter(p => p.id !== pageId);
-        setSelectedPageId(remaining.length > 0 ? remaining[0].id : null);
+      await deleteDocPage(token, page.id, shareToken);
+      const removedIds = new Set<string>([page.id]);
+      let changed = true;
+      while (changed) {
+        changed = false;
+        for (const candidate of pages) {
+          if (candidate.parent_id && removedIds.has(candidate.parent_id) && !removedIds.has(candidate.id)) {
+            removedIds.add(candidate.id);
+            changed = true;
+          }
+        }
       }
-    } catch { /* */ }
+      const nextPages = pages.filter((item) => !removedIds.has(item.id));
+      setPages(nextPages);
+      if (selectedPageId && removedIds.has(selectedPageId)) {
+        setSelectedPageId(nextPages[0]?.id ?? null);
+      }
+    } catch {
+      // no-op
+    }
+  };
+
+  const handleEditorChange = (blocks: Record<string, unknown>[]) => {
+    if (!token || !activePage?.can_edit) return;
+    if (saveTimerRef.current) {
+      clearTimeout(saveTimerRef.current);
+    }
+    saveTimerRef.current = setTimeout(async () => {
+      try {
+        const updated = await updateDocPage(token, activePage.id, { content_blocks: blocks }, shareToken);
+        setPages((current) => current.map((page) => (page.id === updated.id ? updated : page)));
+      } catch {
+        // no-op
+      }
+    }, 800);
   };
 
   const toggleExpand = (nodeId: string) => {
-    setExpandedNodes(prev => {
-      const next = new Set(prev);
+    setExpandedNodes((current) => {
+      const next = new Set(current);
       if (next.has(nodeId)) next.delete(nodeId);
       else next.add(nodeId);
       return next;
     });
   };
 
-  // Render page tree node
-  const renderTreeNode = (node: TreeNode, depth = 0) => (
-    <div key={node.id}>
-      <button
-        onClick={() => setSelectedPageId(node.id)}
-        className={cn(
-          'app-text-body-sm group flex w-full items-center gap-1 rounded px-2 py-1.5 transition-all',
-          selectedPageId === node.id
-            ? 'bg-clickup-purple/10 text-clickup-purple'
-            : 'text-gray-400 hover:bg-clickup-hover hover:text-gray-200',
-        )}
-        style={{ paddingLeft: `${8 + depth * 16}px` }}
-      >
-        {node.children.length > 0 ? (
-          <span
-            onClick={e => { e.stopPropagation(); toggleExpand(node.id); }}
-            className="flex-shrink-0"
-          >
-            {expandedNodes.has(node.id)
-              ? <ChevronDown size={12} className="text-gray-500" />
-              : <ChevronRight size={12} className="text-gray-500" />
-            }
-          </span>
-        ) : (
-          <span className="w-3" />
-        )}
-        <FileText size={14} className={selectedPageId === node.id ? 'text-clickup-purple' : 'text-gray-500'} />
-        <span className="truncate flex-1 text-left">{node.title}</span>
-        <span
-          className="opacity-0 group-hover:opacity-100"
-          onClick={e => { e.stopPropagation(); handleDeletePage(node.id); }}
-        >
-          <Trash2 size={12} className="text-gray-500 hover:text-red-400" />
-        </span>
-      </button>
-      {expandedNodes.has(node.id) &&
-        node.children
-          .sort((a, b) => a.sort_order - b.sort_order)
-          .map(child => renderTreeNode(child, depth + 1))
-      }
-    </div>
-  );
+  const refreshSharing = useCallback(async (itemId: string) => {
+    if (!token) return;
+    const [sharing, users] = await Promise.all([
+      getDocSharing(token, itemId),
+      listShareableUsers(token),
+    ]);
+    setSharingState(sharing);
+    setShareableUsers(users);
+  }, [token]);
 
-  // Document Editor View
+  const openShareModal = async () => {
+    if (!selectedDoc?.can_share || !token) return;
+    setShareLoading(true);
+    setShowShareModal(true);
+    try {
+      await refreshSharing(selectedDoc.id);
+    } finally {
+      setShareLoading(false);
+    }
+  };
+
+  const handleAddUserShare = async () => {
+    if (!token || !selectedDoc || !shareUserId) return;
+    setShareLoading(true);
+    try {
+      const updated = await upsertDocUserShare(token, selectedDoc.id, shareUserId, shareAccessLevel);
+      setSharingState(updated);
+      setShareUserId('');
+    } finally {
+      setShareLoading(false);
+    }
+  };
+
+  const handleRemoveUserShare = async (userId: string) => {
+    if (!token || !selectedDoc) return;
+    setShareLoading(true);
+    try {
+      const updated = await deleteDocUserShare(token, selectedDoc.id, userId);
+      setSharingState(updated);
+    } finally {
+      setShareLoading(false);
+    }
+  };
+
+  const handleEnableLinkShare = async (accessLevel: 'read' | 'edit', regenerateToken = false) => {
+    if (!token || !selectedDoc) return;
+    setShareLoading(true);
+    try {
+      const updated = await upsertDocLinkShare(token, selectedDoc.id, {
+        access_level: accessLevel,
+        active: true,
+        regenerate_token: regenerateToken,
+      });
+      setSharingState(updated);
+    } finally {
+      setShareLoading(false);
+    }
+  };
+
+  const handleDisableLinkShare = async () => {
+    if (!token || !selectedDoc) return;
+    setShareLoading(true);
+    try {
+      const updated = await deleteDocLinkShare(token, selectedDoc.id);
+      setSharingState(updated);
+    } finally {
+      setShareLoading(false);
+    }
+  };
+
+  const copyShareLink = async () => {
+    const tokenValue = sharingState?.link_share?.token;
+    if (!tokenValue) return;
+    const url = `${window.location.origin}/docs/shared/${tokenValue}`;
+    await navigator.clipboard.writeText(url);
+  };
+
+  const renderTreeNode = (node: TreeNode, depth = 0) => {
+    const isExpanded = expandedNodes.has(node.id);
+    const hasChildren = node.children.length > 0;
+    return (
+      <div key={node.id}>
+        <button
+          onClick={() => setSelectedPageId(node.id)}
+          className={cn(
+            'app-text-body-sm group flex w-full items-center gap-1 rounded px-2 py-1.5 transition-all',
+            selectedPageId === node.id
+              ? 'bg-clickup-purple/10 text-clickup-purple'
+              : 'text-gray-400 hover:bg-clickup-hover hover:text-gray-200',
+          )}
+          style={{ paddingLeft: `${8 + depth * 16}px` }}
+        >
+          {hasChildren ? (
+            <span
+              className="flex-shrink-0"
+              onClick={(event) => {
+                event.stopPropagation();
+                toggleExpand(node.id);
+              }}
+            >
+              {isExpanded ? (
+                <ChevronDown size={12} className="text-gray-500" />
+              ) : (
+                <ChevronRight size={12} className="text-gray-500" />
+              )}
+            </span>
+          ) : (
+            <span className="w-3" />
+          )}
+          <FileText size={14} className={selectedPageId === node.id ? 'text-clickup-purple' : 'text-gray-500'} />
+          <span className="truncate flex-1 text-left">{node.title}</span>
+          {node.can_edit ? (
+            <span
+              className="opacity-0 group-hover:opacity-100"
+              onClick={(event) => {
+                event.stopPropagation();
+                void handleDeletePage(node);
+              }}
+            >
+              <Trash2 size={12} className="text-gray-500 hover:text-red-400" />
+            </span>
+          ) : null}
+        </button>
+        {isExpanded ? node.children.sort((left, right) => left.sort_order - right.sort_order).map((child) => renderTreeNode(child, depth + 1)) : null}
+      </div>
+    );
+  };
+
   const renderEditor = () => {
     if (editorLoading) {
       return (
         <div className="flex-1 flex items-center justify-center bg-clickup-bg">
-          <Loader2 size={32} className="animate-spin text-clickup-purple" />
+          <Loader2 size={28} className="animate-spin text-clickup-purple" />
         </div>
       );
     }
 
     if (!selectedDoc) {
       return (
-        <div className="flex-1 flex items-center justify-center text-gray-500 bg-clickup-bg">
+        <div className="flex-1 flex items-center justify-center bg-clickup-bg text-gray-500">
           <div className="text-center">
             <FileText size={48} className="mx-auto mb-4 opacity-20" />
             <h2 className="app-text-title-md text-clickup-text">Document not found</h2>
@@ -472,33 +574,35 @@ export const DocsView = () => {
       );
     }
 
-    const tree = buildTree(pages);
-    const activePage = pages.find(p => p.id === selectedPageId);
-
     return (
       <div className="h-full flex flex-col bg-clickup-bg overflow-hidden">
-        {/* Top Header */}
         <div className="h-12 border-b border-clickup-border flex items-center justify-between px-4 bg-clickup-sidebar">
-          <div className="app-text-caption flex items-center gap-2">
+          <div className="app-text-caption flex items-center gap-2 min-w-0">
             <span className="cursor-pointer text-gray-500 hover:text-gray-300" onClick={handleBack}>
               Docs
             </span>
             <span className="text-gray-600">/</span>
-            <div className="flex items-center gap-2 px-2 py-1 hover:bg-clickup-hover rounded cursor-pointer">
-              <FileText size={14} className="text-clickup-purple" />
-              <span className="app-text-control text-clickup-text">{selectedDoc.title}</span>
-              <Star
-                size={12}
-                className={cn(
-                  'text-gray-600 cursor-pointer',
-                  selectedDoc.is_favorite && 'text-yellow-500 fill-yellow-500',
-                )}
-                onClick={e => handleToggleFavorite(e, selectedDoc)}
-              />
-            </div>
+            <span className="truncate text-clickup-text">{selectedDoc.title}</span>
+            <Star
+              size={12}
+              className={cn(
+                'text-gray-600 cursor-pointer',
+                selectedDoc.is_favorite && 'text-yellow-500 fill-yellow-500',
+              )}
+              onClick={(event) => void handleToggleFavorite(event, selectedDoc)}
+            />
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
+            {selectedDoc.can_share ? (
+              <button
+                onClick={() => void openShareModal()}
+                className="app-text-control-sm flex items-center gap-1.5 rounded-md px-3 py-1.5 text-clickup-text transition-colors hover:bg-clickup-hover"
+              >
+                <Share2 size={14} />
+                <span>Share</span>
+              </button>
+            ) : null}
             <button className="app-text-control-sm flex items-center gap-1.5 rounded-md px-3 py-1.5 text-clickup-purple transition-colors hover:bg-clickup-purple/10">
               <Sparkles size={14} />
               <span>Ask AI</span>
@@ -510,85 +614,112 @@ export const DocsView = () => {
         </div>
 
         <div className="flex-1 flex overflow-hidden">
-          {/* Page Sidebar */}
-          <div className="w-60 border-r border-clickup-border bg-clickup-sidebar flex flex-col overflow-hidden">
+          <div className="w-64 border-r border-clickup-border bg-clickup-sidebar flex flex-col overflow-hidden">
             <div className="p-4 space-y-4">
-              <h2 className="app-text-title-sm px-2 text-clickup-text truncate">{selectedDoc.title}</h2>
-              <div>
-                <div className="flex items-center justify-between px-2 mb-2">
-                  <span className="app-text-overline text-gray-500">Pages</span>
-                </div>
-                <div className="space-y-0.5 overflow-y-auto custom-scrollbar max-h-[calc(100vh-250px)]">
-                  {tree.map(node => renderTreeNode(node))}
-                  <button
-                    onClick={() => handleAddPage(null)}
-                    className="app-text-body-sm flex w-full items-center gap-2 rounded px-3 py-1.5 text-gray-500 transition-all hover:bg-clickup-hover hover:text-clickup-purple"
-                  >
-                    <Plus size={14} />
-                    <span>Add page</span>
-                  </button>
-                </div>
+              <div className="space-y-1">
+                <h2 className="app-text-title-sm text-clickup-text truncate">{selectedDoc.title}</h2>
+                <p className="app-text-caption text-gray-500 truncate">{selectedDoc.location_label}</p>
               </div>
+
+              {selectedDoc.structure_kind === 'page_tree' ? (
+                <div>
+                  <div className="flex items-center justify-between px-2 mb-2">
+                    <span className="app-text-overline text-gray-500">Pages</span>
+                  </div>
+                  <div className="space-y-0.5 overflow-y-auto custom-scrollbar max-h-[calc(100vh-250px)]">
+                    {tree.map((node) => renderTreeNode(node))}
+                    {selectedDoc.can_edit ? (
+                      <button
+                        onClick={() => void handleAddPage(null)}
+                        className="app-text-body-sm flex w-full items-center gap-2 rounded px-3 py-1.5 text-gray-500 transition-all hover:bg-clickup-hover hover:text-clickup-purple"
+                      >
+                        <Plus size={14} />
+                        <span>Add page</span>
+                      </button>
+                    ) : null}
+                  </div>
+                </div>
+              ) : null}
             </div>
 
             <div className="mt-auto p-4 border-t border-clickup-border space-y-1">
-              <button className="app-text-body-sm flex w-full items-center gap-2 rounded px-3 py-1.5 text-gray-500 hover:bg-clickup-hover">
-                <Settings size={14} />
-                <span>Doc Settings</span>
-              </button>
-              <button
-                onClick={() => handleDelete(selectedDoc)}
-                className="app-text-body-sm flex w-full items-center gap-2 rounded px-3 py-1.5 text-gray-500 hover:bg-clickup-hover hover:text-red-400"
-              >
-                <Trash2 size={14} />
-                <span>Delete Doc</span>
-              </button>
+              <div className="app-text-body-sm flex items-center gap-2 rounded px-3 py-1.5 text-gray-500">
+                {selectedDoc.source_type === 'native_doc' ? <Lock size={14} /> : <Globe size={14} />}
+                <span>{sharingLabel(selectedDoc)}</span>
+              </div>
+              {selectedDoc.can_manage ? (
+                <>
+                  <button
+                    onClick={() => void handleRenameDoc(selectedDoc)}
+                    className="app-text-body-sm flex w-full items-center gap-2 rounded px-3 py-1.5 text-gray-500 hover:bg-clickup-hover"
+                  >
+                    <Pencil size={14} />
+                    <span>Rename Doc</span>
+                  </button>
+                  <button
+                    onClick={() => void handleDeleteDoc(selectedDoc)}
+                    className="app-text-body-sm flex w-full items-center gap-2 rounded px-3 py-1.5 text-gray-500 hover:bg-clickup-hover hover:text-red-400"
+                  >
+                    <Trash2 size={14} />
+                    <span>Delete Doc</span>
+                  </button>
+                </>
+              ) : null}
             </div>
           </div>
 
-          {/* Editor Content */}
           <div className="flex-1 flex flex-col min-w-0 bg-white dark:bg-[#1e1e24] overflow-y-auto custom-scrollbar">
             <div className="max-w-4xl mx-auto py-12 px-12 w-full">
-              <div className="space-y-6">
-                {activePage ? (
-                  <>
-                    <div className="space-y-4">
-                      <h1 className="app-text-title-xl text-clickup-text">{activePage.title}</h1>
-                      <div className="app-text-caption flex items-center gap-3 text-gray-500">
-                        <div className="flex items-center gap-1.5">
-                          <div className="app-text-micro flex h-5 w-5 items-center justify-center rounded-full bg-clickup-purple font-bold text-clickup-bg">
-                            {selectedDoc.created_by_name.split(' ').map(n => n[0]).join('').slice(0, 2)}
-                          </div>
-                          <span className="app-text-control text-clickup-text">{selectedDoc.created_by_name}</span>
+              {activePage ? (
+                <div className="space-y-6">
+                  <div className="space-y-4">
+                    <h1 className="app-text-title-xl text-clickup-text">{activePage.title}</h1>
+                    <div className="app-text-caption flex items-center gap-3 text-gray-500">
+                      <div className="flex items-center gap-1.5">
+                        <div className="app-text-micro flex h-5 w-5 items-center justify-center rounded-full bg-clickup-purple font-bold text-clickup-bg">
+                          {selectedDoc.created_by_name.split(' ').map((name) => name[0]).join('').slice(0, 2)}
                         </div>
-                        <span>·</span>
-                        <span>Updated {timeAgo(selectedDoc.updated_at)}</span>
+                        <span className="app-text-control text-clickup-text">{selectedDoc.created_by_name}</span>
                       </div>
+                      <span>·</span>
+                      <span>{selectedDoc.location_label}</span>
+                      <span>·</span>
+                      <span>Updated {timeAgo(activePage.updated_at)}</span>
                     </div>
-                    <div className="prose dark:prose-invert max-w-none pt-4">
+                  </div>
+                  <div className="prose dark:prose-invert max-w-none pt-4">
+                    {selectedDoc.can_edit && activePage.can_edit ? (
                       <BlockEditor
-                        key={selectedPageId}
-                        initialContent={pageContent as never}
+                        key={activePage.id}
+                        initialContent={activePage.content_blocks as never}
                         placeholder="Start writing..."
                         uploadFile={uploadFile}
                         resolveFileUrl={resolveFileUrl}
                         onChange={handleEditorChange}
                       />
-                    </div>
-                  </>
-                ) : (
-                  <div className="text-center py-20">
-                    <FileText size={48} className="mx-auto mb-4 text-gray-600 opacity-20" />
-                    <p className="app-text-body text-gray-500 mb-4">No pages yet</p>
+                    ) : (
+                      <BlockViewer
+                        key={activePage.id}
+                        content={(activePage.content_blocks as never) ?? []}
+                        resolveFileUrl={resolveFileUrl}
+                      />
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <div className="text-center py-20">
+                  <FileText size={48} className="mx-auto mb-4 text-gray-600 opacity-20" />
+                  <p className="app-text-body text-gray-500 mb-4">No pages yet</p>
+                  {selectedDoc.can_edit && selectedDoc.structure_kind === 'page_tree' ? (
                     <button
-                      onClick={() => handleAddPage(null)}
+                      onClick={() => void handleAddPage(null)}
                       className="app-text-control rounded-md bg-clickup-purple px-4 py-2 text-clickup-bg hover:opacity-90"
                     >
                       Add first page
                     </button>
-                  </div>
-                )}
-              </div>
+                  ) : null}
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -596,46 +727,30 @@ export const DocsView = () => {
     );
   };
 
-  // ── Main Render ──────────────────────────────────────────────────
-
   return (
     <div className="h-full w-full flex flex-col min-w-0 bg-clickup-bg overflow-hidden relative">
       {confirmDialog}
       {promptDialog}
 
-      {/* Create Doc Modal */}
-      {showCreateModal && (
+      {showCreateModal ? (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50" onClick={() => setShowCreateModal(false)}>
-          <div className="w-full max-w-md rounded-lg border border-clickup-border bg-clickup-sidebar p-6 space-y-4" onClick={e => e.stopPropagation()}>
+          <div className="w-full max-w-md rounded-lg border border-clickup-border bg-clickup-sidebar p-6 space-y-4" onClick={(event) => event.stopPropagation()}>
             <h2 className="app-text-title-md text-clickup-text">New Document</h2>
-            <div className="space-y-3">
-              <div>
-                <label className="app-text-caption text-gray-500 mb-1 block">Title</label>
-                <input
-                  type="text"
-                  value={newDocTitle}
-                  onChange={e => setNewDocTitle(e.target.value)}
-                  placeholder="Document title..."
-                  className="app-text-body w-full rounded-md border border-clickup-border bg-clickup-bg px-3 py-2 text-clickup-text focus:border-clickup-purple focus:outline-none"
-                  autoFocus
-                  onKeyDown={e => { if (e.key === 'Enter') handleCreateDoc(); }}
-                />
-              </div>
-              {teams.length > 1 && (
-                <div>
-                  <label className="app-text-caption text-gray-500 mb-1 block">Space</label>
-                  <select
-                    value={selectedTeamId}
-                    onChange={e => setSelectedTeamId(e.target.value)}
-                    className="app-text-body w-full rounded-md border border-clickup-border bg-clickup-bg px-3 py-2 text-clickup-text focus:border-clickup-purple focus:outline-none"
-                  >
-                    <option value="">Select a space...</option>
-                    {teams.map(t => (
-                      <option key={t.id} value={t.id}>{t.name}</option>
-                    ))}
-                  </select>
-                </div>
-              )}
+            <div>
+              <label className="app-text-caption text-gray-500 mb-1 block">Title</label>
+              <input
+                type="text"
+                value={newDocTitle}
+                onChange={(event) => setNewDocTitle(event.target.value)}
+                placeholder="Document title..."
+                className="app-text-body w-full rounded-md border border-clickup-border bg-clickup-bg px-3 py-2 text-clickup-text focus:border-clickup-purple focus:outline-none"
+                autoFocus
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') {
+                    void handleCreateDoc();
+                  }
+                }}
+              />
             </div>
             <div className="flex justify-end gap-2 pt-2">
               <button
@@ -645,8 +760,8 @@ export const DocsView = () => {
                 Cancel
               </button>
               <button
-                onClick={handleCreateDoc}
-                disabled={creating || !newDocTitle.trim() || !selectedTeamId}
+                onClick={() => void handleCreateDoc()}
+                disabled={creating || !newDocTitle.trim()}
                 className="app-text-control rounded-md bg-clickup-purple px-4 py-2 text-clickup-bg hover:opacity-90 disabled:opacity-50"
               >
                 {creating ? 'Creating...' : 'Create'}
@@ -654,70 +769,206 @@ export const DocsView = () => {
             </div>
           </div>
         </div>
-      )}
+      ) : null}
 
-      <AnimatePresence mode="wait">
-        {!docId ? (
-          <motion.div
-            key="list"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="flex-1 flex flex-col overflow-hidden"
-          >
-            <div className="p-8 space-y-5 overflow-y-auto h-full custom-scrollbar">
-              {/* Header */}
-              <div className="flex items-center justify-between">
-                <h1 className="app-text-title-lg text-clickup-text">{activeCategoryLabel}</h1>
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => openCreateModal()}
-                    className="app-text-control flex items-center gap-2 rounded-md bg-clickup-purple px-4 py-2 text-clickup-bg shadow-lg shadow-purple-500/20 transition-opacity hover:opacity-90"
-                  >
-                    <Plus size={16} />
-                    <span>New Doc</span>
-                  </button>
-                </div>
+      {showShareModal && selectedDoc ? (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/50" onClick={() => setShowShareModal(false)}>
+          <div className="w-full max-w-2xl rounded-lg border border-clickup-border bg-clickup-sidebar p-6 space-y-5" onClick={(event) => event.stopPropagation()}>
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h2 className="app-text-title-md text-clickup-text">Share Document</h2>
+                <p className="app-text-caption text-gray-500">{selectedDoc.title}</p>
               </div>
+              <button onClick={() => setShowShareModal(false)} className="rounded p-1.5 text-gray-500 hover:bg-clickup-hover">
+                <X size={18} />
+              </button>
+            </div>
 
-              {/* Templates */}
-              <div className="flex gap-3">
-                {TEMPLATES.map(t => (
-                  <button
-                    key={t.title}
-                    onClick={() => openCreateModal(t.title)}
-                    className="flex items-center gap-3 rounded-lg border border-clickup-border bg-clickup-sidebar px-4 py-3 text-left transition-colors hover:border-clickup-purple/30 hover:bg-clickup-hover flex-1"
-                  >
-                    <span className="text-2xl">{t.icon}</span>
+            {shareLoading ? (
+              <div className="py-10 flex items-center justify-center">
+                <Loader2 size={24} className="animate-spin text-clickup-purple" />
+              </div>
+            ) : (
+              <>
+                <div className="rounded-lg border border-clickup-border bg-clickup-bg p-4 space-y-3">
+                  <div className="flex items-center justify-between gap-4">
                     <div>
-                      <div className="app-text-control text-clickup-text">{t.title}</div>
-                      <div className="app-text-micro text-gray-500">{t.desc}</div>
+                      <div className="app-text-control text-clickup-text">Internal link</div>
+                      <div className="app-text-caption text-gray-500">
+                        Logged-in internal users can access this document through the generated link.
+                      </div>
                     </div>
-                  </button>
-                ))}
-              </div>
+                    {sharingState?.link_share?.active ? (
+                      <button
+                        onClick={() => void handleDisableLinkShare()}
+                        className="app-text-control rounded-md border border-clickup-border px-3 py-2 text-clickup-text hover:bg-clickup-hover"
+                      >
+                        Disable
+                      </button>
+                    ) : (
+                      <div className="flex items-center gap-2">
+                        <select
+                          value={sharingState?.link_share?.access_level ?? 'read'}
+                          onChange={(event) => void handleEnableLinkShare(event.target.value as 'read' | 'edit')}
+                          className="app-text-body rounded-md border border-clickup-border bg-clickup-sidebar px-3 py-2 text-clickup-text focus:border-clickup-purple focus:outline-none"
+                        >
+                          <option value="read">Can read</option>
+                          <option value="edit">Can edit</option>
+                        </select>
+                        <button
+                          onClick={() => void handleEnableLinkShare(sharingState?.link_share?.access_level ?? 'read')}
+                          className="app-text-control rounded-md bg-clickup-purple px-3 py-2 text-clickup-bg hover:opacity-90"
+                        >
+                          Enable link
+                        </button>
+                      </div>
+                    )}
+                  </div>
 
-              {/* Filter Bar */}
-              <div className="flex items-center gap-4 border-b border-clickup-border pb-2">
-                <button className="app-text-control-sm flex items-center gap-1.5 rounded px-2 py-1 text-gray-500 hover:bg-clickup-hover hover:text-clickup-text">
-                  <Filter size={14} />
-                  <span>Filters</span>
-                </button>
-                <div className="app-text-caption ml-auto flex items-center gap-2 text-gray-500">
-                  <span>Tags:</span>
-                  <button className="px-2 py-0.5 bg-clickup-sidebar border border-clickup-border rounded hover:bg-clickup-hover">View all</button>
+                  {sharingState?.link_share?.active ? (
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        readOnly
+                        value={`${window.location.origin}${sharingState.link_share.share_path}`}
+                        className="app-text-body flex-1 rounded-md border border-clickup-border bg-clickup-sidebar px-3 py-2 text-clickup-text"
+                      />
+                      <button
+                        onClick={() => void copyShareLink()}
+                        className="app-text-control rounded-md border border-clickup-border px-3 py-2 text-clickup-text hover:bg-clickup-hover"
+                      >
+                        <Copy size={14} />
+                      </button>
+                      <button
+                        onClick={() => void handleEnableLinkShare(sharingState.link_share?.access_level ?? 'read', true)}
+                        className="app-text-control rounded-md border border-clickup-border px-3 py-2 text-clickup-text hover:bg-clickup-hover"
+                      >
+                        Regenerate
+                      </button>
+                    </div>
+                  ) : null}
                 </div>
+
+                <div className="rounded-lg border border-clickup-border bg-clickup-bg p-4 space-y-4">
+                  <div>
+                    <div className="app-text-control text-clickup-text">Invite internal users</div>
+                    <div className="app-text-caption text-gray-500">
+                      Grant read or edit access to specific internal users.
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <select
+                      value={shareUserId}
+                      onChange={(event) => setShareUserId(event.target.value)}
+                      className="app-text-body flex-1 rounded-md border border-clickup-border bg-clickup-sidebar px-3 py-2 text-clickup-text focus:border-clickup-purple focus:outline-none"
+                    >
+                      <option value="">Select user...</option>
+                      {shareableUsers.map((user) => (
+                        <option key={user.id} value={user.id}>
+                          {user.full_name} ({user.email})
+                        </option>
+                      ))}
+                    </select>
+                    <select
+                      value={shareAccessLevel}
+                      onChange={(event) => setShareAccessLevel(event.target.value as 'read' | 'edit')}
+                      className="app-text-body rounded-md border border-clickup-border bg-clickup-sidebar px-3 py-2 text-clickup-text focus:border-clickup-purple focus:outline-none"
+                    >
+                      <option value="read">Can read</option>
+                      <option value="edit">Can edit</option>
+                    </select>
+                    <button
+                      onClick={() => void handleAddUserShare()}
+                      disabled={!shareUserId}
+                      className="app-text-control rounded-md bg-clickup-purple px-3 py-2 text-clickup-bg hover:opacity-90 disabled:opacity-50"
+                    >
+                      Add
+                    </button>
+                  </div>
+
+                  <div className="space-y-2">
+                    {sharingState?.users.length ? sharingState.users.map((user) => (
+                      <div key={user.user_id} className="flex items-center justify-between rounded-md border border-clickup-border bg-clickup-sidebar px-3 py-2">
+                        <div>
+                          <div className="app-text-control text-clickup-text">{user.full_name}</div>
+                          <div className="app-text-caption text-gray-500">{user.email}</div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="app-text-caption text-gray-500">{user.access_level === 'edit' ? 'Can edit' : 'Can read'}</span>
+                          <button
+                            onClick={() => void handleRemoveUserShare(user.user_id)}
+                            className="app-text-control rounded-md border border-clickup-border px-3 py-1.5 text-clickup-text hover:bg-clickup-hover"
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      </div>
+                    )) : (
+                      <div className="app-text-caption text-gray-500">No individual users have access.</div>
+                    )}
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      ) : null}
+
+      {isListView ? (
+        <div className="flex-1 flex flex-col overflow-hidden">
+          <div className="p-8 space-y-5 overflow-y-auto h-full custom-scrollbar">
+            <div className="flex items-center justify-between">
+              <div>
+                <h1 className="app-text-title-lg text-clickup-text">{activeCategoryLabel}</h1>
+                <p className="app-text-caption text-gray-500">{total} documents</p>
+              </div>
+              <button
+                onClick={() => openCreateModal()}
+                className="app-text-control flex items-center gap-2 rounded-md bg-clickup-purple px-4 py-2 text-clickup-bg shadow-lg shadow-purple-500/20 transition-opacity hover:opacity-90"
+              >
+                <Plus size={16} />
+                <span>New Doc</span>
+              </button>
+            </div>
+
+            <div className="flex gap-3">
+              {TEMPLATES.map((template) => (
+                <button
+                  key={template.title}
+                  onClick={() => openCreateModal(template.title)}
+                  className="flex items-center gap-3 rounded-lg border border-clickup-border bg-clickup-sidebar px-4 py-3 text-left transition-colors hover:border-clickup-purple/30 hover:bg-clickup-hover flex-1"
+                >
+                  <span className="text-2xl">{template.icon}</span>
+                  <div>
+                    <div className="app-text-control text-clickup-text">{template.title}</div>
+                    <div className="app-text-micro text-gray-500">{template.desc}</div>
+                  </div>
+                </button>
+              ))}
+            </div>
+
+            <div className="flex items-center gap-4 border-b border-clickup-border pb-2">
+              <button className="app-text-control-sm flex items-center gap-1.5 rounded px-2 py-1 text-gray-500 hover:bg-clickup-hover hover:text-clickup-text">
+                <Filter size={14} />
+                <span>Filters</span>
+              </button>
+              <div className="app-text-caption ml-auto flex items-center gap-2 text-gray-500">
                 {searchOpen ? (
                   <div className="relative">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" size={14} />
                     <input
                       type="text"
-                      placeholder="Search docs..."
                       defaultValue={searchQuery}
-                      onChange={e => handleSearchChange(e.target.value)}
+                      placeholder="Search docs..."
+                      onChange={(event) => handleSearchChange(event.target.value)}
                       className="app-text-body-sm w-64 rounded-md border border-clickup-border bg-clickup-sidebar py-1.5 pl-9 pr-4 text-clickup-text focus:border-clickup-purple focus:outline-none"
                       autoFocus
-                      onBlur={e => { if (!e.target.value) setSearchOpen(false); }}
+                      onBlur={(event) => {
+                        if (!event.target.value) {
+                          setSearchOpen(false);
+                        }
+                      }}
                     />
                   </div>
                 ) : (
@@ -729,185 +980,144 @@ export const DocsView = () => {
                   </button>
                 )}
               </div>
-
-              {/* Table */}
-              {loading ? (
-                <div className="flex items-center justify-center py-20">
-                  <Loader2 size={32} className="animate-spin text-clickup-purple" />
-                </div>
-              ) : docs.length === 0 ? (
-                <div className="flex-1 flex flex-col items-center justify-center py-20 text-center">
-                  <div className="w-24 h-24 bg-clickup-sidebar rounded-full flex items-center justify-center mb-6">
-                    <FileText size={48} className="text-gray-600 opacity-20" />
-                  </div>
-                  <h2 className="app-text-title-md mb-2 text-clickup-text">No Docs found</h2>
-                  <p className="app-text-body mb-8 max-w-xs mx-auto text-gray-500">
-                    Create anything from project plans to knowledge bases with Docs
-                  </p>
-                  <button
-                    onClick={() => openCreateModal()}
-                    className="app-text-control rounded-md bg-clickup-purple px-6 py-2 font-bold text-clickup-bg transition-opacity hover:opacity-90"
-                  >
-                    New Doc
-                  </button>
-                </div>
-              ) : (
-                <div className="border border-clickup-border rounded-lg overflow-hidden">
-                  <table className="w-full">
-                    <thead>
-                      <tr className="border-b border-clickup-border bg-clickup-sidebar">
-                        <th
-                          className="app-text-overline text-left px-4 py-2.5 text-gray-500 cursor-pointer hover:text-clickup-text"
-                          onClick={() => handleSort('title')}
-                        >
-                          <span className="flex items-center gap-1">
-                            Name
-                            {sortBy === 'title' && (sortDir === 'asc' ? ' ↑' : ' ↓')}
-                          </span>
-                        </th>
-                        <th className="app-text-overline text-left px-4 py-2.5 text-gray-500 w-36">Location</th>
-                        <th className="app-text-overline text-left px-4 py-2.5 text-gray-500 w-24">Tags</th>
-                        <th
-                          className="app-text-overline text-left px-4 py-2.5 text-gray-500 w-32 cursor-pointer hover:text-clickup-text"
-                          onClick={() => handleSort('updated_at')}
-                        >
-                          <span className="flex items-center gap-1">
-                            Date updated
-                            {sortBy === 'updated_at' && (sortDir === 'asc' ? ' ↑' : ' ↓')}
-                          </span>
-                        </th>
-                        <th
-                          className="app-text-overline text-left px-4 py-2.5 text-gray-500 w-32 cursor-pointer hover:text-clickup-text"
-                          onClick={() => handleSort('last_viewed_at')}
-                        >
-                          <span className="flex items-center gap-1">
-                            Date viewed
-                            {sortBy === 'last_viewed_at' && (sortDir === 'asc' ? ' ↑' : ' ↓')}
-                          </span>
-                        </th>
-                        <th className="app-text-overline text-center px-4 py-2.5 text-gray-500 w-20">Sharing</th>
-                        <th className="w-10" />
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {docs.map(doc => (
-                        <tr
-                          key={doc.id}
-                          onClick={() => handleDocClick(doc)}
-                          className="border-b border-clickup-border last:border-b-0 hover:bg-clickup-hover cursor-pointer group transition-colors"
-                        >
-                          {/* Name */}
-                          <td className="px-4 py-2.5">
-                            <div className="flex items-center gap-2.5">
-                              <Star
-                                size={14}
-                                className={cn(
-                                  'flex-shrink-0 cursor-pointer transition-colors',
-                                  doc.is_favorite
-                                    ? 'text-yellow-500 fill-yellow-500'
-                                    : 'text-transparent group-hover:text-gray-600 hover:!text-yellow-500',
-                                )}
-                                onClick={e => handleToggleFavorite(e, doc)}
-                              />
-                              <FileText size={16} className="flex-shrink-0 text-clickup-purple" />
-                              <span className="app-text-body text-clickup-text truncate">{doc.title}</span>
-                              {doc.page_count > 0 && (
-                                <span className="app-text-micro flex items-center gap-0.5 rounded border border-clickup-border bg-clickup-sidebar px-1.5 py-0.5 text-gray-500 flex-shrink-0">
-                                  <Files size={10} />
-                                  {doc.page_count}
-                                </span>
-                              )}
-                            </div>
-                          </td>
-                          {/* Location */}
-                          <td className="px-4 py-2.5">
-                            <span className="app-text-caption text-gray-500">{doc.space_name || '–'}</span>
-                          </td>
-                          {/* Tags */}
-                          <td className="px-4 py-2.5">
-                            <span className="app-text-caption text-gray-600">–</span>
-                          </td>
-                          {/* Date updated */}
-                          <td className="px-4 py-2.5">
-                            <span className="app-text-caption text-gray-500">{timeAgo(doc.updated_at)}</span>
-                          </td>
-                          {/* Date viewed */}
-                          <td className="px-4 py-2.5">
-                            <span className="app-text-caption text-gray-500">
-                              {doc.last_viewed_at ? timeAgo(doc.last_viewed_at) : '–'}
-                            </span>
-                          </td>
-                          {/* Sharing */}
-                          <td className="px-4 py-2.5 text-center">
-                            {doc.is_private ? (
-                              <Lock size={14} className="inline text-gray-500" />
-                            ) : (
-                              <Globe size={14} className="inline text-green-500" />
-                            )}
-                          </td>
-                          {/* More */}
-                          <td className="px-2 py-2.5 relative">
-                            <button
-                              onClick={e => {
-                                e.stopPropagation();
-                                setMenuOpenId(menuOpenId === doc.id ? null : doc.id);
-                              }}
-                              className="p-1 rounded opacity-0 group-hover:opacity-100 hover:bg-clickup-hover text-gray-500"
-                            >
-                              <MoreHorizontal size={16} />
-                            </button>
-                            {menuOpenId === doc.id && (
-                              <div className="absolute right-0 top-full z-50 w-44 rounded-md border border-clickup-border bg-clickup-sidebar shadow-lg py-1">
-                                <button
-                                  onClick={e => { e.stopPropagation(); handleRename(doc); }}
-                                  className="app-text-body-sm flex w-full items-center gap-2 px-3 py-1.5 text-clickup-text hover:bg-clickup-hover"
-                                >
-                                  <Pencil size={14} /> Rename
-                                </button>
-                                <button
-                                  onClick={e => { e.stopPropagation(); handleToggleFavorite(e, doc); setMenuOpenId(null); }}
-                                  className="app-text-body-sm flex w-full items-center gap-2 px-3 py-1.5 text-clickup-text hover:bg-clickup-hover"
-                                >
-                                  <Star size={14} /> {doc.is_favorite ? 'Unfavorite' : 'Favorite'}
-                                </button>
-                                <button
-                                  onClick={e => { e.stopPropagation(); handleTogglePrivate(doc); }}
-                                  className="app-text-body-sm flex w-full items-center gap-2 px-3 py-1.5 text-clickup-text hover:bg-clickup-hover"
-                                >
-                                  {doc.is_private ? <Globe size={14} /> : <Lock size={14} />}
-                                  {doc.is_private ? 'Make Public' : 'Make Private'}
-                                </button>
-                                <div className="border-t border-clickup-border my-1" />
-                                <button
-                                  onClick={e => { e.stopPropagation(); handleDelete(doc); }}
-                                  className="app-text-body-sm flex w-full items-center gap-2 px-3 py-1.5 text-red-400 hover:bg-clickup-hover"
-                                >
-                                  <Trash2 size={14} /> Delete
-                                </button>
-                              </div>
-                            )}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
             </div>
-          </motion.div>
-        ) : (
-          <motion.div
-            key="editor"
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.95 }}
-            transition={{ duration: 0.2 }}
-            className="absolute inset-0 z-10 flex flex-col bg-clickup-bg overflow-hidden"
-          >
-            {renderEditor()}
-          </motion.div>
-        )}
-      </AnimatePresence>
+
+            {loadingList ? (
+              <div className="flex items-center justify-center py-20">
+                <Loader2 size={32} className="animate-spin text-clickup-purple" />
+              </div>
+            ) : docs.length === 0 ? (
+              <div className="flex-1 flex flex-col items-center justify-center py-20 text-center">
+                <div className="w-24 h-24 bg-clickup-sidebar rounded-full flex items-center justify-center mb-6">
+                  <FileText size={48} className="text-gray-600 opacity-20" />
+                </div>
+                <h2 className="app-text-title-md mb-2 text-clickup-text">No Docs found</h2>
+                <p className="app-text-body mb-8 max-w-xs mx-auto text-gray-500">
+                  Create personal docs here, and browse PMS documents with their original permissions.
+                </p>
+                <button
+                  onClick={() => openCreateModal()}
+                  className="app-text-control rounded-md bg-clickup-purple px-6 py-2 font-bold text-clickup-bg transition-opacity hover:opacity-90"
+                >
+                  New Doc
+                </button>
+              </div>
+            ) : (
+              <div className="border border-clickup-border rounded-lg overflow-hidden">
+                <table className="w-full">
+                  <thead>
+                    <tr className="border-b border-clickup-border bg-clickup-sidebar">
+                      <th
+                        className="app-text-overline text-left px-4 py-2.5 text-gray-500 cursor-pointer hover:text-clickup-text"
+                        onClick={() => {
+                          if (sortBy === 'title') setSortDir((current) => (current === 'asc' ? 'desc' : 'asc'));
+                          else {
+                            setSortBy('title');
+                            setSortDir('asc');
+                          }
+                        }}
+                      >
+                        Name
+                      </th>
+                      <th className="app-text-overline text-left px-4 py-2.5 text-gray-500">Location</th>
+                      <th className="app-text-overline text-left px-4 py-2.5 text-gray-500">Sharing</th>
+                      <th
+                        className="app-text-overline text-left px-4 py-2.5 text-gray-500 cursor-pointer hover:text-clickup-text"
+                        onClick={() => {
+                          if (sortBy === 'updated_at') setSortDir((current) => (current === 'asc' ? 'desc' : 'asc'));
+                          else {
+                            setSortBy('updated_at');
+                            setSortDir('desc');
+                          }
+                        }}
+                      >
+                        Updated
+                      </th>
+                      <th className="w-12" />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {docs.map((item) => (
+                      <tr
+                        key={item.id}
+                        onClick={() => openDoc(item.id)}
+                        className="cursor-pointer border-b border-clickup-border last:border-b-0 hover:bg-clickup-sidebar/60"
+                      >
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-3 min-w-0">
+                            <FileText size={16} className="text-clickup-purple shrink-0" />
+                            <div className="min-w-0">
+                              <div className="app-text-control text-clickup-text truncate">{item.title}</div>
+                              <div className="app-text-caption text-gray-500">
+                                {item.page_count} page{item.page_count === 1 ? '' : 's'}
+                              </div>
+                            </div>
+                            <Star
+                              size={14}
+                              className={cn(
+                                'shrink-0 text-gray-600',
+                                item.is_favorite && 'text-yellow-500 fill-yellow-500',
+                              )}
+                              onClick={(event) => void handleToggleFavorite(event, item)}
+                            />
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 app-text-body-sm text-gray-400">{item.location_label}</td>
+                        <td className="px-4 py-3 app-text-body-sm text-gray-400">
+                          <div className="flex items-center gap-2">
+                            {item.source_type === 'native_doc' && item.is_private ? <Lock size={14} /> : <Globe size={14} />}
+                            <span>{sharingLabel(item)}</span>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 app-text-body-sm text-gray-400">{timeAgo(item.updated_at)}</td>
+                        <td className="px-4 py-3 relative">
+                          <button
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              setMenuOpenId((current) => (current === item.id ? null : item.id));
+                            }}
+                            className="rounded p-1.5 text-gray-500 hover:bg-clickup-hover"
+                          >
+                            <MoreHorizontal size={16} />
+                          </button>
+                          {menuOpenId === item.id ? (
+                            <div className="absolute right-4 top-11 z-20 w-48 rounded-lg border border-clickup-border bg-clickup-sidebar py-1 shadow-xl">
+                              <button
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  void handleRenameDoc(item);
+                                }}
+                                disabled={!item.can_manage}
+                                className="flex w-full items-center gap-2 px-3 py-2 text-left text-clickup-text hover:bg-clickup-hover disabled:opacity-40"
+                              >
+                                <Pencil size={14} />
+                                <span className="app-text-control-sm">Rename</span>
+                              </button>
+                              <button
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  void handleDeleteDoc(item);
+                                }}
+                                disabled={!item.can_manage}
+                                className="flex w-full items-center gap-2 px-3 py-2 text-left text-red-400 hover:bg-clickup-hover disabled:opacity-40"
+                              >
+                                <Trash2 size={14} />
+                                <span className="app-text-control-sm">Delete</span>
+                              </button>
+                            </div>
+                          ) : null}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+      ) : (
+        renderEditor()
+      )}
     </div>
   );
 };

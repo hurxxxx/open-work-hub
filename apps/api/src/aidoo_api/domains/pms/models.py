@@ -102,6 +102,7 @@ class Project(Base):
     )
     docs: Mapped[list["Doc"]] = relationship(
         cascade="all, delete-orphan",
+        back_populates="project",
     )
 
 
@@ -498,6 +499,7 @@ class Doc(Base):
         onupdate=utcnow_naive,
         nullable=False,
     )
+    project: Mapped[Project] = relationship(back_populates="docs")
     created_by = relationship("User")
 
 

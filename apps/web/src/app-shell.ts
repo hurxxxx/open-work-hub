@@ -73,6 +73,11 @@ export function resolveShellState(
   }
 
   if (path === '/docs' || path.startsWith('/docs/')) {
+    if (path.startsWith('/docs/shared/')) {
+      return canShowAppChrome(user, 'docs')
+        ? { activeAppId: 'docs', activeNavItemId: '' }
+        : HOME_SHELL_STATE;
+    }
     return canShowAppChrome(user, 'docs')
       ? { activeAppId: 'docs', activeNavItemId: '' }
       : HOME_SHELL_STATE;

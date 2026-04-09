@@ -222,6 +222,7 @@ const AppContent = () => {
                 </WorkspaceGate>
               )}
             />
+            <Route path="/docs/shared/:shareToken" element={<DocsView />} />
             <Route
               path="/docs/:docId"
               element={(

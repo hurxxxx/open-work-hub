@@ -905,6 +905,29 @@ def resolve_workspace_roles(db: Session, user: User) -> list[dict[str, str]]:
     return items
 
 
+def _has_docs_native_workspace_access(db: Session, user: User) -> bool:
+    from aidoo_api.domains.docs.models import NativeDoc, NativeDocUserShare
+
+    owned_doc_id = db.scalar(
+        select(NativeDoc.id).where(
+            NativeDoc.owner_id == user.id,
+            NativeDoc.trashed_at.is_(None),
+        )
+    )
+    if owned_doc_id is not None:
+        return True
+
+    shared_doc_id = db.scalar(
+        select(NativeDocUserShare.id)
+        .join(NativeDoc, NativeDoc.id == NativeDocUserShare.doc_id)
+        .where(
+            NativeDocUserShare.user_id == user.id,
+            NativeDoc.trashed_at.is_(None),
+        )
+    )
+    return shared_doc_id is not None
+
+
 def resolve_app_access(db: Session, user: User) -> list[dict[str, str | None]]:
     workspace_roles = {item["key"]: item for item in resolve_workspace_roles(db, user)}
     workspace_lookup = {
@@ -941,6 +964,19 @@ def resolve_app_access(db: Session, user: User) -> list[dict[str, str | None]]:
             continue
 
         workspace = workspace_roles.get(app_code)
+        if app_code == "docs" and workspace is None and _has_docs_native_workspace_access(db, user):
+            docs_workspace = workspace_lookup.get("docs")
+            if docs_workspace is not None:
+                items.append(
+                    {
+                        "app": "docs",
+                        "workspace_id": docs_workspace.id,
+                        "workspace_key": docs_workspace.key,
+                        "workspace_name": docs_workspace.name,
+                        "role": "member",
+                    }
+                )
+            continue
         if app_code == "pms" and workspace is None and SYSTEM_ORG_ADMIN in system_roles:
             pms_workspace = workspace_lookup.get("pms")
             if pms_workspace is not None:

@@ -23,7 +23,8 @@ import { NAV_ITEMS, APP_BAR_ITEMS } from '@/src/constants';
 import { hasAdminSectionAccess, type AdminSection } from '@/src/domains/admin/admin-permissions';
 import { useAuth } from '@/src/domains/auth/auth-provider';
 import { hasAppAccess, teamRoleAllows } from '@/src/domains/auth/auth-api';
-import { listPmsLists, listFolders, listSpaceDocs, createSpaceDoc, updateSpaceDoc, deleteSpaceDoc, updateFolder, deleteFolder, listFavoriteDocs, listRecentPages, listSpaces, updateSpace, deleteSpace, type PmsFolder, type PmsList, type PmsSpace, type PmsSpaceDoc, type FavoriteDocItem, type RecentPageItem } from '@/src/domains/pms/pms-api';
+import { listFavoriteDocs, listRecentPages, type FavoriteDocItem, type RecentPageItem } from '@/src/domains/docs/docs-api';
+import { listPmsLists, listFolders, listSpaceDocs, createSpaceDoc, updateSpaceDoc, deleteSpaceDoc, updateFolder, deleteFolder, listSpaces, updateSpace, deleteSpace, type PmsFolder, type PmsList, type PmsSpace, type PmsSpaceDoc } from '@/src/domains/pms/pms-api';
 import { CreateProjectModal } from '@/src/components/views/PMSView/CreateProjectModal';
 import { CreateSpaceModal } from '@/src/components/views/PMSView/CreateSpaceModal';
 import { CreateFolderModal } from '@/src/components/views/PMSView/CreateFolderModal';
@@ -778,7 +779,11 @@ export const SubSidebar = ({ activeAppId, activeNavItemId }: { activeAppId: stri
   const { confirm, confirmDialog } = useConfirm();
   const { prompt, promptDialog } = usePrompt();
   const isSpaceDocs = /^\/tool\/pms-space-[0-9a-f-]+-docs/.test(location.pathname);
-  const isDocEditor = !isSpaceDocs && (location.pathname.match(/^\/tool\/[^/]+\/[^/]+$/) || location.pathname.match(/^\/docs\/[^/]+$/));
+  const isDocEditor = !isSpaceDocs && (
+    location.pathname.match(/^\/tool\/[^/]+\/[^/]+$/)
+    || location.pathname.match(/^\/docs\/[^/]+$/)
+    || location.pathname.match(/^\/docs\/shared\/[^/]+$/)
+  );
   const canReadTeams = hasAppAccess(user, 'pms');
   const canWriteTeams = hasAppAccess(user, 'pms');
   const canManageSpace = useCallback(
@@ -1446,7 +1451,7 @@ export const SubSidebar = ({ activeAppId, activeNavItemId }: { activeAppId: stri
           )}
         </div>
 
-        {activeAppId !== 'settings' && (
+        {activeAppId !== 'settings' && activeAppId !== 'docs' && (
           <div className="p-4 border-t border-clickup-border">
             <button
               onClick={() => openCreateProject(null)}
