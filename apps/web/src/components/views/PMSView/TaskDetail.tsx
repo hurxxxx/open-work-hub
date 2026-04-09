@@ -1165,7 +1165,7 @@ export const TaskDetail = ({
 
                 {comments.map(comment => (
                   <div key={comment.id} className="flex gap-2">
-                    <div className="w-6 h-6 rounded-full bg-clickup-purple flex items-center justify-center text-[8px] font-bold text-white shrink-0 mt-0.5">
+                    <div className="w-6 h-6 rounded-full bg-clickup-purple flex items-center justify-center text-[8px] font-bold text-clickup-bg shrink-0 mt-0.5">
                       {initials(comment.author_name)}
                     </div>
                     <div className="flex-1 min-w-0">
@@ -1189,7 +1189,7 @@ export const TaskDetail = ({
 
           {/* Comment input — sticky bottom */}
           <div className="relative flex items-center gap-2 px-4 py-3 border-t border-clickup-border shrink-0">
-            <div className="w-6 h-6 rounded-full bg-clickup-purple flex items-center justify-center text-[8px] font-bold text-white shrink-0">
+            <div className="w-6 h-6 rounded-full bg-clickup-purple flex items-center justify-center text-[8px] font-bold text-clickup-bg shrink-0">
               ME
             </div>
             <div className="flex-1 relative">

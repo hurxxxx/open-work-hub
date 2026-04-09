@@ -36,19 +36,12 @@ import {
   RequireAuth,
   useAuth,
 } from './domains/auth/auth-provider';
-import type { ThemePreference } from './domains/auth/auth-api';
+import { hasFeatureAccess, type ThemePreference } from './domains/auth/auth-api';
 import {
   AccessDeniedView,
   ProfilePage,
 } from './domains/auth/settings-pages';
-
-const FEATURE_BY_APP_ID: Partial<Record<'home' | 'ai' | 'pms' | 'docs' | 'planner' | 'settings', string>> = {
-  ai: 'nav.ai',
-  docs: 'nav.docs',
-  pms: 'nav.pms',
-  planner: 'nav.planner',
-  settings: 'nav.admin',
-};
+import { FEATURE_BY_APP_ID, resolveShellState, type ShellAppId } from './app-shell';
 
 function resolveThemePreference(themePreference: ThemePreference, systemDarkMode: boolean) {
   if (themePreference === 'system') {
@@ -80,11 +73,11 @@ function AdminGate({
   section,
   children,
 }: {
-  section: 'general' | 'people' | 'teams' | 'workspaces' | 'security' | 'audit';
+  section: 'general' | 'people' | 'workspaces' | 'security' | 'audit';
   children: React.ReactNode;
 }) {
   const auth = useAuth();
-  if (!hasAdminSectionAccess(auth.user?.permissions ?? [], section)) {
+  if (!hasAdminSectionAccess(auth.user?.system_roles ?? [], section)) {
     return <AccessDeniedView description="현재 계정에는 이 관리자 섹션을 볼 권한이 없습니다." />;
   }
 
@@ -98,13 +91,17 @@ function AdminLandingRedirect() {
     return <Navigate replace to="/login" />;
   }
 
-  return <Navigate replace to={getDefaultAdminPath(auth.user.permissions)} />;
+  return <Navigate replace to={getDefaultAdminPath(auth.user.system_roles)} />;
 }
 
 const ToolViewWrapper = () => {
   const auth = useAuth();
   const location = useLocation();
   const { toolId } = useParams();
+
+  if (toolId === 'pms-space-team') {
+    return <Navigate replace to={{ pathname: '/pms', search: location.search }} />;
+  }
 
   if (toolId?.startsWith('pms-project-')) {
     const listId = toolId.replace('pms-project-', '');
@@ -113,7 +110,7 @@ const ToolViewWrapper = () => {
 
   if (toolId?.startsWith('pms-list-') || /^pms-space-.+/.test(toolId ?? '')) {
     const featureCode = FEATURE_BY_APP_ID['pms'];
-    if (featureCode && !auth.hasFeature(featureCode)) {
+    if (featureCode && !hasFeatureAccess(auth.user, featureCode)) {
       return (
         <AccessDeniedView description="현재 계정에는 이 도구가 속한 워크스페이스 접근 권한이 없습니다." />
       );
@@ -127,7 +124,7 @@ const ToolViewWrapper = () => {
   }
 
   const featureCode = FEATURE_BY_APP_ID[item.appId];
-  if (featureCode && !auth.hasFeature(featureCode)) {
+  if (featureCode && !hasFeatureAccess(auth.user, featureCode)) {
     return (
       <AccessDeniedView description="현재 계정에는 이 도구가 속한 워크스페이스 접근 권한이 없습니다." />
     );
@@ -147,7 +144,7 @@ const ToolViewWrapper = () => {
 const AppContent = () => {
   const auth = useAuth();
   const location = useLocation();
-  const [activeAppId, setActiveAppId] = useState<'home' | 'ai' | 'pms' | 'docs' | 'planner' | 'settings' | 'profile'>('home');
+  const [activeAppId, setActiveAppId] = useState<ShellAppId>('home');
   const [activeNavItemId, setActiveNavItemId] = useState('');
   const [systemDarkMode, setSystemDarkMode] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
@@ -175,67 +172,10 @@ const AppContent = () => {
   }, [resolvedTheme]);
 
   useEffect(() => {
-    const path = location.pathname;
-    if (path === '/') {
-      setActiveAppId('home');
-      setActiveNavItemId('');
-      return;
-    }
-
-    if (path === '/ai') {
-      setActiveAppId('ai');
-      setActiveNavItemId('');
-      return;
-    }
-
-    if (path === '/pms') {
-      setActiveAppId('pms');
-      setActiveNavItemId('');
-      return;
-    }
-
-    if (path === '/docs' || path.startsWith('/docs/')) {
-      setActiveAppId('docs');
-      setActiveNavItemId('');
-      return;
-    }
-
-    if (path === '/planner') {
-      setActiveAppId('planner');
-      setActiveNavItemId('');
-      return;
-    }
-
-    if (path === '/admin' || path.startsWith('/admin/')) {
-      setActiveAppId('settings');
-      if (path === '/admin' || path === '/admin/') {
-        setActiveNavItemId('settings-people');
-        return;
-      }
-      const slug = path.split('/')[2];
-      const mappedId = `settings-${slug === 'users' ? 'people' : slug === 'groups' || slug === 'feature-access' ? 'security' : slug}`;      
-      setActiveNavItemId(mappedId);
-      return;
-    }
-
-    if (path.startsWith('/tool/')) {
-      const toolId = path.split('/')[2];
-      if (
-        toolId?.startsWith('pms-project-')
-        || toolId?.startsWith('pms-list-')
-        || /^pms-space-.+/.test(toolId ?? '')
-      ) {
-        setActiveAppId('pms');
-        setActiveNavItemId(toolId.startsWith('pms-project-') ? toolId.replace('pms-project-', 'pms-list-') : toolId);
-        return;
-      }
-      const item = NAV_ITEMS.find((entry) => entry.id === toolId);
-      if (item) {
-        setActiveAppId(item.appId);
-        setActiveNavItemId(item.id);
-      }
-    }
-  }, [location]);
+    const nextState = resolveShellState(location.pathname, currentUser);
+    setActiveAppId(nextState.activeAppId);
+    setActiveNavItemId(nextState.activeNavItemId);
+  }, [currentUser, location.pathname]);
 
   if (!currentUser) {
     return <Navigate replace to="/login" />;
@@ -304,6 +244,7 @@ const AppContent = () => {
             <Route path="/admin/users" element={<Navigate replace to="/admin/people" />} />
             <Route path="/admin/groups" element={<Navigate replace to="/admin/security" />} />
             <Route path="/admin/feature-access" element={<Navigate replace to="/admin/security" />} />
+            <Route path="/admin/teams" element={<Navigate replace to="/admin/workspaces" />} />
             <Route
               path="/admin/general"
               element={(
@@ -317,14 +258,6 @@ const AppContent = () => {
               element={(
                 <AdminGate section="people">
                   <AdminConsoleView section="people" />
-                </AdminGate>
-              )}
-            />
-            <Route
-              path="/admin/teams"
-              element={(
-                <AdminGate section="teams">
-                  <AdminConsoleView section="teams" />
                 </AdminGate>
               )}
             />

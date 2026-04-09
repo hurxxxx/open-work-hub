@@ -572,3 +572,19 @@ class SpaceDocPage(Base):
         back_populates="parent",
         cascade="all, delete-orphan",
     )
+
+
+class UserDocPref(Base):
+    """Per-user preferences for a SpaceDoc (favorite, private, last viewed)."""
+
+    __tablename__ = "pms_user_doc_prefs"
+    __table_args__ = (
+        UniqueConstraint("user_id", "space_doc_id", name="uq_user_doc_pref"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
+    space_doc_id: Mapped[str] = mapped_column(ForeignKey("pms_space_docs.id"), index=True)
+    is_favorite: Mapped[bool] = mapped_column(Boolean, default=False)
+    is_private: Mapped[bool] = mapped_column(Boolean, default=False)
+    last_viewed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)

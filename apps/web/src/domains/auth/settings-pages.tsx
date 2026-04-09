@@ -351,7 +351,9 @@ export function ProfilePage({ initialTab }: { initialTab: SettingsSection }) {
                     </FieldRow>
 
                     <FieldRow label="Role">
-                      <span className="app-text-body text-clickup-text">{user.is_admin ? 'Admin' : 'Member'}</span>
+                      <span className="app-text-body text-clickup-text">
+                        {(user.system_roles ?? []).length > 0 ? user.system_roles.join(', ') : 'Member'}
+                      </span>
                     </FieldRow>
 
                     <FieldRow label="Groups">

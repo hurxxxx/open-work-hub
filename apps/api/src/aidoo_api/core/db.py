@@ -68,6 +68,28 @@ def _apply_postgres_schema_compat(engine) -> None:
         "ALTER TABLE auth_sessions ADD COLUMN IF NOT EXISTS last_seen_at TIMESTAMP",
         "ALTER TABLE auth_sessions ADD COLUMN IF NOT EXISTS user_agent VARCHAR(255)",
         "ALTER TABLE auth_sessions ADD COLUMN IF NOT EXISTS ip_address VARCHAR(64)",
+        """
+        CREATE TABLE IF NOT EXISTS user_system_roles (
+            id VARCHAR(36) PRIMARY KEY,
+            user_id VARCHAR(36) NOT NULL REFERENCES users(id),
+            role VARCHAR(40) NOT NULL,
+            created_at TIMESTAMP NOT NULL DEFAULT now(),
+            CONSTRAINT uq_user_system_role UNIQUE (user_id, role)
+        )
+        """,
+        "CREATE INDEX IF NOT EXISTS ix_user_system_roles_user_id ON user_system_roles (user_id)",
+        "CREATE INDEX IF NOT EXISTS ix_user_system_roles_role ON user_system_roles (role)",
+        """
+        CREATE TABLE IF NOT EXISTS group_system_roles (
+            id VARCHAR(36) PRIMARY KEY,
+            group_id VARCHAR(36) NOT NULL REFERENCES access_groups(id),
+            role VARCHAR(40) NOT NULL,
+            created_at TIMESTAMP NOT NULL DEFAULT now(),
+            CONSTRAINT uq_group_system_role UNIQUE (group_id, role)
+        )
+        """,
+        "CREATE INDEX IF NOT EXISTS ix_group_system_roles_group_id ON group_system_roles (group_id)",
+        "CREATE INDEX IF NOT EXISTS ix_group_system_roles_role ON group_system_roles (role)",
         "ALTER TABLE teams ADD COLUMN IF NOT EXISTS trashed_at TIMESTAMP",
         "CREATE INDEX IF NOT EXISTS ix_teams_trashed_at ON teams (trashed_at)",
         "ALTER TABLE pms_issues ADD COLUMN IF NOT EXISTS parent_id VARCHAR(36) REFERENCES pms_issues(id)",
@@ -239,6 +261,20 @@ def _apply_postgres_schema_compat(engine) -> None:
         WHERE id IN (SELECT id FROM orphan_pages)
         """,
         "ALTER TABLE pms_space_doc_pages ALTER COLUMN space_doc_id SET NOT NULL",
+        # ── pms_user_doc_prefs table ──
+        """
+        CREATE TABLE IF NOT EXISTS pms_user_doc_prefs (
+            id VARCHAR(36) PRIMARY KEY,
+            user_id VARCHAR(36) NOT NULL REFERENCES users(id),
+            space_doc_id VARCHAR(36) NOT NULL REFERENCES pms_space_docs(id),
+            is_favorite BOOLEAN NOT NULL DEFAULT FALSE,
+            is_private BOOLEAN NOT NULL DEFAULT FALSE,
+            last_viewed_at TIMESTAMP,
+            CONSTRAINT uq_user_doc_pref UNIQUE (user_id, space_doc_id)
+        )
+        """,
+        "CREATE INDEX IF NOT EXISTS ix_pms_user_doc_prefs_user_id ON pms_user_doc_prefs (user_id)",
+        "CREATE INDEX IF NOT EXISTS ix_pms_user_doc_prefs_doc_id ON pms_user_doc_prefs (space_doc_id)",
     ]
 
     with engine.begin() as connection:

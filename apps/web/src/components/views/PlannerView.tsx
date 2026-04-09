@@ -151,7 +151,7 @@ export const PlannerView = () => {
             </span>
             <ChevronRight size={16} className="text-gray-500 cursor-pointer hover:text-clickup-text" />
           </div>
-          <button className="app-text-control flex items-center gap-2 rounded-md bg-clickup-purple px-4 py-2 text-white">
+          <button className="app-text-control flex items-center gap-2 rounded-md bg-clickup-purple px-4 py-2 text-clickup-bg">
             <Plus size={16} />
             <span>Add Event</span>
           </button>
@@ -187,7 +187,7 @@ export const PlannerView = () => {
                   >
                     <div className={cn(
                       "app-text-control-sm mb-2",
-                      date === selectedDate ? "w-6 h-6 bg-clickup-purple text-white rounded-full flex items-center justify-center -mt-1 -ml-1" : "text-gray-500"
+                      date === selectedDate ? "w-6 h-6 bg-clickup-purple text-clickup-bg rounded-full flex items-center justify-center -mt-1 -ml-1" : "text-gray-500"
                     )}>
                       {date > 0 && date <= 31 ? date : ''}
                     </div>
@@ -290,7 +290,7 @@ export const PlannerView = () => {
               className="flex-1 flex flex-col overflow-hidden"
             >
               <div className="p-6 border-b border-clickup-border flex items-center gap-6">
-                <div className="w-16 h-16 bg-clickup-purple rounded-xl flex flex-col items-center justify-center text-white shadow-lg shadow-purple-500/20">
+                <div className="w-16 h-16 bg-clickup-purple rounded-xl flex flex-col items-center justify-center text-clickup-bg shadow-lg shadow-purple-500/20">
                   <span className="app-text-overline">May</span>
                   <span className="app-text-title-lg font-black">{selectedDate}</span>
                 </div>

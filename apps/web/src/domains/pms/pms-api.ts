@@ -46,6 +46,41 @@ export interface PmsProjectMembersResponse {
   page_size: number;
 }
 
+export interface PmsSpace {
+  id: string;
+  workspace_id: string;
+  workspace_key: string;
+  key: string;
+  name: string;
+  description: string;
+  member_count: number;
+  current_user_role: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PmsSpaceMember {
+  user_id: string;
+  email: string;
+  full_name: string;
+  is_admin: boolean;
+  role: string;
+  joined_at: string;
+}
+
+export interface PmsSpaceMembersResponse {
+  items: PmsSpaceMember[];
+  total: number;
+  page: number;
+  page_size: number;
+}
+
+export interface PmsUserSummary {
+  id: string;
+  email: string;
+  full_name: string;
+}
+
 export interface PmsMilestone {
   id: string;
   project_id: string;
@@ -407,6 +442,80 @@ export function listPmsProjects(token: string, teamId?: string): Promise<PmsProj
   const params = new URLSearchParams({ page: '1', page_size: '50' });
   if (teamId) params.set('team_id', teamId);
   return request<PmsProjectsResponse>(`/api/v1/pms/lists?${params}`, token);
+}
+
+export function listSpaces(token: string): Promise<PmsSpace[]> {
+  return request<PmsSpace[]>('/api/v1/pms/spaces', token);
+}
+
+export function listPmsUsers(token: string): Promise<PmsUserSummary[]> {
+  return request<PmsUserSummary[]>('/api/v1/pms/users', token);
+}
+
+export function createSpace(
+  token: string,
+  payload: { name: string; description?: string },
+): Promise<PmsSpace> {
+  return request<PmsSpace>('/api/v1/pms/spaces', token, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function updateSpace(
+  token: string,
+  spaceId: string,
+  payload: { name?: string; description?: string },
+): Promise<PmsSpace> {
+  return request<PmsSpace>(`/api/v1/pms/spaces/${spaceId}`, token, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function deleteSpace(token: string, spaceId: string): Promise<void> {
+  return request<void>(`/api/v1/pms/spaces/${spaceId}`, token, { method: 'DELETE' });
+}
+
+export function listSpaceMembers(
+  token: string,
+  spaceId: string,
+): Promise<PmsSpaceMembersResponse> {
+  return request<PmsSpaceMembersResponse>(
+    `/api/v1/pms/spaces/${spaceId}/members?page=1&page_size=50`,
+    token,
+  );
+}
+
+export function addSpaceMember(
+  token: string,
+  spaceId: string,
+  payload: { user_id: string; role: string },
+): Promise<PmsSpaceMember> {
+  return request<PmsSpaceMember>(`/api/v1/pms/spaces/${spaceId}/members`, token, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function updateSpaceMemberRole(
+  token: string,
+  spaceId: string,
+  userId: string,
+  role: string,
+): Promise<PmsSpaceMember> {
+  return request<PmsSpaceMember>(`/api/v1/pms/spaces/${spaceId}/members/${userId}`, token, {
+    method: 'PATCH',
+    body: JSON.stringify({ role }),
+  });
+}
+
+export function removeSpaceMember(token: string, spaceId: string, userId: string): Promise<void> {
+  return request<void>(`/api/v1/pms/spaces/${spaceId}/members/${userId}`, token, { method: 'DELETE' });
+}
+
+export function getPmsList(token: string, projectId: string): Promise<PmsProject> {
+  return request<PmsProject>(`/api/v1/pms/lists/${projectId}`, token);
 }
 
 export function createPmsProject(
@@ -1067,4 +1176,89 @@ export function updateSpaceDocPage(
 
 export function deleteSpaceDocPage(token: string, pageId: string): Promise<void> {
   return request<void>(`/api/v1/pms/space-doc-pages/${pageId}`, token, { method: 'DELETE' });
+}
+
+// ── Docs Hub (cross-space aggregation) ──────────────────────────
+
+export interface DocsHubItem {
+  id: string;
+  team_id: string;
+  space_name: string;
+  title: string;
+  page_count: number;
+  created_by_id: string;
+  created_by_name: string;
+  is_favorite: boolean;
+  is_private: boolean;
+  last_viewed_at: string | null;
+  created_at: string;
+  updated_at: string;
+  trashed_at: string | null;
+}
+
+export interface DocsHubResponse {
+  items: DocsHubItem[];
+  total: number;
+  page: number;
+  page_size: number;
+}
+
+export interface RecentPageItem {
+  page_id: string;
+  page_title: string;
+  doc_id: string;
+  doc_title: string;
+  team_id: string;
+  last_viewed_at: string;
+}
+
+export interface FavoriteDocItem {
+  id: string;
+  title: string;
+  team_id: string;
+}
+
+export function listDocsHub(
+  token: string,
+  params: {
+    category?: string;
+    q?: string;
+    sort_by?: string;
+    sort_dir?: string;
+    page?: number;
+    page_size?: number;
+  } = {},
+): Promise<DocsHubResponse> {
+  const qs = new URLSearchParams();
+  if (params.category) qs.set('category', params.category);
+  if (params.q) qs.set('q', params.q);
+  if (params.sort_by) qs.set('sort_by', params.sort_by);
+  if (params.sort_dir) qs.set('sort_dir', params.sort_dir);
+  if (params.page) qs.set('page', String(params.page));
+  if (params.page_size) qs.set('page_size', String(params.page_size));
+  return request<DocsHubResponse>(`/api/v1/pms/docs-hub?${qs}`, token);
+}
+
+export function toggleDocFavorite(token: string, docId: string): Promise<{ is_favorite: boolean }> {
+  return request<{ is_favorite: boolean }>(`/api/v1/pms/docs-hub/${docId}/favorite`, token, {
+    method: 'PATCH',
+  });
+}
+
+export function toggleDocPrivate(token: string, docId: string): Promise<{ is_private: boolean }> {
+  return request<{ is_private: boolean }>(`/api/v1/pms/docs-hub/${docId}/private`, token, {
+    method: 'PATCH',
+  });
+}
+
+export function recordDocView(token: string, docId: string): Promise<void> {
+  return request<void>(`/api/v1/pms/docs-hub/${docId}/view`, token, { method: 'POST' });
+}
+
+export function listRecentPages(token: string, limit = 10): Promise<RecentPageItem[]> {
+  return request<RecentPageItem[]>(`/api/v1/pms/docs-hub/recent-pages?limit=${limit}`, token);
+}
+
+export function listFavoriteDocs(token: string): Promise<FavoriteDocItem[]> {
+  return request<FavoriteDocItem[]>(`/api/v1/pms/docs-hub/favorites`, token);
 }

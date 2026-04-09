@@ -4,9 +4,12 @@ import { Navigate, useLocation } from 'react-router-dom';
 
 import {
   changePassword as changePasswordRequest,
+  developmentAccountLogin as developmentAccountLoginRequest,
   developmentAdminLogin as developmentAdminLoginRequest,
   getBootstrapStatus,
   getCurrentUser,
+  hasFeatureAccess,
+  hasAnySystemRole,
   login as loginRequest,
   listSessions as listSessionsRequest,
   logout as logoutRequest,
@@ -16,12 +19,15 @@ import {
   type AuthSessionItem,
   type AuthUser,
   type ChangePasswordPayload,
+  type DevLoginAccount,
   type LoginPayload,
   type SetupFirstUserPayload,
   type UpdatePreferencesPayload,
 } from './auth-api';
 import {
   clearStoredAuthToken,
+  consumePostLogoutHomeRedirect,
+  markPostLogoutHomeRedirect,
   persistAuthToken,
   readStoredAuthToken,
 } from './auth-storage';
@@ -37,9 +43,12 @@ export interface AuthContextValue {
   user: AuthUser | null;
   token: string | null;
   requiresSetup: boolean;
+  devAdminLoginAvailable: boolean;
+  devLoginAccounts: DevLoginAccount[];
   bootstrapError: string | null;
   login: (payload: LoginPayload) => Promise<void>;
   loginAsDevelopmentAdmin: () => Promise<void>;
+  loginAsDevelopmentAccount: (accountKey: string) => Promise<void>;
   setupFirstUser: (payload: SetupFirstUserPayload) => Promise<void>;
   logout: () => Promise<void>;
   refreshSession: () => Promise<void>;
@@ -56,10 +65,30 @@ interface AuthState {
   user: AuthUser | null;
   token: string | null;
   requiresSetup: boolean;
+  devAdminLoginAvailable: boolean;
+  devLoginAccounts: DevLoginAccount[];
   bootstrapError: string | null;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
+
+const PERMISSION_ROLE_MAP: Record<string, string[]> = {
+  'admin.access': ['platform_admin', 'org_admin'],
+  'user.read': ['platform_admin', 'org_admin'],
+  'user.write': ['platform_admin', 'org_admin'],
+  'group.read': ['platform_admin', 'org_admin'],
+  'group.write': ['platform_admin', 'org_admin'],
+  'org_unit.read': ['platform_admin', 'org_admin'],
+  'org_unit.write': ['platform_admin', 'org_admin'],
+  'workspace.read': ['platform_admin', 'org_admin'],
+  'workspace.write': ['platform_admin', 'org_admin'],
+  'team.read': ['platform_admin', 'org_admin'],
+  'team.write': ['platform_admin', 'org_admin'],
+  'feature_policy.read': ['platform_admin', 'org_admin'],
+  'feature_policy.write': ['platform_admin', 'org_admin'],
+  'audit.read': ['platform_admin', 'org_admin'],
+  'session.revoke': ['platform_admin', 'org_admin'],
+};
 
 function errorMessage(caughtError: unknown, fallback: string): string {
   if (caughtError instanceof Error && caughtError.message) {
@@ -69,12 +98,19 @@ function errorMessage(caughtError: unknown, fallback: string): string {
   return fallback;
 }
 
-function nextAuthenticatedState(user: AuthUser, token: string): AuthState {
+function nextAuthenticatedState(
+  user: AuthUser,
+  token: string,
+  devAdminLoginAvailable: boolean,
+  devLoginAccounts: DevLoginAccount[],
+): AuthState {
   return {
     status: 'authenticated',
     user,
     token,
     requiresSetup: false,
+    devAdminLoginAvailable,
+    devLoginAccounts,
     bootstrapError: null,
   };
 }
@@ -123,6 +159,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     user: null,
     token: null,
     requiresSetup: false,
+    devAdminLoginAvailable: false,
+    devLoginAccounts: [],
     bootstrapError: null,
   });
   const mountedRef = useRef(true);
@@ -156,9 +194,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     let bootstrapError: string | null = null;
     let requiresSetup = false;
+    let devAdminLoginAvailable = false;
+    let devLoginAccounts: DevLoginAccount[] = [];
 
     if (bootstrapResult.status === 'fulfilled') {
       requiresSetup = bootstrapResult.value.requires_setup;
+      devAdminLoginAvailable = Boolean(bootstrapResult.value.dev_admin_login_available);
+      devLoginAccounts = bootstrapResult.value.dev_login_accounts ?? [];
     } else {
       bootstrapError = errorMessage(
         bootstrapResult.reason,
@@ -176,6 +218,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         user: currentUserResult.value,
         token: storedToken,
         requiresSetup,
+        devAdminLoginAvailable,
+        devLoginAccounts,
         bootstrapError: null,
       });
       return;
@@ -190,6 +234,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       user: null,
       token: null,
       requiresSetup,
+      devAdminLoginAvailable,
+      devLoginAccounts,
       bootstrapError,
     });
   }
@@ -207,7 +253,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     persistAuthToken(session.token);
-    setState(nextAuthenticatedState(session.user, session.token));
+    setState(
+      nextAuthenticatedState(
+        session.user,
+        session.token,
+        state.devAdminLoginAvailable,
+        state.devLoginAccounts,
+      ),
+    );
   }
 
   async function loginAsDevelopmentAdmin() {
@@ -219,7 +272,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     persistAuthToken(session.token);
-    setState(nextAuthenticatedState(session.user, session.token));
+    setState(
+      nextAuthenticatedState(
+        session.user,
+        session.token,
+        state.devAdminLoginAvailable,
+        state.devLoginAccounts,
+      ),
+    );
+  }
+
+  async function loginAsDevelopmentAccount(accountKey: string) {
+    const requestId = ++requestIdRef.current;
+    const session = await developmentAccountLoginRequest(accountKey);
+
+    if (!mountedRef.current || requestIdRef.current !== requestId) {
+      return;
+    }
+
+    persistAuthToken(session.token);
+    setState(
+      nextAuthenticatedState(
+        session.user,
+        session.token,
+        state.devAdminLoginAvailable,
+        state.devLoginAccounts,
+      ),
+    );
   }
 
   async function setupFirstUser(payload: SetupFirstUserPayload) {
@@ -231,7 +310,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     persistAuthToken(session.token);
-    setState(nextAuthenticatedState(session.user, session.token));
+    setState(
+      nextAuthenticatedState(
+        session.user,
+        session.token,
+        state.devAdminLoginAvailable,
+        state.devLoginAccounts,
+      ),
+    );
   }
 
   async function logout() {
@@ -244,6 +330,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     } finally {
       clearStoredAuthToken();
+      markPostLogoutHomeRedirect();
     }
 
     if (!mountedRef.current || requestIdRef.current !== requestId) {
@@ -255,6 +342,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       user: null,
       token: null,
       requiresSetup: false,
+      devAdminLoginAvailable: state.devAdminLoginAvailable,
+      devLoginAccounts: state.devLoginAccounts,
       bootstrapError: null,
     });
   }
@@ -269,7 +358,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    setState((current) => nextAuthenticatedState(user, current.token ?? state.token ?? ''));
+    setState((current) => (
+      nextAuthenticatedState(
+        user,
+        current.token ?? state.token ?? '',
+        current.devAdminLoginAvailable,
+        current.devLoginAccounts,
+      )
+    ));
   }
 
   async function changePassword(payload: ChangePasswordPayload) {
@@ -309,11 +405,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   function hasPermission(permission: string) {
-    return state.user?.permissions.includes(permission) ?? false;
+    const roles = PERMISSION_ROLE_MAP[permission];
+    if (!roles) {
+      return false;
+    }
+    return hasAnySystemRole(state.user, roles);
   }
 
   function hasFeature(featureCode: string) {
-    return state.user?.visible_features.includes(featureCode) ?? false;
+    return hasFeatureAccess(state.user, featureCode);
   }
 
   return (
@@ -322,6 +422,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         ...state,
         login,
         loginAsDevelopmentAdmin,
+        loginAsDevelopmentAccount,
         setupFirstUser,
         logout,
         refreshSession,
@@ -374,6 +475,7 @@ export function RequireAuth({ children }: { children: ReactNode }) {
 export function LoginRoute() {
   const auth = useAuth();
   const location = useLocation();
+  const [redirectToHomeAfterLogout] = useState(() => consumePostLogoutHomeRedirect());
 
   if (auth.status === 'bootstrapping') {
     return <AuthLoadingScreen />;
@@ -383,7 +485,7 @@ export function LoginRoute() {
     return (
       <Navigate
         replace
-        to={sanitizeRedirectTarget(location.state)}
+        to={redirectToHomeAfterLogout ? '/' : sanitizeRedirectTarget(location.state)}
       />
     );
   }

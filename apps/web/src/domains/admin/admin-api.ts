@@ -15,7 +15,7 @@ export interface AccessGroupItem {
   description: string;
   group_kind: string;
   active: boolean;
-  permissions: string[];
+  system_roles: string[];
   member_count: number;
 }
 
@@ -53,9 +53,7 @@ export interface FeaturePolicyItem {
   name: string;
   description: string;
   enabled: boolean;
-  required_permissions: string[];
   allowed_workspace_keys: string[];
-  allowed_group_slugs: string[];
 }
 
 export interface AuditLogItem {
@@ -187,7 +185,7 @@ export function createGroup(
   payload: {
     name: string;
     description: string;
-    permissions: string[];
+    system_roles?: string[];
   },
 ): Promise<AccessGroupItem> {
   return request<AccessGroupItem>(token, '/api/v1/admin/groups', {
@@ -299,9 +297,6 @@ export function updateFeaturePolicies(
   items: Array<{
     id: string;
     enabled: boolean;
-    required_permissions: string[];
-    allowed_workspace_keys: string[];
-    allowed_group_slugs: string[];
   }>,
 ): Promise<FeaturePolicyItem[]> {
   return request<FeaturePolicyItem[]>(token, '/api/v1/admin/feature-policies', {

@@ -60,6 +60,10 @@ class AccessGroup(Base):
         back_populates="group",
         cascade="all, delete-orphan",
     )
+    system_role_links: Mapped[list["GroupSystemRole"]] = relationship(
+        back_populates="group",
+        cascade="all, delete-orphan",
+    )
 
 
 class Workspace(Base):
@@ -121,6 +125,10 @@ class User(Base):
         back_populates="user",
         cascade="all, delete-orphan",
     )
+    system_role_links: Mapped[list["UserSystemRole"]] = relationship(
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
     workspace_bindings: Mapped[list["WorkspaceUserBinding"]] = relationship(
         back_populates="user",
         cascade="all, delete-orphan",
@@ -143,6 +151,28 @@ class UserAccessGroup(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow_naive, nullable=False)
     user: Mapped[User] = relationship(back_populates="group_links")
     group: Mapped[AccessGroup] = relationship(back_populates="members")
+
+
+class UserSystemRole(Base):
+    __tablename__ = "user_system_roles"
+    __table_args__ = (UniqueConstraint("user_id", "role", name="uq_user_system_role"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
+    role: Mapped[str] = mapped_column(String(40), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow_naive, nullable=False)
+    user: Mapped[User] = relationship(back_populates="system_role_links")
+
+
+class GroupSystemRole(Base):
+    __tablename__ = "group_system_roles"
+    __table_args__ = (UniqueConstraint("group_id", "role", name="uq_group_system_role"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    group_id: Mapped[str] = mapped_column(ForeignKey("access_groups.id"), index=True)
+    role: Mapped[str] = mapped_column(String(40), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow_naive, nullable=False)
+    group: Mapped[AccessGroup] = relationship(back_populates="system_role_links")
 
 
 class WorkspaceUserBinding(Base):

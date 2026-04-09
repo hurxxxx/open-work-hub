@@ -327,14 +327,15 @@ def test_space_docs_collection_permissions_and_soft_delete(client: TestClient) -
     assert outsider_create_response.status_code == 403
 
     project_editor = _create_user(client, admin_session["token"], email="space-editor@aidoo.local", full_name="Project Editor")
-    _add_project_member(client, admin_session["token"], project["id"], project_editor["user"]["id"], "editor")
+    _add_project_member(client, admin_session["token"], project["id"], project_editor["user"]["id"], "member")
     project_editor_token = _login(client, project_editor["user"]["email"], project_editor["temporary_password"])
 
     editor_list_response = client.get(
         f"/api/v1/pms/spaces/{space_id}/docs",
         headers=_auth_headers(project_editor_token),
     )
-    assert editor_list_response.status_code == 403
+    assert editor_list_response.status_code == 200
+    assert [item["id"] for item in editor_list_response.json()["items"]] == [collection["id"]]
 
     second_collection_response = client.post(
         f"/api/v1/pms/spaces/{space_id}/docs",
@@ -342,15 +343,6 @@ def test_space_docs_collection_permissions_and_soft_delete(client: TestClient) -
         json={"title": "Project Notes"},
     )
     assert second_collection_response.status_code == 403
-
-    _add_team_member(client, admin_session["token"], space_id, project_editor["user"]["id"])
-
-    editor_list_after_team_scope_response = client.get(
-        f"/api/v1/pms/spaces/{space_id}/docs",
-        headers=_auth_headers(project_editor_token),
-    )
-    assert editor_list_after_team_scope_response.status_code == 200
-    assert [item["id"] for item in editor_list_after_team_scope_response.json()["items"]] == [collection["id"]]
 
     member_page_response = client.post(
         f"/api/v1/pms/spaces/{space_id}/docs/pages",
@@ -432,7 +424,7 @@ def test_space_docs_collection_permissions_and_soft_delete(client: TestClient) -
     assert deleted_collection_pages_response.status_code == 404
 
 
-def test_project_member_cannot_reach_space_surfaces_without_team_membership(client: TestClient) -> None:
+def test_project_member_api_grants_space_scope_for_project_resources(client: TestClient) -> None:
     admin_session = _bootstrap_admin_session(client)
     project = _create_project(client, admin_session["token"])
     space_id = project["team_id"]
@@ -446,7 +438,7 @@ def test_project_member_cannot_reach_space_surfaces_without_team_membership(clie
         email="project-member@aidoo.local",
         full_name="Project Member",
     )
-    _add_project_member(client, admin_session["token"], project["id"], project_member["user"]["id"], "editor")
+    _add_project_member(client, admin_session["token"], project["id"], project_member["user"]["id"], "member")
     project_member_token = _login(
         client,
         project_member["user"]["email"],
@@ -469,20 +461,21 @@ def test_project_member_cannot_reach_space_surfaces_without_team_membership(clie
         f"/api/v1/pms/spaces/{space_id}/lists",
         headers=_auth_headers(project_member_token),
     )
-    assert space_lists_response.status_code == 403
+    assert space_lists_response.status_code == 200
+    assert any(item["id"] == project["id"] for item in space_lists_response.json()["items"])
 
     space_folders_response = client.get(
         "/api/v1/pms/folders",
         headers=_auth_headers(project_member_token),
         params={"team_id": space_id},
     )
-    assert space_folders_response.status_code == 403
+    assert space_folders_response.status_code == 200
 
     space_docs_response = client.get(
         f"/api/v1/pms/spaces/{space_id}/docs",
         headers=_auth_headers(project_member_token),
     )
-    assert space_docs_response.status_code == 403
+    assert space_docs_response.status_code == 200
 
 
 def test_media_linking_follows_parent_resource_acl(client: TestClient) -> None:
@@ -523,7 +516,7 @@ def test_media_linking_follows_parent_resource_acl(client: TestClient) -> None:
         email="media-project-member@aidoo.local",
         full_name="Media Project Member",
     )
-    _add_project_member(client, admin_session["token"], project["id"], project_member["user"]["id"], "editor")
+    _add_project_member(client, admin_session["token"], project["id"], project_member["user"]["id"], "member")
     project_member_token = _login(
         client,
         project_member["user"]["email"],
@@ -556,7 +549,7 @@ def test_media_linking_follows_parent_resource_acl(client: TestClient) -> None:
             "resource_id": page["id"],
         },
     )
-    assert forbidden_space_link_response.status_code == 403
+    assert forbidden_space_link_response.status_code == 204
 
     space_member = _create_user(
         client,
@@ -589,7 +582,7 @@ def test_media_linking_follows_parent_resource_acl(client: TestClient) -> None:
         headers=_auth_headers(space_member_token),
         json={"media_ids": [forbidden_doc_media["id"]], "resource_type": "doc", "resource_id": doc["id"]},
     )
-    assert forbidden_doc_link_response.status_code == 403
+    assert forbidden_doc_link_response.status_code == 204
 
 
 def test_team_soft_delete_hides_space_data_and_untrashes_default_space(client: TestClient) -> None:
@@ -799,7 +792,9 @@ def _create_user(client: TestClient, token: str, *, email: str, full_name: str) 
         },
     )
     assert response.status_code == 201
-    return response.json()
+    payload = response.json()
+    _grant_workspace_access(client, token, payload["user"]["id"], "pms")
+    return payload
 
 
 def _login(client: TestClient, email: str, password: str) -> str:
@@ -836,6 +831,51 @@ def _add_team_member(client: TestClient, token: str, team_id: str, user_id: str)
     )
     assert response.status_code == 200
     return response.json()
+
+
+def _grant_workspace_access(
+    client: TestClient,
+    token: str,
+    user_id: str,
+    workspace_key: str,
+    role: str = "member",
+) -> None:
+    workspaces_response = client.get(
+        "/api/v1/admin/workspaces",
+        headers=_auth_headers(token),
+    )
+    assert workspaces_response.status_code == 200
+    workspace = next(item for item in workspaces_response.json() if item["key"] == workspace_key)
+
+    bindings_response = client.get(
+        f"/api/v1/admin/workspaces/{workspace['id']}/bindings",
+        headers=_auth_headers(token),
+    )
+    assert bindings_response.status_code == 200
+    bindings = bindings_response.json()
+
+    user_bindings = [
+        {"subject_id": item["subject_id"], "role": item["role"]}
+        for item in bindings
+        if item["subject_type"] == "user"
+    ]
+    group_bindings = [
+        {"subject_id": item["subject_id"], "role": item["role"]}
+        for item in bindings
+        if item["subject_type"] == "group"
+    ]
+    user_bindings = [
+        item
+        for item in user_bindings
+        if item["subject_id"] != user_id
+    ] + [{"subject_id": user_id, "role": role}]
+
+    update_response = client.put(
+        f"/api/v1/admin/workspaces/{workspace['id']}/bindings",
+        headers=_auth_headers(token),
+        json={"users": user_bindings, "groups": group_bindings},
+    )
+    assert update_response.status_code == 200
 
 
 def _create_unlinked_media(uploaded_by_id: str) -> dict[str, str]:

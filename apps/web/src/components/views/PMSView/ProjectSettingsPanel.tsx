@@ -1,23 +1,26 @@
 import { useState, useEffect, useCallback } from 'react';
 import { motion } from 'motion/react';
 import { X, Plus, Pencil, Trash2, Check, Loader2 } from 'lucide-react';
-import { Button, InlineNotice } from '@aidoo/ui';
+import { Button, InlineNotice, Select } from '@aidoo/ui';
 import { useAuth } from '@/src/domains/auth/auth-provider';
 import {
+  addSpaceMember,
   listProjectLabels,
+  listPmsUsers,
   createProjectLabel,
   updateLabel,
   deleteLabel,
-  listProjectMembers,
+  listSpaceMembers,
   listProjectStatuses,
   createProjectStatus,
   updateProjectStatus,
   deleteProjectStatus,
-  updateMemberRole,
-  removeProjectMember,
+  updateSpaceMemberRole,
+  removeSpaceMember,
   type PmsLabel,
-  type PmsProjectMember,
+  type PmsSpaceMember,
   type PmsProjectStatus,
+  type PmsUserSummary,
 } from '@/src/domains/pms/pms-api';
 
 const PRESET_COLORS = [
@@ -35,24 +38,26 @@ const CATEGORY_OPTIONS: { value: string; label: string }[] = [
 const ROLE_OPTIONS = [
   { value: 'owner', label: 'Owner' },
   { value: 'admin', label: 'Admin' },
-  { value: 'editor', label: 'Editor' },
   { value: 'member', label: 'Member' },
   { value: 'viewer', label: 'Viewer' },
 ];
 
 export function ProjectSettingsPanel({
   projectId,
+  teamId,
   onClose,
   onLabelsChanged,
   onStatusesChanged,
 }: {
   projectId: string;
+  teamId: string | null;
   onClose: () => void;
   onLabelsChanged?: (labels: PmsLabel[]) => void;
   onStatusesChanged?: (statuses: PmsProjectStatus[]) => void;
 }) {
   const { token } = useAuth();
-  const [members, setMembers] = useState<PmsProjectMember[]>([]);
+  const [members, setMembers] = useState<PmsSpaceMember[]>([]);
+  const [availableUsers, setAvailableUsers] = useState<PmsUserSummary[]>([]);
   const [labels, setLabels] = useState<PmsLabel[]>([]);
   const [statuses, setStatuses] = useState<PmsProjectStatus[]>([]);
   const [loading, setLoading] = useState(true);
@@ -73,6 +78,9 @@ export function ProjectSettingsPanel({
   const [editStatusName, setEditStatusName] = useState('');
   const [editStatusColor, setEditStatusColor] = useState('');
   const [editStatusCategory, setEditStatusCategory] = useState('');
+  const [selectedUserId, setSelectedUserId] = useState('__none__');
+  const [selectedRole, setSelectedRole] = useState('member');
+  const [addingMember, setAddingMember] = useState(false);
 
   const notifyParent = useCallback((updated: PmsLabel[]) => {
     onLabelsChanged?.(updated);
@@ -88,12 +96,14 @@ export function ProjectSettingsPanel({
     setLoading(true);
     setError(null);
     try {
-      const [memberRes, labelRes, statusRes] = await Promise.all([
-        listProjectMembers(token, projectId),
+      const [memberRes, userItems, labelRes, statusRes] = await Promise.all([
+        teamId ? listSpaceMembers(token, teamId) : Promise.resolve({ items: [], total: 0, page: 1, page_size: 20 }),
+        listPmsUsers(token),
         listProjectLabels(token, projectId),
         listProjectStatuses(token, projectId),
       ]);
       setMembers(memberRes.items);
+      setAvailableUsers(userItems);
       setLabels(labelRes.items);
       notifyParent(labelRes.items);
       setStatuses(statusRes.items);
@@ -103,7 +113,7 @@ export function ProjectSettingsPanel({
     } finally {
       setLoading(false);
     }
-  }, [notifyParent, notifyStatusParent, projectId, token]);
+  }, [notifyParent, notifyStatusParent, projectId, teamId, token]);
 
   useEffect(() => {
     void loadAll();
@@ -223,29 +233,58 @@ export function ProjectSettingsPanel({
     }
   }, [token, statuses, notifyStatusParent]);
 
-  const handleRoleChange = useCallback(async (userId: string, role: string) => {
-    if (!token) return;
+  const handleAddMember = useCallback(async () => {
+    if (!token || !teamId || selectedUserId === '__none__') return;
+    setAddingMember(true);
     setError(null);
     try {
-      const updatedMember = await updateMemberRole(token, projectId, userId, role);
+      const added = await addSpaceMember(token, teamId, {
+        user_id: selectedUserId,
+        role: selectedRole,
+      });
+      setMembers((current) => [...current, added]);
+      setSelectedUserId('__none__');
+      setSelectedRole('member');
+    } catch (caughtError) {
+      setError(caughtError instanceof Error ? caughtError.message : '멤버를 추가하지 못했습니다.');
+    } finally {
+      setAddingMember(false);
+    }
+  }, [selectedRole, selectedUserId, teamId, token]);
+
+  const handleRoleChange = useCallback(async (userId: string, role: string) => {
+    if (!token || !teamId) return;
+    setError(null);
+    try {
+      const updatedMember = await updateSpaceMemberRole(token, teamId, userId, role);
       setMembers((current) => current.map((member) => (
         member.user_id === userId ? updatedMember : member
       )));
     } catch (caughtError) {
       setError(caughtError instanceof Error ? caughtError.message : '멤버 역할을 변경하지 못했습니다.');
     }
-  }, [projectId, token]);
+  }, [teamId, token]);
 
   const handleRemoveMember = useCallback(async (userId: string) => {
-    if (!token) return;
+    if (!token || !teamId) return;
     setError(null);
     try {
-      await removeProjectMember(token, projectId, userId);
+      await removeSpaceMember(token, teamId, userId);
       setMembers((current) => current.filter((member) => member.user_id !== userId));
     } catch (caughtError) {
       setError(caughtError instanceof Error ? caughtError.message : '멤버를 제거하지 못했습니다.');
     }
-  }, [projectId, token]);
+  }, [teamId, token]);
+
+  const memberCandidateOptions = [
+    { value: '__none__', label: 'Add member by email' },
+    ...availableUsers
+      .filter((user) => !members.some((member) => member.user_id === user.id))
+      .map((user) => ({
+        value: user.id,
+        label: `${user.full_name} (${user.email})`,
+      })),
+  ];
 
   return (
     <>
@@ -268,6 +307,34 @@ export function ProjectSettingsPanel({
             <h3 className="app-text-overline text-clickup-text/50">Members</h3>
 
             {error ? <InlineNotice tone="danger">{error}</InlineNotice> : null}
+
+            {teamId ? (
+              <div className="grid gap-2 rounded-lg border border-clickup-border bg-clickup-sidebar px-3 py-3">
+                <Select
+                  onValueChange={setSelectedUserId}
+                  options={memberCandidateOptions}
+                  value={selectedUserId}
+                />
+                <div className="flex items-center gap-2">
+                  <select
+                    value={selectedRole}
+                    onChange={(event) => setSelectedRole(event.target.value)}
+                    className="app-text-caption flex-1 rounded border border-clickup-border bg-clickup-bg px-2 py-2 text-clickup-text focus:outline-none"
+                  >
+                    {ROLE_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>{option.label}</option>
+                    ))}
+                  </select>
+                  <Button
+                    disabled={selectedUserId === '__none__' || addingMember}
+                    onClick={() => { void handleAddMember(); }}
+                    variant="secondary"
+                  >
+                    Add
+                  </Button>
+                </div>
+              </div>
+            ) : null}
 
             {loading ? (
               <div className="flex justify-center py-6"><Loader2 size={18} className="animate-spin text-clickup-text/40" /></div>

@@ -12,7 +12,11 @@ def test_healthz(client: TestClient) -> None:
 def test_auth_bootstrap_and_protected_search(client: TestClient) -> None:
     status_response = client.get("/api/v1/auth/bootstrap-status")
     assert status_response.status_code == 200
-    assert status_response.json() == {"requires_setup": True}
+    assert status_response.json() == {
+        "requires_setup": True,
+        "dev_admin_login_available": True,
+        "dev_login_accounts": [],
+    }
 
     unauthenticated = client.post(
         "/api/v1/search/documents",
@@ -30,10 +34,10 @@ def test_auth_bootstrap_and_protected_search(client: TestClient) -> None:
     )
     assert setup_response.status_code == 201
     auth_payload = setup_response.json()
-    assert auth_payload["user"]["is_admin"] is True
-    assert "platform-admin" in auth_payload["user"]["group_slugs"]
+    assert "platform_admin" in auth_payload["user"]["system_roles"]
     assert auth_payload["user"]["theme_preference"] == "system"
     assert auth_payload["user"]["workspace_roles"]
+    assert any(item["app"] == "admin" for item in auth_payload["user"]["app_access"])
     token = auth_payload["token"]
 
     me_response = client.get(
@@ -86,7 +90,7 @@ def test_auth_login_success_and_invalid_password(client: TestClient) -> None:
     )
     assert login_response.status_code == 200
     assert login_response.json()["user"]["email"] == "admin@aidoo.local"
-    assert "admin.access" in login_response.json()["user"]["permissions"]
+    assert "platform_admin" in login_response.json()["user"]["system_roles"]
     assert login_response.json()["token"]
 
     invalid_password_response = client.post(
@@ -114,8 +118,84 @@ def test_dev_admin_login_shortcut(client: TestClient) -> None:
     assert dev_login_response.status_code == 200
     payload = dev_login_response.json()
     assert payload["user"]["email"] == "admin@aidoo.local"
-    assert payload["user"]["is_admin"] is True
+    assert "platform_admin" in payload["user"]["system_roles"]
     assert payload["token"]
+
+
+def test_dev_admin_login_shortcut_skips_non_admin_email_match(client: TestClient) -> None:
+    _create_direct_user(
+        email="admin@aidoo.local",
+        full_name="Plain Admin Email",
+        is_admin=False,
+    )
+    _create_direct_user(
+        email="platform-owner@aidoo.local",
+        full_name="Platform Owner",
+        is_admin=True,
+    )
+
+    dev_login_response = client.post("/api/v1/auth/dev-admin-login")
+    assert dev_login_response.status_code == 200
+    payload = dev_login_response.json()
+    assert payload["user"]["email"] == "platform-owner@aidoo.local"
+    assert "platform_admin" in payload["user"]["system_roles"]
+
+
+def test_seeded_dev_login_accounts_are_listed_and_can_log_in(client: TestClient) -> None:
+    _seed_dev_login_accounts()
+
+    status_response = client.get("/api/v1/auth/bootstrap-status")
+    assert status_response.status_code == 200
+    payload = status_response.json()
+    assert payload["requires_setup"] is False
+    assert payload["dev_admin_login_available"] is True
+    assert any(item["account_key"] == "platform-admin" for item in payload["dev_login_accounts"])
+    assert any(item["account_key"] == "pms-viewer" for item in payload["dev_login_accounts"])
+
+    platform_admin_login_response = client.post(
+        "/api/v1/auth/dev-login",
+        json={"account_key": "platform-admin"},
+    )
+    assert platform_admin_login_response.status_code == 200
+    platform_admin_payload = platform_admin_login_response.json()
+    assert platform_admin_payload["user"]["email"] == "platform-admin@aidoo.local"
+    assert "platform_admin" in platform_admin_payload["user"]["system_roles"]
+    assert any(item["app"] == "admin" for item in platform_admin_payload["user"]["app_access"])
+
+    dev_login_response = client.post(
+        "/api/v1/auth/dev-login",
+        json={"account_key": "pms-viewer"},
+    )
+    assert dev_login_response.status_code == 200
+    login_payload = dev_login_response.json()
+    assert login_payload["user"]["email"] == "pms-viewer@aidoo.local"
+    assert any(item["app"] == "pms" for item in login_payload["user"]["app_access"])
+
+
+def test_bootstrap_status_syncs_missing_dev_login_accounts(client: TestClient) -> None:
+    setup_response = client.post(
+        "/api/v1/auth/setup",
+        json={
+            "full_name": "AIDOO Admin",
+            "email": "admin@aidoo.local",
+            "password": "supersecret123",
+        },
+    )
+    assert setup_response.status_code == 201
+
+    status_response = client.get("/api/v1/auth/bootstrap-status")
+    assert status_response.status_code == 200
+    payload = status_response.json()
+    assert payload["requires_setup"] is False
+    assert any(item["account_key"] == "org-admin" for item in payload["dev_login_accounts"])
+
+    org_admin_login_response = client.post(
+        "/api/v1/auth/dev-login",
+        json={"account_key": "org-admin"},
+    )
+    assert org_admin_login_response.status_code == 200
+    assert org_admin_login_response.json()["user"]["email"] == "org-admin@aidoo.local"
+    assert "org_admin" in org_admin_login_response.json()["user"]["system_roles"]
 
 
 def test_auth_preferences_password_and_sessions(client: TestClient) -> None:
@@ -254,9 +334,13 @@ def _create_direct_user(
     full_name: str,
     password: str = "supersecret123",
     is_admin: bool = False,
+    system_roles: tuple[str, ...] = (),
+    workspace_keys: tuple[str, ...] = (),
 ) -> tuple[str, str]:
+    from sqlalchemy import select
+
     from aidoo_api.core.db import get_session_factory
-    from aidoo_api.domains.auth.models import AuthSession, User
+    from aidoo_api.domains.auth.models import AuthSession, User, UserSystemRole, Workspace, WorkspaceUserBinding
     from aidoo_api.domains.auth.security import (
         hash_password,
         issue_session_token,
@@ -279,6 +363,26 @@ def _create_direct_user(
                 is_admin=is_admin,
             )
         )
+        for role in {*(system_roles or ()), *(("platform_admin",) if is_admin else ())}:
+            db.add(
+                UserSystemRole(
+                    id=new_id(),
+                    user_id=user_id,
+                    role=role,
+                )
+            )
+        for workspace_key in workspace_keys:
+            workspace = db.scalar(select(Workspace).where(Workspace.key == workspace_key))
+            if workspace is None:
+                continue
+            db.add(
+                WorkspaceUserBinding(
+                    id=new_id(),
+                    workspace_id=workspace.id,
+                    user_id=user_id,
+                    role="member",
+                )
+            )
         db.add(
             AuthSession(
                 id=new_id(),
@@ -292,6 +396,17 @@ def _create_direct_user(
         db.close()
 
     return user_id, session_token.plain_text
+
+
+def _seed_dev_login_accounts() -> None:
+    from aidoo_api.core.db import get_session_factory
+    from aidoo_api.domains.auth.access import ensure_dev_login_seed_data
+
+    db = get_session_factory()()
+    try:
+        ensure_dev_login_seed_data(db)
+    finally:
+        db.close()
 
 
 def _create_pms_project(
@@ -351,7 +466,7 @@ def test_admin_identity_management_endpoints(client: TestClient) -> None:
         json={
             "name": "Docs Editors",
             "description": "Can manage docs access",
-            "permissions": ["group.read", "workspace.read"],
+            "system_roles": ["org_admin"],
         },
     )
     assert group_response.status_code == 201
@@ -432,9 +547,6 @@ def test_admin_identity_management_endpoints(client: TestClient) -> None:
                 {
                     "id": first_policy_id,
                     "enabled": False,
-                    "required_permissions": [],
-                    "allowed_workspace_keys": [],
-                    "allowed_group_slugs": [],
                 }
             ]
         },
@@ -457,7 +569,7 @@ def test_workspace_scoped_team_management_requires_workspace_admin_role(client: 
         json={
             "name": "Scoped Team Operators",
             "description": "Can manage teams only within scoped workspaces.",
-            "permissions": ["team.read", "team.write"],
+            "system_roles": [],
         },
     )
     assert permission_group_response.status_code == 201
@@ -518,7 +630,7 @@ def test_workspace_scoped_team_management_requires_workspace_admin_role(client: 
         f"/api/v1/admin/workspaces/{workspace_id}/bindings",
         headers=admin_headers,
         json={
-            "users": [{"subject_id": scoped_user["id"], "role": "workspace_admin"}],
+            "users": [{"subject_id": scoped_user["id"], "role": "admin"}],
             "groups": [],
         },
     )
@@ -783,6 +895,7 @@ def test_pms_membership_permissions(client: TestClient) -> None:
     outsider_id, outsider_token = _create_direct_user(
         email="member@aidoo.local",
         full_name="PMS Member",
+        workspace_keys=("pms",),
     )
 
     project_response = client.post(
@@ -816,6 +929,108 @@ def test_pms_membership_permissions(client: TestClient) -> None:
     )
     assert member_project_response.status_code == 200
     assert member_project_response.json()["role"] == "member"
+
+
+def test_pms_app_access_is_required_even_for_space_members(client: TestClient) -> None:
+    admin_token = _bootstrap_admin(client)
+    member_id, member_token = _create_direct_user(
+        email="space-only@aidoo.local",
+        full_name="Space Only Member",
+    )
+
+    project_response = client.post(
+        "/api/v1/pms/projects",
+        headers={"Authorization": f"Bearer {admin_token}"},
+        json={
+            "key": "SPACEONLY",
+            "name": "Space-only project",
+            "description": "App access guard",
+        },
+    )
+    assert project_response.status_code == 201
+    project_id = project_response.json()["id"]
+
+    add_member_response = client.post(
+        f"/api/v1/pms/projects/{project_id}/members",
+        headers={"Authorization": f"Bearer {admin_token}"},
+        json={"user_id": member_id, "role": "member"},
+    )
+    assert add_member_response.status_code == 201
+
+    project_detail_response = client.get(
+        f"/api/v1/pms/projects/{project_id}",
+        headers={"Authorization": f"Bearer {member_token}"},
+    )
+    assert project_detail_response.status_code == 403
+
+
+def test_pms_space_creator_becomes_owner_and_last_manager_is_protected(client: TestClient) -> None:
+    _bootstrap_admin(client)
+    creator_id, creator_token = _create_direct_user(
+        email="space-creator@aidoo.local",
+        full_name="Space Creator",
+        workspace_keys=("pms",),
+    )
+
+    create_space_response = client.post(
+        "/api/v1/pms/spaces",
+        headers={"Authorization": f"Bearer {creator_token}"},
+        json={"name": "Operations", "description": "Owner bootstrap"},
+    )
+    assert create_space_response.status_code == 201
+    space = create_space_response.json()
+
+    members_response = client.get(
+        f"/api/v1/pms/spaces/{space['id']}/members",
+        headers={"Authorization": f"Bearer {creator_token}"},
+    )
+    assert members_response.status_code == 200
+    assert members_response.json()["items"][0]["user_id"] == creator_id
+    assert members_response.json()["items"][0]["role"] == "owner"
+
+    demote_response = client.patch(
+        f"/api/v1/pms/spaces/{space['id']}/members/{creator_id}",
+        headers={"Authorization": f"Bearer {creator_token}"},
+        json={"role": "member"},
+    )
+    assert demote_response.status_code == 409
+
+    remove_response = client.delete(
+        f"/api/v1/pms/spaces/{space['id']}/members/{creator_id}",
+        headers={"Authorization": f"Bearer {creator_token}"},
+    )
+    assert remove_response.status_code == 409
+
+
+def test_org_admin_gets_pms_app_access_and_can_view_all_spaces(client: TestClient) -> None:
+    admin_token = _bootstrap_admin(client)
+    project_response = client.post(
+        "/api/v1/pms/projects",
+        headers={"Authorization": f"Bearer {admin_token}"},
+        json={"key": "ORGADM", "name": "Org Admin Project", "description": "Visibility"},
+    )
+    assert project_response.status_code == 201
+    expected_space_id = project_response.json()["team_id"]
+
+    _, org_admin_token = _create_direct_user(
+        email="org-admin@aidoo.local",
+        full_name="Org Admin",
+        system_roles=("org_admin",),
+    )
+
+    me_response = client.get(
+        "/api/v1/auth/me",
+        headers={"Authorization": f"Bearer {org_admin_token}"},
+    )
+    assert me_response.status_code == 200
+    assert any(item["app"] == "pms" for item in me_response.json()["app_access"])
+
+    spaces_response = client.get(
+        "/api/v1/pms/spaces",
+        headers={"Authorization": f"Bearer {org_admin_token}"},
+    )
+    assert spaces_response.status_code == 200
+    assert any(item["id"] == expected_space_id for item in spaces_response.json())
 
 
 def test_pms_parent_issue_validation_and_label_conflicts(client: TestClient) -> None:

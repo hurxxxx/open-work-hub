@@ -1,48 +1,34 @@
-export const ADMIN_READ_PERMISSIONS = [
-  'admin.access',
-  'user.read',
-  'group.read',
-  'workspace.read',
-  'team.read',
-  'feature_policy.read',
-  'audit.read',
-] as const;
-
-export const ADMIN_SECTION_PERMISSIONS = {
-  general: ['admin.access'],
-  people: ['user.read'],
-  teams: ['team.read'],
-  workspaces: ['workspace.read'],
-  security: ['group.read', 'feature_policy.read'],
-  audit: ['audit.read'],
+export const ADMIN_SECTION_ROLES = {
+  general: ['platform_admin', 'org_admin'],
+  people: ['platform_admin', 'org_admin'],
+  workspaces: ['platform_admin', 'org_admin'],
+  security: ['platform_admin', 'org_admin'],
+  audit: ['platform_admin', 'org_admin'],
 } as const;
 
-export type AdminSection = keyof typeof ADMIN_SECTION_PERMISSIONS;
+export type AdminSection = keyof typeof ADMIN_SECTION_ROLES;
 
-export function hasAnyAdminReadPermission(permissions: readonly string[]): boolean {
-  return ADMIN_READ_PERMISSIONS.some((permission) => permissions.includes(permission));
+export function hasAnyAdminReadPermission(systemRoles: readonly string[]): boolean {
+  const allowedRoles = new Set(Object.values(ADMIN_SECTION_ROLES).flat());
+  return systemRoles.some((role) => allowedRoles.has(role));
 }
 
 export function hasAdminSectionAccess(
-  permissions: readonly string[],
+  systemRoles: readonly string[],
   section: AdminSection,
 ): boolean {
-  return (
-    permissions.includes('admin.access')
-    || ADMIN_SECTION_PERMISSIONS[section].some((permission) => permissions.includes(permission))
-  );
+  return ADMIN_SECTION_ROLES[section].some((role) => systemRoles.includes(role));
 }
 
-export function getDefaultAdminPath(permissions: readonly string[]): string {
+export function getDefaultAdminPath(systemRoles: readonly string[]): string {
   const orderedSections: AdminSection[] = [
     'general',
     'people',
-    'teams',
     'workspaces',
     'security',
     'audit',
   ];
 
-  const section = orderedSections.find((item) => hasAdminSectionAccess(permissions, item));
+  const section = orderedSections.find((item) => hasAdminSectionAccess(systemRoles, item));
   return section ? `/admin/${section}` : '/admin/general';
 }

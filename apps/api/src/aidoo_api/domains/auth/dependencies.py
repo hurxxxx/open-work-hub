@@ -14,7 +14,7 @@ from aidoo_api.domains.auth.access import (
     load_active_workspace_by_key,
     load_user_graph,
     resolve_team_role,
-    resolve_user_permissions,
+    resolve_system_roles,
     resolve_visible_features,
     resolve_workspace_role,
     team_role_allows,
@@ -31,7 +31,7 @@ bearer_scheme = HTTPBearer(auto_error=False)
 class AuthContext:
     user: User
     session: AuthSession
-    permissions: frozenset[str]
+    system_roles: frozenset[str]
 
 
 @dataclass(frozen=True)
@@ -94,7 +94,7 @@ def require_auth_context(
     return AuthContext(
         user=user,
         session=auth_session,
-        permissions=frozenset(resolve_user_permissions(user)),
+        system_roles=frozenset(resolve_system_roles(db, user)),
     )
 
 
@@ -102,20 +102,49 @@ def require_current_user(context: AuthContext = Depends(require_auth_context)) -
     return context.user
 
 
-def require_permission(permission: str):
+def require_any_system_role(*roles: str):
     def dependency(context: AuthContext = Depends(require_auth_context)) -> AuthContext:
-        if permission not in context.permissions:
+        role_set = set(context.system_roles)
+        if not any(role in role_set for role in roles):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail=f"Permission required: {permission}",
+                detail=f"System role required: {', '.join(roles)}",
             )
         return context
 
     return dependency
 
 
+PERMISSION_COMPAT_ROLE_MAP = {
+    "admin.access": (("platform_admin", "org_admin")),
+    "user.read": (("platform_admin", "org_admin")),
+    "user.write": (("platform_admin", "org_admin")),
+    "group.read": (("platform_admin", "org_admin")),
+    "group.write": (("platform_admin", "org_admin")),
+    "org_unit.read": (("platform_admin", "org_admin")),
+    "org_unit.write": (("platform_admin", "org_admin")),
+    "workspace.read": (("platform_admin", "org_admin")),
+    "workspace.write": (("platform_admin", "org_admin")),
+    "team.read": (("platform_admin", "org_admin")),
+    "team.write": (("platform_admin", "org_admin")),
+    "feature_policy.read": (("platform_admin", "org_admin")),
+    "feature_policy.write": (("platform_admin", "org_admin")),
+    "audit.read": (("platform_admin", "org_admin")),
+    "session.revoke": (("platform_admin", "org_admin")),
+}
+
+
+def require_permission(permission: str):
+    roles = PERMISSION_COMPAT_ROLE_MAP.get(permission)
+    if roles is None:
+        raise ValueError(f"Unsupported compatibility permission: {permission}")
+    return require_any_system_role(*roles)
+
+
 def require_admin_context(
-    context: AuthContext = Depends(require_permission("admin.access")),
+    context: AuthContext = Depends(
+        require_any_system_role("platform_admin", "org_admin")
+    ),
 ) -> AuthContext:
     return context
 
@@ -147,8 +176,8 @@ def require_workspace_access(workspace_key: str, min_role: str = "member"):
                 detail="Workspace not found.",
             )
 
-        if is_platform_admin_user(context.user):
-            return WorkspaceAccessContext(auth=context, workspace=workspace, role="workspace_admin")
+        if is_platform_admin_user(context.user, db):
+            return WorkspaceAccessContext(auth=context, workspace=workspace, role="admin")
 
         role = resolve_workspace_role(db, context.user, workspace.id)
         if not workspace_role_allows(role, min_role):

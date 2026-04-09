@@ -14,16 +14,25 @@ export interface WorkspaceRole {
   role: string;
 }
 
+export interface AppAccess {
+  app: string;
+  workspace_id: string | null;
+  workspace_key: string | null;
+  workspace_name: string | null;
+  role: string;
+}
+
 const WORKSPACE_ROLE_RANK: Record<string, number> = {
   viewer: 10,
   member: 20,
-  workspace_admin: 40,
+  admin: 40,
 };
 
 const TEAM_ROLE_RANK: Record<string, number> = {
   viewer: 10,
   member: 20,
-  team_admin: 30,
+  admin: 30,
+  owner: 40,
 };
 
 export interface AuthUser {
@@ -35,16 +44,23 @@ export interface AuthUser {
   status: string;
   theme_preference: ThemePreference;
   primary_org_unit: OrgUnitSummary | null;
+  system_roles: string[];
   workspace_roles: WorkspaceRole[];
+  app_access: AppAccess[];
   group_ids: string[];
   group_slugs: string[];
-  permissions: string[];
-  visible_features: string[];
   must_change_password: boolean;
-  is_admin: boolean;
   last_login_at?: string | null;
   created_at?: string;
 }
+
+const FEATURE_TO_APP: Record<string, string> = {
+  'nav.ai': 'ai',
+  'nav.docs': 'docs',
+  'nav.pms': 'pms',
+  'nav.planner': 'planner',
+  'nav.admin': 'admin',
+};
 
 export function getWorkspaceRoleByKey(
   user: Pick<AuthUser, 'workspace_roles'> | null | undefined,
@@ -75,8 +91,47 @@ export function teamRoleAllows(
   return (TEAM_ROLE_RANK[role] ?? -1) >= TEAM_ROLE_RANK[minRole];
 }
 
+export function hasSystemRole(
+  user: Pick<AuthUser, 'system_roles'> | null | undefined,
+  role: string,
+): boolean {
+  return user?.system_roles?.includes(role) ?? false;
+}
+
+export function hasAnySystemRole(
+  user: Pick<AuthUser, 'system_roles'> | null | undefined,
+  roles: readonly string[],
+): boolean {
+  return roles.some((role) => hasSystemRole(user, role));
+}
+
+export function hasAppAccess(
+  user: Pick<AuthUser, 'app_access'> | null | undefined,
+  appCode: string,
+): boolean {
+  return user?.app_access?.some((item) => item.app === appCode) ?? false;
+}
+
+export function hasFeatureAccess(
+  user: Pick<AuthUser, 'app_access'> | null | undefined,
+  featureCode: string,
+): boolean {
+  const appCode = FEATURE_TO_APP[featureCode];
+  return appCode ? hasAppAccess(user, appCode) : false;
+}
+
 export interface BootstrapStatusResponse {
   requires_setup: boolean;
+  dev_admin_login_available?: boolean;
+  dev_login_accounts?: DevLoginAccount[];
+}
+
+export interface DevLoginAccount {
+  account_key: string;
+  label: string;
+  email: string;
+  description: string;
+  category: string;
 }
 
 export interface AuthSessionResponse {
@@ -146,6 +201,12 @@ function defaultAuthErrorMessage(path: string, status: number): string {
     return status >= 500
       ? '개발용 관리자 로그인을 처리하지 못했습니다. API 서버 상태를 확인해 주세요.'
       : '개발용 관리자 바로 로그인을 실행하지 못했습니다.';
+  }
+
+  if (path === '/api/v1/auth/dev-login') {
+    return status >= 500
+      ? '개발용 계정 로그인을 처리하지 못했습니다. API 서버 상태를 확인해 주세요.'
+      : '개발용 계정 바로 로그인을 실행하지 못했습니다.';
   }
 
   if (path === '/api/v1/auth/setup') {
@@ -248,6 +309,13 @@ export function login(payload: LoginPayload): Promise<AuthSessionResponse> {
 export function developmentAdminLogin(): Promise<AuthSessionResponse> {
   return request<AuthSessionResponse>('/api/v1/auth/dev-admin-login', {
     method: 'POST',
+  });
+}
+
+export function developmentAccountLogin(accountKey: string): Promise<AuthSessionResponse> {
+  return request<AuthSessionResponse>('/api/v1/auth/dev-login', {
+    method: 'POST',
+    body: JSON.stringify({ account_key: accountKey }),
   });
 }
 

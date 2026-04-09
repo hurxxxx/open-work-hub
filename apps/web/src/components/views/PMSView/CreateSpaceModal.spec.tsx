@@ -6,7 +6,7 @@ import type { AuthUser } from '@/src/domains/auth/auth-api';
 import { CreateSpaceModal } from './CreateSpaceModal';
 
 const mockUseAuth = vi.fn();
-const mockCreateTeam = vi.fn();
+const mockCreateSpace = vi.fn();
 
 vi.mock('@aidoo/ui', () => ({
   Dialog: ({
@@ -45,8 +45,8 @@ vi.mock('@/src/domains/auth/auth-provider', () => ({
   useAuth: () => mockUseAuth(),
 }));
 
-vi.mock('@/src/domains/admin/admin-api', () => ({
-  createTeam: (...args: unknown[]) => mockCreateTeam(...args),
+vi.mock('@/src/domains/pms/pms-api', () => ({
+  createSpace: (...args: unknown[]) => mockCreateSpace(...args),
 }));
 
 function buildUser(overrides: Partial<AuthUser> = {}): AuthUser {
@@ -66,12 +66,13 @@ function buildUser(overrides: Partial<AuthUser> = {}): AuthUser {
         role: 'member',
       },
     ],
+    app_access: [
+      { app: 'pms', workspace_id: 'workspace-pms', workspace_key: 'pms', workspace_name: 'PMS Workspace', role: 'member' },
+    ],
+    system_roles: [],
     group_ids: [],
     group_slugs: [],
-    permissions: [],
-    visible_features: ['nav.pms'],
     must_change_password: false,
-    is_admin: false,
     last_login_at: null,
     created_at: '2026-04-08T00:00:00Z',
     ...overrides,
@@ -86,7 +87,7 @@ describe('CreateSpaceModal', () => {
   it('disables creation for users without workspace admin scope', () => {
     mockUseAuth.mockReturnValue({
       token: 'member-token',
-      user: buildUser(),
+      user: buildUser({ app_access: [] }),
     });
 
     render(
@@ -96,33 +97,26 @@ describe('CreateSpaceModal', () => {
       />,
     );
 
-    expect(screen.getByText('이 워크스페이스에서 스페이스를 만들 권한이 없습니다.')).toBeTruthy();
+    expect(screen.getByText('PMS 앱 접근 권한이 없어 스페이스를 생성할 수 없습니다.')).toBeTruthy();
     expect((screen.getByRole('button', { name: 'Create Space' }) as HTMLButtonElement).disabled).toBe(true);
   });
 
-  it('creates a space for workspace admins', async () => {
+  it('creates a space for users with PMS app access', async () => {
     mockUseAuth.mockReturnValue({
-      token: 'workspace-admin-token',
-      user: buildUser({
-        workspace_roles: [
-          {
-            workspace_id: 'workspace-pms',
-            key: 'pms',
-            name: 'PMS Workspace',
-            role: 'workspace_admin',
-          },
-        ],
-      }),
+      token: 'pms-member-token',
+      user: buildUser(),
     });
-    mockCreateTeam.mockResolvedValue({
-      id: 'team-1',
+    mockCreateSpace.mockResolvedValue({
+      id: 'space-1',
       workspace_id: 'workspace-pms',
       workspace_key: 'pms',
       key: 'eng',
       name: 'Engineering',
       description: 'Delivery team',
-      active: true,
       member_count: 1,
+      current_user_role: 'owner',
+      created_at: '2026-04-08T00:00:00Z',
+      updated_at: '2026-04-08T00:00:00Z',
     });
 
     const onClose = vi.fn();
@@ -145,12 +139,12 @@ describe('CreateSpaceModal', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Create Space' }));
 
     await waitFor(() => {
-      expect(mockCreateTeam).toHaveBeenCalledWith('workspace-admin-token', 'workspace-pms', {
+      expect(mockCreateSpace).toHaveBeenCalledWith('pms-member-token', {
         name: 'Engineering',
         description: 'Delivery team',
       });
     });
-    expect(onCreated).toHaveBeenCalledWith(expect.objectContaining({ id: 'team-1' }));
+    expect(onCreated).toHaveBeenCalledWith(expect.objectContaining({ id: 'space-1' }));
     expect(onClose).toHaveBeenCalled();
   });
 });

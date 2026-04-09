@@ -20,7 +20,9 @@ import {
 import { cn } from '@/src/lib/utils';
 import { useAuth } from '@/src/domains/auth/auth-provider';
 import {
+  getPmsList,
   listPmsProjects,
+  listSpaces,
   listProjectIssues,
   listProjectMembers,
   listProjectMilestones,
@@ -33,6 +35,7 @@ import {
   type PmsList,
   type PmsIssue,
   type PmsProjectMember,
+  type PmsSpace,
   type PmsMilestone,
   type PmsLabel,
   type PmsProjectStatus,
@@ -54,6 +57,7 @@ import { AssignedToMeView } from './AssignedToMeView';
 import { TodayOverdueView } from './TodayOverdueView';
 import { PersonalListView } from './PersonalListView';
 import { ProjectSettingsPanel } from './ProjectSettingsPanel';
+import { CreateSpaceModal } from './CreateSpaceModal';
 import { FilterBar } from './FilterBar';
 import { BulkActionBar } from './BulkActionBar';
 import { SpaceDocsView } from './SpaceDocsView';
@@ -86,6 +90,7 @@ export const PMSView = () => {
   const [isNewTaskModalOpen, setIsNewTaskModalOpen] = useState(false);
 
   const [projects, setProjects] = useState<PmsList[]>([]);
+  const [spaces, setSpaces] = useState<PmsSpace[]>([]);
   const [selectedProjectId, setSelectedProjectId] = useState<string>('');
   const [issues, setIssues] = useState<PmsIssue[]>([]);
   const [members, setMembers] = useState<PmsProjectMember[]>([]);
@@ -97,6 +102,7 @@ export const PMSView = () => {
   const [filterParams, setFilterParams] = useState<IssueFilterParams>(createDefaultIssueFilterParams());
   const [selectedIssueIds, setSelectedIssueIds] = useState<Set<string>>(new Set());
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [createSpaceOpen, setCreateSpaceOpen] = useState(false);
 
   const isAssignedTasksView = toolId === 'pms-tasks' || toolId === 'pms-tasks-assigned';
   const isTodayView = toolId === 'pms-tasks-today';
@@ -110,7 +116,7 @@ export const PMSView = () => {
   const spaceDocsSpaceId = spaceDocsMatch?.[1] ?? null;
   const spaceDocsDocId = spaceDocsMatch?.[2] ?? null;
   const spaceOverviewId = (toolId && /^pms-space-.+$/.test(toolId) && !spaceDocsMatch) ? toolId.replace('pms-space-', '') : null;
-  const isOverviewRoute = !toolId || toolId === 'pms-space-team';
+  const isOverviewRoute = !toolId;
   const selectedProject = projects.find(p => p.id === selectedProjectId);
   const projectName = selectedProject?.name || 'List';
   const canEditProject = projectRoleAllows(selectedProject?.role, 'member');
@@ -149,31 +155,60 @@ export const PMSView = () => {
   useEffect(() => {
     if (!token) return;
     let cancelled = false;
-    setLoading(true);
-    setError(null);
-    listPmsProjects(token)
-      .then(res => {
-        if (cancelled) return;
-        setProjects((current) => (isSameListCollection(current, res.items) ? current : res.items));
-        setSelectedProjectId((current) => {
-          if (routeProjectId && res.items.some((project) => project.id === routeProjectId)) {
-            return current === routeProjectId ? current : routeProjectId;
+
+    async function loadProjects() {
+      setLoading(true);
+      setError(null);
+
+      try {
+        const [response, spaceItems] = await Promise.all([
+          listPmsProjects(token),
+          listSpaces(token),
+        ]);
+        if (cancelled) {
+          return;
+        }
+
+        setSpaces(spaceItems);
+        let nextProjects = response.items;
+        let requestedProjectResolved = false;
+
+        if (routeProjectId) {
+          requestedProjectResolved = response.items.some((project) => project.id === routeProjectId);
+          if (!requestedProjectResolved) {
+            const requestedProject = await getPmsList(token, routeProjectId);
+            if (cancelled) {
+              return;
+            }
+            nextProjects = [...response.items, requestedProject];
+            requestedProjectResolved = true;
           }
-          if (current && res.items.some((project) => project.id === current)) {
+        }
+
+        setProjects((current) => (isSameListCollection(current, nextProjects) ? current : nextProjects));
+        setSelectedProjectId((current) => {
+          if (routeProjectId) {
+            return requestedProjectResolved ? routeProjectId : '';
+          }
+          if (current && nextProjects.some((project) => project.id === current)) {
             return current;
           }
-          return res.items[0]?.id || '';
+          return nextProjects[0]?.id || '';
         });
-      })
-      .catch(err => {
-        if (cancelled) return;
+      } catch (err) {
+        if (cancelled) {
+          return;
+        }
+        setSelectedProjectId('');
         setError(getErrorMessage(err, '프로젝트를 불러오지 못했습니다.'));
-      })
-      .finally(() => {
+      } finally {
         if (!cancelled) {
           setLoading(false);
         }
-      });
+      }
+    }
+
+    void loadProjects();
 
     return () => {
       cancelled = true;
@@ -319,11 +354,45 @@ export const PMSView = () => {
     return <SpaceOverviewView spaceId={spaceOverviewId} spaceName={spaceName} />;
   }
   if (isOverviewRoute) {
+    if (!loading && spaces.length === 0) {
+      return (
+        <>
+          <div className="flex h-full items-center justify-center px-8">
+            <div className="w-full max-w-xl rounded-2xl border border-clickup-border bg-clickup-card p-8 text-center">
+              <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-clickup-purple text-clickup-bg">
+                <Layout size={22} />
+              </div>
+              <h1 className="app-text-title-lg text-clickup-text">No Spaces Yet</h1>
+              <p className="app-text-body mt-3 text-clickup-text/60">
+                PMS 앱 접근은 준비됐지만 아직 속한 스페이스가 없습니다. 새 스페이스를 만들고 바로 리스트와 문서를 운영할 수 있습니다.
+              </p>
+              <div className="mt-6 flex justify-center">
+                <button
+                  className="app-text-control-sm rounded-lg bg-clickup-purple px-4 py-2 text-clickup-bg transition-colors hover:bg-clickup-purple/90"
+                  onClick={() => setCreateSpaceOpen(true)}
+                  type="button"
+                >
+                  Create Space
+                </button>
+              </div>
+            </div>
+          </div>
+          <CreateSpaceModal
+            isOpen={createSpaceOpen}
+            onClose={() => setCreateSpaceOpen(false)}
+            onCreated={(space) => {
+              setSpaces((current) => [space, ...current.filter((item) => item.id !== space.id)]);
+              navigate(`/tool/pms-space-${space.id}`);
+            }}
+          />
+        </>
+      );
+    }
     return (
       <div className="h-full flex flex-col relative">
         <header className="bg-clickup-bg border-b border-clickup-border px-8 pt-6 transition-colors">
           <div className="flex items-center gap-3 mb-6">
-            <div className="w-8 h-8 bg-clickup-purple rounded flex items-center justify-center text-white">
+            <div className="w-8 h-8 bg-clickup-purple rounded flex items-center justify-center text-clickup-bg">
               <Layout size={20} />
             </div>
             <div>
@@ -341,6 +410,13 @@ export const PMSView = () => {
       </div>
     );
   }
+  if (error && !loading && !selectedProjectId) {
+    return (
+      <div className="app-text-body flex h-full items-center justify-center text-red-400">
+        {error}
+      </div>
+    );
+  }
   if (!selectedProjectId && !loading) {
     return (
       <div className="app-text-body flex h-full items-center justify-center text-gray-500">
@@ -354,7 +430,7 @@ export const PMSView = () => {
       <header className="bg-clickup-bg border-b border-clickup-border px-8 pt-6 transition-colors">
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 bg-clickup-purple rounded flex items-center justify-center text-white">
+            <div className="w-8 h-8 bg-clickup-purple rounded flex items-center justify-center text-clickup-bg">
               <Layout size={20} />
             </div>
             <div>
@@ -425,7 +501,7 @@ export const PMSView = () => {
             {canEditProject ? (
               <button
                 onClick={() => setIsNewTaskModalOpen(true)}
-                className="app-text-body-sm flex min-h-10 items-center gap-2 rounded-md bg-clickup-purple px-4 font-semibold text-white shadow-lg shadow-purple-500/20"
+                className="app-text-body-sm flex min-h-10 items-center gap-2 rounded-md bg-clickup-purple px-4 font-semibold text-clickup-bg shadow-lg shadow-purple-500/20"
               >
                 <Plus size={16} />
                 <span>New Task</span>
@@ -567,6 +643,7 @@ export const PMSView = () => {
         {settingsOpen && selectedProjectId && (
           <ProjectSettingsPanel
             projectId={selectedProjectId}
+            teamId={selectedProject?.team_id ?? null}
             onClose={() => setSettingsOpen(false)}
             onLabelsChanged={(updated) => setLabels(updated)}
             onStatusesChanged={(updated) => setProjectStatuses(updated)}
@@ -587,6 +664,15 @@ export const PMSView = () => {
           projectStatuses={projectStatuses}
         />
       )}
+
+      <CreateSpaceModal
+        isOpen={createSpaceOpen}
+        onClose={() => setCreateSpaceOpen(false)}
+        onCreated={(space) => {
+          setSpaces((current) => [space, ...current.filter((item) => item.id !== space.id)]);
+          navigate(`/tool/pms-space-${space.id}`);
+        }}
+      />
     </div>
   );
 };

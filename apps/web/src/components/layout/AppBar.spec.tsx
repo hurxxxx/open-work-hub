@@ -39,12 +39,16 @@ function buildUser(overrides: Partial<AuthUser> = {}): AuthUser {
     theme_preference: 'system',
     primary_org_unit: null,
     workspace_roles: [],
+    app_access: [
+      { app: 'ai', workspace_id: 'workspace-ai', workspace_key: 'ai', workspace_name: 'AI Workspace', role: 'member' },
+      { app: 'docs', workspace_id: 'workspace-docs', workspace_key: 'docs', workspace_name: 'Docs Workspace', role: 'member' },
+      { app: 'pms', workspace_id: 'workspace-pms', workspace_key: 'pms', workspace_name: 'PMS Workspace', role: 'member' },
+      { app: 'planner', workspace_id: 'workspace-planner', workspace_key: 'planner', workspace_name: 'Planner Workspace', role: 'member' },
+    ],
+    system_roles: [],
     group_ids: [],
     group_slugs: [],
-    permissions: [],
-    visible_features: ['nav.ai', 'nav.docs', 'nav.pms', 'nav.planner'],
     must_change_password: false,
-    is_admin: false,
     last_login_at: null,
     created_at: '2026-04-08T00:00:00Z',
     ...overrides,
@@ -73,8 +77,10 @@ describe('AppBar', () => {
         <AppBar
           activeAppId="settings"
           currentUser={buildUser({
-            permissions: ['group.read'],
-            visible_features: [],
+            app_access: [
+              { app: 'admin', workspace_id: 'workspace-admin', workspace_key: 'admin', workspace_name: 'Admin Console', role: 'admin' },
+            ],
+            system_roles: ['org_admin'],
           })}
           onOpenAccount={onOpenAccount}
         />
@@ -83,7 +89,7 @@ describe('AppBar', () => {
 
     const settingsLink = screen.getByText('Settings').closest('a');
     expect(settingsLink).toBeTruthy();
-    expect(settingsLink?.getAttribute('href')).toBe('/admin/security');
+    expect(settingsLink?.getAttribute('href')).toBe('/admin/general');
     await waitFor(() => {
       expect(mockGetUnreadNotificationCount).toHaveBeenCalledWith('test-token');
     });

@@ -59,7 +59,7 @@ export const ToolView = ({ item }: { item: NavItem }) => {
                   <span>음성 입력</span>
                 </button>
               </div>
-              <button className="app-text-control flex items-center gap-2 rounded-lg bg-clickup-purple px-8 py-2.5 font-semibold text-white shadow-lg shadow-purple-500/20 transition-all hover:bg-opacity-90">
+              <button className="app-text-control flex items-center gap-2 rounded-lg bg-clickup-purple px-8 py-2.5 font-semibold text-clickup-bg shadow-lg shadow-purple-500/20 transition-all hover:bg-opacity-90">
                 <Brain size={18} />
                 <span>AI 실행하기</span>
               </button>

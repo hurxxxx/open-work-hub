@@ -16,8 +16,7 @@ import type { BlockContent } from '@aidoo/ui';
 import { useConfirm, usePrompt } from '@aidoo/ui';
 
 import { cn } from '@/src/lib/utils';
-import { listTeams } from '@/src/domains/admin/admin-api';
-import { getWorkspaceRoleByKey, teamRoleAllows } from '@/src/domains/auth/auth-api';
+import { teamRoleAllows } from '@/src/domains/auth/auth-api';
 import { useAuth } from '@/src/domains/auth/auth-provider';
 import { AccessDeniedView } from '@/src/domains/auth/settings-pages';
 import { useMediaUpload } from '@/src/domains/media/use-media-upload';
@@ -29,6 +28,7 @@ import {
   getSpaceDocPage,
   listSpaceDocPages,
   listSpaceDocs,
+  listSpaces,
   updateSpaceDoc,
   updateSpaceDocPage,
   type PmsSpaceDoc,
@@ -36,7 +36,6 @@ import {
 } from '@/src/domains/pms/pms-api';
 
 type TreeNode = PmsSpaceDocPage & { children: TreeNode[] };
-const PMS_WORKSPACE_KEY = 'pms';
 
 function getErrorMessage(error: unknown, fallback: string) {
   return error instanceof Error && error.message ? error.message : fallback;
@@ -144,7 +143,7 @@ const PageTreeItem = ({
 export const SpaceDocsView = ({ spaceId, spaceName, docId: spaceDocId }: { spaceId: string; spaceName?: string | null; docId?: string | null }) => {
   const navigate = useNavigate();
   const { docId: pageId } = useParams();
-  const { token, user } = useAuth();
+  const { token } = useAuth();
   const { uploadFile, resolveFileUrl } = useMediaUpload();
   const { confirm, confirmDialog } = useConfirm();
   const { prompt, promptDialog } = usePrompt();
@@ -160,8 +159,6 @@ export const SpaceDocsView = ({ spaceId, spaceName, docId: spaceDocId }: { space
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const navigateRef = useRef(navigate);
   navigateRef.current = navigate;
-  const pmsWorkspaceRole = getWorkspaceRoleByKey(user, PMS_WORKSPACE_KEY);
-  const pmsWorkspaceId = pmsWorkspaceRole?.workspace_id ?? null;
 
   const basePath = `/tool/pms-space-${spaceId}-docs`;
   const collectionPath = useCallback((docId: string) => `${basePath}-${docId}`, [basePath]);
@@ -172,10 +169,10 @@ export const SpaceDocsView = ({ spaceId, spaceName, docId: spaceDocId }: { space
   const pageTree = useMemo(() => buildTree(pages), [pages]);
   const canAccessSpaceDocs = teamRoleAllows(spaceRole, 'viewer');
   const canEditPages = teamRoleAllows(spaceRole, 'member');
-  const canManageCollections = teamRoleAllows(spaceRole, 'team_admin');
+  const canManageCollections = teamRoleAllows(spaceRole, 'admin');
 
   useEffect(() => {
-    if (!token || !pmsWorkspaceId) {
+    if (!token) {
       setSpaceRole(null);
       setSpaceRoleResolved(true);
       return;
@@ -183,7 +180,7 @@ export const SpaceDocsView = ({ spaceId, spaceName, docId: spaceDocId }: { space
 
     let cancelled = false;
     setSpaceRoleResolved(false);
-    void listTeams(token, pmsWorkspaceId)
+    void listSpaces(token)
       .then((items) => {
         if (cancelled) return;
         const currentTeam = items.find((item) => item.id === spaceId);
@@ -201,7 +198,7 @@ export const SpaceDocsView = ({ spaceId, spaceName, docId: spaceDocId }: { space
       });
 
     return () => { cancelled = true; };
-  }, [pmsWorkspaceId, spaceId, token]);
+  }, [spaceId, token]);
 
   const loadCollections = useCallback(async () => {
     if (!token) return;
@@ -449,7 +446,7 @@ export const SpaceDocsView = ({ spaceId, spaceName, docId: spaceDocId }: { space
             {canManageCollections ? (
               <button
                 onClick={() => { void handleCreateCollection(); }}
-                className="app-text-control flex items-center gap-2 rounded-md bg-clickup-purple px-4 py-2 text-white"
+                className="app-text-control flex items-center gap-2 rounded-md bg-clickup-purple px-4 py-2 text-clickup-bg"
               >
                 <Plus size={16} />
                 <span>New Collection</span>
@@ -514,7 +511,7 @@ export const SpaceDocsView = ({ spaceId, spaceName, docId: spaceDocId }: { space
               {canManageCollections ? (
                 <button
                   onClick={() => { void handleCreateCollection(); }}
-                  className="app-text-control mt-6 inline-flex items-center gap-2 rounded-md bg-clickup-purple px-4 py-2 text-white"
+                  className="app-text-control mt-6 inline-flex items-center gap-2 rounded-md bg-clickup-purple px-4 py-2 text-clickup-bg"
                 >
                   <Plus size={16} />
                   <span>Create Collection</span>

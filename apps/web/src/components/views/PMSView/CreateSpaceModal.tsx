@@ -2,8 +2,8 @@ import { useState, useEffect } from 'react';
 import { Layout } from 'lucide-react';
 import { Dialog, Button } from '@aidoo/ui';
 import { useAuth } from '@/src/domains/auth/auth-provider';
-import { getWorkspaceRoleByKey, workspaceRoleAllows } from '@/src/domains/auth/auth-api';
-import { createTeam, type TeamItem } from '@/src/domains/admin/admin-api';
+import { hasAppAccess } from '@/src/domains/auth/auth-api';
+import { createSpace, type PmsSpace } from '@/src/domains/pms/pms-api';
 
 export const CreateSpaceModal = ({
   isOpen,
@@ -12,7 +12,7 @@ export const CreateSpaceModal = ({
 }: {
   isOpen: boolean;
   onClose: () => void;
-  onCreated?: (team: TeamItem) => void;
+  onCreated?: (space: PmsSpace) => void;
 }) => {
   const { token, user } = useAuth();
   const [name, setName] = useState('');
@@ -20,9 +20,7 @@ export const CreateSpaceModal = ({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
 
-  const workspaceRole = getWorkspaceRoleByKey(user, 'pms');
-  const workspaceId = workspaceRole?.workspace_id;
-  const canCreateSpace = Boolean(user?.is_admin) || workspaceRoleAllows(workspaceRole?.role, 'workspace_admin');
+  const canCreateSpace = hasAppAccess(user, 'pms');
 
   // Reset form when modal opens/closes
   useEffect(() => {
@@ -35,15 +33,15 @@ export const CreateSpaceModal = ({
   }, [isOpen]);
 
   async function handleCreate() {
-    if (!token || !name.trim() || !workspaceId || !canCreateSpace) return;
+    if (!token || !name.trim() || !canCreateSpace) return;
     setSubmitting(true);
     setError('');
     try {
-      const team = await createTeam(token, workspaceId, {
+      const space = await createSpace(token, {
         name: name.trim(),
         description: description.trim(),
       });
-      onCreated?.(team);
+      onCreated?.(space);
       onClose();
     } catch (err) {
       setError(err instanceof Error ? err.message : '스페이스 생성에 실패했습니다.');
@@ -64,7 +62,7 @@ export const CreateSpaceModal = ({
           <Button
             variant="primary"
             onClick={handleCreate}
-            disabled={!name.trim() || !workspaceId || !canCreateSpace || submitting}
+            disabled={!name.trim() || !canCreateSpace || submitting}
           >
             {submitting ? 'Creating...' : 'Create Space'}
           </Button>
@@ -81,15 +79,9 @@ export const CreateSpaceModal = ({
           </div>
         </div>
 
-        {!workspaceId && (
+        {!canCreateSpace && (
           <div className="app-text-body rounded-md border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-amber-400">
-            워크스페이스에 소속되어 있지 않아 스페이스를 생성할 수 없습니다.
-          </div>
-        )}
-
-        {workspaceId && !canCreateSpace && (
-          <div className="app-text-body rounded-md border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-amber-400">
-            이 워크스페이스에서 스페이스를 만들 권한이 없습니다.
+            PMS 앱 접근 권한이 없어 스페이스를 생성할 수 없습니다.
           </div>
         )}
 

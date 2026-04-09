@@ -103,7 +103,7 @@ export const SchedulePopover = ({ isOpen, onClose, position, initialDate, initia
           </button>
         </div>
         <div className="flex-1"></div>
-        <button className="app-text-control-sm rounded-md bg-clickup-purple px-4 py-1.5 text-white transition-colors hover:bg-opacity-90">
+        <button className="app-text-control-sm rounded-md bg-clickup-purple px-4 py-1.5 text-clickup-bg transition-colors hover:bg-opacity-90">
           Save
         </button>
       </div>

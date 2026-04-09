@@ -88,7 +88,6 @@ export const NAV_ITEMS: NavItem[] = [
   { id: 'pms-tasks-assigned', title: 'Assigned to me', icon: User, category: 'Personal', appId: 'pms' },
   { id: 'pms-tasks-today', title: 'Today & Overdue', icon: Calendar, category: 'Personal', appId: 'pms' },
   { id: 'pms-tasks-personal', title: 'Personal List', icon: ListIcon, category: 'Personal', appId: 'pms' },
-  { id: 'pms-space-team', title: 'Team Space', icon: Layout, category: 'Spaces', appId: 'pms' },
 
   // DOCS
   { id: 'docs-all', title: 'All Docs', icon: Files, category: 'Library', appId: 'docs' },
@@ -106,8 +105,7 @@ export const NAV_ITEMS: NavItem[] = [
   // Settings
   { id: 'settings-general', title: 'General', icon: Settings, category: 'Admin', appId: 'settings', path: '/admin/general' },
   { id: 'settings-people', title: 'People', icon: User, category: 'Admin', appId: 'settings', path: '/admin/people' },
-  { id: 'settings-teams', title: 'Teams', icon: Layout, category: 'Admin', appId: 'settings', path: '/admin/teams' },
   { id: 'settings-workspaces', title: 'Workspaces', icon: Database, category: 'Admin', appId: 'settings', path: '/admin/workspaces' },
-  { id: 'settings-security', title: 'Security & Permissions', icon: Lock, category: 'Security & Permissions', appId: 'settings', path: '/admin/security' },
-  { id: 'settings-audit', title: 'Audit Logs', icon: Activity, category: 'Security & Permissions', appId: 'settings', path: '/admin/audit' },
+  { id: 'settings-security', title: 'Permissions', icon: Lock, category: 'Security', appId: 'settings', path: '/admin/security' },
+  { id: 'settings-audit', title: 'Audit Logs', icon: Activity, category: 'Security', appId: 'settings', path: '/admin/audit' },
 ];

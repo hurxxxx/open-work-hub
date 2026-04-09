@@ -82,7 +82,7 @@ export const SpaceOverviewView = ({
     <div className="h-full flex flex-col">
       <header className="bg-clickup-bg border-b border-clickup-border px-8 pt-6 pb-4">
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 bg-clickup-purple rounded flex items-center justify-center text-white">
+          <div className="w-8 h-8 bg-clickup-purple rounded flex items-center justify-center text-clickup-bg">
             <Layout size={20} />
           </div>
           <div>

@@ -1,9 +1,9 @@
 const PROJECT_ROLE_RANK: Record<string, number> = {
   viewer: 0,
   member: 1,
-  editor: 2,
-  admin: 3,
-  owner: 4,
+  editor: 1,
+  admin: 2,
+  owner: 3,
 };
 
 export function projectRoleAllows(

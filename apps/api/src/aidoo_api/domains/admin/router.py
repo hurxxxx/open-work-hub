@@ -12,10 +12,14 @@ from sqlalchemy.orm import Session, joinedload, selectinload
 from aidoo_api.core.db import get_db_session
 from aidoo_api.domains.auth.access import (
     assign_user_groups,
+    is_org_admin_user,
     is_platform_admin_user,
     is_valid_workspace_role,
     load_user_graph,
     load_active_workspace_by_id,
+    normalize_workspace_role,
+    replace_group_system_roles,
+    replace_user_system_roles,
     record_audit_log,
     resolve_team_role,
     resolve_workspace_role,
@@ -56,7 +60,7 @@ class AccessGroupItemResponse(BaseModel):
     description: str
     group_kind: str
     active: bool
-    permissions: list[str]
+    system_roles: list[str]
     member_count: int
 
 
@@ -124,7 +128,7 @@ def _ensure_workspace_scope(
     workspace = load_active_workspace_by_id(db, workspace_id)
     if workspace is None:
         raise HTTPException(status_code=404, detail="Workspace not found.")
-    if is_platform_admin_user(user):
+    if is_platform_admin_user(user, db) or is_org_admin_user(user, db):
         return workspace
 
     role = resolve_workspace_role(db, user, workspace.id)
@@ -150,6 +154,8 @@ def _ensure_team_scope(
     )
     if team is None or not team.active or not team.workspace.active:
         raise HTTPException(status_code=404, detail="Team not found.")
+    if is_platform_admin_user(user, db) or is_org_admin_user(user, db):
+        return team
     role = resolve_team_role(db, user, team)
     if not team_role_allows(role, min_role):
         raise HTTPException(status_code=403, detail="Team access required.")
@@ -162,9 +168,7 @@ class FeaturePolicyItemResponse(BaseModel):
     name: str
     description: str
     enabled: bool
-    required_permissions: list[str]
     allowed_workspace_keys: list[str]
-    allowed_group_slugs: list[str]
 
 
 class AuditLogItemResponse(BaseModel):
@@ -187,13 +191,12 @@ class AdminUserItemResponse(BaseModel):
     status: str
     theme_preference: str
     primary_org_unit: dict[str, str | None] | None
+    system_roles: list[str]
     workspace_roles: list[dict[str, str]]
+    app_access: list[dict[str, str | None]]
     group_ids: list[str]
     group_slugs: list[str]
-    permissions: list[str]
-    visible_features: list[str]
     must_change_password: bool
-    is_admin: bool
     last_login_at: datetime | None
     created_at: datetime
 
@@ -218,9 +221,9 @@ class AccessGroupUpsertRequest(BaseModel):
     name: str = Field(..., min_length=2, max_length=120)
     slug: str | None = Field(default=None, max_length=80)
     description: str = Field(default="", max_length=1000)
-    group_kind: str = Field(default="access", max_length=24)
+    group_kind: str = Field(default="principal", max_length=24)
     active: bool = True
-    permissions: list[str] = Field(default_factory=list)
+    system_roles: list[str] = Field(default_factory=list)
 
 
 class WorkspaceUpsertRequest(BaseModel):
@@ -246,7 +249,9 @@ class WorkspaceBindingInput(BaseModel):
     def validate_role(cls, value: str) -> str:
         if not is_valid_workspace_role(value):
             raise ValueError("Invalid workspace role.")
-        return value
+        normalized = normalize_workspace_role(value)
+        assert normalized is not None
+        return normalized
 
 
 class WorkspaceBindingsUpdateRequest(BaseModel):
@@ -266,6 +271,7 @@ class AdminUserCreateRequest(BaseModel):
     job_title: str | None = Field(default=None, max_length=120)
     primary_org_unit_id: str | None = None
     group_ids: list[str] = Field(default_factory=list)
+    system_roles: list[str] = Field(default_factory=list)
     temporary_password: str | None = Field(default=None, min_length=8, max_length=128)
     status: Literal["active", "invited", "suspended"] = "active"
 
@@ -277,6 +283,7 @@ class AdminUserUpdateRequest(BaseModel):
     job_title: str | None = Field(default=None, max_length=120)
     primary_org_unit_id: str | None = None
     group_ids: list[str] | None = None
+    system_roles: list[str] | None = None
     status: Literal["active", "invited", "suspended"] | None = None
     theme_preference: Literal["system", "light", "dark"] | None = None
     must_change_password: bool | None = None
@@ -293,9 +300,6 @@ class ResetPasswordResponse(BaseModel):
 class FeaturePolicyUpdateItem(BaseModel):
     id: str
     enabled: bool
-    required_permissions: list[str] = Field(default_factory=list)
-    allowed_workspace_keys: list[str] = Field(default_factory=list)
-    allowed_group_slugs: list[str] = Field(default_factory=list)
 
 
 class FeaturePolicyUpdateRequest(BaseModel):
@@ -314,16 +318,6 @@ def _serialize_admin_user(db: Session, user: User) -> AdminUserItemResponse:
     if loaded is None:
         raise HTTPException(status_code=404, detail="User not found.")
     return AdminUserItemResponse.model_validate(serialize_auth_user(db, loaded))
-
-
-def _sync_is_admin(db: Session, user: User) -> None:
-    platform_admin = db.scalar(select(AccessGroup).where(AccessGroup.slug == "platform-admin"))
-    if platform_admin is None:
-        return
-    user.is_admin = any(link.group_id == platform_admin.id for link in user.group_links)
-    db.add(user)
-
-
 @router.get("/users", response_model=AdminUsersResponse)
 def list_users(
     context: AuthContext = Depends(require_permission("user.read")),
@@ -360,9 +354,9 @@ def create_user(
     db.add(user)
     db.flush()
     assign_user_groups(db, user, payload.group_ids)
+    replace_user_system_roles(db, user.id, payload.system_roles)
     db.flush()
     db.refresh(user)
-    _sync_is_admin(db, user)
     record_audit_log(
         db,
         actor_user_id=context.user.id,
@@ -370,7 +364,7 @@ def create_user(
         entity_kind="user",
         entity_id=user.id,
         summary=f"Created user {user.email}",
-        payload={"group_ids": payload.group_ids},
+        payload={"group_ids": payload.group_ids, "system_roles": payload.system_roles},
     )
     db.commit()
     return CreatedUserResponse(
@@ -420,10 +414,11 @@ def update_user(
         user.must_change_password = payload.must_change_password
     if payload.group_ids is not None:
         assign_user_groups(db, user, payload.group_ids)
+    if payload.system_roles is not None:
+        replace_user_system_roles(db, user.id, payload.system_roles)
 
     db.flush()
     db.refresh(user)
-    _sync_is_admin(db, user)
     record_audit_log(
         db,
         actor_user_id=context.user.id,
@@ -431,6 +426,7 @@ def update_user(
         entity_kind="user",
         entity_id=user.id,
         summary=f"Updated user {user.email}",
+        payload={"system_roles": payload.system_roles} if payload.system_roles is not None else {},
     )
     db.commit()
     return _serialize_admin_user(db, user)
@@ -556,7 +552,12 @@ def list_groups(
     context: AuthContext = Depends(require_permission("group.read")),
     db: Session = Depends(get_db_session),
 ) -> list[AccessGroupItemResponse]:
-    groups = db.scalars(select(AccessGroup).options(selectinload(AccessGroup.members))).all()
+    groups = db.scalars(
+        select(AccessGroup).options(
+            selectinload(AccessGroup.members),
+            selectinload(AccessGroup.system_role_links),
+        )
+    ).all()
     return [
         AccessGroupItemResponse(
             id=group.id,
@@ -565,7 +566,7 @@ def list_groups(
             description=group.description,
             group_kind=group.group_kind,
             active=group.active,
-            permissions=list(group.permissions or []),
+            system_roles=sorted({link.role for link in group.system_role_links}),
             member_count=len(group.members),
         )
         for group in groups
@@ -589,16 +590,19 @@ def create_group(
         description=payload.description.strip(),
         group_kind=payload.group_kind,
         active=payload.active,
-        permissions=payload.permissions,
+        permissions=[],
     )
     db.add(group)
+    db.flush()
+    replace_group_system_roles(db, group.id, payload.system_roles)
     record_audit_log(
         db,
         actor_user_id=context.user.id,
         action="admin.group.create",
         entity_kind="group",
         entity_id=group.id,
-        summary=f"Created access group {group.name}",
+        summary=f"Created principal group {group.name}",
+        payload={"system_roles": payload.system_roles},
     )
     db.commit()
     return AccessGroupItemResponse(
@@ -608,7 +612,7 @@ def create_group(
         description=group.description,
         group_kind=group.group_kind,
         active=group.active,
-        permissions=list(group.permissions or []),
+        system_roles=sorted(payload.system_roles),
         member_count=0,
     )
 
@@ -620,7 +624,11 @@ def update_group(
     context: AuthContext = Depends(require_permission("group.write")),
     db: Session = Depends(get_db_session),
 ) -> AccessGroupItemResponse:
-    group = db.scalar(select(AccessGroup).options(selectinload(AccessGroup.members)).where(AccessGroup.id == group_id))
+    group = db.scalar(
+        select(AccessGroup)
+        .options(selectinload(AccessGroup.members), selectinload(AccessGroup.system_role_links))
+        .where(AccessGroup.id == group_id)
+    )
     if group is None:
         raise HTTPException(status_code=404, detail="Group not found.")
 
@@ -629,7 +637,8 @@ def update_group(
     group.description = payload.description.strip()
     group.group_kind = payload.group_kind
     group.active = payload.active
-    group.permissions = payload.permissions
+    group.permissions = []
+    replace_group_system_roles(db, group.id, payload.system_roles)
     db.add(group)
     record_audit_log(
         db,
@@ -637,7 +646,8 @@ def update_group(
         action="admin.group.update",
         entity_kind="group",
         entity_id=group.id,
-        summary=f"Updated access group {group.name}",
+        summary=f"Updated principal group {group.name}",
+        payload={"system_roles": payload.system_roles},
     )
     db.commit()
     return AccessGroupItemResponse(
@@ -647,7 +657,7 @@ def update_group(
         description=group.description,
         group_kind=group.group_kind,
         active=group.active,
-        permissions=list(group.permissions or []),
+        system_roles=sorted(payload.system_roles),
         member_count=len(group.members),
     )
 
@@ -659,7 +669,11 @@ def replace_group_members(
     context: AuthContext = Depends(require_permission("group.write")),
     db: Session = Depends(get_db_session),
 ) -> AccessGroupItemResponse:
-    group = db.scalar(select(AccessGroup).options(selectinload(AccessGroup.members)).where(AccessGroup.id == group_id))
+    group = db.scalar(
+        select(AccessGroup)
+        .options(selectinload(AccessGroup.members), selectinload(AccessGroup.system_role_links))
+        .where(AccessGroup.id == group_id)
+    )
     if group is None:
         raise HTTPException(status_code=404, detail="Group not found.")
 
@@ -682,7 +696,11 @@ def replace_group_members(
         payload={"user_ids": sorted(requested_ids)},
     )
     db.commit()
-    group = db.scalar(select(AccessGroup).options(selectinload(AccessGroup.members)).where(AccessGroup.id == group_id))
+    group = db.scalar(
+        select(AccessGroup)
+        .options(selectinload(AccessGroup.members), selectinload(AccessGroup.system_role_links))
+        .where(AccessGroup.id == group_id)
+    )
     assert group is not None
     return AccessGroupItemResponse(
         id=group.id,
@@ -691,7 +709,7 @@ def replace_group_members(
         description=group.description,
         group_kind=group.group_kind,
         active=group.active,
-        permissions=list(group.permissions or []),
+        system_roles=sorted({link.role for link in group.system_role_links}),
         member_count=len(group.members),
     )
 
@@ -703,7 +721,7 @@ def list_workspaces(
 ) -> list[WorkspaceItemResponse]:
     query = select(Workspace).options(selectinload(Workspace.teams)).where(Workspace.active.is_(True))
     items = db.scalars(query).all()
-    if not is_platform_admin_user(context.user):
+    if not (is_platform_admin_user(context.user, db) or is_org_admin_user(context.user, db)):
         accessible_workspace_ids = {
             item["workspace_id"]
             for item in serialize_auth_user(db, context.user)["workspace_roles"]
@@ -766,7 +784,7 @@ def update_workspace(
     context: AuthContext = Depends(require_auth_context),
     db: Session = Depends(get_db_session),
 ) -> WorkspaceItemResponse:
-    workspace = _ensure_workspace_scope(db, context.user, workspace_id, min_role="workspace_admin")
+    workspace = _ensure_workspace_scope(db, context.user, workspace_id, min_role="admin")
     workspace = db.scalar(select(Workspace).options(selectinload(Workspace.teams)).where(Workspace.id == workspace.id))
     assert workspace is not None
 
@@ -800,7 +818,7 @@ def list_workspace_bindings(
     context: AuthContext = Depends(require_auth_context),
     db: Session = Depends(get_db_session),
 ) -> list[WorkspaceBindingItemResponse]:
-    _ensure_workspace_scope(db, context.user, workspace_id, min_role="workspace_admin")
+    _ensure_workspace_scope(db, context.user, workspace_id, min_role="admin")
     workspace = db.scalar(
         select(Workspace)
         .options(
@@ -817,7 +835,9 @@ def list_workspace_bindings(
             subject_id=binding.user_id,
             subject_type="user",
             subject_label=binding.user.email,
-            role=binding.role,
+            role="member"
+            if workspace.key == "pms"
+            else (normalize_workspace_role(binding.role) or binding.role),
         )
         for binding in workspace.user_bindings
     ]
@@ -826,7 +846,9 @@ def list_workspace_bindings(
             subject_id=binding.group_id,
             subject_type="group",
             subject_label=binding.group.name,
-            role=binding.role,
+            role="member"
+            if workspace.key == "pms"
+            else (normalize_workspace_role(binding.role) or binding.role),
         )
         for binding in workspace.group_bindings
     )
@@ -840,7 +862,7 @@ def replace_workspace_bindings(
     context: AuthContext = Depends(require_auth_context),
     db: Session = Depends(get_db_session),
 ) -> list[WorkspaceBindingItemResponse]:
-    _ensure_workspace_scope(db, context.user, workspace_id, min_role="workspace_admin")
+    _ensure_workspace_scope(db, context.user, workspace_id, min_role="admin")
     workspace = db.scalar(
         select(Workspace)
         .options(
@@ -854,8 +876,9 @@ def replace_workspace_bindings(
 
     requested_user_ids = {item.subject_id for item in payload.users}
     requested_group_ids = {item.subject_id for item in payload.groups}
-    user_role_map = {item.subject_id: item.role for item in payload.users}
-    group_role_map = {item.subject_id: item.role for item in payload.groups}
+    normalized_role = (lambda role: "member" if workspace.key == "pms" else role)
+    user_role_map = {item.subject_id: normalized_role(item.role) for item in payload.users}
+    group_role_map = {item.subject_id: normalized_role(item.role) for item in payload.groups}
 
     for binding in list(workspace.user_bindings):
         if binding.user_id not in requested_user_ids:
@@ -920,7 +943,10 @@ def list_teams(
         _ensure_workspace_scope(db, context.user, workspace_id, min_role="member")
         query = query.where(Team.workspace_id == workspace_id)
     items = db.scalars(query.order_by(Team.name.asc())).all()
-    if not is_platform_admin_user(context.user) and workspace_id is None:
+    if not (
+        is_platform_admin_user(context.user, db)
+        or is_org_admin_user(context.user, db)
+    ) and workspace_id is None:
         accessible_workspace_ids = {
             item["workspace_id"]
             for item in serialize_auth_user(db, context.user)["workspace_roles"]
@@ -949,7 +975,7 @@ def create_team(
     context: AuthContext = Depends(require_auth_context),
     db: Session = Depends(get_db_session),
 ) -> TeamItemResponse:
-    workspace = _ensure_workspace_scope(db, context.user, workspace_id, min_role="workspace_admin")
+    workspace = _ensure_workspace_scope(db, context.user, workspace_id, min_role="admin")
 
     key = payload.key or slugify(payload.name)
     if db.scalar(select(Team).where(Team.workspace_id == workspace.id, Team.key == key)) is not None:
@@ -970,7 +996,7 @@ def create_team(
             id=new_id(),
             team_id=team.id,
             user_id=context.user.id,
-            role="team_admin",
+            role="owner",
         )
     )
     record_audit_log(
@@ -991,7 +1017,7 @@ def create_team(
         description=team.description,
         active=team.active,
         member_count=1,
-        current_user_role="team_admin",
+        current_user_role="owner",
     )
 
 
@@ -1006,7 +1032,7 @@ def update_team(
         db,
         context.user,
         team_id,
-        min_role="team_admin",
+        min_role="admin",
         include_workspace=True,
         include_members=True,
     )
@@ -1044,7 +1070,7 @@ def delete_team(
     context: AuthContext = Depends(require_auth_context),
     db: Session = Depends(get_db_session),
 ) -> None:
-    team = _ensure_team_scope(db, context.user, team_id, min_role="team_admin")
+    team = _ensure_team_scope(db, context.user, team_id, min_role="admin")
     team.trashed_at = _utcnow()
     db.add(team)
     record_audit_log(
@@ -1091,7 +1117,7 @@ def replace_team_members(
         db,
         context.user,
         team_id,
-        min_role="team_admin",
+        min_role="admin",
         include_members=True,
     )
 
@@ -1130,9 +1156,7 @@ def list_feature_policies(
             name=item.name,
             description=item.description,
             enabled=item.enabled,
-            required_permissions=list(item.required_permissions or []),
             allowed_workspace_keys=list(item.allowed_workspace_keys or []),
-            allowed_group_slugs=list(item.allowed_group_slugs or []),
         )
         for item in items
     ]
@@ -1152,9 +1176,6 @@ def update_feature_policies(
         if policy is None:
             continue
         policy.enabled = update.enabled
-        policy.required_permissions = update.required_permissions
-        policy.allowed_workspace_keys = update.allowed_workspace_keys
-        policy.allowed_group_slugs = update.allowed_group_slugs
         db.add(policy)
 
     record_audit_log(

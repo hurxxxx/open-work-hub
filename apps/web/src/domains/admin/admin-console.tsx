@@ -6,18 +6,15 @@ import { Button, InlineNotice, Select } from '@aidoo/ui';
 import {
   createAdminUser,
   createGroup,
-  createTeam,
   createWorkspace,
   listAdminUsers,
   listAuditLogs,
   listFeaturePolicies,
   listGroups,
   listOrgUnits,
-  listTeamMembers,
   listTeams,
   listWorkspaceBindings,
   listWorkspaces,
-  replaceTeamMembers,
   replaceWorkspaceBindings,
   resetUserPassword,
   updateFeaturePolicies,
@@ -25,7 +22,6 @@ import {
   type AuditLogItem,
   type FeaturePolicyItem,
   type OrgUnitItem,
-  type TeamItem,
   type WorkspaceBindingItem,
   type WorkspaceItem,
 } from './admin-api';
@@ -33,7 +29,7 @@ import {
   hasAnyAdminReadPermission,
   type AdminSection,
 } from './admin-permissions';
-import { workspaceRoleAllows, type AuthUser } from '@/src/domains/auth/auth-api';
+import type { AuthUser } from '@/src/domains/auth/auth-api';
 import { useAuth } from '@/src/domains/auth/auth-provider';
 import { AccessDeniedView } from '@/src/domains/auth/settings-pages';
 
@@ -47,16 +43,11 @@ const sectionMeta: Record<
 > = {
   general: {
     title: 'General settings',
-    description: '공통 사용자, 팀, 워크스페이스, 권한 정책의 현재 상태를 한곳에서 확인합니다.',
+    description: '공통 사용자, 공간, 워크스페이스, 권한 정책의 현재 상태를 한곳에서 확인합니다.',
   },
   people: {
     title: 'Manage people',
     description: '',
-    learnMoreLabel: 'Learn more',
-  },
-  teams: {
-    title: 'Teams',
-    description: 'View-only users added to Teams will be converted to paid users.',
     learnMoreLabel: 'Learn more',
   },
   workspaces: {
@@ -107,6 +98,10 @@ function formatDateLabel(value?: string | null): string {
     day: '2-digit',
     year: 'numeric',
   });
+}
+
+function isAdminUser(user: Pick<AuthUser, 'system_roles'>): boolean {
+  return user.system_roles.length > 0;
 }
 
 function SettingsShell({
@@ -264,17 +259,28 @@ function SectionMessage({
 }
 
 function GeneralSection({ token }: { token: string }) {
+  const auth = useAuth();
   const [summary, setSummary] = useState({
-    userCount: 0,
-    adminCount: 0,
-    groupCount: 0,
-    workspaceCount: 0,
-    teamCount: 0,
-    policyCount: 0,
-    enabledPolicyCount: 0,
-    auditCount: 0,
+    userCount: null as number | null,
+    adminCount: null as number | null,
+    groupCount: null as number | null,
+    workspaceCount: null as number | null,
+    teamCount: null as number | null,
+    policyCount: null as number | null,
+    enabledPolicyCount: null as number | null,
+    auditCount: null as number | null,
   });
   const [error, setError] = useState<string | null>(null);
+  const canReadUsers = auth.hasPermission('user.read');
+  const canReadGroups = auth.hasPermission('group.read');
+  const canReadWorkspaces = auth.hasPermission('workspace.read');
+  const canReadTeams = auth.hasPermission('team.read');
+  const canReadPolicies = auth.hasPermission('feature_policy.read');
+  const canReadAudit = auth.hasPermission('audit.read');
+
+  function formatCount(value: number | null) {
+    return value ?? 'Restricted';
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -282,25 +288,25 @@ function GeneralSection({ token }: { token: string }) {
     async function load() {
       try {
         const [users, groups, workspaces, teams, policies, audits] = await Promise.all([
-          listAdminUsers(token),
-          listGroups(token),
-          listWorkspaces(token),
-          listTeams(token),
-          listFeaturePolicies(token),
-          listAuditLogs(token),
+          canReadUsers ? listAdminUsers(token) : Promise.resolve(null),
+          canReadGroups ? listGroups(token) : Promise.resolve(null),
+          canReadWorkspaces ? listWorkspaces(token) : Promise.resolve(null),
+          canReadTeams ? listTeams(token) : Promise.resolve(null),
+          canReadPolicies ? listFeaturePolicies(token) : Promise.resolve(null),
+          canReadAudit ? listAuditLogs(token) : Promise.resolve(null),
         ]);
         if (cancelled) {
           return;
         }
         setSummary({
-          userCount: users.items.length,
-          adminCount: users.items.filter((item) => item.is_admin).length,
-          groupCount: groups.length,
-          workspaceCount: workspaces.length,
-          teamCount: teams.length,
-          policyCount: policies.length,
-          enabledPolicyCount: policies.filter((item) => item.enabled).length,
-          auditCount: audits.length,
+          userCount: users?.items.length ?? null,
+          adminCount: users?.items.filter((item) => isAdminUser(item)).length ?? null,
+          groupCount: groups?.length ?? null,
+          workspaceCount: workspaces?.length ?? null,
+          teamCount: teams?.length ?? null,
+          policyCount: policies?.length ?? null,
+          enabledPolicyCount: policies?.filter((item) => item.enabled).length ?? null,
+          auditCount: audits?.length ?? null,
         });
       } catch (caughtError) {
         if (!cancelled) {
@@ -314,7 +320,15 @@ function GeneralSection({ token }: { token: string }) {
     return () => {
       cancelled = true;
     };
-  }, [token]);
+  }, [
+    canReadAudit,
+    canReadGroups,
+    canReadPolicies,
+    canReadTeams,
+    canReadUsers,
+    canReadWorkspaces,
+    token,
+  ]);
 
   return (
     <div className="space-y-6">
@@ -330,18 +344,18 @@ function GeneralSection({ token }: { token: string }) {
           <div className="grid gap-4 md:grid-cols-2">
             <div className="rounded-xl border border-clickup-border bg-clickup-sidebar p-4">
               <div className="app-text-title-md text-clickup-text">Identity</div>
-              <div className="app-text-body mt-3 space-y-2 text-gray-500">
-                <div>사용자 계정 {summary.userCount}개</div>
-                <div>관리자 {summary.adminCount}명</div>
-                <div>권한 그룹 {summary.groupCount}개</div>
+                <div className="app-text-body mt-3 space-y-2 text-gray-500">
+                <div>사용자 계정 {formatCount(summary.userCount)}{summary.userCount !== null ? '개' : ''}</div>
+                <div>관리자 {formatCount(summary.adminCount)}{summary.adminCount !== null ? '명' : ''}</div>
+                <div>권한 그룹 {formatCount(summary.groupCount)}{summary.groupCount !== null ? '개' : ''}</div>
               </div>
             </div>
             <div className="rounded-xl border border-clickup-border bg-clickup-sidebar p-4">
               <div className="app-text-title-md text-clickup-text">Work model</div>
               <div className="app-text-body mt-3 space-y-2 text-gray-500">
-                <div>워크스페이스 {summary.workspaceCount}개</div>
-                <div>실행 팀 {summary.teamCount}개</div>
-                <div>기능 정책 {summary.policyCount}개</div>
+                <div>워크스페이스 {formatCount(summary.workspaceCount)}{summary.workspaceCount !== null ? '개' : ''}</div>
+                <div>PMS 공간 {formatCount(summary.teamCount)}{summary.teamCount !== null ? '개' : ''}</div>
+                <div>기능 정책 {formatCount(summary.policyCount)}{summary.policyCount !== null ? '개' : ''}</div>
               </div>
             </div>
           </div>
@@ -356,7 +370,7 @@ function GeneralSection({ token }: { token: string }) {
               프로필 아바타는 개인 설정으로만 이동하고, 조직 운영 기능은 모두 Settings 앱 안에서 다룹니다.
             </div>
             <div className="rounded-xl border border-clickup-border bg-clickup-sidebar p-4">
-              사용자, 팀, 워크스페이스, 권한 정책은 좌측 서브사이드바를 기준으로 분리합니다.
+              사용자, PMS 공간, 워크스페이스, 권한 정책은 좌측 서브사이드바를 기준으로 분리합니다.
             </div>
             <div className="rounded-xl border border-clickup-border bg-clickup-sidebar p-4">
               관리자 이벤트와 인증 이벤트는 Audit 섹션에서 시간순으로 확인합니다.
@@ -421,7 +435,7 @@ function PeopleSection({ token }: { token: string }) {
 
       const matchesRole =
         roleFilter === 'all' ||
-        (roleFilter === 'admin' ? user.is_admin : !user.is_admin);
+        (roleFilter === 'admin' ? isAdminUser(user) : !isAdminUser(user));
 
       return matchesQuery && matchesRole;
     });
@@ -468,7 +482,7 @@ function PeopleSection({ token }: { token: string }) {
     const rows = filteredUsers.map((user) => [
       user.display_name || user.full_name,
       user.email,
-      user.is_admin ? 'Owner' : 'Member',
+      isAdminUser(user) ? 'Admin' : 'Member',
       formatDateLabel(user.last_login_at),
       'System',
       formatDateLabel(user.created_at),
@@ -583,16 +597,16 @@ function PeopleSection({ token }: { token: string }) {
                       </div>
                       <div>
                         <div className="font-medium text-clickup-text">{user.display_name || user.full_name}</div>
-                        {user.is_admin ? (
+                        {isAdminUser(user) ? (
                           <div className="mt-0.5">
-                            <Badge tone="default">Owner</Badge>
+                            <Badge tone="default">Admin</Badge>
                           </div>
                         ) : null}
                       </div>
                     </div>
                   </BodyCell>
                   <BodyCell>{user.email}</BodyCell>
-                  <BodyCell>{user.is_admin ? 'Owner' : 'Member'}</BodyCell>
+                  <BodyCell>{isAdminUser(user) ? 'Admin' : 'Member'}</BodyCell>
                   <BodyCell>{formatDateLabel(user.last_login_at)}</BodyCell>
                   <BodyCell>System</BodyCell>
                   <BodyCell>{formatDateLabel(user.created_at)}</BodyCell>
@@ -664,323 +678,8 @@ function PeopleSection({ token }: { token: string }) {
   );
 }
 
-function TeamsSection({ token }: { token: string }) {
-  const auth = useAuth();
-  const [workspaces, setWorkspaces] = useState<WorkspaceItem[]>([]);
-  const [teams, setTeams] = useState<TeamItem[]>([]);
-  const [users, setUsers] = useState<AuthUser[]>([]);
-  const [selectedWorkspaceId, setSelectedWorkspaceId] = useState('');
-  const [selectedTeamId, setSelectedTeamId] = useState('');
-  const [selectedUserId, setSelectedUserId] = useState(NONE_OPTION_VALUE);
-  const [createOpen, setCreateOpen] = useState(false);
-  const [name, setName] = useState('');
-  const [description, setDescription] = useState('');
-  const [teamMembers, setTeamMembers] = useState<AuthUser[]>([]);
-  const [message, setMessage] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const manageableWorkspaceIds = useMemo(
-    () => new Set(
-      (auth.user?.workspace_roles ?? [])
-        .filter((item) => workspaceRoleAllows(item.role, 'workspace_admin'))
-        .map((item) => item.workspace_id),
-    ),
-    [auth.user?.workspace_roles],
-  );
-  const manageableWorkspaces = useMemo(
-    () => (
-      auth.user?.is_admin
-        ? workspaces
-        : workspaces.filter((item) => manageableWorkspaceIds.has(item.id))
-    ),
-    [auth.user?.is_admin, manageableWorkspaceIds, workspaces],
-  );
-  const canCreateTeams = Boolean(auth.user?.is_admin) || manageableWorkspaces.length > 0;
-  const canReadUsers = auth.hasPermission('user.read');
-
-  async function load() {
-    try {
-      const [workspaceItems, teamItems] = await Promise.all([
-        listWorkspaces(token),
-        listTeams(token),
-      ]);
-      const userResponse = canReadUsers ? await listAdminUsers(token) : { items: [] };
-      setWorkspaces(workspaceItems);
-      setTeams(teamItems);
-      setUsers(userResponse.items);
-      setSelectedWorkspaceId((current) => current || workspaceItems[0]?.id || '');
-      setSelectedUserId((current) => current || NONE_OPTION_VALUE);
-    } catch (caughtError) {
-      setError(getErrorMessage(caughtError, '팀 정보를 불러오지 못했습니다.'));
-    }
-  }
-
-  async function loadMembers(teamId: string) {
-    try {
-      setTeamMembers(await listTeamMembers(token, teamId));
-    } catch (caughtError) {
-      setError(getErrorMessage(caughtError, '팀 멤버를 불러오지 못했습니다.'));
-    }
-  }
-
-  useEffect(() => {
-    void load();
-  }, [canReadUsers, token]);
-
-  useEffect(() => {
-    if (!canCreateTeams) {
-      setCreateOpen(false);
-      setSelectedWorkspaceId('');
-      return;
-    }
-
-    setSelectedWorkspaceId((current) => (
-      manageableWorkspaces.some((item) => item.id === current)
-        ? current
-        : manageableWorkspaces[0]?.id ?? ''
-    ));
-  }, [canCreateTeams, manageableWorkspaces]);
-
-  useEffect(() => {
-    if (!selectedTeamId) {
-      setTeamMembers([]);
-      return;
-    }
-    void loadMembers(selectedTeamId);
-  }, [selectedTeamId, token]);
-  const selectedTeam = useMemo(
-    () => teams.find((item) => item.id === selectedTeamId) ?? null,
-    [selectedTeamId, teams],
-  );
-  const canManageSelectedTeam = Boolean(auth.user?.is_admin)
-    || selectedTeam?.current_user_role === 'team_admin';
-
-  async function handleCreateTeam(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!selectedWorkspaceId || !canCreateTeams) {
-      return;
-    }
-
-    setMessage(null);
-    setError(null);
-
-    try {
-      await createTeam(token, selectedWorkspaceId, {
-        name: name.trim(),
-        description: description.trim(),
-      });
-      setName('');
-      setDescription('');
-      setMessage('팀을 생성했습니다.');
-      setCreateOpen(false);
-      await load();
-    } catch (caughtError) {
-      setError(getErrorMessage(caughtError, '팀을 생성하지 못했습니다.'));
-    }
-  }
-
-  async function handleAddTeamMember() {
-    if (!selectedTeamId || !selectedUserId || selectedUserId === NONE_OPTION_VALUE) {
-      return;
-    }
-
-    setMessage(null);
-    setError(null);
-
-    try {
-      const nextIds = Array.from(new Set([...teamMembers.map((item) => item.id), selectedUserId]));
-      const members = await replaceTeamMembers(token, selectedTeamId, nextIds);
-      setTeamMembers(members);
-      setMessage('팀 멤버를 저장했습니다.');
-    } catch (caughtError) {
-      setError(getErrorMessage(caughtError, '팀 멤버를 저장하지 못했습니다.'));
-    }
-  }
-
-  return (
-    <div className="space-y-6">
-      <SectionMessage error={error} message={message} />
-
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-clickup-border pb-4">
-        <div>
-          <div className="app-text-title-md text-clickup-text">Create team</div>
-          <div className="app-text-body text-gray-500">팀은 항상 워크스페이스에 속합니다. View-only users added to Teams will be converted to paid users.</div>
-        </div>
-        {canCreateTeams ? (
-          <div className="flex items-center gap-2">
-            <button
-              className="app-text-control inline-flex items-center gap-1.5 rounded-md bg-clickup-text px-3 py-1.5 text-clickup-bg transition-opacity hover:opacity-90 dark:bg-white dark:text-black"
-              onClick={() => setCreateOpen((current) => !current)}
-              type="button"
-            >
-              <span>+</span>
-              <span>{createOpen ? 'Close' : 'Create Team'}</span>
-            </button>
-          </div>
-        ) : null}
-      </div>
-
-      <div className="w-full">
-        <table className="app-text-body min-w-full border-collapse">
-          <thead>
-            <tr>
-              <HeadCell>Name</HeadCell>
-              <HeadCell>Alias</HeadCell>
-              <HeadCell>Source</HeadCell>
-              <HeadCell>Members</HeadCell>
-              <HeadCell>Actions</HeadCell>
-            </tr>
-          </thead>
-          <tbody>
-            {teams.length === 0 ? (
-              <EmptyRow
-                colSpan={5}
-                description="상단의 Create Team 버튼으로 첫 팀을 추가하세요."
-                title="등록된 팀이 없습니다."
-              />
-            ) : (
-              teams.map((team) => (
-                <tr
-                  key={team.id}
-                  className={selectedTeamId === team.id ? 'bg-clickup-hover/70' : undefined}
-                >
-                  <BodyCell>
-                    <button
-                      className="flex items-center gap-3 text-left"
-                      onClick={() => setSelectedTeamId(team.id)}
-                      type="button"
-                    >
-                      <div className="app-text-label flex h-8 w-8 items-center justify-center rounded-full bg-clickup-sidebar text-gray-500">
-                        {getInitials(team.name)}
-                      </div>
-                      <div>
-                        <div className="font-medium text-clickup-text">{team.name}</div>
-                        <div className="app-text-caption mt-0.5 text-gray-500">{team.member_count} members</div>
-                      </div>
-                    </button>
-                  </BodyCell>
-                  <BodyCell>@{team.key}</BodyCell>
-                  <BodyCell>
-                    <Badge tone="green">Manual</Badge>
-                  </BodyCell>
-                  <BodyCell>{team.member_count}</BodyCell>
-                  <BodyCell className="w-12 text-right">
-                    <button
-                      className="rounded-md px-2 py-1 text-gray-500 transition-colors hover:bg-clickup-hover hover:text-clickup-text"
-                      onClick={() => setSelectedTeamId(team.id)}
-                      type="button"
-                    >
-                      ...
-                    </button>
-                  </BodyCell>
-                </tr>
-              ))
-            )}
-            {canCreateTeams ? (
-              <tr>
-                <td className="app-text-body px-4 py-3 text-gray-500" colSpan={5}>
-                  <button
-                    className="transition-colors hover:text-clickup-text"
-                    onClick={() => setCreateOpen(true)}
-                    type="button"
-                  >
-                    + Create Team
-                  </button>
-                </td>
-              </tr>
-            ) : null}
-          </tbody>
-        </table>
-      </div>
-
-      {createOpen && canCreateTeams ? (
-        <div className="border-t border-b border-clickup-border px-5 py-5 mb-6">
-          <form className="grid gap-3 lg:grid-cols-[220px_minmax(0,1fr)_minmax(0,1fr)_auto]" onSubmit={(event) => void handleCreateTeam(event)}>
-            <Select
-              onValueChange={setSelectedWorkspaceId}
-              options={manageableWorkspaces.map((item) => ({ value: item.id, label: item.name }))}
-              value={selectedWorkspaceId}
-            />
-            <input
-              className={fieldClassName}
-              onChange={(event) => setName(event.target.value)}
-              placeholder="Team name"
-              value={name}
-            />
-            <input
-              className={fieldClassName}
-              onChange={(event) => setDescription(event.target.value)}
-              placeholder="Description"
-              value={description}
-            />
-            <div className="flex justify-end">
-              <Button type="submit" variant="primary">Create</Button>
-            </div>
-          </form>
-        </div>
-      ) : null}
-
-      {selectedTeam ? (
-        <div className="rounded-xl border border-clickup-border bg-clickup-card px-5 py-5">
-          <div className="flex flex-col gap-3 border-b border-clickup-border pb-4 lg:flex-row lg:items-start lg:justify-between">
-            <div>
-              <div className="app-text-title-md text-clickup-text">{selectedTeam.name}</div>
-              <div className="app-text-body mt-1 text-gray-500">
-                Workspace {selectedTeam.workspace_key} / Alias @{selectedTeam.key}
-              </div>
-            </div>
-            <Badge tone="green">Manual</Badge>
-          </div>
-
-          {canManageSelectedTeam && canReadUsers ? (
-            <div className="mt-4 grid gap-4 lg:grid-cols-[260px_auto]">
-              <Select
-                onValueChange={setSelectedUserId}
-                options={[
-                  { value: NONE_OPTION_VALUE, label: 'Add member by email' },
-                  ...users.map((item) => ({ value: item.id, label: item.email })),
-                ]}
-                value={selectedUserId}
-              />
-              <div className="flex justify-end lg:justify-start">
-                <Button onClick={() => { void handleAddTeamMember(); }} variant="secondary">Add member</Button>
-              </div>
-            </div>
-          ) : null}
-
-          <div className="mt-4 grid gap-2">
-            {teamMembers.length === 0 ? (
-              <div className="app-text-body rounded-lg border border-dashed border-clickup-border px-4 py-5 text-gray-500">
-                아직 팀 멤버가 없습니다.
-              </div>
-            ) : (
-              teamMembers.map((member) => (
-                <div
-                  key={member.id}
-                  className="flex items-center justify-between border-b border-clickup-border py-3 last:border-b-0"
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="app-text-label flex h-8 w-8 items-center justify-center rounded-full bg-clickup-sidebar text-gray-500">
-                      {getInitials(member.display_name || member.full_name)}
-                    </div>
-                    <div>
-                      <div className="font-medium text-clickup-text">{member.display_name || member.full_name}</div>
-                      <div className="app-text-caption mt-0.5 text-gray-500">{member.email}</div>
-                    </div>
-                  </div>
-                  <Badge tone={member.is_admin ? 'purple' : 'default'}>
-                    {member.is_admin ? 'Admin' : 'Member'}
-                  </Badge>
-                </div>
-              ))
-            )}
-          </div>
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
 function WorkspacesSection({ token }: { token: string }) {
+  const auth = useAuth();
   const [workspaces, setWorkspaces] = useState<WorkspaceItem[]>([]);
   const [users, setUsers] = useState<AuthUser[]>([]);
   const [groups, setGroups] = useState<AccessGroupItem[]>([]);
@@ -992,13 +691,23 @@ function WorkspacesSection({ token }: { token: string }) {
   const [selectedGroupId, setSelectedGroupId] = useState(NONE_OPTION_VALUE);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const canCreateWorkspaces = auth.hasPermission('workspace.write');
+  const canReadUsers = auth.hasPermission('user.read');
+  const canReadGroups = auth.hasPermission('group.read');
+  const canManageBindings = canCreateWorkspaces;
+  const selectedWorkspace = useMemo(
+    () => workspaces.find((item) => item.id === selectedWorkspaceId) ?? null,
+    [selectedWorkspaceId, workspaces],
+  );
+  const isPmsWorkspace = selectedWorkspace?.key === 'pms';
 
   async function load() {
     try {
+      setError(null);
       const [workspaceItems, userResponse, groupItems] = await Promise.all([
         listWorkspaces(token),
-        listAdminUsers(token),
-        listGroups(token),
+        canReadUsers ? listAdminUsers(token) : Promise.resolve({ items: [] }),
+        canReadGroups ? listGroups(token) : Promise.resolve([]),
       ]);
       setWorkspaces(workspaceItems);
       setUsers(userResponse.items);
@@ -1017,10 +726,13 @@ function WorkspacesSection({ token }: { token: string }) {
 
   useEffect(() => {
     void load();
-  }, [token]);
+  }, [canReadGroups, canReadUsers, token]);
 
   async function handleCreateWorkspace(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (!canCreateWorkspaces) {
+      return;
+    }
     setMessage(null);
     setError(null);
 
@@ -1039,7 +751,7 @@ function WorkspacesSection({ token }: { token: string }) {
   }
 
   async function handleAddBindings() {
-    if (!selectedWorkspaceId) {
+    if (!selectedWorkspaceId || !canManageBindings) {
       return;
     }
 
@@ -1063,7 +775,7 @@ function WorkspacesSection({ token }: { token: string }) {
           subject_id: selectedGroupId,
           subject_type: 'group',
           subject_label: groups.find((item) => item.id === selectedGroupId)?.name ?? selectedGroupId,
-          role: 'viewer',
+          role: isPmsWorkspace ? 'member' : 'viewer',
         });
       }
 
@@ -1078,11 +790,16 @@ function WorkspacesSection({ token }: { token: string }) {
         })),
       });
       setBindings(response);
-      setMessage('워크스페이스 바인딩을 저장했습니다.');
+      setMessage(isPmsWorkspace ? 'PMS 앱 접근 바인딩을 저장했습니다.' : '워크스페이스 바인딩을 저장했습니다.');
       setSelectedUserId(NONE_OPTION_VALUE);
       setSelectedGroupId(NONE_OPTION_VALUE);
     } catch (caughtError) {
-      setError(getErrorMessage(caughtError, '워크스페이스 바인딩을 저장하지 못했습니다.'));
+      setError(
+        getErrorMessage(
+          caughtError,
+          isPmsWorkspace ? 'PMS 앱 접근 바인딩을 저장하지 못했습니다.' : '워크스페이스 바인딩을 저장하지 못했습니다.',
+        ),
+      );
     }
   }
 
@@ -1100,37 +817,51 @@ function WorkspacesSection({ token }: { token: string }) {
           <form className="grid gap-3" onSubmit={(event) => void handleCreateWorkspace(event)}>
             <input
               className={fieldClassName}
+              disabled={!canCreateWorkspaces}
               onChange={(event) => setName(event.target.value)}
               placeholder="Workspace name"
               value={name}
             />
             <input
               className={fieldClassName}
+              disabled={!canCreateWorkspaces}
               onChange={(event) => setDescription(event.target.value)}
               placeholder="Description"
               value={description}
             />
             <div className="flex justify-end">
-              <Button type="submit" variant="primary">Create workspace</Button>
+              <Button disabled={!canCreateWorkspaces} type="submit" variant="primary">Create workspace</Button>
             </div>
           </form>
         </SurfaceCard>
 
         <SurfaceCard
-          description="사용자 또는 그룹을 선택한 워크스페이스에 연결합니다."
-          title="Workspace access bindings"
+          description={
+            isPmsWorkspace
+              ? 'PMS는 앱 접근만 여기서 관리하고, 실제 권한은 PMS 내부 스페이스 역할에서 관리합니다.'
+              : '사용자 또는 그룹을 선택한 워크스페이스에 연결합니다.'
+          }
+          title={isPmsWorkspace ? 'PMS app access bindings' : 'Workspace access bindings'}
         >
           <div className="grid gap-3">
             <Select
               onValueChange={async (value) => {
                 setSelectedWorkspaceId(value);
-                setBindings(await listWorkspaceBindings(token, value));
+                setMessage(null);
+                setError(null);
+                try {
+                  setBindings(await listWorkspaceBindings(token, value));
+                } catch (caughtError) {
+                  setBindings([]);
+                  setError(getErrorMessage(caughtError, '워크스페이스 바인딩을 불러오지 못했습니다.'));
+                }
               }}
               options={workspaces.map((item) => ({ value: item.id, label: item.name }))}
               value={selectedWorkspaceId}
             />
             <div className="grid gap-3 md:grid-cols-2">
               <Select
+                disabled={!canReadUsers || !canManageBindings}
                 onValueChange={setSelectedUserId}
                 options={[
                   { value: NONE_OPTION_VALUE, label: 'No user selected' },
@@ -1139,6 +870,7 @@ function WorkspacesSection({ token }: { token: string }) {
                 value={selectedUserId}
               />
               <Select
+                disabled={!canReadGroups || !canManageBindings}
                 onValueChange={setSelectedGroupId}
                 options={[
                   { value: NONE_OPTION_VALUE, label: 'No group selected' },
@@ -1147,8 +879,18 @@ function WorkspacesSection({ token }: { token: string }) {
                 value={selectedGroupId}
               />
             </div>
+            {!canReadUsers || !canReadGroups ? (
+              <InlineNotice tone="warning">
+                사용자 또는 그룹 디렉터리 읽기 권한이 없어 새 바인딩 대상을 선택할 수 없습니다.
+              </InlineNotice>
+            ) : null}
+            {isPmsWorkspace ? (
+              <InlineNotice tone="default">
+                PMS 바인딩은 접근 on/off만 의미합니다. 스페이스 내 관리자와 멤버 역할은 PMS 앱 내부에서 설정합니다.
+              </InlineNotice>
+            ) : null}
             <div className="flex justify-end">
-              <Button onClick={() => { void handleAddBindings(); }} variant="primary">Save bindings</Button>
+              <Button disabled={!canManageBindings} onClick={() => { void handleAddBindings(); }} variant="primary">Save bindings</Button>
             </div>
             <div className="grid gap-2">
               {bindings.length === 0 ? (
@@ -1165,7 +907,7 @@ function WorkspacesSection({ token }: { token: string }) {
                       <div className="font-medium text-clickup-text">{binding.subject_label}</div>
                       <div className="app-text-caption mt-1 text-gray-500">{binding.subject_type}</div>
                     </div>
-                    <Badge tone="purple">{binding.role}</Badge>
+                    <Badge tone="purple">{isPmsWorkspace ? 'access enabled' : binding.role}</Badge>
                   </div>
                 ))
               )}
@@ -1175,7 +917,7 @@ function WorkspacesSection({ token }: { token: string }) {
       </div>
 
       <SurfaceCard
-        description="등록된 워크스페이스와 연결된 팀 수를 요약합니다."
+        description="등록된 워크스페이스와 연결된 공간 수를 요약합니다."
         title="Workspace directory"
       >
         <TableShell>
@@ -1184,7 +926,7 @@ function WorkspacesSection({ token }: { token: string }) {
               <HeadCell>Name</HeadCell>
               <HeadCell>Key</HeadCell>
               <HeadCell>Description</HeadCell>
-              <HeadCell>Teams</HeadCell>
+              <HeadCell>Spaces</HeadCell>
               <HeadCell>Status</HeadCell>
             </tr>
           </thead>
@@ -1236,7 +978,7 @@ function SecuritySection({
   const [policies, setPolicies] = useState<FeaturePolicyItem[]>([]);
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
-  const [permissions, setPermissions] = useState('group.read,workspace.read');
+  const [systemRoles, setSystemRoles] = useState('');
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -1279,13 +1021,14 @@ function SecuritySection({
       await createGroup(token, {
         name: name.trim(),
         description: description.trim(),
-        permissions: permissions
+        system_roles: systemRoles
           .split(',')
           .map((item) => item.trim())
           .filter(Boolean),
       });
       setName('');
       setDescription('');
+      setSystemRoles('');
       setMessage('그룹을 생성했습니다.');
       await load();
     } catch (caughtError) {
@@ -1304,9 +1047,6 @@ function SecuritySection({
         policies.map((policy) => ({
           id: policy.id,
           enabled: policy.enabled,
-          required_permissions: policy.required_permissions,
-          allowed_workspace_keys: policy.allowed_workspace_keys,
-          allowed_group_slugs: policy.allowed_group_slugs,
         })),
       );
       setPolicies(response);
@@ -1324,8 +1064,8 @@ function SecuritySection({
 
       <div className="grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
         <SurfaceCard
-          description="권한 코드를 쉼표로 입력해 그룹 권한을 빠르게 정의합니다."
-          title="Create access group"
+          description="그룹은 사용자 묶음이며, 필요하면 시스템 역할을 함께 연결할 수 있습니다."
+          title="Create principal group"
         >
           {canWriteGroups ? (
             <form className="grid gap-3" onSubmit={(event) => void handleCreateGroup(event)}>
@@ -1343,9 +1083,9 @@ function SecuritySection({
               />
               <input
                 className={fieldClassName}
-                onChange={(event) => setPermissions(event.target.value)}
-                placeholder="permission.read, permission.write"
-                value={permissions}
+                onChange={(event) => setSystemRoles(event.target.value)}
+                placeholder="org_admin"
+                value={systemRoles}
               />
               <div className="flex justify-end">
                 <Button type="submit" variant="primary">Create group</Button>
@@ -1359,8 +1099,8 @@ function SecuritySection({
         </SurfaceCard>
 
         <SurfaceCard
-          description="그룹에 부여된 권한과 현재 멤버 수를 확인합니다."
-          title="Access groups"
+          description="그룹에 연결된 시스템 역할과 현재 멤버 수를 확인합니다."
+          title="Principal groups"
         >
           {canReadGroups ? (
             <TableShell>
@@ -1368,7 +1108,7 @@ function SecuritySection({
                 <tr>
                   <HeadCell>Name</HeadCell>
                   <HeadCell>Slug</HeadCell>
-                  <HeadCell>Permissions</HeadCell>
+                  <HeadCell>System roles</HeadCell>
                   <HeadCell>Members</HeadCell>
                 </tr>
               </thead>
@@ -1387,7 +1127,7 @@ function SecuritySection({
                         <div className="app-text-caption mt-1 text-gray-500">{group.description || '설명 없음'}</div>
                       </BodyCell>
                       <BodyCell>{group.slug}</BodyCell>
-                      <BodyCell>{group.permissions.join(', ') || 'None'}</BodyCell>
+                      <BodyCell>{group.system_roles.join(', ') || 'None'}</BodyCell>
                       <BodyCell>{group.member_count}</BodyCell>
                     </tr>
                   ))
@@ -1437,8 +1177,8 @@ function SecuritySection({
                   <div className="app-text-body mt-1 text-gray-500">{policy.description}</div>
                   <div className="app-text-caption mt-3 flex flex-wrap gap-2">
                     <Badge>{policy.code}</Badge>
-                    {policy.required_permissions.map((permission) => (
-                      <Badge key={`${policy.id}-${permission}`}>{permission}</Badge>
+                    {policy.allowed_workspace_keys.map((workspaceKey) => (
+                      <Badge key={`${policy.id}-${workspaceKey}`}>{workspaceKey}</Badge>
                     ))}
                   </div>
                   {!canWritePolicies ? (
@@ -1518,7 +1258,7 @@ export function AdminConsoleView({ section }: { section: AdminSection }) {
   const auth = useAuth();
   const token = auth.token;
   const hasAdminReadPermission = useMemo(
-    () => hasAnyAdminReadPermission(auth.user?.permissions ?? []),
+    () => hasAnyAdminReadPermission(auth.user?.system_roles ?? []),
     [auth.user],
   );
 
@@ -1540,9 +1280,6 @@ export function AdminConsoleView({ section }: { section: AdminSection }) {
     case 'people':
       content = <PeopleSection token={token} />;
       actions = <Badge tone="purple">Admin only</Badge>;
-      break;
-    case 'teams':
-      content = <TeamsSection token={token} />;
       break;
     case 'workspaces':
       content = <WorkspacesSection token={token} />;

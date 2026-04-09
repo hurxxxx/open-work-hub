@@ -94,7 +94,7 @@ export const TeamDocsView = () => {
                 </h1>
                 <div className="app-text-caption flex items-center gap-3 text-gray-500">
                   <div className="flex items-center gap-1.5">
-                    <div className="app-text-micro flex h-5 w-5 items-center justify-center rounded-full bg-clickup-purple font-bold text-white">GH</div>
+                    <div className="app-text-micro flex h-5 w-5 items-center justify-center rounded-full bg-clickup-purple font-bold text-clickup-bg">GH</div>
                     <span>Gunwoo Hur</span>
                   </div>
                   <span>•</span>

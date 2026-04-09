@@ -11,15 +11,19 @@ from sqlalchemy.orm import Session
 from aidoo_api.core.db import get_db_session
 from aidoo_api.core.settings import get_settings
 from aidoo_api.domains.auth.access import (
+    SYSTEM_PLATFORM_ADMIN,
+    ensure_dev_login_seed_data,
     ensure_seed_data,
+    get_dev_login_user,
+    list_dev_login_accounts,
     load_user_graph,
     record_audit_log,
     resolve_group_slugs,
-    resolve_user_permissions,
+    replace_user_system_roles,
     serialize_auth_user,
 )
 from aidoo_api.domains.auth.dependencies import AuthContext, require_auth_context
-from aidoo_api.domains.auth.models import AccessGroup, AuthSession, OrgUnit, User, UserAccessGroup
+from aidoo_api.domains.auth.models import AuthSession, OrgUnit, User
 from aidoo_api.domains.auth.security import (
     hash_password,
     issue_session_token,
@@ -31,6 +35,16 @@ from aidoo_api.domains.auth.security import (
 
 class BootstrapStatusResponse(BaseModel):
     requires_setup: bool
+    dev_admin_login_available: bool = False
+    dev_login_accounts: list["DevLoginAccountResponse"] = Field(default_factory=list)
+
+
+class DevLoginAccountResponse(BaseModel):
+    account_key: str
+    label: str
+    email: str
+    description: str
+    category: str
 
 
 class OrgUnitSummaryResponse(BaseModel):
@@ -47,6 +61,14 @@ class WorkspaceRoleResponse(BaseModel):
     role: str
 
 
+class AppAccessResponse(BaseModel):
+    app: str
+    workspace_id: str | None
+    workspace_key: str | None
+    workspace_name: str | None
+    role: str
+
+
 class AuthUserResponse(BaseModel):
     id: str
     email: str
@@ -56,13 +78,12 @@ class AuthUserResponse(BaseModel):
     status: str
     theme_preference: str
     primary_org_unit: OrgUnitSummaryResponse | None
+    system_roles: list[str]
     workspace_roles: list[WorkspaceRoleResponse]
+    app_access: list[AppAccessResponse]
     group_ids: list[str]
     group_slugs: list[str]
-    permissions: list[str]
-    visible_features: list[str]
     must_change_password: bool
-    is_admin: bool
     last_login_at: datetime | None
     created_at: datetime
 
@@ -112,6 +133,10 @@ class LoginRequest(BaseModel):
         if "@" not in normalized:
             raise ValueError("A valid email address is required.")
         return normalized
+
+
+class DevLoginRequest(BaseModel):
+    account_key: str = Field(..., min_length=2, max_length=80)
 
 
 class ChangePasswordRequest(BaseModel):
@@ -182,19 +207,19 @@ def _ensure_development_environment() -> None:
         )
 
 
-def _ensure_local_dev_admin_login_allowed(request: Request) -> None:
-    _ensure_development_environment()
+def _is_local_dev_admin_login_available(request: Request) -> bool:
     settings = get_settings()
-    if not settings.allow_dev_admin_login:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Not found.",
-        )
+    if settings.environment.lower() == "production" or not settings.allow_dev_admin_login:
+        return False
 
     client_host = request.client.host if request.client else None
     request_host = request.url.hostname
     local_hosts = {"127.0.0.1", "::1", "localhost", "testclient"}
-    if client_host not in local_hosts and request_host not in local_hosts:
+    return client_host in local_hosts or request_host in local_hosts
+
+
+def _ensure_local_dev_admin_login_allowed(request: Request) -> None:
+    if not _is_local_dev_admin_login_available(request):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Not found.",
@@ -202,9 +227,26 @@ def _ensure_local_dev_admin_login_allowed(request: Request) -> None:
 
 
 @router.get("/bootstrap-status", response_model=BootstrapStatusResponse)
-def bootstrap_status(db: Session = Depends(get_db_session)) -> BootstrapStatusResponse:
+def bootstrap_status(
+    request: Request,
+    db: Session = Depends(get_db_session),
+) -> BootstrapStatusResponse:
     has_users = db.scalar(select(func.count()).select_from(User)) > 0
-    return BootstrapStatusResponse(requires_setup=not has_users)
+    dev_admin_login_available = _is_local_dev_admin_login_available(request)
+    if has_users and dev_admin_login_available:
+        ensure_dev_login_seed_data(db)
+    return BootstrapStatusResponse(
+        requires_setup=not has_users,
+        dev_admin_login_available=dev_admin_login_available,
+        dev_login_accounts=(
+            [
+                DevLoginAccountResponse.model_validate(item)
+                for item in list_dev_login_accounts(db)
+            ]
+            if dev_admin_login_available
+            else []
+        ),
+    )
 
 
 @router.post(
@@ -226,8 +268,7 @@ def setup_first_user(
         )
 
     root_org_unit = db.scalar(select(OrgUnit).where(OrgUnit.slug == "hq"))
-    platform_admin = db.scalar(select(AccessGroup).where(AccessGroup.slug == "platform-admin"))
-    if root_org_unit is None or platform_admin is None:
+    if root_org_unit is None:
         raise HTTPException(status_code=500, detail="Default identity seed is incomplete.")
 
     user = User(
@@ -236,20 +277,14 @@ def setup_first_user(
         full_name=payload.full_name.strip(),
         display_name=payload.full_name.strip(),
         password_hash=hash_password(payload.password),
-        is_admin=True,
         status="active",
         primary_org_unit_id=root_org_unit.id,
         must_change_password=False,
         theme_preference="system",
     )
     db.add(user)
-    db.add(
-        UserAccessGroup(
-            id=new_id(),
-            user_id=user.id,
-            group_id=platform_admin.id,
-        )
-    )
+    db.flush()
+    replace_user_system_roles(db, user.id, [SYSTEM_PLATFORM_ADMIN])
     record_audit_log(
         db,
         actor_user_id=user.id,
@@ -257,7 +292,7 @@ def setup_first_user(
         entity_kind="user",
         entity_id=user.id,
         summary=f"Initial administrator created: {user.email}",
-        payload={"group_slugs": ["platform-admin"]},
+        payload={"system_roles": [SYSTEM_PLATFORM_ADMIN]},
     )
     db.commit()
     return _issue_auth_response(db, user, request)
@@ -295,12 +330,22 @@ def dev_admin_login(
     db: Session = Depends(get_db_session),
 ) -> AuthSessionResponse:
     _ensure_local_dev_admin_login_allowed(request)
+    has_users = db.scalar(select(func.count()).select_from(User)) > 0
+    if has_users:
+        ensure_dev_login_seed_data(db)
 
-    user = db.scalar(
+    candidates = db.scalars(
         select(User)
         .where(User.status == "active")
-        .where((User.is_admin.is_(True)) | (User.email == "admin@aidoo.local"))
-        .order_by(User.created_at.asc())
+        .order_by((User.email == "admin@aidoo.local").desc(), User.created_at.asc())
+    ).all()
+    user = next(
+        (
+            candidate
+            for candidate in candidates
+            if SYSTEM_PLATFORM_ADMIN in _serialize_user(db, candidate).system_roles
+        ),
+        None,
     )
     if user is None:
         raise HTTPException(
@@ -317,6 +362,38 @@ def dev_admin_login(
         entity_id=user.id,
         summary=f"Development admin quick login: {user.email}",
         payload={"group_slugs": resolve_group_slugs(load_user_graph(db, user.id) or user)},
+    )
+    db.commit()
+    return _issue_auth_response(db, user, request)
+
+
+@router.post("/dev-login", response_model=AuthSessionResponse)
+def dev_login(
+    payload: DevLoginRequest,
+    request: Request,
+    db: Session = Depends(get_db_session),
+) -> AuthSessionResponse:
+    _ensure_local_dev_admin_login_allowed(request)
+    has_users = db.scalar(select(func.count()).select_from(User)) > 0
+    if has_users:
+        ensure_dev_login_seed_data(db)
+
+    user = get_dev_login_user(db, payload.account_key)
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Requested development account is not available.",
+        )
+
+    _ensure_active_user(user)
+    record_audit_log(
+        db,
+        actor_user_id=user.id,
+        action="auth.dev_login",
+        entity_kind="session",
+        entity_id=user.id,
+        summary=f"Development account quick login: {user.email}",
+        payload={"account_key": payload.account_key},
     )
     db.commit()
     return _issue_auth_response(db, user, request)

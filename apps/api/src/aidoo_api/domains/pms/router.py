@@ -9,11 +9,17 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Response, UploadFi
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import func, or_, select
-from sqlalchemy.orm import Session, selectinload
+from sqlalchemy.orm import Session, joinedload, selectinload
 
 from aidoo_api.core.db import get_db_session
-from aidoo_api.domains.auth.access import get_or_create_default_pms_space, is_platform_admin_user
-from aidoo_api.domains.auth.dependencies import require_current_user
+from aidoo_api.domains.auth.access import (
+    get_or_create_default_pms_space,
+    has_system_role,
+    is_platform_admin_user,
+    resolve_team_role,
+    slugify,
+)
+from aidoo_api.domains.auth.dependencies import require_current_user, require_feature_access
 from aidoo_api.domains.auth.models import Team, TeamMember, User, Workspace
 from aidoo_api.domains.auth.security import new_id
 from aidoo_api.core.settings import get_settings
@@ -42,6 +48,7 @@ from aidoo_api.domains.pms.models import (
     SpaceDocPage,
     TaskTemplate,
     TimeEntry,
+    UserDocPref,
 )
 
 
@@ -108,7 +115,7 @@ class ProjectUpdateRequest(BaseModel):
 
 class ProjectMemberCreateRequest(BaseModel):
     user_id: str
-    role: Literal["owner", "admin", "editor", "viewer", "member"] = "member"
+    role: Literal["owner", "admin", "viewer", "member"] = "member"
 
 
 class MilestoneCreateRequest(BaseModel):
@@ -234,6 +241,60 @@ class ProjectMemberListResponse(BaseModel):
     total: int
     page: int
     page_size: int
+
+
+class SpaceCreateRequest(BaseModel):
+    name: str = Field(..., min_length=2, max_length=120)
+    description: str = Field(default="", max_length=1000)
+
+
+class SpaceUpdateRequest(BaseModel):
+    name: str | None = Field(default=None, min_length=2, max_length=120)
+    description: str | None = Field(default=None, max_length=1000)
+
+
+class SpaceItem(BaseModel):
+    id: str
+    workspace_id: str
+    workspace_key: str
+    key: str
+    name: str
+    description: str
+    member_count: int
+    current_user_role: str | None
+    created_at: datetime
+    updated_at: datetime
+
+
+class SpaceMemberItem(BaseModel):
+    user_id: str
+    email: str
+    full_name: str
+    is_admin: bool
+    role: str
+    joined_at: datetime
+
+
+class SpaceUserItem(BaseModel):
+    id: str
+    email: str
+    full_name: str
+
+
+class SpaceMemberListResponse(BaseModel):
+    items: list[SpaceMemberItem]
+    total: int
+    page: int
+    page_size: int
+
+
+class SpaceMemberCreateRequest(BaseModel):
+    user_id: str
+    role: Literal["owner", "admin", "viewer", "member"] = "member"
+
+
+class SpaceMemberRoleUpdateRequest(BaseModel):
+    role: Literal["owner", "admin", "viewer", "member"]
 
 
 class MilestoneItem(BaseModel):
@@ -585,7 +646,11 @@ class DashboardSummaryResponse(BaseModel):
     recent_activity: list[RecentActivityItem]
 
 
-router = APIRouter(prefix="/pms", tags=["pms"])
+router = APIRouter(
+    prefix="/pms",
+    tags=["pms"],
+    dependencies=[Depends(require_feature_access("nav.pms"))],
+)
 
 
 def _paginate[T](items: list[T], page: int, page_size: int) -> tuple[list[T], int]:
@@ -598,32 +663,78 @@ def _paginate[T](items: list[T], page: int, page_size: int) -> tuple[list[T], in
 PROJECT_ROLE_RANK = {
     "viewer": 0,
     "member": 1,
-    "editor": 2,
-    "admin": 3,
-    "owner": 4,
+    "admin": 2,
+    "owner": 3,
 }
-SPACE_TEAM_EDITOR_ROLES = {"member", "team_admin", "admin", "owner"}
-SPACE_TEAM_MANAGER_ROLES = {"team_admin", "admin", "owner"}
-PROJECT_EDITOR_ROLES = {"member", "editor", "admin", "owner"}
+SPACE_TEAM_EDITOR_ROLES = {"member", "admin", "owner"}
+SPACE_TEAM_MANAGER_ROLES = {"admin", "owner"}
+PROJECT_EDITOR_ROLES = {"member", "admin", "owner"}
 PROJECT_MANAGER_ROLES = {"admin", "owner"}
 
 
+def _is_pms_super_admin(db: Session, user: User) -> bool:
+    return has_system_role(db, user, "platform_admin", "org_admin")
+
+
+def _load_active_space(
+    db: Session,
+    space_id: str,
+    *,
+    include_members: bool = False,
+) -> Team | None:
+    query = select(Team).options(joinedload(Team.workspace)).where(
+        Team.id == space_id,
+        Team.active.is_(True),
+        Team.trashed_at.is_(None),
+        Team.workspace.has(Workspace.active.is_(True)),
+        Team.workspace.has(Workspace.key == "pms"),
+    )
+    if include_members:
+        query = query.options(selectinload(Team.members))
+    return db.scalar(query)
+
+
+def _serialize_space(team: Team, current_user_role: str | None) -> SpaceItem:
+    return SpaceItem(
+        id=team.id,
+        workspace_id=team.workspace_id,
+        workspace_key=team.workspace.key,
+        key=team.key,
+        name=team.name,
+        description=team.description,
+        member_count=len(team.members),
+        current_user_role=current_user_role,
+        created_at=team.created_at,
+        updated_at=team.updated_at,
+    )
+
+
+def _serialize_space_member(db: Session, member: TeamMember) -> SpaceMemberItem:
+    return SpaceMemberItem(
+        user_id=member.user_id,
+        email=member.user.email,
+        full_name=member.user.full_name,
+        is_admin=_is_pms_super_admin(db, member.user),
+        role=member.role,
+        joined_at=member.created_at,
+    )
+
+
 def _best_project_role(db: Session, user: User, space_id: str) -> str | None:
-    roles = list(
-        db.scalars(
-            select(ProjectMember.role)
-            .join(Project, Project.id == ProjectMember.project_id)
-            .join(Team, Team.id == Project.team_id)
-            .where(
-                ProjectMember.user_id == user.id,
-                Project.team_id == space_id,
-                Team.trashed_at.is_(None),
-            )
+    team = db.scalar(
+        select(Team)
+        .options(joinedload(Team.workspace))
+        .where(
+            Team.id == space_id,
+            Team.active.is_(True),
+            Team.trashed_at.is_(None),
+            Team.workspace.has(Workspace.active.is_(True)),
+            Team.workspace.has(Workspace.key == "pms"),
         )
     )
-    if not roles:
+    if team is None:
         return None
-    return max(roles, key=lambda role: PROJECT_ROLE_RANK.get(role, -1))
+    return resolve_team_role(db, user, team)
 
 
 def _is_active_space_id(db: Session, space_id: str) -> bool:
@@ -634,6 +745,7 @@ def _is_active_space_id(db: Session, space_id: str) -> bool:
                 Team.active.is_(True),
                 Team.trashed_at.is_(None),
                 Team.workspace.has(Workspace.active.is_(True)),
+                Team.workspace.has(Workspace.key == "pms"),
             )
         )
         is not None
@@ -641,32 +753,23 @@ def _is_active_space_id(db: Session, space_id: str) -> bool:
 
 
 def _ensure_space_access(db: Session, user: User, space_id: str) -> tuple[Team, str]:
-    team = db.scalar(
-        select(Team)
-        .options(selectinload(Team.members))
-        .where(
-            Team.id == space_id,
-            Team.active.is_(True),
-            Team.trashed_at.is_(None),
-            Team.workspace.has(Workspace.active.is_(True)),
-        )
-    )
+    team = _load_active_space(db, space_id, include_members=True)
     if team is None:
         raise HTTPException(status_code=404, detail="Space not found.")
 
-    if is_platform_admin_user(user):
-        return team, "owner"
+    if _is_pms_super_admin(db, user):
+        return team, "owner" if is_platform_admin_user(user, db) else "admin"
 
-    team_membership = next((member for member in team.members if member.user_id == user.id), None)
-    if team_membership is not None:
-        return team, team_membership.role
+    role = resolve_team_role(db, user, team)
+    if role is not None:
+        return team, role
 
     raise HTTPException(status_code=403, detail="Space access required.")
 
 
 def _ensure_space_editor(db: Session, user: User, space_id: str) -> tuple[Team, str]:
     team, role = _ensure_space_access(db, user, space_id)
-    if is_platform_admin_user(user):
+    if _is_pms_super_admin(db, user):
         return team, role
 
     if role in SPACE_TEAM_EDITOR_ROLES:
@@ -677,7 +780,7 @@ def _ensure_space_editor(db: Session, user: User, space_id: str) -> tuple[Team, 
 
 def _ensure_space_manager(db: Session, user: User, space_id: str) -> tuple[Team, str]:
     team, role = _ensure_space_access(db, user, space_id)
-    if is_platform_admin_user(user):
+    if _is_pms_super_admin(db, user):
         return team, role
 
     if role in SPACE_TEAM_MANAGER_ROLES:
@@ -687,18 +790,19 @@ def _ensure_space_manager(db: Session, user: User, space_id: str) -> tuple[Team,
 
 
 def _accessible_space_ids(db: Session, user: User) -> set[str]:
-    if is_platform_admin_user(user):
+    if _is_pms_super_admin(db, user):
         return set(
             db.scalars(
                 select(Team.id).where(
                     Team.active.is_(True),
                     Team.trashed_at.is_(None),
                     Team.workspace.has(Workspace.active.is_(True)),
+                    Team.workspace.has(Workspace.key == "pms"),
                 )
             )
         )
 
-    return set(
+    direct_space_ids = set(
         db.scalars(
             select(TeamMember.team_id)
             .join(Team, Team.id == TeamMember.team_id)
@@ -707,9 +811,130 @@ def _accessible_space_ids(db: Session, user: User) -> set[str]:
                 Team.active.is_(True),
                 Team.trashed_at.is_(None),
                 Team.workspace.has(Workspace.active.is_(True)),
+                Team.workspace.has(Workspace.key == "pms"),
             )
         )
     )
+    return direct_space_ids
+
+
+def _load_space_members(db: Session, space_id: str) -> list[TeamMember]:
+    return list(
+        db.scalars(
+            select(TeamMember)
+            .options(selectinload(TeamMember.user))
+            .where(TeamMember.team_id == space_id)
+        )
+    )
+
+
+def _space_member_ids(db: Session, space_id: str) -> set[str]:
+    return set(db.scalars(select(TeamMember.user_id).where(TeamMember.team_id == space_id)))
+
+
+def _space_manager_count(members: list[TeamMember]) -> int:
+    return sum(1 for member in members if member.role in SPACE_TEAM_MANAGER_ROLES)
+
+
+def _ensure_space_manager_survives(
+    members: list[TeamMember],
+    target_user_id: str,
+    *,
+    next_role: str | None,
+) -> None:
+    current_member = next((member for member in members if member.user_id == target_user_id), None)
+    if current_member is None or current_member.role not in SPACE_TEAM_MANAGER_ROLES:
+        return
+
+    remaining = 0
+    for member in members:
+        role = next_role if member.user_id == target_user_id else member.role
+        if role in SPACE_TEAM_MANAGER_ROLES:
+            remaining += 1
+
+    if remaining < 1:
+        raise HTTPException(
+            status_code=409,
+            detail="At least one owner or admin must remain in the space.",
+        )
+
+
+def _get_pms_workspace(db: Session) -> Workspace:
+    workspace = db.scalar(
+        select(Workspace).where(
+            Workspace.key == "pms",
+            Workspace.active.is_(True),
+        )
+    )
+    if workspace is None:
+        raise HTTPException(status_code=500, detail="PMS workspace is not available.")
+    return workspace
+
+
+def _unique_space_key(db: Session, workspace_id: str, name: str) -> str:
+    base = slugify(name) or "space"
+    candidate = base
+    counter = 1
+    while db.scalar(
+        select(Team.id).where(
+            Team.workspace_id == workspace_id,
+            Team.key == candidate,
+        )
+    ):
+        candidate = f"{base}-{counter}"
+        counter += 1
+    return candidate
+
+
+def _space_query_for_user(db: Session, user: User):
+    if _is_pms_super_admin(db, user):
+        return (
+            select(Team)
+            .options(joinedload(Team.workspace), selectinload(Team.members))
+            .where(
+                Team.active.is_(True),
+                Team.trashed_at.is_(None),
+                Team.workspace.has(Workspace.active.is_(True)),
+                Team.workspace.has(Workspace.key == "pms"),
+            )
+        )
+
+    return (
+        select(Team)
+        .options(joinedload(Team.workspace), selectinload(Team.members))
+        .join(TeamMember, TeamMember.team_id == Team.id)
+        .where(
+            TeamMember.user_id == user.id,
+            Team.active.is_(True),
+            Team.trashed_at.is_(None),
+            Team.workspace.has(Workspace.active.is_(True)),
+            Team.workspace.has(Workspace.key == "pms"),
+        )
+    )
+
+
+def _get_space_membership(
+    db: Session,
+    space_id: str,
+    user_id: str,
+) -> TeamMember | None:
+    return db.scalar(
+        select(TeamMember)
+        .options(selectinload(TeamMember.user))
+        .where(
+            TeamMember.team_id == space_id,
+            TeamMember.user_id == user_id,
+        )
+    )
+
+
+def _validate_space_member_user(db: Session, space_id: str, user_id: str) -> User:
+    user = db.scalar(select(User).where(User.id == user_id, User.status == "active"))
+    if user is None:
+        raise HTTPException(status_code=404, detail="User not found.")
+    if user_id in _space_member_ids(db, space_id):
+        raise HTTPException(status_code=409, detail="User is already a space member.")
+    return user
 
 
 def _validate_folder_membership(db: Session, team_id: str, folder_id: str | None) -> None:
@@ -727,8 +952,8 @@ def _ensure_project_access(db: Session, user: User, project_id: str) -> tuple[Pr
     project = db.scalar(
         select(Project)
         .options(
-            selectinload(Project.members).selectinload(ProjectMember.user),
             selectinload(Project.milestones),
+            joinedload(Project.folder),
         )
         .where(Project.id == project_id)
     )
@@ -736,57 +961,32 @@ def _ensure_project_access(db: Session, user: User, project_id: str) -> tuple[Pr
         raise HTTPException(status_code=404, detail="Project not found.")
     if project.team_id is not None and not _is_active_space_id(db, project.team_id):
         raise HTTPException(status_code=404, detail="Project not found.")
-
-    if is_platform_admin_user(user):
-        return project, "owner"
-
-    membership = next((member for member in project.members if member.user_id == user.id), None)
-    if membership is None:
-        raise HTTPException(status_code=403, detail="Project membership required.")
-
-    return project, membership.role
+    if project.team_id is None:
+        raise HTTPException(status_code=409, detail="Project space is not set.")
+    _space, role = _ensure_space_access(db, user, project.team_id)
+    return project, role
 
 
 def _ensure_project_owner(db: Session, user: User, project_id: str) -> tuple[Project, str]:
     project, role = _ensure_project_access(db, user, project_id)
-    if not is_platform_admin_user(user) and role not in {"owner", "admin"}:
+    if not is_platform_admin_user(user, db) and role not in {"owner", "admin"}:
         raise HTTPException(status_code=403, detail="Project owner/admin access required.")
     return project, role
 
 
 def _ensure_project_editor(db: Session, user: User, project_id: str) -> tuple[Project, str]:
-    """Allow owner, admin, editor, and member roles. Block viewers."""
+    """Allow owner, admin, and member roles. Block viewers."""
     project, role = _ensure_project_access(db, user, project_id)
-    if not is_platform_admin_user(user) and role == "viewer":
+    if not is_platform_admin_user(user, db) and role == "viewer":
         raise HTTPException(status_code=403, detail="Viewer role cannot modify project data.")
     return project, role
 
 
-def _accessible_projects_query(user: User):
-    active_space_ids = select(Team.id).where(
-        Team.active.is_(True),
-        Team.trashed_at.is_(None),
-        Team.workspace.has(Workspace.active.is_(True)),
-    )
-    if is_platform_admin_user(user):
-        return select(Project).where(
-            or_(
-                Project.team_id.is_(None),
-                Project.team_id.in_(active_space_ids),
-            )
-        )
-
-    return (
-        select(Project)
-        .join(ProjectMember, ProjectMember.project_id == Project.id)
-        .where(
-            ProjectMember.user_id == user.id,
-            or_(
-                Project.team_id.is_(None),
-                Project.team_id.in_(active_space_ids),
-            ),
-        )
-    )
+def _accessible_projects_query(db: Session, user: User):
+    accessible_space_ids = _accessible_space_ids(db, user)
+    if not accessible_space_ids:
+        return select(Project).where(Project.id == "__none__")
+    return select(Project).where(Project.team_id.in_(accessible_space_ids))
 
 
 CATEGORY_PROGRESS = {
@@ -893,7 +1093,12 @@ def _serialize_issue(issue: Issue) -> IssueListItem:
     )
 
 
-def _serialize_project(project: Project, role: str, team_name: str | None = None) -> ProjectListItem:
+def _serialize_project(
+    project: Project,
+    role: str,
+    team_name: str | None = None,
+    member_count: int | None = None,
+) -> ProjectListItem:
     overdue_issue_count = sum(
         1
         for issue in project.issues
@@ -917,7 +1122,7 @@ def _serialize_project(project: Project, role: str, team_name: str | None = None
         folder_name=getattr(project.folder, "name", None) if project.folder_id else None,
         role=role,
         progress=_calculate_progress(project.issues, project),
-        member_count=len(project.members),
+        member_count=member_count if member_count is not None else len(project.members),
         milestone_count=len(project.milestones),
         issue_count=len(project.issues),
         overdue_issue_count=overdue_issue_count,
@@ -972,11 +1177,15 @@ def _serialize_activity(log: IssueActivityLog, reference_lookup: dict[str, str])
     )
 
 
-def _project_role(project: Project, user: User) -> str:
-    if is_platform_admin_user(user):
+def _project_role(db: Session, project: Project, user: User, team_lookup: dict[str, Team]) -> str:
+    if is_platform_admin_user(user, db):
         return "owner"
-    membership = next((member for member in project.members if member.user_id == user.id), None)
-    return membership.role if membership is not None else "member"
+    if project.team_id is None:
+        return "viewer"
+    team = team_lookup.get(project.team_id)
+    if team is None:
+        return "viewer"
+    return resolve_team_role(db, user, team) or "viewer"
 
 
 DEFAULT_PROJECT_STATUSES: list[tuple[str, str, str, str, int]] = [
@@ -1138,15 +1347,17 @@ def _validate_member_user(db: Session, project: Project, user_id: str) -> User:
     user = db.scalar(select(User).where(User.id == user_id))
     if user is None:
         raise HTTPException(status_code=404, detail="User not found.")
-    if any(member.user_id == user_id for member in project.members):
+    if project.team_id is None:
+        raise HTTPException(status_code=409, detail="Project space is not set.")
+    if user_id in _space_member_ids(db, project.team_id):
         raise HTTPException(status_code=409, detail="User is already a project member.")
     return user
 
 
-def _validate_issue_assignee(project: Project, assignee_id: str | None) -> None:
+def _validate_issue_assignee(db: Session, project: Project, assignee_id: str | None) -> None:
     if assignee_id is None:
         return
-    if assignee_id not in {member.user_id for member in project.members}:
+    if project.team_id is None or assignee_id not in _space_member_ids(db, project.team_id):
         raise HTTPException(status_code=400, detail="Assignee must be a project member.")
 
 
@@ -1245,6 +1456,184 @@ def _get_issue_for_user(
     return issue, project
 
 
+@router.get("/spaces", response_model=list[SpaceItem])
+def list_spaces(
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+) -> list[SpaceItem]:
+    spaces = list(db.scalars(_space_query_for_user(db, current_user).order_by(Team.name.asc())))
+    return [
+        _serialize_space(space, resolve_team_role(db, current_user, space))
+        for space in spaces
+    ]
+
+
+@router.get("/users", response_model=list[SpaceUserItem])
+def list_pms_users(
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+) -> list[SpaceUserItem]:
+    del current_user
+    users = db.scalars(
+        select(User)
+        .where(User.status == "active")
+        .order_by(User.full_name.asc(), User.email.asc())
+    ).all()
+    return [
+        SpaceUserItem(
+            id=user.id,
+            email=user.email,
+            full_name=user.full_name,
+        )
+        for user in users
+    ]
+
+
+@router.post("/spaces", response_model=SpaceItem, status_code=status.HTTP_201_CREATED)
+def create_space(
+    payload: SpaceCreateRequest,
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+) -> SpaceItem:
+    workspace = _get_pms_workspace(db)
+    team = Team(
+        id=new_id(),
+        workspace_id=workspace.id,
+        key=_unique_space_key(db, workspace.id, payload.name),
+        name=payload.name.strip(),
+        description=payload.description.strip(),
+        active=True,
+    )
+    db.add(team)
+    db.flush()
+    db.add(
+        TeamMember(
+            id=new_id(),
+            team_id=team.id,
+            user_id=current_user.id,
+            role="owner",
+        )
+    )
+    db.commit()
+    team = _load_active_space(db, team.id, include_members=True)
+    assert team is not None
+    return _serialize_space(team, "owner")
+
+
+@router.patch("/spaces/{space_id}", response_model=SpaceItem)
+def update_space(
+    space_id: str,
+    payload: SpaceUpdateRequest,
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+) -> SpaceItem:
+    team, role = _ensure_space_manager(db, current_user, space_id)
+    if payload.name is not None:
+        team.name = payload.name.strip()
+    if payload.description is not None:
+        team.description = payload.description.strip()
+    db.add(team)
+    db.commit()
+    team = _load_active_space(db, team.id, include_members=True)
+    assert team is not None
+    return _serialize_space(team, role)
+
+
+@router.delete("/spaces/{space_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_space(
+    space_id: str,
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+) -> Response:
+    team, _role = _ensure_space_manager(db, current_user, space_id)
+    team.trashed_at = _utcnow()
+    db.add(team)
+    db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.get("/spaces/{space_id}/members", response_model=SpaceMemberListResponse)
+def list_space_members(
+    space_id: str,
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=100),
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+) -> SpaceMemberListResponse:
+    _ensure_space_access(db, current_user, space_id)
+    members = [
+        _serialize_space_member(db, member)
+        for member in sorted(
+            _load_space_members(db, space_id),
+            key=lambda item: (item.role not in {"owner", "admin"}, item.user.full_name.lower()),
+        )
+    ]
+    page_items, total = _paginate(members, page, page_size)
+    return SpaceMemberListResponse(items=page_items, total=total, page=page, page_size=page_size)
+
+
+@router.post("/spaces/{space_id}/members", response_model=SpaceMemberItem, status_code=status.HTTP_201_CREATED)
+def add_space_member(
+    space_id: str,
+    payload: SpaceMemberCreateRequest,
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+) -> SpaceMemberItem:
+    _ensure_space_manager(db, current_user, space_id)
+    user = _validate_space_member_user(db, space_id, payload.user_id)
+    membership = TeamMember(
+        id=new_id(),
+        team_id=space_id,
+        user_id=user.id,
+        role=payload.role,
+    )
+    db.add(membership)
+    db.commit()
+    membership = _get_space_membership(db, space_id, user.id)
+    assert membership is not None
+    return _serialize_space_member(db, membership)
+
+
+@router.patch("/spaces/{space_id}/members/{user_id}", response_model=SpaceMemberItem)
+def update_space_member(
+    space_id: str,
+    user_id: str,
+    payload: SpaceMemberRoleUpdateRequest,
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+) -> SpaceMemberItem:
+    _ensure_space_manager(db, current_user, space_id)
+    membership = _get_space_membership(db, space_id, user_id)
+    if membership is None:
+        raise HTTPException(status_code=404, detail="Member not found.")
+    members = _load_space_members(db, space_id)
+    _ensure_space_manager_survives(members, user_id, next_role=payload.role)
+    membership.role = payload.role
+    db.add(membership)
+    db.commit()
+    membership = _get_space_membership(db, space_id, user_id)
+    assert membership is not None
+    return _serialize_space_member(db, membership)
+
+
+@router.delete("/spaces/{space_id}/members/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
+def remove_space_member(
+    space_id: str,
+    user_id: str,
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+) -> Response:
+    _ensure_space_manager(db, current_user, space_id)
+    membership = _get_space_membership(db, space_id, user_id)
+    if membership is None:
+        raise HTTPException(status_code=404, detail="Member not found.")
+    members = _load_space_members(db, space_id)
+    _ensure_space_manager_survives(members, user_id, next_role=None)
+    db.delete(membership)
+    db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
 @router.get("/projects", response_model=ProjectListResponse)
 @router.get("/lists", response_model=ProjectListResponse)
 def list_projects(
@@ -1263,11 +1652,11 @@ def list_projects(
 
     projects = list(
         db.scalars(
-            _accessible_projects_query(current_user).options(
-                selectinload(Project.members).selectinload(ProjectMember.user),
+            _accessible_projects_query(db, current_user).options(
                 selectinload(Project.milestones),
                 selectinload(Project.issues).selectinload(Issue.comments),
                 selectinload(Project.issues).selectinload(Issue.subtasks),
+                joinedload(Project.folder),
             )
         )
     )
@@ -1299,17 +1688,29 @@ def list_projects(
     # Build team name lookup
     team_ids = {p.team_id for p in projects if p.team_id}
     team_names: dict[str, str] = {}
+    team_lookup: dict[str, Team] = {}
+    team_member_counts: dict[str, int] = {}
     if team_ids:
-        teams = db.scalars(
+        teams = list(
+            db.scalars(
             select(Team).where(
                 Team.id.in_(team_ids),
                 Team.trashed_at.is_(None),
             )
+            .options(joinedload(Team.workspace), selectinload(Team.members))
+        )
         )
         team_names = {t.id: t.name for t in teams}
+        team_lookup = {t.id: t for t in teams}
+        team_member_counts = {t.id: len(t.members) for t in teams}
 
     serialized = [
-        _serialize_project(project, _project_role(project, current_user), team_names.get(project.team_id, None) if project.team_id else None)
+        _serialize_project(
+            project,
+            _project_role(db, project, current_user, team_lookup),
+            team_names.get(project.team_id, None) if project.team_id else None,
+            team_member_counts.get(project.team_id or "", 0),
+        )
         for project in projects
     ]
     page_items, total = _paginate(serialized, page, page_size)
@@ -1374,14 +1775,10 @@ def create_project(
         created_by_id=current_user.id,
     )
     db.add(project)
-    db.add(
-        ProjectMember(
-            id=new_id(),
-            project_id=project.id,
-            user_id=current_user.id,
-            role="owner",
-        )
-    )
+    if not db.scalar(
+        select(TeamMember.id).where(TeamMember.team_id == resolved_team_id, TeamMember.user_id == current_user.id)
+    ):
+        db.add(TeamMember(id=new_id(), team_id=resolved_team_id, user_id=current_user.id, role="owner"))
     _create_default_labels(db, project.id)
     _create_default_statuses(db, project.id)
     db.commit()
@@ -1389,13 +1786,14 @@ def create_project(
     project = db.scalar(
         select(Project)
         .options(
-            selectinload(Project.members).selectinload(ProjectMember.user),
             selectinload(Project.milestones),
             selectinload(Project.issues).selectinload(Issue.comments),
+            joinedload(Project.folder),
         )
         .where(Project.id == project.id)
     )
-    return _serialize_project(project, "owner", resolved_team_name)
+    member_count = len(_load_space_members(db, resolved_team_id))
+    return _serialize_project(project, "owner", resolved_team_name, member_count)
 
 
 @router.get("/projects/{project_id}", response_model=ProjectListItem)
@@ -1409,14 +1807,15 @@ def get_project(
     project = db.scalar(
         select(Project)
         .options(
-            selectinload(Project.members).selectinload(ProjectMember.user),
             selectinload(Project.milestones),
             selectinload(Project.issues).selectinload(Issue.comments),
+            joinedload(Project.folder),
         )
         .where(Project.id == project.id)
     )
     t_name = db.scalar(select(Team.name).where(Team.id == project.team_id)) if project.team_id else None
-    return _serialize_project(project, role, t_name)
+    member_count = len(_load_space_members(db, project.team_id)) if project.team_id else 0
+    return _serialize_project(project, role, t_name, member_count)
 
 
 @router.patch("/projects/{project_id}", response_model=ProjectListItem)
@@ -1444,14 +1843,15 @@ def update_project(
     project = db.scalar(
         select(Project)
         .options(
-            selectinload(Project.members).selectinload(ProjectMember.user),
             selectinload(Project.milestones),
             selectinload(Project.issues).selectinload(Issue.comments),
+            joinedload(Project.folder),
         )
         .where(Project.id == project.id)
     )
     t_name = db.scalar(select(Team.name).where(Team.id == project.team_id)) if project.team_id else None
-    return _serialize_project(project, role, t_name)
+    member_count = len(_load_space_members(db, project.team_id)) if project.team_id else 0
+    return _serialize_project(project, role, t_name, member_count)
 
 
 @router.get("/projects/{project_id}/members", response_model=ProjectMemberListResponse)
@@ -1464,19 +1864,31 @@ def list_project_members(
     current_user: User = Depends(require_current_user),
 ) -> ProjectMemberListResponse:
     project, _ = _ensure_project_access(db, current_user, project_id)
-    members = [
+    if project.team_id is None:
+        raise HTTPException(status_code=409, detail="Project space is not set.")
+    space_members = list_space_members(
+        space_id=project.team_id,
+        page=page,
+        page_size=page_size,
+        db=db,
+        current_user=current_user,
+    )
+    return ProjectMemberListResponse(
+        items=[
         ProjectMemberItem(
-            user_id=member.user_id,
-            email=member.user.email,
-            full_name=member.user.full_name,
-            is_admin=member.user.is_admin,
-            role=member.role,
-            joined_at=member.joined_at,
+            user_id=item.user_id,
+            email=item.email,
+            full_name=item.full_name,
+            is_admin=item.is_admin,
+            role=item.role,
+            joined_at=item.joined_at,
         )
-        for member in sorted(project.members, key=lambda item: (item.role != "owner", item.user.full_name.lower()))
-    ]
-    page_items, total = _paginate(members, page, page_size)
-    return ProjectMemberListResponse(items=page_items, total=total, page=page, page_size=page_size)
+            for item in space_members.items
+        ],
+        total=space_members.total,
+        page=space_members.page,
+        page_size=space_members.page_size,
+    )
 
 
 @router.post(
@@ -1496,27 +1908,22 @@ def add_project_member(
     current_user: User = Depends(require_current_user),
 ) -> ProjectMemberItem:
     project, _ = _ensure_project_owner(db, current_user, project_id)
-    user = _validate_member_user(db, project, payload.user_id)
-    member = ProjectMember(
-        id=new_id(),
-        project_id=project.id,
-        user_id=user.id,
-        role=payload.role,
+    if project.team_id is None:
+        raise HTTPException(status_code=409, detail="Project space is not set.")
+    member = add_space_member(
+        space_id=project.team_id,
+        payload=SpaceMemberCreateRequest(user_id=payload.user_id, role=payload.role),
+        db=db,
+        current_user=current_user,
     )
-    db.add(member)
-    db.commit()
     return ProjectMemberItem(
-        user_id=user.id,
-        email=user.email,
-        full_name=user.full_name,
-        is_admin=user.is_admin,
+        user_id=member.user_id,
+        email=member.email,
+        full_name=member.full_name,
+        is_admin=member.is_admin,
         role=member.role,
         joined_at=member.joined_at,
     )
-
-
-class MemberRoleUpdateRequest(BaseModel):
-    role: Literal["owner", "admin", "editor", "viewer", "member"]
 
 
 @router.patch("/projects/{project_id}/members/{user_id}/role", response_model=ProjectMemberItem)
@@ -1524,25 +1931,27 @@ class MemberRoleUpdateRequest(BaseModel):
 def update_member_role(
     project_id: str,
     user_id: str,
-    payload: MemberRoleUpdateRequest,
+    payload: SpaceMemberRoleUpdateRequest,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
 ) -> ProjectMemberItem:
     project, _ = _ensure_project_owner(db, current_user, project_id)
-    membership = next((m for m in project.members if m.user_id == user_id), None)
-    if membership is None:
-        raise HTTPException(status_code=404, detail="Member not found.")
-    membership.role = payload.role
-    db.commit()
-    db.refresh(membership)
-    user = membership.user
+    if project.team_id is None:
+        raise HTTPException(status_code=409, detail="Project space is not set.")
+    member = update_space_member(
+        space_id=project.team_id,
+        user_id=user_id,
+        payload=payload,
+        db=db,
+        current_user=current_user,
+    )
     return ProjectMemberItem(
-        user_id=user.id,
-        email=user.email,
-        full_name=user.full_name,
-        is_admin=user.is_admin,
-        role=membership.role,
-        joined_at=membership.joined_at,
+        user_id=member.user_id,
+        email=member.email,
+        full_name=member.full_name,
+        is_admin=member.is_admin,
+        role=member.role,
+        joined_at=member.joined_at,
     )
 
 
@@ -1555,14 +1964,14 @@ def remove_project_member(
     current_user: User = Depends(require_current_user),
 ) -> Response:
     project, _ = _ensure_project_owner(db, current_user, project_id)
-    membership = next((m for m in project.members if m.user_id == user_id), None)
-    if membership is None:
-        raise HTTPException(status_code=404, detail="Member not found.")
-    if membership.role == "owner" and sum(1 for m in project.members if m.role == "owner") == 1:
-        raise HTTPException(status_code=409, detail="Cannot remove the last owner.")
-    db.delete(membership)
-    db.commit()
-    return Response(status_code=status.HTTP_204_NO_CONTENT)
+    if project.team_id is None:
+        raise HTTPException(status_code=409, detail="Project space is not set.")
+    return remove_space_member(
+        space_id=project.team_id,
+        user_id=user_id,
+        db=db,
+        current_user=current_user,
+    )
 
 
 @router.get("/projects/{project_id}/milestones", response_model=MilestoneListResponse)
@@ -1835,7 +2244,7 @@ def create_issue(
     current_user: User = Depends(require_current_user),
 ) -> IssueListItem:
     project, _ = _ensure_project_editor(db, current_user, project_id)
-    _validate_issue_assignee(project, payload.assignee_id)
+    _validate_issue_assignee(db, project, payload.assignee_id)
     _validate_milestone(project, payload.milestone_id)
     _validate_parent_issue(db, project, payload.parent_id)
     next_position = _next_issue_board_position(db, project_id, payload.status)
@@ -1976,7 +2385,7 @@ def update_issue(
 ) -> IssueListItem:
     issue, project = _get_issue_for_user(db, current_user, issue_id, require_editor=True)
     if "assignee_id" in payload.model_fields_set:
-        _validate_issue_assignee(project, payload.assignee_id)
+        _validate_issue_assignee(db, project, payload.assignee_id)
     if "milestone_id" in payload.model_fields_set:
         _validate_milestone(project, payload.milestone_id)
     if "parent_id" in payload.model_fields_set:
@@ -2166,7 +2575,7 @@ def bulk_update_issues(
             issue.priority = payload.priority
             changed = True
         if "assignee_id" in payload.model_fields_set and payload.assignee_id != issue.assignee_id:
-            _validate_issue_assignee(project, payload.assignee_id)
+            _validate_issue_assignee(db, project, payload.assignee_id)
             old_name = getattr(issue.assignee, "full_name", "Unassigned")
             issue.assignee_id = payload.assignee_id
             _log_issue_activity(db, issue.id, current_user.id, "updated", f"{current_user.full_name} updated assignee.", field_name="assignee", from_value=old_name, to_value=payload.assignee_id or "Unassigned")
@@ -2364,7 +2773,7 @@ def get_dashboard_summary(
 ) -> DashboardSummaryResponse:
     projects = list(
         db.scalars(
-            _accessible_projects_query(current_user).options(
+            _accessible_projects_query(db, current_user).options(
                 selectinload(Project.members).selectinload(ProjectMember.user),
                 selectinload(Project.milestones).selectinload(Milestone.issues),
                 selectinload(Project.issues)
@@ -3387,7 +3796,9 @@ def set_issue_assignees(
     current_user: User = Depends(require_current_user),
 ) -> list[IssueAssigneeItem]:
     issue, project = _get_issue_for_user(db, current_user, issue_id, require_editor=True)
-    member_ids = {member.user_id for member in project.members}
+    if project.team_id is None:
+        raise HTTPException(status_code=409, detail="Project space is not set.")
+    member_ids = _space_member_ids(db, project.team_id)
 
     # Clear existing assignee links
     for link in list(issue.assignee_links):
@@ -3450,7 +3861,7 @@ def list_folders(
     if team_id:
         _ensure_space_access(db, current_user, team_id)
         q = q.where(Folder.team_id == team_id)
-    elif is_platform_admin_user(current_user):
+    elif is_platform_admin_user(current_user, db):
         q = q.where(
             or_(
                 Folder.team_id.is_(None),
@@ -3463,7 +3874,7 @@ def list_folders(
                 ),
             )
         )
-    elif not is_platform_admin_user(current_user):
+    elif not is_platform_admin_user(current_user, db):
         accessible_team_ids = _accessible_space_ids(db, current_user)
         if accessible_team_ids:
             q = q.where(Folder.team_id.in_(accessible_team_ids))
@@ -3524,7 +3935,10 @@ def create_folder(
         created_by_id=current_user.id,
     )
     db.add(default_project)
-    db.add(ProjectMember(id=new_id(), project_id=default_project.id, user_id=current_user.id, role="owner"))
+    if not db.scalar(
+        select(TeamMember.id).where(TeamMember.team_id == resolved_team_id, TeamMember.user_id == current_user.id)
+    ):
+        db.add(TeamMember(id=new_id(), team_id=resolved_team_id, user_id=current_user.id, role="owner"))
     _create_default_statuses(db, default_project.id)
     _create_default_labels(db, default_project.id)
 
@@ -4160,3 +4574,339 @@ def delete_space_doc_page(
         db.add(descendant)
     db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+# ── Docs Hub (cross-space aggregation) ──────────────────────────────
+
+
+class DocsHubItem(BaseModel):
+    id: str
+    team_id: str
+    space_name: str
+    title: str
+    page_count: int
+    created_by_id: str
+    created_by_name: str
+    is_favorite: bool
+    is_private: bool
+    last_viewed_at: datetime | None = None
+    created_at: datetime
+    updated_at: datetime
+    trashed_at: datetime | None = None
+
+
+class DocsHubResponse(BaseModel):
+    items: list[DocsHubItem]
+    total: int
+    page: int
+    page_size: int
+
+
+class RecentPageItem(BaseModel):
+    page_id: str
+    page_title: str
+    doc_id: str
+    doc_title: str
+    team_id: str
+    last_viewed_at: datetime
+
+
+class FavoriteDocItem(BaseModel):
+    id: str
+    title: str
+    team_id: str
+
+
+@router.get("/docs-hub", response_model=DocsHubResponse)
+def list_docs_hub(
+    category: str = Query("all"),
+    q: str = Query(""),
+    sort_by: str = Query("updated_at"),
+    sort_dir: str = Query("desc"),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1, le=100),
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+) -> DocsHubResponse:
+    accessible = _accessible_space_ids(db, current_user)
+    if not accessible:
+        return DocsHubResponse(items=[], total=0, page=page, page_size=page_size)
+
+    page_count_sub = (
+        select(func.count(SpaceDocPage.id))
+        .where(
+            SpaceDocPage.space_doc_id == SpaceDoc.id,
+            SpaceDocPage.trashed_at.is_(None),
+        )
+        .correlate(SpaceDoc)
+        .scalar_subquery()
+        .label("page_count")
+    )
+
+    q_stmt = (
+        select(
+            SpaceDoc,
+            Team.name.label("space_name"),
+            User.full_name.label("created_by_name"),
+            page_count_sub,
+            UserDocPref.is_favorite.label("is_favorite"),
+            UserDocPref.is_private.label("is_private"),
+            UserDocPref.last_viewed_at.label("last_viewed_at"),
+        )
+        .join(Team, Team.id == SpaceDoc.team_id)
+        .join(User, User.id == SpaceDoc.created_by_id)
+        .outerjoin(
+            UserDocPref,
+            (UserDocPref.space_doc_id == SpaceDoc.id)
+            & (UserDocPref.user_id == current_user.id),
+        )
+        .where(SpaceDoc.team_id.in_(accessible))
+    )
+
+    # Category filters
+    if category == "all":
+        q_stmt = q_stmt.where(SpaceDoc.trashed_at.is_(None))
+    elif category == "my":
+        q_stmt = q_stmt.where(
+            SpaceDoc.trashed_at.is_(None),
+            SpaceDoc.created_by_id == current_user.id,
+        )
+    elif category == "shared":
+        q_stmt = q_stmt.where(
+            SpaceDoc.trashed_at.is_(None),
+            SpaceDoc.created_by_id != current_user.id,
+        )
+    elif category == "favorites":
+        q_stmt = q_stmt.where(
+            SpaceDoc.trashed_at.is_(None),
+            UserDocPref.is_favorite.is_(True),
+        )
+    elif category == "private":
+        q_stmt = q_stmt.where(
+            SpaceDoc.trashed_at.is_(None),
+            UserDocPref.is_private.is_(True),
+        )
+    elif category == "recent":
+        q_stmt = q_stmt.where(
+            SpaceDoc.trashed_at.is_(None),
+            UserDocPref.last_viewed_at.isnot(None),
+        )
+    elif category == "archived":
+        q_stmt = q_stmt.where(SpaceDoc.trashed_at.isnot(None))
+    else:
+        q_stmt = q_stmt.where(SpaceDoc.trashed_at.is_(None))
+
+    # Text search
+    if q.strip():
+        q_stmt = q_stmt.where(SpaceDoc.title.ilike(f"%{q.strip()}%"))
+
+    # Count total
+    from sqlalchemy import distinct
+    count_stmt = select(func.count(distinct(SpaceDoc.id))).select_from(q_stmt.subquery())
+    total = db.scalar(count_stmt) or 0
+
+    # Sorting
+    sort_column_map = {
+        "updated_at": SpaceDoc.updated_at,
+        "created_at": SpaceDoc.created_at,
+        "title": SpaceDoc.title,
+        "last_viewed_at": UserDocPref.last_viewed_at,
+    }
+    sort_col = sort_column_map.get(sort_by, SpaceDoc.updated_at)
+    if sort_dir == "asc":
+        q_stmt = q_stmt.order_by(sort_col.asc())
+    else:
+        q_stmt = q_stmt.order_by(sort_col.desc())
+
+    # Pagination
+    q_stmt = q_stmt.offset((page - 1) * page_size).limit(page_size)
+
+    rows = db.execute(q_stmt).all()
+    items = [
+        DocsHubItem(
+            id=row.SpaceDoc.id,
+            team_id=row.SpaceDoc.team_id,
+            space_name=row.space_name or "",
+            title=row.SpaceDoc.title,
+            page_count=row.page_count or 0,
+            created_by_id=row.SpaceDoc.created_by_id,
+            created_by_name=row.created_by_name or "",
+            is_favorite=bool(row.is_favorite),
+            is_private=bool(row.is_private),
+            last_viewed_at=row.last_viewed_at,
+            created_at=row.SpaceDoc.created_at,
+            updated_at=row.SpaceDoc.updated_at,
+            trashed_at=row.SpaceDoc.trashed_at,
+        )
+        for row in rows
+    ]
+
+    return DocsHubResponse(items=items, total=total, page=page, page_size=page_size)
+
+
+@router.patch("/docs-hub/{doc_id}/favorite")
+def toggle_doc_favorite(
+    doc_id: str,
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+) -> dict:
+    doc = db.get(SpaceDoc, doc_id)
+    if doc is None:
+        raise HTTPException(status_code=404, detail="Doc not found.")
+    _ensure_space_access(db, current_user, doc.team_id)
+    pref = db.scalar(
+        select(UserDocPref).where(
+            UserDocPref.user_id == current_user.id,
+            UserDocPref.space_doc_id == doc_id,
+        )
+    )
+    if pref is None:
+        pref = UserDocPref(
+            id=new_id(),
+            user_id=current_user.id,
+            space_doc_id=doc_id,
+            is_favorite=True,
+        )
+        db.add(pref)
+    else:
+        pref.is_favorite = not pref.is_favorite
+    db.commit()
+    return {"is_favorite": pref.is_favorite}
+
+
+@router.patch("/docs-hub/{doc_id}/private")
+def toggle_doc_private(
+    doc_id: str,
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+) -> dict:
+    doc = db.get(SpaceDoc, doc_id)
+    if doc is None:
+        raise HTTPException(status_code=404, detail="Doc not found.")
+    _ensure_space_access(db, current_user, doc.team_id)
+    pref = db.scalar(
+        select(UserDocPref).where(
+            UserDocPref.user_id == current_user.id,
+            UserDocPref.space_doc_id == doc_id,
+        )
+    )
+    if pref is None:
+        pref = UserDocPref(
+            id=new_id(),
+            user_id=current_user.id,
+            space_doc_id=doc_id,
+            is_private=True,
+        )
+        db.add(pref)
+    else:
+        pref.is_private = not pref.is_private
+    db.commit()
+    return {"is_private": pref.is_private}
+
+
+@router.post("/docs-hub/{doc_id}/view")
+def record_doc_view(
+    doc_id: str,
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+) -> dict:
+    doc = db.get(SpaceDoc, doc_id)
+    if doc is None:
+        raise HTTPException(status_code=404, detail="Doc not found.")
+    _ensure_space_access(db, current_user, doc.team_id)
+    pref = db.scalar(
+        select(UserDocPref).where(
+            UserDocPref.user_id == current_user.id,
+            UserDocPref.space_doc_id == doc_id,
+        )
+    )
+    if pref is None:
+        pref = UserDocPref(
+            id=new_id(),
+            user_id=current_user.id,
+            space_doc_id=doc_id,
+            last_viewed_at=_utcnow(),
+        )
+        db.add(pref)
+    else:
+        pref.last_viewed_at = _utcnow()
+    db.commit()
+    return {"ok": True}
+
+
+@router.get("/docs-hub/recent-pages", response_model=list[RecentPageItem])
+def list_recent_pages(
+    limit: int = Query(10, ge=1, le=20),
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+) -> list[RecentPageItem]:
+    accessible = _accessible_space_ids(db, current_user)
+    if not accessible:
+        return []
+
+    rows = db.execute(
+        select(
+            SpaceDocPage.id.label("page_id"),
+            SpaceDocPage.title.label("page_title"),
+            SpaceDoc.id.label("doc_id"),
+            SpaceDoc.title.label("doc_title"),
+            SpaceDoc.team_id.label("team_id"),
+            UserDocPref.last_viewed_at,
+        )
+        .join(SpaceDoc, SpaceDoc.id == SpaceDocPage.space_doc_id)
+        .join(
+            UserDocPref,
+            (UserDocPref.space_doc_id == SpaceDoc.id)
+            & (UserDocPref.user_id == current_user.id),
+        )
+        .where(
+            SpaceDoc.team_id.in_(accessible),
+            SpaceDoc.trashed_at.is_(None),
+            SpaceDocPage.trashed_at.is_(None),
+            UserDocPref.last_viewed_at.isnot(None),
+        )
+        .order_by(UserDocPref.last_viewed_at.desc())
+        .limit(limit)
+    ).all()
+
+    return [
+        RecentPageItem(
+            page_id=r.page_id,
+            page_title=r.page_title,
+            doc_id=r.doc_id,
+            doc_title=r.doc_title,
+            team_id=r.team_id,
+            last_viewed_at=r.last_viewed_at,
+        )
+        for r in rows
+    ]
+
+
+@router.get("/docs-hub/favorites", response_model=list[FavoriteDocItem])
+def list_favorite_docs(
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+) -> list[FavoriteDocItem]:
+    accessible = _accessible_space_ids(db, current_user)
+    if not accessible:
+        return []
+
+    rows = db.execute(
+        select(SpaceDoc.id, SpaceDoc.title, SpaceDoc.team_id)
+        .join(
+            UserDocPref,
+            (UserDocPref.space_doc_id == SpaceDoc.id)
+            & (UserDocPref.user_id == current_user.id),
+        )
+        .where(
+            SpaceDoc.team_id.in_(accessible),
+            SpaceDoc.trashed_at.is_(None),
+            UserDocPref.is_favorite.is_(True),
+        )
+        .order_by(SpaceDoc.updated_at.desc())
+    ).all()
+
+    return [
+        FavoriteDocItem(id=r.id, title=r.title, team_id=r.team_id)
+        for r in rows
+    ]

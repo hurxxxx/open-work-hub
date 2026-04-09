@@ -20,15 +20,15 @@ import {
 import { InlineNotice, useConfirm, usePrompt } from '@aidoo/ui';
 import { cn } from '@/src/lib/utils';
 import { NAV_ITEMS, APP_BAR_ITEMS } from '@/src/constants';
+import { hasAdminSectionAccess, type AdminSection } from '@/src/domains/admin/admin-permissions';
 import { useAuth } from '@/src/domains/auth/auth-provider';
-import { getWorkspaceRoleByKey, teamRoleAllows, workspaceRoleAllows } from '@/src/domains/auth/auth-api';
-import { listPmsLists, listFolders, listSpaceDocs, createSpaceDoc, updateSpaceDoc, deleteSpaceDoc, updateFolder, deleteFolder, type PmsFolder, type PmsList, type PmsSpaceDoc } from '@/src/domains/pms/pms-api';
-import { listTeams, updateTeam, deleteTeam, type TeamItem } from '@/src/domains/admin/admin-api';
+import { hasAppAccess, teamRoleAllows } from '@/src/domains/auth/auth-api';
+import { listPmsLists, listFolders, listSpaceDocs, createSpaceDoc, updateSpaceDoc, deleteSpaceDoc, updateFolder, deleteFolder, listFavoriteDocs, listRecentPages, listSpaces, updateSpace, deleteSpace, type PmsFolder, type PmsList, type PmsSpace, type PmsSpaceDoc, type FavoriteDocItem, type RecentPageItem } from '@/src/domains/pms/pms-api';
 import { CreateProjectModal } from '@/src/components/views/PMSView/CreateProjectModal';
 import { CreateSpaceModal } from '@/src/components/views/PMSView/CreateSpaceModal';
 import { CreateFolderModal } from '@/src/components/views/PMSView/CreateFolderModal';
+import { buildSidebarCategories } from './sub-sidebar-categories';
 
-const PMS_WORKSPACE_KEY = 'pms';
 const SPACE_COLORS = [
   'bg-emerald-500',
   'bg-blue-500',
@@ -43,8 +43,8 @@ function upsertList(lists: PmsList[], item: PmsList): PmsList[] {
   );
 }
 
-function upsertTeam(teams: TeamItem[], team: TeamItem): TeamItem[] {
-  return [team, ...teams.filter((item) => item.id !== team.id)].sort(
+function upsertSpace(spaces: PmsSpace[], space: PmsSpace): PmsSpace[] {
+  return [space, ...spaces.filter((item) => item.id !== space.id)].sort(
     (left, right) => left.name.localeCompare(right.name, 'ko'),
   );
 }
@@ -468,7 +468,7 @@ const SpaceItem = ({
             onClick={onToggle}
             className={cn(
               'ml-1 flex h-7 w-6 shrink-0 items-center justify-center rounded transition-colors',
-              spaceActive ? 'text-clickup-text/50' : 'text-gray-500 hover:text-gray-300',
+              spaceActive ? 'text-clickup-text/50' : 'text-gray-600 dark:text-gray-300 hover:text-clickup-text dark:hover:text-white',
             )}
             title={expanded ? 'Collapse Space' : 'Expand Space'}
           >
@@ -508,7 +508,7 @@ const SpaceItem = ({
               onClick={() => { if (!expanded) onToggle(); onNavigate(); }}
               className={cn(
                 'flex min-w-0 flex-1 items-center gap-2 py-1.5 pl-0.5 pr-2 text-left',
-                spaceActive ? 'text-clickup-text' : 'text-gray-500 group-hover:text-gray-300',
+                spaceActive ? 'text-clickup-text' : 'text-gray-600 dark:text-gray-300 group-hover:text-clickup-text dark:group-hover:text-white',
               )}
             >
               <div className={cn('h-5 w-5 shrink-0 rounded flex items-center justify-center', iconColor)}>
@@ -529,7 +529,7 @@ const SpaceItem = ({
                   event.stopPropagation();
                   setSpaceMenuOpen((current) => !current);
                 }}
-                className="p-0.5 hover:bg-clickup-hover rounded text-gray-500 hover:text-gray-300 transition-colors"
+                className="p-0.5 hover:bg-clickup-hover rounded text-gray-600 dark:text-gray-300 hover:text-clickup-text dark:hover:text-white transition-colors"
                 title="More"
               >
                 <MoreHorizontal size={14} />
@@ -541,7 +541,7 @@ const SpaceItem = ({
                   event.stopPropagation();
                   setAddPopoverOpen((current) => !current);
                 }}
-                className="p-0.5 hover:bg-clickup-hover rounded text-gray-500 hover:text-gray-300 transition-colors"
+                className="p-0.5 hover:bg-clickup-hover rounded text-gray-600 dark:text-gray-300 hover:text-clickup-text dark:hover:text-white transition-colors"
                 title="Add"
               >
                 <Plus size={14} />
@@ -607,7 +607,7 @@ const SpaceItem = ({
                                 event.stopPropagation();
                                 setFolderMenuOpen((current) => (current === folder.id ? null : folder.id));
                               }}
-                              className="p-0.5 hover:bg-clickup-hover rounded text-gray-500 hover:text-gray-300 transition-colors"
+                              className="p-0.5 hover:bg-clickup-hover rounded text-gray-600 dark:text-gray-300 hover:text-clickup-text dark:hover:text-white transition-colors"
                               title="Folder options"
                             >
                               <MoreHorizontal size={12} />
@@ -618,7 +618,7 @@ const SpaceItem = ({
                                 event.stopPropagation();
                                 setFolderPopoverOpen((current) => (current === folder.id ? null : folder.id));
                               }}
-                              className="p-0.5 hover:bg-clickup-hover rounded text-gray-500 hover:text-gray-300 transition-colors"
+                              className="p-0.5 hover:bg-clickup-hover rounded text-gray-600 dark:text-gray-300 hover:text-clickup-text dark:hover:text-white transition-colors"
                               title="Add to folder"
                             >
                               <Plus size={12} />
@@ -745,7 +745,7 @@ const SpaceItem = ({
                               e.stopPropagation();
                               setDocMenuOpen((c) => (c === item.id ? null : item.id));
                             }}
-                            className="p-0.5 hover:bg-clickup-hover rounded text-gray-500 hover:text-gray-300 transition-colors"
+                            className="p-0.5 hover:bg-clickup-hover rounded text-gray-600 dark:text-gray-300 hover:text-clickup-text dark:hover:text-white transition-colors"
                             title="Doc options"
                           >
                             <MoreHorizontal size={12} />
@@ -779,19 +779,17 @@ export const SubSidebar = ({ activeAppId, activeNavItemId }: { activeAppId: stri
   const { prompt, promptDialog } = usePrompt();
   const isSpaceDocs = /^\/tool\/pms-space-[0-9a-f-]+-docs/.test(location.pathname);
   const isDocEditor = !isSpaceDocs && (location.pathname.match(/^\/tool\/[^/]+\/[^/]+$/) || location.pathname.match(/^\/docs\/[^/]+$/));
-  const pmsWorkspaceRole = getWorkspaceRoleByKey(user, PMS_WORKSPACE_KEY);
-  const pmsWorkspaceId = pmsWorkspaceRole?.workspace_id ?? null;
-  const canReadTeams = Boolean(user?.is_admin) || Boolean(pmsWorkspaceId);
-  const canWriteTeams = Boolean(user?.is_admin) || workspaceRoleAllows(pmsWorkspaceRole?.role, 'workspace_admin');
+  const canReadTeams = hasAppAccess(user, 'pms');
+  const canWriteTeams = hasAppAccess(user, 'pms');
   const canManageSpace = useCallback(
-    (team: TeamItem) => canWriteTeams || teamRoleAllows(team.current_user_role, 'team_admin'),
-    [canWriteTeams],
+    (team: PmsSpace) => teamRoleAllows(team.current_user_role, 'admin'),
+    [],
   );
 
   const [expandedCategories, setExpandedCategories] = useState<string[]>([]);
   const [pmsLists, setPmsLists] = useState<PmsList[]>([]);
   const [pmsFolders, setPmsFolders] = useState<PmsFolder[]>([]);
-  const [pmsTeams, setPmsTeams] = useState<TeamItem[]>([]);
+  const [pmsTeams, setPmsTeams] = useState<PmsSpace[]>([]);
   const [pmsLoading, setPmsLoading] = useState(false);
   const [pmsError, setPmsError] = useState<string | null>(null);
   const [createProjectOpen, setCreateProjectOpen] = useState(false);
@@ -799,16 +797,85 @@ export const SubSidebar = ({ activeAppId, activeNavItemId }: { activeAppId: stri
   const [createProjectFolderId, setCreateProjectFolderId] = useState<string | null>(null);
   const [createSpaceOpen, setCreateSpaceOpen] = useState(false);
   const [expandedSpaces, setExpandedSpaces] = useState<Set<string>>(new Set());
+  const [docsFavorites, setDocsFavorites] = useState<FavoriteDocItem[]>([]);
+  const [docsRecentPages, setDocsRecentPages] = useState<RecentPageItem[]>([]);
+
+  // Resizable sidebar width (persisted in localStorage)
+  const SIDEBAR_MIN_WIDTH = 180;
+  const SIDEBAR_MAX_WIDTH = 480;
+  const SIDEBAR_DEFAULT_WIDTH = 240;
+  const [sidebarWidth, setSidebarWidth] = useState<number>(() => {
+    if (typeof window === 'undefined') return SIDEBAR_DEFAULT_WIDTH;
+    const saved = window.localStorage.getItem('aidoo:sub-sidebar-width');
+    const parsed = saved ? parseInt(saved, 10) : NaN;
+    if (Number.isFinite(parsed) && parsed >= SIDEBAR_MIN_WIDTH && parsed <= SIDEBAR_MAX_WIDTH) {
+      return parsed;
+    }
+    return SIDEBAR_DEFAULT_WIDTH;
+  });
+  const [isResizing, setIsResizing] = useState(false);
+
+  useEffect(() => {
+    if (!isResizing) return;
+    const handleMouseMove = (e: MouseEvent) => {
+      // SubSidebar starts after the AppBar (w-16 = 64px)
+      const newWidth = Math.min(
+        SIDEBAR_MAX_WIDTH,
+        Math.max(SIDEBAR_MIN_WIDTH, e.clientX - 64),
+      );
+      setSidebarWidth(newWidth);
+    };
+    const handleMouseUp = () => {
+      setIsResizing(false);
+    };
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+  }, [isResizing]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    window.localStorage.setItem('aidoo:sub-sidebar-width', String(sidebarWidth));
+  }, [sidebarWidth]);
 
   const knownSpaceIdsRef = useRef(new Set<string>());
 
   const filteredItems = useMemo(
-    () => NAV_ITEMS.filter((item) => item.appId === activeAppId),
-    [activeAppId],
+    () => {
+      const items = NAV_ITEMS.filter((item) => item.appId === activeAppId);
+      if (activeAppId !== 'settings') {
+        return items;
+      }
+
+      const sectionByItemId: Partial<Record<string, AdminSection>> = {
+        'settings-general': 'general',
+        'settings-people': 'people',
+        'settings-workspaces': 'workspaces',
+        'settings-security': 'security',
+        'settings-audit': 'audit',
+      };
+
+      return items.filter((item) => {
+        const section = sectionByItemId[item.id];
+        return section ? hasAdminSectionAccess(user?.system_roles ?? [], section) : false;
+      });
+    },
+    [activeAppId, user?.system_roles],
   );
   const categories = useMemo(
-    () => Array.from(new Set(filteredItems.map((item) => item.category))),
-    [filteredItems],
+    () => buildSidebarCategories(
+      filteredItems.map((item) => item.category),
+      activeAppId,
+      canReadTeams,
+    ),
+    [activeAppId, canReadTeams, filteredItems],
   );
 
   useEffect(() => {
@@ -838,8 +905,8 @@ export const SubSidebar = ({ activeAppId, activeNavItemId }: { activeAppId: stri
         setPmsFolders([]);
       });
 
-    const teamRequest = canReadTeams && pmsWorkspaceId
-      ? listTeams(token, pmsWorkspaceId)
+    const teamRequest = canReadTeams
+      ? listSpaces(token)
           .then((teams) => {
             if (cancelled) return;
             setPmsTeams(Array.isArray(teams) ? teams : []);
@@ -862,7 +929,20 @@ export const SubSidebar = ({ activeAppId, activeNavItemId }: { activeAppId: stri
     return () => {
       cancelled = true;
     };
-  }, [activeAppId, canReadTeams, pmsWorkspaceId, token]);
+  }, [activeAppId, canReadTeams, token]);
+
+  // Fetch docs sidebar data (favorites + recent pages)
+  useEffect(() => {
+    if (activeAppId !== 'docs' || !token) return;
+    let cancelled = false;
+    listFavoriteDocs(token)
+      .then((items) => { if (!cancelled) setDocsFavorites(items); })
+      .catch(() => { if (!cancelled) setDocsFavorites([]); });
+    listRecentPages(token, 5)
+      .then((items) => { if (!cancelled) setDocsRecentPages(items); })
+      .catch(() => { if (!cancelled) setDocsRecentPages([]); });
+    return () => { cancelled = true; };
+  }, [activeAppId, token]);
 
   const toggleCategory = (category: string) => {
     setExpandedCategories((prev) => (
@@ -1013,7 +1093,7 @@ export const SubSidebar = ({ activeAppId, activeNavItemId }: { activeAppId: stri
   const handleRenameSpace = useCallback(async (spaceId: string, newName: string) => {
     if (!token) return;
     try {
-      const updated = await updateTeam(token, spaceId, { name: newName });
+      const updated = await updateSpace(token, spaceId, { name: newName });
       setPmsTeams((current) => current.map((t) => (t.id === updated.id ? updated : t)));
     } catch { /* ignore */ }
   }, [token]);
@@ -1023,7 +1103,7 @@ export const SubSidebar = ({ activeAppId, activeNavItemId }: { activeAppId: stri
     if (!await confirm({ title: 'Delete Space', description: 'Move this space and its contents to Trash?', confirmLabel: 'Move to Trash', variant: 'danger' })) return;
     setPmsError(null);
     try {
-      await deleteTeam(token, spaceId);
+      await deleteSpace(token, spaceId);
       const activeListInSpace = pmsLists.some((list) => (
         list.team_id === spaceId && activeNavItemId === `pms-list-${list.id}`
       ));
@@ -1046,10 +1126,10 @@ export const SubSidebar = ({ activeAppId, activeNavItemId }: { activeAppId: stri
       });
 
       if (activeSpaceRoute || activeListInSpace) {
-        navigate('/tool/pms-space-team');
+        navigate('/pms');
       }
     } catch (error) {
-      setPmsError(getErrorMessage(error, '팀 스페이스를 휴지통으로 옮기지 못했습니다.'));
+      setPmsError(getErrorMessage(error, '스페이스를 휴지통으로 옮기지 못했습니다.'));
     }
   }, [activeNavItemId, navigate, pmsLists, token]);
 
@@ -1145,15 +1225,19 @@ export const SubSidebar = ({ activeAppId, activeNavItemId }: { activeAppId: stri
         <div className="w-full flex items-center justify-between px-3 py-1">
           <button
             onClick={() => toggleCategory('Spaces')}
-            className="app-text-overline flex items-center gap-1 text-gray-500 transition-colors hover:text-gray-300"
+            className="sidebar-section-label sidebar-section-header group/section flex items-center gap-1"
           >
+            {isExpanded ? (
+              <ChevronDown size={11} className="text-gray-500 dark:text-gray-400 transition-colors group-hover/section:text-clickup-text dark:group-hover/section:text-white" />
+            ) : (
+              <ChevronRight size={11} className="text-gray-500 dark:text-gray-400 transition-colors group-hover/section:text-clickup-text dark:group-hover/section:text-white" />
+            )}
             <span>Spaces</span>
-            {isExpanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
           </button>
           {canWriteTeams && (
             <button
               onClick={() => setCreateSpaceOpen(true)}
-              className="p-1 hover:bg-clickup-hover rounded text-gray-500 hover:text-gray-300 transition-colors"
+              className="p-1 hover:bg-clickup-hover rounded text-gray-600 dark:text-gray-300 hover:text-clickup-text dark:hover:text-white transition-colors"
               title="Create Space"
             >
               <Plus size={12} />
@@ -1171,7 +1255,7 @@ export const SubSidebar = ({ activeAppId, activeNavItemId }: { activeAppId: stri
             >
               {pmsLoading ? (
                 <div className="flex items-center justify-center py-4">
-                  <Loader2 size={14} className="animate-spin text-gray-500" />
+                  <Loader2 size={14} className="animate-spin text-gray-500 dark:text-gray-400" />
                 </div>
               ) : (
                 <>
@@ -1205,7 +1289,7 @@ export const SubSidebar = ({ activeAppId, activeNavItemId }: { activeAppId: stri
                       onDeleteDoc={(pageId) => { void handleDeleteDoc(pageId); }}
                       activeNavItemId={activeNavItemId}
                       canManageSpace={canManageSpace(space)}
-                      canManageCollections={teamRoleAllows(space.current_user_role, 'team_admin')}
+                      canManageCollections={teamRoleAllows(space.current_user_role, 'admin')}
                     />
                   ))}
 
@@ -1231,9 +1315,12 @@ export const SubSidebar = ({ activeAppId, activeNavItemId }: { activeAppId: stri
     <>
       {confirmDialog}
       {promptDialog}
-      <div className="w-60 h-full bg-clickup-sidebar border-r border-clickup-border flex flex-col overflow-hidden">
+      <div
+        className="relative h-full bg-clickup-sidebar border-r border-clickup-border flex flex-col overflow-hidden shrink-0"
+        style={{ width: `${sidebarWidth}px` }}
+      >
         <div className="p-4 border-b border-clickup-border">
-          <h2 className="app-text-overline text-gray-500">
+          <h2 className="app-text-overline text-gray-600 dark:text-gray-300">
             {activeAppId === 'settings' ? 'All settings' : APP_BAR_ITEMS.find((item) => item.id === activeAppId)?.title}
           </h2>
         </div>
@@ -1248,10 +1335,14 @@ export const SubSidebar = ({ activeAppId, activeNavItemId }: { activeAppId: stri
               <div key={category} className="space-y-1">
                 <button
                   onClick={() => toggleCategory(category)}
-                  className="app-text-overline w-full flex items-center justify-between px-3 py-1 text-gray-500 transition-colors hover:text-gray-300"
+                  className="sidebar-section-label sidebar-section-header group/section flex w-full items-center gap-1 px-3 py-1"
                 >
+                  {expandedCategories.includes(category) ? (
+                    <ChevronDown size={11} className="text-gray-500 dark:text-gray-400 transition-colors group-hover/section:text-clickup-text dark:group-hover/section:text-white" />
+                  ) : (
+                    <ChevronRight size={11} className="text-gray-500 dark:text-gray-400 transition-colors group-hover/section:text-clickup-text dark:group-hover/section:text-white" />
+                  )}
                   <span>{category}</span>
-                  {expandedCategories.includes(category) ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
                 </button>
 
                 <AnimatePresence initial={false}>
@@ -1270,7 +1361,7 @@ export const SubSidebar = ({ activeAppId, activeNavItemId }: { activeAppId: stri
                             return (
                               <div key={item.id} className="space-y-1">
                                 <div className={cn('sidebar-submenu-group ml-1 cursor-default', isMyTasksActive && 'sidebar-submenu-item-active')}>
-                                  <item.icon size={16} className={cn('text-gray-400', isMyTasksActive && 'text-clickup-purple')} />
+                                  <item.icon size={16} className={cn('text-gray-500 dark:text-gray-400', isMyTasksActive && 'text-clickup-purple')} />
                                   <span className="sidebar-submenu-label">{item.title}</span>
                                 </div>
                                 <div className="ml-6 border-l border-clickup-border pl-2 space-y-1">
@@ -1280,7 +1371,7 @@ export const SubSidebar = ({ activeAppId, activeNavItemId }: { activeAppId: stri
                                       to={`/tool/${sub.id}`}
                                       className={cn('sidebar-submenu-item', activeNavItemId === sub.id && 'sidebar-submenu-item-active')}
                                     >
-                                      <sub.icon size={14} className="text-gray-500" />
+                                      <sub.icon size={14} className="text-gray-500 dark:text-gray-400" />
                                       <span className="sidebar-submenu-label">{sub.title}</span>
                                     </Link>
                                   ))}
@@ -1291,17 +1382,13 @@ export const SubSidebar = ({ activeAppId, activeNavItemId }: { activeAppId: stri
                           if (item.id.startsWith('pms-tasks-')) return null;
                         }
 
-                        if (activeAppId === 'pms' && item.id === 'pms-space-team') {
-                          return null;
-                        }
-
                         return (
                           <Link
                             key={item.id}
                             to={item.path ?? `/tool/${item.id}`}
                             className={cn('sidebar-submenu-item ml-1', activeNavItemId === item.id && 'sidebar-submenu-item-active')}
                           >
-                            <item.icon size={16} className="text-gray-400" />
+                            <item.icon size={16} className="text-gray-500 dark:text-gray-400" />
                             <span className="sidebar-submenu-label">{item.title}</span>
                           </Link>
                         );
@@ -1312,19 +1399,74 @@ export const SubSidebar = ({ activeAppId, activeNavItemId }: { activeAppId: stri
               </div>
             );
           })}
+
+          {/* Docs sidebar extras: Favorites + Recent Pages */}
+          {activeAppId === 'docs' && (
+            <>
+              <div className="space-y-1 pt-2 border-t border-clickup-border mt-2">
+                <span className="sidebar-section-label block px-3 py-1 text-gray-500">Favorites</span>
+                {docsFavorites.length > 0 ? (
+                  docsFavorites.map((fav) => (
+                    <Link
+                      key={fav.id}
+                      to={`/docs/${fav.id}`}
+                      className={cn('sidebar-submenu-item ml-1', location.pathname === `/docs/${fav.id}` && 'sidebar-submenu-item-active')}
+                    >
+                      <FileText size={14} className="text-yellow-500" />
+                      <span className="sidebar-submenu-label truncate">{fav.title}</span>
+                    </Link>
+                  ))
+                ) : (
+                  <div className="px-3 py-2 text-center">
+                    <span className="app-text-micro text-gray-600">Star a Doc to see it here</span>
+                  </div>
+                )}
+              </div>
+
+              <div className="space-y-1 pt-2 border-t border-clickup-border mt-2">
+                <span className="sidebar-section-label block px-3 py-1 text-gray-500">Recent Pages</span>
+                {docsRecentPages.length > 0 ? (
+                  docsRecentPages.map((rp) => (
+                    <Link
+                      key={rp.page_id}
+                      to={`/docs/${rp.doc_id}`}
+                      className="sidebar-submenu-item ml-1"
+                    >
+                      <FileText size={14} className="text-gray-500" />
+                      <span className="sidebar-submenu-label truncate">{rp.page_title}</span>
+                    </Link>
+                  ))
+                ) : (
+                  <div className="px-3 py-2 text-center">
+                    <span className="app-text-micro text-gray-600">No recent pages</span>
+                  </div>
+                )}
+              </div>
+            </>
+          )}
         </div>
 
         {activeAppId !== 'settings' && (
           <div className="p-4 border-t border-clickup-border">
             <button
               onClick={() => openCreateProject(null)}
-              className="app-text-control flex w-full items-center gap-2 rounded-md bg-clickup-purple px-3 py-2 text-white transition-all hover:bg-opacity-90"
+              className="app-text-control flex w-full items-center gap-2 rounded-md bg-clickup-purple px-3 py-2 text-clickup-bg transition-all hover:bg-opacity-90"
             >
               <Plus size={18} />
               <span>Quick Add</span>
             </button>
           </div>
         )}
+
+        {/* Resize handle */}
+        <div
+          onMouseDown={(e) => { e.preventDefault(); setIsResizing(true); }}
+          className={cn(
+            'absolute right-0 top-0 h-full w-1 cursor-col-resize transition-colors hover:bg-clickup-purple/30',
+            isResizing && 'bg-clickup-purple/50',
+          )}
+          title="Drag to resize"
+        />
       </div>
 
       <CreateProjectModal
@@ -1350,10 +1492,10 @@ export const SubSidebar = ({ activeAppId, activeNavItemId }: { activeAppId: stri
       <CreateSpaceModal
         isOpen={createSpaceOpen}
         onClose={() => setCreateSpaceOpen(false)}
-        onCreated={(team) => {
-          knownSpaceIdsRef.current.add(team.id);
-          setPmsTeams((current) => upsertTeam(current, team));
-          setExpandedSpaces((current) => new Set(current).add(team.id));
+        onCreated={(space) => {
+          knownSpaceIdsRef.current.add(space.id);
+          setPmsTeams((current) => upsertSpace(current, space));
+          setExpandedSpaces((current) => new Set(current).add(space.id));
         }}
       />
 
