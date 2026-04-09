@@ -77,6 +77,7 @@ def postgres_dsn() -> str:
 def client(monkeypatch: pytest.MonkeyPatch, postgres_dsn: str) -> TestClient:
     monkeypatch.setenv("DOOWON_POSTGRES_DSN", postgres_dsn)
     monkeypatch.setenv("DOOWON_API_SESSION_TTL_HOURS", "1")
+    monkeypatch.setenv("DOOWON_API_ALLOW_DEV_ADMIN_LOGIN", "1")
 
     from aidoo_api.core.db import Base, get_engine, get_session_factory
     from aidoo_api.core.settings import get_settings

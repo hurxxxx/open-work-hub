@@ -3,6 +3,8 @@ import { createPortal } from 'react-dom';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import {
+  ArrowDown,
+  ArrowUp,
   ChevronDown,
   ChevronRight,
   Plus,
@@ -19,7 +21,7 @@ import { InlineNotice, useConfirm, usePrompt } from '@aidoo/ui';
 import { cn } from '@/src/lib/utils';
 import { NAV_ITEMS, APP_BAR_ITEMS } from '@/src/constants';
 import { useAuth } from '@/src/domains/auth/auth-provider';
-import { getWorkspaceRoleByKey } from '@/src/domains/auth/auth-api';
+import { getWorkspaceRoleByKey, workspaceRoleAllows } from '@/src/domains/auth/auth-api';
 import { listPmsLists, listFolders, listSpaceDocs, createSpaceDoc, updateSpaceDoc, deleteSpaceDoc, updateFolder, deleteFolder, type PmsFolder, type PmsList, type PmsSpaceDoc } from '@/src/domains/pms/pms-api';
 import { listTeams, updateTeam, deleteTeam, type TeamItem } from '@/src/domains/admin/admin-api';
 import { CreateProjectModal } from '@/src/components/views/PMSView/CreateProjectModal';
@@ -195,12 +197,20 @@ const FolderContextMenu = ({
   open,
   anchorRef,
   onClose,
+  onMoveUp,
+  onMoveDown,
+  canMoveUp = false,
+  canMoveDown = false,
   onRename,
   onDelete,
 }: {
   open: boolean;
   anchorRef: React.RefObject<HTMLButtonElement | null>;
   onClose: () => void;
+  onMoveUp?: () => void;
+  onMoveDown?: () => void;
+  canMoveUp?: boolean;
+  canMoveDown?: boolean;
   onRename: () => void;
   onDelete: () => void;
 }) => {
@@ -230,6 +240,26 @@ const FolderContextMenu = ({
       style={{ top: pos.top, left: pos.left }}
       className="fixed z-[9999] w-44 bg-clickup-bg border border-clickup-border rounded-lg shadow-xl py-1"
     >
+      {onMoveUp ? (
+        <button
+          onClick={() => { onMoveUp(); onClose(); }}
+          disabled={!canMoveUp}
+          className="w-full flex items-center gap-3 px-3 py-2 hover:bg-clickup-hover transition-colors disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          <ArrowUp size={14} className="text-gray-400" />
+          <span className="app-text-control-sm text-clickup-text">Move Up</span>
+        </button>
+      ) : null}
+      {onMoveDown ? (
+        <button
+          onClick={() => { onMoveDown(); onClose(); }}
+          disabled={!canMoveDown}
+          className="w-full flex items-center gap-3 px-3 py-2 hover:bg-clickup-hover transition-colors disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          <ArrowDown size={14} className="text-gray-400" />
+          <span className="app-text-control-sm text-clickup-text">Move Down</span>
+        </button>
+      ) : null}
       <button
         onClick={() => { onRename(); onClose(); }}
         className="w-full flex items-center gap-3 px-3 py-2 hover:bg-clickup-hover transition-colors"
@@ -325,6 +355,7 @@ const SpaceItem = ({
   onAddListToFolder,
   onAddFolder,
   onOpenDocs,
+  onMoveFolder,
   onRenameFolder,
   onDeleteFolder,
   onRenameSpace,
@@ -346,6 +377,7 @@ const SpaceItem = ({
   onAddListToFolder: (folderId: string) => void;
   onAddFolder: () => void;
   onOpenDocs: () => void;
+  onMoveFolder: (folderId: string, direction: 'up' | 'down') => void;
   onRenameFolder: (folderId: string, currentName: string) => void;
   onDeleteFolder: (folderId: string) => void;
   onRenameSpace: (newName: string) => void;
@@ -595,11 +627,13 @@ const SpaceItem = ({
                 </div>
               ) : null}
 
-              {folders.map(({ folder, lists }) => {
+              {folders.map(({ folder, lists }, folderIndex) => {
                 const isFolderExpanded = expandedFolders.has(folder.id);
                 const isFolderPopoverOpen = folderPopoverOpen === folder.id;
                 const isFolderMenuOpen = folderMenuOpen === folder.id;
                 const hasAnyPopup = isFolderPopoverOpen || isFolderMenuOpen;
+                const canMoveUp = folderIndex > 0;
+                const canMoveDown = folderIndex < folders.length - 1;
                 return (
                   <div key={folder.id}>
                     <div className="group/folder flex items-center">
@@ -650,6 +684,10 @@ const SpaceItem = ({
                         open={isFolderMenuOpen}
                         anchorRef={{ current: folderMenuBtnRefs.current.get(folder.id) ?? null }}
                         onClose={() => setFolderMenuOpen(null)}
+                        onMoveUp={() => onMoveFolder(folder.id, 'up')}
+                        onMoveDown={() => onMoveFolder(folder.id, 'down')}
+                        canMoveUp={canMoveUp}
+                        canMoveDown={canMoveDown}
                         onRename={() => onRenameFolder(folder.id, folder.name)}
                         onDelete={() => onDeleteFolder(folder.id)}
                       />
@@ -714,14 +752,15 @@ const SpaceItem = ({
 export const SubSidebar = ({ activeAppId, activeNavItemId }: { activeAppId: string, activeNavItemId: string }) => {
   const location = useLocation();
   const navigate = useNavigate();
-  const { token, user, hasPermission } = useAuth();
+  const { token, user } = useAuth();
   const { confirm, confirmDialog } = useConfirm();
   const { prompt, promptDialog } = usePrompt();
   const isSpaceDocs = /^\/tool\/pms-space-[0-9a-f-]+-docs/.test(location.pathname);
   const isDocEditor = !isSpaceDocs && (location.pathname.match(/^\/tool\/[^/]+\/[^/]+$/) || location.pathname.match(/^\/docs\/[^/]+$/));
-  const pmsWorkspaceId = getWorkspaceRoleByKey(user, PMS_WORKSPACE_KEY)?.workspace_id ?? null;
-  const canReadTeams = hasPermission('team.read');
-  const canWriteTeams = hasPermission('team.write') && Boolean(pmsWorkspaceId);
+  const pmsWorkspaceRole = getWorkspaceRoleByKey(user, PMS_WORKSPACE_KEY);
+  const pmsWorkspaceId = pmsWorkspaceRole?.workspace_id ?? null;
+  const canReadTeams = Boolean(user?.is_admin) || Boolean(pmsWorkspaceId);
+  const canWriteTeams = Boolean(user?.is_admin) || workspaceRoleAllows(pmsWorkspaceRole?.role, 'workspace_admin');
 
   const [expandedCategories, setExpandedCategories] = useState<string[]>([]);
   const [pmsLists, setPmsLists] = useState<PmsList[]>([]);
@@ -893,6 +932,42 @@ export const SubSidebar = ({ activeAppId, activeNavItemId }: { activeAppId: stri
       setPmsFolders((current) => current.map((f) => (f.id === updated.id ? updated : f)));
     } catch { /* ignore */ }
   }, [token]);
+
+  const handleMoveFolder = useCallback(async (spaceId: string, folderId: string, direction: 'up' | 'down') => {
+    if (!token) return;
+    setPmsError(null);
+
+    const orderedFolders = pmsFolders
+      .filter((folder) => folder.team_id === spaceId)
+      .slice()
+      .sort((left, right) => left.sort_order - right.sort_order || left.name.localeCompare(right.name, 'ko'));
+    const currentIndex = orderedFolders.findIndex((folder) => folder.id === folderId);
+    if (currentIndex < 0) return;
+
+    const targetIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1;
+    if (targetIndex < 0 || targetIndex >= orderedFolders.length) return;
+
+    const nextOrder = [...orderedFolders];
+    const [movedFolder] = nextOrder.splice(currentIndex, 1);
+    nextOrder.splice(targetIndex, 0, movedFolder);
+
+    const updates = nextOrder
+      .map((folder, index) => ({ folder, sort_order: index }))
+      .filter(({ folder, sort_order }) => folder.sort_order !== sort_order);
+
+    if (updates.length === 0) return;
+
+    try {
+      const updatedFolders = new Map<string, PmsFolder>();
+      for (const { folder, sort_order } of updates) {
+        const updated = await updateFolder(token, folder.id, { sort_order });
+        updatedFolders.set(updated.id, updated);
+      }
+      setPmsFolders((current) => current.map((folder) => updatedFolders.get(folder.id) ?? folder));
+    } catch (error) {
+      setPmsError(getErrorMessage(error, '폴더 순서를 변경하지 못했습니다.'));
+    }
+  }, [pmsFolders, token]);
 
   const handleDeleteFolder = useCallback(async (folderId: string) => {
     if (!token) return;
@@ -1089,6 +1164,7 @@ export const SubSidebar = ({ activeAppId, activeNavItemId }: { activeAppId: stri
                       onAddListToFolder={(folderId) => { setCreateProjectTeamId(space.id); setCreateProjectFolderId(folderId); setCreateProjectOpen(true); }}
                       onAddFolder={() => openCreateFolder(space.id)}
                       onOpenDocs={() => { void handleCreateDoc(space.id); }}
+                      onMoveFolder={(folderId, direction) => { void handleMoveFolder(space.id, folderId, direction); }}
                       onRenameFolder={(folderId, currentName) => { void handleRenameFolder(folderId, currentName); }}
                       onDeleteFolder={(folderId) => { void handleDeleteFolder(folderId); }}
                       onRenameSpace={(newName) => { void handleRenameSpace(space.id, newName); }}

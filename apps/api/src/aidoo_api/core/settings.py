@@ -20,6 +20,7 @@ ENV_FILE = WORKSPACE_ROOT / ".env"
 class Settings(BaseSettings):
     app_name: str = "아이두 API"
     environment: str = "development"
+    allow_dev_admin_login: bool = False
     api_prefix: str = "/api/v1"
     postgres_dsn: str = Field(
         ...,

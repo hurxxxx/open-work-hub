@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 from aidoo_api.core.db import get_db_session
 from aidoo_api.core.settings import get_settings
 from aidoo_api.core.storage import get_minio_client
+from aidoo_api.domains.auth.access import is_platform_admin_user
 from aidoo_api.domains.auth.dependencies import require_admin_context, require_current_user
 from aidoo_api.domains.auth.models import User
 from aidoo_api.domains.auth.security import new_id
@@ -146,7 +147,7 @@ def resolve_media_urls(
 
 def _can_resolve(db: Session, user: User, media: MediaFile) -> bool:
     """Check if the user is allowed to resolve this media file."""
-    if user.is_admin:
+    if is_platform_admin_user(user):
         return True
     # Unlinked media: only the uploader can resolve
     if media.resource_type is None:
@@ -165,12 +166,39 @@ def _can_resolve(db: Session, user: User, media: MediaFile) -> bool:
             )
         )
         return member is not None
+    if media.resource_type == "doc":
+        from aidoo_api.domains.pms.models import Doc, ProjectMember
+
+        doc = db.scalar(select(Doc).where(Doc.id == media.resource_id))
+        if doc is None:
+            return False
+        member = db.scalar(
+            select(ProjectMember).where(
+                ProjectMember.project_id == doc.project_id,
+                ProjectMember.user_id == user.id,
+            )
+        )
+        return member is not None
+    if media.resource_type == "space_doc_page":
+        from aidoo_api.domains.auth.models import TeamMember
+        from aidoo_api.domains.pms.models import SpaceDocPage
+
+        page = db.scalar(select(SpaceDocPage).where(SpaceDocPage.id == media.resource_id))
+        if page is None:
+            return False
+        member = db.scalar(
+            select(TeamMember).where(
+                TeamMember.team_id == page.team_id,
+                TeamMember.user_id == user.id,
+            )
+        )
+        return member is not None
     # Unknown resource type: allow uploader only
     return media.uploaded_by_id == user.id
 
 
 def _can_link_unlinked_media(user: User, media: MediaFile) -> bool:
-    return user.is_admin or media.uploaded_by_id == user.id
+    return is_platform_admin_user(user) or media.uploaded_by_id == user.id
 
 
 # ── Link ──────────────────────────────────────────────────────────────
@@ -194,6 +222,10 @@ def link_media(
     # Validate resource access
     if payload.resource_type == "issue":
         _ensure_issue_access(db, current_user, payload.resource_id)
+    elif payload.resource_type == "doc":
+        _ensure_doc_access(db, current_user, payload.resource_id)
+    elif payload.resource_type == "space_doc_page":
+        _ensure_space_doc_page_access(db, current_user, payload.resource_id)
 
     media_files = db.scalars(
         select(MediaFile).where(
@@ -219,7 +251,7 @@ def _ensure_issue_access(db: Session, user: User, issue_id: str) -> None:
     issue = db.scalar(select(Issue).where(Issue.id == issue_id))
     if issue is None:
         raise HTTPException(status_code=404, detail="Issue not found.")
-    if user.is_admin:
+    if is_platform_admin_user(user):
         return
     member = db.scalar(
         select(ProjectMember).where(
@@ -229,6 +261,45 @@ def _ensure_issue_access(db: Session, user: User, issue_id: str) -> None:
     )
     if member is None:
         raise HTTPException(status_code=403, detail="Project membership required.")
+
+
+def _ensure_doc_access(db: Session, user: User, doc_id: str) -> None:
+    """Verify the user has access to the doc's project."""
+    from aidoo_api.domains.pms.models import Doc, ProjectMember
+
+    doc = db.scalar(select(Doc).where(Doc.id == doc_id))
+    if doc is None:
+        raise HTTPException(status_code=404, detail="Doc not found.")
+    if is_platform_admin_user(user):
+        return
+    member = db.scalar(
+        select(ProjectMember).where(
+            ProjectMember.project_id == doc.project_id,
+            ProjectMember.user_id == user.id,
+        )
+    )
+    if member is None:
+        raise HTTPException(status_code=403, detail="Project membership required.")
+
+
+def _ensure_space_doc_page_access(db: Session, user: User, page_id: str) -> None:
+    """Verify the user has access to the page's space."""
+    from aidoo_api.domains.auth.models import TeamMember
+    from aidoo_api.domains.pms.models import SpaceDocPage
+
+    page = db.scalar(select(SpaceDocPage).where(SpaceDocPage.id == page_id))
+    if page is None:
+        raise HTTPException(status_code=404, detail="Space doc page not found.")
+    if is_platform_admin_user(user):
+        return
+    member = db.scalar(
+        select(TeamMember).where(
+            TeamMember.team_id == page.team_id,
+            TeamMember.user_id == user.id,
+        )
+    )
+    if member is None:
+        raise HTTPException(status_code=403, detail="Space membership required.")
 
 
 # ── Cleanup ───────────────────────────────────────────────────────────

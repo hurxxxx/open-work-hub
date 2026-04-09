@@ -12,9 +12,9 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
 from aidoo_api.core.db import get_db_session
-from aidoo_api.domains.auth.access import get_or_create_default_pms_space
+from aidoo_api.domains.auth.access import get_or_create_default_pms_space, is_platform_admin_user
 from aidoo_api.domains.auth.dependencies import require_current_user
-from aidoo_api.domains.auth.models import Team, TeamMember, User
+from aidoo_api.domains.auth.models import Team, TeamMember, User, Workspace
 from aidoo_api.domains.auth.security import new_id
 from aidoo_api.core.settings import get_settings
 from aidoo_api.core.storage import get_minio_client
@@ -602,8 +602,8 @@ PROJECT_ROLE_RANK = {
     "admin": 3,
     "owner": 4,
 }
-SPACE_TEAM_EDITOR_ROLES = {"member", "team_admin", "workspace_admin", "admin", "owner", "editor"}
-SPACE_TEAM_MANAGER_ROLES = {"team_admin", "workspace_admin", "admin", "owner"}
+SPACE_TEAM_EDITOR_ROLES = {"member", "team_admin", "admin", "owner"}
+SPACE_TEAM_MANAGER_ROLES = {"team_admin", "admin", "owner"}
 PROJECT_EDITOR_ROLES = {"member", "editor", "admin", "owner"}
 PROJECT_MANAGER_ROLES = {"admin", "owner"}
 
@@ -631,7 +631,9 @@ def _is_active_space_id(db: Session, space_id: str) -> bool:
         db.scalar(
             select(Team.id).where(
                 Team.id == space_id,
+                Team.active.is_(True),
                 Team.trashed_at.is_(None),
+                Team.workspace.has(Workspace.active.is_(True)),
             )
         )
         is not None
@@ -644,32 +646,30 @@ def _ensure_space_access(db: Session, user: User, space_id: str) -> tuple[Team, 
         .options(selectinload(Team.members))
         .where(
             Team.id == space_id,
+            Team.active.is_(True),
             Team.trashed_at.is_(None),
+            Team.workspace.has(Workspace.active.is_(True)),
         )
     )
     if team is None:
         raise HTTPException(status_code=404, detail="Space not found.")
 
-    if user.is_admin:
+    if is_platform_admin_user(user):
         return team, "owner"
 
     team_membership = next((member for member in team.members if member.user_id == user.id), None)
     if team_membership is not None:
         return team, team_membership.role
 
-    project_role = _best_project_role(db, user, space_id)
-    if project_role is not None:
-        return team, project_role
-
     raise HTTPException(status_code=403, detail="Space access required.")
 
 
 def _ensure_space_editor(db: Session, user: User, space_id: str) -> tuple[Team, str]:
     team, role = _ensure_space_access(db, user, space_id)
-    if user.is_admin:
+    if is_platform_admin_user(user):
         return team, role
 
-    if role in SPACE_TEAM_EDITOR_ROLES or role in PROJECT_EDITOR_ROLES:
+    if role in SPACE_TEAM_EDITOR_ROLES:
         return team, role
 
     raise HTTPException(status_code=403, detail="Viewer role cannot modify space data.")
@@ -677,44 +677,39 @@ def _ensure_space_editor(db: Session, user: User, space_id: str) -> tuple[Team, 
 
 def _ensure_space_manager(db: Session, user: User, space_id: str) -> tuple[Team, str]:
     team, role = _ensure_space_access(db, user, space_id)
-    if user.is_admin:
+    if is_platform_admin_user(user):
         return team, role
 
-    if role in SPACE_TEAM_MANAGER_ROLES or role in PROJECT_MANAGER_ROLES:
+    if role in SPACE_TEAM_MANAGER_ROLES:
         return team, role
 
     raise HTTPException(status_code=403, detail="Space owner/admin access required.")
 
 
 def _accessible_space_ids(db: Session, user: User) -> set[str]:
-    if user.is_admin:
-        return set(db.scalars(select(Team.id).where(Team.trashed_at.is_(None))))
+    if is_platform_admin_user(user):
+        return set(
+            db.scalars(
+                select(Team.id).where(
+                    Team.active.is_(True),
+                    Team.trashed_at.is_(None),
+                    Team.workspace.has(Workspace.active.is_(True)),
+                )
+            )
+        )
 
-    space_ids = set(
+    return set(
         db.scalars(
             select(TeamMember.team_id)
             .join(Team, Team.id == TeamMember.team_id)
             .where(
                 TeamMember.user_id == user.id,
+                Team.active.is_(True),
                 Team.trashed_at.is_(None),
+                Team.workspace.has(Workspace.active.is_(True)),
             )
         )
     )
-    space_ids.update(
-        team_id
-        for team_id in db.scalars(
-            select(Project.team_id)
-            .join(ProjectMember, ProjectMember.project_id == Project.id)
-            .join(Team, Team.id == Project.team_id)
-            .where(
-                ProjectMember.user_id == user.id,
-                Project.team_id.is_not(None),
-                Team.trashed_at.is_(None),
-            )
-        )
-        if team_id is not None
-    )
-    return space_ids
 
 
 def _validate_folder_membership(db: Session, team_id: str, folder_id: str | None) -> None:
@@ -742,7 +737,7 @@ def _ensure_project_access(db: Session, user: User, project_id: str) -> tuple[Pr
     if project.team_id is not None and not _is_active_space_id(db, project.team_id):
         raise HTTPException(status_code=404, detail="Project not found.")
 
-    if user.is_admin:
+    if is_platform_admin_user(user):
         return project, "owner"
 
     membership = next((member for member in project.members if member.user_id == user.id), None)
@@ -754,7 +749,7 @@ def _ensure_project_access(db: Session, user: User, project_id: str) -> tuple[Pr
 
 def _ensure_project_owner(db: Session, user: User, project_id: str) -> tuple[Project, str]:
     project, role = _ensure_project_access(db, user, project_id)
-    if not user.is_admin and role not in {"owner", "admin"}:
+    if not is_platform_admin_user(user) and role not in {"owner", "admin"}:
         raise HTTPException(status_code=403, detail="Project owner/admin access required.")
     return project, role
 
@@ -762,14 +757,18 @@ def _ensure_project_owner(db: Session, user: User, project_id: str) -> tuple[Pro
 def _ensure_project_editor(db: Session, user: User, project_id: str) -> tuple[Project, str]:
     """Allow owner, admin, editor, and member roles. Block viewers."""
     project, role = _ensure_project_access(db, user, project_id)
-    if not user.is_admin and role == "viewer":
+    if not is_platform_admin_user(user) and role == "viewer":
         raise HTTPException(status_code=403, detail="Viewer role cannot modify project data.")
     return project, role
 
 
 def _accessible_projects_query(user: User):
-    active_space_ids = select(Team.id).where(Team.trashed_at.is_(None))
-    if user.is_admin:
+    active_space_ids = select(Team.id).where(
+        Team.active.is_(True),
+        Team.trashed_at.is_(None),
+        Team.workspace.has(Workspace.active.is_(True)),
+    )
+    if is_platform_admin_user(user):
         return select(Project).where(
             or_(
                 Project.team_id.is_(None),
@@ -974,7 +973,7 @@ def _serialize_activity(log: IssueActivityLog, reference_lookup: dict[str, str])
 
 
 def _project_role(project: Project, user: User) -> str:
-    if user.is_admin:
+    if is_platform_admin_user(user):
         return "owner"
     membership = next((member for member in project.members if member.user_id == user.id), None)
     return membership.role if membership is not None else "member"
@@ -3451,14 +3450,20 @@ def list_folders(
     if team_id:
         _ensure_space_access(db, current_user, team_id)
         q = q.where(Folder.team_id == team_id)
-    elif current_user.is_admin:
+    elif is_platform_admin_user(current_user):
         q = q.where(
             or_(
                 Folder.team_id.is_(None),
-                Folder.team_id.in_(select(Team.id).where(Team.trashed_at.is_(None))),
+                Folder.team_id.in_(
+                    select(Team.id).where(
+                        Team.active.is_(True),
+                        Team.trashed_at.is_(None),
+                        Team.workspace.has(Workspace.active.is_(True)),
+                    )
+                ),
             )
         )
-    elif not current_user.is_admin:
+    elif not is_platform_admin_user(current_user):
         accessible_team_ids = _accessible_space_ids(db, current_user)
         if accessible_team_ids:
             q = q.where(Folder.team_id.in_(accessible_team_ids))

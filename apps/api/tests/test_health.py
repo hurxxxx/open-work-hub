@@ -239,6 +239,15 @@ def _bootstrap_admin(client: TestClient) -> str:
     return setup_response.json()["token"]
 
 
+def _login(client: TestClient, email: str, password: str) -> str:
+    response = client.post(
+        "/api/v1/auth/login",
+        json={"email": email, "password": password},
+    )
+    assert response.status_code == 200
+    return response.json()["token"]
+
+
 def _create_direct_user(
     *,
     email: str,
@@ -436,6 +445,190 @@ def test_admin_identity_management_endpoints(client: TestClient) -> None:
     audit_logs_response = client.get("/api/v1/admin/audit-logs", headers=headers)
     assert audit_logs_response.status_code == 200
     assert audit_logs_response.json()
+
+
+def test_workspace_scoped_team_management_requires_workspace_admin_role(client: TestClient) -> None:
+    admin_token = _bootstrap_admin(client)
+    admin_headers = {"Authorization": f"Bearer {admin_token}"}
+
+    permission_group_response = client.post(
+        "/api/v1/admin/groups",
+        headers=admin_headers,
+        json={
+            "name": "Scoped Team Operators",
+            "description": "Can manage teams only within scoped workspaces.",
+            "permissions": ["team.read", "team.write"],
+        },
+    )
+    assert permission_group_response.status_code == 201
+    permission_group_id = permission_group_response.json()["id"]
+
+    workspace_response = client.post(
+        "/api/v1/admin/workspaces",
+        headers=admin_headers,
+        json={
+            "name": "Scoped Workspace",
+            "description": "Workspace for scoped team management tests",
+        },
+    )
+    assert workspace_response.status_code == 201
+    workspace_id = workspace_response.json()["id"]
+
+    second_workspace_response = client.post(
+        "/api/v1/admin/workspaces",
+        headers=admin_headers,
+        json={
+            "name": "Another Workspace",
+            "description": "Second workspace for negative coverage",
+        },
+    )
+    assert second_workspace_response.status_code == 201
+    second_workspace_id = second_workspace_response.json()["id"]
+
+    scoped_user_response = client.post(
+        "/api/v1/admin/users",
+        headers=admin_headers,
+        json={
+            "email": "scoped-manager@aidoo.local",
+            "full_name": "Scoped Manager",
+            "group_ids": [permission_group_id],
+        },
+    )
+    assert scoped_user_response.status_code == 201
+    scoped_user = scoped_user_response.json()["user"]
+    scoped_user_token = _login(
+        client,
+        scoped_user["email"],
+        scoped_user_response.json()["temporary_password"],
+    )
+    scoped_headers = {"Authorization": f"Bearer {scoped_user_token}"}
+
+    inaccessible_workspaces_response = client.get("/api/v1/admin/workspaces", headers=scoped_headers)
+    assert inaccessible_workspaces_response.status_code == 200
+    assert inaccessible_workspaces_response.json() == []
+
+    create_team_without_scope_response = client.post(
+        f"/api/v1/admin/workspaces/{workspace_id}/teams",
+        headers=scoped_headers,
+        json={"name": "Forbidden Team", "description": "Should be blocked"},
+    )
+    assert create_team_without_scope_response.status_code == 403
+
+    bind_workspace_response = client.put(
+        f"/api/v1/admin/workspaces/{workspace_id}/bindings",
+        headers=admin_headers,
+        json={
+            "users": [{"subject_id": scoped_user["id"], "role": "workspace_admin"}],
+            "groups": [],
+        },
+    )
+    assert bind_workspace_response.status_code == 200
+
+    visible_workspaces_response = client.get("/api/v1/admin/workspaces", headers=scoped_headers)
+    assert visible_workspaces_response.status_code == 200
+    assert [item["id"] for item in visible_workspaces_response.json()] == [workspace_id]
+
+    create_team_with_scope_response = client.post(
+        f"/api/v1/admin/workspaces/{workspace_id}/teams",
+        headers=scoped_headers,
+        json={"name": "Scoped Team", "description": "Allowed via workspace role"},
+    )
+    assert create_team_with_scope_response.status_code == 201
+    created_team = create_team_with_scope_response.json()
+
+    visible_teams_response = client.get(
+        "/api/v1/admin/teams",
+        headers=scoped_headers,
+        params={"workspace_id": workspace_id},
+    )
+    assert visible_teams_response.status_code == 200
+    assert [item["id"] for item in visible_teams_response.json()] == [created_team["id"]]
+
+    create_team_other_workspace_response = client.post(
+        f"/api/v1/admin/workspaces/{second_workspace_id}/teams",
+        headers=scoped_headers,
+        json={"name": "Forbidden Elsewhere", "description": "No scope here"},
+    )
+    assert create_team_other_workspace_response.status_code == 403
+
+
+def test_non_pms_routes_require_workspace_feature_access(client: TestClient) -> None:
+    admin_token = _bootstrap_admin(client)
+    admin_headers = {"Authorization": f"Bearer {admin_token}"}
+
+    user_response = client.post(
+        "/api/v1/admin/users",
+        headers=admin_headers,
+        json={
+            "email": "docs-member@aidoo.local",
+            "full_name": "Docs Member",
+        },
+    )
+    assert user_response.status_code == 201
+    user = user_response.json()["user"]
+    user_token = _login(client, user["email"], user_response.json()["temporary_password"])
+    user_headers = {"Authorization": f"Bearer {user_token}"}
+
+    documents_forbidden_response = client.post(
+        "/api/v1/search/documents",
+        headers=user_headers,
+        json={"query": "compressor specification"},
+    )
+    assert documents_forbidden_response.status_code == 403
+
+    drafts_forbidden_response = client.get("/api/v1/drafts", headers=user_headers)
+    assert drafts_forbidden_response.status_code == 403
+
+    wiki_forbidden_response = client.get("/api/v1/wiki/pages", headers=user_headers)
+    assert wiki_forbidden_response.status_code == 403
+
+    plm_forbidden_response = client.post(
+        "/api/v1/search/plm",
+        headers=user_headers,
+        json={"query": "release delay"},
+    )
+    assert plm_forbidden_response.status_code == 403
+
+    ocr_forbidden_response = client.post(
+        "/api/v1/connectors/ocr/route",
+        headers=user_headers,
+        json={"asset_uri": "file://scan.pdf"},
+    )
+    assert ocr_forbidden_response.status_code == 403
+
+    workspaces_response = client.get("/api/v1/admin/workspaces", headers=admin_headers)
+    assert workspaces_response.status_code == 200
+    docs_workspace_id = next(item["id"] for item in workspaces_response.json() if item["key"] == "docs")
+
+    bind_docs_workspace_response = client.put(
+        f"/api/v1/admin/workspaces/{docs_workspace_id}/bindings",
+        headers=admin_headers,
+        json={
+            "users": [{"subject_id": user["id"], "role": "member"}],
+            "groups": [],
+        },
+    )
+    assert bind_docs_workspace_response.status_code == 200
+
+    documents_allowed_response = client.post(
+        "/api/v1/search/documents",
+        headers=user_headers,
+        json={"query": "compressor specification"},
+    )
+    assert documents_allowed_response.status_code == 200
+
+    drafts_allowed_response = client.get("/api/v1/drafts", headers=user_headers)
+    assert drafts_allowed_response.status_code == 200
+
+    wiki_allowed_response = client.get("/api/v1/wiki/pages", headers=user_headers)
+    assert wiki_allowed_response.status_code == 200
+
+    plm_still_forbidden_response = client.post(
+        "/api/v1/search/plm",
+        headers=user_headers,
+        json={"query": "release delay"},
+    )
+    assert plm_still_forbidden_response.status_code == 403
 
 
 def test_pms_project_workflow_and_dashboard(client: TestClient) -> None:

@@ -14,6 +14,12 @@ export interface WorkspaceRole {
   role: string;
 }
 
+const WORKSPACE_ROLE_RANK: Record<string, number> = {
+  viewer: 10,
+  member: 20,
+  workspace_admin: 40,
+};
+
 export interface AuthUser {
   id: string;
   email: string;
@@ -39,6 +45,17 @@ export function getWorkspaceRoleByKey(
   key: string,
 ): WorkspaceRole | null {
   return user?.workspace_roles.find((role) => role.key === key) ?? null;
+}
+
+export function workspaceRoleAllows(
+  role: string | null | undefined,
+  minRole: keyof typeof WORKSPACE_ROLE_RANK,
+): boolean {
+  if (!role) {
+    return false;
+  }
+
+  return (WORKSPACE_ROLE_RANK[role] ?? -1) >= WORKSPACE_ROLE_RANK[minRole];
 }
 
 export interface BootstrapStatusResponse {

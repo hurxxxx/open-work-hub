@@ -5,19 +5,26 @@ import secrets
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload, selectinload
 
 from aidoo_api.core.db import get_db_session
 from aidoo_api.domains.auth.access import (
     assign_user_groups,
+    is_platform_admin_user,
+    is_valid_workspace_role,
     load_user_graph,
+    load_active_workspace_by_id,
     record_audit_log,
+    resolve_team_role,
+    resolve_workspace_role,
     serialize_auth_user,
     slugify,
+    team_role_allows,
+    workspace_role_allows,
 )
-from aidoo_api.domains.auth.dependencies import AuthContext, require_permission
+from aidoo_api.domains.auth.dependencies import AuthContext, require_auth_context, require_permission
 from aidoo_api.domains.auth.models import (
     AccessGroup,
     AuditLog,
@@ -106,6 +113,48 @@ def _get_active_team(
     return db.scalar(query)
 
 
+def _ensure_workspace_scope(
+    db: Session,
+    user: User,
+    workspace_id: str,
+    *,
+    min_role: str = "member",
+) -> Workspace:
+    workspace = load_active_workspace_by_id(db, workspace_id)
+    if workspace is None:
+        raise HTTPException(status_code=404, detail="Workspace not found.")
+    if is_platform_admin_user(user):
+        return workspace
+
+    role = resolve_workspace_role(db, user, workspace.id)
+    if not workspace_role_allows(role, min_role):
+        raise HTTPException(status_code=403, detail="Workspace access required.")
+    return workspace
+
+
+def _ensure_team_scope(
+    db: Session,
+    user: User,
+    team_id: str,
+    *,
+    min_role: str = "member",
+    include_workspace: bool = False,
+    include_members: bool = False,
+) -> Team:
+    team = _get_active_team(
+        db,
+        team_id,
+        include_workspace=include_workspace,
+        include_members=include_members,
+    )
+    if team is None or not team.active or not team.workspace.active:
+        raise HTTPException(status_code=404, detail="Team not found.")
+    role = resolve_team_role(db, user, team)
+    if not team_role_allows(role, min_role):
+        raise HTTPException(status_code=403, detail="Team access required.")
+    return team
+
+
 class FeaturePolicyItemResponse(BaseModel):
     id: str
     code: str
@@ -190,6 +239,13 @@ class TeamUpsertRequest(BaseModel):
 class WorkspaceBindingInput(BaseModel):
     subject_id: str
     role: str = Field(default="member", max_length=24)
+
+    @field_validator("role")
+    @classmethod
+    def validate_role(cls, value: str) -> str:
+        if not is_valid_workspace_role(value):
+            raise ValueError("Invalid workspace role.")
+        return value
 
 
 class WorkspaceBindingsUpdateRequest(BaseModel):
@@ -641,10 +697,17 @@ def replace_group_members(
 
 @router.get("/workspaces", response_model=list[WorkspaceItemResponse])
 def list_workspaces(
-    context: AuthContext = Depends(require_permission("workspace.read")),
+    context: AuthContext = Depends(require_auth_context),
     db: Session = Depends(get_db_session),
 ) -> list[WorkspaceItemResponse]:
-    items = db.scalars(select(Workspace).options(selectinload(Workspace.teams))).all()
+    query = select(Workspace).options(selectinload(Workspace.teams)).where(Workspace.active.is_(True))
+    items = db.scalars(query).all()
+    if not is_platform_admin_user(context.user):
+        accessible_workspace_ids = {
+            item["workspace_id"]
+            for item in serialize_auth_user(db, context.user)["workspace_roles"]
+        }
+        items = [item for item in items if item.id in accessible_workspace_ids]
     return [
         WorkspaceItemResponse(
             id=item.id,
@@ -699,12 +762,12 @@ def create_workspace(
 def update_workspace(
     workspace_id: str,
     payload: WorkspaceUpsertRequest,
-    context: AuthContext = Depends(require_permission("workspace.write")),
+    context: AuthContext = Depends(require_auth_context),
     db: Session = Depends(get_db_session),
 ) -> WorkspaceItemResponse:
-    workspace = db.scalar(select(Workspace).options(selectinload(Workspace.teams)).where(Workspace.id == workspace_id))
-    if workspace is None:
-        raise HTTPException(status_code=404, detail="Workspace not found.")
+    workspace = _ensure_workspace_scope(db, context.user, workspace_id, min_role="workspace_admin")
+    workspace = db.scalar(select(Workspace).options(selectinload(Workspace.teams)).where(Workspace.id == workspace.id))
+    assert workspace is not None
 
     workspace.key = payload.key or workspace.key
     workspace.name = payload.name.strip()
@@ -733,9 +796,10 @@ def update_workspace(
 @router.get("/workspaces/{workspace_id}/bindings", response_model=list[WorkspaceBindingItemResponse])
 def list_workspace_bindings(
     workspace_id: str,
-    context: AuthContext = Depends(require_permission("workspace.read")),
+    context: AuthContext = Depends(require_auth_context),
     db: Session = Depends(get_db_session),
 ) -> list[WorkspaceBindingItemResponse]:
+    _ensure_workspace_scope(db, context.user, workspace_id, min_role="workspace_admin")
     workspace = db.scalar(
         select(Workspace)
         .options(
@@ -772,9 +836,10 @@ def list_workspace_bindings(
 def replace_workspace_bindings(
     workspace_id: str,
     payload: WorkspaceBindingsUpdateRequest,
-    context: AuthContext = Depends(require_permission("workspace.write")),
+    context: AuthContext = Depends(require_auth_context),
     db: Session = Depends(get_db_session),
 ) -> list[WorkspaceBindingItemResponse]:
+    _ensure_workspace_scope(db, context.user, workspace_id, min_role="workspace_admin")
     workspace = db.scalar(
         select(Workspace)
         .options(
@@ -842,7 +907,7 @@ def replace_workspace_bindings(
 @router.get("/teams", response_model=list[TeamItemResponse])
 def list_teams(
     workspace_id: str | None = None,
-    context: AuthContext = Depends(require_permission("team.read")),
+    context: AuthContext = Depends(require_auth_context),
     db: Session = Depends(get_db_session),
 ) -> list[TeamItemResponse]:
     query = (
@@ -851,8 +916,15 @@ def list_teams(
         .where(Team.trashed_at.is_(None))
     )
     if workspace_id:
+        _ensure_workspace_scope(db, context.user, workspace_id, min_role="member")
         query = query.where(Team.workspace_id == workspace_id)
     items = db.scalars(query.order_by(Team.name.asc())).all()
+    if not is_platform_admin_user(context.user) and workspace_id is None:
+        accessible_workspace_ids = {
+            item["workspace_id"]
+            for item in serialize_auth_user(db, context.user)["workspace_roles"]
+        }
+        items = [item for item in items if item.workspace_id in accessible_workspace_ids]
     return [
         TeamItemResponse(
             id=item.id,
@@ -872,12 +944,10 @@ def list_teams(
 def create_team(
     workspace_id: str,
     payload: TeamUpsertRequest,
-    context: AuthContext = Depends(require_permission("team.write")),
+    context: AuthContext = Depends(require_auth_context),
     db: Session = Depends(get_db_session),
 ) -> TeamItemResponse:
-    workspace = db.scalar(select(Workspace).where(Workspace.id == workspace_id))
-    if workspace is None:
-        raise HTTPException(status_code=404, detail="Workspace not found.")
+    workspace = _ensure_workspace_scope(db, context.user, workspace_id, min_role="workspace_admin")
 
     key = payload.key or slugify(payload.name)
     if db.scalar(select(Team).where(Team.workspace_id == workspace.id, Team.key == key)) is not None:
@@ -926,12 +996,17 @@ def create_team(
 def update_team(
     team_id: str,
     payload: TeamUpsertRequest,
-    context: AuthContext = Depends(require_permission("team.write")),
+    context: AuthContext = Depends(require_auth_context),
     db: Session = Depends(get_db_session),
 ) -> TeamItemResponse:
-    team = _get_active_team(db, team_id, include_workspace=True, include_members=True)
-    if team is None:
-        raise HTTPException(status_code=404, detail="Team not found.")
+    team = _ensure_team_scope(
+        db,
+        context.user,
+        team_id,
+        min_role="team_admin",
+        include_workspace=True,
+        include_members=True,
+    )
 
     team.key = payload.key or team.key
     team.name = payload.name.strip()
@@ -962,12 +1037,10 @@ def update_team(
 @router.delete("/teams/{team_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_team(
     team_id: str,
-    context: AuthContext = Depends(require_permission("team.write")),
+    context: AuthContext = Depends(require_auth_context),
     db: Session = Depends(get_db_session),
 ) -> None:
-    team = _get_active_team(db, team_id)
-    if team is None:
-        raise HTTPException(status_code=404, detail="Team not found.")
+    team = _ensure_team_scope(db, context.user, team_id, min_role="team_admin")
     team.trashed_at = _utcnow()
     db.add(team)
     record_audit_log(
@@ -984,12 +1057,16 @@ def delete_team(
 @router.get("/teams/{team_id}/members", response_model=list[AdminUserItemResponse])
 def list_team_members(
     team_id: str,
-    context: AuthContext = Depends(require_permission("team.read")),
+    context: AuthContext = Depends(require_auth_context),
     db: Session = Depends(get_db_session),
 ) -> list[AdminUserItemResponse]:
-    team = _get_active_team(db, team_id, include_members=True)
-    if team is None:
-        raise HTTPException(status_code=404, detail="Team not found.")
+    team = _ensure_team_scope(
+        db,
+        context.user,
+        team_id,
+        min_role="member",
+        include_members=True,
+    )
     members = db.scalars(
         select(User)
         .join(TeamMember, TeamMember.user_id == User.id)
@@ -1003,12 +1080,16 @@ def list_team_members(
 def replace_team_members(
     team_id: str,
     payload: TeamMembersUpdateRequest,
-    context: AuthContext = Depends(require_permission("team.write")),
+    context: AuthContext = Depends(require_auth_context),
     db: Session = Depends(get_db_session),
 ) -> list[AdminUserItemResponse]:
-    team = _get_active_team(db, team_id, include_members=True)
-    if team is None:
-        raise HTTPException(status_code=404, detail="Team not found.")
+    team = _ensure_team_scope(
+        db,
+        context.user,
+        team_id,
+        min_role="team_admin",
+        include_members=True,
+    )
 
     requested_ids = set(payload.user_ids)
     current_ids = {member.user_id for member in team.members}

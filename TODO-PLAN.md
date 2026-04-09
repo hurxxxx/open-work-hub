@@ -39,13 +39,17 @@
 - [x] `Team Docs` 탭 제거
 - [x] Space Docs 실구현
   - 경로: `/tool/pms-space-{space_id}-docs`
-  - hierarchical page CRUD
+  - doc collection + hierarchical page CRUD
   - 실제 BlockEditor 연결
 - [x] list-named API alias 추가
   - `/api/v1/pms/lists`
   - `/api/v1/pms/lists/{id}/...`
   - `/api/v1/pms/spaces/{space_id}/lists`
 - [x] 프론트 API 레이어를 `lists`/`space docs` 계약으로 전환
+- [x] Space 삭제를 휴지통 정책으로 전환
+  - `Team.trashed_at` 기반 soft delete
+  - 삭제된 Space의 lists/folders/space docs 비노출 처리
+  - 기본 `Team Space` 재요청 시 untrash 재사용
 
 ## 제거된 기능
 
@@ -54,19 +58,19 @@
 
 ## 호환용 유지
 
-- [ ] 내부 저장 구조의 `pms_projects` 테이블 이름
+- [x] 내부 저장 구조의 `pms_projects` 테이블 이름
   - 물리 테이블은 유지
   - 사용자 계약과 UI에서는 `List`로 노출
-- [ ] legacy `/projects` API
+- [x] legacy `/projects` API
   - 기존 클라이언트 호환용 alias로 유지
-- [ ] project-scoped docs API
+- [x] project-scoped docs API
   - 기존 데이터 호환용으로 유지
   - 신규 PMS UI는 Space Docs 사용
 
 ## 후속 개선 후보
 
 - [ ] issue payload의 `project_id` 등 내부 필드명을 `list_id` 계열로 정리
-- [ ] Folder 생성/정렬/이동 UI 추가
+- [x] Folder 정렬/이동 UI 추가
 - [ ] Space 권한을 프로젝트 fallback 없이 완전한 Space ACL로 정리
 - [ ] Space Docs 페이지 이동/드래그 정렬 UX 개선
 
@@ -74,5 +78,5 @@
 
 - [x] `pnpm nx test web --skip-nx-cache`
 - [x] `pnpm nx build web --skip-nx-cache`
-- [x] `cd apps/api && uv run pytest tests/test_pms_issues.py -q`
+- [x] `cd apps/api && uv run pytest tests/test_db_compat.py tests/test_pms_issues.py`
 - [x] `cd apps/api && uv run python -m py_compile ...`

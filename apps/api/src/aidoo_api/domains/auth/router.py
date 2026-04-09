@@ -182,9 +182,27 @@ def _ensure_development_environment() -> None:
         )
 
 
+def _ensure_local_dev_admin_login_allowed(request: Request) -> None:
+    _ensure_development_environment()
+    settings = get_settings()
+    if not settings.allow_dev_admin_login:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Not found.",
+        )
+
+    client_host = request.client.host if request.client else None
+    request_host = request.url.hostname
+    local_hosts = {"127.0.0.1", "::1", "localhost", "testclient"}
+    if client_host not in local_hosts and request_host not in local_hosts:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Not found.",
+        )
+
+
 @router.get("/bootstrap-status", response_model=BootstrapStatusResponse)
 def bootstrap_status(db: Session = Depends(get_db_session)) -> BootstrapStatusResponse:
-    ensure_seed_data(db)
     has_users = db.scalar(select(func.count()).select_from(User)) > 0
     return BootstrapStatusResponse(requires_setup=not has_users)
 
@@ -276,8 +294,7 @@ def dev_admin_login(
     request: Request,
     db: Session = Depends(get_db_session),
 ) -> AuthSessionResponse:
-    _ensure_development_environment()
-    ensure_seed_data(db)
+    _ensure_local_dev_admin_login_allowed(request)
 
     user = db.scalar(
         select(User)

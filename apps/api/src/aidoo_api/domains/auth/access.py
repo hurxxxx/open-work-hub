@@ -40,6 +40,11 @@ CORE_PERMISSIONS = [
     "session.revoke",
 ]
 
+PLATFORM_ADMIN_GROUP_SLUG = "platform-admin"
+WORKSPACE_ADMIN_ROLE = "workspace_admin"
+TEAM_ADMIN_ROLE = "team_admin"
+DEFAULT_MEMBER_ROLE = "member"
+
 DEFAULT_GROUP_DEFINITIONS = [
     {
         "slug": "platform-admin",
@@ -137,12 +142,18 @@ DEFAULT_FEATURE_POLICIES = [
     },
 ]
 
-ROLE_RANK = {
+WORKSPACE_ROLE_RANK = {
+    "viewer": 10,
+    "member": 20,
+    "workspace_admin": 40,
+}
+TEAM_ROLE_RANK = {
     "viewer": 10,
     "member": 20,
     "team_admin": 30,
-    "workspace_admin": 40,
 }
+VALID_WORKSPACE_ROLES = frozenset(WORKSPACE_ROLE_RANK)
+VALID_TEAM_ROLES = frozenset(TEAM_ROLE_RANK)
 
 USER_GRAPH_OPTIONS = (
     joinedload(User.primary_org_unit),
@@ -299,6 +310,123 @@ def get_or_create_default_pms_space(db: Session) -> Team:
     return team
 
 
+def is_valid_workspace_role(role: str) -> bool:
+    return role in VALID_WORKSPACE_ROLES
+
+
+def is_valid_team_role(role: str) -> bool:
+    return role in VALID_TEAM_ROLES
+
+
+def workspace_role_allows(role: str | None, min_role: str) -> bool:
+    required_rank = WORKSPACE_ROLE_RANK.get(min_role)
+    if required_rank is None:
+        raise ValueError(f"Unknown workspace role: {min_role}")
+    if role is None:
+        return False
+    return WORKSPACE_ROLE_RANK.get(role, -1) >= required_rank
+
+
+def team_role_allows(role: str | None, min_role: str) -> bool:
+    required_rank = TEAM_ROLE_RANK.get(min_role)
+    if required_rank is None:
+        raise ValueError(f"Unknown team role: {min_role}")
+    if role is None:
+        return False
+    return TEAM_ROLE_RANK.get(role, -1) >= required_rank
+
+
+def is_platform_admin_user(user: User) -> bool:
+    permissions = set(resolve_user_permissions(user))
+    group_slugs = {
+        link.group.slug
+        for link in user.group_links
+        if link.group.active
+    }
+    return user.is_admin or "admin.access" in permissions or PLATFORM_ADMIN_GROUP_SLUG in group_slugs
+
+
+def load_active_workspace_by_id(db: Session, workspace_id: str) -> Workspace | None:
+    return db.scalar(
+        select(Workspace).where(
+            Workspace.id == workspace_id,
+            Workspace.active.is_(True),
+        )
+    )
+
+
+def load_active_workspace_by_key(db: Session, workspace_key: str) -> Workspace | None:
+    return db.scalar(
+        select(Workspace).where(
+            Workspace.key == workspace_key,
+            Workspace.active.is_(True),
+        )
+    )
+
+
+def resolve_workspace_role_map(db: Session, user: User) -> dict[str, str]:
+    workspaces = db.scalars(select(Workspace).where(Workspace.active.is_(True))).all()
+    role_map: dict[str, str] = {}
+
+    if is_platform_admin_user(user):
+        for workspace in workspaces:
+            role_map[workspace.id] = WORKSPACE_ADMIN_ROLE
+        return role_map
+
+    for binding in user.workspace_bindings:
+        if not binding.workspace.active or not is_valid_workspace_role(binding.role):
+            continue
+        role_map[binding.workspace_id] = binding.role
+
+    for link in user.group_links:
+        if not link.group.active:
+            continue
+        for binding in link.group.workspace_bindings:
+            if not binding.workspace.active or not is_valid_workspace_role(binding.role):
+                continue
+            current = role_map.get(binding.workspace_id)
+            if current is None or WORKSPACE_ROLE_RANK[binding.role] > WORKSPACE_ROLE_RANK[current]:
+                role_map[binding.workspace_id] = binding.role
+
+    for membership in user.team_memberships:
+        if (
+            not membership.team.active
+            or membership.team.trashed_at is not None
+            or not membership.team.workspace.active
+        ):
+            continue
+        workspace_id = membership.team.workspace_id
+        current = role_map.get(workspace_id)
+        if current is None or WORKSPACE_ROLE_RANK[DEFAULT_MEMBER_ROLE] > WORKSPACE_ROLE_RANK[current]:
+            role_map[workspace_id] = DEFAULT_MEMBER_ROLE
+
+    return role_map
+
+
+def resolve_workspace_role(db: Session, user: User, workspace_id: str) -> str | None:
+    return resolve_workspace_role_map(db, user).get(workspace_id)
+
+
+def resolve_team_role(db: Session, user: User, team: Team) -> str | None:
+    if is_platform_admin_user(user):
+        return TEAM_ADMIN_ROLE
+
+    membership_role = db.scalar(
+        select(TeamMember.role).where(
+            TeamMember.team_id == team.id,
+            TeamMember.user_id == user.id,
+        )
+    )
+    if membership_role is not None and is_valid_team_role(membership_role):
+        return membership_role
+
+    workspace_role = resolve_workspace_role(db, user, team.workspace_id)
+    if workspace_role_allows(workspace_role, WORKSPACE_ADMIN_ROLE):
+        return TEAM_ADMIN_ROLE
+
+    return None
+
+
 def resolve_user_permissions(user: User) -> list[str]:
     permissions = set()
     group_slugs = set()
@@ -309,7 +437,7 @@ def resolve_user_permissions(user: User) -> list[str]:
         group_slugs.add(link.group.slug)
         permissions.update(link.group.permissions or [])
 
-    if user.is_admin or "platform-admin" in group_slugs:
+    if user.is_admin or PLATFORM_ADMIN_GROUP_SLUG in group_slugs:
         permissions.update(CORE_PERMISSIONS)
 
     return sorted(permissions)
@@ -327,38 +455,7 @@ def resolve_group_slugs(user: User) -> list[str]:
 
 def resolve_workspace_roles(db: Session, user: User) -> list[dict[str, str]]:
     workspaces = db.scalars(select(Workspace).where(Workspace.active.is_(True))).all()
-    user_permissions = set(resolve_user_permissions(user))
-    role_map: dict[str, str] = {}
-
-    if "admin.access" in user_permissions:
-        for workspace in workspaces:
-            role_map[workspace.id] = "workspace_admin"
-    else:
-        for binding in user.workspace_bindings:
-            if binding.workspace.active:
-                role_map[binding.workspace_id] = binding.role
-
-        for link in user.group_links:
-            if not link.group.active:
-                continue
-            for binding in link.group.workspace_bindings:
-                if not binding.workspace.active:
-                    continue
-                current = role_map.get(binding.workspace_id)
-                if current is None or ROLE_RANK.get(binding.role, 0) > ROLE_RANK.get(current, 0):
-                    role_map[binding.workspace_id] = binding.role
-
-        for membership in user.team_memberships:
-            if (
-                not membership.team.active
-                or membership.team.trashed_at is not None
-                or not membership.team.workspace.active
-            ):
-                continue
-            workspace_id = membership.team.workspace_id
-            current = role_map.get(workspace_id)
-            if current is None or ROLE_RANK.get("member", 0) > ROLE_RANK.get(current, 0):
-                role_map[workspace_id] = "member"
+    role_map = resolve_workspace_role_map(db, user)
 
     items = []
     for workspace in sorted(workspaces, key=lambda item: item.key):
@@ -416,7 +513,7 @@ def serialize_auth_user(db: Session, user: User) -> dict[str, Any]:
     workspace_roles = resolve_workspace_roles(db, user)
     permissions = resolve_user_permissions(user)
     group_slugs = resolve_group_slugs(user)
-    is_admin_compat = user.is_admin or "admin.access" in permissions or "platform-admin" in group_slugs
+    is_admin_compat = is_platform_admin_user(user)
 
     return {
         "id": user.id,
