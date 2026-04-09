@@ -85,6 +85,7 @@ class TeamItemResponse(BaseModel):
     description: str
     active: bool
     member_count: int
+    current_user_role: str | None = None
 
 
 def _utcnow() -> datetime:
@@ -935,6 +936,7 @@ def list_teams(
             description=item.description,
             active=item.active,
             member_count=len(item.members),
+            current_user_role=resolve_team_role(db, context.user, item),
         )
         for item in items
     ]
@@ -989,6 +991,7 @@ def create_team(
         description=team.description,
         active=team.active,
         member_count=1,
+        current_user_role="team_admin",
     )
 
 
@@ -1031,6 +1034,7 @@ def update_team(
         description=team.description,
         active=team.active,
         member_count=len(team.members),
+        current_user_role=resolve_team_role(db, context.user, team),
     )
 
 

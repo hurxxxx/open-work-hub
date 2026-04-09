@@ -21,7 +21,7 @@ import { InlineNotice, useConfirm, usePrompt } from '@aidoo/ui';
 import { cn } from '@/src/lib/utils';
 import { NAV_ITEMS, APP_BAR_ITEMS } from '@/src/constants';
 import { useAuth } from '@/src/domains/auth/auth-provider';
-import { getWorkspaceRoleByKey, workspaceRoleAllows } from '@/src/domains/auth/auth-api';
+import { getWorkspaceRoleByKey, teamRoleAllows, workspaceRoleAllows } from '@/src/domains/auth/auth-api';
 import { listPmsLists, listFolders, listSpaceDocs, createSpaceDoc, updateSpaceDoc, deleteSpaceDoc, updateFolder, deleteFolder, type PmsFolder, type PmsList, type PmsSpaceDoc } from '@/src/domains/pms/pms-api';
 import { listTeams, updateTeam, deleteTeam, type TeamItem } from '@/src/domains/admin/admin-api';
 import { CreateProjectModal } from '@/src/components/views/PMSView/CreateProjectModal';
@@ -364,6 +364,8 @@ const SpaceItem = ({
   onRenameDoc,
   onDeleteDoc,
   activeNavItemId,
+  canManageSpace,
+  canManageCollections,
 }: {
   spaceId: string;
   name: string;
@@ -386,6 +388,8 @@ const SpaceItem = ({
   onRenameDoc: (docId: string, newTitle: string) => void;
   onDeleteDoc: (docId: string) => void;
   activeNavItemId: string;
+  canManageSpace: boolean;
+  canManageCollections: boolean;
 }) => {
   const [addPopoverOpen, setAddPopoverOpen] = useState(false);
   const [spaceMenuOpen, setSpaceMenuOpen] = useState(false);
@@ -498,48 +502,52 @@ const SpaceItem = ({
           )}
         </div>
 
-        <div className={cn('items-center gap-0.5 pr-1 shrink-0', addPopoverOpen || spaceMenuOpen ? 'flex' : 'hidden group-hover:flex')}>
-          <button
-            ref={spaceMenuBtnRef}
-            onClick={(event) => {
-              event.preventDefault();
-              event.stopPropagation();
-              setSpaceMenuOpen((current) => !current);
-            }}
-            className="p-0.5 hover:bg-clickup-hover rounded text-gray-500 hover:text-gray-300 transition-colors"
-            title="More"
-          >
-            <MoreHorizontal size={14} />
-          </button>
-          <button
-            ref={addBtnRef}
-            onClick={(event) => {
-              event.preventDefault();
-              event.stopPropagation();
-              setAddPopoverOpen((current) => !current);
-            }}
-            className="p-0.5 hover:bg-clickup-hover rounded text-gray-500 hover:text-gray-300 transition-colors"
-            title="Add"
-          >
-            <Plus size={14} />
-          </button>
-        </div>
+        {canManageSpace ? (
+          <>
+            <div className={cn('items-center gap-0.5 pr-1 shrink-0', addPopoverOpen || spaceMenuOpen ? 'flex' : 'hidden group-hover:flex')}>
+              <button
+                ref={spaceMenuBtnRef}
+                onClick={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  setSpaceMenuOpen((current) => !current);
+                }}
+                className="p-0.5 hover:bg-clickup-hover rounded text-gray-500 hover:text-gray-300 transition-colors"
+                title="More"
+              >
+                <MoreHorizontal size={14} />
+              </button>
+              <button
+                ref={addBtnRef}
+                onClick={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  setAddPopoverOpen((current) => !current);
+                }}
+                className="p-0.5 hover:bg-clickup-hover rounded text-gray-500 hover:text-gray-300 transition-colors"
+                title="Add"
+              >
+                <Plus size={14} />
+              </button>
+            </div>
 
-        <SpaceContextMenu
-          open={spaceMenuOpen}
-          anchorRef={spaceMenuBtnRef}
-          onClose={() => setSpaceMenuOpen(false)}
-          onRename={() => { setRenameValue(name); setRenaming(true); }}
-          onDelete={onDeleteSpace}
-        />
-        <SpaceAddPopover
-          open={addPopoverOpen}
-          anchorRef={addBtnRef}
-          onClose={() => setAddPopoverOpen(false)}
-          onCreateList={onAddList}
-          onCreateFolder={onAddFolder}
-          onOpenDocs={onOpenDocs}
-        />
+            <SpaceContextMenu
+              open={spaceMenuOpen}
+              anchorRef={spaceMenuBtnRef}
+              onClose={() => setSpaceMenuOpen(false)}
+              onRename={() => { setRenameValue(name); setRenaming(true); }}
+              onDelete={onDeleteSpace}
+            />
+            <SpaceAddPopover
+              open={addPopoverOpen}
+              anchorRef={addBtnRef}
+              onClose={() => setAddPopoverOpen(false)}
+              onCreateList={onAddList}
+              onCreateFolder={onAddFolder}
+              onOpenDocs={onOpenDocs}
+            />
+          </>
+        ) : null}
       </div>
 
       <AnimatePresence initial={false}>
@@ -601,26 +609,30 @@ const SpaceItem = ({
                             <span className="sidebar-submenu-label">{doc.title || 'Untitled'}</span>
                           </Link>
                         )}
-                        <div className={cn('items-center gap-0.5 pr-1 shrink-0', isDocMenuOpen ? 'flex' : 'hidden group-hover/doc:flex')}>
-                          <button
-                            ref={(el) => { if (el) docMenuBtnRefs.current.set(doc.id, el); }}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setDocMenuOpen((c) => (c === doc.id ? null : doc.id));
-                            }}
-                            className="p-0.5 hover:bg-clickup-hover rounded text-gray-500 hover:text-gray-300 transition-colors"
-                            title="Doc options"
-                          >
-                            <MoreHorizontal size={12} />
-                          </button>
-                        </div>
-                        <FolderContextMenu
-                          open={isDocMenuOpen}
-                          anchorRef={{ current: docMenuBtnRefs.current.get(doc.id) ?? null }}
-                          onClose={() => setDocMenuOpen(null)}
-                          onRename={() => { setDocRenameValue(doc.title); setRenamingDocId(doc.id); }}
-                          onDelete={() => onDeleteDoc(doc.id)}
-                        />
+                        {canManageCollections ? (
+                          <>
+                            <div className={cn('items-center gap-0.5 pr-1 shrink-0', isDocMenuOpen ? 'flex' : 'hidden group-hover/doc:flex')}>
+                              <button
+                                ref={(el) => { if (el) docMenuBtnRefs.current.set(doc.id, el); }}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setDocMenuOpen((c) => (c === doc.id ? null : doc.id));
+                                }}
+                                className="p-0.5 hover:bg-clickup-hover rounded text-gray-500 hover:text-gray-300 transition-colors"
+                                title="Doc options"
+                              >
+                                <MoreHorizontal size={12} />
+                              </button>
+                            </div>
+                            <FolderContextMenu
+                              open={isDocMenuOpen}
+                              anchorRef={{ current: docMenuBtnRefs.current.get(doc.id) ?? null }}
+                              onClose={() => setDocMenuOpen(null)}
+                              onRename={() => { setDocRenameValue(doc.title); setRenamingDocId(doc.id); }}
+                              onDelete={() => onDeleteDoc(doc.id)}
+                            />
+                          </>
+                        ) : null}
                       </div>
                     );
                   })}
@@ -649,48 +661,52 @@ const SpaceItem = ({
                         </span>
                         <span className="sidebar-submenu-label">{folder.name}</span>
                       </button>
-                      <div className={cn('items-center gap-0.5 pr-1 shrink-0', hasAnyPopup ? 'flex' : 'hidden group-hover/folder:flex')}>
-                        <button
-                          ref={(el) => { if (el) folderMenuBtnRefs.current.set(folder.id, el); }}
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            setFolderMenuOpen((current) => (current === folder.id ? null : folder.id));
-                          }}
-                          className="p-0.5 hover:bg-clickup-hover rounded text-gray-500 hover:text-gray-300 transition-colors"
-                          title="Folder options"
-                        >
-                          <MoreHorizontal size={12} />
-                        </button>
-                        <button
-                          ref={(el) => { if (el) folderAddBtnRefs.current.set(folder.id, el); }}
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            setFolderPopoverOpen((current) => (current === folder.id ? null : folder.id));
-                          }}
-                          className="p-0.5 hover:bg-clickup-hover rounded text-gray-500 hover:text-gray-300 transition-colors"
-                          title="Add to folder"
-                        >
-                          <Plus size={12} />
-                        </button>
-                      </div>
-                      <FolderAddPopover
-                        open={isFolderPopoverOpen}
-                        anchorRef={{ current: folderAddBtnRefs.current.get(folder.id) ?? null }}
-                        onClose={() => setFolderPopoverOpen(null)}
-                        onCreateList={() => onAddListToFolder(folder.id)}
-                        onCreateDoc={onOpenDocs}
-                      />
-                      <FolderContextMenu
-                        open={isFolderMenuOpen}
-                        anchorRef={{ current: folderMenuBtnRefs.current.get(folder.id) ?? null }}
-                        onClose={() => setFolderMenuOpen(null)}
-                        onMoveUp={() => onMoveFolder(folder.id, 'up')}
-                        onMoveDown={() => onMoveFolder(folder.id, 'down')}
-                        canMoveUp={canMoveUp}
-                        canMoveDown={canMoveDown}
-                        onRename={() => onRenameFolder(folder.id, folder.name)}
-                        onDelete={() => onDeleteFolder(folder.id)}
-                      />
+                      {canManageSpace ? (
+                        <>
+                          <div className={cn('items-center gap-0.5 pr-1 shrink-0', hasAnyPopup ? 'flex' : 'hidden group-hover/folder:flex')}>
+                            <button
+                              ref={(el) => { if (el) folderMenuBtnRefs.current.set(folder.id, el); }}
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                setFolderMenuOpen((current) => (current === folder.id ? null : folder.id));
+                              }}
+                              className="p-0.5 hover:bg-clickup-hover rounded text-gray-500 hover:text-gray-300 transition-colors"
+                              title="Folder options"
+                            >
+                              <MoreHorizontal size={12} />
+                            </button>
+                            <button
+                              ref={(el) => { if (el) folderAddBtnRefs.current.set(folder.id, el); }}
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                setFolderPopoverOpen((current) => (current === folder.id ? null : folder.id));
+                              }}
+                              className="p-0.5 hover:bg-clickup-hover rounded text-gray-500 hover:text-gray-300 transition-colors"
+                              title="Add to folder"
+                            >
+                              <Plus size={12} />
+                            </button>
+                          </div>
+                          <FolderAddPopover
+                            open={isFolderPopoverOpen}
+                            anchorRef={{ current: folderAddBtnRefs.current.get(folder.id) ?? null }}
+                            onClose={() => setFolderPopoverOpen(null)}
+                            onCreateList={() => onAddListToFolder(folder.id)}
+                            onCreateDoc={onOpenDocs}
+                          />
+                          <FolderContextMenu
+                            open={isFolderMenuOpen}
+                            anchorRef={{ current: folderMenuBtnRefs.current.get(folder.id) ?? null }}
+                            onClose={() => setFolderMenuOpen(null)}
+                            onMoveUp={() => onMoveFolder(folder.id, 'up')}
+                            onMoveDown={() => onMoveFolder(folder.id, 'down')}
+                            canMoveUp={canMoveUp}
+                            canMoveDown={canMoveDown}
+                            onRename={() => onRenameFolder(folder.id, folder.name)}
+                            onDelete={() => onDeleteFolder(folder.id)}
+                          />
+                        </>
+                      ) : null}
                     </div>
                     <AnimatePresence initial={false}>
                       {isFolderExpanded && (
@@ -761,6 +777,10 @@ export const SubSidebar = ({ activeAppId, activeNavItemId }: { activeAppId: stri
   const pmsWorkspaceId = pmsWorkspaceRole?.workspace_id ?? null;
   const canReadTeams = Boolean(user?.is_admin) || Boolean(pmsWorkspaceId);
   const canWriteTeams = Boolean(user?.is_admin) || workspaceRoleAllows(pmsWorkspaceRole?.role, 'workspace_admin');
+  const canManageSpace = useCallback(
+    (team: TeamItem) => canWriteTeams || teamRoleAllows(team.current_user_role, 'team_admin'),
+    [canWriteTeams],
+  );
 
   const [expandedCategories, setExpandedCategories] = useState<string[]>([]);
   const [pmsLists, setPmsLists] = useState<PmsList[]>([]);
@@ -885,6 +905,9 @@ export const SubSidebar = ({ activeAppId, activeNavItemId }: { activeAppId: stri
   useEffect(() => {
     if (!token) return;
     for (const team of pmsTeams) {
+      if (!teamRoleAllows(team.current_user_role, 'viewer')) {
+        continue;
+      }
       listSpaceDocs(token, team.id)
         .then((res) => setSpaceDocsMap((prev) => new Map(prev).set(team.id, res.items)))
         .catch(() => undefined);
@@ -1173,6 +1196,8 @@ export const SubSidebar = ({ activeAppId, activeNavItemId }: { activeAppId: stri
                       onRenameDoc={(pageId, newTitle) => { void handleRenameDoc(pageId, newTitle); }}
                       onDeleteDoc={(pageId) => { void handleDeleteDoc(pageId); }}
                       activeNavItemId={activeNavItemId}
+                      canManageSpace={canManageSpace(space)}
+                      canManageCollections={teamRoleAllows(space.current_user_role, 'team_admin')}
                     />
                   ))}
 

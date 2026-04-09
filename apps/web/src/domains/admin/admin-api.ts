@@ -44,6 +44,7 @@ export interface TeamItem {
   description: string;
   active: boolean;
   member_count: number;
+  current_user_role?: string | null;
 }
 
 export interface FeaturePolicyItem {

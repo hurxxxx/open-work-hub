@@ -33,7 +33,7 @@ import {
   hasAnyAdminReadPermission,
   type AdminSection,
 } from './admin-permissions';
-import type { AuthUser } from '@/src/domains/auth/auth-api';
+import { workspaceRoleAllows, type AuthUser } from '@/src/domains/auth/auth-api';
 import { useAuth } from '@/src/domains/auth/auth-provider';
 import { AccessDeniedView } from '@/src/domains/auth/settings-pages';
 
@@ -665,6 +665,7 @@ function PeopleSection({ token }: { token: string }) {
 }
 
 function TeamsSection({ token }: { token: string }) {
+  const auth = useAuth();
   const [workspaces, setWorkspaces] = useState<WorkspaceItem[]>([]);
   const [teams, setTeams] = useState<TeamItem[]>([]);
   const [users, setUsers] = useState<AuthUser[]>([]);
@@ -677,14 +678,32 @@ function TeamsSection({ token }: { token: string }) {
   const [teamMembers, setTeamMembers] = useState<AuthUser[]>([]);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const manageableWorkspaceIds = useMemo(
+    () => new Set(
+      (auth.user?.workspace_roles ?? [])
+        .filter((item) => workspaceRoleAllows(item.role, 'workspace_admin'))
+        .map((item) => item.workspace_id),
+    ),
+    [auth.user?.workspace_roles],
+  );
+  const manageableWorkspaces = useMemo(
+    () => (
+      auth.user?.is_admin
+        ? workspaces
+        : workspaces.filter((item) => manageableWorkspaceIds.has(item.id))
+    ),
+    [auth.user?.is_admin, manageableWorkspaceIds, workspaces],
+  );
+  const canCreateTeams = Boolean(auth.user?.is_admin) || manageableWorkspaces.length > 0;
+  const canReadUsers = auth.hasPermission('user.read');
 
   async function load() {
     try {
-      const [workspaceItems, teamItems, userResponse] = await Promise.all([
+      const [workspaceItems, teamItems] = await Promise.all([
         listWorkspaces(token),
         listTeams(token),
-        listAdminUsers(token),
       ]);
+      const userResponse = canReadUsers ? await listAdminUsers(token) : { items: [] };
       setWorkspaces(workspaceItems);
       setTeams(teamItems);
       setUsers(userResponse.items);
@@ -705,7 +724,21 @@ function TeamsSection({ token }: { token: string }) {
 
   useEffect(() => {
     void load();
-  }, [token]);
+  }, [canReadUsers, token]);
+
+  useEffect(() => {
+    if (!canCreateTeams) {
+      setCreateOpen(false);
+      setSelectedWorkspaceId('');
+      return;
+    }
+
+    setSelectedWorkspaceId((current) => (
+      manageableWorkspaces.some((item) => item.id === current)
+        ? current
+        : manageableWorkspaces[0]?.id ?? ''
+    ));
+  }, [canCreateTeams, manageableWorkspaces]);
 
   useEffect(() => {
     if (!selectedTeamId) {
@@ -718,10 +751,12 @@ function TeamsSection({ token }: { token: string }) {
     () => teams.find((item) => item.id === selectedTeamId) ?? null,
     [selectedTeamId, teams],
   );
+  const canManageSelectedTeam = Boolean(auth.user?.is_admin)
+    || selectedTeam?.current_user_role === 'team_admin';
 
   async function handleCreateTeam(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!selectedWorkspaceId) {
+    if (!selectedWorkspaceId || !canCreateTeams) {
       return;
     }
 
@@ -770,16 +805,18 @@ function TeamsSection({ token }: { token: string }) {
           <div className="app-text-title-md text-clickup-text">Create team</div>
           <div className="app-text-body text-gray-500">팀은 항상 워크스페이스에 속합니다. View-only users added to Teams will be converted to paid users.</div>
         </div>
-        <div className="flex items-center gap-2">
-          <button
-            className="app-text-control inline-flex items-center gap-1.5 rounded-md bg-clickup-text px-3 py-1.5 text-clickup-bg transition-opacity hover:opacity-90 dark:bg-white dark:text-black"
-            onClick={() => setCreateOpen((current) => !current)}
-            type="button"
-          >
-            <span>+</span>
-            <span>{createOpen ? 'Close' : 'Create Team'}</span>
-          </button>
-        </div>
+        {canCreateTeams ? (
+          <div className="flex items-center gap-2">
+            <button
+              className="app-text-control inline-flex items-center gap-1.5 rounded-md bg-clickup-text px-3 py-1.5 text-clickup-bg transition-opacity hover:opacity-90 dark:bg-white dark:text-black"
+              onClick={() => setCreateOpen((current) => !current)}
+              type="button"
+            >
+              <span>+</span>
+              <span>{createOpen ? 'Close' : 'Create Team'}</span>
+            </button>
+          </div>
+        ) : null}
       </div>
 
       <div className="w-full">
@@ -838,27 +875,29 @@ function TeamsSection({ token }: { token: string }) {
                 </tr>
               ))
             )}
-            <tr>
-              <td className="app-text-body px-4 py-3 text-gray-500" colSpan={5}>
-                <button
-                  className="transition-colors hover:text-clickup-text"
-                  onClick={() => setCreateOpen(true)}
-                  type="button"
-                >
-                  + Create Team
-                </button>
-              </td>
-            </tr>
+            {canCreateTeams ? (
+              <tr>
+                <td className="app-text-body px-4 py-3 text-gray-500" colSpan={5}>
+                  <button
+                    className="transition-colors hover:text-clickup-text"
+                    onClick={() => setCreateOpen(true)}
+                    type="button"
+                  >
+                    + Create Team
+                  </button>
+                </td>
+              </tr>
+            ) : null}
           </tbody>
         </table>
       </div>
 
-      {createOpen ? (
+      {createOpen && canCreateTeams ? (
         <div className="border-t border-b border-clickup-border px-5 py-5 mb-6">
           <form className="grid gap-3 lg:grid-cols-[220px_minmax(0,1fr)_minmax(0,1fr)_auto]" onSubmit={(event) => void handleCreateTeam(event)}>
             <Select
               onValueChange={setSelectedWorkspaceId}
-              options={workspaces.map((item) => ({ value: item.id, label: item.name }))}
+              options={manageableWorkspaces.map((item) => ({ value: item.id, label: item.name }))}
               value={selectedWorkspaceId}
             />
             <input
@@ -892,19 +931,21 @@ function TeamsSection({ token }: { token: string }) {
             <Badge tone="green">Manual</Badge>
           </div>
 
-          <div className="mt-4 grid gap-4 lg:grid-cols-[260px_auto]">
-            <Select
-              onValueChange={setSelectedUserId}
-              options={[
-                { value: NONE_OPTION_VALUE, label: 'Add member by email' },
-                ...users.map((item) => ({ value: item.id, label: item.email })),
-              ]}
-              value={selectedUserId}
-            />
-            <div className="flex justify-end lg:justify-start">
-              <Button onClick={() => { void handleAddTeamMember(); }} variant="secondary">Add member</Button>
+          {canManageSelectedTeam && canReadUsers ? (
+            <div className="mt-4 grid gap-4 lg:grid-cols-[260px_auto]">
+              <Select
+                onValueChange={setSelectedUserId}
+                options={[
+                  { value: NONE_OPTION_VALUE, label: 'Add member by email' },
+                  ...users.map((item) => ({ value: item.id, label: item.email })),
+                ]}
+                value={selectedUserId}
+              />
+              <div className="flex justify-end lg:justify-start">
+                <Button onClick={() => { void handleAddTeamMember(); }} variant="secondary">Add member</Button>
+              </div>
             </div>
-          </div>
+          ) : null}
 
           <div className="mt-4 grid gap-2">
             {teamMembers.length === 0 ? (

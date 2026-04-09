@@ -3739,7 +3739,7 @@ def create_space_doc(
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
 ) -> SpaceDocItem:
-    _ensure_space_editor(db, current_user, space_id)
+    _ensure_space_manager(db, current_user, space_id)
     doc = SpaceDoc(
         id=new_id(),
         team_id=space_id,
@@ -3769,7 +3769,10 @@ def update_space_doc(
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
 ) -> SpaceDocItem:
-    doc = _require_space_doc_access(db, current_user, doc_id, write=True)
+    doc = _get_active_space_doc(db, doc_id, with_created_by=True)
+    if doc is None:
+        raise HTTPException(status_code=404, detail="SpaceDoc not found.")
+    _ensure_space_manager(db, current_user, doc.team_id)
     if payload.title is not None:
         doc.title = payload.title.strip()
     db.add(doc)
@@ -3784,7 +3787,10 @@ def delete_space_doc(
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
 ) -> None:
-    doc = _require_space_doc_access(db, current_user, doc_id, write=True)
+    doc = _get_active_space_doc(db, doc_id)
+    if doc is None:
+        raise HTTPException(status_code=404, detail="SpaceDoc not found.")
+    _ensure_space_manager(db, current_user, doc.team_id)
     deleted_at = _utcnow()
     doc.trashed_at = deleted_at
     pages = list(

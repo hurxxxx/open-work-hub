@@ -75,6 +75,22 @@ function isSameListCollection(left: PmsList[], right: PmsList[]): boolean {
   });
 }
 
+const PROJECT_ROLE_RANK: Record<string, number> = {
+  viewer: 0,
+  member: 1,
+  editor: 2,
+  admin: 3,
+  owner: 4,
+};
+
+function projectRoleAllows(role: string | null | undefined, minRole: keyof typeof PROJECT_ROLE_RANK): boolean {
+  if (!role) {
+    return false;
+  }
+
+  return (PROJECT_ROLE_RANK[role] ?? -1) >= PROJECT_ROLE_RANK[minRole];
+}
+
 export const PMSView = () => {
   const { toolId } = useParams();
   const navigate = useNavigate();
@@ -112,6 +128,8 @@ export const PMSView = () => {
   const isOverviewRoute = !toolId || toolId === 'pms-space-team';
   const selectedProject = projects.find(p => p.id === selectedProjectId);
   const projectName = selectedProject?.name || 'List';
+  const canEditProject = projectRoleAllows(selectedProject?.role, 'member');
+  const canManageProject = projectRoleAllows(selectedProject?.role, 'admin');
   const requestedIssueId = searchParams.get('issue');
 
   const getErrorMessage = useCallback(
@@ -411,19 +429,23 @@ export const PMSView = () => {
                 <Download size={16} />
               </button>
             )}
-            <button
-              onClick={() => setSettingsOpen(true)}
-              className="flex h-10 w-10 items-center justify-center rounded border border-clickup-border text-gray-500 transition-colors hover:bg-clickup-hover dark:text-gray-400"
-            >
-              <Settings size={16} />
-            </button>
-            <button
-              onClick={() => setIsNewTaskModalOpen(true)}
-              className="app-text-body-sm flex min-h-10 items-center gap-2 rounded-md bg-clickup-purple px-4 font-semibold text-white shadow-lg shadow-purple-500/20"
-            >
-              <Plus size={16} />
-              <span>New Task</span>
-            </button>
+            {canManageProject ? (
+              <button
+                onClick={() => setSettingsOpen(true)}
+                className="flex h-10 w-10 items-center justify-center rounded border border-clickup-border text-gray-500 transition-colors hover:bg-clickup-hover dark:text-gray-400"
+              >
+                <Settings size={16} />
+              </button>
+            ) : null}
+            {canEditProject ? (
+              <button
+                onClick={() => setIsNewTaskModalOpen(true)}
+                className="app-text-body-sm flex min-h-10 items-center gap-2 rounded-md bg-clickup-purple px-4 font-semibold text-white shadow-lg shadow-purple-500/20"
+              >
+                <Plus size={16} />
+                <span>New Task</span>
+              </button>
+            ) : null}
           </div>
         </div>
 
@@ -533,6 +555,7 @@ export const PMSView = () => {
                 milestones={milestones}
                 projectLabels={labels}
                 projectStatuses={projectStatuses}
+                spaceName={selectedProject?.team_name}
                 onClose={clearSelectedIssue}
                 onUpdate={reloadIssues}
               />
@@ -549,6 +572,7 @@ export const PMSView = () => {
             projectId={selectedProjectId}
             onCreated={reloadIssues}
             projectStatuses={projectStatuses}
+            canCreate={canEditProject}
           />
         )}
       </AnimatePresence>

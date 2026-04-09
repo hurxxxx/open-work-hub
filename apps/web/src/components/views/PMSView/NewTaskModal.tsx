@@ -19,12 +19,14 @@ export const NewTaskModal = ({
   projectId,
   onCreated,
   projectStatuses,
+  canCreate = true,
 }: {
   isOpen: boolean;
   onClose: () => void;
   projectId: string;
   onCreated?: () => void;
   projectStatuses?: PmsProjectStatus[];
+  canCreate?: boolean;
 }) => {
   const { token } = useAuth();
   const { uploadFile, resolveFileUrl } = useMediaUpload();
@@ -58,7 +60,7 @@ export const NewTaskModal = ({
   };
 
   async function handleCreate() {
-    if (!token || !title.trim() || !projectId) return;
+    if (!token || !title.trim() || !projectId || !canCreate) return;
     setSubmitting(true);
     try {
       await createProjectIssue(token, projectId, {
@@ -125,7 +127,7 @@ export const NewTaskModal = ({
               <Button
                 variant="primary"
                 onClick={handleCreate}
-                disabled={!title.trim() || submitting}
+                disabled={!title.trim() || submitting || !canCreate}
                 className="rounded-r-none"
               >
                 {submitting ? 'Creating...' : 'Create Task'}
@@ -145,9 +147,10 @@ export const NewTaskModal = ({
           placeholder="Task Name"
           value={title}
           onChange={e => setTitle(e.target.value)}
-          onKeyDown={e => { if (e.key === 'Enter' && !e.nativeEvent.isComposing && title.trim() && !submitting) handleCreate(); }}
+          onKeyDown={e => { if (e.key === 'Enter' && !e.nativeEvent.isComposing && title.trim() && !submitting && canCreate) handleCreate(); }}
           className="app-text-title-md w-full rounded-lg border border-clickup-border bg-transparent px-4 py-3 font-medium text-clickup-text placeholder:text-clickup-text/40 transition-all focus:border-clickup-purple focus:outline-none"
           autoFocus
+          disabled={!canCreate}
         />
 
         {/* Description */}
@@ -167,6 +170,7 @@ export const NewTaskModal = ({
             <button
               className="app-text-body flex items-center gap-2 text-clickup-text/50 transition-colors hover:text-clickup-text"
               onClick={() => setShowDescription(true)}
+              disabled={!canCreate}
             >
               <FileText size={18} />
               <span>Add description</span>
@@ -180,6 +184,7 @@ export const NewTaskModal = ({
             value={status}
             onChange={e => setStatus(e.target.value)}
             className="app-text-body-sm rounded-md border border-clickup-border bg-clickup-sidebar px-2 py-1 text-clickup-text focus:outline-none"
+            disabled={!canCreate}
           >
             {getStatusSlugs(projectStatuses).map(s => (
               <option key={s} value={s}>{getStatusLabel(s, projectStatuses)}</option>
@@ -190,6 +195,7 @@ export const NewTaskModal = ({
             value={priority}
             onChange={e => setPriority(e.target.value)}
             className="app-text-body-sm rounded-md border border-clickup-border bg-clickup-sidebar px-2 py-1 text-clickup-text focus:outline-none"
+            disabled={!canCreate}
           >
             <option value="low">Low</option>
             <option value="medium">Medium</option>
@@ -202,6 +208,7 @@ export const NewTaskModal = ({
             value={dueDate}
             onChange={e => setDueDate(e.target.value)}
             className="app-text-body-sm rounded-md border border-clickup-border bg-clickup-sidebar px-2 py-1 text-clickup-text focus:outline-none"
+            disabled={!canCreate}
           />
         </div>
       </div>

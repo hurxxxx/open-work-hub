@@ -38,7 +38,9 @@ import {
   deleteChecklistItem,
   createTimeEntry,
   deleteTimeEntry,
+  createDependency,
   deleteDependency,
+  listProjectIssues,
   type PmsIssue,
   type PmsComment,
   type PmsActivityLog,
@@ -69,6 +71,7 @@ export const TaskDetail = ({
   milestones = [],
   projectLabels = [],
   projectStatuses,
+  spaceName,
   onClose,
   onUpdate,
 }: {
@@ -77,6 +80,7 @@ export const TaskDetail = ({
   milestones?: PmsMilestone[];
   projectLabels?: PmsLabel[];
   projectStatuses?: PmsProjectStatus[];
+  spaceName?: string | null;
   onClose: () => void;
   onUpdate?: () => void | Promise<void>;
 }) => {
@@ -102,6 +106,10 @@ export const TaskDetail = ({
   const [loggingTime, setLoggingTime] = useState(false);
   const [attachments, setAttachments] = useState<PmsAttachment[]>([]);
   const [dependencies, setDependencies] = useState<PmsDependency[]>([]);
+  const [depSearchQuery, setDepSearchQuery] = useState('');
+  const [depSearchResults, setDepSearchResults] = useState<PmsIssue[]>([]);
+  const [depSearching, setDepSearching] = useState(false);
+  const [addingDep, setAddingDep] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -380,6 +388,32 @@ export const TaskDetail = ({
     }
   }, [token, onUpdate]);
 
+  // ── Dependency handlers ──────────────────────────────────────────
+  const handleDepSearch = useCallback(async (query: string) => {
+    setDepSearchQuery(query);
+    if (!token || !query.trim()) { setDepSearchResults([]); return; }
+    setDepSearching(true);
+    try {
+      const res = await listProjectIssues(token, issue.project_id, { q: query.trim() });
+      setDepSearchResults(res.items.filter(i => i.id !== issue.id));
+    } catch { setDepSearchResults([]); }
+    finally { setDepSearching(false); }
+  }, [token, issue.id, issue.project_id]);
+
+  const handleAddDependency = useCallback(async (targetId: string) => {
+    if (!token) return;
+    setAddingDep(true);
+    try {
+      const dep = await createDependency(token, { predecessor_id: targetId, successor_id: issue.id });
+      setDependencies(prev => [...prev, dep]);
+      setDepSearchQuery('');
+      setDepSearchResults([]);
+      await Promise.resolve(onUpdate?.());
+    } catch (error) {
+      setSaveError(getErrorMessage(error, '의존성을 추가하지 못했습니다.'));
+    } finally { setAddingDep(false); }
+  }, [token, issue.id, onUpdate]);
+
   const handleToggleLabel = useCallback((labelId: string) => {
     const nextLabelIds = selectedLabelIds.includes(labelId)
       ? selectedLabelIds.filter(id => id !== labelId)
@@ -470,7 +504,7 @@ export const TaskDetail = ({
       {/* Top bar */}
       <div className="flex items-center justify-between px-5 py-3 border-b border-clickup-border shrink-0">
         <div className="app-text-caption flex items-center gap-2 text-clickup-text/50">
-          <span>Team Space</span>
+          <span>{spaceName || 'Space'}</span>
           <ChevronRight size={12} />
           <span className="text-clickup-text/70">{issueState.reference}</span>
         </div>
@@ -659,7 +693,7 @@ export const TaskDetail = ({
                             value={editingChecklistText}
                             onChange={e => setEditingChecklistText(e.target.value)}
                             onKeyDown={e => {
-                              if (e.key === 'Enter' && !e.nativeEvent.isComposing) handleSaveChecklistEdit(ci.id);
+                              if (e.key === 'Enter' && !e.nativeEvent.isComposing) { e.preventDefault(); handleSaveChecklistEdit(ci.id); }
                               if (e.key === 'Escape') setEditingChecklistId(null);
                             }}
                             onBlur={() => handleSaveChecklistEdit(ci.id)}
@@ -692,7 +726,7 @@ export const TaskDetail = ({
                   type="text"
                   value={newChecklistText}
                   onChange={e => setNewChecklistText(e.target.value)}
-                  onKeyDown={e => { if (e.key === 'Enter' && !e.nativeEvent.isComposing && newChecklistText.trim()) handleAddChecklistItem(); }}
+                  onKeyDown={e => { if (e.key === 'Enter' && !e.nativeEvent.isComposing && newChecklistText.trim()) { e.preventDefault(); handleAddChecklistItem(); } }}
                   placeholder="+ Add checklist item..."
                   className="app-text-body flex-1 border-b border-transparent bg-transparent py-1 text-clickup-text placeholder:text-clickup-text/40 transition-colors focus:border-clickup-purple focus:outline-none"
                 />
@@ -784,7 +818,7 @@ export const TaskDetail = ({
                   type="text"
                   value={newSubtaskTitle}
                   onChange={e => setNewSubtaskTitle(e.target.value)}
-                  onKeyDown={e => { if (e.key === 'Enter' && !e.nativeEvent.isComposing && newSubtaskTitle.trim()) handleAddSubtask(); }}
+                  onKeyDown={e => { if (e.key === 'Enter' && !e.nativeEvent.isComposing && newSubtaskTitle.trim()) { e.preventDefault(); handleAddSubtask(); } }}
                   placeholder="+ Add subtask..."
                   className="app-text-body flex-1 border-b border-transparent bg-transparent py-1 text-clickup-text placeholder:text-clickup-text/40 transition-colors focus:border-clickup-purple focus:outline-none"
                 />
@@ -799,11 +833,13 @@ export const TaskDetail = ({
             <hr className="border-clickup-border" />
 
             {/* Dependencies */}
-            {dependencies.length > 0 && (
-              <div className="space-y-2">
-                <h3 className="app-text-title-md text-clickup-text">
-                  Dependencies <span className="text-clickup-text/40 font-normal">({dependencies.length})</span>
-                </h3>
+            <div className="space-y-2">
+              <h3 className="app-text-title-md text-clickup-text flex items-center gap-2">
+                <Unlink size={16} className="text-clickup-text/50" />
+                Dependencies
+                {dependencies.length > 0 && <span className="text-clickup-text/40 font-normal">({dependencies.length})</span>}
+              </h3>
+              {dependencies.length > 0 && (
                 <div className="space-y-1">
                   {dependencies.map(dep => {
                     const isBlocking = dep.predecessor_id === issue.id;
@@ -819,6 +855,7 @@ export const TaskDetail = ({
                             if (!token) return;
                             await deleteDependency(token, dep.id);
                             setDependencies(prev => prev.filter(d => d.id !== dep.id));
+                            await Promise.resolve(onUpdate?.());
                           }}
                           className="opacity-0 group-hover:opacity-100 text-clickup-text/30 hover:text-red-400 transition-all"
                           title="Remove dependency"
@@ -829,8 +866,34 @@ export const TaskDetail = ({
                     );
                   })}
                 </div>
+              )}
+              <div className="relative">
+                <input
+                  type="text"
+                  value={depSearchQuery}
+                  onChange={e => handleDepSearch(e.target.value)}
+                  placeholder="+ Add dependency (search issue)..."
+                  className="app-text-body w-full border-b border-transparent bg-transparent py-1 text-clickup-text placeholder:text-clickup-text/40 transition-colors focus:border-clickup-purple focus:outline-none"
+                />
+                {depSearchResults.length > 0 && (
+                  <div className="absolute left-0 top-full z-20 mt-1 w-full max-h-40 overflow-y-auto rounded-lg border border-clickup-border bg-clickup-bg shadow-xl py-1">
+                    {depSearchResults.map(r => (
+                      <button
+                        key={r.id}
+                        type="button"
+                        disabled={addingDep || dependencies.some(d => d.predecessor_id === r.id || d.successor_id === r.id)}
+                        onClick={() => handleAddDependency(r.id)}
+                        className="app-text-body w-full flex items-center gap-2 px-3 py-1.5 text-left hover:bg-clickup-hover disabled:opacity-40"
+                      >
+                        <span className="app-text-caption font-mono text-clickup-text/50">{r.reference}</span>
+                        <span className="truncate">{r.title}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {depSearching && <Loader2 size={14} className="absolute right-1 top-1.5 animate-spin text-clickup-text/30" />}
               </div>
-            )}
+            </div>
 
             <hr className="border-clickup-border" />
 
@@ -987,7 +1050,7 @@ export const TaskDetail = ({
                   type="text"
                   value={timeLogDesc}
                   onChange={e => setTimeLogDesc(e.target.value)}
-                  onKeyDown={e => { if (e.key === 'Enter' && !e.nativeEvent.isComposing && timeLogMinutes) handleLogTime(); }}
+                  onKeyDown={e => { if (e.key === 'Enter' && !e.nativeEvent.isComposing && timeLogMinutes) { e.preventDefault(); handleLogTime(); } }}
                   placeholder="Description..."
                   className="app-text-body flex-1 border-b border-transparent bg-transparent py-1 text-clickup-text placeholder:text-clickup-text/40 transition-colors focus:border-clickup-purple focus:outline-none"
                 />
@@ -1073,7 +1136,7 @@ export const TaskDetail = ({
                     setMentionOpen(false);
                   }
                 }}
-                onKeyDown={e => { if (e.key === 'Enter' && !e.nativeEvent.isComposing && !mentionOpen) handleCommentSubmit(); if (e.key === 'Escape') setMentionOpen(false); }}
+                onKeyDown={e => { if (e.key === 'Enter' && !e.nativeEvent.isComposing && !mentionOpen) { e.preventDefault(); handleCommentSubmit(); } if (e.key === 'Escape') setMentionOpen(false); }}
                 placeholder="Write a comment... (type @ to mention)"
                 className="app-text-body w-full rounded-lg border border-clickup-border bg-transparent px-3 py-1.5 text-clickup-text placeholder:text-clickup-text/40 transition-colors focus:border-clickup-purple focus:outline-none"
               />

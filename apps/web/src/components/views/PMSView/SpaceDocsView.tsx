@@ -10,13 +10,16 @@ import {
   Plus,
   Trash2,
 } from 'lucide-react';
-import { BlockEditor } from '@aidoo/ui';
+import { BlockEditor, BlockViewer } from '@aidoo/ui';
 import type { BlockContent } from '@aidoo/ui';
 
 import { useConfirm, usePrompt } from '@aidoo/ui';
 
 import { cn } from '@/src/lib/utils';
+import { listTeams } from '@/src/domains/admin/admin-api';
+import { getWorkspaceRoleByKey, teamRoleAllows } from '@/src/domains/auth/auth-api';
 import { useAuth } from '@/src/domains/auth/auth-provider';
+import { AccessDeniedView } from '@/src/domains/auth/settings-pages';
 import { useMediaUpload } from '@/src/domains/media/use-media-upload';
 import {
   createSpaceDoc,
@@ -33,6 +36,7 @@ import {
 } from '@/src/domains/pms/pms-api';
 
 type TreeNode = PmsSpaceDocPage & { children: TreeNode[] };
+const PMS_WORKSPACE_KEY = 'pms';
 
 function getErrorMessage(error: unknown, fallback: string) {
   return error instanceof Error && error.message ? error.message : fallback;
@@ -72,6 +76,7 @@ const PageTreeItem = ({
   onSelect,
   onCreateChild,
   onDelete,
+  canEdit,
   depth = 0,
 }: {
   node: TreeNode;
@@ -79,6 +84,7 @@ const PageTreeItem = ({
   onSelect: (pageId: string) => void;
   onCreateChild: (parentId: string) => void;
   onDelete: (pageId: string) => void;
+  canEdit: boolean;
   depth?: number;
 }) => {
   const [expanded, setExpanded] = useState(true);
@@ -103,14 +109,16 @@ const PageTreeItem = ({
           <FileText size={14} className={selectedPageId === node.id ? 'text-clickup-purple' : 'text-gray-500'} />
           <span className="truncate">{node.title}</span>
         </button>
-        <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
-          <button onClick={() => onCreateChild(node.id)} className="text-gray-500 hover:text-clickup-text">
-            <Plus size={12} />
-          </button>
-          <button onClick={() => onDelete(node.id)} className="text-gray-500 hover:text-red-400">
-            <Trash2 size={12} />
-          </button>
-        </div>
+        {canEdit ? (
+          <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+            <button onClick={() => onCreateChild(node.id)} className="text-gray-500 hover:text-clickup-text">
+              <Plus size={12} />
+            </button>
+            <button onClick={() => onDelete(node.id)} className="text-gray-500 hover:text-red-400">
+              <Trash2 size={12} />
+            </button>
+          </div>
+        ) : null}
       </div>
 
       {expanded && hasChildren && (
@@ -123,6 +131,7 @@ const PageTreeItem = ({
               onSelect={onSelect}
               onCreateChild={onCreateChild}
               onDelete={onDelete}
+              canEdit={canEdit}
               depth={depth + 1}
             />
           ))}
@@ -135,7 +144,7 @@ const PageTreeItem = ({
 export const SpaceDocsView = ({ spaceId, spaceName, docId: spaceDocId }: { spaceId: string; spaceName?: string | null; docId?: string | null }) => {
   const navigate = useNavigate();
   const { docId: pageId } = useParams();
-  const { token } = useAuth();
+  const { token, user } = useAuth();
   const { uploadFile, resolveFileUrl } = useMediaUpload();
   const { confirm, confirmDialog } = useConfirm();
   const { prompt, promptDialog } = usePrompt();
@@ -146,7 +155,11 @@ export const SpaceDocsView = ({ spaceId, spaceName, docId: spaceDocId }: { space
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [titleDraft, setTitleDraft] = useState('');
+  const [spaceRole, setSpaceRole] = useState<string | null>(null);
+  const [spaceRoleResolved, setSpaceRoleResolved] = useState(false);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pmsWorkspaceRole = getWorkspaceRoleByKey(user, PMS_WORKSPACE_KEY);
+  const pmsWorkspaceId = pmsWorkspaceRole?.workspace_id ?? null;
 
   const basePath = `/tool/pms-space-${spaceId}-docs`;
   const collectionPath = useCallback((docId: string) => `${basePath}-${docId}`, [basePath]);
@@ -155,6 +168,38 @@ export const SpaceDocsView = ({ spaceId, spaceName, docId: spaceDocId }: { space
   const selectedCollection = collections.find((doc) => doc.id === spaceDocId) ?? null;
   const selectedPage = pages.find((page) => page.id === pageId) ?? null;
   const pageTree = useMemo(() => buildTree(pages), [pages]);
+  const canAccessSpaceDocs = teamRoleAllows(spaceRole, 'viewer');
+  const canEditPages = teamRoleAllows(spaceRole, 'member');
+  const canManageCollections = teamRoleAllows(spaceRole, 'team_admin');
+
+  useEffect(() => {
+    if (!token || !pmsWorkspaceId) {
+      setSpaceRole(null);
+      setSpaceRoleResolved(true);
+      return;
+    }
+
+    let cancelled = false;
+    setSpaceRoleResolved(false);
+    void listTeams(token, pmsWorkspaceId)
+      .then((items) => {
+        if (cancelled) return;
+        const currentTeam = items.find((item) => item.id === spaceId);
+        setSpaceRole(currentTeam?.current_user_role ?? null);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setSpaceRole(null);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setSpaceRoleResolved(true);
+        }
+      });
+
+    return () => { cancelled = true; };
+  }, [pmsWorkspaceId, spaceId, token]);
 
   const loadCollections = useCallback(async () => {
     if (!token) return;
@@ -183,17 +228,27 @@ export const SpaceDocsView = ({ spaceId, spaceName, docId: spaceDocId }: { space
   }, [spaceId, token]);
 
   useEffect(() => {
+    if (!spaceRoleResolved) {
+      return;
+    }
+    if (!canAccessSpaceDocs) {
+      setCollections([]);
+      setPages([]);
+      setLoadingCollections(false);
+      setLoadingPages(false);
+      return;
+    }
     void loadCollections();
-  }, [loadCollections]);
+  }, [canAccessSpaceDocs, loadCollections, spaceRoleResolved]);
 
   useEffect(() => {
-    if (!selectedCollection) {
+    if (!canAccessSpaceDocs || !selectedCollection) {
       setPages([]);
       setLoadingPages(false);
       return;
     }
     void loadPages(selectedCollection.id);
-  }, [loadPages, selectedCollection]);
+  }, [canAccessSpaceDocs, loadPages, selectedCollection]);
 
   useEffect(() => {
     if (!spaceDocId || !pageId || loadingCollections) return;
@@ -237,7 +292,7 @@ export const SpaceDocsView = ({ spaceId, spaceName, docId: spaceDocId }: { space
   }, []);
 
   const patchPage = useCallback(async (targetPageId: string, payload: Record<string, unknown>, fallbackMessage: string) => {
-    if (!token) return null;
+    if (!token || !canEditPages) return null;
     setSaving(true);
     setError(null);
     try {
@@ -250,10 +305,10 @@ export const SpaceDocsView = ({ spaceId, spaceName, docId: spaceDocId }: { space
     } finally {
       setSaving(false);
     }
-  }, [token]);
+  }, [canEditPages, token]);
 
   const handleCreateCollection = useCallback(async () => {
-    if (!token) return;
+    if (!token || !canManageCollections) return;
     setSaving(true);
     setError(null);
     try {
@@ -265,10 +320,10 @@ export const SpaceDocsView = ({ spaceId, spaceName, docId: spaceDocId }: { space
     } finally {
       setSaving(false);
     }
-  }, [collectionPath, navigate, spaceId, token]);
+  }, [canManageCollections, collectionPath, navigate, spaceId, token]);
 
   const handleRenameCollection = useCallback(async (doc: PmsSpaceDoc) => {
-    if (!token) return;
+    if (!token || !canManageCollections) return;
     const nextTitle = await prompt({ title: 'Rename Collection', defaultValue: doc.title, placeholder: 'Collection name' });
     if (!nextTitle || nextTitle === doc.title) return;
     setSaving(true);
@@ -281,10 +336,10 @@ export const SpaceDocsView = ({ spaceId, spaceName, docId: spaceDocId }: { space
     } finally {
       setSaving(false);
     }
-  }, [token]);
+  }, [canManageCollections, token]);
 
   const handleDeleteCollection = useCallback(async (doc: PmsSpaceDoc) => {
-    if (!token) return;
+    if (!token || !canManageCollections) return;
     if (!await confirm({ title: 'Delete Collection', description: 'Move this document collection and all its pages to Trash?', confirmLabel: 'Move to Trash', variant: 'danger' })) return;
     setSaving(true);
     setError(null);
@@ -300,10 +355,10 @@ export const SpaceDocsView = ({ spaceId, spaceName, docId: spaceDocId }: { space
     } finally {
       setSaving(false);
     }
-  }, [basePath, navigate, spaceDocId, token]);
+  }, [basePath, canManageCollections, navigate, spaceDocId, token]);
 
   const handleCreatePage = useCallback(async (parentId: string | null = null) => {
-    if (!token || !selectedCollection) return;
+    if (!token || !selectedCollection || !canEditPages) return;
     setSaving(true);
     setError(null);
     try {
@@ -319,10 +374,10 @@ export const SpaceDocsView = ({ spaceId, spaceName, docId: spaceDocId }: { space
     } finally {
       setSaving(false);
     }
-  }, [navigate, pagePath, selectedCollection, spaceId, token]);
+  }, [canEditPages, navigate, pagePath, selectedCollection, spaceId, token]);
 
   const handleDeletePage = useCallback(async (targetPageId: string) => {
-    if (!token || !selectedCollection) return;
+    if (!token || !selectedCollection || !canEditPages) return;
     if (!await confirm({ title: 'Delete Page', description: 'Move this page and its subpages to Trash?', confirmLabel: 'Move to Trash', variant: 'danger' })) return;
     setSaving(true);
     setError(null);
@@ -339,20 +394,32 @@ export const SpaceDocsView = ({ spaceId, spaceName, docId: spaceDocId }: { space
     } finally {
       setSaving(false);
     }
-  }, [collectionPath, navigate, pagePath, selectedCollection, selectedPage, spaceId, token]);
+  }, [canEditPages, collectionPath, navigate, pagePath, selectedCollection, selectedPage, spaceId, token]);
 
   const handleTitleSave = useCallback(async () => {
-    if (!selectedPage || titleDraft.trim() === selectedPage.title) return;
+    if (!canEditPages || !selectedPage || titleDraft.trim() === selectedPage.title) return;
     await patchPage(selectedPage.id, { title: titleDraft.trim() || 'Untitled Page' }, '페이지 제목을 저장하지 못했습니다.');
-  }, [patchPage, selectedPage, titleDraft]);
+  }, [canEditPages, patchPage, selectedPage, titleDraft]);
 
   const handleContentChange = useCallback((content: BlockContent) => {
-    if (!selectedPage) return;
+    if (!canEditPages || !selectedPage) return;
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(() => {
       void patchPage(selectedPage.id, { content_blocks: content }, '페이지 내용을 저장하지 못했습니다.');
     }, 500);
-  }, [patchPage, selectedPage]);
+  }, [canEditPages, patchPage, selectedPage]);
+
+  if (!spaceRoleResolved) {
+    return (
+      <div className="flex h-full items-center justify-center bg-clickup-bg">
+        <Loader2 size={20} className="animate-spin text-gray-500" />
+      </div>
+    );
+  }
+
+  if (!canAccessSpaceDocs) {
+    return <AccessDeniedView description="현재 계정에는 이 스페이스 문서에 접근할 권한이 없습니다." />;
+  }
 
   if (!spaceDocId) {
     return (
@@ -366,13 +433,15 @@ export const SpaceDocsView = ({ spaceId, spaceName, docId: spaceDocId }: { space
               <div className="app-text-title-lg text-clickup-text">{spaceName ?? 'Space'}</div>
               <div className="app-text-body text-gray-500">문서 컬렉션 단위로 페이지를 정리하고 관리합니다.</div>
             </div>
-            <button
-              onClick={() => { void handleCreateCollection(); }}
-              className="app-text-control flex items-center gap-2 rounded-md bg-clickup-purple px-4 py-2 text-white"
-            >
-              <Plus size={16} />
-              <span>New Collection</span>
-            </button>
+            {canManageCollections ? (
+              <button
+                onClick={() => { void handleCreateCollection(); }}
+                className="app-text-control flex items-center gap-2 rounded-md bg-clickup-purple px-4 py-2 text-white"
+              >
+                <Plus size={16} />
+                <span>New Collection</span>
+              </button>
+            ) : null}
           </div>
         </header>
 
@@ -403,22 +472,24 @@ export const SpaceDocsView = ({ spaceId, spaceName, docId: spaceDocId }: { space
                       </div>
                     </div>
                   </button>
-                  <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
-                    <button
-                      onClick={() => { void handleRenameCollection(doc); }}
-                      className="rounded p-1.5 text-gray-500 transition-colors hover:bg-clickup-hover hover:text-clickup-text"
-                      title="Rename collection"
-                    >
-                      <MoreHorizontal size={14} />
-                    </button>
-                    <button
-                      onClick={() => { void handleDeleteCollection(doc); }}
-                      className="rounded p-1.5 text-gray-500 transition-colors hover:bg-red-500/10 hover:text-red-400"
-                      title="Move to Trash"
-                    >
-                      <Trash2 size={14} />
-                    </button>
-                  </div>
+                  {canManageCollections ? (
+                    <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+                      <button
+                        onClick={() => { void handleRenameCollection(doc); }}
+                        className="rounded p-1.5 text-gray-500 transition-colors hover:bg-clickup-hover hover:text-clickup-text"
+                        title="Rename collection"
+                      >
+                        <MoreHorizontal size={14} />
+                      </button>
+                      <button
+                        onClick={() => { void handleDeleteCollection(doc); }}
+                        className="rounded p-1.5 text-gray-500 transition-colors hover:bg-red-500/10 hover:text-red-400"
+                        title="Move to Trash"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                  ) : null}
                 </div>
               ))}
             </div>
@@ -427,13 +498,15 @@ export const SpaceDocsView = ({ spaceId, spaceName, docId: spaceDocId }: { space
               <FileText size={24} className="mb-4 text-gray-400" />
               <div className="app-text-title-md text-clickup-text">No document collections yet</div>
               <div className="app-text-body mt-2 text-gray-500">첫 번째 컬렉션을 만들고 그 안에서 페이지를 관리하세요.</div>
-              <button
-                onClick={() => { void handleCreateCollection(); }}
-                className="app-text-control mt-6 inline-flex items-center gap-2 rounded-md bg-clickup-purple px-4 py-2 text-white"
-              >
-                <Plus size={16} />
-                <span>Create Collection</span>
-              </button>
+              {canManageCollections ? (
+                <button
+                  onClick={() => { void handleCreateCollection(); }}
+                  className="app-text-control mt-6 inline-flex items-center gap-2 rounded-md bg-clickup-purple px-4 py-2 text-white"
+                >
+                  <Plus size={16} />
+                  <span>Create Collection</span>
+                </button>
+              ) : null}
             </div>
           )}
         </main>
@@ -458,13 +531,15 @@ export const SpaceDocsView = ({ spaceId, spaceName, docId: spaceDocId }: { space
               {selectedCollection?.title ?? 'Collection'}
             </div>
           </div>
-          <button
-            onClick={() => { void handleCreatePage(null); }}
-            className="rounded p-1 text-gray-500 transition-colors hover:bg-clickup-hover hover:text-clickup-text"
-            title="Add page"
-          >
-            <Plus size={14} />
-          </button>
+          {canEditPages ? (
+            <button
+              onClick={() => { void handleCreatePage(null); }}
+              className="rounded p-1 text-gray-500 transition-colors hover:bg-clickup-hover hover:text-clickup-text"
+              title="Add page"
+            >
+              <Plus size={14} />
+            </button>
+          ) : null}
         </div>
 
         <div className="custom-scrollbar flex-1 overflow-y-auto px-2 py-3 space-y-1">
@@ -483,15 +558,20 @@ export const SpaceDocsView = ({ spaceId, spaceName, docId: spaceDocId }: { space
                 }}
                 onCreateChild={(parentId) => { void handleCreatePage(parentId); }}
                 onDelete={(targetPageId) => { void handleDeletePage(targetPageId); }}
+                canEdit={canEditPages}
               />
             ))
-          ) : (
+          ) : canEditPages ? (
             <button
               onClick={() => { void handleCreatePage(null); }}
               className="app-text-body w-full rounded-md border border-dashed border-clickup-border px-3 py-4 text-gray-500 transition-colors hover:border-clickup-purple hover:text-clickup-text"
             >
               Create the first page
             </button>
+          ) : (
+            <div className="app-text-body rounded-md border border-dashed border-clickup-border px-3 py-4 text-gray-500">
+              No pages in this collection
+            </div>
           )}
         </div>
       </div>
@@ -527,13 +607,17 @@ export const SpaceDocsView = ({ spaceId, spaceName, docId: spaceDocId }: { space
                     onChange={(event) => setTitleDraft(event.target.value)}
                     onBlur={() => { void handleTitleSave(); }}
                     onKeyDown={(event) => {
-                      if (event.key === 'Enter') {
+                      if (canEditPages && event.key === 'Enter') {
                         event.preventDefault();
                         void handleTitleSave();
                       }
                     }}
-                    className="app-text-title-xl w-full bg-transparent text-clickup-text outline-none placeholder:text-clickup-text/20"
+                    className={cn(
+                      'app-text-title-xl w-full bg-transparent text-clickup-text outline-none placeholder:text-clickup-text/20',
+                      !canEditPages && 'cursor-default',
+                    )}
                     placeholder="Untitled Page"
+                    readOnly={!canEditPages}
                   />
                   <div className="app-text-caption text-gray-500">
                     Last updated {new Date(selectedPage.updated_at).toLocaleString()}
@@ -541,14 +625,21 @@ export const SpaceDocsView = ({ spaceId, spaceName, docId: spaceDocId }: { space
                 </div>
 
                 <div className="prose max-w-none dark:prose-invert">
-                  <BlockEditor
-                    key={selectedPage.id}
-                    initialContent={(selectedPage.content_blocks as BlockContent | null) ?? undefined}
-                    placeholder="Start writing..."
-                    uploadFile={uploadFile}
-                    resolveFileUrl={resolveFileUrl}
-                    onChange={handleContentChange}
-                  />
+                  {canEditPages ? (
+                    <BlockEditor
+                      key={selectedPage.id}
+                      initialContent={(selectedPage.content_blocks as BlockContent | null) ?? undefined}
+                      placeholder="Start writing..."
+                      uploadFile={uploadFile}
+                      resolveFileUrl={resolveFileUrl}
+                      onChange={handleContentChange}
+                    />
+                  ) : (
+                    <BlockViewer
+                      key={selectedPage.id}
+                      content={(selectedPage.content_blocks as BlockContent | null) ?? []}
+                    />
+                  )}
                 </div>
               </motion.div>
             </div>

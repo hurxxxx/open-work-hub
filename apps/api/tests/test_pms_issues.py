@@ -352,9 +352,23 @@ def test_space_docs_collection_permissions_and_soft_delete(client: TestClient) -
     assert editor_list_after_team_scope_response.status_code == 200
     assert [item["id"] for item in editor_list_after_team_scope_response.json()["items"]] == [collection["id"]]
 
+    member_page_response = client.post(
+        f"/api/v1/pms/spaces/{space_id}/docs/pages",
+        headers=_auth_headers(project_editor_token),
+        json={"title": "Member page", "space_doc_id": collection["id"]},
+    )
+    assert member_page_response.status_code == 201
+
     second_collection_response = client.post(
         f"/api/v1/pms/spaces/{space_id}/docs",
         headers=_auth_headers(project_editor_token),
+        json={"title": "Project Notes"},
+    )
+    assert second_collection_response.status_code == 403
+
+    second_collection_response = client.post(
+        f"/api/v1/pms/spaces/{space_id}/docs",
+        headers=_auth_headers(admin_session["token"]),
         json={"title": "Project Notes"},
     )
     assert second_collection_response.status_code == 201

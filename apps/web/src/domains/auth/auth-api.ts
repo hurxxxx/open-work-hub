@@ -20,6 +20,12 @@ const WORKSPACE_ROLE_RANK: Record<string, number> = {
   workspace_admin: 40,
 };
 
+const TEAM_ROLE_RANK: Record<string, number> = {
+  viewer: 10,
+  member: 20,
+  team_admin: 30,
+};
+
 export interface AuthUser {
   id: string;
   email: string;
@@ -56,6 +62,17 @@ export function workspaceRoleAllows(
   }
 
   return (WORKSPACE_ROLE_RANK[role] ?? -1) >= WORKSPACE_ROLE_RANK[minRole];
+}
+
+export function teamRoleAllows(
+  role: string | null | undefined,
+  minRole: keyof typeof TEAM_ROLE_RANK,
+): boolean {
+  if (!role) {
+    return false;
+  }
+
+  return (TEAM_ROLE_RANK[role] ?? -1) >= TEAM_ROLE_RANK[minRole];
 }
 
 export interface BootstrapStatusResponse {
