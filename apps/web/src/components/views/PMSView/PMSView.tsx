@@ -58,6 +58,7 @@ import { FilterBar } from './FilterBar';
 import { BulkActionBar } from './BulkActionBar';
 import { SpaceDocsView } from './SpaceDocsView';
 import { SpaceOverviewView } from './SpaceOverviewView';
+import { projectRoleAllows } from '@/src/domains/pms/pms-permissions';
 
 function isSameListCollection(left: PmsList[], right: PmsList[]): boolean {
   if (left.length !== right.length) {
@@ -73,22 +74,6 @@ function isSameListCollection(left: PmsList[], right: PmsList[]): boolean {
       && item?.folder_id === other?.folder_id
     );
   });
-}
-
-const PROJECT_ROLE_RANK: Record<string, number> = {
-  viewer: 0,
-  member: 1,
-  editor: 2,
-  admin: 3,
-  owner: 4,
-};
-
-function projectRoleAllows(role: string | null | undefined, minRole: keyof typeof PROJECT_ROLE_RANK): boolean {
-  if (!role) {
-    return false;
-  }
-
-  return (PROJECT_ROLE_RANK[role] ?? -1) >= PROJECT_ROLE_RANK[minRole];
 }
 
 export const PMSView = () => {
@@ -556,6 +541,7 @@ export const PMSView = () => {
                 projectLabels={labels}
                 projectStatuses={projectStatuses}
                 spaceName={selectedProject?.team_name}
+                canEdit={canEditProject}
                 onClose={clearSelectedIssue}
                 onUpdate={reloadIssues}
               />

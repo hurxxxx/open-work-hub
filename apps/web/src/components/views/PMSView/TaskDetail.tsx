@@ -60,6 +60,7 @@ const PRIORITIES = ['low', 'medium', 'high', 'critical'] as const;
 const PRIORITY_LABELS: Record<string, string> = { low: 'Low', medium: 'Medium', high: 'High', critical: 'Critical' };
 
 const selectClass = 'app-text-body bg-transparent text-clickup-text border border-clickup-border rounded-md px-2 py-1 focus:outline-none focus:border-clickup-purple cursor-pointer hover:border-clickup-text/30 transition-colors';
+const disabledFieldClass = `${selectClass} disabled:cursor-not-allowed disabled:opacity-60`;
 
 function getErrorMessage(error: unknown, fallback: string): string {
   return error instanceof Error && error.message ? error.message : fallback;
@@ -72,6 +73,7 @@ export const TaskDetail = ({
   projectLabels = [],
   projectStatuses,
   spaceName,
+  canEdit = true,
   onClose,
   onUpdate,
 }: {
@@ -81,6 +83,7 @@ export const TaskDetail = ({
   projectLabels?: PmsLabel[];
   projectStatuses?: PmsProjectStatus[];
   spaceName?: string | null;
+  canEdit?: boolean;
   onClose: () => void;
   onUpdate?: () => void | Promise<void>;
 }) => {
@@ -122,6 +125,17 @@ export const TaskDetail = ({
   const selectedLabelIds = issueState.labels.map((label) => label.id);
 
   useEffect(() => {
+    if (canEdit) {
+      return;
+    }
+
+    setLabelPickerOpen(false);
+    setMentionOpen(false);
+    setSubtaskMenuOpen(null);
+    setDescFullscreen(false);
+  }, [canEdit]);
+
+  useEffect(() => {
     setIssueState(issue);
     setSaveError(null);
   }, [issue]);
@@ -157,7 +171,7 @@ export const TaskDetail = ({
       applyOptimistic: (current: PmsIssue) => PmsIssue,
       fallbackMessage: string,
     ) => {
-      if (!token) return null;
+      if (!token || !canEdit) return null;
 
       const previousIssue = issueState;
       setSaveError(null);
@@ -174,7 +188,7 @@ export const TaskDetail = ({
         return null;
       }
     },
-    [issueState, onUpdate, token],
+    [canEdit, issueState, onUpdate, token],
   );
 
   const patchField = useCallback(
@@ -190,7 +204,7 @@ export const TaskDetail = ({
 
   const handleDescriptionChange = useCallback(
     (content: BlockContent) => {
-      if (!token) return;
+      if (!token || !canEdit) return;
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
       setSaveError(null);
       saveTimerRef.current = setTimeout(() => {
@@ -208,11 +222,11 @@ export const TaskDetail = ({
           });
       }, 500);
     },
-    [issueState.id, onUpdate, token],
+    [canEdit, issueState.id, onUpdate, token],
   );
 
   const handleUnlinkSubtask = useCallback(async (subtaskId: string) => {
-    if (!token) return;
+    if (!token || !canEdit) return;
     setSaveError(null);
     try {
       await updateIssue(token, subtaskId, { parent_id: null });
@@ -221,10 +235,10 @@ export const TaskDetail = ({
     } catch (error) {
       setSaveError(getErrorMessage(error, '서브태스크 연결을 해제하지 못했습니다.'));
     }
-  }, [token, onUpdate]);
+  }, [canEdit, token, onUpdate]);
 
   const handleArchiveSubtask = useCallback(async (subtaskId: string) => {
-    if (!token) return;
+    if (!token || !canEdit) return;
     setSaveError(null);
     try {
       await updateIssue(token, subtaskId, { archived: true });
@@ -234,10 +248,10 @@ export const TaskDetail = ({
     } catch (error) {
       setSaveError(getErrorMessage(error, '서브태스크를 보관하지 못했습니다.'));
     }
-  }, [token, onUpdate]);
+  }, [canEdit, token, onUpdate]);
 
   const handleDeleteSubtask = useCallback(async (subtaskId: string) => {
-    if (!token) return;
+    if (!token || !canEdit) return;
     setSaveError(null);
     try {
       await deleteIssue(token, subtaskId);
@@ -247,19 +261,20 @@ export const TaskDetail = ({
     } catch (error) {
       setSaveError(getErrorMessage(error, '서브태스크를 삭제하지 못했습니다.'));
     }
-  }, [token, onUpdate]);
+  }, [canEdit, token, onUpdate]);
 
   const handleToggleIssueArchive = useCallback(() => {
+    if (!canEdit) return;
     const nextArchived = !issueState.archived;
     void persistIssueUpdate(
       { archived: nextArchived },
       (current) => ({ ...current, archived: nextArchived }),
       nextArchived ? '이슈를 보관하지 못했습니다.' : '이슈를 복구하지 못했습니다.',
     );
-  }, [issueState.archived, persistIssueUpdate]);
+  }, [canEdit, issueState.archived, persistIssueUpdate]);
 
   const handleAddSubtask = useCallback(async () => {
-    if (!token || !newSubtaskTitle.trim()) return;
+    if (!token || !canEdit || !newSubtaskTitle.trim()) return;
     setAddingSubtask(true);
     setSaveError(null);
     try {
@@ -281,12 +296,12 @@ export const TaskDetail = ({
     } finally {
       setAddingSubtask(false);
     }
-  }, [token, issue.id, issue.project_id, newSubtaskTitle, onUpdate]);
+  }, [canEdit, token, issue.id, issue.project_id, newSubtaskTitle, onUpdate]);
 
   // ── Checklist handlers ──────────────────────────────────────────
 
   const handleAddChecklistItem = useCallback(async () => {
-    if (!token || !newChecklistText.trim()) return;
+    if (!token || !canEdit || !newChecklistText.trim()) return;
     setAddingChecklist(true);
     setSaveError(null);
     try {
@@ -302,10 +317,10 @@ export const TaskDetail = ({
     } finally {
       setAddingChecklist(false);
     }
-  }, [token, issue.id, newChecklistText, checklistItems.length, onUpdate]);
+  }, [canEdit, token, issue.id, newChecklistText, checklistItems.length, onUpdate]);
 
   const handleToggleChecklistItem = useCallback(async (item: PmsChecklistItem) => {
-    if (!token) return;
+    if (!token || !canEdit) return;
     const newCompleted = !item.completed;
     setChecklistItems(prev => prev.map(ci => ci.id === item.id ? { ...ci, completed: newCompleted } : ci));
     try {
@@ -315,10 +330,10 @@ export const TaskDetail = ({
       setChecklistItems(prev => prev.map(ci => ci.id === item.id ? { ...ci, completed: !newCompleted } : ci));
       setSaveError(getErrorMessage(error, '체크리스트 항목을 변경하지 못했습니다.'));
     }
-  }, [token, onUpdate]);
+  }, [canEdit, token, onUpdate]);
 
   const handleSaveChecklistEdit = useCallback(async (itemId: string) => {
-    if (!token || !editingChecklistText.trim()) return;
+    if (!token || !canEdit || !editingChecklistText.trim()) return;
     try {
       await updateChecklistItem(token, itemId, { text: editingChecklistText.trim() });
       setChecklistItems(prev => prev.map(ci => ci.id === itemId ? { ...ci, text: editingChecklistText.trim() } : ci));
@@ -326,10 +341,10 @@ export const TaskDetail = ({
     } catch (error) {
       setSaveError(getErrorMessage(error, '체크리스트 항목을 수정하지 못했습니다.'));
     }
-  }, [token, editingChecklistText]);
+  }, [canEdit, token, editingChecklistText]);
 
   const handleDeleteChecklistItem = useCallback(async (itemId: string) => {
-    if (!token) return;
+    if (!token || !canEdit) return;
     try {
       await deleteChecklistItem(token, itemId);
       setChecklistItems(prev => prev.filter(ci => ci.id !== itemId));
@@ -337,7 +352,7 @@ export const TaskDetail = ({
     } catch (error) {
       setSaveError(getErrorMessage(error, '체크리스트 항목을 삭제하지 못했습니다.'));
     }
-  }, [token, onUpdate]);
+  }, [canEdit, token, onUpdate]);
 
   const checklistDone = checklistItems.filter(ci => ci.completed).length;
   const checklistTotal = checklistItems.length;
@@ -355,7 +370,7 @@ export const TaskDetail = ({
   const totalTimeSpent = timeEntries.reduce((sum, te) => sum + te.duration_minutes, 0);
 
   const handleLogTime = useCallback(async () => {
-    if (!token || !timeLogMinutes) return;
+    if (!token || !canEdit || !timeLogMinutes) return;
     const mins = Math.round(parseFloat(timeLogMinutes) * 60);
     if (isNaN(mins) || mins <= 0) return;
     setLoggingTime(true);
@@ -375,10 +390,10 @@ export const TaskDetail = ({
     } finally {
       setLoggingTime(false);
     }
-  }, [token, issue.id, timeLogMinutes, timeLogDesc, onUpdate]);
+  }, [canEdit, token, issue.id, timeLogMinutes, timeLogDesc, onUpdate]);
 
   const handleDeleteTimeEntry = useCallback(async (entryId: string) => {
-    if (!token) return;
+    if (!token || !canEdit) return;
     try {
       await deleteTimeEntry(token, entryId);
       setTimeEntries(prev => prev.filter(te => te.id !== entryId));
@@ -386,22 +401,22 @@ export const TaskDetail = ({
     } catch (error) {
       setSaveError(getErrorMessage(error, '시간 기록을 삭제하지 못했습니다.'));
     }
-  }, [token, onUpdate]);
+  }, [canEdit, token, onUpdate]);
 
   // ── Dependency handlers ──────────────────────────────────────────
   const handleDepSearch = useCallback(async (query: string) => {
     setDepSearchQuery(query);
-    if (!token || !query.trim()) { setDepSearchResults([]); return; }
+    if (!token || !canEdit || !query.trim()) { setDepSearchResults([]); return; }
     setDepSearching(true);
     try {
       const res = await listProjectIssues(token, issue.project_id, { q: query.trim() });
       setDepSearchResults(res.items.filter(i => i.id !== issue.id));
     } catch { setDepSearchResults([]); }
     finally { setDepSearching(false); }
-  }, [token, issue.id, issue.project_id]);
+  }, [canEdit, token, issue.id, issue.project_id]);
 
   const handleAddDependency = useCallback(async (targetId: string) => {
-    if (!token) return;
+    if (!token || !canEdit) return;
     setAddingDep(true);
     try {
       const dep = await createDependency(token, { predecessor_id: targetId, successor_id: issue.id });
@@ -412,9 +427,10 @@ export const TaskDetail = ({
     } catch (error) {
       setSaveError(getErrorMessage(error, '의존성을 추가하지 못했습니다.'));
     } finally { setAddingDep(false); }
-  }, [token, issue.id, onUpdate]);
+  }, [canEdit, token, issue.id, onUpdate]);
 
   const handleToggleLabel = useCallback((labelId: string) => {
+    if (!canEdit) return;
     const nextLabelIds = selectedLabelIds.includes(labelId)
       ? selectedLabelIds.filter(id => id !== labelId)
       : [...selectedLabelIds, labelId];
@@ -424,10 +440,10 @@ export const TaskDetail = ({
       (current) => ({ ...current, labels: nextLabels }),
       '라벨을 저장하지 못했습니다.',
     );
-  }, [persistIssueUpdate, projectLabels, selectedLabelIds]);
+  }, [canEdit, persistIssueUpdate, projectLabels, selectedLabelIds]);
 
   const handleCommentSubmit = useCallback(() => {
-    if (!token || !commentDraft.trim()) return;
+    if (!token || !canEdit || !commentDraft.trim()) return;
     setSaveError(null);
     createIssueComment(token, issue.id, commentDraft.trim())
       .then(async (newComment) => {
@@ -438,10 +454,10 @@ export const TaskDetail = ({
       .catch((error) => {
         setSaveError(getErrorMessage(error, '댓글을 등록하지 못했습니다.'));
       });
-  }, [token, issue.id, commentDraft, onUpdate]);
+  }, [canEdit, token, issue.id, commentDraft, onUpdate]);
 
   const handleFileUpload = useCallback(async (files: FileList | File[]) => {
-    if (!token) return;
+    if (!token || !canEdit) return;
     setUploading(true);
     setSaveError(null);
     try {
@@ -456,10 +472,10 @@ export const TaskDetail = ({
       setUploading(false);
       setDragOver(false);
     }
-  }, [token, issue.id, onUpdate]);
+  }, [canEdit, token, issue.id, onUpdate]);
 
   const handleDeleteAttachment = useCallback(async (attachmentId: string) => {
-    if (!token) return;
+    if (!token || !canEdit) return;
     setSaveError(null);
     try {
       await deleteAttachment(token, attachmentId);
@@ -468,7 +484,7 @@ export const TaskDetail = ({
     } catch (error) {
       setSaveError(getErrorMessage(error, '첨부파일을 삭제하지 못했습니다.'));
     }
-  }, [token, onUpdate]);
+  }, [canEdit, token, onUpdate]);
 
   // Description fullscreen mode
   if (descFullscreen) {
@@ -486,14 +502,21 @@ export const TaskDetail = ({
         </div>
         <div className="flex-1 overflow-y-auto custom-scrollbar px-8 py-6 max-w-4xl mx-auto w-full">
           <h1 className="app-text-title-lg mb-6 text-clickup-text">{issueState.title}</h1>
-          <BlockEditor
-            initialContent={issueState.description_blocks as BlockContent | undefined}
-            onChange={handleDescriptionChange}
-            placeholder="Start writing..."
-            className="[&_.bn-editor]:min-h-[400px] [&_.bn-editor]:px-1"
-            uploadFile={uploadFile}
-            resolveFileUrl={resolveFileUrl}
-          />
+          {canEdit ? (
+            <BlockEditor
+              initialContent={issueState.description_blocks as BlockContent | undefined}
+              onChange={handleDescriptionChange}
+              placeholder="Start writing..."
+              className="[&_.bn-editor]:min-h-[400px] [&_.bn-editor]:px-1"
+              uploadFile={uploadFile}
+              resolveFileUrl={resolveFileUrl}
+            />
+          ) : (
+            <BlockViewer
+              content={(issueState.description_blocks as BlockContent | null) ?? []}
+              resolveFileUrl={resolveFileUrl}
+            />
+          )}
         </div>
       </div>
     );
@@ -509,13 +532,19 @@ export const TaskDetail = ({
           <span className="text-clickup-text/70">{issueState.reference}</span>
         </div>
         <div className="flex items-center gap-1">
-          <button
-            type="button"
-            onClick={handleToggleIssueArchive}
-            className="app-text-control-sm rounded-md border border-clickup-border px-2.5 py-1 text-clickup-text/60 transition-colors hover:border-clickup-text/30 hover:text-clickup-text"
-          >
-            {issueState.archived ? 'Restore' : 'Archive'}
-          </button>
+          {!canEdit ? (
+            <span className="app-text-overline rounded-full border border-clickup-border px-2 py-1 text-clickup-text/50">
+              Read only
+            </span>
+          ) : (
+            <button
+              type="button"
+              onClick={handleToggleIssueArchive}
+              className="app-text-control-sm rounded-md border border-clickup-border px-2.5 py-1 text-clickup-text/60 transition-colors hover:border-clickup-text/30 hover:text-clickup-text"
+            >
+              {issueState.archived ? 'Restore' : 'Archive'}
+            </button>
+          )}
           <Button variant="ghost" size="icon"><Share2 size={16} /></Button>
           <Button variant="ghost" size="icon"><MoreHorizontal size={16} /></Button>
           <Button variant="ghost" size="icon" onClick={onClose}><X size={16} /></Button>
@@ -542,26 +571,26 @@ export const TaskDetail = ({
             {/* Meta fields — 2-column grid like ClickUp */}
             <div className="grid grid-cols-[auto_1fr_auto_1fr] items-center gap-x-6 gap-y-3">
               <MetaLabel>Status</MetaLabel>
-              <select value={issueState.status} onChange={e => patchField('status', e.target.value)} className={selectClass}>
+              <select value={issueState.status} onChange={e => patchField('status', e.target.value)} className={disabledFieldClass} disabled={!canEdit}>
                 {getStatusSlugs(projectStatuses).map(s => <option key={s} value={s}>{getStatusLabel(s, projectStatuses)}</option>)}
               </select>
               <MetaLabel>Assignee</MetaLabel>
-              <select value={issueState.assignee_id ?? ''} onChange={e => patchField('assignee_id', e.target.value || null)} className={selectClass}>
+              <select value={issueState.assignee_id ?? ''} onChange={e => patchField('assignee_id', e.target.value || null)} className={disabledFieldClass} disabled={!canEdit}>
                 <option value="">Unassigned</option>
                 {members.map(m => <option key={m.user_id} value={m.user_id}>{m.full_name}</option>)}
               </select>
 
               <MetaLabel>Start</MetaLabel>
-              <input type="date" value={issueState.start_date ?? ''} onChange={e => patchField('start_date', e.target.value || null)} className={selectClass} />
+              <input type="date" value={issueState.start_date ?? ''} onChange={e => patchField('start_date', e.target.value || null)} className={disabledFieldClass} disabled={!canEdit} />
               <MetaLabel>Due</MetaLabel>
-              <input type="date" value={issueState.due_date ?? ''} onChange={e => patchField('due_date', e.target.value || null)} className={selectClass} />
+              <input type="date" value={issueState.due_date ?? ''} onChange={e => patchField('due_date', e.target.value || null)} className={disabledFieldClass} disabled={!canEdit} />
 
               <MetaLabel>Priority</MetaLabel>
-              <select value={issueState.priority} onChange={e => patchField('priority', e.target.value)} className={selectClass}>
+              <select value={issueState.priority} onChange={e => patchField('priority', e.target.value)} className={disabledFieldClass} disabled={!canEdit}>
                 {PRIORITIES.map(p => <option key={p} value={p}>{PRIORITY_LABELS[p]}</option>)}
               </select>
               <MetaLabel>Milestone</MetaLabel>
-              <select value={issueState.milestone_id ?? ''} onChange={e => patchField('milestone_id', e.target.value || null)} className={selectClass}>
+              <select value={issueState.milestone_id ?? ''} onChange={e => patchField('milestone_id', e.target.value || null)} className={disabledFieldClass} disabled={!canEdit}>
                 <option value="">None</option>
                 {milestones.map(m => <option key={m.id} value={m.id}>{m.title}</option>)}
               </select>
@@ -570,7 +599,8 @@ export const TaskDetail = ({
               <select
                 value={issueState.recurrence_rule ?? ''}
                 onChange={e => patchField('recurrence_rule', e.target.value || null)}
-                className={selectClass}
+                className={disabledFieldClass}
+                disabled={!canEdit}
               >
                 <option value="">None</option>
                 <option value="daily">Daily</option>
@@ -581,8 +611,15 @@ export const TaskDetail = ({
               <MetaLabel>Labels</MetaLabel>
               <div className="col-span-3 relative">
                 <button
-                  onClick={() => setLabelPickerOpen(prev => !prev)}
-                  className="flex flex-wrap gap-1 min-h-[28px] items-center hover:bg-clickup-hover/50 rounded px-1 py-0.5 transition-colors w-full text-left"
+                  type="button"
+                  onClick={() => {
+                    if (!canEdit) return;
+                    setLabelPickerOpen(prev => !prev);
+                  }}
+                  className={`flex min-h-[28px] w-full flex-wrap items-center gap-1 rounded px-1 py-0.5 text-left transition-colors ${
+                    canEdit ? 'hover:bg-clickup-hover/50' : 'cursor-default'
+                  }`}
+                  disabled={!canEdit}
                 >
                   {selectedLabelIds.length > 0 ? (
                     selectedLabelIds.map(id => {
@@ -598,10 +635,13 @@ export const TaskDetail = ({
                       ) : null;
                     })
                   ) : (
-                    <span className="app-text-body flex items-center gap-1 text-clickup-text/40"><Tag size={12} /> Add labels...</span>
+                    <span className="app-text-body flex items-center gap-1 text-clickup-text/40">
+                      <Tag size={12} />
+                      {canEdit ? 'Add labels...' : 'No labels'}
+                    </span>
                   )}
                 </button>
-                {labelPickerOpen && (
+                {labelPickerOpen && canEdit && (
                   <>
                     <div className="fixed inset-0 z-10" onClick={() => setLabelPickerOpen(false)} />
                     <div className="absolute left-0 top-8 z-20 w-48 bg-clickup-bg border border-clickup-border rounded-lg shadow-xl py-1">
@@ -640,14 +680,23 @@ export const TaskDetail = ({
                 </Button>
               </div>
               <div className="rounded-lg border border-clickup-border overflow-hidden">
-                <BlockEditor
-                  initialContent={issueState.description_blocks as BlockContent | undefined}
-                  onChange={handleDescriptionChange}
-                  placeholder="Add a description..."
-                  className="[&_.bn-editor]:min-h-[120px] [&_.bn-editor]:px-3 [&_.bn-editor]:py-2"
-                  uploadFile={uploadFile}
-                  resolveFileUrl={resolveFileUrl}
-                />
+                {canEdit ? (
+                  <BlockEditor
+                    initialContent={issueState.description_blocks as BlockContent | undefined}
+                    onChange={handleDescriptionChange}
+                    placeholder="Add a description..."
+                    className="[&_.bn-editor]:min-h-[120px] [&_.bn-editor]:px-3 [&_.bn-editor]:py-2"
+                    uploadFile={uploadFile}
+                    resolveFileUrl={resolveFileUrl}
+                  />
+                ) : (
+                  <div className="px-3 py-2">
+                    <BlockViewer
+                      content={(issueState.description_blocks as BlockContent | null) ?? []}
+                      resolveFileUrl={resolveFileUrl}
+                    />
+                  </div>
+                )}
               </div>
             </div>
 
@@ -685,6 +734,7 @@ export const TaskDetail = ({
                           type="checkbox"
                           checked={ci.completed}
                           onChange={() => handleToggleChecklistItem(ci)}
+                          disabled={!canEdit}
                           className="h-3.5 w-3.5 rounded border-clickup-border accent-clickup-purple cursor-pointer shrink-0"
                         />
                         {editingChecklistId === ci.id ? (
@@ -696,25 +746,31 @@ export const TaskDetail = ({
                               if (e.key === 'Enter' && !e.nativeEvent.isComposing) { e.preventDefault(); handleSaveChecklistEdit(ci.id); }
                               if (e.key === 'Escape') setEditingChecklistId(null);
                             }}
-                            onBlur={() => handleSaveChecklistEdit(ci.id)}
+                            onBlur={() => { if (canEdit) { void handleSaveChecklistEdit(ci.id); } }}
                             autoFocus
                             className="app-text-body flex-1 border-b border-clickup-purple bg-transparent py-0.5 text-clickup-text focus:outline-none"
                           />
                         ) : (
                           <span
-                            className={`app-text-body flex-1 cursor-pointer ${ci.completed ? 'line-through text-clickup-text/40' : 'text-clickup-text'}`}
-                            onClick={() => { setEditingChecklistId(ci.id); setEditingChecklistText(ci.text); }}
+                            className={`app-text-body flex-1 ${canEdit ? 'cursor-pointer' : 'cursor-default'} ${ci.completed ? 'line-through text-clickup-text/40' : 'text-clickup-text'}`}
+                            onClick={() => {
+                              if (!canEdit) return;
+                              setEditingChecklistId(ci.id);
+                              setEditingChecklistText(ci.text);
+                            }}
                           >
                             {ci.text}
                           </span>
                         )}
-                        <button
-                          onClick={() => handleDeleteChecklistItem(ci.id)}
-                          className="opacity-0 group-hover:opacity-100 text-clickup-text/30 hover:text-red-400 transition-all p-0.5 rounded"
-                          title="Delete"
-                        >
-                          <X size={13} />
-                        </button>
+                        {canEdit ? (
+                          <button
+                            onClick={() => { void handleDeleteChecklistItem(ci.id); }}
+                            className="opacity-0 group-hover:opacity-100 text-clickup-text/30 hover:text-red-400 transition-all p-0.5 rounded"
+                            title="Delete"
+                          >
+                            <X size={13} />
+                          </button>
+                        ) : null}
                       </div>
                     ))}
                   </div>
@@ -727,10 +783,11 @@ export const TaskDetail = ({
                   value={newChecklistText}
                   onChange={e => setNewChecklistText(e.target.value)}
                   onKeyDown={e => { if (e.key === 'Enter' && !e.nativeEvent.isComposing && newChecklistText.trim()) { e.preventDefault(); handleAddChecklistItem(); } }}
-                  placeholder="+ Add checklist item..."
+                  placeholder={canEdit ? '+ Add checklist item...' : 'Checklist is read-only'}
                   className="app-text-body flex-1 border-b border-transparent bg-transparent py-1 text-clickup-text placeholder:text-clickup-text/40 transition-colors focus:border-clickup-purple focus:outline-none"
+                  disabled={!canEdit}
                 />
-                {newChecklistText.trim() && (
+                {canEdit && newChecklistText.trim() && (
                   <Button variant="ghost" size="icon" onClick={handleAddChecklistItem} disabled={addingChecklist}>
                     <Send size={14} />
                   </Button>
@@ -770,44 +827,46 @@ export const TaskDetail = ({
                         </div>
                       )}
                       {/* ··· context menu */}
-                      <div className="relative">
-                        <button
-                          onClick={(e) => { e.stopPropagation(); setSubtaskMenuOpen(prev => prev === sub.id ? null : sub.id); }}
-                          className="opacity-0 group-hover:opacity-100 text-clickup-text/30 hover:text-clickup-text transition-all p-0.5 rounded"
-                          title="More options"
-                        >
-                          <MoreHorizontal size={14} />
-                        </button>
-                        {subtaskMenuOpen === sub.id && (
-                          <>
-                            <div className="fixed inset-0 z-10" onClick={() => setSubtaskMenuOpen(null)} />
-                            <div className="app-text-body absolute right-0 top-full z-20 w-36 rounded-lg border border-clickup-border bg-clickup-bg py-1 shadow-xl">
-                              <button
-                                onClick={(e) => { e.stopPropagation(); handleUnlinkSubtask(sub.id); setSubtaskMenuOpen(null); }}
-                                className="flex items-center gap-2 w-full px-3 py-1.5 text-clickup-text/70 hover:bg-clickup-hover hover:text-clickup-text transition-colors"
-                              >
-                                <Unlink size={13} />
-                                Unlink
-                              </button>
-                              <button
-                                onClick={(e) => { e.stopPropagation(); handleArchiveSubtask(sub.id); }}
-                                className="flex items-center gap-2 w-full px-3 py-1.5 text-clickup-text/70 hover:bg-clickup-hover hover:text-clickup-text transition-colors"
-                              >
-                                <Archive size={13} />
-                                Archive
-                              </button>
-                              <hr className="border-clickup-border my-1" />
-                              <button
-                                onClick={(e) => { e.stopPropagation(); handleDeleteSubtask(sub.id); }}
-                                className="flex items-center gap-2 w-full px-3 py-1.5 text-red-400 hover:bg-clickup-hover hover:text-red-500 transition-colors"
-                              >
-                                <Trash2 size={13} />
-                                Delete
-                              </button>
-                            </div>
-                          </>
-                        )}
-                      </div>
+                      {canEdit ? (
+                        <div className="relative">
+                          <button
+                            onClick={(e) => { e.stopPropagation(); setSubtaskMenuOpen(prev => prev === sub.id ? null : sub.id); }}
+                            className="opacity-0 group-hover:opacity-100 text-clickup-text/30 hover:text-clickup-text transition-all p-0.5 rounded"
+                            title="More options"
+                          >
+                            <MoreHorizontal size={14} />
+                          </button>
+                          {subtaskMenuOpen === sub.id && (
+                            <>
+                              <div className="fixed inset-0 z-10" onClick={() => setSubtaskMenuOpen(null)} />
+                              <div className="app-text-body absolute right-0 top-full z-20 w-36 rounded-lg border border-clickup-border bg-clickup-bg py-1 shadow-xl">
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); void handleUnlinkSubtask(sub.id); setSubtaskMenuOpen(null); }}
+                                  className="flex items-center gap-2 w-full px-3 py-1.5 text-clickup-text/70 hover:bg-clickup-hover hover:text-clickup-text transition-colors"
+                                >
+                                  <Unlink size={13} />
+                                  Unlink
+                                </button>
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); void handleArchiveSubtask(sub.id); }}
+                                  className="flex items-center gap-2 w-full px-3 py-1.5 text-clickup-text/70 hover:bg-clickup-hover hover:text-clickup-text transition-colors"
+                                >
+                                  <Archive size={13} />
+                                  Archive
+                                </button>
+                                <hr className="border-clickup-border my-1" />
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); void handleDeleteSubtask(sub.id); }}
+                                  className="flex items-center gap-2 w-full px-3 py-1.5 text-red-400 hover:bg-clickup-hover hover:text-red-500 transition-colors"
+                                >
+                                  <Trash2 size={13} />
+                                  Delete
+                                </button>
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      ) : null}
                     </div>
                   ))}
                 </div>
@@ -819,10 +878,11 @@ export const TaskDetail = ({
                   value={newSubtaskTitle}
                   onChange={e => setNewSubtaskTitle(e.target.value)}
                   onKeyDown={e => { if (e.key === 'Enter' && !e.nativeEvent.isComposing && newSubtaskTitle.trim()) { e.preventDefault(); handleAddSubtask(); } }}
-                  placeholder="+ Add subtask..."
+                  placeholder={canEdit ? '+ Add subtask...' : 'Subtasks are read-only'}
                   className="app-text-body flex-1 border-b border-transparent bg-transparent py-1 text-clickup-text placeholder:text-clickup-text/40 transition-colors focus:border-clickup-purple focus:outline-none"
+                  disabled={!canEdit}
                 />
-                {newSubtaskTitle.trim() && (
+                {canEdit && newSubtaskTitle.trim() && (
                   <Button variant="ghost" size="icon" onClick={handleAddSubtask} disabled={addingSubtask}>
                     <Send size={14} />
                   </Button>
@@ -850,18 +910,20 @@ export const TaskDetail = ({
                           {isBlocking ? 'Blocks' : 'Blocked by'}
                         </span>
                         <span className="app-text-caption flex-1 truncate font-mono text-clickup-text/60">{linkedId.slice(0, 8)}…</span>
-                        <button
-                          onClick={async () => {
-                            if (!token) return;
-                            await deleteDependency(token, dep.id);
-                            setDependencies(prev => prev.filter(d => d.id !== dep.id));
-                            await Promise.resolve(onUpdate?.());
-                          }}
-                          className="opacity-0 group-hover:opacity-100 text-clickup-text/30 hover:text-red-400 transition-all"
-                          title="Remove dependency"
-                        >
-                          <X size={13} />
-                        </button>
+                        {canEdit ? (
+                          <button
+                            onClick={async () => {
+                              if (!token) return;
+                              await deleteDependency(token, dep.id);
+                              setDependencies(prev => prev.filter(d => d.id !== dep.id));
+                              await Promise.resolve(onUpdate?.());
+                            }}
+                            className="opacity-0 group-hover:opacity-100 text-clickup-text/30 hover:text-red-400 transition-all"
+                            title="Remove dependency"
+                          >
+                            <X size={13} />
+                          </button>
+                        ) : null}
                       </div>
                     );
                   })}
@@ -872,10 +934,11 @@ export const TaskDetail = ({
                   type="text"
                   value={depSearchQuery}
                   onChange={e => handleDepSearch(e.target.value)}
-                  placeholder="+ Add dependency (search issue)..."
+                  placeholder={canEdit ? '+ Add dependency (search issue)...' : 'Dependencies are read-only'}
                   className="app-text-body w-full border-b border-transparent bg-transparent py-1 text-clickup-text placeholder:text-clickup-text/40 transition-colors focus:border-clickup-purple focus:outline-none"
+                  disabled={!canEdit}
                 />
-                {depSearchResults.length > 0 && (
+                {canEdit && depSearchResults.length > 0 && (
                   <div className="absolute left-0 top-full z-20 mt-1 w-full max-h-40 overflow-y-auto rounded-lg border border-clickup-border bg-clickup-bg shadow-xl py-1">
                     {depSearchResults.map(r => (
                       <button
@@ -938,12 +1001,14 @@ export const TaskDetail = ({
                         >
                           <Download size={14} />
                         </a>
-                        <button
-                          onClick={() => handleDeleteAttachment(att.id)}
-                          className="opacity-0 group-hover:opacity-100 text-clickup-text/40 hover:text-red-400 transition-all"
-                        >
-                          <Trash2 size={14} />
-                        </button>
+                        {canEdit ? (
+                          <button
+                            onClick={() => { void handleDeleteAttachment(att.id); }}
+                            className="opacity-0 group-hover:opacity-100 text-clickup-text/40 hover:text-red-400 transition-all"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        ) : null}
                       </div>
                     );
                   })}
@@ -951,25 +1016,30 @@ export const TaskDetail = ({
               )}
 
               <div
-                onDragOver={e => { e.preventDefault(); setDragOver(true); }}
-                onDragLeave={() => setDragOver(false)}
-                onDrop={e => { e.preventDefault(); if (e.dataTransfer.files.length) handleFileUpload(e.dataTransfer.files); }}
-                onClick={() => fileInputRef.current?.click()}
-                className={`app-text-body cursor-pointer rounded-lg border-2 border-dashed py-4 text-center transition-colors ${
-                  dragOver ? 'border-clickup-purple bg-clickup-purple/5 text-clickup-purple' : 'border-clickup-border text-clickup-text/40 hover:border-clickup-text/30'
+                onDragOver={canEdit ? (e) => { e.preventDefault(); setDragOver(true); } : undefined}
+                onDragLeave={canEdit ? () => setDragOver(false) : undefined}
+                onDrop={canEdit ? (e) => { e.preventDefault(); if (e.dataTransfer.files.length) { void handleFileUpload(e.dataTransfer.files); } } : undefined}
+                onClick={canEdit ? () => fileInputRef.current?.click() : undefined}
+                className={`app-text-body rounded-lg border-2 border-dashed py-4 text-center transition-colors ${
+                  canEdit
+                    ? dragOver
+                      ? 'cursor-pointer border-clickup-purple bg-clickup-purple/5 text-clickup-purple'
+                      : 'cursor-pointer border-clickup-border text-clickup-text/40 hover:border-clickup-text/30'
+                    : 'cursor-default border-clickup-border text-clickup-text/30'
                 }`}
               >
                 {uploading ? (
                   <Loader2 size={16} className="animate-spin mx-auto text-clickup-purple" />
                 ) : (
-                  <span>{dragOver ? 'Drop to upload' : 'Click or drag files to upload'}</span>
+                  <span>{canEdit ? (dragOver ? 'Drop to upload' : 'Click or drag files to upload') : 'Attachments are read-only'}</span>
                 )}
                 <input
                   ref={fileInputRef}
                   type="file"
                   multiple
                   className="hidden"
-                  onChange={e => { if (e.target.files?.length) { handleFileUpload(e.target.files); e.target.value = ''; } }}
+                  disabled={!canEdit}
+                  onChange={e => { if (e.target.files?.length) { void handleFileUpload(e.target.files); e.target.value = ''; } }}
                 />
               </div>
             </div>
@@ -998,6 +1068,7 @@ export const TaskDetail = ({
                     }}
                     placeholder="—"
                     className="w-14 bg-transparent text-clickup-text border-b border-clickup-border focus:border-clickup-purple focus:outline-none text-center py-0.5"
+                    disabled={!canEdit}
                   />
                   <span className="text-clickup-text/40">h</span>
                 </div>
@@ -1024,12 +1095,14 @@ export const TaskDetail = ({
                       <span className="text-clickup-text font-medium">{formatDuration(te.duration_minutes)}</span>
                       <span className="text-clickup-text/40">{te.entry_date}</span>
                       <span className="text-clickup-text/50 flex-1 truncate">{te.description || te.user_name}</span>
-                      <button
-                        onClick={() => handleDeleteTimeEntry(te.id)}
-                        className="opacity-0 group-hover:opacity-100 text-clickup-text/30 hover:text-red-400 transition-all p-0.5"
-                      >
-                        <X size={11} />
-                      </button>
+                      {canEdit ? (
+                        <button
+                          onClick={() => { void handleDeleteTimeEntry(te.id); }}
+                          className="opacity-0 group-hover:opacity-100 text-clickup-text/30 hover:text-red-400 transition-all p-0.5"
+                        >
+                          <X size={11} />
+                        </button>
+                      ) : null}
                     </div>
                   ))}
                 </div>
@@ -1043,18 +1116,20 @@ export const TaskDetail = ({
                   min="0"
                   value={timeLogMinutes}
                   onChange={e => setTimeLogMinutes(e.target.value)}
-                  placeholder="Hours..."
+                  placeholder={canEdit ? 'Hours...' : 'Time tracking is read-only'}
                   className="app-text-body w-20 border-b border-transparent bg-transparent py-1 text-clickup-text placeholder:text-clickup-text/40 transition-colors focus:border-clickup-purple focus:outline-none"
+                  disabled={!canEdit}
                 />
                 <input
                   type="text"
                   value={timeLogDesc}
                   onChange={e => setTimeLogDesc(e.target.value)}
                   onKeyDown={e => { if (e.key === 'Enter' && !e.nativeEvent.isComposing && timeLogMinutes) { e.preventDefault(); handleLogTime(); } }}
-                  placeholder="Description..."
+                  placeholder={canEdit ? 'Description...' : 'Time tracking is read-only'}
                   className="app-text-body flex-1 border-b border-transparent bg-transparent py-1 text-clickup-text placeholder:text-clickup-text/40 transition-colors focus:border-clickup-purple focus:outline-none"
+                  disabled={!canEdit}
                 />
-                {timeLogMinutes && (
+                {canEdit && timeLogMinutes && (
                   <Button variant="ghost" size="icon" onClick={handleLogTime} disabled={loggingTime}>
                     <Send size={14} />
                   </Button>
@@ -1122,6 +1197,7 @@ export const TaskDetail = ({
                 type="text"
                 value={commentDraft}
                 onChange={e => {
+                  if (!canEdit) return;
                   setCommentDraft(e.target.value);
                   // Show mention dropdown when @ is typed
                   const val = e.target.value;
@@ -1137,10 +1213,11 @@ export const TaskDetail = ({
                   }
                 }}
                 onKeyDown={e => { if (e.key === 'Enter' && !e.nativeEvent.isComposing && !mentionOpen) { e.preventDefault(); handleCommentSubmit(); } if (e.key === 'Escape') setMentionOpen(false); }}
-                placeholder="Write a comment... (type @ to mention)"
+                placeholder={canEdit ? 'Write a comment... (type @ to mention)' : 'Comments are read-only'}
                 className="app-text-body w-full rounded-lg border border-clickup-border bg-transparent px-3 py-1.5 text-clickup-text placeholder:text-clickup-text/40 transition-colors focus:border-clickup-purple focus:outline-none"
+                disabled={!canEdit}
               />
-              {mentionOpen && (
+              {mentionOpen && canEdit && (
                 <>
                   <div className="fixed inset-0 z-10" onClick={() => setMentionOpen(false)} />
                   <div className="absolute bottom-full left-0 mb-1 z-20 w-56 bg-clickup-bg border border-clickup-border rounded-lg shadow-xl py-1 max-h-40 overflow-y-auto">
@@ -1170,9 +1247,11 @@ export const TaskDetail = ({
                 </>
               )}
             </div>
-            <Button variant="ghost" size="icon" className="shrink-0" onClick={handleCommentSubmit}>
-              <Send size={14} />
-            </Button>
+            {canEdit ? (
+              <Button variant="ghost" size="icon" className="shrink-0" onClick={handleCommentSubmit}>
+                <Send size={14} />
+              </Button>
+            ) : null}
           </div>
         </div>
       </div>

@@ -1,8 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Loader2 } from 'lucide-react';
 import { useAuth } from '@/src/domains/auth/auth-provider';
-import { listPmsProjects, listProjectIssues, type PmsIssue } from '@/src/domains/pms/pms-api';
+import { listPmsProjects, listProjectIssues, type PmsIssue, type PmsList } from '@/src/domains/pms/pms-api';
+import { projectRoleAllows } from '@/src/domains/pms/pms-permissions';
 import { ListView } from './ListView';
 import { TaskDetail } from './TaskDetail';
 
@@ -10,6 +11,7 @@ export const AssignedToMeView = () => {
   const { token, user } = useAuth();
   const [selectedIssue, setSelectedIssue] = useState<PmsIssue | null>(null);
   const [issues, setIssues] = useState<PmsIssue[]>([]);
+  const [projects, setProjects] = useState<PmsList[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -17,6 +19,7 @@ export const AssignedToMeView = () => {
     setLoading(true);
     listPmsProjects(token)
       .then(async (res) => {
+        setProjects(res.items);
         const allIssues: PmsIssue[] = [];
         for (const project of res.items) {
           const issueRes = await listProjectIssues(token, project.id);
@@ -26,6 +29,11 @@ export const AssignedToMeView = () => {
       })
       .finally(() => setLoading(false));
   }, [token, user]);
+
+  const selectedProject = useMemo(
+    () => (selectedIssue ? projects.find((project) => project.id === selectedIssue.project_id) ?? null : null),
+    [projects, selectedIssue],
+  );
 
   return (
     <div className="h-full flex flex-col relative">
@@ -52,7 +60,12 @@ export const AssignedToMeView = () => {
               onClick={() => setSelectedIssue(null)}
               className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40"
             />
-            <TaskDetail issue={selectedIssue} onClose={() => setSelectedIssue(null)} />
+            <TaskDetail
+              issue={selectedIssue}
+              spaceName={selectedProject?.team_name}
+              canEdit={projectRoleAllows(selectedProject?.role, 'member')}
+              onClose={() => setSelectedIssue(null)}
+            />
           </>
         )}
       </AnimatePresence>

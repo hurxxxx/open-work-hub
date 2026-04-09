@@ -18,6 +18,9 @@ const mockUpdateChecklistItem = vi.fn();
 const mockDeleteChecklistItem = vi.fn();
 const mockCreateTimeEntry = vi.fn();
 const mockDeleteTimeEntry = vi.fn();
+const mockCreateDependency = vi.fn();
+const mockDeleteDependency = vi.fn();
+const mockListProjectIssues = vi.fn();
 
 vi.mock('@aidoo/ui', () => ({
   Badge: ({ children }: { children: ReactNode }) => <span>{children}</span>,
@@ -60,6 +63,9 @@ vi.mock('@/src/domains/pms/pms-api', () => ({
   deleteChecklistItem: (...args: unknown[]) => mockDeleteChecklistItem(...args),
   createTimeEntry: (...args: unknown[]) => mockCreateTimeEntry(...args),
   deleteTimeEntry: (...args: unknown[]) => mockDeleteTimeEntry(...args),
+  createDependency: (...args: unknown[]) => mockCreateDependency(...args),
+  deleteDependency: (...args: unknown[]) => mockDeleteDependency(...args),
+  listProjectIssues: (...args: unknown[]) => mockListProjectIssues(...args),
 }));
 
 function buildIssue(overrides: Partial<PmsIssue> = {}): PmsIssue {
@@ -92,6 +98,9 @@ function buildIssue(overrides: Partial<PmsIssue> = {}): PmsIssue {
     checklist_done: 0,
     estimate_hours: null,
     time_spent_minutes: 0,
+    recurrence_rule: null,
+    assignee_ids: [],
+    assignee_names: [],
     labels: [],
     updated_at: '2026-04-08T00:00:00Z',
     ...overrides,
@@ -120,6 +129,9 @@ describe('TaskDetail', () => {
     mockDeleteChecklistItem.mockResolvedValue(undefined);
     mockCreateTimeEntry.mockResolvedValue(undefined);
     mockDeleteTimeEntry.mockResolvedValue(undefined);
+    mockCreateDependency.mockResolvedValue(undefined);
+    mockDeleteDependency.mockResolvedValue(undefined);
+    mockListProjectIssues.mockResolvedValue({ items: [], total: 0, page: 1, page_size: 100 });
   });
 
   afterEach(() => {
@@ -232,5 +244,28 @@ describe('TaskDetail', () => {
 
     expect(screen.getByRole('button', { name: 'Restore' })).toBeTruthy();
     expect(screen.getByText('Archived')).toBeTruthy();
+  });
+
+  it('renders task detail in read-only mode when editing is disabled', async () => {
+    render(
+      <TaskDetail
+        issue={buildIssue()}
+        members={[]}
+        milestones={[]}
+        projectLabels={[]}
+        canEdit={false}
+        onClose={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(mockGetIssueDetail).toHaveBeenCalled();
+    });
+
+    expect(screen.getByText('Read only')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Archive' })).toBeNull();
+    expect(screen.getAllByRole('combobox')[0].hasAttribute('disabled')).toBe(true);
+    expect(screen.getByPlaceholderText('Comments are read-only').hasAttribute('disabled')).toBe(true);
+    expect(screen.queryByText('Click or drag files to upload')).toBeNull();
   });
 });
