@@ -412,12 +412,29 @@ const SpaceItem = ({
   const docRenameInputRef = useRef<HTMLInputElement>(null);
 
 
-  const docsToolId = `pms-space-${spaceId}-docs`;
   const spaceOverviewToolId = `pms-space-${spaceId}`;
-  const docsActive = activeNavItemId === docsToolId || activeNavItemId.startsWith(`${docsToolId}-`);
-  const spaceActive = docsActive || activeNavItemId === spaceOverviewToolId
+  const spaceActive = activeNavItemId === spaceOverviewToolId
+    || activeNavItemId.startsWith(`pms-space-${spaceId}-docs-`)
     || rootLists.some((list) => activeNavItemId === `pms-list-${list.id}`)
     || folders.some(({ lists }) => lists.some((list) => activeNavItemId === `pms-list-${list.id}`));
+
+  type SidebarRootItem =
+    | { kind: 'list'; id: string; name: string; issueCount: number }
+    | { kind: 'doc'; id: string; title: string };
+
+  const rootItems: SidebarRootItem[] = useMemo(() => {
+    const listItems: SidebarRootItem[] = rootLists.map((list) => ({
+      kind: 'list', id: list.id, name: list.name, issueCount: list.issue_count,
+    }));
+    const docItems: SidebarRootItem[] = spaceDocs.map((doc) => ({
+      kind: 'doc', id: doc.id, title: doc.title,
+    }));
+    return [...listItems, ...docItems].sort((a, b) => {
+      const nameA = a.kind === 'list' ? a.name : a.title;
+      const nameB = b.kind === 'list' ? b.name : b.title;
+      return nameA.localeCompare(nameB, 'ko');
+    });
+  }, [rootLists, spaceDocs]);
 
   useEffect(() => {
     setExpandedFolders((prev) => {
@@ -559,86 +576,6 @@ const SpaceItem = ({
             className="overflow-hidden"
           >
             <div className="ml-4 pl-3 border-l border-clickup-border space-y-1">
-              <Link
-                to={`/tool/${docsToolId}`}
-                className={cn('sidebar-submenu-item flex-1 min-w-0', activeNavItemId === docsToolId && 'sidebar-submenu-item-active')}
-              >
-                <FileText size={13} className="text-gray-500 shrink-0" />
-                <span className="sidebar-submenu-label">Docs</span>
-              </Link>
-
-              {spaceDocs.length > 0 ? (
-                <div className="ml-4 space-y-0.5">
-                  {spaceDocs.map((doc) => {
-                    const docNavId = `pms-space-${spaceId}-docs-${doc.id}`;
-                    const isDocMenuOpen = docMenuOpen === doc.id;
-                    const isDocRenaming = renamingDocId === doc.id;
-                    return (
-                      <div key={doc.id} className="group/doc flex items-center">
-                        {isDocRenaming ? (
-                          <div className="sidebar-submenu-item flex-1 min-w-0">
-                            <FileText size={13} className="text-gray-500 shrink-0" />
-                            <input
-                              ref={docRenameInputRef}
-                              value={docRenameValue}
-                              onChange={(e) => setDocRenameValue(e.target.value)}
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter') {
-                                  const trimmed = docRenameValue.trim();
-                                  if (trimmed && trimmed !== doc.title) onRenameDoc(doc.id, trimmed);
-                                  setRenamingDocId(null);
-                                } else if (e.key === 'Escape') {
-                                  setRenamingDocId(null);
-                                }
-                              }}
-                              onBlur={() => {
-                                const trimmed = docRenameValue.trim();
-                                if (trimmed && trimmed !== doc.title) onRenameDoc(doc.id, trimmed);
-                                setRenamingDocId(null);
-                              }}
-                              className="app-text-body-sm flex-1 min-w-0 rounded border border-blue-500 bg-transparent px-1 py-0.5 text-clickup-text outline-none"
-                              autoFocus
-                            />
-                          </div>
-                        ) : (
-                          <Link
-                            to={`/tool/${docNavId}`}
-                            className={cn('sidebar-submenu-item flex-1 min-w-0', activeNavItemId === docNavId && 'sidebar-submenu-item-active')}
-                          >
-                            <FileText size={13} className="text-gray-500 shrink-0" />
-                            <span className="sidebar-submenu-label">{doc.title || 'Untitled'}</span>
-                          </Link>
-                        )}
-                        {canManageCollections ? (
-                          <>
-                            <div className={cn('items-center gap-0.5 pr-1 shrink-0', isDocMenuOpen ? 'flex' : 'hidden group-hover/doc:flex')}>
-                              <button
-                                ref={(el) => { if (el) docMenuBtnRefs.current.set(doc.id, el); }}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setDocMenuOpen((c) => (c === doc.id ? null : doc.id));
-                                }}
-                                className="p-0.5 hover:bg-clickup-hover rounded text-gray-500 hover:text-gray-300 transition-colors"
-                                title="Doc options"
-                              >
-                                <MoreHorizontal size={12} />
-                              </button>
-                            </div>
-                            <FolderContextMenu
-                              open={isDocMenuOpen}
-                              anchorRef={{ current: docMenuBtnRefs.current.get(doc.id) ?? null }}
-                              onClose={() => setDocMenuOpen(null)}
-                              onRename={() => { setDocRenameValue(doc.title); setRenamingDocId(doc.id); }}
-                              onDelete={() => onDeleteDoc(doc.id)}
-                            />
-                          </>
-                        ) : null}
-                      </div>
-                    );
-                  })}
-                </div>
-              ) : null}
-
               {folders.map(({ folder, lists }, folderIndex) => {
                 const isFolderExpanded = expandedFolders.has(folder.id);
                 const isFolderPopoverOpen = folderPopoverOpen === folder.id;
@@ -741,22 +678,91 @@ const SpaceItem = ({
                 );
               })}
 
-              {rootLists.map((list) => (
-                <Link
-                  key={list.id}
-                  to={`/tool/pms-list-${list.id}`}
-                  className={cn(
-                    'sidebar-submenu-item',
-                    activeNavItemId === `pms-list-${list.id}` && 'sidebar-submenu-item-active',
-                  )}
-                >
-                  <ListIcon size={13} className="text-gray-500 shrink-0" />
-                  <span className="sidebar-submenu-label">{list.name}</span>
-                  <span className="sidebar-submenu-meta">
-                    ({list.issue_count})
-                  </span>
-                </Link>
-              ))}
+              {rootItems.map((item) => {
+                if (item.kind === 'list') {
+                  return (
+                    <Link
+                      key={`list-${item.id}`}
+                      to={`/tool/pms-list-${item.id}`}
+                      className={cn(
+                        'sidebar-submenu-item',
+                        activeNavItemId === `pms-list-${item.id}` && 'sidebar-submenu-item-active',
+                      )}
+                    >
+                      <ListIcon size={13} className="text-gray-500 shrink-0" />
+                      <span className="sidebar-submenu-label">{item.name}</span>
+                      <span className="sidebar-submenu-meta">
+                        ({item.issueCount})
+                      </span>
+                    </Link>
+                  );
+                }
+                const docNavId = `pms-space-${spaceId}-docs-${item.id}`;
+                const isDocMenuOpen = docMenuOpen === item.id;
+                const isDocRenaming = renamingDocId === item.id;
+                return (
+                  <div key={`doc-${item.id}`} className="group/doc flex items-center">
+                    {isDocRenaming ? (
+                      <div className="sidebar-submenu-item flex-1 min-w-0">
+                        <FileText size={13} className="text-gray-500 shrink-0" />
+                        <input
+                          ref={docRenameInputRef}
+                          value={docRenameValue}
+                          onChange={(e) => setDocRenameValue(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              const trimmed = docRenameValue.trim();
+                              if (trimmed && trimmed !== item.title) onRenameDoc(item.id, trimmed);
+                              setRenamingDocId(null);
+                            } else if (e.key === 'Escape') {
+                              setRenamingDocId(null);
+                            }
+                          }}
+                          onBlur={() => {
+                            const trimmed = docRenameValue.trim();
+                            if (trimmed && trimmed !== item.title) onRenameDoc(item.id, trimmed);
+                            setRenamingDocId(null);
+                          }}
+                          className="app-text-body-sm flex-1 min-w-0 rounded border border-blue-500 bg-transparent px-1 py-0.5 text-clickup-text outline-none"
+                          autoFocus
+                        />
+                      </div>
+                    ) : (
+                      <Link
+                        to={`/tool/${docNavId}`}
+                        className={cn('sidebar-submenu-item flex-1 min-w-0', activeNavItemId === docNavId && 'sidebar-submenu-item-active')}
+                      >
+                        <FileText size={13} className="text-gray-500 shrink-0" />
+                        <span className="sidebar-submenu-label">{item.title || 'Untitled'}</span>
+                      </Link>
+                    )}
+                    {canManageCollections ? (
+                      <>
+                        <div className={cn('items-center gap-0.5 pr-1 shrink-0', isDocMenuOpen ? 'flex' : 'hidden group-hover/doc:flex')}>
+                          <button
+                            ref={(el) => { if (el) docMenuBtnRefs.current.set(item.id, el); }}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setDocMenuOpen((c) => (c === item.id ? null : item.id));
+                            }}
+                            className="p-0.5 hover:bg-clickup-hover rounded text-gray-500 hover:text-gray-300 transition-colors"
+                            title="Doc options"
+                          >
+                            <MoreHorizontal size={12} />
+                          </button>
+                        </div>
+                        <FolderContextMenu
+                          open={isDocMenuOpen}
+                          anchorRef={{ current: docMenuBtnRefs.current.get(item.id) ?? null }}
+                          onClose={() => setDocMenuOpen(null)}
+                          onRename={() => { setDocRenameValue(item.title); setRenamingDocId(item.id); }}
+                          onDelete={() => onDeleteDoc(item.id)}
+                        />
+                      </>
+                    ) : null}
+                  </div>
+                );
+              })}
             </div>
           </motion.div>
         )}
@@ -889,8 +895,10 @@ export const SubSidebar = ({ activeAppId, activeNavItemId }: { activeAppId: stri
 
   const handleCreateDoc = useCallback(async (spaceId: string) => {
     if (!token) return;
+    const title = await prompt({ title: 'New Document', placeholder: 'Document name', defaultValue: '' });
+    if (!title) return;
     try {
-      const doc = await createSpaceDoc(token, spaceId, { title: 'Untitled' });
+      const doc = await createSpaceDoc(token, spaceId, { title });
       setSpaceDocsMap((prev) => {
         const next = new Map(prev);
         next.set(spaceId, [...(next.get(spaceId) ?? []), doc]);
@@ -898,7 +906,7 @@ export const SubSidebar = ({ activeAppId, activeNavItemId }: { activeAppId: stri
       });
       navigate(`/tool/pms-space-${spaceId}-docs-${doc.id}`);
     } catch { /* ignore */ }
-  }, [navigate, token]);
+  }, [navigate, prompt, token]);
 
   const [spaceDocsMap, setSpaceDocsMap] = useState<Map<string, PmsSpaceDoc[]>>(new Map());
 

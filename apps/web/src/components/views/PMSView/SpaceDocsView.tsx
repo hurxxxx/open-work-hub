@@ -158,6 +158,8 @@ export const SpaceDocsView = ({ spaceId, spaceName, docId: spaceDocId }: { space
   const [spaceRole, setSpaceRole] = useState<string | null>(null);
   const [spaceRoleResolved, setSpaceRoleResolved] = useState(false);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const navigateRef = useRef(navigate);
+  navigateRef.current = navigate;
   const pmsWorkspaceRole = getWorkspaceRoleByKey(user, PMS_WORKSPACE_KEY);
   const pmsWorkspaceId = pmsWorkspaceRole?.workspace_id ?? null;
 
@@ -214,18 +216,6 @@ export const SpaceDocsView = ({ spaceId, spaceName, docId: spaceDocId }: { space
     }
   }, [spaceId, token]);
 
-  const loadPages = useCallback(async (docId: string) => {
-    if (!token) return;
-    setLoadingPages(true);
-    try {
-      const response = await listSpaceDocPages(token, spaceId, docId);
-      setPages(response.items);
-    } catch (caughtError) {
-      setError(getErrorMessage(caughtError, '문서 페이지를 불러오지 못했습니다.'));
-    } finally {
-      setLoadingPages(false);
-    }
-  }, [spaceId, token]);
 
   useEffect(() => {
     if (!spaceRoleResolved) {
@@ -241,14 +231,35 @@ export const SpaceDocsView = ({ spaceId, spaceName, docId: spaceDocId }: { space
     void loadCollections();
   }, [canAccessSpaceDocs, loadCollections, spaceRoleResolved]);
 
+  const pageIdRef = useRef(pageId);
+  pageIdRef.current = pageId;
+
   useEffect(() => {
     if (!canAccessSpaceDocs || !selectedCollection) {
       setPages([]);
       setLoadingPages(false);
       return;
     }
-    void loadPages(selectedCollection.id);
-  }, [canAccessSpaceDocs, loadPages, selectedCollection]);
+    let cancelled = false;
+    const docId = selectedCollection.id;
+    setLoadingPages(true);
+    void listSpaceDocPages(token!, spaceId, docId)
+      .then((response) => {
+        if (cancelled) return;
+        setPages(response.items);
+        if (!pageIdRef.current && response.items[0]) {
+          navigateRef.current(pagePath(docId, response.items[0].id), { replace: true });
+        }
+      })
+      .catch((caughtError) => {
+        if (!cancelled) setError(getErrorMessage(caughtError, '문서 페이지를 불러오지 못했습니다.'));
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingPages(false);
+      });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [canAccessSpaceDocs, pagePath, selectedCollection, spaceId, token]);
 
   useEffect(() => {
     if (!spaceDocId || !pageId || loadingCollections) return;
@@ -277,8 +288,8 @@ export const SpaceDocsView = ({ spaceId, spaceName, docId: spaceDocId }: { space
   }, [basePath, navigate, pageId, pagePath, spaceDocId, spaceId, token]);
 
   useEffect(() => {
-    if (!selectedCollection || loadingPages) return;
-    if (!pageId || !pages.some((page) => page.id === pageId)) {
+    if (!selectedCollection || loadingPages || !pageId) return;
+    if (!pages.some((page) => page.id === pageId)) {
       if (pages[0]) navigate(pagePath(selectedCollection.id, pages[0].id), { replace: true });
     }
   }, [loadingPages, navigate, pageId, pagePath, pages, selectedCollection]);
@@ -309,10 +320,12 @@ export const SpaceDocsView = ({ spaceId, spaceName, docId: spaceDocId }: { space
 
   const handleCreateCollection = useCallback(async () => {
     if (!token || !canManageCollections) return;
+    const title = await prompt({ title: 'New Document', placeholder: 'Document name', defaultValue: '' });
+    if (!title) return;
     setSaving(true);
     setError(null);
     try {
-      const created = await createSpaceDoc(token, spaceId, { title: 'Untitled' });
+      const created = await createSpaceDoc(token, spaceId, { title });
       setCollections((current) => [created, ...current]);
       navigate(collectionPath(created.id));
     } catch (caughtError) {
@@ -320,7 +333,7 @@ export const SpaceDocsView = ({ spaceId, spaceName, docId: spaceDocId }: { space
     } finally {
       setSaving(false);
     }
-  }, [canManageCollections, collectionPath, navigate, spaceId, token]);
+  }, [canManageCollections, collectionPath, navigate, prompt, spaceId, token]);
 
   const handleRenameCollection = useCallback(async (doc: PmsSpaceDoc) => {
     if (!token || !canManageCollections) return;
