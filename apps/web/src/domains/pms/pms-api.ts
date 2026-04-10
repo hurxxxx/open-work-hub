@@ -285,23 +285,6 @@ export interface PmsDashboardSummary {
   recent_activity: PmsDashboardRecentActivity[];
 }
 
-// ── Docs (Wiki) ─────────────────────────────────────────────────────
-
-export interface PmsDoc {
-  id: string;
-  project_id: string;
-  title: string;
-  content_blocks: Record<string, unknown>[] | null;
-  created_by_id: string;
-  created_by_name: string;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface PmsDocsResponse {
-  items: PmsDoc[];
-}
-
 export interface PmsSpaceDoc {
   id: string;
   team_id: string;
@@ -1071,42 +1054,6 @@ export function updateFolder(
 
 export function deleteFolder(token: string, folderId: string): Promise<void> {
   return request<void>(`/api/v1/pms/folders/${folderId}`, token, { method: 'DELETE' });
-}
-
-// ── Docs (Wiki) ─────────────────────────────────────────────────────
-
-export function listDocs(token: string, projectId: string): Promise<PmsDocsResponse> {
-  return request<PmsDocsResponse>(`/api/v1/pms/lists/${projectId}/docs`, token);
-}
-
-export function createDoc(
-  token: string,
-  projectId: string,
-  payload: { title: string; content_blocks?: Record<string, unknown>[] | null },
-): Promise<PmsDoc> {
-  return request<PmsDoc>(`/api/v1/pms/lists/${projectId}/docs`, token, {
-    method: 'POST',
-    body: JSON.stringify(payload),
-  });
-}
-
-export function getDoc(token: string, docId: string): Promise<PmsDoc> {
-  return request<PmsDoc>(`/api/v1/pms/docs/${docId}`, token);
-}
-
-export function updateDoc(
-  token: string,
-  docId: string,
-  payload: { title?: string; content_blocks?: Record<string, unknown>[] | null },
-): Promise<PmsDoc> {
-  return request<PmsDoc>(`/api/v1/pms/docs/${docId}`, token, {
-    method: 'PATCH',
-    body: JSON.stringify(payload),
-  });
-}
-
-export function deleteDoc(token: string, docId: string): Promise<void> {
-  return request<void>(`/api/v1/pms/docs/${docId}`, token, { method: 'DELETE' });
 }
 
 // ── Space Docs (collections) ────────────────────────────────────────

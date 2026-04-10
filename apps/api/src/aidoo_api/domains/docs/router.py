@@ -11,8 +11,6 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload, selectinload
 
 from aidoo_api.core.db import get_db_session
-from aidoo_api.core.settings import get_settings
-from aidoo_api.core.storage import get_minio_client
 from aidoo_api.domains.auth.access import has_system_role, resolve_visible_features, resolve_team_role
 from aidoo_api.domains.auth.dependencies import require_current_user
 from aidoo_api.domains.auth.models import Team, TeamMember, User, Workspace
@@ -24,28 +22,17 @@ from aidoo_api.domains.docs.models import (
     NativeDocPage,
     NativeDocUserShare,
 )
-from aidoo_api.domains.media.router import cleanup_media_for_resource, sync_embedded_media
-from aidoo_api.domains.pms.models import Doc, Project, SpaceDoc, SpaceDocPage
+from aidoo_api.domains.media.router import sync_embedded_media
+from aidoo_api.domains.pms.models import SpaceDoc, SpaceDocPage
 
 
 router = APIRouter(prefix="/docs", tags=["docs"])
 
 SOURCE_NATIVE_DOC = "native_doc"
 SOURCE_PMS_SPACE_DOC = "pms_space_doc"
-SOURCE_PMS_PROJECT_DOC = "pms_project_doc"
 
 PAGE_SOURCE_NATIVE_DOC = "native_doc_page"
 PAGE_SOURCE_PMS_SPACE_DOC = "pms_space_doc_page"
-PAGE_SOURCE_PMS_PROJECT_DOC = "pms_project_doc_page"
-
-SOURCE_PREFIXES = {
-    SOURCE_NATIVE_DOC: SOURCE_NATIVE_DOC,
-    SOURCE_PMS_SPACE_DOC: SOURCE_PMS_SPACE_DOC,
-    SOURCE_PMS_PROJECT_DOC: SOURCE_PMS_PROJECT_DOC,
-    PAGE_SOURCE_NATIVE_DOC: PAGE_SOURCE_NATIVE_DOC,
-    PAGE_SOURCE_PMS_SPACE_DOC: PAGE_SOURCE_PMS_SPACE_DOC,
-    PAGE_SOURCE_PMS_PROJECT_DOC: PAGE_SOURCE_PMS_PROJECT_DOC,
-}
 
 TEAM_ROLE_RANK = {
     "viewer": 10,
@@ -225,7 +212,7 @@ class DocsHubItem(BaseModel):
     source_app: str
     source_type: str
     source_id: str
-    structure_kind: Literal["page_tree", "single_page"]
+    structure_kind: Literal["page_tree"]
     location_label: str
     title: str
     page_count: int
@@ -476,39 +463,6 @@ def _serialize_space_doc_item(
     )
 
 
-def _serialize_project_doc_item(
-    doc: Doc,
-    *,
-    location_label: str,
-    role: str,
-    pref: DocsUserItemPref | None,
-) -> DocsHubItem:
-    can_edit = role != "viewer"
-    return DocsHubItem(
-        id=_make_item_id(SOURCE_PMS_PROJECT_DOC, doc.id),
-        source_app="pms",
-        source_type=SOURCE_PMS_PROJECT_DOC,
-        source_id=doc.id,
-        structure_kind="single_page",
-        location_label=location_label,
-        title=doc.title,
-        page_count=1,
-        created_by_id=doc.created_by_id,
-        created_by_name=getattr(doc.created_by, "full_name", ""),
-        created_at=doc.created_at,
-        updated_at=doc.updated_at,
-        trashed_at=None,
-        is_favorite=bool(pref and pref.is_favorite),
-        is_private=False,
-        last_viewed_at=pref.last_viewed_at if pref else None,
-        can_view=True,
-        can_edit=can_edit,
-        can_share=False,
-        can_manage=can_edit,
-        sharing_summary=None,
-    )
-
-
 def _load_accessible_native_docs(db: Session, user: User) -> list[NativeDoc]:
     docs = list(
         db.scalars(
@@ -643,26 +597,6 @@ def _load_accessible_space_docs(
     )
 
 
-def _load_accessible_project_docs(
-    db: Session,
-    user: User,
-) -> list[Doc]:
-    team_ids = _accessible_pms_team_ids(db, user)
-    if not team_ids:
-        return []
-    return list(
-        db.scalars(
-            select(Doc)
-            .options(
-                selectinload(Doc.created_by),
-                joinedload(Doc.project).joinedload(Project.folder),
-            )
-            .join(Project, Project.id == Doc.project_id)
-            .where(Project.team_id.in_(team_ids))
-        )
-    )
-
-
 def _load_space_doc_with_pages(db: Session, doc_id: str) -> SpaceDoc | None:
     return db.scalar(
         select(SpaceDoc)
@@ -790,36 +724,6 @@ def _serialize_space_page(
     )
 
 
-def _serialize_project_doc_page(
-    doc: Doc,
-    *,
-    can_edit: bool,
-) -> DocsPageItem:
-    return DocsPageItem(
-        id=_make_page_id(PAGE_SOURCE_PMS_PROJECT_DOC, doc.id),
-        doc_id=_make_item_id(SOURCE_PMS_PROJECT_DOC, doc.id),
-        source_type=PAGE_SOURCE_PMS_PROJECT_DOC,
-        source_page_id=doc.id,
-        parent_id=None,
-        title=doc.title,
-        content_blocks=doc.content_blocks,
-        sort_order=0,
-        created_by_id=doc.created_by_id,
-        created_by_name=getattr(doc.created_by, "full_name", ""),
-        created_at=doc.created_at,
-        updated_at=doc.updated_at,
-        trashed_at=None,
-        can_edit=can_edit,
-    )
-
-
-def _project_location_label(doc: Doc) -> str:
-    project = getattr(doc, "project", None)
-    if project is None:
-        return "PMS"
-    return f"PMS / {project.name}"
-
-
 def _space_location_label(db: Session, team_id: str) -> str:
     team = _load_active_pms_team(db, team_id)
     return f"PMS / {team.name}" if team is not None else "PMS"
@@ -861,34 +765,6 @@ def _space_doc_from_item_or_404(
     return doc, role
 
 
-def _project_doc_from_item_or_404(
-    db: Session,
-    item_id: str,
-    current_user: User,
-) -> tuple[Doc, str]:
-    prefix, raw_id = _split_prefixed_id(item_id)
-    if prefix not in {None, SOURCE_PMS_PROJECT_DOC}:
-        raise HTTPException(status_code=404, detail="Doc not found.")
-    doc = db.scalar(
-        select(Doc)
-        .options(
-            selectinload(Doc.created_by),
-            joinedload(Doc.project).joinedload(Project.folder),
-        )
-        .where(Doc.id == raw_id)
-    )
-    if doc is None:
-        raise HTTPException(status_code=404, detail="Doc not found.")
-    project = getattr(doc, "project", None)
-    team_id = getattr(project, "team_id", None)
-    if team_id is None:
-        raise HTTPException(status_code=404, detail="Doc not found.")
-    role = _resolve_pms_team_role(db, current_user, team_id)
-    if role is None:
-        raise HTTPException(status_code=404, detail="Doc not found.")
-    return doc, role
-
-
 def _lookup_item(
     db: Session,
     item_id: str,
@@ -923,25 +799,6 @@ def _lookup_item(
                     location_label=_space_location_label(db, doc.team_id),
                     role=role,
                     pref=pref_map.get((SOURCE_PMS_SPACE_DOC, doc.id)),
-                )
-
-    if prefix in {SOURCE_PMS_PROJECT_DOC, None}:
-        doc = db.scalar(
-            select(Doc)
-            .options(
-                selectinload(Doc.created_by),
-                joinedload(Doc.project).joinedload(Project.folder),
-            )
-            .where(Doc.id == raw_id)
-        )
-        if doc is not None and doc.project is not None and doc.project.team_id is not None:
-            role = _resolve_pms_team_role(db, current_user, doc.project.team_id)
-            if role is not None:
-                return _serialize_project_doc_item(
-                    doc,
-                    location_label=_project_location_label(doc),
-                    role=role,
-                    pref=pref_map.get((SOURCE_PMS_PROJECT_DOC, doc.id)),
                 )
 
     raise HTTPException(status_code=404, detail="Doc not found.")
@@ -1056,24 +913,8 @@ def list_docs_hub(
             )
         )
 
-    project_items: list[DocsHubItem] = []
-    for doc in _load_accessible_project_docs(db, current_user):
-        if doc.project is None or doc.project.team_id is None:
-            continue
-        role = _resolve_pms_team_role(db, current_user, doc.project.team_id)
-        if role is None:
-            continue
-        project_items.append(
-            _serialize_project_doc_item(
-                doc,
-                location_label=_project_location_label(doc),
-                role=role,
-                pref=pref_map.get((SOURCE_PMS_PROJECT_DOC, doc.id)),
-            )
-        )
-
     docs = _filter_docs_by_category(
-        [*native_items, *space_items, *project_items],
+        [*native_items, *space_items],
         current_user_id=current_user.id,
         category=category,
         q=q,
@@ -1173,11 +1014,7 @@ def update_doc_item(
         db.commit()
         return _lookup_item(db, item_id, current_user)
 
-    doc, _role = _project_doc_from_item_or_404(db, item_id, current_user)
-    doc.title = payload.title.strip()
-    db.add(doc)
-    db.commit()
-    return _lookup_item(db, item_id, current_user)
+    raise HTTPException(status_code=404, detail="Doc not found.")
 
 
 @router.delete("/items/{item_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -1222,19 +1059,7 @@ def delete_doc_item(
         db.commit()
         return Response(status_code=status.HTTP_204_NO_CONTENT)
 
-    doc, _role = _project_doc_from_item_or_404(db, item_id, current_user)
-    media_keys = cleanup_media_for_resource(db, "doc", doc.id)
-    db.delete(doc)
-    db.commit()
-    if media_keys:
-        settings = get_settings()
-        client = get_minio_client()
-        for key in media_keys:
-            try:
-                client.remove_object(settings.minio_bucket, key)
-            except Exception:
-                pass
-    return Response(status_code=status.HTTP_204_NO_CONTENT)
+    raise HTTPException(status_code=404, detail="Doc not found.")
 
 
 @router.get("/items/{item_id}/pages", response_model=DocsPageListResponse)
@@ -1277,10 +1102,7 @@ def list_doc_pages(
         ]
         return DocsPageListResponse(items=items)
 
-    doc, role = _project_doc_from_item_or_404(db, item_id, current_user)
-    return DocsPageListResponse(
-        items=[_serialize_project_doc_page(doc, can_edit=role != "viewer")]
-    )
+    raise HTTPException(status_code=404, detail="Doc not found.")
 
 
 @router.post("/items/{item_id}/pages", response_model=DocsPageItem, status_code=status.HTTP_201_CREATED)
@@ -1296,8 +1118,6 @@ def create_doc_page(
     item = _lookup_item(db, item_id, current_user, share_token=share_token)
     if not item.can_edit:
         raise HTTPException(status_code=403, detail="Doc edit access required.")
-    if item.source_type == SOURCE_PMS_PROJECT_DOC:
-        raise HTTPException(status_code=409, detail="This document does not support multiple pages.")
 
     if item.source_type == SOURCE_NATIVE_DOC:
         doc, access = _native_doc_from_item_or_404(db, item_id, current_user, share_token=share_token)
@@ -1438,26 +1258,7 @@ def update_doc_page(
             assert page is not None and page.doc is not None
             return _serialize_space_page(page.doc, page, can_edit=True)
 
-    if prefix not in {PAGE_SOURCE_PMS_PROJECT_DOC, None}:
-        raise HTTPException(status_code=404, detail="Page not found.")
-
-    doc, role = _project_doc_from_item_or_404(db, _make_item_id(SOURCE_PMS_PROJECT_DOC, raw_id), current_user)
-    if role == "viewer":
-        raise HTTPException(status_code=403, detail="Doc edit access required.")
-    if payload.title is not None:
-        doc.title = payload.title.strip()
-    if "content_blocks" in payload.model_fields_set:
-        doc.content_blocks = payload.content_blocks
-        sync_embedded_media(db, payload.content_blocks, "doc", doc.id, current_user)
-    db.add(doc)
-    db.commit()
-    doc = db.scalar(
-        select(Doc)
-        .options(selectinload(Doc.created_by), joinedload(Doc.project))
-        .where(Doc.id == doc.id)
-    )
-    assert doc is not None
-    return _serialize_project_doc_page(doc, can_edit=True)
+    raise HTTPException(status_code=404, detail="Page not found.")
 
 
 @router.delete("/pages/{page_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -1498,9 +1299,6 @@ def delete_doc_page(
                 db.add(node)
             db.commit()
             return Response(status_code=status.HTTP_204_NO_CONTENT)
-
-    if prefix in {PAGE_SOURCE_PMS_PROJECT_DOC, None}:
-        raise HTTPException(status_code=409, detail="This document page cannot be deleted separately.")
 
     raise HTTPException(status_code=404, detail="Page not found.")
 
@@ -1561,9 +1359,6 @@ def record_doc_view(
             if page is not None:
                 page_title = page.title
                 page_source_id = page.id
-        elif item.source_type == SOURCE_PMS_PROJECT_DOC:
-            page_title = item.title
-            page_source_id = item.source_id
     pref.last_viewed_page_source_id = page_source_id
     pref.last_viewed_page_title = page_title
     db.add(pref)
@@ -1636,7 +1431,7 @@ def list_recent_pages(
         elif pref.source_type == SOURCE_PMS_SPACE_DOC:
             page_id = _make_page_id(PAGE_SOURCE_PMS_SPACE_DOC, page_source_id)
         else:
-            page_id = _make_page_id(PAGE_SOURCE_PMS_PROJECT_DOC, page_source_id)
+            continue
         items.append(
             RecentPageItem(
                 page_id=page_id,

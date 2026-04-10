@@ -100,11 +100,6 @@ class Project(Base):
     custom_fields: Mapped[list["CustomField"]] = relationship(
         cascade="all, delete-orphan",
     )
-    docs: Mapped[list["Doc"]] = relationship(
-        cascade="all, delete-orphan",
-        back_populates="project",
-    )
-
 
 class ProjectStatus(Base):
     """Custom workflow statuses per project."""
@@ -476,31 +471,6 @@ class IssueAssignee(Base):
     issue_id: Mapped[str] = mapped_column(ForeignKey("pms_issues.id"), index=True)
     user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
     user = relationship("User")
-
-
-class Doc(Base):
-    """Project-scoped documents (wiki pages)."""
-
-    __tablename__ = "pms_docs"
-
-    id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    project_id: Mapped[str] = mapped_column(ForeignKey("pms_projects.id"), index=True)
-    title: Mapped[str] = mapped_column(String(200))
-    content_blocks: Mapped[list[dict] | None] = mapped_column(JSON, nullable=True)
-    created_by_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime,
-        default=utcnow_naive,
-        nullable=False,
-    )
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime,
-        default=utcnow_naive,
-        onupdate=utcnow_naive,
-        nullable=False,
-    )
-    project: Mapped[Project] = relationship(back_populates="docs")
-    created_by = relationship("User")
 
 
 class SpaceDoc(Base):

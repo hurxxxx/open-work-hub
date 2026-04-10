@@ -30,7 +30,6 @@ from aidoo_api.domains.pms.models import (
     ChecklistItem,
     CustomField,
     CustomFieldValue,
-    Doc,
     Folder,
     Issue,
     IssueActivityLog,
@@ -3996,44 +3995,6 @@ def delete_folder(
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
-# ── Docs (Wiki) ─────────────────────────────────────────────────────
-
-
-class DocItem(BaseModel):
-    id: str
-    project_id: str
-    title: str
-    content_blocks: list[dict] | None = None
-    created_by_id: str
-    created_by_name: str
-    created_at: datetime
-    updated_at: datetime
-
-
-class DocListResponse(BaseModel):
-    items: list[DocItem]
-
-
-class DocCreateRequest(BaseModel):
-    title: str = Field(..., min_length=1, max_length=200)
-    content_blocks: list[dict] | None = None
-
-
-class DocUpdateRequest(BaseModel):
-    title: str | None = Field(default=None, min_length=1, max_length=200)
-    content_blocks: list[dict] | None = None
-
-
-def _serialize_doc(d: Doc) -> DocItem:
-    return DocItem(
-        id=d.id, project_id=d.project_id, title=d.title,
-        content_blocks=d.content_blocks,
-        created_by_id=d.created_by_id,
-        created_by_name=getattr(d.created_by, "full_name", ""),
-        created_at=d.created_at, updated_at=d.updated_at,
-    )
-
-
 # ── Space Docs (collections) ─────────────────────────────────────────
 
 
@@ -4337,107 +4298,6 @@ def _collect_active_space_doc_page_subtree(
         subtree.append(current)
         stack.extend(by_parent.get(current.id, []))
     return subtree
-
-
-@router.get("/projects/{project_id}/docs", response_model=DocListResponse)
-@router.get("/lists/{project_id}/docs", response_model=DocListResponse)
-def list_docs(
-    project_id: str,
-    db: Session = Depends(get_db_session),
-    current_user: User = Depends(require_current_user),
-) -> DocListResponse:
-    _ensure_project_access(db, current_user, project_id)
-    docs = list(
-        db.scalars(
-            select(Doc)
-            .options(selectinload(Doc.created_by))
-            .where(Doc.project_id == project_id)
-            .order_by(Doc.updated_at.desc())
-        )
-    )
-    return DocListResponse(items=[_serialize_doc(d) for d in docs])
-
-
-@router.post("/projects/{project_id}/docs", response_model=DocItem, status_code=status.HTTP_201_CREATED)
-@router.post("/lists/{project_id}/docs", response_model=DocItem, status_code=status.HTTP_201_CREATED)
-def create_doc(
-    project_id: str,
-    payload: DocCreateRequest,
-    db: Session = Depends(get_db_session),
-    current_user: User = Depends(require_current_user),
-) -> DocItem:
-    _ensure_project_editor(db, current_user, project_id)
-    d = Doc(
-        id=new_id(), project_id=project_id,
-        title=payload.title.strip(),
-        content_blocks=payload.content_blocks,
-        created_by_id=current_user.id,
-    )
-    db.add(d)
-    db.flush()
-    if payload.content_blocks:
-        sync_embedded_media(db, payload.content_blocks, "doc", d.id, current_user)
-    db.commit()
-    d = db.scalar(select(Doc).options(selectinload(Doc.created_by)).where(Doc.id == d.id))
-    return _serialize_doc(d)
-
-
-@router.get("/docs/{doc_id}", response_model=DocItem)
-def get_doc(
-    doc_id: str,
-    db: Session = Depends(get_db_session),
-    current_user: User = Depends(require_current_user),
-) -> DocItem:
-    d = db.scalar(select(Doc).options(selectinload(Doc.created_by)).where(Doc.id == doc_id))
-    if d is None:
-        raise HTTPException(status_code=404, detail="Doc not found.")
-    _ensure_project_access(db, current_user, d.project_id)
-    return _serialize_doc(d)
-
-
-@router.patch("/docs/{doc_id}", response_model=DocItem)
-def update_doc(
-    doc_id: str,
-    payload: DocUpdateRequest,
-    db: Session = Depends(get_db_session),
-    current_user: User = Depends(require_current_user),
-) -> DocItem:
-    d = db.scalar(select(Doc).options(selectinload(Doc.created_by)).where(Doc.id == doc_id))
-    if d is None:
-        raise HTTPException(status_code=404, detail="Doc not found.")
-    _ensure_project_editor(db, current_user, d.project_id)
-    if payload.title is not None:
-        d.title = payload.title.strip()
-    if "content_blocks" in payload.model_fields_set:
-        d.content_blocks = payload.content_blocks
-        sync_embedded_media(db, payload.content_blocks, "doc", d.id, current_user)
-    db.commit()
-    db.refresh(d)
-    return _serialize_doc(d)
-
-
-@router.delete("/docs/{doc_id}")
-def delete_doc(
-    doc_id: str,
-    db: Session = Depends(get_db_session),
-    current_user: User = Depends(require_current_user),
-) -> Response:
-    d = db.scalar(select(Doc).where(Doc.id == doc_id))
-    if d is None:
-        raise HTTPException(status_code=404, detail="Doc not found.")
-    _ensure_project_editor(db, current_user, d.project_id)
-    media_keys = cleanup_media_for_resource(db, "doc", d.id)
-    db.delete(d)
-    db.commit()
-    if media_keys:
-        settings = get_settings()
-        client = get_minio_client()
-        for key in media_keys:
-            try:
-                client.remove_object(settings.minio_bucket, key)
-            except Exception:
-                pass
-    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.get("/spaces/{space_id}/docs/pages", response_model=SpaceDocPageListResponse)

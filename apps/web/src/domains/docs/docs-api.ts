@@ -52,9 +52,9 @@ export interface DocsShareSummary {
 export interface DocsHubItem {
   id: string;
   source_app: string;
-  source_type: 'native_doc' | 'pms_space_doc' | 'pms_project_doc';
+  source_type: 'native_doc' | 'pms_space_doc';
   source_id: string;
-  structure_kind: 'page_tree' | 'single_page';
+  structure_kind: 'page_tree';
   location_label: string;
   title: string;
   page_count: number;
@@ -83,7 +83,7 @@ export interface DocsHubResponse {
 export interface DocsPageItem {
   id: string;
   doc_id: string;
-  source_type: 'native_doc_page' | 'pms_space_doc_page' | 'pms_project_doc_page';
+  source_type: 'native_doc_page' | 'pms_space_doc_page';
   source_page_id: string;
   parent_id: string | null;
   title: string;

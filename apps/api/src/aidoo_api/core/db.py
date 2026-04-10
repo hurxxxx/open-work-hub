@@ -198,19 +198,6 @@ def _apply_postgres_schema_compat(engine) -> None:
         "DROP TABLE IF EXISTS pms_goal_links",
         "DROP TABLE IF EXISTS pms_goals",
         "DROP TABLE IF EXISTS pms_automations",
-        # ── pms_docs table ──
-        """
-        CREATE TABLE IF NOT EXISTS pms_docs (
-            id VARCHAR(36) PRIMARY KEY,
-            project_id VARCHAR(36) NOT NULL REFERENCES pms_projects(id),
-            title VARCHAR(200) NOT NULL,
-            content_blocks JSON,
-            created_by_id VARCHAR(36) NOT NULL REFERENCES users(id),
-            created_at TIMESTAMP NOT NULL DEFAULT now(),
-            updated_at TIMESTAMP NOT NULL DEFAULT now()
-        )
-        """,
-        "CREATE INDEX IF NOT EXISTS ix_pms_docs_project_id ON pms_docs (project_id)",
         # ── pms_space_docs table ──
         """
         CREATE TABLE IF NOT EXISTS pms_space_docs (

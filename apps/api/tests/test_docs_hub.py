@@ -78,12 +78,6 @@ def test_docs_hub_reuses_pms_acl_and_blocks_resharing_of_source_docs(client: Tes
     admin = _bootstrap_admin_session(client)
 
     project = _create_project(client, admin["token"], key="DOCS", name="Docs Source Project")
-    project_doc_response = client.post(
-        f"/api/v1/pms/projects/{project['id']}/docs",
-        headers=_auth_headers(admin["token"]),
-        json={"title": "Project Spec", "content_blocks": []},
-    )
-    assert project_doc_response.status_code == 201
 
     space_doc_response = client.post(
         f"/api/v1/pms/spaces/{project['team_id']}/docs",
@@ -110,8 +104,6 @@ def test_docs_hub_reuses_pms_acl_and_blocks_resharing_of_source_docs(client: Tes
     viewer_hub_response = client.get("/api/v1/docs/hub", headers=_auth_headers(viewer_token))
     assert viewer_hub_response.status_code == 200
     viewer_items = {item["title"]: item for item in viewer_hub_response.json()["items"]}
-    assert viewer_items["Project Spec"]["can_edit"] is False
-    assert viewer_items["Project Spec"]["can_manage"] is False
     assert viewer_items["Space Handbook"]["can_edit"] is False
     assert viewer_items["Space Handbook"]["can_manage"] is False
 
@@ -145,8 +137,6 @@ def test_docs_hub_reuses_pms_acl_and_blocks_resharing_of_source_docs(client: Tes
     member_hub_response = client.get("/api/v1/docs/hub", headers=_auth_headers(member_token))
     assert member_hub_response.status_code == 200
     member_items = {item["title"]: item for item in member_hub_response.json()["items"]}
-    assert member_items["Project Spec"]["can_edit"] is True
-    assert member_items["Project Spec"]["can_manage"] is True
     assert member_items["Space Handbook"]["can_edit"] is True
     assert member_items["Space Handbook"]["can_manage"] is False
 
@@ -162,20 +152,6 @@ def test_docs_hub_reuses_pms_acl_and_blocks_resharing_of_source_docs(client: Tes
         headers=_auth_headers(member_token),
     )
     assert member_delete_space_doc_response.status_code == 403
-
-    project_pages_response = client.get(
-        f"/api/v1/docs/items/{member_items['Project Spec']['id']}/pages",
-        headers=_auth_headers(member_token),
-    )
-    assert project_pages_response.status_code == 200
-    project_page = project_pages_response.json()["items"][0]
-
-    update_project_page_response = client.patch(
-        f"/api/v1/docs/pages/{project_page['id']}",
-        headers=_auth_headers(member_token),
-        json={"content_blocks": [{"type": "paragraph", "content": "edited"}]},
-    )
-    assert update_project_page_response.status_code == 200
 
     original_space_page_lookup_response = client.get(
         f"/api/v1/docs/items/{member_items['Space Handbook']['id']}/pages",

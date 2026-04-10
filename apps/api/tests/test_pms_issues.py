@@ -486,14 +486,6 @@ def test_media_linking_follows_parent_resource_acl(client: TestClient) -> None:
 
     issue = _create_issue(client, admin_session["token"], project["id"], title="Media ACL issue")
 
-    doc_response = client.post(
-        f"/api/v1/pms/projects/{project['id']}/docs",
-        headers=_auth_headers(admin_session["token"]),
-        json={"title": "Project Doc", "content_blocks": []},
-    )
-    assert doc_response.status_code == 201
-    doc = doc_response.json()
-
     collection_response = client.post(
         f"/api/v1/pms/spaces/{space_id}/docs",
         headers=_auth_headers(admin_session["token"]),
@@ -531,13 +523,13 @@ def test_media_linking_follows_parent_resource_acl(client: TestClient) -> None:
     )
     assert issue_link_response.status_code == 204
 
-    doc_media = _create_unlinked_media(project_member["user"]["id"])
-    doc_link_response = client.post(
+    removed_doc_media = _create_unlinked_media(project_member["user"]["id"])
+    removed_doc_link_response = client.post(
         "/api/v1/media/link",
         headers=_auth_headers(project_member_token),
-        json={"media_ids": [doc_media["id"]], "resource_type": "doc", "resource_id": doc["id"]},
+        json={"media_ids": [removed_doc_media["id"]], "resource_type": "doc", "resource_id": issue["id"]},
     )
-    assert doc_link_response.status_code == 204
+    assert removed_doc_link_response.status_code == 400
 
     forbidden_space_media = _create_unlinked_media(project_member["user"]["id"])
     forbidden_space_link_response = client.post(
@@ -575,14 +567,6 @@ def test_media_linking_follows_parent_resource_acl(client: TestClient) -> None:
         },
     )
     assert page_link_response.status_code == 204
-
-    forbidden_doc_media = _create_unlinked_media(space_member["user"]["id"])
-    forbidden_doc_link_response = client.post(
-        "/api/v1/media/link",
-        headers=_auth_headers(space_member_token),
-        json={"media_ids": [forbidden_doc_media["id"]], "resource_type": "doc", "resource_id": doc["id"]},
-    )
-    assert forbidden_doc_link_response.status_code == 204
 
 
 def test_team_soft_delete_hides_space_data_and_untrashes_default_space(client: TestClient) -> None:

@@ -161,14 +161,6 @@ def _can_resolve(db: Session, user: User, media: MediaFile) -> bool:
             return False
         project = db.scalar(select(Project).where(Project.id == issue.project_id))
         return _has_space_access(db, user, project.team_id if project else None)
-    if media.resource_type == "doc":
-        from aidoo_api.domains.pms.models import Doc, Project
-
-        doc = db.scalar(select(Doc).where(Doc.id == media.resource_id))
-        if doc is None:
-            return False
-        project = db.scalar(select(Project).where(Project.id == doc.project_id))
-        return _has_space_access(db, user, project.team_id if project else None)
     if media.resource_type == "space_doc_page":
         from aidoo_api.domains.pms.models import SpaceDocPage
 
@@ -223,10 +215,10 @@ def link_media(
     # Validate resource access
     if payload.resource_type == "issue":
         _ensure_issue_access(db, current_user, payload.resource_id)
-    elif payload.resource_type == "doc":
-        _ensure_doc_access(db, current_user, payload.resource_id)
     elif payload.resource_type == "space_doc_page":
         _ensure_space_doc_page_access(db, current_user, payload.resource_id)
+    else:
+        raise HTTPException(status_code=400, detail="Unsupported media resource type.")
 
     media_files = db.scalars(
         select(MediaFile).where(
@@ -253,18 +245,6 @@ def _ensure_issue_access(db: Session, user: User, issue_id: str) -> None:
     if issue is None:
         raise HTTPException(status_code=404, detail="Issue not found.")
     project = db.scalar(select(Project).where(Project.id == issue.project_id))
-    if not _has_space_access(db, user, project.team_id if project else None):
-        raise HTTPException(status_code=403, detail="Project space access required.")
-
-
-def _ensure_doc_access(db: Session, user: User, doc_id: str) -> None:
-    """Verify the user has access to the doc's project."""
-    from aidoo_api.domains.pms.models import Doc, Project
-
-    doc = db.scalar(select(Doc).where(Doc.id == doc_id))
-    if doc is None:
-        raise HTTPException(status_code=404, detail="Doc not found.")
-    project = db.scalar(select(Project).where(Project.id == doc.project_id))
     if not _has_space_access(db, user, project.team_id if project else None):
         raise HTTPException(status_code=403, detail="Project space access required.")
 

@@ -349,7 +349,7 @@ export const DocsView = () => {
   };
 
   const handleAddPage = async (parentId?: string | null) => {
-    if (!token || !selectedDoc || !selectedDoc.can_edit || selectedDoc.structure_kind !== 'page_tree') return;
+    if (!token || !selectedDoc || !selectedDoc.can_edit) return;
     const title = await prompt({ title: 'New Page', defaultValue: 'Untitled' });
     if (!title || !title.trim()) return;
     try {
@@ -621,25 +621,23 @@ export const DocsView = () => {
                 <p className="app-text-caption text-gray-500 truncate">{selectedDoc.location_label}</p>
               </div>
 
-              {selectedDoc.structure_kind === 'page_tree' ? (
-                <div>
-                  <div className="flex items-center justify-between px-2 mb-2">
-                    <span className="app-text-overline text-gray-500">Pages</span>
-                  </div>
-                  <div className="space-y-0.5 overflow-y-auto custom-scrollbar max-h-[calc(100vh-250px)]">
-                    {tree.map((node) => renderTreeNode(node))}
-                    {selectedDoc.can_edit ? (
-                      <button
-                        onClick={() => void handleAddPage(null)}
-                        className="app-text-body-sm flex w-full items-center gap-2 rounded px-3 py-1.5 text-gray-500 transition-all hover:bg-clickup-hover hover:text-clickup-purple"
-                      >
-                        <Plus size={14} />
-                        <span>Add page</span>
-                      </button>
-                    ) : null}
-                  </div>
+              <div>
+                <div className="flex items-center justify-between px-2 mb-2">
+                  <span className="app-text-overline text-gray-500">Pages</span>
                 </div>
-              ) : null}
+                <div className="space-y-0.5 overflow-y-auto custom-scrollbar max-h-[calc(100vh-250px)]">
+                  {tree.map((node) => renderTreeNode(node))}
+                  {selectedDoc.can_edit ? (
+                    <button
+                      onClick={() => void handleAddPage(null)}
+                      className="app-text-body-sm flex w-full items-center gap-2 rounded px-3 py-1.5 text-gray-500 transition-all hover:bg-clickup-hover hover:text-clickup-purple"
+                    >
+                      <Plus size={14} />
+                      <span>Add page</span>
+                    </button>
+                  ) : null}
+                </div>
+              </div>
             </div>
 
             <div className="mt-auto p-4 border-t border-clickup-border space-y-1">
@@ -710,7 +708,7 @@ export const DocsView = () => {
                 <div className="text-center py-20">
                   <FileText size={48} className="mx-auto mb-4 text-gray-600 opacity-20" />
                   <p className="app-text-body text-gray-500 mb-4">No pages yet</p>
-                  {selectedDoc.can_edit && selectedDoc.structure_kind === 'page_tree' ? (
+                  {selectedDoc.can_edit ? (
                     <button
                       onClick={() => void handleAddPage(null)}
                       className="app-text-control rounded-md bg-clickup-purple px-4 py-2 text-clickup-bg hover:opacity-90"
