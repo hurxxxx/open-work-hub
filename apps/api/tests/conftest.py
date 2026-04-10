@@ -79,6 +79,7 @@ def client(monkeypatch: pytest.MonkeyPatch, postgres_dsn: str) -> TestClient:
     monkeypatch.setenv("DOOWON_API_SESSION_TTL_HOURS", "1")
     monkeypatch.setenv("DOOWON_API_ALLOW_DEV_ADMIN_LOGIN", "1")
     monkeypatch.setenv("DOOWON_LLM_HEALTHCHECK_ON_STARTUP", "0")
+    monkeypatch.setenv("DOOWON_API_AUTO_MIGRATE", "1")
 
     from aidoo_api.core.db import Base, get_engine, get_session_factory
     from aidoo_api.core.llm import get_llm_client
@@ -93,6 +94,8 @@ def client(monkeypatch: pytest.MonkeyPatch, postgres_dsn: str) -> TestClient:
 
     engine = get_engine()
     Base.metadata.drop_all(bind=engine)
+    with engine.begin() as connection:
+        connection.exec_driver_sql("DROP TABLE IF EXISTS alembic_version")
 
     from aidoo_api.app import create_app
 
@@ -101,6 +104,8 @@ def client(monkeypatch: pytest.MonkeyPatch, postgres_dsn: str) -> TestClient:
         yield test_client
 
     Base.metadata.drop_all(bind=engine)
+    with engine.begin() as connection:
+        connection.exec_driver_sql("DROP TABLE IF EXISTS alembic_version")
     engine.dispose()
     get_settings.cache_clear()
     get_llm_client.cache_clear()

@@ -41,3 +41,41 @@ curl http://127.0.0.1:8000/readyz
 챗봇 요청은 기본 `backend_mode=auto`로 로컬 Ollama를 먼저 사용하고 실패 시 OpenRouter로
 넘어간다. UI 또는 API 요청에서 `backend_mode=local`이나 `backend_mode=openrouter`를
 보내면 해당 backend만 사용한다.
+
+## 데이터베이스 마이그레이션 (Alembic)
+
+스키마는 Alembic 이 단독 소유한다. `Base.metadata.create_all()` 과 손으로 만든
+`_apply_postgres_schema_compat()` SQL 리스트는 `0b843a383b2b_baseline_2026_04_10`
+리비전으로 baseline 화 되었다 (PR0).
+
+### 일상 워크플로
+
+```bash
+cd apps/api
+
+# 1. 모델 변경 후 마이그레이션 자동 생성
+DOOWON_POSTGRES_DSN=postgresql+psycopg://aidoo_db:aidoo_db@127.0.0.1:5432/doowon_ai_portal \
+  uv run --python 3.12 alembic revision --autogenerate -m "add_meeting_tables"
+
+# 2. 생성된 alembic/versions/<hash>_*.py 파일을 반드시 손으로 검토
+#    autogenerate 가 잡지 못하는 변경 (테이블/컬럼 rename, server_default, CHECK 등) 보강
+# 3. 로컬에 적용
+uv run --python 3.12 alembic upgrade head
+
+# 4. 직전 리비전 되돌리기 (개발 중에만)
+uv run --python 3.12 alembic downgrade -1
+```
+
+### 환경별 적용 방법
+
+| 환경 | 방법 |
+| --- | --- |
+| 로컬 dev / 테스트 | `DOOWON_API_AUTO_MIGRATE=1` 환경변수를 켜면 앱 부팅 시 `init_db()` 가 자동으로 `alembic upgrade head` 를 호출한다. 테스트 fixture (`apps/api/tests/conftest.py`) 가 이 방식을 사용한다. |
+| 스테이징 / 프로덕션 | **자동 실행 금지.** 배포 스크립트에서 명시적으로 `alembic upgrade head` 를 실행한 뒤 앱을 기동한다. `DOOWON_API_AUTO_MIGRATE` 는 prod 에서 절대 켜지 말 것. |
+| Alembic 도입 이전부터 운영 중인 기존 DB | 한 번만 `alembic stamp head` 로 baseline 적용 표시. 이후부터 일반 워크플로 따르면 된다. baseline 은 새 컬럼/테이블만 다루므로 기존 row 는 손실 없음. 다만 legacy `pms_goals`, `pms_goal_links`, `pms_automations` 는 baseline 이 더 이상 다루지 않으므로 필요하면 수동 DROP. |
+
+### 모델 드리프트 가드
+
+`apps/api/tests/test_alembic_migrations.py` 의 `test_alembic_check_reports_no_model_drift`
+가 매 테스트 실행마다 `alembic check` 를 돌려, SQLAlchemy 모델 변경이 마이그레이션
+없이 머지되는 것을 막는다. 모델만 바꾸고 마이그레이션을 깜빡하면 CI 가 빨개진다.

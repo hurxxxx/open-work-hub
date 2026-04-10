@@ -5,7 +5,7 @@ from urllib.parse import urlparse
 
 from sqlalchemy.orm import Session
 
-from aidoo_api.core.db import Base, _apply_postgres_schema_compat, get_engine
+from aidoo_api.core.db import Base, get_engine, run_migrations
 from aidoo_api.core.settings import get_settings
 from aidoo_api.domains.auth.access import (
     DEV_LOGIN_ACCOUNTS,
@@ -55,8 +55,9 @@ def main() -> None:
 
     engine = get_engine()
     Base.metadata.drop_all(bind=engine)
-    Base.metadata.create_all(bind=engine)
-    _apply_postgres_schema_compat(engine)
+    with engine.begin() as connection:
+        connection.exec_driver_sql("DROP TABLE IF EXISTS alembic_version")
+    run_migrations()
 
     with Session(engine) as session:
         if args.seed_dev_accounts:
