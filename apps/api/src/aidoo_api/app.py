@@ -5,12 +5,15 @@ from fastapi import Depends, FastAPI
 from fastapi import Response, status
 
 from aidoo_api.core.db import init_db
-from aidoo_api.core.llm import check_llm_health
+from aidoo_api.core.llm import check_llm_stack_health
 from aidoo_api.core.settings import get_settings
 from aidoo_api.core.storage import ensure_bucket
 from aidoo_api.domains.ai.router import router as ai_router
 from aidoo_api.domains.admin.router import router as admin_router
-from aidoo_api.domains.auth.dependencies import require_current_user, require_workspace_feature_access
+from aidoo_api.domains.auth.dependencies import (
+    require_current_user,
+    require_workspace_feature_access,
+)
 from aidoo_api.domains.auth.router import router as auth_router
 from aidoo_api.domains.docs.router import router as docs_router
 from aidoo_api.domains.documents.router import router as documents_router
@@ -33,7 +36,7 @@ def create_app() -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         if settings.llm_healthcheck_on_startup:
-            llm_health = check_llm_health(settings)
+            llm_health = check_llm_stack_health(settings)
             app.state.llm_health = llm_health.public_dict()
             if settings.llm_required and not llm_health.ready:
                 logger.warning("LLM readiness check failed: %s", llm_health.public_dict())
@@ -53,7 +56,7 @@ def create_app() -> FastAPI:
 
     @app.get("/readyz", tags=["system"])
     def readyz(response: Response) -> dict[str, object]:
-        llm_health = check_llm_health(settings)
+        llm_health = check_llm_stack_health(settings)
         ready = llm_health.ready or not settings.llm_required
         if not ready:
             response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE

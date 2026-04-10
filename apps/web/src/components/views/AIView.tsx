@@ -1,12 +1,21 @@
 import { Link } from 'react-router-dom';
 import { motion } from 'motion/react';
 import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
-import { Bot, ChevronRight, Loader2, Send, User } from 'lucide-react';
+import {
+  Bot,
+  ChevronRight,
+  Loader2,
+  RefreshCcw,
+  Send,
+  User,
+} from 'lucide-react';
 import { NAV_ITEMS } from '@/src/constants';
 import {
   getLlmHealth,
   sendAiChat,
+  type AiBackendMode,
   type AiChatMessage,
+  type LlmBackendHealthResponse,
   type LlmHealthResponse,
 } from '@/src/domains/ai/ai-api';
 import { useAuth } from '@/src/domains/auth/auth-provider';
@@ -15,6 +24,9 @@ interface ChatTurn {
   id: string;
   role: 'user' | 'assistant';
   content: string;
+  backend?: string;
+  provider?: string;
+  fallbackUsed?: boolean;
 }
 
 const INITIAL_TURNS: ChatTurn[] = [
@@ -25,22 +37,143 @@ const INITIAL_TURNS: ChatTurn[] = [
   },
 ];
 
-function formatHealth(health: LlmHealthResponse | null): string {
+const AI_BACKEND_MODE_STORAGE_KEY = 'aidoo.ai.backendMode';
+
+const BACKEND_OPTIONS: Array<{
+  value: AiBackendMode;
+  label: string;
+  description: string;
+}> = [
+  { value: 'auto', label: '자동', description: '로컬 우선' },
+  { value: 'local', label: '로컬', description: 'Ollama 고정' },
+  { value: 'openrouter', label: 'OpenRouter', description: 'Fallback 고정' },
+];
+
+function readInitialBackendMode(): AiBackendMode {
+  if (typeof window === 'undefined') {
+    return 'auto';
+  }
+
+  const savedMode = window.localStorage.getItem(AI_BACKEND_MODE_STORAGE_KEY);
+  if (
+    savedMode === 'auto' ||
+    savedMode === 'local' ||
+    savedMode === 'openrouter'
+  ) {
+    return savedMode;
+  }
+
+  return 'auto';
+}
+
+function formatBackendMode(mode: AiBackendMode): string {
+  if (mode === 'local') {
+    return '로컬 Ollama';
+  }
+
+  if (mode === 'openrouter') {
+    return 'OpenRouter';
+  }
+
+  return '자동';
+}
+
+function formatHealth(
+  health: LlmHealthResponse | null,
+  backendMode: AiBackendMode,
+): string {
+  const modeLabel = formatBackendMode(backendMode);
   if (!health) {
-    return '모델 상태 확인 중';
+    return `${modeLabel}: 모델 상태 확인 중`;
   }
 
-  if (health.ready) {
-    return `${health.model} 준비됨`;
+  return `${modeLabel}: ${health.canonical_model}`;
+}
+
+function formatHealthDetail(
+  health: LlmHealthResponse | null,
+  backendMode: AiBackendMode,
+): string {
+  if (!health) {
+    return '상태 점검 중';
   }
 
-  return '모델 확인 필요';
+  if (backendMode === 'local') {
+    return health.primary.ready
+      ? '로컬 Ollama 사용'
+      : `로컬 확인 필요: ${health.primary.status}`;
+  }
+
+  if (backendMode === 'openrouter') {
+    return health.fallback?.ready
+      ? 'OpenRouter 사용'
+      : `OpenRouter 확인 필요: ${health.fallback?.status ?? 'not_configured'}`;
+  }
+
+  if (health.active_backend === 'fallback') {
+    return '로컬 모델 장애, OpenRouter fallback 사용 중';
+  }
+
+  if (health.primary.ready) {
+    return health.fallback?.ready
+      ? 'Ollama 연결됨, fallback 대기'
+      : 'Ollama 연결됨';
+  }
+
+  return health.detail ?? 'LLM 연결 확인 필요';
+}
+
+function formatBackendStatus(
+  backend: LlmBackendHealthResponse | null | undefined,
+): string {
+  if (!backend) {
+    return '확인 안 됨';
+  }
+
+  if (backend.ready) {
+    return '준비됨';
+  }
+
+  return backend.status;
+}
+
+function BackendStatusRow({
+  health,
+  label,
+}: {
+  health: LlmBackendHealthResponse | null | undefined;
+  label: string;
+}) {
+  const ready = Boolean(health?.ready);
+
+  return (
+    <div className="flex items-start justify-between gap-3 border-b border-app-border py-2 last:border-b-0">
+      <div className="min-w-0">
+        <div className="app-text-control-sm text-app-ink">{label}</div>
+        <div className="app-text-micro truncate text-gray-500">
+          {health?.model ?? '모델 확인 중'}
+        </div>
+      </div>
+      <div className="flex shrink-0 items-center gap-2">
+        <span
+          className={`h-2 w-2 rounded-full ${ready ? 'bg-emerald-500' : 'bg-amber-500'}`}
+        />
+        <span className="app-text-micro text-gray-500">
+          {formatBackendStatus(health)}
+        </span>
+      </div>
+    </div>
+  );
 }
 
 export const AIView = () => {
   const { token } = useAuth();
   const [health, setHealth] = useState<LlmHealthResponse | null>(null);
   const [healthError, setHealthError] = useState<string | null>(null);
+  const [isCheckingHealth, setIsCheckingHealth] = useState(false);
+  const [backendMode, setBackendMode] = useState<AiBackendMode>(
+    readInitialBackendMode,
+  );
   const [turns, setTurns] = useState<ChatTurn[]>(INITIAL_TURNS);
   const [input, setInput] = useState('');
   const [isSending, setIsSending] = useState(false);
@@ -51,6 +184,28 @@ export const AIView = () => {
     () => NAV_ITEMS.filter((item) => item.appId === 'ai'),
     [],
   );
+
+  async function refreshHealth() {
+    if (!token) {
+      return;
+    }
+
+    setIsCheckingHealth(true);
+    try {
+      const nextHealth = await getLlmHealth(token);
+      setHealth(nextHealth);
+      setHealthError(null);
+    } catch (error) {
+      setHealth(null);
+      setHealthError(
+        error instanceof Error
+          ? error.message
+          : '모델 상태를 확인하지 못했습니다.',
+      );
+    } finally {
+      setIsCheckingHealth(false);
+    }
+  }
 
   useEffect(() => {
     if (!token) {
@@ -80,6 +235,12 @@ export const AIView = () => {
       cancelled = true;
     };
   }, [token]);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem(AI_BACKEND_MODE_STORAGE_KEY, backendMode);
+    }
+  }, [backendMode]);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({
@@ -125,6 +286,7 @@ export const AIView = () => {
       const response = await sendAiChat(
         {
           messages,
+          backend_mode: backendMode,
           max_tokens: 1024,
           temperature: 0.2,
           reasoning_effort: 'none',
@@ -137,6 +299,9 @@ export const AIView = () => {
           id: `assistant-${Date.now()}`,
           role: 'assistant',
           content: response.content || '응답을 생성하지 못했습니다.',
+          backend: response.backend,
+          provider: response.provider,
+          fallbackUsed: response.fallback_used,
         },
       ]);
     } catch (error) {
@@ -169,11 +334,10 @@ export const AIView = () => {
             </div>
             <div className="rounded-md border border-app-border bg-app-bg px-3 py-2 text-right">
               <div className="app-text-caption text-app-ink">
-                {formatHealth(health)}
+                {formatHealth(health, backendMode)}
               </div>
               <div className="app-text-micro text-gray-500">
-                {healthError ??
-                  (health?.ready ? 'Ollama 연결됨' : '상태 점검 중')}
+                {healthError ?? formatHealthDetail(health, backendMode)}
               </div>
             </div>
           </header>
@@ -202,6 +366,13 @@ export const AIView = () => {
                   <p className="m-0 whitespace-pre-wrap break-words">
                     {turn.content}
                   </p>
+                  {turn.role === 'assistant' && turn.backend && (
+                    <div className="mt-2 app-text-micro text-gray-500">
+                      {turn.backend === 'fallback' ? 'OpenRouter' : 'Ollama'}{' '}
+                      응답
+                      {turn.fallbackUsed ? ' · fallback' : ''}
+                    </div>
+                  )}
                 </div>
                 {turn.role === 'user' && (
                   <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-app-border bg-app-surface text-gray-500">
@@ -258,36 +429,85 @@ export const AIView = () => {
 
         <aside className="border-t border-app-border bg-app-surface-sidebar p-5 lg:border-l lg:border-t-0">
           <div className="space-y-2">
-            <h2 className="app-text-title-md text-app-ink">바로가기</h2>
+            <h2 className="app-text-title-md text-app-ink">모델 경로</h2>
             <p className="app-text-body-sm text-gray-500 dark:text-gray-400">
-              자주 쓰는 업무 도구로 이동합니다.
+              응답 경로를 선택합니다.
             </p>
           </div>
 
-          <div className="mt-5 grid grid-cols-1 gap-3">
-            {aiTools.slice(0, 8).map((item) => (
-              <Link
-                key={item.id}
-                to={`/tool/${item.id}`}
-                className="group flex items-center gap-3 rounded-lg border border-app-border bg-app-surface px-3 py-3 no-underline transition-colors hover:border-app-accent"
+          <div className="mt-4 grid grid-cols-3 gap-2">
+            {BACKEND_OPTIONS.map((option) => (
+              <button
+                key={option.value}
+                className={`min-h-16 rounded-lg border px-2 py-2 text-left transition-colors ${
+                  backendMode === option.value
+                    ? 'border-app-accent bg-app-bg text-app-ink'
+                    : 'border-app-border bg-app-surface text-gray-500 hover:border-app-accent hover:text-app-ink'
+                }`}
+                onClick={() => setBackendMode(option.value)}
+                type="button"
               >
-                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-app-border bg-app-bg text-app-accent">
-                  <item.icon size={18} />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <div className="app-text-control-sm truncate text-app-ink">
-                    {item.title}
-                  </div>
-                  <div className="app-text-micro truncate text-gray-500">
-                    {item.description}
-                  </div>
-                </div>
-                <ChevronRight
-                  size={16}
-                  className="shrink-0 text-gray-500 transition-colors group-hover:text-app-ink"
-                />
-              </Link>
+                <span className="block app-text-control-sm">
+                  {option.label}
+                </span>
+                <span className="block app-text-micro">
+                  {option.description}
+                </span>
+              </button>
             ))}
+          </div>
+
+          <div className="mt-4 rounded-lg border border-app-border bg-app-surface px-3 py-2">
+            <BackendStatusRow health={health?.primary} label="로컬 Ollama" />
+            <BackendStatusRow health={health?.fallback} label="OpenRouter" />
+          </div>
+
+          <button
+            className="app-text-control-sm mt-3 flex h-10 w-full items-center justify-center gap-2 rounded-lg border border-app-border bg-app-surface text-app-ink transition-colors hover:border-app-accent disabled:cursor-not-allowed disabled:opacity-60"
+            disabled={!token || isCheckingHealth}
+            onClick={refreshHealth}
+            type="button"
+          >
+            <RefreshCcw
+              size={15}
+              className={isCheckingHealth ? 'animate-spin' : ''}
+            />
+            로컬 다시 확인
+          </button>
+
+          <div className="mt-8 border-t border-app-border pt-5">
+            <div className="space-y-2">
+              <h2 className="app-text-title-md text-app-ink">바로가기</h2>
+              <p className="app-text-body-sm text-gray-500 dark:text-gray-400">
+                자주 쓰는 업무 도구로 이동합니다.
+              </p>
+            </div>
+
+            <div className="mt-5 grid grid-cols-1 gap-3">
+              {aiTools.slice(0, 8).map((item) => (
+                <Link
+                  key={item.id}
+                  to={`/tool/${item.id}`}
+                  className="group flex items-center gap-3 rounded-lg border border-app-border bg-app-surface px-3 py-3 no-underline transition-colors hover:border-app-accent"
+                >
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-app-border bg-app-bg text-app-accent">
+                    <item.icon size={18} />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="app-text-control-sm truncate text-app-ink">
+                      {item.title}
+                    </div>
+                    <div className="app-text-micro truncate text-gray-500">
+                      {item.description}
+                    </div>
+                  </div>
+                  <ChevronRight
+                    size={16}
+                    className="shrink-0 text-gray-500 transition-colors group-hover:text-app-ink"
+                  />
+                </Link>
+              ))}
+            </div>
           </div>
         </aside>
       </section>

@@ -59,6 +59,44 @@ class Settings(BaseSettings):
         default="qwen3.5:35b-a3b-q4_K_M",
         validation_alias=AliasChoices("DOOWON_LLM_DEFAULT_MODEL"),
     )
+    llm_canonical_model: str = Field(
+        default="qwen/qwen3.5-35b-a3b",
+        validation_alias=AliasChoices("DOOWON_LLM_CANONICAL_MODEL", "DOOWON_LLM_MODEL_FAMILY"),
+    )
+    llm_fallback_enabled: bool = Field(
+        default=True,
+        validation_alias=AliasChoices("DOOWON_LLM_FALLBACK_ENABLED"),
+    )
+    llm_fallback_provider: str = Field(
+        default="openrouter",
+        validation_alias=AliasChoices("DOOWON_LLM_FALLBACK_PROVIDER"),
+    )
+    llm_fallback_base_url: str = Field(
+        default="https://openrouter.ai/api/v1",
+        validation_alias=AliasChoices("DOOWON_LLM_FALLBACK_BASE_URL", "DOOWON_OPENROUTER_BASE_URL"),
+    )
+    llm_fallback_api_key: str = Field(
+        default="",
+        validation_alias=AliasChoices(
+            "DOOWON_LLM_FALLBACK_API_KEY",
+            "DOOWON_OPENROUTER_API_KEY",
+            "OPENROUTER_API_KEY",
+        ),
+    )
+    llm_fallback_model: str = Field(
+        default="qwen/qwen3.5-35b-a3b",
+        validation_alias=AliasChoices("DOOWON_LLM_FALLBACK_MODEL"),
+    )
+    llm_fallback_http_referer: str = Field(
+        default="",
+        validation_alias=AliasChoices(
+            "DOOWON_LLM_FALLBACK_HTTP_REFERER", "DOOWON_OPENROUTER_HTTP_REFERER"
+        ),
+    )
+    llm_fallback_title: str = Field(
+        default="Doowon Aidoo",
+        validation_alias=AliasChoices("DOOWON_LLM_FALLBACK_TITLE", "DOOWON_OPENROUTER_TITLE"),
+    )
     llm_request_timeout_seconds: float = Field(
         default=10.0,
         gt=0,

@@ -1,4 +1,5 @@
 export type AiChatRole = 'system' | 'user' | 'assistant';
+export type AiBackendMode = 'auto' | 'local' | 'openrouter';
 
 export interface AiChatMessage {
   role: AiChatRole;
@@ -7,6 +8,7 @@ export interface AiChatMessage {
 
 export interface AiChatRequest {
   messages: AiChatMessage[];
+  backend_mode?: AiBackendMode;
   max_tokens?: number;
   temperature?: number;
   reasoning_effort?: 'none' | 'low' | 'medium' | 'high';
@@ -22,15 +24,28 @@ export interface AiChatResponse {
   model: string;
   content: string;
   usage: AiChatUsage | null;
+  provider: string;
+  backend: string;
+  fallback_used: boolean;
+  canonical_model: string;
+  requested_backend_mode: AiBackendMode;
 }
 
-export interface LlmHealthResponse {
+export interface LlmBackendHealthResponse {
+  name: string;
   provider: string;
   base_url: string;
   model: string;
+  canonical_model: string;
   status: string;
   ready: boolean;
   detail: string | null;
+}
+
+export interface LlmHealthResponse extends LlmBackendHealthResponse {
+  active_backend: string | null;
+  primary: LlmBackendHealthResponse;
+  fallback: LlmBackendHealthResponse | null;
 }
 
 export class AiApiError extends Error {
