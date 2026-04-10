@@ -70,6 +70,15 @@ export interface AuditLogItem {
 
 export interface AdminUsersResponse {
   items: AuthUser[];
+  total: number;
+  page: number;
+  page_size: number;
+}
+
+export interface AdminUsersQuery {
+  page?: number;
+  page_size?: number;
+  q?: string;
 }
 
 export interface CreatedUserResponse {
@@ -152,8 +161,24 @@ async function request<T>(token: string, path: string, init: RequestInit = {}): 
   return payload as T;
 }
 
-export function listAdminUsers(token: string): Promise<AdminUsersResponse> {
-  return request<AdminUsersResponse>(token, '/api/v1/admin/users');
+export function listAdminUsers(
+  token: string,
+  query: AdminUsersQuery = {},
+): Promise<AdminUsersResponse> {
+  const params = new URLSearchParams();
+  if (query.page !== undefined) {
+    params.set('page', String(query.page));
+  }
+  if (query.page_size !== undefined) {
+    params.set('page_size', String(query.page_size));
+  }
+  if (query.q?.trim()) {
+    params.set('q', query.q.trim());
+  }
+
+  const queryString = params.toString();
+  const suffix = queryString ? `?${queryString}` : '';
+  return request<AdminUsersResponse>(token, `/api/v1/admin/users${suffix}`);
 }
 
 export function createAdminUser(

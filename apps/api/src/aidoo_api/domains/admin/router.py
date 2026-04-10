@@ -4,13 +4,18 @@ from datetime import UTC, datetime
 import secrets
 from typing import Literal
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field, field_validator
-from sqlalchemy import select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session, joinedload, selectinload
 
 from aidoo_api.core.db import get_db_session
 from aidoo_api.domains.auth.access import (
+    APP_FEATURE_CODES,
+    SYSTEM_ORG_ADMIN,
+    SYSTEM_PLATFORM_ADMIN,
+    SYSTEM_ROLE_ORDER,
+    WORKSPACE_ROLE_RANK,
     assign_user_groups,
     is_org_admin_user,
     is_platform_admin_user,
@@ -24,6 +29,7 @@ from aidoo_api.domains.auth.access import (
     resolve_team_role,
     resolve_workspace_role,
     serialize_auth_user,
+    serialize_org_unit,
     slugify,
     team_role_allows,
     workspace_role_allows,
@@ -203,6 +209,9 @@ class AdminUserItemResponse(BaseModel):
 
 class AdminUsersResponse(BaseModel):
     items: list[AdminUserItemResponse]
+    total: int
+    page: int
+    page_size: int
 
 
 class CreatedUserResponse(BaseModel):
@@ -308,6 +317,19 @@ class FeaturePolicyUpdateRequest(BaseModel):
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
+ADMIN_USER_LIST_OPTIONS = (
+    joinedload(User.primary_org_unit),
+    selectinload(User.system_role_links),
+    selectinload(User.group_links)
+    .joinedload(UserAccessGroup.group)
+    .selectinload(AccessGroup.system_role_links),
+    selectinload(User.group_links)
+    .joinedload(UserAccessGroup.group)
+    .selectinload(AccessGroup.workspace_bindings)
+    .joinedload(WorkspaceGroupBinding.workspace),
+    selectinload(User.workspace_bindings).joinedload(WorkspaceUserBinding.workspace),
+)
+
 
 def _generate_temporary_password() -> str:
     return f"Aidoo!{secrets.token_urlsafe(10)}"
@@ -318,13 +340,272 @@ def _serialize_admin_user(db: Session, user: User) -> AdminUserItemResponse:
     if loaded is None:
         raise HTTPException(status_code=404, detail="User not found.")
     return AdminUserItemResponse.model_validate(serialize_auth_user(db, loaded))
+
+
+def _sort_system_roles(roles: set[str]) -> list[str]:
+    ordered = [role for role in SYSTEM_ROLE_ORDER if role in roles]
+    extras = sorted(role for role in roles if role not in SYSTEM_ROLE_ORDER)
+    return ordered + extras
+
+
+def _resolve_loaded_system_roles(user: User) -> list[str]:
+    roles = {
+        link.role
+        for link in user.system_role_links
+        if link.role in {SYSTEM_PLATFORM_ADMIN, SYSTEM_ORG_ADMIN}
+    }
+
+    for link in user.group_links:
+        if not link.group.active:
+            continue
+        roles.update(
+            system_link.role
+            for system_link in link.group.system_role_links
+            if system_link.role in {SYSTEM_PLATFORM_ADMIN, SYSTEM_ORG_ADMIN}
+        )
+
+    if user.is_admin:
+        roles.add(SYSTEM_PLATFORM_ADMIN)
+
+    return _sort_system_roles(roles)
+
+
+def _resolve_loaded_workspace_role_map(
+    user: User,
+    system_roles: set[str],
+    active_workspace_ids: set[str],
+) -> dict[str, str]:
+    if SYSTEM_PLATFORM_ADMIN in system_roles:
+        return {workspace_id: "admin" for workspace_id in active_workspace_ids}
+
+    role_map: dict[str, str] = {}
+    for binding in user.workspace_bindings:
+        normalized_role = normalize_workspace_role(binding.role)
+        if (
+            normalized_role is None
+            or binding.workspace_id not in active_workspace_ids
+            or not binding.workspace.active
+        ):
+            continue
+        role_map[binding.workspace_id] = normalized_role
+
+    for link in user.group_links:
+        if not link.group.active:
+            continue
+        for binding in link.group.workspace_bindings:
+            normalized_role = normalize_workspace_role(binding.role)
+            if (
+                normalized_role is None
+                or binding.workspace_id not in active_workspace_ids
+                or not binding.workspace.active
+            ):
+                continue
+            current_role = role_map.get(binding.workspace_id)
+            if (
+                current_role is None
+                or WORKSPACE_ROLE_RANK[normalized_role] > WORKSPACE_ROLE_RANK[current_role]
+            ):
+                role_map[binding.workspace_id] = normalized_role
+
+    return role_map
+
+
+def _resolve_docs_native_user_ids(db: Session, user_ids: set[str]) -> set[str]:
+    if not user_ids:
+        return set()
+
+    from aidoo_api.domains.docs.models import NativeDoc, NativeDocUserShare
+
+    owner_ids = set(
+        db.scalars(
+            select(NativeDoc.owner_id).where(
+                NativeDoc.owner_id.in_(user_ids),
+                NativeDoc.trashed_at.is_(None),
+            )
+        )
+    )
+    shared_user_ids = set(
+        db.scalars(
+            select(NativeDocUserShare.user_id)
+            .join(NativeDoc, NativeDoc.id == NativeDocUserShare.doc_id)
+            .where(
+                NativeDocUserShare.user_id.in_(user_ids),
+                NativeDoc.trashed_at.is_(None),
+            )
+        )
+    )
+    return owner_ids | shared_user_ids
+
+
+def _serialize_admin_user_list(db: Session, users: list[User]) -> list[AdminUserItemResponse]:
+    workspaces = list(db.scalars(select(Workspace).where(Workspace.active.is_(True))).all())
+    workspace_by_id = {workspace.id: workspace for workspace in workspaces}
+    workspace_by_key = {workspace.key: workspace for workspace in workspaces}
+    active_workspace_ids = set(workspace_by_id)
+    enabled_policies = {
+        policy.code: policy
+        for policy in db.scalars(select(FeaturePolicy).where(FeaturePolicy.enabled.is_(True))).all()
+    }
+    docs_native_user_ids = _resolve_docs_native_user_ids(db, {user.id for user in users})
+
+    items: list[AdminUserItemResponse] = []
+    for user in users:
+        system_roles = _resolve_loaded_system_roles(user)
+        system_role_set = set(system_roles)
+        workspace_role_map = _resolve_loaded_workspace_role_map(
+            user,
+            system_role_set,
+            active_workspace_ids,
+        )
+        workspace_roles = [
+            {
+                "workspace_id": workspace.id,
+                "key": workspace.key,
+                "name": workspace.name,
+                "role": role,
+            }
+            for workspace in sorted(workspaces, key=lambda item: item.key)
+            if (role := workspace_role_map.get(workspace.id)) is not None
+        ]
+        workspace_roles_by_key = {item["key"]: item for item in workspace_roles}
+        app_access: list[dict[str, str | None]] = []
+
+        for app_code, feature_code in APP_FEATURE_CODES.items():
+            if feature_code not in enabled_policies:
+                continue
+
+            if app_code == "admin":
+                if not system_roles:
+                    continue
+                workspace = workspace_roles_by_key.get("admin")
+                app_access.append(
+                    {
+                        "app": "admin",
+                        "workspace_id": workspace["workspace_id"] if workspace else None,
+                        "workspace_key": "admin",
+                        "workspace_name": workspace["name"] if workspace else "Admin Console",
+                        "role": "admin",
+                    }
+                )
+                continue
+
+            workspace = workspace_roles_by_key.get(app_code)
+            if app_code == "docs" and workspace is None and user.id in docs_native_user_ids:
+                docs_workspace = workspace_by_key.get("docs")
+                if docs_workspace is not None:
+                    app_access.append(
+                        {
+                            "app": "docs",
+                            "workspace_id": docs_workspace.id,
+                            "workspace_key": docs_workspace.key,
+                            "workspace_name": docs_workspace.name,
+                            "role": "member",
+                        }
+                    )
+                continue
+
+            if app_code == "pms" and workspace is None and SYSTEM_ORG_ADMIN in system_role_set:
+                pms_workspace = workspace_by_key.get("pms")
+                if pms_workspace is not None:
+                    app_access.append(
+                        {
+                            "app": "pms",
+                            "workspace_id": pms_workspace.id,
+                            "workspace_key": pms_workspace.key,
+                            "workspace_name": pms_workspace.name,
+                            "role": "admin",
+                        }
+                    )
+                continue
+
+            if workspace is None:
+                continue
+            app_access.append(
+                {
+                    "app": app_code,
+                    "workspace_id": workspace["workspace_id"],
+                    "workspace_key": workspace["key"],
+                    "workspace_name": workspace["name"],
+                    "role": workspace["role"],
+                }
+            )
+
+        items.append(
+            AdminUserItemResponse.model_validate(
+                {
+                    "id": user.id,
+                    "email": user.email,
+                    "full_name": user.full_name,
+                    "display_name": user.display_name or user.full_name,
+                    "status": user.status,
+                    "theme_preference": user.theme_preference,
+                    "primary_org_unit": serialize_org_unit(user.primary_org_unit),
+                    "system_roles": system_roles,
+                    "workspace_roles": workspace_roles,
+                    "app_access": app_access,
+                    "group_ids": sorted(
+                        {link.group_id for link in user.group_links if link.group.active}
+                    ),
+                    "group_slugs": sorted(
+                        {link.group.slug for link in user.group_links if link.group.active}
+                    ),
+                    "must_change_password": user.must_change_password,
+                    "last_login_at": user.last_login_at,
+                    "created_at": user.created_at,
+                }
+            )
+        )
+
+    return items
+
+
 @router.get("/users", response_model=AdminUsersResponse)
 def list_users(
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=100),
+    q: str | None = Query(default=None, max_length=120),
     context: AuthContext = Depends(require_permission("user.read")),
     db: Session = Depends(get_db_session),
 ) -> AdminUsersResponse:
-    users = db.scalars(select(User).order_by(User.created_at.asc())).all()
-    return AdminUsersResponse(items=[_serialize_admin_user(db, user) for user in users])
+    normalized_query = q.strip() if q else ""
+    user_query = select(User)
+    count_query = select(func.count()).select_from(User)
+
+    if normalized_query:
+        search_pattern = f"%{normalized_query}%"
+        search_filter = or_(
+            User.email.ilike(search_pattern),
+            User.full_name.ilike(search_pattern),
+            User.display_name.ilike(search_pattern),
+            User.employee_code.ilike(search_pattern),
+            User.job_title.ilike(search_pattern),
+            OrgUnit.name.ilike(search_pattern),
+        )
+        user_query = user_query.outerjoin(OrgUnit, User.primary_org_unit_id == OrgUnit.id).where(
+            search_filter
+        )
+        count_query = count_query.outerjoin(OrgUnit, User.primary_org_unit_id == OrgUnit.id).where(
+            search_filter
+        )
+
+    total = db.scalar(count_query) or 0
+    offset = (page - 1) * page_size
+    users = list(
+        db.scalars(
+            user_query.options(*ADMIN_USER_LIST_OPTIONS)
+            .order_by(User.created_at.asc())
+            .offset(offset)
+            .limit(page_size)
+        )
+        .unique()
+        .all()
+    )
+    return AdminUsersResponse(
+        items=_serialize_admin_user_list(db, users),
+        total=total,
+        page=page,
+        page_size=page_size,
+    )
 
 
 @router.post("/users", response_model=CreatedUserResponse, status_code=status.HTTP_201_CREATED)

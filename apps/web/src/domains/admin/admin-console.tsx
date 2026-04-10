@@ -34,6 +34,8 @@ import { useAuth } from '@/src/domains/auth/auth-provider';
 import { AccessDeniedView } from '@/src/domains/auth/settings-pages';
 
 const NONE_OPTION_VALUE = '__none__';
+const PEOPLE_PAGE_SIZE = 20;
+const PEOPLE_EXPORT_PAGE_SIZE = 100;
 const fieldClassName =
   'app-text-body w-full rounded-lg border border-app-border bg-app-bg px-3 py-2 text-app-ink outline-none transition-colors focus:border-app-accent';
 
@@ -288,7 +290,7 @@ function GeneralSection({ token }: { token: string }) {
     async function load() {
       try {
         const [users, groups, workspaces, teams, policies, audits] = await Promise.all([
-          canReadUsers ? listAdminUsers(token) : Promise.resolve(null),
+          canReadUsers ? listAdminUsers(token, { page_size: 100 }) : Promise.resolve(null),
           canReadGroups ? listGroups(token) : Promise.resolve(null),
           canReadWorkspaces ? listWorkspaces(token) : Promise.resolve(null),
           canReadTeams ? listTeams(token) : Promise.resolve(null),
@@ -299,7 +301,7 @@ function GeneralSection({ token }: { token: string }) {
           return;
         }
         setSummary({
-          userCount: users?.items.length ?? null,
+          userCount: users?.total ?? null,
           adminCount: users?.items.filter((item) => isAdminUser(item)).length ?? null,
           groupCount: groups?.length ?? null,
           workspaceCount: workspaces?.length ?? null,
@@ -384,6 +386,8 @@ function GeneralSection({ token }: { token: string }) {
 
 function PeopleSection({ token }: { token: string }) {
   const [users, setUsers] = useState<AuthUser[]>([]);
+  const [totalUsers, setTotalUsers] = useState(0);
+  const [page, setPage] = useState(1);
   const [groups, setGroups] = useState<AccessGroupItem[]>([]);
   const [orgUnits, setOrgUnits] = useState<OrgUnitItem[]>([]);
   const [inviteOpen, setInviteOpen] = useState(false);
@@ -396,15 +400,18 @@ function PeopleSection({ token }: { token: string }) {
   const [selectedGroupId, setSelectedGroupId] = useState(NONE_OPTION_VALUE);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [isLoadingUsers, setIsLoadingUsers] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
+  const totalPages = Math.max(1, Math.ceil(totalUsers / PEOPLE_PAGE_SIZE));
+  const firstVisibleUser = totalUsers === 0 ? 0 : (page - 1) * PEOPLE_PAGE_SIZE + 1;
+  const lastVisibleUser = Math.min(totalUsers, (page - 1) * PEOPLE_PAGE_SIZE + users.length);
 
-  async function load() {
+  async function loadDirectoryOptions() {
     try {
-      const [userResponse, groupItems, orgUnitItems] = await Promise.all([
-        listAdminUsers(token),
+      const [groupItems, orgUnitItems] = await Promise.all([
         listGroups(token),
         listOrgUnits(token),
       ]);
-      setUsers(userResponse.items);
       setGroups(groupItems);
       setOrgUnits(orgUnitItems);
       setSelectedOrgUnitId((current) => current || orgUnitItems[0]?.id || '');
@@ -420,26 +427,103 @@ function PeopleSection({ token }: { token: string }) {
   }
 
   useEffect(() => {
+    let cancelled = false;
+
+    async function load() {
+      try {
+        const [groupItems, orgUnitItems] = await Promise.all([
+          listGroups(token),
+          listOrgUnits(token),
+        ]);
+        if (cancelled) {
+          return;
+        }
+        setGroups(groupItems);
+        setOrgUnits(orgUnitItems);
+        setSelectedOrgUnitId((current) => current || orgUnitItems[0]?.id || '');
+        setSelectedGroupId((current) => {
+          if (current !== NONE_OPTION_VALUE && groupItems.some((item) => item.id === current)) {
+            return current;
+          }
+          return groupItems[0]?.id ?? NONE_OPTION_VALUE;
+        });
+      } catch (caughtError) {
+        if (!cancelled) {
+          setError(getErrorMessage(caughtError, '사용자 정보를 불러오지 못했습니다.'));
+        }
+      }
+    }
+
     void load();
+
+    return () => {
+      cancelled = true;
+    };
   }, [token]);
 
-  const filteredUsers = useMemo(() => {
-    const normalizedQuery = search.trim().toLowerCase();
-    return users.filter((user) => {
-      const matchesQuery =
-        normalizedQuery.length === 0 ||
-        user.email.toLowerCase().includes(normalizedQuery) ||
-        user.display_name.toLowerCase().includes(normalizedQuery) ||
-        user.full_name.toLowerCase().includes(normalizedQuery) ||
-        (user.primary_org_unit?.name ?? '').toLowerCase().includes(normalizedQuery);
+  useEffect(() => {
+    let cancelled = false;
+    const handle = window.setTimeout(() => {
+      async function load() {
+        setIsLoadingUsers(true);
+        try {
+          const userResponse = await listAdminUsers(token, {
+            page,
+            page_size: PEOPLE_PAGE_SIZE,
+            q: search,
+          });
+          if (cancelled) {
+            return;
+          }
+          setUsers(userResponse.items);
+          setTotalUsers(userResponse.total);
+        } catch (caughtError) {
+          if (!cancelled) {
+            setError(getErrorMessage(caughtError, '사용자 목록을 불러오지 못했습니다.'));
+          }
+        } finally {
+          if (!cancelled) {
+            setIsLoadingUsers(false);
+          }
+        }
+      }
 
+      void load();
+    }, 250);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(handle);
+    };
+  }, [page, search, token]);
+
+  const filteredUsers = useMemo(() => {
+    return users.filter((user) => {
       const matchesRole =
         roleFilter === 'all' ||
         (roleFilter === 'admin' ? isAdminUser(user) : !isAdminUser(user));
 
-      return matchesQuery && matchesRole;
+      return matchesRole;
     });
-  }, [roleFilter, search, users]);
+  }, [roleFilter, users]);
+
+  async function reloadUsers(nextPage: number) {
+    setIsLoadingUsers(true);
+    try {
+      const userResponse = await listAdminUsers(token, {
+        page: nextPage,
+        page_size: PEOPLE_PAGE_SIZE,
+        q: search,
+      });
+      setUsers(userResponse.items);
+      setTotalUsers(userResponse.total);
+      setPage(userResponse.page);
+    } catch (caughtError) {
+      setError(getErrorMessage(caughtError, '사용자 목록을 불러오지 못했습니다.'));
+    } finally {
+      setIsLoadingUsers(false);
+    }
+  }
 
   async function handleCreateUser(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -459,7 +543,8 @@ function PeopleSection({ token }: { token: string }) {
       setDisplayName('');
       setInviteOpen(false);
       setMessage(`사용자를 생성했습니다. 임시 비밀번호: ${response.temporary_password}`);
-      await load();
+      await loadDirectoryOptions();
+      await reloadUsers(1);
     } catch (caughtError) {
       setError(getErrorMessage(caughtError, '사용자를 생성하지 못했습니다.'));
     }
@@ -477,31 +562,61 @@ function PeopleSection({ token }: { token: string }) {
     }
   }
 
-  function handleExport() {
-    const header = ['Name', 'Email', 'Role', 'Last active', 'Invited by', 'Invited on', 'Teams'];
-    const rows = filteredUsers.map((user) => [
-      user.display_name || user.full_name,
-      user.email,
-      isAdminUser(user) ? 'Admin' : 'Member',
-      formatDateLabel(user.last_login_at),
-      'System',
-      formatDateLabel(user.created_at),
-      user.workspace_roles.map((item) => item.name).join(', ') || '-',
-    ]);
-    const csv = [header, ...rows]
-      .map((row) =>
-        row
-          .map((item) => `"${String(item).replaceAll('"', '""')}"`)
-          .join(','),
-      )
-      .join('\n');
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement('a');
-    anchor.href = url;
-    anchor.download = 'aidoo-people.csv';
-    anchor.click();
-    URL.revokeObjectURL(url);
+  async function handleExport() {
+    setIsExporting(true);
+    setError(null);
+    try {
+      const exportUsers: AuthUser[] = [];
+      let nextPage = 1;
+      let total = 0;
+      let received = 0;
+
+      do {
+        const userResponse = await listAdminUsers(token, {
+          page: nextPage,
+          page_size: PEOPLE_EXPORT_PAGE_SIZE,
+          q: search,
+        });
+        exportUsers.push(...userResponse.items);
+        total = userResponse.total;
+        received = userResponse.items.length;
+        nextPage += 1;
+      } while (received > 0 && exportUsers.length < total);
+
+      const rows = exportUsers
+        .filter((user) => {
+          return roleFilter === 'all' || (roleFilter === 'admin' ? isAdminUser(user) : !isAdminUser(user));
+        })
+        .map((user) => [
+          user.display_name || user.full_name,
+          user.email,
+          isAdminUser(user) ? 'Admin' : 'Member',
+          formatDateLabel(user.last_login_at),
+          'System',
+          formatDateLabel(user.created_at),
+          user.workspace_roles.map((item) => item.name).join(', ') || '-',
+        ]);
+
+      const header = ['Name', 'Email', 'Role', 'Last active', 'Invited by', 'Invited on', 'Teams'];
+      const csv = [header, ...rows]
+        .map((row) =>
+          row
+            .map((item) => `"${String(item).replaceAll('"', '""')}"`)
+            .join(','),
+        )
+        .join('\n');
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = 'aidoo-people.csv';
+      anchor.click();
+      URL.revokeObjectURL(url);
+    } catch (caughtError) {
+      setError(getErrorMessage(caughtError, '사용자 목록을 내보내지 못했습니다.'));
+    } finally {
+      setIsExporting(false);
+    }
   }
 
   return (
@@ -514,7 +629,10 @@ function PeopleSection({ token }: { token: string }) {
             <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" size={16} />
             <input
               className="app-text-body w-full rounded-md border border-transparent bg-transparent py-1.5 pl-9 text-app-ink outline-none transition-colors hover:border-app-border focus:border-app-accent focus:bg-app-bg"
-              onChange={(event) => setSearch(event.target.value)}
+              onChange={(event) => {
+                setSearch(event.target.value);
+                setPage(1);
+              }}
               placeholder="Search or invite by email"
               value={search}
             />
@@ -523,10 +641,13 @@ function PeopleSection({ token }: { token: string }) {
         <div className="flex items-center gap-2">
           <button
             className="app-text-control rounded-md border border-transparent px-3 py-1.5 text-gray-500 transition-colors hover:border-app-border hover:bg-app-surface-hover hover:text-app-ink"
-            onClick={handleExport}
+            disabled={isExporting || totalUsers === 0}
+            onClick={() => {
+              void handleExport();
+            }}
             type="button"
           >
-            Export
+            {isExporting ? 'Exporting' : 'Export'}
           </button>
           <button
             className="app-text-control inline-flex items-center gap-1.5 rounded-md bg-app-ink px-3 py-1.5 text-app-bg transition-opacity hover:opacity-90 dark:bg-white dark:text-black"
@@ -549,9 +670,10 @@ function PeopleSection({ token }: { token: string }) {
           className="app-text-control inline-flex items-center gap-1.5 rounded p-1 text-app-ink hover:bg-app-surface-hover"
           type="button"
         >
-          <span>All Users ({users.length})</span>
+          <span>All Users ({totalUsers})</span>
           <span className="app-text-micro text-gray-500">▾</span>
         </button>
+        {isLoadingUsers ? <span className="app-text-body text-gray-500">Loading</span> : null}
       </div>
 
       <div className="w-full">
@@ -581,7 +703,13 @@ function PeopleSection({ token }: { token: string }) {
                 </button>
               </td>
             </tr>
-            {filteredUsers.length === 0 ? (
+            {isLoadingUsers && users.length === 0 ? (
+              <EmptyRow
+                colSpan={8}
+                description="잠시만 기다려 주세요."
+                title="사용자 목록을 불러오는 중입니다."
+              />
+            ) : filteredUsers.length === 0 ? (
               <EmptyRow
                 colSpan={8}
                 description="검색어를 바꾸거나 초대 버튼으로 사용자를 추가하세요."
@@ -627,6 +755,33 @@ function PeopleSection({ token }: { token: string }) {
             )}
           </tbody>
         </table>
+      </div>
+
+      <div className="flex flex-col gap-3 border-t border-app-border pt-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="app-text-body text-gray-500">
+          {firstVisibleUser}-{lastVisibleUser} of {totalUsers}
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            className="app-text-control rounded-md border border-app-border px-3 py-1.5 text-app-ink transition-colors hover:bg-app-surface-hover disabled:cursor-not-allowed disabled:opacity-50"
+            disabled={page <= 1 || isLoadingUsers}
+            onClick={() => setPage((current) => Math.max(1, current - 1))}
+            type="button"
+          >
+            Previous
+          </button>
+          <span className="app-text-body min-w-20 text-center text-gray-500">
+            {page} / {totalPages}
+          </span>
+          <button
+            className="app-text-control rounded-md border border-app-border px-3 py-1.5 text-app-ink transition-colors hover:bg-app-surface-hover disabled:cursor-not-allowed disabled:opacity-50"
+            disabled={page >= totalPages || isLoadingUsers}
+            onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
+            type="button"
+          >
+            Next
+          </button>
+        </div>
       </div>
 
       {inviteOpen ? (
@@ -706,7 +861,9 @@ function WorkspacesSection({ token }: { token: string }) {
       setError(null);
       const [workspaceItems, userResponse, groupItems] = await Promise.all([
         listWorkspaces(token),
-        canReadUsers ? listAdminUsers(token) : Promise.resolve({ items: [] }),
+        canReadUsers
+          ? listAdminUsers(token, { page_size: 100 })
+          : Promise.resolve({ items: [], total: 0, page: 1, page_size: 100 }),
         canReadGroups ? listGroups(token) : Promise.resolve([]),
       ]);
       setWorkspaces(workspaceItems);

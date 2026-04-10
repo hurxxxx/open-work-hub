@@ -492,7 +492,31 @@ def test_admin_identity_management_endpoints(client: TestClient) -> None:
 
     list_users_response = client.get("/api/v1/admin/users", headers=headers)
     assert list_users_response.status_code == 200
-    assert len(list_users_response.json()["items"]) == 2
+    list_users_payload = list_users_response.json()
+    assert len(list_users_payload["items"]) == 2
+    assert list_users_payload["total"] == 2
+    assert list_users_payload["page"] == 1
+    assert list_users_payload["page_size"] == 20
+
+    paged_users_response = client.get(
+        "/api/v1/admin/users",
+        headers=headers,
+        params={"page": 1, "page_size": 1},
+    )
+    assert paged_users_response.status_code == 200
+    paged_users_payload = paged_users_response.json()
+    assert len(paged_users_payload["items"]) == 1
+    assert paged_users_payload["total"] == 2
+
+    searched_users_response = client.get(
+        "/api/v1/admin/users",
+        headers=headers,
+        params={"q": "member"},
+    )
+    assert searched_users_response.status_code == 200
+    searched_users_payload = searched_users_response.json()
+    assert len(searched_users_payload["items"]) == 1
+    assert searched_users_payload["total"] == 1
 
     workspace_response = client.post(
         "/api/v1/admin/workspaces",
