@@ -1,8 +1,14 @@
+import logging
+from contextlib import asynccontextmanager
+
 from fastapi import Depends, FastAPI
+from fastapi import Response, status
 
 from aidoo_api.core.db import init_db
+from aidoo_api.core.llm import check_llm_health
 from aidoo_api.core.settings import get_settings
 from aidoo_api.core.storage import ensure_bucket
+from aidoo_api.domains.ai.router import router as ai_router
 from aidoo_api.domains.admin.router import router as admin_router
 from aidoo_api.domains.auth.dependencies import require_current_user, require_workspace_feature_access
 from aidoo_api.domains.auth.router import router as auth_router
@@ -16,23 +22,58 @@ from aidoo_api.domains.plm.router import router as plm_router
 from aidoo_api.domains.wiki_pms.router import router as wiki_pms_router
 
 
+logger = logging.getLogger(__name__)
+
+
 def create_app() -> FastAPI:
     settings = get_settings()
     init_db()
     ensure_bucket()
+
+    @asynccontextmanager
+    async def lifespan(app: FastAPI):
+        if settings.llm_healthcheck_on_startup:
+            llm_health = check_llm_health(settings)
+            app.state.llm_health = llm_health.public_dict()
+            if settings.llm_required and not llm_health.ready:
+                logger.warning("LLM readiness check failed: %s", llm_health.public_dict())
+        yield
+
     app = FastAPI(
         title=settings.app_name,
         version="0.1.0",
         docs_url="/docs",
         redoc_url="/redoc",
+        lifespan=lifespan,
     )
 
     @app.get("/healthz", tags=["system"])
     def healthz() -> dict[str, str]:
         return {"status": "ok", "environment": settings.environment}
 
+    @app.get("/readyz", tags=["system"])
+    def readyz(response: Response) -> dict[str, object]:
+        llm_health = check_llm_health(settings)
+        ready = llm_health.ready or not settings.llm_required
+        if not ready:
+            response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+
+        return {
+            "status": "ok" if ready else "degraded",
+            "environment": settings.environment,
+            "llm": llm_health.public_dict(),
+        }
+
     app.include_router(auth_router, prefix=settings.api_prefix)
     protected_dependencies = [Depends(require_current_user)]
+    app.include_router(
+        ai_router,
+        prefix=settings.api_prefix,
+        dependencies=[
+            *protected_dependencies,
+            Depends(require_workspace_feature_access("ai", "nav.ai")),
+        ],
+    )
     app.include_router(
         admin_router,
         prefix=settings.api_prefix,

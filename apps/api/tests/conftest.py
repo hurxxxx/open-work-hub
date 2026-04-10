@@ -78,13 +78,16 @@ def client(monkeypatch: pytest.MonkeyPatch, postgres_dsn: str) -> TestClient:
     monkeypatch.setenv("DOOWON_POSTGRES_DSN", postgres_dsn)
     monkeypatch.setenv("DOOWON_API_SESSION_TTL_HOURS", "1")
     monkeypatch.setenv("DOOWON_API_ALLOW_DEV_ADMIN_LOGIN", "1")
+    monkeypatch.setenv("DOOWON_LLM_HEALTHCHECK_ON_STARTUP", "0")
 
     from aidoo_api.core.db import Base, get_engine, get_session_factory
+    from aidoo_api.core.llm import get_llm_client
     from aidoo_api.core.settings import get_settings
     from aidoo_api.domains.auth import models as auth_models  # noqa: F401
     from aidoo_api.domains.pms import models as pms_models  # noqa: F401
 
     get_settings.cache_clear()
+    get_llm_client.cache_clear()
     get_engine.cache_clear()
     get_session_factory.cache_clear()
 
@@ -100,5 +103,6 @@ def client(monkeypatch: pytest.MonkeyPatch, postgres_dsn: str) -> TestClient:
     Base.metadata.drop_all(bind=engine)
     engine.dispose()
     get_settings.cache_clear()
+    get_llm_client.cache_clear()
     get_engine.cache_clear()
     get_session_factory.cache_clear()

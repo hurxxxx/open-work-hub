@@ -43,6 +43,36 @@ class Settings(BaseSettings):
         default="aidoo-portal",
         validation_alias=AliasChoices("DOOWON_MINIO_BUCKET"),
     )
+    llm_provider: str = Field(
+        default="ollama",
+        validation_alias=AliasChoices("DOOWON_LLM_PROVIDER"),
+    )
+    llm_base_url: str = Field(
+        default="http://127.0.0.1:11434/v1",
+        validation_alias=AliasChoices("DOOWON_LLM_BASE_URL"),
+    )
+    llm_api_key: str = Field(
+        default="ollama",
+        validation_alias=AliasChoices("DOOWON_LLM_API_KEY"),
+    )
+    llm_default_model: str = Field(
+        default="qwen3.5:35b-a3b-q4_K_M",
+        validation_alias=AliasChoices("DOOWON_LLM_DEFAULT_MODEL"),
+    )
+    llm_request_timeout_seconds: float = Field(
+        default=10.0,
+        gt=0,
+        le=300,
+        validation_alias=AliasChoices("DOOWON_LLM_REQUEST_TIMEOUT_SECONDS"),
+    )
+    llm_healthcheck_on_startup: bool = Field(
+        default=True,
+        validation_alias=AliasChoices("DOOWON_LLM_HEALTHCHECK_ON_STARTUP"),
+    )
+    llm_required: bool = Field(
+        default=True,
+        validation_alias=AliasChoices("DOOWON_LLM_REQUIRED"),
+    )
 
     model_config = SettingsConfigDict(
         env_prefix="DOOWON_API_",
