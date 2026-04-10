@@ -1,0 +1,662 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>테트리스 게임</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            font-family: 'Arial', sans-serif;
+        }
+
+        .game-container {
+            display: flex;
+            gap: 30px;
+            padding: 20px;
+        }
+
+        .game-board {
+            border: 4px solid #4a4a6a;
+            border-radius: 10px;
+            background-color: #0a0a15;
+            box-shadow: 0 0 20px rgba(100, 100, 200, 0.3);
+        }
+
+        .side-panel {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            min-width: 180px;
+        }
+
+        .panel-box {
+            background: linear-gradient(135deg, #2a2a4a, #1a1a3a);
+            border-radius: 10px;
+            padding: 15px;
+            border: 2px solid #4a4a6a;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+        }
+
+        .panel-title {
+            color: #fff;
+            font-size: 16px;
+            margin-bottom: 8px;
+            text-align: center;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .score, .level, .lines, .speed {
+            color: #00ffcc;
+            font-size: 22px;
+            font-weight: bold;
+            text-align: center;
+        }
+
+        .next-piece {
+            text-align: center;
+        }
+
+        .controls {
+            color: #aaa;
+            font-size: 13px;
+            line-height: 1.8;
+        }
+
+        .controls h3 {
+            color: #fff;
+            margin-bottom: 8px;
+            font-size: 16px;
+        }
+
+        .controls p {
+            margin: 5px 0;
+        }
+
+        button {
+            background: linear-gradient(135deg, #4a4a8a, #2a2a6a);
+            color: #fff;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 10px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: all 0.3s;
+            width: 100%;
+        }
+
+        button:hover {
+            background: linear-gradient(135deg, #6a6aaa, #4a4a8a);
+            transform: scale(1.05);
+        }
+
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .game-over {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 0, 0, 0.95);
+            padding: 40px;
+            border-radius: 15px;
+            text-align: center;
+            display: none;
+            border: 2px solid #ff0066;
+            z-index: 100;
+        }
+
+        .game-over h2 {
+            color: #ff0066;
+            font-size: 32px;
+            margin-bottom: 20px;
+        }
+
+        .game-over p {
+            color: #fff;
+            font-size: 20px;
+            margin-bottom: 20px;
+        }
+
+        .game-over button {
+            margin-top: 10px;
+        }
+
+        .game-info {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+        }
+
+        .info-item {
+            text-align: center;
+            padding: 10px;
+            background: rgba(0, 255, 204, 0.1);
+            border-radius: 8px;
+        }
+
+        .info-label {
+            color: #aaa;
+            font-size: 12px;
+            margin-bottom: 4px;
+        }
+
+        .info-value {
+            color: #00ffcc;
+            font-size: 20px;
+            font-weight: bold;
+        }
+
+        .difficulty-bar {
+            height: 8px;
+            background: #2a2a4a;
+            border-radius: 4px;
+            margin-top: 8px;
+            overflow: hidden;
+        }
+
+        .difficulty-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #ff0066, #ffff00, #00ff00);
+            transition: width 0.3s;
+        }
+
+        .speed-indicator {
+            margin-top: 8px;
+            padding: 8px;
+            background: rgba(0, 255, 204, 0.1);
+            border-radius: 8px;
+            text-align: center;
+        }
+
+        .speed-text {
+            color: #fff;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <div class="game-container">
+        <canvas id="game-board" class="game-board"></canvas>
+        
+        <div class="side-panel">
+            <div class="panel-box next-piece">
+                <div class="panel-title">다음 조각</div>
+                <canvas id="next-piece"></canvas>
+            </div>
+
+            <div class="panel-box">
+                <div class="panel-title">게임 정보</div>
+                <div class="game-info">
+                    <div class="info-item">
+                        <div class="info-label">점수</div>
+                        <div id="score" class="info-value">0</div>
+                    </div>
+                    <div class="info-item">
+                        <div class="info-label">레벨</div>
+                        <div id="level" class="info-value">1</div>
+                    </div>
+                    <div class="info-item">
+                        <div class="info-label">라인</div>
+                        <div id="lines" class="info-value">0</div>
+                    </div>
+                    <div class="info-item">
+                        <div class="info-label">속도</div>
+                        <div id="speed" class="info-value">1000ms</div>
+                    </div>
+                </div>
+                
+                <div class="difficulty-bar">
+                    <div id="difficulty-fill" class="difficulty-fill" style="width: 5%"></div>
+                </div>
+                
+                <div class="speed-indicator">
+                    <div class="speed-text">현재 속도: <span id="speed-text">느림</span></div>
+                </div>
+            </div>
+
+            <div class="panel-box controls">
+                <h3>조작법</h3>
+                <p>← → : 이동</p>
+                <p>↑ : 회전</p>
+                <p>↓ : 빠르게 내리기</p>
+                <p>space : 즉시 내리기</p>
+                <p>P : 일시정지</p>
+            </div>
+
+            <button id="start-btn">게임 시작</button>
+        </div>
+    </div>
+
+    <div class="game-over" id="game-over">
+        <h2>GAME OVER</h2>
+        <p>최종 점수: <span id="final-score">0</span></p>
+        <p>레벨: <span id="final-level">1</span></p>
+        <p>소거된 라인: <span id="final-lines">0</span></p>
+        <button onclick="restartGame()">다시 시작</button>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('game-board');
+        const ctx = canvas.getContext('2d');
+        const nextCanvas = document.getElementById('next-piece');
+        const nextCtx = nextCanvas.getContext('2d');
+
+        canvas.width = 240;
+        canvas.height = 480;
+        nextCanvas.width = 120;
+        nextCanvas.height = 120;
+
+        const COLS = 10;
+        const ROWS = 20;
+        const BLOCK_SIZE = 24;
+
+        let grid;
+        let piece;
+        let nextPiece;
+        let score = 0;
+        let level = 1;
+        let lines = 0;
+        let gameOver = false;
+        let paused = false;
+        let dropInterval = 2000; // 초기 속도는 매우 느리게 (2초)
+        let dropTimer = 0;
+        let animationId = null;
+        let lastTime = 0;
+
+        const PIECES = [
+            { shape: [[1,1,1,1]], color: '#00ffff', name: 'I' },
+            { shape: [[1,1,1],[0,1,0]], color: '#ff00ff', name: 'T' },
+            { shape: [[1,1,1],[1,0,0]], color: '#ffff00', name: 'L' },
+            { shape: [[1,1,1],[0,0,1]], color: '#0000ff', name: 'J' },
+            { shape: [[1,1],[1,1]], color: '#ff0000', name: 'O' },
+            { shape: [[0,1,1],[1,1,0]], color: '#00ff00', name: 'S' },
+            { shape: [[1,1,0],[0,1,1]], color: '#000088', name: 'Z' }
+        ];
+
+        function createGrid() {
+            grid = Array.from({ length: ROWS }, () => Array(COLS).fill(0));
+        }
+
+        function createPiece(type) {
+            const pieceData = PIECES[type];
+            return {
+                shape: pieceData.shape.map(row => [...row]),
+                color: pieceData.color,
+                x: 3,
+                y: 0
+            };
+        }
+
+        function draw() {
+            ctx.fillStyle = '#0a0a15';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            for (let y = 0; y < ROWS; y++) {
+                for (let x = 0; x < COLS; x++) {
+                    if (grid[y][x]) {
+                        drawBlock(ctx, x, y, grid[y][x]);
+                    }
+                }
+            }
+
+            if (piece) {
+                for (let y = 0; y < piece.shape.length; y++) {
+                    for (let x = 0; x < piece.shape[y].length; x++) {
+                        if (piece.shape[y][x]) {
+                            drawBlock(ctx, piece.x + x, piece.y + y, piece.color);
+                        }
+                    }
+                }
+            }
+
+            if (paused) {
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.fillStyle = '#fff';
+                ctx.font = '24px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText('PAUSED', canvas.width / 2, canvas.height / 2);
+            }
+        }
+
+        function drawBlock(context, x, y, color) {
+            context.fillStyle = color;
+            context.fillRect(x * BLOCK_SIZE, y * BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE);
+            
+            context.fillStyle = 'rgba(255,255,255,0.3)';
+            context.fillRect(x * BLOCK_SIZE, y * BLOCK_SIZE, BLOCK_SIZE, 4);
+            context.fillRect(x * BLOCK_SIZE, y * BLOCK_SIZE, 4, BLOCK_SIZE);
+            
+            context.fillStyle = 'rgba(0,0,0,0.3)';
+            context.fillRect(x * BLOCK_SIZE + BLOCK_SIZE - 4, y * BLOCK_SIZE, 4, BLOCK_SIZE);
+            context.fillRect(x * BLOCK_SIZE, y * BLOCK_SIZE + BLOCK_SIZE - 4, BLOCK_SIZE, 4);
+            
+            context.strokeStyle = 'rgba(255,255,255,0.5)';
+            context.strokeRect(x * BLOCK_SIZE, y * BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE);
+        }
+
+        function drawNextPiece() {
+            nextCtx.fillStyle = '#0a0a15';
+            nextCtx.fillRect(0, 0, nextCanvas.width, nextCanvas.height);
+
+            if (nextPiece) {
+                const blockSize = 12;
+                const offsetX = (nextCanvas.width - nextPiece.shape[0].length * blockSize) / 2;
+                const offsetY = (nextCanvas.height - nextPiece.shape.length * blockSize) / 2;
+                
+                for (let y = 0; y < nextPiece.shape.length; y++) {
+                    for (let x = 0; x < nextPiece.shape[y].length; x++) {
+                        if (nextPiece.shape[y][x]) {
+                            nextCtx.fillStyle = nextPiece.color;
+                            nextCtx.fillRect(offsetX + x * blockSize, offsetY + y * blockSize, blockSize, blockSize);
+                            nextCtx.strokeStyle = 'rgba(255,255,255,0.5)';
+                            nextCtx.strokeRect(offsetX + x * blockSize, offsetY + y * blockSize, blockSize, blockSize);
+                        }
+                    }
+                }
+            }
+        }
+
+        function collide(ox, oy, shape) {
+            for (let y = 0; y < shape.length; y++) {
+                for (let x = 0; x < shape[y].length; x++) {
+                    if (shape[y][x]) {
+                        const newX = piece.x + x + ox;
+                        const newY = piece.y + y + oy;
+                        
+                        if (newX < 0 || newX >= COLS) return true;
+                        if (newY >= ROWS) return true;
+                        if (newY >= 0 && grid[newY][newX]) return true;
+                    }
+                }
+            }
+            return false;
+        }
+
+        function rotate() {
+            const rotated = piece.shape[0].map((_, index) =>
+                piece.shape.map(row => row[index]).reverse()
+            );
+            
+            const originalShape = piece.shape.map(row => [...row]);
+            
+            if (!collide(0, 0, rotated)) {
+                piece.shape = rotated;
+                return;
+            }
+            
+            if (!collide(-1, 0, rotated)) {
+                piece.x -= 1;
+                piece.shape = rotated;
+                return;
+            }
+            
+            if (!collide(1, 0, rotated)) {
+                piece.x += 1;
+                piece.shape = rotated;
+                return;
+            }
+            
+            if (!collide(-2, 0, rotated)) {
+                piece.x -= 2;
+                piece.shape = rotated;
+                return;
+            }
+            
+            if (!collide(2, 0, rotated)) {
+                piece.x += 2;
+                piece.shape = rotated;
+                return;
+            }
+            
+            piece.shape = originalShape;
+        }
+
+        function drop() {
+            if (!collide(0, 1, piece.shape)) {
+                piece.y += 1;
+                return true;
+            }
+            return false;
+        }
+
+        function lockPiece() {
+            for (let y = 0; y < piece.shape.length; y++) {
+                for (let x = 0; x < piece.shape[y].length; x++) {
+                    if (piece.shape[y][x]) {
+                        if (piece.y + y >= ROWS) {
+                            gameOver = true;
+                            showGameOver();
+                            return false;
+                        }
+                        grid[piece.y + y][piece.x + x] = piece.color;
+                    }
+                }
+            }
+            return true;
+        }
+
+        function clearLines() {
+            let linesCleared = 0;
+            
+            for (let y = ROWS - 1; y >= 0; y--) {
+                if (grid[y].every(cell => cell !== 0)) {
+                    grid.splice(y, 1);
+                    grid.unshift(Array(COLS).fill(0));
+                    linesCleared++;
+                    y++;
+                }
+            }
+            
+            if (linesCleared > 0) {
+                const points = [0, 100, 300, 500, 800];
+                score += points[linesCleared] * level;
+                lines += linesCleared;
+                level = Math.floor(lines / 10) + 1;
+                
+                // 속도를 레벨에 따라 빠르게
+                const maxSpeed = 100;
+                dropInterval = Math.max(maxSpeed, 2000 - (level - 1) * 200);
+                
+                updateDisplay();
+            }
+        }
+
+        function spawnPiece() {
+            if (nextPiece === null) {
+                nextPiece = createPiece(Math.floor(Math.random() * PIECES.length));
+            }
+            
+            piece = nextPiece;
+            nextPiece = createPiece(Math.floor(Math.random() * PIECES.length));
+            drawNextPiece();
+            
+            if (collide(0, 0, piece.shape)) {
+                gameOver = true;
+                showGameOver();
+                return false;
+            }
+            
+            return true;
+        }
+
+        function move(dir) {
+            if (!collide(dir, 0, piece.shape)) {
+                piece.x += dir;
+            }
+        }
+
+        function hardDrop() {
+            while (!collide(0, 1, piece.shape)) {
+                piece.y += 1;
+                score += 2;
+            }
+        }
+
+        function getSpeedLabel(ms) {
+            if (ms >= 1800) return '매우 느림';
+            if (ms >= 1400) return '느림';
+            if (ms >= 1000) return '보통';
+            if (ms >= 700) return '빠름';
+            return '매우 빠름';
+        }
+
+        function updateDisplay() {
+            document.getElementById('score').textContent = score;
+            document.getElementById('level').textContent = level;
+            document.getElementById('lines').textContent = lines;
+            document.getElementById('speed').textContent = dropInterval + 'ms';
+            document.getElementById('speed-text').textContent = getSpeedLabel(dropInterval);
+            const difficulty = Math.min(100, (level - 1) * 5);
+            document.getElementById('difficulty-fill').style.width = difficulty + '%';
+        }
+
+        function showGameOver() {
+            document.getElementById('final-score').textContent = score;
+            document.getElementById('final-level').textContent = level;
+            document.getElementById('final-lines').textContent = lines;
+            document.getElementById('game-over').style.display = 'block';
+            if (animationId) {
+                cancelAnimationFrame(animationId);
+                animationId = null;
+            }
+        }
+
+        function restartGame() {
+            createGrid();
+            score = 0;
+            level = 1;
+            lines = 0;
+            dropInterval = 2000;
+            dropTimer = 0;
+            gameOver = false;
+            paused = false;
+            animationId = null;
+            lastTime = 0;
+            nextPiece = null;
+            piece = null;
+            
+            document.getElementById('game-over').style.display = 'none';
+            
+            if (spawnPiece()) {
+                lastTime = performance.now();
+                gameLoop(lastTime);
+            }
+            
+            updateDisplay();
+        }
+
+        function gameLoop(time) {
+            if (gameOver || paused) {
+                draw();
+                return;
+            }
+            
+            if (!animationId) {
+                animationId = requestAnimationFrame(gameLoop);
+                return;
+            }
+            
+            const deltaTime = time - lastTime;
+            lastTime = time;
+            
+            dropTimer += deltaTime;
+            
+            if (dropTimer >= dropInterval) {
+                if (!drop()) {
+                    if (!lockPiece()) {
+                        return;
+                    }
+                    clearLines();
+                    if (!spawnPiece()) {
+                        return;
+                    }
+                }
+                dropTimer = 0;
+            }
+            
+            draw();
+            
+            if (animationId) {
+                animationId = requestAnimationFrame(gameLoop);
+            }
+        }
+
+        function togglePause() {
+            if (gameOver) return;
+            paused = !paused;
+            if (!paused && !animationId) {
+                lastTime = performance.now();
+                gameLoop(lastTime);
+            }
+        }
+
+        document.addEventListener('keydown', (e) => {
+            if (gameOver) return;
+            
+            switch(e.key) {
+                case 'ArrowLeft':
+                    move(-1);
+                    break;
+                case 'ArrowRight':
+                    move(1);
+                    break;
+                case 'ArrowDown':
+                    dropTimer = 0;
+                    if (!drop()) {
+                        if (!lockPiece()) return;
+                        clearLines();
+                        if (!spawnPiece()) return;
+                    }
+                    score += 1;
+                    updateDisplay();
+                    break;
+                case 'ArrowUp':
+                    rotate();
+                    break;
+                case ' ':
+                    hardDrop();
+                    if (!lockPiece()) return;
+                    clearLines();
+                    spawnPiece();
+                    break;
+                case 'p':
+                case 'P':
+                    togglePause();
+                    break;
+            }
+            
+            e.preventDefault();
+            draw();
+        });
+
+        document.getElementById('start-btn').addEventListener('click', () => {
+            if (gameOver) {
+                restartGame();
+            } else if (paused) {
+                togglePause();
+            } else {
+                restartGame();
+            }
+        });
+
+        createGrid();
+        draw();
+    </script>
+</body>
+</html>
