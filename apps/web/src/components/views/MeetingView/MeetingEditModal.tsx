@@ -5,6 +5,7 @@ import { X } from 'lucide-react';
 import { useAuth } from '@/src/domains/auth/auth-provider';
 import {
   listMeetingUsers,
+  parseServerDateTime,
   updateMeeting,
   type MeetingAttendeeInput,
   type MeetingDetail,
@@ -22,7 +23,7 @@ function toLocalInputValue(iso: string): string {
   // Convert an ISO datetime back into a YYYY-MM-DDTHH:mm value the
   // <input type="datetime-local"> control accepts. We render in local time
   // so the user edits in their wall clock.
-  const date = new Date(iso);
+  const date = parseServerDateTime(iso);
   const pad = (n: number) => n.toString().padStart(2, '0');
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
@@ -183,6 +184,7 @@ export function MeetingEditModal({
       }}
       title="Edit Meeting"
       maxWidth="max-w-xl"
+      dismissOnInteractOutside={false}
       actions={
         <div className="flex w-full items-center justify-end gap-3">
           <Button variant="secondary" onClick={onClose}>취소</Button>

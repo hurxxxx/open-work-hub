@@ -13,6 +13,15 @@ export interface DialogProps {
   actions?: ReactNode;
   /** Maximum width class, e.g. "max-w-lg" or "max-w-3xl". Defaults to "max-w-lg". */
   maxWidth?: string;
+  /**
+   * Whether interacting outside the dialog (pointer-down outside or focus
+   * outside) should close it. Defaults to ``true``. Set to ``false`` for
+   * form-heavy modals where an accidental misclick — for example, on a
+   * native datetime picker that overflows the dialog — would otherwise
+   * destroy the user's in-progress edits. ESC and the close button still
+   * work in either mode.
+   */
+  dismissOnInteractOutside?: boolean;
 }
 
 export function Dialog({
@@ -23,7 +32,11 @@ export function Dialog({
   children,
   actions,
   maxWidth = 'max-w-lg',
+  dismissOnInteractOutside = true,
 }: DialogProps) {
+  const blockOutside = dismissOnInteractOutside
+    ? undefined
+    : (event: Event) => event.preventDefault();
   return (
     <DialogPrimitive.Root open={open} onOpenChange={onOpenChange}>
       <DialogPrimitive.Portal>
@@ -34,6 +47,8 @@ export function Dialog({
             'flex max-h-[85vh] flex-col rounded-[var(--ui-radius-lg)] border border-[var(--ui-color-border)] bg-ui-surface-raised shadow-[var(--ui-shadow-lg)] outline-none',
             maxWidth,
           )}
+          onPointerDownOutside={blockOutside}
+          onInteractOutside={blockOutside}
         >
           <div className="flex items-start justify-between gap-3 border-b border-b-[var(--ui-color-border)] px-5 py-4">
             <div className="grid gap-1">

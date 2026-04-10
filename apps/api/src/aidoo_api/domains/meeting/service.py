@@ -1,13 +1,19 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta
+from io import BytesIO
 from typing import Iterable
 
-from fastapi import HTTPException, status
+from fastapi import HTTPException, UploadFile, status
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
-from aidoo_api.domains.auth.access import load_active_workspace_by_key
+from aidoo_api.core.settings import get_settings
+from aidoo_api.core.storage import get_minio_client
+from aidoo_api.domains.auth.access import (
+    is_platform_admin_user,
+    load_active_workspace_by_key,
+)
 from aidoo_api.domains.auth.models import User, Workspace
 from aidoo_api.domains.auth.security import new_id
 from aidoo_api.domains.docs.models import NativeDoc
@@ -15,11 +21,14 @@ from aidoo_api.domains.meeting.models import (
     Meeting,
     MeetingAttendee,
     MeetingDocLink,
+    MeetingFileAttachment,
     MeetingTaskLink,
 )
 from aidoo_api.domains.meeting.permissions import (
     ensure_doc_readable,
     ensure_issue_readable,
+    ensure_link_remover,
+    ensure_meeting_participant,
 )
 from aidoo_api.domains.meeting.schemas import (
     MeetingAttendeeInput,
@@ -27,12 +36,16 @@ from aidoo_api.domains.meeting.schemas import (
     MeetingCreateRequest,
     MeetingDetail,
     MeetingDocLinkOut,
+    MeetingFileAttachmentOut,
     MeetingListItem,
     MeetingListResponse,
     MeetingRecordingOut,
     MeetingTaskLinkOut,
     MeetingUpdateRequest,
 )
+
+
+MAX_FILE_UPLOAD_SIZE = 100 * 1024 * 1024  # 100 MB
 from aidoo_api.domains.pms.models import Issue, Project
 
 
@@ -122,6 +135,38 @@ def _serialize_doc_link(db: Session, link: MeetingDocLink) -> MeetingDocLinkOut:
     )
 
 
+def _build_file_download_url(storage_key: str) -> str:
+    """Issue a 1-hour presigned GET URL for a meeting file attachment.
+
+    Wrapped in a module-level function so tests can monkeypatch it without
+    spinning up a real MinIO container.
+    """
+    settings = get_settings()
+    client = get_minio_client()
+    return client.presigned_get_object(
+        settings.minio_bucket,
+        storage_key,
+        expires=timedelta(hours=1),
+    )
+
+
+def _serialize_file_attachment(
+    attachment: MeetingFileAttachment,
+) -> MeetingFileAttachmentOut:
+    return MeetingFileAttachmentOut(
+        id=attachment.id,
+        filename=attachment.filename,
+        content_type=attachment.content_type,
+        size_bytes=attachment.size_bytes,
+        download_url=_build_file_download_url(attachment.storage_key),
+        added_by_id=attachment.added_by_id,
+        added_by_name=(
+            attachment.added_by.full_name if attachment.added_by else ""
+        ),
+        created_at=attachment.created_at,
+    )
+
+
 def _serialize_recording(recording) -> MeetingRecordingOut:
     return MeetingRecordingOut.model_validate(recording)
 
@@ -140,6 +185,10 @@ def _serialize_meeting(db: Session, meeting: Meeting) -> MeetingDetail:
         attendees=[_serialize_attendee(a) for a in meeting.attendees],
         task_links=[_serialize_task_link(db, link) for link in meeting.task_links],
         doc_links=[_serialize_doc_link(db, link) for link in meeting.doc_links],
+        file_attachments=[
+            _serialize_file_attachment(att)
+            for att in sorted(meeting.file_attachments, key=lambda a: a.created_at)
+        ],
         recordings=[_serialize_recording(r) for r in meeting.recordings],
         created_at=meeting.created_at,
         updated_at=meeting.updated_at,
@@ -153,6 +202,9 @@ def _load_meeting(db: Session, meeting_id: str) -> Meeting:
             selectinload(Meeting.attendees).selectinload(MeetingAttendee.user),
             selectinload(Meeting.task_links),
             selectinload(Meeting.doc_links),
+            selectinload(Meeting.file_attachments).selectinload(
+                MeetingFileAttachment.added_by
+            ),
             selectinload(Meeting.recordings),
             selectinload(Meeting.organizer),
         )
@@ -333,7 +385,12 @@ def list_meetings(
 
     base = select(Meeting).where(Meeting.workspace_id == workspace.id)
 
-    if scope == "mine":
+    # Restrict to meetings the caller is involved in unless they are a
+    # platform admin viewing the workspace globally. Without this guard
+    # ``upcoming`` and ``all`` would expose every meeting in the workspace
+    # to any user with ``nav.meeting`` access.
+    is_admin = is_platform_admin_user(user, db)
+    if not is_admin:
         attendee_meeting_ids = select(MeetingAttendee.meeting_id).where(
             MeetingAttendee.user_id == user.id
         )
@@ -343,6 +400,20 @@ def list_meetings(
                 Meeting.id.in_(attendee_meeting_ids),
             )
         )
+
+    if scope == "mine":
+        # ``mine`` always narrows to the caller, even for admins, so the
+        # tab label remains accurate when an admin opens it.
+        if is_admin:
+            attendee_meeting_ids = select(MeetingAttendee.meeting_id).where(
+                MeetingAttendee.user_id == user.id
+            )
+            base = base.where(
+                or_(
+                    Meeting.organizer_id == user.id,
+                    Meeting.id.in_(attendee_meeting_ids),
+                )
+            )
     elif scope == "upcoming":
         now = datetime.utcnow()
         base = base.where(Meeting.end_at >= now)
@@ -388,10 +459,8 @@ def list_meetings(
 def attach_task(
     db: Session, *, user: User, meeting_id: str, issue_id: str
 ) -> MeetingDetail:
-    from aidoo_api.domains.meeting.permissions import ensure_meeting_organizer
-
     meeting = _load_meeting(db, meeting_id)
-    ensure_meeting_organizer(db, user, meeting)
+    ensure_meeting_participant(db, user, meeting)
     ensure_issue_readable(db, user, issue_id)
 
     existing = db.scalar(
@@ -418,10 +487,7 @@ def attach_task(
 def detach_task(
     db: Session, *, user: User, meeting_id: str, issue_id: str
 ) -> MeetingDetail:
-    from aidoo_api.domains.meeting.permissions import ensure_meeting_organizer
-
     meeting = _load_meeting(db, meeting_id)
-    ensure_meeting_organizer(db, user, meeting)
 
     link = db.scalar(
         select(MeetingTaskLink).where(
@@ -430,6 +496,7 @@ def detach_task(
         )
     )
     if link is not None:
+        ensure_link_remover(db, user, meeting, link.added_by_id)
         db.delete(link)
         db.commit()
 
@@ -440,10 +507,8 @@ def detach_task(
 def attach_doc(
     db: Session, *, user: User, meeting_id: str, doc_id: str
 ) -> MeetingDetail:
-    from aidoo_api.domains.meeting.permissions import ensure_meeting_organizer
-
     meeting = _load_meeting(db, meeting_id)
-    ensure_meeting_organizer(db, user, meeting)
+    ensure_meeting_participant(db, user, meeting)
     ensure_doc_readable(db, user, doc_id)
 
     existing = db.scalar(
@@ -470,10 +535,7 @@ def attach_doc(
 def detach_doc(
     db: Session, *, user: User, meeting_id: str, doc_id: str
 ) -> MeetingDetail:
-    from aidoo_api.domains.meeting.permissions import ensure_meeting_organizer
-
     meeting = _load_meeting(db, meeting_id)
-    ensure_meeting_organizer(db, user, meeting)
 
     link = db.scalar(
         select(MeetingDocLink).where(
@@ -482,8 +544,94 @@ def detach_doc(
         )
     )
     if link is not None:
+        ensure_link_remover(db, user, meeting, link.added_by_id)
         db.delete(link)
         db.commit()
+
+    fresh = _load_meeting(db, meeting_id)
+    return _serialize_meeting(db, fresh)
+
+
+async def attach_file(
+    db: Session,
+    *,
+    user: User,
+    meeting_id: str,
+    upload: UploadFile,
+) -> MeetingDetail:
+    """Upload a binary file and attach it to the meeting. Any participant
+    (organizer or attendee) can upload."""
+    meeting = _load_meeting(db, meeting_id)
+    ensure_meeting_participant(db, user, meeting)
+
+    data = await upload.read()
+    if len(data) > MAX_FILE_UPLOAD_SIZE:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail=f"File size exceeds {MAX_FILE_UPLOAD_SIZE // (1024 * 1024)} MB limit.",
+        )
+
+    settings = get_settings()
+    client = get_minio_client()
+    attachment_id = new_id()
+    safe_name = upload.filename or "unnamed"
+    storage_key = f"meeting/{meeting.id}/{attachment_id}/{safe_name}"
+    client.put_object(
+        settings.minio_bucket,
+        storage_key,
+        BytesIO(data),
+        length=len(data),
+        content_type=upload.content_type or "application/octet-stream",
+    )
+
+    attachment = MeetingFileAttachment(
+        id=attachment_id,
+        meeting_id=meeting.id,
+        filename=safe_name,
+        content_type=upload.content_type or "application/octet-stream",
+        size_bytes=len(data),
+        storage_key=storage_key,
+        added_by_id=user.id,
+    )
+    db.add(attachment)
+    db.commit()
+
+    fresh = _load_meeting(db, meeting_id)
+    return _serialize_meeting(db, fresh)
+
+
+def detach_file(
+    db: Session, *, user: User, meeting_id: str, file_id: str
+) -> MeetingDetail:
+    """Remove a file attachment. Only the meeting organizer or the user
+    who originally uploaded it (or a platform admin) may remove a file."""
+    meeting = _load_meeting(db, meeting_id)
+
+    attachment = db.scalar(
+        select(MeetingFileAttachment).where(
+            MeetingFileAttachment.meeting_id == meeting_id,
+            MeetingFileAttachment.id == file_id,
+        )
+    )
+    if attachment is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="File attachment not found.",
+        )
+
+    ensure_link_remover(db, user, meeting, attachment.added_by_id)
+
+    settings = get_settings()
+    client = get_minio_client()
+    try:
+        client.remove_object(settings.minio_bucket, attachment.storage_key)
+    except Exception:
+        # If the storage object is already gone we still want to drop the
+        # database row so the UI no longer shows a phantom attachment.
+        pass
+
+    db.delete(attachment)
+    db.commit()
 
     fresh = _load_meeting(db, meeting_id)
     return _serialize_meeting(db, fresh)

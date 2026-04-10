@@ -29,6 +29,17 @@ export interface MeetingDocLink {
   created_at: string;
 }
 
+export interface MeetingFileAttachment {
+  id: string;
+  filename: string;
+  content_type: string;
+  size_bytes: number;
+  download_url: string;
+  added_by_id: string;
+  added_by_name: string;
+  created_at: string;
+}
+
 export interface MeetingRecording {
   id: string;
   storage_key: string;
@@ -71,6 +82,7 @@ export interface MeetingDetail {
   attendees: MeetingAttendee[];
   task_links: MeetingTaskLink[];
   doc_links: MeetingDocLink[];
+  file_attachments: MeetingFileAttachment[];
   recordings: MeetingRecording[];
   created_at: string;
   updated_at: string;
@@ -105,6 +117,31 @@ export interface MeetingUpdateInput {
 }
 
 export type MeetingScope = 'mine' | 'upcoming' | 'all';
+
+/**
+ * Parse a datetime string returned by the meeting API.
+ *
+ * The backend stores ``start_at``/``end_at`` in a naive ``DateTime`` column
+ * and pydantic emits the value without a timezone marker (e.g.
+ * ``"2026-04-10T11:00:00"``). The values are wall-time UTC — the request
+ * pipeline serializes the user's input through ``Date.toISOString()`` which
+ * normalizes to UTC before reaching the database.
+ *
+ * ``new Date("2026-04-10T11:00:00")`` would otherwise be interpreted as
+ * **local** time per the ECMAScript spec, producing a 9-hour drift in
+ * KST browsers. Appending ``Z`` makes the parse unambiguous and lets
+ * ``toLocaleString``/``toLocaleTimeString`` render the user's wall clock
+ * correctly.
+ *
+ * PR4 will replace this convention with a TIMESTAMPTZ column + explicit
+ * tz-aware serialization, at which point this helper can be removed.
+ */
+export function parseServerDateTime(iso: string): Date {
+  if (iso.endsWith('Z') || /[+-]\d{2}:?\d{2}$/.test(iso)) {
+    return new Date(iso);
+  }
+  return new Date(`${iso}Z`);
+}
 
 export class MeetingApiError extends Error {
   status: number;
@@ -229,6 +266,45 @@ export function detachDocFromMeeting(
 ): Promise<MeetingDetail> {
   return request<MeetingDetail>(
     `/api/v1/meeting/meetings/${meetingId}/docs/${docId}`,
+    token,
+    { method: 'DELETE' },
+  );
+}
+
+export async function uploadMeetingFile(
+  token: string,
+  meetingId: string,
+  file: File,
+): Promise<MeetingDetail> {
+  const formData = new FormData();
+  formData.append('file', file);
+  const response = await fetch(`/api/v1/meeting/meetings/${meetingId}/files`, {
+    method: 'POST',
+    headers: {
+      // Do not set Content-Type — the browser fills in the multipart boundary.
+      Accept: 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: formData,
+    cache: 'no-store',
+  });
+  const payload = await response.json().catch(() => null);
+  if (!response.ok) {
+    throw new MeetingApiError(
+      response.status,
+      payload?.detail ?? `파일 업로드에 실패했습니다 (${response.status}).`,
+    );
+  }
+  return payload as MeetingDetail;
+}
+
+export function deleteMeetingFile(
+  token: string,
+  meetingId: string,
+  fileId: string,
+): Promise<MeetingDetail> {
+  return request<MeetingDetail>(
+    `/api/v1/meeting/meetings/${meetingId}/files/${fileId}`,
     token,
     { method: 'DELETE' },
   );

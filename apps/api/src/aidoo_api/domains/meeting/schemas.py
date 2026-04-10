@@ -78,6 +78,19 @@ class MeetingDocLinkOut(BaseModel):
     created_at: datetime
 
 
+class MeetingFileAttachmentOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    filename: str
+    content_type: str
+    size_bytes: int
+    download_url: str
+    added_by_id: str
+    added_by_name: str
+    created_at: datetime
+
+
 class MeetingRecordingOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -124,6 +137,7 @@ class MeetingDetail(BaseModel):
     attendees: list[MeetingAttendeeOut]
     task_links: list[MeetingTaskLinkOut]
     doc_links: list[MeetingDocLinkOut]
+    file_attachments: list[MeetingFileAttachmentOut]
     recordings: list[MeetingRecordingOut]
     created_at: datetime
     updated_at: datetime

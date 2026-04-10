@@ -227,6 +227,7 @@ export function MeetingCreateModal({ isOpen, onClose, onCreated }: MeetingCreate
       }}
       title="New Meeting"
       maxWidth="max-w-xl"
+      dismissOnInteractOutside={false}
       actions={
         <div className="flex w-full items-center justify-end gap-3">
           <Button variant="secondary" onClick={onClose}>취소</Button>

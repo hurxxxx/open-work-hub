@@ -56,6 +56,10 @@ class Meeting(Base):
         back_populates="meeting",
         cascade="all, delete-orphan",
     )
+    file_attachments: Mapped[list["MeetingFileAttachment"]] = relationship(
+        back_populates="meeting",
+        cascade="all, delete-orphan",
+    )
     recordings: Mapped[list["MeetingRecording"]] = relationship(
         back_populates="meeting",
         cascade="all, delete-orphan",
@@ -132,6 +136,37 @@ class MeetingDocLink(Base):
     )
 
     meeting: Mapped["Meeting"] = relationship(back_populates="doc_links")
+    added_by = relationship("User")
+
+
+class MeetingFileAttachment(Base):
+    """A binary file attached to a meeting (uploaded by organizer or any
+    attendee). Stored in MinIO under ``meeting/<meeting_id>/<id>/<filename>``.
+
+    Removal is restricted by ``ensure_link_remover`` — only the organizer or
+    the original uploader can delete an attachment.
+    """
+
+    __tablename__ = "meeting_file_attachments"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    meeting_id: Mapped[str] = mapped_column(
+        ForeignKey("meetings.id"), index=True, nullable=False
+    )
+    filename: Mapped[str] = mapped_column(String(255), nullable=False)
+    content_type: Mapped[str] = mapped_column(
+        String(120), default="application/octet-stream", nullable=False
+    )
+    size_bytes: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    storage_key: Mapped[str] = mapped_column(String(512), unique=True, nullable=False)
+    added_by_id: Mapped[str] = mapped_column(
+        ForeignKey("users.id"), index=True, nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=utcnow_naive, nullable=False
+    )
+
+    meeting: Mapped["Meeting"] = relationship(back_populates="file_attachments")
     added_by = relationship("User")
 
 

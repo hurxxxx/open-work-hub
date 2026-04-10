@@ -1,8 +1,10 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   CheckSquare,
+  Download,
   FileText,
   Loader2,
+  Paperclip,
   Pencil,
   Plus,
   Trash2,
@@ -16,12 +18,19 @@ import {
   attachDocToMeeting,
   attachTaskToMeeting,
   deleteMeeting,
+  deleteMeetingFile,
   detachDocFromMeeting,
   detachTaskFromMeeting,
   getMeeting,
+  parseServerDateTime,
+  uploadMeetingFile,
   type MeetingDetail as MeetingDetailType,
 } from '@/src/domains/meeting/meeting-api';
-import { canEditMeeting } from '@/src/domains/meeting/meeting-permissions';
+import {
+  canAttachToMeeting,
+  canEditMeeting,
+  canRemoveAttachment,
+} from '@/src/domains/meeting/meeting-permissions';
 
 import { MeetingEditModal } from './MeetingEditModal';
 import { TaskPickerModal } from './TaskPickerModal';
@@ -42,8 +51,8 @@ const STATUS_LABELS: Record<string, string> = {
 };
 
 function formatRange(start: string, end: string): string {
-  const s = new Date(start);
-  const e = new Date(end);
+  const s = parseServerDateTime(start);
+  const e = parseServerDateTime(end);
   return `${s.toLocaleString('ko-KR', {
     month: 'short',
     day: 'numeric',
@@ -67,6 +76,8 @@ export function MeetingDetail({
   const [docPickerOpen, setDocPickerOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const refresh = useCallback(async () => {
     if (!token) return;
@@ -88,6 +99,7 @@ export function MeetingDetail({
   }, [refresh]);
 
   const editable = canEditMeeting(user, meeting);
+  const canAttach = canAttachToMeeting(user, meeting);
 
   async function handleAttachTask(issue: { id: string }) {
     if (!token) return;
@@ -129,6 +141,45 @@ export function MeetingDetail({
     } finally {
       setBusy(false);
     }
+  }
+
+  async function handleFileChange(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    // Reset the input so the user can pick the same file again later.
+    event.target.value = '';
+    if (!file || !token) return;
+    setUploading(true);
+    setError(null);
+    try {
+      const updated = await uploadMeetingFile(token, meetingId, file);
+      setMeeting(updated);
+      onChanged();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '파일을 업로드할 수 없습니다.');
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  async function handleFileDelete(fileId: string) {
+    if (!token) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const updated = await deleteMeetingFile(token, meetingId, fileId);
+      setMeeting(updated);
+      onChanged();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '파일을 삭제할 수 없습니다.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function formatFileSize(bytes: number): string {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   }
 
   async function handleDelete() {
@@ -223,7 +274,7 @@ export function MeetingDetail({
           icon={<CheckSquare size={14} />}
           title="연결된 태스크"
           count={meeting.task_links.length}
-          onAdd={editable ? () => setTaskPickerOpen(true) : undefined}
+          onAdd={canAttach ? () => setTaskPickerOpen(true) : undefined}
         >
           {meeting.task_links.length === 0 ? (
             <EmptyRow text="첨부된 태스크가 없습니다." />
@@ -244,7 +295,7 @@ export function MeetingDetail({
                         : '#'}
                     </p>
                   </div>
-                  {editable ? (
+                  {canRemoveAttachment(user, meeting, link) ? (
                     <button
                       type="button"
                       onClick={() => handleDetachTask(link.issue_id)}
@@ -265,7 +316,7 @@ export function MeetingDetail({
           icon={<FileText size={14} />}
           title="연결된 문서"
           count={meeting.doc_links.length}
-          onAdd={editable ? () => setDocPickerOpen(true) : undefined}
+          onAdd={canAttach ? () => setDocPickerOpen(true) : undefined}
         >
           {meeting.doc_links.length === 0 ? (
             <EmptyRow text="첨부된 문서가 없습니다." />
@@ -279,13 +330,70 @@ export function MeetingDetail({
                   <p className="app-text-body line-clamp-1 text-app-ink">
                     {link.doc_title || '제목 없음'}
                   </p>
-                  {editable ? (
+                  {canRemoveAttachment(user, meeting, link) ? (
                     <button
                       type="button"
                       onClick={() => handleDetachDoc(link.doc_id)}
                       disabled={busy}
                       className="ml-2 shrink-0 text-app-ink/40 hover:text-[var(--ui-color-danger)] disabled:opacity-40"
                       aria-label="문서 첨부 해제"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+          )}
+        </Section>
+
+        <Section
+          icon={<Paperclip size={14} />}
+          title="첨부 파일"
+          count={meeting.file_attachments.length}
+          onAdd={
+            canAttach
+              ? () => fileInputRef.current?.click()
+              : undefined
+          }
+          addLabel={uploading ? '업로드 중...' : '추가'}
+        >
+          <input
+            ref={fileInputRef}
+            type="file"
+            className="hidden"
+            onChange={handleFileChange}
+          />
+          {meeting.file_attachments.length === 0 ? (
+            <EmptyRow text="첨부된 파일이 없습니다." />
+          ) : (
+            <ul className="space-y-1">
+              {meeting.file_attachments.map((file) => (
+                <li
+                  key={file.id}
+                  className="flex items-start justify-between rounded-md border border-app-border bg-app-surface-sidebar px-3 py-2"
+                >
+                  <div className="min-w-0 flex-1">
+                    <a
+                      href={file.download_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="app-text-body line-clamp-1 inline-flex items-center gap-1.5 text-app-ink hover:text-app-accent"
+                    >
+                      <Download size={12} className="shrink-0 text-app-ink/40" />
+                      {file.filename}
+                    </a>
+                    <p className="app-text-caption text-app-ink/40">
+                      {formatFileSize(file.size_bytes)} · {file.added_by_name}
+                    </p>
+                  </div>
+                  {canRemoveAttachment(user, meeting, file) ? (
+                    <button
+                      type="button"
+                      onClick={() => handleFileDelete(file.id)}
+                      disabled={busy}
+                      className="ml-2 shrink-0 text-app-ink/40 hover:text-[var(--ui-color-danger)] disabled:opacity-40"
+                      aria-label="파일 삭제"
                     >
                       <Trash2 size={14} />
                     </button>
@@ -384,12 +492,14 @@ function Section({
   title,
   count,
   onAdd,
+  addLabel = '추가',
   children,
 }: {
   icon: React.ReactNode;
   title: string;
   count: number;
   onAdd?: () => void;
+  addLabel?: string;
   children: React.ReactNode;
 }) {
   return (
@@ -407,7 +517,7 @@ function Section({
             className="app-text-caption inline-flex items-center gap-1 text-app-accent hover:underline"
           >
             <Plus size={12} />
-            추가
+            {addLabel}
           </button>
         ) : null}
       </div>

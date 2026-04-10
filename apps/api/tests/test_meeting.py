@@ -459,6 +459,424 @@ def test_meeting_user_search_returns_users_without_pms_access(
     assert [item["email"] for item in email_response.json()] == ["bob@aidoo.local"]
 
 
+class _FakeMinioClient:
+    """Minimal stand-in for the minio client used by file attachment tests.
+    Captures put_object calls so assertions can verify the storage path
+    without needing a running MinIO container."""
+
+    def __init__(self) -> None:
+        self.objects: dict[str, bytes] = {}
+        self.removed: list[str] = []
+
+    def put_object(
+        self, bucket: str, key: str, body, length: int, content_type: str
+    ) -> None:
+        del bucket, length, content_type
+        self.objects[key] = body.read()
+
+    def remove_object(self, bucket: str, key: str) -> None:
+        del bucket
+        self.removed.append(key)
+        self.objects.pop(key, None)
+
+    def presigned_get_object(self, bucket: str, key: str, expires) -> str:
+        del bucket, expires
+        return f"https://fake-minio.local/{key}"
+
+
+def _install_fake_minio(monkeypatch) -> _FakeMinioClient:
+    """Patch the meeting service module's storage and URL builder to a
+    fake in-memory MinIO so the upload/list/delete paths can be exercised
+    without external dependencies."""
+    from aidoo_api.domains.meeting import service as meeting_service
+
+    fake = _FakeMinioClient()
+    monkeypatch.setattr(meeting_service, "get_minio_client", lambda: fake)
+    monkeypatch.setattr(
+        meeting_service,
+        "_build_file_download_url",
+        lambda storage_key: f"https://fake-minio.local/{storage_key}",
+    )
+    return fake
+
+
+def _create_native_doc(client: TestClient, token: str, title: str) -> str:
+    response = client.post(
+        "/api/v1/docs/native-docs",
+        headers=_auth_headers(token),
+        json={"title": title},
+    )
+    assert response.status_code == 201, response.text
+    return response.json()["source_id"]
+
+
+def test_attendee_can_attach_doc_and_only_adder_can_remove(
+    client: TestClient,
+) -> None:
+    """Attendees should be able to upload prep material before the meeting.
+    Removing an attachment is restricted to the meeting organizer or the
+    user who originally added it. We exercise the matrix with native docs
+    because ``ensure_doc_readable`` only requires the owner check, sidestepping
+    PR2's IssueUserAccess work."""
+
+    admin = _bootstrap_admin_session(client)
+    admin_token = admin["token"]
+
+    # Attendee user with meeting + docs workspace access so they can both
+    # be invited and create their own native doc.
+    attendee = _create_user_with_workspaces(
+        client,
+        admin_token,
+        email="prep@aidoo.local",
+        full_name="Prep Attendee",
+        workspace_keys=["meeting", "docs"],
+    )
+    attendee_token = _login(
+        client, attendee["user"]["email"], attendee["temporary_password"]
+    )
+
+    admin_doc = _create_native_doc(client, admin_token, "Admin prep")
+    attendee_doc = _create_native_doc(client, attendee_token, "Attendee prep")
+
+    # Admin organizes a meeting and invites the attendee.
+    meeting = _create_meeting(
+        client,
+        admin_token,
+        title="Prep meeting",
+        attendees=[{"user_id": attendee["user"]["id"], "role": "required"}],
+    )
+
+    # Attendee (non-organizer) attaches their own doc → success.
+    attendee_attach = client.post(
+        f"/api/v1/meeting/meetings/{meeting['id']}/docs",
+        headers=_auth_headers(attendee_token),
+        json={"doc_id": attendee_doc},
+    )
+    assert attendee_attach.status_code == 200, attendee_attach.text
+    body = attendee_attach.json()
+    assert len(body["doc_links"]) == 1
+    assert body["doc_links"][0]["added_by_id"] == attendee["user"]["id"]
+
+    # Admin (organizer) attaches their own doc.
+    organizer_attach = client.post(
+        f"/api/v1/meeting/meetings/{meeting['id']}/docs",
+        headers=_auth_headers(admin_token),
+        json={"doc_id": admin_doc},
+    )
+    assert organizer_attach.status_code == 200
+    assert len(organizer_attach.json()["doc_links"]) == 2
+
+    # Attendee tries to detach the organizer's doc → 403.
+    forbidden = client.delete(
+        f"/api/v1/meeting/meetings/{meeting['id']}/docs/{admin_doc}",
+        headers=_auth_headers(attendee_token),
+    )
+    assert forbidden.status_code == 403, forbidden.text
+
+    # Attendee detaches their own doc → success.
+    own_detach = client.delete(
+        f"/api/v1/meeting/meetings/{meeting['id']}/docs/{attendee_doc}",
+        headers=_auth_headers(attendee_token),
+    )
+    assert own_detach.status_code == 200
+    assert {link["doc_id"] for link in own_detach.json()["doc_links"]} == {
+        admin_doc
+    }
+
+    # Re-attach attendee's doc, then organizer detaches it → success
+    # (organizer always wins).
+    re_attach = client.post(
+        f"/api/v1/meeting/meetings/{meeting['id']}/docs",
+        headers=_auth_headers(attendee_token),
+        json={"doc_id": attendee_doc},
+    )
+    assert re_attach.status_code == 200
+
+    organizer_removes_others = client.delete(
+        f"/api/v1/meeting/meetings/{meeting['id']}/docs/{attendee_doc}",
+        headers=_auth_headers(admin_token),
+    )
+    assert organizer_removes_others.status_code == 200
+
+
+def test_meeting_file_attachment_upload_and_permission_matrix(
+    client: TestClient, monkeypatch
+) -> None:
+    """End-to-end exercise of the new POST/DELETE /meetings/{id}/files
+    routes. Uses an in-memory fake MinIO so no external services are
+    required."""
+    fake = _install_fake_minio(monkeypatch)
+
+    admin = _bootstrap_admin_session(client)
+    admin_token = admin["token"]
+
+    attendee = _create_user_with_workspaces(
+        client,
+        admin_token,
+        email="filer@aidoo.local",
+        full_name="File Attendee",
+        workspace_keys=["meeting"],
+    )
+    attendee_token = _login(
+        client, attendee["user"]["email"], attendee["temporary_password"]
+    )
+
+    meeting = _create_meeting(
+        client,
+        admin_token,
+        title="Files meeting",
+        attendees=[{"user_id": attendee["user"]["id"], "role": "required"}],
+    )
+
+    # Attendee uploads a prep file → success.
+    upload_response = client.post(
+        f"/api/v1/meeting/meetings/{meeting['id']}/files",
+        headers=_auth_headers(attendee_token),
+        files={"file": ("notes.txt", b"hello world", "text/plain")},
+    )
+    assert upload_response.status_code == 200, upload_response.text
+    body = upload_response.json()
+    assert len(body["file_attachments"]) == 1
+    file_meta = body["file_attachments"][0]
+    assert file_meta["filename"] == "notes.txt"
+    assert file_meta["content_type"] == "text/plain"
+    assert file_meta["size_bytes"] == len(b"hello world")
+    assert file_meta["added_by_id"] == attendee["user"]["id"]
+    assert file_meta["download_url"].startswith("https://fake-minio.local/")
+    assert any("notes.txt" in key for key in fake.objects)
+
+    file_id = file_meta["id"]
+
+    # GET via meeting detail surfaces the same data.
+    detail_response = client.get(
+        f"/api/v1/meeting/meetings/{meeting['id']}",
+        headers=_auth_headers(attendee_token),
+    )
+    assert detail_response.status_code == 200
+    fetched_files = detail_response.json()["file_attachments"]
+    assert len(fetched_files) == 1
+    assert fetched_files[0]["id"] == file_id
+
+    # Admin uploads their own file as the organizer.
+    admin_upload = client.post(
+        f"/api/v1/meeting/meetings/{meeting['id']}/files",
+        headers=_auth_headers(admin_token),
+        files={"file": ("agenda.md", b"# agenda", "text/markdown")},
+    )
+    assert admin_upload.status_code == 200
+    admin_file_id = next(
+        item["id"]
+        for item in admin_upload.json()["file_attachments"]
+        if item["filename"] == "agenda.md"
+    )
+
+    # Attendee tries to delete the organizer's file → 403.
+    forbidden = client.delete(
+        f"/api/v1/meeting/meetings/{meeting['id']}/files/{admin_file_id}",
+        headers=_auth_headers(attendee_token),
+    )
+    assert forbidden.status_code == 403
+
+    # Attendee deletes their own file → success.
+    own_delete = client.delete(
+        f"/api/v1/meeting/meetings/{meeting['id']}/files/{file_id}",
+        headers=_auth_headers(attendee_token),
+    )
+    assert own_delete.status_code == 200
+    remaining = own_delete.json()["file_attachments"]
+    assert {item["id"] for item in remaining} == {admin_file_id}
+    assert any("notes.txt" in key for key in fake.removed)
+
+    # Organizer deletes the remaining file (their own) → success.
+    organizer_delete = client.delete(
+        f"/api/v1/meeting/meetings/{meeting['id']}/files/{admin_file_id}",
+        headers=_auth_headers(admin_token),
+    )
+    assert organizer_delete.status_code == 200
+    assert organizer_delete.json()["file_attachments"] == []
+
+
+def test_meeting_file_upload_rejects_non_participant(
+    client: TestClient, monkeypatch
+) -> None:
+    _install_fake_minio(monkeypatch)
+
+    admin = _bootstrap_admin_session(client)
+    admin_token = admin["token"]
+
+    stranger = _create_user_with_workspaces(
+        client,
+        admin_token,
+        email="lurker3@aidoo.local",
+        full_name="Stranger",
+        workspace_keys=["meeting"],
+    )
+    stranger_token = _login(
+        client, stranger["user"]["email"], stranger["temporary_password"]
+    )
+
+    meeting = _create_meeting(client, admin_token, title="Closed for files")
+
+    response = client.post(
+        f"/api/v1/meeting/meetings/{meeting['id']}/files",
+        headers=_auth_headers(stranger_token),
+        files={"file": ("intruder.txt", b"hi", "text/plain")},
+    )
+    assert response.status_code == 403
+
+
+def test_non_participant_cannot_attach_doc(client: TestClient) -> None:
+    """A user with meeting workspace access who is neither organizer nor
+    attendee must not be able to attach to someone else's meeting."""
+
+    admin = _bootstrap_admin_session(client)
+    admin_token = admin["token"]
+
+    stranger = _create_user_with_workspaces(
+        client,
+        admin_token,
+        email="lurker2@aidoo.local",
+        full_name="Lurker",
+        workspace_keys=["meeting", "docs"],
+    )
+    stranger_token = _login(
+        client, stranger["user"]["email"], stranger["temporary_password"]
+    )
+    stranger_doc = _create_native_doc(client, stranger_token, "Lurker prep")
+
+    # Admin organizes a meeting and does NOT invite the stranger.
+    meeting = _create_meeting(client, admin_token, title="Closed meeting")
+
+    forbidden = client.post(
+        f"/api/v1/meeting/meetings/{meeting['id']}/docs",
+        headers=_auth_headers(stranger_token),
+        json={"doc_id": stranger_doc},
+    )
+    assert forbidden.status_code == 403
+
+
+def test_meeting_time_roundtrip_with_utc_iso_input(client: TestClient) -> None:
+    """The frontend serializes datetime-local picker values with
+    ``Date.toISOString()`` which always emits a ``Z`` suffix. The backend
+    must accept that, store it, and return the same wall-clock value back
+    so the frontend can render it without drift."""
+
+    admin = _bootstrap_admin_session(client)
+    token = admin["token"]
+
+    # Simulate the frontend pipeline. KST 21:00 → UTC 12:00 with the Z suffix.
+    request_start = "2026-05-10T12:00:00.000Z"
+    request_end = "2026-05-10T13:30:00.000Z"
+
+    response = client.post(
+        "/api/v1/meeting/meetings",
+        headers=_auth_headers(token),
+        json={
+            "title": "TZ roundtrip",
+            "agenda": "",
+            "start_at": request_start,
+            "end_at": request_end,
+            "attendees": [],
+        },
+    )
+    assert response.status_code == 201, response.text
+    body = response.json()
+    # The server emits naive ISO strings (no Z, no offset). They represent
+    # the same UTC instant the client sent.
+    assert body["start_at"] == "2026-05-10T12:00:00"
+    assert body["end_at"] == "2026-05-10T13:30:00"
+
+    # Re-fetch via GET to confirm the value persisted, not just echoed.
+    fetched = client.get(
+        f"/api/v1/meeting/meetings/{body['id']}",
+        headers=_auth_headers(token),
+    )
+    assert fetched.status_code == 200
+    fetched_body = fetched.json()
+    assert fetched_body["start_at"] == "2026-05-10T12:00:00"
+    assert fetched_body["end_at"] == "2026-05-10T13:30:00"
+
+    # PATCH with another Z-suffixed UTC ISO and verify the same contract.
+    patch_response = client.patch(
+        f"/api/v1/meeting/meetings/{body['id']}",
+        headers=_auth_headers(token),
+        json={
+            "start_at": "2026-05-10T14:00:00.000Z",
+            "end_at": "2026-05-10T15:00:00.000Z",
+        },
+    )
+    assert patch_response.status_code == 200
+    patched = patch_response.json()
+    assert patched["start_at"] == "2026-05-10T14:00:00"
+    assert patched["end_at"] == "2026-05-10T15:00:00"
+
+
+def test_upcoming_scope_does_not_leak_other_users_meetings(
+    client: TestClient,
+) -> None:
+    admin = _bootstrap_admin_session(client)
+    admin_token = admin["token"]
+
+    outsider = _create_user_with_workspaces(
+        client,
+        admin_token,
+        email="lurker@aidoo.local",
+        full_name="Lurker",
+        workspace_keys=["meeting"],
+    )
+    outsider_token = _login(
+        client,
+        outsider["user"]["email"],
+        outsider["temporary_password"],
+    )
+
+    # Admin organizes a private meeting and does NOT invite the outsider.
+    private = _create_meeting(client, admin_token, title="Admin only")
+
+    # Outsider sees nothing in any scope, even though they have meeting
+    # workspace access.
+    for scope in ("mine", "upcoming", "all"):
+        response = client.get(
+            "/api/v1/meeting/meetings",
+            headers=_auth_headers(outsider_token),
+            params={"scope": scope},
+        )
+        assert response.status_code == 200, response.text
+        body = response.json()
+        assert body["total"] == 0, (
+            f"scope={scope} leaked meeting: {body}"
+        )
+
+    # Trying to GET the meeting directly is also blocked.
+    direct = client.get(
+        f"/api/v1/meeting/meetings/{private['id']}",
+        headers=_auth_headers(outsider_token),
+    )
+    assert direct.status_code == 403
+
+    # Now invite the outsider as an attendee. They should immediately see
+    # the meeting in all scopes that include them.
+    update_response = client.patch(
+        f"/api/v1/meeting/meetings/{private['id']}",
+        headers=_auth_headers(admin_token),
+        json={
+            "attendees": [
+                {"user_id": outsider["user"]["id"], "role": "required"}
+            ],
+        },
+    )
+    assert update_response.status_code == 200
+
+    for scope in ("mine", "upcoming", "all"):
+        response = client.get(
+            "/api/v1/meeting/meetings",
+            headers=_auth_headers(outsider_token),
+            params={"scope": scope},
+        )
+        assert response.status_code == 200
+        assert response.json()["total"] == 1, f"scope={scope}"
+
+
 def test_meeting_update_changes_time_and_attendees(client: TestClient) -> None:
     admin = _bootstrap_admin_session(client)
     admin_token = admin["token"]

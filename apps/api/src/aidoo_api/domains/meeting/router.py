@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Literal
 
-from fastapi import APIRouter, Depends, Query, Response, status
+from fastapi import APIRouter, Depends, Query, Response, UploadFile, status
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
@@ -153,6 +153,33 @@ def detach_doc(
 ) -> MeetingDetail:
     return meeting_service.detach_doc(
         db, user=current_user, meeting_id=meeting_id, doc_id=doc_id
+    )
+
+
+@router.post("/meetings/{meeting_id}/files", response_model=MeetingDetail)
+async def attach_file(
+    meeting_id: str,
+    file: UploadFile,
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+) -> MeetingDetail:
+    return await meeting_service.attach_file(
+        db, user=current_user, meeting_id=meeting_id, upload=file
+    )
+
+
+@router.delete(
+    "/meetings/{meeting_id}/files/{file_id}",
+    response_model=MeetingDetail,
+)
+def detach_file(
+    meeting_id: str,
+    file_id: str,
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+) -> MeetingDetail:
+    return meeting_service.detach_file(
+        db, user=current_user, meeting_id=meeting_id, file_id=file_id
     )
 
 

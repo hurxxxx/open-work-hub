@@ -1,7 +1,10 @@
 import { useMemo } from 'react';
 import { CheckSquare, FileText, Users } from 'lucide-react';
 
-import type { MeetingListItem } from '@/src/domains/meeting/meeting-api';
+import {
+  parseServerDateTime,
+  type MeetingListItem,
+} from '@/src/domains/meeting/meeting-api';
 
 interface MeetingListProps {
   items: MeetingListItem[];
@@ -26,8 +29,8 @@ const STATUS_COLORS: Record<string, string> = {
 };
 
 function formatTimeRange(start: string, end: string): string {
-  const startDate = new Date(start);
-  const endDate = new Date(end);
+  const startDate = parseServerDateTime(start);
+  const endDate = parseServerDateTime(end);
   const dateLabel = startDate.toLocaleDateString('ko-KR', {
     month: 'short',
     day: 'numeric',

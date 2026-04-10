@@ -8,7 +8,175 @@
 
 ## 1. 한 줄 요약
 
-**PR1 산출물은 모두 작성됐고 자동화 검증 (pytest, typecheck, 마이그레이션 왕복) 은 모두 green 입니다. 원격 dev DB 에 마이그레이션도 적용 완료. 남은 작업은 브라우저로 사람 손 QA 와 사용자가 추가로 발견할 수 있는 디버깅 라운드입니다.**
+**PR1 산출물은 모두 작성됐고 자동화 검증 (pytest 52 passed, typecheck 신규 0) 은 모두 green 입니다. 원격 dev DB 에 마이그레이션도 적용 완료. 2 라운드 검증/디버깅에서 Upcoming leak 1건 fix + 회귀 테스트 추가, 타임존 chain 진단 완료 (사용자 결정 대기).**
+
+## 1a. 2-3 라운드 (2026-04-10 후속 세션) 변경 사항
+
+### Fixed: `list_meetings(scope="upcoming"|"all")` 가 비참석자에게 leak
+
+**증상**: 워크스페이스 바인딩만 있는 비조직자·비참석자 사용자도 Upcoming 탭을 열면 다른 사람이 만든 회의가 다 보임. 클릭하면 403 (`get_meeting` 에서 `_ensure_user_can_view` 차단).
+
+**원인**: [service.py:list_meetings](apps/api/src/aidoo_api/domains/meeting/service.py) 의 `scope="upcoming"` / `"all"` 분기가 user 필터를 안 걸었음. `scope="mine"` 만 organizer/attendee 로 좁혔음.
+
+**Fix**: platform admin 이 아닌 caller 에게는 모든 scope 에 organizer-or-attendee 필터를 항상 적용. platform admin 은 종전대로 `upcoming`/`all` 에서 워크스페이스 전체 조회 가능. `mine` 은 admin 도 본인 것만 보도록 명시 좁힘 (탭 라벨이 정확하게).
+
+**테스트**: `test_upcoming_scope_does_not_leak_other_users_meetings` 추가. mine/upcoming/all 세 scope 모두에서 비참석자가 0건 보고, 그 후 초대되면 1건 보는지 검증. 직접 GET 도 403 확인.
+
+**자동화 결과**: pytest 51→52 passed.
+
+### Diagnosed (fix 보류, 사용자 결정 대기): 타임존 roundtrip 버그
+
+**원격 dev DB 직접 조회 결과**:
+```
+SHOW TIMEZONE = Etc/UTC
+now() = 2026-04-10 11:30 UTC
+meetings:
+  '미팅1'        start_at=2026-04-10 02:00, end_at=03:00
+  'ㅎㅇㅎㄹㅇㄴ'  start_at=2026-04-10 11:00, end_at=12:00
+```
+
+**Node TZ 검증** (`TZ=Asia/Seoul node`):
+- `new Date("2026-04-10T11:00").toISOString()` → `"2026-04-10T02:00:00.000Z"` (KST→UTC)
+- `new Date("2026-04-10T11:00:00")` (백엔드가 돌려준 tz 마커 없는 ISO) → 로컬 KST 11:00 으로 해석 → 화면엔 "오전 11:00"
+
+**체인**:
+1. 사용자가 datetime-local 에 wall-clock 11:00 입력
+2. [MeetingCreateModal.localInputToIso](apps/web/src/components/views/MeetingView/MeetingCreateModal.tsx) 의 `new Date(value).toISOString()` 가 KST→UTC 변환해서 `"02:00Z"` 전송
+3. 백엔드 pydantic → tz-aware. SQLAlchemy + naive `DateTime` 컬럼 + postgres session UTC → naive `02:00` 저장
+4. 읽기: 백엔드가 `"02:00:00"` (Z 없음) 반환
+5. [MeetingList.formatTimeRange](apps/web/src/components/views/MeetingView/MeetingList.tsx) / [MeetingDetail.formatRange](apps/web/src/components/views/MeetingView/MeetingDetail.tsx) 가 `new Date(iso)` → 로컬 KST 02:00 으로 해석 → "오전 02:00" 표시
+
+**현재 dev DB 데이터로 본 실제 동작** (KST 브라우저 가정):
+- '미팅1' 입력=11:00 KST, 저장=02:00 UTC, 화면=오전 02:00 (9시간 어긋남)
+- 'ㅎㅇㅎㄹㅇㄴ' 입력=20:00 KST, 저장=11:00 UTC, 화면=오전 11:00 (9시간 어긋남)
+
+스크린샷에 '오전 11:00' 으로 보이는 회의는 사실 사용자가 8 PM 으로 입력했을 가능성이 큼.
+
+**`MeetingEditModal.toLocalInputValue` 도 같은 문제** — 백엔드가 돌려준 ISO 를 local 로 잘못 해석해서 picker 에 표시. 사용자가 그대로 저장하면 추가 9시간 어긋남이 누적될 수 있음 (Edit 한번 더 도는 케이스 검증 필요).
+
+**`scope="upcoming"` 의 `datetime.utcnow() vs Meeting.end_at`** — 양쪽 모두 UTC-naive 로 통일돼 있어서 시간 비교 자체는 맞음. 다만 위 chain 의 영향으로 "사용자가 의도한 시간" 과 "DB 의 시간" 이 다르므로, 사용자가 "내일 11:00 회의" 를 만들었다고 생각해도 실제로는 9시간 어긋난 시각으로 필터링됨.
+
+**해결 옵션** (사용자 결정 필요):
+
+| 옵션 | 변경 범위 | 기존 데이터 |
+|---|---|---|
+| **A. Display 측만 fix** — 백엔드 ISO 가 UTC 라고 명시 (frontend 에서 'Z' 부착 후 parse) | `formatRange`, `formatTimeRange`, `toLocalInputValue` 3곳 (~10줄) | 의미적으로 자동 복원 (저장된 02:00 UTC = 11:00 KST 로 표시) |
+| **B. Input 측만 fix** — `localInputToIso` 가 wall-clock 그대로 (Z 없이) 보내도록 | `localInputToIso` 1곳 (~3줄) | 복원 안 됨 (기존 데이터는 그대로 어긋난 채 표시) |
+| **C. Backend 를 TIMESTAMPTZ 로 마이그레이션** | models.py + alembic 마이그레이션 + pydantic serializer | 마이그레이션이 변환 |
+| **D. 그대로 두고 PR4 (Event 도메인) 가 한꺼번에 처리** | 0 | — |
+
+권장: **A**. 가장 작고, 기존 데이터 의미가 자동 복원되며, 백엔드 변경 없음. 단점은 "백엔드가 돌려주는 naive ISO 는 실은 UTC" 라는 암묵적 컨벤션이 frontend 에 박힘. PR4 에서 Event 도메인 + TIMESTAMPTZ 로 전환할 때 cleanup.
+
+이 옵션 중 어느 걸 갈지는 사용자 결정 후 다음 라운드에서 작업.
+
+### Fixed (3 라운드): 타임존 표시 chain — 옵션 A 적용
+
+**계기**: 사용자가 Edit 모달에서 시작=오후 9시, 종료=오후 11시 로 저장했더니 화면이 오후 12시 ~ 오후 2시 로 표시되는 증상을 직접 보고 (스크린샷 2장). 정확히 KST→UTC 9시간 offset.
+
+**컨벤션 명시**: 백엔드가 돌려주는 tz 마커 없는 ISO (`"2026-04-10T12:00:00"`) 는 **UTC** 로 해석한다. JS `new Date()` 가 이걸 local 로 잘못 해석하지 않도록 frontend 에서 'Z' 를 부착한 뒤 parse.
+
+**Fix 위치**:
+- [apps/web/src/domains/meeting/meeting-api.ts](apps/web/src/domains/meeting/meeting-api.ts) — `parseServerDateTime(iso)` helper 추가. tz 마커가 없으면 'Z' 부착. PR4 에서 TIMESTAMPTZ 전환 시 제거 예정이라고 docstring 에 명시.
+- [apps/web/src/components/views/MeetingView/MeetingList.tsx](apps/web/src/components/views/MeetingView/MeetingList.tsx) `formatTimeRange` — `new Date(iso)` → `parseServerDateTime(iso)`
+- [apps/web/src/components/views/MeetingView/MeetingDetail.tsx](apps/web/src/components/views/MeetingView/MeetingDetail.tsx) `formatRange` — 동일
+- [apps/web/src/components/views/MeetingView/MeetingEditModal.tsx](apps/web/src/components/views/MeetingView/MeetingEditModal.tsx) `toLocalInputValue` — 동일
+
+**Backend 미변경**: 입력 측 (`localInputToIso` → `Date.toISOString()`) 는 그대로 KST→UTC 변환해서 전송. Backend 는 그대로 naive 컬럼에 저장. 표시 측만 fix 했더니 chain 이 self-consistent 가 됨.
+
+**기존 데이터 의미 자동 복원**:
+- '미팅1' 저장값 02:00 → 표시 11:00 KST (사용자가 원래 의도했던 11 AM)
+- 'ㅎㅇㅎㄹㅇㄴ' 저장값 11:00 → 표시 20:00 KST (8 PM)
+
+**회귀 테스트**: `test_meeting_time_roundtrip_with_utc_iso_input` 추가. 프론트엔드 파이프라인 (`Date.toISOString()` 의 Z-suffixed UTC ISO) 으로 POST/GET/PATCH 한 결과가 모두 동일한 wall-clock 값으로 돌아오는지 검증.
+
+### Fixed (3 라운드): Edit/Create 모달 outside-click 닫힘
+
+**계기**: datetime-local picker 의 달력 popup 에 확정 버튼이 없어서 외부 클릭으로 닫는 게 native 동작. 그런데 modal 도 outside-click 으로 닫혀서, picker 닫으려다가 modal 까지 같이 닫히고 작성 중인 데이터가 사라짐.
+
+**Fix**: [packages/ui/src/lib/primitives/dialog.tsx](packages/ui/src/lib/primitives/dialog.tsx) Dialog 컴포넌트에 `dismissOnInteractOutside?: boolean` prop 추가 (default `true` — 기존 동작 유지). `false` 일 때 Radix `onPointerDownOutside` / `onInteractOutside` 에서 `event.preventDefault()` 호출. ESC 와 X 버튼은 항상 동작.
+
+[MeetingCreateModal](apps/web/src/components/views/MeetingView/MeetingCreateModal.tsx) 와 [MeetingEditModal](apps/web/src/components/views/MeetingView/MeetingEditModal.tsx) 에서 `dismissOnInteractOutside={false}` 사용.
+
+**다른 8개 Dialog 사용처**: 비파괴 (default `true` 그대로). 추후 form 입력 위주 모달은 같은 패턴으로 이전할 가치 있음 — 이번 PR1 범위는 아님.
+
+**자동화 결과**: pytest 52→53 passed, typecheck 신규 0 (사전 12개 그대로).
+
+### Fixed (4 라운드): Picker 모달 권한 부족 시 한글 안내
+
+**계기**: ai-member 계정 (`nav.meeting` 만 보유, `nav.pms`/`nav.docs` 없음) 으로 로그인한 사용자가 본인이 만든 회의에서 "+ 태스크" 또는 "+ 문서" 클릭 → Task/Doc Picker 모달이 열리고 → 백엔드 PMS/Docs 라우터의 `require_feature_access` 가드가 403 Forbidden 반환 → 모달엔 의미 불명의 영문 에러 또는 빈 화면.
+
+사용자 확인: "이게 맞지?" → **네 의도된 차단**. 다만 안내 메시지가 한글로 명확해야 함.
+
+**Fix**: [TaskPickerModal](apps/web/src/components/views/MeetingView/TaskPickerModal.tsx) / [DocPickerModal](apps/web/src/components/views/MeetingView/DocPickerModal.tsx) 가 `useAuth().hasFeature('nav.pms')` / `'nav.docs'` 로 사전 체크.
+
+- 권한 없음 → API 호출 자체를 skip 하고 (403 안 일으킴), 자물쇠 아이콘 + 한글 안내 패널 렌더링:
+  > "PMS 워크스페이스 접근 권한이 없어 태스크를 첨부할 수 없습니다.
+  > 관리자에게 PMS 권한을 요청하시거나, PMS 권한이 있는 회의 주최자에게 첨부를 요청해주세요."
+- 권한 있음 → 종전대로 프로젝트/이슈 리스트 로드.
+
+**의도적으로 안 한 것**: "+ 태스크" / "+ 문서" 버튼을 처음부터 숨기거나 disabled 처리하지 않음. 이유:
+1. 사용자가 "이 기능이 존재한다는 것" 자체는 인지해야 권한 요청을 할 수 있음
+2. 현재 로그인 사용자가 organizer 가 아닌 경우 [`editable` 가드](apps/web/src/components/views/MeetingView/MeetingDetail.tsx) 가 이미 버튼을 숨김 — picker 모달까지 도달하는 사용자는 organizer 임이 보장됨
+
+**자동화 결과**: typecheck 신규 0 (사전 12개 그대로). 권한 분기는 frontend-only render 변경이라 backend 테스트는 불필요.
+
+### Refactored (5 라운드): NoAccessNotice 공통 컴포넌트로 추출
+
+**계기**: 사용자 피드백 — "이런 비슷한 상황이 더 있을건대... 공통화 할 수 있나?". 권한 부족 시 한글 안내를 모달마다 직접 작성하면 향후 추가될 모달도 같은 코드를 복붙하게 됨.
+
+**Fix**: [apps/web/src/components/common/NoAccessNotice.tsx](apps/web/src/components/common/NoAccessNotice.tsx) 신규. `workspaceLabel`, `action`, optional `helpText` prop 만 받음. 자물쇠 아이콘 + 표준 한글 메시지 + override 가능한 보조 텍스트.
+
+[TaskPickerModal](apps/web/src/components/views/MeetingView/TaskPickerModal.tsx) 와 [DocPickerModal](apps/web/src/components/views/MeetingView/DocPickerModal.tsx) 가 인라인 JSX 대신 `<NoAccessNotice workspaceLabel="..." action="..." />` 호출.
+
+향후 권한 게이트가 필요한 새 모달은 `useAuth().hasFeature('nav.X')` + `<NoAccessNotice />` 패턴을 그대로 재사용 가능.
+
+### Fixed (5 라운드): 첨부 권한 완화 + 삭제 권한 분리
+
+**계기**: 사용자 피드백 — "문서와 태스크는 참여자도 추가를 할 수 있어야 할 것 같은데, 회의 자료를 미리 올리는 용도가 될 수 있으니깐. 그러나 첨부된 태스크 문서 첨부파일은 미팅 최초 승인자나 등록한 사용자만 삭제 할 수 있도록 해야 할듯."
+
+**의미**: PR1 기존 동작은 organizer 만 attach/detach. 사용자는 attendee 도 prep material 을 미리 올릴 수 있고, 누가 올린 attachment 는 그 사람 (또는 organizer) 만 삭제할 수 있어야 한다고 명시.
+
+**Backend**:
+- [permissions.py](apps/api/src/aidoo_api/domains/meeting/permissions.py) 에 `is_participant`, `ensure_meeting_participant`, `ensure_link_remover` 추가.
+  - `ensure_meeting_participant` — organizer/attendee/admin 통과, 그 외 403
+  - `ensure_link_remover` — organizer/admin/`added_by_id == user.id` 통과, 그 외 403
+- [service.py](apps/api/src/aidoo_api/domains/meeting/service.py) 의 `attach_task` / `attach_doc` 가 `ensure_meeting_organizer` → `ensure_meeting_participant` 로 교체. `detach_task` / `detach_doc` 는 link 의 `added_by_id` 를 조회한 후 `ensure_link_remover` 호출.
+
+**Frontend**:
+- [meeting-permissions.ts](apps/web/src/domains/meeting/meeting-permissions.ts) 에 `isParticipant`, `canAttachToMeeting`, `canRemoveAttachment` 추가. 기존 `canEditMeeting` 은 metadata edit (organizer-only) 용도로 의미 명시.
+- [MeetingDetail.tsx](apps/web/src/components/views/MeetingView/MeetingDetail.tsx) 의 "+ 추가" 버튼은 `canAttach`, 각 row 의 휴지통은 `canRemoveAttachment(user, meeting, link)` 로 분기.
+
+**테스트**:
+- `test_attendee_can_attach_doc_and_only_adder_can_remove` — attendee 가 자기 doc 첨부 OK, organizer doc 삭제 시도 403, 자기 doc 삭제 OK, organizer 가 attendee doc 삭제 OK
+- `test_non_participant_cannot_attach_doc` — meeting 워크스페이스 바인딩만 있고 invitation 없는 stranger 는 attach 시 403
+
+NB: 권한 매트릭스 테스트는 task 가 아닌 **doc** 으로 작성. 이유: `ensure_issue_readable` 가 `ProjectMember` 테이블을 직접 조회하는데 PMS 의 `add_project_member` 라우터가 SpaceMember 만 채우고 ProjectMember 는 안 채우는 PR2 미해결 항목이 있어, attendee 가 PMS issue 를 readable 로 만들 마땅한 setup 경로가 없음. Doc 는 `ensure_doc_readable` 가 owner 만 확인하므로 attendee 가 자기 doc 만 만들면 setup 끝.
+
+### Added (5 라운드): MeetingFileAttachment — 회의에 임의 파일 업로드
+
+**계기**: 사용자 피드백 — "태스크 문서 뿐만 아니라 첨부 파일도 미팅에 추가가 가능해야 할듯."
+
+**아키텍처**: PMS Attachment 패턴 그대로 복용. MinIO 경로는 `meeting/{meeting_id}/{attachment_id}/{filename}`. 1시간 presigned GET URL 발급. 100 MB 사이즈 제한.
+
+**Backend**:
+- [models.py](apps/api/src/aidoo_api/domains/meeting/models.py) `MeetingFileAttachment` 모델 — id, meeting_id, filename, content_type, size_bytes, storage_key (unique), added_by_id, created_at. Meeting 에 cascade delete 관계 추가.
+- [alembic/versions/13e887cfb1db_add_meeting_file_attachments.py](apps/api/alembic/versions/13e887cfb1db_add_meeting_file_attachments.py) — autogenerate 로 생성. CREATE TABLE 1개 + 인덱스 2개 (meeting_id, added_by_id). upgrade/downgrade/upgrade 왕복 + alembic check drift 0 검증 완료. **단 dev DB 에는 아직 미적용** (사용자 승인 후 적용).
+- [schemas.py](apps/api/src/aidoo_api/domains/meeting/schemas.py) `MeetingFileAttachmentOut` 추가, `MeetingDetail.file_attachments` 필드.
+- [service.py](apps/api/src/aidoo_api/domains/meeting/service.py) `attach_file` (async, multipart UploadFile), `detach_file`, `_serialize_file_attachment`, `_build_file_download_url` (모듈 레벨 — 테스트에서 monkeypatch 가능). `_load_meeting` 의 selectinload 에 `file_attachments` + `MeetingFileAttachment.added_by` 추가.
+- [router.py](apps/api/src/aidoo_api/domains/meeting/router.py) `POST /meetings/{id}/files` (multipart), `DELETE /meetings/{id}/files/{file_id}`.
+
+**Frontend**:
+- [meeting-api.ts](apps/web/src/domains/meeting/meeting-api.ts) `MeetingFileAttachment` 타입, `uploadMeetingFile` (FormData multipart), `deleteMeetingFile` 함수. `MeetingDetail.file_attachments` 필드 추가.
+- [MeetingDetail.tsx](apps/web/src/components/views/MeetingView/MeetingDetail.tsx) 새 "첨부 파일" Section. 숨겨진 `<input type="file" />` + ref 패턴, "+ 추가" 클릭 시 파일 선택. 업로드 중에는 라벨이 "업로드 중..." 으로 바뀜 (Section 컴포넌트에 `addLabel?: string` prop 추가). 파일 row 는 다운로드 링크 (presigned URL 새 탭) + 사이즈 + 업로더 이름 + (organizer/uploader 만) 휴지통 버튼.
+
+**테스트** (mocked MinIO):
+- `_FakeMinioClient` + `_install_fake_minio` 헬퍼 — `monkeypatch` 로 `meeting_service.get_minio_client` 와 `meeting_service._build_file_download_url` 를 in-memory 객체로 교체. PMS Attachment 는 backend 테스트가 아예 없는 반면, 새 meeting file attachment 는 happy path + 권한 매트릭스 모두 자동화로 검증.
+- `test_meeting_file_attachment_upload_and_permission_matrix` — attendee 업로드 → 메타데이터 전부 검증 → admin 두 번째 업로드 → attendee 가 admin 파일 삭제 시도 403 → attendee 자기 파일 삭제 OK → admin 잔여 파일 삭제 OK. fake minio 의 `objects` / `removed` 로 storage 호출도 검증.
+- `test_meeting_file_upload_rejects_non_participant` — invitation 없는 사용자는 업로드 403.
+
+**자동화 결과**: pytest 53→57 passed (+4 신규), typecheck 신규 0 (사전 12개 그대로 — admin-pagination commit 으로 admin-console 라인 번호만 1021→1173 식으로 시프트).
+
+**원격 dev DB 마이그레이션 적용**: 아직 안 함. 사용자 승인 후 `cd apps/api && uv run --python 3.12 alembic upgrade head` 1줄로 적용.
 
 ## 2. 이번 세션이 할 일 (요청 받은 범위)
 
