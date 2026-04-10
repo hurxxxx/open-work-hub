@@ -17,6 +17,9 @@ importers:
       '@blocknote/react':
         specifier: ^0.47.3
         version: 0.47.3(@floating-ui/dom@1.7.6)(@types/hast@3.0.4)(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
+      '@hyunbinseo/holidays-kr':
+        specifier: ^4.2026.0
+        version: 4.2026.0
       '@mantine/core':
         specifier: ^8.3.18
         version: 8.3.18(@mantine/hooks@8.3.18(react@19.2.4))(@types/react@19.2.14)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
@@ -1059,6 +1062,10 @@ packages:
   '@humanwhocodes/retry@0.4.3':
     resolution: {integrity: sha512-bV0Tgo9K4hfPCek+aMAn81RppFKv2ySDQeMoSZuvTASywNTnVJCArCZE2FWqpvIatKu7VMRLWlR1EazvVhDyhQ==}
     engines: {node: '>=18.18'}
+
+  '@hyunbinseo/holidays-kr@4.2026.0':
+    resolution: {integrity: sha512-1TOtdFtzR7v7DO8Wt6+MSnahIcTYYz2U6v2E5CgulETzlKZoNMDZjJBnx2qlH6BXQ/H/8QtSr6Xn5AGyUXAe9w==}
+    engines: {node: '>=18'}
 
   '@jest/diff-sequences@30.3.0':
     resolution: {integrity: sha512-cG51MVnLq1ecVUaQ3fr6YuuAOitHK1S4WUJHnsPFE/quQr33ADUx1FfrTCpMCRxvy0Yr9BThKpDjSlcTi91tMA==}
@@ -8080,6 +8087,8 @@ snapshots:
   '@humanwhocodes/module-importer@1.0.1': {}
 
   '@humanwhocodes/retry@0.4.3': {}
+
+  '@hyunbinseo/holidays-kr@4.2026.0': {}
 
   '@jest/diff-sequences@30.3.0': {}
 

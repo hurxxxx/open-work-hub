@@ -6,13 +6,12 @@ import { cn } from '@/src/lib/utils';
 interface SchedulePopoverProps {
   isOpen: boolean;
   onClose: () => void;
-  position: { top: number; left: number };
   initialDate?: string;
   initialStartTime?: string;
   initialEndTime?: string;
 }
 
-export const SchedulePopover = ({ isOpen, onClose, position, initialDate, initialStartTime, initialEndTime }: SchedulePopoverProps) => {
+export const SchedulePopover = ({ isOpen, onClose, initialDate, initialStartTime, initialEndTime }: SchedulePopoverProps) => {
   const [activeTab, setActiveTab] = useState<'Event' | 'Task' | 'Focus time' | 'OOO'>('Event');
 
   if (!isOpen) return null;
@@ -22,8 +21,7 @@ export const SchedulePopover = ({ isOpen, onClose, position, initialDate, initia
       initial={{ opacity: 0, y: 10, scale: 0.95 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
       exit={{ opacity: 0, y: 10, scale: 0.95 }}
-      style={{ top: position.top, left: position.left }}
-      className="absolute z-50 w-[400px] bg-app-bg border border-app-border rounded-xl shadow-2xl overflow-hidden"
+      className="fixed left-1/2 bottom-6 z-50 w-[400px] -translate-x-1/2 bg-app-bg border border-app-border rounded-xl shadow-2xl overflow-hidden"
     >
       <div className="flex items-center justify-between p-2 border-b border-app-border bg-app-surface-sidebar/50">
         <div className="flex items-center gap-1">

@@ -291,10 +291,18 @@ export const DocsView = () => {
     navigate(toolId ? `/tool/${toolId}` : '/docs');
   };
 
-  const openCreateModal = (templateTitle?: string) => {
+  const openCreateModal = useCallback((templateTitle?: string) => {
     setNewDocTitle(templateTitle ?? '');
     setShowCreateModal(true);
-  };
+  }, []);
+
+  // Allow other parts of the shell (e.g. SubSidebar header "+" button) to
+  // open the New Doc modal without owning a reference to this component.
+  useEffect(() => {
+    const handler = () => openCreateModal();
+    window.addEventListener('docs:create', handler);
+    return () => window.removeEventListener('docs:create', handler);
+  }, [openCreateModal]);
 
   const handleCreateDoc = async () => {
     if (!token || !newDocTitle.trim()) return;

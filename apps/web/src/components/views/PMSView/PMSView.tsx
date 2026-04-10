@@ -103,6 +103,8 @@ export const PMSView = () => {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [createSpaceOpen, setCreateSpaceOpen] = useState(false);
   const [projectSwitcherOpen, setProjectSwitcherOpen] = useState(false);
+
+
   const projectSwitcherRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -134,6 +136,21 @@ export const PMSView = () => {
   const canEditProject = projectRoleAllows(selectedProject?.role, 'member');
   const canManageProject = projectRoleAllows(selectedProject?.role, 'admin');
   const requestedIssueId = searchParams.get('issue');
+
+  // Listen for the SubSidebar header "+" button (and any future quick-create
+  // entry points) so they can pop the New Task modal without needing a
+  // direct ref into this component. Only respond when a list is selected
+  // and the user can edit it — otherwise the modal would mount without a
+  // valid projectId.
+  const newTaskTriggerRef = useRef<{ enabled: boolean }>({ enabled: false });
+  newTaskTriggerRef.current.enabled = Boolean(selectedProjectId && canEditProject);
+  useEffect(() => {
+    const handler = () => {
+      if (newTaskTriggerRef.current.enabled) setIsNewTaskModalOpen(true);
+    };
+    window.addEventListener('pms:create-task', handler);
+    return () => window.removeEventListener('pms:create-task', handler);
+  }, []);
 
   const getErrorMessage = useCallback(
     (error: unknown, fallback: string) => (error instanceof Error ? error.message : fallback),

@@ -5,6 +5,8 @@ import { motion, AnimatePresence } from 'motion/react';
 import {
   ArrowDown,
   ArrowUp,
+  Calendar,
+  CheckSquare,
   ChevronDown,
   ChevronRight,
   Plus,
@@ -15,6 +17,7 @@ import {
   FileText,
   MoreHorizontal,
   Pencil,
+  Sparkles,
   Trash2,
 } from 'lucide-react';
 import { InlineNotice, useConfirm, usePrompt } from '@aidoo/ui';
@@ -801,7 +804,25 @@ export const SubSidebar = ({ activeAppId, activeNavItemId }: { activeAppId: stri
   const [createProjectTeamId, setCreateProjectTeamId] = useState<string | null>(null);
   const [createProjectFolderId, setCreateProjectFolderId] = useState<string | null>(null);
   const [createSpaceOpen, setCreateSpaceOpen] = useState(false);
+  const [createMenuOpen, setCreateMenuOpen] = useState(false);
+  const createMenuRef = useRef<HTMLDivElement>(null);
   const [expandedSpaces, setExpandedSpaces] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    if (!createMenuOpen) return;
+    function handler(event: MouseEvent) {
+      if (createMenuRef.current && !createMenuRef.current.contains(event.target as Node)) {
+        setCreateMenuOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [createMenuOpen]);
+
+  // Reset the menu when switching apps so it doesn't stay open across navigation.
+  useEffect(() => {
+    setCreateMenuOpen(false);
+  }, [activeAppId]);
   const [docsFavorites, setDocsFavorites] = useState<FavoriteDocItem[]>([]);
   const [docsRecentPages, setDocsRecentPages] = useState<RecentPageItem[]>([]);
 
@@ -1324,10 +1345,92 @@ export const SubSidebar = ({ activeAppId, activeNavItemId }: { activeAppId: stri
         className="relative h-full bg-app-surface-sidebar border-r border-app-border flex flex-col overflow-hidden shrink-0"
         style={{ width: `${sidebarWidth}px` }}
       >
-        <div className="p-4 border-b border-app-border">
+        <div className="flex items-center justify-between p-4 border-b border-app-border">
           <h2 className="app-text-overline text-gray-600 dark:text-gray-300">
             {activeAppId === 'settings' ? 'All settings' : APP_BAR_ITEMS.find((item) => item.id === activeAppId)?.title}
           </h2>
+          {(activeAppId === 'pms' || activeAppId === 'docs' || activeAppId === 'planner' || activeAppId === 'ai') ? (
+            <div ref={createMenuRef} className="relative">
+              <button
+                type="button"
+                onClick={() => setCreateMenuOpen((open) => !open)}
+                title="Create"
+                className="flex h-7 w-7 items-center justify-center rounded-md border border-app-border bg-app-surface text-app-ink shadow-sm transition-colors hover:bg-app-surface-hover"
+              >
+                <Plus size={14} />
+              </button>
+              {createMenuOpen ? (
+                <div className="absolute right-0 top-full mt-1 z-30 w-52 rounded-lg border border-app-border bg-app-surface py-1 shadow-xl">
+                  <div className="app-text-overline px-3 pt-1.5 pb-1 text-gray-500">Create</div>
+                  {activeAppId === 'pms' ? (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setCreateMenuOpen(false);
+                          window.dispatchEvent(new CustomEvent('pms:create-task'));
+                        }}
+                        className="app-text-control-sm flex w-full items-center gap-2 px-3 py-2 text-left text-app-ink hover:bg-app-surface-hover"
+                      >
+                        <CheckSquare size={14} className="text-gray-500" />
+                        <span>Task</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setCreateMenuOpen(false);
+                          setCreateSpaceOpen(true);
+                        }}
+                        className="app-text-control-sm flex w-full items-center gap-2 px-3 py-2 text-left text-app-ink hover:bg-app-surface-hover"
+                      >
+                        <Layout size={14} className="text-gray-500" />
+                        <span>Space</span>
+                      </button>
+                    </>
+                  ) : null}
+                  {activeAppId === 'docs' ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCreateMenuOpen(false);
+                        window.dispatchEvent(new CustomEvent('docs:create'));
+                      }}
+                      className="app-text-control-sm flex w-full items-center gap-2 px-3 py-2 text-left text-app-ink hover:bg-app-surface-hover"
+                    >
+                      <FileText size={14} className="text-gray-500" />
+                      <span>Doc</span>
+                    </button>
+                  ) : null}
+                  {activeAppId === 'planner' ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCreateMenuOpen(false);
+                        window.dispatchEvent(new CustomEvent('planner:create-event'));
+                      }}
+                      className="app-text-control-sm flex w-full items-center gap-2 px-3 py-2 text-left text-app-ink hover:bg-app-surface-hover"
+                    >
+                      <Calendar size={14} className="text-gray-500" />
+                      <span>Event</span>
+                    </button>
+                  ) : null}
+                  {activeAppId === 'ai' ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCreateMenuOpen(false);
+                        navigate('/tool/search');
+                      }}
+                      className="app-text-control-sm flex w-full items-center gap-2 px-3 py-2 text-left text-app-ink hover:bg-app-surface-hover"
+                    >
+                      <Sparkles size={14} className="text-gray-500" />
+                      <span>Ask AI</span>
+                    </button>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
+          ) : null}
         </div>
 
         <div className="flex-1 overflow-y-auto py-4 px-2 space-y-6 custom-scrollbar">
@@ -1450,18 +1553,6 @@ export const SubSidebar = ({ activeAppId, activeNavItemId }: { activeAppId: stri
             </>
           )}
         </div>
-
-        {activeAppId !== 'settings' && activeAppId !== 'docs' && (
-          <div className="p-4 border-t border-app-border">
-            <button
-              onClick={() => openCreateProject(null)}
-              className="app-text-control flex w-full items-center gap-2 rounded-md bg-app-accent px-3 py-2 text-app-bg transition-all hover:bg-opacity-90"
-            >
-              <Plus size={18} />
-              <span>Quick Add</span>
-            </button>
-          </div>
-        )}
 
         {/* Resize handle */}
         <div
