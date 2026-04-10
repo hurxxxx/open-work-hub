@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Search } from 'lucide-react';
 
-import { Button, InlineNotice, Select } from '@aidoo/ui';
+import { Button, Dialog, DropdownMenu, InlineNotice, Select } from '@aidoo/ui';
 
 import {
   createAdminUser,
   createGroup,
   createWorkspace,
+  deleteAdminUser,
   listAdminUsers,
   listAuditLogs,
   listFeaturePolicies,
@@ -17,6 +18,7 @@ import {
   listWorkspaces,
   replaceWorkspaceBindings,
   resetUserPassword,
+  updateAdminUser,
   updateFeaturePolicies,
   type AccessGroupItem,
   type AuditLogItem,
@@ -36,6 +38,13 @@ import { AccessDeniedView } from '@/src/domains/auth/settings-pages';
 const NONE_OPTION_VALUE = '__none__';
 const PEOPLE_PAGE_SIZE = 20;
 const PEOPLE_EXPORT_PAGE_SIZE = 100;
+const APP_WORKSPACE_LABELS: Record<string, string> = {
+  ai: 'AI',
+  docs: 'Docs',
+  pms: 'PMS',
+  planner: 'Planner',
+  meeting: 'Meeting',
+};
 const fieldClassName =
   'app-text-body w-full rounded-lg border border-app-border bg-app-bg px-3 py-2 text-app-ink outline-none transition-colors focus:border-app-accent';
 
@@ -104,6 +113,23 @@ function formatDateLabel(value?: string | null): string {
 
 function isAdminUser(user: Pick<AuthUser, 'system_roles'>): boolean {
   return user.system_roles.length > 0;
+}
+
+function formatUserApps(user: Pick<AuthUser, 'app_access'>): string {
+  return user.app_access
+    .map((item) => APP_WORKSPACE_LABELS[item.app] ?? item.workspace_name ?? item.app)
+    .join(', ') || '-';
+}
+
+function formatUserGroups(user: Pick<AuthUser, 'group_slugs'>): string {
+  return user.group_slugs.join(', ') || '-';
+}
+
+function formatStatusLabel(status: string): string {
+  if (status === 'active') return 'Active';
+  if (status === 'invited') return 'Invited';
+  if (status === 'suspended') return 'Suspended';
+  return status || '-';
 }
 
 function SettingsShell({
@@ -181,17 +207,41 @@ function TableShell({ children }: { children: React.ReactNode }) {
   );
 }
 
-function HeadCell({ children }: { children: React.ReactNode }) {
+function HeadCell({
+  children,
+  className = '',
+  dense = false,
+}: {
+  children: React.ReactNode;
+  className?: string;
+  dense?: boolean;
+}) {
   return (
-    <th className="app-text-overline border-b border-app-border px-4 py-3 text-left text-gray-500">
+    <th
+      className={`app-text-overline border-b border-app-border text-left text-gray-500 ${
+        dense ? 'px-3 py-2' : 'px-4 py-3'
+      } ${className}`.trim()}
+    >
       {children}
     </th>
   );
 }
 
-function BodyCell({ children, className = '' }: { children: React.ReactNode; className?: string }) {
+function BodyCell({
+  children,
+  className = '',
+  dense = false,
+}: {
+  children: React.ReactNode;
+  className?: string;
+  dense?: boolean;
+}) {
   return (
-    <td className={`app-text-body border-b border-app-border px-4 py-3 align-top text-app-ink ${className}`.trim()}>
+    <td
+      className={`border-b border-app-border text-app-ink ${
+        dense ? 'app-text-body-sm px-3 py-2 align-middle' : 'app-text-body px-4 py-3 align-top'
+      } ${className}`.trim()}
+    >
       {children}
     </td>
   );
@@ -390,10 +440,12 @@ function PeopleSection({ token }: { token: string }) {
   const [page, setPage] = useState(1);
   const [groups, setGroups] = useState<AccessGroupItem[]>([]);
   const [orgUnits, setOrgUnits] = useState<OrgUnitItem[]>([]);
+  const [workspaces, setWorkspaces] = useState<WorkspaceItem[]>([]);
   const [inviteOpen, setInviteOpen] = useState(false);
   const [email, setEmail] = useState('');
   const [fullName, setFullName] = useState('');
   const [displayName, setDisplayName] = useState('');
+  const [selectedAppWorkspaceIds, setSelectedAppWorkspaceIds] = useState<string[]>([]);
   const [search, setSearch] = useState('');
   const [roleFilter] = useState<'all' | 'admin' | 'member'>('all');
   const [selectedOrgUnitId, setSelectedOrgUnitId] = useState('');
@@ -402,18 +454,34 @@ function PeopleSection({ token }: { token: string }) {
   const [error, setError] = useState<string | null>(null);
   const [isLoadingUsers, setIsLoadingUsers] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
+  const [isCreatingUser, setIsCreatingUser] = useState(false);
+  const [editingUserId, setEditingUserId] = useState<string | null>(null);
+  const [editFullName, setEditFullName] = useState('');
+  const [editDisplayName, setEditDisplayName] = useState('');
+  const [editStatus, setEditStatus] = useState<'active' | 'invited' | 'suspended'>('active');
+  const [editOrgUnitId, setEditOrgUnitId] = useState('');
+  const [editGroupId, setEditGroupId] = useState(NONE_OPTION_VALUE);
+  const [editAppWorkspaceIds, setEditAppWorkspaceIds] = useState<string[]>([]);
+  const [isSavingUser, setIsSavingUser] = useState(false);
+  const [deletingUserId, setDeletingUserId] = useState<string | null>(null);
+  const appWorkspaces = useMemo(
+    () => workspaces.filter((workspace) => workspace.active && workspace.key in APP_WORKSPACE_LABELS),
+    [workspaces],
+  );
   const totalPages = Math.max(1, Math.ceil(totalUsers / PEOPLE_PAGE_SIZE));
   const firstVisibleUser = totalUsers === 0 ? 0 : (page - 1) * PEOPLE_PAGE_SIZE + 1;
   const lastVisibleUser = Math.min(totalUsers, (page - 1) * PEOPLE_PAGE_SIZE + users.length);
 
   async function loadDirectoryOptions() {
     try {
-      const [groupItems, orgUnitItems] = await Promise.all([
+      const [groupItems, orgUnitItems, workspaceItems] = await Promise.all([
         listGroups(token),
         listOrgUnits(token),
+        listWorkspaces(token),
       ]);
       setGroups(groupItems);
       setOrgUnits(orgUnitItems);
+      setWorkspaces(workspaceItems);
       setSelectedOrgUnitId((current) => current || orgUnitItems[0]?.id || '');
       setSelectedGroupId((current) => {
         if (current !== NONE_OPTION_VALUE && groupItems.some((item) => item.id === current)) {
@@ -431,15 +499,17 @@ function PeopleSection({ token }: { token: string }) {
 
     async function load() {
       try {
-        const [groupItems, orgUnitItems] = await Promise.all([
+        const [groupItems, orgUnitItems, workspaceItems] = await Promise.all([
           listGroups(token),
           listOrgUnits(token),
+          listWorkspaces(token),
         ]);
         if (cancelled) {
           return;
         }
         setGroups(groupItems);
         setOrgUnits(orgUnitItems);
+        setWorkspaces(workspaceItems);
         setSelectedOrgUnitId((current) => current || orgUnitItems[0]?.id || '');
         setSelectedGroupId((current) => {
           if (current !== NONE_OPTION_VALUE && groupItems.some((item) => item.id === current)) {
@@ -506,6 +576,67 @@ function PeopleSection({ token }: { token: string }) {
       return matchesRole;
     });
   }, [roleFilter, users]);
+  const editingUser = useMemo(
+    () => users.find((user) => user.id === editingUserId) ?? null,
+    [editingUserId, users],
+  );
+
+  function toggleWorkspaceSelection(
+    setter: React.Dispatch<React.SetStateAction<string[]>>,
+    workspaceId: string,
+  ) {
+    setter((current) =>
+      current.includes(workspaceId)
+        ? current.filter((item) => item !== workspaceId)
+        : [...current, workspaceId],
+    );
+  }
+
+  function resolveUserAppWorkspaceIds(user: AuthUser) {
+    const workspaceIds = new Set<string>();
+    const appWorkspaceByKey = new Map(appWorkspaces.map((workspace) => [workspace.key, workspace]));
+    for (const role of user.workspace_roles) {
+      if (appWorkspaces.some((workspace) => workspace.id === role.workspace_id)) {
+        workspaceIds.add(role.workspace_id);
+      }
+    }
+    for (const access of user.app_access) {
+      const workspace = access.workspace_key ? appWorkspaceByKey.get(access.workspace_key) : null;
+      if (workspace) {
+        workspaceIds.add(workspace.id);
+      }
+    }
+    return Array.from(workspaceIds);
+  }
+
+  async function syncUserAppAccess(userId: string, selectedWorkspaceIds: string[]) {
+    const selectedIds = new Set(selectedWorkspaceIds);
+    for (const workspace of appWorkspaces) {
+      const bindings = await listWorkspaceBindings(token, workspace.id);
+      const existingUserBinding = bindings.find(
+        (binding) => binding.subject_type === 'user' && binding.subject_id === userId,
+      );
+      const nextUsers = bindings
+        .filter((binding) => binding.subject_type === 'user' && binding.subject_id !== userId)
+        .map((binding) => ({ subject_id: binding.subject_id, role: binding.role }));
+
+      if (selectedIds.has(workspace.id)) {
+        nextUsers.push({
+          subject_id: userId,
+          role: existingUserBinding?.role ?? 'member',
+        });
+      }
+
+      const nextGroups = bindings
+        .filter((binding) => binding.subject_type === 'group')
+        .map((binding) => ({ subject_id: binding.subject_id, role: binding.role }));
+
+      await replaceWorkspaceBindings(token, workspace.id, {
+        users: nextUsers,
+        groups: nextGroups,
+      });
+    }
+  }
 
   async function reloadUsers(nextPage: number) {
     setIsLoadingUsers(true);
@@ -525,10 +656,33 @@ function PeopleSection({ token }: { token: string }) {
     }
   }
 
+  function openCreateUserDialog() {
+    setMessage(null);
+    setError(null);
+    setEditingUserId(null);
+    setInviteOpen(true);
+    requestAnimationFrame(() => {
+      document.getElementById('admin-user-email')?.focus();
+    });
+  }
+
+  function closeCreateUserDialog() {
+    if (!isCreatingUser) {
+      setInviteOpen(false);
+    }
+  }
+
+  function closeEditUserDialog() {
+    if (!isSavingUser) {
+      setEditingUserId(null);
+    }
+  }
+
   async function handleCreateUser(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setMessage(null);
     setError(null);
+    setIsCreatingUser(true);
 
     try {
       const response = await createAdminUser(token, {
@@ -538,15 +692,19 @@ function PeopleSection({ token }: { token: string }) {
         primary_org_unit_id: selectedOrgUnitId || undefined,
         group_ids: selectedGroupId !== NONE_OPTION_VALUE ? [selectedGroupId] : [],
       });
+      await syncUserAppAccess(response.user.id, selectedAppWorkspaceIds);
       setEmail('');
       setFullName('');
       setDisplayName('');
+      setSelectedAppWorkspaceIds([]);
       setInviteOpen(false);
       setMessage(`사용자를 생성했습니다. 임시 비밀번호: ${response.temporary_password}`);
       await loadDirectoryOptions();
       await reloadUsers(1);
     } catch (caughtError) {
       setError(getErrorMessage(caughtError, '사용자를 생성하지 못했습니다.'));
+    } finally {
+      setIsCreatingUser(false);
     }
   }
 
@@ -559,6 +717,76 @@ function PeopleSection({ token }: { token: string }) {
       setMessage(`임시 비밀번호를 재발급했습니다. 새 비밀번호: ${response.temporary_password}`);
     } catch (caughtError) {
       setError(getErrorMessage(caughtError, '비밀번호를 재발급하지 못했습니다.'));
+    }
+  }
+
+  function startEditUser(user: AuthUser) {
+    setMessage(null);
+    setError(null);
+    setInviteOpen(false);
+    setEditingUserId(user.id);
+    setEditFullName(user.full_name);
+    setEditDisplayName(user.display_name);
+    setEditStatus(
+      user.status === 'invited' || user.status === 'suspended' ? user.status : 'active',
+    );
+    setEditOrgUnitId(user.primary_org_unit?.id ?? orgUnits[0]?.id ?? '');
+    setEditGroupId(user.group_ids[0] ?? NONE_OPTION_VALUE);
+    setEditAppWorkspaceIds(resolveUserAppWorkspaceIds(user));
+    requestAnimationFrame(() => {
+      document.getElementById('admin-user-edit-full-name')?.focus();
+    });
+  }
+
+  async function handleUpdateUser(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!editingUserId) {
+      return;
+    }
+
+    setMessage(null);
+    setError(null);
+    setIsSavingUser(true);
+
+    try {
+      await updateAdminUser(token, editingUserId, {
+        full_name: editFullName.trim(),
+        display_name: editDisplayName.trim() || editFullName.trim(),
+        primary_org_unit_id: editOrgUnitId || undefined,
+        group_ids: editGroupId !== NONE_OPTION_VALUE ? [editGroupId] : [],
+        status: editStatus,
+      });
+      await syncUserAppAccess(editingUserId, editAppWorkspaceIds);
+      setEditingUserId(null);
+      setMessage('사용자 정보를 저장했습니다.');
+      await reloadUsers(page);
+    } catch (caughtError) {
+      setError(getErrorMessage(caughtError, '사용자 정보를 저장하지 못했습니다.'));
+    } finally {
+      setIsSavingUser(false);
+    }
+  }
+
+  async function handleDeleteUser(user: AuthUser) {
+    if (!window.confirm(`${user.email} 사용자를 삭제할까요?`)) {
+      return;
+    }
+
+    setMessage(null);
+    setError(null);
+    setDeletingUserId(user.id);
+
+    try {
+      await deleteAdminUser(token, user.id);
+      setEditingUserId((current) => (current === user.id ? null : current));
+      setMessage(`${user.email} 사용자를 삭제했습니다.`);
+      const nextTotal = Math.max(0, totalUsers - 1);
+      const nextPage = Math.min(page, Math.max(1, Math.ceil(nextTotal / PEOPLE_PAGE_SIZE)));
+      await reloadUsers(nextPage);
+    } catch (caughtError) {
+      setError(getErrorMessage(caughtError, '사용자를 삭제하지 못했습니다.'));
+    } finally {
+      setDeletingUserId(null);
     }
   }
 
@@ -590,14 +818,16 @@ function PeopleSection({ token }: { token: string }) {
         .map((user) => [
           user.display_name || user.full_name,
           user.email,
+          user.primary_org_unit?.name ?? '-',
+          formatUserGroups(user),
           isAdminUser(user) ? 'Admin' : 'Member',
+          formatStatusLabel(user.status),
           formatDateLabel(user.last_login_at),
-          'System',
           formatDateLabel(user.created_at),
-          user.workspace_roles.map((item) => item.name).join(', ') || '-',
+          formatUserApps(user),
         ]);
 
-      const header = ['Name', 'Email', 'Role', 'Last active', 'Invited by', 'Invited on', 'Teams'];
+      const header = ['Name', 'Email', 'Org', 'Groups', 'Role', 'Status', 'Last active', 'Created on', 'Apps'];
       const csv = [header, ...rows]
         .map((row) =>
           row
@@ -633,7 +863,7 @@ function PeopleSection({ token }: { token: string }) {
                 setSearch(event.target.value);
                 setPage(1);
               }}
-              placeholder="Search or invite by email"
+              placeholder="Search by name or email"
               value={search}
             />
           </label>
@@ -651,16 +881,11 @@ function PeopleSection({ token }: { token: string }) {
           </button>
           <button
             className="app-text-control inline-flex items-center gap-1.5 rounded-md bg-app-ink px-3 py-1.5 text-app-bg transition-opacity hover:opacity-90 dark:bg-white dark:text-black"
-            onClick={() => {
-              setInviteOpen((current) => !current);
-              requestAnimationFrame(() => {
-                document.getElementById('admin-user-email')?.focus();
-              });
-            }}
+            onClick={openCreateUserDialog}
             type="button"
           >
             <span>+</span>
-            <span>Invite people</span>
+            <span>Create user</span>
           </button>
         </div>
       </div>
@@ -676,79 +901,112 @@ function PeopleSection({ token }: { token: string }) {
         {isLoadingUsers ? <span className="app-text-body text-gray-500">Loading</span> : null}
       </div>
 
-      <div className="w-full">
-
-        <table className="app-text-body min-w-full border-collapse">
+      <div className="w-full overflow-x-auto">
+        <table className="app-text-body-sm min-w-[1180px] w-full border-collapse">
           <thead>
-            <tr>
-              <HeadCell>Name</HeadCell>
-              <HeadCell>Email</HeadCell>
-              <HeadCell>Role</HeadCell>
-              <HeadCell>Last active</HeadCell>
-              <HeadCell>Invited by</HeadCell>
-              <HeadCell>Invited on</HeadCell>
-              <HeadCell>Teams</HeadCell>
-              <HeadCell>Actions</HeadCell>
+            <tr className="bg-app-surface-sidebar/40">
+              <HeadCell className="w-[270px]" dense>User</HeadCell>
+              <HeadCell className="w-[150px]" dense>Org</HeadCell>
+              <HeadCell className="w-[150px]" dense>Groups</HeadCell>
+              <HeadCell className="w-[90px]" dense>Role</HeadCell>
+              <HeadCell className="w-[100px]" dense>Status</HeadCell>
+              <HeadCell className="w-[220px]" dense>Apps</HeadCell>
+              <HeadCell className="w-[110px]" dense>Last active</HeadCell>
+              <HeadCell className="w-[110px]" dense>Created</HeadCell>
+              <HeadCell className="w-[72px] text-right" dense>Actions</HeadCell>
             </tr>
           </thead>
           <tbody>
             <tr>
-              <td className="app-text-body border-b border-app-border px-4 py-3 text-gray-500" colSpan={8}>
+              <td className="app-text-body-sm border-b border-app-border px-3 py-2 text-gray-500" colSpan={9}>
                 <button
                   className="transition-colors hover:text-app-ink"
-                  onClick={() => setInviteOpen(true)}
+                  onClick={openCreateUserDialog}
                   type="button"
                 >
-                  + Invite people
+                  + Create user
                 </button>
               </td>
             </tr>
             {isLoadingUsers && users.length === 0 ? (
               <EmptyRow
-                colSpan={8}
+                colSpan={9}
                 description="잠시만 기다려 주세요."
                 title="사용자 목록을 불러오는 중입니다."
               />
             ) : filteredUsers.length === 0 ? (
               <EmptyRow
-                colSpan={8}
-                description="검색어를 바꾸거나 초대 버튼으로 사용자를 추가하세요."
+                colSpan={9}
+                description="검색어를 바꾸거나 생성 버튼으로 사용자를 추가하세요."
                 title="조건에 맞는 사용자가 없습니다."
               />
             ) : (
               filteredUsers.map((user) => (
-                <tr key={user.id}>
-                  <BodyCell>
-                    <div className="flex items-center gap-3">
-                      <div className="app-text-label flex h-8 w-8 items-center justify-center rounded-full bg-app-surface-sidebar text-gray-500">
+                <tr className="transition-colors hover:bg-app-surface-hover/40" key={user.id}>
+                  <BodyCell dense>
+                    <div className="flex min-w-0 items-center gap-2">
+                      <div className="app-text-micro flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-app-surface-sidebar text-gray-500">
                         {getInitials(user.display_name || user.full_name)}
                       </div>
-                      <div>
-                        <div className="font-medium text-app-ink">{user.display_name || user.full_name}</div>
-                        {isAdminUser(user) ? (
-                          <div className="mt-0.5">
-                            <Badge tone="default">Admin</Badge>
-                          </div>
-                        ) : null}
+                      <div className="min-w-0">
+                        <div className="truncate font-medium text-app-ink">{user.display_name || user.full_name}</div>
+                        <div className="app-text-caption truncate text-gray-500">{user.email}</div>
                       </div>
                     </div>
                   </BodyCell>
-                  <BodyCell>{user.email}</BodyCell>
-                  <BodyCell>{isAdminUser(user) ? 'Admin' : 'Member'}</BodyCell>
-                  <BodyCell>{formatDateLabel(user.last_login_at)}</BodyCell>
-                  <BodyCell>System</BodyCell>
-                  <BodyCell>{formatDateLabel(user.created_at)}</BodyCell>
-                  <BodyCell>{user.workspace_roles.length > 0 ? user.workspace_roles.map((item) => item.name).join(', ') : '-'}</BodyCell>
-                  <BodyCell className="w-14 text-right">
-                    <button
-                      className="rounded-md px-2 py-1 text-gray-500 transition-colors hover:bg-app-surface-hover hover:text-app-ink"
-                      onClick={() => {
-                        void handleResetPassword(user.id);
-                      }}
-                      type="button"
-                    >
-                      ...
-                    </button>
+                  <BodyCell className="max-w-[150px] truncate text-gray-500" dense>
+                    {user.primary_org_unit?.name ?? '-'}
+                  </BodyCell>
+                  <BodyCell className="max-w-[150px] truncate text-gray-500" dense>
+                    {formatUserGroups(user)}
+                  </BodyCell>
+                  <BodyCell dense>{isAdminUser(user) ? 'Admin' : 'Member'}</BodyCell>
+                  <BodyCell dense>
+                    <span className="rounded border border-app-border px-1.5 py-0.5 text-gray-500">
+                      {formatStatusLabel(user.status)}
+                    </span>
+                  </BodyCell>
+                  <BodyCell className="max-w-[220px] truncate text-gray-500" dense>
+                    {formatUserApps(user)}
+                  </BodyCell>
+                  <BodyCell className="text-gray-500" dense>{formatDateLabel(user.last_login_at)}</BodyCell>
+                  <BodyCell className="text-gray-500" dense>{formatDateLabel(user.created_at)}</BodyCell>
+                  <BodyCell className="text-right" dense>
+                    <DropdownMenu
+                      items={[
+                        {
+                          id: 'edit',
+                          label: 'Edit user',
+                          onSelect: () => startEditUser(user),
+                        },
+                        {
+                          id: 'reset',
+                          label: 'Reset password',
+                          onSelect: () => {
+                            void handleResetPassword(user.id);
+                          },
+                        },
+                        {
+                          id: 'delete',
+                          label: deletingUserId === user.id ? 'Deleting user' : 'Delete user',
+                          disabled: deletingUserId === user.id,
+                          separatorBefore: true,
+                          tone: 'danger',
+                          onSelect: () => {
+                            void handleDeleteUser(user);
+                          },
+                        },
+                      ]}
+                      trigger={
+                        <button
+                          aria-label={`${user.email} actions`}
+                          className="app-text-control rounded-md border border-app-border px-2 py-1 text-gray-500 transition-colors hover:bg-app-surface-hover hover:text-app-ink"
+                          type="button"
+                        >
+                          More
+                        </button>
+                      }
+                    />
                   </BodyCell>
                 </tr>
               ))
@@ -784,51 +1042,206 @@ function PeopleSection({ token }: { token: string }) {
         </div>
       </div>
 
-      {inviteOpen ? (
-        <div className="rounded-xl border border-app-border bg-app-surface px-5 py-5">
-          <div className="mb-4">
-            <div className="app-text-title-md text-app-ink">Invite people</div>
-            <div className="app-text-body mt-1 text-gray-500">관리자가 계정을 만들고 기본 조직과 그룹을 함께 배정합니다.</div>
+      <Dialog
+        actions={
+          <div className="flex w-full items-center justify-end gap-2">
+            <Button disabled={isCreatingUser} onClick={closeCreateUserDialog} variant="secondary">
+              Cancel
+            </Button>
+            <Button disabled={isCreatingUser} form="admin-user-create-form" type="submit" variant="primary">
+              {isCreatingUser ? 'Creating' : 'Create'}
+            </Button>
           </div>
-          <form className="grid gap-3 xl:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)_minmax(0,1fr)_220px_220px_auto]" onSubmit={(event) => void handleCreateUser(event)}>
-            <input
-              className={fieldClassName}
-              id="admin-user-email"
-              onChange={(event) => setEmail(event.target.value)}
-              placeholder="Email"
-              value={email}
-            />
-            <input
-              className={fieldClassName}
-              onChange={(event) => setFullName(event.target.value)}
-              placeholder="Full name"
-              value={fullName}
-            />
-            <input
-              className={fieldClassName}
-              onChange={(event) => setDisplayName(event.target.value)}
-              placeholder="Display name"
-              value={displayName}
-            />
-            <Select
-              onValueChange={setSelectedOrgUnitId}
-              options={orgUnits.map((item) => ({ value: item.id, label: item.name }))}
-              value={selectedOrgUnitId}
-            />
-            <Select
-              onValueChange={setSelectedGroupId}
-              options={[
-                { value: NONE_OPTION_VALUE, label: 'No group' },
-                ...groups.map((item) => ({ value: item.id, label: item.name })),
-              ]}
-              value={selectedGroupId}
-            />
-            <div className="flex justify-end">
-              <Button type="submit" variant="primary">Invite</Button>
+        }
+        description="계정을 만들고 조직, 그룹, 접근 가능한 앱을 함께 배정합니다."
+        dismissOnInteractOutside={false}
+        maxWidth="max-w-2xl"
+        onOpenChange={(open) => {
+          if (!open) closeCreateUserDialog();
+        }}
+        open={inviteOpen}
+        title="Create user"
+      >
+        <form className="grid gap-4" id="admin-user-create-form" onSubmit={(event) => void handleCreateUser(event)}>
+          <div className="grid gap-3 md:grid-cols-2">
+            <label className="grid gap-1">
+              <span className="app-text-caption text-gray-500">Email</span>
+              <input
+                className={fieldClassName}
+                id="admin-user-email"
+                onChange={(event) => setEmail(event.target.value)}
+                placeholder="name@company.com"
+                required
+                type="email"
+                value={email}
+              />
+            </label>
+            <label className="grid gap-1">
+              <span className="app-text-caption text-gray-500">Full name</span>
+              <input
+                className={fieldClassName}
+                onChange={(event) => setFullName(event.target.value)}
+                placeholder="Full name"
+                required
+                value={fullName}
+              />
+            </label>
+            <label className="grid gap-1">
+              <span className="app-text-caption text-gray-500">Display name</span>
+              <input
+                className={fieldClassName}
+                onChange={(event) => setDisplayName(event.target.value)}
+                placeholder="Display name"
+                value={displayName}
+              />
+            </label>
+            <div className="grid gap-1">
+              <span className="app-text-caption text-gray-500">Org unit</span>
+              <Select
+                onValueChange={setSelectedOrgUnitId}
+                options={orgUnits.map((item) => ({ value: item.id, label: item.name }))}
+                value={selectedOrgUnitId}
+              />
             </div>
-          </form>
-        </div>
-      ) : null}
+            <div className="grid gap-1 md:col-span-2">
+              <span className="app-text-caption text-gray-500">Group</span>
+              <Select
+                onValueChange={setSelectedGroupId}
+                options={[
+                  { value: NONE_OPTION_VALUE, label: 'No group' },
+                  ...groups.map((item) => ({ value: item.id, label: item.name })),
+                ]}
+                value={selectedGroupId}
+              />
+            </div>
+          </div>
+          <div className="grid gap-2">
+            <div className="app-text-caption text-gray-500">Accessible apps</div>
+            {appWorkspaces.length === 0 ? (
+              <div className="app-text-caption rounded-md border border-dashed border-app-border px-3 py-3 text-gray-500">
+                접근 가능한 앱 워크스페이스가 없습니다.
+              </div>
+            ) : (
+              <div className="grid gap-2 sm:grid-cols-2">
+                {appWorkspaces.map((workspace) => (
+                  <label
+                    className="app-text-control inline-flex items-center gap-2 rounded-md border border-app-border bg-app-surface-sidebar px-3 py-2 text-app-ink"
+                    key={workspace.id}
+                  >
+                    <input
+                      checked={selectedAppWorkspaceIds.includes(workspace.id)}
+                      onChange={() => toggleWorkspaceSelection(setSelectedAppWorkspaceIds, workspace.id)}
+                      type="checkbox"
+                    />
+                    <span>{APP_WORKSPACE_LABELS[workspace.key] ?? workspace.name}</span>
+                  </label>
+                ))}
+              </div>
+            )}
+          </div>
+        </form>
+      </Dialog>
+
+      <Dialog
+        actions={
+          <div className="flex w-full items-center justify-end gap-2">
+            <Button disabled={isSavingUser} onClick={closeEditUserDialog} variant="secondary">
+              Cancel
+            </Button>
+            <Button disabled={isSavingUser} form="admin-user-edit-form" type="submit" variant="primary">
+              {isSavingUser ? 'Saving' : 'Save'}
+            </Button>
+          </div>
+        }
+        description={editingUser ? editingUser.email : undefined}
+        dismissOnInteractOutside={false}
+        maxWidth="max-w-2xl"
+        onOpenChange={(open) => {
+          if (!open) closeEditUserDialog();
+        }}
+        open={editingUserId !== null}
+        title="Edit user"
+      >
+        <form className="grid gap-4" id="admin-user-edit-form" onSubmit={(event) => void handleUpdateUser(event)}>
+          <div className="grid gap-3 md:grid-cols-2">
+            <label className="grid gap-1">
+              <span className="app-text-caption text-gray-500">Full name</span>
+              <input
+                className={fieldClassName}
+                id="admin-user-edit-full-name"
+                onChange={(event) => setEditFullName(event.target.value)}
+                placeholder="Full name"
+                required
+                value={editFullName}
+              />
+            </label>
+            <label className="grid gap-1">
+              <span className="app-text-caption text-gray-500">Display name</span>
+              <input
+                className={fieldClassName}
+                onChange={(event) => setEditDisplayName(event.target.value)}
+                placeholder="Display name"
+                value={editDisplayName}
+              />
+            </label>
+            <label className="grid gap-1">
+              <span className="app-text-caption text-gray-500">Status</span>
+              <select
+                className={fieldClassName}
+                onChange={(event) => setEditStatus(event.target.value as typeof editStatus)}
+                value={editStatus}
+              >
+                <option value="active">Active</option>
+                <option value="invited">Invited</option>
+                <option value="suspended">Suspended</option>
+              </select>
+            </label>
+            <div className="grid gap-1">
+              <span className="app-text-caption text-gray-500">Org unit</span>
+              <Select
+                onValueChange={setEditOrgUnitId}
+                options={orgUnits.map((item) => ({ value: item.id, label: item.name }))}
+                value={editOrgUnitId}
+              />
+            </div>
+            <div className="grid gap-1 md:col-span-2">
+              <span className="app-text-caption text-gray-500">Group</span>
+              <Select
+                onValueChange={setEditGroupId}
+                options={[
+                  { value: NONE_OPTION_VALUE, label: 'No group' },
+                  ...groups.map((item) => ({ value: item.id, label: item.name })),
+                ]}
+                value={editGroupId}
+              />
+            </div>
+          </div>
+          <div className="grid gap-2">
+            <div className="app-text-caption text-gray-500">Accessible apps</div>
+            {appWorkspaces.length === 0 ? (
+              <div className="app-text-caption rounded-md border border-dashed border-app-border px-3 py-3 text-gray-500">
+                접근 가능한 앱 워크스페이스가 없습니다.
+              </div>
+            ) : (
+              <div className="grid gap-2 sm:grid-cols-2">
+                {appWorkspaces.map((workspace) => (
+                  <label
+                    className="app-text-control inline-flex items-center gap-2 rounded-md border border-app-border bg-app-surface-sidebar px-3 py-2 text-app-ink"
+                    key={workspace.id}
+                  >
+                    <input
+                      checked={editAppWorkspaceIds.includes(workspace.id)}
+                      onChange={() => toggleWorkspaceSelection(setEditAppWorkspaceIds, workspace.id)}
+                      type="checkbox"
+                    />
+                    <span>{APP_WORKSPACE_LABELS[workspace.key] ?? workspace.name}</span>
+                  </label>
+                ))}
+              </div>
+            )}
+          </div>
+        </form>
+      </Dialog>
     </div>
   );
 }

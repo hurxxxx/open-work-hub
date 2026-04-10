@@ -6,7 +6,10 @@ from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field, field_validator
+from sqlalchemy import delete as sa_delete
 from sqlalchemy import func, or_, select
+from sqlalchemy import update as sa_update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload, selectinload
 
 from aidoo_api.core.db import get_db_session
@@ -38,12 +41,14 @@ from aidoo_api.domains.auth.dependencies import AuthContext, require_auth_contex
 from aidoo_api.domains.auth.models import (
     AccessGroup,
     AuditLog,
+    AuthSession,
     FeaturePolicy,
     OrgUnit,
     Team,
     TeamMember,
     User,
     UserAccessGroup,
+    UserSystemRole,
     Workspace,
     WorkspaceGroupBinding,
     WorkspaceUserBinding,
@@ -738,6 +743,47 @@ def reset_user_password(
     )
     db.commit()
     return ResetPasswordResponse(temporary_password=temporary_password)
+
+
+@router.delete("/users/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_user(
+    user_id: str,
+    context: AuthContext = Depends(require_permission("user.write")),
+    db: Session = Depends(get_db_session),
+) -> None:
+    if user_id == context.user.id:
+        raise HTTPException(status_code=400, detail="You cannot delete your own user account.")
+
+    user = db.scalar(select(User).where(User.id == user_id))
+    if user is None:
+        raise HTTPException(status_code=404, detail="User not found.")
+
+    email = user.email
+    db.execute(sa_update(AuditLog).where(AuditLog.actor_user_id == user_id).values(actor_user_id=None))
+    db.execute(sa_delete(AuthSession).where(AuthSession.user_id == user_id))
+    db.execute(sa_delete(UserAccessGroup).where(UserAccessGroup.user_id == user_id))
+    db.execute(sa_delete(UserSystemRole).where(UserSystemRole.user_id == user_id))
+    db.execute(sa_delete(WorkspaceUserBinding).where(WorkspaceUserBinding.user_id == user_id))
+    db.execute(sa_delete(TeamMember).where(TeamMember.user_id == user_id))
+    db.delete(user)
+    record_audit_log(
+        db,
+        actor_user_id=context.user.id,
+        action="admin.user.delete",
+        entity_kind="user",
+        entity_id=user_id,
+        summary=f"Deleted user {email}",
+        payload={"email": email},
+    )
+
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail="User has linked records and cannot be deleted.",
+        ) from exc
 
 
 @router.get("/org-units", response_model=list[OrgUnitItemResponse])

@@ -197,6 +197,27 @@ export function createAdminUser(
   });
 }
 
+export function updateAdminUser(
+  token: string,
+  userId: string,
+  payload: {
+    full_name?: string;
+    display_name?: string;
+    primary_org_unit_id?: string;
+    group_ids?: string[];
+    status?: 'active' | 'invited' | 'suspended';
+  },
+): Promise<AuthUser> {
+  return request<AuthUser>(token, `/api/v1/admin/users/${userId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function deleteAdminUser(token: string, userId: string): Promise<void> {
+  return request<void>(token, `/api/v1/admin/users/${userId}`, { method: 'DELETE' });
+}
+
 export function listOrgUnits(token: string): Promise<OrgUnitItem[]> {
   return request<OrgUnitItem[]>(token, '/api/v1/admin/org-units');
 }

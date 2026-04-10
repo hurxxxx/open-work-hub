@@ -518,6 +518,54 @@ def test_admin_identity_management_endpoints(client: TestClient) -> None:
     assert len(searched_users_payload["items"]) == 1
     assert searched_users_payload["total"] == 1
 
+    update_user_response = client.patch(
+        f"/api/v1/admin/users/{created_user['id']}",
+        headers=headers,
+        json={
+            "full_name": "AIDOO Member Updated",
+            "display_name": "Updated Member",
+            "status": "active",
+            "group_ids": [group_id],
+        },
+    )
+    assert update_user_response.status_code == 200
+    assert update_user_response.json()["full_name"] == "AIDOO Member Updated"
+    assert update_user_response.json()["display_name"] == "Updated Member"
+    assert update_user_response.json()["group_ids"] == [group_id]
+
+    delete_user_response = client.post(
+        "/api/v1/admin/users",
+        headers=headers,
+        json={
+            "email": "delete-me@aidoo.local",
+            "full_name": "Delete Me",
+            "display_name": "Delete Me",
+            "primary_org_unit_id": root_org_unit_id,
+        },
+    )
+    assert delete_user_response.status_code == 201
+    delete_user_id = delete_user_response.json()["user"]["id"]
+
+    me_response = client.get("/api/v1/auth/me", headers=headers)
+    assert me_response.status_code == 200
+    self_delete_response = client.delete(
+        f"/api/v1/admin/users/{me_response.json()['id']}",
+        headers=headers,
+    )
+    assert self_delete_response.status_code == 400
+
+    deleted_user_response = client.delete(
+        f"/api/v1/admin/users/{delete_user_id}",
+        headers=headers,
+    )
+    assert deleted_user_response.status_code == 204
+
+    deleted_user_get_response = client.get(
+        f"/api/v1/admin/users/{delete_user_id}",
+        headers=headers,
+    )
+    assert deleted_user_get_response.status_code == 404
+
     workspace_response = client.post(
         "/api/v1/admin/workspaces",
         headers=headers,
