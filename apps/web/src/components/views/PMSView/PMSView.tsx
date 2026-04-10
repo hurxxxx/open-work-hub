@@ -1,12 +1,10 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, Link, useSearchParams, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   Layout,
-  FolderKanban,
   Star,
   Lock,
-  Search,
   Settings,
   Plus,
   List as ListIcon,
@@ -16,6 +14,7 @@ import {
   Table,
   Loader2,
   Download,
+  ChevronDown,
 } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 import { useAuth } from '@/src/domains/auth/auth-provider';
@@ -103,6 +102,19 @@ export const PMSView = () => {
   const [selectedIssueIds, setSelectedIssueIds] = useState<Set<string>>(new Set());
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [createSpaceOpen, setCreateSpaceOpen] = useState(false);
+  const [projectSwitcherOpen, setProjectSwitcherOpen] = useState(false);
+  const projectSwitcherRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!projectSwitcherOpen) return;
+    function onClick(e: MouseEvent) {
+      if (projectSwitcherRef.current && !projectSwitcherRef.current.contains(e.target as Node)) {
+        setProjectSwitcherOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', onClick);
+    return () => document.removeEventListener('mousedown', onClick);
+  }, [projectSwitcherOpen]);
 
   const isAssignedTasksView = toolId === 'pms-tasks' || toolId === 'pms-tasks-assigned';
   const isTodayView = toolId === 'pms-tasks-today';
@@ -427,85 +439,104 @@ export const PMSView = () => {
 
   return (
     <div className="h-full flex flex-col relative">
-      <header className="bg-clickup-bg border-b border-clickup-border px-8 pt-6 transition-colors">
-        <div className="flex items-center justify-between mb-6">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 bg-clickup-purple rounded flex items-center justify-center text-clickup-bg">
-              <Layout size={20} />
+      <header className="bg-clickup-bg border-b border-clickup-border px-6 pt-3 transition-colors">
+        {/* Row 1: breadcrumb */}
+        <nav className="app-text-caption flex items-center gap-1.5 text-gray-500 mb-1.5 min-w-0">
+          <Link to="/pms" className="hover:text-clickup-text transition-colors shrink-0">PMS</Link>
+          {selectedProject?.team_name ? (
+            <>
+              <span className="text-gray-600 shrink-0">/</span>
+              <span className="truncate max-w-[160px]">{selectedProject.team_name}</span>
+            </>
+          ) : null}
+          {selectedProject?.folder_name ? (
+            <>
+              <span className="text-gray-600 shrink-0">/</span>
+              <span className="truncate max-w-[160px]">{selectedProject.folder_name}</span>
+            </>
+          ) : null}
+        </nav>
+
+        {/* Row 2: title + actions */}
+        <div className="flex items-center justify-between gap-4 mb-3 min-w-0">
+          <div className="flex items-center gap-2.5 flex-1 min-w-0">
+            <div className="w-7 h-7 bg-clickup-purple rounded flex items-center justify-center text-clickup-bg shrink-0">
+              <Layout size={16} />
             </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <Link to="/pms" className="app-text-title-lg text-gray-500 transition-colors hover:text-clickup-text">PMS</Link>
-                {selectedProject?.team_name ? (
-                  <>
-                    <span className="app-text-title-md text-gray-400">/</span>
-                    <span className="app-text-title-lg text-gray-500">{selectedProject.team_name}</span>
-                  </>
-                ) : null}
-                <span className="app-text-title-md text-gray-400">/</span>
-                <h1 className="app-text-title-lg flex items-center gap-2 text-clickup-text">
-                  <FolderKanban size={18} className="text-blue-400" />
-                  {selectedProject?.name || projectName}
-                  <Star size={16} className="text-gray-600 cursor-pointer hover:text-yellow-500 ml-2" />
-                </h1>
-              </div>
-              <div className="app-text-caption flex items-center gap-2 text-gray-500">
-                <Lock size={10} />
-                <span>{selectedProject?.folder_name ? `Folder: ${selectedProject.folder_name}` : 'Root List'}</span>
-              </div>
-            </div>
-          </div>
-          <div className="flex items-center gap-3">
-            {/* Project Selector */}
+            <h1 className="app-text-title-md text-clickup-text truncate min-w-0">
+              {selectedProject?.name || projectName}
+            </h1>
+            <button
+              type="button"
+              className="shrink-0 text-gray-600 hover:text-yellow-500 transition-colors"
+              title="Favorite"
+            >
+              <Star size={14} />
+            </button>
             {projects.length > 1 && (
-              <select
-                value={selectedProjectId}
-                onChange={e => {
-                  clearSelectedIssue();
-                  navigate(`/tool/pms-list-${e.target.value}`);
-                }}
-                className="app-text-body-sm min-h-10 rounded-md border border-clickup-border bg-clickup-sidebar px-3 text-clickup-text focus:border-clickup-purple focus:outline-none"
-              >
-                {projects.map(p => (
-                  <option key={p.id} value={p.id}>{p.name}</option>
-                ))}
-              </select>
+              <div ref={projectSwitcherRef} className="relative shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setProjectSwitcherOpen(o => !o)}
+                  className="flex h-7 w-7 items-center justify-center rounded text-gray-500 transition-colors hover:bg-clickup-hover hover:text-clickup-text"
+                  title="Switch list"
+                >
+                  <ChevronDown size={14} />
+                </button>
+                {projectSwitcherOpen && (
+                  <div className="absolute top-full left-0 mt-1 z-30 min-w-[220px] max-h-72 overflow-y-auto custom-scrollbar bg-clickup-bg border border-clickup-border rounded-lg shadow-xl py-1">
+                    {projects.map(p => (
+                      <button
+                        key={p.id}
+                        type="button"
+                        onClick={() => {
+                          setProjectSwitcherOpen(false);
+                          clearSelectedIssue();
+                          navigate(`/tool/pms-list-${p.id}`);
+                        }}
+                        className={cn(
+                          'app-text-body-sm w-full px-3 py-1.5 text-left hover:bg-clickup-hover truncate',
+                          p.id === selectedProjectId ? 'text-clickup-purple font-medium' : 'text-clickup-text'
+                        )}
+                      >
+                        {p.name}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
             )}
-            <div className="app-text-body-sm flex min-h-10 items-center gap-2 rounded-md border border-clickup-border bg-clickup-sidebar px-3 text-clickup-text">
-              <Search size={14} className="text-gray-500" />
-              <input
-                type="text"
-                placeholder="Search..."
-                value={filterParams.q ?? ''}
-                onChange={e => setFilterParams(prev => ({ ...prev, q: e.target.value || undefined }))}
-                className="w-32 bg-transparent text-inherit focus:outline-none"
-              />
-            </div>
+          </div>
+          <div className="flex items-center gap-1 shrink-0">
             {selectedProjectId && (
               <button
                 onClick={() => { if (token) void exportProjectCsv(token, selectedProjectId); }}
-                className="flex h-10 w-10 items-center justify-center rounded border border-clickup-border text-gray-500 transition-colors hover:bg-clickup-hover dark:text-gray-400"
+                className="flex h-8 w-8 items-center justify-center rounded text-gray-500 transition-colors hover:bg-clickup-hover hover:text-clickup-text"
                 title="Export CSV"
               >
-                <Download size={16} />
+                <Download size={15} />
               </button>
             )}
             {canManageProject ? (
               <button
                 onClick={() => setSettingsOpen(true)}
-                className="flex h-10 w-10 items-center justify-center rounded border border-clickup-border text-gray-500 transition-colors hover:bg-clickup-hover dark:text-gray-400"
+                className="flex h-8 w-8 items-center justify-center rounded text-gray-500 transition-colors hover:bg-clickup-hover hover:text-clickup-text"
+                title="Settings"
               >
-                <Settings size={16} />
+                <Settings size={15} />
               </button>
             ) : null}
             {canEditProject ? (
-              <button
-                onClick={() => setIsNewTaskModalOpen(true)}
-                className="app-text-body-sm flex min-h-10 items-center gap-2 rounded-md bg-clickup-purple px-4 font-semibold text-clickup-bg shadow-lg shadow-purple-500/20"
-              >
-                <Plus size={16} />
-                <span>New Task</span>
-              </button>
+              <>
+                <div className="w-px h-5 bg-clickup-border mx-1" />
+                <button
+                  onClick={() => setIsNewTaskModalOpen(true)}
+                  className="app-text-body-sm flex h-8 items-center gap-1.5 rounded-md bg-clickup-purple px-3 font-semibold text-clickup-bg shadow-lg shadow-purple-500/20"
+                >
+                  <Plus size={14} />
+                  <span>New Task</span>
+                </button>
+              </>
             ) : null}
           </div>
         </div>

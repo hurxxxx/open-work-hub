@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { X, Filter, ChevronDown, Save, BookmarkCheck } from 'lucide-react';
+import { X, Filter, ChevronDown, Save, BookmarkCheck, Search } from 'lucide-react';
 import type { IssueFilterParams, PmsProjectMember, PmsMilestone, PmsLabel, PmsProjectStatus } from '@/src/domains/pms/pms-api';
 import {
   createDefaultIssueFilterParams,
@@ -214,7 +214,29 @@ export const FilterBar = ({
   }
 
   return (
-    <div className="flex items-center gap-2 flex-wrap px-8 py-2 border-b border-clickup-border bg-clickup-bg/50">
+    <div className="flex items-center gap-2 flex-wrap px-6 py-2 border-b border-clickup-border bg-clickup-bg/50">
+      {/* Search */}
+      <div className="app-text-body-sm flex h-8 items-center gap-1.5 rounded-md border border-clickup-border bg-clickup-sidebar px-2.5 text-clickup-text focus-within:border-clickup-purple">
+        <Search size={13} className="text-clickup-text/40 shrink-0" />
+        <input
+          type="text"
+          placeholder="Search tasks..."
+          value={filterParams.q ?? ''}
+          onChange={e => setFilterParams({ ...filterParams, q: e.target.value || undefined })}
+          className="w-36 bg-transparent text-inherit focus:outline-none placeholder:text-clickup-text/40"
+        />
+        {filterParams.q && (
+          <button
+            type="button"
+            onClick={() => setFilterParams({ ...filterParams, q: undefined })}
+            className="text-clickup-text/40 hover:text-clickup-text shrink-0"
+          >
+            <X size={11} />
+          </button>
+        )}
+      </div>
+      <div className="h-4 w-px bg-clickup-border" />
+
       <Filter size={13} className="text-clickup-text/40 shrink-0" />
 
       {/* Status (multi-select) */}
