@@ -23,9 +23,9 @@ export const SchedulePopover = ({ isOpen, onClose, position, initialDate, initia
       animate={{ opacity: 1, y: 0, scale: 1 }}
       exit={{ opacity: 0, y: 10, scale: 0.95 }}
       style={{ top: position.top, left: position.left }}
-      className="absolute z-50 w-[400px] bg-clickup-bg border border-clickup-border rounded-xl shadow-2xl overflow-hidden"
+      className="absolute z-50 w-[400px] bg-app-bg border border-app-border rounded-xl shadow-2xl overflow-hidden"
     >
-      <div className="flex items-center justify-between p-2 border-b border-clickup-border bg-clickup-sidebar/50">
+      <div className="flex items-center justify-between p-2 border-b border-app-border bg-app-surface-sidebar/50">
         <div className="flex items-center gap-1">
           {(['Event', 'Task', 'Focus time', 'OOO'] as const).map(tab => (
             <button
@@ -33,14 +33,14 @@ export const SchedulePopover = ({ isOpen, onClose, position, initialDate, initia
               onClick={() => setActiveTab(tab)}
               className={cn(
                 "app-text-control-sm rounded-md px-3 py-1.5 transition-colors",
-                activeTab === tab ? "bg-clickup-bg text-clickup-text shadow-sm" : "text-gray-500 hover:text-clickup-text hover:bg-clickup-hover"
+                activeTab === tab ? "bg-app-bg text-app-ink shadow-sm" : "text-gray-500 hover:text-app-ink hover:bg-app-surface-hover"
               )}
             >
               {tab}
             </button>
           ))}
         </div>
-        <button onClick={onClose} className="p-1.5 text-gray-500 hover:text-clickup-text hover:bg-clickup-hover rounded-md">
+        <button onClick={onClose} className="p-1.5 text-gray-500 hover:text-app-ink hover:bg-app-surface-hover rounded-md">
           <X size={14} />
         </button>
       </div>
@@ -49,61 +49,61 @@ export const SchedulePopover = ({ isOpen, onClose, position, initialDate, initia
         <input
           type="text"
           placeholder="Add title, @ for people, @@ for tasks"
-          className="app-text-body w-full rounded-md border border-clickup-border bg-transparent px-3 py-2 text-clickup-text transition-colors focus:border-clickup-purple focus:outline-none"
+          className="app-text-body w-full rounded-md border border-app-border bg-transparent px-3 py-2 text-app-ink transition-colors focus:border-app-accent focus:outline-none"
           autoFocus
         />
 
-        <div className="app-text-caption flex items-center gap-2 text-clickup-text">
+        <div className="app-text-caption flex items-center gap-2 text-app-ink">
           <span>{initialDate || 'Apr 7, 2026'}</span>
           <span className="text-gray-500">{initialStartTime || '6:45 AM'}</span>
           <span className="text-gray-500">→</span>
           <span className="text-gray-500">{initialEndTime || '10:30 AM'}</span>
         </div>
 
-        <button className="app-text-control flex w-full items-center justify-center gap-2 rounded-md border border-clickup-border bg-clickup-sidebar py-2 text-clickup-text transition-colors hover:bg-clickup-hover">
+        <button className="app-text-control flex w-full items-center justify-center gap-2 rounded-md border border-app-border bg-app-surface-sidebar py-2 text-app-ink transition-colors hover:bg-app-surface-hover">
           <Video size={16} />
           <span>Add video call</span>
         </button>
 
         <div className="space-y-3">
-          <button className="app-text-body flex w-full items-center gap-3 text-left text-gray-500 transition-colors hover:text-clickup-text">
+          <button className="app-text-body flex w-full items-center gap-3 text-left text-gray-500 transition-colors hover:text-app-ink">
             <Users size={16} />
             <span>Add participants</span>
           </button>
-          <button className="app-text-body flex w-full items-center gap-3 text-left text-gray-500 transition-colors hover:text-clickup-text">
+          <button className="app-text-body flex w-full items-center gap-3 text-left text-gray-500 transition-colors hover:text-app-ink">
             <LinkIcon size={16} />
             <span>Add ClickUp tasks and docs</span>
           </button>
-          <button className="app-text-body flex w-full items-center gap-3 text-left text-gray-500 transition-colors hover:text-clickup-text">
+          <button className="app-text-body flex w-full items-center gap-3 text-left text-gray-500 transition-colors hover:text-app-ink">
             <MapPin size={16} />
             <span>Add location or room</span>
           </button>
-          <button className="app-text-body flex w-full items-center gap-3 text-left text-gray-500 transition-colors hover:text-clickup-text">
+          <button className="app-text-body flex w-full items-center gap-3 text-left text-gray-500 transition-colors hover:text-app-ink">
             <AlignLeft size={16} />
             <span>Add description</span>
           </button>
         </div>
       </div>
 
-      <div className="p-3 border-t border-clickup-border bg-clickup-sidebar/30 flex items-center gap-4">
-        <button className="app-text-caption flex items-center gap-1.5 text-gray-500 hover:text-clickup-text">
+      <div className="p-3 border-t border-app-border bg-app-surface-sidebar/30 flex items-center gap-4">
+        <button className="app-text-caption flex items-center gap-1.5 text-gray-500 hover:text-app-ink">
           <CalendarIcon size={14} />
         </button>
         <div className="app-text-caption flex items-center gap-3 text-gray-500">
-          <button className="flex items-center gap-1.5 hover:text-clickup-text">
+          <button className="flex items-center gap-1.5 hover:text-app-ink">
             <div className="w-2 h-2 rounded-full bg-blue-500"></div>
             Default
           </button>
-          <button className="flex items-center gap-1.5 hover:text-clickup-text">
+          <button className="flex items-center gap-1.5 hover:text-app-ink">
             <Clock size={14} />
             Busy
           </button>
-          <button className="flex items-center gap-1.5 hover:text-clickup-text">
+          <button className="flex items-center gap-1.5 hover:text-app-ink">
             <Coffee size={14} />
           </button>
         </div>
         <div className="flex-1"></div>
-        <button className="app-text-control-sm rounded-md bg-clickup-purple px-4 py-1.5 text-clickup-bg transition-colors hover:bg-opacity-90">
+        <button className="app-text-control-sm rounded-md bg-app-accent px-4 py-1.5 text-app-bg transition-colors hover:bg-opacity-90">
           Save
         </button>
       </div>

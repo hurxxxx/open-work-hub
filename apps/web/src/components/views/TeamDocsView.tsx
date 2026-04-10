@@ -26,7 +26,7 @@ export const TeamDocsView = () => {
     <div>
       <div className="h-full flex bg-white dark:bg-[#1e1e24]">
         {/* Local Sidebar for Pages */}
-        <div className="w-64 border-r border-clickup-border bg-clickup-sidebar flex flex-col">
+        <div className="w-64 border-r border-app-border bg-app-surface-sidebar flex flex-col">
           <div className="p-4 flex items-center justify-between">
             <h3 className="app-text-overline text-gray-500">Pages</h3>
           </div>
@@ -38,12 +38,12 @@ export const TeamDocsView = () => {
                 className={cn(
                   "app-text-body group flex w-full items-center justify-between rounded-md px-3 py-2 transition-colors",
                   activePageId === page.id 
-                    ? "bg-clickup-hover text-clickup-text" 
-                    : "text-gray-400 hover:bg-clickup-hover hover:text-gray-300"
+                    ? "bg-app-surface-hover text-app-ink" 
+                    : "text-gray-400 hover:bg-app-surface-hover hover:text-gray-300"
                 )}
               >
                 <div className="flex items-center gap-2">
-                  <page.icon size={16} className={activePageId === page.id ? "text-clickup-purple" : "text-gray-500"} />
+                  <page.icon size={16} className={activePageId === page.id ? "text-app-accent" : "text-gray-500"} />
                   <span className="truncate">{page.title}</span>
                 </div>
                 <div className={cn(
@@ -55,7 +55,7 @@ export const TeamDocsView = () => {
                 </div>
               </button>
             ))}
-            <button className="app-text-body mt-2 flex w-full items-center gap-2 rounded-md px-3 py-2 text-gray-500 transition-colors hover:bg-clickup-hover hover:text-gray-300">
+            <button className="app-text-body mt-2 flex w-full items-center gap-2 rounded-md px-3 py-2 text-gray-500 transition-colors hover:bg-app-surface-hover hover:text-gray-300">
               <Plus size={16} />
               <span>Add page</span>
             </button>
@@ -65,13 +65,13 @@ export const TeamDocsView = () => {
         {/* Editor Area */}
         <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
           {/* Editor Header */}
-          <div className="h-12 border-b border-clickup-border flex items-center justify-between px-4">
+          <div className="h-12 border-b border-app-border flex items-center justify-between px-4">
             <div className="app-text-caption flex items-center gap-2 text-gray-500">
               <LinkIcon size={12} />
               <span>Link Task or Doc</span>
             </div>
             <div className="flex items-center gap-4">
-              <button className="app-text-control-sm flex items-center gap-1.5 text-clickup-purple">
+              <button className="app-text-control-sm flex items-center gap-1.5 text-app-accent">
                 <Sparkles size={14} />
                 <span>Ask AI</span>
               </button>
@@ -89,12 +89,12 @@ export const TeamDocsView = () => {
           <div className="flex-1 overflow-y-auto custom-scrollbar">
             <div className="max-w-4xl mx-auto py-12 px-12 space-y-8">
               <div className="space-y-4">
-                <h1 className="app-text-title-xl text-clickup-text outline-none" contentEditable suppressContentEditableWarning>
+                <h1 className="app-text-title-xl text-app-ink outline-none" contentEditable suppressContentEditableWarning>
                   {activePage.title}
                 </h1>
                 <div className="app-text-caption flex items-center gap-3 text-gray-500">
                   <div className="flex items-center gap-1.5">
-                    <div className="app-text-micro flex h-5 w-5 items-center justify-center rounded-full bg-clickup-purple font-bold text-clickup-bg">GH</div>
+                    <div className="app-text-micro flex h-5 w-5 items-center justify-center rounded-full bg-app-accent font-bold text-app-bg">GH</div>
                     <span>Gunwoo Hur</span>
                   </div>
                   <span>•</span>

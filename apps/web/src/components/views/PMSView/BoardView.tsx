@@ -63,7 +63,7 @@ export const BoardView = ({
 	                      })()
 	                    : undefined}
 	                />
-                <h3 className="app-text-overline text-clickup-text">{label}</h3>
+                <h3 className="app-text-overline text-app-ink">{label}</h3>
                 <span className="app-text-micro font-bold text-gray-600">{statusIssues.length}</span>
               </div>
               <div className="flex items-center gap-1 text-gray-600">
@@ -82,7 +82,7 @@ export const BoardView = ({
 	                    if (e.dataTransfer) e.dataTransfer.setData('text/plain', issue.id);
 	                  }}
                   onClick={() => onSelectIssue(issue)}
-                  className="card p-4 hover:border-clickup-purple transition-all cursor-pointer group space-y-4 relative"
+                  className="card p-4 hover:border-app-accent transition-all cursor-pointer group space-y-4 relative"
                 >
                   {onToggleSelect && (
                     <div className={`absolute top-2 left-2 z-10 ${selectedIds?.has(issue.id) ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'} transition-opacity`}>
@@ -91,7 +91,7 @@ export const BoardView = ({
                         checked={selectedIds?.has(issue.id) ?? false}
                         onChange={(e) => { e.stopPropagation(); onToggleSelect(issue.id); }}
                         onClick={(e) => e.stopPropagation()}
-                        className="h-3.5 w-3.5 rounded accent-clickup-purple cursor-pointer"
+                        className="h-3.5 w-3.5 rounded accent-app-accent cursor-pointer"
                       />
                     </div>
                   )}
@@ -99,7 +99,7 @@ export const BoardView = ({
                     {issue.labels.map(label => (
                       <span
                         key={label.id}
-                        className="app-text-micro rounded border border-clickup-border bg-clickup-sidebar px-1.5 py-0.5 text-gray-500"
+                        className="app-text-micro rounded border border-app-border bg-app-surface-sidebar px-1.5 py-0.5 text-gray-500"
                         style={label.color !== '#1f2d38' ? { borderColor: label.color, color: label.color } : undefined}
                       >
                         {label.name}
@@ -107,12 +107,12 @@ export const BoardView = ({
                     ))}
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className="app-text-micro text-clickup-text/40">{issue.reference}</span>
-                    <h4 className="app-text-body font-medium leading-tight text-clickup-text transition-colors group-hover:text-clickup-purple">
+                    <span className="app-text-micro text-app-ink/40">{issue.reference}</span>
+                    <h4 className="app-text-body font-medium leading-tight text-app-ink transition-colors group-hover:text-app-accent">
                       {issue.title}
                     </h4>
                   </div>
-                  <div className="flex items-center justify-between pt-2 border-t border-clickup-border/50">
+                  <div className="flex items-center justify-between pt-2 border-t border-app-border/50">
                     <div className="flex items-center gap-3">
                       <Flag size={14} className={PRIORITY_COLOR[issue.priority] ?? 'text-gray-500'} />
                       {issue.checklist_total > 0 && (
@@ -136,11 +136,11 @@ export const BoardView = ({
                     </div>
                     <div className="flex items-center -space-x-2">
                       {issue.assignee_name ? (
-                        <div className="app-text-micro flex h-6 w-6 items-center justify-center rounded-full border-2 border-clickup-bg bg-blue-500 font-bold text-white">
+                        <div className="app-text-micro flex h-6 w-6 items-center justify-center rounded-full border-2 border-app-bg bg-blue-500 font-bold text-white">
                           {initials(issue.assignee_name)}
                         </div>
                       ) : (
-                        <div className="w-6 h-6 rounded-full bg-clickup-sidebar border-2 border-clickup-bg flex items-center justify-center text-gray-600">
+                        <div className="w-6 h-6 rounded-full bg-app-surface-sidebar border-2 border-app-bg flex items-center justify-center text-gray-600">
                           <User2 size={12} />
                         </div>
                       )}
@@ -148,7 +148,7 @@ export const BoardView = ({
                   </div>
                 </motion.div>
               ))}
-              <button className="app-text-micro w-full rounded-lg border border-dashed border-clickup-border py-2 text-gray-600 transition-all hover:border-gray-400 hover:text-gray-400">
+              <button className="app-text-micro w-full rounded-lg border border-dashed border-app-border py-2 text-gray-600 transition-all hover:border-gray-400 hover:text-gray-400">
                 + Add Task
               </button>
             </div>

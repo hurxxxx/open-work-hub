@@ -49,7 +49,7 @@ export const OverviewView = () => {
   if (loading) {
     return (
       <div className="flex justify-center py-16">
-        <Loader2 size={24} className="animate-spin text-clickup-purple" />
+        <Loader2 size={24} className="animate-spin text-app-accent" />
       </div>
     );
   }
@@ -61,11 +61,11 @@ export const OverviewView = () => {
   return (
     <div className="space-y-8 max-w-6xl mx-auto">
       {/* Welcome Section */}
-      <div className="rounded-xl border border-clickup-border bg-clickup-card p-8">
-        <h2 className="app-text-title-lg mb-2 text-clickup-text">
+      <div className="rounded-xl border border-app-border bg-app-surface p-8">
+        <h2 className="app-text-title-lg mb-2 text-app-ink">
           {user?.full_name ? `Hello, ${user.full_name.split(' ')[0]}!` : 'Welcome!'}
         </h2>
-        <p className="app-text-body max-w-xl text-clickup-text/60">
+        <p className="app-text-body max-w-xl text-app-ink/60">
           {dashboard
             ? `${dashboard.project_count} projects · ${dashboard.active_issue_count} active issues · ${dashboard.overdue_issue_count} overdue`
             : 'Loading summary...'}
@@ -75,14 +75,14 @@ export const OverviewView = () => {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
       {/* Lists */}
         <Panel>
-          <h3 className="app-text-title-md mb-4 flex items-center justify-between text-clickup-text">
+          <h3 className="app-text-title-md mb-4 flex items-center justify-between text-app-ink">
             <div className="flex items-center gap-2">
-              <History size={16} className="text-clickup-purple" />
+              <History size={16} className="text-app-accent" />
               Lists
             </div>
             <button
               onClick={() => setCreateProjectOpen(true)}
-              className="app-text-control-sm flex items-center gap-1 text-clickup-purple transition-colors hover:text-clickup-purple/80"
+              className="app-text-control-sm flex items-center gap-1 text-app-accent transition-colors hover:text-app-accent/80"
             >
               <Plus size={14} />
               <span>New</span>
@@ -93,28 +93,28 @@ export const OverviewView = () => {
               <div
                 key={project.id}
                 onClick={() => navigate(`/tool/pms-list-${project.id}`)}
-                className="flex items-center gap-3 p-2 hover:bg-clickup-hover rounded-md transition-colors group cursor-pointer"
+                className="flex items-center gap-3 p-2 hover:bg-app-surface-hover rounded-md transition-colors group cursor-pointer"
               >
                 <div className="w-8 h-8 bg-blue-500/10 rounded flex items-center justify-center">
                   <FolderKanban size={16} className="text-blue-400" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="app-text-body-sm truncate font-medium text-clickup-text transition-colors group-hover:text-clickup-purple">
+                  <div className="app-text-body-sm truncate font-medium text-app-ink transition-colors group-hover:text-app-accent">
                     {project.name}
                   </div>
-                  <div className="app-text-micro text-clickup-text/40">
+                  <div className="app-text-micro text-app-ink/40">
                     {project.team_name && <span>{project.team_name} · </span>}
                     {project.issue_count} issues · {Math.round(project.progress * 100)}% done
                   </div>
                 </div>
                 <ChevronRight
                   size={14}
-                  className="text-clickup-text/30 opacity-0 group-hover:opacity-100 transition-opacity"
+                  className="text-app-ink/30 opacity-0 group-hover:opacity-100 transition-opacity"
                 />
               </div>
             ))}
             {projects.length === 0 && (
-              <p className="app-text-body text-clickup-text/40">No lists yet</p>
+              <p className="app-text-body text-app-ink/40">No lists yet</p>
             )}
           </div>
         </Panel>
@@ -123,8 +123,8 @@ export const OverviewView = () => {
         {statusCategories.length > 0 && (
           <DonutChartCard
             title={
-              <span className="app-text-title-md flex items-center gap-2 text-clickup-text">
-                <LayoutDashboard size={16} className="text-clickup-purple" />
+              <span className="app-text-title-md flex items-center gap-2 text-app-ink">
+                <LayoutDashboard size={16} className="text-app-accent" />
                 Status Distribution
               </span>
             }
@@ -140,9 +140,9 @@ export const OverviewView = () => {
 
         {/* Recent Activity */}
         <Panel>
-          <h3 className="app-text-title-md mb-4 flex items-center justify-between text-clickup-text">
+          <h3 className="app-text-title-md mb-4 flex items-center justify-between text-app-ink">
             <div className="flex items-center gap-2">
-              <History size={16} className="text-clickup-purple" />
+              <History size={16} className="text-app-accent" />
               Recent Activity
             </div>
           </h3>
@@ -150,19 +150,19 @@ export const OverviewView = () => {
             {dashboard?.recent_activity.slice(0, 5).map((activity) => (
               <div
                 key={activity.id}
-                className="flex items-center gap-3 p-2 hover:bg-clickup-hover rounded-md transition-colors cursor-pointer"
+                className="flex items-center gap-3 p-2 hover:bg-app-surface-hover rounded-md transition-colors cursor-pointer"
               >
-                <div className="w-6 h-6 rounded-full bg-clickup-sidebar border border-clickup-border flex items-center justify-center text-[8px] font-bold text-clickup-text/60">
+                <div className="w-6 h-6 rounded-full bg-app-surface-sidebar border border-app-border flex items-center justify-center text-[8px] font-bold text-app-ink/60">
                   {activity.actor_name?.[0] ?? '?'}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="app-text-caption truncate text-clickup-text/70">{activity.message}</div>
-                  <div className="app-text-micro text-clickup-text/40">{activity.issue_reference}</div>
+                  <div className="app-text-caption truncate text-app-ink/70">{activity.message}</div>
+                  <div className="app-text-micro text-app-ink/40">{activity.issue_reference}</div>
                 </div>
               </div>
             ))}
             {(!dashboard?.recent_activity || dashboard.recent_activity.length === 0) && (
-              <p className="app-text-body text-clickup-text/40">No recent activity</p>
+              <p className="app-text-body text-app-ink/40">No recent activity</p>
             )}
           </div>
         </Panel>

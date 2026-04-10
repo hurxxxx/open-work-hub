@@ -35,7 +35,7 @@ import { AccessDeniedView } from '@/src/domains/auth/settings-pages';
 
 const NONE_OPTION_VALUE = '__none__';
 const fieldClassName =
-  'app-text-body w-full rounded-lg border border-clickup-border bg-clickup-bg px-3 py-2 text-clickup-text outline-none transition-colors focus:border-clickup-purple';
+  'app-text-body w-full rounded-lg border border-app-border bg-app-bg px-3 py-2 text-app-ink outline-none transition-colors focus:border-app-accent';
 
 const sectionMeta: Record<
   AdminSection,
@@ -118,12 +118,12 @@ function SettingsShell({
   return (
     <div className="custom-scrollbar h-full overflow-y-auto p-8">
       <div className="mx-auto max-w-7xl space-y-6">
-        <header className="flex flex-col gap-4 border-b border-clickup-border pb-6 lg:flex-row lg:items-start lg:justify-between">
+        <header className="flex flex-col gap-4 border-b border-app-border pb-6 lg:flex-row lg:items-start lg:justify-between">
           <div className="space-y-3">
             <div className="flex flex-wrap items-center gap-3">
-              <h1 className="app-text-title-lg text-clickup-text">{meta.title}</h1>
+              <h1 className="app-text-title-lg text-app-ink">{meta.title}</h1>
               {meta.learnMoreLabel ? (
-                <button className="app-text-control-sm text-clickup-purple hover:underline" type="button">
+                <button className="app-text-control-sm text-app-accent hover:underline" type="button">
                   {meta.learnMoreLabel}
                 </button>
               ) : null}
@@ -155,7 +155,7 @@ function SurfaceCard({
     <section className={`space-y-4 ${className}`.trim()}>
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div>
-          <h2 className="app-text-title-md text-clickup-text">{title}</h2>
+          <h2 className="app-text-title-md text-app-ink">{title}</h2>
           {description ? <p className="app-text-body mt-1 text-gray-500">{description}</p> : null}
         </div>
         {actions ? <div className="flex items-center gap-2">{actions}</div> : null}
@@ -181,7 +181,7 @@ function TableShell({ children }: { children: React.ReactNode }) {
 
 function HeadCell({ children }: { children: React.ReactNode }) {
   return (
-    <th className="app-text-overline border-b border-clickup-border px-4 py-3 text-left text-gray-500">
+    <th className="app-text-overline border-b border-app-border px-4 py-3 text-left text-gray-500">
       {children}
     </th>
   );
@@ -189,7 +189,7 @@ function HeadCell({ children }: { children: React.ReactNode }) {
 
 function BodyCell({ children, className = '' }: { children: React.ReactNode; className?: string }) {
   return (
-    <td className={`app-text-body border-b border-clickup-border px-4 py-3 align-top text-clickup-text ${className}`.trim()}>
+    <td className={`app-text-body border-b border-app-border px-4 py-3 align-top text-app-ink ${className}`.trim()}>
       {children}
     </td>
   );
@@ -208,7 +208,7 @@ function EmptyRow({
     <tr>
       <td className="px-3 py-10 text-center" colSpan={colSpan}>
         <div className="space-y-1">
-          <div className="app-text-body font-medium text-clickup-text">{title}</div>
+          <div className="app-text-body font-medium text-app-ink">{title}</div>
           <div className="app-text-body text-gray-500">{description}</div>
         </div>
       </td>
@@ -225,12 +225,12 @@ function Badge({
 }) {
   const toneClassName =
     tone === 'purple'
-      ? 'border-clickup-purple/20 bg-clickup-purple/10 text-clickup-purple'
+      ? 'border-app-accent/20 bg-app-accent/10 text-app-accent'
       : tone === 'green'
         ? 'border-green-500/20 bg-green-500/10 text-green-600 dark:text-green-400'
         : tone === 'amber'
           ? 'border-amber-500/20 bg-amber-500/10 text-amber-600 dark:text-amber-300'
-          : 'border-clickup-border bg-clickup-sidebar text-gray-500';
+          : 'border-app-border bg-app-surface-sidebar text-gray-500';
 
   return (
     <span className={`app-text-label inline-flex items-center rounded-full border px-2.5 py-1 ${toneClassName}`.trim()}>
@@ -342,16 +342,16 @@ function GeneralSection({ token }: { token: string }) {
           description="현재 공통 계정 체계와 작업 영역 운영 방식을 한 번에 확인할 수 있는 요약입니다."
         >
           <div className="grid gap-4 md:grid-cols-2">
-            <div className="rounded-xl border border-clickup-border bg-clickup-sidebar p-4">
-              <div className="app-text-title-md text-clickup-text">Identity</div>
+            <div className="rounded-xl border border-app-border bg-app-surface-sidebar p-4">
+              <div className="app-text-title-md text-app-ink">Identity</div>
                 <div className="app-text-body mt-3 space-y-2 text-gray-500">
                 <div>사용자 계정 {formatCount(summary.userCount)}{summary.userCount !== null ? '개' : ''}</div>
                 <div>관리자 {formatCount(summary.adminCount)}{summary.adminCount !== null ? '명' : ''}</div>
                 <div>권한 그룹 {formatCount(summary.groupCount)}{summary.groupCount !== null ? '개' : ''}</div>
               </div>
             </div>
-            <div className="rounded-xl border border-clickup-border bg-clickup-sidebar p-4">
-              <div className="app-text-title-md text-clickup-text">Work model</div>
+            <div className="rounded-xl border border-app-border bg-app-surface-sidebar p-4">
+              <div className="app-text-title-md text-app-ink">Work model</div>
               <div className="app-text-body mt-3 space-y-2 text-gray-500">
                 <div>워크스페이스 {formatCount(summary.workspaceCount)}{summary.workspaceCount !== null ? '개' : ''}</div>
                 <div>PMS 공간 {formatCount(summary.teamCount)}{summary.teamCount !== null ? '개' : ''}</div>
@@ -366,13 +366,13 @@ function GeneralSection({ token }: { token: string }) {
           description="설정 앱과 마이페이지의 역할을 분리한 현재 UX 원칙입니다."
         >
           <div className="app-text-body space-y-3 text-gray-500">
-            <div className="rounded-xl border border-clickup-border bg-clickup-sidebar p-4">
+            <div className="rounded-xl border border-app-border bg-app-surface-sidebar p-4">
               프로필 아바타는 개인 설정으로만 이동하고, 조직 운영 기능은 모두 Settings 앱 안에서 다룹니다.
             </div>
-            <div className="rounded-xl border border-clickup-border bg-clickup-sidebar p-4">
+            <div className="rounded-xl border border-app-border bg-app-surface-sidebar p-4">
               사용자, PMS 공간, 워크스페이스, 권한 정책은 좌측 서브사이드바를 기준으로 분리합니다.
             </div>
-            <div className="rounded-xl border border-clickup-border bg-clickup-sidebar p-4">
+            <div className="rounded-xl border border-app-border bg-app-surface-sidebar p-4">
               관리자 이벤트와 인증 이벤트는 Audit 섹션에서 시간순으로 확인합니다.
             </div>
           </div>
@@ -508,12 +508,12 @@ function PeopleSection({ token }: { token: string }) {
     <div className="space-y-6">
       <SectionMessage error={error} message={message} />
 
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-clickup-border pb-4">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-app-border pb-4">
         <ToolbarField className="min-w-[280px] max-w-md flex-1">
           <label className="relative block">
             <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" size={16} />
             <input
-              className="app-text-body w-full rounded-md border border-transparent bg-transparent py-1.5 pl-9 text-clickup-text outline-none transition-colors hover:border-clickup-border focus:border-clickup-purple focus:bg-clickup-bg"
+              className="app-text-body w-full rounded-md border border-transparent bg-transparent py-1.5 pl-9 text-app-ink outline-none transition-colors hover:border-app-border focus:border-app-accent focus:bg-app-bg"
               onChange={(event) => setSearch(event.target.value)}
               placeholder="Search or invite by email"
               value={search}
@@ -522,14 +522,14 @@ function PeopleSection({ token }: { token: string }) {
         </ToolbarField>
         <div className="flex items-center gap-2">
           <button
-            className="app-text-control rounded-md border border-transparent px-3 py-1.5 text-gray-500 transition-colors hover:border-clickup-border hover:bg-clickup-hover hover:text-clickup-text"
+            className="app-text-control rounded-md border border-transparent px-3 py-1.5 text-gray-500 transition-colors hover:border-app-border hover:bg-app-surface-hover hover:text-app-ink"
             onClick={handleExport}
             type="button"
           >
             Export
           </button>
           <button
-            className="app-text-control inline-flex items-center gap-1.5 rounded-md bg-clickup-text px-3 py-1.5 text-clickup-bg transition-opacity hover:opacity-90 dark:bg-white dark:text-black"
+            className="app-text-control inline-flex items-center gap-1.5 rounded-md bg-app-ink px-3 py-1.5 text-app-bg transition-opacity hover:opacity-90 dark:bg-white dark:text-black"
             onClick={() => {
               setInviteOpen((current) => !current);
               requestAnimationFrame(() => {
@@ -546,7 +546,7 @@ function PeopleSection({ token }: { token: string }) {
 
       <div className="flex items-center gap-2 py-2">
         <button
-          className="app-text-control inline-flex items-center gap-1.5 rounded p-1 text-clickup-text hover:bg-clickup-hover"
+          className="app-text-control inline-flex items-center gap-1.5 rounded p-1 text-app-ink hover:bg-app-surface-hover"
           type="button"
         >
           <span>All Users ({users.length})</span>
@@ -571,9 +571,9 @@ function PeopleSection({ token }: { token: string }) {
           </thead>
           <tbody>
             <tr>
-              <td className="app-text-body border-b border-clickup-border px-4 py-3 text-gray-500" colSpan={8}>
+              <td className="app-text-body border-b border-app-border px-4 py-3 text-gray-500" colSpan={8}>
                 <button
-                  className="transition-colors hover:text-clickup-text"
+                  className="transition-colors hover:text-app-ink"
                   onClick={() => setInviteOpen(true)}
                   type="button"
                 >
@@ -592,11 +592,11 @@ function PeopleSection({ token }: { token: string }) {
                 <tr key={user.id}>
                   <BodyCell>
                     <div className="flex items-center gap-3">
-                      <div className="app-text-label flex h-8 w-8 items-center justify-center rounded-full bg-clickup-sidebar text-gray-500">
+                      <div className="app-text-label flex h-8 w-8 items-center justify-center rounded-full bg-app-surface-sidebar text-gray-500">
                         {getInitials(user.display_name || user.full_name)}
                       </div>
                       <div>
-                        <div className="font-medium text-clickup-text">{user.display_name || user.full_name}</div>
+                        <div className="font-medium text-app-ink">{user.display_name || user.full_name}</div>
                         {isAdminUser(user) ? (
                           <div className="mt-0.5">
                             <Badge tone="default">Admin</Badge>
@@ -613,7 +613,7 @@ function PeopleSection({ token }: { token: string }) {
                   <BodyCell>{user.workspace_roles.length > 0 ? user.workspace_roles.map((item) => item.name).join(', ') : '-'}</BodyCell>
                   <BodyCell className="w-14 text-right">
                     <button
-                      className="rounded-md px-2 py-1 text-gray-500 transition-colors hover:bg-clickup-hover hover:text-clickup-text"
+                      className="rounded-md px-2 py-1 text-gray-500 transition-colors hover:bg-app-surface-hover hover:text-app-ink"
                       onClick={() => {
                         void handleResetPassword(user.id);
                       }}
@@ -630,9 +630,9 @@ function PeopleSection({ token }: { token: string }) {
       </div>
 
       {inviteOpen ? (
-        <div className="rounded-xl border border-clickup-border bg-clickup-card px-5 py-5">
+        <div className="rounded-xl border border-app-border bg-app-surface px-5 py-5">
           <div className="mb-4">
-            <div className="app-text-title-md text-clickup-text">Invite people</div>
+            <div className="app-text-title-md text-app-ink">Invite people</div>
             <div className="app-text-body mt-1 text-gray-500">관리자가 계정을 만들고 기본 조직과 그룹을 함께 배정합니다.</div>
           </div>
           <form className="grid gap-3 xl:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)_minmax(0,1fr)_220px_220px_auto]" onSubmit={(event) => void handleCreateUser(event)}>
@@ -894,17 +894,17 @@ function WorkspacesSection({ token }: { token: string }) {
             </div>
             <div className="grid gap-2">
               {bindings.length === 0 ? (
-                <div className="app-text-body rounded-xl border border-dashed border-clickup-border bg-clickup-sidebar px-4 py-6 text-gray-500">
+                <div className="app-text-body rounded-xl border border-dashed border-app-border bg-app-surface-sidebar px-4 py-6 text-gray-500">
                   아직 바인딩이 없습니다.
                 </div>
               ) : (
                 bindings.map((binding) => (
                   <div
                     key={`${binding.subject_type}-${binding.subject_id}`}
-                    className="flex items-center justify-between rounded-xl border border-clickup-border bg-clickup-sidebar px-4 py-3"
+                    className="flex items-center justify-between rounded-xl border border-app-border bg-app-surface-sidebar px-4 py-3"
                   >
                     <div>
-                      <div className="font-medium text-clickup-text">{binding.subject_label}</div>
+                      <div className="font-medium text-app-ink">{binding.subject_label}</div>
                       <div className="app-text-caption mt-1 text-gray-500">{binding.subject_type}</div>
                     </div>
                     <Badge tone="purple">{isPmsWorkspace ? 'access enabled' : binding.role}</Badge>
@@ -941,7 +941,7 @@ function WorkspacesSection({ token }: { token: string }) {
               workspaces.map((workspace) => (
                 <tr key={workspace.id}>
                   <BodyCell>
-                    <div className="font-medium text-clickup-text">{workspace.name}</div>
+                    <div className="font-medium text-app-ink">{workspace.name}</div>
                   </BodyCell>
                   <BodyCell>{workspace.key}</BodyCell>
                   <BodyCell>{workspace.description || '설명 없음'}</BodyCell>
@@ -1123,7 +1123,7 @@ function SecuritySection({
                   groups.map((group) => (
                     <tr key={group.id}>
                       <BodyCell>
-                        <div className="font-medium text-clickup-text">{group.name}</div>
+                        <div className="font-medium text-app-ink">{group.name}</div>
                         <div className="app-text-caption mt-1 text-gray-500">{group.description || '설명 없음'}</div>
                       </BodyCell>
                       <BodyCell>{group.slug}</BodyCell>
@@ -1152,7 +1152,7 @@ function SecuritySection({
             {policies.map((policy) => (
               <label
                 key={policy.id}
-                className="flex items-start gap-4 rounded-xl border border-clickup-border bg-clickup-sidebar px-4 py-4"
+                className="flex items-start gap-4 rounded-xl border border-app-border bg-app-surface-sidebar px-4 py-4"
               >
                 <input
                   checked={policy.enabled}
@@ -1169,7 +1169,7 @@ function SecuritySection({
                 />
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
-                    <strong className="app-text-body text-clickup-text">{policy.name}</strong>
+                    <strong className="app-text-body text-app-ink">{policy.name}</strong>
                     <Badge tone={policy.enabled ? 'green' : 'default'}>
                       {policy.enabled ? 'enabled' : 'disabled'}
                     </Badge>
@@ -1222,19 +1222,19 @@ function AuditSection({ token }: { token: string }) {
       >
         <div className="space-y-3">
           {items.length === 0 ? (
-            <div className="app-text-body rounded-xl border border-dashed border-clickup-border bg-clickup-sidebar px-4 py-8 text-center text-gray-500">
+            <div className="app-text-body rounded-xl border border-dashed border-app-border bg-app-surface-sidebar px-4 py-8 text-center text-gray-500">
               표시할 감사 이벤트가 없습니다.
             </div>
           ) : (
             items.map((item) => (
               <div
                 key={item.id}
-                className="rounded-xl border border-clickup-border bg-clickup-sidebar px-5 py-4"
+                className="rounded-xl border border-app-border bg-app-surface-sidebar px-5 py-4"
               >
                 <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                   <div className="space-y-2">
                     <div className="flex flex-wrap items-center gap-2">
-                      <div className="font-medium text-clickup-text">{item.summary}</div>
+                      <div className="font-medium text-app-ink">{item.summary}</div>
                       <Badge tone="purple">{item.action}</Badge>
                     </div>
                     <div className="app-text-body text-gray-500">

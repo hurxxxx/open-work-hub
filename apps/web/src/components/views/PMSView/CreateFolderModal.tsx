@@ -62,12 +62,12 @@ export const CreateFolderModal = ({
         </div>
       }
     >
-      <div className="space-y-5 text-clickup-text">
-        <div className="flex items-center gap-3 p-4 rounded-lg bg-clickup-sidebar border border-clickup-border">
+      <div className="space-y-5 text-app-ink">
+        <div className="flex items-center gap-3 p-4 rounded-lg bg-app-surface-sidebar border border-app-border">
           <div className="w-10 h-10 bg-amber-500/20 rounded-lg flex items-center justify-center">
             <FolderOpen size={20} className="text-amber-400" />
           </div>
-          <div className="app-text-body text-clickup-text/60">
+          <div className="app-text-body text-app-ink/60">
             폴더를 생성하면 리스트와 문서를 그룹으로 묶어 관리할 수 있습니다.
           </div>
         </div>
@@ -79,14 +79,14 @@ export const CreateFolderModal = ({
         )}
 
         <div className="space-y-1">
-          <label className="app-text-control-sm text-clickup-text/70">Folder Name</label>
+          <label className="app-text-control-sm text-app-ink/70">Folder Name</label>
           <input
             type="text"
             placeholder="e.g. Sprint 1"
             value={name}
             onChange={e => setName(e.target.value)}
             onKeyDown={e => { if (e.key === 'Enter' && !e.nativeEvent.isComposing && name.trim() && !submitting) handleCreate(); }}
-            className="app-text-body w-full rounded-md border border-clickup-border bg-clickup-sidebar px-3 py-2 text-clickup-text placeholder:text-clickup-text/30 transition-all focus:border-clickup-purple focus:outline-none"
+            className="app-text-body w-full rounded-md border border-app-border bg-app-surface-sidebar px-3 py-2 text-app-ink placeholder:text-app-ink/30 transition-all focus:border-app-accent focus:outline-none"
             autoFocus
           />
         </div>

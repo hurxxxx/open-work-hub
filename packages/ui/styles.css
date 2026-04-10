@@ -2,12 +2,14 @@
   --ui-font-sans: "Pretendard Variable", "Pretendard", "IBM Plex Sans KR", "IBM Plex Sans", sans-serif;
   --ui-font-mono: "IBM Plex Mono", "JetBrains Mono", monospace;
 
-  /* ── Surface & Background (aligned with --clickup-* palette) ── */
+  /* ── Surface & Background ── */
   --ui-color-bg: #ffffff;
+  --ui-color-bg-strong: #1e1f21;
   --ui-color-surface: #ffffff;
   --ui-color-surface-raised: #ffffff;
   --ui-color-surface-subtle: #f6f7f9;
   --ui-color-surface-sidebar: #f6f7f9;
+  --ui-color-surface-hover: #f0f1f4;
 
   /* ── Border ── */
   --ui-color-border: #e8eaed;
@@ -19,8 +21,8 @@
   --ui-color-ink-subtle: #9ca3af;
 
   /* ── Accent ── */
-  --ui-color-accent: #1a1a1a;
-  --ui-color-accent-hover: #000000;
+  --ui-color-accent: #1c2385;
+  --ui-color-accent-hover: #161b6b;
   --ui-color-accent-weak: #f0f1f4;
   --ui-color-accent-fg: #ffffff;
 
@@ -73,19 +75,21 @@
 
 .dark {
   --ui-color-bg: #1e1f21;
+  --ui-color-bg-strong: #1e1f21;
   --ui-color-surface: #2a2b2d;
   --ui-color-surface-raised: #2a2b2d;
   --ui-color-surface-subtle: #353638;
   --ui-color-surface-sidebar: #2a2b2d;
+  --ui-color-surface-hover: #353638;
   --ui-color-border: #3d3e40;
   --ui-color-border-strong: #4b4c4e;
   --ui-color-ink: #d5d6d7;
   --ui-color-ink-muted: #9ca3af;
   --ui-color-ink-subtle: #6b7280;
-  --ui-color-accent: #e8e8e8;
-  --ui-color-accent-hover: #ffffff;
+  --ui-color-accent: #3d47b8;
+  --ui-color-accent-hover: #5662d4;
   --ui-color-accent-weak: #3a3b3d;
-  --ui-color-accent-fg: #1e1f21;
+  --ui-color-accent-fg: #ffffff;
   --ui-color-success: #22c55e;
   --ui-color-warning: #f97316;
   --ui-color-danger: #ef4444;

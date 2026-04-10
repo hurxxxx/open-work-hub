@@ -36,7 +36,7 @@ const themeOptions: { value: ThemePreference; label: string; icon: typeof Sun }[
 ];
 
 const fieldClassName =
-  'app-text-body w-full rounded-md border border-clickup-border bg-clickup-bg px-3 py-2 text-clickup-text transition-colors focus:border-clickup-purple focus:outline-none';
+  'app-text-body w-full rounded-md border border-app-border bg-app-bg px-3 py-2 text-app-ink transition-colors focus:border-app-accent focus:outline-none';
 
 type SettingsSection = 'profile' | 'appearance' | 'security' | 'notifications';
 
@@ -51,8 +51,8 @@ export function AccessDeniedView({
 }) {
   return (
     <div className="p-6">
-      <div className="rounded-xl border border-clickup-border bg-clickup-sidebar p-6">
-        <h2 className="app-text-title-md mb-2 text-clickup-text">{title}</h2>
+      <div className="rounded-xl border border-app-border bg-app-surface-sidebar p-6">
+        <h2 className="app-text-title-md mb-2 text-app-ink">{title}</h2>
         <p className="app-text-body mb-4 text-gray-500">{description}</p>
         <InlineNotice tone="warning">
           관리자에게 필요한 권한과 워크스페이스 바인딩을 요청하세요.
@@ -72,9 +72,9 @@ function SessionCard({
   onRevoke: (sessionId: string) => Promise<void>;
 }) {
   return (
-    <div className="flex items-start justify-between gap-4 rounded-md border border-clickup-border bg-clickup-bg px-4 py-3">
+    <div className="flex items-start justify-between gap-4 rounded-md border border-app-border bg-app-bg px-4 py-3">
       <div className="app-text-body grid gap-1">
-        <span className="font-medium text-clickup-text">
+        <span className="font-medium text-app-ink">
           {session.is_current ? '현재 세션' : '저장된 세션'}
         </span>
         <span className="app-text-caption text-gray-500">
@@ -116,9 +116,9 @@ function FieldRow({
   description?: string;
 }) {
   return (
-    <div className="grid grid-cols-[180px_1fr] items-start gap-6 py-4 border-b border-clickup-border last:border-b-0 max-[720px]:grid-cols-1 max-[720px]:gap-2">
+    <div className="grid grid-cols-[180px_1fr] items-start gap-6 py-4 border-b border-app-border last:border-b-0 max-[720px]:grid-cols-1 max-[720px]:gap-2">
       <div>
-        <label className="app-text-control text-clickup-text">{label}</label>
+        <label className="app-text-control text-app-ink">{label}</label>
         {description ? <p className="app-text-caption mt-0.5 text-gray-500">{description}</p> : null}
       </div>
       <div className="max-w-md">{children}</div>
@@ -131,7 +131,7 @@ function FieldRow({
 function SectionHeader({ title, description }: { title: string; description?: string }) {
   return (
     <div className="mb-6">
-      <h2 className="app-text-title-md text-clickup-text">{title}</h2>
+      <h2 className="app-text-title-md text-app-ink">{title}</h2>
       {description ? <p className="app-text-body mt-1 text-gray-500">{description}</p> : null}
     </div>
   );
@@ -259,7 +259,7 @@ export function ProfilePage({ initialTab }: { initialTab: SettingsSection }) {
       <div className="mx-auto max-w-5xl px-8 py-8">
         {/* Header */}
         <div className="flex items-center justify-between mb-8">
-          <h1 className="app-text-title-lg text-clickup-text">My Settings</h1>
+          <h1 className="app-text-title-lg text-app-ink">My Settings</h1>
           <button
             className="app-text-control flex items-center gap-2 rounded-md px-3 py-1.5 text-red-500 transition-colors hover:bg-red-500/10"
             onClick={() => { void auth.logout(); }}
@@ -285,8 +285,8 @@ export function ProfilePage({ initialTab }: { initialTab: SettingsSection }) {
                 className={cn(
                   'app-text-control w-full flex items-center gap-2.5 rounded-md px-3 py-2 text-left transition-colors',
                   activeSection === item.id
-                    ? 'bg-clickup-hover text-clickup-text font-medium'
-                    : 'text-gray-500 hover:text-clickup-text hover:bg-clickup-hover/50',
+                    ? 'bg-app-surface-hover text-app-ink font-medium'
+                    : 'text-gray-500 hover:text-app-ink hover:bg-app-surface-hover/50',
                 )}
               >
                 <item.icon size={15} />
@@ -304,14 +304,14 @@ export function ProfilePage({ initialTab }: { initialTab: SettingsSection }) {
                 <SectionHeader title="Profile" description="Manage your personal information." />
 
                 <form onSubmit={(event) => void handleProfileSubmit(event)}>
-                  <div className="border-t border-clickup-border">
+                  <div className="border-t border-app-border">
                     <FieldRow label="Avatar">
                       <div className="flex items-center gap-4">
                         <div className="app-text-title-md flex h-12 w-12 items-center justify-center rounded-full bg-orange-500 font-bold text-white">
                           {getUserInitials(user.display_name || user.full_name)}
                         </div>
                         <div className="app-text-body">
-                          <p className="font-medium text-clickup-text">{user.display_name || user.full_name}</p>
+                          <p className="font-medium text-app-ink">{user.display_name || user.full_name}</p>
                           <p className="app-text-caption text-gray-500">{user.email}</p>
                         </div>
                       </div>
@@ -351,13 +351,13 @@ export function ProfilePage({ initialTab }: { initialTab: SettingsSection }) {
                     </FieldRow>
 
                     <FieldRow label="Role">
-                      <span className="app-text-body text-clickup-text">
+                      <span className="app-text-body text-app-ink">
                         {(user.system_roles ?? []).length > 0 ? user.system_roles.join(', ') : 'Member'}
                       </span>
                     </FieldRow>
 
                     <FieldRow label="Groups">
-                      <span className="app-text-body text-clickup-text">{user.group_slugs.join(', ') || '없음'}</span>
+                      <span className="app-text-body text-app-ink">{user.group_slugs.join(', ') || '없음'}</span>
                     </FieldRow>
                   </div>
 
@@ -388,7 +388,7 @@ export function ProfilePage({ initialTab }: { initialTab: SettingsSection }) {
               <div>
                 <SectionHeader title="Appearance" description="Customize how the app looks." />
 
-                <div className="border-t border-clickup-border">
+                <div className="border-t border-app-border">
                   <FieldRow label="Theme" description="Select your preferred color scheme.">
                     <div className="flex gap-2">
                       {themeOptions.map((opt) => (
@@ -402,8 +402,8 @@ export function ProfilePage({ initialTab }: { initialTab: SettingsSection }) {
                           className={cn(
                             'app-text-control flex items-center gap-2 rounded-md border px-4 py-2.5 transition-colors',
                             themePreference === opt.value
-                              ? 'border-clickup-purple bg-clickup-purple/10 text-clickup-purple'
-                              : 'border-clickup-border bg-clickup-bg text-clickup-text hover:border-clickup-text/30',
+                              ? 'border-app-accent bg-app-accent/10 text-app-accent'
+                              : 'border-app-border bg-app-bg text-app-ink hover:border-app-ink/30',
                           )}
                         >
                           <opt.icon size={15} />
@@ -421,7 +421,7 @@ export function ProfilePage({ initialTab }: { initialTab: SettingsSection }) {
               <div>
                 <SectionHeader title="Security" description="Manage your password and sessions." />
 
-                <div className="border-t border-clickup-border">
+                <div className="border-t border-app-border">
                   {auth.user?.must_change_password ? (
                     <div className="py-4">
                       <InlineNotice tone="warning">
@@ -460,7 +460,7 @@ export function ProfilePage({ initialTab }: { initialTab: SettingsSection }) {
                 </div>
 
                 <div className="mt-8">
-                  <h3 className="app-text-title-md mb-1 text-clickup-text">Active Sessions</h3>
+                  <h3 className="app-text-title-md mb-1 text-app-ink">Active Sessions</h3>
                   <p className="app-text-caption mb-4 text-gray-500">
                     Review and revoke browser sessions.
                   </p>
@@ -495,7 +495,7 @@ export function ProfilePage({ initialTab }: { initialTab: SettingsSection }) {
               <div>
                 <SectionHeader title="Notifications" description="Choose what you get notified about." />
 
-                <div className="border-t border-clickup-border">
+                <div className="border-t border-app-border">
                   <InlineNotice tone="warning" className="mt-4">
                     알림 설정은 아직 연결되지 않았습니다.
                   </InlineNotice>
@@ -507,16 +507,16 @@ export function ProfilePage({ initialTab }: { initialTab: SettingsSection }) {
                   ].map((item) => (
                     <div
                       key={item.title}
-                      className="flex items-center justify-between py-4 border-b border-clickup-border last:border-b-0"
+                      className="flex items-center justify-between py-4 border-b border-app-border last:border-b-0"
                     >
                       <div>
-                        <div className="app-text-body font-medium text-clickup-text">{item.title}</div>
+                        <div className="app-text-body font-medium text-app-ink">{item.title}</div>
                         <div className="app-text-caption mt-0.5 text-gray-500">{item.desc}</div>
                       </div>
                       <div className="flex items-center gap-5">
                         <label className="flex items-center gap-1.5 cursor-pointer">
                           <input
-                            className="h-3.5 w-3.5 rounded border-clickup-border bg-clickup-bg accent-clickup-purple"
+                            className="h-3.5 w-3.5 rounded border-app-border bg-app-bg accent-app-accent"
                             defaultChecked={item.email}
                             type="checkbox"
                           />
@@ -524,7 +524,7 @@ export function ProfilePage({ initialTab }: { initialTab: SettingsSection }) {
                         </label>
                         <label className="flex items-center gap-1.5 cursor-pointer">
                           <input
-                            className="h-3.5 w-3.5 rounded border-clickup-border bg-clickup-bg accent-clickup-purple"
+                            className="h-3.5 w-3.5 rounded border-app-border bg-app-bg accent-app-accent"
                             defaultChecked={item.push}
                             type="checkbox"
                           />

@@ -294,22 +294,22 @@ export function ProjectSettingsPanel({
         animate={{ x: 0 }}
         exit={{ x: '100%' }}
         transition={{ type: 'spring', damping: 30, stiffness: 300 }}
-        className="fixed right-0 top-0 bottom-0 z-50 w-80 bg-clickup-bg border-l border-clickup-border shadow-2xl flex flex-col"
+        className="fixed right-0 top-0 bottom-0 z-50 w-80 bg-app-bg border-l border-app-border shadow-2xl flex flex-col"
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-clickup-border shrink-0">
-          <h2 className="app-text-title-md text-clickup-text">List Settings</h2>
+        <div className="flex items-center justify-between px-5 py-4 border-b border-app-border shrink-0">
+          <h2 className="app-text-title-md text-app-ink">List Settings</h2>
           <Button variant="ghost" size="icon" onClick={onClose}><X size={16} /></Button>
         </div>
 
         <div className="flex-1 overflow-y-auto custom-scrollbar px-5 py-4 space-y-6">
           <section className="space-y-3">
-            <h3 className="app-text-overline text-clickup-text/50">Members</h3>
+            <h3 className="app-text-overline text-app-ink/50">Members</h3>
 
             {error ? <InlineNotice tone="danger">{error}</InlineNotice> : null}
 
             {teamId ? (
-              <div className="grid gap-2 rounded-lg border border-clickup-border bg-clickup-sidebar px-3 py-3">
+              <div className="grid gap-2 rounded-lg border border-app-border bg-app-surface-sidebar px-3 py-3">
                 <Select
                   onValueChange={setSelectedUserId}
                   options={memberCandidateOptions}
@@ -319,7 +319,7 @@ export function ProjectSettingsPanel({
                   <select
                     value={selectedRole}
                     onChange={(event) => setSelectedRole(event.target.value)}
-                    className="app-text-caption flex-1 rounded border border-clickup-border bg-clickup-bg px-2 py-2 text-clickup-text focus:outline-none"
+                    className="app-text-caption flex-1 rounded border border-app-border bg-app-bg px-2 py-2 text-app-ink focus:outline-none"
                   >
                     {ROLE_OPTIONS.map((option) => (
                       <option key={option.value} value={option.value}>{option.label}</option>
@@ -337,32 +337,32 @@ export function ProjectSettingsPanel({
             ) : null}
 
             {loading ? (
-              <div className="flex justify-center py-6"><Loader2 size={18} className="animate-spin text-clickup-text/40" /></div>
+              <div className="flex justify-center py-6"><Loader2 size={18} className="animate-spin text-app-ink/40" /></div>
             ) : (
               <div className="space-y-2">
                 {members.map((member) => (
-                  <div key={member.user_id} className="rounded-lg border border-clickup-border bg-clickup-sidebar px-3 py-2">
+                  <div key={member.user_id} className="rounded-lg border border-app-border bg-app-surface-sidebar px-3 py-2">
                     <div className="flex items-center justify-between gap-3">
                       <div className="min-w-0">
-                        <div className="app-text-body truncate font-medium text-clickup-text">{member.full_name}</div>
-                        <div className="app-text-caption truncate text-clickup-text/45">{member.email}</div>
+                        <div className="app-text-body truncate font-medium text-app-ink">{member.full_name}</div>
+                        <div className="app-text-caption truncate text-app-ink/45">{member.email}</div>
                       </div>
                       <button
                         onClick={() => { void handleRemoveMember(member.user_id); }}
-                        className="text-clickup-text/35 hover:text-red-400 transition-colors"
+                        className="text-app-ink/35 hover:text-red-400 transition-colors"
                         title="Remove member"
                       >
                         <Trash2 size={13} />
                       </button>
                     </div>
                     <div className="mt-2 flex items-center justify-between gap-2">
-                      <div className="app-text-micro text-clickup-text/35">
+                      <div className="app-text-micro text-app-ink/35">
                         Joined {new Date(member.joined_at).toLocaleDateString()}
                       </div>
                       <select
                         value={member.role}
                         onChange={(event) => { void handleRoleChange(member.user_id, event.target.value); }}
-                        className="app-text-caption rounded border border-clickup-border bg-clickup-bg px-2 py-1 text-clickup-text focus:outline-none"
+                        className="app-text-caption rounded border border-app-border bg-app-bg px-2 py-1 text-app-ink focus:outline-none"
                       >
                         {ROLE_OPTIONS.map((option) => (
                           <option key={option.value} value={option.value}>{option.label}</option>
@@ -377,10 +377,10 @@ export function ProjectSettingsPanel({
 
           {/* Labels section */}
           <section className="space-y-3">
-            <h3 className="app-text-overline text-clickup-text/50">Labels</h3>
+            <h3 className="app-text-overline text-app-ink/50">Labels</h3>
 
             {loading ? (
-              <div className="flex justify-center py-6"><Loader2 size={18} className="animate-spin text-clickup-text/40" /></div>
+              <div className="flex justify-center py-6"><Loader2 size={18} className="animate-spin text-app-ink/40" /></div>
             ) : (
               <div className="space-y-1">
                 {labels.map(label => (
@@ -393,26 +393,26 @@ export function ProjectSettingsPanel({
                           value={editName}
                           onChange={e => setEditName(e.target.value)}
                           onKeyDown={e => { if (e.key === 'Enter') handleSaveEdit(); if (e.key === 'Escape') setEditingId(null); }}
-                          className="app-text-body flex-1 rounded border border-clickup-border bg-clickup-sidebar px-2 py-0.5 text-clickup-text focus:border-clickup-purple focus:outline-none"
+                          className="app-text-body flex-1 rounded border border-app-border bg-app-surface-sidebar px-2 py-0.5 text-app-ink focus:border-app-accent focus:outline-none"
                         />
                         <ColorPicker value={editColor} onChange={setEditColor} />
-                        <button onClick={handleSaveEdit} className="text-clickup-purple hover:opacity-80">
+                        <button onClick={handleSaveEdit} className="text-app-accent hover:opacity-80">
                           <Check size={14} />
                         </button>
                       </>
                     ) : (
                       <>
                         <ColorDot color={label.color} />
-                        <span className="app-text-body flex-1 text-clickup-text">{label.name}</span>
+                        <span className="app-text-body flex-1 text-app-ink">{label.name}</span>
                         <button
                           onClick={() => startEdit(label)}
-                          className="opacity-0 group-hover:opacity-100 text-clickup-text/40 hover:text-clickup-text transition-all"
+                          className="opacity-0 group-hover:opacity-100 text-app-ink/40 hover:text-app-ink transition-all"
                         >
                           <Pencil size={13} />
                         </button>
                         <button
                           onClick={() => handleDelete(label.id)}
-                          className="opacity-0 group-hover:opacity-100 text-clickup-text/40 hover:text-red-400 transition-all"
+                          className="opacity-0 group-hover:opacity-100 text-app-ink/40 hover:text-red-400 transition-all"
                         >
                           <Trash2 size={13} />
                         </button>
@@ -431,14 +431,14 @@ export function ProjectSettingsPanel({
                 onChange={e => setNewName(e.target.value)}
                 onKeyDown={e => { if (e.key === 'Enter' && newName.trim()) handleCreate(); }}
                 placeholder="New label name..."
-                className="app-text-body flex-1 border-b border-clickup-border bg-transparent py-0.5 text-clickup-text placeholder:text-clickup-text/40 transition-colors focus:border-clickup-purple focus:outline-none"
+                className="app-text-body flex-1 border-b border-app-border bg-transparent py-0.5 text-app-ink placeholder:text-app-ink/40 transition-colors focus:border-app-accent focus:outline-none"
               />
               <ColorPicker value={newColor} onChange={setNewColor} />
               {newName.trim() && (
                 <button
                   onClick={handleCreate}
                   disabled={creating}
-                  className="text-clickup-purple hover:opacity-80 disabled:opacity-40"
+                  className="text-app-accent hover:opacity-80 disabled:opacity-40"
                 >
                   {creating ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
                 </button>
@@ -448,7 +448,7 @@ export function ProjectSettingsPanel({
 
           {/* Statuses section */}
           <section className="space-y-3">
-            <h3 className="app-text-overline text-clickup-text/50">Workflow Statuses</h3>
+            <h3 className="app-text-overline text-app-ink/50">Workflow Statuses</h3>
 
             {!loading && (
               <div className="space-y-1">
@@ -462,34 +462,34 @@ export function ProjectSettingsPanel({
                           value={editStatusName}
                           onChange={e => setEditStatusName(e.target.value)}
                           onKeyDown={e => { if (e.key === 'Enter') handleSaveEditStatus(); if (e.key === 'Escape') setEditingStatusId(null); }}
-                          className="app-text-body flex-1 rounded border border-clickup-border bg-clickup-sidebar px-2 py-0.5 text-clickup-text focus:border-clickup-purple focus:outline-none"
+                          className="app-text-body flex-1 rounded border border-app-border bg-app-surface-sidebar px-2 py-0.5 text-app-ink focus:border-app-accent focus:outline-none"
                         />
                         <select
                           value={editStatusCategory}
                           onChange={e => setEditStatusCategory(e.target.value)}
-                          className="app-text-micro rounded border border-clickup-border bg-clickup-sidebar px-1 py-0.5 text-clickup-text focus:outline-none"
+                          className="app-text-micro rounded border border-app-border bg-app-surface-sidebar px-1 py-0.5 text-app-ink focus:outline-none"
                         >
                           {CATEGORY_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                         </select>
                         <ColorPicker value={editStatusColor} onChange={setEditStatusColor} />
-                        <button onClick={handleSaveEditStatus} className="text-clickup-purple hover:opacity-80">
+                        <button onClick={handleSaveEditStatus} className="text-app-accent hover:opacity-80">
                           <Check size={14} />
                         </button>
                       </>
                     ) : (
                       <>
                         <ColorDot color={ps.color} />
-                        <span className="app-text-body flex-1 text-clickup-text">{ps.name}</span>
-                        <span className="app-text-micro uppercase text-clickup-text/30">{ps.category}</span>
+                        <span className="app-text-body flex-1 text-app-ink">{ps.name}</span>
+                        <span className="app-text-micro uppercase text-app-ink/30">{ps.category}</span>
                         <button
                           onClick={() => startEditStatus(ps)}
-                          className="opacity-0 group-hover:opacity-100 text-clickup-text/40 hover:text-clickup-text transition-all"
+                          className="opacity-0 group-hover:opacity-100 text-app-ink/40 hover:text-app-ink transition-all"
                         >
                           <Pencil size={13} />
                         </button>
                         <button
                           onClick={() => handleDeleteStatus(ps.id)}
-                          className="opacity-0 group-hover:opacity-100 text-clickup-text/40 hover:text-red-400 transition-all"
+                          className="opacity-0 group-hover:opacity-100 text-app-ink/40 hover:text-red-400 transition-all"
                         >
                           <Trash2 size={13} />
                         </button>
@@ -509,12 +509,12 @@ export function ProjectSettingsPanel({
                   onChange={e => setNewStatusName(e.target.value)}
                   onKeyDown={e => { if (e.key === 'Enter' && newStatusName.trim()) handleCreateStatus(); }}
                   placeholder="New status name..."
-                  className="app-text-body flex-1 border-b border-clickup-border bg-transparent py-0.5 text-clickup-text placeholder:text-clickup-text/40 transition-colors focus:border-clickup-purple focus:outline-none"
+                  className="app-text-body flex-1 border-b border-app-border bg-transparent py-0.5 text-app-ink placeholder:text-app-ink/40 transition-colors focus:border-app-accent focus:outline-none"
                 />
                 <select
                   value={newStatusCategory}
                   onChange={e => setNewStatusCategory(e.target.value)}
-                  className="app-text-micro rounded border border-clickup-border bg-clickup-sidebar px-1 py-0.5 text-clickup-text focus:outline-none"
+                  className="app-text-micro rounded border border-app-border bg-app-surface-sidebar px-1 py-0.5 text-app-ink focus:outline-none"
                 >
                   {CATEGORY_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                 </select>
@@ -523,7 +523,7 @@ export function ProjectSettingsPanel({
                   <button
                     onClick={handleCreateStatus}
                     disabled={creatingStatus}
-                    className="text-clickup-purple hover:opacity-80 disabled:opacity-40"
+                    className="text-app-accent hover:opacity-80 disabled:opacity-40"
                   >
                     {creatingStatus ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
                   </button>

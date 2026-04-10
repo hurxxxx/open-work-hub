@@ -40,7 +40,7 @@ export const PersonalListView = () => {
   return (
     <div className="h-full flex flex-col relative max-w-3xl mx-auto w-full">
       <header className="px-8 pt-10 pb-6">
-        <h1 className="app-text-title-lg text-clickup-text">Personal List</h1>
+        <h1 className="app-text-title-lg text-app-ink">Personal List</h1>
         <p className="app-text-body mt-2 text-gray-500">Your private to-do list</p>
       </header>
 
@@ -54,7 +54,7 @@ export const PersonalListView = () => {
             value={newTaskText}
             onChange={(e) => setNewTaskText(e.target.value)}
             placeholder="Add a new task..."
-            className="w-full bg-clickup-sidebar border border-clickup-border rounded-lg py-3 pl-11 pr-4 text-clickup-text focus:outline-none focus:border-clickup-purple transition-colors"
+            className="w-full bg-app-surface-sidebar border border-app-border rounded-lg py-3 pl-11 pr-4 text-app-ink focus:outline-none focus:border-app-accent transition-colors"
           />
         </form>
 
@@ -65,8 +65,8 @@ export const PersonalListView = () => {
               className={cn(
                 "group flex items-center justify-between p-4 rounded-lg border transition-all",
                 todo.completed 
-                  ? "bg-clickup-sidebar/50 border-transparent" 
-                  : "bg-clickup-sidebar border-clickup-border hover:border-gray-600"
+                  ? "bg-app-surface-sidebar/50 border-transparent" 
+                  : "bg-app-surface-sidebar border-app-border hover:border-gray-600"
               )}
             >
               <div className="flex items-center gap-4">
@@ -83,7 +83,7 @@ export const PersonalListView = () => {
                 </button>
                 <span className={cn(
                   "app-text-body transition-all",
-                  todo.completed ? "text-gray-500 line-through" : "text-clickup-text"
+                  todo.completed ? "text-gray-500 line-through" : "text-app-ink"
                 )}>
                   {todo.text}
                 </span>

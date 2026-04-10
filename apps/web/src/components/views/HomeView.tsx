@@ -20,11 +20,11 @@ function SectionHeader({
 }) {
   return (
     <div className="flex items-center justify-between mb-1">
-      <h2 className="app-text-title-md text-clickup-text">{title}</h2>
+      <h2 className="app-text-title-md text-app-ink">{title}</h2>
       {actionLabel && actionTo ? (
         <Link
           to={actionTo}
-          className="app-text-caption text-gray-500 transition-colors hover:text-clickup-text"
+          className="app-text-caption text-gray-500 transition-colors hover:text-app-ink"
         >
           {actionLabel}
         </Link>
@@ -62,7 +62,7 @@ export const HomeView = () => {
       <div className="max-w-3xl mx-auto px-8 py-10 space-y-10">
         {/* Header */}
         <div>
-          <h1 className="app-text-title-lg text-clickup-text">
+          <h1 className="app-text-title-lg text-app-ink">
             {getGreeting()}, {userName}
           </h1>
           <p className="app-text-body mt-1 text-gray-500">오늘의 업무와 최근 작업을 확인하세요.</p>
@@ -74,9 +74,9 @@ export const HomeView = () => {
           <input
             type="text"
             placeholder="Search everything..."
-            className="app-text-body w-full rounded-md border border-clickup-border bg-clickup-bg py-2.5 pl-10 pr-4 text-clickup-text placeholder:text-gray-400 transition-colors focus:border-clickup-purple focus:outline-none"
+            className="app-text-body w-full rounded-md border border-app-border bg-app-bg py-2.5 pl-10 pr-4 text-app-ink placeholder:text-gray-400 transition-colors focus:border-app-accent focus:outline-none"
           />
-          <kbd className="app-text-micro absolute right-3.5 top-1/2 -translate-y-1/2 hidden items-center gap-0.5 rounded border border-clickup-border bg-clickup-sidebar px-1.5 py-0.5 text-gray-500 sm:inline-flex">
+          <kbd className="app-text-micro absolute right-3.5 top-1/2 -translate-y-1/2 hidden items-center gap-0.5 rounded border border-app-border bg-app-surface-sidebar px-1.5 py-0.5 text-gray-500 sm:inline-flex">
             ⌘K
           </kbd>
         </div>
@@ -84,14 +84,14 @@ export const HomeView = () => {
         {/* Assigned to me */}
         <section>
           <SectionHeader title="Assigned to me" actionLabel="See all" actionTo="/pms" />
-          <div className="border-t border-clickup-border">
+          <div className="border-t border-app-border">
             {assignedTasks.map((task) => (
               <div
                 key={task.id}
-                className="flex items-center gap-3 py-3 border-b border-clickup-border last:border-b-0 group cursor-pointer hover:bg-clickup-hover/50 -mx-2 px-2 rounded-sm transition-colors"
+                className="flex items-center gap-3 py-3 border-b border-app-border last:border-b-0 group cursor-pointer hover:bg-app-surface-hover/50 -mx-2 px-2 rounded-sm transition-colors"
               >
-                <Circle size={16} className="text-gray-400 group-hover:text-clickup-purple shrink-0 transition-colors" />
-                <span className="app-text-body flex-1 truncate text-clickup-text">{task.name}</span>
+                <Circle size={16} className="text-gray-400 group-hover:text-app-accent shrink-0 transition-colors" />
+                <span className="app-text-body flex-1 truncate text-app-ink">{task.name}</span>
                 <span className="app-text-caption shrink-0 text-gray-500">{task.due}</span>
                 <Flag size={13} className={`${priorityColor[task.priority]} shrink-0`} />
               </div>
@@ -105,18 +105,18 @@ export const HomeView = () => {
         {/* Recently visited */}
         <section>
           <SectionHeader title="Recently visited" actionLabel="See all" actionTo="/ai" />
-          <div className="border-t border-clickup-border">
+          <div className="border-t border-app-border">
             {recentTools.map((item) => (
               <Link
                 key={item.id}
                 to={`/tool/${item.id}`}
-                className="flex items-center gap-3 py-3 border-b border-clickup-border last:border-b-0 group -mx-2 px-2 rounded-sm hover:bg-clickup-hover/50 transition-colors"
+                className="flex items-center gap-3 py-3 border-b border-app-border last:border-b-0 group -mx-2 px-2 rounded-sm hover:bg-app-surface-hover/50 transition-colors"
               >
-                <div className="w-7 h-7 rounded-md bg-clickup-sidebar border border-clickup-border flex items-center justify-center shrink-0 group-hover:border-clickup-purple/40 transition-colors">
-                  <item.icon size={14} className="text-gray-500 group-hover:text-clickup-purple transition-colors" />
+                <div className="w-7 h-7 rounded-md bg-app-surface-sidebar border border-app-border flex items-center justify-center shrink-0 group-hover:border-app-accent/40 transition-colors">
+                  <item.icon size={14} className="text-gray-500 group-hover:text-app-accent transition-colors" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <span className="app-text-body block truncate text-clickup-text">{item.title}</span>
+                  <span className="app-text-body block truncate text-app-ink">{item.title}</span>
                   {item.description ? (
                     <span className="app-text-caption block truncate text-gray-500">{item.description}</span>
                   ) : null}
@@ -130,7 +130,7 @@ export const HomeView = () => {
         {/* Favorites */}
         <section>
           <SectionHeader title="Favorites" />
-          <div className="border-t border-clickup-border py-8 text-center">
+          <div className="border-t border-app-border py-8 text-center">
             <Star size={20} className="mx-auto text-gray-400 mb-2" />
             <p className="app-text-body text-gray-500">즐겨찾기한 도구나 문서가 없습니다.</p>
             <p className="app-text-caption mt-1 text-gray-400">자주 쓰는 항목에 ★ 표시하면 여기에 나타납니다.</p>

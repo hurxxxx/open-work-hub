@@ -46,9 +46,9 @@ export const CalendarView = ({ issues, projectStatuses }: { issues: PmsIssue[]; 
 
   return (
     <div className="h-full flex flex-col card p-0 overflow-hidden">
-      <div className="grid grid-cols-7 border-b border-clickup-border bg-clickup-sidebar/30">
+      <div className="grid grid-cols-7 border-b border-app-border bg-app-surface-sidebar/30">
         {days.map(day => (
-          <div key={day} className="app-text-overline border-r border-clickup-border py-3 text-center text-gray-500 last:border-r-0">
+          <div key={day} className="app-text-overline border-r border-app-border py-3 text-center text-gray-500 last:border-r-0">
             {day}
           </div>
         ))}
@@ -58,8 +58,8 @@ export const CalendarView = ({ issues, projectStatuses }: { issues: PmsIssue[]; 
           <div
             key={i}
             className={cn(
-              "p-2 border-r border-b border-clickup-border last:border-r-0 min-h-[120px] hover:bg-clickup-hover/50 transition-colors",
-              date === null && "bg-clickup-sidebar/20"
+              "p-2 border-r border-b border-app-border last:border-r-0 min-h-[120px] hover:bg-app-surface-hover/50 transition-colors",
+              date === null && "bg-app-surface-sidebar/20"
             )}
           >
             <div className="app-text-micro mb-2 font-bold text-gray-600">
@@ -69,7 +69,7 @@ export const CalendarView = ({ issues, projectStatuses }: { issues: PmsIssue[]; 
               {date && issuesByDate[date]?.map(issue => (
                 <div
                   key={issue.id}
-                  className="app-text-micro truncate rounded border-l-2 bg-clickup-sidebar/60 px-1.5 py-1 text-clickup-text"
+                  className="app-text-micro truncate rounded border-l-2 bg-app-surface-sidebar/60 px-1.5 py-1 text-app-ink"
                   style={{ borderLeftColor: getStatusColor(issue.status, projectStatuses) }}
                 >
                   {issue.reference} {issue.title}

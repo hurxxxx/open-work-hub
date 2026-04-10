@@ -182,7 +182,7 @@ const AppContent = () => {
   }
 
   return (
-    <div className="flex h-screen bg-clickup-sidebar text-clickup-text overflow-hidden transition-colors">
+    <div className="flex h-screen bg-app-surface-sidebar text-app-ink overflow-hidden transition-colors">
       <AppBar
         activeAppId={activeAppId}
         currentUser={currentUser}
@@ -195,7 +195,7 @@ const AppContent = () => {
           activeNavItemId={activeNavItemId}
         />
 
-        <main className="flex-1 bg-clickup-bg overflow-y-auto relative transition-colors">
+        <main className="flex-1 bg-app-bg overflow-y-auto relative transition-colors">
           <Routes>
             <Route path="/" element={<HomeView />} />
             <Route
@@ -297,10 +297,10 @@ const AppContent = () => {
             className="absolute inset-0 bg-black/50 backdrop-blur-[2px]"
             onClick={() => setProfileOpen(false)}
           />
-          <div className="relative z-10 w-full max-w-4xl h-[85vh] bg-clickup-bg border border-clickup-border rounded-2xl shadow-2xl overflow-hidden">
+          <div className="relative z-10 w-full max-w-4xl h-[85vh] bg-app-bg border border-app-border rounded-2xl shadow-2xl overflow-hidden">
             <button
               onClick={() => setProfileOpen(false)}
-              className="absolute top-4 right-4 z-20 w-8 h-8 flex items-center justify-center rounded-lg text-clickup-text/50 hover:text-clickup-text hover:bg-clickup-hover transition-colors"
+              className="absolute top-4 right-4 z-20 w-8 h-8 flex items-center justify-center rounded-lg text-app-ink/50 hover:text-app-ink hover:bg-app-surface-hover transition-colors"
             >
               ✕
             </button>

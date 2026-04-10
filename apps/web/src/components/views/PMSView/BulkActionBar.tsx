@@ -46,7 +46,7 @@ function ActionDropdown({
         <ChevronDown size={12} />
       </button>
       {open && (
-        <div className="absolute bottom-full left-0 mb-1 z-40 min-w-[160px] bg-clickup-bg border border-clickup-border rounded-lg shadow-xl py-1 max-h-48 overflow-y-auto custom-scrollbar">
+        <div className="absolute bottom-full left-0 mb-1 z-40 min-w-[160px] bg-app-bg border border-app-border rounded-lg shadow-xl py-1 max-h-48 overflow-y-auto custom-scrollbar">
           {children(() => setOpen(false))}
         </div>
       )}
@@ -120,7 +120,7 @@ export const BulkActionBar = ({
               <button
                 key={opt.value}
                 onClick={() => { exec({ status: opt.value }); close(); }}
-                className="app-text-body-sm w-full px-3 py-1.5 text-left text-clickup-text hover:bg-clickup-hover"
+                className="app-text-body-sm w-full px-3 py-1.5 text-left text-app-ink hover:bg-app-surface-hover"
               >
                 {opt.label}
               </button>
@@ -137,7 +137,7 @@ export const BulkActionBar = ({
               <button
                 key={opt.value}
                 onClick={() => { exec({ priority: opt.value }); close(); }}
-                className="app-text-body-sm w-full px-3 py-1.5 text-left text-clickup-text hover:bg-clickup-hover"
+                className="app-text-body-sm w-full px-3 py-1.5 text-left text-app-ink hover:bg-app-surface-hover"
               >
                 {opt.label}
               </button>
@@ -152,7 +152,7 @@ export const BulkActionBar = ({
           <>
             <button
               onClick={() => { exec({ assignee_id: null }); close(); }}
-              className="app-text-body-sm w-full px-3 py-1.5 text-left text-clickup-text/50 hover:bg-clickup-hover"
+              className="app-text-body-sm w-full px-3 py-1.5 text-left text-app-ink/50 hover:bg-app-surface-hover"
             >
               Unassign
             </button>
@@ -160,7 +160,7 @@ export const BulkActionBar = ({
               <button
                 key={m.user_id}
                 onClick={() => { exec({ assignee_id: m.user_id }); close(); }}
-                className="app-text-body-sm w-full px-3 py-1.5 text-left text-clickup-text hover:bg-clickup-hover"
+                className="app-text-body-sm w-full px-3 py-1.5 text-left text-app-ink hover:bg-app-surface-hover"
               >
                 {m.full_name}
               </button>
@@ -174,24 +174,24 @@ export const BulkActionBar = ({
         <ActionDropdown label="Labels">
           {(close) => (
             <>
-              <div className="app-text-overline px-3 py-1 text-clickup-text/40">Add</div>
+              <div className="app-text-overline px-3 py-1 text-app-ink/40">Add</div>
               {labels.map(l => (
                 <button
                   key={`add-${l.id}`}
                   onClick={() => { exec({ add_label_ids: [l.id] }); close(); }}
-                  className="app-text-body-sm flex w-full items-center gap-2 px-3 py-1.5 text-left text-clickup-text hover:bg-clickup-hover"
+                  className="app-text-body-sm flex w-full items-center gap-2 px-3 py-1.5 text-left text-app-ink hover:bg-app-surface-hover"
                 >
                   <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: l.color }} />
                   {l.name}
                 </button>
               ))}
-              <hr className="border-clickup-border my-1" />
-              <div className="app-text-overline px-3 py-1 text-clickup-text/40">Remove</div>
+              <hr className="border-app-border my-1" />
+              <div className="app-text-overline px-3 py-1 text-app-ink/40">Remove</div>
               {labels.map(l => (
                 <button
                   key={`rm-${l.id}`}
                   onClick={() => { exec({ remove_label_ids: [l.id] }); close(); }}
-                  className="app-text-body-sm flex w-full items-center gap-2 px-3 py-1.5 text-left text-red-400/70 hover:bg-clickup-hover"
+                  className="app-text-body-sm flex w-full items-center gap-2 px-3 py-1.5 text-left text-red-400/70 hover:bg-app-surface-hover"
                 >
                   <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: l.color }} />
                   {l.name}

@@ -113,8 +113,8 @@ export const PlannerView = () => {
     >
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
-          <h1 className="app-text-title-lg text-clickup-text">Planner</h1>
-          <div className="flex items-center bg-clickup-sidebar border border-clickup-border rounded-md p-1">
+          <h1 className="app-text-title-lg text-app-ink">Planner</h1>
+          <div className="flex items-center bg-app-surface-sidebar border border-app-border rounded-md p-1">
             {(['Month', 'Week', 'Day'] as const).map((mode) => (
               <button 
                 key={mode}
@@ -125,8 +125,8 @@ export const PlannerView = () => {
                 className={cn(
                   "app-text-control-sm rounded px-3 py-1 transition-all",
                   viewMode === mode 
-                    ? "bg-clickup-hover text-clickup-text shadow-sm" 
-                    : "text-gray-500 hover:text-clickup-text"
+                    ? "bg-app-surface-hover text-app-ink shadow-sm" 
+                    : "text-gray-500 hover:text-app-ink"
                 )}
               >
                 {mode}
@@ -138,20 +138,20 @@ export const PlannerView = () => {
               setSelectedDate(20);
               setViewMode('Month');
             }}
-            className="app-text-control-sm rounded-md border border-clickup-border px-3 py-1 text-gray-500 transition-colors hover:text-clickup-text"
+            className="app-text-control-sm rounded-md border border-app-border px-3 py-1 text-gray-500 transition-colors hover:text-app-ink"
           >
             Today
           </button>
         </div>
         <div className="flex items-center gap-3">
-          <div className="flex items-center gap-1 bg-clickup-sidebar border border-clickup-border rounded-md px-3 py-1.5">
-            <ChevronLeft size={16} className="text-gray-500 cursor-pointer hover:text-clickup-text" />
-            <span className="app-text-control px-2 text-clickup-text">
+          <div className="flex items-center gap-1 bg-app-surface-sidebar border border-app-border rounded-md px-3 py-1.5">
+            <ChevronLeft size={16} className="text-gray-500 cursor-pointer hover:text-app-ink" />
+            <span className="app-text-control px-2 text-app-ink">
               {viewMode === 'Day' ? `May ${selectedDate}, 2024` : 'May 2024'}
             </span>
-            <ChevronRight size={16} className="text-gray-500 cursor-pointer hover:text-clickup-text" />
+            <ChevronRight size={16} className="text-gray-500 cursor-pointer hover:text-app-ink" />
           </div>
-          <button className="app-text-control flex items-center gap-2 rounded-md bg-clickup-purple px-4 py-2 text-clickup-bg">
+          <button className="app-text-control flex items-center gap-2 rounded-md bg-app-accent px-4 py-2 text-app-bg">
             <Plus size={16} />
             <span>Add Event</span>
           </button>
@@ -168,9 +168,9 @@ export const PlannerView = () => {
               exit={{ opacity: 0, x: -20 }}
               className="flex-1 flex flex-col"
             >
-              <div className="grid grid-cols-7 border-b border-clickup-border">
+              <div className="grid grid-cols-7 border-b border-app-border">
                 {days.map(day => (
-                  <div key={day} className="app-text-overline border-r border-clickup-border py-2 text-center text-gray-500 last:border-r-0">
+                  <div key={day} className="app-text-overline border-r border-app-border py-2 text-center text-gray-500 last:border-r-0">
                     {day}
                   </div>
                 ))}
@@ -181,13 +181,13 @@ export const PlannerView = () => {
                     key={i} 
                     onClick={(e) => handleDateClick(e, date)}
                     className={cn(
-                      "p-2 border-r border-b border-clickup-border last:border-r-0 min-h-[100px] hover:bg-clickup-hover transition-colors cursor-pointer group",
-                      (date < 1 || date > 31) && "bg-clickup-sidebar/50"
+                      "p-2 border-r border-b border-app-border last:border-r-0 min-h-[100px] hover:bg-app-surface-hover transition-colors cursor-pointer group",
+                      (date < 1 || date > 31) && "bg-app-surface-sidebar/50"
                     )}
                   >
                     <div className={cn(
                       "app-text-control-sm mb-2",
-                      date === selectedDate ? "w-6 h-6 bg-clickup-purple text-clickup-bg rounded-full flex items-center justify-center -mt-1 -ml-1" : "text-gray-500"
+                      date === selectedDate ? "w-6 h-6 bg-app-accent text-app-bg rounded-full flex items-center justify-center -mt-1 -ml-1" : "text-gray-500"
                     )}>
                       {date > 0 && date <= 31 ? date : ''}
                     </div>
@@ -216,7 +216,7 @@ export const PlannerView = () => {
               exit={{ opacity: 0, x: -20 }}
               className="flex-1 flex flex-col overflow-hidden"
             >
-              <div className="flex border-b border-clickup-border">
+              <div className="flex border-b border-app-border">
                 <div className="w-16 shrink-0"></div>
                 <div className="flex-1 grid grid-cols-7">
                   {days.map((day, i) => (
@@ -226,12 +226,12 @@ export const PlannerView = () => {
                         setSelectedDate(weekDates[i]);
                         setViewMode('Day');
                       }}
-                      className="py-3 text-center border-r border-clickup-border last:border-r-0 hover:bg-clickup-hover cursor-pointer transition-colors"
+                      className="py-3 text-center border-r border-app-border last:border-r-0 hover:bg-app-surface-hover cursor-pointer transition-colors"
                     >
                       <div className="app-text-overline mb-1 text-gray-500">{day}</div>
                       <div className={cn(
                         "app-text-title-md font-bold",
-                        weekDates[i] === selectedDate ? "text-clickup-purple" : "text-clickup-text"
+                        weekDates[i] === selectedDate ? "text-app-accent" : "text-app-ink"
                       )}>
                         {weekDates[i]}
                       </div>
@@ -249,7 +249,7 @@ export const PlannerView = () => {
                       {weekDates.map(date => (
                         <div 
                           key={`${date}-${hour}`}
-                          className="border-t border-r border-clickup-border last:border-r-0 h-12 relative group"
+                          className="border-t border-r border-app-border last:border-r-0 h-12 relative group"
                           onMouseDown={(e) => handleMouseDown(e, date, hour)}
                           onMouseEnter={() => handleMouseEnter(date, hour)}
                           onMouseUp={handleMouseUp}
@@ -289,13 +289,13 @@ export const PlannerView = () => {
               exit={{ opacity: 0, x: -20 }}
               className="flex-1 flex flex-col overflow-hidden"
             >
-              <div className="p-6 border-b border-clickup-border flex items-center gap-6">
-                <div className="w-16 h-16 bg-clickup-purple rounded-xl flex flex-col items-center justify-center text-clickup-bg shadow-lg shadow-purple-500/20">
+              <div className="p-6 border-b border-app-border flex items-center gap-6">
+                <div className="w-16 h-16 bg-app-accent rounded-xl flex flex-col items-center justify-center text-app-bg shadow-lg shadow-purple-500/20">
                   <span className="app-text-overline">May</span>
                   <span className="app-text-title-lg font-black">{selectedDate}</span>
                 </div>
                 <div>
-                  <h2 className="app-text-title-lg text-clickup-text">
+                  <h2 className="app-text-title-lg text-app-ink">
                     {days[weekDates.indexOf(selectedDate) !== -1 ? weekDates.indexOf(selectedDate) : 1]}day
                   </h2>
                   <p className="app-text-body text-gray-500">
@@ -312,7 +312,7 @@ export const PlannerView = () => {
                         {hour === 12 ? '12 PM' : hour > 12 ? `${hour - 12} PM` : `${hour} AM`}
                       </div>
                       <div 
-                        className="flex-1 border-t border-clickup-border h-16 relative"
+                        className="flex-1 border-t border-app-border h-16 relative"
                         onMouseDown={(e) => handleMouseDown(e, selectedDate, hour)}
                         onMouseEnter={() => handleMouseEnter(selectedDate, hour)}
                         onMouseUp={handleMouseUp}
@@ -331,7 +331,7 @@ export const PlannerView = () => {
                           style={{ height: `${(event.endHour - event.startHour) * 64 - 16}px` }}
                           >
                             <div className="font-bold mb-1">{formatHour(event.startHour)} - {formatHour(event.endHour)}</div>
-                            <div className="text-clickup-text font-medium">{event.title}</div>
+                            <div className="text-app-ink font-medium">{event.title}</div>
                             <div className="text-gray-500 mt-1 flex items-center gap-1">
                               <MessageSquare size={10} />
                               <span>3 participants</span>

@@ -62,7 +62,7 @@ export const SpaceOverviewView = ({
   if (loading) {
     return (
       <div className="flex justify-center items-center h-64">
-        <Loader2 size={24} className="animate-spin text-clickup-purple" />
+        <Loader2 size={24} className="animate-spin text-app-accent" />
       </div>
     );
   }
@@ -80,13 +80,13 @@ export const SpaceOverviewView = ({
 
   return (
     <div className="h-full flex flex-col">
-      <header className="bg-clickup-bg border-b border-clickup-border px-8 pt-6 pb-4">
+      <header className="bg-app-bg border-b border-app-border px-8 pt-6 pb-4">
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 bg-clickup-purple rounded flex items-center justify-center text-clickup-bg">
+          <div className="w-8 h-8 bg-app-accent rounded flex items-center justify-center text-app-bg">
             <Layout size={20} />
           </div>
           <div>
-            <h1 className="app-text-title-lg text-clickup-text">{spaceName ?? 'Space'}</h1>
+            <h1 className="app-text-title-lg text-app-ink">{spaceName ?? 'Space'}</h1>
             <div className="app-text-micro text-gray-500">
               {lists.length} lists · {folders.length} folders · {spaceDocs.length} doc collections
             </div>
@@ -98,8 +98,8 @@ export const SpaceOverviewView = ({
         <div className="max-w-5xl mx-auto space-y-8">
           {/* Docs */}
           <Panel>
-            <h3 className="app-text-title-md mb-4 flex items-center gap-2 text-clickup-text">
-              <FileText size={16} className="text-clickup-purple" />
+            <h3 className="app-text-title-md mb-4 flex items-center gap-2 text-app-ink">
+              <FileText size={16} className="text-app-accent" />
               Docs
             </h3>
             <div className="space-y-2">
@@ -107,21 +107,21 @@ export const SpaceOverviewView = ({
                 <div
                   key={doc.id}
                   onClick={() => navigate(`/tool/pms-space-${spaceId}-docs-${doc.id}`)}
-                  className="flex items-center gap-3 p-2 hover:bg-clickup-hover rounded-md cursor-pointer group"
+                  className="flex items-center gap-3 p-2 hover:bg-app-surface-hover rounded-md cursor-pointer group"
                 >
                   <FileText size={14} className="text-gray-500 shrink-0" />
-                  <span className="app-text-body-sm flex-1 truncate text-clickup-text transition-colors group-hover:text-clickup-purple">
+                  <span className="app-text-body-sm flex-1 truncate text-app-ink transition-colors group-hover:text-app-accent">
                     {doc.title}
                   </span>
                 </div>
               ))}
               {spaceDocs.length === 0 && (
-                <p className="app-text-body text-clickup-text/40">No doc collections yet</p>
+                <p className="app-text-body text-app-ink/40">No doc collections yet</p>
               )}
               {spaceDocs.length > 0 && (
                 <button
                   onClick={() => navigate(`/tool/pms-space-${spaceId}-docs`)}
-                  className="app-text-control-sm text-clickup-purple transition-colors hover:text-clickup-purple/80"
+                  className="app-text-control-sm text-app-accent transition-colors hover:text-app-accent/80"
                 >
                   View all collections
                 </button>
@@ -132,8 +132,8 @@ export const SpaceOverviewView = ({
           {/* Folders */}
           {folders.length > 0 && (
             <Panel>
-              <h3 className="app-text-title-md mb-4 flex items-center gap-2 text-clickup-text">
-                <FolderOpen size={16} className="text-clickup-purple" />
+              <h3 className="app-text-title-md mb-4 flex items-center gap-2 text-app-ink">
+                <FolderOpen size={16} className="text-app-accent" />
                 Folders
               </h3>
               <div className="space-y-3">
@@ -141,7 +141,7 @@ export const SpaceOverviewView = ({
                   const folderLists = listsByFolder.get(folder.id) ?? [];
                   return (
                     <div key={folder.id} className="space-y-1">
-                      <div className="app-text-body-sm flex items-center gap-2 font-medium text-clickup-text">
+                      <div className="app-text-body-sm flex items-center gap-2 font-medium text-app-ink">
                         <FolderOpen size={14} className="text-amber-400" />
                         {folder.name}
                       </div>
@@ -149,16 +149,16 @@ export const SpaceOverviewView = ({
                         <div
                           key={list.id}
                           onClick={() => navigate(`/tool/pms-list-${list.id}`)}
-                          className="flex items-center gap-3 pl-6 p-2 hover:bg-clickup-hover rounded-md cursor-pointer group"
+                          className="flex items-center gap-3 pl-6 p-2 hover:bg-app-surface-hover rounded-md cursor-pointer group"
                         >
                           <FolderKanban size={14} className="text-blue-400 shrink-0" />
-                          <span className="app-text-body-sm flex-1 truncate text-clickup-text transition-colors group-hover:text-clickup-purple">
+                          <span className="app-text-body-sm flex-1 truncate text-app-ink transition-colors group-hover:text-app-accent">
                             {list.name}
                           </span>
-                          <span className="app-text-micro text-clickup-text/30">
+                          <span className="app-text-micro text-app-ink/30">
                             {list.issue_count} issues
                           </span>
-                          <ChevronRight size={12} className="text-clickup-text/30 opacity-0 group-hover:opacity-100 transition-opacity" />
+                          <ChevronRight size={12} className="text-app-ink/30 opacity-0 group-hover:opacity-100 transition-opacity" />
                         </div>
                       ))}
                     </div>
@@ -170,14 +170,14 @@ export const SpaceOverviewView = ({
 
           {/* Lists */}
           <Panel>
-            <h3 className="app-text-title-md mb-4 flex items-center justify-between text-clickup-text">
+            <h3 className="app-text-title-md mb-4 flex items-center justify-between text-app-ink">
               <div className="flex items-center gap-2">
-                <FolderKanban size={16} className="text-clickup-purple" />
+                <FolderKanban size={16} className="text-app-accent" />
                 Lists
               </div>
               <button
                 onClick={() => setCreateListOpen(true)}
-                className="app-text-control-sm flex items-center gap-1 text-clickup-purple transition-colors hover:text-clickup-purple/80"
+                className="app-text-control-sm flex items-center gap-1 text-app-accent transition-colors hover:text-app-accent/80"
               >
                 <Plus size={14} />
                 <span>New List</span>
@@ -188,22 +188,22 @@ export const SpaceOverviewView = ({
                 <div
                   key={list.id}
                   onClick={() => navigate(`/tool/pms-list-${list.id}`)}
-                  className="flex items-center gap-3 p-2 hover:bg-clickup-hover rounded-md cursor-pointer group"
+                  className="flex items-center gap-3 p-2 hover:bg-app-surface-hover rounded-md cursor-pointer group"
                 >
                   <FolderKanban size={14} className="text-blue-400 shrink-0" />
                   <div className="flex-1 min-w-0">
-                    <div className="app-text-body-sm truncate font-medium text-clickup-text transition-colors group-hover:text-clickup-purple">
+                    <div className="app-text-body-sm truncate font-medium text-app-ink transition-colors group-hover:text-app-accent">
                       {list.name}
                     </div>
-                    <div className="app-text-micro text-clickup-text/40">
+                    <div className="app-text-micro text-app-ink/40">
                       {list.issue_count} issues · {Math.round(list.progress * 100)}% done
                     </div>
                   </div>
-                  <ChevronRight size={14} className="text-clickup-text/30 opacity-0 group-hover:opacity-100 transition-opacity" />
+                  <ChevronRight size={14} className="text-app-ink/30 opacity-0 group-hover:opacity-100 transition-opacity" />
                 </div>
               ))}
               {rootLists.length === 0 && (
-                <p className="app-text-body text-clickup-text/40">No lists yet</p>
+                <p className="app-text-body text-app-ink/40">No lists yet</p>
               )}
             </div>
           </Panel>

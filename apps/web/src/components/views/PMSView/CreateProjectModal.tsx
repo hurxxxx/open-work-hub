@@ -70,8 +70,8 @@ export const CreateProjectModal = ({
         </div>
       }
     >
-      <div className="space-y-5 text-clickup-text">
-        <div className="app-text-body text-clickup-text/60">
+      <div className="space-y-5 text-app-ink">
+        <div className="app-text-body text-app-ink/60">
           All Lists are located within a Space. Lists can house any type of task.
         </div>
 
@@ -82,7 +82,7 @@ export const CreateProjectModal = ({
         )}
 
         <div className="space-y-1">
-          <label className="app-text-control-sm text-clickup-text/70">
+          <label className="app-text-control-sm text-app-ink/70">
             Name <span className="text-red-400">*</span>
           </label>
           <input
@@ -91,19 +91,19 @@ export const CreateProjectModal = ({
             value={name}
             onChange={e => setName(e.target.value)}
             onKeyDown={e => { if (e.key === 'Enter' && !e.nativeEvent.isComposing && name.trim() && !submitting) handleCreate(); }}
-            className="app-text-body w-full rounded-md border border-clickup-border bg-clickup-sidebar px-3 py-2 text-clickup-text placeholder:text-clickup-text/30 transition-all focus:border-clickup-purple focus:outline-none"
+            className="app-text-body w-full rounded-md border border-app-border bg-app-surface-sidebar px-3 py-2 text-app-ink placeholder:text-app-ink/30 transition-all focus:border-app-accent focus:outline-none"
             autoFocus
           />
         </div>
 
         <div className="space-y-1">
-          <label className="app-text-control-sm text-clickup-text/70">Description <span className="text-clickup-text/30">(optional)</span></label>
+          <label className="app-text-control-sm text-app-ink/70">Description <span className="text-app-ink/30">(optional)</span></label>
           <textarea
             placeholder="리스트에 대한 간단한 설명"
             value={description}
             onChange={e => setDescription(e.target.value)}
             rows={3}
-            className="app-text-body w-full resize-none rounded-md border border-clickup-border bg-clickup-sidebar px-3 py-2 text-clickup-text placeholder:text-clickup-text/30 transition-all focus:border-clickup-purple focus:outline-none"
+            className="app-text-body w-full resize-none rounded-md border border-app-border bg-app-surface-sidebar px-3 py-2 text-app-ink placeholder:text-app-ink/30 transition-all focus:border-app-accent focus:outline-none"
           />
         </div>
       </div>

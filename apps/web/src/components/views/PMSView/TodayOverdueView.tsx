@@ -36,14 +36,14 @@ export const TodayOverdueView = () => {
 
   return (
     <div className="h-full flex flex-col relative">
-      <header className="bg-clickup-bg border-b border-clickup-border px-8 pt-6 pb-4">
-        <h1 className="app-text-title-lg text-clickup-text">Today & Overdue</h1>
+      <header className="bg-app-bg border-b border-app-border px-8 pt-6 pb-4">
+        <h1 className="app-text-title-lg text-app-ink">Today & Overdue</h1>
         <p className="app-text-body mt-1 text-gray-500">Focus on what's important right now</p>
       </header>
 
       <main className="flex-1 overflow-y-auto p-8 custom-scrollbar">
         {loading ? (
-          <div className="flex justify-center py-16"><Loader2 size={24} className="animate-spin text-clickup-purple" /></div>
+          <div className="flex justify-center py-16"><Loader2 size={24} className="animate-spin text-app-accent" /></div>
         ) : (
           <div className="max-w-4xl mx-auto space-y-8">
             {/* Overdue */}
@@ -57,7 +57,7 @@ export const TodayOverdueView = () => {
                 {overdue.map(issue => (
                   <IssueAgendaItem key={issue.id} issue={issue} isOverdue />
                 ))}
-                {overdue.length === 0 && <p className="app-text-body text-clickup-text/40">No overdue tasks</p>}
+                {overdue.length === 0 && <p className="app-text-body text-app-ink/40">No overdue tasks</p>}
               </div>
             </section>
 
@@ -72,7 +72,7 @@ export const TodayOverdueView = () => {
                 {todayIssues.map(issue => (
                   <IssueAgendaItem key={issue.id} issue={issue} />
                 ))}
-                {todayIssues.length === 0 && <p className="app-text-body text-clickup-text/40">No tasks due today</p>}
+                {todayIssues.length === 0 && <p className="app-text-body text-app-ink/40">No tasks due today</p>}
               </div>
             </section>
           </div>
@@ -83,15 +83,15 @@ export const TodayOverdueView = () => {
 };
 
 const IssueAgendaItem = ({ issue, isOverdue = false }: { issue: PmsIssue; isOverdue?: boolean }) => (
-  <div className="flex items-center justify-between p-4 bg-clickup-sidebar border border-clickup-border rounded-lg hover:border-gray-600 transition-colors group cursor-pointer">
+  <div className="flex items-center justify-between p-4 bg-app-surface-sidebar border border-app-border rounded-lg hover:border-gray-600 transition-colors group cursor-pointer">
     <div className="flex items-center gap-4">
       <button className="text-gray-500 hover:text-green-500 transition-colors">
         <CheckCircle2 size={20} />
       </button>
       <div>
         <div className="flex items-center gap-2">
-          <span className="app-text-micro text-clickup-text/40">{issue.reference}</span>
-          <h3 className="app-text-body font-medium text-clickup-text transition-colors group-hover:text-clickup-purple">{issue.title}</h3>
+          <span className="app-text-micro text-app-ink/40">{issue.reference}</span>
+          <h3 className="app-text-body font-medium text-app-ink transition-colors group-hover:text-app-accent">{issue.title}</h3>
         </div>
         <div className="app-text-caption mt-1 flex items-center gap-3 text-gray-500">
           <span className={cn("flex items-center gap-1", isOverdue ? "text-red-500" : "")}>

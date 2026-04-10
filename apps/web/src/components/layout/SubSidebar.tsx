@@ -93,39 +93,39 @@ const SpaceAddPopover = ({
     <div
       ref={ref}
       style={{ top: pos.top, left: pos.left }}
-      className="fixed z-[9999] w-52 bg-clickup-bg border border-clickup-border rounded-lg shadow-xl py-1"
+      className="fixed z-[9999] w-52 bg-app-bg border border-app-border rounded-lg shadow-xl py-1"
     >
       <div className="app-text-overline px-3 py-1.5 text-gray-500">
         Create
       </div>
       <button
         onClick={() => { onCreateList(); onClose(); }}
-        className="w-full flex items-center gap-3 px-3 py-2 hover:bg-clickup-hover transition-colors"
+        className="w-full flex items-center gap-3 px-3 py-2 hover:bg-app-surface-hover transition-colors"
       >
         <ListIcon size={16} className="text-gray-400" />
         <div className="text-left">
-          <div className="app-text-control-sm text-clickup-text">List</div>
-          <div className="app-text-micro text-clickup-text/40">Track tasks, projects, people & more</div>
+          <div className="app-text-control-sm text-app-ink">List</div>
+          <div className="app-text-micro text-app-ink/40">Track tasks, projects, people & more</div>
         </div>
       </button>
       <button
         onClick={() => { onCreateFolder(); onClose(); }}
-        className="w-full flex items-center gap-3 px-3 py-2 hover:bg-clickup-hover transition-colors"
+        className="w-full flex items-center gap-3 px-3 py-2 hover:bg-app-surface-hover transition-colors"
       >
         <FolderOpen size={16} className="text-gray-400" />
         <div className="text-left">
-          <div className="app-text-control-sm text-clickup-text">Folder</div>
-          <div className="app-text-micro text-clickup-text/40">Group Lists, Docs & more</div>
+          <div className="app-text-control-sm text-app-ink">Folder</div>
+          <div className="app-text-micro text-app-ink/40">Group Lists, Docs & more</div>
         </div>
       </button>
       <button
         onClick={() => { onOpenDocs(); onClose(); }}
-        className="w-full flex items-center gap-3 px-3 py-2 hover:bg-clickup-hover transition-colors"
+        className="w-full flex items-center gap-3 px-3 py-2 hover:bg-app-surface-hover transition-colors"
       >
         <FileText size={16} className="text-gray-400" />
         <div className="text-left">
-          <div className="app-text-control-sm text-clickup-text">Doc</div>
-          <div className="app-text-micro text-clickup-text/40">Write and organize documents</div>
+          <div className="app-text-control-sm text-app-ink">Doc</div>
+          <div className="app-text-micro text-app-ink/40">Write and organize documents</div>
         </div>
       </button>
     </div>,
@@ -170,24 +170,24 @@ const FolderAddPopover = ({
     <div
       ref={ref}
       style={{ top: pos.top, left: pos.left }}
-      className="fixed z-[9999] w-48 bg-clickup-bg border border-clickup-border rounded-lg shadow-xl py-1"
+      className="fixed z-[9999] w-48 bg-app-bg border border-app-border rounded-lg shadow-xl py-1"
     >
       <div className="app-text-overline px-3 py-1.5 text-gray-500">
         Create
       </div>
       <button
         onClick={() => { onCreateList(); onClose(); }}
-        className="w-full flex items-center gap-3 px-3 py-2 hover:bg-clickup-hover transition-colors"
+        className="w-full flex items-center gap-3 px-3 py-2 hover:bg-app-surface-hover transition-colors"
       >
         <ListIcon size={14} className="text-gray-400" />
-        <div className="app-text-control-sm text-clickup-text">List</div>
+        <div className="app-text-control-sm text-app-ink">List</div>
       </button>
       <button
         onClick={() => { onCreateDoc(); onClose(); }}
-        className="w-full flex items-center gap-3 px-3 py-2 hover:bg-clickup-hover transition-colors"
+        className="w-full flex items-center gap-3 px-3 py-2 hover:bg-app-surface-hover transition-colors"
       >
         <FileText size={14} className="text-gray-400" />
-        <div className="app-text-control-sm text-clickup-text">Doc</div>
+        <div className="app-text-control-sm text-app-ink">Doc</div>
       </button>
     </div>,
     document.body,
@@ -239,38 +239,38 @@ const FolderContextMenu = ({
     <div
       ref={ref}
       style={{ top: pos.top, left: pos.left }}
-      className="fixed z-[9999] w-44 bg-clickup-bg border border-clickup-border rounded-lg shadow-xl py-1"
+      className="fixed z-[9999] w-44 bg-app-bg border border-app-border rounded-lg shadow-xl py-1"
     >
       {onMoveUp ? (
         <button
           onClick={() => { onMoveUp(); onClose(); }}
           disabled={!canMoveUp}
-          className="w-full flex items-center gap-3 px-3 py-2 hover:bg-clickup-hover transition-colors disabled:cursor-not-allowed disabled:opacity-40"
+          className="w-full flex items-center gap-3 px-3 py-2 hover:bg-app-surface-hover transition-colors disabled:cursor-not-allowed disabled:opacity-40"
         >
           <ArrowUp size={14} className="text-gray-400" />
-          <span className="app-text-control-sm text-clickup-text">Move Up</span>
+          <span className="app-text-control-sm text-app-ink">Move Up</span>
         </button>
       ) : null}
       {onMoveDown ? (
         <button
           onClick={() => { onMoveDown(); onClose(); }}
           disabled={!canMoveDown}
-          className="w-full flex items-center gap-3 px-3 py-2 hover:bg-clickup-hover transition-colors disabled:cursor-not-allowed disabled:opacity-40"
+          className="w-full flex items-center gap-3 px-3 py-2 hover:bg-app-surface-hover transition-colors disabled:cursor-not-allowed disabled:opacity-40"
         >
           <ArrowDown size={14} className="text-gray-400" />
-          <span className="app-text-control-sm text-clickup-text">Move Down</span>
+          <span className="app-text-control-sm text-app-ink">Move Down</span>
         </button>
       ) : null}
       <button
         onClick={() => { onRename(); onClose(); }}
-        className="w-full flex items-center gap-3 px-3 py-2 hover:bg-clickup-hover transition-colors"
+        className="w-full flex items-center gap-3 px-3 py-2 hover:bg-app-surface-hover transition-colors"
       >
         <Pencil size={14} className="text-gray-400" />
-        <span className="app-text-control-sm text-clickup-text">Rename</span>
+        <span className="app-text-control-sm text-app-ink">Rename</span>
       </button>
       <button
         onClick={() => { onDelete(); onClose(); }}
-        className="w-full flex items-center gap-3 px-3 py-2 hover:bg-clickup-hover transition-colors"
+        className="w-full flex items-center gap-3 px-3 py-2 hover:bg-app-surface-hover transition-colors"
       >
         <Trash2 size={14} className="text-red-400" />
         <span className="app-text-control-sm text-red-400">Delete</span>
@@ -317,18 +317,18 @@ const SpaceContextMenu = ({
     <div
       ref={ref}
       style={{ top: pos.top, left: pos.left }}
-      className="fixed z-[9999] w-44 bg-clickup-bg border border-clickup-border rounded-lg shadow-xl py-1"
+      className="fixed z-[9999] w-44 bg-app-bg border border-app-border rounded-lg shadow-xl py-1"
     >
       <button
         onClick={() => { onRename(); onClose(); }}
-        className="w-full flex items-center gap-3 px-3 py-2 hover:bg-clickup-hover transition-colors"
+        className="w-full flex items-center gap-3 px-3 py-2 hover:bg-app-surface-hover transition-colors"
       >
         <Pencil size={14} className="text-gray-400" />
-        <span className="app-text-control-sm text-clickup-text">Rename</span>
+        <span className="app-text-control-sm text-app-ink">Rename</span>
       </button>
       <button
         onClick={() => { onDelete(); onClose(); }}
-        className="w-full flex items-center gap-3 px-3 py-2 hover:bg-clickup-hover transition-colors"
+        className="w-full flex items-center gap-3 px-3 py-2 hover:bg-app-surface-hover transition-colors"
       >
         <Trash2 size={14} className="text-red-400" />
         <span className="app-text-control-sm text-red-400">Delete</span>
@@ -462,14 +462,14 @@ const SpaceItem = ({
         <div
           className={cn(
             'flex min-w-0 flex-1 items-center gap-1 rounded-md transition-colors',
-            spaceActive ? 'bg-clickup-hover' : 'hover:bg-clickup-hover',
+            spaceActive ? 'bg-app-surface-hover' : 'hover:bg-app-surface-hover',
           )}
         >
           <button
             onClick={onToggle}
             className={cn(
               'ml-1 flex h-7 w-6 shrink-0 items-center justify-center rounded transition-colors',
-              spaceActive ? 'text-clickup-text/50' : 'text-gray-600 dark:text-gray-300 hover:text-clickup-text dark:hover:text-white',
+              spaceActive ? 'text-app-ink/50' : 'text-gray-600 dark:text-gray-300 hover:text-app-ink dark:hover:text-white',
             )}
             title={expanded ? 'Collapse Space' : 'Expand Space'}
           >
@@ -500,7 +500,7 @@ const SpaceItem = ({
                   if (trimmed && trimmed !== name) onRenameSpace(trimmed);
                   setRenaming(false);
                 }}
-                className="app-text-control-sm flex-1 min-w-0 rounded border border-blue-500 bg-transparent px-1 py-0.5 text-clickup-text outline-none"
+                className="app-text-control-sm flex-1 min-w-0 rounded border border-blue-500 bg-transparent px-1 py-0.5 text-app-ink outline-none"
                 autoFocus
               />
             </div>
@@ -509,7 +509,7 @@ const SpaceItem = ({
               onClick={() => { if (!expanded) onToggle(); onNavigate(); }}
               className={cn(
                 'flex min-w-0 flex-1 items-center gap-2 py-1.5 pl-0.5 pr-2 text-left',
-                spaceActive ? 'text-clickup-text' : 'text-gray-600 dark:text-gray-300 group-hover:text-clickup-text dark:group-hover:text-white',
+                spaceActive ? 'text-app-ink' : 'text-gray-600 dark:text-gray-300 group-hover:text-app-ink dark:group-hover:text-white',
               )}
             >
               <div className={cn('h-5 w-5 shrink-0 rounded flex items-center justify-center', iconColor)}>
@@ -530,7 +530,7 @@ const SpaceItem = ({
                   event.stopPropagation();
                   setSpaceMenuOpen((current) => !current);
                 }}
-                className="p-0.5 hover:bg-clickup-hover rounded text-gray-600 dark:text-gray-300 hover:text-clickup-text dark:hover:text-white transition-colors"
+                className="p-0.5 hover:bg-app-surface-hover rounded text-gray-600 dark:text-gray-300 hover:text-app-ink dark:hover:text-white transition-colors"
                 title="More"
               >
                 <MoreHorizontal size={14} />
@@ -542,7 +542,7 @@ const SpaceItem = ({
                   event.stopPropagation();
                   setAddPopoverOpen((current) => !current);
                 }}
-                className="p-0.5 hover:bg-clickup-hover rounded text-gray-600 dark:text-gray-300 hover:text-clickup-text dark:hover:text-white transition-colors"
+                className="p-0.5 hover:bg-app-surface-hover rounded text-gray-600 dark:text-gray-300 hover:text-app-ink dark:hover:text-white transition-colors"
                 title="Add"
               >
                 <Plus size={14} />
@@ -576,7 +576,7 @@ const SpaceItem = ({
             exit={{ height: 0, opacity: 0 }}
             className="overflow-hidden"
           >
-            <div className="ml-4 pl-3 border-l border-clickup-border space-y-1">
+            <div className="ml-4 pl-3 border-l border-app-border space-y-1">
               {folders.map(({ folder, lists }, folderIndex) => {
                 const isFolderExpanded = expandedFolders.has(folder.id);
                 const isFolderPopoverOpen = folderPopoverOpen === folder.id;
@@ -608,7 +608,7 @@ const SpaceItem = ({
                                 event.stopPropagation();
                                 setFolderMenuOpen((current) => (current === folder.id ? null : folder.id));
                               }}
-                              className="p-0.5 hover:bg-clickup-hover rounded text-gray-600 dark:text-gray-300 hover:text-clickup-text dark:hover:text-white transition-colors"
+                              className="p-0.5 hover:bg-app-surface-hover rounded text-gray-600 dark:text-gray-300 hover:text-app-ink dark:hover:text-white transition-colors"
                               title="Folder options"
                             >
                               <MoreHorizontal size={12} />
@@ -619,7 +619,7 @@ const SpaceItem = ({
                                 event.stopPropagation();
                                 setFolderPopoverOpen((current) => (current === folder.id ? null : folder.id));
                               }}
-                              className="p-0.5 hover:bg-clickup-hover rounded text-gray-600 dark:text-gray-300 hover:text-clickup-text dark:hover:text-white transition-colors"
+                              className="p-0.5 hover:bg-app-surface-hover rounded text-gray-600 dark:text-gray-300 hover:text-app-ink dark:hover:text-white transition-colors"
                               title="Add to folder"
                             >
                               <Plus size={12} />
@@ -724,7 +724,7 @@ const SpaceItem = ({
                             if (trimmed && trimmed !== item.title) onRenameDoc(item.id, trimmed);
                             setRenamingDocId(null);
                           }}
-                          className="app-text-body-sm flex-1 min-w-0 rounded border border-blue-500 bg-transparent px-1 py-0.5 text-clickup-text outline-none"
+                          className="app-text-body-sm flex-1 min-w-0 rounded border border-blue-500 bg-transparent px-1 py-0.5 text-app-ink outline-none"
                           autoFocus
                         />
                       </div>
@@ -746,7 +746,7 @@ const SpaceItem = ({
                               e.stopPropagation();
                               setDocMenuOpen((c) => (c === item.id ? null : item.id));
                             }}
-                            className="p-0.5 hover:bg-clickup-hover rounded text-gray-600 dark:text-gray-300 hover:text-clickup-text dark:hover:text-white transition-colors"
+                            className="p-0.5 hover:bg-app-surface-hover rounded text-gray-600 dark:text-gray-300 hover:text-app-ink dark:hover:text-white transition-colors"
                             title="Doc options"
                           >
                             <MoreHorizontal size={12} />
@@ -1233,16 +1233,16 @@ export const SubSidebar = ({ activeAppId, activeNavItemId }: { activeAppId: stri
             className="sidebar-section-label sidebar-section-header group/section flex items-center gap-1"
           >
             {isExpanded ? (
-              <ChevronDown size={11} className="text-gray-500 dark:text-gray-400 transition-colors group-hover/section:text-clickup-text dark:group-hover/section:text-white" />
+              <ChevronDown size={11} className="text-gray-500 dark:text-gray-400 transition-colors group-hover/section:text-app-ink dark:group-hover/section:text-white" />
             ) : (
-              <ChevronRight size={11} className="text-gray-500 dark:text-gray-400 transition-colors group-hover/section:text-clickup-text dark:group-hover/section:text-white" />
+              <ChevronRight size={11} className="text-gray-500 dark:text-gray-400 transition-colors group-hover/section:text-app-ink dark:group-hover/section:text-white" />
             )}
             <span>Spaces</span>
           </button>
           {canWriteTeams && (
             <button
               onClick={() => setCreateSpaceOpen(true)}
-              className="p-1 hover:bg-clickup-hover rounded text-gray-600 dark:text-gray-300 hover:text-clickup-text dark:hover:text-white transition-colors"
+              className="p-1 hover:bg-app-surface-hover rounded text-gray-600 dark:text-gray-300 hover:text-app-ink dark:hover:text-white transition-colors"
               title="Create Space"
             >
               <Plus size={12} />
@@ -1321,10 +1321,10 @@ export const SubSidebar = ({ activeAppId, activeNavItemId }: { activeAppId: stri
       {confirmDialog}
       {promptDialog}
       <div
-        className="relative h-full bg-clickup-sidebar border-r border-clickup-border flex flex-col overflow-hidden shrink-0"
+        className="relative h-full bg-app-surface-sidebar border-r border-app-border flex flex-col overflow-hidden shrink-0"
         style={{ width: `${sidebarWidth}px` }}
       >
-        <div className="p-4 border-b border-clickup-border">
+        <div className="p-4 border-b border-app-border">
           <h2 className="app-text-overline text-gray-600 dark:text-gray-300">
             {activeAppId === 'settings' ? 'All settings' : APP_BAR_ITEMS.find((item) => item.id === activeAppId)?.title}
           </h2>
@@ -1343,9 +1343,9 @@ export const SubSidebar = ({ activeAppId, activeNavItemId }: { activeAppId: stri
                   className="sidebar-section-label sidebar-section-header group/section flex w-full items-center gap-1 px-3 py-1"
                 >
                   {expandedCategories.includes(category) ? (
-                    <ChevronDown size={11} className="text-gray-500 dark:text-gray-400 transition-colors group-hover/section:text-clickup-text dark:group-hover/section:text-white" />
+                    <ChevronDown size={11} className="text-gray-500 dark:text-gray-400 transition-colors group-hover/section:text-app-ink dark:group-hover/section:text-white" />
                   ) : (
-                    <ChevronRight size={11} className="text-gray-500 dark:text-gray-400 transition-colors group-hover/section:text-clickup-text dark:group-hover/section:text-white" />
+                    <ChevronRight size={11} className="text-gray-500 dark:text-gray-400 transition-colors group-hover/section:text-app-ink dark:group-hover/section:text-white" />
                   )}
                   <span>{category}</span>
                 </button>
@@ -1366,10 +1366,10 @@ export const SubSidebar = ({ activeAppId, activeNavItemId }: { activeAppId: stri
                             return (
                               <div key={item.id} className="space-y-1">
                                 <div className={cn('sidebar-submenu-group ml-1 cursor-default', isMyTasksActive && 'sidebar-submenu-item-active')}>
-                                  <item.icon size={16} className={cn('text-gray-500 dark:text-gray-400', isMyTasksActive && 'text-clickup-purple')} />
+                                  <item.icon size={16} className={cn('text-gray-500 dark:text-gray-400', isMyTasksActive && 'text-app-accent')} />
                                   <span className="sidebar-submenu-label">{item.title}</span>
                                 </div>
-                                <div className="ml-6 border-l border-clickup-border pl-2 space-y-1">
+                                <div className="ml-6 border-l border-app-border pl-2 space-y-1">
                                   {subTasks.map((sub) => (
                                     <Link
                                       key={sub.id}
@@ -1408,7 +1408,7 @@ export const SubSidebar = ({ activeAppId, activeNavItemId }: { activeAppId: stri
           {/* Docs sidebar extras: Favorites + Recent Pages */}
           {activeAppId === 'docs' && (
             <>
-              <div className="space-y-1 pt-2 border-t border-clickup-border mt-2">
+              <div className="space-y-1 pt-2 border-t border-app-border mt-2">
                 <span className="sidebar-section-label block px-3 py-1 text-gray-500">Favorites</span>
                 {docsFavorites.length > 0 ? (
                   docsFavorites.map((fav) => (
@@ -1428,7 +1428,7 @@ export const SubSidebar = ({ activeAppId, activeNavItemId }: { activeAppId: stri
                 )}
               </div>
 
-              <div className="space-y-1 pt-2 border-t border-clickup-border mt-2">
+              <div className="space-y-1 pt-2 border-t border-app-border mt-2">
                 <span className="sidebar-section-label block px-3 py-1 text-gray-500">Recent Pages</span>
                 {docsRecentPages.length > 0 ? (
                   docsRecentPages.map((rp) => (
@@ -1452,10 +1452,10 @@ export const SubSidebar = ({ activeAppId, activeNavItemId }: { activeAppId: stri
         </div>
 
         {activeAppId !== 'settings' && activeAppId !== 'docs' && (
-          <div className="p-4 border-t border-clickup-border">
+          <div className="p-4 border-t border-app-border">
             <button
               onClick={() => openCreateProject(null)}
-              className="app-text-control flex w-full items-center gap-2 rounded-md bg-clickup-purple px-3 py-2 text-clickup-bg transition-all hover:bg-opacity-90"
+              className="app-text-control flex w-full items-center gap-2 rounded-md bg-app-accent px-3 py-2 text-app-bg transition-all hover:bg-opacity-90"
             >
               <Plus size={18} />
               <span>Quick Add</span>
@@ -1467,8 +1467,8 @@ export const SubSidebar = ({ activeAppId, activeNavItemId }: { activeAppId: stri
         <div
           onMouseDown={(e) => { e.preventDefault(); setIsResizing(true); }}
           className={cn(
-            'absolute right-0 top-0 h-full w-1 cursor-col-resize transition-colors hover:bg-clickup-purple/30',
-            isResizing && 'bg-clickup-purple/50',
+            'absolute right-0 top-0 h-full w-1 cursor-col-resize transition-colors hover:bg-app-accent/30',
+            isResizing && 'bg-app-accent/50',
           )}
           title="Drag to resize"
         />

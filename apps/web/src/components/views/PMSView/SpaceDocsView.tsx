@@ -94,7 +94,7 @@ const PageTreeItem = ({
       <div
         className={cn(
           'app-text-body group flex items-center gap-1 rounded-md px-2 py-1.5 transition-colors',
-          selectedPageId === node.id ? 'bg-clickup-hover text-clickup-text' : 'text-gray-400 hover:bg-clickup-hover hover:text-gray-300',
+          selectedPageId === node.id ? 'bg-app-surface-hover text-app-ink' : 'text-gray-400 hover:bg-app-surface-hover hover:text-gray-300',
         )}
         style={{ paddingLeft: `${depth * 14 + 8}px` }}
       >
@@ -105,12 +105,12 @@ const PageTreeItem = ({
           {hasChildren ? (expanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />) : null}
         </button>
         <button onClick={() => onSelect(node.id)} className="flex min-w-0 flex-1 items-center gap-2 text-left">
-          <FileText size={14} className={selectedPageId === node.id ? 'text-clickup-purple' : 'text-gray-500'} />
+          <FileText size={14} className={selectedPageId === node.id ? 'text-app-accent' : 'text-gray-500'} />
           <span className="truncate">{node.title}</span>
         </button>
         {canEdit ? (
           <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
-            <button onClick={() => onCreateChild(node.id)} className="text-gray-500 hover:text-clickup-text">
+            <button onClick={() => onCreateChild(node.id)} className="text-gray-500 hover:text-app-ink">
               <Plus size={12} />
             </button>
             <button onClick={() => onDelete(node.id)} className="text-gray-500 hover:text-red-400">
@@ -421,7 +421,7 @@ export const SpaceDocsView = ({ spaceId, spaceName, docId: spaceDocId }: { space
 
   if (!spaceRoleResolved) {
     return (
-      <div className="flex h-full items-center justify-center bg-clickup-bg">
+      <div className="flex h-full items-center justify-center bg-app-bg">
         <Loader2 size={20} className="animate-spin text-gray-500" />
       </div>
     );
@@ -433,20 +433,20 @@ export const SpaceDocsView = ({ spaceId, spaceName, docId: spaceDocId }: { space
 
   if (!spaceDocId) {
     return (
-      <div className="h-full flex flex-col bg-clickup-bg">
+      <div className="h-full flex flex-col bg-app-bg">
         {confirmDialog}
         {promptDialog}
-        <header className="border-b border-clickup-border px-8 py-6">
+        <header className="border-b border-app-border px-8 py-6">
           <div className="flex items-start justify-between gap-4">
             <div className="space-y-2">
               <div className="app-text-overline text-gray-500">Space Docs</div>
-              <div className="app-text-title-lg text-clickup-text">{spaceName ?? 'Space'}</div>
+              <div className="app-text-title-lg text-app-ink">{spaceName ?? 'Space'}</div>
               <div className="app-text-body text-gray-500">문서 컬렉션 단위로 페이지를 정리하고 관리합니다.</div>
             </div>
             {canManageCollections ? (
               <button
                 onClick={() => { void handleCreateCollection(); }}
-                className="app-text-control flex items-center gap-2 rounded-md bg-clickup-purple px-4 py-2 text-clickup-bg"
+                className="app-text-control flex items-center gap-2 rounded-md bg-app-accent px-4 py-2 text-app-bg"
               >
                 <Plus size={16} />
                 <span>New Collection</span>
@@ -467,16 +467,16 @@ export const SpaceDocsView = ({ spaceId, spaceName, docId: spaceDocId }: { space
           ) : collections.length > 0 ? (
             <div className="mx-auto max-w-4xl space-y-3">
               {collections.map((doc) => (
-                <div key={doc.id} className="group flex items-center gap-3 rounded-lg border border-clickup-border bg-clickup-sidebar px-4 py-3">
+                <div key={doc.id} className="group flex items-center gap-3 rounded-lg border border-app-border bg-app-surface-sidebar px-4 py-3">
                   <button
                     onClick={() => navigate(collectionPath(doc.id))}
                     className="flex min-w-0 flex-1 items-center gap-3 text-left"
                   >
-                    <div className="flex h-10 w-10 items-center justify-center rounded-md border border-clickup-border bg-clickup-bg text-clickup-purple">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-md border border-app-border bg-app-bg text-app-accent">
                       <FileText size={18} />
                     </div>
                     <div className="min-w-0 flex-1">
-                      <div className="app-text-title-md truncate text-clickup-text">{doc.title}</div>
+                      <div className="app-text-title-md truncate text-app-ink">{doc.title}</div>
                       <div className="app-text-caption text-gray-500">
                         Updated {new Date(doc.updated_at).toLocaleString()}
                       </div>
@@ -486,7 +486,7 @@ export const SpaceDocsView = ({ spaceId, spaceName, docId: spaceDocId }: { space
                     <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
                       <button
                         onClick={() => { void handleRenameCollection(doc); }}
-                        className="rounded p-1.5 text-gray-500 transition-colors hover:bg-clickup-hover hover:text-clickup-text"
+                        className="rounded p-1.5 text-gray-500 transition-colors hover:bg-app-surface-hover hover:text-app-ink"
                         title="Rename collection"
                       >
                         <MoreHorizontal size={14} />
@@ -504,14 +504,14 @@ export const SpaceDocsView = ({ spaceId, spaceName, docId: spaceDocId }: { space
               ))}
             </div>
           ) : (
-            <div className="mx-auto flex max-w-xl flex-col items-center justify-center rounded-xl border border-dashed border-clickup-border bg-clickup-sidebar px-8 py-12 text-center">
+            <div className="mx-auto flex max-w-xl flex-col items-center justify-center rounded-xl border border-dashed border-app-border bg-app-surface-sidebar px-8 py-12 text-center">
               <FileText size={24} className="mb-4 text-gray-400" />
-              <div className="app-text-title-md text-clickup-text">No document collections yet</div>
+              <div className="app-text-title-md text-app-ink">No document collections yet</div>
               <div className="app-text-body mt-2 text-gray-500">첫 번째 컬렉션을 만들고 그 안에서 페이지를 관리하세요.</div>
               {canManageCollections ? (
                 <button
                   onClick={() => { void handleCreateCollection(); }}
-                  className="app-text-control mt-6 inline-flex items-center gap-2 rounded-md bg-clickup-purple px-4 py-2 text-clickup-bg"
+                  className="app-text-control mt-6 inline-flex items-center gap-2 rounded-md bg-app-accent px-4 py-2 text-app-bg"
                 >
                   <Plus size={16} />
                   <span>Create Collection</span>
@@ -525,26 +525,26 @@ export const SpaceDocsView = ({ spaceId, spaceName, docId: spaceDocId }: { space
   }
 
   return (
-    <div className="h-full flex bg-clickup-bg">
+    <div className="h-full flex bg-app-bg">
       {confirmDialog}
       {promptDialog}
-      <div className="flex w-72 flex-col border-r border-clickup-border bg-clickup-sidebar">
-        <div className="flex items-center justify-between border-b border-clickup-border px-4 py-4">
+      <div className="flex w-72 flex-col border-r border-app-border bg-app-surface-sidebar">
+        <div className="flex items-center justify-between border-b border-app-border px-4 py-4">
           <div className="min-w-0">
             <button
               onClick={() => navigate(basePath)}
-              className="app-text-overline text-gray-500 transition-colors hover:text-clickup-text"
+              className="app-text-overline text-gray-500 transition-colors hover:text-app-ink"
             >
               Space Docs
             </button>
-            <div className="app-text-title-md truncate text-clickup-text">
+            <div className="app-text-title-md truncate text-app-ink">
               {selectedCollection?.title ?? 'Collection'}
             </div>
           </div>
           {canEditPages ? (
             <button
               onClick={() => { void handleCreatePage(null); }}
-              className="rounded p-1 text-gray-500 transition-colors hover:bg-clickup-hover hover:text-clickup-text"
+              className="rounded p-1 text-gray-500 transition-colors hover:bg-app-surface-hover hover:text-app-ink"
               title="Add page"
             >
               <Plus size={14} />
@@ -574,12 +574,12 @@ export const SpaceDocsView = ({ spaceId, spaceName, docId: spaceDocId }: { space
           ) : canEditPages ? (
             <button
               onClick={() => { void handleCreatePage(null); }}
-              className="app-text-body w-full rounded-md border border-dashed border-clickup-border px-3 py-4 text-gray-500 transition-colors hover:border-clickup-purple hover:text-clickup-text"
+              className="app-text-body w-full rounded-md border border-dashed border-app-border px-3 py-4 text-gray-500 transition-colors hover:border-app-accent hover:text-app-ink"
             >
               Create the first page
             </button>
           ) : (
-            <div className="app-text-body rounded-md border border-dashed border-clickup-border px-3 py-4 text-gray-500">
+            <div className="app-text-body rounded-md border border-dashed border-app-border px-3 py-4 text-gray-500">
               No pages in this collection
             </div>
           )}
@@ -593,7 +593,7 @@ export const SpaceDocsView = ({ spaceId, spaceName, docId: spaceDocId }: { space
 
         {selectedPage ? (
           <>
-            <div className="app-text-caption flex h-12 items-center justify-between border-b border-clickup-border px-6 text-gray-500">
+            <div className="app-text-caption flex h-12 items-center justify-between border-b border-app-border px-6 text-gray-500">
               <div className="flex items-center gap-2">
                 <FileText size={12} />
                 <span>{selectedCollection?.title ?? 'Collection'}</span>
@@ -623,7 +623,7 @@ export const SpaceDocsView = ({ spaceId, spaceName, docId: spaceDocId }: { space
                       }
                     }}
                     className={cn(
-                      'app-text-title-xl w-full bg-transparent text-clickup-text outline-none placeholder:text-clickup-text/20',
+                      'app-text-title-xl w-full bg-transparent text-app-ink outline-none placeholder:text-app-ink/20',
                       !canEditPages && 'cursor-default',
                     )}
                     placeholder="Untitled Page"

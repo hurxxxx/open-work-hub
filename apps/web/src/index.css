@@ -4,14 +4,18 @@
 
 @theme {
   --font-sans: "Pretendard Variable", "Pretendard", "IBM Plex Sans KR", "IBM Plex Sans", sans-serif;
-  --color-clickup-bg: var(--clickup-bg);
-  --color-clickup-sidebar: var(--clickup-sidebar);
-  --color-clickup-border: var(--clickup-border);
-  --color-clickup-text: var(--clickup-text);
-  --color-clickup-purple: var(--clickup-purple);
-  --color-clickup-hover: var(--clickup-hover);
-  --color-clickup-card: var(--clickup-card);
-  --color-clickup-dark: #1e1f21;
+
+  /* App-level color tokens — aliased to the canonical --ui-color-* design tokens
+     defined in packages/ui/styles.css. Single source of truth lives there. */
+  --color-app-bg: var(--ui-color-bg);
+  --color-app-bg-strong: var(--ui-color-bg-strong);
+  --color-app-surface: var(--ui-color-surface);
+  --color-app-surface-sidebar: var(--ui-color-surface-sidebar);
+  --color-app-surface-hover: var(--ui-color-surface-hover);
+  --color-app-border: var(--ui-color-border);
+  --color-app-ink: var(--ui-color-ink);
+  --color-app-accent: var(--ui-color-accent);
+  --color-app-accent-hover: var(--ui-color-accent-hover);
 
   /* Register --ui-* tokens so Tailwind v4 resolves bg-[var(--ui-*)] as colors */
   --color-ui-bg: var(--ui-color-bg);
@@ -33,28 +37,8 @@
 }
 
 @layer base {
-  :root {
-    --clickup-bg: #ffffff;
-    --clickup-sidebar: #f6f7f9;
-    --clickup-border: #e8eaed;
-    --clickup-text: #2a2b2d;
-    --clickup-hover: #f0f1f4;
-    --clickup-card: #ffffff;
-    --clickup-purple: #1a1a1a;
-  }
-
-  .dark {
-    --clickup-bg: #1e1f21;
-    --clickup-sidebar: #2a2b2d;
-    --clickup-border: #3d3e40;
-    --clickup-text: #d5d6d7;
-    --clickup-hover: #353638;
-    --clickup-card: #2a2b2d;
-    --clickup-purple: #e8e8e8;
-  }
-
   body {
-    @apply bg-clickup-bg text-clickup-text font-sans antialiased transition-colors duration-300;
+    @apply bg-app-bg text-app-ink font-sans antialiased transition-colors duration-300;
   }
 
   button,
@@ -73,29 +57,29 @@
     background: transparent;
   }
   .custom-scrollbar::-webkit-scrollbar-thumb {
-    background: var(--clickup-border);
+    background: var(--ui-color-border);
     border-radius: 10px;
   }
   .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-    background: var(--clickup-hover);
+    background: var(--ui-color-surface-hover);
   }
 }
 
 @layer components {
   .sidebar-item {
-    @apply flex items-center gap-2 px-3 py-1.5 rounded-md text-sm transition-colors cursor-pointer hover:bg-clickup-hover text-gray-500 dark:text-gray-400 no-underline;
+    @apply flex items-center gap-2 px-3 py-1.5 rounded-md text-sm transition-colors cursor-pointer hover:bg-app-surface-hover text-gray-500 dark:text-gray-400 no-underline;
   }
   
   .sidebar-item.active {
-    @apply bg-clickup-hover text-clickup-text font-medium;
+    @apply bg-app-surface-hover text-app-ink font-medium;
   }
 
   .sidebar-submenu-item {
-    @apply flex min-h-8 items-center gap-2 rounded-md px-3 py-1.5 text-left text-[12px] leading-5 text-gray-600 dark:text-gray-300 transition-colors hover:bg-clickup-hover hover:text-clickup-text dark:hover:text-white no-underline;
+    @apply flex min-h-8 items-center gap-2 rounded-md px-3 py-1.5 text-left text-[12px] leading-5 text-gray-600 dark:text-gray-300 transition-colors hover:bg-app-surface-hover hover:text-app-ink dark:hover:text-white no-underline;
   }
 
   .sidebar-submenu-item-active {
-    @apply bg-clickup-hover text-clickup-text dark:text-white;
+    @apply bg-app-surface-hover text-app-ink dark:text-white;
   }
 
   .sidebar-submenu-group {
@@ -107,11 +91,11 @@
   }
 
   .sidebar-submenu-meta {
-    @apply shrink-0 text-[11px] leading-5 text-clickup-text/40 dark:text-clickup-text/60;
+    @apply shrink-0 text-[11px] leading-5 text-app-ink/40 dark:text-app-ink/60;
   }
 
   .sidebar-section-header {
-    @apply text-gray-600 dark:text-gray-300 transition-colors hover:text-clickup-text dark:hover:text-white;
+    @apply text-gray-600 dark:text-gray-300 transition-colors hover:text-app-ink dark:hover:text-white;
   }
 
   .sidebar-icon {
@@ -195,7 +179,7 @@
   }
 
   .card {
-    @apply bg-clickup-card border border-clickup-border rounded-lg p-4 shadow-sm dark:shadow-none;
+    @apply bg-app-surface border border-app-border rounded-lg p-4 shadow-sm dark:shadow-none;
   }
 }
 

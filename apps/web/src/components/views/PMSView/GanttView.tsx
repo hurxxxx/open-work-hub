@@ -39,12 +39,12 @@ export const GanttView = ({ issues, projectStatuses }: { issues: PmsIssue[]; pro
 
   return (
     <div className="h-full flex flex-col card p-0 overflow-hidden">
-      <div className="flex border-b border-clickup-border bg-clickup-sidebar/30">
-        <div className="app-text-overline w-64 shrink-0 border-r border-clickup-border p-4 text-gray-500">Task Name</div>
+      <div className="flex border-b border-app-border bg-app-surface-sidebar/30">
+        <div className="app-text-overline w-64 shrink-0 border-r border-app-border p-4 text-gray-500">Task Name</div>
         <div className="flex-1 flex overflow-x-auto custom-scrollbar">
           {dates.map(date => (
-            <div key={date} className="flex-shrink-0 w-10 py-3 text-center border-r border-clickup-border last:border-r-0">
-              <div className="app-text-micro font-bold text-clickup-text">{date}</div>
+            <div key={date} className="flex-shrink-0 w-10 py-3 text-center border-r border-app-border last:border-r-0">
+              <div className="app-text-micro font-bold text-app-ink">{date}</div>
             </div>
           ))}
         </div>
@@ -54,10 +54,10 @@ export const GanttView = ({ issues, projectStatuses }: { issues: PmsIssue[]; pro
         {issues.map(issue => {
           const barStyle = getBarStyle(issue);
           return (
-            <div key={issue.id} className="flex border-b border-clickup-border hover:bg-clickup-hover transition-colors">
-              <div className="w-64 border-r border-clickup-border p-4 flex items-center gap-3 shrink-0">
+            <div key={issue.id} className="flex border-b border-app-border hover:bg-app-surface-hover transition-colors">
+              <div className="w-64 border-r border-app-border p-4 flex items-center gap-3 shrink-0">
 	                <div className={cn("w-2 h-2 rounded-full shrink-0", getGanttDotColor(issue.status))} style={getGanttDotStyle(issue.status, projectStatuses)} />
-                <span className="app-text-body-sm truncate font-medium text-clickup-text">{issue.title}</span>
+                <span className="app-text-body-sm truncate font-medium text-app-ink">{issue.title}</span>
               </div>
               <div className="flex-1 flex relative" style={{ minWidth: `${dates.length * 40}px` }}>
                 {barStyle && (
@@ -72,7 +72,7 @@ export const GanttView = ({ issues, projectStatuses }: { issues: PmsIssue[]; pro
                   </div>
                 )}
                 {dates.map(date => (
-                  <div key={date} className="flex-shrink-0 w-10 border-r border-clickup-border last:border-r-0 h-12" />
+                  <div key={date} className="flex-shrink-0 w-10 border-r border-app-border last:border-r-0 h-12" />
                 ))}
               </div>
             </div>

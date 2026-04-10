@@ -21,19 +21,19 @@ export const ToolView = ({ item }: { item: NavItem }) => {
       <div className="card space-y-8">
         <header className="flex items-start justify-between">
           <div className="flex items-center gap-4">
-            <div className="p-4 bg-clickup-bg rounded-2xl border border-clickup-border">
-              <item.icon size={32} className="text-clickup-purple" />
+            <div className="p-4 bg-app-bg rounded-2xl border border-app-border">
+              <item.icon size={32} className="text-app-accent" />
             </div>
             <div>
-              <h1 className="app-text-title-lg mb-2 text-clickup-text">{item.title}</h1>
+              <h1 className="app-text-title-lg mb-2 text-app-ink">{item.title}</h1>
               <p className="app-text-body text-gray-500 dark:text-gray-400">{item.description}</p>
             </div>
           </div>
           <div className="flex gap-2">
-            <button className="p-2 hover:bg-clickup-hover rounded-md border border-clickup-border text-gray-500 dark:text-gray-400">
+            <button className="p-2 hover:bg-app-surface-hover rounded-md border border-app-border text-gray-500 dark:text-gray-400">
               <Share2 size={18} />
             </button>
-            <button className="p-2 hover:bg-clickup-hover rounded-md border border-clickup-border text-gray-500 dark:text-gray-400">
+            <button className="p-2 hover:bg-app-surface-hover rounded-md border border-app-border text-gray-500 dark:text-gray-400">
               <History size={18} />
             </button>
           </div>
@@ -44,22 +44,22 @@ export const ToolView = ({ item }: { item: NavItem }) => {
             <div className="space-y-4">
               <label className="app-text-control text-gray-500 dark:text-gray-400">Input Content</label>
               <textarea 
-                className="app-text-body h-64 w-full resize-none rounded-xl border border-clickup-border bg-clickup-bg p-6 leading-relaxed text-clickup-text transition-all focus:border-clickup-purple focus:outline-none"
+                className="app-text-body h-64 w-full resize-none rounded-xl border border-app-border bg-app-bg p-6 leading-relaxed text-app-ink transition-all focus:border-app-accent focus:outline-none"
                 placeholder="여기에 내용을 입력하거나 파일을 업로드하세요..."
               />
             </div>
             <div className="flex items-center justify-between">
               <div className="flex gap-2">
-                <button className="app-text-control flex items-center gap-2 rounded-lg border border-clickup-border bg-clickup-sidebar px-4 py-2 text-clickup-text transition-all hover:bg-clickup-hover">
+                <button className="app-text-control flex items-center gap-2 rounded-lg border border-app-border bg-app-surface-sidebar px-4 py-2 text-app-ink transition-all hover:bg-app-surface-hover">
                   <FilePlus size={18} />
                   <span>파일 업로드</span>
                 </button>
-                <button className="app-text-control flex items-center gap-2 rounded-lg border border-clickup-border bg-clickup-sidebar px-4 py-2 text-clickup-text transition-all hover:bg-clickup-hover">
+                <button className="app-text-control flex items-center gap-2 rounded-lg border border-app-border bg-app-surface-sidebar px-4 py-2 text-app-ink transition-all hover:bg-app-surface-hover">
                   <Mic size={18} />
                   <span>음성 입력</span>
                 </button>
               </div>
-              <button className="app-text-control flex items-center gap-2 rounded-lg bg-clickup-purple px-8 py-2.5 font-semibold text-clickup-bg shadow-lg shadow-purple-500/20 transition-all hover:bg-opacity-90">
+              <button className="app-text-control flex items-center gap-2 rounded-lg bg-app-accent px-8 py-2.5 font-semibold text-app-bg shadow-lg shadow-purple-500/20 transition-all hover:bg-opacity-90">
                 <Brain size={18} />
                 <span>AI 실행하기</span>
               </button>
@@ -67,19 +67,19 @@ export const ToolView = ({ item }: { item: NavItem }) => {
           </div>
 
           <div className="space-y-6">
-            <div className="card bg-clickup-bg/50 border-dashed">
-              <h3 className="app-text-title-md mb-4 flex items-center gap-2 text-clickup-text">
-                <Activity size={16} className="text-clickup-purple" />
+            <div className="card bg-app-bg/50 border-dashed">
+              <h3 className="app-text-title-md mb-4 flex items-center gap-2 text-app-ink">
+                <Activity size={16} className="text-app-accent" />
                 최근 작업 내역
               </h3>
               <div className="space-y-3">
                 {[1, 2, 3].map(i => (
-                  <div key={i} className="flex items-center gap-3 p-2 hover:bg-clickup-hover rounded-md transition-colors cursor-pointer group">
-                    <div className="w-8 h-8 rounded bg-clickup-sidebar border border-clickup-border flex items-center justify-center">
-                      <FileText size={14} className="text-gray-500 group-hover:text-clickup-purple" />
+                  <div key={i} className="flex items-center gap-3 p-2 hover:bg-app-surface-hover rounded-md transition-colors cursor-pointer group">
+                    <div className="w-8 h-8 rounded bg-app-surface-sidebar border border-app-border flex items-center justify-center">
+                      <FileText size={14} className="text-gray-500 group-hover:text-app-accent" />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <div className="app-text-caption truncate text-clickup-text">작업 문서 #{i}</div>
+                      <div className="app-text-caption truncate text-app-ink">작업 문서 #{i}</div>
                       <div className="app-text-micro text-gray-500">2시간 전</div>
                     </div>
                   </div>
@@ -87,9 +87,9 @@ export const ToolView = ({ item }: { item: NavItem }) => {
               </div>
             </div>
 
-            <div className="card bg-clickup-bg/50 border-dashed">
-              <h3 className="app-text-title-md mb-4 flex items-center gap-2 text-clickup-text">
-                <HelpCircle size={16} className="text-clickup-purple" />
+            <div className="card bg-app-bg/50 border-dashed">
+              <h3 className="app-text-title-md mb-4 flex items-center gap-2 text-app-ink">
+                <HelpCircle size={16} className="text-app-accent" />
                 도움말
               </h3>
               <p className="app-text-caption leading-relaxed text-gray-500">

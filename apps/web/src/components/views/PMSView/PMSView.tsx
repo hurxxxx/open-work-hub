@@ -370,17 +370,17 @@ export const PMSView = () => {
       return (
         <>
           <div className="flex h-full items-center justify-center px-8">
-            <div className="w-full max-w-xl rounded-2xl border border-clickup-border bg-clickup-card p-8 text-center">
-              <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-clickup-purple text-clickup-bg">
+            <div className="w-full max-w-xl rounded-2xl border border-app-border bg-app-surface p-8 text-center">
+              <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-app-accent text-app-bg">
                 <Layout size={22} />
               </div>
-              <h1 className="app-text-title-lg text-clickup-text">No Spaces Yet</h1>
-              <p className="app-text-body mt-3 text-clickup-text/60">
+              <h1 className="app-text-title-lg text-app-ink">No Spaces Yet</h1>
+              <p className="app-text-body mt-3 text-app-ink/60">
                 PMS 앱 접근은 준비됐지만 아직 속한 스페이스가 없습니다. 새 스페이스를 만들고 바로 리스트와 문서를 운영할 수 있습니다.
               </p>
               <div className="mt-6 flex justify-center">
                 <button
-                  className="app-text-control-sm rounded-lg bg-clickup-purple px-4 py-2 text-clickup-bg transition-colors hover:bg-clickup-purple/90"
+                  className="app-text-control-sm rounded-lg bg-app-accent px-4 py-2 text-app-bg transition-colors hover:bg-app-accent/90"
                   onClick={() => setCreateSpaceOpen(true)}
                   type="button"
                 >
@@ -402,13 +402,13 @@ export const PMSView = () => {
     }
     return (
       <div className="h-full flex flex-col relative">
-        <header className="bg-clickup-bg border-b border-clickup-border px-8 pt-6 transition-colors">
+        <header className="bg-app-bg border-b border-app-border px-8 pt-6 transition-colors">
           <div className="flex items-center gap-3 mb-6">
-            <div className="w-8 h-8 bg-clickup-purple rounded flex items-center justify-center text-clickup-bg">
+            <div className="w-8 h-8 bg-app-accent rounded flex items-center justify-center text-app-bg">
               <Layout size={20} />
             </div>
             <div>
-              <h1 className="app-text-title-lg text-clickup-text">PMS Overview</h1>
+              <h1 className="app-text-title-lg text-app-ink">PMS Overview</h1>
               <div className="app-text-caption flex items-center gap-2 text-gray-500">
                 <Lock size={10} />
                 <span>Spaces, Lists and Docs</span>
@@ -439,10 +439,10 @@ export const PMSView = () => {
 
   return (
     <div className="h-full flex flex-col relative">
-      <header className="bg-clickup-bg border-b border-clickup-border px-6 pt-3 transition-colors">
+      <header className="bg-app-bg border-b border-app-border px-6 pt-3 transition-colors">
         {/* Row 1: breadcrumb */}
         <nav className="app-text-caption flex items-center gap-1.5 text-gray-500 mb-1.5 min-w-0">
-          <Link to="/pms" className="hover:text-clickup-text transition-colors shrink-0">PMS</Link>
+          <Link to="/pms" className="hover:text-app-ink transition-colors shrink-0">PMS</Link>
           {selectedProject?.team_name ? (
             <>
               <span className="text-gray-600 shrink-0">/</span>
@@ -460,10 +460,10 @@ export const PMSView = () => {
         {/* Row 2: title + actions */}
         <div className="flex items-center justify-between gap-4 mb-3 min-w-0">
           <div className="flex items-center gap-2.5 flex-1 min-w-0">
-            <div className="w-7 h-7 bg-clickup-purple rounded flex items-center justify-center text-clickup-bg shrink-0">
+            <div className="w-7 h-7 bg-app-accent rounded flex items-center justify-center text-app-bg shrink-0">
               <Layout size={16} />
             </div>
-            <h1 className="app-text-title-md text-clickup-text truncate min-w-0">
+            <h1 className="app-text-title-md text-app-ink truncate min-w-0">
               {selectedProject?.name || projectName}
             </h1>
             <button
@@ -478,13 +478,13 @@ export const PMSView = () => {
                 <button
                   type="button"
                   onClick={() => setProjectSwitcherOpen(o => !o)}
-                  className="flex h-7 w-7 items-center justify-center rounded text-gray-500 transition-colors hover:bg-clickup-hover hover:text-clickup-text"
+                  className="flex h-7 w-7 items-center justify-center rounded text-gray-500 transition-colors hover:bg-app-surface-hover hover:text-app-ink"
                   title="Switch list"
                 >
                   <ChevronDown size={14} />
                 </button>
                 {projectSwitcherOpen && (
-                  <div className="absolute top-full left-0 mt-1 z-30 min-w-[220px] max-h-72 overflow-y-auto custom-scrollbar bg-clickup-bg border border-clickup-border rounded-lg shadow-xl py-1">
+                  <div className="absolute top-full left-0 mt-1 z-30 min-w-[220px] max-h-72 overflow-y-auto custom-scrollbar bg-app-bg border border-app-border rounded-lg shadow-xl py-1">
                     {projects.map(p => (
                       <button
                         key={p.id}
@@ -495,8 +495,8 @@ export const PMSView = () => {
                           navigate(`/tool/pms-list-${p.id}`);
                         }}
                         className={cn(
-                          'app-text-body-sm w-full px-3 py-1.5 text-left hover:bg-clickup-hover truncate',
-                          p.id === selectedProjectId ? 'text-clickup-purple font-medium' : 'text-clickup-text'
+                          'app-text-body-sm w-full px-3 py-1.5 text-left hover:bg-app-surface-hover truncate',
+                          p.id === selectedProjectId ? 'text-app-accent font-medium' : 'text-app-ink'
                         )}
                       >
                         {p.name}
@@ -511,7 +511,7 @@ export const PMSView = () => {
             {selectedProjectId && (
               <button
                 onClick={() => { if (token) void exportProjectCsv(token, selectedProjectId); }}
-                className="flex h-8 w-8 items-center justify-center rounded text-gray-500 transition-colors hover:bg-clickup-hover hover:text-clickup-text"
+                className="flex h-8 w-8 items-center justify-center rounded text-gray-500 transition-colors hover:bg-app-surface-hover hover:text-app-ink"
                 title="Export CSV"
               >
                 <Download size={15} />
@@ -520,7 +520,7 @@ export const PMSView = () => {
             {canManageProject ? (
               <button
                 onClick={() => setSettingsOpen(true)}
-                className="flex h-8 w-8 items-center justify-center rounded text-gray-500 transition-colors hover:bg-clickup-hover hover:text-clickup-text"
+                className="flex h-8 w-8 items-center justify-center rounded text-gray-500 transition-colors hover:bg-app-surface-hover hover:text-app-ink"
                 title="Settings"
               >
                 <Settings size={15} />
@@ -528,10 +528,10 @@ export const PMSView = () => {
             ) : null}
             {canEditProject ? (
               <>
-                <div className="w-px h-5 bg-clickup-border mx-1" />
+                <div className="w-px h-5 bg-app-border mx-1" />
                 <button
                   onClick={() => setIsNewTaskModalOpen(true)}
-                  className="app-text-body-sm flex h-8 items-center gap-1.5 rounded-md bg-clickup-purple px-3 font-semibold text-clickup-bg shadow-lg shadow-purple-500/20"
+                  className="app-text-body-sm flex h-8 items-center gap-1.5 rounded-md bg-app-accent px-3 font-semibold text-app-bg shadow-lg shadow-purple-500/20"
                 >
                   <Plus size={14} />
                   <span>New Task</span>
@@ -548,7 +548,7 @@ export const PMSView = () => {
               onClick={() => setActiveTab(tab as typeof activeTab)}
               className={cn(
                 'app-text-body-sm relative pb-3 font-medium transition-all',
-                activeTab === tab ? 'text-clickup-text' : 'text-gray-500 hover:text-clickup-text'
+                activeTab === tab ? 'text-app-ink' : 'text-gray-500 hover:text-app-ink'
               )}
             >
               <div className="flex items-center gap-2">
@@ -560,7 +560,7 @@ export const PMSView = () => {
                 {tab}
               </div>
               {activeTab === tab && (
-                <motion.div layoutId="activeTab" className="absolute bottom-0 left-0 right-0 h-0.5 bg-clickup-purple" />
+                <motion.div layoutId="activeTab" className="absolute bottom-0 left-0 right-0 h-0.5 bg-app-accent" />
               )}
             </button>
           ))}
@@ -588,7 +588,7 @@ export const PMSView = () => {
       )}>
         {loading && issues.length === 0 ? (
           <div className="flex items-center justify-center h-64">
-            <Loader2 size={24} className="animate-spin text-clickup-purple" />
+            <Loader2 size={24} className="animate-spin text-app-accent" />
           </div>
         ) : error ? (
           <div className="app-text-body flex h-64 items-center justify-center text-red-400">{error}</div>
@@ -639,7 +639,7 @@ export const PMSView = () => {
               animate={{ y: 0, opacity: 1 }}
               exit={{ y: 30, opacity: 0 }}
               transition={{ type: 'spring', damping: 28, stiffness: 350 }}
-              className="relative z-10 my-6 mx-auto w-[80%] bg-clickup-bg border border-clickup-border rounded-xl shadow-2xl overflow-hidden flex flex-col"
+              className="relative z-10 my-6 mx-auto w-[80%] bg-app-bg border border-app-border rounded-xl shadow-2xl overflow-hidden flex flex-col"
             >
               <TaskDetail
                 issue={selectedIssue}

@@ -72,10 +72,10 @@ export function NotificationPanel({
         initial={{ opacity: 0, y: -8 }}
         animate={{ opacity: 1, y: 0 }}
         exit={{ opacity: 0, y: -8 }}
-        className="absolute left-16 bottom-16 z-50 w-80 max-h-[480px] bg-clickup-bg border border-clickup-border rounded-xl shadow-2xl flex flex-col overflow-hidden"
+        className="absolute left-16 bottom-16 z-50 w-80 max-h-[480px] bg-app-bg border border-app-border rounded-xl shadow-2xl flex flex-col overflow-hidden"
       >
-        <div className="flex items-center justify-between px-4 py-3 border-b border-clickup-border shrink-0">
-          <h3 className="app-text-title-md text-clickup-text">Notifications</h3>
+        <div className="flex items-center justify-between px-4 py-3 border-b border-app-border shrink-0">
+          <h3 className="app-text-title-md text-app-ink">Notifications</h3>
           <div className="flex items-center gap-1">
             <Button variant="ghost" size="icon" onClick={handleReadAll} title="Mark all as read">
               <CheckCheck size={14} />
@@ -89,30 +89,30 @@ export function NotificationPanel({
         <div className="flex-1 overflow-y-auto custom-scrollbar">
           {loading ? (
             <div className="flex justify-center py-8">
-              <Loader2 size={18} className="animate-spin text-clickup-text/40" />
+              <Loader2 size={18} className="animate-spin text-app-ink/40" />
             </div>
           ) : notifications.length === 0 ? (
-            <p className="app-text-body text-center text-clickup-text/30 py-8">No notifications</p>
+            <p className="app-text-body text-center text-app-ink/30 py-8">No notifications</p>
           ) : (
             notifications.map(n => (
               <button
                 key={n.id}
                 onClick={() => handleClick(n)}
-                className={`w-full text-left px-4 py-3 border-b border-clickup-border hover:bg-clickup-hover transition-colors ${
+                className={`w-full text-left px-4 py-3 border-b border-app-border hover:bg-app-surface-hover transition-colors ${
                   n.is_read ? 'opacity-60' : ''
                 }`}
               >
                 <div className="flex items-start gap-2">
-                  {!n.is_read && <span className="w-2 h-2 rounded-full bg-clickup-purple shrink-0 mt-1.5" />}
+                  {!n.is_read && <span className="w-2 h-2 rounded-full bg-app-accent shrink-0 mt-1.5" />}
                   <div className="flex-1 min-w-0">
-                    <p className="app-text-body truncate font-medium text-clickup-text">{n.title}</p>
-                    <p className="app-text-caption mt-0.5 truncate text-clickup-text/50">{n.body}</p>
-                    <span className="app-text-micro text-clickup-text/30">{timeAgo(n.created_at)}</span>
+                    <p className="app-text-body truncate font-medium text-app-ink">{n.title}</p>
+                    <p className="app-text-caption mt-0.5 truncate text-app-ink/50">{n.body}</p>
+                    <span className="app-text-micro text-app-ink/30">{timeAgo(n.created_at)}</span>
                   </div>
                   {!n.is_read && (
                     <button
                       onClick={e => { e.stopPropagation(); void handleRead(n); }}
-                      className="text-clickup-text/30 hover:text-clickup-purple shrink-0 mt-1"
+                      className="text-app-ink/30 hover:text-app-accent shrink-0 mt-1"
                       title="Mark as read"
                     >
                       <Check size={12} />

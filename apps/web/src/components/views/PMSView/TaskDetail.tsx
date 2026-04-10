@@ -59,7 +59,7 @@ import { getStatusSlugs, getStatusTone, getStatusLabel, initials, formatDate } f
 const PRIORITIES = ['low', 'medium', 'high', 'critical'] as const;
 const PRIORITY_LABELS: Record<string, string> = { low: 'Low', medium: 'Medium', high: 'High', critical: 'Critical' };
 
-const selectClass = 'app-text-body bg-transparent text-clickup-text border border-clickup-border rounded-md px-2 py-1 focus:outline-none focus:border-clickup-purple cursor-pointer hover:border-clickup-text/30 transition-colors';
+const selectClass = 'app-text-body bg-transparent text-app-ink border border-app-border rounded-md px-2 py-1 focus:outline-none focus:border-app-accent cursor-pointer hover:border-app-ink/30 transition-colors';
 const disabledFieldClass = `${selectClass} disabled:cursor-not-allowed disabled:opacity-60`;
 
 function getErrorMessage(error: unknown, fallback: string): string {
@@ -490,18 +490,18 @@ export const TaskDetail = ({
   if (descFullscreen) {
     return (
       <div className="flex flex-col h-full">
-        <div className="flex items-center justify-between px-6 py-3 border-b border-clickup-border shrink-0">
+        <div className="flex items-center justify-between px-6 py-3 border-b border-app-border shrink-0">
           <button
             onClick={() => setDescFullscreen(false)}
-            className="app-text-body flex items-center gap-2 text-clickup-text/60 transition-colors hover:text-clickup-text"
+            className="app-text-body flex items-center gap-2 text-app-ink/60 transition-colors hover:text-app-ink"
           >
             ← Back to task
           </button>
-          <span className="app-text-control text-clickup-text">{issueState.title}</span>
+          <span className="app-text-control text-app-ink">{issueState.title}</span>
           <Button variant="ghost" size="icon" onClick={() => setDescFullscreen(false)}><Minimize2 size={16} /></Button>
         </div>
         <div className="flex-1 overflow-y-auto custom-scrollbar px-8 py-6 max-w-4xl mx-auto w-full">
-          <h1 className="app-text-title-lg mb-6 text-clickup-text">{issueState.title}</h1>
+          <h1 className="app-text-title-lg mb-6 text-app-ink">{issueState.title}</h1>
           {canEdit ? (
             <BlockEditor
               initialContent={issueState.description_blocks as BlockContent | undefined}
@@ -525,22 +525,22 @@ export const TaskDetail = ({
   return (
     <div className="flex flex-col h-full">
       {/* Top bar */}
-      <div className="flex items-center justify-between px-5 py-3 border-b border-clickup-border shrink-0">
-        <div className="app-text-caption flex items-center gap-2 text-clickup-text/50">
+      <div className="flex items-center justify-between px-5 py-3 border-b border-app-border shrink-0">
+        <div className="app-text-caption flex items-center gap-2 text-app-ink/50">
           <span>{spaceName || 'Space'}</span>
           <ChevronRight size={12} />
-          <span className="text-clickup-text/70">{issueState.reference}</span>
+          <span className="text-app-ink/70">{issueState.reference}</span>
         </div>
         <div className="flex items-center gap-1">
           {!canEdit ? (
-            <span className="app-text-overline rounded-full border border-clickup-border px-2 py-1 text-clickup-text/50">
+            <span className="app-text-overline rounded-full border border-app-border px-2 py-1 text-app-ink/50">
               Read only
             </span>
           ) : (
             <button
               type="button"
               onClick={handleToggleIssueArchive}
-              className="app-text-control-sm rounded-md border border-clickup-border px-2.5 py-1 text-clickup-text/60 transition-colors hover:border-clickup-text/30 hover:text-clickup-text"
+              className="app-text-control-sm rounded-md border border-app-border px-2.5 py-1 text-app-ink/60 transition-colors hover:border-app-ink/30 hover:text-app-ink"
             >
               {issueState.archived ? 'Restore' : 'Archive'}
             </button>
@@ -554,11 +554,11 @@ export const TaskDetail = ({
       {/* Two-column layout: left content + right activity */}
       <div className="flex-1 flex min-h-0">
         {/* Left: main content */}
-        <div className="flex-1 overflow-y-auto custom-scrollbar border-r border-clickup-border">
+        <div className="flex-1 overflow-y-auto custom-scrollbar border-r border-app-border">
           <div className="px-8 py-6 max-w-3xl mx-auto space-y-6">
             {/* Title */}
             <div className="flex items-center gap-2">
-              <h1 className="app-text-title-lg text-clickup-text">{issueState.title}</h1>
+              <h1 className="app-text-title-lg text-app-ink">{issueState.title}</h1>
               {issueState.archived && (
                 <span className="app-text-overline rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-amber-300">
                   Archived
@@ -617,7 +617,7 @@ export const TaskDetail = ({
                     setLabelPickerOpen(prev => !prev);
                   }}
                   className={`flex min-h-[28px] w-full flex-wrap items-center gap-1 rounded px-1 py-0.5 text-left transition-colors ${
-                    canEdit ? 'hover:bg-clickup-hover/50' : 'cursor-default'
+                    canEdit ? 'hover:bg-app-surface-hover/50' : 'cursor-default'
                   }`}
                   disabled={!canEdit}
                 >
@@ -635,7 +635,7 @@ export const TaskDetail = ({
                       ) : null;
                     })
                   ) : (
-                    <span className="app-text-body flex items-center gap-1 text-clickup-text/40">
+                    <span className="app-text-body flex items-center gap-1 text-app-ink/40">
                       <Tag size={12} />
                       {canEdit ? 'Add labels...' : 'No labels'}
                     </span>
@@ -644,22 +644,22 @@ export const TaskDetail = ({
                 {labelPickerOpen && canEdit && (
                   <>
                     <div className="fixed inset-0 z-10" onClick={() => setLabelPickerOpen(false)} />
-                    <div className="absolute left-0 top-8 z-20 w-48 bg-clickup-bg border border-clickup-border rounded-lg shadow-xl py-1">
+                    <div className="absolute left-0 top-8 z-20 w-48 bg-app-bg border border-app-border rounded-lg shadow-xl py-1">
                       {projectLabels.length === 0 ? (
-                        <p className="app-text-caption px-3 py-2 text-clickup-text/40">No labels in this project</p>
+                        <p className="app-text-caption px-3 py-2 text-app-ink/40">No labels in this project</p>
                       ) : (
                         projectLabels.map(label => (
                           <button
                             key={label.id}
                             onClick={() => handleToggleLabel(label.id)}
-                            className="app-text-body flex w-full items-center gap-2 px-3 py-1.5 text-clickup-text transition-colors hover:bg-clickup-hover"
+                            className="app-text-body flex w-full items-center gap-2 px-3 py-1.5 text-app-ink transition-colors hover:bg-app-surface-hover"
                           >
                             <span
                               className="w-3 h-3 rounded-full shrink-0"
                               style={{ backgroundColor: label.color }}
                             />
                             <span className="flex-1 text-left">{label.name}</span>
-                            {selectedLabelIds.includes(label.id) && <Check size={12} className="text-clickup-purple" />}
+                            {selectedLabelIds.includes(label.id) && <Check size={12} className="text-app-accent" />}
                           </button>
                         ))
                       )}
@@ -669,17 +669,17 @@ export const TaskDetail = ({
               </div>
             </div>
 
-            <hr className="border-clickup-border" />
+            <hr className="border-app-border" />
 
             {/* Description with fullscreen button */}
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <h3 className="app-text-title-md text-clickup-text">Description</h3>
+                <h3 className="app-text-title-md text-app-ink">Description</h3>
                 <Button variant="ghost" size="icon" onClick={() => setDescFullscreen(true)} title="Full screen">
                   <Maximize2 size={14} />
                 </Button>
               </div>
-              <div className="rounded-lg border border-clickup-border overflow-hidden">
+              <div className="rounded-lg border border-app-border overflow-hidden">
                 {canEdit ? (
                   <BlockEditor
                     initialContent={issueState.description_blocks as BlockContent | undefined}
@@ -700,16 +700,16 @@ export const TaskDetail = ({
               </div>
             </div>
 
-            <hr className="border-clickup-border" />
+            <hr className="border-app-border" />
 
             {/* Checklist */}
             <div className="space-y-2">
               <div className="flex items-center gap-2">
-                <CheckSquare size={14} className="text-clickup-text/50" />
-                <h3 className="app-text-title-md text-clickup-text">
+                <CheckSquare size={14} className="text-app-ink/50" />
+                <h3 className="app-text-title-md text-app-ink">
                   Checklist
                   {checklistTotal > 0 && (
-                    <span className="text-clickup-text/40 font-normal ml-1">
+                    <span className="text-app-ink/40 font-normal ml-1">
                       ({checklistDone}/{checklistTotal})
                     </span>
                   )}
@@ -718,24 +718,24 @@ export const TaskDetail = ({
 
               {checklistTotal > 0 && (
                 <>
-                  <div className="w-full h-1.5 bg-clickup-border rounded-full overflow-hidden">
+                  <div className="w-full h-1.5 bg-app-border rounded-full overflow-hidden">
                     <div
                       className="h-full bg-emerald-500 rounded-full transition-all duration-300"
                       style={{ width: `${checklistTotal > 0 ? (checklistDone / checklistTotal) * 100 : 0}%` }}
                     />
                   </div>
-                  <div className="border border-clickup-border rounded-lg">
+                  <div className="border border-app-border rounded-lg">
                     {checklistItems.map(ci => (
                       <div
                         key={ci.id}
-                        className="flex items-center gap-3 px-3 py-2 border-b border-clickup-border last:border-b-0 hover:bg-clickup-hover/50 transition-colors group first:rounded-t-lg last:rounded-b-lg"
+                        className="flex items-center gap-3 px-3 py-2 border-b border-app-border last:border-b-0 hover:bg-app-surface-hover/50 transition-colors group first:rounded-t-lg last:rounded-b-lg"
                       >
                         <input
                           type="checkbox"
                           checked={ci.completed}
                           onChange={() => handleToggleChecklistItem(ci)}
                           disabled={!canEdit}
-                          className="h-3.5 w-3.5 rounded border-clickup-border accent-clickup-purple cursor-pointer shrink-0"
+                          className="h-3.5 w-3.5 rounded border-app-border accent-app-accent cursor-pointer shrink-0"
                         />
                         {editingChecklistId === ci.id ? (
                           <input
@@ -748,11 +748,11 @@ export const TaskDetail = ({
                             }}
                             onBlur={() => { if (canEdit) { void handleSaveChecklistEdit(ci.id); } }}
                             autoFocus
-                            className="app-text-body flex-1 border-b border-clickup-purple bg-transparent py-0.5 text-clickup-text focus:outline-none"
+                            className="app-text-body flex-1 border-b border-app-accent bg-transparent py-0.5 text-app-ink focus:outline-none"
                           />
                         ) : (
                           <span
-                            className={`app-text-body flex-1 ${canEdit ? 'cursor-pointer' : 'cursor-default'} ${ci.completed ? 'line-through text-clickup-text/40' : 'text-clickup-text'}`}
+                            className={`app-text-body flex-1 ${canEdit ? 'cursor-pointer' : 'cursor-default'} ${ci.completed ? 'line-through text-app-ink/40' : 'text-app-ink'}`}
                             onClick={() => {
                               if (!canEdit) return;
                               setEditingChecklistId(ci.id);
@@ -765,7 +765,7 @@ export const TaskDetail = ({
                         {canEdit ? (
                           <button
                             onClick={() => { void handleDeleteChecklistItem(ci.id); }}
-                            className="opacity-0 group-hover:opacity-100 text-clickup-text/30 hover:text-red-400 transition-all p-0.5 rounded"
+                            className="opacity-0 group-hover:opacity-100 text-app-ink/30 hover:text-red-400 transition-all p-0.5 rounded"
                             title="Delete"
                           >
                             <X size={13} />
@@ -784,7 +784,7 @@ export const TaskDetail = ({
                   onChange={e => setNewChecklistText(e.target.value)}
                   onKeyDown={e => { if (e.key === 'Enter' && !e.nativeEvent.isComposing && newChecklistText.trim()) { e.preventDefault(); handleAddChecklistItem(); } }}
                   placeholder={canEdit ? '+ Add checklist item...' : 'Checklist is read-only'}
-                  className="app-text-body flex-1 border-b border-transparent bg-transparent py-1 text-clickup-text placeholder:text-clickup-text/40 transition-colors focus:border-clickup-purple focus:outline-none"
+                  className="app-text-body flex-1 border-b border-transparent bg-transparent py-1 text-app-ink placeholder:text-app-ink/40 transition-colors focus:border-app-accent focus:outline-none"
                   disabled={!canEdit}
                 />
                 {canEdit && newChecklistText.trim() && (
@@ -795,29 +795,29 @@ export const TaskDetail = ({
               </div>
             </div>
 
-            <hr className="border-clickup-border" />
+            <hr className="border-app-border" />
 
             {/* Subtasks */}
             <div className="space-y-2">
-              <h3 className="app-text-title-md text-clickup-text">
-                Subtasks {subtasks.length > 0 && <span className="text-clickup-text/40 font-normal">({subtasks.length})</span>}
+              <h3 className="app-text-title-md text-app-ink">
+                Subtasks {subtasks.length > 0 && <span className="text-app-ink/40 font-normal">({subtasks.length})</span>}
               </h3>
 
               {subtasks.length > 0 && (
-                <div className="border border-clickup-border rounded-lg">
+                <div className="border border-app-border rounded-lg">
                   {subtasks.map(sub => (
                     <div
                       key={sub.id}
-                      className="flex items-center gap-3 px-3 py-2 border-b border-clickup-border last:border-b-0 hover:bg-clickup-hover/50 transition-colors group relative first:rounded-t-lg last:rounded-b-lg"
+                      className="flex items-center gap-3 px-3 py-2 border-b border-app-border last:border-b-0 hover:bg-app-surface-hover/50 transition-colors group relative first:rounded-t-lg last:rounded-b-lg"
                     >
                       <input
                         type="checkbox"
                         checked={sub.status === 'done'}
                         readOnly
-                        className="h-3.5 w-3.5 rounded border-clickup-border accent-clickup-purple cursor-pointer"
+                        className="h-3.5 w-3.5 rounded border-app-border accent-app-accent cursor-pointer"
                       />
-                      <span className="app-text-caption font-mono text-clickup-text/40">{sub.reference}</span>
-                      <span className={`app-text-body flex-1 ${sub.status === 'done' ? 'line-through text-clickup-text/40' : 'text-clickup-text'}`}>
+                      <span className="app-text-caption font-mono text-app-ink/40">{sub.reference}</span>
+                      <span className={`app-text-body flex-1 ${sub.status === 'done' ? 'line-through text-app-ink/40' : 'text-app-ink'}`}>
                         {sub.title}
                       </span>
                       <Badge tone={getStatusTone(sub.status, projectStatuses)}>{sub.status_label}</Badge>
@@ -831,7 +831,7 @@ export const TaskDetail = ({
                         <div className="relative">
                           <button
                             onClick={(e) => { e.stopPropagation(); setSubtaskMenuOpen(prev => prev === sub.id ? null : sub.id); }}
-                            className="opacity-0 group-hover:opacity-100 text-clickup-text/30 hover:text-clickup-text transition-all p-0.5 rounded"
+                            className="opacity-0 group-hover:opacity-100 text-app-ink/30 hover:text-app-ink transition-all p-0.5 rounded"
                             title="More options"
                           >
                             <MoreHorizontal size={14} />
@@ -839,25 +839,25 @@ export const TaskDetail = ({
                           {subtaskMenuOpen === sub.id && (
                             <>
                               <div className="fixed inset-0 z-10" onClick={() => setSubtaskMenuOpen(null)} />
-                              <div className="app-text-body absolute right-0 top-full z-20 w-36 rounded-lg border border-clickup-border bg-clickup-bg py-1 shadow-xl">
+                              <div className="app-text-body absolute right-0 top-full z-20 w-36 rounded-lg border border-app-border bg-app-bg py-1 shadow-xl">
                                 <button
                                   onClick={(e) => { e.stopPropagation(); void handleUnlinkSubtask(sub.id); setSubtaskMenuOpen(null); }}
-                                  className="flex items-center gap-2 w-full px-3 py-1.5 text-clickup-text/70 hover:bg-clickup-hover hover:text-clickup-text transition-colors"
+                                  className="flex items-center gap-2 w-full px-3 py-1.5 text-app-ink/70 hover:bg-app-surface-hover hover:text-app-ink transition-colors"
                                 >
                                   <Unlink size={13} />
                                   Unlink
                                 </button>
                                 <button
                                   onClick={(e) => { e.stopPropagation(); void handleArchiveSubtask(sub.id); }}
-                                  className="flex items-center gap-2 w-full px-3 py-1.5 text-clickup-text/70 hover:bg-clickup-hover hover:text-clickup-text transition-colors"
+                                  className="flex items-center gap-2 w-full px-3 py-1.5 text-app-ink/70 hover:bg-app-surface-hover hover:text-app-ink transition-colors"
                                 >
                                   <Archive size={13} />
                                   Archive
                                 </button>
-                                <hr className="border-clickup-border my-1" />
+                                <hr className="border-app-border my-1" />
                                 <button
                                   onClick={(e) => { e.stopPropagation(); void handleDeleteSubtask(sub.id); }}
-                                  className="flex items-center gap-2 w-full px-3 py-1.5 text-red-400 hover:bg-clickup-hover hover:text-red-500 transition-colors"
+                                  className="flex items-center gap-2 w-full px-3 py-1.5 text-red-400 hover:bg-app-surface-hover hover:text-red-500 transition-colors"
                                 >
                                   <Trash2 size={13} />
                                   Delete
@@ -879,7 +879,7 @@ export const TaskDetail = ({
                   onChange={e => setNewSubtaskTitle(e.target.value)}
                   onKeyDown={e => { if (e.key === 'Enter' && !e.nativeEvent.isComposing && newSubtaskTitle.trim()) { e.preventDefault(); handleAddSubtask(); } }}
                   placeholder={canEdit ? '+ Add subtask...' : 'Subtasks are read-only'}
-                  className="app-text-body flex-1 border-b border-transparent bg-transparent py-1 text-clickup-text placeholder:text-clickup-text/40 transition-colors focus:border-clickup-purple focus:outline-none"
+                  className="app-text-body flex-1 border-b border-transparent bg-transparent py-1 text-app-ink placeholder:text-app-ink/40 transition-colors focus:border-app-accent focus:outline-none"
                   disabled={!canEdit}
                 />
                 {canEdit && newSubtaskTitle.trim() && (
@@ -890,14 +890,14 @@ export const TaskDetail = ({
               </div>
             </div>
 
-            <hr className="border-clickup-border" />
+            <hr className="border-app-border" />
 
             {/* Dependencies */}
             <div className="space-y-2">
-              <h3 className="app-text-title-md text-clickup-text flex items-center gap-2">
-                <Unlink size={16} className="text-clickup-text/50" />
+              <h3 className="app-text-title-md text-app-ink flex items-center gap-2">
+                <Unlink size={16} className="text-app-ink/50" />
                 Dependencies
-                {dependencies.length > 0 && <span className="text-clickup-text/40 font-normal">({dependencies.length})</span>}
+                {dependencies.length > 0 && <span className="text-app-ink/40 font-normal">({dependencies.length})</span>}
               </h3>
               {dependencies.length > 0 && (
                 <div className="space-y-1">
@@ -905,11 +905,11 @@ export const TaskDetail = ({
                     const isBlocking = dep.predecessor_id === issue.id;
                     const linkedId = isBlocking ? dep.successor_id : dep.predecessor_id;
                     return (
-                      <div key={dep.id} className="app-text-body flex items-center gap-2 rounded-md px-2 py-1.5 group hover:bg-clickup-hover">
-                        <span className="app-text-overline w-16 shrink-0 text-clickup-text/50">
+                      <div key={dep.id} className="app-text-body flex items-center gap-2 rounded-md px-2 py-1.5 group hover:bg-app-surface-hover">
+                        <span className="app-text-overline w-16 shrink-0 text-app-ink/50">
                           {isBlocking ? 'Blocks' : 'Blocked by'}
                         </span>
-                        <span className="app-text-caption flex-1 truncate font-mono text-clickup-text/60">{linkedId.slice(0, 8)}…</span>
+                        <span className="app-text-caption flex-1 truncate font-mono text-app-ink/60">{linkedId.slice(0, 8)}…</span>
                         {canEdit ? (
                           <button
                             onClick={async () => {
@@ -918,7 +918,7 @@ export const TaskDetail = ({
                               setDependencies(prev => prev.filter(d => d.id !== dep.id));
                               await Promise.resolve(onUpdate?.());
                             }}
-                            className="opacity-0 group-hover:opacity-100 text-clickup-text/30 hover:text-red-400 transition-all"
+                            className="opacity-0 group-hover:opacity-100 text-app-ink/30 hover:text-red-400 transition-all"
                             title="Remove dependency"
                           >
                             <X size={13} />
@@ -935,37 +935,37 @@ export const TaskDetail = ({
                   value={depSearchQuery}
                   onChange={e => handleDepSearch(e.target.value)}
                   placeholder={canEdit ? '+ Add dependency (search issue)...' : 'Dependencies are read-only'}
-                  className="app-text-body w-full border-b border-transparent bg-transparent py-1 text-clickup-text placeholder:text-clickup-text/40 transition-colors focus:border-clickup-purple focus:outline-none"
+                  className="app-text-body w-full border-b border-transparent bg-transparent py-1 text-app-ink placeholder:text-app-ink/40 transition-colors focus:border-app-accent focus:outline-none"
                   disabled={!canEdit}
                 />
                 {canEdit && depSearchResults.length > 0 && (
-                  <div className="absolute left-0 top-full z-20 mt-1 w-full max-h-40 overflow-y-auto rounded-lg border border-clickup-border bg-clickup-bg shadow-xl py-1">
+                  <div className="absolute left-0 top-full z-20 mt-1 w-full max-h-40 overflow-y-auto rounded-lg border border-app-border bg-app-bg shadow-xl py-1">
                     {depSearchResults.map(r => (
                       <button
                         key={r.id}
                         type="button"
                         disabled={addingDep || dependencies.some(d => d.predecessor_id === r.id || d.successor_id === r.id)}
                         onClick={() => handleAddDependency(r.id)}
-                        className="app-text-body w-full flex items-center gap-2 px-3 py-1.5 text-left hover:bg-clickup-hover disabled:opacity-40"
+                        className="app-text-body w-full flex items-center gap-2 px-3 py-1.5 text-left hover:bg-app-surface-hover disabled:opacity-40"
                       >
-                        <span className="app-text-caption font-mono text-clickup-text/50">{r.reference}</span>
+                        <span className="app-text-caption font-mono text-app-ink/50">{r.reference}</span>
                         <span className="truncate">{r.title}</span>
                       </button>
                     ))}
                   </div>
                 )}
-                {depSearching && <Loader2 size={14} className="absolute right-1 top-1.5 animate-spin text-clickup-text/30" />}
+                {depSearching && <Loader2 size={14} className="absolute right-1 top-1.5 animate-spin text-app-ink/30" />}
               </div>
             </div>
 
-            <hr className="border-clickup-border" />
+            <hr className="border-app-border" />
 
             {/* Attachments */}
             <div className="space-y-2">
               <div className="flex items-center gap-2">
-                <Paperclip size={14} className="text-clickup-text/50" />
-                <h3 className="app-text-title-md text-clickup-text">Attachments</h3>
-                <span className="app-text-caption text-clickup-text/40">{attachments.length}</span>
+                <Paperclip size={14} className="text-app-ink/50" />
+                <h3 className="app-text-title-md text-app-ink">Attachments</h3>
+                <span className="app-text-caption text-app-ink/40">{attachments.length}</span>
               </div>
 
               {attachments.length > 0 && (
@@ -973,21 +973,21 @@ export const TaskDetail = ({
                   {attachments.map(att => {
                     const isImage = att.content_type.startsWith('image/');
                     return (
-                      <div key={att.id} className="flex items-center gap-3 py-1.5 px-2 rounded-md hover:bg-clickup-hover group transition-colors">
+                      <div key={att.id} className="flex items-center gap-3 py-1.5 px-2 rounded-md hover:bg-app-surface-hover group transition-colors">
                         {isImage ? (
                           <img
                             src={att.download_url}
                             alt={att.filename}
-                            className="w-8 h-8 rounded object-cover border border-clickup-border"
+                            className="w-8 h-8 rounded object-cover border border-app-border"
                           />
                         ) : (
-                          <div className="w-8 h-8 rounded bg-clickup-sidebar border border-clickup-border flex items-center justify-center">
-                            <FileIcon size={14} className="text-clickup-text/40" />
+                          <div className="w-8 h-8 rounded bg-app-surface-sidebar border border-app-border flex items-center justify-center">
+                            <FileIcon size={14} className="text-app-ink/40" />
                           </div>
                         )}
                         <div className="flex-1 min-w-0">
-                          <p className="app-text-body truncate text-clickup-text">{att.filename}</p>
-                          <p className="app-text-micro text-clickup-text/40">
+                          <p className="app-text-body truncate text-app-ink">{att.filename}</p>
+                          <p className="app-text-micro text-app-ink/40">
                             {att.size_bytes < 1024 ? `${att.size_bytes} B` : att.size_bytes < 1048576 ? `${(att.size_bytes / 1024).toFixed(1)} KB` : `${(att.size_bytes / 1048576).toFixed(1)} MB`}
                             {' · '}{att.uploaded_by_name}
                           </p>
@@ -997,14 +997,14 @@ export const TaskDetail = ({
                           target="_blank"
                           rel="noopener noreferrer"
                           aria-label={`${att.filename} 다운로드`}
-                          className="opacity-0 group-hover:opacity-100 text-clickup-text/40 hover:text-clickup-text transition-all"
+                          className="opacity-0 group-hover:opacity-100 text-app-ink/40 hover:text-app-ink transition-all"
                         >
                           <Download size={14} />
                         </a>
                         {canEdit ? (
                           <button
                             onClick={() => { void handleDeleteAttachment(att.id); }}
-                            className="opacity-0 group-hover:opacity-100 text-clickup-text/40 hover:text-red-400 transition-all"
+                            className="opacity-0 group-hover:opacity-100 text-app-ink/40 hover:text-red-400 transition-all"
                           >
                             <Trash2 size={14} />
                           </button>
@@ -1023,13 +1023,13 @@ export const TaskDetail = ({
                 className={`app-text-body rounded-lg border-2 border-dashed py-4 text-center transition-colors ${
                   canEdit
                     ? dragOver
-                      ? 'cursor-pointer border-clickup-purple bg-clickup-purple/5 text-clickup-purple'
-                      : 'cursor-pointer border-clickup-border text-clickup-text/40 hover:border-clickup-text/30'
-                    : 'cursor-default border-clickup-border text-clickup-text/30'
+                      ? 'cursor-pointer border-app-accent bg-app-accent/5 text-app-accent'
+                      : 'cursor-pointer border-app-border text-app-ink/40 hover:border-app-ink/30'
+                    : 'cursor-default border-app-border text-app-ink/30'
                 }`}
               >
                 {uploading ? (
-                  <Loader2 size={16} className="animate-spin mx-auto text-clickup-purple" />
+                  <Loader2 size={16} className="animate-spin mx-auto text-app-accent" />
                 ) : (
                   <span>{canEdit ? (dragOver ? 'Drop to upload' : 'Click or drag files to upload') : 'Attachments are read-only'}</span>
                 )}
@@ -1044,19 +1044,19 @@ export const TaskDetail = ({
               </div>
             </div>
 
-            <hr className="border-clickup-border" />
+            <hr className="border-app-border" />
 
             {/* Time Tracking */}
             <div className="space-y-2">
               <div className="flex items-center gap-2">
-                <Clock size={14} className="text-clickup-text/50" />
-                <h3 className="app-text-title-md text-clickup-text">Time Tracking</h3>
+                <Clock size={14} className="text-app-ink/50" />
+                <h3 className="app-text-title-md text-app-ink">Time Tracking</h3>
               </div>
 
               {/* Estimate + Progress */}
               <div className="app-text-caption flex items-center gap-3">
                 <div className="flex items-center gap-1.5">
-                  <span className="text-clickup-text/50">Estimate:</span>
+                  <span className="text-app-ink/50">Estimate:</span>
                   <input
                     type="number"
                     step="0.5"
@@ -1067,19 +1067,19 @@ export const TaskDetail = ({
                       patchField('estimate_hours', v);
                     }}
                     placeholder="—"
-                    className="w-14 bg-transparent text-clickup-text border-b border-clickup-border focus:border-clickup-purple focus:outline-none text-center py-0.5"
+                    className="w-14 bg-transparent text-app-ink border-b border-app-border focus:border-app-accent focus:outline-none text-center py-0.5"
                     disabled={!canEdit}
                   />
-                  <span className="text-clickup-text/40">h</span>
+                  <span className="text-app-ink/40">h</span>
                 </div>
-                <span className="text-clickup-text/30">|</span>
-                <span className="text-clickup-text/60">
-                  Spent: <span className="text-clickup-text font-medium">{formatDuration(totalTimeSpent)}</span>
+                <span className="text-app-ink/30">|</span>
+                <span className="text-app-ink/60">
+                  Spent: <span className="text-app-ink font-medium">{formatDuration(totalTimeSpent)}</span>
                 </span>
               </div>
 
               {issueState.estimate_hours && issueState.estimate_hours > 0 && (
-                <div className="w-full h-1.5 bg-clickup-border rounded-full overflow-hidden">
+                <div className="w-full h-1.5 bg-app-border rounded-full overflow-hidden">
                   <div
                     className={`h-full rounded-full transition-all duration-300 ${totalTimeSpent > issueState.estimate_hours * 60 ? 'bg-red-500' : 'bg-blue-500'}`}
                     style={{ width: `${Math.min((totalTimeSpent / (issueState.estimate_hours * 60)) * 100, 100)}%` }}
@@ -1089,16 +1089,16 @@ export const TaskDetail = ({
 
               {/* Time entries list */}
               {timeEntries.length > 0 && (
-                <div className="border border-clickup-border rounded-lg max-h-32 overflow-y-auto custom-scrollbar">
+                <div className="border border-app-border rounded-lg max-h-32 overflow-y-auto custom-scrollbar">
                   {timeEntries.map(te => (
-                    <div key={te.id} className="app-text-caption flex items-center gap-2 border-b border-clickup-border px-3 py-1.5 group last:border-b-0 hover:bg-clickup-hover/50">
-                      <span className="text-clickup-text font-medium">{formatDuration(te.duration_minutes)}</span>
-                      <span className="text-clickup-text/40">{te.entry_date}</span>
-                      <span className="text-clickup-text/50 flex-1 truncate">{te.description || te.user_name}</span>
+                    <div key={te.id} className="app-text-caption flex items-center gap-2 border-b border-app-border px-3 py-1.5 group last:border-b-0 hover:bg-app-surface-hover/50">
+                      <span className="text-app-ink font-medium">{formatDuration(te.duration_minutes)}</span>
+                      <span className="text-app-ink/40">{te.entry_date}</span>
+                      <span className="text-app-ink/50 flex-1 truncate">{te.description || te.user_name}</span>
                       {canEdit ? (
                         <button
                           onClick={() => { void handleDeleteTimeEntry(te.id); }}
-                          className="opacity-0 group-hover:opacity-100 text-clickup-text/30 hover:text-red-400 transition-all p-0.5"
+                          className="opacity-0 group-hover:opacity-100 text-app-ink/30 hover:text-red-400 transition-all p-0.5"
                         >
                           <X size={11} />
                         </button>
@@ -1117,7 +1117,7 @@ export const TaskDetail = ({
                   value={timeLogMinutes}
                   onChange={e => setTimeLogMinutes(e.target.value)}
                   placeholder={canEdit ? 'Hours...' : 'Time tracking is read-only'}
-                  className="app-text-body w-20 border-b border-transparent bg-transparent py-1 text-clickup-text placeholder:text-clickup-text/40 transition-colors focus:border-clickup-purple focus:outline-none"
+                  className="app-text-body w-20 border-b border-transparent bg-transparent py-1 text-app-ink placeholder:text-app-ink/40 transition-colors focus:border-app-accent focus:outline-none"
                   disabled={!canEdit}
                 />
                 <input
@@ -1126,7 +1126,7 @@ export const TaskDetail = ({
                   onChange={e => setTimeLogDesc(e.target.value)}
                   onKeyDown={e => { if (e.key === 'Enter' && !e.nativeEvent.isComposing && timeLogMinutes) { e.preventDefault(); handleLogTime(); } }}
                   placeholder={canEdit ? 'Description...' : 'Time tracking is read-only'}
-                  className="app-text-body flex-1 border-b border-transparent bg-transparent py-1 text-clickup-text placeholder:text-clickup-text/40 transition-colors focus:border-clickup-purple focus:outline-none"
+                  className="app-text-body flex-1 border-b border-transparent bg-transparent py-1 text-app-ink placeholder:text-app-ink/40 transition-colors focus:border-app-accent focus:outline-none"
                   disabled={!canEdit}
                 />
                 {canEdit && timeLogMinutes && (
@@ -1140,56 +1140,56 @@ export const TaskDetail = ({
         </div>
 
         {/* Right: Activity sidebar */}
-        <div className="w-[340px] shrink-0 flex flex-col bg-clickup-bg">
-          <div className="px-4 py-3 border-b border-clickup-border">
-            <h3 className="app-text-title-md text-clickup-text">Activity</h3>
+        <div className="w-[340px] shrink-0 flex flex-col bg-app-bg">
+          <div className="px-4 py-3 border-b border-app-border">
+            <h3 className="app-text-title-md text-app-ink">Activity</h3>
           </div>
 
           {/* Activity list */}
           <div className="flex-1 overflow-y-auto custom-scrollbar px-4 py-3 space-y-3">
             {loading ? (
-              <div className="flex justify-center py-8"><Loader2 size={18} className="animate-spin text-clickup-text/40" /></div>
+              <div className="flex justify-center py-8"><Loader2 size={18} className="animate-spin text-app-ink/40" /></div>
             ) : (
               <>
                 {activityLogs.map(log => (
                   <div key={log.id} className="flex gap-2">
-                    <div className="w-6 h-6 rounded-full bg-clickup-sidebar border border-clickup-border flex items-center justify-center text-[8px] font-bold text-clickup-text/60 shrink-0 mt-0.5">
+                    <div className="w-6 h-6 rounded-full bg-app-surface-sidebar border border-app-border flex items-center justify-center text-[8px] font-bold text-app-ink/60 shrink-0 mt-0.5">
                       {initials(log.actor_name)}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="app-text-caption text-clickup-text/60">{log.message}</p>
-                      <span className="app-text-micro text-clickup-text/30">{formatDate(log.created_at)}</span>
+                      <p className="app-text-caption text-app-ink/60">{log.message}</p>
+                      <span className="app-text-micro text-app-ink/30">{formatDate(log.created_at)}</span>
                     </div>
                   </div>
                 ))}
 
                 {comments.map(comment => (
                   <div key={comment.id} className="flex gap-2">
-                    <div className="w-6 h-6 rounded-full bg-clickup-purple flex items-center justify-center text-[8px] font-bold text-clickup-bg shrink-0 mt-0.5">
+                    <div className="w-6 h-6 rounded-full bg-app-accent flex items-center justify-center text-[8px] font-bold text-app-bg shrink-0 mt-0.5">
                       {initials(comment.author_name)}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <span className="app-text-caption font-bold text-clickup-text">{comment.author_name}</span>
+                      <span className="app-text-caption font-bold text-app-ink">{comment.author_name}</span>
                       {comment.body_blocks ? (
                         <BlockViewer content={comment.body_blocks as BlockContent} className="app-text-caption mt-0.5" resolveFileUrl={resolveFileUrl} />
                       ) : (
-                        <p className="app-text-caption mt-0.5 text-clickup-text/60">{comment.body}</p>
+                        <p className="app-text-caption mt-0.5 text-app-ink/60">{comment.body}</p>
                       )}
-                      <span className="app-text-micro text-clickup-text/30">{formatDate(comment.created_at)}</span>
+                      <span className="app-text-micro text-app-ink/30">{formatDate(comment.created_at)}</span>
                     </div>
                   </div>
                 ))}
 
                 {activityLogs.length === 0 && comments.length === 0 && (
-                  <p className="app-text-body py-8 text-center text-clickup-text/30">No activity yet</p>
+                  <p className="app-text-body py-8 text-center text-app-ink/30">No activity yet</p>
                 )}
               </>
             )}
           </div>
 
           {/* Comment input — sticky bottom */}
-          <div className="relative flex items-center gap-2 px-4 py-3 border-t border-clickup-border shrink-0">
-            <div className="w-6 h-6 rounded-full bg-clickup-purple flex items-center justify-center text-[8px] font-bold text-clickup-bg shrink-0">
+          <div className="relative flex items-center gap-2 px-4 py-3 border-t border-app-border shrink-0">
+            <div className="w-6 h-6 rounded-full bg-app-accent flex items-center justify-center text-[8px] font-bold text-app-bg shrink-0">
               ME
             </div>
             <div className="flex-1 relative">
@@ -1214,13 +1214,13 @@ export const TaskDetail = ({
                 }}
                 onKeyDown={e => { if (e.key === 'Enter' && !e.nativeEvent.isComposing && !mentionOpen) { e.preventDefault(); handleCommentSubmit(); } if (e.key === 'Escape') setMentionOpen(false); }}
                 placeholder={canEdit ? 'Write a comment... (type @ to mention)' : 'Comments are read-only'}
-                className="app-text-body w-full rounded-lg border border-clickup-border bg-transparent px-3 py-1.5 text-clickup-text placeholder:text-clickup-text/40 transition-colors focus:border-clickup-purple focus:outline-none"
+                className="app-text-body w-full rounded-lg border border-app-border bg-transparent px-3 py-1.5 text-app-ink placeholder:text-app-ink/40 transition-colors focus:border-app-accent focus:outline-none"
                 disabled={!canEdit}
               />
               {mentionOpen && canEdit && (
                 <>
                   <div className="fixed inset-0 z-10" onClick={() => setMentionOpen(false)} />
-                  <div className="absolute bottom-full left-0 mb-1 z-20 w-56 bg-clickup-bg border border-clickup-border rounded-lg shadow-xl py-1 max-h-40 overflow-y-auto">
+                  <div className="absolute bottom-full left-0 mb-1 z-20 w-56 bg-app-bg border border-app-border rounded-lg shadow-xl py-1 max-h-40 overflow-y-auto">
                     {members
                       .filter(m => !mentionQuery || m.full_name.toLowerCase().includes(mentionQuery))
                       .map(m => (
@@ -1232,7 +1232,7 @@ export const TaskDetail = ({
                             setCommentDraft(`${before}@${m.user_id} `);
                             setMentionOpen(false);
                           }}
-                          className="app-text-body flex w-full items-center gap-2 px-3 py-1.5 text-left text-clickup-text transition-colors hover:bg-clickup-hover"
+                          className="app-text-body flex w-full items-center gap-2 px-3 py-1.5 text-left text-app-ink transition-colors hover:bg-app-surface-hover"
                         >
                           <div className="w-5 h-5 rounded-full bg-blue-500 flex items-center justify-center text-[8px] font-bold text-white">
                             {initials(m.full_name)}
@@ -1241,7 +1241,7 @@ export const TaskDetail = ({
                         </button>
                       ))}
                     {members.filter(m => !mentionQuery || m.full_name.toLowerCase().includes(mentionQuery)).length === 0 && (
-                      <p className="app-text-caption px-3 py-2 text-clickup-text/40">No matches</p>
+                      <p className="app-text-caption px-3 py-2 text-app-ink/40">No matches</p>
                     )}
                   </div>
                 </>
@@ -1261,7 +1261,7 @@ export const TaskDetail = ({
 
 function MetaLabel({ children }: { children: React.ReactNode }) {
   return (
-    <span className="app-text-overline whitespace-nowrap text-clickup-text/50">{children}</span>
+    <span className="app-text-overline whitespace-nowrap text-app-ink/50">{children}</span>
   );
 }
 

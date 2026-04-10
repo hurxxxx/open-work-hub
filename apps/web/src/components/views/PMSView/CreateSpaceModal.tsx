@@ -69,12 +69,12 @@ export const CreateSpaceModal = ({
         </div>
       }
     >
-      <div className="space-y-5 text-clickup-text">
-        <div className="flex items-center gap-3 p-4 rounded-lg bg-clickup-sidebar border border-clickup-border">
-          <div className="w-10 h-10 bg-clickup-purple/20 rounded-lg flex items-center justify-center">
-            <Layout size={20} className="text-clickup-purple" />
+      <div className="space-y-5 text-app-ink">
+        <div className="flex items-center gap-3 p-4 rounded-lg bg-app-surface-sidebar border border-app-border">
+          <div className="w-10 h-10 bg-app-accent/20 rounded-lg flex items-center justify-center">
+            <Layout size={20} className="text-app-accent" />
           </div>
-          <div className="app-text-body text-clickup-text/60">
+          <div className="app-text-body text-app-ink/60">
             스페이스는 팀 단위의 작업 공간입니다. 리스트와 멤버를 묶어 관리할 수 있습니다.
           </div>
         </div>
@@ -92,26 +92,26 @@ export const CreateSpaceModal = ({
         )}
 
         <div className="space-y-1">
-          <label className="app-text-control-sm text-clickup-text/70">Space Name</label>
+          <label className="app-text-control-sm text-app-ink/70">Space Name</label>
           <input
             type="text"
             placeholder="e.g. Engineering"
             value={name}
             onChange={e => setName(e.target.value)}
             onKeyDown={e => { if (e.key === 'Enter' && !e.nativeEvent.isComposing && name.trim() && !submitting) handleCreate(); }}
-            className="app-text-body w-full rounded-md border border-clickup-border bg-clickup-sidebar px-3 py-2 text-clickup-text placeholder:text-clickup-text/30 transition-all focus:border-clickup-purple focus:outline-none"
+            className="app-text-body w-full rounded-md border border-app-border bg-app-surface-sidebar px-3 py-2 text-app-ink placeholder:text-app-ink/30 transition-all focus:border-app-accent focus:outline-none"
             autoFocus
           />
         </div>
 
         <div className="space-y-1">
-          <label className="app-text-control-sm text-clickup-text/70">Description <span className="text-clickup-text/30">(optional)</span></label>
+          <label className="app-text-control-sm text-app-ink/70">Description <span className="text-app-ink/30">(optional)</span></label>
           <textarea
             placeholder="스페이스에 대한 간단한 설명"
             value={description}
             onChange={e => setDescription(e.target.value)}
             rows={3}
-            className="app-text-body w-full resize-none rounded-md border border-clickup-border bg-clickup-sidebar px-3 py-2 text-clickup-text placeholder:text-clickup-text/30 transition-all focus:border-clickup-purple focus:outline-none"
+            className="app-text-body w-full resize-none rounded-md border border-app-border bg-app-surface-sidebar px-3 py-2 text-app-ink placeholder:text-app-ink/30 transition-all focus:border-app-accent focus:outline-none"
           />
         </div>
       </div>

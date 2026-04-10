@@ -15,7 +15,7 @@ function getMessage(caughtError: unknown, fallback: string): string {
 }
 
 const fieldClassName =
-  'w-full rounded-lg border border-[#3d3e40] bg-[#1e1f21] py-2.5 pr-4 text-sm text-[#d5d6d7] transition-all placeholder:text-gray-500 focus:border-clickup-purple focus:outline-none focus:ring-1 focus:ring-clickup-purple';
+  'w-full rounded-lg border border-[#3d3e40] bg-[#1e1f21] py-2.5 pr-4 text-sm text-[#d5d6d7] transition-all placeholder:text-gray-500 focus:border-app-accent focus:outline-none focus:ring-1 focus:ring-app-accent';
 
 function DevAccountsPanel({
   categories,
@@ -65,7 +65,7 @@ function DevAccountsPanel({
                           {account.email}
                         </div>
                       </div>
-                      <ShieldCheck size={14} className="mt-0.5 shrink-0 text-clickup-purple" />
+                      <ShieldCheck size={14} className="mt-0.5 shrink-0 text-app-accent" />
                     </div>
                     <div className="mt-2 line-clamp-2 text-[0.7rem] leading-4 text-gray-400">
                       {account.description}
@@ -136,9 +136,9 @@ export function LoginScreen() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-clickup-dark p-4">
+    <div className="min-h-screen flex items-center justify-center bg-app-bg-strong p-4">
       <div className="pointer-events-none absolute inset-0 overflow-hidden">
-        <div className="absolute -top-[20%] -left-[10%] h-[50%] w-[50%] rounded-full bg-clickup-purple/10 blur-[120px]" />
+        <div className="absolute -top-[20%] -left-[10%] h-[50%] w-[50%] rounded-full bg-app-accent/10 blur-[120px]" />
         <div className="absolute top-[60%] -right-[10%] h-[60%] w-[40%] rounded-full bg-blue-500/10 blur-[120px]" />
       </div>
 
@@ -176,7 +176,7 @@ export function LoginScreen() {
 
           <div className="order-1 rounded-2xl border border-[#3d3e40] bg-[#2a2b2d] p-8 shadow-2xl lg:order-2">
             <div className="mb-8 text-center">
-              <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-clickup-purple text-xl font-bold text-clickup-bg shadow-lg shadow-clickup-purple/20">
+              <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-app-accent text-xl font-bold text-app-bg shadow-lg shadow-app-accent/20">
                 ID
               </div>
               <h1 className="mb-2 text-2xl font-bold text-[#d5d6d7]">
@@ -249,7 +249,7 @@ export function LoginScreen() {
                     비밀번호
                   </label>
                   {!isSetupMode ? (
-                    <span className="text-xs text-clickup-purple">Local ID/PW</span>
+                    <span className="text-xs text-app-accent">Local ID/PW</span>
                   ) : null}
                 </div>
                 <div className="relative">
@@ -271,12 +271,12 @@ export function LoginScreen() {
               </div>
 
               <button
-                className="mt-6 flex w-full items-center justify-center gap-2 rounded-lg bg-clickup-purple py-2.5 text-sm font-medium text-clickup-bg transition-all hover:bg-opacity-90 disabled:cursor-not-allowed disabled:opacity-70"
+                className="mt-6 flex w-full items-center justify-center gap-2 rounded-lg bg-app-accent py-2.5 text-sm font-medium text-app-bg transition-all hover:bg-opacity-90 disabled:cursor-not-allowed disabled:opacity-70"
                 disabled={submitting}
                 type="submit"
               >
                 {submitting ? (
-                  <div className="h-5 w-5 animate-spin rounded-full border-2 border-clickup-bg/30 border-t-clickup-bg" />
+                  <div className="h-5 w-5 animate-spin rounded-full border-2 border-app-bg/30 border-t-app-bg" />
                 ) : (
                   <>
                     {isSetupMode ? '관리자 계정 만들기' : '로그인'}

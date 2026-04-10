@@ -92,21 +92,21 @@ export const NewTaskModal = ({
         <div className="flex items-center justify-between w-full">
           <div className="relative">
             <Button variant="secondary" className="gap-2" onClick={openTemplateMenu}>
-              <LayoutTemplate size={16} className="text-clickup-text/50" />
+              <LayoutTemplate size={16} className="text-app-ink/50" />
               Templates
             </Button>
             {templateMenuOpen && (
               <>
                 <div className="fixed inset-0 z-10" onClick={() => setTemplateMenuOpen(false)} />
-                <div className="absolute bottom-full left-0 mb-1 z-20 w-56 bg-clickup-bg border border-clickup-border rounded-lg shadow-xl py-1 max-h-48 overflow-y-auto">
+                <div className="absolute bottom-full left-0 mb-1 z-20 w-56 bg-app-bg border border-app-border rounded-lg shadow-xl py-1 max-h-48 overflow-y-auto">
                   {templates.length === 0 ? (
-                    <p className="app-text-caption px-3 py-2 text-clickup-text/40">No templates yet</p>
+                    <p className="app-text-caption px-3 py-2 text-app-ink/40">No templates yet</p>
                   ) : (
                     templates.map(t => (
                       <button
                         key={t.id}
                         onClick={() => applyTemplate(t)}
-                        className="app-text-body w-full px-3 py-2 text-left text-clickup-text transition-colors hover:bg-clickup-hover"
+                        className="app-text-body w-full px-3 py-2 text-left text-app-ink transition-colors hover:bg-app-surface-hover"
                       >
                         {t.name}
                       </button>
@@ -117,9 +117,9 @@ export const NewTaskModal = ({
             )}
           </div>
           <div className="flex items-center gap-4">
-            <div className="flex items-center gap-4 text-clickup-text/50">
-              <Paperclip size={20} className="cursor-pointer hover:text-clickup-text transition-colors" />
-              <div className="flex items-center gap-1 cursor-pointer hover:text-clickup-text transition-colors">
+            <div className="flex items-center gap-4 text-app-ink/50">
+              <Paperclip size={20} className="cursor-pointer hover:text-app-ink transition-colors" />
+              <div className="flex items-center gap-1 cursor-pointer hover:text-app-ink transition-colors">
                 <Bell size={20} />
               </div>
             </div>
@@ -140,7 +140,7 @@ export const NewTaskModal = ({
         </div>
       }
     >
-      <div className="space-y-6 text-clickup-text">
+      <div className="space-y-6 text-app-ink">
         {/* Task Name Input */}
         <input
           type="text"
@@ -148,7 +148,7 @@ export const NewTaskModal = ({
           value={title}
           onChange={e => setTitle(e.target.value)}
           onKeyDown={e => { if (e.key === 'Enter' && !e.nativeEvent.isComposing && title.trim() && !submitting && canCreate) handleCreate(); }}
-          className="app-text-title-md w-full rounded-lg border border-clickup-border bg-transparent px-4 py-3 font-medium text-clickup-text placeholder:text-clickup-text/40 transition-all focus:border-clickup-purple focus:outline-none"
+          className="app-text-title-md w-full rounded-lg border border-app-border bg-transparent px-4 py-3 font-medium text-app-ink placeholder:text-app-ink/40 transition-all focus:border-app-accent focus:outline-none"
           autoFocus
           disabled={!canCreate}
         />
@@ -156,7 +156,7 @@ export const NewTaskModal = ({
         {/* Description */}
         <div className="space-y-4">
           {showDescription ? (
-            <div className="rounded-lg border border-clickup-border bg-clickup-sidebar overflow-hidden">
+            <div className="rounded-lg border border-app-border bg-app-surface-sidebar overflow-hidden">
               <BlockEditor
                 initialContent={descriptionBlocks}
                 onChange={setDescriptionBlocks}
@@ -168,7 +168,7 @@ export const NewTaskModal = ({
             </div>
           ) : (
             <button
-              className="app-text-body flex items-center gap-2 text-clickup-text/50 transition-colors hover:text-clickup-text"
+              className="app-text-body flex items-center gap-2 text-app-ink/50 transition-colors hover:text-app-ink"
               onClick={() => setShowDescription(true)}
               disabled={!canCreate}
             >
@@ -183,7 +183,7 @@ export const NewTaskModal = ({
           <select
             value={status}
             onChange={e => setStatus(e.target.value)}
-            className="app-text-body-sm rounded-md border border-clickup-border bg-clickup-sidebar px-2 py-1 text-clickup-text focus:outline-none"
+            className="app-text-body-sm rounded-md border border-app-border bg-app-surface-sidebar px-2 py-1 text-app-ink focus:outline-none"
             disabled={!canCreate}
           >
             {getStatusSlugs(projectStatuses).map(s => (
@@ -194,7 +194,7 @@ export const NewTaskModal = ({
           <select
             value={priority}
             onChange={e => setPriority(e.target.value)}
-            className="app-text-body-sm rounded-md border border-clickup-border bg-clickup-sidebar px-2 py-1 text-clickup-text focus:outline-none"
+            className="app-text-body-sm rounded-md border border-app-border bg-app-surface-sidebar px-2 py-1 text-app-ink focus:outline-none"
             disabled={!canCreate}
           >
             <option value="low">Low</option>
@@ -207,7 +207,7 @@ export const NewTaskModal = ({
             type="date"
             value={dueDate}
             onChange={e => setDueDate(e.target.value)}
-            className="app-text-body-sm rounded-md border border-clickup-border bg-clickup-sidebar px-2 py-1 text-clickup-text focus:outline-none"
+            className="app-text-body-sm rounded-md border border-app-border bg-app-surface-sidebar px-2 py-1 text-app-ink focus:outline-none"
             disabled={!canCreate}
           />
         </div>

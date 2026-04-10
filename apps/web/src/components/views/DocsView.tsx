@@ -582,8 +582,8 @@ export const DocsView = () => {
           className={cn(
             'app-text-body-sm group flex w-full items-center gap-1 rounded px-2 py-1.5 transition-all',
             selectedPageId === node.id
-              ? 'bg-clickup-purple/10 text-clickup-purple'
-              : 'text-gray-400 hover:bg-clickup-hover hover:text-gray-200',
+              ? 'bg-app-accent/10 text-app-accent'
+              : 'text-gray-400 hover:bg-app-surface-hover hover:text-gray-200',
           )}
           style={{ paddingLeft: `${8 + depth * 16}px` }}
         >
@@ -604,7 +604,7 @@ export const DocsView = () => {
           ) : (
             <span className="w-3" />
           )}
-          <FileText size={14} className={selectedPageId === node.id ? 'text-clickup-purple' : 'text-gray-500'} />
+          <FileText size={14} className={selectedPageId === node.id ? 'text-app-accent' : 'text-gray-500'} />
           <span className="truncate flex-1 text-left">{node.title}</span>
           {node.can_edit ? (
             <span
@@ -626,19 +626,19 @@ export const DocsView = () => {
   const renderEditor = () => {
     if (editorLoading) {
       return (
-        <div className="flex-1 flex items-center justify-center bg-clickup-bg">
-          <Loader2 size={28} className="animate-spin text-clickup-purple" />
+        <div className="flex-1 flex items-center justify-center bg-app-bg">
+          <Loader2 size={28} className="animate-spin text-app-accent" />
         </div>
       );
     }
 
     if (!selectedDoc) {
       return (
-        <div className="flex-1 flex items-center justify-center bg-clickup-bg text-gray-500">
+        <div className="flex-1 flex items-center justify-center bg-app-bg text-gray-500">
           <div className="text-center">
             <FileText size={48} className="mx-auto mb-4 opacity-20" />
-            <h2 className="app-text-title-md text-clickup-text">Document not found</h2>
-            <button onClick={handleBack} className="app-text-control mt-4 text-clickup-purple hover:underline">
+            <h2 className="app-text-title-md text-app-ink">Document not found</h2>
+            <button onClick={handleBack} className="app-text-control mt-4 text-app-accent hover:underline">
               Go back
             </button>
           </div>
@@ -647,14 +647,14 @@ export const DocsView = () => {
     }
 
     return (
-      <div className="h-full flex flex-col bg-clickup-bg overflow-hidden">
-        <div className="h-12 border-b border-clickup-border flex items-center justify-between px-4 bg-clickup-sidebar">
+      <div className="h-full flex flex-col bg-app-bg overflow-hidden">
+        <div className="h-12 border-b border-app-border flex items-center justify-between px-4 bg-app-surface-sidebar">
           <div className="app-text-caption flex items-center gap-2 min-w-0">
             <span className="cursor-pointer text-gray-500 hover:text-gray-300" onClick={handleBack}>
               Docs
             </span>
             <span className="text-gray-600">/</span>
-            <span className="truncate text-clickup-text">{selectedDoc.title}</span>
+            <span className="truncate text-app-ink">{selectedDoc.title}</span>
             <Star
               size={12}
               className={cn(
@@ -669,63 +669,63 @@ export const DocsView = () => {
             {selectedDoc.can_share ? (
               <button
                 onClick={() => void openShareModal()}
-                className="app-text-control-sm flex items-center gap-1.5 rounded-md px-3 py-1.5 text-clickup-text transition-colors hover:bg-clickup-hover"
+                className="app-text-control-sm flex items-center gap-1.5 rounded-md px-3 py-1.5 text-app-ink transition-colors hover:bg-app-surface-hover"
               >
                 <Share2 size={14} />
                 <span>Share</span>
               </button>
             ) : null}
-            <button className="app-text-control-sm flex items-center gap-1.5 rounded-md px-3 py-1.5 text-clickup-purple transition-colors hover:bg-clickup-purple/10">
+            <button className="app-text-control-sm flex items-center gap-1.5 rounded-md px-3 py-1.5 text-app-accent transition-colors hover:bg-app-accent/10">
               <Sparkles size={14} />
               <span>Ask AI</span>
             </button>
             <div ref={docMenuRef} className="relative">
               <button
                 onClick={() => setDocMenuOpen((o) => !o)}
-                className="rounded p-1.5 text-gray-500 transition-colors hover:bg-clickup-hover hover:text-clickup-text"
+                className="rounded p-1.5 text-gray-500 transition-colors hover:bg-app-surface-hover hover:text-app-ink"
                 title="More actions"
               >
                 <MoreHorizontal size={18} />
               </button>
               {docMenuOpen ? (
-                <div className="absolute right-0 top-full mt-1 z-30 w-52 rounded-lg border border-clickup-border bg-clickup-sidebar py-1 shadow-xl">
+                <div className="absolute right-0 top-full mt-1 z-30 w-52 rounded-lg border border-app-border bg-app-surface-sidebar py-1 shadow-xl">
                   <button
                     onClick={() => void handleCopyLink(selectedDoc)}
-                    className="app-text-control-sm flex w-full items-center gap-2 px-3 py-2 text-left text-clickup-text hover:bg-clickup-hover"
+                    className="app-text-control-sm flex w-full items-center gap-2 px-3 py-2 text-left text-app-ink hover:bg-app-surface-hover"
                   >
                     <Link2 size={14} />
                     <span>{copiedDocId === selectedDoc.id ? 'Copied!' : 'Copy link'}</span>
                   </button>
                   <button
                     onClick={() => handleOpenInNewTab(selectedDoc)}
-                    className="app-text-control-sm flex w-full items-center gap-2 px-3 py-2 text-left text-clickup-text hover:bg-clickup-hover"
+                    className="app-text-control-sm flex w-full items-center gap-2 px-3 py-2 text-left text-app-ink hover:bg-app-surface-hover"
                   >
                     <ExternalLink size={14} />
                     <span>Open in new tab</span>
                   </button>
                   <button
                     onClick={() => void handleDuplicateDoc(selectedDoc)}
-                    className="app-text-control-sm flex w-full items-center gap-2 px-3 py-2 text-left text-clickup-text hover:bg-clickup-hover"
+                    className="app-text-control-sm flex w-full items-center gap-2 px-3 py-2 text-left text-app-ink hover:bg-app-surface-hover"
                   >
                     <Copy size={14} />
                     <span>Duplicate</span>
                   </button>
                   <button
                     onClick={handlePrintDoc}
-                    className="app-text-control-sm flex w-full items-center gap-2 px-3 py-2 text-left text-clickup-text hover:bg-clickup-hover"
+                    className="app-text-control-sm flex w-full items-center gap-2 px-3 py-2 text-left text-app-ink hover:bg-app-surface-hover"
                   >
                     <Printer size={14} />
                     <span>Print</span>
                   </button>
                   {selectedDoc.can_manage ? (
                     <>
-                      <div className="my-1 h-px bg-clickup-border" />
+                      <div className="my-1 h-px bg-app-border" />
                       <button
                         onClick={() => {
                           setDocMenuOpen(false);
                           void handleRenameDoc(selectedDoc);
                         }}
-                        className="app-text-control-sm flex w-full items-center gap-2 px-3 py-2 text-left text-clickup-text hover:bg-clickup-hover"
+                        className="app-text-control-sm flex w-full items-center gap-2 px-3 py-2 text-left text-app-ink hover:bg-app-surface-hover"
                       >
                         <Pencil size={14} />
                         <span>Rename</span>
@@ -735,7 +735,7 @@ export const DocsView = () => {
                           setDocMenuOpen(false);
                           void handleDeleteDoc(selectedDoc);
                         }}
-                        className="app-text-control-sm flex w-full items-center gap-2 px-3 py-2 text-left text-red-400 hover:bg-clickup-hover"
+                        className="app-text-control-sm flex w-full items-center gap-2 px-3 py-2 text-left text-red-400 hover:bg-app-surface-hover"
                       >
                         <Trash2 size={14} />
                         <span>Delete</span>
@@ -752,10 +752,10 @@ export const DocsView = () => {
         </div>
 
         <div className="flex-1 flex overflow-hidden">
-          <div className="w-64 border-r border-clickup-border bg-clickup-sidebar flex flex-col overflow-hidden">
+          <div className="w-64 border-r border-app-border bg-app-surface-sidebar flex flex-col overflow-hidden">
             <div className="p-4 space-y-4">
               <div className="space-y-1">
-                <h2 className="app-text-title-sm text-clickup-text truncate">{selectedDoc.title}</h2>
+                <h2 className="app-text-title-sm text-app-ink truncate">{selectedDoc.title}</h2>
                 <p className="app-text-caption text-gray-500 truncate">{selectedDoc.location_label}</p>
               </div>
 
@@ -768,7 +768,7 @@ export const DocsView = () => {
                   {selectedDoc.can_edit ? (
                     <button
                       onClick={() => void handleAddPage(null)}
-                      className="app-text-body-sm flex w-full items-center gap-2 rounded px-3 py-1.5 text-gray-500 transition-all hover:bg-clickup-hover hover:text-clickup-purple"
+                      className="app-text-body-sm flex w-full items-center gap-2 rounded px-3 py-1.5 text-gray-500 transition-all hover:bg-app-surface-hover hover:text-app-accent"
                     >
                       <Plus size={14} />
                       <span>Add page</span>
@@ -778,7 +778,7 @@ export const DocsView = () => {
               </div>
             </div>
 
-            <div className="mt-auto p-4 border-t border-clickup-border">
+            <div className="mt-auto p-4 border-t border-app-border">
               <div className="app-text-body-sm flex items-center gap-2 rounded px-3 py-1.5 text-gray-500">
                 {selectedDoc.source_type === 'native_doc' ? <Lock size={14} /> : <Globe size={14} />}
                 <span>{sharingLabel(selectedDoc)}</span>
@@ -797,7 +797,7 @@ export const DocsView = () => {
                         type="text"
                         defaultValue={activePage.title}
                         placeholder="Untitled"
-                        className="app-text-title-xl w-full bg-transparent text-clickup-text placeholder:text-gray-500 focus:outline-none"
+                        className="app-text-title-xl w-full bg-transparent text-app-ink placeholder:text-gray-500 focus:outline-none"
                         onBlur={(event) => void handlePageTitleSave(activePage.id, event.target.value)}
                         onKeyDown={(event) => {
                           if (event.key === 'Enter') {
@@ -811,14 +811,14 @@ export const DocsView = () => {
                         }}
                       />
                     ) : (
-                      <h1 className="app-text-title-xl text-clickup-text">{activePage.title}</h1>
+                      <h1 className="app-text-title-xl text-app-ink">{activePage.title}</h1>
                     )}
                     <div className="app-text-caption flex items-center gap-3 text-gray-500">
                       <div className="flex items-center gap-1.5">
-                        <div className="app-text-micro flex h-5 w-5 items-center justify-center rounded-full bg-clickup-purple font-bold text-clickup-bg">
+                        <div className="app-text-micro flex h-5 w-5 items-center justify-center rounded-full bg-app-accent font-bold text-app-bg">
                           {selectedDoc.created_by_name.split(' ').map((name) => name[0]).join('').slice(0, 2)}
                         </div>
-                        <span className="app-text-control text-clickup-text">{selectedDoc.created_by_name}</span>
+                        <span className="app-text-control text-app-ink">{selectedDoc.created_by_name}</span>
                       </div>
                       <span>·</span>
                       <span>{selectedDoc.location_label}</span>
@@ -852,7 +852,7 @@ export const DocsView = () => {
                   {selectedDoc.can_edit ? (
                     <button
                       onClick={() => void handleAddPage(null)}
-                      className="app-text-control rounded-md bg-clickup-purple px-4 py-2 text-clickup-bg hover:opacity-90"
+                      className="app-text-control rounded-md bg-app-accent px-4 py-2 text-app-bg hover:opacity-90"
                     >
                       Add first page
                     </button>
@@ -867,14 +867,14 @@ export const DocsView = () => {
   };
 
   return (
-    <div className="h-full w-full flex flex-col min-w-0 bg-clickup-bg overflow-hidden relative">
+    <div className="h-full w-full flex flex-col min-w-0 bg-app-bg overflow-hidden relative">
       {confirmDialog}
       {promptDialog}
 
       {showCreateModal ? (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50" onClick={() => setShowCreateModal(false)}>
-          <div className="w-full max-w-md rounded-lg border border-clickup-border bg-clickup-sidebar p-6 space-y-4" onClick={(event) => event.stopPropagation()}>
-            <h2 className="app-text-title-md text-clickup-text">New Document</h2>
+          <div className="w-full max-w-md rounded-lg border border-app-border bg-app-surface-sidebar p-6 space-y-4" onClick={(event) => event.stopPropagation()}>
+            <h2 className="app-text-title-md text-app-ink">New Document</h2>
             <div>
               <label className="app-text-caption text-gray-500 mb-1 block">Title</label>
               <input
@@ -882,7 +882,7 @@ export const DocsView = () => {
                 value={newDocTitle}
                 onChange={(event) => setNewDocTitle(event.target.value)}
                 placeholder="Document title..."
-                className="app-text-body w-full rounded-md border border-clickup-border bg-clickup-bg px-3 py-2 text-clickup-text focus:border-clickup-purple focus:outline-none"
+                className="app-text-body w-full rounded-md border border-app-border bg-app-bg px-3 py-2 text-app-ink focus:border-app-accent focus:outline-none"
                 autoFocus
                 onKeyDown={(event) => {
                   if (event.key === 'Enter') {
@@ -894,14 +894,14 @@ export const DocsView = () => {
             <div className="flex justify-end gap-2 pt-2">
               <button
                 onClick={() => setShowCreateModal(false)}
-                className="app-text-control rounded-md border border-clickup-border px-4 py-2 text-clickup-text hover:bg-clickup-hover"
+                className="app-text-control rounded-md border border-app-border px-4 py-2 text-app-ink hover:bg-app-surface-hover"
               >
                 Cancel
               </button>
               <button
                 onClick={() => void handleCreateDoc()}
                 disabled={creating || !newDocTitle.trim()}
-                className="app-text-control rounded-md bg-clickup-purple px-4 py-2 text-clickup-bg hover:opacity-90 disabled:opacity-50"
+                className="app-text-control rounded-md bg-app-accent px-4 py-2 text-app-bg hover:opacity-90 disabled:opacity-50"
               >
                 {creating ? 'Creating...' : 'Create'}
               </button>
@@ -912,27 +912,27 @@ export const DocsView = () => {
 
       {showShareModal && selectedDoc ? (
         <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/50" onClick={() => setShowShareModal(false)}>
-          <div className="w-full max-w-2xl rounded-lg border border-clickup-border bg-clickup-sidebar p-6 space-y-5" onClick={(event) => event.stopPropagation()}>
+          <div className="w-full max-w-2xl rounded-lg border border-app-border bg-app-surface-sidebar p-6 space-y-5" onClick={(event) => event.stopPropagation()}>
             <div className="flex items-start justify-between gap-4">
               <div>
-                <h2 className="app-text-title-md text-clickup-text">Share Document</h2>
+                <h2 className="app-text-title-md text-app-ink">Share Document</h2>
                 <p className="app-text-caption text-gray-500">{selectedDoc.title}</p>
               </div>
-              <button onClick={() => setShowShareModal(false)} className="rounded p-1.5 text-gray-500 hover:bg-clickup-hover">
+              <button onClick={() => setShowShareModal(false)} className="rounded p-1.5 text-gray-500 hover:bg-app-surface-hover">
                 <X size={18} />
               </button>
             </div>
 
             {shareLoading ? (
               <div className="py-10 flex items-center justify-center">
-                <Loader2 size={24} className="animate-spin text-clickup-purple" />
+                <Loader2 size={24} className="animate-spin text-app-accent" />
               </div>
             ) : (
               <>
-                <div className="rounded-lg border border-clickup-border bg-clickup-bg p-4 space-y-3">
+                <div className="rounded-lg border border-app-border bg-app-bg p-4 space-y-3">
                   <div className="flex items-center justify-between gap-4">
                     <div>
-                      <div className="app-text-control text-clickup-text">Internal link</div>
+                      <div className="app-text-control text-app-ink">Internal link</div>
                       <div className="app-text-caption text-gray-500">
                         Logged-in internal users can access this document through the generated link.
                       </div>
@@ -940,7 +940,7 @@ export const DocsView = () => {
                     {sharingState?.link_share?.active ? (
                       <button
                         onClick={() => void handleDisableLinkShare()}
-                        className="app-text-control rounded-md border border-clickup-border px-3 py-2 text-clickup-text hover:bg-clickup-hover"
+                        className="app-text-control rounded-md border border-app-border px-3 py-2 text-app-ink hover:bg-app-surface-hover"
                       >
                         Disable
                       </button>
@@ -949,14 +949,14 @@ export const DocsView = () => {
                         <select
                           value={sharingState?.link_share?.access_level ?? 'read'}
                           onChange={(event) => void handleEnableLinkShare(event.target.value as 'read' | 'edit')}
-                          className="app-text-body rounded-md border border-clickup-border bg-clickup-sidebar px-3 py-2 text-clickup-text focus:border-clickup-purple focus:outline-none"
+                          className="app-text-body rounded-md border border-app-border bg-app-surface-sidebar px-3 py-2 text-app-ink focus:border-app-accent focus:outline-none"
                         >
                           <option value="read">Can read</option>
                           <option value="edit">Can edit</option>
                         </select>
                         <button
                           onClick={() => void handleEnableLinkShare(sharingState?.link_share?.access_level ?? 'read')}
-                          className="app-text-control rounded-md bg-clickup-purple px-3 py-2 text-clickup-bg hover:opacity-90"
+                          className="app-text-control rounded-md bg-app-accent px-3 py-2 text-app-bg hover:opacity-90"
                         >
                           Enable link
                         </button>
@@ -970,17 +970,17 @@ export const DocsView = () => {
                         type="text"
                         readOnly
                         value={`${window.location.origin}${sharingState.link_share.share_path}`}
-                        className="app-text-body flex-1 rounded-md border border-clickup-border bg-clickup-sidebar px-3 py-2 text-clickup-text"
+                        className="app-text-body flex-1 rounded-md border border-app-border bg-app-surface-sidebar px-3 py-2 text-app-ink"
                       />
                       <button
                         onClick={() => void copyShareLink()}
-                        className="app-text-control rounded-md border border-clickup-border px-3 py-2 text-clickup-text hover:bg-clickup-hover"
+                        className="app-text-control rounded-md border border-app-border px-3 py-2 text-app-ink hover:bg-app-surface-hover"
                       >
                         <Copy size={14} />
                       </button>
                       <button
                         onClick={() => void handleEnableLinkShare(sharingState.link_share?.access_level ?? 'read', true)}
-                        className="app-text-control rounded-md border border-clickup-border px-3 py-2 text-clickup-text hover:bg-clickup-hover"
+                        className="app-text-control rounded-md border border-app-border px-3 py-2 text-app-ink hover:bg-app-surface-hover"
                       >
                         Regenerate
                       </button>
@@ -988,9 +988,9 @@ export const DocsView = () => {
                   ) : null}
                 </div>
 
-                <div className="rounded-lg border border-clickup-border bg-clickup-bg p-4 space-y-4">
+                <div className="rounded-lg border border-app-border bg-app-bg p-4 space-y-4">
                   <div>
-                    <div className="app-text-control text-clickup-text">Invite internal users</div>
+                    <div className="app-text-control text-app-ink">Invite internal users</div>
                     <div className="app-text-caption text-gray-500">
                       Grant read or edit access to specific internal users.
                     </div>
@@ -1000,7 +1000,7 @@ export const DocsView = () => {
                     <select
                       value={shareUserId}
                       onChange={(event) => setShareUserId(event.target.value)}
-                      className="app-text-body flex-1 rounded-md border border-clickup-border bg-clickup-sidebar px-3 py-2 text-clickup-text focus:border-clickup-purple focus:outline-none"
+                      className="app-text-body flex-1 rounded-md border border-app-border bg-app-surface-sidebar px-3 py-2 text-app-ink focus:border-app-accent focus:outline-none"
                     >
                       <option value="">Select user...</option>
                       {shareableUsers.map((user) => (
@@ -1012,7 +1012,7 @@ export const DocsView = () => {
                     <select
                       value={shareAccessLevel}
                       onChange={(event) => setShareAccessLevel(event.target.value as 'read' | 'edit')}
-                      className="app-text-body rounded-md border border-clickup-border bg-clickup-sidebar px-3 py-2 text-clickup-text focus:border-clickup-purple focus:outline-none"
+                      className="app-text-body rounded-md border border-app-border bg-app-surface-sidebar px-3 py-2 text-app-ink focus:border-app-accent focus:outline-none"
                     >
                       <option value="read">Can read</option>
                       <option value="edit">Can edit</option>
@@ -1020,7 +1020,7 @@ export const DocsView = () => {
                     <button
                       onClick={() => void handleAddUserShare()}
                       disabled={!shareUserId}
-                      className="app-text-control rounded-md bg-clickup-purple px-3 py-2 text-clickup-bg hover:opacity-90 disabled:opacity-50"
+                      className="app-text-control rounded-md bg-app-accent px-3 py-2 text-app-bg hover:opacity-90 disabled:opacity-50"
                     >
                       Add
                     </button>
@@ -1028,16 +1028,16 @@ export const DocsView = () => {
 
                   <div className="space-y-2">
                     {sharingState?.users.length ? sharingState.users.map((user) => (
-                      <div key={user.user_id} className="flex items-center justify-between rounded-md border border-clickup-border bg-clickup-sidebar px-3 py-2">
+                      <div key={user.user_id} className="flex items-center justify-between rounded-md border border-app-border bg-app-surface-sidebar px-3 py-2">
                         <div>
-                          <div className="app-text-control text-clickup-text">{user.full_name}</div>
+                          <div className="app-text-control text-app-ink">{user.full_name}</div>
                           <div className="app-text-caption text-gray-500">{user.email}</div>
                         </div>
                         <div className="flex items-center gap-2">
                           <span className="app-text-caption text-gray-500">{user.access_level === 'edit' ? 'Can edit' : 'Can read'}</span>
                           <button
                             onClick={() => void handleRemoveUserShare(user.user_id)}
-                            className="app-text-control rounded-md border border-clickup-border px-3 py-1.5 text-clickup-text hover:bg-clickup-hover"
+                            className="app-text-control rounded-md border border-app-border px-3 py-1.5 text-app-ink hover:bg-app-surface-hover"
                           >
                             Remove
                           </button>
@@ -1059,12 +1059,12 @@ export const DocsView = () => {
           <div className="p-8 space-y-5 overflow-y-auto h-full custom-scrollbar">
             <div className="flex items-center justify-between">
               <div>
-                <h1 className="app-text-title-lg text-clickup-text">{activeCategoryLabel}</h1>
+                <h1 className="app-text-title-lg text-app-ink">{activeCategoryLabel}</h1>
                 <p className="app-text-caption text-gray-500">{total} documents</p>
               </div>
               <button
                 onClick={() => openCreateModal()}
-                className="app-text-control flex items-center gap-2 rounded-md bg-clickup-purple px-4 py-2 text-clickup-bg shadow-lg shadow-purple-500/20 transition-opacity hover:opacity-90"
+                className="app-text-control flex items-center gap-2 rounded-md bg-app-accent px-4 py-2 text-app-bg shadow-lg shadow-purple-500/20 transition-opacity hover:opacity-90"
               >
                 <Plus size={16} />
                 <span>New Doc</span>
@@ -1076,19 +1076,19 @@ export const DocsView = () => {
                 <button
                   key={template.title}
                   onClick={() => openCreateModal(template.title)}
-                  className="flex items-center gap-3 rounded-lg border border-clickup-border bg-clickup-sidebar px-4 py-3 text-left transition-colors hover:border-clickup-purple/30 hover:bg-clickup-hover flex-1"
+                  className="flex items-center gap-3 rounded-lg border border-app-border bg-app-surface-sidebar px-4 py-3 text-left transition-colors hover:border-app-accent/30 hover:bg-app-surface-hover flex-1"
                 >
                   <span className="text-2xl">{template.icon}</span>
                   <div>
-                    <div className="app-text-control text-clickup-text">{template.title}</div>
+                    <div className="app-text-control text-app-ink">{template.title}</div>
                     <div className="app-text-micro text-gray-500">{template.desc}</div>
                   </div>
                 </button>
               ))}
             </div>
 
-            <div className="flex items-center gap-4 border-b border-clickup-border pb-2">
-              <button className="app-text-control-sm flex items-center gap-1.5 rounded px-2 py-1 text-gray-500 hover:bg-clickup-hover hover:text-clickup-text">
+            <div className="flex items-center gap-4 border-b border-app-border pb-2">
+              <button className="app-text-control-sm flex items-center gap-1.5 rounded px-2 py-1 text-gray-500 hover:bg-app-surface-hover hover:text-app-ink">
                 <Filter size={14} />
                 <span>Filters</span>
               </button>
@@ -1101,7 +1101,7 @@ export const DocsView = () => {
                       defaultValue={searchQuery}
                       placeholder="Search docs..."
                       onChange={(event) => handleSearchChange(event.target.value)}
-                      className="app-text-body-sm w-64 rounded-md border border-clickup-border bg-clickup-sidebar py-1.5 pl-9 pr-4 text-clickup-text focus:border-clickup-purple focus:outline-none"
+                      className="app-text-body-sm w-64 rounded-md border border-app-border bg-app-surface-sidebar py-1.5 pl-9 pr-4 text-app-ink focus:border-app-accent focus:outline-none"
                       autoFocus
                       onBlur={(event) => {
                         if (!event.target.value) {
@@ -1113,7 +1113,7 @@ export const DocsView = () => {
                 ) : (
                   <button
                     onClick={() => setSearchOpen(true)}
-                    className="p-1.5 rounded text-gray-500 hover:bg-clickup-hover hover:text-clickup-text"
+                    className="p-1.5 rounded text-gray-500 hover:bg-app-surface-hover hover:text-app-ink"
                   >
                     <Search size={16} />
                   </button>
@@ -1123,31 +1123,31 @@ export const DocsView = () => {
 
             {loadingList ? (
               <div className="flex items-center justify-center py-20">
-                <Loader2 size={32} className="animate-spin text-clickup-purple" />
+                <Loader2 size={32} className="animate-spin text-app-accent" />
               </div>
             ) : docs.length === 0 ? (
               <div className="flex-1 flex flex-col items-center justify-center py-20 text-center">
-                <div className="w-24 h-24 bg-clickup-sidebar rounded-full flex items-center justify-center mb-6">
+                <div className="w-24 h-24 bg-app-surface-sidebar rounded-full flex items-center justify-center mb-6">
                   <FileText size={48} className="text-gray-600 opacity-20" />
                 </div>
-                <h2 className="app-text-title-md mb-2 text-clickup-text">No Docs found</h2>
+                <h2 className="app-text-title-md mb-2 text-app-ink">No Docs found</h2>
                 <p className="app-text-body mb-8 max-w-xs mx-auto text-gray-500">
                   Create personal docs here, and browse PMS documents with their original permissions.
                 </p>
                 <button
                   onClick={() => openCreateModal()}
-                  className="app-text-control rounded-md bg-clickup-purple px-6 py-2 font-bold text-clickup-bg transition-opacity hover:opacity-90"
+                  className="app-text-control rounded-md bg-app-accent px-6 py-2 font-bold text-app-bg transition-opacity hover:opacity-90"
                 >
                   New Doc
                 </button>
               </div>
             ) : (
-              <div className="border border-clickup-border rounded-lg overflow-hidden">
+              <div className="border border-app-border rounded-lg overflow-hidden">
                 <table className="w-full">
                   <thead>
-                    <tr className="border-b border-clickup-border bg-clickup-sidebar">
+                    <tr className="border-b border-app-border bg-app-surface-sidebar">
                       <th
-                        className="app-text-overline text-left px-4 py-2.5 text-gray-500 cursor-pointer hover:text-clickup-text"
+                        className="app-text-overline text-left px-4 py-2.5 text-gray-500 cursor-pointer hover:text-app-ink"
                         onClick={() => {
                           if (sortBy === 'title') setSortDir((current) => (current === 'asc' ? 'desc' : 'asc'));
                           else {
@@ -1161,7 +1161,7 @@ export const DocsView = () => {
                       <th className="app-text-overline text-left px-4 py-2.5 text-gray-500">Location</th>
                       <th className="app-text-overline text-left px-4 py-2.5 text-gray-500">Sharing</th>
                       <th
-                        className="app-text-overline text-left px-4 py-2.5 text-gray-500 cursor-pointer hover:text-clickup-text"
+                        className="app-text-overline text-left px-4 py-2.5 text-gray-500 cursor-pointer hover:text-app-ink"
                         onClick={() => {
                           if (sortBy === 'updated_at') setSortDir((current) => (current === 'asc' ? 'desc' : 'asc'));
                           else {
@@ -1180,13 +1180,13 @@ export const DocsView = () => {
                       <tr
                         key={item.id}
                         onClick={() => openDoc(item.id)}
-                        className="cursor-pointer border-b border-clickup-border last:border-b-0 hover:bg-clickup-sidebar/60"
+                        className="cursor-pointer border-b border-app-border last:border-b-0 hover:bg-app-surface-sidebar/60"
                       >
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-3 min-w-0">
-                            <FileText size={16} className="text-clickup-purple shrink-0" />
+                            <FileText size={16} className="text-app-accent shrink-0" />
                             <div className="min-w-0">
-                              <div className="app-text-control text-clickup-text truncate">{item.title}</div>
+                              <div className="app-text-control text-app-ink truncate">{item.title}</div>
                               <div className="app-text-caption text-gray-500">
                                 {item.page_count} page{item.page_count === 1 ? '' : 's'}
                               </div>
@@ -1215,19 +1215,19 @@ export const DocsView = () => {
                               event.stopPropagation();
                               setMenuOpenId((current) => (current === item.id ? null : item.id));
                             }}
-                            className="rounded p-1.5 text-gray-500 hover:bg-clickup-hover"
+                            className="rounded p-1.5 text-gray-500 hover:bg-app-surface-hover"
                           >
                             <MoreHorizontal size={16} />
                           </button>
                           {menuOpenId === item.id ? (
-                            <div className="absolute right-4 top-11 z-20 w-48 rounded-lg border border-clickup-border bg-clickup-sidebar py-1 shadow-xl">
+                            <div className="absolute right-4 top-11 z-20 w-48 rounded-lg border border-app-border bg-app-surface-sidebar py-1 shadow-xl">
                               <button
                                 onClick={(event) => {
                                   event.stopPropagation();
                                   void handleRenameDoc(item);
                                 }}
                                 disabled={!item.can_manage}
-                                className="flex w-full items-center gap-2 px-3 py-2 text-left text-clickup-text hover:bg-clickup-hover disabled:opacity-40"
+                                className="flex w-full items-center gap-2 px-3 py-2 text-left text-app-ink hover:bg-app-surface-hover disabled:opacity-40"
                               >
                                 <Pencil size={14} />
                                 <span className="app-text-control-sm">Rename</span>
@@ -1238,7 +1238,7 @@ export const DocsView = () => {
                                   void handleDeleteDoc(item);
                                 }}
                                 disabled={!item.can_manage}
-                                className="flex w-full items-center gap-2 px-3 py-2 text-left text-red-400 hover:bg-clickup-hover disabled:opacity-40"
+                                className="flex w-full items-center gap-2 px-3 py-2 text-left text-red-400 hover:bg-app-surface-hover disabled:opacity-40"
                               >
                                 <Trash2 size={14} />
                                 <span className="app-text-control-sm">Delete</span>
