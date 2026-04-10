@@ -1,18 +1,19 @@
 import { NAV_ITEMS } from './constants';
 import { hasFeatureAccess, type AuthUser } from './domains/auth/auth-api';
 
-export type ShellAppId = 'home' | 'ai' | 'pms' | 'docs' | 'planner' | 'settings' | 'profile';
+export type ShellAppId = 'home' | 'ai' | 'pms' | 'docs' | 'planner' | 'meeting' | 'settings' | 'profile';
 
 export type ShellState = {
   activeAppId: ShellAppId;
   activeNavItemId: string;
 };
 
-export const FEATURE_BY_APP_ID: Partial<Record<'ai' | 'pms' | 'docs' | 'planner' | 'settings', string>> = {
+export const FEATURE_BY_APP_ID: Partial<Record<'ai' | 'pms' | 'docs' | 'planner' | 'meeting' | 'settings', string>> = {
   ai: 'nav.ai',
   docs: 'nav.docs',
   pms: 'nav.pms',
   planner: 'nav.planner',
+  meeting: 'nav.meeting',
   settings: 'nav.admin',
 };
 
@@ -23,7 +24,7 @@ const HOME_SHELL_STATE: ShellState = {
 
 function canShowAppChrome(
   user: AuthUser | null | undefined,
-  appId: 'ai' | 'pms' | 'docs' | 'planner' | 'settings',
+  appId: 'ai' | 'pms' | 'docs' | 'planner' | 'meeting' | 'settings',
 ): boolean {
   const featureCode = FEATURE_BY_APP_ID[appId];
   return featureCode ? hasFeatureAccess(user, featureCode) : true;
@@ -86,6 +87,12 @@ export function resolveShellState(
   if (path === '/planner') {
     return canShowAppChrome(user, 'planner')
       ? { activeAppId: 'planner', activeNavItemId: '' }
+      : HOME_SHELL_STATE;
+  }
+
+  if (path === '/meeting' || path.startsWith('/meeting/')) {
+    return canShowAppChrome(user, 'meeting')
+      ? { activeAppId: 'meeting', activeNavItemId: 'meeting-upcoming' }
       : HOME_SHELL_STATE;
   }
 

@@ -19,6 +19,7 @@ import {
   Pencil,
   Sparkles,
   Trash2,
+  Users,
 } from 'lucide-react';
 import { InlineNotice, useConfirm, usePrompt } from '@aidoo/ui';
 import { cn } from '@/src/lib/utils';
@@ -1349,7 +1350,7 @@ export const SubSidebar = ({ activeAppId, activeNavItemId }: { activeAppId: stri
           <h2 className="app-text-overline text-gray-600 dark:text-gray-300">
             {activeAppId === 'settings' ? 'All settings' : APP_BAR_ITEMS.find((item) => item.id === activeAppId)?.title}
           </h2>
-          {(activeAppId === 'pms' || activeAppId === 'docs' || activeAppId === 'planner' || activeAppId === 'ai') ? (
+          {(activeAppId === 'pms' || activeAppId === 'docs' || activeAppId === 'planner' || activeAppId === 'ai' || activeAppId === 'meeting') ? (
             <div ref={createMenuRef} className="relative">
               <button
                 type="button"
@@ -1425,6 +1426,27 @@ export const SubSidebar = ({ activeAppId, activeNavItemId }: { activeAppId: stri
                     >
                       <Sparkles size={14} className="text-gray-500" />
                       <span>Ask AI</span>
+                    </button>
+                  ) : null}
+                  {activeAppId === 'meeting' ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCreateMenuOpen(false);
+                        if (window.location.pathname.startsWith('/meeting')) {
+                          window.dispatchEvent(new CustomEvent('meeting:create-event'));
+                        } else {
+                          navigate('/meeting');
+                          // Defer the dispatch until after the route mounts.
+                          setTimeout(() => {
+                            window.dispatchEvent(new CustomEvent('meeting:create-event'));
+                          }, 50);
+                        }
+                      }}
+                      className="app-text-control-sm flex w-full items-center gap-2 px-3 py-2 text-left text-app-ink hover:bg-app-surface-hover"
+                    >
+                      <Users size={14} className="text-gray-500" />
+                      <span>Meeting</span>
                     </button>
                   ) : null}
                 </div>

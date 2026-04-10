@@ -85,6 +85,7 @@ def client(monkeypatch: pytest.MonkeyPatch, postgres_dsn: str) -> TestClient:
     from aidoo_api.core.llm import get_llm_client
     from aidoo_api.core.settings import get_settings
     from aidoo_api.domains.auth import models as auth_models  # noqa: F401
+    from aidoo_api.domains.meeting import models as meeting_models  # noqa: F401
     from aidoo_api.domains.pms import models as pms_models  # noqa: F401
 
     get_settings.cache_clear()

@@ -21,6 +21,7 @@ import { SubSidebar } from './components/layout/SubSidebar';
 import { AIView } from './components/views/AIView';
 import { DocsView } from './components/views/DocsView';
 import { HomeView } from './components/views/HomeView';
+import { MeetingView } from './components/views/MeetingView/MeetingView';
 import { PlannerView } from './components/views/PlannerView';
 import { PMSView } from './components/views/PMSView/PMSView';
 import { ToolView } from './components/views/ToolView';
@@ -236,6 +237,14 @@ const AppContent = () => {
               element={(
                 <WorkspaceGate featureCode="nav.planner">
                   <PlannerView />
+                </WorkspaceGate>
+              )}
+            />
+            <Route
+              path="/meeting/*"
+              element={(
+                <WorkspaceGate featureCode="nav.meeting">
+                  <MeetingView />
                 </WorkspaceGate>
               )}
             />

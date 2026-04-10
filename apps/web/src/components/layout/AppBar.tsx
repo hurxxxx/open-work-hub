@@ -14,11 +14,12 @@ import { getUnreadNotificationCount } from '@/src/domains/pms/pms-api';
 import { cn } from '@/src/lib/utils';
 import { NotificationPanel } from './NotificationPanel';
 
-const featureByAppId: Partial<Record<'home' | 'ai' | 'pms' | 'docs' | 'planner' | 'settings', string>> = {
+const featureByAppId: Partial<Record<'home' | 'ai' | 'pms' | 'docs' | 'planner' | 'meeting' | 'settings', string>> = {
   ai: 'nav.ai',
   docs: 'nav.docs',
   pms: 'nav.pms',
   planner: 'nav.planner',
+  meeting: 'nav.meeting',
   settings: 'nav.admin',
 };
 

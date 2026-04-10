@@ -83,11 +83,21 @@
   --ui-color-surface-hover: #353638;
   --ui-color-border: #3d3e40;
   --ui-color-border-strong: #4b4c4e;
-  --ui-color-ink: #d5d6d7;
-  --ui-color-ink-muted: #9ca3af;
-  --ui-color-ink-subtle: #6b7280;
-  --ui-color-accent: #3d47b8;
-  --ui-color-accent-hover: #5662d4;
+  /* Brighter ink base. The previous #d5d6d7 was readable as full-opacity body
+     text, but the codebase uses text-app-ink/40 / /50 / /60 modifiers in
+     ~130 places for label text. Opacity blending against the dark surface
+     (#2a2b2d) drove the effective color into ~#6e6f71 territory, well below
+     WCAG AA. Lifting the base color brightens every faded usage at once. */
+  --ui-color-ink: #e8eaed;
+  --ui-color-ink-muted: #b8bdc7;
+  --ui-color-ink-subtle: #9ca3af;
+  /* Brand indigo, lifted for dark surfaces. The light-mode token (#1c2385)
+     is a deep navy that vanishes on a dark background, so the dark variant
+     uses a Tailwind indigo-400 / indigo-300 pair. White button text on the
+     base value passes WCAG AA Large; the same value as text on the dark
+     surface (#2a2b2d) passes WCAG AA for body sizes. */
+  --ui-color-accent: #818cf8;
+  --ui-color-accent-hover: #a5b4fc;
   --ui-color-accent-weak: #3a3b3d;
   --ui-color-accent-fg: #ffffff;
   --ui-color-success: #22c55e;
@@ -95,6 +105,16 @@
   --ui-color-danger: #ef4444;
   --ui-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.2);
   --ui-shadow-lg: 0 16px 32px rgba(0, 0, 0, 0.3);
+
+  /* Remap raw Tailwind grays so direct text-gray-500 / text-gray-600 usages
+     (over 200 in this codebase, mostly label text without dark: overrides)
+     become legible on dark surfaces. Both bump to gray-400, the smallest
+     step that clears WCAG AA against the dark surface. bg-gray-500 /
+     border-gray-500 also pick up the new value, but the only six such
+     usages are decorative status dots and hover borders where a small
+     brightness shift is acceptable. */
+  --color-gray-500: oklch(0.707 0.022 261.325); /* Tailwind gray-400 */
+  --color-gray-600: oklch(0.707 0.022 261.325); /* Tailwind gray-400 */
 }
 
 @layer base {

@@ -59,6 +59,7 @@ const FEATURE_TO_APP: Record<string, string> = {
   'nav.docs': 'docs',
   'nav.pms': 'pms',
   'nav.planner': 'planner',
+  'nav.meeting': 'meeting',
   'nav.admin': 'admin',
 };
 

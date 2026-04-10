@@ -113,6 +113,7 @@ APP_FEATURE_CODES = {
     "docs": "nav.docs",
     "pms": "nav.pms",
     "planner": "nav.planner",
+    "meeting": "nav.meeting",
     "admin": "nav.admin",
 }
 FEATURE_APP_CODES = {value: key for key, value in APP_FEATURE_CODES.items()}
@@ -122,6 +123,7 @@ DEFAULT_WORKSPACES = [
     {"key": "docs", "name": "Docs Workspace", "description": "Documents and knowledge work."},
     {"key": "pms", "name": "PMS Workspace", "description": "Project and issue management."},
     {"key": "planner", "name": "Planner Workspace", "description": "Calendar and planning tools."},
+    {"key": "meeting", "name": "Meeting Workspace", "description": "Meeting minutes and linked work."},
     {"key": "admin", "name": "Admin Console", "description": "Identity and operations control."},
 ]
 
@@ -153,6 +155,12 @@ DEFAULT_FEATURE_POLICIES = [
         "name": "Planner navigation",
         "description": "Expose the Planner workspace entrypoint.",
         "allowed_workspace_keys": ["planner"],
+    },
+    {
+        "code": "nav.meeting",
+        "name": "Meeting navigation",
+        "description": "Expose the Meeting workspace entrypoint.",
+        "allowed_workspace_keys": ["meeting"],
     },
     {
         "code": "nav.admin",
@@ -201,7 +209,11 @@ DEV_LOGIN_ACCOUNTS = [
         "email": "ai-member@aidoo.local",
         "description": "AI 앱 접근 권한만 가진 일반 사용자입니다.",
         "category": "Applications",
-        "workspace_bindings": [("ai", "member")],
+        "workspace_bindings": [
+            ("ai", "member"),
+            ("planner", "member"),
+            ("meeting", "member"),
+        ],
         "team_role": None,
     },
     {
@@ -237,7 +249,11 @@ DEV_LOGIN_ACCOUNTS = [
         "email": "pms-member@aidoo.local",
         "description": "PMS 공간에서 일반 작업을 수행합니다.",
         "category": "Applications",
-        "workspace_bindings": [("pms", "member")],
+        "workspace_bindings": [
+            ("pms", "member"),
+            ("planner", "member"),
+            ("meeting", "member"),
+        ],
         "team_role": "member",
     },
     {
