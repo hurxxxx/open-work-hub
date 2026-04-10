@@ -201,6 +201,16 @@ export function deleteDocsItem(token: string, itemId: string, shareToken?: strin
   });
 }
 
+export function duplicateDocsItem(
+  token: string,
+  itemId: string,
+  shareToken?: string | null,
+): Promise<DocsHubItem> {
+  return request<DocsHubItem>(withShareToken(`/api/v1/docs/items/${itemId}/duplicate`, shareToken), token, {
+    method: 'POST',
+  });
+}
+
 export function listDocPages(token: string, itemId: string, shareToken?: string | null): Promise<DocsPageListResponse> {
   return request<DocsPageListResponse>(withShareToken(`/api/v1/docs/items/${itemId}/pages`, shareToken), token);
 }

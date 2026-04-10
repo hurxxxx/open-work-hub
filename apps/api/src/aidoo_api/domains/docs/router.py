@@ -1062,6 +1062,104 @@ def delete_doc_item(
     raise HTTPException(status_code=404, detail="Doc not found.")
 
 
+@router.post(
+    "/items/{item_id}/duplicate",
+    response_model=DocsHubItem,
+    status_code=status.HTTP_201_CREATED,
+)
+def duplicate_doc_item(
+    item_id: str,
+    share_token: str | None = Query(default=None),
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+) -> DocsHubItem:
+    """Duplicate any doc the user can view into a new private native doc owned by them."""
+    if share_token is None or not _share_token_allows_item_without_docs_access(item_id):
+        _ensure_docs_workspace_access(db, current_user)
+
+    item = _lookup_item(db, item_id, current_user, share_token=share_token)
+    if not item.can_view:
+        raise HTTPException(status_code=403, detail="Doc view access required.")
+
+    # Collect non-trashed source pages, regardless of source type.
+    if item.source_type == SOURCE_NATIVE_DOC:
+        source_doc, _access = _native_doc_from_item_or_404(
+            db, item_id, current_user, share_token=share_token,
+        )
+        source_title = source_doc.title
+        source_pages = [page for page in source_doc.pages if page.trashed_at is None]
+    elif item.source_type == SOURCE_PMS_SPACE_DOC:
+        source_doc, _role = _space_doc_from_item_or_404(db, item_id, current_user)
+        source_title = source_doc.title
+        source_pages = [page for page in source_doc.pages if page.trashed_at is None]
+    else:
+        raise HTTPException(status_code=404, detail="Doc not found.")
+
+    # Create the new native doc shell.
+    new_doc = NativeDoc(
+        id=new_id(),
+        owner_id=current_user.id,
+        title=f"{source_title} (copy)"[:200],
+    )
+    db.add(new_doc)
+
+    # Clone pages preserving parent/child hierarchy via id mapping.
+    sorted_pages = sorted(
+        source_pages,
+        key=lambda page: (
+            "" if page.parent_id is None else page.parent_id,
+            page.sort_order,
+            page.created_at,
+        ),
+    )
+    id_map: dict[str, str] = {}
+    cloned_pages: list[tuple[NativeDocPage, list[dict] | None]] = []
+    for source_page in sorted_pages:
+        new_page_id = new_id()
+        id_map[source_page.id] = new_page_id
+        new_parent_id = id_map.get(source_page.parent_id) if source_page.parent_id else None
+        content_blocks = source_page.content_blocks or []
+        new_page = NativeDocPage(
+            id=new_page_id,
+            doc_id=new_doc.id,
+            parent_id=new_parent_id,
+            title=source_page.title,
+            content_blocks=content_blocks,
+            sort_order=source_page.sort_order,
+            created_by_id=current_user.id,
+        )
+        db.add(new_page)
+        cloned_pages.append((new_page, content_blocks))
+
+    # Always include at least one page so the new doc opens to something.
+    if not cloned_pages:
+        empty_page = NativeDocPage(
+            id=new_id(),
+            doc_id=new_doc.id,
+            parent_id=None,
+            title=source_title,
+            content_blocks=[],
+            sort_order=0,
+            created_by_id=current_user.id,
+        )
+        db.add(empty_page)
+
+    db.commit()
+
+    # Re-link any embedded media to the cloned pages.
+    for new_page, content_blocks in cloned_pages:
+        if content_blocks:
+            sync_embedded_media(db, content_blocks, "docs_native_page", new_page.id, current_user)
+
+    new_doc = _load_native_doc_for_access(db, new_doc.id)
+    assert new_doc is not None
+    return _serialize_native_item(
+        new_doc,
+        _resolve_native_doc_access(new_doc, current_user),
+        _get_pref_map(db, current_user.id).get((SOURCE_NATIVE_DOC, new_doc.id)),
+    )
+
+
 @router.get("/items/{item_id}/pages", response_model=DocsPageListResponse)
 def list_doc_pages(
     item_id: str,

@@ -4,14 +4,17 @@ import {
   ChevronDown,
   ChevronRight,
   Copy,
+  ExternalLink,
   FileText,
   Filter,
   Globe,
+  Link2,
   Loader2,
   Lock,
   MoreHorizontal,
   Pencil,
   Plus,
+  Printer,
   Search,
   Share2,
   Sparkles,
@@ -31,6 +34,7 @@ import {
   deleteDocsItem,
   deleteDocLinkShare,
   deleteDocUserShare,
+  duplicateDocsItem,
   getDocsItem,
   getDocSharing,
   listDocPages,
@@ -142,6 +146,19 @@ export const DocsView = () => {
   const [sortBy, setSortBy] = useState('updated_at');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
   const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
+  const [docMenuOpen, setDocMenuOpen] = useState(false);
+  const docMenuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!docMenuOpen) return;
+    function onClick(e: MouseEvent) {
+      if (docMenuRef.current && !docMenuRef.current.contains(e.target as Node)) {
+        setDocMenuOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', onClick);
+    return () => document.removeEventListener('mousedown', onClick);
+  }, [docMenuOpen]);
 
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [newDocTitle, setNewDocTitle] = useState('');
@@ -348,6 +365,47 @@ export const DocsView = () => {
     }
   };
 
+  const handleDuplicateDoc = async (item: DocsHubItem) => {
+    setMenuOpenId(null);
+    setDocMenuOpen(false);
+    if (!token) return;
+    try {
+      const duplicate = await duplicateDocsItem(token, item.id, shareToken);
+      void fetchDocs();
+      navigate(toolId ? `/tool/${toolId}/${duplicate.id}` : `/docs/${duplicate.id}`);
+    } catch {
+      // no-op
+    }
+  };
+
+  const docUrlFor = (item: DocsHubItem): string => {
+    const path = toolId ? `/tool/${toolId}/${item.id}` : `/docs/${item.id}`;
+    return `${window.location.origin}${path}`;
+  };
+
+  const [copiedDocId, setCopiedDocId] = useState<string | null>(null);
+
+  const handleCopyLink = async (item: DocsHubItem) => {
+    setDocMenuOpen(false);
+    try {
+      await navigator.clipboard.writeText(docUrlFor(item));
+      setCopiedDocId(item.id);
+      window.setTimeout(() => setCopiedDocId((current) => (current === item.id ? null : current)), 1500);
+    } catch {
+      // no-op
+    }
+  };
+
+  const handleOpenInNewTab = (item: DocsHubItem) => {
+    setDocMenuOpen(false);
+    window.open(docUrlFor(item), '_blank', 'noopener,noreferrer');
+  };
+
+  const handlePrintDoc = () => {
+    setDocMenuOpen(false);
+    window.print();
+  };
+
   const handleAddPage = async (parentId?: string | null) => {
     if (!token || !selectedDoc || !selectedDoc.can_edit) return;
     const title = await prompt({ title: 'New Page', defaultValue: 'Untitled' });
@@ -412,6 +470,20 @@ export const DocsView = () => {
         // no-op
       }
     }, 800);
+  };
+
+  const handlePageTitleSave = async (pageId: string, nextTitle: string) => {
+    if (!token) return;
+    const trimmed = nextTitle.trim();
+    if (!trimmed) return;
+    const target = pages.find((page) => page.id === pageId);
+    if (!target || target.title === trimmed) return;
+    try {
+      const updated = await updateDocPage(token, pageId, { title: trimmed }, shareToken);
+      setPages((current) => current.map((page) => (page.id === updated.id ? updated : page)));
+    } catch {
+      // no-op
+    }
   };
 
   const toggleExpand = (nodeId: string) => {
@@ -607,6 +679,72 @@ export const DocsView = () => {
               <Sparkles size={14} />
               <span>Ask AI</span>
             </button>
+            <div ref={docMenuRef} className="relative">
+              <button
+                onClick={() => setDocMenuOpen((o) => !o)}
+                className="rounded p-1.5 text-gray-500 transition-colors hover:bg-clickup-hover hover:text-clickup-text"
+                title="More actions"
+              >
+                <MoreHorizontal size={18} />
+              </button>
+              {docMenuOpen ? (
+                <div className="absolute right-0 top-full mt-1 z-30 w-52 rounded-lg border border-clickup-border bg-clickup-sidebar py-1 shadow-xl">
+                  <button
+                    onClick={() => void handleCopyLink(selectedDoc)}
+                    className="app-text-control-sm flex w-full items-center gap-2 px-3 py-2 text-left text-clickup-text hover:bg-clickup-hover"
+                  >
+                    <Link2 size={14} />
+                    <span>{copiedDocId === selectedDoc.id ? 'Copied!' : 'Copy link'}</span>
+                  </button>
+                  <button
+                    onClick={() => handleOpenInNewTab(selectedDoc)}
+                    className="app-text-control-sm flex w-full items-center gap-2 px-3 py-2 text-left text-clickup-text hover:bg-clickup-hover"
+                  >
+                    <ExternalLink size={14} />
+                    <span>Open in new tab</span>
+                  </button>
+                  <button
+                    onClick={() => void handleDuplicateDoc(selectedDoc)}
+                    className="app-text-control-sm flex w-full items-center gap-2 px-3 py-2 text-left text-clickup-text hover:bg-clickup-hover"
+                  >
+                    <Copy size={14} />
+                    <span>Duplicate</span>
+                  </button>
+                  <button
+                    onClick={handlePrintDoc}
+                    className="app-text-control-sm flex w-full items-center gap-2 px-3 py-2 text-left text-clickup-text hover:bg-clickup-hover"
+                  >
+                    <Printer size={14} />
+                    <span>Print</span>
+                  </button>
+                  {selectedDoc.can_manage ? (
+                    <>
+                      <div className="my-1 h-px bg-clickup-border" />
+                      <button
+                        onClick={() => {
+                          setDocMenuOpen(false);
+                          void handleRenameDoc(selectedDoc);
+                        }}
+                        className="app-text-control-sm flex w-full items-center gap-2 px-3 py-2 text-left text-clickup-text hover:bg-clickup-hover"
+                      >
+                        <Pencil size={14} />
+                        <span>Rename</span>
+                      </button>
+                      <button
+                        onClick={() => {
+                          setDocMenuOpen(false);
+                          void handleDeleteDoc(selectedDoc);
+                        }}
+                        className="app-text-control-sm flex w-full items-center gap-2 px-3 py-2 text-left text-red-400 hover:bg-clickup-hover"
+                      >
+                        <Trash2 size={14} />
+                        <span>Delete</span>
+                      </button>
+                    </>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
             <button onClick={handleBack} className="p-1.5 hover:bg-red-500/20 hover:text-red-500 rounded text-gray-500 transition-colors">
               <X size={20} />
             </button>
@@ -640,38 +778,41 @@ export const DocsView = () => {
               </div>
             </div>
 
-            <div className="mt-auto p-4 border-t border-clickup-border space-y-1">
+            <div className="mt-auto p-4 border-t border-clickup-border">
               <div className="app-text-body-sm flex items-center gap-2 rounded px-3 py-1.5 text-gray-500">
                 {selectedDoc.source_type === 'native_doc' ? <Lock size={14} /> : <Globe size={14} />}
                 <span>{sharingLabel(selectedDoc)}</span>
               </div>
-              {selectedDoc.can_manage ? (
-                <>
-                  <button
-                    onClick={() => void handleRenameDoc(selectedDoc)}
-                    className="app-text-body-sm flex w-full items-center gap-2 rounded px-3 py-1.5 text-gray-500 hover:bg-clickup-hover"
-                  >
-                    <Pencil size={14} />
-                    <span>Rename Doc</span>
-                  </button>
-                  <button
-                    onClick={() => void handleDeleteDoc(selectedDoc)}
-                    className="app-text-body-sm flex w-full items-center gap-2 rounded px-3 py-1.5 text-gray-500 hover:bg-clickup-hover hover:text-red-400"
-                  >
-                    <Trash2 size={14} />
-                    <span>Delete Doc</span>
-                  </button>
-                </>
-              ) : null}
             </div>
           </div>
 
-          <div className="flex-1 flex flex-col min-w-0 bg-white dark:bg-[#1e1e24] overflow-y-auto custom-scrollbar">
+          <div className="docs-print-area flex-1 flex flex-col min-w-0 bg-white dark:bg-[#1e1e24] overflow-y-auto custom-scrollbar">
             <div className="max-w-4xl mx-auto py-12 px-12 w-full">
               {activePage ? (
                 <div className="space-y-6">
                   <div className="space-y-4">
-                    <h1 className="app-text-title-xl text-clickup-text">{activePage.title}</h1>
+                    {selectedDoc.can_edit && activePage.can_edit ? (
+                      <input
+                        key={activePage.id}
+                        type="text"
+                        defaultValue={activePage.title}
+                        placeholder="Untitled"
+                        className="app-text-title-xl w-full bg-transparent text-clickup-text placeholder:text-gray-500 focus:outline-none"
+                        onBlur={(event) => void handlePageTitleSave(activePage.id, event.target.value)}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Enter') {
+                            event.preventDefault();
+                            event.currentTarget.blur();
+                          }
+                          if (event.key === 'Escape') {
+                            event.currentTarget.value = activePage.title;
+                            event.currentTarget.blur();
+                          }
+                        }}
+                      />
+                    ) : (
+                      <h1 className="app-text-title-xl text-clickup-text">{activePage.title}</h1>
+                    )}
                     <div className="app-text-caption flex items-center gap-3 text-gray-500">
                       <div className="flex items-center gap-1.5">
                         <div className="app-text-micro flex h-5 w-5 items-center justify-center rounded-full bg-clickup-purple font-bold text-clickup-bg">

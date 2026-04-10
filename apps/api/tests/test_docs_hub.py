@@ -244,6 +244,98 @@ def test_internal_shared_links_require_auth_and_honor_read_vs_edit(client: TestC
     assert edit_via_link_response.status_code == 200
 
 
+def test_duplicate_native_doc_clones_pages_into_new_private_doc(client: TestClient) -> None:
+    admin = _bootstrap_admin_session(client)
+
+    owner = _create_user(client, admin["token"], email="dup-owner@aidoo.local", full_name="Dup Owner")
+    _grant_workspace_access(client, admin["token"], owner["user"]["id"], "docs")
+    owner_token = _login(client, owner["user"]["email"], owner["temporary_password"])
+
+    create_doc_response = client.post(
+        "/api/v1/docs/native-docs",
+        headers=_auth_headers(owner_token),
+        json={"title": "Original Doc"},
+    )
+    assert create_doc_response.status_code == 201
+    original = create_doc_response.json()
+
+    # Add a child page so we can verify hierarchy is preserved.
+    pages_response = client.get(
+        f"/api/v1/docs/items/{original['id']}/pages",
+        headers=_auth_headers(owner_token),
+    )
+    root_page = pages_response.json()["items"][0]
+    child_response = client.post(
+        f"/api/v1/docs/items/{original['id']}/pages",
+        headers=_auth_headers(owner_token),
+        json={"title": "Child", "parent_id": root_page["id"]},
+    )
+    assert child_response.status_code == 201
+
+    # Duplicate as the owner.
+    duplicate_response = client.post(
+        f"/api/v1/docs/items/{original['id']}/duplicate",
+        headers=_auth_headers(owner_token),
+    )
+    assert duplicate_response.status_code == 201
+    duplicate = duplicate_response.json()
+    assert duplicate["id"] != original["id"]
+    assert duplicate["title"] == "Original Doc (copy)"
+    assert duplicate["can_manage"] is True
+    assert duplicate["is_private"] is True
+
+    duplicate_pages_response = client.get(
+        f"/api/v1/docs/items/{duplicate['id']}/pages",
+        headers=_auth_headers(owner_token),
+    )
+    assert duplicate_pages_response.status_code == 200
+    duplicate_pages = duplicate_pages_response.json()["items"]
+    assert len(duplicate_pages) == 2
+    titles = sorted(page["title"] for page in duplicate_pages)
+    assert titles == ["Child", "Original Doc"]
+    # Hierarchy preserved: child page references a new parent id, not the original.
+    new_child = next(page for page in duplicate_pages if page["title"] == "Child")
+    assert new_child["parent_id"] is not None
+    assert new_child["parent_id"] != root_page["id"]
+
+
+def test_duplicate_doc_via_read_share_creates_private_copy_for_recipient(client: TestClient) -> None:
+    admin = _bootstrap_admin_session(client)
+
+    owner = _create_user(client, admin["token"], email="dup-share-owner@aidoo.local", full_name="Owner")
+    _grant_workspace_access(client, admin["token"], owner["user"]["id"], "docs")
+    owner_token = _login(client, owner["user"]["email"], owner["temporary_password"])
+
+    recipient = _create_user(client, admin["token"], email="dup-share-recipient@aidoo.local", full_name="Recipient")
+    _grant_workspace_access(client, admin["token"], recipient["user"]["id"], "docs")
+    recipient_token = _login(client, recipient["user"]["email"], recipient["temporary_password"])
+
+    create_doc_response = client.post(
+        "/api/v1/docs/native-docs",
+        headers=_auth_headers(owner_token),
+        json={"title": "Shared Plan"},
+    )
+    original = create_doc_response.json()
+
+    share_response = client.put(
+        f"/api/v1/docs/items/{original['id']}/sharing/users/{recipient['user']['id']}",
+        headers=_auth_headers(owner_token),
+        json={"access_level": "read"},
+    )
+    assert share_response.status_code == 200
+
+    # Recipient with read access can duplicate even though they cannot manage.
+    duplicate_response = client.post(
+        f"/api/v1/docs/items/{original['id']}/duplicate",
+        headers=_auth_headers(recipient_token),
+    )
+    assert duplicate_response.status_code == 201
+    duplicate = duplicate_response.json()
+    assert duplicate["title"] == "Shared Plan (copy)"
+    assert duplicate["can_manage"] is True  # recipient is now the owner of the copy
+    assert duplicate["is_private"] is True
+
+
 def _bootstrap_admin_session(client: TestClient) -> dict:
     response = client.post(
         "/api/v1/auth/setup",
