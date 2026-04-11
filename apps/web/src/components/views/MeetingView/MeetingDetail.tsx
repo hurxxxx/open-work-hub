@@ -11,7 +11,7 @@ import {
   Users,
   X,
 } from 'lucide-react';
-import { Button } from '@aidoo/ui';
+import { Button, useConfirm } from '@aidoo/ui';
 
 import { useAuth } from '@/src/domains/auth/auth-provider';
 import {
@@ -69,6 +69,7 @@ export function MeetingDetail({
   onDeleted,
 }: MeetingDetailProps) {
   const { token, user } = useAuth();
+  const { confirm, confirmDialog } = useConfirm();
   const [meeting, setMeeting] = useState<MeetingDetailType | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -213,7 +214,14 @@ export function MeetingDetail({
 
   async function handleDelete() {
     if (!token) return;
-    if (!window.confirm('이 회의를 삭제하시겠습니까?')) return;
+    const ok = await confirm({
+      title: '회의 삭제',
+      description: '이 회의를 삭제하시겠습니까?',
+      confirmLabel: '삭제',
+      cancelLabel: '취소',
+      variant: 'danger',
+    });
+    if (!ok) return;
     setBusy(true);
     try {
       await deleteMeeting(token, meetingId);
@@ -524,6 +532,7 @@ export function MeetingDetail({
           onChanged();
         }}
       />
+      {confirmDialog}
     </div>
   );
 }
