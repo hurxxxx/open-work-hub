@@ -86,20 +86,12 @@ export function WorkspaceSettingsView() {
       <div className="mx-auto max-w-6xl space-y-6">
         <header className="space-y-2 border-b border-app-border pb-6">
           <div className="app-text-overline text-app-ink/50">Workspace Settings</div>
-          <div className="flex items-center justify-between gap-4">
-            <div>
-              <h1 className="app-text-title-lg text-app-ink">
-                {workspace?.name ?? currentWorkspaceSummary.name}
-              </h1>
-              <p className="app-text-body mt-1 text-app-ink/60">
-                이 협업 공간의 프로필, enabled apps, 멤버십을 관리합니다.
-              </p>
-            </div>
-            <div className="rounded-lg border border-app-border bg-app-surface-sidebar px-3 py-2 text-right">
-              <div className="app-text-caption text-app-ink/50">Your role</div>
-              <div className="app-text-body-sm text-app-ink">{currentWorkspaceSummary.role}</div>
-            </div>
-          </div>
+          <h1 className="app-text-title-lg text-app-ink">
+            {workspace?.name ?? currentWorkspaceSummary.name}
+          </h1>
+          <p className="app-text-body text-app-ink/60">
+            이 협업 공간의 프로필, enabled apps, 멤버십을 관리합니다.
+          </p>
         </header>
 
         {error ? <InlineNotice tone="danger">{error}</InlineNotice> : null}
