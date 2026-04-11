@@ -182,6 +182,35 @@ export function MeetingDetail({
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   }
 
+  // Force a real file download instead of opening in a new tab. We fetch the
+  // MinIO presigned URL as a blob and trigger a synthetic anchor click with
+  // the original filename. The <a download> attribute is ignored on cross-
+  // origin URLs, which is why we take the blob roundtrip.
+  async function handleFileDownload(file: {
+    download_url: string;
+    filename: string;
+  }) {
+    try {
+      const response = await fetch(file.download_url);
+      if (!response.ok) {
+        throw new Error(`다운로드 실패 (${response.status})`);
+      }
+      const blob = await response.blob();
+      const objectUrl = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = objectUrl;
+      anchor.download = file.filename;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      URL.revokeObjectURL(objectUrl);
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : '파일 다운로드에 실패했습니다.',
+      );
+    }
+  }
+
   async function handleDelete() {
     if (!token) return;
     if (!window.confirm('이 회의를 삭제하시겠습니까?')) return;
@@ -378,26 +407,38 @@ export function MeetingDetail({
                       href={file.download_url}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="app-text-body line-clamp-1 inline-flex items-center gap-1.5 text-app-ink hover:text-app-accent"
+                      className="app-text-body line-clamp-1 text-app-ink hover:text-app-accent"
+                      title="새 탭에서 미리보기"
                     >
-                      <Download size={12} className="shrink-0 text-app-ink/40" />
                       {file.filename}
                     </a>
                     <p className="app-text-caption text-app-ink/40">
                       {formatFileSize(file.size_bytes)} · {file.added_by_name}
                     </p>
                   </div>
-                  {canRemoveAttachment(user, meeting, file) ? (
+                  <div className="ml-2 flex shrink-0 items-center gap-0.5">
                     <button
                       type="button"
-                      onClick={() => handleFileDelete(file.id)}
-                      disabled={busy}
-                      className="ml-2 shrink-0 text-app-ink/40 hover:text-[var(--ui-color-danger)] disabled:opacity-40"
-                      aria-label="파일 삭제"
+                      onClick={() => handleFileDownload(file)}
+                      className="rounded-md p-1.5 text-app-ink/40 hover:bg-app-surface-hover hover:text-app-ink"
+                      aria-label="파일 다운로드"
+                      title="다운로드"
                     >
-                      <Trash2 size={14} />
+                      <Download size={14} />
                     </button>
-                  ) : null}
+                    {canRemoveAttachment(user, meeting, file) ? (
+                      <button
+                        type="button"
+                        onClick={() => handleFileDelete(file.id)}
+                        disabled={busy}
+                        className="rounded-md p-1.5 text-app-ink/40 hover:bg-app-surface-hover hover:text-[var(--ui-color-danger)] disabled:opacity-40"
+                        aria-label="파일 삭제"
+                        title="삭제"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    ) : null}
+                  </div>
                 </li>
               ))}
             </ul>

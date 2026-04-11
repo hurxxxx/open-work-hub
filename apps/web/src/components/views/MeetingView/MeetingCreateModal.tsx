@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Button, Dialog } from '@aidoo/ui';
-import { CheckSquare, FileText, Plus, X } from 'lucide-react';
+import { CheckSquare, FileText, Paperclip, Plus, X } from 'lucide-react';
 
 import { useAuth } from '@/src/domains/auth/auth-provider';
 import {
@@ -8,6 +8,7 @@ import {
   attachTaskToMeeting,
   createMeeting,
   listMeetingUsers,
+  uploadMeetingFile,
   type MeetingAttendeeInput,
   type MeetingUser,
 } from '@/src/domains/meeting/meeting-api';
@@ -73,10 +74,12 @@ export function MeetingCreateModal({ isOpen, onClose, onCreated }: MeetingCreate
   const [usersLoading, setUsersLoading] = useState(false);
   const [pickedTasks, setPickedTasks] = useState<PickedTask[]>([]);
   const [pickedDocs, setPickedDocs] = useState<PickedDoc[]>([]);
+  const [pickedFiles, setPickedFiles] = useState<File[]>([]);
   const [taskPickerOpen, setTaskPickerOpen] = useState(false);
   const [docPickerOpen, setDocPickerOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -91,6 +94,7 @@ export function MeetingCreateModal({ isOpen, onClose, onCreated }: MeetingCreate
     setUserQueryFocused(false);
     setPickedTasks([]);
     setPickedDocs([]);
+    setPickedFiles([]);
     setTaskPickerOpen(false);
     setDocPickerOpen(false);
     setError(null);
@@ -164,6 +168,24 @@ export function MeetingCreateModal({ isOpen, onClose, onCreated }: MeetingCreate
     setPickedDocs((prev) => prev.filter((item) => item.id !== docId));
   }
 
+  function handleFileInputChange(event: React.ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(event.target.files ?? []);
+    // Allow the same file to be re-picked later by resetting the input.
+    event.target.value = '';
+    if (files.length === 0) return;
+    setPickedFiles((prev) => [...prev, ...files]);
+  }
+
+  function removePickedFile(index: number) {
+    setPickedFiles((prev) => prev.filter((_, i) => i !== index));
+  }
+
+  function formatFileSize(bytes: number): string {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  }
+
   async function handleCreate() {
     if (!token || !title.trim()) return;
     if (new Date(endAt) <= new Date(startAt)) {
@@ -200,6 +222,15 @@ export function MeetingCreateModal({ isOpen, onClose, onCreated }: MeetingCreate
         } catch (err) {
           failures.push(
             `${doc.title}: ${err instanceof Error ? err.message : '실패'}`,
+          );
+        }
+      }
+      for (const file of pickedFiles) {
+        try {
+          await uploadMeetingFile(token, meeting.id, file);
+        } catch (err) {
+          failures.push(
+            `${file.name}: ${err instanceof Error ? err.message : '실패'}`,
           );
         }
       }
@@ -269,9 +300,11 @@ export function MeetingCreateModal({ isOpen, onClose, onCreated }: MeetingCreate
         <div className="space-y-2">
           <label className="app-text-control-sm text-app-ink/70">연결된 업무</label>
           <p className="app-text-caption text-app-ink/40">
-            이 회의에서 다룰 PMS 태스크와 문서를 첨부합니다.
+            이 회의에서 다룰 PMS 태스크, 문서, 첨부 파일을 미리 연결합니다.
           </p>
-          {pickedTasks.length > 0 || pickedDocs.length > 0 ? (
+          {pickedTasks.length > 0 ||
+          pickedDocs.length > 0 ||
+          pickedFiles.length > 0 ? (
             <div className="flex flex-wrap gap-1.5">
               {pickedTasks.map((task) => (
                 <span
@@ -310,6 +343,28 @@ export function MeetingCreateModal({ isOpen, onClose, onCreated }: MeetingCreate
                   </button>
                 </span>
               ))}
+              {pickedFiles.map((file, index) => (
+                <span
+                  key={`file-${index}-${file.name}`}
+                  className="app-text-caption inline-flex items-center gap-1 rounded-full border border-app-border bg-app-surface-sidebar px-2 py-1 text-app-ink"
+                >
+                  <Paperclip size={11} className="text-app-ink/40" />
+                  <span className="max-w-[14rem] truncate">
+                    {file.name}
+                  </span>
+                  <span className="text-app-ink/40">
+                    ({formatFileSize(file.size)})
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => removePickedFile(index)}
+                    className="text-app-ink/40 hover:text-app-ink"
+                    aria-label={`${file.name} 제거`}
+                  >
+                    <X size={11} />
+                  </button>
+                </span>
+              ))}
             </div>
           ) : null}
           <div className="flex gap-2">
@@ -331,6 +386,22 @@ export function MeetingCreateModal({ isOpen, onClose, onCreated }: MeetingCreate
               <FileText size={12} />
               문서
             </button>
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              className="app-text-control-sm inline-flex items-center gap-1.5 rounded-md border border-app-border bg-app-surface-sidebar px-3 py-1.5 text-app-ink hover:bg-app-surface-hover"
+            >
+              <Plus size={12} />
+              <Paperclip size={12} />
+              파일
+            </button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              className="hidden"
+              onChange={handleFileInputChange}
+            />
           </div>
         </div>
 

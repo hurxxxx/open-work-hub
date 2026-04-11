@@ -176,7 +176,28 @@ NB: 권한 매트릭스 테스트는 task 가 아닌 **doc** 으로 작성. 이�
 
 **자동화 결과**: pytest 53→57 passed (+4 신규), typecheck 신규 0 (사전 12개 그대로 — admin-pagination commit 으로 admin-console 라인 번호만 1021→1173 식으로 시프트).
 
-**원격 dev DB 마이그레이션 적용**: 아직 안 함. 사용자 승인 후 `cd apps/api && uv run --python 3.12 alembic upgrade head` 1줄로 적용.
+**원격 dev DB 마이그레이션 적용**: **적용 완료** — `alembic current` → `13e887cfb1db (head)`. 적용 당시 사용자 "마이크레이션 커밋 푸시" 명시 승인.
+
+**Commit**: `dcced7a` Refine Meeting domain: fixes, permissions, file attachments — 18 files, +1364/-146, origin/main 푸시 완료.
+
+### Fixed (6 라운드): 파일 첨부 UX — Create 모달 첨부 + 명시 다운로드 버튼
+
+**계기**: 사용자 피드백 — "미팅 등록 할때는 파일 첨부가 없음. 미팅 등록 후 미팅 우측 사이드 편집에서는 파일 업로드 및 열어보기는 잘됨" + "파일 다운로드용 버튼이 따로 있으면 좋겠음".
+
+**Create 모달에 파일 첨부 추가** ([MeetingCreateModal.tsx](apps/web/src/components/views/MeetingView/MeetingCreateModal.tsx)):
+- `pickedFiles: File[]` 로컬 상태 + ref 기반 `<input type="file" multiple>` 숨김 처리
+- "연결된 업무" 섹션에 "+ 파일" 버튼 (태스크/문서 버튼과 동일 라인)
+- 선택된 파일은 칩 형태로 노출 (파일명 + 사이즈 + X 버튼)
+- `handleCreate` 에서 기존 tasks/docs sequential attach 뒤에 `uploadMeetingFile` 루프 추가. failure collection 패턴 동일.
+- Create 시점에 meeting_id 가 아직 없어서 tasks/docs 와 동일한 "로컬 수집 → post-create sequential upload" 패턴을 따름. 일부 업로드 실패 시에도 meeting 은 유지되고 사용자는 detail 패널에서 재시도 가능.
+
+**다운로드 전용 버튼 분리** ([MeetingDetail.tsx](apps/web/src/components/views/MeetingView/MeetingDetail.tsx)):
+- 기존: 파일명 자체가 presigned URL 링크 → 새 탭 open (브라우저가 PDF/image 는 미리보기, 그 외는 다운로드)
+- 변경: 파일명은 preview 용 링크 (새 탭 open) 유지, 우측에 Download 아이콘 버튼 별도 추가
+- Download 버튼은 `handleFileDownload` 호출 — fetch → blob → `URL.createObjectURL` → synthetic `<a download={filename}>` click → revoke. MinIO presigned URL 이 cross-origin 이라 `<a download>` attribute 가 무시되는 문제를 우회.
+- 100 MB 파일까지는 브라우저 메모리에 올려도 체감 무리 없음.
+
+**자동화 결과**: typecheck 신규 0 (사전 12개 그대로 — admin-people commit 으로 admin-console 라인 번호만 1173→1434 로 다시 시프트). Frontend-only 변경이라 pytest 는 동일 57 passed.
 
 ## 2. 이번 세션이 할 일 (요청 받은 범위)
 
@@ -331,18 +352,15 @@ PR0-RESULT.md §미해결 사항 의 연장. PR1 마이그레이션 적용 후 `
 - `src/domains/admin/admin-console.tsx` — Select disabled / NoticeTone 3건
 - `src/domains/admin/admin-permissions.ts(13,54)` — string|literal mismatch
 
-### 작업 트리에 PR1 와 무관한 사전 수정 4 개
+### 작업 트리에 PR1 와 무관한 사전 수정 4 개 (해결됨)
 
-**중요**: 이번 세션 시작 시점에 이미 작업 트리에 다음 4 개 파일이 modified 상태로 있었습니다. PR1 작업과 무관합니다.
+이전 세션 시작 시점에 작업 트리에 admin/health 관련 4 개 파일이 modified 상태로 남아있었고, PR1 commit 만들 때 stage 하면 안 된다는 경고가 여기 있었습니다.
 
-```
-M apps/api/src/aidoo_api/domains/admin/router.py  (+289 lines)
-M apps/api/tests/test_health.py                   (+26 lines)
-M apps/web/src/domains/admin/admin-api.ts         (+29 lines)
-M apps/web/src/domains/admin/admin-console.tsx    (+253 lines)
-```
+**현재 상태**: 해당 작업은 **별도로 commit 되어 origin/main 에 있습니다**:
+- `c544455 Add admin user list pagination and filtering`
+- `927ff4f Improve admin people management`
 
-마지막 commit (`6dbea8e`) 이후 누군가의 진행 중 작업으로 보임. **PR1 commit 만들 때 절대 stage 하지 말 것**. 사용자에게 "이 4 파일은 PR1 무관 사전 수정인데 어떻게 처리할까요?" 라고 명시 확인 받아야 함.
+PR1 커밋 (`3f7c7a9`, `dcced7a`) 과 섞이지 않았고, 작업 트리는 깨끗합니다. 이 섹션은 히스토리 보존용으로만 남겨둡니다.
 
 ### 의도적으로 PR1 범위 밖
 [PR1-HANDOFF.md §1](PR1-HANDOFF.md) 의 표 그대로:
