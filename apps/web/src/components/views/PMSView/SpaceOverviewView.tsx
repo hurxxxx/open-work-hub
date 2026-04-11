@@ -8,6 +8,7 @@ import {
   ChevronRight,
   Plus,
   Loader2,
+  Users,
 } from 'lucide-react';
 import { Panel } from '@aidoo/ui';
 import { useAuth } from '@/src/domains/auth/auth-provider';
@@ -15,11 +16,42 @@ import {
   listPmsLists,
   listFolders,
   listSpaceDocs,
+  listSpaceMembers,
+  listSpaces,
   type PmsList,
   type PmsFolder,
+  type PmsSpace,
   type PmsSpaceDoc,
+  type PmsSpaceMember,
 } from '@/src/domains/pms/pms-api';
+import { initials } from './pms-constants';
 import { CreateProjectModal } from './CreateProjectModal';
+import { SpaceMembersModal } from './SpaceMembersModal';
+
+const AVATAR_COLORS = [
+  'bg-rose-500',
+  'bg-pink-500',
+  'bg-fuchsia-500',
+  'bg-purple-500',
+  'bg-violet-500',
+  'bg-indigo-500',
+  'bg-blue-500',
+  'bg-sky-500',
+  'bg-cyan-500',
+  'bg-teal-500',
+  'bg-emerald-500',
+  'bg-green-500',
+  'bg-amber-500',
+  'bg-orange-500',
+];
+
+function avatarColor(seed: string): string {
+  let hash = 0;
+  for (let i = 0; i < seed.length; i += 1) {
+    hash = (hash * 31 + seed.charCodeAt(i)) >>> 0;
+  }
+  return AVATAR_COLORS[hash % AVATAR_COLORS.length];
+}
 
 export const SpaceOverviewView = ({
   spaceId,
@@ -33,8 +65,12 @@ export const SpaceOverviewView = ({
   const [lists, setLists] = useState<PmsList[]>([]);
   const [folders, setFolders] = useState<PmsFolder[]>([]);
   const [spaceDocs, setSpaceDocs] = useState<PmsSpaceDoc[]>([]);
+  const [members, setMembers] = useState<PmsSpaceMember[]>([]);
+  const [spaceMeta, setSpaceMeta] = useState<PmsSpace | null>(null);
   const [loading, setLoading] = useState(true);
   const [createListOpen, setCreateListOpen] = useState(false);
+  const [membersModalOpen, setMembersModalOpen] = useState(false);
+  const [membersRefreshToken, setMembersRefreshToken] = useState(0);
 
   useEffect(() => {
     if (!token) return;
@@ -45,19 +81,35 @@ export const SpaceOverviewView = ({
       listPmsLists(token, spaceId),
       listFolders(token, spaceId),
       listSpaceDocs(token, spaceId).catch(() => ({ items: [] as PmsSpaceDoc[] })),
+      listSpaceMembers(token, spaceId).catch(() => ({
+        items: [] as PmsSpaceMember[],
+        total: 0,
+        page: 1,
+        page_size: 50,
+      })),
+      listSpaces(token).catch(() => [] as PmsSpace[]),
     ])
-      .then(([listRes, folderRes, docsRes]) => {
+      .then(([listRes, folderRes, docsRes, memberRes, spaces]) => {
         if (cancelled) return;
         setLists(listRes.items);
         setFolders(folderRes.items);
         setSpaceDocs(docsRes.items);
+        setMembers(memberRes.items);
+        const me = Array.isArray(spaces)
+          ? spaces.find((s) => s.id === spaceId) ?? null
+          : null;
+        setSpaceMeta(me);
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
       });
 
     return () => { cancelled = true; };
-  }, [spaceId, token]);
+  }, [spaceId, token, membersRefreshToken]);
+
+  const canManageMembers =
+    spaceMeta?.current_user_role === 'owner' ||
+    spaceMeta?.current_user_role === 'admin';
 
   if (loading) {
     return (
@@ -96,6 +148,69 @@ export const SpaceOverviewView = ({
 
       <main className="flex-1 overflow-y-auto p-8 custom-scrollbar">
         <div className="max-w-5xl mx-auto space-y-8">
+          {/* Members */}
+          <Panel>
+            <h3 className="app-text-title-md mb-4 flex items-center justify-between text-app-ink">
+              <div className="flex items-center gap-2">
+                <Users size={16} className="text-app-accent" />
+                멤버 ({members.length})
+              </div>
+              <button
+                onClick={() => setMembersModalOpen(true)}
+                className="app-text-control-sm flex items-center gap-1 text-app-accent transition-colors hover:text-app-accent/80"
+              >
+                {canManageMembers ? (
+                  <>
+                    <Plus size={14} />
+                    <span>멤버 관리</span>
+                  </>
+                ) : (
+                  <span>전체 보기</span>
+                )}
+              </button>
+            </h3>
+            {members.length === 0 ? (
+              <p className="app-text-body text-app-ink/40">아직 멤버가 없습니다.</p>
+            ) : (
+              <div className="flex flex-wrap gap-2">
+                {members.slice(0, 12).map((member) => (
+                  <div
+                    key={member.user_id}
+                    title={`${member.full_name} · ${member.email}`}
+                    className="inline-flex items-center gap-2 rounded-full border border-app-border bg-app-surface-sidebar py-1 pl-1 pr-3"
+                  >
+                    <div
+                      className={`flex h-6 w-6 items-center justify-center rounded-full text-[10px] font-semibold text-white ${avatarColor(member.user_id)}`}
+                    >
+                      {initials(member.full_name)}
+                    </div>
+                    <span className="app-text-caption text-app-ink">
+                      {member.full_name}
+                    </span>
+                    {member.role === 'owner' ? (
+                      <span className="app-text-overline text-amber-500">
+                        Owner
+                      </span>
+                    ) : member.role !== 'member' ? (
+                      <span className="app-text-overline text-app-ink/40">
+                        {member.role}
+                      </span>
+                    ) : null}
+                  </div>
+                ))}
+                {members.length > 12 ? (
+                  <button
+                    type="button"
+                    onClick={() => setMembersModalOpen(true)}
+                    className="app-text-caption inline-flex items-center rounded-full border border-dashed border-app-border px-3 py-1 text-app-ink/60 hover:border-app-accent hover:text-app-accent"
+                  >
+                    +{members.length - 12} 더 보기
+                  </button>
+                ) : null}
+              </div>
+            )}
+          </Panel>
+
           {/* Docs */}
           <Panel>
             <h3 className="app-text-title-md mb-4 flex items-center gap-2 text-app-ink">
@@ -218,6 +333,15 @@ export const SpaceOverviewView = ({
           setLists((current) => [...current, project]);
           navigate(`/tool/pms-list-${project.id}`);
         }}
+      />
+
+      <SpaceMembersModal
+        isOpen={membersModalOpen}
+        onClose={() => setMembersModalOpen(false)}
+        spaceId={spaceId}
+        spaceName={spaceName ?? 'Space'}
+        canManage={canManageMembers}
+        onChanged={() => setMembersRefreshToken((v) => v + 1)}
       />
     </div>
   );

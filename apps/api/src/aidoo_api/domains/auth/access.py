@@ -637,27 +637,33 @@ def ensure_dev_login_seed_data(db: Session) -> None:
                 )
             )
 
+        # Reconcile the seed user's membership in the default PMS space ONLY.
+        # Any other TeamMember rows (e.g. user-created spaces) are the user's
+        # own data and must not be touched by the seed loop — deleting them
+        # here previously wiped out spaces every time the server restarted.
         requested_team_role = normalize_team_role(definition.get("team_role"))
-        current_team_memberships = db.scalars(
-            select(TeamMember).where(TeamMember.user_id == user.id)
-        ).all()
-        for membership in list(current_team_memberships):
-            if membership.team_id != default_pms_space.id or requested_team_role is None:
-                db.delete(membership)
-                continue
-            membership.role = requested_team_role
-            db.add(membership)
-        if requested_team_role is not None and not any(
-            membership.team_id == default_pms_space.id for membership in current_team_memberships
-        ):
-            db.add(
-                TeamMember(
-                    id=new_id(),
-                    team_id=default_pms_space.id,
-                    user_id=user.id,
-                    role=requested_team_role,
-                )
+        default_space_membership = db.scalar(
+            select(TeamMember).where(
+                TeamMember.user_id == user.id,
+                TeamMember.team_id == default_pms_space.id,
             )
+        )
+        if requested_team_role is None:
+            if default_space_membership is not None:
+                db.delete(default_space_membership)
+        else:
+            if default_space_membership is None:
+                db.add(
+                    TeamMember(
+                        id=new_id(),
+                        team_id=default_pms_space.id,
+                        user_id=user.id,
+                        role=requested_team_role,
+                    )
+                )
+            else:
+                default_space_membership.role = requested_team_role
+                db.add(default_space_membership)
 
         seeded_users[definition["key"]] = user
 
