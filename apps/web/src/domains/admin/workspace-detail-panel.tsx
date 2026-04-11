@@ -622,7 +622,7 @@ export function WorkspaceDetailPanel({
           </section>
         ) : null}
 
-        {/* Members preview + add panel + open drawer */}
+        {/* Members preview + open drawer */}
         <section className="px-4 py-3">
           <div className="mb-2 flex items-center justify-between gap-2">
             <h3 className="app-text-control text-app-ink">
@@ -633,7 +633,7 @@ export function WorkspaceDetailPanel({
             </h3>
             <div className="flex items-center gap-1.5">
               {capabilities.canManageMembers ? (
-                <Button variant="primary" onClick={() => setAddPanelOpen((current) => !current)}>
+                <Button variant="primary" onClick={() => setAddPanelOpen(true)}>
                   <Plus size={12} className="mr-1" />
                   멤버 추가
                 </Button>
@@ -645,73 +645,6 @@ export function WorkspaceDetailPanel({
             </div>
           </div>
 
-          {addPanelOpen && capabilities.canManageMembers ? (
-            <div className="mb-3 rounded-md border border-app-accent/40 bg-app-accent/5 p-3">
-              <div className="mb-2 flex items-center justify-between">
-                <h4 className="app-text-control text-app-ink">새 멤버 추가</h4>
-                <button
-                  type="button"
-                  onClick={resetAddPanel}
-                  className="rounded p-0.5 text-app-ink/60 hover:bg-app-surface-sidebar hover:text-app-ink"
-                  aria-label="닫기"
-                >
-                  ×
-                </button>
-              </div>
-              <SubjectPickerInline
-                workspaceId={workspace.id}
-                token={token}
-                groups={groups}
-                excludeIds={memberSubjectIds}
-                selection={addSelection}
-                onSelectionChange={setAddSelection}
-                canReadGroups={canReadGroups}
-                onOpenDirectory={
-                  capabilities.canBrowseDirectory ? () => setAddPickerOpen(true) : null
-                }
-              />
-              <div className="mt-2 space-y-2">
-                <div>
-                  <div className="app-text-caption mb-1 text-app-ink/60">
-                    선택 ({selectionSize(addSelection)})
-                  </div>
-                  <SelectedSubjectsBar
-                    selection={addSelection}
-                    onRemove={(kind, id) =>
-                      setAddSelection((current) => removeSubject(current, kind, id))
-                    }
-                  />
-                </div>
-                <div className="flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-2">
-                    <span className="app-text-caption text-app-ink/60">역할</span>
-                    <Select
-                      value={addRole}
-                      onValueChange={setAddRole}
-                      options={WORKSPACE_ROLE_OPTIONS.map((option) => ({
-                        value: option.value,
-                        label: option.label,
-                      }))}
-                    />
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <Button variant="ghost" onClick={resetAddPanel} disabled={addBusy}>
-                      취소
-                    </Button>
-                    <Button
-                      variant="primary"
-                      disabled={addBusy || selectionSize(addSelection) === 0}
-                      onClick={() => void handleBulkAddSelection()}
-                    >
-                      {addBusy
-                        ? '추가 중...'
-                        : `${selectionSize(addSelection)}명 추가`}
-                    </Button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          ) : null}
           {previewBindings.length === 0 ? (
             <div className="rounded-md border border-dashed border-app-border bg-app-bg px-3 py-6 text-center">
               <p className="app-text-body-sm text-app-ink/60">아직 멤버가 없습니다.</p>
@@ -784,6 +717,32 @@ export function WorkspaceDetailPanel({
         busy={editBusy}
         error={editError}
       />
+      {capabilities.canManageMembers ? (
+        <WorkspaceAddMemberModal
+          open={addPanelOpen}
+          onOpenChange={(next) => {
+            if (!next) {
+              resetAddPanel();
+            } else {
+              setAddPanelOpen(true);
+            }
+          }}
+          workspaceId={workspace.id}
+          token={token}
+          groups={groups}
+          canReadGroups={canReadGroups}
+          canBrowseDirectory={capabilities.canBrowseDirectory}
+          excludeIds={memberSubjectIds}
+          selection={addSelection}
+          onSelectionChange={setAddSelection}
+          role={addRole}
+          onRoleChange={setAddRole}
+          busy={addBusy}
+          onOpenDirectory={() => setAddPickerOpen(true)}
+          onSubmit={handleBulkAddSelection}
+          onCancel={resetAddPanel}
+        />
+      ) : null}
       {confirmState ? (
         <ConfirmDialog
           open
@@ -1209,6 +1168,100 @@ function SubjectPickerInline({
   );
 }
 
+function WorkspaceAddMemberModal({
+  open,
+  onOpenChange,
+  workspaceId,
+  token,
+  groups,
+  canReadGroups,
+  canBrowseDirectory,
+  excludeIds,
+  selection,
+  onSelectionChange,
+  role,
+  onRoleChange,
+  busy,
+  onOpenDirectory,
+  onSubmit,
+  onCancel,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  workspaceId: string;
+  token: string;
+  groups: AccessGroupItem[];
+  canReadGroups: boolean;
+  canBrowseDirectory: boolean;
+  excludeIds: Set<string>;
+  selection: SubjectSelectionState;
+  onSelectionChange: (next: SubjectSelectionState) => void;
+  role: string;
+  onRoleChange: (role: string) => void;
+  busy: boolean;
+  onOpenDirectory: () => void;
+  onSubmit: () => Promise<void>;
+  onCancel: () => void;
+}) {
+  const count = selectionSize(selection);
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={onOpenChange}
+      title="새 멤버 추가"
+      description="사용자 또는 그룹을 검색해 여러 명을 한 번에 추가합니다."
+      fullSize
+      dismissOnInteractOutside={false}
+      actions={
+        <>
+          <span className="app-text-body mr-auto text-app-ink/60">선택 {count}명</span>
+          <div className="flex items-center gap-2">
+            <span className="app-text-caption text-app-ink/60">역할</span>
+            <Select
+              value={role}
+              onValueChange={onRoleChange}
+              options={WORKSPACE_ROLE_OPTIONS.map((option) => ({
+                value: option.value,
+                label: option.label,
+              }))}
+            />
+          </div>
+          <Button variant="ghost" onClick={onCancel} disabled={busy}>
+            취소
+          </Button>
+          <Button variant="primary" disabled={busy || count === 0} onClick={() => void onSubmit()}>
+            {busy ? '추가 중...' : `${count}명 추가`}
+          </Button>
+        </>
+      }
+    >
+      <div className="flex h-full min-h-0 flex-col gap-4">
+        <div className="min-h-0 flex-1 overflow-y-auto rounded-md border border-app-border bg-app-bg p-3">
+          <SubjectPickerInline
+            workspaceId={workspaceId}
+            token={token}
+            groups={groups}
+            excludeIds={excludeIds}
+            selection={selection}
+            onSelectionChange={onSelectionChange}
+            canReadGroups={canReadGroups}
+            onOpenDirectory={canBrowseDirectory ? onOpenDirectory : null}
+          />
+        </div>
+        <div className="shrink-0">
+          <div className="app-text-caption mb-1 text-app-ink/60">선택 ({count})</div>
+          <SelectedSubjectsBar
+            selection={selection}
+            onRemove={(kind, id) =>
+              onSelectionChange(removeSubject(selection, kind, id))
+            }
+          />
+        </div>
+      </div>
+    </Dialog>
+  );
+}
+
 function PeoplePickerModal({
   open,
   onClose,
@@ -1231,8 +1284,8 @@ function PeoplePickerModal({
         if (!next) onClose();
       }}
       title="임직원 디렉터리"
-      description="검색과 필터로 사용자를 찾아 다중 선택합니다. 여기서 선택한 항목은 아래 추가 패널의 선택 목록에 누적됩니다."
-      maxWidth="max-w-[1600px]"
+      description="검색과 필터로 사용자를 찾아 다중 선택합니다. 여기서 선택한 항목은 추가 모달의 선택 목록에 누적됩니다."
+      fullSize
       dismissOnInteractOutside={false}
       actions={
         <>
@@ -1245,7 +1298,7 @@ function PeoplePickerModal({
         </>
       }
     >
-      <div className="h-[70vh] overflow-hidden rounded-xl border border-app-border bg-app-bg">
+      <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-xl border border-app-border bg-app-bg">
         <PeopleDirectoryGrid
           token={token}
           selection={selection}
@@ -1553,10 +1606,10 @@ function WorkspaceMembersDrawer({
       onOpenChange={onOpenChange}
       title={`${workspace.name} 멤버 관리`}
       description="검색, 필터, 일괄 작업으로 워크스페이스 멤버를 관리합니다."
-      maxWidth="max-w-[1600px]"
+      fullSize
       dismissOnInteractOutside={false}
     >
-      <div className="space-y-4">
+      <div className="flex h-full min-h-0 flex-col gap-4">
         {/* Filter bar */}
         <div className="flex flex-wrap items-center gap-3">
           <div className="flex flex-1 min-w-[220px] items-center gap-2 rounded-md border border-app-border bg-app-surface-sidebar px-2 py-1.5">
@@ -1648,9 +1701,9 @@ function WorkspaceMembersDrawer({
         ) : null}
 
         {/* Table */}
-        <div className="overflow-hidden rounded-xl border border-app-border">
+        <div className="min-h-0 flex-1 overflow-auto rounded-xl border border-app-border">
           <table className="w-full">
-            <thead className="bg-app-surface-sidebar">
+            <thead className="sticky top-0 z-10 bg-app-surface-sidebar">
               <tr>
                 <th className="w-10 px-3 py-2 text-left">
                   {canManage ? (

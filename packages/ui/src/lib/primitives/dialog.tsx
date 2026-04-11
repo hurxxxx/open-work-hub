@@ -11,8 +11,15 @@ export interface DialogProps {
   description?: ReactNode;
   children: ReactNode;
   actions?: ReactNode;
-  /** Maximum width class, e.g. "max-w-lg" or "max-w-3xl". Defaults to "max-w-lg". */
+  /** Maximum width class, e.g. "max-w-lg" or "max-w-3xl". Defaults to "max-w-lg". Ignored when ``fullSize`` is true. */
   maxWidth?: string;
+  /**
+   * When true, the dialog occupies a near-fullscreen fixed size
+   * (~96vw × ~92vh) regardless of content. Use for dense data tables or
+   * multi-pane experiences where you want a predictable, large canvas
+   * rather than a dialog that shrinks to its children.
+   */
+  fullSize?: boolean;
   /**
    * Whether interacting outside the dialog (pointer-down outside or focus
    * outside) should close it. Defaults to ``true``. Set to ``false`` for
@@ -32,6 +39,7 @@ export function Dialog({
   children,
   actions,
   maxWidth = 'max-w-lg',
+  fullSize = false,
   dismissOnInteractOutside = true,
 }: DialogProps) {
   const blockOutside = dismissOnInteractOutside
@@ -43,9 +51,11 @@ export function Dialog({
         <DialogPrimitive.Overlay className="fixed inset-0 z-[calc(var(--ui-z-drawer)-1)] bg-slate-950/32 backdrop-blur-sm" />
         <DialogPrimitive.Content
           className={cn(
-            'fixed left-1/2 top-1/2 z-[var(--ui-z-drawer)] w-[calc(100vw-2rem)] -translate-x-1/2 -translate-y-1/2',
-            'flex max-h-[85vh] flex-col rounded-[var(--ui-radius-lg)] border border-[var(--ui-color-border)] bg-ui-surface-raised shadow-[var(--ui-shadow-lg)] outline-none',
-            maxWidth,
+            'fixed left-1/2 top-1/2 z-[var(--ui-z-drawer)] -translate-x-1/2 -translate-y-1/2',
+            'flex flex-col rounded-[var(--ui-radius-lg)] border border-[var(--ui-color-border)] bg-ui-surface-raised shadow-[var(--ui-shadow-lg)] outline-none',
+            fullSize
+              ? 'h-[92vh] w-[96vw] max-w-[1600px]'
+              : ['w-[calc(100vw-2rem)] max-h-[85vh]', maxWidth],
           )}
           onPointerDownOutside={blockOutside}
           onInteractOutside={blockOutside}
