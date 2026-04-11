@@ -38,6 +38,15 @@ function buildUser(overrides: Partial<AuthUser> = {}): AuthUser {
     status: 'active',
     theme_preference: 'system',
     primary_org_unit: null,
+    workspaces: [
+      {
+        id: 'workspace-hq',
+        slug: 'hq',
+        name: 'HQ',
+        role: 'member',
+        enabled_apps: ['ai', 'docs', 'pms', 'planner'],
+      },
+    ],
     workspace_roles: [],
     app_access: [
       { app: 'ai', workspace_id: 'workspace-ai', workspace_key: 'ai', workspace_name: 'AI Workspace', role: 'member' },
@@ -77,11 +86,21 @@ describe('AppBar', () => {
         <AppBar
           activeAppId="settings"
           currentUser={buildUser({
+            workspaces: [
+              {
+                id: 'workspace-hq',
+                slug: 'hq',
+                name: 'HQ',
+                role: 'owner',
+                enabled_apps: ['ai', 'docs', 'pms', 'planner', 'meeting'],
+              },
+            ],
             app_access: [
               { app: 'admin', workspace_id: 'workspace-admin', workspace_key: 'admin', workspace_name: 'Admin Console', role: 'admin' },
             ],
             system_roles: ['org_admin'],
           })}
+          currentWorkspaceSlug="hq"
           onOpenAccount={onOpenAccount}
         />
       </MemoryRouter>,
@@ -101,6 +120,7 @@ describe('AppBar', () => {
         <AppBar
           activeAppId="ai"
           currentUser={buildUser()}
+          currentWorkspaceSlug="hq"
           onOpenAccount={vi.fn()}
         />
         <LocationDisplay />
@@ -111,7 +131,7 @@ describe('AppBar', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Open issue notification' }));
 
     await waitFor(() => {
-      expect(screen.getByTestId('location').textContent).toBe('/pms?issue=issue-123');
+      expect(screen.getByTestId('location').textContent).toBe('/w/hq/pms?issue=issue-123');
     });
   });
 });

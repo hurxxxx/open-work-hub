@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Button, Dialog } from '@aidoo/ui';
 import { Loader2 } from 'lucide-react';
+import { useParams } from 'react-router-dom';
 
 import { useAuth } from '@/src/domains/auth/auth-provider';
+import { hasAppAccess } from '@/src/domains/auth/auth-api';
 import { NoAccessNotice } from '@/src/components/common/NoAccessNotice';
 import { listDocsHub, type DocsHubItem } from '@/src/domains/docs/docs-api';
 
@@ -19,8 +21,9 @@ export function DocPickerModal({
   onPick,
   excludeDocIds = [],
 }: DocPickerModalProps) {
-  const { token, hasFeature } = useAuth();
-  const canAccessDocs = hasFeature('nav.docs');
+  const { workspaceSlug } = useParams();
+  const { token, user } = useAuth();
+  const canAccessDocs = hasAppAccess(user, 'docs', workspaceSlug);
   const [items, setItems] = useState<DocsHubItem[]>([]);
   const [query, setQuery] = useState('');
   const [loading, setLoading] = useState(false);

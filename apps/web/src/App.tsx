@@ -3,13 +3,14 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import {
   BrowserRouter as Router,
   Navigate,
   Route,
   Routes,
   useLocation,
+  useNavigate,
   useParams,
 } from 'react-router-dom';
 import { MantineProvider } from '@mantine/core';
@@ -37,7 +38,20 @@ import {
   RequireAuth,
   useAuth,
 } from './domains/auth/auth-provider';
-import { hasFeatureAccess, type ThemePreference } from './domains/auth/auth-api';
+import {
+  hasFeatureAccess,
+  type ThemePreference,
+} from './domains/auth/auth-api';
+import {
+  buildWorkspaceAppPath,
+  getPreferredWorkspace,
+  getWorkspaceBySlug,
+  getWorkspaceSlugFromPath,
+  persistLastWorkspaceSlug,
+  resolveDefaultWorkspaceAppPath,
+  type WorkspaceAppId,
+} from './domains/workspaces/workspace-utils';
+import { WorkspaceSettingsView } from './domains/workspaces/WorkspaceSettingsView';
 import {
   AccessDeniedView,
   ProfilePage,
@@ -53,21 +67,33 @@ function resolveThemePreference(themePreference: ThemePreference, systemDarkMode
 }
 
 function WorkspaceGate({
+  appId,
   featureCode,
   children,
 }: {
+  appId?: WorkspaceAppId;
   featureCode?: string;
-  children: React.ReactNode;
+  children: ReactNode;
 }) {
   const auth = useAuth();
+  const { workspaceSlug } = useParams();
 
-  if (featureCode && !auth.hasFeature(featureCode)) {
+  if ((featureCode || appId) && !hasFeatureAccess(
+    auth.user,
+    featureCode ?? FEATURE_BY_APP_ID[appId ?? 'ai'] ?? '',
+    workspaceSlug,
+  )) {
     return (
-      <AccessDeniedView description="현재 계정에는 이 워크스페이스에 대한 노출 권한이 없습니다." />
+      <AccessDeniedView description="현재 계정은 이 workspace에서 해당 앱을 사용할 수 없습니다." />
     );
   }
 
   return <>{children}</>;
+}
+
+function WorkspaceAppRedirect({ appId }: { appId: WorkspaceAppId }) {
+  const auth = useAuth();
+  return <Navigate replace to={resolveDefaultWorkspaceAppPath(auth.user, appId)} />;
 }
 
 function AdminGate({
@@ -75,7 +101,7 @@ function AdminGate({
   children,
 }: {
   section: 'general' | 'people' | 'workspaces' | 'security' | 'audit';
-  children: React.ReactNode;
+  children: ReactNode;
 }) {
   const auth = useAuth();
   if (!hasAdminSectionAccess(auth.user?.system_roles ?? [], section)) {
@@ -99,9 +125,10 @@ const ToolViewWrapper = () => {
   const auth = useAuth();
   const location = useLocation();
   const { toolId } = useParams();
+  const pmsRoot = resolveDefaultWorkspaceAppPath(auth.user, 'pms');
 
   if (toolId === 'pms-space-team') {
-    return <Navigate replace to={{ pathname: '/pms', search: location.search }} />;
+    return <Navigate replace to={{ pathname: pmsRoot, search: location.search }} />;
   }
 
   if (toolId?.startsWith('pms-project-')) {
@@ -150,6 +177,8 @@ const AppContent = () => {
   const [systemDarkMode, setSystemDarkMode] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const currentUser = auth.user;
+  const currentWorkspaceSlug = getWorkspaceSlugFromPath(location.pathname);
+  const currentWorkspace = getWorkspaceBySlug(currentUser, currentWorkspaceSlug);
   const themePreference = currentUser?.theme_preference ?? 'system';
   const resolvedTheme = resolveThemePreference(themePreference, systemDarkMode);
 
@@ -178,6 +207,10 @@ const AppContent = () => {
     setActiveNavItemId(nextState.activeNavItemId);
   }, [currentUser, location.pathname]);
 
+  useEffect(() => {
+    persistLastWorkspaceSlug(currentWorkspaceSlug);
+  }, [currentWorkspaceSlug]);
+
   if (!currentUser) {
     return <Navigate replace to="/login" />;
   }
@@ -187,6 +220,7 @@ const AppContent = () => {
       <AppBar
         activeAppId={activeAppId}
         currentUser={currentUser}
+        currentWorkspaceSlug={currentWorkspaceSlug}
         onOpenAccount={() => setProfileOpen(true)}
       />
 
@@ -194,60 +228,76 @@ const AppContent = () => {
         <SubSidebar
           activeAppId={activeAppId}
           activeNavItemId={activeNavItemId}
+          currentWorkspaceSlug={currentWorkspaceSlug}
         />
 
-        <main className="flex-1 bg-app-bg overflow-y-auto relative transition-colors">
-          <Routes>
+        <div className="flex-1 flex flex-col overflow-hidden bg-app-bg transition-colors">
+          {currentWorkspace ? (
+            <WorkspaceHeader
+              currentUser={currentUser}
+              currentWorkspaceSlug={currentWorkspace.slug}
+              title={currentWorkspace.name}
+            />
+          ) : null}
+          <main className="flex-1 overflow-y-auto relative">
+            <Routes>
             <Route path="/" element={<HomeView />} />
+            <Route path="/ai" element={<WorkspaceAppRedirect appId="ai" />} />
+            <Route path="/pms" element={<WorkspaceAppRedirect appId="pms" />} />
+            <Route path="/docs" element={<WorkspaceAppRedirect appId="docs" />} />
+            <Route path="/docs/shared/:shareToken" element={<DocsView />} />
+            <Route path="/docs/:docId" element={<WorkspaceAppRedirect appId="docs" />} />
+            <Route path="/planner" element={<WorkspaceAppRedirect appId="planner" />} />
+            <Route path="/meeting/*" element={<WorkspaceAppRedirect appId="meeting" />} />
             <Route
-              path="/ai"
+              path="/w/:workspaceSlug/ai"
               element={(
-                <WorkspaceGate featureCode="nav.ai">
+                <WorkspaceGate appId="ai" featureCode="nav.ai">
                   <AIView />
                 </WorkspaceGate>
               )}
             />
             <Route
-              path="/pms"
+              path="/w/:workspaceSlug/pms"
               element={(
-                <WorkspaceGate featureCode="nav.pms">
+                <WorkspaceGate appId="pms" featureCode="nav.pms">
                   <PMSView />
                 </WorkspaceGate>
               )}
             />
             <Route
-              path="/docs"
+              path="/w/:workspaceSlug/docs"
               element={(
-                <WorkspaceGate featureCode="nav.docs">
-                  <DocsView />
-                </WorkspaceGate>
-              )}
-            />
-            <Route path="/docs/shared/:shareToken" element={<DocsView />} />
-            <Route
-              path="/docs/:docId"
-              element={(
-                <WorkspaceGate featureCode="nav.docs">
+                <WorkspaceGate appId="docs" featureCode="nav.docs">
                   <DocsView />
                 </WorkspaceGate>
               )}
             />
             <Route
-              path="/planner"
+              path="/w/:workspaceSlug/docs/:docId"
               element={(
-                <WorkspaceGate featureCode="nav.planner">
+                <WorkspaceGate appId="docs" featureCode="nav.docs">
+                  <DocsView />
+                </WorkspaceGate>
+              )}
+            />
+            <Route
+              path="/w/:workspaceSlug/planner"
+              element={(
+                <WorkspaceGate appId="planner" featureCode="nav.planner">
                   <PlannerView />
                 </WorkspaceGate>
               )}
             />
             <Route
-              path="/meeting/*"
+              path="/w/:workspaceSlug/meeting/*"
               element={(
-                <WorkspaceGate featureCode="nav.meeting">
+                <WorkspaceGate appId="meeting" featureCode="nav.meeting">
                   <MeetingView />
                 </WorkspaceGate>
               )}
             />
+            <Route path="/w/:workspaceSlug/settings" element={<WorkspaceSettingsView />} />
             <Route path="/tool/:toolId" element={<ToolViewWrapper />} />
             <Route path="/tool/:toolId/:docId" element={<ToolViewWrapper />} />
             <Route path="/admin" element={<AdminLandingRedirect />} />
@@ -295,8 +345,9 @@ const AppContent = () => {
                 </AdminGate>
               )}
             />
-          </Routes>
-        </main>
+            </Routes>
+          </main>
+        </div>
       </div>
 
       {/* Profile modal overlay — renders on top of current page, no route change */}
@@ -345,5 +396,46 @@ export default function App() {
         <ToastViewport />
       </ToastProvider>
     </MantineProvider>
+  );
+}
+
+function WorkspaceHeader({
+  currentUser,
+  currentWorkspaceSlug,
+  title,
+}: {
+  currentUser: NonNullable<ReturnType<typeof useAuth>['user']>;
+  currentWorkspaceSlug: string;
+  title: string;
+}) {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const appMatch = location.pathname.match(/^\/w\/[^/]+\/(ai|pms|docs|planner|meeting)(?:\/|$)/);
+  const activeAppId = (appMatch?.[1] as WorkspaceAppId | undefined) ?? null;
+
+  return (
+    <div className="border-b border-app-border bg-app-bg px-6 py-3 flex items-center justify-between gap-4">
+      <div>
+        <div className="app-text-micro uppercase tracking-[0.08em] text-app-ink/50">Workspace</div>
+        <div className="app-text-body-sm text-app-ink">{title}</div>
+      </div>
+      <select
+        value={currentWorkspaceSlug}
+        onChange={(event) => {
+          const nextWorkspace = event.currentTarget.value;
+          const nextPath = activeAppId
+            ? buildWorkspaceAppPath(nextWorkspace, activeAppId)
+            : buildWorkspaceAppPath(nextWorkspace, 'docs');
+          navigate(nextPath);
+        }}
+        className="app-text-body-sm rounded-md border border-app-border bg-app-bg px-3 py-2 text-app-ink outline-none focus:border-app-accent"
+      >
+        {currentUser.workspaces.map((workspace) => (
+          <option key={workspace.id} value={workspace.slug}>
+            {workspace.name}
+          </option>
+        ))}
+      </select>
+    </div>
   );
 }

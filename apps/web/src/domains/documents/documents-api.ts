@@ -1,3 +1,5 @@
+import { rewriteWorkspaceApiPath } from '@/src/domains/workspaces/workspace-utils';
+
 export interface SearchDocumentsFilters {
   doc_type: string[];
   project: string[];
@@ -63,7 +65,7 @@ export async function searchDocuments(
   payload: SearchDocumentsPayload,
   token: string,
 ): Promise<SearchDocumentsResponse> {
-  const response = await fetch('/api/v1/search/documents', {
+  const response = await fetch(rewriteWorkspaceApiPath('/api/v1/search/documents'), {
     method: 'POST',
     headers: {
       Accept: 'application/json',

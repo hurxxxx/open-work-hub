@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { NAV_ITEMS } from '@/src/constants';
 import { useAuth } from '@/src/domains/auth/auth-provider';
+import { resolveDefaultWorkspaceAppPath } from '@/src/domains/workspaces/workspace-utils';
 
 function SectionHeader({
   title,
@@ -56,6 +57,8 @@ export const HomeView = () => {
   const auth = useAuth();
   const userName = auth.user?.display_name || auth.user?.full_name || 'User';
   const recentTools = NAV_ITEMS.slice(0, 5);
+  const pmsPath = resolveDefaultWorkspaceAppPath(auth.user, 'pms');
+  const aiPath = resolveDefaultWorkspaceAppPath(auth.user, 'ai');
 
   return (
     <div className="h-full overflow-y-auto custom-scrollbar">
@@ -83,7 +86,7 @@ export const HomeView = () => {
 
         {/* Assigned to me */}
         <section>
-          <SectionHeader title="Assigned to me" actionLabel="See all" actionTo="/pms" />
+          <SectionHeader title="Assigned to me" actionLabel="See all" actionTo={pmsPath} />
           <div className="border-t border-app-border">
             {assignedTasks.map((task) => (
               <div
@@ -104,7 +107,7 @@ export const HomeView = () => {
 
         {/* Recently visited */}
         <section>
-          <SectionHeader title="Recently visited" actionLabel="See all" actionTo="/ai" />
+          <SectionHeader title="Recently visited" actionLabel="See all" actionTo={aiPath} />
           <div className="border-t border-app-border">
             {recentTools.map((item) => (
               <Link

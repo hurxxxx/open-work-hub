@@ -17,6 +17,14 @@ export interface AccessGroupItem {
   active: boolean;
   system_roles: string[];
   member_count: number;
+  workspace_bindings: GroupWorkspaceBindingItem[];
+}
+
+export interface GroupWorkspaceBindingItem {
+  workspace_id: string;
+  workspace_key: string;
+  workspace_name: string;
+  role: string;
 }
 
 export interface WorkspaceItem {
@@ -26,12 +34,41 @@ export interface WorkspaceItem {
   description: string;
   active: boolean;
   team_count: number;
+  enabled_apps: string[];
+  member_count: number;
+  meeting_count: number;
+  doc_count: number;
+  created_at: string | null;
+  updated_at: string | null;
 }
 
 export interface WorkspaceBindingItem {
   subject_id: string;
   subject_type: 'user' | 'group';
   subject_label: string;
+  role: string;
+}
+
+export interface WorkspaceAppsResponse {
+  enabled_apps: string[];
+}
+
+export interface WorkspaceMemberCandidate {
+  id: string;
+  email: string;
+  full_name: string;
+  display_name: string;
+  status: string;
+}
+
+export interface UserTeamMembershipItem {
+  id: string;
+  workspace_id: string;
+  workspace_key: string;
+  workspace_name: string;
+  key: string;
+  name: string;
+  description: string;
   role: string;
 }
 
@@ -240,8 +277,52 @@ export function createGroup(
   });
 }
 
-export function listWorkspaces(token: string): Promise<WorkspaceItem[]> {
-  return request<WorkspaceItem[]>(token, '/api/v1/admin/workspaces');
+export function updateGroup(
+  token: string,
+  groupId: string,
+  payload: {
+    name: string;
+    description: string;
+    system_roles?: string[];
+    slug?: string;
+    group_kind?: string;
+    active?: boolean;
+  },
+): Promise<AccessGroupItem> {
+  return request<AccessGroupItem>(token, `/api/v1/admin/groups/${groupId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function replaceGroupWorkspaceBindings(
+  token: string,
+  groupId: string,
+  items: Array<{ workspace_id: string; role: string }>,
+): Promise<AccessGroupItem> {
+  return request<AccessGroupItem>(token, `/api/v1/admin/groups/${groupId}/workspace-bindings`, {
+    method: 'PUT',
+    body: JSON.stringify({ items }),
+  });
+}
+
+export function replaceGroupMembers(
+  token: string,
+  groupId: string,
+  userIds: string[],
+): Promise<AccessGroupItem> {
+  return request<AccessGroupItem>(token, `/api/v1/admin/groups/${groupId}/members`, {
+    method: 'PUT',
+    body: JSON.stringify({ user_ids: userIds }),
+  });
+}
+
+export function listWorkspaces(
+  token: string,
+  options: { includeArchived?: boolean } = {},
+): Promise<WorkspaceItem[]> {
+  const suffix = options.includeArchived ? '?include_archived=true' : '';
+  return request<WorkspaceItem[]>(token, `/api/v1/admin/workspaces${suffix}`);
 }
 
 export function createWorkspace(
@@ -253,6 +334,22 @@ export function createWorkspace(
 ): Promise<WorkspaceItem> {
   return request<WorkspaceItem>(token, '/api/v1/admin/workspaces', {
     method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function updateWorkspace(
+  token: string,
+  workspaceId: string,
+  payload: {
+    key?: string;
+    name: string;
+    description: string;
+    active?: boolean;
+  },
+): Promise<WorkspaceItem> {
+  return request<WorkspaceItem>(token, `/api/v1/admin/workspaces/${workspaceId}`, {
+    method: 'PATCH',
     body: JSON.stringify(payload),
   });
 }
@@ -283,6 +380,100 @@ export function replaceWorkspaceBindings(
       body: JSON.stringify(payload),
     },
   );
+}
+
+export function addWorkspaceMember(
+  token: string,
+  workspaceId: string,
+  payload: {
+    subject_id: string;
+    subject_type: 'user' | 'group';
+    role: string;
+  },
+): Promise<WorkspaceBindingItem> {
+  return request<WorkspaceBindingItem>(
+    token,
+    `/api/v1/admin/workspaces/${workspaceId}/members`,
+    {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    },
+  );
+}
+
+export function updateWorkspaceMemberRole(
+  token: string,
+  workspaceId: string,
+  subjectType: 'user' | 'group',
+  subjectId: string,
+  role: string,
+): Promise<WorkspaceBindingItem> {
+  return request<WorkspaceBindingItem>(
+    token,
+    `/api/v1/admin/workspaces/${workspaceId}/members/${subjectType}/${encodeURIComponent(subjectId)}`,
+    {
+      method: 'PATCH',
+      body: JSON.stringify({ role }),
+    },
+  );
+}
+
+export function removeWorkspaceMember(
+  token: string,
+  workspaceId: string,
+  subjectType: 'user' | 'group',
+  subjectId: string,
+): Promise<void> {
+  return request<void>(
+    token,
+    `/api/v1/admin/workspaces/${workspaceId}/members/${subjectType}/${encodeURIComponent(subjectId)}`,
+    {
+      method: 'DELETE',
+    },
+  );
+}
+
+export function deleteWorkspace(token: string, workspaceId: string): Promise<void> {
+  return request<void>(token, `/api/v1/admin/workspaces/${workspaceId}`, {
+    method: 'DELETE',
+  });
+}
+
+export function getWorkspaceApps(
+  token: string,
+  workspaceId: string,
+): Promise<WorkspaceAppsResponse> {
+  return request<WorkspaceAppsResponse>(token, `/api/v1/admin/workspaces/${workspaceId}/apps`);
+}
+
+export function updateWorkspaceApps(
+  token: string,
+  workspaceId: string,
+  enabledApps: string[],
+): Promise<WorkspaceAppsResponse> {
+  return request<WorkspaceAppsResponse>(token, `/api/v1/admin/workspaces/${workspaceId}/apps`, {
+    method: 'PUT',
+    body: JSON.stringify({ enabled_apps: enabledApps }),
+  });
+}
+
+export function listWorkspaceMemberCandidates(
+  token: string,
+  workspaceId: string,
+  query?: string,
+): Promise<WorkspaceMemberCandidate[]> {
+  const suffix = query?.trim() ? `?q=${encodeURIComponent(query.trim())}` : '';
+  return request<WorkspaceMemberCandidate[]>(
+    token,
+    `/api/v1/admin/workspaces/${workspaceId}/member-candidates${suffix}`,
+  );
+}
+
+export function listUserTeamMemberships(
+  token: string,
+  userId: string,
+): Promise<UserTeamMembershipItem[]> {
+  return request<UserTeamMembershipItem[]>(token, `/api/v1/admin/users/${userId}/teams`);
 }
 
 export function listTeams(token: string, workspaceId?: string): Promise<TeamItem[]> {

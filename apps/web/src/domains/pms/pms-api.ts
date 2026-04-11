@@ -1,3 +1,5 @@
+import { rewriteWorkspaceApiPath } from '@/src/domains/workspaces/workspace-utils';
+
 export interface PmsProject {
   id: string;
   key: string;
@@ -394,8 +396,13 @@ class PmsApiError extends Error {
   }
 }
 
-async function request<T>(path: string, token: string, init: RequestInit = {}): Promise<T> {
-  const response = await fetch(path, {
+async function request<T>(
+  path: string,
+  token: string,
+  init: RequestInit = {},
+  workspaceSlug?: string | null,
+): Promise<T> {
+  const response = await fetch(resolvePmsPath(path, workspaceSlug), {
     ...init,
     headers: {
       Accept: 'application/json',
@@ -419,6 +426,10 @@ async function request<T>(path: string, token: string, init: RequestInit = {}): 
   }
 
   return payload as T;
+}
+
+function resolvePmsPath(path: string, workspaceSlug?: string | null): string {
+  return rewriteWorkspaceApiPath(path, workspaceSlug);
 }
 
 export function listPmsProjects(token: string, teamId?: string): Promise<PmsProjectsResponse> {
@@ -463,10 +474,13 @@ export function deleteSpace(token: string, spaceId: string): Promise<void> {
 export function listSpaceMembers(
   token: string,
   spaceId: string,
+  workspaceSlug?: string | null,
 ): Promise<PmsSpaceMembersResponse> {
   return request<PmsSpaceMembersResponse>(
     `/api/v1/pms/spaces/${spaceId}/members?page=1&page_size=50`,
     token,
+    {},
+    workspaceSlug,
   );
 }
 
@@ -474,11 +488,12 @@ export function addSpaceMember(
   token: string,
   spaceId: string,
   payload: { user_id: string; role: string },
+  workspaceSlug?: string | null,
 ): Promise<PmsSpaceMember> {
   return request<PmsSpaceMember>(`/api/v1/pms/spaces/${spaceId}/members`, token, {
     method: 'POST',
     body: JSON.stringify(payload),
-  });
+  }, workspaceSlug);
 }
 
 export function updateSpaceMemberRole(
@@ -486,15 +501,26 @@ export function updateSpaceMemberRole(
   spaceId: string,
   userId: string,
   role: string,
+  workspaceSlug?: string | null,
 ): Promise<PmsSpaceMember> {
   return request<PmsSpaceMember>(`/api/v1/pms/spaces/${spaceId}/members/${userId}`, token, {
     method: 'PATCH',
     body: JSON.stringify({ role }),
-  });
+  }, workspaceSlug);
 }
 
-export function removeSpaceMember(token: string, spaceId: string, userId: string): Promise<void> {
-  return request<void>(`/api/v1/pms/spaces/${spaceId}/members/${userId}`, token, { method: 'DELETE' });
+export function removeSpaceMember(
+  token: string,
+  spaceId: string,
+  userId: string,
+  workspaceSlug?: string | null,
+): Promise<void> {
+  return request<void>(
+    `/api/v1/pms/spaces/${spaceId}/members/${userId}`,
+    token,
+    { method: 'DELETE' },
+    workspaceSlug,
+  );
 }
 
 export function getPmsList(token: string, projectId: string): Promise<PmsProject> {
@@ -721,7 +747,7 @@ export async function uploadAttachment(
 ): Promise<PmsAttachment> {
   const formData = new FormData();
   formData.append('file', file);
-  const response = await fetch(`/api/v1/pms/issues/${issueId}/attachments`, {
+  const response = await fetch(resolvePmsPath(`/api/v1/pms/issues/${issueId}/attachments`), {
     method: 'POST',
     headers: { Authorization: `Bearer ${token}` },
     body: formData,
@@ -919,7 +945,7 @@ export function deleteProjectStatus(token: string, statusId: string): Promise<vo
 // ── Export ──────────────────────────────────────────────────────────
 
 export async function exportProjectCsv(token: string, projectId: string): Promise<void> {
-  const response = await fetch(`/api/v1/pms/lists/${projectId}/export?format=csv`, {
+  const response = await fetch(resolvePmsPath(`/api/v1/pms/lists/${projectId}/export?format=csv`), {
     headers: { Authorization: `Bearer ${token}` },
   });
   if (!response.ok) throw new PmsApiError(response.status, 'Export failed.');

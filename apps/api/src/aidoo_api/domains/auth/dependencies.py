@@ -10,14 +10,21 @@ from sqlalchemy.orm import Session, joinedload
 
 from aidoo_api.core.db import get_db_session
 from aidoo_api.domains.auth.access import (
+    APP_FEATURE_CODES,
+    FEATURE_APP_CODES,
+    bind_current_workspace,
+    get_current_workspace,
     is_platform_admin_user,
     load_active_workspace_by_key,
     load_user_graph,
-    resolve_team_role,
+    reset_current_workspace,
     resolve_system_roles,
+    resolve_team_role,
     resolve_visible_features,
+    resolve_workspaces,
     resolve_workspace_role,
     team_role_allows,
+    workspace_has_enabled_app,
     workspace_role_allows,
 )
 from aidoo_api.domains.auth.models import AuthSession, Team, User, Workspace
@@ -38,7 +45,7 @@ class AuthContext:
 class WorkspaceAccessContext:
     auth: AuthContext
     workspace: Workspace
-    role: str
+    role: str | None
 
 
 @dataclass(frozen=True)
@@ -61,8 +68,7 @@ def require_auth_context(
     now = datetime.now(UTC).replace(tzinfo=None)
     token_hash = hash_token(credentials.credentials)
     auth_session = db.scalar(
-        select(AuthSession)
-        .where(
+        select(AuthSession).where(
             AuthSession.token_hash == token_hash,
             AuthSession.revoked_at.is_(None),
             AuthSession.expires_at > now,
@@ -142,9 +148,7 @@ def require_permission(permission: str):
 
 
 def require_admin_context(
-    context: AuthContext = Depends(
-        require_any_system_role("platform_admin", "org_admin")
-    ),
+    context: AuthContext = Depends(require_any_system_role("platform_admin", "org_admin")),
 ) -> AuthContext:
     return context
 
@@ -164,43 +168,162 @@ def require_feature_access(feature_code: str):
     return dependency
 
 
-def require_workspace_access(workspace_key: str, min_role: str = "member"):
+def _resolve_workspace_role_for_request(
+    db: Session,
+    auth: AuthContext,
+    workspace: Workspace,
+) -> str | None:
+    if is_platform_admin_user(auth.user, db):
+        return "owner"
+    if "org_admin" in auth.system_roles:
+        return "admin"
+    return resolve_workspace_role(db, auth.user, workspace.id)
+
+
+def _select_legacy_workspace_for_feature(
+    db: Session,
+    auth: AuthContext,
+    feature_code: str,
+    app_or_workspace_key: str,
+    min_role: str,
+) -> tuple[Workspace, str]:
+    explicit_workspace = load_active_workspace_by_key(db, app_or_workspace_key)
+    if explicit_workspace is not None:
+        explicit_role = _resolve_workspace_role_for_request(db, auth, explicit_workspace)
+        app_code = FEATURE_APP_CODES.get(feature_code)
+        if explicit_role is not None and workspace_role_allows(explicit_role, min_role):
+            if app_code is None or workspace_has_enabled_app(db, explicit_workspace, app_code):
+                return explicit_workspace, explicit_role
+
+    app_code = FEATURE_APP_CODES.get(feature_code)
+    for summary in resolve_workspaces(db, auth.user):
+        if not workspace_role_allows(summary["role"], min_role):
+            continue
+        if app_code is not None and app_code not in summary["enabled_apps"]:
+            continue
+        workspace = db.scalar(
+            select(Workspace)
+            .options()
+            .where(Workspace.id == summary["id"], Workspace.active.is_(True))
+        )
+        if workspace is not None:
+            return workspace, summary["role"]
+
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail=f"Workspace access required: {feature_code}",
+    )
+
+
+def require_workspace_context(
+    request: Request,
+    auth: AuthContext = Depends(require_auth_context),
+    db: Session = Depends(get_db_session),
+):
+    workspace_slug = request.path_params.get("workspace_slug")
+    if not workspace_slug:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Missing workspace slug.",
+        )
+    workspace = load_active_workspace_by_key(db, workspace_slug)
+    if workspace is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Workspace not found.")
+
+    role = _resolve_workspace_role_for_request(db, auth, workspace)
+    token = bind_current_workspace(workspace)
+    try:
+        yield WorkspaceAccessContext(auth=auth, workspace=workspace, role=role)
+    finally:
+        reset_current_workspace(token)
+
+
+def require_workspace_membership(min_role: str = "member"):
     def dependency(
-        context: AuthContext = Depends(require_auth_context),
+        workspace_context: WorkspaceAccessContext = Depends(require_workspace_context),
+    ) -> WorkspaceAccessContext:
+        if not workspace_role_allows(workspace_context.role, min_role):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Workspace membership required: {workspace_context.workspace.key}",
+            )
+        return workspace_context
+
+    return dependency
+
+
+def require_workspace_app_enabled(app_code: str, min_role: str = "member"):
+    feature_code = APP_FEATURE_CODES.get(app_code)
+    if feature_code is None:
+        raise ValueError(f"Unknown workspace app: {app_code}")
+
+    def dependency(
+        workspace_context: WorkspaceAccessContext = Depends(require_workspace_membership(min_role)),
+        _feature_context: AuthContext = Depends(require_feature_access(feature_code)),
         db: Session = Depends(get_db_session),
     ) -> WorkspaceAccessContext:
+        if not workspace_has_enabled_app(db, workspace_context.workspace, app_code):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"You need {feature_code}. Ask a workspace admin to enable {app_code}.",
+            )
+        return workspace_context
+
+    return dependency
+
+
+def require_workspace_access(workspace_key: str, min_role: str = "member"):
+    def dependency(
+        auth: AuthContext = Depends(require_auth_context),
+        db: Session = Depends(get_db_session),
+    ):
         workspace = load_active_workspace_by_key(db, workspace_key)
         if workspace is None:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Workspace not found.",
             )
-
-        if is_platform_admin_user(context.user, db):
-            return WorkspaceAccessContext(auth=context, workspace=workspace, role="admin")
-
-        role = resolve_workspace_role(db, context.user, workspace.id)
+        role = _resolve_workspace_role_for_request(db, auth, workspace)
         if not workspace_role_allows(role, min_role):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=f"Workspace access required: {workspace.key}",
             )
-        assert role is not None
-        return WorkspaceAccessContext(auth=context, workspace=workspace, role=role)
+        token = bind_current_workspace(workspace)
+        try:
+            yield WorkspaceAccessContext(auth=auth, workspace=workspace, role=role)
+        finally:
+            reset_current_workspace(token)
 
     return dependency
 
 
 def require_workspace_feature_access(
-    workspace_key: str,
+    app_or_workspace_key: str,
     feature_code: str,
     min_role: str = "member",
 ):
     def dependency(
-        workspace_context: WorkspaceAccessContext = Depends(require_workspace_access(workspace_key, min_role)),
-        _feature_context: AuthContext = Depends(require_feature_access(feature_code)),
-    ) -> WorkspaceAccessContext:
-        return workspace_context
+        auth: AuthContext = Depends(require_auth_context),
+        db: Session = Depends(get_db_session),
+    ):
+        if feature_code not in resolve_visible_features(db, auth.user):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Feature access required: {feature_code}",
+            )
+        workspace, role = _select_legacy_workspace_for_feature(
+            db,
+            auth,
+            feature_code,
+            app_or_workspace_key,
+            min_role,
+        )
+        token = bind_current_workspace(workspace)
+        try:
+            yield WorkspaceAccessContext(auth=auth, workspace=workspace, role=role)
+        finally:
+            reset_current_workspace(token)
 
     return dependency
 
@@ -229,6 +352,10 @@ def require_team_access(min_role: str = "member", team_param: str = "team_id"):
             )
         )
         if team is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Team not found.")
+
+        bound_workspace = get_current_workspace()
+        if bound_workspace is not None and team.workspace_id != bound_workspace.id:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Team not found.")
 
         role = resolve_team_role(db, context.user, team)

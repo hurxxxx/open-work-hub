@@ -57,7 +57,7 @@ export interface AuthContextValue {
   listSessions: () => Promise<AuthSessionItem[]>;
   revokeSession: (sessionId: string) => Promise<void>;
   hasPermission: (permission: string) => boolean;
-  hasFeature: (featureCode: string) => boolean;
+  hasFeature: (featureCode: string, workspaceSlug?: string | null) => boolean;
 }
 
 interface AuthState {
@@ -412,8 +412,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return hasAnySystemRole(state.user, roles);
   }
 
-  function hasFeature(featureCode: string) {
-    return hasFeatureAccess(state.user, featureCode);
+  function hasFeature(featureCode: string, workspaceSlug?: string | null) {
+    return hasFeatureAccess(state.user, featureCode, workspaceSlug);
   }
 
   return (

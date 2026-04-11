@@ -7,6 +7,8 @@ import { CreateSpaceModal } from './CreateSpaceModal';
 
 const mockUseAuth = vi.fn();
 const mockCreateSpace = vi.fn();
+const mockListPmsUsers = vi.fn();
+const mockAddSpaceMember = vi.fn();
 
 vi.mock('@aidoo/ui', () => ({
   Dialog: ({
@@ -46,7 +48,9 @@ vi.mock('@/src/domains/auth/auth-provider', () => ({
 }));
 
 vi.mock('@/src/domains/pms/pms-api', () => ({
+  addSpaceMember: (...args: unknown[]) => mockAddSpaceMember(...args),
   createSpace: (...args: unknown[]) => mockCreateSpace(...args),
+  listPmsUsers: (...args: unknown[]) => mockListPmsUsers(...args),
 }));
 
 function buildUser(overrides: Partial<AuthUser> = {}): AuthUser {
@@ -58,6 +62,15 @@ function buildUser(overrides: Partial<AuthUser> = {}): AuthUser {
     status: 'active',
     theme_preference: 'system',
     primary_org_unit: null,
+    workspaces: [
+      {
+        id: 'workspace-hq',
+        slug: 'hq',
+        name: 'HQ',
+        role: 'member',
+        enabled_apps: ['pms'],
+      },
+    ],
     workspace_roles: [
       {
         workspace_id: 'workspace-pms',
@@ -82,12 +95,25 @@ function buildUser(overrides: Partial<AuthUser> = {}): AuthUser {
 describe('CreateSpaceModal', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockListPmsUsers.mockResolvedValue([]);
+    mockAddSpaceMember.mockResolvedValue(undefined);
   });
 
   it('disables creation for users without workspace admin scope', () => {
     mockUseAuth.mockReturnValue({
       token: 'member-token',
-      user: buildUser({ app_access: [] }),
+      user: buildUser({
+        workspaces: [
+          {
+            id: 'workspace-hq',
+            slug: 'hq',
+            name: 'HQ',
+            role: 'member',
+            enabled_apps: [],
+          },
+        ],
+        app_access: [],
+      }),
     });
 
     render(
@@ -98,7 +124,7 @@ describe('CreateSpaceModal', () => {
     );
 
     expect(screen.getByText('PMS 앱 접근 권한이 없어 스페이스를 생성할 수 없습니다.')).toBeTruthy();
-    expect((screen.getByRole('button', { name: 'Create Space' }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole('button', { name: '스페이스 만들기' }) as HTMLButtonElement).disabled).toBe(true);
   });
 
   it('creates a space for users with PMS app access', async () => {
@@ -130,13 +156,13 @@ describe('CreateSpaceModal', () => {
       />,
     );
 
-    fireEvent.change(screen.getByPlaceholderText('e.g. Engineering'), {
+    fireEvent.change(screen.getByPlaceholderText('예: Engineering'), {
       target: { value: 'Engineering' },
     });
     fireEvent.change(screen.getByPlaceholderText('스페이스에 대한 간단한 설명'), {
       target: { value: 'Delivery team' },
     });
-    fireEvent.click(screen.getByRole('button', { name: 'Create Space' }));
+    fireEvent.click(screen.getByRole('button', { name: '스페이스 만들기' }));
 
     await waitFor(() => {
       expect(mockCreateSpace).toHaveBeenCalledWith('pms-member-token', {

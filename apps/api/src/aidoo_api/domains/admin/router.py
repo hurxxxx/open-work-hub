@@ -15,18 +15,24 @@ from sqlalchemy.orm import Session, joinedload, selectinload
 from aidoo_api.core.db import get_db_session
 from aidoo_api.domains.auth.access import (
     APP_FEATURE_CODES,
+    DEFAULT_WORKSPACE_ENABLED_APPS,
     SYSTEM_ORG_ADMIN,
     SYSTEM_PLATFORM_ADMIN,
     SYSTEM_ROLE_ORDER,
     WORKSPACE_ROLE_RANK,
     assign_user_groups,
+    ensure_workspace_default_pms_space,
     is_org_admin_user,
     is_platform_admin_user,
     is_valid_workspace_role,
+    is_valid_workspace_app_code,
+    list_workspace_enabled_apps,
     load_user_graph,
     load_active_workspace_by_id,
     normalize_workspace_role,
+    normalize_workspace_app_code,
     replace_group_system_roles,
+    replace_workspace_enabled_apps,
     replace_user_system_roles,
     record_audit_log,
     resolve_team_role,
@@ -73,6 +79,7 @@ class AccessGroupItemResponse(BaseModel):
     active: bool
     system_roles: list[str]
     member_count: int
+    workspace_bindings: list[dict[str, str]]
 
 
 class WorkspaceItemResponse(BaseModel):
@@ -82,12 +89,41 @@ class WorkspaceItemResponse(BaseModel):
     description: str
     active: bool
     team_count: int
+    enabled_apps: list[str]
+    member_count: int = 0
+    meeting_count: int = 0
+    doc_count: int = 0
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
 
 
 class WorkspaceBindingItemResponse(BaseModel):
     subject_id: str
     subject_type: Literal["user", "group"]
     subject_label: str
+    role: str
+
+
+class WorkspaceAppsResponse(BaseModel):
+    enabled_apps: list[str]
+
+
+class WorkspaceMemberCandidateResponse(BaseModel):
+    id: str
+    email: str
+    full_name: str
+    display_name: str
+    status: str
+
+
+class UserTeamMembershipItemResponse(BaseModel):
+    id: str
+    workspace_id: str
+    workspace_key: str
+    workspace_name: str
+    key: str
+    name: str
+    description: str
     role: str
 
 
@@ -109,6 +145,63 @@ def _utcnow() -> datetime:
 
 def _visible_team_count(workspace: Workspace) -> int:
     return sum(1 for team in workspace.teams if team.trashed_at is None)
+
+
+def _workspace_member_count(db: Session, workspace_id: str) -> int:
+    user_count = db.scalar(
+        select(func.count())
+        .select_from(WorkspaceUserBinding)
+        .where(WorkspaceUserBinding.workspace_id == workspace_id)
+    ) or 0
+    group_count = db.scalar(
+        select(func.count())
+        .select_from(WorkspaceGroupBinding)
+        .where(WorkspaceGroupBinding.workspace_id == workspace_id)
+    ) or 0
+    return int(user_count) + int(group_count)
+
+
+def _workspace_meeting_count(db: Session, workspace_id: str) -> int:
+    from aidoo_api.domains.meeting.models import Meeting
+
+    return int(
+        db.scalar(
+            select(func.count())
+            .select_from(Meeting)
+            .where(Meeting.workspace_id == workspace_id)
+        )
+        or 0
+    )
+
+
+def _workspace_doc_count(db: Session, workspace_id: str) -> int:
+    from aidoo_api.domains.docs.models import NativeDoc
+
+    return int(
+        db.scalar(
+            select(func.count())
+            .select_from(NativeDoc)
+            .where(NativeDoc.workspace_id == workspace_id)
+        )
+        or 0
+    )
+
+
+def _serialize_workspace(db: Session, workspace: Workspace) -> WorkspaceItemResponse:
+    return WorkspaceItemResponse(
+        id=workspace.id,
+        key=workspace.key,
+        name=workspace.name,
+        description=workspace.description,
+        active=workspace.active,
+        team_count=_visible_team_count(workspace),
+        enabled_apps=list_workspace_enabled_apps(db, workspace.id),
+        member_count=_workspace_member_count(db, workspace.id),
+        meeting_count=_workspace_meeting_count(db, workspace.id),
+        doc_count=_workspace_doc_count(db, workspace.id),
+        created_at=workspace.created_at,
+        updated_at=workspace.updated_at,
+    )
 
 
 def _get_active_team(
@@ -144,6 +237,29 @@ def _ensure_workspace_scope(
 
     role = resolve_workspace_role(db, user, workspace.id)
     if not workspace_role_allows(role, min_role):
+        raise HTTPException(status_code=403, detail="Workspace access required.")
+    return workspace
+
+
+def _ensure_admin_workspace_scope(
+    db: Session,
+    user: User,
+    workspace_id: str,
+) -> Workspace:
+    """Like `_ensure_workspace_scope` but allows archived (active=false) workspaces.
+
+    Used by admin endpoints that need to manage soft-deleted workspaces.
+    Only platform/org admins or workspace admin/owner role holders pass.
+    """
+    workspace = db.scalar(
+        select(Workspace).options(selectinload(Workspace.teams)).where(Workspace.id == workspace_id)
+    )
+    if workspace is None:
+        raise HTTPException(status_code=404, detail="Workspace not found.")
+    if is_platform_admin_user(user, db) or is_org_admin_user(user, db):
+        return workspace
+    role = resolve_workspace_role(db, user, workspace.id)
+    if not workspace_role_allows(role, "admin"):
         raise HTTPException(status_code=403, detail="Workspace access required.")
     return workspace
 
@@ -203,6 +319,7 @@ class AdminUserItemResponse(BaseModel):
     theme_preference: str
     primary_org_unit: dict[str, str | None] | None
     system_roles: list[str]
+    workspaces: list[dict[str, object]]
     workspace_roles: list[dict[str, str]]
     app_access: list[dict[str, str | None]]
     group_ids: list[str]
@@ -273,8 +390,71 @@ class WorkspaceBindingsUpdateRequest(BaseModel):
     groups: list[WorkspaceBindingInput] = Field(default_factory=list)
 
 
+class WorkspaceMemberUpsertRequest(BaseModel):
+    subject_id: str
+    subject_type: Literal["user", "group"]
+    role: str = Field(default="member", max_length=24)
+
+    @field_validator("role")
+    @classmethod
+    def validate_role(cls, value: str) -> str:
+        if not is_valid_workspace_role(value):
+            raise ValueError("Invalid workspace role.")
+        normalized = normalize_workspace_role(value)
+        assert normalized is not None
+        return normalized
+
+
+class WorkspaceMemberRoleUpdateRequest(BaseModel):
+    role: str = Field(..., max_length=24)
+
+    @field_validator("role")
+    @classmethod
+    def validate_role(cls, value: str) -> str:
+        if not is_valid_workspace_role(value):
+            raise ValueError("Invalid workspace role.")
+        normalized = normalize_workspace_role(value)
+        assert normalized is not None
+        return normalized
+
+
+class GroupWorkspaceBindingInput(BaseModel):
+    workspace_id: str
+    role: str = Field(default="member", max_length=24)
+
+    @field_validator("role")
+    @classmethod
+    def validate_role(cls, value: str) -> str:
+        if not is_valid_workspace_role(value):
+            raise ValueError("Invalid workspace role.")
+        normalized = normalize_workspace_role(value)
+        assert normalized is not None
+        return normalized
+
+
+class GroupWorkspaceBindingsUpdateRequest(BaseModel):
+    items: list[GroupWorkspaceBindingInput] = Field(default_factory=list)
+
+
 class TeamMembersUpdateRequest(BaseModel):
     user_ids: list[str] = Field(default_factory=list)
+
+
+class WorkspaceAppsUpdateRequest(BaseModel):
+    enabled_apps: list[str] = Field(default_factory=list)
+
+    @field_validator("enabled_apps")
+    @classmethod
+    def validate_enabled_apps(cls, value: list[str]) -> list[str]:
+        normalized: list[str] = []
+        for item in value:
+            if not is_valid_workspace_app_code(item):
+                raise ValueError("Invalid workspace app code.")
+            normalized_item = normalize_workspace_app_code(item)
+            assert normalized_item is not None
+            if normalized_item not in normalized:
+                normalized.append(normalized_item)
+        return normalized
 
 
 class AdminUserCreateRequest(BaseModel):
@@ -338,6 +518,32 @@ ADMIN_USER_LIST_OPTIONS = (
 
 def _generate_temporary_password() -> str:
     return f"Aidoo!{secrets.token_urlsafe(10)}"
+
+
+def _serialize_access_group(group: AccessGroup) -> AccessGroupItemResponse:
+    return AccessGroupItemResponse(
+        id=group.id,
+        name=group.name,
+        slug=group.slug,
+        description=group.description,
+        group_kind=group.group_kind,
+        active=group.active,
+        system_roles=sorted({link.role for link in group.system_role_links}),
+        member_count=len(group.members),
+        workspace_bindings=[
+            {
+                "workspace_id": binding.workspace_id,
+                "workspace_key": binding.workspace.key,
+                "workspace_name": binding.workspace.name,
+                "role": normalize_workspace_role(binding.role) or binding.role,
+            }
+            for binding in sorted(
+                group.workspace_bindings,
+                key=lambda item: (item.workspace.name.lower(), item.workspace.key.lower()),
+            )
+            if binding.workspace.active
+        ],
+    )
 
 
 def _serialize_admin_user(db: Session, user: User) -> AdminUserItemResponse:
@@ -445,13 +651,11 @@ def _resolve_docs_native_user_ids(db: Session, user_ids: set[str]) -> set[str]:
 def _serialize_admin_user_list(db: Session, users: list[User]) -> list[AdminUserItemResponse]:
     workspaces = list(db.scalars(select(Workspace).where(Workspace.active.is_(True))).all())
     workspace_by_id = {workspace.id: workspace for workspace in workspaces}
-    workspace_by_key = {workspace.key: workspace for workspace in workspaces}
     active_workspace_ids = set(workspace_by_id)
     enabled_policies = {
         policy.code: policy
         for policy in db.scalars(select(FeaturePolicy).where(FeaturePolicy.enabled.is_(True))).all()
     }
-    docs_native_user_ids = _resolve_docs_native_user_ids(db, {user.id for user in users})
 
     items: list[AdminUserItemResponse] = []
     for user in users:
@@ -472,66 +676,42 @@ def _serialize_admin_user_list(db: Session, users: list[User]) -> list[AdminUser
             for workspace in sorted(workspaces, key=lambda item: item.key)
             if (role := workspace_role_map.get(workspace.id)) is not None
         ]
-        workspace_roles_by_key = {item["key"]: item for item in workspace_roles}
+        workspace_summaries = [
+            {
+                "id": workspace.id,
+                "slug": workspace.key,
+                "name": workspace.name,
+                "role": role,
+                "enabled_apps": list_workspace_enabled_apps(db, workspace.id),
+            }
+            for workspace in sorted(workspaces, key=lambda item: item.key)
+            if (role := workspace_role_map.get(workspace.id)) is not None
+        ]
         app_access: list[dict[str, str | None]] = []
 
-        for app_code, feature_code in APP_FEATURE_CODES.items():
-            if feature_code not in enabled_policies:
-                continue
-
-            if app_code == "admin":
-                if not system_roles:
+        for workspace in workspace_summaries:
+            for app_code in workspace["enabled_apps"]:
+                feature_code = APP_FEATURE_CODES.get(app_code)
+                if feature_code is None or feature_code not in enabled_policies:
                     continue
-                workspace = workspace_roles_by_key.get("admin")
                 app_access.append(
                     {
-                        "app": "admin",
-                        "workspace_id": workspace["workspace_id"] if workspace else None,
-                        "workspace_key": "admin",
-                        "workspace_name": workspace["name"] if workspace else "Admin Console",
-                        "role": "admin",
+                        "app": app_code,
+                        "workspace_id": workspace["id"],
+                        "workspace_key": workspace["slug"],
+                        "workspace_name": workspace["name"],
+                        "role": workspace["role"],
                     }
                 )
-                continue
 
-            workspace = workspace_roles_by_key.get(app_code)
-            if app_code == "docs" and workspace is None and user.id in docs_native_user_ids:
-                docs_workspace = workspace_by_key.get("docs")
-                if docs_workspace is not None:
-                    app_access.append(
-                        {
-                            "app": "docs",
-                            "workspace_id": docs_workspace.id,
-                            "workspace_key": docs_workspace.key,
-                            "workspace_name": docs_workspace.name,
-                            "role": "member",
-                        }
-                    )
-                continue
-
-            if app_code == "pms" and workspace is None and SYSTEM_ORG_ADMIN in system_role_set:
-                pms_workspace = workspace_by_key.get("pms")
-                if pms_workspace is not None:
-                    app_access.append(
-                        {
-                            "app": "pms",
-                            "workspace_id": pms_workspace.id,
-                            "workspace_key": pms_workspace.key,
-                            "workspace_name": pms_workspace.name,
-                            "role": "admin",
-                        }
-                    )
-                continue
-
-            if workspace is None:
-                continue
+        if system_roles and APP_FEATURE_CODES["admin"] in enabled_policies:
             app_access.append(
                 {
-                    "app": app_code,
-                    "workspace_id": workspace["workspace_id"],
-                    "workspace_key": workspace["key"],
-                    "workspace_name": workspace["name"],
-                    "role": workspace["role"],
+                    "app": "admin",
+                    "workspace_id": None,
+                    "workspace_key": "admin",
+                    "workspace_name": "Admin Console",
+                    "role": "admin",
                 }
             )
 
@@ -546,6 +726,7 @@ def _serialize_admin_user_list(db: Session, users: list[User]) -> list[AdminUser
                     "theme_preference": user.theme_preference,
                     "primary_org_unit": serialize_org_unit(user.primary_org_unit),
                     "system_roles": system_roles,
+                    "workspaces": workspace_summaries,
                     "workspace_roles": workspace_roles,
                     "app_access": app_access,
                     "group_ids": sorted(
@@ -669,6 +850,71 @@ def get_user(
     if user is None:
         raise HTTPException(status_code=404, detail="User not found.")
     return _serialize_admin_user(db, user)
+
+
+@router.get("/users/{user_id}/teams", response_model=list[UserTeamMembershipItemResponse])
+def list_user_team_memberships(
+    user_id: str,
+    context: AuthContext = Depends(require_permission("user.read")),
+    db: Session = Depends(get_db_session),
+) -> list[UserTeamMembershipItemResponse]:
+    user = db.scalar(select(User.id).where(User.id == user_id))
+    if user is None:
+        raise HTTPException(status_code=404, detail="User not found.")
+
+    memberships = list(
+        db.scalars(
+            select(TeamMember)
+            .join(Team, Team.id == TeamMember.team_id)
+            .options(joinedload(TeamMember.team).joinedload(Team.workspace))
+            .where(TeamMember.user_id == user_id)
+            .order_by(Team.name.asc())
+        )
+        .unique()
+        .all()
+    )
+
+    if not is_platform_admin_user(context.user, db) and not is_org_admin_user(context.user, db):
+        accessible_workspace_ids = {
+            item["workspace_id"]
+            for item in serialize_auth_user(db, context.user)["workspace_roles"]
+        }
+        memberships = [
+            membership
+            for membership in memberships
+            if membership.team.trashed_at is None
+            and membership.team.active
+            and membership.team.workspace.active
+            and membership.team.workspace_id in accessible_workspace_ids
+        ]
+    else:
+        memberships = [
+            membership
+            for membership in memberships
+            if membership.team.trashed_at is None
+            and membership.team.active
+            and membership.team.workspace.active
+        ]
+
+    memberships.sort(
+        key=lambda membership: (
+            membership.team.workspace.name.lower(),
+            membership.team.name.lower(),
+        )
+    )
+    return [
+        UserTeamMembershipItemResponse(
+            id=membership.team.id,
+            workspace_id=membership.team.workspace_id,
+            workspace_key=membership.team.workspace.key,
+            workspace_name=membership.team.workspace.name,
+            key=membership.team.key,
+            name=membership.team.name,
+            description=membership.team.description,
+            role=membership.role,
+        )
+        for membership in memberships
+    ]
 
 
 @router.patch("/users/{user_id}", response_model=AdminUserItemResponse)
@@ -883,21 +1129,10 @@ def list_groups(
         select(AccessGroup).options(
             selectinload(AccessGroup.members),
             selectinload(AccessGroup.system_role_links),
+            selectinload(AccessGroup.workspace_bindings).joinedload(WorkspaceGroupBinding.workspace),
         )
     ).all()
-    return [
-        AccessGroupItemResponse(
-            id=group.id,
-            name=group.name,
-            slug=group.slug,
-            description=group.description,
-            group_kind=group.group_kind,
-            active=group.active,
-            system_roles=sorted({link.role for link in group.system_role_links}),
-            member_count=len(group.members),
-        )
-        for group in groups
-    ]
+    return [_serialize_access_group(group) for group in groups]
 
 
 @router.post("/groups", response_model=AccessGroupItemResponse, status_code=status.HTTP_201_CREATED)
@@ -922,6 +1157,8 @@ def create_group(
     db.add(group)
     db.flush()
     replace_group_system_roles(db, group.id, payload.system_roles)
+    db.flush()
+    db.refresh(group)
     record_audit_log(
         db,
         actor_user_id=context.user.id,
@@ -932,16 +1169,17 @@ def create_group(
         payload={"system_roles": payload.system_roles},
     )
     db.commit()
-    return AccessGroupItemResponse(
-        id=group.id,
-        name=group.name,
-        slug=group.slug,
-        description=group.description,
-        group_kind=group.group_kind,
-        active=group.active,
-        system_roles=sorted(payload.system_roles),
-        member_count=0,
+    group = db.scalar(
+        select(AccessGroup)
+        .options(
+            selectinload(AccessGroup.members),
+            selectinload(AccessGroup.system_role_links),
+            selectinload(AccessGroup.workspace_bindings).joinedload(WorkspaceGroupBinding.workspace),
+        )
+        .where(AccessGroup.id == group.id)
     )
+    assert group is not None
+    return _serialize_access_group(group)
 
 
 @router.patch("/groups/{group_id}", response_model=AccessGroupItemResponse)
@@ -953,7 +1191,11 @@ def update_group(
 ) -> AccessGroupItemResponse:
     group = db.scalar(
         select(AccessGroup)
-        .options(selectinload(AccessGroup.members), selectinload(AccessGroup.system_role_links))
+        .options(
+            selectinload(AccessGroup.members),
+            selectinload(AccessGroup.system_role_links),
+            selectinload(AccessGroup.workspace_bindings).joinedload(WorkspaceGroupBinding.workspace),
+        )
         .where(AccessGroup.id == group_id)
     )
     if group is None:
@@ -977,16 +1219,7 @@ def update_group(
         payload={"system_roles": payload.system_roles},
     )
     db.commit()
-    return AccessGroupItemResponse(
-        id=group.id,
-        name=group.name,
-        slug=group.slug,
-        description=group.description,
-        group_kind=group.group_kind,
-        active=group.active,
-        system_roles=sorted(payload.system_roles),
-        member_count=len(group.members),
-    )
+    return _serialize_access_group(group)
 
 
 @router.put("/groups/{group_id}/members", response_model=AccessGroupItemResponse)
@@ -998,7 +1231,11 @@ def replace_group_members(
 ) -> AccessGroupItemResponse:
     group = db.scalar(
         select(AccessGroup)
-        .options(selectinload(AccessGroup.members), selectinload(AccessGroup.system_role_links))
+        .options(
+            selectinload(AccessGroup.members),
+            selectinload(AccessGroup.system_role_links),
+            selectinload(AccessGroup.workspace_bindings).joinedload(WorkspaceGroupBinding.workspace),
+        )
         .where(AccessGroup.id == group_id)
     )
     if group is None:
@@ -1025,46 +1262,105 @@ def replace_group_members(
     db.commit()
     group = db.scalar(
         select(AccessGroup)
-        .options(selectinload(AccessGroup.members), selectinload(AccessGroup.system_role_links))
+        .options(
+            selectinload(AccessGroup.members),
+            selectinload(AccessGroup.system_role_links),
+            selectinload(AccessGroup.workspace_bindings).joinedload(WorkspaceGroupBinding.workspace),
+        )
         .where(AccessGroup.id == group_id)
     )
     assert group is not None
-    return AccessGroupItemResponse(
-        id=group.id,
-        name=group.name,
-        slug=group.slug,
-        description=group.description,
-        group_kind=group.group_kind,
-        active=group.active,
-        system_roles=sorted({link.role for link in group.system_role_links}),
-        member_count=len(group.members),
+    return _serialize_access_group(group)
+
+
+@router.put("/groups/{group_id}/workspace-bindings", response_model=AccessGroupItemResponse)
+def replace_group_workspace_bindings(
+    group_id: str,
+    payload: GroupWorkspaceBindingsUpdateRequest,
+    context: AuthContext = Depends(require_permission("group.write")),
+    db: Session = Depends(get_db_session),
+) -> AccessGroupItemResponse:
+    group = db.scalar(
+        select(AccessGroup)
+        .options(
+            selectinload(AccessGroup.members),
+            selectinload(AccessGroup.system_role_links),
+            selectinload(AccessGroup.workspace_bindings).joinedload(WorkspaceGroupBinding.workspace),
+        )
+        .where(AccessGroup.id == group_id)
     )
+    if group is None:
+        raise HTTPException(status_code=404, detail="Group not found.")
+
+    requested_workspace_ids = {item.workspace_id for item in payload.items}
+    role_map = {item.workspace_id: item.role for item in payload.items}
+
+    for binding in list(group.workspace_bindings):
+        if binding.workspace_id not in requested_workspace_ids:
+            db.delete(binding)
+        else:
+            binding.role = role_map[binding.workspace_id]
+            db.add(binding)
+
+    existing_workspace_ids = {binding.workspace_id for binding in group.workspace_bindings}
+    for workspace_id in requested_workspace_ids - existing_workspace_ids:
+        if db.scalar(select(Workspace.id).where(Workspace.id == workspace_id, Workspace.active.is_(True))) is not None:
+            db.add(
+                WorkspaceGroupBinding(
+                    id=new_id(),
+                    workspace_id=workspace_id,
+                    group_id=group.id,
+                    role=role_map[workspace_id],
+                )
+            )
+
+    record_audit_log(
+        db,
+        actor_user_id=context.user.id,
+        action="admin.group.workspace-bindings.replace",
+        entity_kind="group",
+        entity_id=group.id,
+        summary=f"Updated workspace templates for group {group.name}",
+        payload={
+            "items": [
+                {"workspace_id": item.workspace_id, "role": item.role}
+                for item in payload.items
+            ]
+        },
+    )
+    db.commit()
+    group = db.scalar(
+        select(AccessGroup)
+        .options(
+            selectinload(AccessGroup.members),
+            selectinload(AccessGroup.system_role_links),
+            selectinload(AccessGroup.workspace_bindings).joinedload(WorkspaceGroupBinding.workspace),
+        )
+        .where(AccessGroup.id == group_id)
+    )
+    assert group is not None
+    return _serialize_access_group(group)
 
 
 @router.get("/workspaces", response_model=list[WorkspaceItemResponse])
 def list_workspaces(
+    include_archived: bool = Query(default=False),
     context: AuthContext = Depends(require_auth_context),
     db: Session = Depends(get_db_session),
 ) -> list[WorkspaceItemResponse]:
-    query = select(Workspace).options(selectinload(Workspace.teams)).where(Workspace.active.is_(True))
+    is_admin = is_platform_admin_user(context.user, db) or is_org_admin_user(context.user, db)
+    query = select(Workspace).options(selectinload(Workspace.teams))
+    if not (include_archived and is_admin):
+        query = query.where(Workspace.active.is_(True))
+    query = query.order_by(Workspace.name.asc())
     items = db.scalars(query).all()
-    if not (is_platform_admin_user(context.user, db) or is_org_admin_user(context.user, db)):
+    if not is_admin:
         accessible_workspace_ids = {
             item["workspace_id"]
             for item in serialize_auth_user(db, context.user)["workspace_roles"]
         }
         items = [item for item in items if item.id in accessible_workspace_ids]
-    return [
-        WorkspaceItemResponse(
-            id=item.id,
-            key=item.key,
-            name=item.name,
-            description=item.description,
-            active=item.active,
-            team_count=_visible_team_count(item),
-        )
-        for item in items
-    ]
+    return [_serialize_workspace(db, item) for item in items]
 
 
 @router.post("/workspaces", response_model=WorkspaceItemResponse, status_code=status.HTTP_201_CREATED)
@@ -1085,6 +1381,17 @@ def create_workspace(
         active=payload.active,
     )
     db.add(workspace)
+    db.flush()
+    replace_workspace_enabled_apps(db, workspace.id, DEFAULT_WORKSPACE_ENABLED_APPS)
+    ensure_workspace_default_pms_space(db, workspace)
+    db.add(
+        WorkspaceUserBinding(
+            id=new_id(),
+            workspace_id=workspace.id,
+            user_id=context.user.id,
+            role="owner",
+        )
+    )
     record_audit_log(
         db,
         actor_user_id=context.user.id,
@@ -1094,14 +1401,8 @@ def create_workspace(
         summary=f"Created workspace {workspace.name}",
     )
     db.commit()
-    return WorkspaceItemResponse(
-        id=workspace.id,
-        key=workspace.key,
-        name=workspace.name,
-        description=workspace.description,
-        active=workspace.active,
-        team_count=0,
-    )
+    db.refresh(workspace)
+    return _serialize_workspace(db, workspace)
 
 
 @router.patch("/workspaces/{workspace_id}", response_model=WorkspaceItemResponse)
@@ -1111,9 +1412,7 @@ def update_workspace(
     context: AuthContext = Depends(require_auth_context),
     db: Session = Depends(get_db_session),
 ) -> WorkspaceItemResponse:
-    workspace = _ensure_workspace_scope(db, context.user, workspace_id, min_role="admin")
-    workspace = db.scalar(select(Workspace).options(selectinload(Workspace.teams)).where(Workspace.id == workspace.id))
-    assert workspace is not None
+    workspace = _ensure_admin_workspace_scope(db, context.user, workspace_id)
 
     workspace.key = payload.key or workspace.key
     workspace.name = payload.name.strip()
@@ -1129,14 +1428,99 @@ def update_workspace(
         summary=f"Updated workspace {workspace.name}",
     )
     db.commit()
-    return WorkspaceItemResponse(
-        id=workspace.id,
-        key=workspace.key,
-        name=workspace.name,
-        description=workspace.description,
-        active=workspace.active,
-        team_count=_visible_team_count(workspace),
+    db.refresh(workspace)
+    return _serialize_workspace(db, workspace)
+
+
+@router.delete("/workspaces/{workspace_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_workspace(
+    workspace_id: str,
+    context: AuthContext = Depends(require_auth_context),
+    db: Session = Depends(get_db_session),
+) -> None:
+    workspace = _ensure_admin_workspace_scope(db, context.user, workspace_id)
+
+    if workspace.active:
+        raise HTTPException(
+            status_code=409,
+            detail="Workspace must be archived before it can be permanently deleted.",
+        )
+
+    team_count = _visible_team_count(workspace)
+    meeting_count = _workspace_meeting_count(db, workspace.id)
+    doc_count = _workspace_doc_count(db, workspace.id)
+    blockers: list[str] = []
+    if team_count > 0:
+        blockers.append(f"{team_count} space(s)")
+    if meeting_count > 0:
+        blockers.append(f"{meeting_count} meeting(s)")
+    if doc_count > 0:
+        blockers.append(f"{doc_count} document(s)")
+    if blockers:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Workspace still contains {', '.join(blockers)}. Empty its content first.",
+        )
+
+    workspace_name = workspace.name
+    workspace_key = workspace.key
+    db.execute(sa_delete(WorkspaceUserBinding).where(WorkspaceUserBinding.workspace_id == workspace.id))
+    db.execute(sa_delete(WorkspaceGroupBinding).where(WorkspaceGroupBinding.workspace_id == workspace.id))
+    db.execute(
+        sa_delete(Team).where(
+            Team.workspace_id == workspace.id,
+            Team.trashed_at.is_not(None),
+        )
     )
+    from aidoo_api.domains.auth.models import WorkspaceEnabledApp
+
+    db.execute(
+        sa_delete(WorkspaceEnabledApp).where(WorkspaceEnabledApp.workspace_id == workspace.id)
+    )
+    db.delete(workspace)
+    record_audit_log(
+        db,
+        actor_user_id=context.user.id,
+        action="admin.workspace.delete",
+        entity_kind="workspace",
+        entity_id=workspace_id,
+        summary=f"Deleted workspace {workspace_name}",
+        payload={"key": workspace_key, "name": workspace_name},
+    )
+    db.commit()
+
+
+@router.get("/workspaces/{workspace_id}/apps", response_model=WorkspaceAppsResponse)
+def get_workspace_apps(
+    workspace_id: str,
+    context: AuthContext = Depends(require_auth_context),
+    db: Session = Depends(get_db_session),
+) -> WorkspaceAppsResponse:
+    _ensure_workspace_scope(db, context.user, workspace_id, min_role="admin")
+    return WorkspaceAppsResponse(enabled_apps=list_workspace_enabled_apps(db, workspace_id))
+
+
+@router.put("/workspaces/{workspace_id}/apps", response_model=WorkspaceAppsResponse)
+def update_workspace_apps(
+    workspace_id: str,
+    payload: WorkspaceAppsUpdateRequest,
+    context: AuthContext = Depends(require_auth_context),
+    db: Session = Depends(get_db_session),
+) -> WorkspaceAppsResponse:
+    workspace = _ensure_workspace_scope(db, context.user, workspace_id, min_role="admin")
+    enabled_apps = replace_workspace_enabled_apps(db, workspace.id, payload.enabled_apps)
+    ensure_workspace_default_pms_space(db, workspace)
+    record_audit_log(
+        db,
+        actor_user_id=context.user.id,
+        action="admin.workspace.apps.update",
+        entity_kind="workspace",
+        entity_id=workspace.id,
+        summary=f"Updated enabled apps for {workspace.name}",
+        payload={"enabled_apps": enabled_apps},
+    )
+    db.commit()
+    return WorkspaceAppsResponse(enabled_apps=enabled_apps)
 
 
 @router.get("/workspaces/{workspace_id}/bindings", response_model=list[WorkspaceBindingItemResponse])
@@ -1162,9 +1546,7 @@ def list_workspace_bindings(
             subject_id=binding.user_id,
             subject_type="user",
             subject_label=binding.user.email,
-            role="member"
-            if workspace.key == "pms"
-            else (normalize_workspace_role(binding.role) or binding.role),
+            role=normalize_workspace_role(binding.role) or binding.role,
         )
         for binding in workspace.user_bindings
     ]
@@ -1173,9 +1555,7 @@ def list_workspace_bindings(
             subject_id=binding.group_id,
             subject_type="group",
             subject_label=binding.group.name,
-            role="member"
-            if workspace.key == "pms"
-            else (normalize_workspace_role(binding.role) or binding.role),
+            role=normalize_workspace_role(binding.role) or binding.role,
         )
         for binding in workspace.group_bindings
     )
@@ -1203,9 +1583,8 @@ def replace_workspace_bindings(
 
     requested_user_ids = {item.subject_id for item in payload.users}
     requested_group_ids = {item.subject_id for item in payload.groups}
-    normalized_role = (lambda role: "member" if workspace.key == "pms" else role)
-    user_role_map = {item.subject_id: normalized_role(item.role) for item in payload.users}
-    group_role_map = {item.subject_id: normalized_role(item.role) for item in payload.groups}
+    user_role_map = {item.subject_id: item.role for item in payload.users}
+    group_role_map = {item.subject_id: item.role for item in payload.groups}
 
     for binding in list(workspace.user_bindings):
         if binding.user_id not in requested_user_ids:
@@ -1253,6 +1632,260 @@ def replace_workspace_bindings(
     )
     db.commit()
     return list_workspace_bindings(workspace_id, context, db)
+
+
+def _serialize_user_binding(binding: WorkspaceUserBinding) -> WorkspaceBindingItemResponse:
+    return WorkspaceBindingItemResponse(
+        subject_id=binding.user_id,
+        subject_type="user",
+        subject_label=binding.user.email,
+        role=normalize_workspace_role(binding.role) or binding.role,
+    )
+
+
+def _serialize_group_binding(binding: WorkspaceGroupBinding) -> WorkspaceBindingItemResponse:
+    return WorkspaceBindingItemResponse(
+        subject_id=binding.group_id,
+        subject_type="group",
+        subject_label=binding.group.name,
+        role=normalize_workspace_role(binding.role) or binding.role,
+    )
+
+
+@router.post(
+    "/workspaces/{workspace_id}/members",
+    response_model=WorkspaceBindingItemResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def add_workspace_member(
+    workspace_id: str,
+    payload: WorkspaceMemberUpsertRequest,
+    context: AuthContext = Depends(require_auth_context),
+    db: Session = Depends(get_db_session),
+) -> WorkspaceBindingItemResponse:
+    workspace = _ensure_admin_workspace_scope(db, context.user, workspace_id)
+
+    if payload.subject_type == "user":
+        if db.scalar(select(User.id).where(User.id == payload.subject_id)) is None:
+            raise HTTPException(status_code=404, detail="User not found.")
+        existing = db.scalar(
+            select(WorkspaceUserBinding).where(
+                WorkspaceUserBinding.workspace_id == workspace.id,
+                WorkspaceUserBinding.user_id == payload.subject_id,
+            )
+        )
+        if existing is not None:
+            raise HTTPException(
+                status_code=409, detail="User is already a member of this workspace."
+            )
+        binding = WorkspaceUserBinding(
+            id=new_id(),
+            workspace_id=workspace.id,
+            user_id=payload.subject_id,
+            role=payload.role,
+        )
+        db.add(binding)
+        record_audit_log(
+            db,
+            actor_user_id=context.user.id,
+            action="admin.workspace.member.add",
+            entity_kind="workspace",
+            entity_id=workspace.id,
+            summary=f"Added user to {workspace.name}",
+            payload={"subject_type": "user", "subject_id": payload.subject_id, "role": payload.role},
+        )
+        db.commit()
+        loaded = db.scalar(
+            select(WorkspaceUserBinding)
+            .options(joinedload(WorkspaceUserBinding.user))
+            .where(WorkspaceUserBinding.id == binding.id)
+        )
+        assert loaded is not None
+        return _serialize_user_binding(loaded)
+
+    if db.scalar(select(AccessGroup.id).where(AccessGroup.id == payload.subject_id)) is None:
+        raise HTTPException(status_code=404, detail="Group not found.")
+    existing_group = db.scalar(
+        select(WorkspaceGroupBinding).where(
+            WorkspaceGroupBinding.workspace_id == workspace.id,
+            WorkspaceGroupBinding.group_id == payload.subject_id,
+        )
+    )
+    if existing_group is not None:
+        raise HTTPException(
+            status_code=409, detail="Group is already a member of this workspace."
+        )
+    group_binding = WorkspaceGroupBinding(
+        id=new_id(),
+        workspace_id=workspace.id,
+        group_id=payload.subject_id,
+        role=payload.role,
+    )
+    db.add(group_binding)
+    record_audit_log(
+        db,
+        actor_user_id=context.user.id,
+        action="admin.workspace.member.add",
+        entity_kind="workspace",
+        entity_id=workspace.id,
+        summary=f"Added group to {workspace.name}",
+        payload={"subject_type": "group", "subject_id": payload.subject_id, "role": payload.role},
+    )
+    db.commit()
+    loaded_group = db.scalar(
+        select(WorkspaceGroupBinding)
+        .options(joinedload(WorkspaceGroupBinding.group))
+        .where(WorkspaceGroupBinding.id == group_binding.id)
+    )
+    assert loaded_group is not None
+    return _serialize_group_binding(loaded_group)
+
+
+@router.patch(
+    "/workspaces/{workspace_id}/members/{subject_type}/{subject_id}",
+    response_model=WorkspaceBindingItemResponse,
+)
+def update_workspace_member_role(
+    workspace_id: str,
+    subject_type: Literal["user", "group"],
+    subject_id: str,
+    payload: WorkspaceMemberRoleUpdateRequest,
+    context: AuthContext = Depends(require_auth_context),
+    db: Session = Depends(get_db_session),
+) -> WorkspaceBindingItemResponse:
+    workspace = _ensure_admin_workspace_scope(db, context.user, workspace_id)
+
+    if subject_type == "user":
+        binding = db.scalar(
+            select(WorkspaceUserBinding)
+            .options(joinedload(WorkspaceUserBinding.user))
+            .where(
+                WorkspaceUserBinding.workspace_id == workspace.id,
+                WorkspaceUserBinding.user_id == subject_id,
+            )
+        )
+        if binding is None:
+            raise HTTPException(status_code=404, detail="Workspace member not found.")
+        binding.role = payload.role
+        db.add(binding)
+        record_audit_log(
+            db,
+            actor_user_id=context.user.id,
+            action="admin.workspace.member.role.update",
+            entity_kind="workspace",
+            entity_id=workspace.id,
+            summary=f"Changed user role in {workspace.name}",
+            payload={"subject_type": "user", "subject_id": subject_id, "role": payload.role},
+        )
+        db.commit()
+        return _serialize_user_binding(binding)
+
+    group_binding = db.scalar(
+        select(WorkspaceGroupBinding)
+        .options(joinedload(WorkspaceGroupBinding.group))
+        .where(
+            WorkspaceGroupBinding.workspace_id == workspace.id,
+            WorkspaceGroupBinding.group_id == subject_id,
+        )
+    )
+    if group_binding is None:
+        raise HTTPException(status_code=404, detail="Workspace member not found.")
+    group_binding.role = payload.role
+    db.add(group_binding)
+    record_audit_log(
+        db,
+        actor_user_id=context.user.id,
+        action="admin.workspace.member.role.update",
+        entity_kind="workspace",
+        entity_id=workspace.id,
+        summary=f"Changed group role in {workspace.name}",
+        payload={"subject_type": "group", "subject_id": subject_id, "role": payload.role},
+    )
+    db.commit()
+    return _serialize_group_binding(group_binding)
+
+
+@router.delete(
+    "/workspaces/{workspace_id}/members/{subject_type}/{subject_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+def remove_workspace_member(
+    workspace_id: str,
+    subject_type: Literal["user", "group"],
+    subject_id: str,
+    context: AuthContext = Depends(require_auth_context),
+    db: Session = Depends(get_db_session),
+) -> None:
+    workspace = _ensure_admin_workspace_scope(db, context.user, workspace_id)
+
+    if subject_type == "user":
+        binding = db.scalar(
+            select(WorkspaceUserBinding).where(
+                WorkspaceUserBinding.workspace_id == workspace.id,
+                WorkspaceUserBinding.user_id == subject_id,
+            )
+        )
+        if binding is None:
+            raise HTTPException(status_code=404, detail="Workspace member not found.")
+        db.delete(binding)
+    else:
+        group_binding = db.scalar(
+            select(WorkspaceGroupBinding).where(
+                WorkspaceGroupBinding.workspace_id == workspace.id,
+                WorkspaceGroupBinding.group_id == subject_id,
+            )
+        )
+        if group_binding is None:
+            raise HTTPException(status_code=404, detail="Workspace member not found.")
+        db.delete(group_binding)
+
+    record_audit_log(
+        db,
+        actor_user_id=context.user.id,
+        action="admin.workspace.member.remove",
+        entity_kind="workspace",
+        entity_id=workspace.id,
+        summary=f"Removed {subject_type} from {workspace.name}",
+        payload={"subject_type": subject_type, "subject_id": subject_id},
+    )
+    db.commit()
+
+
+@router.get(
+    "/workspaces/{workspace_id}/member-candidates",
+    response_model=list[WorkspaceMemberCandidateResponse],
+)
+def list_workspace_member_candidates(
+    workspace_id: str,
+    q: str | None = Query(default=None, max_length=120),
+    limit: int = Query(default=100, ge=1, le=200),
+    context: AuthContext = Depends(require_auth_context),
+    db: Session = Depends(get_db_session),
+) -> list[WorkspaceMemberCandidateResponse]:
+    _ensure_workspace_scope(db, context.user, workspace_id, min_role="admin")
+
+    normalized_query = q.strip() if q else ""
+    query = select(User).where(User.status.in_(("active", "invited"))).order_by(User.full_name.asc())
+    if normalized_query:
+        search_pattern = f"%{normalized_query}%"
+        query = query.where(
+            or_(
+                User.email.ilike(search_pattern),
+                User.full_name.ilike(search_pattern),
+                User.display_name.ilike(search_pattern),
+            )
+        )
+    users = db.scalars(query.limit(limit)).all()
+    return [
+        WorkspaceMemberCandidateResponse(
+            id=item.id,
+            email=item.email,
+            full_name=item.full_name,
+            display_name=item.display_name or item.full_name,
+            status=item.status,
+        )
+        for item in users
+    ]
 
 
 @router.get("/teams", response_model=list[TeamItemResponse])

@@ -22,10 +22,19 @@ export interface AppAccess {
   role: string;
 }
 
+export interface WorkspaceSummary {
+  id: string;
+  slug: string;
+  name: string;
+  role: string;
+  enabled_apps: string[];
+}
+
 const WORKSPACE_ROLE_RANK: Record<string, number> = {
   viewer: 10,
   member: 20,
   admin: 40,
+  owner: 50,
 };
 
 const TEAM_ROLE_RANK: Record<string, number> = {
@@ -45,8 +54,9 @@ export interface AuthUser {
   theme_preference: ThemePreference;
   primary_org_unit: OrgUnitSummary | null;
   system_roles: string[];
-  workspace_roles: WorkspaceRole[];
-  app_access: AppAccess[];
+  workspaces: WorkspaceSummary[];
+  workspace_roles?: WorkspaceRole[];
+  app_access?: AppAccess[];
   group_ids: string[];
   group_slugs: string[];
   must_change_password: boolean;
@@ -64,10 +74,19 @@ const FEATURE_TO_APP: Record<string, string> = {
 };
 
 export function getWorkspaceRoleByKey(
-  user: Pick<AuthUser, 'workspace_roles'> | null | undefined,
+  user: Pick<AuthUser, 'workspaces' | 'workspace_roles'> | null | undefined,
   key: string,
 ): WorkspaceRole | null {
-  return user?.workspace_roles.find((role) => role.key === key) ?? null;
+  const workspace = user?.workspaces.find((item) => item.slug === key);
+  if (workspace) {
+    return {
+      workspace_id: workspace.id,
+      key: workspace.slug,
+      name: workspace.name,
+      role: workspace.role,
+    };
+  }
+  return user?.workspace_roles?.find((role) => role.key === key) ?? null;
 }
 
 export function workspaceRoleAllows(
@@ -107,18 +126,34 @@ export function hasAnySystemRole(
 }
 
 export function hasAppAccess(
-  user: Pick<AuthUser, 'app_access'> | null | undefined,
+  user: Pick<AuthUser, 'workspaces' | 'app_access'> | null | undefined,
   appCode: string,
+  workspaceSlug?: string | null,
 ): boolean {
-  return user?.app_access?.some((item) => item.app === appCode) ?? false;
+  if (workspaceSlug) {
+    return (
+      user?.workspaces?.some(
+        (workspace) => workspace.slug === workspaceSlug && workspace.enabled_apps.includes(appCode),
+      ) ?? false
+    );
+  }
+  return (
+    user?.workspaces?.some((workspace) => workspace.enabled_apps.includes(appCode))
+    ?? user?.app_access?.some((item) => item.app === appCode)
+    ?? false
+  );
 }
 
 export function hasFeatureAccess(
-  user: Pick<AuthUser, 'app_access'> | null | undefined,
+  user: Pick<AuthUser, 'workspaces' | 'app_access' | 'system_roles'> | null | undefined,
   featureCode: string,
+  workspaceSlug?: string | null,
 ): boolean {
+  if (featureCode === 'nav.admin') {
+    return hasAnySystemRole(user, ['platform_admin', 'org_admin']);
+  }
   const appCode = FEATURE_TO_APP[featureCode];
-  return appCode ? hasAppAccess(user, appCode) : false;
+  return appCode ? hasAppAccess(user, appCode, workspaceSlug) : false;
 }
 
 export interface BootstrapStatusResponse {

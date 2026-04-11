@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Button, Dialog } from '@aidoo/ui';
 import { Loader2 } from 'lucide-react';
+import { useParams } from 'react-router-dom';
 
 import { useAuth } from '@/src/domains/auth/auth-provider';
+import { hasAppAccess } from '@/src/domains/auth/auth-api';
 import { NoAccessNotice } from '@/src/components/common/NoAccessNotice';
 import {
   listPmsProjects,
@@ -24,8 +26,9 @@ export function TaskPickerModal({
   onPick,
   excludeIssueIds = [],
 }: TaskPickerModalProps) {
-  const { token, hasFeature } = useAuth();
-  const canAccessPms = hasFeature('nav.pms');
+  const { workspaceSlug } = useParams();
+  const { token, user } = useAuth();
+  const canAccessPms = hasAppAccess(user, 'pms', workspaceSlug);
   const [projects, setProjects] = useState<PmsProject[]>([]);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [issues, setIssues] = useState<PmsIssue[]>([]);

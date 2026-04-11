@@ -1,3 +1,5 @@
+import { rewriteWorkspaceApiPath } from '@/src/domains/workspaces/workspace-utils';
+
 export type MeetingStatus = 'scheduled' | 'in_progress' | 'completed' | 'cancelled';
 export type AttendeeRole = 'required' | 'optional';
 export type AttendeeResponse = 'pending' | 'accepted' | 'declined' | 'tentative';
@@ -153,7 +155,7 @@ export class MeetingApiError extends Error {
 }
 
 async function request<T>(path: string, token: string, init: RequestInit = {}): Promise<T> {
-  const response = await fetch(path, {
+  const response = await fetch(resolveMeetingPath(path), {
     ...init,
     headers: {
       Accept: 'application/json',
@@ -177,6 +179,10 @@ async function request<T>(path: string, token: string, init: RequestInit = {}): 
   }
 
   return payload as T;
+}
+
+function resolveMeetingPath(path: string): string {
+  return rewriteWorkspaceApiPath(path);
 }
 
 export function listMeetings(
@@ -278,7 +284,7 @@ export async function uploadMeetingFile(
 ): Promise<MeetingDetail> {
   const formData = new FormData();
   formData.append('file', file);
-  const response = await fetch(`/api/v1/meeting/meetings/${meetingId}/files`, {
+  const response = await fetch(resolveMeetingPath(`/api/v1/meeting/meetings/${meetingId}/files`), {
     method: 'POST',
     headers: {
       // Do not set Content-Type — the browser fills in the multipart boundary.

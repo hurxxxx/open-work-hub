@@ -36,8 +36,11 @@ def test_auth_bootstrap_and_protected_search(client: TestClient) -> None:
     auth_payload = setup_response.json()
     assert "platform_admin" in auth_payload["user"]["system_roles"]
     assert auth_payload["user"]["theme_preference"] == "system"
-    assert auth_payload["user"]["workspace_roles"]
-    assert any(item["app"] == "admin" for item in auth_payload["user"]["app_access"])
+    assert auth_payload["user"]["workspaces"]
+    assert any(item["role"] == "owner" for item in auth_payload["user"]["workspaces"])
+    assert any("docs" in item["enabled_apps"] for item in auth_payload["user"]["workspaces"])
+    assert "workspace_roles" not in auth_payload["user"]
+    assert "app_access" not in auth_payload["user"]
     token = auth_payload["token"]
 
     me_response = client.get(
@@ -160,7 +163,8 @@ def test_seeded_dev_login_accounts_are_listed_and_can_log_in(client: TestClient)
     platform_admin_payload = platform_admin_login_response.json()
     assert platform_admin_payload["user"]["email"] == "platform-admin@aidoo.local"
     assert "platform_admin" in platform_admin_payload["user"]["system_roles"]
-    assert any(item["app"] == "admin" for item in platform_admin_payload["user"]["app_access"])
+    assert platform_admin_payload["user"]["workspaces"]
+    assert "app_access" not in platform_admin_payload["user"]
 
     dev_login_response = client.post(
         "/api/v1/auth/dev-login",
@@ -169,7 +173,8 @@ def test_seeded_dev_login_accounts_are_listed_and_can_log_in(client: TestClient)
     assert dev_login_response.status_code == 200
     login_payload = dev_login_response.json()
     assert login_payload["user"]["email"] == "pms-viewer@aidoo.local"
-    assert any(item["app"] == "pms" for item in login_payload["user"]["app_access"])
+    assert any("pms" in item["enabled_apps"] for item in login_payload["user"]["workspaces"])
+    assert any(item["role"] == "member" for item in login_payload["user"]["workspaces"])
 
 
 def test_dev_login_creates_missing_dev_accounts_on_demand(client: TestClient) -> None:
@@ -356,11 +361,19 @@ def _create_direct_user(
     is_admin: bool = False,
     system_roles: tuple[str, ...] = (),
     workspace_keys: tuple[str, ...] = (),
+    workspace_app_codes: tuple[str, ...] = (),
 ) -> tuple[str, str]:
     from sqlalchemy import select
 
     from aidoo_api.core.db import get_session_factory
-    from aidoo_api.domains.auth.models import AuthSession, User, UserSystemRole, Workspace, WorkspaceUserBinding
+    from aidoo_api.domains.auth.models import (
+        AuthSession,
+        User,
+        UserSystemRole,
+        Workspace,
+        WorkspaceEnabledApp,
+        WorkspaceUserBinding,
+    )
     from aidoo_api.domains.auth.security import (
         hash_password,
         issue_session_token,
@@ -391,14 +404,30 @@ def _create_direct_user(
                     role=role,
                 )
             )
+        bound_workspace_ids: set[str] = set()
         for workspace_key in workspace_keys:
             workspace = db.scalar(select(Workspace).where(Workspace.key == workspace_key))
             if workspace is None:
                 continue
+            bound_workspace_ids.add(workspace.id)
+        for app_code in workspace_app_codes:
+            workspace = db.scalar(
+                select(Workspace)
+                .join(WorkspaceEnabledApp, WorkspaceEnabledApp.workspace_id == Workspace.id)
+                .where(
+                    Workspace.active.is_(True),
+                    WorkspaceEnabledApp.app_code == app_code,
+                )
+                .order_by(Workspace.created_at.asc(), Workspace.key.asc())
+            )
+            if workspace is None:
+                continue
+            bound_workspace_ids.add(workspace.id)
+        for workspace_id in bound_workspace_ids:
             db.add(
                 WorkspaceUserBinding(
                     id=new_id(),
-                    workspace_id=workspace.id,
+                    workspace_id=workspace_id,
                     user_id=user_id,
                     role="member",
                 )
@@ -746,7 +775,8 @@ def test_workspace_scoped_team_management_requires_workspace_admin_role(client: 
         params={"workspace_id": workspace_id},
     )
     assert visible_teams_response.status_code == 200
-    assert [item["id"] for item in visible_teams_response.json()] == [created_team["id"]]
+    visible_team_ids = {item["id"] for item in visible_teams_response.json()}
+    assert created_team["id"] in visible_team_ids
 
     create_team_other_workspace_response = client.post(
         f"/api/v1/admin/workspaces/{second_workspace_id}/teams",
@@ -759,6 +789,25 @@ def test_workspace_scoped_team_management_requires_workspace_admin_role(client: 
 def test_non_pms_routes_require_workspace_feature_access(client: TestClient) -> None:
     admin_token = _bootstrap_admin(client)
     admin_headers = {"Authorization": f"Bearer {admin_token}"}
+
+    docs_workspace_response = client.post(
+        "/api/v1/admin/workspaces",
+        headers=admin_headers,
+        json={
+            "name": "Docs Workspace",
+            "description": "Docs-only workspace for feature access coverage",
+        },
+    )
+    assert docs_workspace_response.status_code == 201
+    docs_workspace = docs_workspace_response.json()
+
+    update_apps_response = client.put(
+        f"/api/v1/admin/workspaces/{docs_workspace['id']}/apps",
+        headers=admin_headers,
+        json={"enabled_apps": ["docs"]},
+    )
+    assert update_apps_response.status_code == 200
+    assert update_apps_response.json()["enabled_apps"] == ["docs"]
 
     user_response = client.post(
         "/api/v1/admin/users",
@@ -800,12 +849,8 @@ def test_non_pms_routes_require_workspace_feature_access(client: TestClient) -> 
     )
     assert ocr_forbidden_response.status_code == 403
 
-    workspaces_response = client.get("/api/v1/admin/workspaces", headers=admin_headers)
-    assert workspaces_response.status_code == 200
-    docs_workspace_id = next(item["id"] for item in workspaces_response.json() if item["key"] == "docs")
-
     bind_docs_workspace_response = client.put(
-        f"/api/v1/admin/workspaces/{docs_workspace_id}/bindings",
+        f"/api/v1/admin/workspaces/{docs_workspace['id']}/bindings",
         headers=admin_headers,
         json={
             "users": [{"subject_id": user["id"], "role": "member"}],
@@ -987,7 +1032,7 @@ def test_pms_membership_permissions(client: TestClient) -> None:
     outsider_id, outsider_token = _create_direct_user(
         email="member@aidoo.local",
         full_name="PMS Member",
-        workspace_keys=("pms",),
+        workspace_app_codes=("pms",),
     )
 
     project_response = client.post(
@@ -1061,7 +1106,7 @@ def test_pms_space_creator_becomes_owner_and_last_manager_is_protected(client: T
     creator_id, creator_token = _create_direct_user(
         email="space-creator@aidoo.local",
         full_name="Space Creator",
-        workspace_keys=("pms",),
+        workspace_app_codes=("pms",),
     )
 
     create_space_response = client.post(
@@ -1115,7 +1160,9 @@ def test_org_admin_gets_pms_app_access_and_can_view_all_spaces(client: TestClien
         headers={"Authorization": f"Bearer {org_admin_token}"},
     )
     assert me_response.status_code == 200
-    assert any(item["app"] == "pms" for item in me_response.json()["app_access"])
+    assert any("pms" in item["enabled_apps"] for item in me_response.json()["workspaces"])
+    assert any(item["role"] == "admin" for item in me_response.json()["workspaces"])
+    assert "app_access" not in me_response.json()
 
     spaces_response = client.get(
         "/api/v1/pms/spaces",
@@ -1123,6 +1170,124 @@ def test_org_admin_gets_pms_app_access_and_can_view_all_spaces(client: TestClien
     )
     assert spaces_response.status_code == 200
     assert any(item["id"] == expected_space_id for item in spaces_response.json())
+
+
+def test_group_workspace_templates_grant_and_revoke_effective_workspace_access(
+    client: TestClient,
+) -> None:
+    admin_token = _bootstrap_admin(client)
+    admin_headers = {"Authorization": f"Bearer {admin_token}"}
+
+    group_response = client.post(
+        "/api/v1/admin/groups",
+        headers=admin_headers,
+        json={
+            "name": "Workspace Operators",
+            "description": "Workspace admins inherited through group templates.",
+            "system_roles": [],
+        },
+    )
+    assert group_response.status_code == 201
+    group = group_response.json()
+
+    workspace_response = client.post(
+        "/api/v1/admin/workspaces",
+        headers=admin_headers,
+        json={
+            "name": "Operations Workspace",
+            "description": "Template-managed workspace",
+        },
+    )
+    assert workspace_response.status_code == 201
+    workspace = workspace_response.json()
+
+    update_group_response = client.patch(
+        f"/api/v1/admin/groups/{group['id']}",
+        headers=admin_headers,
+        json={
+            "name": "Workspace Operators Updated",
+            "slug": group["slug"],
+            "description": "Updated group metadata",
+            "group_kind": group["group_kind"],
+            "active": True,
+            "system_roles": [],
+        },
+    )
+    assert update_group_response.status_code == 200
+    assert update_group_response.json()["name"] == "Workspace Operators Updated"
+
+    workspace_templates_response = client.put(
+        f"/api/v1/admin/groups/{group['id']}/workspace-bindings",
+        headers=admin_headers,
+        json={
+            "items": [
+                {
+                    "workspace_id": workspace["id"],
+                    "role": "admin",
+                }
+            ]
+        },
+    )
+    assert workspace_templates_response.status_code == 200
+    assert workspace_templates_response.json()["workspace_bindings"] == [
+        {
+            "workspace_id": workspace["id"],
+            "workspace_key": workspace["key"],
+            "workspace_name": workspace["name"],
+            "role": "admin",
+        }
+    ]
+
+    create_user_response = client.post(
+        "/api/v1/admin/users",
+        headers=admin_headers,
+        json={
+            "email": "group-operator@aidoo.local",
+            "full_name": "Group Operator",
+        },
+    )
+    assert create_user_response.status_code == 201
+    created_user = create_user_response.json()["user"]
+    user_token = _login(
+        client,
+        created_user["email"],
+        create_user_response.json()["temporary_password"],
+    )
+    user_headers = {"Authorization": f"Bearer {user_token}"}
+
+    replace_members_response = client.put(
+        f"/api/v1/admin/groups/{group['id']}/members",
+        headers=admin_headers,
+        json={"user_ids": [created_user["id"]]},
+    )
+    assert replace_members_response.status_code == 200
+    assert replace_members_response.json()["member_count"] == 1
+
+    me_response = client.get("/api/v1/auth/me", headers=user_headers)
+    assert me_response.status_code == 200
+    inherited_workspace = next(
+        item for item in me_response.json()["workspaces"] if item["id"] == workspace["id"]
+    )
+    assert inherited_workspace["role"] == "admin"
+    assert sorted(inherited_workspace["enabled_apps"]) == sorted(workspace["enabled_apps"])
+
+    visible_workspaces_response = client.get("/api/v1/admin/workspaces", headers=user_headers)
+    assert visible_workspaces_response.status_code == 200
+    assert [item["id"] for item in visible_workspaces_response.json()] == [workspace["id"]]
+
+    remove_members_response = client.put(
+        f"/api/v1/admin/groups/{group['id']}/members",
+        headers=admin_headers,
+        json={"user_ids": []},
+    )
+    assert remove_members_response.status_code == 200
+    assert remove_members_response.json()["member_count"] == 0
+
+    me_after_removal_response = client.get("/api/v1/auth/me", headers=user_headers)
+    assert me_after_removal_response.status_code == 200
+    assert all(
+        item["id"] != workspace["id"] for item in me_after_removal_response.json()["workspaces"]
+    )
 
 
 def test_pms_parent_issue_validation_and_label_conflicts(client: TestClient) -> None:

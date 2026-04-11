@@ -1,3 +1,5 @@
+import { rewriteWorkspaceApiPath } from '@/src/domains/workspaces/workspace-utils';
+
 export class DocsApiError extends Error {
   constructor(
     public readonly status: number,
@@ -8,7 +10,8 @@ export class DocsApiError extends Error {
 }
 
 async function request<T>(path: string, token: string, init: RequestInit = {}): Promise<T> {
-  const response = await fetch(path, {
+  const resolvedPath = resolveDocsPath(path);
+  const response = await fetch(resolvedPath, {
     ...init,
     headers: {
       Accept: 'application/json',
@@ -40,6 +43,16 @@ function withShareToken(path: string, shareToken?: string | null): string {
   }
   const separator = path.includes('?') ? '&' : '?';
   return `${path}${separator}share_token=${encodeURIComponent(shareToken)}`;
+}
+
+function resolveDocsPath(path: string): string {
+  if (
+    path.startsWith('/api/v1/docs/shared-links/')
+    || path.includes('share_token=')
+  ) {
+    return path;
+  }
+  return rewriteWorkspaceApiPath(path);
 }
 
 export interface DocsShareSummary {

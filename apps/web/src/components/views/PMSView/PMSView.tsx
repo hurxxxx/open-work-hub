@@ -19,6 +19,10 @@ import {
 import { cn } from '@/src/lib/utils';
 import { useAuth } from '@/src/domains/auth/auth-provider';
 import {
+  getCurrentOrLastWorkspaceSlug,
+  resolveDefaultWorkspaceAppPath,
+} from '@/src/domains/workspaces/workspace-utils';
+import {
   getPmsList,
   listPmsProjects,
   listSpaces,
@@ -83,7 +87,9 @@ export const PMSView = () => {
   const { toolId } = useParams();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const { token } = useAuth();
+  const { token, user } = useAuth();
+  const pmsRoot = resolveDefaultWorkspaceAppPath(user, 'pms');
+  const currentWorkspaceSlug = getCurrentOrLastWorkspaceSlug();
   const [activeTab, setActiveTab] = useState<'List' | 'Board' | 'Calendar' | 'Gantt' | 'Table'>('List');
   const [selectedIssue, setSelectedIssue] = useState<PmsIssue | null>(null);
   const [isNewTaskModalOpen, setIsNewTaskModalOpen] = useState(false);
@@ -459,7 +465,7 @@ export const PMSView = () => {
       <header className="bg-app-bg border-b border-app-border px-6 pt-3 transition-colors">
         {/* Row 1: breadcrumb */}
         <nav className="app-text-caption flex items-center gap-1.5 text-gray-500 mb-1.5 min-w-0">
-          <Link to="/pms" className="hover:text-app-ink transition-colors shrink-0">PMS</Link>
+          <Link to={currentWorkspaceSlug ? `/w/${encodeURIComponent(currentWorkspaceSlug)}/pms` : pmsRoot} className="hover:text-app-ink transition-colors shrink-0">PMS</Link>
           {selectedProject?.team_name ? (
             <>
               <span className="text-gray-600 shrink-0">/</span>

@@ -26,6 +26,7 @@ import { BlockEditor, BlockViewer, useConfirm, usePrompt } from '@aidoo/ui';
 
 import { useMediaUpload } from '@/src/domains/media/use-media-upload';
 import { useAuth } from '@/src/domains/auth/auth-provider';
+import { hasAppAccess } from '@/src/domains/auth/auth-api';
 import { cn } from '@/src/lib/utils';
 import {
   createDocPage,
@@ -52,6 +53,10 @@ import {
   type NativeDocSharingResponse,
   type ShareableUserItem,
 } from '@/src/domains/docs/docs-api';
+import {
+  buildWorkspaceAppPath,
+  resolveDefaultWorkspaceAppPath,
+} from '@/src/domains/workspaces/workspace-utils';
 
 const CATEGORY_MAP: Record<string, string> = {
   'docs-all': 'all',
@@ -129,7 +134,7 @@ function sharingLabel(item: DocsHubItem): string {
 }
 
 export const DocsView = () => {
-  const { toolId, docId, shareToken } = useParams();
+  const { toolId, docId, shareToken, workspaceSlug } = useParams();
   const navigate = useNavigate();
   const auth = useAuth();
   const { token } = auth;
@@ -186,7 +191,18 @@ export const DocsView = () => {
   const tree = useMemo(() => buildTree(pages), [pages]);
   const activePage = pages.find((page) => page.id === selectedPageId) ?? pages[0] ?? null;
   const isListView = !activeItemId && !shareToken;
-  const hasDocsWorkspace = auth.hasFeature('nav.docs');
+  const hasDocsWorkspace = hasAppAccess(auth.user, 'docs', workspaceSlug);
+  const docsRoot = workspaceSlug
+    ? buildWorkspaceAppPath(workspaceSlug, 'docs')
+    : resolveDefaultWorkspaceAppPath(auth.user, 'docs');
+  const docPathFor = useCallback(
+    (itemId: string) => (
+      workspaceSlug
+        ? buildWorkspaceAppPath(workspaceSlug, 'docs', `/${itemId}`)
+        : resolveDefaultWorkspaceAppPath(auth.user, 'docs', `/${itemId}`)
+    ),
+    [auth.user, workspaceSlug],
+  );
 
   const fetchDocs = useCallback(async () => {
     if (!token) return;
@@ -280,7 +296,7 @@ export const DocsView = () => {
   };
 
   const openDoc = (itemId: string) => {
-    navigate(toolId ? `/tool/${toolId}/${itemId}` : `/docs/${itemId}`);
+    navigate(toolId ? `/tool/${toolId}/${itemId}` : docPathFor(itemId));
   };
 
   const handleBack = () => {
@@ -288,7 +304,7 @@ export const DocsView = () => {
       navigate('/');
       return;
     }
-    navigate(toolId ? `/tool/${toolId}` : '/docs');
+    navigate(toolId ? `/tool/${toolId}` : docsRoot);
   };
 
   const openCreateModal = useCallback((templateTitle?: string) => {
@@ -380,14 +396,14 @@ export const DocsView = () => {
     try {
       const duplicate = await duplicateDocsItem(token, item.id, shareToken);
       void fetchDocs();
-      navigate(toolId ? `/tool/${toolId}/${duplicate.id}` : `/docs/${duplicate.id}`);
+      navigate(toolId ? `/tool/${toolId}/${duplicate.id}` : docPathFor(duplicate.id));
     } catch {
       // no-op
     }
   };
 
   const docUrlFor = (item: DocsHubItem): string => {
-    const path = toolId ? `/tool/${toolId}/${item.id}` : `/docs/${item.id}`;
+    const path = toolId ? `/tool/${toolId}/${item.id}` : docPathFor(item.id);
     return `${window.location.origin}${path}`;
   };
 

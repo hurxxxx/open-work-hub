@@ -1,3 +1,5 @@
+import { rewriteWorkspaceApiPath } from '@/src/domains/workspaces/workspace-utils';
+
 export type AiChatRole = 'system' | 'user' | 'assistant';
 export type AiBackendMode = 'auto' | 'local' | 'openrouter';
 
@@ -93,7 +95,7 @@ async function aiRequest<T>(
 
   let response: Response;
   try {
-    response = await fetch(path, {
+    response = await fetch(rewriteWorkspaceApiPath(path), {
       ...init,
       headers,
       cache: 'no-store',

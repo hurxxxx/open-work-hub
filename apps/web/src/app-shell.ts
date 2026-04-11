@@ -1,5 +1,6 @@
 import { NAV_ITEMS } from './constants';
 import { hasFeatureAccess, type AuthUser } from './domains/auth/auth-api';
+import { getWorkspaceSlugFromPath } from './domains/workspaces/workspace-utils';
 
 export type ShellAppId = 'home' | 'ai' | 'pms' | 'docs' | 'planner' | 'meeting' | 'settings' | 'profile';
 
@@ -25,9 +26,10 @@ const HOME_SHELL_STATE: ShellState = {
 function canShowAppChrome(
   user: AuthUser | null | undefined,
   appId: 'ai' | 'pms' | 'docs' | 'planner' | 'meeting' | 'settings',
+  workspaceSlug?: string | null,
 ): boolean {
   const featureCode = FEATURE_BY_APP_ID[appId];
-  return featureCode ? hasFeatureAccess(user, featureCode) : true;
+  return featureCode ? hasFeatureAccess(user, featureCode, workspaceSlug) : true;
 }
 
 function resolvePmsToolState(
@@ -57,43 +59,49 @@ export function resolveShellState(
   path: string,
   user: AuthUser | null | undefined,
 ): ShellState {
+  const workspaceSlug = getWorkspaceSlugFromPath(path);
+
   if (path === '/') {
     return HOME_SHELL_STATE;
   }
 
-  if (path === '/ai') {
-    return canShowAppChrome(user, 'ai')
+  if (path === '/ai' || /^\/w\/[^/]+\/ai(?:\/|$)/.test(path)) {
+    return canShowAppChrome(user, 'ai', workspaceSlug)
       ? { activeAppId: 'ai', activeNavItemId: '' }
       : HOME_SHELL_STATE;
   }
 
-  if (path === '/pms') {
-    return canShowAppChrome(user, 'pms')
+  if (path === '/pms' || /^\/w\/[^/]+\/pms(?:\/|$)/.test(path)) {
+    return canShowAppChrome(user, 'pms', workspaceSlug)
       ? { activeAppId: 'pms', activeNavItemId: '' }
       : HOME_SHELL_STATE;
   }
 
-  if (path === '/docs' || path.startsWith('/docs/')) {
+  if (path === '/docs' || path.startsWith('/docs/') || /^\/w\/[^/]+\/docs(?:\/|$)/.test(path)) {
     if (path.startsWith('/docs/shared/')) {
       return canShowAppChrome(user, 'docs')
         ? { activeAppId: 'docs', activeNavItemId: '' }
         : HOME_SHELL_STATE;
     }
-    return canShowAppChrome(user, 'docs')
-      ? { activeAppId: 'docs', activeNavItemId: '' }
+    return canShowAppChrome(user, 'docs', workspaceSlug)
+      ? { activeAppId: 'docs', activeNavItemId: 'docs-all' }
       : HOME_SHELL_STATE;
   }
 
-  if (path === '/planner') {
-    return canShowAppChrome(user, 'planner')
+  if (path === '/planner' || /^\/w\/[^/]+\/planner(?:\/|$)/.test(path)) {
+    return canShowAppChrome(user, 'planner', workspaceSlug)
       ? { activeAppId: 'planner', activeNavItemId: '' }
       : HOME_SHELL_STATE;
   }
 
-  if (path === '/meeting' || path.startsWith('/meeting/')) {
-    return canShowAppChrome(user, 'meeting')
+  if (path === '/meeting' || path.startsWith('/meeting/') || /^\/w\/[^/]+\/meeting(?:\/|$)/.test(path)) {
+    return canShowAppChrome(user, 'meeting', workspaceSlug)
       ? { activeAppId: 'meeting', activeNavItemId: 'meeting-upcoming' }
       : HOME_SHELL_STATE;
+  }
+
+  if (/^\/w\/[^/]+\/settings(?:\/|$)/.test(path)) {
+    return HOME_SHELL_STATE;
   }
 
   if (path === '/admin' || path.startsWith('/admin/')) {

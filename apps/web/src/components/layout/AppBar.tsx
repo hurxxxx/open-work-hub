@@ -9,6 +9,11 @@ import {
   hasAnyAdminReadPermission,
 } from '@/src/domains/admin/admin-permissions';
 import { hasFeatureAccess, type AuthUser } from '@/src/domains/auth/auth-api';
+import {
+  buildWorkspaceAppPath,
+  getPreferredWorkspace,
+  type WorkspaceAppId,
+} from '@/src/domains/workspaces/workspace-utils';
 import { useAuth } from '@/src/domains/auth/auth-provider';
 import { getUnreadNotificationCount } from '@/src/domains/pms/pms-api';
 import { cn } from '@/src/lib/utils';
@@ -37,10 +42,12 @@ function getUserInitials(fullName: string): string {
 export function AppBar({
   activeAppId,
   currentUser,
+  currentWorkspaceSlug,
   onOpenAccount,
 }: {
   activeAppId: string;
   currentUser: AuthUser;
+  currentWorkspaceSlug: string | null;
   onOpenAccount: () => void;
 }) {
   const { token } = useAuth();
@@ -83,8 +90,12 @@ export function AppBar({
   }, []);
 
   const handleNavigateToIssue = useCallback((issueId: string) => {
-    navigate(`/pms?issue=${encodeURIComponent(issueId)}`);
-  }, [navigate]);
+    const workspace = getPreferredWorkspace(currentUser, 'pms');
+    if (!workspace) {
+      return;
+    }
+    navigate(`${buildWorkspaceAppPath(workspace.slug, 'pms')}?issue=${encodeURIComponent(issueId)}`);
+  }, [currentUser, navigate]);
 
   const visibleItems = APP_BAR_ITEMS.filter((item) => {
     if (item.id === 'settings') {
@@ -95,7 +106,7 @@ export function AppBar({
     }
 
     const featureCode = featureByAppId[item.id];
-    return !featureCode || hasFeatureAccess(currentUser, featureCode);
+    return !featureCode || hasFeatureAccess(currentUser, featureCode, currentWorkspaceSlug);
   });
 
   return (
@@ -107,7 +118,9 @@ export function AppBar({
       {visibleItems.map((item) => (
         <Link
           key={item.id}
-          to={item.id === 'settings' ? getDefaultAdminPath(currentUser.system_roles) : item.path}
+          to={item.id === 'settings'
+            ? getDefaultAdminPath(currentUser.system_roles)
+            : buildAppLink(item.id as WorkspaceAppId, currentUser, currentWorkspaceSlug)}
           className={cn(
             'p-3 rounded-xl transition-all group relative',
             activeAppId === item.id
@@ -162,4 +175,20 @@ export function AppBar({
       </div>
     </div>
   );
+}
+
+function buildAppLink(
+  appId: WorkspaceAppId,
+  currentUser: AuthUser,
+  currentWorkspaceSlug: string | null,
+): string {
+  const preferredWorkspace = (
+    currentWorkspaceSlug
+      ? currentUser.workspaces?.find(
+        (workspace) => workspace.slug === currentWorkspaceSlug && workspace.enabled_apps.includes(appId),
+      ) ?? null
+      : null
+  ) ?? getPreferredWorkspace(currentUser, appId);
+
+  return preferredWorkspace ? buildWorkspaceAppPath(preferredWorkspace.slug, appId) : '/';
 }

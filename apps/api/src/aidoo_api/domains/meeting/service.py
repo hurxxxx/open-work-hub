@@ -11,10 +11,10 @@ from sqlalchemy.orm import Session, selectinload
 from aidoo_api.core.settings import get_settings
 from aidoo_api.core.storage import get_minio_client
 from aidoo_api.domains.auth.access import (
+    get_current_workspace,
     is_platform_admin_user,
-    load_active_workspace_by_key,
 )
-from aidoo_api.domains.auth.models import User, Workspace
+from aidoo_api.domains.auth.models import User, Workspace, WorkspaceEnabledApp
 from aidoo_api.domains.auth.security import new_id
 from aidoo_api.domains.docs.models import NativeDoc
 from aidoo_api.domains.meeting.models import (
@@ -49,11 +49,18 @@ MAX_FILE_UPLOAD_SIZE = 100 * 1024 * 1024  # 100 MB
 from aidoo_api.domains.pms.models import Issue, Project
 
 
-MEETING_WORKSPACE_KEY = "meeting"
-
-
 def _get_meeting_workspace(db: Session) -> Workspace:
-    workspace = load_active_workspace_by_key(db, MEETING_WORKSPACE_KEY)
+    workspace = get_current_workspace()
+    if workspace is None:
+        workspace = db.scalar(
+            select(Workspace)
+            .join(WorkspaceEnabledApp, WorkspaceEnabledApp.workspace_id == Workspace.id)
+            .where(
+                Workspace.active.is_(True),
+                WorkspaceEnabledApp.app_code == "meeting",
+            )
+            .order_by(Workspace.created_at.asc(), Workspace.key.asc())
+        )
     if workspace is None:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -196,6 +203,7 @@ def _serialize_meeting(db: Session, meeting: Meeting) -> MeetingDetail:
 
 
 def _load_meeting(db: Session, meeting_id: str) -> Meeting:
+    current_workspace = get_current_workspace()
     meeting = db.scalar(
         select(Meeting)
         .options(
@@ -208,7 +216,10 @@ def _load_meeting(db: Session, meeting_id: str) -> Meeting:
             selectinload(Meeting.recordings),
             selectinload(Meeting.organizer),
         )
-        .where(Meeting.id == meeting_id)
+        .where(
+            Meeting.id == meeting_id,
+            Meeting.workspace_id == current_workspace.id if current_workspace is not None else True,
+        )
     )
     if meeting is None:
         raise HTTPException(

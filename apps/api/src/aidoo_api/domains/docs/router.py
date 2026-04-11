@@ -11,7 +11,17 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload, selectinload
 
 from aidoo_api.core.db import get_db_session
-from aidoo_api.domains.auth.access import has_system_role, resolve_visible_features, resolve_team_role
+from aidoo_api.domains.auth.access import (
+    bind_current_workspace,
+    get_current_workspace,
+    has_system_role,
+    resolve_team_role,
+    resolve_visible_features,
+    resolve_workspaces,
+    resolve_workspace_role,
+    load_active_workspace_by_key,
+    workspace_has_enabled_app,
+)
 from aidoo_api.domains.auth.dependencies import require_current_user
 from aidoo_api.domains.auth.models import Team, TeamMember, User, Workspace
 from aidoo_api.domains.auth.security import new_id
@@ -93,14 +103,34 @@ def _team_role_allows(role: str | None, minimum: str) -> bool:
 
 
 def _ensure_docs_workspace_access(db: Session, user: User) -> None:
+    current_workspace = get_current_workspace()
+    if current_workspace is None:
+        for summary in resolve_workspaces(db, user):
+            if "docs" not in summary["enabled_apps"]:
+                continue
+            current_workspace = load_active_workspace_by_key(db, summary["slug"])
+            if current_workspace is not None:
+                bind_current_workspace(current_workspace)
+                break
+        if current_workspace is None:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Docs requests require a workspace context.",
+            )
     if "nav.docs" not in resolve_visible_features(db, user):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Feature access required: nav.docs",
         )
+    if not workspace_has_enabled_app(db, current_workspace, "docs"):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You need nav.docs. Ask a workspace admin to enable Docs.",
+        )
 
 
 def _load_active_pms_team(db: Session, team_id: str) -> Team | None:
+    current_workspace = get_current_workspace()
     return db.scalar(
         select(Team)
         .options(joinedload(Team.workspace))
@@ -109,7 +139,7 @@ def _load_active_pms_team(db: Session, team_id: str) -> Team | None:
             Team.active.is_(True),
             Team.trashed_at.is_(None),
             Team.workspace.has(Workspace.active.is_(True)),
-            Team.workspace.has(Workspace.key == "pms"),
+            Team.workspace_id == current_workspace.id if current_workspace is not None else True,
         )
     )
 
@@ -124,6 +154,7 @@ def _resolve_pms_team_role(db: Session, user: User, team_id: str) -> str | None:
 
 
 def _accessible_pms_team_ids(db: Session, user: User) -> set[str]:
+    current_workspace = get_current_workspace()
     if _is_pms_super_admin(db, user):
         return set(
             db.scalars(
@@ -131,7 +162,7 @@ def _accessible_pms_team_ids(db: Session, user: User) -> set[str]:
                     Team.active.is_(True),
                     Team.trashed_at.is_(None),
                     Team.workspace.has(Workspace.active.is_(True)),
-                    Team.workspace.has(Workspace.key == "pms"),
+                    Team.workspace_id == current_workspace.id if current_workspace is not None else True,
                 )
             )
         )
@@ -144,7 +175,7 @@ def _accessible_pms_team_ids(db: Session, user: User) -> set[str]:
                 Team.active.is_(True),
                 Team.trashed_at.is_(None),
                 Team.workspace.has(Workspace.active.is_(True)),
-                Team.workspace.has(Workspace.key == "pms"),
+                Team.workspace_id == current_workspace.id if current_workspace is not None else True,
             )
         )
     )
@@ -464,6 +495,9 @@ def _serialize_space_doc_item(
 
 
 def _load_accessible_native_docs(db: Session, user: User) -> list[NativeDoc]:
+    current_workspace = get_current_workspace()
+    if current_workspace is None:
+        return []
     docs = list(
         db.scalars(
             select(NativeDoc)
@@ -473,7 +507,10 @@ def _load_accessible_native_docs(db: Session, user: User) -> list[NativeDoc]:
                 selectinload(NativeDoc.user_shares).selectinload(NativeDocUserShare.user),
                 selectinload(NativeDoc.link_shares),
             )
-            .where(NativeDoc.owner_id == user.id)
+            .where(
+                NativeDoc.owner_id == user.id,
+                NativeDoc.workspace_id == current_workspace.id,
+            )
         )
     )
     shared_docs = list(
@@ -486,7 +523,10 @@ def _load_accessible_native_docs(db: Session, user: User) -> list[NativeDoc]:
                 selectinload(NativeDoc.user_shares).selectinload(NativeDocUserShare.user),
                 selectinload(NativeDoc.link_shares),
             )
-            .where(NativeDocUserShare.user_id == user.id)
+            .where(
+                NativeDocUserShare.user_id == user.id,
+                NativeDoc.workspace_id == current_workspace.id,
+            )
         )
     )
     by_id = {doc.id: doc for doc in docs}
@@ -499,7 +539,8 @@ def _load_native_doc_for_access(
     db: Session,
     doc_id: str,
 ) -> NativeDoc | None:
-    return db.scalar(
+    current_workspace = get_current_workspace()
+    query = (
         select(NativeDoc)
         .options(
             selectinload(NativeDoc.owner),
@@ -509,6 +550,9 @@ def _load_native_doc_for_access(
         )
         .where(NativeDoc.id == doc_id)
     )
+    if current_workspace is not None:
+        query = query.where(NativeDoc.workspace_id == current_workspace.id)
+    return db.scalar(query)
 
 
 def _load_native_page(
@@ -938,9 +982,13 @@ def create_native_doc(
     current_user: User = Depends(require_current_user),
 ) -> DocsHubItem:
     _ensure_docs_workspace_access(db, current_user)
+    current_workspace = get_current_workspace()
+    if current_workspace is None:
+        raise HTTPException(status_code=403, detail="Docs requests require a workspace context.")
 
     doc = NativeDoc(
         id=new_id(),
+        workspace_id=current_workspace.id,
         owner_id=current_user.id,
         title=payload.title.strip(),
     )
@@ -1096,8 +1144,12 @@ def duplicate_doc_item(
         raise HTTPException(status_code=404, detail="Doc not found.")
 
     # Create the new native doc shell.
+    current_workspace = get_current_workspace()
+    if current_workspace is None:
+        raise HTTPException(status_code=403, detail="Docs requests require a workspace context.")
     new_doc = NativeDoc(
         id=new_id(),
+        workspace_id=current_workspace.id,
         owner_id=current_user.id,
         title=f"{source_title} (copy)"[:200],
     )
@@ -1553,6 +1605,9 @@ def list_shareable_users(
     current_user: User = Depends(require_current_user),
 ) -> list[ShareableUserItem]:
     _ensure_docs_workspace_access(db, current_user)
+    current_workspace = get_current_workspace()
+    if current_workspace is None:
+        raise HTTPException(status_code=403, detail="Docs requests require a workspace context.")
     query = select(User).where(User.status == "active").order_by(User.full_name.asc(), User.email.asc())
     search = q.strip()
     if search:
@@ -1564,6 +1619,7 @@ def list_shareable_users(
         ShareableUserItem(id=user.id, email=user.email, full_name=user.full_name)
         for user in users
         if user.id != current_user.id
+        and resolve_workspace_role(db, user, current_workspace.id) is not None
     ]
 
 
@@ -1631,6 +1687,11 @@ def upsert_native_doc_user_share(
     target_user = db.scalar(select(User).where(User.id == user_id, User.status == "active"))
     if target_user is None:
         raise HTTPException(status_code=404, detail="User not found.")
+    if resolve_workspace_role(db, target_user, doc.workspace_id) is None:
+        raise HTTPException(
+            status_code=409,
+            detail="Shared users must be members of the same workspace.",
+        )
     share = next((item for item in doc.user_shares if item.user_id == user_id), None)
     if share is None:
         share = NativeDocUserShare(

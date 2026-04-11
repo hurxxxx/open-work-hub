@@ -55,9 +55,18 @@ def _grant_workspace_access(
         headers=_auth_headers(admin_token),
     )
     assert workspaces_response.status_code == 200
-    workspace = next(
-        item for item in workspaces_response.json() if item["key"] == workspace_key
-    )
+    matching_workspaces = [
+        item
+        for item in workspaces_response.json()
+        if item["key"] == workspace_key or workspace_key in item.get("enabled_apps", [])
+    ]
+    workspace = next((item for item in matching_workspaces if item["key"] == workspace_key), None)
+    if workspace is None:
+        workspace = min(
+            matching_workspaces,
+            key=lambda item: (len(item.get("enabled_apps", [])), item["key"]),
+        ) if matching_workspaces else None
+    assert workspace is not None
 
     bindings_response = client.get(
         f"/api/v1/admin/workspaces/{workspace['id']}/bindings",

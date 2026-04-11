@@ -12,6 +12,7 @@ from aidoo_api.domains.ai.router import router as ai_router
 from aidoo_api.domains.admin.router import router as admin_router
 from aidoo_api.domains.auth.dependencies import (
     require_current_user,
+    require_workspace_app_enabled,
     require_workspace_feature_access,
 )
 from aidoo_api.domains.auth.router import router as auth_router
@@ -79,6 +80,14 @@ def create_app() -> FastAPI:
         ],
     )
     app.include_router(
+        ai_router,
+        prefix=f"{settings.api_prefix}/workspaces/{{workspace_slug}}",
+        dependencies=[
+            *protected_dependencies,
+            Depends(require_workspace_app_enabled("ai")),
+        ],
+    )
+    app.include_router(
         admin_router,
         prefix=settings.api_prefix,
         dependencies=protected_dependencies,
@@ -92,9 +101,25 @@ def create_app() -> FastAPI:
         ],
     )
     app.include_router(
+        documents_router,
+        prefix=f"{settings.api_prefix}/workspaces/{{workspace_slug}}",
+        dependencies=[
+            *protected_dependencies,
+            Depends(require_workspace_app_enabled("docs")),
+        ],
+    )
+    app.include_router(
         docs_router,
         prefix=settings.api_prefix,
         dependencies=protected_dependencies,
+    )
+    app.include_router(
+        docs_router,
+        prefix=f"{settings.api_prefix}/workspaces/{{workspace_slug}}",
+        dependencies=[
+            *protected_dependencies,
+            Depends(require_workspace_app_enabled("docs")),
+        ],
     )
     app.include_router(
         plm_router,
@@ -102,6 +127,14 @@ def create_app() -> FastAPI:
         dependencies=[
             *protected_dependencies,
             Depends(require_workspace_feature_access("ai", "nav.ai")),
+        ],
+    )
+    app.include_router(
+        plm_router,
+        prefix=f"{settings.api_prefix}/workspaces/{{workspace_slug}}",
+        dependencies=[
+            *protected_dependencies,
+            Depends(require_workspace_app_enabled("ai")),
         ],
     )
     app.include_router(
@@ -113,11 +146,27 @@ def create_app() -> FastAPI:
         ],
     )
     app.include_router(
+        drafts_router,
+        prefix=f"{settings.api_prefix}/workspaces/{{workspace_slug}}",
+        dependencies=[
+            *protected_dependencies,
+            Depends(require_workspace_app_enabled("docs")),
+        ],
+    )
+    app.include_router(
         ocr_router,
         prefix=settings.api_prefix,
         dependencies=[
             *protected_dependencies,
             Depends(require_workspace_feature_access("ai", "nav.ai")),
+        ],
+    )
+    app.include_router(
+        ocr_router,
+        prefix=f"{settings.api_prefix}/workspaces/{{workspace_slug}}",
+        dependencies=[
+            *protected_dependencies,
+            Depends(require_workspace_app_enabled("ai")),
         ],
     )
     app.include_router(
@@ -129,14 +178,44 @@ def create_app() -> FastAPI:
         ],
     )
     app.include_router(
+        wiki_pms_router,
+        prefix=f"{settings.api_prefix}/workspaces/{{workspace_slug}}",
+        dependencies=[
+            *protected_dependencies,
+            Depends(require_workspace_app_enabled("docs")),
+        ],
+    )
+    app.include_router(
         pms_router,
         prefix=settings.api_prefix,
-        dependencies=protected_dependencies,
+        dependencies=[
+            *protected_dependencies,
+            Depends(require_workspace_feature_access("pms", "nav.pms")),
+        ],
+    )
+    app.include_router(
+        pms_router,
+        prefix=f"{settings.api_prefix}/workspaces/{{workspace_slug}}",
+        dependencies=[
+            *protected_dependencies,
+            Depends(require_workspace_app_enabled("pms")),
+        ],
     )
     app.include_router(
         meeting_router,
         prefix=settings.api_prefix,
-        dependencies=protected_dependencies,
+        dependencies=[
+            *protected_dependencies,
+            Depends(require_workspace_feature_access("meeting", "nav.meeting")),
+        ],
+    )
+    app.include_router(
+        meeting_router,
+        prefix=f"{settings.api_prefix}/workspaces/{{workspace_slug}}",
+        dependencies=[
+            *protected_dependencies,
+            Depends(require_workspace_app_enabled("meeting")),
+        ],
     )
     app.include_router(
         media_router,

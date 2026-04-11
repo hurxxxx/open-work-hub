@@ -16,6 +16,7 @@ class NativeDoc(Base):
     __tablename__ = "docs_native_docs"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    workspace_id: Mapped[str] = mapped_column(ForeignKey("workspaces.id"), index=True)
     owner_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
     title: Mapped[str] = mapped_column(String(200))
     created_at: Mapped[datetime] = mapped_column(
@@ -30,6 +31,7 @@ class NativeDoc(Base):
         nullable=False,
     )
     trashed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, index=True)
+    workspace = relationship("Workspace")
     owner = relationship("User")
     pages: Mapped[list["NativeDocPage"]] = relationship(
         back_populates="doc",

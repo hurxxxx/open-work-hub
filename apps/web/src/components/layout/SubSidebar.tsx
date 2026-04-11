@@ -29,6 +29,11 @@ import { useAuth } from '@/src/domains/auth/auth-provider';
 import { hasAppAccess, teamRoleAllows } from '@/src/domains/auth/auth-api';
 import { listFavoriteDocs, listRecentPages, type FavoriteDocItem, type RecentPageItem } from '@/src/domains/docs/docs-api';
 import { listPmsLists, listFolders, listSpaceDocs, createSpaceDoc, updateSpaceDoc, deleteSpaceDoc, updateFolder, deleteFolder, listSpaces, updateSpace, deleteSpace, type PmsFolder, type PmsList, type PmsSpace, type PmsSpaceDoc } from '@/src/domains/pms/pms-api';
+import {
+  buildWorkspaceAppPath,
+  resolveDefaultWorkspaceAppPath,
+  rewriteLegacyAppPath,
+} from '@/src/domains/workspaces/workspace-utils';
 import { CreateProjectModal } from '@/src/components/views/PMSView/CreateProjectModal';
 import { CreateSpaceModal } from '@/src/components/views/PMSView/CreateSpaceModal';
 import { SpaceMembersModal } from '@/src/components/views/PMSView/SpaceMembersModal';
@@ -794,7 +799,15 @@ const SpaceItem = ({
   );
 };
 
-export const SubSidebar = ({ activeAppId, activeNavItemId }: { activeAppId: string, activeNavItemId: string }) => {
+export const SubSidebar = ({
+  activeAppId,
+  activeNavItemId,
+  currentWorkspaceSlug,
+}: {
+  activeAppId: string;
+  activeNavItemId: string;
+  currentWorkspaceSlug: string | null;
+}) => {
   const location = useLocation();
   const navigate = useNavigate();
   const { token, user } = useAuth();
@@ -803,11 +816,13 @@ export const SubSidebar = ({ activeAppId, activeNavItemId }: { activeAppId: stri
   const isSpaceDocs = /^\/tool\/pms-space-[0-9a-f-]+-docs/.test(location.pathname);
   const isDocEditor = !isSpaceDocs && (
     location.pathname.match(/^\/tool\/[^/]+\/[^/]+$/)
-    || location.pathname.match(/^\/docs\/[^/]+$/)
+    || location.pathname.match(/^\/w\/[^/]+\/docs\/[^/]+$/)
     || location.pathname.match(/^\/docs\/shared\/[^/]+$/)
   );
-  const canReadTeams = hasAppAccess(user, 'pms');
-  const canWriteTeams = hasAppAccess(user, 'pms');
+  const canReadTeams = hasAppAccess(user, 'pms', currentWorkspaceSlug);
+  const canWriteTeams = hasAppAccess(user, 'pms', currentWorkspaceSlug);
+  const pmsRootPath = resolveDefaultWorkspaceAppPath(user, 'pms');
+  const meetingRootPath = resolveDefaultWorkspaceAppPath(user, 'meeting');
   const canManageSpace = useCallback(
     (team: PmsSpace) => teamRoleAllows(team.current_user_role, 'admin'),
     [],
@@ -1176,12 +1191,12 @@ export const SubSidebar = ({ activeAppId, activeNavItemId }: { activeAppId: stri
       });
 
       if (activeSpaceRoute || activeListInSpace) {
-        navigate('/pms');
+        navigate(currentWorkspaceSlug ? buildWorkspaceAppPath(currentWorkspaceSlug, 'pms') : pmsRootPath);
       }
     } catch (error) {
       setPmsError(getErrorMessage(error, '스페이스를 휴지통으로 옮기지 못했습니다.'));
     }
-  }, [activeNavItemId, navigate, pmsLists, token]);
+  }, [activeNavItemId, currentWorkspaceSlug, navigate, pmsLists, pmsRootPath, token]);
 
   const groupedSpaces = useMemo(() => {
     type SpaceGroup = {
@@ -1471,10 +1486,10 @@ export const SubSidebar = ({ activeAppId, activeNavItemId }: { activeAppId: stri
                   {activeAppId === 'ai' ? (
                     <button
                       type="button"
-                      onClick={() => {
-                        setCreateMenuOpen(false);
-                        navigate('/tool/search');
-                      }}
+                        onClick={() => {
+                          setCreateMenuOpen(false);
+                          navigate('/tool/search');
+                        }}
                       className="app-text-control-sm flex w-full items-center gap-2 px-3 py-2 text-left text-app-ink hover:bg-app-surface-hover"
                     >
                       <Sparkles size={14} className="text-gray-500" />
@@ -1486,10 +1501,10 @@ export const SubSidebar = ({ activeAppId, activeNavItemId }: { activeAppId: stri
                       type="button"
                       onClick={() => {
                         setCreateMenuOpen(false);
-                        if (window.location.pathname.startsWith('/meeting')) {
+                        if (window.location.pathname.includes('/meeting')) {
                           window.dispatchEvent(new CustomEvent('meeting:create-event'));
                         } else {
-                          navigate('/meeting');
+                          navigate(currentWorkspaceSlug ? buildWorkspaceAppPath(currentWorkspaceSlug, 'meeting') : meetingRootPath);
                           // Defer the dispatch until after the route mounts.
                           setTimeout(() => {
                             window.dispatchEvent(new CustomEvent('meeting:create-event'));
@@ -1568,7 +1583,9 @@ export const SubSidebar = ({ activeAppId, activeNavItemId }: { activeAppId: stri
                         return (
                           <Link
                             key={item.id}
-                            to={item.path ?? `/tool/${item.id}`}
+                            to={item.path
+                              ? rewriteLegacyAppPath(item.path, currentWorkspaceSlug)
+                              : `/tool/${item.id}`}
                             className={cn('sidebar-submenu-item ml-1', activeNavItemId === item.id && 'sidebar-submenu-item-active')}
                           >
                             <item.icon size={16} className="text-gray-500 dark:text-gray-400" />
@@ -1590,14 +1607,21 @@ export const SubSidebar = ({ activeAppId, activeNavItemId }: { activeAppId: stri
                 <span className="sidebar-section-label block px-3 py-1 text-gray-500">Favorites</span>
                 {docsFavorites.length > 0 ? (
                   docsFavorites.map((fav) => (
-                    <Link
-                      key={fav.id}
-                      to={`/docs/${fav.id}`}
-                      className={cn('sidebar-submenu-item ml-1', location.pathname === `/docs/${fav.id}` && 'sidebar-submenu-item-active')}
-                    >
-                      <FileText size={14} className="text-yellow-500" />
-                      <span className="sidebar-submenu-label truncate">{fav.title}</span>
-                    </Link>
+                    (() => {
+                      const docPath = currentWorkspaceSlug
+                        ? buildWorkspaceAppPath(currentWorkspaceSlug, 'docs', `/${fav.id}`)
+                        : resolveDefaultWorkspaceAppPath(user, 'docs', `/${fav.id}`);
+                      return (
+                        <Link
+                          key={fav.id}
+                          to={docPath}
+                          className={cn('sidebar-submenu-item ml-1', location.pathname === docPath && 'sidebar-submenu-item-active')}
+                        >
+                          <FileText size={14} className="text-yellow-500" />
+                          <span className="sidebar-submenu-label truncate">{fav.title}</span>
+                        </Link>
+                      );
+                    })()
                   ))
                 ) : (
                   <div className="px-3 py-2 text-center">
@@ -1610,14 +1634,21 @@ export const SubSidebar = ({ activeAppId, activeNavItemId }: { activeAppId: stri
                 <span className="sidebar-section-label block px-3 py-1 text-gray-500">Recent Pages</span>
                 {docsRecentPages.length > 0 ? (
                   docsRecentPages.map((rp) => (
-                    <Link
-                      key={rp.page_id}
-                      to={`/docs/${rp.doc_id}`}
-                      className="sidebar-submenu-item ml-1"
-                    >
-                      <FileText size={14} className="text-gray-500" />
-                      <span className="sidebar-submenu-label truncate">{rp.page_title}</span>
-                    </Link>
+                    (() => {
+                      const docPath = currentWorkspaceSlug
+                        ? buildWorkspaceAppPath(currentWorkspaceSlug, 'docs', `/${rp.doc_id}`)
+                        : resolveDefaultWorkspaceAppPath(user, 'docs', `/${rp.doc_id}`);
+                      return (
+                        <Link
+                          key={rp.page_id}
+                          to={docPath}
+                          className="sidebar-submenu-item ml-1"
+                        >
+                          <FileText size={14} className="text-gray-500" />
+                          <span className="sidebar-submenu-label truncate">{rp.page_title}</span>
+                        </Link>
+                      );
+                    })()
                   ))
                 ) : (
                   <div className="px-3 py-2 text-center">

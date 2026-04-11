@@ -191,9 +191,10 @@ def test_ensure_seed_data_does_not_overwrite_workspace_renames(
 
     _seed_dev_accounts()
     session_factory = get_session_factory()
+    workspace_key = "delivery-hub"
 
     with session_factory() as db:
-        ws = db.scalar(select(Workspace).where(Workspace.key == "pms"))
+        ws = db.scalar(select(Workspace).where(Workspace.key == workspace_key))
         assert ws is not None
         ws.name = "Custom PMS Name"
         ws.description = "Admin-edited description"
@@ -206,7 +207,7 @@ def test_ensure_seed_data_does_not_overwrite_workspace_renames(
         db.commit()
 
     with session_factory() as db:
-        ws = db.scalar(select(Workspace).where(Workspace.key == "pms"))
+        ws = db.scalar(select(Workspace).where(Workspace.key == workspace_key))
         assert ws is not None
         assert ws.name == "Custom PMS Name", (
             "ensure_seed_data is still overwriting workspace names on rerun"
@@ -247,3 +248,46 @@ def test_seed_still_reconciles_default_space_membership(
         assert pms_viewer_ms.role == "viewer"
         # platform-admin has team_role=None → no membership
         assert admin_ms is None
+
+
+def test_dev_login_recreates_missing_dev_workspace_seeds(
+    client: TestClient,
+) -> None:
+    from sqlalchemy.orm import selectinload
+
+    from aidoo_api.core.db import get_session_factory
+    from aidoo_api.domains.auth.models import Team, Workspace
+
+    _seed_dev_accounts()
+    session_factory = get_session_factory()
+
+    with session_factory() as db:
+        innovation_lab = db.scalar(
+            select(Workspace)
+            .options(
+                selectinload(Workspace.user_bindings),
+                selectinload(Workspace.group_bindings),
+                selectinload(Workspace.enabled_apps),
+                selectinload(Workspace.teams).selectinload(Team.members),
+            )
+            .where(Workspace.key == "innovation-lab")
+        )
+        assert innovation_lab is not None
+        db.delete(innovation_lab)
+        db.commit()
+
+    login_response = client.post(
+        "/api/v1/auth/dev-login",
+        json={"account_key": "ai-member"},
+    )
+    assert login_response.status_code == 200, login_response.text
+    assert any(
+        workspace["slug"] == "innovation-lab"
+        for workspace in login_response.json()["user"]["workspaces"]
+    )
+
+    with session_factory() as db:
+        restored_workspace = db.scalar(
+            select(Workspace).where(Workspace.key == "innovation-lab")
+        )
+        assert restored_workspace is not None

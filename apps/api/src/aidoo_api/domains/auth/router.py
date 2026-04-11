@@ -54,19 +54,12 @@ class OrgUnitSummaryResponse(BaseModel):
     parent_id: str | None
 
 
-class WorkspaceRoleResponse(BaseModel):
-    workspace_id: str
-    key: str
+class WorkspaceSummaryResponse(BaseModel):
+    id: str
+    slug: str
     name: str
     role: str
-
-
-class AppAccessResponse(BaseModel):
-    app: str
-    workspace_id: str | None
-    workspace_key: str | None
-    workspace_name: str | None
-    role: str
+    enabled_apps: list[str]
 
 
 class AuthUserResponse(BaseModel):
@@ -79,8 +72,7 @@ class AuthUserResponse(BaseModel):
     theme_preference: str
     primary_org_unit: OrgUnitSummaryResponse | None
     system_roles: list[str]
-    workspace_roles: list[WorkspaceRoleResponse]
-    app_access: list[AppAccessResponse]
+    workspaces: list[WorkspaceSummaryResponse]
     group_ids: list[str]
     group_slugs: list[str]
     must_change_password: bool

@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session, joinedload, selectinload
 
 from aidoo_api.core.db import get_db_session
 from aidoo_api.domains.auth.access import (
+    get_current_workspace,
     get_or_create_default_pms_space,
     has_system_role,
     is_platform_admin_user,
@@ -20,7 +21,7 @@ from aidoo_api.domains.auth.access import (
     slugify,
 )
 from aidoo_api.domains.auth.dependencies import require_current_user, require_feature_access
-from aidoo_api.domains.auth.models import Team, TeamMember, User, Workspace
+from aidoo_api.domains.auth.models import Team, TeamMember, User, Workspace, WorkspaceEnabledApp
 from aidoo_api.domains.auth.security import new_id
 from aidoo_api.core.settings import get_settings
 from aidoo_api.core.storage import get_minio_client
@@ -659,12 +660,13 @@ def _load_active_space(
     *,
     include_members: bool = False,
 ) -> Team | None:
+    workspace = _get_pms_workspace(db)
     query = select(Team).options(joinedload(Team.workspace)).where(
         Team.id == space_id,
         Team.active.is_(True),
         Team.trashed_at.is_(None),
         Team.workspace.has(Workspace.active.is_(True)),
-        Team.workspace.has(Workspace.key == "pms"),
+        Team.workspace_id == workspace.id,
     )
     if include_members:
         query = query.options(selectinload(Team.members))
@@ -698,6 +700,7 @@ def _serialize_space_member(db: Session, member: TeamMember) -> SpaceMemberItem:
 
 
 def _best_project_role(db: Session, user: User, space_id: str) -> str | None:
+    workspace = _get_pms_workspace(db)
     team = db.scalar(
         select(Team)
         .options(joinedload(Team.workspace))
@@ -706,7 +709,7 @@ def _best_project_role(db: Session, user: User, space_id: str) -> str | None:
             Team.active.is_(True),
             Team.trashed_at.is_(None),
             Team.workspace.has(Workspace.active.is_(True)),
-            Team.workspace.has(Workspace.key == "pms"),
+            Team.workspace_id == workspace.id,
         )
     )
     if team is None:
@@ -715,6 +718,7 @@ def _best_project_role(db: Session, user: User, space_id: str) -> str | None:
 
 
 def _is_active_space_id(db: Session, space_id: str) -> bool:
+    workspace = _get_pms_workspace(db)
     return (
         db.scalar(
             select(Team.id).where(
@@ -722,7 +726,7 @@ def _is_active_space_id(db: Session, space_id: str) -> bool:
                 Team.active.is_(True),
                 Team.trashed_at.is_(None),
                 Team.workspace.has(Workspace.active.is_(True)),
-                Team.workspace.has(Workspace.key == "pms"),
+                Team.workspace_id == workspace.id,
             )
         )
         is not None
@@ -767,6 +771,7 @@ def _ensure_space_manager(db: Session, user: User, space_id: str) -> tuple[Team,
 
 
 def _accessible_space_ids(db: Session, user: User) -> set[str]:
+    workspace = _get_pms_workspace(db)
     if _is_pms_super_admin(db, user):
         return set(
             db.scalars(
@@ -774,7 +779,7 @@ def _accessible_space_ids(db: Session, user: User) -> set[str]:
                     Team.active.is_(True),
                     Team.trashed_at.is_(None),
                     Team.workspace.has(Workspace.active.is_(True)),
-                    Team.workspace.has(Workspace.key == "pms"),
+                    Team.workspace_id == workspace.id,
                 )
             )
         )
@@ -788,7 +793,7 @@ def _accessible_space_ids(db: Session, user: User) -> set[str]:
                 Team.active.is_(True),
                 Team.trashed_at.is_(None),
                 Team.workspace.has(Workspace.active.is_(True)),
-                Team.workspace.has(Workspace.key == "pms"),
+                Team.workspace_id == workspace.id,
             )
         )
     )
@@ -837,12 +842,17 @@ def _ensure_space_manager_survives(
 
 
 def _get_pms_workspace(db: Session) -> Workspace:
-    workspace = db.scalar(
-        select(Workspace).where(
-            Workspace.key == "pms",
-            Workspace.active.is_(True),
+    workspace = get_current_workspace()
+    if workspace is None:
+        workspace = db.scalar(
+            select(Workspace)
+            .join(WorkspaceEnabledApp, WorkspaceEnabledApp.workspace_id == Workspace.id)
+            .where(
+                Workspace.active.is_(True),
+                WorkspaceEnabledApp.app_code == "pms",
+            )
+            .order_by(Workspace.created_at.asc(), Workspace.key.asc())
         )
-    )
     if workspace is None:
         raise HTTPException(status_code=500, detail="PMS workspace is not available.")
     return workspace
@@ -864,6 +874,7 @@ def _unique_space_key(db: Session, workspace_id: str, name: str) -> str:
 
 
 def _space_query_for_user(db: Session, user: User):
+    workspace = _get_pms_workspace(db)
     if _is_pms_super_admin(db, user):
         return (
             select(Team)
@@ -872,7 +883,7 @@ def _space_query_for_user(db: Session, user: User):
                 Team.active.is_(True),
                 Team.trashed_at.is_(None),
                 Team.workspace.has(Workspace.active.is_(True)),
-                Team.workspace.has(Workspace.key == "pms"),
+                Team.workspace_id == workspace.id,
             )
         )
 
@@ -885,7 +896,7 @@ def _space_query_for_user(db: Session, user: User):
             Team.active.is_(True),
             Team.trashed_at.is_(None),
             Team.workspace.has(Workspace.active.is_(True)),
-            Team.workspace.has(Workspace.key == "pms"),
+            Team.workspace_id == workspace.id,
         )
     )
 

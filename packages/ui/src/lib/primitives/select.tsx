@@ -13,6 +13,7 @@ export interface SelectProps {
   options: SelectOption[];
   placeholder?: string;
   className?: string;
+  disabled?: boolean;
 }
 
 export function Select({
@@ -21,12 +22,15 @@ export function Select({
   options,
   placeholder,
   className,
+  disabled,
 }: SelectProps) {
   return (
-      <SelectPrimitive.Root value={value} onValueChange={onValueChange}>
+      <SelectPrimitive.Root value={value} onValueChange={onValueChange} disabled={disabled}>
         <SelectPrimitive.Trigger
+        disabled={disabled}
         className={cn(
           'inline-flex h-[var(--ui-density-dense)] min-w-[148px] items-center justify-between gap-2 rounded-[var(--ui-radius-sm)] border border-[var(--ui-color-border)] bg-ui-surface-raised px-3 text-[0.84rem] text-[var(--ui-color-ink)]',
+          'data-[disabled]:cursor-not-allowed data-[disabled]:opacity-60',
           className,
         )}
         >

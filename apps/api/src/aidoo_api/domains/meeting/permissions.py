@@ -5,6 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from aidoo_api.domains.auth.access import (
+    get_current_workspace,
     is_platform_admin_user,
     resolve_team_role,
 )
@@ -101,6 +102,12 @@ def ensure_issue_readable(db: Session, user: User, issue_id: str) -> Issue:
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You do not have access to this issue.",
         )
+    current_workspace = get_current_workspace()
+    if current_workspace is not None and team.workspace_id != current_workspace.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You do not have access to this issue.",
+        )
     return issue
 
 
@@ -123,8 +130,20 @@ def ensure_doc_readable(db: Session, user: User, doc_id: str) -> NativeDoc:
         )
 
     if is_platform_admin_user(user, db):
+        current_workspace = get_current_workspace()
+        if current_workspace is not None and doc.workspace_id != current_workspace.id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You do not have access to this document.",
+            )
         return doc
 
+    current_workspace = get_current_workspace()
+    if current_workspace is not None and doc.workspace_id != current_workspace.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You do not have access to this document.",
+        )
     if doc.owner_id != user.id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,

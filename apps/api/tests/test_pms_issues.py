@@ -578,7 +578,9 @@ def test_team_soft_delete_hides_space_data_and_untrashes_default_space(client: T
 
     workspaces_response = client.get("/api/v1/admin/workspaces", headers=headers)
     assert workspaces_response.status_code == 200
-    pms_workspace = next(item for item in workspaces_response.json() if item["key"] == "pms")
+    pms_workspace = next(
+        item for item in workspaces_response.json() if "pms" in item.get("enabled_apps", [])
+    )
     assert pms_workspace["team_count"] == 1
 
     folder_response = client.post(
@@ -666,7 +668,9 @@ def test_team_soft_delete_hides_space_data_and_untrashes_default_space(client: T
 
     workspaces_after_delete_response = client.get("/api/v1/admin/workspaces", headers=headers)
     assert workspaces_after_delete_response.status_code == 200
-    pms_workspace_after_delete = next(item for item in workspaces_after_delete_response.json() if item["key"] == "pms")
+    pms_workspace_after_delete = next(
+        item for item in workspaces_after_delete_response.json() if "pms" in item.get("enabled_apps", [])
+    )
     assert pms_workspace_after_delete["team_count"] == 0
 
     recreated_project_response = client.post(
@@ -692,7 +696,9 @@ def test_team_soft_delete_hides_space_data_and_untrashes_default_space(client: T
 
     workspaces_after_restore_response = client.get("/api/v1/admin/workspaces", headers=headers)
     assert workspaces_after_restore_response.status_code == 200
-    pms_workspace_after_restore = next(item for item in workspaces_after_restore_response.json() if item["key"] == "pms")
+    pms_workspace_after_restore = next(
+        item for item in workspaces_after_restore_response.json() if "pms" in item.get("enabled_apps", [])
+    )
     assert pms_workspace_after_restore["team_count"] == 1
 
 
@@ -829,7 +835,18 @@ def _grant_workspace_access(
         headers=_auth_headers(token),
     )
     assert workspaces_response.status_code == 200
-    workspace = next(item for item in workspaces_response.json() if item["key"] == workspace_key)
+    matching_workspaces = [
+        item
+        for item in workspaces_response.json()
+        if item["key"] == workspace_key or workspace_key in item.get("enabled_apps", [])
+    ]
+    workspace = next((item for item in matching_workspaces if item["key"] == workspace_key), None)
+    if workspace is None:
+        workspace = min(
+            matching_workspaces,
+            key=lambda item: (len(item.get("enabled_apps", [])), item["key"]),
+        ) if matching_workspaces else None
+    assert workspace is not None
 
     bindings_response = client.get(
         f"/api/v1/admin/workspaces/{workspace['id']}/bindings",
