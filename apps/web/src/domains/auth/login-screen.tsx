@@ -32,10 +32,10 @@ function DevAccountsPanel({
     <div className="order-2 rounded-2xl border border-[#3d3e40] bg-[#242527]/95 p-4 shadow-xl lg:order-1">
       <div className="mb-4">
         <div className="text-[0.68rem] font-semibold uppercase tracking-[0.12em] text-gray-500">
-          Dev Accounts
+          Seed Accounts
         </div>
         <p className="mt-2 text-xs leading-5 text-gray-400">
-          테스트용 시드 계정을 바로 열 수 있습니다.
+          시드 계정을 바로 로그인할 수 있습니다.
         </p>
       </div>
 
@@ -186,10 +186,10 @@ export function LoginScreen() {
                 {isSetupMode
                   ? '첫 관리자 계정을 생성해 워크스페이스를 시작합니다.'
                   : hasDevAccountButtons
-                    ? '시드된 개발용 계정을 한 번에 로그인할 수 있습니다.'
+                    ? '시드 계정을 한 번에 바로 로그인할 수 있습니다.'
                     : auth.devAdminLoginAvailable
                       ? '원격 dev DB 기준 관리자 빠른 로그인을 지원합니다.'
-                    : '로컬 계정으로 로그인합니다.'}
+                      : '로컬 계정으로 로그인합니다.'}
               </p>
             </div>
 

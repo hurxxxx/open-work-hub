@@ -216,6 +216,8 @@ def test_dev_login_creates_missing_dev_accounts_on_demand(client: TestClient) ->
     assert status_response.status_code == 200
     payload = status_response.json()
     assert payload["requires_setup"] is False
+    account_keys = {item["account_key"] for item in payload["dev_login_accounts"]}
+    assert account_keys == EXPECTED_DEV_LOGIN_ACCOUNT_KEYS
 
     # First dev-login for platform-admin seeds the full DEV_LOGIN_ACCOUNTS set.
     platform_admin_login_response = client.post(

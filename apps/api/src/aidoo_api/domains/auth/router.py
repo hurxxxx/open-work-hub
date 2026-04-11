@@ -15,6 +15,7 @@ from aidoo_api.domains.auth.access import (
     ensure_dev_login_seed_data,
     ensure_seed_data,
     get_dev_login_user,
+    list_dev_login_account_catalog,
     list_dev_login_accounts,
     load_user_graph,
     record_audit_log,
@@ -236,7 +237,11 @@ def bootstrap_status(
         dev_login_accounts=(
             [
                 DevLoginAccountResponse.model_validate(item)
-                for item in list_dev_login_accounts(db)
+                for item in (
+                    list_dev_login_account_catalog()
+                    if has_users
+                    else list_dev_login_accounts(db)
+                )
             ]
             if dev_admin_login_available
             else []

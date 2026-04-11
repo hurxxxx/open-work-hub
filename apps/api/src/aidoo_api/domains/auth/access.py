@@ -999,6 +999,19 @@ def list_dev_login_accounts(db: Session) -> list[dict[str, str]]:
     return items
 
 
+def list_dev_login_account_catalog() -> list[dict[str, str]]:
+    return [
+        {
+            "account_key": definition["key"],
+            "label": definition["label"],
+            "email": definition["email"],
+            "description": definition["description"],
+            "category": definition["category"],
+        }
+        for definition in DEV_LOGIN_ACCOUNTS
+    ]
+
+
 def get_dev_login_user(db: Session, account_key: str) -> User | None:
     definition = DEV_LOGIN_ACCOUNT_MAP.get(account_key)
     if definition is None:
