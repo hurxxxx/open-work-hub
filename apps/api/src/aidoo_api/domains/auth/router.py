@@ -233,8 +233,11 @@ def bootstrap_status(
 ) -> BootstrapStatusResponse:
     has_users = db.scalar(select(func.count()).select_from(User)) > 0
     dev_admin_login_available = _is_local_dev_admin_login_available(request)
-    if has_users and dev_admin_login_available:
-        ensure_dev_login_seed_data(db)
+    # The dev-login account list is a read-only projection. Previously this
+    # endpoint also triggered ``ensure_dev_login_seed_data`` on every call,
+    # which turned the routine "open login page" action into an expensive
+    # reconcile that historically wiped user-created team memberships. The
+    # seed now runs exactly once on an empty DB (init_db or dev-login).
     return BootstrapStatusResponse(
         requires_setup=not has_users,
         dev_admin_login_available=dev_admin_login_available,

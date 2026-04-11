@@ -415,7 +415,27 @@ def load_user_graph(db: Session, user_id: str) -> User | None:
     return db.scalar(select(User).options(*USER_GRAPH_OPTIONS).where(User.id == user_id))
 
 
+def is_infrastructure_seeded(db: Session) -> bool:
+    """Cheap check for whether ``ensure_seed_data`` has ever run against this
+    database. We use the ``hq`` OrgUnit plus the full DEFAULT_WORKSPACES set
+    as the tombstone — if both are present the seed has already installed
+    the static infrastructure and we should not reconcile it again, because
+    rerunning overwrites user-edited workspace names/descriptions back to
+    the canonical defaults."""
+    root_org_id = db.scalar(select(OrgUnit.id).where(OrgUnit.slug == "hq"))
+    if root_org_id is None:
+        return False
+    existing_workspace_keys = set(
+        db.scalars(select(Workspace.key)).all()
+    )
+    required_keys = {definition["key"] for definition in DEFAULT_WORKSPACES}
+    return required_keys.issubset(existing_workspace_keys)
+
+
 def ensure_seed_data(db: Session) -> None:
+    if is_infrastructure_seeded(db):
+        return
+
     root_org = db.scalar(select(OrgUnit).where(OrgUnit.slug == "hq"))
     if root_org is None:
         db.add(
@@ -528,7 +548,27 @@ def ensure_seed_data(db: Session) -> None:
     db.commit()
 
 
+def are_dev_login_accounts_seeded(db: Session) -> bool:
+    """True iff every account listed in ``DEV_LOGIN_ACCOUNTS`` is already
+    present in ``users``. Used to short-circuit the dev-login seed loop so
+    it doesn't clobber user-created team memberships on every login."""
+    required_emails = {definition["email"] for definition in DEV_LOGIN_ACCOUNTS}
+    existing = set(
+        db.scalars(select(User.email).where(User.email.in_(required_emails))).all()
+    )
+    return required_emails.issubset(existing)
+
+
 def ensure_dev_login_seed_data(db: Session) -> None:
+    # Short-circuit: the dev-login seed loop is expensive and, worse, used
+    # to reconcile TeamMember rows so aggressively that it deleted every
+    # user-created space membership on each call. Now that the reconciler
+    # is narrowed to the default PMS space we still avoid calling it on
+    # every bootstrap-status / dev-login request — it should only run on
+    # a fresh DB where the seed accounts are missing.
+    if is_infrastructure_seeded(db) and are_dev_login_accounts_seeded(db):
+        return
+
     ensure_seed_data(db)
 
     root_org = db.scalar(select(OrgUnit).where(OrgUnit.slug == "hq"))

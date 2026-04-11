@@ -97,6 +97,123 @@ def test_seed_preserves_user_created_space_membership(client: TestClient) -> Non
     assert new_space_id in space_ids
 
 
+def test_dev_login_is_idempotent_and_preserves_user_spaces(
+    client: TestClient,
+) -> None:
+    """Logging in multiple times (a very common dev loop: bootstrap-status
+    on load, then dev-login on button click, then another account switch)
+    must NOT rerun the seed reconciler against already-seeded accounts.
+
+    Before the guard landed, each of those requests walked every seed user's
+    TeamMember rows and wiped out anything outside the default PMS space,
+    destroying user-created spaces on every login."""
+    from aidoo_api.core.db import get_session_factory
+    from aidoo_api.domains.auth.models import Team, TeamMember, Workspace
+    from sqlalchemy import select
+
+    _seed_dev_accounts()
+
+    # pms-member creates a private space.
+    login = client.post(
+        "/api/v1/auth/dev-login",
+        json={"account_key": "pms-member"},
+    )
+    assert login.status_code == 200
+    token = login.json()["token"]
+    user_id = login.json()["user"]["id"]
+
+    create = client.post(
+        "/api/v1/pms/spaces",
+        headers=_auth_headers(token),
+        json={"name": "Private Space", "description": ""},
+    )
+    assert create.status_code == 201
+    space_id = create.json()["id"]
+
+    session_factory = get_session_factory()
+
+    def owner_row() -> TeamMember | None:
+        with session_factory() as db:
+            return db.scalar(
+                select(TeamMember).where(
+                    TeamMember.team_id == space_id,
+                    TeamMember.user_id == user_id,
+                )
+            )
+
+    assert owner_row() is not None
+
+    # Simulate the dev flow: open login screen (bootstrap-status), then log
+    # in as platform-admin, then back to pms-member. Each of these calls
+    # used to re-run ensure_dev_login_seed_data.
+    for _ in range(3):
+        assert (
+            client.get("/api/v1/auth/bootstrap-status").status_code == 200
+        )
+        assert (
+            client.post(
+                "/api/v1/auth/dev-login", json={"account_key": "platform-admin"}
+            ).status_code
+            == 200
+        )
+        assert (
+            client.post(
+                "/api/v1/auth/dev-login", json={"account_key": "pms-member"}
+            ).status_code
+            == 200
+        )
+
+    assert owner_row() is not None, (
+        "dev-login / bootstrap-status rerunning the seed loop wiped out the "
+        "user's self-created space membership."
+    )
+
+    # The user-created space should also still be listed.
+    list_response = client.get(
+        "/api/v1/pms/spaces",
+        headers=_auth_headers(token),
+    )
+    assert list_response.status_code == 200
+    assert any(item["id"] == space_id for item in list_response.json())
+
+
+def test_ensure_seed_data_does_not_overwrite_workspace_renames(
+    client: TestClient,
+) -> None:
+    """``ensure_seed_data`` rewrote workspace name/description back to the
+    canonical defaults every time it ran, which made admin-console renames
+    silently revert on the next server restart. The guard should skip the
+    reconcile entirely once the infrastructure is in place."""
+    from aidoo_api.core.db import get_session_factory
+    from aidoo_api.domains.auth.access import ensure_seed_data
+    from aidoo_api.domains.auth.models import Workspace
+    from sqlalchemy import select
+
+    _seed_dev_accounts()
+    session_factory = get_session_factory()
+
+    with session_factory() as db:
+        ws = db.scalar(select(Workspace).where(Workspace.key == "pms"))
+        assert ws is not None
+        ws.name = "Custom PMS Name"
+        ws.description = "Admin-edited description"
+        db.add(ws)
+        db.commit()
+
+    # Rerun seed. The guard should short-circuit and leave the edits alone.
+    with session_factory() as db:
+        ensure_seed_data(db)
+        db.commit()
+
+    with session_factory() as db:
+        ws = db.scalar(select(Workspace).where(Workspace.key == "pms"))
+        assert ws is not None
+        assert ws.name == "Custom PMS Name", (
+            "ensure_seed_data is still overwriting workspace names on rerun"
+        )
+        assert ws.description == "Admin-edited description"
+
+
 def test_seed_still_reconciles_default_space_membership(
     client: TestClient,
 ) -> None:

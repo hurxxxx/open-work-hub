@@ -172,7 +172,16 @@ def test_seeded_dev_login_accounts_are_listed_and_can_log_in(client: TestClient)
     assert any(item["app"] == "pms" for item in login_payload["user"]["app_access"])
 
 
-def test_bootstrap_status_syncs_missing_dev_login_accounts(client: TestClient) -> None:
+def test_dev_login_creates_missing_dev_accounts_on_demand(client: TestClient) -> None:
+    """After ``/auth/setup`` only creates the first admin, the dev-login
+    quick-login endpoint must still be able to provision the remaining
+    seed accounts the first time one of them is requested.
+
+    Previously ``/auth/bootstrap-status`` also re-seeded on every call as
+    a side-effect, which ran the full reconcile loop constantly and wiped
+    user-created team memberships along the way. Bootstrap-status is now
+    a pure read and the seeding responsibility sits on the dev-login route
+    itself, which only mutates the database on a fresh install."""
     setup_response = client.post(
         "/api/v1/auth/setup",
         json={
@@ -183,12 +192,13 @@ def test_bootstrap_status_syncs_missing_dev_login_accounts(client: TestClient) -
     )
     assert setup_response.status_code == 201
 
+    # bootstrap-status is a pure read after setup.
     status_response = client.get("/api/v1/auth/bootstrap-status")
     assert status_response.status_code == 200
     payload = status_response.json()
     assert payload["requires_setup"] is False
-    assert any(item["account_key"] == "org-admin" for item in payload["dev_login_accounts"])
 
+    # First dev-login for org-admin seeds the full DEV_LOGIN_ACCOUNTS set.
     org_admin_login_response = client.post(
         "/api/v1/auth/dev-login",
         json={"account_key": "org-admin"},
@@ -196,6 +206,16 @@ def test_bootstrap_status_syncs_missing_dev_login_accounts(client: TestClient) -
     assert org_admin_login_response.status_code == 200
     assert org_admin_login_response.json()["user"]["email"] == "org-admin@aidoo.local"
     assert "org_admin" in org_admin_login_response.json()["user"]["system_roles"]
+
+    # After seeding, bootstrap-status surfaces the full dev-login account
+    # list without having to mutate the database itself.
+    second_status = client.get("/api/v1/auth/bootstrap-status")
+    assert second_status.status_code == 200
+    account_keys = {
+        item["account_key"] for item in second_status.json()["dev_login_accounts"]
+    }
+    assert "org-admin" in account_keys
+    assert "pms-member" in account_keys
 
 
 def test_auth_preferences_password_and_sessions(client: TestClient) -> None:
