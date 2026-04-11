@@ -4,11 +4,14 @@ from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from aidoo_api.domains.auth.access import is_platform_admin_user
-from aidoo_api.domains.auth.models import User
+from aidoo_api.domains.auth.access import (
+    is_platform_admin_user,
+    resolve_team_role,
+)
+from aidoo_api.domains.auth.models import Team, User
 from aidoo_api.domains.docs.models import NativeDoc
 from aidoo_api.domains.meeting.models import Meeting
-from aidoo_api.domains.pms.models import Issue, Project, ProjectMember
+from aidoo_api.domains.pms.models import Issue, Project
 
 
 def is_organizer(user: User, meeting: Meeting) -> bool:
@@ -65,10 +68,9 @@ def ensure_link_remover(
 
 
 def ensure_issue_readable(db: Session, user: User, issue_id: str) -> Issue:
-    """PR1 fallback rule: organizer must be a project member of the issue's project.
-
-    PR2 will introduce ``IssueUserAccess``; until then this is a hard 403 if the
-    user is not a project member (or platform/org admin)."""
+    """Allow attaching an issue iff the caller has access to the issue's
+    owning PMS space. Mirrors ``_ensure_space_access`` in the PMS router so
+    the attachable set matches what the user can already see in the PMS UI."""
 
     issue = db.scalar(select(Issue).where(Issue.id == issue_id))
     if issue is None:
@@ -87,13 +89,14 @@ def ensure_issue_readable(db: Session, user: User, issue_id: str) -> Issue:
             detail="Issue not found.",
         )
 
-    membership = db.scalar(
-        select(ProjectMember.id).where(
-            ProjectMember.project_id == project.id,
-            ProjectMember.user_id == user.id,
+    if project.team_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You do not have access to this issue.",
         )
-    )
-    if membership is None:
+
+    team = db.scalar(select(Team).where(Team.id == project.team_id))
+    if team is None or resolve_team_role(db, user, team) is None:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You do not have access to this issue.",

@@ -510,6 +510,94 @@ def _create_native_doc(client: TestClient, token: str, title: str) -> str:
     return response.json()["source_id"]
 
 
+def test_attendee_can_attach_task_via_space_access(client: TestClient) -> None:
+    """An attendee who has access to the issue's PMS space (Team) — but no
+    direct ProjectMember row — must be able to attach the issue. This was
+    the regression behind '미팅2 에서 태스크가 등록되지 않는다' — meeting
+    permission used the ProjectMember table directly while PMS itself reads
+    via space membership, so seed accounts (e.g. pms-member) were silently
+    locked out."""
+
+    admin = _bootstrap_admin_session(client)
+    admin_token = admin["token"]
+
+    # Admin creates a PMS space, project, and an issue.
+    space_response = client.post(
+        "/api/v1/pms/spaces",
+        headers=_auth_headers(admin_token),
+        json={"name": "Meeting Attach Space", "description": ""},
+    )
+    assert space_response.status_code == 201, space_response.text
+    space = space_response.json()
+
+    project_response = client.post(
+        "/api/v1/pms/projects",
+        headers=_auth_headers(admin_token),
+        json={
+            "key": "MEETIN",
+            "name": "Meeting Attach Project",
+            "description": "",
+            "team_id": space["id"],
+        },
+    )
+    assert project_response.status_code == 201, project_response.text
+    project = project_response.json()
+
+    issue_response = client.post(
+        f"/api/v1/pms/projects/{project['id']}/issues",
+        headers=_auth_headers(admin_token),
+        json={
+            "title": "Prep task",
+            "description": "",
+            "status": "backlog",
+            "priority": "medium",
+            "label_ids": [],
+        },
+    )
+    assert issue_response.status_code == 201
+    issue = issue_response.json()
+
+    # Attendee user with both meeting and pms workspace access. We then
+    # add them as a member of the PMS space — NOT the project — exactly
+    # mirroring how the seed pms-member account is provisioned.
+    attendee = _create_user_with_workspaces(
+        client,
+        admin_token,
+        email="space-prep@aidoo.local",
+        full_name="Space Prep",
+        workspace_keys=["meeting", "pms"],
+    )
+    add_space_member = client.post(
+        f"/api/v1/pms/spaces/{space['id']}/members",
+        headers=_auth_headers(admin_token),
+        json={"user_id": attendee["user"]["id"], "role": "member"},
+    )
+    assert add_space_member.status_code in (200, 201), add_space_member.text
+
+    attendee_token = _login(
+        client, attendee["user"]["email"], attendee["temporary_password"]
+    )
+
+    # Admin organizes a meeting and invites the attendee.
+    meeting = _create_meeting(
+        client,
+        admin_token,
+        title="Space-only access meeting",
+        attendees=[{"user_id": attendee["user"]["id"], "role": "required"}],
+    )
+
+    # Attendee attaches the task — should succeed via space membership.
+    attach_response = client.post(
+        f"/api/v1/meeting/meetings/{meeting['id']}/tasks",
+        headers=_auth_headers(attendee_token),
+        json={"issue_id": issue["id"]},
+    )
+    assert attach_response.status_code == 200, attach_response.text
+    body = attach_response.json()
+    assert len(body["task_links"]) == 1
+    assert body["task_links"][0]["added_by_id"] == attendee["user"]["id"]
+
+
 def test_attendee_can_attach_doc_and_only_adder_can_remove(
     client: TestClient,
 ) -> None:

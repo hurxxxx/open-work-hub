@@ -40,7 +40,6 @@ from aidoo_api.domains.pms.models import (
     Milestone,
     Notification,
     Project,
-    ProjectMember,
     ProjectStatus,
     ScheduleDependency,
     SpaceDoc,
@@ -110,11 +109,6 @@ class ProjectUpdateRequest(BaseModel):
     status: Literal["planned", "active", "on_hold", "done"] | None = None
     archived: bool | None = None
     folder_id: str | None = None
-
-
-class ProjectMemberCreateRequest(BaseModel):
-    user_id: str
-    role: Literal["owner", "admin", "viewer", "member"] = "member"
 
 
 class MilestoneCreateRequest(BaseModel):
@@ -221,22 +215,6 @@ class ProjectListItem(BaseModel):
 
 class ProjectListResponse(BaseModel):
     items: list[ProjectListItem]
-    total: int
-    page: int
-    page_size: int
-
-
-class ProjectMemberItem(BaseModel):
-    user_id: str
-    email: str
-    full_name: str
-    is_admin: bool
-    role: str
-    joined_at: datetime
-
-
-class ProjectMemberListResponse(BaseModel):
-    items: list[ProjectMemberItem]
     total: int
     page: int
     page_size: int
@@ -1121,7 +1099,7 @@ def _serialize_project(
         folder_name=getattr(project.folder, "name", None) if project.folder_id else None,
         role=role,
         progress=_calculate_progress(project.issues, project),
-        member_count=member_count if member_count is not None else len(project.members),
+        member_count=member_count if member_count is not None else 0,
         milestone_count=len(project.milestones),
         issue_count=len(project.issues),
         overdue_issue_count=overdue_issue_count,
@@ -1422,7 +1400,6 @@ def _get_issue_for_user(
     issue = db.scalar(
         select(Issue)
         .options(
-            selectinload(Issue.project).selectinload(Project.members).selectinload(ProjectMember.user),
             selectinload(Issue.project).selectinload(Project.labels),
             selectinload(Issue.milestone),
             selectinload(Issue.assignee),
@@ -1853,104 +1830,75 @@ def update_project(
     return _serialize_project(project, role, t_name, member_count)
 
 
-@router.get("/projects/{project_id}/members", response_model=ProjectMemberListResponse)
-@router.get("/lists/{project_id}/members", response_model=ProjectMemberListResponse)
+@router.get("/projects/{project_id}/members", response_model=SpaceMemberListResponse)
+@router.get("/lists/{project_id}/members", response_model=SpaceMemberListResponse)
 def list_project_members(
     project_id: str,
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-) -> ProjectMemberListResponse:
+) -> SpaceMemberListResponse:
+    """A project's members are the members of its owning space. The project-
+    level membership model was removed; this route remains as a thin alias so
+    existing clients keep working."""
     project, _ = _ensure_project_access(db, current_user, project_id)
     if project.team_id is None:
         raise HTTPException(status_code=409, detail="Project space is not set.")
-    space_members = list_space_members(
+    return list_space_members(
         space_id=project.team_id,
         page=page,
         page_size=page_size,
         db=db,
         current_user=current_user,
     )
-    return ProjectMemberListResponse(
-        items=[
-        ProjectMemberItem(
-            user_id=item.user_id,
-            email=item.email,
-            full_name=item.full_name,
-            is_admin=item.is_admin,
-            role=item.role,
-            joined_at=item.joined_at,
-        )
-            for item in space_members.items
-        ],
-        total=space_members.total,
-        page=space_members.page,
-        page_size=space_members.page_size,
-    )
 
 
 @router.post(
     "/projects/{project_id}/members",
-    response_model=ProjectMemberItem,
+    response_model=SpaceMemberItem,
     status_code=status.HTTP_201_CREATED,
 )
 @router.post(
     "/lists/{project_id}/members",
-    response_model=ProjectMemberItem,
+    response_model=SpaceMemberItem,
     status_code=status.HTTP_201_CREATED,
 )
 def add_project_member(
     project_id: str,
-    payload: ProjectMemberCreateRequest,
+    payload: SpaceMemberCreateRequest,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-) -> ProjectMemberItem:
+) -> SpaceMemberItem:
     project, _ = _ensure_project_owner(db, current_user, project_id)
     if project.team_id is None:
         raise HTTPException(status_code=409, detail="Project space is not set.")
-    member = add_space_member(
+    return add_space_member(
         space_id=project.team_id,
-        payload=SpaceMemberCreateRequest(user_id=payload.user_id, role=payload.role),
+        payload=payload,
         db=db,
         current_user=current_user,
     )
-    return ProjectMemberItem(
-        user_id=member.user_id,
-        email=member.email,
-        full_name=member.full_name,
-        is_admin=member.is_admin,
-        role=member.role,
-        joined_at=member.joined_at,
-    )
 
 
-@router.patch("/projects/{project_id}/members/{user_id}/role", response_model=ProjectMemberItem)
-@router.patch("/lists/{project_id}/members/{user_id}/role", response_model=ProjectMemberItem)
+@router.patch("/projects/{project_id}/members/{user_id}/role", response_model=SpaceMemberItem)
+@router.patch("/lists/{project_id}/members/{user_id}/role", response_model=SpaceMemberItem)
 def update_member_role(
     project_id: str,
     user_id: str,
     payload: SpaceMemberRoleUpdateRequest,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-) -> ProjectMemberItem:
+) -> SpaceMemberItem:
     project, _ = _ensure_project_owner(db, current_user, project_id)
     if project.team_id is None:
         raise HTTPException(status_code=409, detail="Project space is not set.")
-    member = update_space_member(
+    return update_space_member(
         space_id=project.team_id,
         user_id=user_id,
         payload=payload,
         db=db,
         current_user=current_user,
-    )
-    return ProjectMemberItem(
-        user_id=member.user_id,
-        email=member.email,
-        full_name=member.full_name,
-        is_admin=member.is_admin,
-        role=member.role,
-        joined_at=member.joined_at,
     )
 
 
@@ -2040,7 +1988,7 @@ def update_milestone(
 ) -> MilestoneItem:
     milestone = db.scalar(
         select(Milestone)
-        .options(selectinload(Milestone.project).selectinload(Project.members).selectinload(ProjectMember.user))
+        .options(selectinload(Milestone.project))
         .where(Milestone.id == milestone_id)
     )
     if milestone is None:
@@ -2773,7 +2721,6 @@ def get_dashboard_summary(
     projects = list(
         db.scalars(
             _accessible_projects_query(db, current_user).options(
-                selectinload(Project.members).selectinload(ProjectMember.user),
                 selectinload(Project.milestones).selectinload(Milestone.issues),
                 selectinload(Project.issues)
                 .selectinload(Issue.comments),

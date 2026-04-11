@@ -31,6 +31,7 @@ import { listFavoriteDocs, listRecentPages, type FavoriteDocItem, type RecentPag
 import { listPmsLists, listFolders, listSpaceDocs, createSpaceDoc, updateSpaceDoc, deleteSpaceDoc, updateFolder, deleteFolder, listSpaces, updateSpace, deleteSpace, type PmsFolder, type PmsList, type PmsSpace, type PmsSpaceDoc } from '@/src/domains/pms/pms-api';
 import { CreateProjectModal } from '@/src/components/views/PMSView/CreateProjectModal';
 import { CreateSpaceModal } from '@/src/components/views/PMSView/CreateSpaceModal';
+import { SpaceMembersModal } from '@/src/components/views/PMSView/SpaceMembersModal';
 import { CreateFolderModal } from '@/src/components/views/PMSView/CreateFolderModal';
 import { buildSidebarCategories } from './sub-sidebar-categories';
 
@@ -289,12 +290,16 @@ const SpaceContextMenu = ({
   anchorRef,
   onClose,
   onRename,
+  onManageMembers,
+  canManage,
   onDelete,
 }: {
   open: boolean;
   anchorRef: React.RefObject<HTMLButtonElement | null>;
   onClose: () => void;
   onRename: () => void;
+  onManageMembers: () => void;
+  canManage: boolean;
   onDelete: () => void;
 }) => {
   const ref = useRef<HTMLDivElement>(null);
@@ -331,6 +336,15 @@ const SpaceContextMenu = ({
         <span className="app-text-control-sm text-app-ink">Rename</span>
       </button>
       <button
+        onClick={() => { onManageMembers(); onClose(); }}
+        className="w-full flex items-center gap-3 px-3 py-2 hover:bg-app-surface-hover transition-colors"
+      >
+        <Users size={14} className="text-gray-400" />
+        <span className="app-text-control-sm text-app-ink">
+          {canManage ? '멤버 관리' : '멤버 보기'}
+        </span>
+      </button>
+      <button
         onClick={() => { onDelete(); onClose(); }}
         className="w-full flex items-center gap-3 px-3 py-2 hover:bg-app-surface-hover transition-colors"
       >
@@ -365,6 +379,7 @@ const SpaceItem = ({
   onDeleteFolder,
   onRenameSpace,
   onDeleteSpace,
+  onManageMembers,
   spaceDocs,
   onRenameDoc,
   onDeleteDoc,
@@ -389,6 +404,7 @@ const SpaceItem = ({
   onDeleteFolder: (folderId: string) => void;
   onRenameSpace: (newName: string) => void;
   onDeleteSpace: () => void;
+  onManageMembers: () => void;
   spaceDocs: PmsSpaceDoc[];
   onRenameDoc: (docId: string, newTitle: string) => void;
   onDeleteDoc: (docId: string) => void;
@@ -558,6 +574,8 @@ const SpaceItem = ({
               anchorRef={spaceMenuBtnRef}
               onClose={() => setSpaceMenuOpen(false)}
               onRename={() => { setRenameValue(name); setRenaming(true); }}
+              onManageMembers={onManageMembers}
+              canManage={canManageSpace}
               onDelete={onDeleteSpace}
             />
             <SpaceAddPopover
@@ -805,6 +823,11 @@ export const SubSidebar = ({ activeAppId, activeNavItemId }: { activeAppId: stri
   const [createProjectTeamId, setCreateProjectTeamId] = useState<string | null>(null);
   const [createProjectFolderId, setCreateProjectFolderId] = useState<string | null>(null);
   const [createSpaceOpen, setCreateSpaceOpen] = useState(false);
+  const [manageMembersSpace, setManageMembersSpace] = useState<{
+    id: string;
+    name: string;
+    canManage: boolean;
+  } | null>(null);
   const [createMenuOpen, setCreateMenuOpen] = useState(false);
   const createMenuRef = useRef<HTMLDivElement>(null);
   const [expandedSpaces, setExpandedSpaces] = useState<Set<string>>(new Set());
@@ -1291,34 +1314,44 @@ export const SubSidebar = ({ activeAppId, activeNavItemId }: { activeAppId: stri
                       <InlineNotice tone="danger">{pmsError}</InlineNotice>
                     </div>
                   ) : null}
-                  {groupedSpaces.map((space, index) => (
-                    <SpaceItem
-                      key={space.id}
-                      spaceId={space.id}
-                      name={space.name}
-                      iconColor={SPACE_COLORS[index % SPACE_COLORS.length]}
-                      rootLists={space.rootLists}
-                      folders={space.folders}
-                      expanded={expandedSpaces.has(space.id)}
-                      onToggle={() => toggleSpace(space.id)}
-                      onNavigate={() => navigate(`/tool/pms-space-${space.id}`)}
-                      onAddList={() => openCreateProject(space.id)}
-                      onAddListToFolder={(folderId) => { setCreateProjectTeamId(space.id); setCreateProjectFolderId(folderId); setCreateProjectOpen(true); }}
-                      onAddFolder={() => openCreateFolder(space.id)}
-                      onOpenDocs={() => { void handleCreateDoc(space.id); }}
-                      onMoveFolder={(folderId, direction) => { void handleMoveFolder(space.id, folderId, direction); }}
-                      onRenameFolder={(folderId, currentName) => { void handleRenameFolder(folderId, currentName); }}
-                      onDeleteFolder={(folderId) => { void handleDeleteFolder(folderId); }}
-                      onRenameSpace={(newName) => { void handleRenameSpace(space.id, newName); }}
-                      onDeleteSpace={() => { void handleDeleteSpace(space.id); }}
-                      spaceDocs={spaceDocsMap.get(space.id) ?? []}
-                      onRenameDoc={(pageId, newTitle) => { void handleRenameDoc(pageId, newTitle); }}
-                      onDeleteDoc={(pageId) => { void handleDeleteDoc(pageId); }}
-                      activeNavItemId={activeNavItemId}
-                      canManageSpace={canManageSpace(space)}
-                      canManageCollections={teamRoleAllows(space.current_user_role, 'admin')}
-                    />
-                  ))}
+                  {groupedSpaces.map((space, index) => {
+                    const spaceCanManage = canManageSpace(space);
+                    return (
+                      <SpaceItem
+                        key={space.id}
+                        spaceId={space.id}
+                        name={space.name}
+                        iconColor={SPACE_COLORS[index % SPACE_COLORS.length]}
+                        rootLists={space.rootLists}
+                        folders={space.folders}
+                        expanded={expandedSpaces.has(space.id)}
+                        onToggle={() => toggleSpace(space.id)}
+                        onNavigate={() => navigate(`/tool/pms-space-${space.id}`)}
+                        onAddList={() => openCreateProject(space.id)}
+                        onAddListToFolder={(folderId) => { setCreateProjectTeamId(space.id); setCreateProjectFolderId(folderId); setCreateProjectOpen(true); }}
+                        onAddFolder={() => openCreateFolder(space.id)}
+                        onOpenDocs={() => { void handleCreateDoc(space.id); }}
+                        onMoveFolder={(folderId, direction) => { void handleMoveFolder(space.id, folderId, direction); }}
+                        onRenameFolder={(folderId, currentName) => { void handleRenameFolder(folderId, currentName); }}
+                        onDeleteFolder={(folderId) => { void handleDeleteFolder(folderId); }}
+                        onRenameSpace={(newName) => { void handleRenameSpace(space.id, newName); }}
+                        onDeleteSpace={() => { void handleDeleteSpace(space.id); }}
+                        onManageMembers={() => {
+                          setManageMembersSpace({
+                            id: space.id,
+                            name: space.name,
+                            canManage: spaceCanManage,
+                          });
+                        }}
+                        spaceDocs={spaceDocsMap.get(space.id) ?? []}
+                        onRenameDoc={(pageId, newTitle) => { void handleRenameDoc(pageId, newTitle); }}
+                        onDeleteDoc={(pageId) => { void handleDeleteDoc(pageId); }}
+                        activeNavItemId={activeNavItemId}
+                        canManageSpace={spaceCanManage}
+                        canManageCollections={teamRoleAllows(space.current_user_role, 'admin')}
+                      />
+                    );
+                  })}
 
                   {canWriteTeams && (
                     <button
@@ -1614,6 +1647,31 @@ export const SubSidebar = ({ activeAppId, activeNavItemId }: { activeAppId: stri
           knownSpaceIdsRef.current.add(space.id);
           setPmsTeams((current) => upsertSpace(current, space));
           setExpandedSpaces((current) => new Set(current).add(space.id));
+          // Open the members modal immediately so the creator can invite
+          // teammates to their new space without having to hunt for the
+          // right menu.
+          setManageMembersSpace({
+            id: space.id,
+            name: space.name,
+            canManage: true,
+          });
+        }}
+      />
+
+      <SpaceMembersModal
+        isOpen={manageMembersSpace !== null}
+        onClose={() => setManageMembersSpace(null)}
+        spaceId={manageMembersSpace?.id ?? null}
+        spaceName={manageMembersSpace?.name ?? ''}
+        canManage={manageMembersSpace?.canManage ?? false}
+        onChanged={() => {
+          if (token) {
+            listSpaces(token)
+              .then((teams) => {
+                if (Array.isArray(teams)) setPmsTeams(teams);
+              })
+              .catch(() => undefined);
+          }
         }}
       />
 

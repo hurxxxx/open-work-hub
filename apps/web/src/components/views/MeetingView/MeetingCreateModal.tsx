@@ -79,6 +79,8 @@ export function MeetingCreateModal({ isOpen, onClose, onCreated }: MeetingCreate
   const [docPickerOpen, setDocPickerOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [createdMeetingId, setCreatedMeetingId] = useState<string | null>(null);
+  const [partialFailures, setPartialFailures] = useState<string[]>([]);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
@@ -99,6 +101,8 @@ export function MeetingCreateModal({ isOpen, onClose, onCreated }: MeetingCreate
     setDocPickerOpen(false);
     setError(null);
     setSubmitting(false);
+    setCreatedMeetingId(null);
+    setPartialFailures([]);
   }, [isOpen]);
 
   // Server-side user search. Only fires when there's an actual query so an
@@ -194,6 +198,7 @@ export function MeetingCreateModal({ isOpen, onClose, onCreated }: MeetingCreate
     }
     setSubmitting(true);
     setError(null);
+    setPartialFailures([]);
     try {
       const meeting = await createMeeting(token, {
         title: title.trim(),
@@ -203,42 +208,59 @@ export function MeetingCreateModal({ isOpen, onClose, onCreated }: MeetingCreate
         attendees,
       });
 
-      // Attach picked tasks and docs sequentially. Failures here surface to
-      // the user but the meeting itself remains created — the user can retry
-      // attachment from the detail panel.
       const failures: string[] = [];
+      const succeededTaskIds = new Set<string>();
+      const succeededDocIds = new Set<string>();
+      const succeededFileNames = new Set<string>();
+
       for (const task of pickedTasks) {
         try {
           await attachTaskToMeeting(token, meeting.id, task.id);
+          succeededTaskIds.add(task.id);
         } catch (err) {
           failures.push(
-            `${task.reference || task.title}: ${err instanceof Error ? err.message : '실패'}`,
+            `태스크 "${task.reference || task.title}": ${
+              err instanceof Error ? err.message : '실패'
+            }`,
           );
         }
       }
       for (const doc of pickedDocs) {
         try {
           await attachDocToMeeting(token, meeting.id, doc.id);
+          succeededDocIds.add(doc.id);
         } catch (err) {
           failures.push(
-            `${doc.title}: ${err instanceof Error ? err.message : '실패'}`,
+            `문서 "${doc.title}": ${err instanceof Error ? err.message : '실패'}`,
           );
         }
       }
       for (const file of pickedFiles) {
         try {
           await uploadMeetingFile(token, meeting.id, file);
+          succeededFileNames.add(file.name);
         } catch (err) {
           failures.push(
-            `${file.name}: ${err instanceof Error ? err.message : '실패'}`,
+            `파일 "${file.name}": ${err instanceof Error ? err.message : '실패'}`,
           );
         }
       }
 
       if (failures.length > 0) {
-        setError(`회의는 만들었지만 일부 첨부에 실패했습니다: ${failures.join(', ')}`);
-        // Still navigate to the new meeting so the user sees what landed.
-        onCreated(meeting.id);
+        // Drop successfully attached items so the remaining chips are the
+        // ones the user still needs to address, and keep the modal open so
+        // the error panel is visible. The created meeting id is stashed for
+        // an explicit "회의 보러 가기" action.
+        setPickedTasks((prev) => prev.filter((t) => !succeededTaskIds.has(t.id)));
+        setPickedDocs((prev) => prev.filter((d) => !succeededDocIds.has(d.id)));
+        setPickedFiles((prev) =>
+          prev.filter((f) => !succeededFileNames.has(f.name)),
+        );
+        setCreatedMeetingId(meeting.id);
+        setPartialFailures(failures);
+        setError(
+          `회의는 만들어졌지만 일부 첨부에 실패했습니다. 남은 항목을 확인하세요.`,
+        );
         return;
       }
 
@@ -248,6 +270,11 @@ export function MeetingCreateModal({ isOpen, onClose, onCreated }: MeetingCreate
     } finally {
       setSubmitting(false);
     }
+  }
+
+  function handleOpenCreatedMeeting() {
+    if (!createdMeetingId) return;
+    onCreated(createdMeetingId);
   }
 
   return (
@@ -261,14 +288,22 @@ export function MeetingCreateModal({ isOpen, onClose, onCreated }: MeetingCreate
       dismissOnInteractOutside={false}
       actions={
         <div className="flex w-full items-center justify-end gap-3">
-          <Button variant="secondary" onClick={onClose}>취소</Button>
-          <Button
-            variant="primary"
-            onClick={handleCreate}
-            disabled={!title.trim() || submitting}
-          >
-            {submitting ? '만드는 중...' : '회의 만들기'}
+          <Button variant="secondary" onClick={onClose}>
+            {createdMeetingId ? '닫기' : '취소'}
           </Button>
+          {createdMeetingId ? (
+            <Button variant="primary" onClick={handleOpenCreatedMeeting}>
+              회의 보러 가기
+            </Button>
+          ) : (
+            <Button
+              variant="primary"
+              onClick={handleCreate}
+              disabled={!title.trim() || submitting}
+            >
+              {submitting ? '만드는 중...' : '회의 만들기'}
+            </Button>
+          )}
         </div>
       }
     >
@@ -278,7 +313,14 @@ export function MeetingCreateModal({ isOpen, onClose, onCreated }: MeetingCreate
             role="alert"
             className="app-text-body rounded-md border border-[var(--ui-color-warning)]/40 bg-[var(--ui-color-warning)]/10 px-3 py-2 text-[var(--ui-color-warning)]"
           >
-            {error}
+            <p>{error}</p>
+            {partialFailures.length > 0 ? (
+              <ul className="mt-2 list-disc space-y-0.5 pl-5 text-[var(--ui-color-warning)]/90">
+                {partialFailures.map((line, idx) => (
+                  <li key={idx}>{line}</li>
+                ))}
+              </ul>
+            ) : null}
           </div>
         ) : null}
 

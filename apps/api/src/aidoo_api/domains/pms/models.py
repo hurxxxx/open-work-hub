@@ -68,10 +68,6 @@ class Project(Base):
         onupdate=utcnow_naive,
         nullable=False,
     )
-    members: Mapped[list["ProjectMember"]] = relationship(
-        back_populates="project",
-        cascade="all, delete-orphan",
-    )
     milestones: Mapped[list["Milestone"]] = relationship(
         back_populates="project",
         cascade="all, delete-orphan",
@@ -124,23 +120,6 @@ class ProjectStatus(Base):
         nullable=False,
     )
     project: Mapped[Project] = relationship(back_populates="statuses")
-
-
-class ProjectMember(Base):
-    __tablename__ = "pms_project_members"
-    __table_args__ = (UniqueConstraint("project_id", "user_id", name="uq_pms_member"),)
-
-    id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    project_id: Mapped[str] = mapped_column(ForeignKey("pms_projects.id"), index=True)
-    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
-    role: Mapped[str] = mapped_column(String(16), default="member")
-    joined_at: Mapped[datetime] = mapped_column(
-        DateTime,
-        default=utcnow_naive,
-        nullable=False,
-    )
-    project: Mapped[Project] = relationship(back_populates="members")
-    user = relationship("User")
 
 
 class Milestone(Base):
