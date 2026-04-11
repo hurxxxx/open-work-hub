@@ -1667,14 +1667,6 @@ export const SubSidebar = ({ activeAppId, activeNavItemId }: { activeAppId: stri
           knownSpaceIdsRef.current.add(space.id);
           setPmsTeams((current) => upsertSpace(current, space));
           setExpandedSpaces((current) => new Set(current).add(space.id));
-          // Open the members modal immediately so the creator can invite
-          // teammates to their new space without having to hunt for the
-          // right menu.
-          setManageMembersSpace({
-            id: space.id,
-            name: space.name,
-            canManage: true,
-          });
         }}
       />
 
