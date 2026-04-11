@@ -102,6 +102,7 @@ class WorkspaceBindingItemResponse(BaseModel):
     subject_id: str
     subject_type: Literal["user", "group"]
     subject_label: str
+    subject_secondary: str | None = None
     role: str
 
 
@@ -1639,7 +1640,8 @@ def list_workspace_bindings(
         WorkspaceBindingItemResponse(
             subject_id=binding.user_id,
             subject_type="user",
-            subject_label=binding.user.email,
+            subject_label=binding.user.full_name or binding.user.email,
+            subject_secondary=binding.user.email,
             role=normalize_workspace_role(binding.role) or binding.role,
         )
         for binding in workspace.user_bindings
@@ -1649,6 +1651,7 @@ def list_workspace_bindings(
             subject_id=binding.group_id,
             subject_type="group",
             subject_label=binding.group.name,
+            subject_secondary=binding.group.slug,
             role=normalize_workspace_role(binding.role) or binding.role,
         )
         for binding in workspace.group_bindings
@@ -1732,7 +1735,8 @@ def _serialize_user_binding(binding: WorkspaceUserBinding) -> WorkspaceBindingIt
     return WorkspaceBindingItemResponse(
         subject_id=binding.user_id,
         subject_type="user",
-        subject_label=binding.user.email,
+        subject_label=binding.user.full_name or binding.user.email,
+        subject_secondary=binding.user.email,
         role=normalize_workspace_role(binding.role) or binding.role,
     )
 
@@ -1742,6 +1746,7 @@ def _serialize_group_binding(binding: WorkspaceGroupBinding) -> WorkspaceBinding
         subject_id=binding.group_id,
         subject_type="group",
         subject_label=binding.group.name,
+        subject_secondary=binding.group.slug,
         role=normalize_workspace_role(binding.role) or binding.role,
     )
 

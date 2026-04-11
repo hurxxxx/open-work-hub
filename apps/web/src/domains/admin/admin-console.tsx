@@ -135,17 +135,6 @@ function getErrorMessage(error: unknown, fallback: string): string {
   return fallback;
 }
 
-function getInitials(label: string): string {
-  const value = label
-    .trim()
-    .split(/\s+/)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase() ?? '')
-    .join('');
-
-  return value || 'TM';
-}
-
 function formatDateLabel(value?: string | null): string {
   if (!value) {
     return '-';
@@ -1310,14 +1299,11 @@ function PeopleSection({ token }: { token: string }) {
               filteredUsers.map((user) => (
                 <tr className="transition-colors hover:bg-app-surface-hover/40" key={user.id}>
                   <BodyCell dense>
-                    <div className="flex min-w-0 items-center gap-2">
-                      <div className="app-text-micro flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-app-surface-sidebar text-gray-500">
-                        {getInitials(user.display_name || user.full_name)}
-                      </div>
-                      <div className="min-w-0">
-                        <div className="truncate font-medium text-app-ink">{user.display_name || user.full_name}</div>
-                        <div className="app-text-caption truncate text-gray-500">{user.email}</div>
-                      </div>
+                    <div className="min-w-0">
+                      <span className="font-medium text-app-ink">
+                        {user.display_name || user.full_name}
+                      </span>
+                      <span className="ml-2 text-gray-500">{user.email}</span>
                     </div>
                   </BodyCell>
                   <BodyCell className="max-w-[150px] truncate text-gray-500" dense>
@@ -1810,47 +1796,6 @@ const APP_DESCRIPTIONS: Record<string, string> = {
   meeting: '회의록과 첨부 자료',
 };
 
-const AVATAR_PALETTE = [
-  'bg-rose-500',
-  'bg-pink-500',
-  'bg-fuchsia-500',
-  'bg-purple-500',
-  'bg-violet-500',
-  'bg-indigo-500',
-  'bg-blue-500',
-  'bg-sky-500',
-  'bg-cyan-500',
-  'bg-teal-500',
-  'bg-emerald-500',
-  'bg-green-500',
-  'bg-amber-500',
-  'bg-orange-500',
-];
-
-function avatarColorFromSeed(seed: string): string {
-  let hash = 0;
-  for (let i = 0; i < seed.length; i += 1) {
-    hash = (hash * 31 + seed.charCodeAt(i)) >>> 0;
-  }
-  return AVATAR_PALETTE[hash % AVATAR_PALETTE.length];
-}
-
-function workspaceInitials(name: string): string {
-  const parts = name.trim().split(/\s+/).slice(0, 2);
-  const initials = parts.map((part) => part[0]?.toUpperCase() ?? '').join('');
-  return initials || 'WS';
-}
-
-function memberInitials(label: string): string {
-  const cleaned = label.includes('@') ? label.split('@')[0] : label;
-  const parts = cleaned
-    .replace(/[._-]/g, ' ')
-    .trim()
-    .split(/\s+/)
-    .slice(0, 2);
-  const initials = parts.map((part) => part[0]?.toUpperCase() ?? '').join('');
-  return initials || 'M';
-}
 
 function MemberRoleBadge({ role }: { role: string }) {
   if (role === 'owner') {
@@ -2073,7 +2018,6 @@ function WorkspaceMemberRow({
 }) {
   const isOwner = binding.role === 'owner';
   const showMenu = canManage && !isCurrentUser;
-  const seed = `${binding.subject_type}:${binding.subject_id}`;
   const items: Parameters<typeof DropdownMenu>[0]['items'] = [
     ...WORKSPACE_ROLE_OPTIONS.map((option) => ({
       id: `role-${option.value}`,
@@ -2104,19 +2048,22 @@ function WorkspaceMemberRow({
   ];
 
   return (
-    <div className="flex items-center gap-3 px-4 py-3">
-      <div
-        className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-semibold text-white ${
-          binding.subject_type === 'group' ? 'bg-app-accent' : avatarColorFromSeed(seed)
-        }`}
-      >
-        {binding.subject_type === 'group' ? <UsersIcon size={14} /> : memberInitials(binding.subject_label)}
-      </div>
+    <div className="flex items-center gap-2 px-3 py-1.5">
+      {binding.subject_type === 'group' ? (
+        <UsersIcon size={12} className="shrink-0 text-app-ink/50" aria-label="그룹" />
+      ) : (
+        <span
+          className="inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-app-ink/30"
+          aria-label="사용자"
+        />
+      )}
       <div className="min-w-0 flex-1">
-        <div className="truncate font-medium text-app-ink">{binding.subject_label}</div>
-        <div className="app-text-caption text-app-ink/60">
-          {binding.subject_type === 'group' ? '그룹' : '사용자'}
-          {isCurrentUser ? ' · 본인' : ''}
+        <div className="app-text-body-sm truncate text-app-ink">
+          <span className="font-medium">{binding.subject_label}</span>
+          {binding.subject_secondary ? (
+            <span className="ml-2 text-app-ink/50">{binding.subject_secondary}</span>
+          ) : null}
+          {isCurrentUser ? <span className="ml-2 text-app-ink/40">(본인)</span> : null}
         </div>
       </div>
       <MemberRoleBadge role={binding.role} />
@@ -2125,16 +2072,16 @@ function WorkspaceMemberRow({
           trigger={
             <button
               type="button"
-              className="rounded-md p-1.5 text-app-ink/60 transition-colors hover:bg-app-surface-sidebar hover:text-app-ink"
+              className="rounded p-1 text-app-ink/60 transition-colors hover:bg-app-surface-sidebar hover:text-app-ink"
               aria-label="멤버 작업"
             >
-              <MoreHorizontal size={16} />
+              <MoreHorizontal size={14} />
             </button>
           }
           items={items}
         />
       ) : (
-        <span className="inline-block w-7" />
+        <span className="inline-block w-6" />
       )}
     </div>
   );
@@ -2260,37 +2207,37 @@ function PeopleDirectoryGrid({
 
   return (
     <div className={`flex h-full flex-col ${className ?? ''}`}>
-      <div className="flex items-center gap-3 border-b border-app-border px-4 py-3">
-        <div className="flex flex-1 items-center gap-2 rounded-md border border-app-border bg-app-surface-sidebar px-2 py-1.5">
-          <Search size={14} className="text-app-ink/50" />
+      <div className="flex items-center gap-2 border-b border-app-border px-3 py-2">
+        <div className="flex flex-1 items-center gap-2 rounded-md border border-app-border bg-app-surface-sidebar px-2 py-1">
+          <Search size={12} className="text-app-ink/50" />
           <input
-            className="app-text-body flex-1 bg-transparent text-app-ink outline-none placeholder:text-app-ink/40"
+            className="app-text-body-sm flex-1 bg-transparent text-app-ink outline-none placeholder:text-app-ink/40"
             placeholder="이름 또는 이메일로 검색"
             value={search}
             onChange={(event) => setSearch(event.target.value)}
             autoFocus
           />
         </div>
-        <span className="app-text-caption text-app-ink/60">총 {total} 명</span>
+        <span className="app-text-caption text-app-ink/50">총 {total} 명</span>
       </div>
 
       <div className="min-h-0 flex-1 overflow-auto">
-        <table className="w-full">
+        <table className="app-text-body-sm w-full">
           <thead className="sticky top-0 bg-app-bg">
-            <tr>
-              <th className="w-10 px-3 py-2 text-left"></th>
-              <th className="app-text-overline px-3 py-2 text-left text-app-ink/60">사용자</th>
-              <th className="app-text-overline px-3 py-2 text-left text-app-ink/60">조직</th>
-              <th className="app-text-overline px-3 py-2 text-left text-app-ink/60">그룹</th>
-              <th className="app-text-overline px-3 py-2 text-left text-app-ink/60">워크스페이스</th>
-              <th className="app-text-overline px-3 py-2 text-left text-app-ink/60">상태</th>
-              <th className="app-text-overline px-3 py-2 text-left text-app-ink/60">최근 로그인</th>
+            <tr className="border-b border-app-border">
+              <th className="w-8 px-2 py-1.5 text-left"></th>
+              <th className="app-text-overline px-2 py-1.5 text-left text-app-ink/60">사용자</th>
+              <th className="app-text-overline px-2 py-1.5 text-left text-app-ink/60">조직</th>
+              <th className="app-text-overline px-2 py-1.5 text-left text-app-ink/60">그룹</th>
+              <th className="app-text-overline px-2 py-1.5 text-left text-app-ink/60">워크스페이스</th>
+              <th className="app-text-overline px-2 py-1.5 text-left text-app-ink/60">상태</th>
+              <th className="app-text-overline px-2 py-1.5 text-left text-app-ink/60">최근</th>
             </tr>
           </thead>
           <tbody>
             {users.length === 0 && !loading ? (
               <tr>
-                <td colSpan={7} className="px-3 py-10 text-center text-app-ink/60">
+                <td colSpan={7} className="px-2 py-8 text-center text-app-ink/60">
                   결과 없음
                 </td>
               </tr>
@@ -2298,15 +2245,14 @@ function PeopleDirectoryGrid({
               users.map((user) => {
                 const isExcluded = excludeIds.has(user.id);
                 const isChecked = selection.users.has(user.id);
-                const seed = `user:${user.id}`;
                 return (
                   <tr
                     key={user.id}
-                    className={`border-t border-app-border ${
+                    className={`border-b border-app-border/50 ${
                       isExcluded ? 'opacity-50' : 'hover:bg-app-surface-hover/40'
                     }`}
                   >
-                    <td className="px-3 py-2">
+                    <td className="px-2 py-1">
                       <input
                         type="checkbox"
                         checked={isChecked}
@@ -2321,44 +2267,35 @@ function PeopleDirectoryGrid({
                         }
                       />
                     </td>
-                    <td className="px-3 py-2">
-                      <div className="flex items-center gap-2">
-                        <div
-                          className={`flex h-7 w-7 items-center justify-center rounded-full text-xs font-semibold text-white ${avatarColorFromSeed(seed)}`}
-                        >
-                          {memberInitials(user.display_name || user.full_name || user.email)}
-                        </div>
-                        <div className="min-w-0">
-                          <div className="truncate font-medium text-app-ink">
-                            {user.display_name || user.full_name}
-                          </div>
-                          <div className="app-text-caption truncate text-app-ink/60">
-                            {user.email}
-                          </div>
-                        </div>
+                    <td className="px-2 py-1">
+                      <div className="min-w-0">
+                        <span className="font-medium text-app-ink">
+                          {user.display_name || user.full_name}
+                        </span>
+                        <span className="ml-2 text-app-ink/50">{user.email}</span>
                       </div>
                     </td>
-                    <td className="app-text-caption max-w-[160px] truncate px-3 py-2 text-app-ink/60">
+                    <td className="max-w-[140px] truncate px-2 py-1 text-app-ink/60">
                       {user.primary_org_unit?.name ?? '-'}
                     </td>
-                    <td className="app-text-caption max-w-[160px] truncate px-3 py-2 text-app-ink/60">
+                    <td className="max-w-[140px] truncate px-2 py-1 text-app-ink/60">
                       {formatUserGroups(user)}
                     </td>
-                    <td className="px-3 py-2">
+                    <td className="px-2 py-1">
                       <UserWorkspaceChips user={user} />
                     </td>
-                    <td className="px-3 py-2">
+                    <td className="px-2 py-1">
                       {isExcluded ? (
                         <Badge tone="green">{membershipLabel}</Badge>
                       ) : user.status === 'invited' ? (
-                        <Badge tone="amber">초대 대기</Badge>
+                        <Badge tone="amber">초대</Badge>
                       ) : user.status === 'suspended' ? (
                         <Badge tone="amber">정지</Badge>
                       ) : (
-                        <span className="app-text-caption text-app-ink/60">활성</span>
+                        <span className="text-app-ink/60">활성</span>
                       )}
                     </td>
-                    <td className="app-text-caption px-3 py-2 text-app-ink/60">
+                    <td className="px-2 py-1 text-app-ink/60">
                       {formatDateLabel(user.last_login_at)}
                     </td>
                   </tr>
@@ -2369,7 +2306,7 @@ function PeopleDirectoryGrid({
         </table>
       </div>
 
-      <div className="flex items-center justify-between gap-2 border-t border-app-border px-4 py-2">
+      <div className="flex items-center justify-between gap-2 border-t border-app-border px-3 py-1.5">
         <span className="app-text-caption text-app-ink/60">
           {total === 0
             ? '0'
@@ -2506,11 +2443,11 @@ function SubjectPickerInline({
   }, [groups, debouncedQuery, excludeIds]);
 
   return (
-    <div className="space-y-3">
-      <div className="flex items-center gap-2">
+    <div className="space-y-2">
+      <div className="flex items-center gap-1.5">
         <button
           type="button"
-          className={`app-text-control rounded-md px-2.5 py-1 ${
+          className={`app-text-control rounded px-2 py-0.5 ${
             tab === 'user'
               ? 'bg-app-surface-sidebar text-app-ink'
               : 'text-app-ink/60 hover:text-app-ink'
@@ -2522,7 +2459,7 @@ function SubjectPickerInline({
         <button
           type="button"
           disabled={!canReadGroups}
-          className={`app-text-control rounded-md px-2.5 py-1 ${
+          className={`app-text-control rounded px-2 py-0.5 ${
             tab === 'group'
               ? 'bg-app-surface-sidebar text-app-ink'
               : 'text-app-ink/60 hover:text-app-ink disabled:cursor-not-allowed disabled:text-app-ink/30'
@@ -2533,17 +2470,17 @@ function SubjectPickerInline({
         </button>
         <button
           type="button"
-          className="app-text-control ml-auto rounded-md px-2.5 py-1 text-app-accent hover:bg-app-accent/10"
+          className="app-text-control ml-auto rounded px-2 py-0.5 text-app-accent hover:bg-app-accent/10"
           onClick={onOpenDirectory}
         >
-          📂 임직원 디렉터리에서 찾기
+          임직원 디렉터리 열기
         </button>
       </div>
 
-      <div className="flex items-center gap-2 rounded-md border border-app-border bg-app-surface-sidebar px-2 py-1.5">
-        <Search size={14} className="text-app-ink/50" />
+      <div className="flex items-center gap-2 rounded-md border border-app-border bg-app-surface-sidebar px-2 py-1">
+        <Search size={12} className="text-app-ink/50" />
         <input
-          className="app-text-body flex-1 bg-transparent text-app-ink outline-none placeholder:text-app-ink/40"
+          className="app-text-body-sm flex-1 bg-transparent text-app-ink outline-none placeholder:text-app-ink/40"
           placeholder={tab === 'user' ? '이름 또는 이메일' : '그룹 이름'}
           value={query}
           onChange={(event) => setQuery(event.target.value)}
@@ -2551,12 +2488,12 @@ function SubjectPickerInline({
         />
       </div>
 
-      <div className="max-h-[260px] overflow-y-auto rounded-md border border-app-border bg-app-bg">
+      <div className="max-h-[240px] overflow-y-auto rounded-md border border-app-border bg-app-bg">
         {tab === 'user' ? (
           loading && candidates.length === 0 ? (
-            <div className="app-text-caption px-3 py-4 text-app-ink/60">불러오는 중...</div>
+            <div className="app-text-caption px-3 py-3 text-app-ink/60">불러오는 중...</div>
           ) : candidates.filter((c) => !excludeIds.has(c.id)).length === 0 ? (
-            <div className="app-text-caption px-3 py-4 text-app-ink/60">결과 없음</div>
+            <div className="app-text-caption px-3 py-3 text-app-ink/60">결과 없음</div>
           ) : (
             candidates
               .filter((c) => !excludeIds.has(c.id))
@@ -2565,7 +2502,7 @@ function SubjectPickerInline({
                 return (
                   <label
                     key={candidate.id}
-                    className="flex w-full cursor-pointer items-center gap-3 border-b border-app-border px-3 py-2 transition-colors last:border-b-0 hover:bg-app-surface-sidebar"
+                    className="app-text-body-sm flex w-full cursor-pointer items-center gap-2 border-b border-app-border/50 px-2 py-1 transition-colors last:border-b-0 hover:bg-app-surface-sidebar"
                   >
                     <input
                       type="checkbox"
@@ -2581,36 +2518,27 @@ function SubjectPickerInline({
                         )
                       }
                     />
-                    <div
-                      className={`flex h-8 w-8 items-center justify-center rounded-full text-xs font-semibold text-white ${avatarColorFromSeed(`user:${candidate.id}`)}`}
-                    >
-                      {memberInitials(candidate.full_name || candidate.email)}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="truncate text-app-ink">
-                        {candidate.full_name || candidate.email}
-                      </div>
-                      <div className="app-text-caption truncate text-app-ink/60">
-                        {candidate.email}
-                      </div>
-                    </div>
+                    <span className="font-medium text-app-ink">
+                      {candidate.full_name || candidate.email}
+                    </span>
+                    <span className="ml-1 truncate text-app-ink/50">{candidate.email}</span>
                   </label>
                 );
               })
           )
         ) : !canReadGroups ? (
-          <div className="app-text-caption px-3 py-4 text-app-ink/60">
+          <div className="app-text-caption px-3 py-3 text-app-ink/60">
             그룹 디렉터리 읽기 권한이 없습니다.
           </div>
         ) : filteredGroups.length === 0 ? (
-          <div className="app-text-caption px-3 py-4 text-app-ink/60">결과 없음</div>
+          <div className="app-text-caption px-3 py-3 text-app-ink/60">결과 없음</div>
         ) : (
           filteredGroups.map((group) => {
             const checked = selection.groups.has(group.id);
             return (
               <label
                 key={group.id}
-                className="flex w-full cursor-pointer items-center gap-3 border-b border-app-border px-3 py-2 transition-colors last:border-b-0 hover:bg-app-surface-sidebar"
+                className="app-text-body-sm flex w-full cursor-pointer items-center gap-2 border-b border-app-border/50 px-2 py-1 transition-colors last:border-b-0 hover:bg-app-surface-sidebar"
               >
                 <input
                   type="checkbox"
@@ -2626,13 +2554,9 @@ function SubjectPickerInline({
                     )
                   }
                 />
-                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-app-accent text-xs font-semibold text-white">
-                  <UsersIcon size={14} />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <div className="truncate text-app-ink">{group.name}</div>
-                  <div className="app-text-caption truncate text-app-ink/60">{group.slug}</div>
-                </div>
+                <UsersIcon size={11} className="text-app-ink/50" />
+                <span className="font-medium text-app-ink">{group.name}</span>
+                <span className="ml-1 truncate text-app-ink/50">{group.slug}</span>
               </label>
             );
           })
@@ -3020,31 +2944,23 @@ function WorkspaceMembersDrawer({
                     />
                   ) : null}
                 </th>
-                <th className="app-text-overline px-3 py-2 text-left text-app-ink/60">
-                  이름
-                </th>
-                <th className="app-text-overline px-3 py-2 text-left text-app-ink/60">
-                  Role
-                </th>
-                <th className="app-text-overline px-3 py-2 text-left text-app-ink/60">
-                  상태
-                </th>
-                <th className="app-text-overline px-3 py-2 text-left text-app-ink/60">
-                  최근 로그인
-                </th>
-                <th className="w-12 px-3 py-2"></th>
+                <th className="app-text-overline px-2 py-1.5 text-left text-app-ink/60">이름</th>
+                <th className="app-text-overline px-2 py-1.5 text-left text-app-ink/60">Role</th>
+                <th className="app-text-overline px-2 py-1.5 text-left text-app-ink/60">상태</th>
+                <th className="app-text-overline px-2 py-1.5 text-left text-app-ink/60">최근</th>
+                <th className="w-10 px-2 py-1.5"></th>
               </tr>
             </thead>
             <tbody>
               {loading && !data ? (
                 <tr>
-                  <td colSpan={6} className="px-3 py-10 text-center text-app-ink/60">
+                  <td colSpan={6} className="px-2 py-8 text-center text-app-ink/60">
                     불러오는 중...
                   </td>
                 </tr>
               ) : (data?.items.length ?? 0) === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-3 py-10 text-center text-app-ink/60">
+                  <td colSpan={6} className="px-2 py-8 text-center text-app-ink/60">
                     표시할 멤버가 없습니다.
                   </td>
                 </tr>
@@ -3053,10 +2969,9 @@ function WorkspaceMembersDrawer({
                   const key = `${item.subject_type}:${item.subject_id}`;
                   const isSelf =
                     item.subject_type === 'user' && item.subject_id === currentUserId;
-                  const seed = `${item.subject_type}:${item.subject_id}`;
                   return (
-                    <tr key={key} className="border-t border-app-border">
-                      <td className="px-3 py-2">
+                    <tr key={key} className="border-b border-app-border/50">
+                      <td className="px-2 py-1">
                         {canManage && !isSelf ? (
                           <input
                             type="checkbox"
@@ -3065,63 +2980,48 @@ function WorkspaceMembersDrawer({
                           />
                         ) : null}
                       </td>
-                      <td className="px-3 py-2">
-                        <div className="flex items-center gap-3">
-                          <div
-                            className={`flex h-8 w-8 items-center justify-center rounded-full text-xs font-semibold text-white ${
-                              item.subject_type === 'group'
-                                ? 'bg-app-accent'
-                                : avatarColorFromSeed(seed)
-                            }`}
-                          >
-                            {item.subject_type === 'group' ? (
-                              <UsersIcon size={14} />
-                            ) : (
-                              memberInitials(item.subject_label)
-                            )}
-                          </div>
-                          <div className="min-w-0">
-                            <div className="truncate font-medium text-app-ink">
-                              {item.subject_label}
-                              {isSelf ? (
-                                <span className="app-text-caption ml-1 text-app-ink/50">
-                                  (본인)
-                                </span>
-                              ) : null}
-                            </div>
-                            <div className="app-text-caption truncate text-app-ink/60">
-                              {item.subject_secondary ?? '-'}
-                            </div>
-                          </div>
-                        </div>
+                      <td className="app-text-body-sm px-2 py-1">
+                        {item.subject_type === 'group' ? (
+                          <UsersIcon
+                            size={11}
+                            className="mr-1 inline text-app-ink/50 align-text-bottom"
+                          />
+                        ) : null}
+                        <span className="font-medium text-app-ink">{item.subject_label}</span>
+                        {item.subject_secondary ? (
+                          <span className="ml-2 text-app-ink/50">{item.subject_secondary}</span>
+                        ) : null}
+                        {isSelf ? (
+                          <span className="ml-2 text-app-ink/40">(본인)</span>
+                        ) : null}
                       </td>
-                      <td className="px-3 py-2">
+                      <td className="px-2 py-1">
                         <MemberRoleBadge role={item.role} />
                       </td>
-                      <td className="px-3 py-2">
+                      <td className="app-text-body-sm px-2 py-1">
                         {item.subject_type === 'group' ? (
-                          <span className="app-text-caption text-app-ink/60">그룹</span>
+                          <span className="text-app-ink/60">그룹</span>
                         ) : item.user_status === 'invited' ? (
-                          <Badge tone="amber">초대 대기</Badge>
+                          <Badge tone="amber">초대</Badge>
                         ) : item.user_status === 'suspended' ? (
                           <Badge tone="amber">정지</Badge>
                         ) : (
-                          <Badge tone="green">활성</Badge>
+                          <span className="text-app-ink/60">활성</span>
                         )}
                       </td>
-                      <td className="app-text-caption px-3 py-2 text-app-ink/60">
+                      <td className="app-text-caption px-2 py-1 text-app-ink/60">
                         {formatDateLabel(item.last_login_at)}
                       </td>
-                      <td className="px-3 py-2 text-right">
+                      <td className="px-2 py-1 text-right">
                         {canManage && !isSelf && item.role !== 'owner' ? (
                           <DropdownMenu
                             trigger={
                               <button
                                 type="button"
-                                className="rounded-md p-1.5 text-app-ink/60 transition-colors hover:bg-app-surface-sidebar hover:text-app-ink"
+                                className="rounded p-1 text-app-ink/60 transition-colors hover:bg-app-surface-sidebar hover:text-app-ink"
                                 aria-label="멤버 작업"
                               >
-                                <MoreHorizontal size={16} />
+                                <MoreHorizontal size={14} />
                               </button>
                             }
                             items={[
@@ -3283,13 +3183,11 @@ function AppToggleRow({
 }) {
   const Icon = APP_ICONS[appCode] ?? FileText;
   return (
-    <div className="flex items-center gap-3 px-4 py-3">
-      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-app-surface-sidebar text-app-ink/70">
-        <Icon size={16} />
-      </div>
+    <div className="flex items-center gap-2 px-3 py-1.5">
+      <Icon size={14} className="shrink-0 text-app-ink/60" />
       <div className="min-w-0 flex-1">
-        <div className="font-medium text-app-ink">{label}</div>
-        <div className="app-text-caption text-app-ink/60">{description}</div>
+        <span className="app-text-body-sm font-medium text-app-ink">{label}</span>
+        <span className="app-text-caption ml-2 text-app-ink/50">{description}</span>
       </div>
       <ToggleSwitch
         ariaLabel={`${label} 토글`}
@@ -3745,12 +3643,12 @@ function WorkspacesSection({ token }: { token: string }) {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-3">
       <SectionMessage error={error} message={message} />
 
-      <div className="grid gap-6 lg:grid-cols-[300px_1fr]">
-        <aside className="overflow-hidden rounded-2xl border border-app-border bg-app-bg">
-          <div className="flex items-center justify-between gap-2 px-4 pt-4">
+      <div className="grid gap-3 lg:grid-cols-[260px_1fr]">
+        <aside className="overflow-hidden rounded-md border border-app-border bg-app-bg">
+          <div className="flex items-center justify-between gap-2 border-b border-app-border px-3 py-2">
             <h2 className="app-text-overline uppercase tracking-wide text-app-ink/60">
               Workspaces · {workspaces.length}
             </h2>
@@ -3758,18 +3656,18 @@ function WorkspacesSection({ token }: { token: string }) {
               <button
                 type="button"
                 onClick={() => setCreateOpen(true)}
-                className="rounded-md p-1.5 text-app-ink/60 transition-colors hover:bg-app-surface-sidebar hover:text-app-ink"
+                className="rounded p-1 text-app-ink/60 transition-colors hover:bg-app-surface-sidebar hover:text-app-ink"
                 aria-label="새 워크스페이스 만들기"
               >
-                <Plus size={16} />
+                <Plus size={14} />
               </button>
             ) : null}
           </div>
-          <div className="space-y-2 px-4 pt-3 pb-3">
-            <div className="flex items-center gap-2 rounded-md border border-app-border bg-app-surface-sidebar px-2 py-1.5">
-              <Search size={14} className="text-app-ink/50" />
+          <div className="space-y-1.5 px-3 py-2">
+            <div className="flex items-center gap-2 rounded-md border border-app-border bg-app-surface-sidebar px-2 py-1">
+              <Search size={12} className="text-app-ink/50" />
               <input
-                className="app-text-body flex-1 bg-transparent text-app-ink outline-none placeholder:text-app-ink/40"
+                className="app-text-body-sm flex-1 bg-transparent text-app-ink outline-none placeholder:text-app-ink/40"
                 placeholder="이름, key 검색"
                 value={searchQuery}
                 onChange={(event) => setSearchQuery(event.target.value)}
@@ -3789,10 +3687,10 @@ function WorkspacesSection({ token }: { token: string }) {
               </TabsList>
             </Tabs>
           </div>
-          <div className="max-h-[640px] overflow-y-auto pb-2">
+          <div className="max-h-[640px] overflow-y-auto pb-1">
             {filteredWorkspaces.length === 0 ? (
-              <div className="px-4 py-10 text-center text-app-ink/60">
-                <p className="app-text-body">표시할 워크스페이스가 없습니다.</p>
+              <div className="px-3 py-8 text-center text-app-ink/60">
+                <p className="app-text-body-sm">표시할 워크스페이스가 없습니다.</p>
               </div>
             ) : (
               filteredWorkspaces.map((workspace) => {
@@ -3802,27 +3700,26 @@ function WorkspacesSection({ token }: { token: string }) {
                     key={workspace.id}
                     type="button"
                     onClick={() => setSelectedWorkspaceId(workspace.id)}
-                    className={`relative flex w-full items-center gap-2.5 px-4 py-2 text-left transition-colors ${
+                    className={`relative flex w-full items-center gap-2 px-3 py-1.5 text-left transition-colors ${
                       isSelected
                         ? 'bg-app-accent/10 text-app-ink'
                         : 'text-app-ink/85 hover:bg-app-surface-sidebar'
                     }`}
                   >
                     {isSelected ? (
-                      <span className="absolute left-0 top-1.5 bottom-1.5 w-[3px] rounded-r bg-app-accent" />
+                      <span className="absolute left-0 top-1 bottom-1 w-[3px] rounded-r bg-app-accent" />
                     ) : null}
-                    <div className="relative flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-app-surface-sidebar text-[11px] font-semibold text-app-ink/80">
-                      {workspaceInitials(workspace.name)}
-                      <span
-                        className={`absolute -bottom-0.5 -right-0.5 h-2 w-2 rounded-full border-2 border-app-bg ${
-                          workspace.active ? 'bg-emerald-500' : 'bg-app-ink/30'
-                        }`}
-                      />
-                    </div>
+                    <span
+                      className={`h-1.5 w-1.5 shrink-0 rounded-full ${
+                        workspace.active ? 'bg-emerald-500' : 'bg-app-ink/30'
+                      }`}
+                    />
                     <div className="min-w-0 flex-1">
-                      <div className="truncate font-medium text-app-ink">{workspace.name}</div>
+                      <div className="app-text-body-sm truncate font-medium text-app-ink">
+                        {workspace.name}
+                      </div>
                       <div className="app-text-caption truncate text-app-ink/50">
-                        {workspace.member_count} 멤버 · {workspace.enabled_apps.length} 앱
+                        {workspace.key} · {workspace.member_count}명 · {workspace.enabled_apps.length}앱
                       </div>
                     </div>
                   </button>
@@ -3832,7 +3729,7 @@ function WorkspacesSection({ token }: { token: string }) {
           </div>
         </aside>
 
-        <section className="flex min-h-[560px] flex-col overflow-hidden rounded-2xl border border-app-border bg-app-bg">
+        <section className="flex min-h-[560px] flex-col overflow-hidden rounded-md border border-app-border bg-app-bg">
           {!selectedWorkspace ? (
             <div className="flex h-full items-center justify-center px-8 py-16 text-center text-app-ink/60">
               <div className="space-y-2">
@@ -3846,14 +3743,11 @@ function WorkspacesSection({ token }: { token: string }) {
             <>
               <div className="custom-scrollbar min-h-0 flex-1 overflow-y-auto">
                 {/* Hero */}
-                <header className="border-b border-app-border px-6 py-6">
-                  <div className="flex items-start gap-4">
-                    <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-app-surface-sidebar text-base font-semibold text-app-ink">
-                      {workspaceInitials(selectedWorkspace.name)}
-                    </div>
+                <header className="border-b border-app-border px-4 py-3">
+                  <div className="flex items-start gap-3">
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-2">
-                        <h2 className="app-text-title-lg truncate text-app-ink">
+                        <h2 className="app-text-title-md truncate text-app-ink">
                           {selectedWorkspace.name}
                         </h2>
                         {selectedWorkspace.active ? (
@@ -3861,9 +3755,7 @@ function WorkspacesSection({ token }: { token: string }) {
                         ) : (
                           <Badge tone="amber">보관됨</Badge>
                         )}
-                      </div>
-                      <div className="mt-1.5 flex items-center gap-1.5 text-app-ink/60">
-                        <code className="app-text-caption rounded bg-app-surface-sidebar px-1.5 py-0.5 font-mono">
+                        <code className="app-text-caption rounded bg-app-surface-sidebar px-1.5 py-0.5 font-mono text-app-ink/70">
                           {selectedWorkspace.key}
                         </code>
                         <button
@@ -3876,18 +3768,18 @@ function WorkspacesSection({ token }: { token: string }) {
                               flashError('Key 를 복사하지 못했습니다.');
                             }
                           }}
-                          className="rounded p-1 text-app-ink/50 transition-colors hover:bg-app-surface-sidebar hover:text-app-ink"
+                          className="rounded p-0.5 text-app-ink/50 transition-colors hover:bg-app-surface-sidebar hover:text-app-ink"
                           aria-label="Key 복사"
                         >
-                          <Copy size={12} />
+                          <Copy size={11} />
                         </button>
-                        <span className="app-text-caption text-app-ink/40">
+                        <span className="app-text-caption text-app-ink/50">
                           · 멤버 {selectedWorkspace.member_count} · 만든 날짜{' '}
                           {formatDateLabel(selectedWorkspace.created_at)}
                         </span>
                       </div>
                       {selectedWorkspace.description ? (
-                        <p className="app-text-body mt-3 whitespace-pre-wrap text-app-ink/85">
+                        <p className="app-text-body-sm mt-1 whitespace-pre-wrap text-app-ink/85">
                           {selectedWorkspace.description}
                         </p>
                       ) : canManage ? (
@@ -3897,7 +3789,7 @@ function WorkspacesSection({ token }: { token: string }) {
                             setEditError(null);
                             setEditOpen(true);
                           }}
-                          className="app-text-body mt-3 italic text-app-ink/40 transition-colors hover:text-app-ink/70"
+                          className="app-text-body-sm mt-1 italic text-app-ink/40 transition-colors hover:text-app-ink/70"
                         >
                           + 설명 추가
                         </button>
@@ -3920,10 +3812,10 @@ function WorkspacesSection({ token }: { token: string }) {
                           trigger={
                             <button
                               type="button"
-                              className="rounded-md p-1.5 text-app-ink/70 transition-colors hover:bg-app-surface-sidebar hover:text-app-ink"
+                              className="rounded p-1 text-app-ink/70 transition-colors hover:bg-app-surface-sidebar hover:text-app-ink"
                               aria-label="워크스페이스 작업"
                             >
-                              <MoreHorizontal size={18} />
+                              <MoreHorizontal size={16} />
                             </button>
                           }
                           items={[
@@ -3979,19 +3871,16 @@ function WorkspacesSection({ token }: { token: string }) {
                 </header>
 
                 {/* Apps */}
-                <section className="border-b border-app-border px-6 py-5">
-                  <div className="mb-3 flex items-end justify-between">
-                    <div>
-                      <h3 className="app-text-title-sm text-app-ink">앱</h3>
-                      <p className="app-text-caption mt-0.5 text-app-ink/60">
-                        이 워크스페이스에서 노출할 앱을 켜고 끕니다.
-                      </p>
-                    </div>
-                    <span className="app-text-caption text-app-ink/50">
-                      {selectedEnabledApps.length} / {APP_ORDER.length} 활성
-                    </span>
+                <section className="border-b border-app-border px-4 py-3">
+                  <div className="mb-2 flex items-center justify-between">
+                    <h3 className="app-text-control text-app-ink">
+                      앱{' '}
+                      <span className="app-text-caption ml-1 text-app-ink/50">
+                        {selectedEnabledApps.length} / {APP_ORDER.length} 활성
+                      </span>
+                    </h3>
                   </div>
-                  <div className="divide-y divide-app-border rounded-xl border border-app-border bg-app-bg">
+                  <div className="divide-y divide-app-border rounded-md border border-app-border bg-app-bg">
                     {APP_ORDER.map((appCode) => {
                       const label =
                         WORKSPACE_ENABLED_APP_LABELS[
@@ -4024,16 +3913,14 @@ function WorkspacesSection({ token }: { token: string }) {
 
                 {/* Groups (small set, all shown) */}
                 {groupBindings.length > 0 ? (
-                  <section className="border-b border-app-border px-6 py-5">
-                    <div className="mb-3">
-                      <h3 className="app-text-title-sm text-app-ink">
-                        그룹 ({groupBindings.length})
-                      </h3>
-                      <p className="app-text-caption mt-0.5 text-app-ink/60">
-                        그룹의 사용자에게 권한이 자동 상속됩니다.
-                      </p>
-                    </div>
-                    <div className="divide-y divide-app-border rounded-xl border border-app-border bg-app-bg">
+                  <section className="border-b border-app-border px-4 py-3">
+                    <h3 className="app-text-control mb-2 text-app-ink">
+                      그룹{' '}
+                      <span className="app-text-caption ml-1 text-app-ink/50">
+                        {groupBindings.length}개 · 사용자에게 권한 상속
+                      </span>
+                    </h3>
+                    <div className="divide-y divide-app-border rounded-md border border-app-border bg-app-bg">
                       {groupBindings.map((binding) => (
                         <WorkspaceMemberRow
                           key={`${binding.subject_type}-${binding.subject_id}`}
@@ -4052,41 +3939,39 @@ function WorkspacesSection({ token }: { token: string }) {
                 ) : null}
 
                 {/* Members preview + add panel + open drawer */}
-                <section className="px-6 py-5">
-                  <div className="mb-3 flex items-center justify-between gap-2">
-                    <div>
-                      <h3 className="app-text-title-sm text-app-ink">
-                        멤버 ({selectedWorkspace.member_count})
-                      </h3>
-                      <p className="app-text-caption mt-0.5 text-app-ink/60">
-                        owner 와 admin 미리보기. 전체 검색·필터·제거는 [멤버 관리] 를 누르세요.
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-2">
+                <section className="px-4 py-3">
+                  <div className="mb-2 flex items-center justify-between gap-2">
+                    <h3 className="app-text-control text-app-ink">
+                      멤버{' '}
+                      <span className="app-text-caption ml-1 text-app-ink/50">
+                        {selectedWorkspace.member_count}명 · owner+admin 미리보기
+                      </span>
+                    </h3>
+                    <div className="flex items-center gap-1.5">
                       {canManage ? (
                         <Button
                           variant="primary"
                           onClick={() => setAddPanelOpen((current) => !current)}
                         >
-                          <Plus size={14} className="mr-1" />
+                          <Plus size={12} className="mr-1" />
                           멤버 추가
                         </Button>
                       ) : null}
                       <Button variant="ghost" onClick={() => setMembersDrawerOpen(true)}>
-                        <UsersIcon size={14} className="mr-1" />
+                        <UsersIcon size={12} className="mr-1" />
                         멤버 관리
                       </Button>
                     </div>
                   </div>
 
                   {addPanelOpen && canManage ? (
-                    <div className="mb-4 rounded-xl border border-app-accent/40 bg-app-accent/5 p-4">
-                      <div className="mb-3 flex items-center justify-between">
+                    <div className="mb-3 rounded-md border border-app-accent/40 bg-app-accent/5 p-3">
+                      <div className="mb-2 flex items-center justify-between">
                         <h4 className="app-text-control text-app-ink">새 멤버 추가</h4>
                         <button
                           type="button"
                           onClick={resetAddPanel}
-                          className="rounded p-1 text-app-ink/60 hover:bg-app-surface-sidebar hover:text-app-ink"
+                          className="rounded p-0.5 text-app-ink/60 hover:bg-app-surface-sidebar hover:text-app-ink"
                           aria-label="닫기"
                         >
                           ×
@@ -4102,10 +3987,10 @@ function WorkspacesSection({ token }: { token: string }) {
                         canReadGroups={canReadGroups}
                         onOpenDirectory={() => setAddPickerOpen(true)}
                       />
-                      <div className="mt-3 space-y-3">
+                      <div className="mt-2 space-y-2">
                         <div>
-                          <div className="app-text-caption mb-1.5 text-app-ink/60">
-                            선택한 사용자 ({selectionSize(addSelection)})
+                          <div className="app-text-caption mb-1 text-app-ink/60">
+                            선택 ({selectionSize(addSelection)})
                           </div>
                           <SelectedSubjectsBar
                             selection={addSelection}
@@ -4126,7 +4011,7 @@ function WorkspacesSection({ token }: { token: string }) {
                               }))}
                             />
                           </div>
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-1.5">
                             <Button variant="ghost" onClick={resetAddPanel} disabled={addBusy}>
                               취소
                             </Button>
@@ -4145,18 +4030,16 @@ function WorkspacesSection({ token }: { token: string }) {
                     </div>
                   ) : null}
                   {previewBindings.length === 0 ? (
-                    <div className="rounded-xl border border-dashed border-app-border bg-app-bg px-4 py-10 text-center">
-                      <p className="app-text-body text-app-ink/60">
-                        아직 멤버가 없습니다.
-                      </p>
+                    <div className="rounded-md border border-dashed border-app-border bg-app-bg px-3 py-6 text-center">
+                      <p className="app-text-body-sm text-app-ink/60">아직 멤버가 없습니다.</p>
                       {canManage ? (
-                        <p className="app-text-caption mt-1 text-app-ink/40">
-                          [멤버 관리] 를 눌러 팀원을 추가하세요.
+                        <p className="app-text-caption mt-0.5 text-app-ink/40">
+                          [멤버 추가] 를 눌러 팀원을 등록하세요.
                         </p>
                       ) : null}
                     </div>
                   ) : (
-                    <div className="divide-y divide-app-border rounded-xl border border-app-border bg-app-bg">
+                    <div className="divide-y divide-app-border rounded-md border border-app-border bg-app-bg">
                       {previewBindings.map((binding) => (
                         <WorkspaceMemberRow
                           key={`${binding.subject_type}-${binding.subject_id}`}
@@ -4177,9 +4060,9 @@ function WorkspacesSection({ token }: { token: string }) {
                         <button
                           type="button"
                           onClick={() => setMembersDrawerOpen(true)}
-                          className="app-text-body w-full px-4 py-3 text-left text-app-accent transition-colors hover:bg-app-surface-sidebar"
+                          className="app-text-body-sm w-full px-3 py-1.5 text-left text-app-accent transition-colors hover:bg-app-surface-sidebar"
                         >
-                          전체 {selectedWorkspace.member_count} 명 보기 →
+                          전체 {selectedWorkspace.member_count}명 보기 →
                         </button>
                       ) : null}
                     </div>

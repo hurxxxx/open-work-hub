@@ -46,6 +46,7 @@ export interface WorkspaceBindingItem {
   subject_id: string;
   subject_type: 'user' | 'group';
   subject_label: string;
+  subject_secondary?: string | null;
   role: string;
 }
 
