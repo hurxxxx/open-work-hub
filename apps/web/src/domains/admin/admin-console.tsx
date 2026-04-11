@@ -2820,7 +2820,7 @@ function WorkspaceMembersDrawer({
       onOpenChange={onOpenChange}
       title={`${workspace.name} 멤버 관리`}
       description="검색, 필터, 일괄 작업으로 워크스페이스 멤버를 관리합니다."
-      maxWidth="max-w-4xl"
+      maxWidth="max-w-[1600px]"
       dismissOnInteractOutside={false}
     >
       <div className="space-y-4">
