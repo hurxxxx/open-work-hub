@@ -1184,16 +1184,50 @@ export const SubSidebar = ({ activeAppId, activeNavItemId }: { activeAppId: stri
   }, [activeNavItemId, navigate, pmsLists, token]);
 
   const groupedSpaces = useMemo(() => {
-    const folderMap = new Map(pmsFolders.map((folder) => [folder.id, folder]));
-    const spaces = new Map<string, { id: string; name: string; rootLists: PmsList[]; folders: Map<string, FolderWithLists> }>();
+    type SpaceGroup = {
+      team: PmsSpace;
+      rootLists: PmsList[];
+      folders: Map<string, FolderWithLists>;
+    };
 
+    const folderMap = new Map(pmsFolders.map((folder) => [folder.id, folder]));
+    const spaces = new Map<string, SpaceGroup>();
+
+    // Preserve the full PmsSpace object (including ``current_user_role``)
+    // so downstream code can evaluate permissions via ``canManageSpace``.
+    // Earlier this collector only copied ``{id, name}`` which silently
+    // stripped the role and made the "+ / …" context menu disappear for
+    // every space, even for its owner.
     for (const team of pmsTeams) {
       spaces.set(team.id, {
-        id: team.id,
-        name: team.name,
+        team,
         rootLists: [],
         folders: new Map(),
       });
+    }
+
+    function ensureGroup(teamId: string, fallbackName: string): SpaceGroup {
+      const existing = spaces.get(teamId);
+      if (existing) return existing;
+      const placeholder: PmsSpace = {
+        id: teamId,
+        workspace_id: '',
+        workspace_key: '',
+        key: '',
+        name: fallbackName,
+        description: '',
+        member_count: 0,
+        current_user_role: null,
+        created_at: '',
+        updated_at: '',
+      };
+      const created: SpaceGroup = {
+        team: placeholder,
+        rootLists: [],
+        folders: new Map<string, FolderWithLists>(),
+      };
+      spaces.set(teamId, created);
+      return created;
     }
 
     for (const list of pmsLists) {
@@ -1201,12 +1235,7 @@ export const SubSidebar = ({ activeAppId, activeNavItemId }: { activeAppId: stri
         continue;
       }
 
-      const current = spaces.get(list.team_id) ?? {
-        id: list.team_id,
-        name: list.team_name ?? 'Untitled Space',
-        rootLists: [],
-        folders: new Map<string, FolderWithLists>(),
-      };
+      const current = ensureGroup(list.team_id, list.team_name ?? 'Untitled Space');
       if (list.folder_id && folderMap.has(list.folder_id)) {
         const folder = folderMap.get(list.folder_id);
         if (folder) {
@@ -1219,28 +1248,19 @@ export const SubSidebar = ({ activeAppId, activeNavItemId }: { activeAppId: stri
       } else {
         current.rootLists.push(list);
       }
-
-      spaces.set(current.id, current);
     }
 
     for (const folder of pmsFolders) {
       if (!folder.team_id) continue;
-      const current = spaces.get(folder.team_id) ?? {
-        id: folder.team_id,
-        name: 'Untitled Space',
-        rootLists: [],
-        folders: new Map<string, FolderWithLists>(),
-      };
+      const current = ensureGroup(folder.team_id, 'Untitled Space');
       if (!current.folders.has(folder.id)) {
         current.folders.set(folder.id, { folder, lists: [] });
       }
-      spaces.set(current.id, current);
     }
 
     return Array.from(spaces.values())
       .map((space) => ({
-        id: space.id,
-        name: space.name,
+        ...space.team,
         rootLists: [...space.rootLists].sort((left, right) => left.name.localeCompare(right.name, 'ko')),
         folders: Array.from(space.folders.values())
           .map((entry) => ({
