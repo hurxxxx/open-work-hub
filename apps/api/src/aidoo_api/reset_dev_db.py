@@ -50,13 +50,22 @@ def main() -> None:
         )
 
     from aidoo_api.domains.auth import models as auth_models  # noqa: F401
+    from aidoo_api.domains.docs import models as docs_models  # noqa: F401
     from aidoo_api.domains.media import models as media_models  # noqa: F401
+    from aidoo_api.domains.meeting import models as meeting_models  # noqa: F401
     from aidoo_api.domains.pms import models as pms_models  # noqa: F401
 
+    # Drop and recreate the public schema wholesale instead of letting
+    # SQLAlchemy walk the metadata graph. drop_all() only knows about
+    # tables still declared in Base.metadata, so orphan tables (old PR
+    # leftovers like ``pms_docs`` from before the docs hub refactor) would
+    # block the reset with "DependentObjectsStillExist" FK errors. A
+    # schema-level drop guarantees the DB ends up in a known empty state
+    # before migrations re-materialize it.
     engine = get_engine()
-    Base.metadata.drop_all(bind=engine)
     with engine.begin() as connection:
-        connection.exec_driver_sql("DROP TABLE IF EXISTS alembic_version")
+        connection.exec_driver_sql("DROP SCHEMA public CASCADE")
+        connection.exec_driver_sql("CREATE SCHEMA public")
     run_migrations()
 
     with Session(engine) as session:
