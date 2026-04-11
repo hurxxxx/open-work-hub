@@ -10,7 +10,6 @@ import {
   Route,
   Routes,
   useLocation,
-  useNavigate,
   useParams,
 } from 'react-router-dom';
 import { MantineProvider } from '@mantine/core';
@@ -43,11 +42,11 @@ import {
   type ThemePreference,
 } from './domains/auth/auth-api';
 import {
-  buildWorkspaceAppPath,
-  getPreferredWorkspace,
-  getWorkspaceBySlug,
+  getWorkspaceAppIdFromPath,
   getWorkspaceSlugFromPath,
+  persistLastWorkspaceAppId,
   persistLastWorkspaceSlug,
+  resolveShellWorkspaceSlug,
   resolveDefaultWorkspaceAppPath,
   type WorkspaceAppId,
 } from './domains/workspaces/workspace-utils';
@@ -177,8 +176,9 @@ const AppContent = () => {
   const [systemDarkMode, setSystemDarkMode] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const currentUser = auth.user;
-  const currentWorkspaceSlug = getWorkspaceSlugFromPath(location.pathname);
-  const currentWorkspace = getWorkspaceBySlug(currentUser, currentWorkspaceSlug);
+  const routeWorkspaceSlug = getWorkspaceSlugFromPath(location.pathname);
+  const routeWorkspaceAppId = getWorkspaceAppIdFromPath(location.pathname);
+  const [shellWorkspaceSlug, setShellWorkspaceSlug] = useState<string | null>(null);
   const themePreference = currentUser?.theme_preference ?? 'system';
   const resolvedTheme = resolveThemePreference(themePreference, systemDarkMode);
 
@@ -208,8 +208,33 @@ const AppContent = () => {
   }, [currentUser, location.pathname]);
 
   useEffect(() => {
-    persistLastWorkspaceSlug(currentWorkspaceSlug);
-  }, [currentWorkspaceSlug]);
+    if (!currentUser) {
+      setShellWorkspaceSlug(null);
+      return;
+    }
+
+    if (routeWorkspaceSlug) {
+      setShellWorkspaceSlug(resolveShellWorkspaceSlug(currentUser, routeWorkspaceSlug));
+      return;
+    }
+
+    setShellWorkspaceSlug((current) => {
+      if (currentUser.workspaces.some((workspace) => workspace.slug === current)) {
+        return current;
+      }
+
+      return resolveShellWorkspaceSlug(currentUser, null);
+    });
+  }, [currentUser, routeWorkspaceSlug]);
+
+  useEffect(() => {
+    if (!routeWorkspaceSlug || !routeWorkspaceAppId) {
+      return;
+    }
+
+    persistLastWorkspaceSlug(routeWorkspaceSlug);
+    persistLastWorkspaceAppId(routeWorkspaceAppId);
+  }, [routeWorkspaceAppId, routeWorkspaceSlug]);
 
   if (!currentUser) {
     return <Navigate replace to="/login" />;
@@ -220,7 +245,9 @@ const AppContent = () => {
       <AppBar
         activeAppId={activeAppId}
         currentUser={currentUser}
-        currentWorkspaceSlug={currentWorkspaceSlug}
+        currentPathname={location.pathname}
+        onShellWorkspaceChange={setShellWorkspaceSlug}
+        shellWorkspaceSlug={shellWorkspaceSlug}
         onOpenAccount={() => setProfileOpen(true)}
       />
 
@@ -228,17 +255,10 @@ const AppContent = () => {
         <SubSidebar
           activeAppId={activeAppId}
           activeNavItemId={activeNavItemId}
-          currentWorkspaceSlug={currentWorkspaceSlug}
+          currentWorkspaceSlug={routeWorkspaceSlug}
         />
 
         <div className="flex-1 flex flex-col overflow-hidden bg-app-bg transition-colors">
-          {currentWorkspace ? (
-            <WorkspaceHeader
-              currentUser={currentUser}
-              currentWorkspaceSlug={currentWorkspace.slug}
-              title={currentWorkspace.name}
-            />
-          ) : null}
           <main className="flex-1 overflow-y-auto relative">
             <Routes>
             <Route path="/" element={<HomeView />} />
@@ -396,46 +416,5 @@ export default function App() {
         <ToastViewport />
       </ToastProvider>
     </MantineProvider>
-  );
-}
-
-function WorkspaceHeader({
-  currentUser,
-  currentWorkspaceSlug,
-  title,
-}: {
-  currentUser: NonNullable<ReturnType<typeof useAuth>['user']>;
-  currentWorkspaceSlug: string;
-  title: string;
-}) {
-  const navigate = useNavigate();
-  const location = useLocation();
-  const appMatch = location.pathname.match(/^\/w\/[^/]+\/(ai|pms|docs|planner|meeting)(?:\/|$)/);
-  const activeAppId = (appMatch?.[1] as WorkspaceAppId | undefined) ?? null;
-
-  return (
-    <div className="border-b border-app-border bg-app-bg px-6 py-3 flex items-center justify-between gap-4">
-      <div>
-        <div className="app-text-micro uppercase tracking-[0.08em] text-app-ink/50">Workspace</div>
-        <div className="app-text-body-sm text-app-ink">{title}</div>
-      </div>
-      <select
-        value={currentWorkspaceSlug}
-        onChange={(event) => {
-          const nextWorkspace = event.currentTarget.value;
-          const nextPath = activeAppId
-            ? buildWorkspaceAppPath(nextWorkspace, activeAppId)
-            : buildWorkspaceAppPath(nextWorkspace, 'docs');
-          navigate(nextPath);
-        }}
-        className="app-text-body-sm rounded-md border border-app-border bg-app-bg px-3 py-2 text-app-ink outline-none focus:border-app-accent"
-      >
-        {currentUser.workspaces.map((workspace) => (
-          <option key={workspace.id} value={workspace.slug}>
-            {workspace.name}
-          </option>
-        ))}
-      </select>
-    </div>
   );
 }

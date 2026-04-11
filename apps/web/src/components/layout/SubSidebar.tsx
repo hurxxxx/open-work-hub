@@ -842,6 +842,7 @@ export const SubSidebar = ({
     id: string;
     name: string;
     canManage: boolean;
+    currentUserRole: string | null;
   } | null>(null);
   const [createMenuOpen, setCreateMenuOpen] = useState(false);
   const createMenuRef = useRef<HTMLDivElement>(null);
@@ -1372,11 +1373,12 @@ export const SubSidebar = ({
                         onRenameSpace={(newName) => { void handleRenameSpace(space.id, newName); }}
                         onDeleteSpace={() => { void handleDeleteSpace(space.id); }}
                         onManageMembers={() => {
-                          setManageMembersSpace({
-                            id: space.id,
-                            name: space.name,
-                            canManage: spaceCanManage,
-                          });
+                              setManageMembersSpace({
+                                id: space.id,
+                                name: space.name,
+                                canManage: spaceCanManage,
+                                currentUserRole: space.current_user_role,
+                              });
                         }}
                         spaceDocs={spaceDocsMap.get(space.id) ?? []}
                         onRenameDoc={(pageId, newTitle) => { void handleRenameDoc(pageId, newTitle); }}
@@ -1707,6 +1709,7 @@ export const SubSidebar = ({
         spaceId={manageMembersSpace?.id ?? null}
         spaceName={manageMembersSpace?.name ?? ''}
         canManage={manageMembersSpace?.canManage ?? false}
+        currentUserRole={manageMembersSpace?.currentUserRole ?? null}
         onChanged={() => {
           if (token) {
             listSpaces(token)

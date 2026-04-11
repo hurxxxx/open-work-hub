@@ -4,7 +4,6 @@ import {
   CalendarDays,
   Check,
   Copy,
-  Crown,
   FileText,
   ListTodo,
   MoreHorizontal,
@@ -192,10 +191,8 @@ function formatUserWorkspaces(user: Pick<AuthUser, 'workspaces'>): string {
 }
 
 const WORKSPACE_ROLE_RANK_DISPLAY: Record<string, number> = {
-  owner: 0,
-  admin: 1,
-  member: 2,
-  viewer: 3,
+  admin: 0,
+  member: 1,
 };
 
 function UserWorkspaceChips({ user }: { user: Pick<AuthUser, 'workspaces'> }) {
@@ -213,7 +210,7 @@ function UserWorkspaceChips({ user }: { user: Pick<AuthUser, 'workspaces'> }) {
   return (
     <div className="flex flex-wrap items-center gap-1">
       {visible.map((workspace) => {
-        const isElevated = workspace.role === 'owner' || workspace.role === 'admin';
+        const isElevated = workspace.role === 'admin';
         return (
           <span
             key={workspace.id}
@@ -226,7 +223,7 @@ function UserWorkspaceChips({ user }: { user: Pick<AuthUser, 'workspaces'> }) {
           >
             <span>{workspace.name}</span>
             {isElevated ? (
-              <span className="opacity-70">{workspace.role === 'owner' ? '👑' : '🛡'}</span>
+              <span className="opacity-70">🛡</span>
             ) : null}
           </span>
         );
@@ -1698,10 +1695,8 @@ function PeopleSection({ token }: { token: string }) {
                       onChange={(event) => setSelectedPmsSpaceRole(event.target.value)}
                       value={selectedPmsSpaceRole}
                     >
-                      <option value="viewer">Viewer</option>
                       <option value="member">Member</option>
                       <option value="admin">Admin</option>
-                      <option value="owner">Owner</option>
                     </select>
                     <Button
                       disabled={isSavingUser || !selectedPmsSpaceId}
@@ -1769,10 +1764,8 @@ function PeopleSection({ token }: { token: string }) {
 type WorkspaceFilter = 'active' | 'archived' | 'all';
 
 const WORKSPACE_ROLE_OPTIONS: { value: string; label: string; description: string }[] = [
-  { value: 'owner', label: '소유자', description: '워크스페이스 전체 권한' },
   { value: 'admin', label: '관리자', description: '멤버와 설정 관리' },
   { value: 'member', label: '멤버', description: '워크스페이스 앱 사용' },
-  { value: 'viewer', label: '뷰어', description: '읽기 전용' },
 ];
 const WORKSPACE_ROLE_LABELS: Record<string, string> = WORKSPACE_ROLE_OPTIONS.reduce(
   (acc, option) => {
@@ -1782,10 +1775,8 @@ const WORKSPACE_ROLE_LABELS: Record<string, string> = WORKSPACE_ROLE_OPTIONS.red
   {} as Record<string, string>,
 );
 const WORKSPACE_ROLE_RANK: Record<string, number> = {
-  owner: 0,
-  admin: 1,
-  member: 2,
-  viewer: 3,
+  admin: 0,
+  member: 1,
 };
 
 const APP_DESCRIPTIONS: Record<string, string> = {
@@ -1798,14 +1789,6 @@ const APP_DESCRIPTIONS: Record<string, string> = {
 
 
 function MemberRoleBadge({ role }: { role: string }) {
-  if (role === 'owner') {
-    return (
-      <span className="app-text-caption inline-flex items-center gap-1 text-app-ink/70">
-        <Crown className="text-amber-500" size={12} />
-        소유자
-      </span>
-    );
-  }
   if (role === 'admin') {
     return (
       <span className="app-text-caption inline-flex items-center gap-1 text-app-ink/70">
@@ -1858,7 +1841,7 @@ function CreateWorkspaceModal({
       open={open}
       onOpenChange={onOpenChange}
       title="새 워크스페이스 만들기"
-      description="협업 공간을 생성합니다. 생성 직후 본인이 자동으로 owner 로 등록되고 기본 Team Space 가 함께 만들어집니다."
+      description="협업 공간을 생성합니다. 생성 직후 본인이 자동으로 admin 으로 등록되고 기본 Team Space 가 함께 만들어집니다."
       dismissOnInteractOutside={false}
       actions={
         <>
@@ -2016,7 +1999,6 @@ function WorkspaceMemberRow({
   onChangeRole: (role: string) => void;
   onRemove: () => void;
 }) {
-  const isOwner = binding.role === 'owner';
   const showMenu = canManage && !isCurrentUser;
   const items: Parameters<typeof DropdownMenu>[0]['items'] = [
     ...WORKSPACE_ROLE_OPTIONS.map((option) => ({
@@ -2067,7 +2049,7 @@ function WorkspaceMemberRow({
         </div>
       </div>
       <MemberRoleBadge role={binding.role} />
-      {showMenu && !isOwner ? (
+      {showMenu ? (
         <DropdownMenu
           trigger={
             <button
@@ -2847,7 +2829,7 @@ function WorkspaceMembersDrawer({
               setPendingOnly(false);
             }}
           />
-          {(['owner', 'admin', 'member', 'viewer'] as const).map((role) => (
+          {(['admin', 'member'] as const).map((role) => (
             <FilterChip
               key={role}
               label={`${WORKSPACE_ROLE_LABELS[role]} ${data?.role_counts[role] ?? 0}`}
@@ -3013,7 +2995,7 @@ function WorkspaceMembersDrawer({
                         {formatDateLabel(item.last_login_at)}
                       </td>
                       <td className="px-2 py-1 text-right">
-                        {canManage && !isSelf && item.role !== 'owner' ? (
+                        {canManage && !isSelf ? (
                           <DropdownMenu
                             trigger={
                               <button
@@ -3370,16 +3352,16 @@ function WorkspacesSection({ token }: { token: string }) {
 
   const previewBindings = useMemo(() => {
     const userBindings = sortedBindings.filter((binding) => binding.subject_type === 'user');
-    // Show owners + first few admins as preview (max 5).
+    // Show admins first as preview (max 5).
     const result: WorkspaceBindingItem[] = [];
     for (const binding of userBindings) {
-      if (binding.role === 'owner' || binding.role === 'admin') {
+      if (binding.role === 'admin') {
         result.push(binding);
       }
       if (result.length >= 5) break;
     }
     if (result.length === 0 && userBindings.length > 0) {
-      // No owners/admins among the loaded bindings — show top members instead.
+      // No admins among the loaded bindings — show top members instead.
       return userBindings.slice(0, 5);
     }
     return result;
@@ -3944,7 +3926,7 @@ function WorkspacesSection({ token }: { token: string }) {
                     <h3 className="app-text-control text-app-ink">
                       멤버{' '}
                       <span className="app-text-caption ml-1 text-app-ink/50">
-                        {selectedWorkspace.member_count}명 · owner+admin 미리보기
+                        {selectedWorkspace.member_count}명 · 관리자 미리보기
                       </span>
                     </h3>
                     <div className="flex items-center gap-1.5">
@@ -4458,7 +4440,7 @@ function SecuritySection({
               <input
                 className={fieldClassName}
                 onChange={(event) => setSystemRoles(event.target.value)}
-                placeholder="org_admin"
+                placeholder="platform_admin"
                 value={systemRoles}
               />
               <div className="flex justify-end">
@@ -4567,7 +4549,7 @@ function SecuritySection({
                 className={fieldClassName}
                 disabled={!canWriteGroups || !selectedTemplateGroup}
                 onChange={(event) => setGroupSystemRoles(event.target.value)}
-                placeholder="org_admin, platform_admin"
+                placeholder="platform_admin"
                 value={groupSystemRoles}
               />
               <label className="app-text-control inline-flex items-center gap-2 rounded-md border border-app-border bg-app-surface-sidebar px-3 py-2 text-app-ink">
@@ -4737,10 +4719,8 @@ function SecuritySection({
                       }}
                       value={binding?.role ?? 'member'}
                     >
-                      <option value="viewer">Viewer</option>
                       <option value="member">Member</option>
                       <option value="admin">Admin</option>
-                      <option value="owner">Owner</option>
                     </select>
                   </div>
                 );

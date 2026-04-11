@@ -36,10 +36,10 @@ def test_seed_preserves_user_created_space_membership(client: TestClient) -> Non
 
     _seed_dev_accounts()
 
-    # Log in as the seeded pms-member account and create a new PMS space.
+    # Log in as the seeded workspace member account and create a new PMS space.
     login_response = client.post(
         "/api/v1/auth/dev-login",
-        json={"account_key": "pms-member"},
+        json={"account_key": "delivery-hub-member"},
     )
     assert login_response.status_code == 200, login_response.text
     session = login_response.json()
@@ -113,10 +113,10 @@ def test_dev_login_is_idempotent_and_preserves_user_spaces(
 
     _seed_dev_accounts()
 
-    # pms-member creates a private space.
+    # delivery-hub-member creates a private space.
     login = client.post(
         "/api/v1/auth/dev-login",
-        json={"account_key": "pms-member"},
+        json={"account_key": "delivery-hub-member"},
     )
     assert login.status_code == 200
     token = login.json()["token"]
@@ -144,7 +144,7 @@ def test_dev_login_is_idempotent_and_preserves_user_spaces(
     assert owner_row() is not None
 
     # Simulate the dev flow: open login screen (bootstrap-status), then log
-    # in as platform-admin, then back to pms-member. Each of these calls
+    # in as platform-admin, then back to delivery-hub-member. Each of these calls
     # used to re-run ensure_dev_login_seed_data.
     for _ in range(3):
         assert (
@@ -158,7 +158,7 @@ def test_dev_login_is_idempotent_and_preserves_user_spaces(
         )
         assert (
             client.post(
-                "/api/v1/auth/dev-login", json={"account_key": "pms-member"}
+                "/api/v1/auth/dev-login", json={"account_key": "delivery-hub-member"}
             ).status_code
             == 200
         )
@@ -219,8 +219,8 @@ def test_seed_still_reconciles_default_space_membership(
     client: TestClient,
 ) -> None:
     """The seed loop should still enforce the team_role declared in
-    DEV_LOGIN_ACCOUNTS against the default PMS space — e.g. pms-member
-    should have a membership there, pms-viewer should be a viewer, and
+    DEV_LOGIN_ACCOUNTS against the default PMS space — e.g. delivery-hub-admin
+    should own the default space, delivery-hub-member should be a member, and
     platform-admin (team_role=None) should not have a membership there at all."""
     _seed_dev_accounts()
 
@@ -238,14 +238,14 @@ def test_seed_still_reconciles_default_space_membership(
                 select(TeamMember).where(TeamMember.user_id == user.id)
             )
 
-        pms_member_ms = membership_for("pms-member@aidoo.local")
-        pms_viewer_ms = membership_for("pms-viewer@aidoo.local")
+        delivery_hub_admin_ms = membership_for("delivery-hub-admin@aidoo.local")
+        delivery_hub_member_ms = membership_for("delivery-hub-member@aidoo.local")
         admin_ms = membership_for("platform-admin@aidoo.local")
 
-        assert pms_member_ms is not None, "pms-member should be seeded into default space"
-        assert pms_member_ms.role == "member"
-        assert pms_viewer_ms is not None
-        assert pms_viewer_ms.role == "viewer"
+        assert delivery_hub_admin_ms is not None, "delivery-hub-admin should own the default space"
+        assert delivery_hub_admin_ms.role == "owner"
+        assert delivery_hub_member_ms is not None, "delivery-hub-member should be seeded into default space"
+        assert delivery_hub_member_ms.role == "member"
         # platform-admin has team_role=None → no membership
         assert admin_ms is None
 
@@ -278,7 +278,7 @@ def test_dev_login_recreates_missing_dev_workspace_seeds(
 
     login_response = client.post(
         "/api/v1/auth/dev-login",
-        json={"account_key": "ai-member"},
+        json={"account_key": "innovation-lab-member"},
     )
     assert login_response.status_code == 200, login_response.text
     assert any(

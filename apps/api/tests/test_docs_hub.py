@@ -129,7 +129,7 @@ def test_docs_hub_reuses_pms_acl_and_blocks_resharing_of_source_docs(client: Tes
     )
     assert viewer_share_response.status_code == 404
 
-    member = _create_user(client, admin["token"], email="docs-member@aidoo.local", full_name="Docs Member User")
+    member = _create_user(client, admin["token"], email="docs-user@aidoo.local", full_name="Docs User")
     _grant_workspace_access(client, admin["token"], member["user"]["id"], "docs")
     _grant_workspace_access(client, admin["token"], member["user"]["id"], "pms")
     _add_project_member(client, admin["token"], project["id"], member["user"]["id"], "member")

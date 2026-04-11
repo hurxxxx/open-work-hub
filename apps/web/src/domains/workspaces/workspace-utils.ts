@@ -20,10 +20,21 @@ const WORKSPACE_API_PREFIXES = [
 ] as const;
 
 const LAST_WORKSPACE_STORAGE_KEY = 'aidoo:last-workspace-slug';
+const LAST_WORKSPACE_APP_STORAGE_KEY = 'aidoo:last-workspace-app';
+const WORKSPACE_APP_PATH_PATTERN = /^\/w\/[^/]+\/(ai|pms|docs|planner|meeting)(?:\/|$)/;
+
+function isWorkspaceAppId(value: string | null | undefined): value is WorkspaceAppId {
+  return (WORKSPACE_APP_IDS as readonly string[]).includes(value ?? '');
+}
 
 export function getWorkspaceSlugFromPath(pathname: string): string | null {
   const match = pathname.match(/^\/w\/([^/]+)(?:\/|$)/);
   return match?.[1] ? decodeURIComponent(match[1]) : null;
+}
+
+export function getWorkspaceAppIdFromPath(pathname: string): WorkspaceAppId | null {
+  const match = pathname.match(WORKSPACE_APP_PATH_PATTERN);
+  return isWorkspaceAppId(match?.[1]) ? match[1] : null;
 }
 
 export function getCurrentWorkspaceSlug(): string | null {
@@ -48,12 +59,35 @@ export function readLastWorkspaceSlug(): string | null {
   }
 }
 
+export function readLastWorkspaceAppId(): WorkspaceAppId | null {
+  if (typeof window === 'undefined') {
+    return null;
+  }
+  try {
+    const stored = window.localStorage.getItem(LAST_WORKSPACE_APP_STORAGE_KEY);
+    return isWorkspaceAppId(stored) ? stored : null;
+  } catch {
+    return null;
+  }
+}
+
 export function persistLastWorkspaceSlug(workspaceSlug: string | null | undefined): void {
   if (!workspaceSlug || typeof window === 'undefined') {
     return;
   }
   try {
     window.localStorage.setItem(LAST_WORKSPACE_STORAGE_KEY, workspaceSlug);
+  } catch {
+    return;
+  }
+}
+
+export function persistLastWorkspaceAppId(appId: WorkspaceAppId | null | undefined): void {
+  if (!appId || typeof window === 'undefined') {
+    return;
+  }
+  try {
+    window.localStorage.setItem(LAST_WORKSPACE_APP_STORAGE_KEY, appId);
   } catch {
     return;
   }
@@ -90,6 +124,23 @@ export function getPreferredWorkspace(
   return user?.workspaces?.[0] ?? null;
 }
 
+export function resolveShellWorkspaceSlug(
+  user: Pick<AuthUser, 'workspaces'> | null | undefined,
+  routeWorkspaceSlug: string | null | undefined,
+): string | null {
+  const routeWorkspace = getWorkspaceBySlug(user, routeWorkspaceSlug);
+  if (routeWorkspace) {
+    return routeWorkspace.slug;
+  }
+
+  const lastWorkspace = getWorkspaceBySlug(user, readLastWorkspaceSlug());
+  if (lastWorkspace) {
+    return lastWorkspace.slug;
+  }
+
+  return user?.workspaces?.[0]?.slug ?? null;
+}
+
 export function hasWorkspaceApp(
   user: Pick<AuthUser, 'workspaces'> | null | undefined,
   workspaceSlug: string | null | undefined,
@@ -118,6 +169,29 @@ export function resolveDefaultWorkspaceAppPath(
 ): string {
   const workspace = getPreferredWorkspace(user, appId);
   return workspace ? buildWorkspaceAppPath(workspace.slug, appId, suffix) : '/';
+}
+
+export function resolveWorkspaceSwitchPath(
+  user: Pick<AuthUser, 'workspaces'> | null | undefined,
+  pathname: string,
+  nextWorkspaceSlug: string,
+): string {
+  const nextWorkspace = getWorkspaceBySlug(user, nextWorkspaceSlug);
+  if (!nextWorkspace) {
+    return '/';
+  }
+
+  const currentAppId = getWorkspaceAppIdFromPath(pathname);
+  if (currentAppId && nextWorkspace.enabled_apps.includes(currentAppId)) {
+    return buildWorkspaceAppPath(nextWorkspace.slug, currentAppId);
+  }
+
+  const lastWorkspaceAppId = readLastWorkspaceAppId();
+  if (lastWorkspaceAppId && nextWorkspace.enabled_apps.includes(lastWorkspaceAppId)) {
+    return buildWorkspaceAppPath(nextWorkspace.slug, lastWorkspaceAppId);
+  }
+
+  return '/';
 }
 
 export function rewriteLegacyAppPath(

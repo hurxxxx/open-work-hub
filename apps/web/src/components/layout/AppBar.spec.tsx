@@ -1,14 +1,18 @@
+import { useState } from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, useLocation } from 'react-router-dom';
 import { vi } from 'vitest';
 
 import type { AuthUser } from '@/src/domains/auth/auth-api';
+import { resolveShellWorkspaceSlug } from '@/src/domains/workspaces/workspace-utils';
 import { AppBar } from './AppBar';
 
 const mockGetUnreadNotificationCount = vi.fn();
+const mockHasPermission = vi.fn();
 
 vi.mock('@/src/domains/auth/auth-provider', () => ({
   useAuth: () => ({
+    hasPermission: (permission: string) => mockHasPermission(permission),
     token: 'test-token',
   }),
 }));
@@ -42,17 +46,35 @@ function buildUser(overrides: Partial<AuthUser> = {}): AuthUser {
       {
         id: 'workspace-hq',
         slug: 'hq',
-        name: 'HQ',
+        name: 'Aidoo HQ',
+        role: 'owner',
+        enabled_apps: ['ai', 'docs', 'pms', 'planner', 'meeting'],
+      },
+      {
+        id: 'workspace-delivery-hub',
+        slug: 'delivery-hub',
+        name: 'Delivery Hub',
         role: 'member',
-        enabled_apps: ['ai', 'docs', 'pms', 'planner'],
+        enabled_apps: ['docs', 'meeting'],
+      },
+      {
+        id: 'workspace-innovation-lab',
+        slug: 'innovation-lab',
+        name: 'Innovation Lab',
+        role: 'member',
+        enabled_apps: ['docs'],
       },
     ],
     workspace_roles: [],
     app_access: [
-      { app: 'ai', workspace_id: 'workspace-ai', workspace_key: 'ai', workspace_name: 'AI Workspace', role: 'member' },
-      { app: 'docs', workspace_id: 'workspace-docs', workspace_key: 'docs', workspace_name: 'Docs Workspace', role: 'member' },
-      { app: 'pms', workspace_id: 'workspace-pms', workspace_key: 'pms', workspace_name: 'PMS Workspace', role: 'member' },
-      { app: 'planner', workspace_id: 'workspace-planner', workspace_key: 'planner', workspace_name: 'Planner Workspace', role: 'member' },
+      { app: 'ai', workspace_id: 'workspace-hq', workspace_key: 'hq', workspace_name: 'Aidoo HQ', role: 'owner' },
+      { app: 'docs', workspace_id: 'workspace-hq', workspace_key: 'hq', workspace_name: 'Aidoo HQ', role: 'owner' },
+      { app: 'pms', workspace_id: 'workspace-hq', workspace_key: 'hq', workspace_name: 'Aidoo HQ', role: 'owner' },
+      { app: 'planner', workspace_id: 'workspace-hq', workspace_key: 'hq', workspace_name: 'Aidoo HQ', role: 'owner' },
+      { app: 'meeting', workspace_id: 'workspace-hq', workspace_key: 'hq', workspace_name: 'Aidoo HQ', role: 'owner' },
+      { app: 'docs', workspace_id: 'workspace-delivery-hub', workspace_key: 'delivery-hub', workspace_name: 'Delivery Hub', role: 'member' },
+      { app: 'meeting', workspace_id: 'workspace-delivery-hub', workspace_key: 'delivery-hub', workspace_name: 'Delivery Hub', role: 'member' },
+      { app: 'docs', workspace_id: 'workspace-innovation-lab', workspace_key: 'innovation-lab', workspace_name: 'Innovation Lab', role: 'member' },
     ],
     system_roles: [],
     group_ids: [],
@@ -69,63 +91,78 @@ function LocationDisplay() {
   return <div data-testid="location">{`${location.pathname}${location.search}`}</div>;
 }
 
+function renderAppBar({
+  activeAppId = 'home',
+  currentPathname = '/',
+  currentUser = buildUser(),
+  shellWorkspaceSlug = 'hq',
+}: {
+  activeAppId?: string;
+  currentPathname?: string;
+  currentUser?: AuthUser;
+  shellWorkspaceSlug?: string | null;
+} = {}) {
+  function Harness() {
+    const [selectedShellWorkspaceSlug, setSelectedShellWorkspaceSlug] = useState(shellWorkspaceSlug);
+
+    return (
+      <>
+        <AppBar
+          activeAppId={activeAppId}
+          currentPathname={currentPathname}
+          currentUser={currentUser}
+          onOpenAccount={vi.fn()}
+          onShellWorkspaceChange={setSelectedShellWorkspaceSlug}
+          shellWorkspaceSlug={selectedShellWorkspaceSlug}
+        />
+        <LocationDisplay />
+      </>
+    );
+  }
+
+  return render(
+    <MemoryRouter initialEntries={[currentPathname]}>
+      <Harness />
+    </MemoryRouter>,
+  );
+}
+
 describe('AppBar', () => {
   beforeEach(() => {
     mockGetUnreadNotificationCount.mockResolvedValue({ count: 0 });
+    mockHasPermission.mockReturnValue(false);
+    window.localStorage.clear();
   });
 
   afterEach(() => {
     vi.clearAllMocks();
+    window.localStorage.clear();
   });
 
   it('shows the settings app for users with admin section permissions and links to the first allowed section', async () => {
-    const onOpenAccount = vi.fn();
+    const { container } = renderAppBar({
+      activeAppId: 'settings',
+      currentUser: buildUser({
+        app_access: [
+          { app: 'admin', workspace_id: 'workspace-admin', workspace_key: 'admin', workspace_name: 'Admin Console', role: 'admin' },
+        ],
+        system_roles: ['platform_admin'],
+      }),
+    });
 
-    render(
-      <MemoryRouter>
-        <AppBar
-          activeAppId="settings"
-          currentUser={buildUser({
-            workspaces: [
-              {
-                id: 'workspace-hq',
-                slug: 'hq',
-                name: 'HQ',
-                role: 'owner',
-                enabled_apps: ['ai', 'docs', 'pms', 'planner', 'meeting'],
-              },
-            ],
-            app_access: [
-              { app: 'admin', workspace_id: 'workspace-admin', workspace_key: 'admin', workspace_name: 'Admin Console', role: 'admin' },
-            ],
-            system_roles: ['org_admin'],
-          })}
-          currentWorkspaceSlug="hq"
-          onOpenAccount={onOpenAccount}
-        />
-      </MemoryRouter>,
-    );
-
-    const settingsLink = screen.getByText('Settings').closest('a');
+    const settingsLink = container.querySelector('a[href="/admin/general"]');
     expect(settingsLink).toBeTruthy();
-    expect(settingsLink?.getAttribute('href')).toBe('/admin/general');
     await waitFor(() => {
       expect(mockGetUnreadNotificationCount).toHaveBeenCalledWith('test-token');
     });
   });
 
   it('routes notification clicks to the requested issue in PMS', async () => {
-    render(
-      <MemoryRouter initialEntries={['/ai']}>
-        <AppBar
-          activeAppId="ai"
-          currentUser={buildUser()}
-          currentWorkspaceSlug="hq"
-          onOpenAccount={vi.fn()}
-        />
-        <LocationDisplay />
-      </MemoryRouter>,
-    );
+    renderAppBar({
+      activeAppId: 'ai',
+      currentPathname: '/w/hq/ai',
+      shellWorkspaceSlug: 'hq',
+    });
 
     fireEvent.click(screen.getByRole('button', { name: '알림' }));
     fireEvent.click(screen.getByRole('button', { name: 'Open issue notification' }));
@@ -133,5 +170,130 @@ describe('AppBar', () => {
     await waitFor(() => {
       expect(screen.getByTestId('location').textContent).toBe('/w/hq/pms?issue=issue-123');
     });
+  });
+
+  it('renders the switcher on global routes using the persisted shell workspace and filters app icons by that workspace', () => {
+    window.localStorage.setItem('aidoo:last-workspace-slug', 'innovation-lab');
+    const currentUser = buildUser();
+    const shellWorkspaceSlug = resolveShellWorkspaceSlug(currentUser, null);
+    const { container } = renderAppBar({
+      currentPathname: '/',
+      currentUser,
+      shellWorkspaceSlug,
+    });
+
+    expect(shellWorkspaceSlug).toBe('innovation-lab');
+    expect(container.querySelector('a[href="/w/innovation-lab/docs"]')).toBeTruthy();
+    expect(container.querySelector('a[href="/w/innovation-lab/ai"]')).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: '워크스페이스 전환' }));
+    expect(screen.getByText('Innovation Lab')).toBeTruthy();
+  });
+
+  it('updates the selected workspace on home even when the route stays on home', async () => {
+    const { container } = renderAppBar({
+      currentPathname: '/',
+      shellWorkspaceSlug: 'hq',
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: '워크스페이스 전환' }));
+    fireEvent.click(screen.getByRole('button', { name: /Innovation Lab/ }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('location').textContent).toBe('/');
+      expect(container.querySelector('a[href="/w/innovation-lab/docs"]')).toBeTruthy();
+      expect(container.querySelector('a[href="/w/hq/ai"]')).toBeNull();
+    });
+  });
+
+  it('switches from a docs detail route to the same app root when the next workspace supports it', async () => {
+    renderAppBar({
+      activeAppId: 'docs',
+      currentPathname: '/w/hq/docs/123',
+      shellWorkspaceSlug: 'hq',
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: '워크스페이스 전환' }));
+    fireEvent.click(screen.getByRole('button', { name: /Delivery Hub/ }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('location').textContent).toBe('/w/delivery-hub/docs');
+    });
+  });
+
+  it('falls back to home when the next workspace supports neither the current app nor a remembered app', async () => {
+    renderAppBar({
+      activeAppId: 'docs',
+      currentPathname: '/w/hq/docs/123',
+      currentUser: buildUser({
+        workspaces: [
+          {
+            id: 'workspace-hq',
+            slug: 'hq',
+            name: 'Aidoo HQ',
+            role: 'owner',
+            enabled_apps: ['ai', 'docs', 'pms', 'planner', 'meeting'],
+          },
+          {
+            id: 'workspace-ai-only',
+            slug: 'ai-only',
+            name: 'AI Only',
+            role: 'member',
+            enabled_apps: ['ai'],
+          },
+        ],
+      }),
+      shellWorkspaceSlug: 'hq',
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: '워크스페이스 전환' }));
+    fireEvent.click(screen.getByRole('button', { name: /AI Only/ }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('location').textContent).toBe('/');
+    });
+  });
+
+  it('uses the remembered app when switching from an admin route', async () => {
+    window.localStorage.setItem('aidoo:last-workspace-app', 'meeting');
+
+    renderAppBar({
+      activeAppId: 'settings',
+      currentPathname: '/admin/people',
+      currentUser: buildUser({
+        system_roles: ['platform_admin'],
+      }),
+      shellWorkspaceSlug: 'hq',
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: '워크스페이스 전환' }));
+    fireEvent.click(screen.getByRole('button', { name: /Delivery Hub/ }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('location').textContent).toBe('/w/delivery-hub/meeting');
+    });
+  });
+
+  it('hides footer actions when the user lacks workspace creation permission and workspace admin role', () => {
+    renderAppBar({
+      currentPathname: '/',
+      currentUser: buildUser({
+        workspaces: [
+          {
+            id: 'workspace-innovation-lab',
+            slug: 'innovation-lab',
+            name: 'Innovation Lab',
+            role: 'member',
+            enabled_apps: ['docs'],
+          },
+        ],
+      }),
+      shellWorkspaceSlug: 'innovation-lab',
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: '워크스페이스 전환' }));
+
+    expect(screen.queryByText('새 워크스페이스')).toBeNull();
+    expect(screen.queryByText('워크스페이스 설정')).toBeNull();
   });
 });

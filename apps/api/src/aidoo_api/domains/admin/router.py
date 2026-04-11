@@ -17,19 +17,18 @@ from aidoo_api.core.db import get_db_session
 from aidoo_api.domains.auth.access import (
     APP_FEATURE_CODES,
     DEFAULT_WORKSPACE_ENABLED_APPS,
-    SYSTEM_ORG_ADMIN,
     SYSTEM_PLATFORM_ADMIN,
     SYSTEM_ROLE_ORDER,
     WORKSPACE_ROLE_RANK,
     assign_user_groups,
     ensure_workspace_default_pms_space,
-    is_org_admin_user,
     is_platform_admin_user,
     is_valid_workspace_role,
     is_valid_workspace_app_code,
     list_workspace_enabled_apps,
     load_user_graph,
     load_active_workspace_by_id,
+    normalize_system_role,
     normalize_workspace_role,
     normalize_workspace_app_code,
     replace_group_system_roles,
@@ -130,10 +129,8 @@ class WorkspaceMemberItemResponse(BaseModel):
 
 
 class WorkspaceMemberRoleCounts(BaseModel):
-    owner: int = 0
     admin: int = 0
     member: int = 0
-    viewer: int = 0
 
 
 class WorkspaceMembersResponse(BaseModel):
@@ -218,43 +215,13 @@ def _workspace_doc_count(db: Session, workspace_id: str) -> int:
     )
 
 
-def _count_workspace_owners(db: Session, workspace_id: str) -> int:
-    user_owners = db.scalar(
-        select(func.count())
-        .select_from(WorkspaceUserBinding)
-        .where(
-            WorkspaceUserBinding.workspace_id == workspace_id,
-            WorkspaceUserBinding.role == "owner",
-        )
-    ) or 0
-    group_owners = db.scalar(
-        select(func.count())
-        .select_from(WorkspaceGroupBinding)
-        .where(
-            WorkspaceGroupBinding.workspace_id == workspace_id,
-            WorkspaceGroupBinding.role == "owner",
-        )
-    ) or 0
-    return int(user_owners) + int(group_owners)
-
-
-def _ensure_not_last_owner_removal(
-    db: Session,
-    workspace_id: str,
-    *,
-    current_role: str,
-    next_role: str | None,
-) -> None:
-    """Refuse to remove or demote the last owner of a workspace."""
-    if current_role != "owner":
-        return
-    if next_role == "owner":
-        return
-    if _count_workspace_owners(db, workspace_id) <= 1:
-        raise HTTPException(
-            status_code=409,
-            detail="워크스페이스에는 최소 한 명의 owner 가 필요합니다.",
-        )
+def _workspace_role_storage_values(role: str) -> tuple[str, ...]:
+    normalized_role = normalize_workspace_role(role)
+    if normalized_role == "admin":
+        return ("admin", "owner")
+    if normalized_role == "member":
+        return ("member", "viewer")
+    return ()
 
 
 def _serialize_workspace(db: Session, workspace: Workspace) -> WorkspaceItemResponse:
@@ -302,7 +269,7 @@ def _ensure_workspace_scope(
     workspace = load_active_workspace_by_id(db, workspace_id)
     if workspace is None:
         raise HTTPException(status_code=404, detail="Workspace not found.")
-    if is_platform_admin_user(user, db) or is_org_admin_user(user, db):
+    if is_platform_admin_user(user, db):
         return workspace
 
     role = resolve_workspace_role(db, user, workspace.id)
@@ -319,14 +286,14 @@ def _ensure_admin_workspace_scope(
     """Like `_ensure_workspace_scope` but allows archived (active=false) workspaces.
 
     Used by admin endpoints that need to manage soft-deleted workspaces.
-    Only platform/org admins or workspace admin/owner role holders pass.
+    Only platform admins or workspace admin role holders pass.
     """
     workspace = db.scalar(
         select(Workspace).options(selectinload(Workspace.teams)).where(Workspace.id == workspace_id)
     )
     if workspace is None:
         raise HTTPException(status_code=404, detail="Workspace not found.")
-    if is_platform_admin_user(user, db) or is_org_admin_user(user, db):
+    if is_platform_admin_user(user, db):
         return workspace
     role = resolve_workspace_role(db, user, workspace.id)
     if not workspace_role_allows(role, "admin"):
@@ -351,7 +318,7 @@ def _ensure_team_scope(
     )
     if team is None or not team.active or not team.workspace.active:
         raise HTTPException(status_code=404, detail="Team not found.")
-    if is_platform_admin_user(user, db) or is_org_admin_user(user, db):
+    if is_platform_admin_user(user, db):
         return team
     role = resolve_team_role(db, user, team)
     if not team_role_allows(role, min_role):
@@ -656,18 +623,18 @@ def _sort_system_roles(roles: set[str]) -> list[str]:
 
 def _resolve_loaded_system_roles(user: User) -> list[str]:
     roles = {
-        link.role
+        normalized_role
         for link in user.system_role_links
-        if link.role in {SYSTEM_PLATFORM_ADMIN, SYSTEM_ORG_ADMIN}
+        if (normalized_role := normalize_system_role(link.role)) is not None
     }
 
     for link in user.group_links:
         if not link.group.active:
             continue
         roles.update(
-            system_link.role
+            normalized_role
             for system_link in link.group.system_role_links
-            if system_link.role in {SYSTEM_PLATFORM_ADMIN, SYSTEM_ORG_ADMIN}
+            if (normalized_role := normalize_system_role(system_link.role)) is not None
         )
 
     if user.is_admin:
@@ -969,7 +936,7 @@ def list_user_team_memberships(
         .all()
     )
 
-    if not is_platform_admin_user(context.user, db) and not is_org_admin_user(context.user, db):
+    if not is_platform_admin_user(context.user, db):
         accessible_workspace_ids = {
             item["workspace_id"]
             for item in serialize_auth_user(db, context.user)["workspace_roles"]
@@ -1443,7 +1410,7 @@ def list_workspaces(
     context: AuthContext = Depends(require_auth_context),
     db: Session = Depends(get_db_session),
 ) -> list[WorkspaceItemResponse]:
-    is_admin = is_platform_admin_user(context.user, db) or is_org_admin_user(context.user, db)
+    is_admin = is_platform_admin_user(context.user, db)
     query = select(Workspace).options(selectinload(Workspace.teams))
     if not (include_archived and is_admin):
         query = query.where(Workspace.active.is_(True))
@@ -1484,7 +1451,7 @@ def create_workspace(
             id=new_id(),
             workspace_id=workspace.id,
             user_id=context.user.id,
-            role="owner",
+            role="admin",
         )
     )
     record_audit_log(
@@ -1870,9 +1837,6 @@ def update_workspace_member_role(
                 status_code=409,
                 detail="자기 자신의 role 은 직접 변경할 수 없습니다. 다른 admin 에게 요청해 주세요.",
             )
-        _ensure_not_last_owner_removal(
-            db, workspace.id, current_role=binding.role, next_role=payload.role
-        )
         binding.role = payload.role
         db.add(binding)
         record_audit_log(
@@ -1897,9 +1861,6 @@ def update_workspace_member_role(
     )
     if group_binding is None:
         raise HTTPException(status_code=404, detail="Workspace member not found.")
-    _ensure_not_last_owner_removal(
-        db, workspace.id, current_role=group_binding.role, next_role=payload.role
-    )
     group_binding.role = payload.role
     db.add(group_binding)
     record_audit_log(
@@ -1942,9 +1903,6 @@ def remove_workspace_member(
                 status_code=409,
                 detail="자기 자신은 워크스페이스에서 제거할 수 없습니다.",
             )
-        _ensure_not_last_owner_removal(
-            db, workspace.id, current_role=binding.role, next_role=None
-        )
         db.delete(binding)
     else:
         group_binding = db.scalar(
@@ -1955,9 +1913,6 @@ def remove_workspace_member(
         )
         if group_binding is None:
             raise HTTPException(status_code=404, detail="Workspace member not found.")
-        _ensure_not_last_owner_removal(
-            db, workspace.id, current_role=group_binding.role, next_role=None
-        )
         db.delete(group_binding)
 
     record_audit_log(
@@ -1990,16 +1945,16 @@ def list_workspace_members(
     workspace = _ensure_admin_workspace_scope(db, context.user, workspace_id)
 
     normalized_query = q.strip() if q else ""
-    requested_roles: list[str] = []
+    requested_role_values: set[str] = set()
     if role:
         for value in role:
             if not is_valid_workspace_role(value):
                 raise HTTPException(status_code=422, detail="Invalid workspace role filter.")
             normalized = normalize_workspace_role(value)
-            if normalized and normalized not in requested_roles:
-                requested_roles.append(normalized)
+            if normalized:
+                requested_role_values.update(_workspace_role_storage_values(normalized))
 
-    role_counts_map: dict[str, int] = {"owner": 0, "admin": 0, "member": 0, "viewer": 0}
+    role_counts_map: dict[str, int] = {"admin": 0, "member": 0}
     user_total = 0
     group_total = 0
 
@@ -2070,7 +2025,7 @@ def list_workspace_members(
     group_items: list[WorkspaceMemberItemResponse] = []
 
     user_role_priority = sa_case(
-        {"owner": 0, "admin": 1, "member": 2, "viewer": 3},
+        {"admin": 0, "owner": 0, "member": 1, "viewer": 1},
         value=WorkspaceUserBinding.role,
         else_=99,
     )
@@ -2081,8 +2036,8 @@ def list_workspace_members(
             .options(joinedload(WorkspaceUserBinding.user))
             .where(*user_filters)
         )
-        if requested_roles:
-            user_query = user_query.where(WorkspaceUserBinding.role.in_(requested_roles))
+        if requested_role_values:
+            user_query = user_query.where(WorkspaceUserBinding.role.in_(requested_role_values))
         user_query = user_query.order_by(user_role_priority.asc(), User.full_name.asc())
         for binding in db.scalars(user_query).all():
             user_items.append(
@@ -2100,7 +2055,7 @@ def list_workspace_members(
 
     if subject_type in (None, "group") and not pending_only:
         group_role_priority = sa_case(
-            {"owner": 0, "admin": 1, "member": 2, "viewer": 3},
+            {"admin": 0, "owner": 0, "member": 1, "viewer": 1},
             value=WorkspaceGroupBinding.role,
             else_=99,
         )
@@ -2110,8 +2065,8 @@ def list_workspace_members(
             .options(joinedload(WorkspaceGroupBinding.group))
             .where(*group_filters)
         )
-        if requested_roles:
-            group_query = group_query.where(WorkspaceGroupBinding.role.in_(requested_roles))
+        if requested_role_values:
+            group_query = group_query.where(WorkspaceGroupBinding.role.in_(requested_role_values))
         group_query = group_query.order_by(group_role_priority.asc(), AccessGroup.name.asc())
         for binding in db.scalars(group_query).all():
             group_items.append(
@@ -2220,9 +2175,6 @@ def bulk_workspace_members(
                             status_code=409,
                             detail="자기 자신은 워크스페이스에서 제거할 수 없습니다.",
                         )
-                    _ensure_not_last_owner_removal(
-                        db, workspace.id, current_role=binding.role, next_role=None
-                    )
                     db.delete(binding)
                 else:
                     group_binding = db.scalar(
@@ -2233,9 +2185,6 @@ def bulk_workspace_members(
                     )
                     if group_binding is None:
                         raise HTTPException(status_code=404, detail="Workspace member not found.")
-                    _ensure_not_last_owner_removal(
-                        db, workspace.id, current_role=group_binding.role, next_role=None
-                    )
                     db.delete(group_binding)
             elif payload.action == "update_role":
                 if entry.role is None:
@@ -2254,9 +2203,6 @@ def bulk_workspace_members(
                             status_code=409,
                             detail="자기 자신의 role 은 직접 변경할 수 없습니다.",
                         )
-                    _ensure_not_last_owner_removal(
-                        db, workspace.id, current_role=binding.role, next_role=entry.role
-                    )
                     binding.role = entry.role
                     db.add(binding)
                 else:
@@ -2268,9 +2214,6 @@ def bulk_workspace_members(
                     )
                     if group_binding is None:
                         raise HTTPException(status_code=404, detail="Workspace member not found.")
-                    _ensure_not_last_owner_removal(
-                        db, workspace.id, current_role=group_binding.role, next_role=entry.role
-                    )
                     group_binding.role = entry.role
                     db.add(group_binding)
             db.flush()
@@ -2351,10 +2294,7 @@ def list_teams(
         _ensure_workspace_scope(db, context.user, workspace_id, min_role="member")
         query = query.where(Team.workspace_id == workspace_id)
     items = db.scalars(query.order_by(Team.name.asc())).all()
-    if not (
-        is_platform_admin_user(context.user, db)
-        or is_org_admin_user(context.user, db)
-    ) and workspace_id is None:
+    if not is_platform_admin_user(context.user, db) and workspace_id is None:
         accessible_workspace_ids = {
             item["workspace_id"]
             for item in serialize_auth_user(db, context.user)["workspace_roles"]

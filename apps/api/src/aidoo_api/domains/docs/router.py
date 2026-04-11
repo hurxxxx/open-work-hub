@@ -93,7 +93,7 @@ def _max_access_level(*levels: str | None) -> str | None:
 
 
 def _is_pms_super_admin(db: Session, user: User) -> bool:
-    return has_system_role(db, user, "platform_admin", "org_admin")
+    return has_system_role(db, user, "platform_admin")
 
 
 def _team_role_allows(role: str | None, minimum: str) -> bool:

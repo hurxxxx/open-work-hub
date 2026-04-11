@@ -651,7 +651,7 @@ PROJECT_MANAGER_ROLES = {"admin", "owner"}
 
 
 def _is_pms_super_admin(db: Session, user: User) -> bool:
-    return has_system_role(db, user, "platform_admin", "org_admin")
+    return has_system_role(db, user, "platform_admin")
 
 
 def _load_active_space(
@@ -770,6 +770,15 @@ def _ensure_space_manager(db: Session, user: User, space_id: str) -> tuple[Team,
     raise HTTPException(status_code=403, detail="Space owner/admin access required.")
 
 
+def _ensure_space_owner(db: Session, user: User, space_id: str) -> tuple[Team, str]:
+    team, role = _ensure_space_access(db, user, space_id)
+    if _is_pms_super_admin(db, user):
+        return team, role
+    if role == "owner":
+        return team, role
+    raise HTTPException(status_code=403, detail="Space owner access required.")
+
+
 def _accessible_space_ids(db: Session, user: User) -> set[str]:
     workspace = _get_pms_workspace(db)
     if _is_pms_super_admin(db, user):
@@ -814,31 +823,48 @@ def _space_member_ids(db: Session, space_id: str) -> set[str]:
     return set(db.scalars(select(TeamMember.user_id).where(TeamMember.team_id == space_id)))
 
 
-def _space_manager_count(members: list[TeamMember]) -> int:
-    return sum(1 for member in members if member.role in SPACE_TEAM_MANAGER_ROLES)
-
-
-def _ensure_space_manager_survives(
+def _ensure_space_owner_survives(
     members: list[TeamMember],
     target_user_id: str,
     *,
     next_role: str | None,
 ) -> None:
     current_member = next((member for member in members if member.user_id == target_user_id), None)
-    if current_member is None or current_member.role not in SPACE_TEAM_MANAGER_ROLES:
+    if current_member is None or current_member.role != "owner":
         return
 
     remaining = 0
     for member in members:
         role = next_role if member.user_id == target_user_id else member.role
-        if role in SPACE_TEAM_MANAGER_ROLES:
+        if role == "owner":
             remaining += 1
 
     if remaining < 1:
         raise HTTPException(
             status_code=409,
-            detail="At least one owner or admin must remain in the space.",
+            detail="At least one owner must remain in the space.",
         )
+
+
+def _ensure_space_admin_change_allowed(
+    db: Session,
+    user: User,
+    space_id: str,
+    *,
+    current_role: str | None,
+    next_role: str | None,
+) -> tuple[Team, str]:
+    team, actor_role = _ensure_space_manager(db, user, space_id)
+    if _is_pms_super_admin(db, user):
+        return team, actor_role
+    if actor_role != "owner" and (
+        current_role in SPACE_TEAM_MANAGER_ROLES or next_role in SPACE_TEAM_MANAGER_ROLES
+    ):
+        raise HTTPException(
+            status_code=403,
+            detail="Only the space owner can manage owners or admins.",
+        )
+    return team, actor_role
 
 
 def _get_pms_workspace(db: Session) -> Workspace:
@@ -1566,7 +1592,13 @@ def add_space_member(
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
 ) -> SpaceMemberItem:
-    _ensure_space_manager(db, current_user, space_id)
+    _ensure_space_admin_change_allowed(
+        db,
+        current_user,
+        space_id,
+        current_role=None,
+        next_role=payload.role,
+    )
     user = _validate_space_member_user(db, space_id, payload.user_id)
     membership = TeamMember(
         id=new_id(),
@@ -1589,12 +1621,18 @@ def update_space_member(
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
 ) -> SpaceMemberItem:
-    _ensure_space_manager(db, current_user, space_id)
     membership = _get_space_membership(db, space_id, user_id)
     if membership is None:
         raise HTTPException(status_code=404, detail="Member not found.")
+    _ensure_space_admin_change_allowed(
+        db,
+        current_user,
+        space_id,
+        current_role=membership.role,
+        next_role=payload.role,
+    )
     members = _load_space_members(db, space_id)
-    _ensure_space_manager_survives(members, user_id, next_role=payload.role)
+    _ensure_space_owner_survives(members, user_id, next_role=payload.role)
     membership.role = payload.role
     db.add(membership)
     db.commit()
@@ -1610,12 +1648,18 @@ def remove_space_member(
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
 ) -> Response:
-    _ensure_space_manager(db, current_user, space_id)
     membership = _get_space_membership(db, space_id, user_id)
     if membership is None:
         raise HTTPException(status_code=404, detail="Member not found.")
+    _ensure_space_admin_change_allowed(
+        db,
+        current_user,
+        space_id,
+        current_role=membership.role,
+        next_role=None,
+    )
     members = _load_space_members(db, space_id)
-    _ensure_space_manager_survives(members, user_id, next_role=None)
+    _ensure_space_owner_survives(members, user_id, next_role=None)
     db.delete(membership)
     db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)

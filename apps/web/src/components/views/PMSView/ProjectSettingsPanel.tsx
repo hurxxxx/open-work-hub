@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { motion } from 'motion/react';
 import { X, Plus, Pencil, Trash2, Check, Loader2 } from 'lucide-react';
 import { Button, InlineNotice, Select } from '@aidoo/ui';
@@ -45,17 +45,19 @@ const ROLE_OPTIONS = [
 export function ProjectSettingsPanel({
   projectId,
   teamId,
+  currentUserRole,
   onClose,
   onLabelsChanged,
   onStatusesChanged,
 }: {
   projectId: string;
   teamId: string | null;
+  currentUserRole: string | null;
   onClose: () => void;
   onLabelsChanged?: (labels: PmsLabel[]) => void;
   onStatusesChanged?: (statuses: PmsProjectStatus[]) => void;
 }) {
-  const { token } = useAuth();
+  const { token, user } = useAuth();
   const [members, setMembers] = useState<PmsSpaceMember[]>([]);
   const [availableUsers, setAvailableUsers] = useState<PmsUserSummary[]>([]);
   const [labels, setLabels] = useState<PmsLabel[]>([]);
@@ -81,6 +83,11 @@ export function ProjectSettingsPanel({
   const [selectedUserId, setSelectedUserId] = useState('__none__');
   const [selectedRole, setSelectedRole] = useState('member');
   const [addingMember, setAddingMember] = useState(false);
+  const canManageAdmins = currentUserRole === 'owner';
+  const availableRoleOptions = useMemo(
+    () => (canManageAdmins ? ROLE_OPTIONS : ROLE_OPTIONS.filter((option) => option.value === 'member' || option.value === 'viewer')),
+    [canManageAdmins],
+  );
 
   const notifyParent = useCallback((updated: PmsLabel[]) => {
     onLabelsChanged?.(updated);
@@ -321,7 +328,7 @@ export function ProjectSettingsPanel({
                     onChange={(event) => setSelectedRole(event.target.value)}
                     className="app-text-caption flex-1 rounded border border-app-border bg-app-bg px-2 py-2 text-app-ink focus:outline-none"
                   >
-                    {ROLE_OPTIONS.map((option) => (
+                    {availableRoleOptions.map((option) => (
                       <option key={option.value} value={option.value}>{option.label}</option>
                     ))}
                   </select>
@@ -340,7 +347,10 @@ export function ProjectSettingsPanel({
               <div className="flex justify-center py-6"><Loader2 size={18} className="animate-spin text-app-ink/40" /></div>
             ) : (
               <div className="space-y-2">
-                {members.map((member) => (
+                {members.map((member) => {
+                  const isProtectedManager = !canManageAdmins && (member.role === 'owner' || member.role === 'admin');
+                  const isSelf = member.user_id === user?.id;
+                  return (
                   <div key={member.user_id} className="rounded-lg border border-app-border bg-app-surface-sidebar px-3 py-2">
                     <div className="flex items-center justify-between gap-3">
                       <div className="min-w-0">
@@ -348,8 +358,9 @@ export function ProjectSettingsPanel({
                         <div className="app-text-caption truncate text-app-ink/45">{member.email}</div>
                       </div>
                       <button
+                        disabled={isProtectedManager || isSelf}
                         onClick={() => { void handleRemoveMember(member.user_id); }}
-                        className="text-app-ink/35 hover:text-red-400 transition-colors"
+                        className="text-app-ink/35 hover:text-red-400 transition-colors disabled:cursor-not-allowed disabled:text-app-ink/20"
                         title="Remove member"
                       >
                         <Trash2 size={13} />
@@ -360,17 +371,21 @@ export function ProjectSettingsPanel({
                         Joined {new Date(member.joined_at).toLocaleDateString()}
                       </div>
                       <select
+                        disabled={isProtectedManager || isSelf}
                         value={member.role}
                         onChange={(event) => { void handleRoleChange(member.user_id, event.target.value); }}
                         className="app-text-caption rounded border border-app-border bg-app-bg px-2 py-1 text-app-ink focus:outline-none"
                       >
-                        {ROLE_OPTIONS.map((option) => (
+                        {(canManageAdmins
+                          ? ROLE_OPTIONS
+                          : availableRoleOptions
+                        ).map((option) => (
                           <option key={option.value} value={option.value}>{option.label}</option>
                         ))}
                       </select>
                     </div>
                   </div>
-                ))}
+                );})}
               </div>
             )}
           </section>

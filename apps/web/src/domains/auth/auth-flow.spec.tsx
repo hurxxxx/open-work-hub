@@ -254,15 +254,15 @@ describe('auth flow', () => {
                 account_key: 'platform-admin',
                 label: 'Platform Admin',
                 email: 'platform-admin@aidoo.local',
-                description: '전역 관리자 권한으로 모든 앱과 설정을 관리합니다.',
+                description: '전역 관리자 권한으로 모든 워크스페이스와 설정을 관리합니다.',
                 category: 'Administrators',
               },
               {
-                account_key: 'pms-viewer',
-                label: 'PMS Viewer',
-                email: 'pms-viewer@aidoo.local',
-                description: 'PMS 공간을 읽기 전용으로 확인합니다.',
-                category: 'Applications',
+                account_key: 'delivery-hub-member',
+                label: 'Delivery Hub Member',
+                email: 'delivery-hub-member@aidoo.local',
+                description: 'Delivery Hub 워크스페이스 멤버 계정입니다. 기본 Team Space 멤버 권한이 함께 제공됩니다.',
+                category: 'Workspaces',
               },
             ],
           }),
@@ -278,24 +278,24 @@ describe('auth flow', () => {
           JSON.stringify({
             token: 'dev-account-token',
             user: buildUser({
-              email: 'pms-viewer@aidoo.local',
-              full_name: 'PMS Viewer',
-              display_name: 'PMS Viewer',
+              email: 'delivery-hub-member@aidoo.local',
+              full_name: 'Delivery Hub Member',
+              display_name: 'Delivery Hub Member',
               workspace_roles: [
                 {
                   workspace_id: 'workspace-pms',
-                  key: 'pms',
-                  name: 'PMS Workspace',
-                  role: 'viewer',
+                  key: 'delivery-hub',
+                  name: 'Delivery Hub',
+                  role: 'member',
                 },
               ],
               app_access: [
                 {
                   app: 'pms',
                   workspace_id: 'workspace-pms',
-                  workspace_key: 'pms',
-                  workspace_name: 'PMS Workspace',
-                  role: 'viewer',
+                  workspace_key: 'delivery-hub',
+                  workspace_name: 'Delivery Hub',
+                  role: 'member',
                 },
               ],
             }),
@@ -314,11 +314,11 @@ describe('auth flow', () => {
 
     await screen.findByRole('heading', { name: '로그인' });
     await screen.findByText('Platform Admin');
-    await screen.findByText('PMS Viewer');
-    fireEvent.click(screen.getByRole('button', { name: /PMS Viewer/ }));
+    await screen.findByText('Delivery Hub Member');
+    fireEvent.click(screen.getByRole('button', { name: /Delivery Hub Member/ }));
 
     await screen.findByText('Protected Shell');
-    expect(screen.getByText('pms-viewer@aidoo.local')).toBeTruthy();
+    expect(screen.getByText('delivery-hub-member@aidoo.local')).toBeTruthy();
     expect(window.localStorage.getItem(AUTH_TOKEN_STORAGE_KEY)).toBe('dev-account-token');
   });
 

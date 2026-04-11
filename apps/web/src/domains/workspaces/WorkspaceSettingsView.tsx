@@ -33,10 +33,8 @@ const APP_OPTIONS = [
 ] as const;
 
 const WORKSPACE_ROLE_OPTIONS = [
-  { value: 'viewer', label: 'Viewer' },
   { value: 'member', label: 'Member' },
   { value: 'admin', label: 'Admin' },
-  { value: 'owner', label: 'Owner' },
 ] as const;
 
 function getErrorMessage(error: unknown, fallback: string): string {

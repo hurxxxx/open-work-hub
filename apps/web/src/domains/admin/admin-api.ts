@@ -74,10 +74,8 @@ export interface WorkspaceMemberItem {
 }
 
 export interface WorkspaceMemberRoleCounts {
-  owner: number;
   admin: number;
   member: number;
-  viewer: number;
 }
 
 export interface WorkspaceMembersResponse {

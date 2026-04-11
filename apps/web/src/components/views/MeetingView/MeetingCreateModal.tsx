@@ -107,7 +107,7 @@ export function MeetingCreateModal({ isOpen, onClose, onCreated }: MeetingCreate
 
   // Server-side user search. Only fires when there's an actual query so an
   // empty focus doesn't surface a misleading "first 8 alphabetical users"
-  // dropdown — that was the original confusion behind "왜 pms-member 가
+  // dropdown — that was the original confusion behind "왜 delivery-hub-member 가
   // 검색이 안되지?".
   useEffect(() => {
     if (!isOpen || !token || !userQueryFocused) return;

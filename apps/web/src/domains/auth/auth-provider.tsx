@@ -73,21 +73,21 @@ interface AuthState {
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 const PERMISSION_ROLE_MAP: Record<string, string[]> = {
-  'admin.access': ['platform_admin', 'org_admin'],
-  'user.read': ['platform_admin', 'org_admin'],
-  'user.write': ['platform_admin', 'org_admin'],
-  'group.read': ['platform_admin', 'org_admin'],
-  'group.write': ['platform_admin', 'org_admin'],
-  'org_unit.read': ['platform_admin', 'org_admin'],
-  'org_unit.write': ['platform_admin', 'org_admin'],
-  'workspace.read': ['platform_admin', 'org_admin'],
-  'workspace.write': ['platform_admin', 'org_admin'],
-  'team.read': ['platform_admin', 'org_admin'],
-  'team.write': ['platform_admin', 'org_admin'],
-  'feature_policy.read': ['platform_admin', 'org_admin'],
-  'feature_policy.write': ['platform_admin', 'org_admin'],
-  'audit.read': ['platform_admin', 'org_admin'],
-  'session.revoke': ['platform_admin', 'org_admin'],
+  'admin.access': ['platform_admin'],
+  'user.read': ['platform_admin'],
+  'user.write': ['platform_admin'],
+  'group.read': ['platform_admin'],
+  'group.write': ['platform_admin'],
+  'org_unit.read': ['platform_admin'],
+  'org_unit.write': ['platform_admin'],
+  'workspace.read': ['platform_admin'],
+  'workspace.write': ['platform_admin'],
+  'team.read': ['platform_admin'],
+  'team.write': ['platform_admin'],
+  'feature_policy.read': ['platform_admin'],
+  'feature_policy.write': ['platform_admin'],
+  'audit.read': ['platform_admin'],
+  'session.revoke': ['platform_admin'],
 };
 
 function errorMessage(caughtError: unknown, fallback: string): string {

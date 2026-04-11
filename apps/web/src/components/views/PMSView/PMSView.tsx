@@ -698,6 +698,7 @@ export const PMSView = () => {
           <ProjectSettingsPanel
             projectId={selectedProjectId}
             teamId={selectedProject?.team_id ?? null}
+            currentUserRole={selectedProject?.role ?? null}
             onClose={() => setSettingsOpen(false)}
             onLabelsChanged={(updated) => setLabels(updated)}
             onStatusesChanged={(updated) => setProjectStatuses(updated)}

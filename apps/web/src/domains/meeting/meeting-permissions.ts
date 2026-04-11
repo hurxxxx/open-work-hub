@@ -1,7 +1,7 @@
 import { hasAnySystemRole, type AuthUser } from '@/src/domains/auth/auth-api';
 import type { MeetingDetail, MeetingListItem } from './meeting-api';
 
-const MEETING_ADMIN_ROLES = ['platform_admin', 'org_admin'] as const;
+const MEETING_ADMIN_ROLES = ['platform_admin'] as const;
 
 export function isOrganizer(
   user: AuthUser | null | undefined,

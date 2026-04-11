@@ -63,7 +63,7 @@ def _create_workspace(
     return response.json()
 
 
-def test_create_workspace_includes_creator_as_owner_and_count_fields(
+def test_create_workspace_includes_creator_as_admin_and_count_fields(
     client: TestClient,
 ) -> None:
     admin = _bootstrap_admin_session(client)
@@ -84,7 +84,7 @@ def test_create_workspace_includes_creator_as_owner_and_count_fields(
     user_bindings = [b for b in bindings if b["subject_type"] == "user"]
     assert len(user_bindings) == 1
     assert user_bindings[0]["subject_id"] == admin["user"]["id"]
-    assert user_bindings[0]["role"] == "owner"
+    assert user_bindings[0]["role"] == "admin"
 
 
 def test_add_remove_member_endpoints(client: TestClient) -> None:
@@ -250,9 +250,9 @@ def test_paginated_members_endpoint_filter_search_and_role_counts(client: TestCl
         f"/api/v1/admin/workspaces/{workspace['id']}/members?page=1&page_size=3",
         headers=_auth_headers(token),
     ).json()
-    assert page1["total"] == 7  # 6 added + creator owner
+    assert page1["total"] == 7  # 6 added + creator admin
     assert len(page1["items"]) == 3
-    assert page1["role_counts"] == {"owner": 1, "admin": 2, "member": 3, "viewer": 1}
+    assert page1["role_counts"] == {"admin": 3, "member": 4}
     assert page1["user_count"] == 7
     assert page1["group_count"] == 0
     assert page1["pending_count"] == 0
@@ -268,7 +268,7 @@ def test_paginated_members_endpoint_filter_search_and_role_counts(client: TestCl
         f"/api/v1/admin/workspaces/{workspace['id']}/members?role=admin",
         headers=_auth_headers(token),
     ).json()
-    assert role_filter["total"] == 2
+    assert role_filter["total"] == 3
     assert all(item["role"] == "admin" for item in role_filter["items"])
 
     search_filter = client.get(
@@ -329,13 +329,14 @@ def test_bulk_member_endpoint_partial_failure(client: TestClient) -> None:
     assert bulk_remove.json()["succeeded"] == 2
 
 
-def test_last_owner_protection_blocks_remove_and_demote(client: TestClient) -> None:
+def test_other_admin_can_demote_and_remove_admin(client: TestClient) -> None:
     admin = _bootstrap_admin_session(client)
     token = admin["token"]
     admin_user_id = admin["user"]["id"]
-    workspace = _create_workspace(client, token, name="Lonely Owner")
+    workspace = _create_workspace(client, token, name="Admin Handoff")
 
-    # Create another admin so we can attempt the remove on the owner.
+    # Create another admin so we can verify workspace admin handoff without
+    # relying on the removed workspace-owner concept.
     second_payload = _create_user_with_password(
         client,
         token,
@@ -360,19 +361,19 @@ def test_last_owner_protection_blocks_remove_and_demote(client: TestClient) -> N
     assert login.status_code == 200, login.text
     second_token = login.json()["token"]
 
-    remove_owner = client.delete(
-        f"/api/v1/admin/workspaces/{workspace['id']}/members/user/{admin_user_id}",
-        headers=_auth_headers(second_token),
-    )
-    assert remove_owner.status_code == 409, remove_owner.text
-    assert "owner" in remove_owner.json()["detail"]
-
-    demote_owner = client.patch(
+    demote_admin = client.patch(
         f"/api/v1/admin/workspaces/{workspace['id']}/members/user/{admin_user_id}",
         headers=_auth_headers(second_token),
         json={"role": "member"},
     )
-    assert demote_owner.status_code == 409
+    assert demote_admin.status_code == 200, demote_admin.text
+    assert demote_admin.json()["role"] == "member"
+
+    remove_admin = client.delete(
+        f"/api/v1/admin/workspaces/{workspace['id']}/members/user/{admin_user_id}",
+        headers=_auth_headers(second_token),
+    )
+    assert remove_admin.status_code == 204, remove_admin.text
 
 
 def test_self_role_change_and_self_remove_blocked(client: TestClient) -> None:
@@ -386,8 +387,7 @@ def test_self_role_change_and_self_remove_blocked(client: TestClient) -> None:
         headers=_auth_headers(token),
         json={"role": "member"},
     )
-    # Self role change is blocked even when there are other owners; here it's
-    # also the last owner so 409 is guaranteed either way.
+    # Self role change is blocked even without the old workspace-owner model.
     assert self_demote.status_code == 409
 
     self_remove = client.delete(

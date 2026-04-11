@@ -122,21 +122,21 @@ def require_any_system_role(*roles: str):
 
 
 PERMISSION_COMPAT_ROLE_MAP = {
-    "admin.access": (("platform_admin", "org_admin")),
-    "user.read": (("platform_admin", "org_admin")),
-    "user.write": (("platform_admin", "org_admin")),
-    "group.read": (("platform_admin", "org_admin")),
-    "group.write": (("platform_admin", "org_admin")),
-    "org_unit.read": (("platform_admin", "org_admin")),
-    "org_unit.write": (("platform_admin", "org_admin")),
-    "workspace.read": (("platform_admin", "org_admin")),
-    "workspace.write": (("platform_admin", "org_admin")),
-    "team.read": (("platform_admin", "org_admin")),
-    "team.write": (("platform_admin", "org_admin")),
-    "feature_policy.read": (("platform_admin", "org_admin")),
-    "feature_policy.write": (("platform_admin", "org_admin")),
-    "audit.read": (("platform_admin", "org_admin")),
-    "session.revoke": (("platform_admin", "org_admin")),
+    "admin.access": (("platform_admin",)),
+    "user.read": (("platform_admin",)),
+    "user.write": (("platform_admin",)),
+    "group.read": (("platform_admin",)),
+    "group.write": (("platform_admin",)),
+    "org_unit.read": (("platform_admin",)),
+    "org_unit.write": (("platform_admin",)),
+    "workspace.read": (("platform_admin",)),
+    "workspace.write": (("platform_admin",)),
+    "team.read": (("platform_admin",)),
+    "team.write": (("platform_admin",)),
+    "feature_policy.read": (("platform_admin",)),
+    "feature_policy.write": (("platform_admin",)),
+    "audit.read": (("platform_admin",)),
+    "session.revoke": (("platform_admin",)),
 }
 
 
@@ -148,7 +148,7 @@ def require_permission(permission: str):
 
 
 def require_admin_context(
-    context: AuthContext = Depends(require_any_system_role("platform_admin", "org_admin")),
+    context: AuthContext = Depends(require_any_system_role("platform_admin")),
 ) -> AuthContext:
     return context
 
@@ -175,8 +175,6 @@ def _resolve_workspace_role_for_request(
 ) -> str | None:
     if is_platform_admin_user(auth.user, db):
         return "owner"
-    if "org_admin" in auth.system_roles:
-        return "admin"
     return resolve_workspace_role(db, auth.user, workspace.id)
 
 

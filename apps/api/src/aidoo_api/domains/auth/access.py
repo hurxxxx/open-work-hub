@@ -27,20 +27,31 @@ from aidoo_api.domains.auth.security import hash_password, new_id
 
 
 SYSTEM_PLATFORM_ADMIN = "platform_admin"
-SYSTEM_ORG_ADMIN = "org_admin"
 
 SYSTEM_ROLE_ORDER = (
     SYSTEM_PLATFORM_ADMIN,
-    SYSTEM_ORG_ADMIN,
 )
 VALID_SYSTEM_ROLES = frozenset(SYSTEM_ROLE_ORDER)
 
 LEGACY_GROUP_ROLE_MAP = {
     "platform-admin": SYSTEM_PLATFORM_ADMIN,
-    "org-admin": SYSTEM_ORG_ADMIN,
-    "people-admin": SYSTEM_ORG_ADMIN,
-    "workspace-admin": SYSTEM_ORG_ADMIN,
-    "audit-viewer": SYSTEM_ORG_ADMIN,
+    "org-admin": SYSTEM_PLATFORM_ADMIN,
+    "people-admin": SYSTEM_PLATFORM_ADMIN,
+    "workspace-admin": SYSTEM_PLATFORM_ADMIN,
+    "audit-viewer": SYSTEM_PLATFORM_ADMIN,
+}
+
+SYSTEM_ROLE_ALIASES = {
+    "platform_admin": SYSTEM_PLATFORM_ADMIN,
+    "platform-admin": SYSTEM_PLATFORM_ADMIN,
+    "org_admin": SYSTEM_PLATFORM_ADMIN,
+    "org-admin": SYSTEM_PLATFORM_ADMIN,
+    "people_admin": SYSTEM_PLATFORM_ADMIN,
+    "people-admin": SYSTEM_PLATFORM_ADMIN,
+    "workspace_admin": SYSTEM_PLATFORM_ADMIN,
+    "workspace-admin": SYSTEM_PLATFORM_ADMIN,
+    "audit_viewer": SYSTEM_PLATFORM_ADMIN,
+    "audit-viewer": SYSTEM_PLATFORM_ADMIN,
 }
 
 SYSTEM_ROLE_PERMISSION_MAP = {
@@ -63,32 +74,11 @@ SYSTEM_ROLE_PERMISSION_MAP = {
             "session.revoke",
         }
     ),
-    SYSTEM_ORG_ADMIN: frozenset(
-        {
-            "admin.access",
-            "user.read",
-            "user.write",
-            "group.read",
-            "group.write",
-            "org_unit.read",
-            "org_unit.write",
-            "workspace.read",
-            "workspace.write",
-            "team.read",
-            "team.write",
-            "feature_policy.read",
-            "feature_policy.write",
-            "audit.read",
-            "session.revoke",
-        }
-    ),
 }
 
 WORKSPACE_ROLE_RANK = {
-    "viewer": 10,
     "member": 20,
     "admin": 40,
-    "owner": 50,
 }
 TEAM_ROLE_RANK = {
     "viewer": 10,
@@ -100,10 +90,10 @@ VALID_WORKSPACE_ROLES = frozenset(WORKSPACE_ROLE_RANK)
 VALID_TEAM_ROLES = frozenset(TEAM_ROLE_RANK)
 
 WORKSPACE_ROLE_ALIASES = {
-    "viewer": "viewer",
+    "viewer": "member",
     "member": "member",
     "admin": "admin",
-    "owner": "owner",
+    "owner": "admin",
 }
 TEAM_ROLE_ALIASES = {
     "viewer": "viewer",
@@ -207,12 +197,50 @@ DEFAULT_FEATURE_POLICIES = [
 
 DEV_LOGIN_PASSWORD = "Aidoo!dev1234"
 
+def _build_workspace_dev_login_accounts() -> list[dict[str, Any]]:
+    items: list[dict[str, Any]] = []
+    for workspace_definition in [*DEFAULT_WORKSPACE_SEEDS, *DEV_WORKSPACE_SEEDS]:
+        workspace_key = workspace_definition["key"]
+        workspace_name = workspace_definition["name"]
+        has_pms = "pms" in workspace_definition["enabled_apps"]
+
+        items.append(
+            {
+                "key": f"{workspace_key}-admin",
+                "label": f"{workspace_name} Admin",
+                "email": f"{workspace_key}-admin@aidoo.local",
+                "description": (
+                    f"{workspace_name} 워크스페이스 관리자 계정입니다."
+                    + (" 기본 Team Space 소유자 권한이 함께 제공됩니다." if has_pms else "")
+                ),
+                "category": "Workspaces",
+                "workspace_memberships": [(workspace_key, "admin")],
+                "team_memberships": [(workspace_key, "owner")] if has_pms else [],
+            }
+        )
+        items.append(
+            {
+                "key": f"{workspace_key}-member",
+                "label": f"{workspace_name} Member",
+                "email": f"{workspace_key}-member@aidoo.local",
+                "description": (
+                    f"{workspace_name} 워크스페이스 멤버 계정입니다."
+                    + (" 기본 Team Space 멤버 권한이 함께 제공됩니다." if has_pms else "")
+                ),
+                "category": "Workspaces",
+                "workspace_memberships": [(workspace_key, "member")],
+                "team_memberships": [(workspace_key, "member")] if has_pms else [],
+            }
+        )
+    return items
+
+
 DEV_LOGIN_ACCOUNTS = [
     {
         "key": "platform-admin",
         "label": "Platform Admin",
         "email": "platform-admin@aidoo.local",
-        "description": "전역 관리자 권한으로 모든 워크스페이스와 앱을 관리합니다.",
+        "description": "전역 관리자 권한으로 모든 워크스페이스와 설정을 관리합니다.",
         "category": "Administrators",
         "group": {
             "name": "Platform Admins",
@@ -223,75 +251,7 @@ DEV_LOGIN_ACCOUNTS = [
         "workspace_memberships": [],
         "team_memberships": [],
     },
-    {
-        "key": "org-admin",
-        "label": "Org Admin",
-        "email": "org-admin@aidoo.local",
-        "description": "사용자, 그룹, 워크스페이스를 관리합니다.",
-        "category": "Administrators",
-        "group": {
-            "name": "Org Admins",
-            "slug": "org-admins",
-            "description": "Seeded organization administrators.",
-            "system_roles": [SYSTEM_ORG_ADMIN],
-        },
-        "workspace_memberships": [],
-        "team_memberships": [],
-    },
-    {
-        "key": "ai-member",
-        "label": "AI Member",
-        "email": "ai-member@aidoo.local",
-        "description": "Innovation Lab 워크스페이스에서 AI/Docs/Meeting 을 사용합니다.",
-        "category": "Applications",
-        "workspace_memberships": [("innovation-lab", "member")],
-        "team_memberships": [],
-    },
-    {
-        "key": "docs-member",
-        "label": "Docs Member",
-        "email": "docs-member@aidoo.local",
-        "description": "Knowledge Base 워크스페이스에서 문서를 사용합니다.",
-        "category": "Applications",
-        "workspace_memberships": [("knowledge-base", "member")],
-        "team_memberships": [],
-    },
-    {
-        "key": "planner-member",
-        "label": "Planner Member",
-        "email": "planner-member@aidoo.local",
-        "description": "Planning Desk 워크스페이스에서 일정 기능만 사용합니다.",
-        "category": "Applications",
-        "workspace_memberships": [("planning-desk", "member")],
-        "team_memberships": [],
-    },
-    {
-        "key": "pms-viewer",
-        "label": "PMS Viewer",
-        "email": "pms-viewer@aidoo.local",
-        "description": "Delivery Hub 의 기본 PMS space 를 읽기 전용으로 확인합니다.",
-        "category": "Applications",
-        "workspace_memberships": [("delivery-hub", "member")],
-        "team_memberships": [("delivery-hub", "viewer")],
-    },
-    {
-        "key": "pms-member",
-        "label": "PMS Member",
-        "email": "pms-member@aidoo.local",
-        "description": "Delivery Hub 에서 PMS, Planner, Meeting 을 사용합니다.",
-        "category": "Applications",
-        "workspace_memberships": [("delivery-hub", "member")],
-        "team_memberships": [("delivery-hub", "member")],
-    },
-    {
-        "key": "outsider",
-        "label": "No Access User",
-        "email": "outsider@aidoo.local",
-        "description": "어떤 워크스페이스에도 속하지 않는 기본 사용자입니다.",
-        "category": "Applications",
-        "workspace_memberships": [],
-        "team_memberships": [],
-    },
+    *_build_workspace_dev_login_accounts(),
 ]
 
 DEV_LOGIN_ACCOUNT_MAP = {item["key"]: item for item in DEV_LOGIN_ACCOUNTS}
@@ -364,6 +324,12 @@ def normalize_team_role(role: str | None) -> str | None:
     return TEAM_ROLE_ALIASES.get(role.strip().lower())
 
 
+def normalize_system_role(role: str | None) -> str | None:
+    if role is None:
+        return None
+    return SYSTEM_ROLE_ALIASES.get(role.strip().lower())
+
+
 def normalize_workspace_app_code(app_code: str | None) -> str | None:
     if app_code is None:
         return None
@@ -380,7 +346,7 @@ def is_valid_team_role(role: str) -> bool:
 
 
 def is_valid_system_role(role: str) -> bool:
-    return role in VALID_SYSTEM_ROLES
+    return normalize_system_role(role) in VALID_SYSTEM_ROLES
 
 
 def is_valid_workspace_app_code(app_code: str) -> bool:
@@ -451,15 +417,20 @@ def _higher_team_role(left: str | None, right: str | None) -> str | None:
 
 
 def _replace_user_system_roles(db: Session, user_id: str, roles: Sequence[str]) -> None:
-    requested_roles = {role for role in roles if is_valid_system_role(role)}
-    current_links = {
-        link.role: link
-        for link in db.scalars(select(UserSystemRole).where(UserSystemRole.user_id == user_id)).all()
+    requested_roles = {
+        normalized
+        for role in roles
+        if (normalized := normalize_system_role(role)) is not None
     }
-    for role, link in list(current_links.items()):
-        if role not in requested_roles:
+    current_links = db.scalars(select(UserSystemRole).where(UserSystemRole.user_id == user_id)).all()
+    current_normalized_roles: set[str] = set()
+    for link in current_links:
+        normalized_role = normalize_system_role(link.role)
+        if normalized_role is None or normalized_role not in requested_roles or link.role != normalized_role:
             db.delete(link)
-    for role in requested_roles - set(current_links):
+            continue
+        current_normalized_roles.add(normalized_role)
+    for role in requested_roles - current_normalized_roles:
         db.add(UserSystemRole(id=new_id(), user_id=user_id, role=role))
 
 
@@ -468,15 +439,20 @@ def replace_user_system_roles(db: Session, user_id: str, roles: Sequence[str]) -
 
 
 def _replace_group_system_roles(db: Session, group_id: str, roles: Sequence[str]) -> None:
-    requested_roles = {role for role in roles if is_valid_system_role(role)}
-    current_links = {
-        link.role: link
-        for link in db.scalars(select(GroupSystemRole).where(GroupSystemRole.group_id == group_id)).all()
+    requested_roles = {
+        normalized
+        for role in roles
+        if (normalized := normalize_system_role(role)) is not None
     }
-    for role, link in list(current_links.items()):
-        if role not in requested_roles:
+    current_links = db.scalars(select(GroupSystemRole).where(GroupSystemRole.group_id == group_id)).all()
+    current_normalized_roles: set[str] = set()
+    for link in current_links:
+        normalized_role = normalize_system_role(link.role)
+        if normalized_role is None or normalized_role not in requested_roles or link.role != normalized_role:
             db.delete(link)
-    for role in requested_roles - set(current_links):
+            continue
+        current_normalized_roles.add(normalized_role)
+    for role in requested_roles - current_normalized_roles:
         db.add(GroupSystemRole(id=new_id(), group_id=group_id, role=role))
 
 
@@ -529,6 +505,14 @@ def _ensure_principal_group_migration(db: Session) -> None:
     for group in existing_groups.values():
         inferred_roles = _infer_system_roles_from_permissions(group.permissions or [])
         legacy_role = LEGACY_GROUP_ROLE_MAP.get(group.slug)
+        stored_roles = {
+            normalized
+            for role in db.scalars(
+                select(GroupSystemRole.role).where(GroupSystemRole.group_id == group.id)
+            ).all()
+            if (normalized := normalize_system_role(role)) is not None
+        }
+        inferred_roles.update(stored_roles)
         if legacy_role is not None:
             inferred_roles.add(legacy_role)
         if group.group_kind == "access" or bool(group.permissions) or legacy_role is not None:
@@ -542,15 +526,12 @@ def _ensure_principal_group_migration(db: Session) -> None:
 def _ensure_user_system_role_migration(db: Session) -> None:
     for user in db.scalars(select(User)).all():
         current_roles = {
-            role
+            normalize_system_role(role)
             for role in db.scalars(select(UserSystemRole.role).where(UserSystemRole.user_id == user.id)).all()
+            if normalize_system_role(role) is not None
         }
         migrated_roles: set[str] = set()
         if user.is_admin or SYSTEM_PLATFORM_ADMIN in current_roles:
-            migrated_roles.add(SYSTEM_PLATFORM_ADMIN)
-        if current_roles.intersection({"people_admin", "workspace_admin", "audit_viewer", SYSTEM_ORG_ADMIN}):
-            migrated_roles.add(SYSTEM_ORG_ADMIN)
-        if user.is_admin:
             migrated_roles.add(SYSTEM_PLATFORM_ADMIN)
         if current_roles - migrated_roles:
             _replace_user_system_roles(db, user.id, list(migrated_roles))
@@ -1068,18 +1049,18 @@ def get_or_create_default_pms_space(
 
 def resolve_system_roles(db: Session, user: User) -> list[str]:
     roles = {
-        link.role
+        normalized_role
         for link in getattr(user, "system_role_links", [])
-        if is_valid_system_role(link.role)
+        if (normalized_role := normalize_system_role(link.role)) is not None
     }
 
     for link in getattr(user, "group_links", []):
         if not link.group.active:
             continue
         roles.update(
-            system_link.role
+            normalized_role
             for system_link in getattr(link.group, "system_role_links", [])
-            if is_valid_system_role(system_link.role)
+            if (normalized_role := normalize_system_role(system_link.role)) is not None
         )
 
     if user.is_admin:
@@ -1090,11 +1071,12 @@ def resolve_system_roles(db: Session, user: User) -> list[str]:
 
 def has_system_role(db: Session, user: User, *roles: str) -> bool:
     role_set = set(resolve_system_roles(db, user))
-    return any(role in role_set for role in roles)
-
-
-def is_org_admin_user(user: User, db: Session) -> bool:
-    return has_system_role(db, user, SYSTEM_ORG_ADMIN)
+    normalized_requested_roles = {
+        normalized
+        for role in roles
+        if (normalized := normalize_system_role(role)) is not None
+    }
+    return any(role in role_set for role in normalized_requested_roles)
 
 
 def is_platform_admin_user(user: User, db: Session | None = None) -> bool:
@@ -1129,10 +1111,7 @@ def resolve_workspace_role_map(db: Session, user: User) -> dict[str, str]:
 
     system_roles = set(resolve_system_roles(db, user))
     if SYSTEM_PLATFORM_ADMIN in system_roles:
-        return {workspace.id: "owner" for workspace in active_workspaces}
-
-    if SYSTEM_ORG_ADMIN in system_roles:
-        role_map = {workspace.id: "admin" for workspace in active_workspaces}
+        return {workspace.id: "admin" for workspace in active_workspaces}
 
     for binding in user.workspace_bindings:
         normalized_role = normalize_workspace_role(binding.role)
@@ -1166,11 +1145,9 @@ def resolve_team_role(db: Session, user: User, team: Team) -> str | None:
     if is_platform_admin_user(user, db):
         return "owner"
 
-    effective_role = "admin" if is_org_admin_user(user, db) else None
+    effective_role = None
     workspace_role = resolve_workspace_role(db, user, team.workspace_id)
-    if workspace_role == "owner":
-        effective_role = _higher_team_role(effective_role, "owner")
-    elif workspace_role == "admin":
+    if workspace_role == "admin":
         effective_role = _higher_team_role(effective_role, "admin")
 
     membership_role = db.scalar(

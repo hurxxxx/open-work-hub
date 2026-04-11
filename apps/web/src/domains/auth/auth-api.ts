@@ -31,10 +31,8 @@ export interface WorkspaceSummary {
 }
 
 const WORKSPACE_ROLE_RANK: Record<string, number> = {
-  viewer: 10,
   member: 20,
   admin: 40,
-  owner: 50,
 };
 
 const TEAM_ROLE_RANK: Record<string, number> = {
@@ -93,11 +91,16 @@ export function workspaceRoleAllows(
   role: string | null | undefined,
   minRole: keyof typeof WORKSPACE_ROLE_RANK,
 ): boolean {
-  if (!role) {
+  const normalizedRole = role === 'owner'
+    ? 'admin'
+    : role === 'viewer'
+      ? 'member'
+      : role;
+  if (!normalizedRole) {
     return false;
   }
 
-  return (WORKSPACE_ROLE_RANK[role] ?? -1) >= WORKSPACE_ROLE_RANK[minRole];
+  return (WORKSPACE_ROLE_RANK[normalizedRole] ?? -1) >= WORKSPACE_ROLE_RANK[minRole];
 }
 
 export function teamRoleAllows(
@@ -150,7 +153,7 @@ export function hasFeatureAccess(
   workspaceSlug?: string | null,
 ): boolean {
   if (featureCode === 'nav.admin') {
-    return hasAnySystemRole(user, ['platform_admin', 'org_admin']);
+    return hasAnySystemRole(user, ['platform_admin']);
   }
   const appCode = FEATURE_TO_APP[featureCode];
   return appCode ? hasAppAccess(user, appCode, workspaceSlug) : false;

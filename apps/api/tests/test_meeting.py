@@ -524,7 +524,7 @@ def test_attendee_can_attach_task_via_space_access(client: TestClient) -> None:
     direct ProjectMember row — must be able to attach the issue. This was
     the regression behind '미팅2 에서 태스크가 등록되지 않는다' — meeting
     permission used the ProjectMember table directly while PMS itself reads
-    via space membership, so seed accounts (e.g. pms-member) were silently
+    via space membership, so seed accounts (e.g. delivery-hub-member) were silently
     locked out."""
 
     admin = _bootstrap_admin_session(client)
@@ -568,7 +568,7 @@ def test_attendee_can_attach_task_via_space_access(client: TestClient) -> None:
 
     # Attendee user with both meeting and pms workspace access. We then
     # add them as a member of the PMS space — NOT the project — exactly
-    # mirroring how the seed pms-member account is provisioned.
+    # mirroring how the seeded delivery-hub-member account is provisioned.
     attendee = _create_user_with_workspaces(
         client,
         admin_token,

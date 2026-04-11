@@ -29,6 +29,7 @@ interface SpaceMembersModalProps {
   spaceId: string | null;
   spaceName: string;
   canManage: boolean;
+  currentUserRole?: string | null;
   onChanged?: () => void;
 }
 
@@ -39,6 +40,12 @@ const ROLE_OPTIONS: { value: RoleValue; label: string; description: string }[] =
   { value: 'member', label: '멤버', description: '리스트와 문서 작성 및 편집' },
   { value: 'viewer', label: '뷰어', description: '읽기 전용' },
 ];
+
+const OWNER_ROLE_OPTION: { value: RoleValue; label: string; description: string } = {
+  value: 'owner',
+  label: '소유자',
+  description: '관리자 지정과 소유권 변경 가능',
+};
 
 const ROLE_LABELS: Record<string, string> = {
   owner: '소유자',
@@ -115,6 +122,7 @@ interface RowMenuProps {
   anchorRef: React.RefObject<HTMLButtonElement | null>;
   onClose: () => void;
   currentRole: RoleValue;
+  roleOptions: { value: RoleValue; label: string; description: string }[];
   onChangeRole: (role: RoleValue) => void;
   onRemove: () => void;
 }
@@ -124,6 +132,7 @@ function RowMenu({
   anchorRef,
   onClose,
   currentRole,
+  roleOptions,
   onChangeRole,
   onRemove,
 }: RowMenuProps) {
@@ -156,7 +165,7 @@ function RowMenu({
       <div className="px-3 py-1 app-text-overline text-app-ink/40">
         역할 변경
       </div>
-      {ROLE_OPTIONS.map((role) => (
+      {roleOptions.map((role) => (
         <button
           key={role.value}
           type="button"
@@ -204,9 +213,10 @@ export function SpaceMembersModal({
   spaceId,
   spaceName,
   canManage,
+  currentUserRole = null,
   onChanged,
 }: SpaceMembersModalProps) {
-  const { token } = useAuth();
+  const { token, user } = useAuth();
   const [members, setMembers] = useState<PmsSpaceMember[]>([]);
   const [allUsers, setAllUsers] = useState<PmsUserSummary[]>([]);
   const [loading, setLoading] = useState(false);
@@ -217,6 +227,11 @@ export function SpaceMembersModal({
   const [memberSearch, setMemberSearch] = useState('');
   const [openRowMenu, setOpenRowMenu] = useState<string | null>(null);
   const rowMenuAnchors = useRef<Map<string, HTMLButtonElement | null>>(new Map());
+  const canManageAdmins = currentUserRole === 'owner';
+  const roleOptions = useMemo(
+    () => (canManageAdmins ? [OWNER_ROLE_OPTION, ...ROLE_OPTIONS] : ROLE_OPTIONS),
+    [canManageAdmins],
+  );
 
   const refresh = useCallback(async () => {
     if (!token || !spaceId) return;
@@ -480,7 +495,10 @@ export function SpaceMembersModal({
             <ul className="divide-y divide-app-border rounded-md border border-app-border bg-app-surface">
               {visibleMembers.map((member) => {
                 const isBusy = busyUserId === member.user_id;
-                const canMutate = canManage && member.role !== 'owner';
+                const isSelf = member.user_id === user?.id;
+                const canMutate = canManage
+                  && !isSelf
+                  && (canManageAdmins || (member.role !== 'owner' && member.role !== 'admin'));
                 return (
                   <li
                     key={member.user_id}
@@ -533,6 +551,7 @@ export function SpaceMembersModal({
                             }}
                             onClose={() => setOpenRowMenu(null)}
                             currentRole={member.role as RoleValue}
+                            roleOptions={roleOptions}
                             onChangeRole={(role) =>
                               handleRoleChange(member.user_id, role)
                             }

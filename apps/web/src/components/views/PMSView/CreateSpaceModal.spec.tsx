@@ -129,7 +129,7 @@ describe('CreateSpaceModal', () => {
 
   it('creates a space for users with PMS app access', async () => {
     mockUseAuth.mockReturnValue({
-      token: 'pms-member-token',
+      token: 'workspace-member-token',
       user: buildUser(),
     });
     mockCreateSpace.mockResolvedValue({
@@ -165,7 +165,7 @@ describe('CreateSpaceModal', () => {
     fireEvent.click(screen.getByRole('button', { name: '스페이스 만들기' }));
 
     await waitFor(() => {
-      expect(mockCreateSpace).toHaveBeenCalledWith('pms-member-token', {
+      expect(mockCreateSpace).toHaveBeenCalledWith('workspace-member-token', {
         name: 'Engineering',
         description: 'Delivery team',
       });

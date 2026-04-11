@@ -2,6 +2,20 @@ from datetime import date, timedelta
 
 from fastapi.testclient import TestClient
 
+EXPECTED_DEV_LOGIN_ACCOUNT_KEYS = {
+    "platform-admin",
+    "hq-admin",
+    "hq-member",
+    "innovation-lab-admin",
+    "innovation-lab-member",
+    "knowledge-base-admin",
+    "knowledge-base-member",
+    "planning-desk-admin",
+    "planning-desk-member",
+    "delivery-hub-admin",
+    "delivery-hub-member",
+}
+
 
 def test_healthz(client: TestClient) -> None:
     response = client.get("/healthz")
@@ -37,7 +51,7 @@ def test_auth_bootstrap_and_protected_search(client: TestClient) -> None:
     assert "platform_admin" in auth_payload["user"]["system_roles"]
     assert auth_payload["user"]["theme_preference"] == "system"
     assert auth_payload["user"]["workspaces"]
-    assert any(item["role"] == "owner" for item in auth_payload["user"]["workspaces"])
+    assert any(item["role"] == "admin" for item in auth_payload["user"]["workspaces"])
     assert any("docs" in item["enabled_apps"] for item in auth_payload["user"]["workspaces"])
     assert "workspace_roles" not in auth_payload["user"]
     assert "app_access" not in auth_payload["user"]
@@ -152,8 +166,8 @@ def test_seeded_dev_login_accounts_are_listed_and_can_log_in(client: TestClient)
     payload = status_response.json()
     assert payload["requires_setup"] is False
     assert payload["dev_admin_login_available"] is True
-    assert any(item["account_key"] == "platform-admin" for item in payload["dev_login_accounts"])
-    assert any(item["account_key"] == "pms-viewer" for item in payload["dev_login_accounts"])
+    account_keys = {item["account_key"] for item in payload["dev_login_accounts"]}
+    assert account_keys == EXPECTED_DEV_LOGIN_ACCOUNT_KEYS
 
     platform_admin_login_response = client.post(
         "/api/v1/auth/dev-login",
@@ -168,11 +182,11 @@ def test_seeded_dev_login_accounts_are_listed_and_can_log_in(client: TestClient)
 
     dev_login_response = client.post(
         "/api/v1/auth/dev-login",
-        json={"account_key": "pms-viewer"},
+        json={"account_key": "delivery-hub-member"},
     )
     assert dev_login_response.status_code == 200
     login_payload = dev_login_response.json()
-    assert login_payload["user"]["email"] == "pms-viewer@aidoo.local"
+    assert login_payload["user"]["email"] == "delivery-hub-member@aidoo.local"
     assert any("pms" in item["enabled_apps"] for item in login_payload["user"]["workspaces"])
     assert any(item["role"] == "member" for item in login_payload["user"]["workspaces"])
 
@@ -203,14 +217,14 @@ def test_dev_login_creates_missing_dev_accounts_on_demand(client: TestClient) ->
     payload = status_response.json()
     assert payload["requires_setup"] is False
 
-    # First dev-login for org-admin seeds the full DEV_LOGIN_ACCOUNTS set.
-    org_admin_login_response = client.post(
+    # First dev-login for platform-admin seeds the full DEV_LOGIN_ACCOUNTS set.
+    platform_admin_login_response = client.post(
         "/api/v1/auth/dev-login",
-        json={"account_key": "org-admin"},
+        json={"account_key": "platform-admin"},
     )
-    assert org_admin_login_response.status_code == 200
-    assert org_admin_login_response.json()["user"]["email"] == "org-admin@aidoo.local"
-    assert "org_admin" in org_admin_login_response.json()["user"]["system_roles"]
+    assert platform_admin_login_response.status_code == 200
+    assert platform_admin_login_response.json()["user"]["email"] == "platform-admin@aidoo.local"
+    assert "platform_admin" in platform_admin_login_response.json()["user"]["system_roles"]
 
     # After seeding, bootstrap-status surfaces the full dev-login account
     # list without having to mutate the database itself.
@@ -219,8 +233,7 @@ def test_dev_login_creates_missing_dev_accounts_on_demand(client: TestClient) ->
     account_keys = {
         item["account_key"] for item in second_status.json()["dev_login_accounts"]
     }
-    assert "org-admin" in account_keys
-    assert "pms-member" in account_keys
+    assert account_keys == EXPECTED_DEV_LOGIN_ACCOUNT_KEYS
 
 
 def test_auth_preferences_password_and_sessions(client: TestClient) -> None:
@@ -515,7 +528,7 @@ def test_admin_identity_management_endpoints(client: TestClient) -> None:
         json={
             "name": "Docs Editors",
             "description": "Can manage docs access",
-            "system_roles": ["org_admin"],
+            "system_roles": ["platform_admin"],
         },
     )
     assert group_response.status_code == 201
@@ -813,8 +826,8 @@ def test_non_pms_routes_require_workspace_feature_access(client: TestClient) -> 
         "/api/v1/admin/users",
         headers=admin_headers,
         json={
-            "email": "docs-member@aidoo.local",
-            "full_name": "Docs Member",
+            "email": "docs-user@aidoo.local",
+            "full_name": "Docs User",
         },
     )
     assert user_response.status_code == 201
@@ -1031,7 +1044,7 @@ def test_pms_membership_permissions(client: TestClient) -> None:
     admin_token = _bootstrap_admin(client)
     outsider_id, outsider_token = _create_direct_user(
         email="member@aidoo.local",
-        full_name="PMS Member",
+        full_name="Project Member",
         workspace_app_codes=("pms",),
     )
 
@@ -1139,25 +1152,25 @@ def test_pms_space_creator_becomes_owner_and_last_manager_is_protected(client: T
     assert remove_response.status_code == 409
 
 
-def test_org_admin_gets_pms_app_access_and_can_view_all_spaces(client: TestClient) -> None:
+def test_platform_admin_gets_pms_app_access_and_can_view_all_spaces(client: TestClient) -> None:
     admin_token = _bootstrap_admin(client)
     project_response = client.post(
         "/api/v1/pms/projects",
         headers={"Authorization": f"Bearer {admin_token}"},
-        json={"key": "ORGADM", "name": "Org Admin Project", "description": "Visibility"},
+        json={"key": "PLATADM", "name": "Platform Admin Project", "description": "Visibility"},
     )
     assert project_response.status_code == 201
     expected_space_id = project_response.json()["team_id"]
 
-    _, org_admin_token = _create_direct_user(
-        email="org-admin@aidoo.local",
-        full_name="Org Admin",
-        system_roles=("org_admin",),
+    _, platform_admin_token = _create_direct_user(
+        email="platform-admin@aidoo.local",
+        full_name="Platform Admin",
+        system_roles=("platform_admin",),
     )
 
     me_response = client.get(
         "/api/v1/auth/me",
-        headers={"Authorization": f"Bearer {org_admin_token}"},
+        headers={"Authorization": f"Bearer {platform_admin_token}"},
     )
     assert me_response.status_code == 200
     assert any("pms" in item["enabled_apps"] for item in me_response.json()["workspaces"])
@@ -1166,7 +1179,7 @@ def test_org_admin_gets_pms_app_access_and_can_view_all_spaces(client: TestClien
 
     spaces_response = client.get(
         "/api/v1/pms/spaces",
-        headers={"Authorization": f"Bearer {org_admin_token}"},
+        headers={"Authorization": f"Bearer {platform_admin_token}"},
     )
     assert spaces_response.status_code == 200
     assert any(item["id"] == expected_space_id for item in spaces_response.json())

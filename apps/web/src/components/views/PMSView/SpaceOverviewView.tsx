@@ -341,6 +341,7 @@ export const SpaceOverviewView = ({
         spaceId={spaceId}
         spaceName={spaceName ?? 'Space'}
         canManage={canManageMembers}
+        currentUserRole={spaceMeta?.current_user_role ?? null}
         onChanged={() => setMembersRefreshToken((v) => v + 1)}
       />
     </div>

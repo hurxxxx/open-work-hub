@@ -1,9 +1,9 @@
 export const ADMIN_SECTION_ROLES = {
-  general: ['platform_admin', 'org_admin'],
-  people: ['platform_admin', 'org_admin'],
-  workspaces: ['platform_admin', 'org_admin'],
-  security: ['platform_admin', 'org_admin'],
-  audit: ['platform_admin', 'org_admin'],
+  general: ['platform_admin'],
+  people: ['platform_admin'],
+  workspaces: ['platform_admin'],
+  security: ['platform_admin'],
+  audit: ['platform_admin'],
 } as const;
 
 export type AdminSection = keyof typeof ADMIN_SECTION_ROLES;
