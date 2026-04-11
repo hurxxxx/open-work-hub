@@ -1043,7 +1043,7 @@ function SubjectPickerInline({
   }, [groups, debouncedQuery, excludeIds]);
 
   return (
-    <div className="space-y-2">
+    <div className="flex min-h-0 flex-1 flex-col gap-2">
       <div className="flex items-center gap-1.5">
         <button
           type="button"
@@ -1090,7 +1090,7 @@ function SubjectPickerInline({
         />
       </div>
 
-      <div className="max-h-[240px] overflow-y-auto rounded-md border border-app-border bg-app-bg">
+      <div className="min-h-0 flex-1 overflow-y-auto rounded-md border border-app-border bg-app-bg">
         {tab === 'user' ? (
           loading && candidates.length === 0 ? (
             <div className="app-text-caption px-3 py-3 text-app-ink/60">불러오는 중...</div>
@@ -1236,18 +1236,16 @@ function WorkspaceAddMemberModal({
       }
     >
       <div className="flex h-full min-h-0 flex-col gap-4">
-        <div className="min-h-0 flex-1 overflow-y-auto rounded-md border border-app-border bg-app-bg p-3">
-          <SubjectPickerInline
-            workspaceId={workspaceId}
-            token={token}
-            groups={groups}
-            excludeIds={excludeIds}
-            selection={selection}
-            onSelectionChange={onSelectionChange}
-            canReadGroups={canReadGroups}
-            onOpenDirectory={canBrowseDirectory ? onOpenDirectory : null}
-          />
-        </div>
+        <SubjectPickerInline
+          workspaceId={workspaceId}
+          token={token}
+          groups={groups}
+          excludeIds={excludeIds}
+          selection={selection}
+          onSelectionChange={onSelectionChange}
+          canReadGroups={canReadGroups}
+          onOpenDirectory={canBrowseDirectory ? onOpenDirectory : null}
+        />
         <div className="shrink-0">
           <div className="app-text-caption mb-1 text-app-ink/60">선택 ({count})</div>
           <SelectedSubjectsBar
