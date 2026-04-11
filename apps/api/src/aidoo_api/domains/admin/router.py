@@ -6,6 +6,7 @@ from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field, field_validator
+from sqlalchemy import case as sa_case
 from sqlalchemy import delete as sa_delete
 from sqlalchemy import func, or_, select
 from sqlalchemy import update as sa_update
@@ -116,6 +117,35 @@ class WorkspaceMemberCandidateResponse(BaseModel):
     status: str
 
 
+class WorkspaceMemberItemResponse(BaseModel):
+    subject_id: str
+    subject_type: Literal["user", "group"]
+    subject_label: str
+    subject_secondary: str | None = None
+    role: str
+    user_status: str | None = None
+    last_login_at: datetime | None = None
+    created_at: datetime | None = None
+
+
+class WorkspaceMemberRoleCounts(BaseModel):
+    owner: int = 0
+    admin: int = 0
+    member: int = 0
+    viewer: int = 0
+
+
+class WorkspaceMembersResponse(BaseModel):
+    items: list[WorkspaceMemberItemResponse]
+    total: int
+    page: int
+    page_size: int
+    role_counts: WorkspaceMemberRoleCounts
+    user_count: int
+    group_count: int
+    pending_count: int
+
+
 class UserTeamMembershipItemResponse(BaseModel):
     id: str
     workspace_id: str
@@ -185,6 +215,45 @@ def _workspace_doc_count(db: Session, workspace_id: str) -> int:
         )
         or 0
     )
+
+
+def _count_workspace_owners(db: Session, workspace_id: str) -> int:
+    user_owners = db.scalar(
+        select(func.count())
+        .select_from(WorkspaceUserBinding)
+        .where(
+            WorkspaceUserBinding.workspace_id == workspace_id,
+            WorkspaceUserBinding.role == "owner",
+        )
+    ) or 0
+    group_owners = db.scalar(
+        select(func.count())
+        .select_from(WorkspaceGroupBinding)
+        .where(
+            WorkspaceGroupBinding.workspace_id == workspace_id,
+            WorkspaceGroupBinding.role == "owner",
+        )
+    ) or 0
+    return int(user_owners) + int(group_owners)
+
+
+def _ensure_not_last_owner_removal(
+    db: Session,
+    workspace_id: str,
+    *,
+    current_role: str,
+    next_role: str | None,
+) -> None:
+    """Refuse to remove or demote the last owner of a workspace."""
+    if current_role != "owner":
+        return
+    if next_role == "owner":
+        return
+    if _count_workspace_owners(db, workspace_id) <= 1:
+        raise HTTPException(
+            status_code=409,
+            detail="워크스페이스에는 최소 한 명의 owner 가 필요합니다.",
+        )
 
 
 def _serialize_workspace(db: Session, workspace: Workspace) -> WorkspaceItemResponse:
@@ -416,6 +485,31 @@ class WorkspaceMemberRoleUpdateRequest(BaseModel):
         normalized = normalize_workspace_role(value)
         assert normalized is not None
         return normalized
+
+
+class WorkspaceMemberBulkSubject(BaseModel):
+    subject_type: Literal["user", "group"]
+    subject_id: str
+    role: str | None = None
+
+    @field_validator("role")
+    @classmethod
+    def validate_role(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        if not is_valid_workspace_role(value):
+            raise ValueError("Invalid workspace role.")
+        return normalize_workspace_role(value)
+
+
+class WorkspaceMemberBulkRequest(BaseModel):
+    action: Literal["add", "remove", "update_role"]
+    subjects: list[WorkspaceMemberBulkSubject] = Field(..., min_length=1, max_length=200)
+
+
+class WorkspaceMemberBulkResponse(BaseModel):
+    succeeded: int
+    failed: list[dict[str, str]] = Field(default_factory=list)
 
 
 class GroupWorkspaceBindingInput(BaseModel):
@@ -1766,6 +1860,14 @@ def update_workspace_member_role(
         )
         if binding is None:
             raise HTTPException(status_code=404, detail="Workspace member not found.")
+        if subject_id == context.user.id and binding.role != payload.role:
+            raise HTTPException(
+                status_code=409,
+                detail="자기 자신의 role 은 직접 변경할 수 없습니다. 다른 admin 에게 요청해 주세요.",
+            )
+        _ensure_not_last_owner_removal(
+            db, workspace.id, current_role=binding.role, next_role=payload.role
+        )
         binding.role = payload.role
         db.add(binding)
         record_audit_log(
@@ -1790,6 +1892,9 @@ def update_workspace_member_role(
     )
     if group_binding is None:
         raise HTTPException(status_code=404, detail="Workspace member not found.")
+    _ensure_not_last_owner_removal(
+        db, workspace.id, current_role=group_binding.role, next_role=payload.role
+    )
     group_binding.role = payload.role
     db.add(group_binding)
     record_audit_log(
@@ -1827,6 +1932,14 @@ def remove_workspace_member(
         )
         if binding is None:
             raise HTTPException(status_code=404, detail="Workspace member not found.")
+        if subject_id == context.user.id:
+            raise HTTPException(
+                status_code=409,
+                detail="자기 자신은 워크스페이스에서 제거할 수 없습니다.",
+            )
+        _ensure_not_last_owner_removal(
+            db, workspace.id, current_role=binding.role, next_role=None
+        )
         db.delete(binding)
     else:
         group_binding = db.scalar(
@@ -1837,6 +1950,9 @@ def remove_workspace_member(
         )
         if group_binding is None:
             raise HTTPException(status_code=404, detail="Workspace member not found.")
+        _ensure_not_last_owner_removal(
+            db, workspace.id, current_role=group_binding.role, next_role=None
+        )
         db.delete(group_binding)
 
     record_audit_log(
@@ -1849,6 +1965,333 @@ def remove_workspace_member(
         payload={"subject_type": subject_type, "subject_id": subject_id},
     )
     db.commit()
+
+
+@router.get(
+    "/workspaces/{workspace_id}/members",
+    response_model=WorkspaceMembersResponse,
+)
+def list_workspace_members(
+    workspace_id: str,
+    q: str | None = Query(default=None, max_length=120),
+    role: list[str] | None = Query(default=None),
+    subject_type: Literal["user", "group"] | None = Query(default=None),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=25, ge=1, le=200),
+    pending_only: bool = Query(default=False),
+    context: AuthContext = Depends(require_auth_context),
+    db: Session = Depends(get_db_session),
+) -> WorkspaceMembersResponse:
+    workspace = _ensure_admin_workspace_scope(db, context.user, workspace_id)
+
+    normalized_query = q.strip() if q else ""
+    requested_roles: list[str] = []
+    if role:
+        for value in role:
+            if not is_valid_workspace_role(value):
+                raise HTTPException(status_code=422, detail="Invalid workspace role filter.")
+            normalized = normalize_workspace_role(value)
+            if normalized and normalized not in requested_roles:
+                requested_roles.append(normalized)
+
+    role_counts_map: dict[str, int] = {"owner": 0, "admin": 0, "member": 0, "viewer": 0}
+    user_total = 0
+    group_total = 0
+
+    user_filters: list = [WorkspaceUserBinding.workspace_id == workspace.id]
+    if normalized_query:
+        like = f"%{normalized_query}%"
+        user_filters.append(
+            or_(
+                User.email.ilike(like),
+                User.full_name.ilike(like),
+                User.display_name.ilike(like),
+            )
+        )
+    if pending_only:
+        user_filters.append(User.status == "invited")
+
+    group_filters: list = [WorkspaceGroupBinding.workspace_id == workspace.id]
+    if normalized_query:
+        like = f"%{normalized_query}%"
+        group_filters.append(
+            or_(
+                AccessGroup.name.ilike(like),
+                AccessGroup.slug.ilike(like),
+            )
+        )
+
+    # Distribution counts: respect search + pending_only but ignore the role filter,
+    # so the chips can show how many items each role would have under current search.
+    user_dist_rows = db.execute(
+        select(WorkspaceUserBinding.role, func.count())
+        .join(User, User.id == WorkspaceUserBinding.user_id)
+        .where(*user_filters)
+        .group_by(WorkspaceUserBinding.role)
+    ).all()
+    for role_value, count_value in user_dist_rows:
+        normalized = normalize_workspace_role(role_value) or role_value
+        if normalized in role_counts_map:
+            role_counts_map[normalized] += int(count_value)
+        user_total += int(count_value)
+
+    if not pending_only:
+        group_dist_rows = db.execute(
+            select(WorkspaceGroupBinding.role, func.count())
+            .join(AccessGroup, AccessGroup.id == WorkspaceGroupBinding.group_id)
+            .where(*group_filters)
+            .group_by(WorkspaceGroupBinding.role)
+        ).all()
+        for role_value, count_value in group_dist_rows:
+            normalized = normalize_workspace_role(role_value) or role_value
+            if normalized in role_counts_map:
+                role_counts_map[normalized] += int(count_value)
+            group_total += int(count_value)
+
+    pending_total = int(
+        db.scalar(
+            select(func.count())
+            .select_from(WorkspaceUserBinding)
+            .join(User, User.id == WorkspaceUserBinding.user_id)
+            .where(
+                WorkspaceUserBinding.workspace_id == workspace.id,
+                User.status == "invited",
+            )
+        )
+        or 0
+    )
+
+    user_items: list[WorkspaceMemberItemResponse] = []
+    group_items: list[WorkspaceMemberItemResponse] = []
+
+    user_role_priority = sa_case(
+        {"owner": 0, "admin": 1, "member": 2, "viewer": 3},
+        value=WorkspaceUserBinding.role,
+        else_=99,
+    )
+    if subject_type in (None, "user"):
+        user_query = (
+            select(WorkspaceUserBinding)
+            .join(User, User.id == WorkspaceUserBinding.user_id)
+            .options(joinedload(WorkspaceUserBinding.user))
+            .where(*user_filters)
+        )
+        if requested_roles:
+            user_query = user_query.where(WorkspaceUserBinding.role.in_(requested_roles))
+        user_query = user_query.order_by(user_role_priority.asc(), User.full_name.asc())
+        for binding in db.scalars(user_query).all():
+            user_items.append(
+                WorkspaceMemberItemResponse(
+                    subject_id=binding.user_id,
+                    subject_type="user",
+                    subject_label=binding.user.full_name or binding.user.email,
+                    subject_secondary=binding.user.email,
+                    role=normalize_workspace_role(binding.role) or binding.role,
+                    user_status=binding.user.status,
+                    last_login_at=binding.user.last_login_at,
+                    created_at=binding.created_at,
+                )
+            )
+
+    if subject_type in (None, "group") and not pending_only:
+        group_role_priority = sa_case(
+            {"owner": 0, "admin": 1, "member": 2, "viewer": 3},
+            value=WorkspaceGroupBinding.role,
+            else_=99,
+        )
+        group_query = (
+            select(WorkspaceGroupBinding)
+            .join(AccessGroup, AccessGroup.id == WorkspaceGroupBinding.group_id)
+            .options(joinedload(WorkspaceGroupBinding.group))
+            .where(*group_filters)
+        )
+        if requested_roles:
+            group_query = group_query.where(WorkspaceGroupBinding.role.in_(requested_roles))
+        group_query = group_query.order_by(group_role_priority.asc(), AccessGroup.name.asc())
+        for binding in db.scalars(group_query).all():
+            group_items.append(
+                WorkspaceMemberItemResponse(
+                    subject_id=binding.group_id,
+                    subject_type="group",
+                    subject_label=binding.group.name,
+                    subject_secondary=binding.group.slug,
+                    role=normalize_workspace_role(binding.role) or binding.role,
+                    user_status=None,
+                    last_login_at=None,
+                    created_at=binding.created_at,
+                )
+            )
+
+    # Order: groups first (typically a small set, role-sorted), then users
+    combined = group_items + user_items
+    total = len(combined)
+    start = (page - 1) * page_size
+    end = start + page_size
+    page_items = combined[start:end]
+
+    return WorkspaceMembersResponse(
+        items=page_items,
+        total=total,
+        page=page,
+        page_size=page_size,
+        role_counts=WorkspaceMemberRoleCounts(**role_counts_map),
+        user_count=user_total,
+        group_count=group_total,
+        pending_count=pending_total,
+    )
+
+
+@router.post(
+    "/workspaces/{workspace_id}/members/bulk",
+    response_model=WorkspaceMemberBulkResponse,
+)
+def bulk_workspace_members(
+    workspace_id: str,
+    payload: WorkspaceMemberBulkRequest,
+    context: AuthContext = Depends(require_auth_context),
+    db: Session = Depends(get_db_session),
+) -> WorkspaceMemberBulkResponse:
+    workspace = _ensure_admin_workspace_scope(db, context.user, workspace_id)
+
+    succeeded = 0
+    failed: list[dict[str, str]] = []
+
+    for entry in payload.subjects:
+        savepoint = db.begin_nested()
+        try:
+            if payload.action == "add":
+                if entry.role is None:
+                    raise HTTPException(status_code=422, detail="role is required for add.")
+                if entry.subject_type == "user":
+                    if db.scalar(select(User.id).where(User.id == entry.subject_id)) is None:
+                        raise HTTPException(status_code=404, detail="User not found.")
+                    existing = db.scalar(
+                        select(WorkspaceUserBinding).where(
+                            WorkspaceUserBinding.workspace_id == workspace.id,
+                            WorkspaceUserBinding.user_id == entry.subject_id,
+                        )
+                    )
+                    if existing is not None:
+                        raise HTTPException(status_code=409, detail="이미 멤버입니다.")
+                    db.add(
+                        WorkspaceUserBinding(
+                            id=new_id(),
+                            workspace_id=workspace.id,
+                            user_id=entry.subject_id,
+                            role=entry.role,
+                        )
+                    )
+                else:
+                    if db.scalar(select(AccessGroup.id).where(AccessGroup.id == entry.subject_id)) is None:
+                        raise HTTPException(status_code=404, detail="Group not found.")
+                    existing_group = db.scalar(
+                        select(WorkspaceGroupBinding).where(
+                            WorkspaceGroupBinding.workspace_id == workspace.id,
+                            WorkspaceGroupBinding.group_id == entry.subject_id,
+                        )
+                    )
+                    if existing_group is not None:
+                        raise HTTPException(status_code=409, detail="이미 멤버입니다.")
+                    db.add(
+                        WorkspaceGroupBinding(
+                            id=new_id(),
+                            workspace_id=workspace.id,
+                            group_id=entry.subject_id,
+                            role=entry.role,
+                        )
+                    )
+            elif payload.action == "remove":
+                if entry.subject_type == "user":
+                    binding = db.scalar(
+                        select(WorkspaceUserBinding).where(
+                            WorkspaceUserBinding.workspace_id == workspace.id,
+                            WorkspaceUserBinding.user_id == entry.subject_id,
+                        )
+                    )
+                    if binding is None:
+                        raise HTTPException(status_code=404, detail="Workspace member not found.")
+                    if entry.subject_id == context.user.id:
+                        raise HTTPException(
+                            status_code=409,
+                            detail="자기 자신은 워크스페이스에서 제거할 수 없습니다.",
+                        )
+                    _ensure_not_last_owner_removal(
+                        db, workspace.id, current_role=binding.role, next_role=None
+                    )
+                    db.delete(binding)
+                else:
+                    group_binding = db.scalar(
+                        select(WorkspaceGroupBinding).where(
+                            WorkspaceGroupBinding.workspace_id == workspace.id,
+                            WorkspaceGroupBinding.group_id == entry.subject_id,
+                        )
+                    )
+                    if group_binding is None:
+                        raise HTTPException(status_code=404, detail="Workspace member not found.")
+                    _ensure_not_last_owner_removal(
+                        db, workspace.id, current_role=group_binding.role, next_role=None
+                    )
+                    db.delete(group_binding)
+            elif payload.action == "update_role":
+                if entry.role is None:
+                    raise HTTPException(status_code=422, detail="role is required for update_role.")
+                if entry.subject_type == "user":
+                    binding = db.scalar(
+                        select(WorkspaceUserBinding).where(
+                            WorkspaceUserBinding.workspace_id == workspace.id,
+                            WorkspaceUserBinding.user_id == entry.subject_id,
+                        )
+                    )
+                    if binding is None:
+                        raise HTTPException(status_code=404, detail="Workspace member not found.")
+                    if entry.subject_id == context.user.id and binding.role != entry.role:
+                        raise HTTPException(
+                            status_code=409,
+                            detail="자기 자신의 role 은 직접 변경할 수 없습니다.",
+                        )
+                    _ensure_not_last_owner_removal(
+                        db, workspace.id, current_role=binding.role, next_role=entry.role
+                    )
+                    binding.role = entry.role
+                    db.add(binding)
+                else:
+                    group_binding = db.scalar(
+                        select(WorkspaceGroupBinding).where(
+                            WorkspaceGroupBinding.workspace_id == workspace.id,
+                            WorkspaceGroupBinding.group_id == entry.subject_id,
+                        )
+                    )
+                    if group_binding is None:
+                        raise HTTPException(status_code=404, detail="Workspace member not found.")
+                    _ensure_not_last_owner_removal(
+                        db, workspace.id, current_role=group_binding.role, next_role=entry.role
+                    )
+                    group_binding.role = entry.role
+                    db.add(group_binding)
+            db.flush()
+            savepoint.commit()
+            succeeded += 1
+        except HTTPException as exc:
+            savepoint.rollback()
+            failed.append(
+                {
+                    "subject_type": entry.subject_type,
+                    "subject_id": entry.subject_id,
+                    "detail": str(exc.detail),
+                }
+            )
+
+    record_audit_log(
+        db,
+        actor_user_id=context.user.id,
+        action=f"admin.workspace.members.bulk.{payload.action}",
+        entity_kind="workspace",
+        entity_id=workspace.id,
+        summary=f"Bulk {payload.action} on {workspace.name}",
+        payload={"succeeded": succeeded, "failed_count": len(failed)},
+    )
+    db.commit()
+    return WorkspaceMemberBulkResponse(succeeded=succeeded, failed=failed)
 
 
 @router.get(

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Bot,
   CalendarDays,
@@ -30,6 +30,7 @@ import {
 
 import {
   addWorkspaceMember,
+  bulkWorkspaceMembers,
   createAdminUser,
   createGroup,
   createWorkspace,
@@ -45,6 +46,7 @@ import {
   listTeams,
   listWorkspaceBindings,
   listWorkspaceMemberCandidates,
+  listWorkspaceMembers,
   listWorkspaces,
   removeWorkspaceMember,
   replaceGroupMembers,
@@ -65,6 +67,8 @@ import {
   type WorkspaceBindingItem,
   type WorkspaceItem,
   type WorkspaceMemberCandidate,
+  type WorkspaceMemberItem,
+  type WorkspaceMembersResponse,
 } from './admin-api';
 import {
   hasAnyAdminReadPermission,
@@ -196,6 +200,61 @@ function formatUserApps(
 
 function formatUserWorkspaces(user: Pick<AuthUser, 'workspaces'>): string {
   return user.workspaces.map((workspace) => workspace.name).join(', ') || '-';
+}
+
+const WORKSPACE_ROLE_RANK_DISPLAY: Record<string, number> = {
+  owner: 0,
+  admin: 1,
+  member: 2,
+  viewer: 3,
+};
+
+function UserWorkspaceChips({ user }: { user: Pick<AuthUser, 'workspaces'> }) {
+  if (user.workspaces.length === 0) {
+    return <span className="text-app-ink/40">-</span>;
+  }
+  const sorted = [...user.workspaces].sort((a, b) => {
+    const rankDiff =
+      (WORKSPACE_ROLE_RANK_DISPLAY[a.role] ?? 99) - (WORKSPACE_ROLE_RANK_DISPLAY[b.role] ?? 99);
+    if (rankDiff !== 0) return rankDiff;
+    return a.name.localeCompare(b.name);
+  });
+  const visible = sorted.slice(0, 3);
+  const hiddenCount = sorted.length - visible.length;
+  return (
+    <div className="flex flex-wrap items-center gap-1">
+      {visible.map((workspace) => {
+        const isElevated = workspace.role === 'owner' || workspace.role === 'admin';
+        return (
+          <span
+            key={workspace.id}
+            className={`app-text-caption inline-flex items-center gap-1 rounded-full border px-2 py-0.5 ${
+              isElevated
+                ? 'border-app-accent/30 bg-app-accent/10 text-app-accent'
+                : 'border-app-border bg-app-surface-sidebar text-app-ink/70'
+            }`}
+            title={`${workspace.name} · ${workspace.role}`}
+          >
+            <span>{workspace.name}</span>
+            {isElevated ? (
+              <span className="opacity-70">{workspace.role === 'owner' ? '👑' : '🛡'}</span>
+            ) : null}
+          </span>
+        );
+      })}
+      {hiddenCount > 0 ? (
+        <span
+          className="app-text-caption text-app-ink/50"
+          title={sorted
+            .slice(3)
+            .map((workspace) => `${workspace.name} (${workspace.role})`)
+            .join(', ')}
+        >
+          +{hiddenCount}
+        </span>
+      ) : null}
+    </div>
+  );
 }
 
 function formatUserGroups(user: Pick<AuthUser, 'group_slugs'>): string {
@@ -1267,8 +1326,8 @@ function PeopleSection({ token }: { token: string }) {
                   <BodyCell className="max-w-[150px] truncate text-gray-500" dense>
                     {formatUserGroups(user)}
                   </BodyCell>
-                  <BodyCell className="max-w-[220px] truncate text-gray-500" dense>
-                    {formatUserWorkspaces(user)}
+                  <BodyCell className="max-w-[260px]" dense>
+                    <UserWorkspaceChips user={user} />
                   </BodyCell>
                   <BodyCell dense>{isAdminUser(user) ? 'Admin' : 'Member'}</BodyCell>
                   <BodyCell dense>
@@ -2081,176 +2140,447 @@ function WorkspaceMemberRow({
   );
 }
 
-function AddMemberPopover({
-  workspaceId,
+// Subject selection contract — shared across inline picker, modal, and future
+// org-chart picker. Stores user/group ids that have been ticked but not yet
+// committed.
+type SubjectKind = 'user' | 'group';
+
+interface SelectedSubject {
+  id: string;
+  kind: SubjectKind;
+  label: string;
+  secondary?: string;
+}
+
+interface SubjectSelectionState {
+  users: Map<string, SelectedSubject>;
+  groups: Map<string, SelectedSubject>;
+}
+
+function emptySubjectSelection(): SubjectSelectionState {
+  return { users: new Map(), groups: new Map() };
+}
+
+function selectionSize(selection: SubjectSelectionState): number {
+  return selection.users.size + selection.groups.size;
+}
+
+function toggleSubject(
+  selection: SubjectSelectionState,
+  subject: SelectedSubject,
+): SubjectSelectionState {
+  const target = subject.kind === 'user' ? selection.users : selection.groups;
+  const next = new Map(target);
+  if (next.has(subject.id)) {
+    next.delete(subject.id);
+  } else {
+    next.set(subject.id, subject);
+  }
+  return subject.kind === 'user'
+    ? { ...selection, users: next }
+    : { ...selection, groups: next };
+}
+
+function removeSubject(
+  selection: SubjectSelectionState,
+  kind: SubjectKind,
+  id: string,
+): SubjectSelectionState {
+  const target = kind === 'user' ? selection.users : selection.groups;
+  if (!target.has(id)) return selection;
+  const next = new Map(target);
+  next.delete(id);
+  return kind === 'user'
+    ? { ...selection, users: next }
+    : { ...selection, groups: next };
+}
+
+function PeopleDirectoryGrid({
   token,
-  groups,
+  selection,
+  onToggleSelect,
   excludeIds,
-  onAdd,
-  canReadGroups,
-  busy,
+  membershipLabel = '이미 멤버',
+  className,
 }: {
-  workspaceId: string;
   token: string;
-  groups: AccessGroupItem[];
+  selection: SubjectSelectionState;
+  onToggleSelect: (subject: SelectedSubject) => void;
   excludeIds: Set<string>;
-  onAdd: (payload: { subject_id: string; subject_type: 'user' | 'group'; role: string }) => Promise<void>;
-  canReadGroups: boolean;
-  busy: boolean;
+  membershipLabel?: string;
+  className?: string;
 }) {
-  const [open, setOpen] = useState(false);
-  const [tab, setTab] = useState<'user' | 'group'>('user');
-  const [query, setQuery] = useState('');
-  const [role, setRole] = useState('member');
-  const [candidates, setCandidates] = useState<WorkspaceMemberCandidate[]>([]);
+  const [users, setUsers] = useState<AuthUser[]>([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
+  const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [loading, setLoading] = useState(false);
-  const [localError, setLocalError] = useState<string | null>(null);
-  const containerRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
-    if (!open || tab !== 'user') {
-      return;
-    }
+    const handle = window.setTimeout(() => setDebouncedSearch(search.trim()), 200);
+    return () => window.clearTimeout(handle);
+  }, [search]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [debouncedSearch]);
+
+  useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    const handle = window.setTimeout(async () => {
+    void (async () => {
       try {
-        const items = await listWorkspaceMemberCandidates(token, workspaceId, query.trim() || undefined);
+        const response = await listAdminUsers(token, {
+          page,
+          page_size: PEOPLE_PAGE_SIZE,
+          q: debouncedSearch || undefined,
+        });
         if (!cancelled) {
-          setCandidates(items.filter((item) => !excludeIds.has(item.id)));
+          setUsers(response.items);
+          setTotal(response.total);
         }
-      } catch (caughtError) {
+      } catch {
         if (!cancelled) {
-          setLocalError(getErrorMessage(caughtError, '사용자를 불러오지 못했습니다.'));
+          setUsers([]);
+          setTotal(0);
         }
       } finally {
         if (!cancelled) {
           setLoading(false);
         }
       }
-    }, 150);
+    })();
     return () => {
       cancelled = true;
-      window.clearTimeout(handle);
     };
-  }, [open, tab, query, token, workspaceId, excludeIds]);
+  }, [token, page, debouncedSearch]);
 
-  useEffect(() => {
-    if (!open) {
-      return;
-    }
-    function handleClick(event: MouseEvent) {
-      if (!containerRef.current?.contains(event.target as Node)) {
-        setOpen(false);
-      }
-    }
-    window.addEventListener('mousedown', handleClick);
-    return () => window.removeEventListener('mousedown', handleClick);
-  }, [open]);
-
-  useEffect(() => {
-    if (!open) {
-      setQuery('');
-      setLocalError(null);
-    }
-  }, [open]);
-
-  const filteredGroups = useMemo(() => {
-    const trimmed = query.trim().toLowerCase();
-    const items = groups.filter((group) => !excludeIds.has(group.id));
-    if (!trimmed) {
-      return items.slice(0, 30);
-    }
-    return items
-      .filter(
-        (group) =>
-          group.name.toLowerCase().includes(trimmed) || group.slug.toLowerCase().includes(trimmed),
-      )
-      .slice(0, 30);
-  }, [groups, query, excludeIds]);
-
-  const handlePick = async (subjectId: string, subjectType: 'user' | 'group') => {
-    setLocalError(null);
-    try {
-      await onAdd({ subject_id: subjectId, subject_type: subjectType, role });
-      setOpen(false);
-    } catch (caughtError) {
-      setLocalError(getErrorMessage(caughtError, '멤버를 추가하지 못했습니다.'));
-    }
-  };
+  const totalPages = Math.max(1, Math.ceil(total / PEOPLE_PAGE_SIZE));
 
   return (
-    <div className="relative" ref={containerRef}>
-      <Button
-        variant="primary"
-        onClick={() => setOpen((prev) => !prev)}
-        disabled={busy}
-      >
-        <Plus size={14} className="mr-1" />
-        멤버 추가
-      </Button>
-      {open ? (
-        <div className="absolute right-0 top-full z-30 mt-2 w-[360px] rounded-xl border border-app-border bg-app-bg shadow-xl">
-          <div className="border-b border-app-border p-3">
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                className={`app-text-control rounded-md px-2 py-1 ${
-                  tab === 'user'
-                    ? 'bg-app-surface-sidebar text-app-ink'
-                    : 'text-app-ink/60 hover:text-app-ink'
-                }`}
-                onClick={() => setTab('user')}
-              >
-                사용자
-              </button>
-              <button
-                type="button"
-                disabled={!canReadGroups}
-                className={`app-text-control rounded-md px-2 py-1 ${
-                  tab === 'group'
-                    ? 'bg-app-surface-sidebar text-app-ink'
-                    : 'text-app-ink/60 hover:text-app-ink disabled:cursor-not-allowed disabled:text-app-ink/30'
-                }`}
-                onClick={() => setTab('group')}
-              >
-                그룹
-              </button>
-              <div className="ml-auto">
-                <Select
-                  value={role}
-                  onValueChange={setRole}
-                  options={WORKSPACE_ROLE_OPTIONS.map((option) => ({
-                    value: option.value,
-                    label: option.label,
-                  }))}
-                />
-              </div>
-            </div>
-            <div className="mt-2 flex items-center gap-2 rounded-md border border-app-border bg-app-surface-sidebar px-2 py-1.5">
-              <Search size={14} className="text-app-ink/50" />
-              <input
-                className="app-text-body flex-1 bg-transparent text-app-ink outline-none"
-                placeholder={tab === 'user' ? '이름 또는 이메일' : '그룹 이름'}
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-              />
-            </div>
-          </div>
-          <div className="max-h-[280px] overflow-y-auto p-1">
-            {tab === 'user' ? (
-              loading ? (
-                <div className="app-text-caption px-3 py-4 text-app-ink/60">불러오는 중...</div>
-              ) : candidates.length === 0 ? (
-                <div className="app-text-caption px-3 py-4 text-app-ink/60">결과 없음</div>
-              ) : (
-                candidates.map((candidate) => (
-                  <button
-                    key={candidate.id}
-                    type="button"
-                    className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-left transition-colors hover:bg-app-surface-sidebar"
-                    onClick={() => void handlePick(candidate.id, 'user')}
+    <div className={`flex h-full flex-col ${className ?? ''}`}>
+      <div className="flex items-center gap-3 border-b border-app-border px-4 py-3">
+        <div className="flex flex-1 items-center gap-2 rounded-md border border-app-border bg-app-surface-sidebar px-2 py-1.5">
+          <Search size={14} className="text-app-ink/50" />
+          <input
+            className="app-text-body flex-1 bg-transparent text-app-ink outline-none placeholder:text-app-ink/40"
+            placeholder="이름 또는 이메일로 검색"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            autoFocus
+          />
+        </div>
+        <span className="app-text-caption text-app-ink/60">총 {total} 명</span>
+      </div>
+
+      <div className="min-h-0 flex-1 overflow-auto">
+        <table className="w-full">
+          <thead className="sticky top-0 bg-app-bg">
+            <tr>
+              <th className="w-10 px-3 py-2 text-left"></th>
+              <th className="app-text-overline px-3 py-2 text-left text-app-ink/60">사용자</th>
+              <th className="app-text-overline px-3 py-2 text-left text-app-ink/60">조직</th>
+              <th className="app-text-overline px-3 py-2 text-left text-app-ink/60">그룹</th>
+              <th className="app-text-overline px-3 py-2 text-left text-app-ink/60">워크스페이스</th>
+              <th className="app-text-overline px-3 py-2 text-left text-app-ink/60">상태</th>
+              <th className="app-text-overline px-3 py-2 text-left text-app-ink/60">최근 로그인</th>
+            </tr>
+          </thead>
+          <tbody>
+            {users.length === 0 && !loading ? (
+              <tr>
+                <td colSpan={7} className="px-3 py-10 text-center text-app-ink/60">
+                  결과 없음
+                </td>
+              </tr>
+            ) : (
+              users.map((user) => {
+                const isExcluded = excludeIds.has(user.id);
+                const isChecked = selection.users.has(user.id);
+                const seed = `user:${user.id}`;
+                return (
+                  <tr
+                    key={user.id}
+                    className={`border-t border-app-border ${
+                      isExcluded ? 'opacity-50' : 'hover:bg-app-surface-hover/40'
+                    }`}
                   >
+                    <td className="px-3 py-2">
+                      <input
+                        type="checkbox"
+                        checked={isChecked}
+                        disabled={isExcluded}
+                        onChange={() =>
+                          onToggleSelect({
+                            id: user.id,
+                            kind: 'user',
+                            label: user.display_name || user.full_name,
+                            secondary: user.email,
+                          })
+                        }
+                      />
+                    </td>
+                    <td className="px-3 py-2">
+                      <div className="flex items-center gap-2">
+                        <div
+                          className={`flex h-7 w-7 items-center justify-center rounded-full text-xs font-semibold text-white ${avatarColorFromSeed(seed)}`}
+                        >
+                          {memberInitials(user.display_name || user.full_name || user.email)}
+                        </div>
+                        <div className="min-w-0">
+                          <div className="truncate font-medium text-app-ink">
+                            {user.display_name || user.full_name}
+                          </div>
+                          <div className="app-text-caption truncate text-app-ink/60">
+                            {user.email}
+                          </div>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="app-text-caption max-w-[160px] truncate px-3 py-2 text-app-ink/60">
+                      {user.primary_org_unit?.name ?? '-'}
+                    </td>
+                    <td className="app-text-caption max-w-[160px] truncate px-3 py-2 text-app-ink/60">
+                      {formatUserGroups(user)}
+                    </td>
+                    <td className="px-3 py-2">
+                      <UserWorkspaceChips user={user} />
+                    </td>
+                    <td className="px-3 py-2">
+                      {isExcluded ? (
+                        <Badge tone="green">{membershipLabel}</Badge>
+                      ) : user.status === 'invited' ? (
+                        <Badge tone="amber">초대 대기</Badge>
+                      ) : user.status === 'suspended' ? (
+                        <Badge tone="amber">정지</Badge>
+                      ) : (
+                        <span className="app-text-caption text-app-ink/60">활성</span>
+                      )}
+                    </td>
+                    <td className="app-text-caption px-3 py-2 text-app-ink/60">
+                      {formatDateLabel(user.last_login_at)}
+                    </td>
+                  </tr>
+                );
+              })
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      <div className="flex items-center justify-between gap-2 border-t border-app-border px-4 py-2">
+        <span className="app-text-caption text-app-ink/60">
+          {total === 0
+            ? '0'
+            : `${(page - 1) * PEOPLE_PAGE_SIZE + 1}-${Math.min(page * PEOPLE_PAGE_SIZE, total)} / ${total}`}
+        </span>
+        <div className="flex items-center gap-1">
+          <Button
+            variant="ghost"
+            disabled={page <= 1 || loading}
+            onClick={() => setPage((p) => Math.max(1, p - 1))}
+          >
+            이전
+          </Button>
+          <span className="app-text-caption px-2 text-app-ink/60">
+            {page} / {totalPages}
+          </span>
+          <Button
+            variant="ghost"
+            disabled={page >= totalPages || loading}
+            onClick={() => setPage((p) => p + 1)}
+          >
+            다음
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SelectedSubjectsBar({
+  selection,
+  onRemove,
+}: {
+  selection: SubjectSelectionState;
+  onRemove: (kind: SubjectKind, id: string) => void;
+}) {
+  const all: SelectedSubject[] = [
+    ...Array.from(selection.groups.values()),
+    ...Array.from(selection.users.values()),
+  ];
+  if (all.length === 0) {
+    return (
+      <div className="app-text-caption text-app-ink/40">선택한 사용자가 없습니다.</div>
+    );
+  }
+  return (
+    <div className="flex flex-wrap items-center gap-1.5">
+      {all.map((subject) => (
+        <span
+          key={`${subject.kind}-${subject.id}`}
+          className="app-text-caption inline-flex items-center gap-1 rounded-full border border-app-border bg-app-surface-sidebar px-2 py-0.5 text-app-ink"
+        >
+          {subject.kind === 'group' ? <UsersIcon size={11} /> : null}
+          <span>{subject.label}</span>
+          <button
+            type="button"
+            className="text-app-ink/50 hover:text-app-ink"
+            onClick={() => onRemove(subject.kind, subject.id)}
+            aria-label={`${subject.label} 선택 해제`}
+          >
+            ×
+          </button>
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function SubjectPickerInline({
+  workspaceId,
+  token,
+  groups,
+  excludeIds,
+  selection,
+  onSelectionChange,
+  canReadGroups,
+  onOpenDirectory,
+}: {
+  workspaceId: string;
+  token: string;
+  groups: AccessGroupItem[];
+  excludeIds: Set<string>;
+  selection: SubjectSelectionState;
+  onSelectionChange: (next: SubjectSelectionState) => void;
+  canReadGroups: boolean;
+  onOpenDirectory: () => void;
+}) {
+  const [tab, setTab] = useState<'user' | 'group'>('user');
+  const [query, setQuery] = useState('');
+  const [debouncedQuery, setDebouncedQuery] = useState('');
+  const [candidates, setCandidates] = useState<WorkspaceMemberCandidate[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    const handle = window.setTimeout(() => setDebouncedQuery(query.trim()), 150);
+    return () => window.clearTimeout(handle);
+  }, [query]);
+
+  useEffect(() => {
+    if (tab !== 'user') return;
+    let cancelled = false;
+    setLoading(true);
+    void (async () => {
+      try {
+        const items = await listWorkspaceMemberCandidates(
+          token,
+          workspaceId,
+          debouncedQuery || undefined,
+        );
+        if (!cancelled) {
+          setCandidates(items);
+        }
+      } catch {
+        // silent
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [tab, debouncedQuery, token, workspaceId]);
+
+  const filteredGroups = useMemo(() => {
+    const trimmed = debouncedQuery.toLowerCase();
+    const items = groups.filter((g) => !excludeIds.has(g.id));
+    if (!trimmed) return items.slice(0, 50);
+    return items
+      .filter(
+        (g) =>
+          g.name.toLowerCase().includes(trimmed) || g.slug.toLowerCase().includes(trimmed),
+      )
+      .slice(0, 50);
+  }, [groups, debouncedQuery, excludeIds]);
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          className={`app-text-control rounded-md px-2.5 py-1 ${
+            tab === 'user'
+              ? 'bg-app-surface-sidebar text-app-ink'
+              : 'text-app-ink/60 hover:text-app-ink'
+          }`}
+          onClick={() => setTab('user')}
+        >
+          사용자
+        </button>
+        <button
+          type="button"
+          disabled={!canReadGroups}
+          className={`app-text-control rounded-md px-2.5 py-1 ${
+            tab === 'group'
+              ? 'bg-app-surface-sidebar text-app-ink'
+              : 'text-app-ink/60 hover:text-app-ink disabled:cursor-not-allowed disabled:text-app-ink/30'
+          }`}
+          onClick={() => setTab('group')}
+        >
+          그룹
+        </button>
+        <button
+          type="button"
+          className="app-text-control ml-auto rounded-md px-2.5 py-1 text-app-accent hover:bg-app-accent/10"
+          onClick={onOpenDirectory}
+        >
+          📂 임직원 디렉터리에서 찾기
+        </button>
+      </div>
+
+      <div className="flex items-center gap-2 rounded-md border border-app-border bg-app-surface-sidebar px-2 py-1.5">
+        <Search size={14} className="text-app-ink/50" />
+        <input
+          className="app-text-body flex-1 bg-transparent text-app-ink outline-none placeholder:text-app-ink/40"
+          placeholder={tab === 'user' ? '이름 또는 이메일' : '그룹 이름'}
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          autoFocus
+        />
+      </div>
+
+      <div className="max-h-[260px] overflow-y-auto rounded-md border border-app-border bg-app-bg">
+        {tab === 'user' ? (
+          loading && candidates.length === 0 ? (
+            <div className="app-text-caption px-3 py-4 text-app-ink/60">불러오는 중...</div>
+          ) : candidates.filter((c) => !excludeIds.has(c.id)).length === 0 ? (
+            <div className="app-text-caption px-3 py-4 text-app-ink/60">결과 없음</div>
+          ) : (
+            candidates
+              .filter((c) => !excludeIds.has(c.id))
+              .map((candidate) => {
+                const checked = selection.users.has(candidate.id);
+                return (
+                  <label
+                    key={candidate.id}
+                    className="flex w-full cursor-pointer items-center gap-3 border-b border-app-border px-3 py-2 transition-colors last:border-b-0 hover:bg-app-surface-sidebar"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() =>
+                        onSelectionChange(
+                          toggleSubject(selection, {
+                            id: candidate.id,
+                            kind: 'user',
+                            label: candidate.full_name || candidate.email,
+                            secondary: candidate.email,
+                          }),
+                        )
+                      }
+                    />
                     <div
                       className={`flex h-8 w-8 items-center justify-center rounded-full text-xs font-semibold text-white ${avatarColorFromSeed(`user:${candidate.id}`)}`}
                     >
@@ -2264,42 +2594,633 @@ function AddMemberPopover({
                         {candidate.email}
                       </div>
                     </div>
-                  </button>
-                ))
-              )
-            ) : !canReadGroups ? (
-              <div className="app-text-caption px-3 py-4 text-app-ink/60">
-                그룹 디렉터리 읽기 권한이 없습니다.
-              </div>
-            ) : filteredGroups.length === 0 ? (
-              <div className="app-text-caption px-3 py-4 text-app-ink/60">결과 없음</div>
-            ) : (
-              filteredGroups.map((group) => (
-                <button
-                  key={group.id}
-                  type="button"
-                  className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-left transition-colors hover:bg-app-surface-sidebar"
-                  onClick={() => void handlePick(group.id, 'group')}
-                >
-                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-app-accent text-xs font-semibold text-white">
-                    <UsersIcon size={14} />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="truncate text-app-ink">{group.name}</div>
-                    <div className="app-text-caption truncate text-app-ink/60">{group.slug}</div>
-                  </div>
-                </button>
-              ))
-            )}
+                  </label>
+                );
+              })
+          )
+        ) : !canReadGroups ? (
+          <div className="app-text-caption px-3 py-4 text-app-ink/60">
+            그룹 디렉터리 읽기 권한이 없습니다.
           </div>
-          {localError ? (
-            <div className="border-t border-app-border px-3 py-2">
-              <InlineNotice tone="danger">{localError}</InlineNotice>
-            </div>
+        ) : filteredGroups.length === 0 ? (
+          <div className="app-text-caption px-3 py-4 text-app-ink/60">결과 없음</div>
+        ) : (
+          filteredGroups.map((group) => {
+            const checked = selection.groups.has(group.id);
+            return (
+              <label
+                key={group.id}
+                className="flex w-full cursor-pointer items-center gap-3 border-b border-app-border px-3 py-2 transition-colors last:border-b-0 hover:bg-app-surface-sidebar"
+              >
+                <input
+                  type="checkbox"
+                  checked={checked}
+                  onChange={() =>
+                    onSelectionChange(
+                      toggleSubject(selection, {
+                        id: group.id,
+                        kind: 'group',
+                        label: group.name,
+                        secondary: group.slug,
+                      }),
+                    )
+                  }
+                />
+                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-app-accent text-xs font-semibold text-white">
+                  <UsersIcon size={14} />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-app-ink">{group.name}</div>
+                  <div className="app-text-caption truncate text-app-ink/60">{group.slug}</div>
+                </div>
+              </label>
+            );
+          })
+        )}
+      </div>
+    </div>
+  );
+}
+
+function PeoplePickerModal({
+  open,
+  onClose,
+  token,
+  selection,
+  onSelectionChange,
+  excludeIds,
+}: {
+  open: boolean;
+  onClose: () => void;
+  token: string;
+  selection: SubjectSelectionState;
+  onSelectionChange: (next: SubjectSelectionState) => void;
+  excludeIds: Set<string>;
+}) {
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        if (!next) onClose();
+      }}
+      title="임직원 디렉터리"
+      description="검색과 필터로 사용자를 찾아 다중 선택합니다. 여기서 선택한 항목은 아래 추가 패널의 선택 목록에 누적됩니다."
+      maxWidth="max-w-[1600px]"
+      dismissOnInteractOutside={false}
+      actions={
+        <>
+          <span className="app-text-body mr-auto text-app-ink/60">
+            현재 선택: {selectionSize(selection)} 명
+          </span>
+          <Button variant="primary" onClick={onClose}>
+            완료
+          </Button>
+        </>
+      }
+    >
+      <div className="h-[70vh] overflow-hidden rounded-xl border border-app-border bg-app-bg">
+        <PeopleDirectoryGrid
+          token={token}
+          selection={selection}
+          onToggleSelect={(subject) =>
+            onSelectionChange(toggleSubject(selection, subject))
+          }
+          excludeIds={excludeIds}
+        />
+      </div>
+    </Dialog>
+  );
+}
+
+function WorkspaceMembersDrawer({
+  open,
+  onOpenChange,
+  workspace,
+  token,
+  canManage,
+  currentUserId,
+  onChanged,
+  onError,
+  onSuccess,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  workspace: WorkspaceItem | null;
+  token: string;
+  canManage: boolean;
+  currentUserId: string;
+  onChanged: () => void;
+  onError: (msg: string) => void;
+  onSuccess: (msg: string) => void;
+}) {
+  const [data, setData] = useState<WorkspaceMembersResponse | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [page, setPage] = useState(1);
+  const [pageSize] = useState(25);
+  const [query, setQuery] = useState('');
+  const [debouncedQuery, setDebouncedQuery] = useState('');
+  const [roleFilter, setRoleFilter] = useState<string | null>(null);
+  const [pendingOnly, setPendingOnly] = useState(false);
+  const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
+  const [busy, setBusy] = useState(false);
+  const [bulkRoleOpen, setBulkRoleOpen] = useState(false);
+
+  useEffect(() => {
+    if (!open) return;
+    setSelectedKeys(new Set());
+  }, [open, workspace?.id, debouncedQuery, roleFilter, pendingOnly, page]);
+
+  useEffect(() => {
+    if (!open) return;
+    const handle = window.setTimeout(() => setDebouncedQuery(query.trim()), 200);
+    return () => window.clearTimeout(handle);
+  }, [query, open]);
+
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    setPage(1);
+  }, [debouncedQuery, roleFilter, pendingOnly]);
+
+  const reload = useCallback(async () => {
+    if (!workspace) return;
+    setLoading(true);
+    try {
+      const response = await listWorkspaceMembers(token, workspace.id, {
+        q: debouncedQuery || undefined,
+        role: roleFilter ? [roleFilter] : undefined,
+        page,
+        pageSize,
+        pendingOnly,
+      });
+      setData(response);
+    } catch (caughtError) {
+      onError(getErrorMessage(caughtError, '멤버를 불러오지 못했습니다.'));
+    } finally {
+      setLoading(false);
+    }
+  }, [token, workspace, debouncedQuery, roleFilter, page, pageSize, pendingOnly, onError]);
+
+  useEffect(() => {
+    if (!open) return;
+    void reload();
+  }, [open, reload]);
+
+  if (!workspace) return null;
+
+  const memberSubjectIds = new Set((data?.items ?? []).map((item) => item.subject_id));
+
+  const totalPages = data ? Math.max(1, Math.ceil(data.total / data.page_size)) : 1;
+
+  function toggleSelect(item: WorkspaceMemberItem) {
+    const key = `${item.subject_type}:${item.subject_id}`;
+    setSelectedKeys((current) => {
+      const next = new Set(current);
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
+      return next;
+    });
+  }
+
+  function toggleSelectAll() {
+    if (!data) return;
+    const allSelectableKeys = data.items
+      .filter(
+        (item) =>
+          !(
+            item.subject_type === 'user' &&
+            item.subject_id === currentUserId
+          ),
+      )
+      .map((item) => `${item.subject_type}:${item.subject_id}`);
+    setSelectedKeys((current) => {
+      if (allSelectableKeys.every((key) => current.has(key)) && allSelectableKeys.length > 0) {
+        return new Set();
+      }
+      return new Set(allSelectableKeys);
+    });
+  }
+
+  async function handleSingleRoleChange(item: WorkspaceMemberItem, role: string) {
+    if (!workspace) return;
+    setBusy(true);
+    try {
+      await updateWorkspaceMemberRole(token, workspace.id, item.subject_type, item.subject_id, role);
+      onSuccess('역할을 변경했습니다.');
+      onChanged();
+      await reload();
+    } catch (caughtError) {
+      onError(getErrorMessage(caughtError, '역할을 변경하지 못했습니다.'));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleSingleRemove(item: WorkspaceMemberItem) {
+    if (!workspace) return;
+    setBusy(true);
+    try {
+      await removeWorkspaceMember(token, workspace.id, item.subject_type, item.subject_id);
+      onSuccess('멤버를 제거했습니다.');
+      onChanged();
+      await reload();
+    } catch (caughtError) {
+      onError(getErrorMessage(caughtError, '멤버를 제거하지 못했습니다.'));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleBulkRemove() {
+    if (!workspace) return;
+    if (selectedKeys.size === 0) return;
+    setBusy(true);
+    try {
+      const subjects = Array.from(selectedKeys).map((key) => {
+        const [subject_type, subject_id] = key.split(':') as ['user' | 'group', string];
+        return { subject_type, subject_id };
+      });
+      const result = await bulkWorkspaceMembers(token, workspace.id, {
+        action: 'remove',
+        subjects,
+      });
+      if (result.failed.length > 0) {
+        onError(`${result.succeeded}명 제거됨, ${result.failed.length}명 실패`);
+      } else {
+        onSuccess(`${result.succeeded}명을 제거했습니다.`);
+      }
+      setSelectedKeys(new Set());
+      onChanged();
+      await reload();
+    } catch (caughtError) {
+      onError(getErrorMessage(caughtError, '일괄 제거에 실패했습니다.'));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleBulkRole(role: string) {
+    if (!workspace) return;
+    if (selectedKeys.size === 0) return;
+    setBulkRoleOpen(false);
+    setBusy(true);
+    try {
+      const subjects = Array.from(selectedKeys).map((key) => {
+        const [subject_type, subject_id] = key.split(':') as ['user' | 'group', string];
+        return { subject_type, subject_id, role };
+      });
+      const result = await bulkWorkspaceMembers(token, workspace.id, {
+        action: 'update_role',
+        subjects,
+      });
+      if (result.failed.length > 0) {
+        onError(`${result.succeeded}명 변경됨, ${result.failed.length}명 실패`);
+      } else {
+        onSuccess(`${result.succeeded}명의 역할을 변경했습니다.`);
+      }
+      setSelectedKeys(new Set());
+      onChanged();
+      await reload();
+    } catch (caughtError) {
+      onError(getErrorMessage(caughtError, '일괄 역할 변경에 실패했습니다.'));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={onOpenChange}
+      title={`${workspace.name} 멤버 관리`}
+      description="검색, 필터, 일괄 작업으로 워크스페이스 멤버를 관리합니다."
+      maxWidth="max-w-4xl"
+      dismissOnInteractOutside={false}
+    >
+      <div className="space-y-4">
+        {/* Filter bar */}
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex flex-1 min-w-[220px] items-center gap-2 rounded-md border border-app-border bg-app-surface-sidebar px-2 py-1.5">
+            <Search size={14} className="text-app-ink/50" />
+            <input
+              className="app-text-body flex-1 bg-transparent text-app-ink outline-none placeholder:text-app-ink/40"
+              placeholder="이름, 이메일, 그룹 이름"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+            />
+          </div>
+        </div>
+
+        {/* Role chips */}
+        <div className="flex flex-wrap items-center gap-2">
+          <FilterChip
+            label={`전체 ${data?.total ?? 0}`}
+            active={roleFilter === null && !pendingOnly}
+            onClick={() => {
+              setRoleFilter(null);
+              setPendingOnly(false);
+            }}
+          />
+          {(['owner', 'admin', 'member', 'viewer'] as const).map((role) => (
+            <FilterChip
+              key={role}
+              label={`${WORKSPACE_ROLE_LABELS[role]} ${data?.role_counts[role] ?? 0}`}
+              active={roleFilter === role && !pendingOnly}
+              onClick={() => {
+                setRoleFilter(role);
+                setPendingOnly(false);
+              }}
+            />
+          ))}
+          {data && data.pending_count > 0 ? (
+            <FilterChip
+              label={`초대 대기 ${data.pending_count}`}
+              active={pendingOnly}
+              tone="warning"
+              onClick={() => {
+                setPendingOnly(true);
+                setRoleFilter(null);
+              }}
+            />
           ) : null}
         </div>
-      ) : null}
-    </div>
+
+        {/* Bulk action bar */}
+        {selectedKeys.size > 0 ? (
+          <div className="flex items-center justify-between gap-2 rounded-lg border border-app-accent/40 bg-app-accent/10 px-3 py-2">
+            <span className="app-text-body text-app-ink">
+              {selectedKeys.size} 명 선택됨
+            </span>
+            <div className="flex items-center gap-2">
+              <div className="relative">
+                <Button
+                  variant="ghost"
+                  onClick={() => setBulkRoleOpen((current) => !current)}
+                  disabled={busy}
+                >
+                  역할 변경
+                </Button>
+                {bulkRoleOpen ? (
+                  <div className="absolute right-0 top-full z-10 mt-1 min-w-[160px] rounded-md border border-app-border bg-app-bg shadow-lg">
+                    {WORKSPACE_ROLE_OPTIONS.map((option) => (
+                      <button
+                        key={option.value}
+                        type="button"
+                        className="app-text-body flex w-full items-center justify-between px-3 py-2 text-left text-app-ink hover:bg-app-surface-sidebar"
+                        onClick={() => void handleBulkRole(option.value)}
+                      >
+                        <span>{option.label}</span>
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+              <Button
+                variant="ghost"
+                onClick={() => void handleBulkRemove()}
+                disabled={busy}
+                className="text-[var(--ui-color-danger)]"
+              >
+                제거
+              </Button>
+              <Button variant="ghost" onClick={() => setSelectedKeys(new Set())}>
+                해제
+              </Button>
+            </div>
+          </div>
+        ) : null}
+
+        {/* Table */}
+        <div className="overflow-hidden rounded-xl border border-app-border">
+          <table className="w-full">
+            <thead className="bg-app-surface-sidebar">
+              <tr>
+                <th className="w-10 px-3 py-2 text-left">
+                  {canManage ? (
+                    <input
+                      type="checkbox"
+                      onChange={toggleSelectAll}
+                      checked={
+                        data !== null &&
+                        data.items.length > 0 &&
+                        data.items
+                          .filter(
+                            (item) =>
+                              !(
+                                item.subject_type === 'user' &&
+                                item.subject_id === currentUserId
+                              ),
+                          )
+                          .every((item) =>
+                            selectedKeys.has(`${item.subject_type}:${item.subject_id}`),
+                          )
+                      }
+                    />
+                  ) : null}
+                </th>
+                <th className="app-text-overline px-3 py-2 text-left text-app-ink/60">
+                  이름
+                </th>
+                <th className="app-text-overline px-3 py-2 text-left text-app-ink/60">
+                  Role
+                </th>
+                <th className="app-text-overline px-3 py-2 text-left text-app-ink/60">
+                  상태
+                </th>
+                <th className="app-text-overline px-3 py-2 text-left text-app-ink/60">
+                  최근 로그인
+                </th>
+                <th className="w-12 px-3 py-2"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {loading && !data ? (
+                <tr>
+                  <td colSpan={6} className="px-3 py-10 text-center text-app-ink/60">
+                    불러오는 중...
+                  </td>
+                </tr>
+              ) : (data?.items.length ?? 0) === 0 ? (
+                <tr>
+                  <td colSpan={6} className="px-3 py-10 text-center text-app-ink/60">
+                    표시할 멤버가 없습니다.
+                  </td>
+                </tr>
+              ) : (
+                data!.items.map((item) => {
+                  const key = `${item.subject_type}:${item.subject_id}`;
+                  const isSelf =
+                    item.subject_type === 'user' && item.subject_id === currentUserId;
+                  const seed = `${item.subject_type}:${item.subject_id}`;
+                  return (
+                    <tr key={key} className="border-t border-app-border">
+                      <td className="px-3 py-2">
+                        {canManage && !isSelf ? (
+                          <input
+                            type="checkbox"
+                            checked={selectedKeys.has(key)}
+                            onChange={() => toggleSelect(item)}
+                          />
+                        ) : null}
+                      </td>
+                      <td className="px-3 py-2">
+                        <div className="flex items-center gap-3">
+                          <div
+                            className={`flex h-8 w-8 items-center justify-center rounded-full text-xs font-semibold text-white ${
+                              item.subject_type === 'group'
+                                ? 'bg-app-accent'
+                                : avatarColorFromSeed(seed)
+                            }`}
+                          >
+                            {item.subject_type === 'group' ? (
+                              <UsersIcon size={14} />
+                            ) : (
+                              memberInitials(item.subject_label)
+                            )}
+                          </div>
+                          <div className="min-w-0">
+                            <div className="truncate font-medium text-app-ink">
+                              {item.subject_label}
+                              {isSelf ? (
+                                <span className="app-text-caption ml-1 text-app-ink/50">
+                                  (본인)
+                                </span>
+                              ) : null}
+                            </div>
+                            <div className="app-text-caption truncate text-app-ink/60">
+                              {item.subject_secondary ?? '-'}
+                            </div>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-3 py-2">
+                        <MemberRoleBadge role={item.role} />
+                      </td>
+                      <td className="px-3 py-2">
+                        {item.subject_type === 'group' ? (
+                          <span className="app-text-caption text-app-ink/60">그룹</span>
+                        ) : item.user_status === 'invited' ? (
+                          <Badge tone="amber">초대 대기</Badge>
+                        ) : item.user_status === 'suspended' ? (
+                          <Badge tone="amber">정지</Badge>
+                        ) : (
+                          <Badge tone="green">활성</Badge>
+                        )}
+                      </td>
+                      <td className="app-text-caption px-3 py-2 text-app-ink/60">
+                        {formatDateLabel(item.last_login_at)}
+                      </td>
+                      <td className="px-3 py-2 text-right">
+                        {canManage && !isSelf && item.role !== 'owner' ? (
+                          <DropdownMenu
+                            trigger={
+                              <button
+                                type="button"
+                                className="rounded-md p-1.5 text-app-ink/60 transition-colors hover:bg-app-surface-sidebar hover:text-app-ink"
+                                aria-label="멤버 작업"
+                              >
+                                <MoreHorizontal size={16} />
+                              </button>
+                            }
+                            items={[
+                              ...WORKSPACE_ROLE_OPTIONS.map((option) => ({
+                                id: `role-${option.value}`,
+                                label: (
+                                  <span className="flex items-center justify-between gap-2">
+                                    <span>{option.label}</span>
+                                    {item.role === option.value ? (
+                                      <Check size={14} className="text-app-accent" />
+                                    ) : null}
+                                  </span>
+                                ),
+                                onSelect: () => {
+                                  if (item.role !== option.value) {
+                                    void handleSingleRoleChange(item, option.value);
+                                  }
+                                },
+                                disabled: busy,
+                              })),
+                              {
+                                id: 'remove',
+                                label: '워크스페이스에서 제거',
+                                onSelect: () => void handleSingleRemove(item),
+                                disabled: busy,
+                                tone: 'danger' as const,
+                                separatorBefore: true,
+                              },
+                            ]}
+                          />
+                        ) : null}
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Pagination footer */}
+        {data && data.total > 0 ? (
+          <div className="flex items-center justify-between gap-2">
+            <span className="app-text-caption text-app-ink/60">
+              {(data.page - 1) * data.page_size + 1}-
+              {Math.min(data.page * data.page_size, data.total)} / {data.total}
+            </span>
+            <div className="flex items-center gap-1">
+              <Button
+                variant="ghost"
+                disabled={data.page <= 1 || busy}
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+              >
+                이전
+              </Button>
+              <span className="app-text-caption px-2 text-app-ink/60">
+                {data.page} / {totalPages}
+              </span>
+              <Button
+                variant="ghost"
+                disabled={data.page >= totalPages || busy}
+                onClick={() => setPage((p) => p + 1)}
+              >
+                다음
+              </Button>
+            </div>
+          </div>
+        ) : null}
+      </div>
+
+    </Dialog>
+  );
+}
+
+function FilterChip({
+  label,
+  active,
+  onClick,
+  tone,
+}: {
+  label: string;
+  active: boolean;
+  onClick: () => void;
+  tone?: 'warning';
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`app-text-control rounded-full border px-3 py-1 transition-colors ${
+        active
+          ? tone === 'warning'
+            ? 'border-amber-500 bg-amber-500/10 text-amber-600 dark:text-amber-300'
+            : 'border-app-accent bg-app-accent/10 text-app-accent'
+          : 'border-app-border bg-app-bg text-app-ink/70 hover:bg-app-surface-sidebar'
+      }`}
+    >
+      {label}
+    </button>
   );
 }
 
@@ -2414,6 +3335,19 @@ function WorkspacesSection({ token }: { token: string }) {
         onConfirm: () => Promise<void>;
       }
   >(null);
+  const [membersDrawerOpen, setMembersDrawerOpen] = useState(false);
+  const [addPanelOpen, setAddPanelOpen] = useState(false);
+  const [addPickerOpen, setAddPickerOpen] = useState(false);
+  const [addSelection, setAddSelection] = useState<SubjectSelectionState>(emptySubjectSelection);
+  const [addRole, setAddRole] = useState('member');
+  const [addBusy, setAddBusy] = useState(false);
+
+  const resetAddPanel = useCallback(() => {
+    setAddPanelOpen(false);
+    setAddPickerOpen(false);
+    setAddSelection(emptySubjectSelection());
+    setAddRole('member');
+  }, []);
 
   const flashSuccess = useCallback((text: string) => {
     setError(null);
@@ -2531,6 +3465,28 @@ function WorkspacesSection({ token }: { token: string }) {
     [bindings],
   );
 
+  const groupBindings = useMemo(
+    () => sortedBindings.filter((binding) => binding.subject_type === 'group'),
+    [sortedBindings],
+  );
+
+  const previewBindings = useMemo(() => {
+    const userBindings = sortedBindings.filter((binding) => binding.subject_type === 'user');
+    // Show owners + first few admins as preview (max 5).
+    const result: WorkspaceBindingItem[] = [];
+    for (const binding of userBindings) {
+      if (binding.role === 'owner' || binding.role === 'admin') {
+        result.push(binding);
+      }
+      if (result.length >= 5) break;
+    }
+    if (result.length === 0 && userBindings.length > 0) {
+      // No owners/admins among the loaded bindings — show top members instead.
+      return userBindings.slice(0, 5);
+    }
+    return result;
+  }, [sortedBindings]);
+
   const memberSubjectIds = useMemo(
     () => new Set(bindings.map((binding) => binding.subject_id)),
     [bindings],
@@ -2634,6 +3590,54 @@ function WorkspacesSection({ token }: { token: string }) {
       throw caughtError;
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function handleBulkAddSelection() {
+    if (!selectedWorkspaceId) return;
+    const totalSelected = selectionSize(addSelection);
+    if (totalSelected === 0) return;
+    setAddBusy(true);
+    try {
+      const subjects = [
+        ...Array.from(addSelection.users.values()).map((subject) => ({
+          subject_type: 'user' as const,
+          subject_id: subject.id,
+          role: addRole,
+        })),
+        ...Array.from(addSelection.groups.values()).map((subject) => ({
+          subject_type: 'group' as const,
+          subject_id: subject.id,
+          role: addRole,
+        })),
+      ];
+      const result = await bulkWorkspaceMembers(token, selectedWorkspaceId, {
+        action: 'add',
+        subjects,
+      });
+      if (result.failed.length > 0) {
+        flashError(`${result.succeeded}명 추가됨, ${result.failed.length}명 실패`);
+      } else {
+        flashSuccess(`${result.succeeded}명을 추가했습니다.`);
+      }
+      // Refresh detail panel preview
+      const refreshed = await listWorkspaceBindings(token, selectedWorkspaceId);
+      setBindings(refreshed);
+      setWorkspaces((current) =>
+        current.map((workspace) =>
+          workspace.id === selectedWorkspaceId
+            ? {
+                ...workspace,
+                member_count: workspace.member_count + result.succeeded,
+              }
+            : workspace,
+        ),
+      );
+      resetAddPanel();
+    } catch (caughtError) {
+      flashError(getErrorMessage(caughtError, '멤버를 추가하지 못했습니다.'));
+    } finally {
+      setAddBusy(false);
     }
   }
 
@@ -3018,43 +4022,142 @@ function WorkspacesSection({ token }: { token: string }) {
                   </div>
                 </section>
 
-                {/* Members */}
-                <section className="px-6 py-5">
-                  <div className="mb-3 flex items-center justify-between">
-                    <div>
+                {/* Groups (small set, all shown) */}
+                {groupBindings.length > 0 ? (
+                  <section className="border-b border-app-border px-6 py-5">
+                    <div className="mb-3">
                       <h3 className="app-text-title-sm text-app-ink">
-                        멤버 ({sortedBindings.length})
+                        그룹 ({groupBindings.length})
                       </h3>
                       <p className="app-text-caption mt-0.5 text-app-ink/60">
-                        사용자와 그룹을 직접 추가합니다. 그룹 멤버는 자동 상속됩니다.
+                        그룹의 사용자에게 권한이 자동 상속됩니다.
                       </p>
                     </div>
-                    {canManage ? (
-                      <AddMemberPopover
+                    <div className="divide-y divide-app-border rounded-xl border border-app-border bg-app-bg">
+                      {groupBindings.map((binding) => (
+                        <WorkspaceMemberRow
+                          key={`${binding.subject_type}-${binding.subject_id}`}
+                          binding={binding}
+                          canManage={canManage}
+                          isCurrentUser={false}
+                          busy={busy}
+                          onChangeRole={(role) =>
+                            void handleChangeMemberRole(binding, role)
+                          }
+                          onRemove={() => void handleRemoveMember(binding)}
+                        />
+                      ))}
+                    </div>
+                  </section>
+                ) : null}
+
+                {/* Members preview + add panel + open drawer */}
+                <section className="px-6 py-5">
+                  <div className="mb-3 flex items-center justify-between gap-2">
+                    <div>
+                      <h3 className="app-text-title-sm text-app-ink">
+                        멤버 ({selectedWorkspace.member_count})
+                      </h3>
+                      <p className="app-text-caption mt-0.5 text-app-ink/60">
+                        owner 와 admin 미리보기. 전체 검색·필터·제거는 [멤버 관리] 를 누르세요.
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {canManage ? (
+                        <Button
+                          variant="primary"
+                          onClick={() => setAddPanelOpen((current) => !current)}
+                        >
+                          <Plus size={14} className="mr-1" />
+                          멤버 추가
+                        </Button>
+                      ) : null}
+                      <Button variant="ghost" onClick={() => setMembersDrawerOpen(true)}>
+                        <UsersIcon size={14} className="mr-1" />
+                        멤버 관리
+                      </Button>
+                    </div>
+                  </div>
+
+                  {addPanelOpen && canManage ? (
+                    <div className="mb-4 rounded-xl border border-app-accent/40 bg-app-accent/5 p-4">
+                      <div className="mb-3 flex items-center justify-between">
+                        <h4 className="app-text-control text-app-ink">새 멤버 추가</h4>
+                        <button
+                          type="button"
+                          onClick={resetAddPanel}
+                          className="rounded p-1 text-app-ink/60 hover:bg-app-surface-sidebar hover:text-app-ink"
+                          aria-label="닫기"
+                        >
+                          ×
+                        </button>
+                      </div>
+                      <SubjectPickerInline
                         workspaceId={selectedWorkspace.id}
                         token={token}
                         groups={groups}
                         excludeIds={memberSubjectIds}
+                        selection={addSelection}
+                        onSelectionChange={setAddSelection}
                         canReadGroups={canReadGroups}
-                        busy={busy}
-                        onAdd={handleAddMember}
+                        onOpenDirectory={() => setAddPickerOpen(true)}
                       />
-                    ) : null}
-                  </div>
-                  {sortedBindings.length === 0 ? (
+                      <div className="mt-3 space-y-3">
+                        <div>
+                          <div className="app-text-caption mb-1.5 text-app-ink/60">
+                            선택한 사용자 ({selectionSize(addSelection)})
+                          </div>
+                          <SelectedSubjectsBar
+                            selection={addSelection}
+                            onRemove={(kind, id) =>
+                              setAddSelection((current) => removeSubject(current, kind, id))
+                            }
+                          />
+                        </div>
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-2">
+                            <span className="app-text-caption text-app-ink/60">역할</span>
+                            <Select
+                              value={addRole}
+                              onValueChange={setAddRole}
+                              options={WORKSPACE_ROLE_OPTIONS.map((option) => ({
+                                value: option.value,
+                                label: option.label,
+                              }))}
+                            />
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Button variant="ghost" onClick={resetAddPanel} disabled={addBusy}>
+                              취소
+                            </Button>
+                            <Button
+                              variant="primary"
+                              disabled={addBusy || selectionSize(addSelection) === 0}
+                              onClick={() => void handleBulkAddSelection()}
+                            >
+                              {addBusy
+                                ? '추가 중...'
+                                : `${selectionSize(addSelection)}명 추가`}
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ) : null}
+                  {previewBindings.length === 0 ? (
                     <div className="rounded-xl border border-dashed border-app-border bg-app-bg px-4 py-10 text-center">
                       <p className="app-text-body text-app-ink/60">
                         아직 멤버가 없습니다.
                       </p>
                       {canManage ? (
                         <p className="app-text-caption mt-1 text-app-ink/40">
-                          위 [멤버 추가] 버튼으로 팀원을 초대해 시작하세요.
+                          [멤버 관리] 를 눌러 팀원을 추가하세요.
                         </p>
                       ) : null}
                     </div>
                   ) : (
                     <div className="divide-y divide-app-border rounded-xl border border-app-border bg-app-bg">
-                      {sortedBindings.map((binding) => (
+                      {previewBindings.map((binding) => (
                         <WorkspaceMemberRow
                           key={`${binding.subject_type}-${binding.subject_id}`}
                           binding={binding}
@@ -3064,10 +4167,21 @@ function WorkspacesSection({ token }: { token: string }) {
                             binding.subject_id === currentUserId
                           }
                           busy={busy}
-                          onChangeRole={(role) => void handleChangeMemberRole(binding, role)}
+                          onChangeRole={(role) =>
+                            void handleChangeMemberRole(binding, role)
+                          }
                           onRemove={() => void handleRemoveMember(binding)}
                         />
                       ))}
+                      {selectedWorkspace.member_count > previewBindings.length ? (
+                        <button
+                          type="button"
+                          onClick={() => setMembersDrawerOpen(true)}
+                          className="app-text-body w-full px-4 py-3 text-left text-app-accent transition-colors hover:bg-app-surface-sidebar"
+                        >
+                          전체 {selectedWorkspace.member_count} 명 보기 →
+                        </button>
+                      ) : null}
                     </div>
                   )}
                 </section>
@@ -3134,6 +4248,31 @@ function WorkspacesSection({ token }: { token: string }) {
           onCancel={() => setConfirmState(null)}
         />
       ) : null}
+      <WorkspaceMembersDrawer
+        open={membersDrawerOpen}
+        onOpenChange={setMembersDrawerOpen}
+        workspace={selectedWorkspace}
+        token={token}
+        canManage={canManage}
+        currentUserId={currentUserId}
+        onChanged={() => {
+          // Refresh detail-panel preview after drawer changes
+          if (selectedWorkspaceId) {
+            void listWorkspaceBindings(token, selectedWorkspaceId).then(setBindings).catch(() => {});
+            void reloadWorkspaces(selectedWorkspaceId);
+          }
+        }}
+        onError={flashError}
+        onSuccess={flashSuccess}
+      />
+      <PeoplePickerModal
+        open={addPickerOpen}
+        onClose={() => setAddPickerOpen(false)}
+        token={token}
+        selection={addSelection}
+        onSelectionChange={setAddSelection}
+        excludeIds={memberSubjectIds}
+      />
     </div>
   );
 }

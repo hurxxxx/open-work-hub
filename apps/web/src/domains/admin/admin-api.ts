@@ -61,6 +61,55 @@ export interface WorkspaceMemberCandidate {
   status: string;
 }
 
+export interface WorkspaceMemberItem {
+  subject_id: string;
+  subject_type: 'user' | 'group';
+  subject_label: string;
+  subject_secondary: string | null;
+  role: string;
+  user_status: string | null;
+  last_login_at: string | null;
+  created_at: string | null;
+}
+
+export interface WorkspaceMemberRoleCounts {
+  owner: number;
+  admin: number;
+  member: number;
+  viewer: number;
+}
+
+export interface WorkspaceMembersResponse {
+  items: WorkspaceMemberItem[];
+  total: number;
+  page: number;
+  page_size: number;
+  role_counts: WorkspaceMemberRoleCounts;
+  user_count: number;
+  group_count: number;
+  pending_count: number;
+}
+
+export interface WorkspaceMembersListParams {
+  q?: string;
+  role?: string[];
+  subjectType?: 'user' | 'group';
+  page?: number;
+  pageSize?: number;
+  pendingOnly?: boolean;
+}
+
+export interface WorkspaceMemberBulkSubject {
+  subject_type: 'user' | 'group';
+  subject_id: string;
+  role?: string;
+}
+
+export interface WorkspaceMemberBulkResponse {
+  succeeded: number;
+  failed: Array<{ subject_type: string; subject_id: string; detail: string }>;
+}
+
 export interface UserTeamMembershipItem {
   id: string;
   workspace_id: string;
@@ -437,6 +486,45 @@ export function deleteWorkspace(token: string, workspaceId: string): Promise<voi
   return request<void>(token, `/api/v1/admin/workspaces/${workspaceId}`, {
     method: 'DELETE',
   });
+}
+
+export function listWorkspaceMembers(
+  token: string,
+  workspaceId: string,
+  params: WorkspaceMembersListParams = {},
+): Promise<WorkspaceMembersResponse> {
+  const search = new URLSearchParams();
+  if (params.q?.trim()) search.set('q', params.q.trim());
+  if (params.subjectType) search.set('subject_type', params.subjectType);
+  if (params.page) search.set('page', String(params.page));
+  if (params.pageSize) search.set('page_size', String(params.pageSize));
+  if (params.pendingOnly) search.set('pending_only', 'true');
+  if (params.role && params.role.length > 0) {
+    for (const role of params.role) search.append('role', role);
+  }
+  const suffix = search.toString() ? `?${search.toString()}` : '';
+  return request<WorkspaceMembersResponse>(
+    token,
+    `/api/v1/admin/workspaces/${workspaceId}/members${suffix}`,
+  );
+}
+
+export function bulkWorkspaceMembers(
+  token: string,
+  workspaceId: string,
+  payload: {
+    action: 'add' | 'remove' | 'update_role';
+    subjects: WorkspaceMemberBulkSubject[];
+  },
+): Promise<WorkspaceMemberBulkResponse> {
+  return request<WorkspaceMemberBulkResponse>(
+    token,
+    `/api/v1/admin/workspaces/${workspaceId}/members/bulk`,
+    {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    },
+  );
 }
 
 export function getWorkspaceApps(

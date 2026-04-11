@@ -221,6 +221,182 @@ def test_delete_workspace_blocked_when_team_present(client: TestClient) -> None:
     assert "space" in blocked.json()["detail"]
 
 
+def test_paginated_members_endpoint_filter_search_and_role_counts(client: TestClient) -> None:
+    admin = _bootstrap_admin_session(client)
+    token = admin["token"]
+    workspace = _create_workspace(client, token, name="Big Place")
+
+    # Create 6 users with deterministic names so we can sort/filter
+    user_ids: list[str] = []
+    for i in range(6):
+        u = _create_user(
+            client,
+            token,
+            email=f"user{i}@aidoo.local",
+            full_name=f"User {i}",
+        )
+        user_ids.append(u["id"])
+
+    roles_to_assign = ["admin", "admin", "member", "member", "member", "viewer"]
+    for user_id, role in zip(user_ids, roles_to_assign):
+        resp = client.post(
+            f"/api/v1/admin/workspaces/{workspace['id']}/members",
+            headers=_auth_headers(token),
+            json={"subject_id": user_id, "subject_type": "user", "role": role},
+        )
+        assert resp.status_code == 201, resp.text
+
+    page1 = client.get(
+        f"/api/v1/admin/workspaces/{workspace['id']}/members?page=1&page_size=3",
+        headers=_auth_headers(token),
+    ).json()
+    assert page1["total"] == 7  # 6 added + creator owner
+    assert len(page1["items"]) == 3
+    assert page1["role_counts"] == {"owner": 1, "admin": 2, "member": 3, "viewer": 1}
+    assert page1["user_count"] == 7
+    assert page1["group_count"] == 0
+    assert page1["pending_count"] == 0
+
+    page2 = client.get(
+        f"/api/v1/admin/workspaces/{workspace['id']}/members?page=2&page_size=3",
+        headers=_auth_headers(token),
+    ).json()
+    assert page2["page"] == 2
+    assert len(page2["items"]) == 3
+
+    role_filter = client.get(
+        f"/api/v1/admin/workspaces/{workspace['id']}/members?role=admin",
+        headers=_auth_headers(token),
+    ).json()
+    assert role_filter["total"] == 2
+    assert all(item["role"] == "admin" for item in role_filter["items"])
+
+    search_filter = client.get(
+        f"/api/v1/admin/workspaces/{workspace['id']}/members?q=user%202",
+        headers=_auth_headers(token),
+    ).json()
+    assert search_filter["total"] == 1
+    assert search_filter["items"][0]["subject_secondary"] == "user2@aidoo.local"
+
+
+def test_bulk_member_endpoint_partial_failure(client: TestClient) -> None:
+    admin = _bootstrap_admin_session(client)
+    token = admin["token"]
+    workspace = _create_workspace(client, token, name="Bulk Lab")
+
+    user_a = _create_user(client, token, email="alice@aidoo.local", full_name="Alice")
+    user_b = _create_user(client, token, email="bob@aidoo.local", full_name="Bob")
+
+    response = client.post(
+        f"/api/v1/admin/workspaces/{workspace['id']}/members/bulk",
+        headers=_auth_headers(token),
+        json={
+            "action": "add",
+            "subjects": [
+                {"subject_type": "user", "subject_id": user_a["id"], "role": "member"},
+                {"subject_type": "user", "subject_id": user_b["id"], "role": "member"},
+                {
+                    "subject_type": "user",
+                    "subject_id": "00000000-0000-0000-0000-000000000000",
+                    "role": "member",
+                },
+            ],
+        },
+    )
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["succeeded"] == 2
+    assert len(payload["failed"]) == 1
+
+    listing = client.get(
+        f"/api/v1/admin/workspaces/{workspace['id']}/members",
+        headers=_auth_headers(token),
+    ).json()
+    assert listing["total"] == 3  # creator + 2 added
+
+    bulk_remove = client.post(
+        f"/api/v1/admin/workspaces/{workspace['id']}/members/bulk",
+        headers=_auth_headers(token),
+        json={
+            "action": "remove",
+            "subjects": [
+                {"subject_type": "user", "subject_id": user_a["id"]},
+                {"subject_type": "user", "subject_id": user_b["id"]},
+            ],
+        },
+    )
+    assert bulk_remove.status_code == 200
+    assert bulk_remove.json()["succeeded"] == 2
+
+
+def test_last_owner_protection_blocks_remove_and_demote(client: TestClient) -> None:
+    admin = _bootstrap_admin_session(client)
+    token = admin["token"]
+    admin_user_id = admin["user"]["id"]
+    workspace = _create_workspace(client, token, name="Lonely Owner")
+
+    # Create another admin so we can attempt the remove on the owner.
+    second_payload = _create_user_with_password(
+        client,
+        token,
+        email="second@aidoo.local",
+        full_name="Second Admin",
+        password="Aidoo!second12",
+    )
+    second_id = second_payload["user"]["id"]
+
+    add_resp = client.post(
+        f"/api/v1/admin/workspaces/{workspace['id']}/members",
+        headers=_auth_headers(token),
+        json={"subject_id": second_id, "subject_type": "user", "role": "admin"},
+    )
+    assert add_resp.status_code == 201
+
+    # Login as the second admin and try to remove the only owner.
+    login = client.post(
+        "/api/v1/auth/login",
+        json={"email": "second@aidoo.local", "password": "Aidoo!second12"},
+    )
+    assert login.status_code == 200, login.text
+    second_token = login.json()["token"]
+
+    remove_owner = client.delete(
+        f"/api/v1/admin/workspaces/{workspace['id']}/members/user/{admin_user_id}",
+        headers=_auth_headers(second_token),
+    )
+    assert remove_owner.status_code == 409, remove_owner.text
+    assert "owner" in remove_owner.json()["detail"]
+
+    demote_owner = client.patch(
+        f"/api/v1/admin/workspaces/{workspace['id']}/members/user/{admin_user_id}",
+        headers=_auth_headers(second_token),
+        json={"role": "member"},
+    )
+    assert demote_owner.status_code == 409
+
+
+def test_self_role_change_and_self_remove_blocked(client: TestClient) -> None:
+    admin = _bootstrap_admin_session(client)
+    token = admin["token"]
+    admin_user_id = admin["user"]["id"]
+    workspace = _create_workspace(client, token, name="Self Service")
+
+    self_demote = client.patch(
+        f"/api/v1/admin/workspaces/{workspace['id']}/members/user/{admin_user_id}",
+        headers=_auth_headers(token),
+        json={"role": "member"},
+    )
+    # Self role change is blocked even when there are other owners; here it's
+    # also the last owner so 409 is guaranteed either way.
+    assert self_demote.status_code == 409
+
+    self_remove = client.delete(
+        f"/api/v1/admin/workspaces/{workspace['id']}/members/user/{admin_user_id}",
+        headers=_auth_headers(token),
+    )
+    assert self_remove.status_code == 409
+
+
 def test_list_workspaces_includes_archived_with_query_param(client: TestClient) -> None:
     admin = _bootstrap_admin_session(client)
     token = admin["token"]
