@@ -1,4 +1,11 @@
-# PMS 안정화 + IA 재설계 현황
+# PMS 안정화 + 협업 워크스페이스 재구조화 현황
+
+## 현재 상태
+
+- PMS IA 재설계와 PR1 meeting 후속 안정화는 main 에 반영됨
+- 현재 모델은 **협업 workspace + enabled apps + team(space) membership** 조합
+- 실제 앱 경로는 `/w/:workspaceSlug/<app>` 기준이며, Admin Console 과 Workspace Settings 가 같은 workspace 상세 패널을 공유
+- 검증 기준 (2026-04-11): backend `75 passed`, Alembic head `2d4f6c9ab1ef`, drift 0, web typecheck 는 기존 오류 7건
 
 ## 구현 완료
 
@@ -51,6 +58,31 @@
   - 삭제된 Space의 lists/folders/space docs 비노출 처리
   - 기본 `Team Space` 재요청 시 untrash 재사용
 
+### Stage 3 협업 워크스페이스 재구조화
+- [x] `workspace_enabled_apps` 테이블 + `docs_native_docs.workspace_id` 마이그레이션
+- [x] 5개 workspace seed 체계 확정
+  - `hq`
+  - `innovation-lab`
+  - `knowledge-base`
+  - `planning-desk`
+  - `delivery-hub`
+- [x] 앱 shell 을 `/w/:workspaceSlug/{ai|pms|docs|planner|meeting}` 경로로 통일
+- [x] AppBar/SubSidebar/workspace-utils 가 현재 workspace slug + enabled apps 기준으로 라우팅
+- [x] Workspace role 단순화
+  - `member`
+  - `admin`
+- [x] System role 단순화
+  - 사실상 `platform_admin` 중심
+- [x] 로그인 화면에서 seed accounts 바로 로그인 노출
+- [x] `WorkspaceDetailPanel` 공용화
+  - Admin Console
+  - Workspace Settings (`/w/:workspaceSlug/settings`)
+- [x] Workspace member management UX 확장
+  - bulk add picker
+  - candidate search
+  - paginated drawer
+  - near-fullscreen fixed modal
+
 ## 제거된 기능
 
 - [x] Automations — 코드·DB 스키마·프론트 API 전체 제거 (불필요)
@@ -79,12 +111,18 @@
   - Alembic 마이그레이션 `6b21fc0a74c8_drop_pms_project_members` 로 테이블 DROP, 원격 dev DB 적용 완료
   - 관련 commit: `98a4700`, `742672c`, `06bd0a1`, `8d2f297`
 - [ ] Space Docs 페이지 이동/드래그 정렬 UX 개선
-- [ ] Admin Console 에 space 멤버 관리 UI 추가 (현재는 PMS 사이드바에서만 접근 가능)
-  - 다음 세션 진단 예정 — PR1-STATUS.md §7 의 "3 레이어 권한 모델 보강" 5 가지 옵션 참조
+- [x] Admin Console / Workspace Settings 공용 workspace 멤버 관리 UI 추가
+- [ ] `/w/:workspaceSlug/<app>` 기반 workspace shell 수동 QA
+- [ ] web typecheck 잔재 7건 정리
+- [ ] meeting `datetime.utcnow()` deprecation warning 제거
 
 ## 검증
 
-- [x] `pnpm nx test web --skip-nx-cache`
-- [x] `pnpm nx build web --skip-nx-cache`
-- [x] `cd apps/api && uv run pytest tests/test_db_compat.py tests/test_pms_issues.py`
-- [x] `cd apps/api && uv run python -m py_compile ...`
+- [x] `cd apps/api && uv run --python 3.12 --group dev pytest`
+  - 75 passed, 2 warnings (2026-04-11)
+- [x] `cd apps/api && uv run --python 3.12 alembic current`
+  - `2d4f6c9ab1ef (head)`
+- [x] `cd apps/api && uv run --python 3.12 alembic check`
+  - drift 0
+- [ ] `pnpm nx typecheck web`
+  - 기존 오류 7건 남아 있음

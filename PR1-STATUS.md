@@ -2,15 +2,56 @@
 
 > **새 세션 첫 메시지 예시**: "프로젝트 루트의 [PR1-STATUS.md](PR1-STATUS.md), [PR1-HANDOFF.md](PR1-HANDOFF.md), [PR0-RESULT.md](PR0-RESULT.md) 세 파일 읽고 이어서 진행해주세요."
 
-작성일: 2026-04-10 (라운드 1), 마지막 갱신: 2026-04-11 (라운드 8 — dev DB reset + access model 보강 방향 결정)
+작성일: 2026-04-10 (라운드 1), 마지막 갱신: 2026-04-11 (라운드 10 — workspace rearchitecture + member flow polish, HEAD `6de0866`)
 모델: Claude Opus 4.6 (1M context)
-이전 세션 요약: PR1 skeleton 작성 → 자동화 검증 → 사용자 dog-food 디버깅 8 라운드
+이전 세션 요약: PR1 skeleton 작성 → 자동화 검증 → 사용자 dog-food 디버깅 8 라운드 → workspace collaboration rearchitecture / member management 후속 2 라운드
+
+## 현행화 메모 (2026-04-11 HEAD)
+
+아래 §2-§13 은 PR1 라운드 1-8의 상세 이력을 보존한 문서다. **현재 상태는 라운드 9-10의 후속 작업까지 포함해서 읽어야 한다.**
+
+- Alembic 최신 head: `2d4f6c9ab1ef`
+- 자동화 기준: `pytest apps/api/tests/` **75 passed**, `alembic check` drift 0, `pnpm nx typecheck web` 는 기존 오류 7건
+- 원격 dev DB 읽기 확인: `alembic_version=2d4f6c9ab1ef`, `workspaces=5`, `workspace_enabled_apps=14`, `users=18`, `teams=5`, `meetings=0`, `docs_native_docs=0`
+- 경로 체계: 실제 앱 경로는 `/w/:workspaceSlug/{ai|pms|docs|planner|meeting}`. legacy `/meeting`, `/docs`, `/pms`, `/planner`, `/ai` 는 기본 workspace redirect
+- 시드 모델: workspace 5개 (`hq`, `innovation-lab`, `knowledge-base`, `planning-desk`, `delivery-hub`), dev login account 정의는 11개. 원격 dev DB 에는 legacy `*@aidoo.local` 계정도 함께 남아 총 18명
+
+### UI E2E smoke (agent-browser, 2026-04-11)
+
+- `delivery-hub-admin@aidoo.local` 폼 로그인 성공
+- legacy `/meeting` → `/w/delivery-hub/meeting` redirect 확인
+- Meeting 생성 성공: `Agent Browser E2E Smoke`
+- Meeting detail 에서 파일 업로드 성공: `PR0-RESULT.md`
+- 다운로드 버튼으로 `/tmp/doowon-downloads` 저장 확인
+- `/w/delivery-hub/settings` 의 workspace detail + 멤버 관리 dialog 정상 오픈
+- `platform-admin@aidoo.local` 로그인 후 `/admin/workspaces` 진입, `Aidoo HQ -> Delivery Hub` detail panel 전환 및 멤버 관리 dialog 정상 오픈
+- 음수 경로 확인: `delivery-hub-admin` 으로 `/w/knowledge-base/meeting` 접근 시 `접근 권한 없음`
+- page error 는 없었고, console 에는 `DialogContent` 의 `Description` / `aria-describedby` 누락 warning 2건이 남음
 
 ## 1. 한 줄 요약
 
-**PR1 본체는 완전히 안정화됐고 (pytest 62 passed, typecheck 신규 0), 원격 dev DB 는 reset 후 fresh 시드 상태로 돌아와 사용자 QA 대기 중입니다.** 사용자 디버깅 중에 PR1 범위를 넘는 근본 버그 세 개 (ProjectMember 좀비 테이블, ensure_seed_data 가 user data 파괴, groupedSpaces 가 role 드롭) 를 잡고 PMS space 멤버 관리 UI 를 신규로 만들었습니다. **다음 작업은 "3 레이어 권한 모델 UX 보강 진단" 을 사용자 요청에 따라 별도 세션에서 따로 시작**.
+**PR1 meeting 본체는 안정 상태를 유지한 채, 그 위에 workspace collaboration rearchitecture 와 멤버 관리 UX 가 main 에 반영된 상태입니다.** PR1 라운드 8에서 "다음 세션 과제"로 남겨뒀던 3-layer access UX 보강은 별도 소규모 진단으로 가지 않고, workspace별 enabled apps / `/w/:workspaceSlug/<app>` 라우팅 / 공용 `WorkspaceDetailPanel` / bulk member flows 로 흡수되었습니다. 현재 기준 검증은 `pytest 75 passed`, `alembic check` drift 0, 웹 typecheck 는 기존 오류 7건입니다.
 
-## 최신 라운드 (8) — 2026-04-11
+## 최신 라운드 (9-10) — 2026-04-11
+
+라운드 8 종료 시점의 "3 레이어 권한 모델 보강" 메모는 이후 workspace 재구조화 작업으로 대부분 흡수됐다. 핵심은 "앱별 글로벌 workspace" 가 아니라 **협업 workspace + enabled apps + per-workspace member flows** 로 shell 과 권한 모델을 정리한 것.
+
+**핵심 변경**:
+- Alembic 마이그레이션 `2d4f6c9ab1ef_workspace_rearchitecture_foundation` 추가. `workspace_enabled_apps` 테이블 신설, `docs_native_docs.workspace_id` 백필 + FK 추가, 원격 dev DB head 반영 완료.
+- 시드/권한 모델 정리: workspace role 을 `member/admin` 으로 단순화, system role 은 사실상 `platform_admin` 하나로 정리. dev seed 는 5 workspace / 11 바로로그인 계정 정의로 재구성.
+- 라우팅 재구조화: 앱 실경로를 `/w/:workspaceSlug/<app>` 로 통일. `AppBar`, `SubSidebar`, `App.tsx`, `workspace-utils.ts` 가 현재 workspace slug 와 enabled apps 를 기준으로 경로를 계산.
+- Admin/Workspace settings 공용화: `WorkspaceDetailPanel` 을 분리해 Admin Console 과 `/w/:workspaceSlug/settings` 가 같은 패널을 공유. workspace admin 도 profile/apps/members 를 직접 관리 가능.
+- 멤버 관리 UX 확장: workspace member bulk add picker, paginated drawer, name/email candidate search, near-fullscreen fixed modal, 리스트 영역 확장까지 반영. 라운드 8 당시 TODO 였던 "orphan 진단/space membership 가시성" 문제의 실제 대응면이 됨.
+- 로그인 UX: 로그인 화면이 seed accounts 를 category 별로 노출. 원격 dev DB 에 legacy `*@aidoo.local` 계정이 섞여 있어도 bootstrap payload 기준 바로 로그인 가능.
+
+**관련 커밋**:
+- `cff47b0` workspace rearchitecture: collaboration spaces with enabled apps
+- `225d511` workspace member management: bulk add picker + paginated drawer
+- `151aef5`, `73de55a` admin/workspace member UI dense layout polish
+- `a6b9a7d`, `87edf0a` roles/dev accounts 단순화 + login seed accounts 노출
+- `e731bad`, `3db3852`, `6dd66d4`, `6de0866` `WorkspaceDetailPanel` 공유 + settings/header/modal polish
+
+## 라운드 8 (히스토리) — 2026-04-11
 
 **세션 마지막에 사용자 결정**: 현재 3-레이어 access 모델 (system role + workspace binding + team membership) 은 **유지**하되, 사용하기 편하게 **보강** 방향으로 가기로 함. 보강안 1~5 번은 다음 세션에서 사용자가 다시 진단 요청 예정. 이번 세션은 여기서 종료하고 dev DB 를 깨끗한 상태로 reset.
 
@@ -429,77 +470,71 @@ NB: 권한 매트릭스 테스트는 task 가 아닌 **doc** 으로 작성. 이�
 
 마지막 두 줄은 Tailwind v4 의 그레이 팔레트를 `.dark` 셀렉터에서 직접 remap 한 것. 코드베이스에 `text-gray-500` 가 205곳, `text-gray-600` 이 70곳 가까이 있는데 대부분 `dark:` override 가 없어서 한 번에 잡았음. `bg-gray-500` / `border-gray-500` 6곳 (PMS status dot, gantt fallback, hover border) 도 함께 영향받지만 모두 장식적 용도라 회귀 위험 낮음.
 
-## 5. 자동화 검증 결과 (라운드 8 시점 — 가장 최신)
+## 5. 자동화 검증 결과 (2026-04-11 현행)
 
 | 항목 | 결과 |
 |---|---|
-| `pytest apps/api/tests/` | **62 passed** (라운드 1: 51 → 라운드 8: 62) |
-| `alembic upgrade head → downgrade → upgrade → check` (로컬 docker) | 성공, drift 0 |
-| 원격 dev DB `alembic current` | `6b21fc0a74c8 (head)` (최신) |
-| `pnpm nx typecheck web` | **10 사전 오류** (라운드 1: 12 → 라운드 7: 10, groupedSpaces fix 가 2 개 해결) |
+| `cd apps/api && uv run --python 3.12 --group dev pytest` | **75 passed, 2 warnings** |
+| `cd apps/api && uv run --python 3.12 alembic current` | `2d4f6c9ab1ef (head)` |
+| `cd apps/api && uv run --python 3.12 alembic heads` | `2d4f6c9ab1ef (head)` |
+| `cd apps/api && uv run --python 3.12 alembic check` | 성공, `No new upgrade operations detected.` |
+| `pnpm nx typecheck web` | **기존 오류 7건** |
 
-**신규 typecheck 오류 0** 이 핵심. 남은 10 개 사전 오류는 모두 PR1 과 무관한 legacy (PMSView string|null, admin-console Select disabled, admin-permissions literal, BoardView motion drag handler 등).
+추가 메모:
+- backend 자동화는 현재 전부 green
+- `tests/test_meeting.py::test_upcoming_scope_does_not_leak_other_users_meetings` 경로에서 `datetime.utcnow()` deprecation warning 2건이 남아 있음
+- web typecheck 잔재 7건은 다음 위치에 남아 있음:
+  - `src/app-shell.ts` 1건
+  - `src/App.tsx` 1건
+  - `src/components/views/PMSView/BoardView.tsx` 1건
+  - `src/components/views/PMSView/PMSView.tsx` 3건
+  - `src/domains/admin/admin-permissions.ts` 1건
 
-## 6. 사람 손 QA — 라운드 8 이후 fresh dev DB 기준
+## 6. 사람 손 QA — 현재 우선순위
 
-원격 dev DB 가 reset 됐고 현재 상태는 `Team Space` 하나 + `DEMO` 프로젝트 하나 + seed 계정 8 명. 다음 세션에서 dev 서버 띄우고 직접 눌러보면서 확인해야 할 것:
+원격 dev DB 는 workspace rearchitecture head 까지 올라와 있다. 현재 수동 QA 는 PR1 meeting 자체보다 **workspace shell/regression** 을 먼저 보는 게 맞다.
 
-**Seed guard 검증 (round 8 의 핵심 fix)**
-- [ ] 로그아웃 → 로그인 화면 열기 → pms-member 로 로그인 → **workspace 이름이 admin-edited 상태로 유지되는지** (seed 가 덮어쓰지 않음)
-- [ ] pms-member 가 새 space 생성 → CreateSpaceModal 한 화면에서 멤버도 몇 명 추가 → 저장
-- [ ] 로그아웃 → platform-admin 로그인 → 로그아웃 → pms-member 재로그인 → 방금 만든 space 의 멤버가 **여전히 그대로** 있는지 (seed loop 이 안 돈다는 검증)
+**Workspace shell / routing**
+- [ ] AppBar workspace 전환 시 현재 app 유지 또는 fallback 동작 검증 (`/w/:workspaceSlug/<app>`)
+- [ ] legacy `/meeting`, `/docs`, `/pms`, `/planner`, `/ai` 진입 시 기본 workspace redirect 검증
+- [ ] enabled apps 가 없는 workspace 에서는 `AccessDeniedView` 가 뜨는지 검증
 
-**CreateSpaceModal 통합 흐름 (round 8)**
-- [ ] Sidebar "+ New Space" → 한 모달에서 이름 + 설명 + 멤버 검색 + chip 추가까지 → 생성 → sidebar 갱신 + SpaceOverviewView 의 멤버 panel 에 추가한 멤버들 즉시 노출
-- [ ] 멤버 chip 에 본인 (creator) 이 안 나타나는지 (자동으로 owner 추가되므로 검색 후보에서 제외)
+**Workspace settings / admin**
+- [ ] `/w/<slug>/settings` 에서 workspace admin 이 동일 `WorkspaceDetailPanel` 로 profile, enabled apps, members 를 관리 가능한지
+- [ ] Admin Console 의 workspace 상세 패널과 settings 패널이 동일 동작을 보이는지
+- [ ] member bulk add picker, candidate search, paginated drawer, near-fullscreen modal UX 확인
 
-**SpaceMembersModal (Linear 스타일)**
-- [ ] SubSidebar 의 space 우클릭 → "멤버 관리" 진입
-- [ ] 각 멤버 row 에 hover → `⋮` 버튼 노출 → 역할 변경/제거
-- [ ] Owner row 에는 `⋮` 가 안 보임 + "소유자" 배지
-- [ ] 상단 초대 input 에 이름/이메일 검색 → 드롭다운에서 클릭 → member 로 추가
+**Meeting 회귀**
+- [ ] `/w/<slug>/meeting` 에서 생성/수정/태스크 첨부/문서 첨부/파일 업로드/다운로드 동작
+- [ ] attendee 의 PMS space access 경유 task attach 회귀 없는지
+- [ ] AI 사이드바 "회의록" deep-link 가 workspace path 기준으로 올바르게 landing 하는지
 
-**PR1 meeting 본체 — fresh DB 에서 회귀 없는지**
-- [ ] Meeting 생성 (제목 + 시간 + 참석자 + 연결된 업무 + 첨부 파일)
-- [ ] Task 첨부 / Doc 첨부 / File 업로드 각각 동작
-- [ ] 파일 다운로드 버튼 (cross-origin blob roundtrip) 동작
-- [ ] Attendee 가 본인 space 의 issue 를 meeting 에 첨부 가능 (ensure_issue_readable 수정 검증)
-- [ ] 모달 outside-click 으로 안 닫히는지 (datetime picker 보호)
+**남겨둔 소규모 정리**
+- [ ] 다크모드 전체 톤 재확인
+- [ ] `datetime.utcnow()` warning 제거 여부 결정
 
-**아직 안 한 / 이번 세션에서 미뤄둔 사람 손 QA** (라운드 1-2 부터 이월)
-- [ ] **다크모드 가독성** — Planner, PMS, Docs, Admin 전체 화면 톤 체크. 사용자가 "일단 문제 없는 듯 필요하면 다시 요청" 이라고 했음
-- [ ] **AI 사이드바 deep-link** — "회의록" 클릭 → /meeting?tab=recordings 이동
-- [ ] **SubSidebar "+" 드롭다운** — 다른 라우트에서 Meeting 클릭 시 라우팅 + 모달 이벤트
-
-## 7. 알려진 잔재 / 미해결 사항 — 라운드 8 시점
+## 7. 알려진 잔재 / 미해결 사항 — 2026-04-11 HEAD 시점
 
 ### 해결됨 (이전 세션 잔재)
 - ~~legacy `pms_docs` 테이블~~ — **round 8 의 `DROP SCHEMA public CASCADE` 로 제거됨**
 - ~~`pms_user_doc_prefs` stale 인덱스~~ — DB reset 으로 자연 해소
 - ~~`ProjectMember` 좀비 테이블~~ — round 7 에서 모델 + 마이그레이션으로 제거
 - ~~ensure_seed_data 가 user data 파괴~~ — round 8 의 guard 로 차단
+- ~~"3 레이어 권한 모델 보강" 별도 진단 필요~~ — 후속 workspace rearchitecture / member flow 작업으로 대부분 흡수
 
-### 사전 typecheck 오류 10 개 (PR1 무관, main 시점부터 존재)
-- `src/app-shell.ts(137,31)` — NavItem.appId 'home' widening
-- `src/App.tsx(127,23)` — FEATURE_BY_APP_ID indexer 'home' 누락
+### web typecheck 오류 7 개 (현재 main 잔재)
+- `src/app-shell.ts(145,31)` — NavItem.appId `home` widening
+- `src/App.tsx(153,23)` — `FEATURE_BY_APP_ID` indexer 에 `home` 누락
 - `src/components/views/PMSView/BoardView.tsx(81,20)` — motion drag handler
-- `src/components/views/PMSView/PMSView.tsx(194,27)` 등 — string|null 3 건
-- `src/domains/admin/admin-console.tsx` — Select disabled / NoticeTone 3 건
+- `src/components/views/PMSView/PMSView.tsx(200,27)` 등 — `string | null` 3 건
 - `src/domains/admin/admin-permissions.ts(13,54)` — string|literal mismatch
 
-### 다음 세션에서 사용자가 다시 진단 요청한 항목 — "3 레이어 권한 모델 보강"
+### 현재 남은 기능/운영 부채
 
-세션 막바지 논의: 현재 access 모델 (system role + workspace binding + team membership) 은 **유지**, 하지만 사용하기 편하게 보강. 5 가지 옵션을 제시했고 사용자가 "지금을 유지하고 보강을 하지뭐" → "일단 지금 진단은 따로 다시 요청할테니" 로 **이번 세션은 종료**. 다음 세션에서 보강안 진단을 다시 요청하기로 함.
-
-제시한 보강 옵션 (다음 세션 참조용):
-
-1. **User edit dialog 에 space 목록 (읽기 전용)** — PeopleSection 의 "Accessible apps" 아래에 "PMS Spaces" 섹션 추가. 작음 (1-2h). 진단 가능성 큰 효과.
-2. **PMS 바인딩 저장 시 orphan 경고** — WorkspacesSection 에서 nav.pms 바인딩 저장할 때 사용자가 team 에 안 속해있으면 경고 다이얼로그. 작음 (1h).
-3. **User edit dialog 에서 space membership 편집** — 1 을 읽기 전용 → 편집 가능으로 업그레이드. 중간 (반나절).
-4. **Access Group 에 workspace binding 템플릿** — 그룹에 사용자 넣으면 자동 fanout. 중간-큰 (1d). 데이터 파괴 위험 있어 신중.
-5. **403 응답에 설명적 메시지 추가** — cross-app 403 에 "ask admin for nav.pms" 같은 힌트. 작음 (30m).
-
-권장 순서: 1 → 2 → 3. 4 는 별도 세션 (fanout 위험), 5 는 1-3 후에 필요하면.
+1. **PMS 내부 명명 debt** — API payload 의 `project_id` 등 legacy 필드명이 여전히 남아 있어 `list_id` 계열 정리가 필요
+2. **Space Docs 이동/정렬 UX** — 페이지 단위 reorder / move affordance 는 여전히 약함
+3. **workspace shell 수동 QA** — `/w/:workspaceSlug/<app>` 전환, enabled apps gating, legacy redirect 경로를 사람 손으로 다시 눌러봐야 함
+4. **meeting UTC warning** — `service.py` 의 `datetime.utcnow()` 호출은 곧 바꿔야 함
 
 ### 의도적으로 PR1 범위 밖
 [PR1-HANDOFF.md §1](PR1-HANDOFF.md) 의 표 그대로:

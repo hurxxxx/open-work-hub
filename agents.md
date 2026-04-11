@@ -29,3 +29,25 @@
 - `/docs` 아래 문서는 모두 보관용 참고 자료로 취급한다.
 - `docs/planning/`, `docs/product/`, `docs/meetings/` 는 사용자가 특정 문서를 보라고 지시할 때만 읽는다.
 - 사용자가 명시하지 않으면 문서보다 현재 코드와 테스트를 우선한다.
+
+## UI E2E Testing
+
+- 사용자가 실제 UI 검증이나 E2E 를 요청하면 로컬 서버 + `agent-browser` 로 **실제 상호작용 기반** 점검을 우선한다.
+- `agent-browser` 사용 방식이 불명확하면 먼저 `agent-browser --help` 로 현재 CLI surface 를 확인한다.
+- 가능하면 이미 떠 있는 로컬 서버를 재사용한다. 기본 포트는 web `127.0.0.1:4200`, api `127.0.0.1:8000` 이다.
+- 서버가 안 떠 있으면 `pnpm nx dev web`, `pnpm nx dev api` 로 직접 기동한 뒤 테스트한다.
+- `agent-browser` 는 named session 을 사용한다. 예: `--session doowon-e2e`, `--session doowon-admin-e2e`.
+- ref (`@e1` 류) 는 `snapshot` 직후 체인에서 쓰는 것이 가장 안정적이다. 따라서 주요 상호작용은 **한 셸 호출 안에서** `open -> wait -> snapshot -> click/fill/upload -> wait -> snapshot` 순으로 묶는다.
+- 테스트 중에는 최소한 다음을 함께 확인한다.
+  - 최종 URL (`agent-browser get url`)
+  - 접근성 스냅샷 (`agent-browser snapshot`)
+  - 콘솔 로그 (`agent-browser console`)
+  - 페이지 오류 (`agent-browser errors`)
+- 파일 업로드/다운로드가 포함된 화면은 가능하면 실제로 한 번 왕복 확인한다. 임시 산출물은 기본적으로 `/tmp` 아래를 사용한다.
+- 이 저장소의 로그인 화면에서 seed quick-login 카드 클릭은 자동화에서 불안정할 수 있다. 클릭이 먹지 않으면 로그인 폼에 이메일/비밀번호를 직접 채워서 진행한다.
+- workspace shell 회귀를 볼 때는 다음 조합을 우선 점검한다.
+  - legacy `/meeting`, `/docs`, `/pms`, `/planner`, `/ai` 가 `/w/:workspaceSlug/<app>` 로 리다이렉트되는지
+  - 접근 가능한 workspace/app 조합의 정상 진입
+  - 접근 불가 workspace/app 조합의 `접근 권한 없음` 차단
+  - `/w/:workspaceSlug/settings` 와 `/admin/workspaces` 의 workspace detail/member flows
+- 브라우저 기반 점검을 수행한 턴에서는 결과를 루트 작업 기록 문서나 관련 작업 문서에 간단히 남겨 다음 세션이 바로 이어받을 수 있게 한다.

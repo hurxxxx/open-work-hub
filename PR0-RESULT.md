@@ -8,6 +8,21 @@
 
 스키마 관리 방식이 `Base.metadata.create_all() + 손제작 compat SQL` → **Alembic** 으로 전환됨. PR1 부터는 마이그레이션 추가가 표준 절차.
 
+## 현행화 메모 (2026-04-11)
+
+이 문서는 **PR0 결과 기록**이다. 이후 main 에 아래 후속 리비전이 추가됐다.
+
+- `d8fe1ed8923a` `add_meeting_tables`
+- `13e887cfb1db` `add_meeting_file_attachments`
+- `6b21fc0a74c8` `drop_pms_project_members`
+- `2d4f6c9ab1ef` `workspace_rearchitecture_foundation`
+
+현재 원격 dev DB 읽기 확인:
+- `alembic current` → `2d4f6c9ab1ef (head)`
+- `alembic check` → drift 0
+- `workspaces=5`, `workspace_enabled_apps=14`, `users=18`, `teams=5`
+- `reset_dev_db.py` 는 PR0 당시의 `drop_all()` 기반이 아니라, 현재는 `DROP SCHEMA public CASCADE` 기반으로 후속 보강돼 있음
+
 ## Shipped
 
 | 파일 | 역할 |
@@ -32,8 +47,8 @@
 - 호스트: `14.39.166.163:37677`
 - DB: `doowon_ai_portal_dev`
 - DSN: 프로젝트 루트 [.env](.env) 의 `DOOWON_POSTGRES_DSN` 에서 자동 로드 (Settings 가 `WORKSPACE_ROOT/.env` 에서 읽음)
-- **Alembic 상태: `alembic_version = 0b843a383b2b` 로 stamp 됨** (2026-04-10 PR0 마무리에서 `alembic stamp head` 적용)
-- 모델에 선언된 36개 테이블 전부 존재. 드리프트 0
+- **Alembic 상태: 현재 `2d4f6c9ab1ef (head)`**. PR0 마무리 시점에는 `0b843a383b2b` 로 stamp 했고, 그 이후 리비전은 정상 `upgrade` 로 누적 적용됨
+- 현재 기준 `alembic check` drift 0
 - App (`pnpm nx dev api`) 은 이 DB 를 사용
 
 ### 테스트 DB
@@ -70,10 +85,10 @@
 - 관련 commit: `0321c45 reset_dev_db: drop schema wholesale instead of via metadata graph`
 - PR1-STATUS.md §3d 참조
 
-### MEETING-APP-PLAN.md 는 untracked 상태
+### 작업 문서 tracked 상태
 
-- 의도적으로 git 에 안 올림 (작업용 임시 문서)
-- PR0-RESULT.md, PR1-HANDOFF.md 도 같은 정책 — 작업 끝나면 셋 다 삭제
+- `MEETING-APP-PLAN.md`, `PR0-RESULT.md`, `PR1-HANDOFF.md`, `PR1-STATUS.md`, `TODO-PLAN.md` 는 현재 git tracked 상태로 유지 중
+- 따라서 이 파일의 과거 "untracked / 작업 끝나면 삭제" 메모는 더 이상 현행 정책이 아님
 
 ## 사용법 cheatsheet
 

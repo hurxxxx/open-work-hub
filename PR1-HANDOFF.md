@@ -1,6 +1,10 @@
 # PR1 인계 — Meeting 도메인 스켈레톤
 
-> **새 세션 첫 메시지 예시**: "프로젝트 루트의 [PR1-HANDOFF.md](PR1-HANDOFF.md), [PR0-RESULT.md](PR0-RESULT.md), [MEETING-APP-PLAN.md](MEETING-APP-PLAN.md) 세 파일 읽고 PR1 시작해주세요."
+> 이 문서는 **PR1 착수 시점 handoff 원본**이다. 현행 상태나 다음 작업을 잡을 때는 [PR1-STATUS.md](PR1-STATUS.md) 와 [TODO-PLAN.md](TODO-PLAN.md) 를 먼저 보고, 이 문서는 PR1 범위/원 설계 확인용으로만 사용한다.
+
+> **새 세션 첫 메시지 예시**: "프로젝트 루트의 [PR1-STATUS.md](PR1-STATUS.md), [TODO-PLAN.md](TODO-PLAN.md), [PR1-HANDOFF.md](PR1-HANDOFF.md) 읽고 현재 head 기준으로 이어서 진행해주세요."
+
+> 주의: 아래 경로/권한 설명은 **PR1 당시 기준**이다. 현재 main 에서는 `/w/:workspaceSlug/<app>` 경로 체계와 workspace `enabled_apps` 모델이 추가로 반영돼 있다.
 
 ## 0. 프로젝트 한 줄 컨텍스트
 
