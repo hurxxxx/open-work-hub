@@ -71,8 +71,16 @@
 
 - [ ] issue payload의 `project_id` 등 내부 필드명을 `list_id` 계열로 정리
 - [x] Folder 정렬/이동 UI 추가
-- [ ] Space 권한을 프로젝트 fallback 없이 완전한 Space ACL로 정리
+- [x] Space 권한을 프로젝트 fallback 없이 완전한 Space ACL로 정리
+  - 2026-04-11 PR1 라운드 7 에서 `ProjectMember` 좀비 테이블 완전 제거
+  - `list_project_members` / `add_project_member` 라우터는 호환용 alias 로 유지하되 응답/요청 모델을 `SpaceMemberItem` 으로 교체
+  - `meeting.ensure_issue_readable` 가 `_ensure_space_access` + `resolve_team_role` 패턴으로 재작성
+  - SpaceMembersModal (Linear 스타일) 신규 — 사이드바 우클릭 / CreateSpaceModal 생성 시점에서 진입
+  - Alembic 마이그레이션 `6b21fc0a74c8_drop_pms_project_members` 로 테이블 DROP, 원격 dev DB 적용 완료
+  - 관련 commit: `98a4700`, `742672c`, `06bd0a1`, `8d2f297`
 - [ ] Space Docs 페이지 이동/드래그 정렬 UX 개선
+- [ ] Admin Console 에 space 멤버 관리 UI 추가 (현재는 PMS 사이드바에서만 접근 가능)
+  - 다음 세션 진단 예정 — PR1-STATUS.md §7 의 "3 레이어 권한 모델 보강" 5 가지 옵션 참조
 
 ## 검증
 

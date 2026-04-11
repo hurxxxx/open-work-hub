@@ -1,16 +1,60 @@
-# PR1 진행 상태 — Meeting 도메인 스켈레톤 (검증/디버깅 단계)
+# PR1 진행 상태 — Meeting 도메인 + 부수 PMS access 보강
 
-> **새 세션 첫 메시지 예시**: "프로젝트 루트의 [PR1-STATUS.md](PR1-STATUS.md), [PR1-HANDOFF.md](PR1-HANDOFF.md), [PR0-RESULT.md](PR0-RESULT.md) 세 파일 읽고 PR1 검증/디버깅 이어서 진행해주세요."
+> **새 세션 첫 메시지 예시**: "프로젝트 루트의 [PR1-STATUS.md](PR1-STATUS.md), [PR1-HANDOFF.md](PR1-HANDOFF.md), [PR0-RESULT.md](PR0-RESULT.md) 세 파일 읽고 이어서 진행해주세요."
 
-작성일: 2026-04-10
+작성일: 2026-04-10 (라운드 1), 마지막 갱신: 2026-04-11 (라운드 8 — dev DB reset + access model 보강 방향 결정)
 모델: Claude Opus 4.6 (1M context)
-이전 세션 요약: PR1 의 백엔드/프런트엔드 산출물 작성 → 자동화 검증 통과 → 사용자 피드백 두 번 (`참석자 검색 누락`, `다크모드 가독성`) 반영
+이전 세션 요약: PR1 skeleton 작성 → 자동화 검증 → 사용자 dog-food 디버깅 8 라운드
 
 ## 1. 한 줄 요약
 
-**PR1 산출물은 모두 작성됐고 자동화 검증 (pytest 52 passed, typecheck 신규 0) 은 모두 green 입니다. 원격 dev DB 에 마이그레이션도 적용 완료. 2 라운드 검증/디버깅에서 Upcoming leak 1건 fix + 회귀 테스트 추가, 타임존 chain 진단 완료 (사용자 결정 대기).**
+**PR1 본체는 완전히 안정화됐고 (pytest 62 passed, typecheck 신규 0), 원격 dev DB 는 reset 후 fresh 시드 상태로 돌아와 사용자 QA 대기 중입니다.** 사용자 디버깅 중에 PR1 범위를 넘는 근본 버그 세 개 (ProjectMember 좀비 테이블, ensure_seed_data 가 user data 파괴, groupedSpaces 가 role 드롭) 를 잡고 PMS space 멤버 관리 UI 를 신규로 만들었습니다. **다음 작업은 "3 레이어 권한 모델 UX 보강 진단" 을 사용자 요청에 따라 별도 세션에서 따로 시작**.
 
-## 1a. 2-3 라운드 (2026-04-10 후속 세션) 변경 사항
+## 최신 라운드 (8) — 2026-04-11
+
+**세션 마지막에 사용자 결정**: 현재 3-레이어 access 모델 (system role + workspace binding + team membership) 은 **유지**하되, 사용하기 편하게 **보강** 방향으로 가기로 함. 보강안 1~5 번은 다음 세션에서 사용자가 다시 진단 요청 예정. 이번 세션은 여기서 종료하고 dev DB 를 깨끗한 상태로 reset.
+
+**이번 라운드에 한 일**:
+- `codex/meeting-delete-confirm-dialog` 를 포함한 stale codex branch 들 (docs-unified-hub, pms-space-hierarchy-stabilization, meeting-delete-confirm-dialog) 을 모두 main fast-forward 또는 무손실 삭제로 정리. 현재 로컬/원격 모두 `main` 하나만 존재.
+- 원격 dev DB 를 `reset_dev_db --force --seed-dev-accounts` 로 **완전 리셋**. 좀비 `pms_docs` 테이블도 이참에 제거됨.
+- `reset_dev_db.py` 의 **두 개 잠재 버그** 를 같이 수정 (commit `0321c45`):
+  1. `meeting`/`docs` 도메인 models 를 import 하지 않아 `Base.metadata.drop_all()` 이 meeting_task_links 등을 인지 못해 FK 순서 에러
+  2. `Base.metadata.drop_all()` 자체가 orphan 테이블 (예: `pms_docs`) 을 처리 못함 — `DROP SCHEMA public CASCADE` + `CREATE SCHEMA public` 으로 교체
+- SpaceMembersModal 을 Linear-style 로 리디자인 (아바타/divide-y/overflow 메뉴) → **CreateSpaceModal 에 멤버 초대 섹션 통합** (사용자 피드백 "따로 뒤에 뜨지 말고"). SpaceOverviewView 에 멤버 panel 추가.
+- 작업 문서 업데이트 (이 라운드).
+
+**현재 원격 dev DB 상태** (reset 직후):
+```
+users:            8 (시드 계정)
+workspaces:       6
+feature_policies: 6
+pms teams:        1 (Team Space)
+team_members:     2 (pms-member: member, pms-viewer: viewer)
+pms_projects:     1 (DEMO)
+pms_issues:       0
+meetings:         0
+docs_native_docs: 0
+pms_docs 좀비:    제거됨
+```
+
+**시드 계정 공유 비밀번호**: `Aidoo!dev1234`
+
+## 2. PR1 본체 (라운드 1-2) — 완료 상태
+
+PR1 skeleton 작성 당시 산출물. **자세한 체크리스트는 §3, §5 참고 (히스토리 보존).**
+
+| 영역 | 상태 |
+|---|---|
+| Backend meeting 도메인 (models/schemas/service/router/permissions) | ✅ |
+| Alembic 마이그레이션 `d8fe1ed8923a_add_meeting_tables` | ✅ 원격 dev DB 적용 완료 |
+| Frontend meeting 도메인 + MeetingView + 7 컴포넌트 | ✅ |
+| AppBar/라우팅/SubSidebar 등록 | ✅ |
+| pytest + typecheck + alembic 왕복 검증 | ✅ 모두 green |
+| 다크모드 토큰 조정 | ✅ |
+
+## 3. 후속 라운드 변경 사항 (라운드 2-8 누적)
+
+## 3a. 라운드 2-3 — 2026-04-10 후속 세션
 
 ### Fixed: `list_meetings(scope="upcoming"|"all")` 가 비참석자에게 leak
 
@@ -199,7 +243,113 @@ NB: 권한 매트릭스 테스트는 task 가 아닌 **doc** 으로 작성. 이�
 
 **자동화 결과**: typecheck 신규 0 (사전 12개 그대로 — admin-people commit 으로 admin-console 라인 번호만 1173→1434 로 다시 시프트). Frontend-only 변경이라 pytest 는 동일 57 passed.
 
-## 2. 이번 세션이 할 일 (요청 받은 범위)
+## 3b. 라운드 7 — 2026-04-11 근본 버그 라운드
+
+사용자가 dog-fooding 하다가 "pms-member 가 만든 space 의 멤버가 자꾸 사라진다" 는 보고. 진단 결과 **세 개의 얽힌 root cause** 가 발견됐고 한 번에 모두 잡음.
+
+### Root cause 1 — `ensure_seed_data` 가 user-created team memberships 를 매번 지움
+
+**증상**: dev 서버가 재시작되거나 로그인 버튼만 눌러도 사용자가 만든 space 의 TeamMember row 가 사라짐. 사용자는 "분명 멤버를 추가했는데 나중에 0 명" 상태를 반복 경험.
+
+**원인**: [access.py:ensure_dev_login_seed_data](apps/api/src/aidoo_api/domains/auth/access.py) 의 per-user reconcile loop 이 `"default_pms_space 가 아닌 TeamMember 는 무조건 DELETE"` 라는 공격적 로직을 가지고 있었음. 본래 의도는 "seed 계정의 default space 역할 관리" 였는데 user-created space 의 membership 까지 쓸어버림. `ensure_dev_login_seed_data` 는 매 부팅 + `GET /auth/bootstrap-status` + `POST /auth/dev-login` + `POST /auth/dev-admin-login` 마다 돌았기 때문에 사용자가 계정 전환만 해도 데이터가 파괴됨.
+
+**Fix (2 단계)**:
+1. **Round 7a** (commit `bc6bdab`) — seed loop 을 default_pms_space 의 row 만 reconcile 하도록 좁힘. 다른 space 의 membership 은 건드리지 않음. user data 파괴는 즉시 중단.
+2. **Round 8a** (commit `1618b34`) — 더 깊은 수정: seed 는 **DB 초기화 시 한 번만** 돌아야 함. `is_infrastructure_seeded` + `are_dev_login_accounts_seeded` 두 guard 를 추가해서 이미 시드된 DB 에서는 no-op. `GET /auth/bootstrap-status` 는 순수 read 가 됨 (부작용 없음). `reset_dev_db.py` 는 drop 후 재시드하는 경로라 guard 가 자연스럽게 통과. 사용자 질문 "seed 는 초기화할 때 한 번만 하면 되는 것 아니냐" 를 반영.
+
+### Root cause 2 — `ProjectMember` 테이블이 좀비 (INSERT 0 곳, 의사결정 read 0 곳)
+
+**발견 계기**: 사용자가 pms-member 로 회의에 task 와 파일을 동시에 등록했는데 **파일만 저장되고 task 는 사라짐**. 파일이 성공한 건 silent failure 경로였고, task 는 meeting `ensure_issue_readable` 에서 403 을 받은 상태.
+
+**원인**: meeting 의 [permissions.py:ensure_issue_readable](apps/api/src/aidoo_api/domains/meeting/permissions.py) 가 `ProjectMember` 테이블을 직접 조회했음. 그런데:
+- `ProjectMember` 모델은 [pms/models.py:129](apps/api/src/aidoo_api/domains/pms/models.py#L129) 에 존재
+- **INSERT 코드는 0 곳** (grep 으로 검증)
+- `list_project_members` / `add_project_member` / `update_member_role` 라우터는 모두 내부적으로 `list_space_members`/`add_space_member`/`update_space_member` 를 호출하고 응답만 `ProjectMemberItem` 모양으로 다시 포장
+- `Project.members` 관계는 `member_count` 계산 fallback 으로만 쓰이고, 실제 count 는 `Team.members` 로 별도 계산됨
+- 즉 PMS 가 한 번 리팩토링되며 Project-level 멤버십 → Space-level 멤버십으로 평탄화됐고 ProjectMember 테이블은 완전 고아 상태 (ProjectMember row 를 읽는 곳이 meeting 의 권한 체크 1 곳뿐)
+
+사용자가 세션 초반에 "ProjectMember 이거 진짜 사용 안 하는 건가? 사용 안 하는 거면 관련 코드 삭제해줘" 라고 정확하게 추측.
+
+**Fix** (commit `98a4700`):
+- 모델 + `Project.members` 관계 삭제
+- 3 곳의 `selectinload(Project.members).selectinload(ProjectMember.user)` eager load 제거
+- `list_project_members` / `add_project_member` / `update_member_role` 라우터는 **유지**하되 응답 모델을 `SpaceMemberItem` / `SpaceMemberListResponse` 로 교체 (필드 모양 동일 → frontend 변경 0)
+- 새 alembic 마이그레이션 `6b21fc0a74c8_drop_pms_project_members` — 로컬 docker 왕복 + drift 0 검증 + 원격 dev DB 적용 완료
+- `ensure_issue_readable` 은 PMS 와 동일한 `_ensure_space_access` 패턴 (= `resolve_team_role`) 로 재작성. meeting 의 attachable issue set 이 사용자가 PMS UI 에서 볼 수 있는 issue set 과 정확히 일치.
+- 회귀 테스트 `test_attendee_can_attach_task_via_space_access` 추가.
+
+### Root cause 3 — `groupedSpaces` 가 `current_user_role` 을 드롭
+
+**증상**: 사용자가 space 를 만들어도 사이드바 hover 시 `+` / `...` 메뉴가 안 떠서 list 추가/멤버 관리 진입이 불가능.
+
+**원인**: [SubSidebar.tsx:groupedSpaces](apps/web/src/components/layout/SubSidebar.tsx) reducer 가 `pmsTeams`/`pmsLists`/`pmsFolders` 를 flatten 하며 space 객체를 `{id, name, rootLists, folders}` 로만 복사하고 `current_user_role` 을 버림. `canManageSpace(space)` 가 항상 false → context menu 전체 숨김. typecheck 에 오래 남아있던 사전 오류 2 개 (`current_user_role does not exist`) 가 사실은 이 runtime 버그의 시그널이었음.
+
+**Fix** (commit `742672c`): reducer 가 원본 `PmsSpace` 객체를 spread 로 보존. typecheck 오류 12 → 10 으로 줄어듦 (진짜 버그가 해결되면서).
+
+### Silent failure 차단 (commit `bc6bdab` 일부)
+
+[MeetingCreateModal.handleCreate](apps/web/src/components/views/MeetingView/MeetingCreateModal.tsx) 가 첨부 실패 시 `setError(...)` 하고 **그 직후 `onCreated`** 를 호출해 부모가 모달을 닫아버림. 사용자가 에러 메시지를 볼 시간이 0.
+
+**Fix**: failure 발생 시 `onCreated` 를 호출하지 않고 모달 유지. 새 state `createdMeetingId` + "회의 보러 가기" 명시 버튼. 성공한 칩은 제거되고 실패한 칩만 남아 사용자가 어떤 게 안 됐는지 시각적으로 인지.
+
+### PMS Space 멤버 관리 UI 신규 — round 7
+
+**계기**: root cause 2 를 고쳐도 정작 어드민이 다른 사용자를 space 에 넣을 UI 가 없으면 의미 없음. Admin Console 도 space 멤버 관리 섹션이 아예 없었음 (`admin-api.ts` 에 함수는 정의됐는데 호출하는 곳 0).
+
+**Fix** (commit `98a4700`):
+- [SpaceMembersModal.tsx](apps/web/src/components/views/PMSView/SpaceMembersModal.tsx) 신규 — 처음엔 박스-per-row 스타일로 만들었다가 round 7b 에서 Linear 스타일로 리디자인
+- SubSidebar 의 SpaceContextMenu 에 "멤버 관리" 진입점 추가
+- PMS `/users` endpoint + `listPmsUsers` frontend 함수는 이미 존재해서 그대로 재사용
+
+## 3c. 라운드 7b — SpaceMembersModal Linear 리디자인
+
+사용자 피드백 "멤버관리 화면이 좀 촌스러운데 이게 현대적인 멤버관리 스타일인가?" → Linear 스타일로 리디자인 (commit `06bd0a1`):
+
+- **아바타** 32px 원형, user_id 기반 hash 로 14색 팔레트에서 결정적 선택, `initials()` 헬퍼 재사용
+- **Row 구조**: 4 개 박스 → 하나의 테두리 박스 안에 `divide-y`
+- **Role 표시**: Select box → crown/shield 아이콘 + 텍스트 배지
+- **Overflow 메뉴** (`⋮`): hover-revealed, portal 로 팝오버, 역할 변경 (체크 마크) + "스페이스에서 제거" (빨간 액션)
+- **초대 섹션**: role select 제거 (기본 member, 나중에 변경), 한 줄 검색 + live dropdown
+- **정렬**: Owner → Admin → Member → Viewer
+- **Owner row**: 다른 row 와 동일 높이, action 자리는 빈 span 으로 정렬 유지
+
+## 3d. 라운드 8 — Create 모달 통합 + seed guard + dev DB reset
+
+### CreateSpaceModal 에 멤버 초대 통합 (commit `8d2f297`)
+
+사용자 피드백 "멤버 추가는 스페이스 만드는 모달에서 같이 하도록 해줘 따로 뒤에 뜨지 말고".
+
+**변경**: [CreateSpaceModal.tsx](apps/web/src/components/views/PMSView/CreateSpaceModal.tsx) 에 멤버 picker 섹션 직접 추가. 기존 name/description 아래에 "멤버 초대 (선택)" 섹션 — chip row + 검색 input + live dropdown. createSpace → sequential addSpaceMember. SubSidebar 의 `onCreated` 에서 SpaceMembersModal 자동 open 동작 제거.
+
+### Seed idempotency guard (commit `1618b34`)
+
+라운드 7 의 seed fix 를 더 깊이 확장. `ensure_seed_data` 와 `ensure_dev_login_seed_data` 에 각각 guard 추가:
+
+- `is_infrastructure_seeded(db)` — `hq` OrgUnit + 6 개 DEFAULT_WORKSPACES 가 모두 존재하면 true
+- `are_dev_login_accounts_seeded(db)` — 8 개 DEV_LOGIN_ACCOUNTS email 이 모두 존재하면 true
+- 둘 다 true 면 seed 함수들이 **no-op 로 즉시 return**
+
+결과: `ensure_seed_data` 는 DB 가 이미 형상에 있다면 admin 이 수정한 workspace 이름/설명을 덮어쓰지 않음. `ensure_dev_login_seed_data` 는 account 가 이미 모두 있으면 스킵하므로 매 로그인마다 reconcile 이 돌지 않음. bootstrap-status 는 부작용 있던 seed call 을 제거하고 순수 read 로 전환.
+
+회귀 테스트 4 개:
+- `test_seed_preserves_user_created_space_membership`
+- `test_dev_login_is_idempotent_and_preserves_user_spaces`
+- `test_ensure_seed_data_does_not_overwrite_workspace_renames`
+- `test_seed_still_reconciles_default_space_membership`
+
+### Dev DB 완전 리셋 (commit `0321c45`)
+
+사용자 요청 "데이터 베이스를 리셋해줘 시드 적재하고". `reset_dev_db.py --force --seed-dev-accounts` 실행 중 두 개 잠재 버그 발견 및 수정:
+
+1. **Missing imports** — `reset_dev_db.py` 가 `auth`/`media`/`pms` models 만 import 하고 `meeting`/`docs` 는 빼먹었음. `Base.metadata.drop_all()` 이 meeting_task_links 를 인지 못 해서 pms_issues drop 시 FK 에러.
+
+2. **좀비 테이블 차단** — 수정 1 후에도 legacy `pms_docs` 테이블 (PR0 부터 남아있던 orphan) 이 `drop_all()` 을 막음. SQLAlchemy metadata-graph drop 은 metadata 에 등록된 테이블만 알기 때문에 구조적으로 orphan 처리 불가능.
+
+**Fix**: `Base.metadata.drop_all()` → `DROP SCHEMA public CASCADE; CREATE SCHEMA public;`. Alembic migration history 도 함께 초기화되므로 baseline 부터 head 까지 깨끗하게 재적용. 어떤 orphan 테이블이 있어도 확실하게 clean state.
+
+**부가 효과**: PR0-RESULT.md §미해결 의 `legacy pms_docs` 항목이 해결됨.
+
+## 4. 이번 세션이 할 일 (원래 요청 받은 범위)
 
 사용자 요청: "PR1 작업 상황 좀 더 체크하고 디버깅 할거야"
 
@@ -279,88 +429,77 @@ NB: 권한 매트릭스 테스트는 task 가 아닌 **doc** 으로 작성. 이�
 
 마지막 두 줄은 Tailwind v4 의 그레이 팔레트를 `.dark` 셀렉터에서 직접 remap 한 것. 코드베이스에 `text-gray-500` 가 205곳, `text-gray-600` 이 70곳 가까이 있는데 대부분 `dark:` override 가 없어서 한 번에 잡았음. `bg-gray-500` / `border-gray-500` 6곳 (PMS status dot, gantt fallback, hover border) 도 함께 영향받지만 모두 장식적 용도라 회귀 위험 낮음.
 
-## 4. 자동화 검증 결과 (이전 세션 마지막 시점)
+## 5. 자동화 검증 결과 (라운드 8 시점 — 가장 최신)
 
 | 항목 | 결과 |
 |---|---|
-| `pytest apps/api/tests/` | **51 passed** (기존 42 + 신규 9) |
-| `pytest tests/test_meeting.py` | 9/9 passed |
-| `alembic check` (로컬 docker) | 0 drift |
-| `alembic upgrade head` → `downgrade -1` → `upgrade head` (로컬 docker) | 성공 |
-| 원격 dev DB `alembic current` | `d8fe1ed8923a (head)` |
-| `pnpm nx typecheck web` | **12 사전 오류 그대로, 신규 0** |
+| `pytest apps/api/tests/` | **62 passed** (라운드 1: 51 → 라운드 8: 62) |
+| `alembic upgrade head → downgrade → upgrade → check` (로컬 docker) | 성공, drift 0 |
+| 원격 dev DB `alembic current` | `6b21fc0a74c8 (head)` (최신) |
+| `pnpm nx typecheck web` | **10 사전 오류** (라운드 1: 12 → 라운드 7: 10, groupedSpaces fix 가 2 개 해결) |
 
-신규 typecheck 오류가 없는 것이 핵심. 사전 12 개는 전부 main branch 에 이미 있던 것 (PMSView, SubSidebar, BoardView, admin-console, admin-permissions 등 PR1 와 무관한 widening/string|null 이슈).
+**신규 typecheck 오류 0** 이 핵심. 남은 10 개 사전 오류는 모두 PR1 과 무관한 legacy (PMSView string|null, admin-console Select disabled, admin-permissions literal, BoardView motion drag handler 등).
 
-## 5. 사람 손 QA — 아직 안 한 것 (이번 세션에서 확인 필요)
+## 6. 사람 손 QA — 라운드 8 이후 fresh dev DB 기준
 
-다음 시나리오들은 코드는 작성했지만 실제 브라우저로 클릭해보지 않았습니다. 새 세션에서 dev 서버 띄우고 확인해야 합니다.
+원격 dev DB 가 reset 됐고 현재 상태는 `Team Space` 하나 + `DEMO` 프로젝트 하나 + seed 계정 8 명. 다음 세션에서 dev 서버 띄우고 직접 눌러보면서 확인해야 할 것:
 
-**핵심 happy path**
-- [ ] AppBar 에 Meeting 항목이 보이는지 (platform_admin 로그인)
-- [ ] `/meeting` 라우트 진입 가능, 빈 상태에서 "예정된 회의가 없습니다" 표시
-- [ ] "+ New Meeting" 클릭 → 모달 오픈 → 제목/시간 입력 → "회의 만들기" → 우측 detail 패널 자동 오픈
-- [ ] CreateModal 의 "연결된 업무" 섹션에서 + 태스크 / + 문서 클릭 → 픽커 모달 → 선택 → 칩으로 회수
-- [ ] 칩 X 버튼으로 연결 해제, 다시 추가 가능
-- [ ] 회의 만든 직후 detail 패널의 연결된 태스크/문서 섹션에 정확히 표시되는지
-- [ ] 참석자 검색 input 에 "pms" / 다른 이메일 일부 입력 → 서버측 검색 결과 노출 → 클릭 → 칩으로 추가
-- [ ] 빈 input 에서 dropdown focus 시 "이름 또는 이메일을 입력하세요" 힌트만 (사용자 목록 노출 X)
-- [ ] detail 패널의 연필 아이콘 → EditModal 오픈 → 제목/시간 변경 → 저장 → 즉시 detail 패널 갱신
-- [ ] EditModal 에서 참석자 추가/제거, 주최자 제거 시도 (X 버튼이 없어야 함)
-- [ ] detail 패널의 + 추가 (task/doc) 도 attach 후 즉시 반영
-- [ ] 회의 삭제 → 확인 dialog → detail 패널 닫힘 + 리스트에서 사라짐
+**Seed guard 검증 (round 8 의 핵심 fix)**
+- [ ] 로그아웃 → 로그인 화면 열기 → pms-member 로 로그인 → **workspace 이름이 admin-edited 상태로 유지되는지** (seed 가 덮어쓰지 않음)
+- [ ] pms-member 가 새 space 생성 → CreateSpaceModal 한 화면에서 멤버도 몇 명 추가 → 저장
+- [ ] 로그아웃 → platform-admin 로그인 → 로그아웃 → pms-member 재로그인 → 방금 만든 space 의 멤버가 **여전히 그대로** 있는지 (seed loop 이 안 돈다는 검증)
 
-**권한 검증**
-- [ ] 일반 사용자에게 meeting workspace binding 부여 → /meeting 진입 가능, 본인이 organizer 가 아닌 회의는 read-only (수정/삭제 버튼 안 보임)
-- [ ] meeting workspace binding 없는 사용자 → /meeting 진입 시 403 (WorkspaceGate 의 AccessDeniedView)
+**CreateSpaceModal 통합 흐름 (round 8)**
+- [ ] Sidebar "+ New Space" → 한 모달에서 이름 + 설명 + 멤버 검색 + chip 추가까지 → 생성 → sidebar 갱신 + SpaceOverviewView 의 멤버 panel 에 추가한 멤버들 즉시 노출
+- [ ] 멤버 chip 에 본인 (creator) 이 안 나타나는지 (자동으로 owner 추가되므로 검색 후보에서 제외)
 
-**SubSidebar / Deep-link**
-- [ ] /meeting 들어간 후 좌측 SubSidebar 가 meeting 카테고리 (Upcoming/My Meetings/Recordings) 노출
-- [ ] SubSidebar "+" 드롭다운에 Meeting 아이템 보이고, 클릭 시 모달 트리거 (`meeting:create-event` 이벤트)
-- [ ] AI 사이드바의 "회의록" 클릭 → /meeting?tab=recordings 로 이동, Recordings 탭이 활성
+**SpaceMembersModal (Linear 스타일)**
+- [ ] SubSidebar 의 space 우클릭 → "멤버 관리" 진입
+- [ ] 각 멤버 row 에 hover → `⋮` 버튼 노출 → 역할 변경/제거
+- [ ] Owner row 에는 `⋮` 가 안 보임 + "소유자" 배지
+- [ ] 상단 초대 input 에 이름/이메일 검색 → 드롭다운에서 클릭 → member 로 추가
 
-**다크 모드 가독성** (사용자가 사용성 보고했던 부분)
-- [ ] Meeting 화면 전체에서 "+ 추가", 상태 배지 ("예정"), 라벨 텍스트가 충분히 밝게 보이는지
-- [ ] **Planner 화면**: 캘린더 SUN/MON/TUE 헤더, 날짜 숫자, "Add Event" 버튼이 다크 모드에서 잘 보이는지
-- [ ] **PMS 화면**: 라벨, 캡션, 사이드바 텍스트가 너무 밝거나 너무 어둡지 않은지
-- [ ] **Docs 화면**: 마찬가지
-- [ ] **Admin Console**: 마찬가지
-- [ ] PMS 의 status dot (backlog 회색, gantt fallback) 이 미세하게 밝아진 것이 어색하지 않은지
+**PR1 meeting 본체 — fresh DB 에서 회귀 없는지**
+- [ ] Meeting 생성 (제목 + 시간 + 참석자 + 연결된 업무 + 첨부 파일)
+- [ ] Task 첨부 / Doc 첨부 / File 업로드 각각 동작
+- [ ] 파일 다운로드 버튼 (cross-origin blob roundtrip) 동작
+- [ ] Attendee 가 본인 space 의 issue 를 meeting 에 첨부 가능 (ensure_issue_readable 수정 검증)
+- [ ] 모달 outside-click 으로 안 닫히는지 (datetime picker 보호)
 
-**참석자 검색 보강 검증** (사용자 보고: "pms-member 가 검색 안된다")
-- [ ] 어드민 콘솔에서 사용자 목록 확인. `pms-member@aidoo.local`, `pms-viewer@aidoo.local` 등 dev 시드 계정이 실제로 존재하는지
-- [ ] 없다면 → `/auth/bootstrap-status` 가 localhost 에서 호출돼서 `ensure_dev_login_seed_data` 가 동작하는지 확인. `dev_admin_login_available` 이 false 면 환경변수 `DOOWON_API_ALLOW_DEV_ADMIN_LOGIN=1` 확인
-- [ ] 있다면 → CreateModal 참석자 input 에 "pms" 입력 시 검색 결과에 실제로 잡히는지 (서버측 ILIKE 검색이라 잡혀야 함)
+**아직 안 한 / 이번 세션에서 미뤄둔 사람 손 QA** (라운드 1-2 부터 이월)
+- [ ] **다크모드 가독성** — Planner, PMS, Docs, Admin 전체 화면 톤 체크. 사용자가 "일단 문제 없는 듯 필요하면 다시 요청" 이라고 했음
+- [ ] **AI 사이드바 deep-link** — "회의록" 클릭 → /meeting?tab=recordings 이동
+- [ ] **SubSidebar "+" 드롭다운** — 다른 라우트에서 Meeting 클릭 시 라우팅 + 모달 이벤트
 
-## 6. 알려진 잔재 / 미해결 사항
+## 7. 알려진 잔재 / 미해결 사항 — 라운드 8 시점
 
-### 원격 dev DB 의 사전 드리프트 (PR1 무관, 운영팀 작업)
-PR0-RESULT.md §미해결 사항 의 연장. PR1 마이그레이션 적용 후 `alembic check` 가 두 가지 잔재를 보고합니다.
+### 해결됨 (이전 세션 잔재)
+- ~~legacy `pms_docs` 테이블~~ — **round 8 의 `DROP SCHEMA public CASCADE` 로 제거됨**
+- ~~`pms_user_doc_prefs` stale 인덱스~~ — DB reset 으로 자연 해소
+- ~~`ProjectMember` 좀비 테이블~~ — round 7 에서 모델 + 마이그레이션으로 제거
+- ~~ensure_seed_data 가 user data 파괴~~ — round 8 의 guard 로 차단
 
-1. **legacy `pms_docs` 테이블** — 모델/baseline 어디에도 없는 prototype 잔재. 운영팀이 백업 후 DROP
-2. **`pms_user_doc_prefs` 의 stale 인덱스** — `ix_pms_user_doc_prefs_doc_id` (구) vs `ix_pms_user_doc_prefs_space_doc_id` (모델 정의). 컬럼 rename 이 PR0 이전에 진행되면서 인덱스 이름이 안 따라간 흔적
-
-**둘 다 PR1 와 무관**하고 로컬 docker DB (baseline + d8fe1ed8923a) 에서는 drift 0 입니다. 새 세션에서 건드리지 말 것.
-
-### 사전 typecheck 오류 12 개 (PR1 무관)
-`pnpm nx typecheck web` 결과 12 개 오류가 main 시점부터 존재합니다. PR1 작업 시작 전 git stash 로 확인했음. 신규 0. 주요 위치:
-- `src/app-shell.ts(137,31)` — `canShowAppChrome(item.appId)` 가 'home' 을 받음 (NavItem.appId widening)
+### 사전 typecheck 오류 10 개 (PR1 무관, main 시점부터 존재)
+- `src/app-shell.ts(137,31)` — NavItem.appId 'home' widening
 - `src/App.tsx(127,23)` — FEATURE_BY_APP_ID indexer 'home' 누락
-- `src/components/layout/SubSidebar.tsx(1318,54)` — PmsSpace 타입 mismatch
 - `src/components/views/PMSView/BoardView.tsx(81,20)` — motion drag handler
-- `src/components/views/PMSView/PMSView.tsx(194,27)` 등 — string|null 3건
-- `src/domains/admin/admin-console.tsx` — Select disabled / NoticeTone 3건
+- `src/components/views/PMSView/PMSView.tsx(194,27)` 등 — string|null 3 건
+- `src/domains/admin/admin-console.tsx` — Select disabled / NoticeTone 3 건
 - `src/domains/admin/admin-permissions.ts(13,54)` — string|literal mismatch
 
-### 작업 트리에 PR1 와 무관한 사전 수정 4 개 (해결됨)
+### 다음 세션에서 사용자가 다시 진단 요청한 항목 — "3 레이어 권한 모델 보강"
 
-이전 세션 시작 시점에 작업 트리에 admin/health 관련 4 개 파일이 modified 상태로 남아있었고, PR1 commit 만들 때 stage 하면 안 된다는 경고가 여기 있었습니다.
+세션 막바지 논의: 현재 access 모델 (system role + workspace binding + team membership) 은 **유지**, 하지만 사용하기 편하게 보강. 5 가지 옵션을 제시했고 사용자가 "지금을 유지하고 보강을 하지뭐" → "일단 지금 진단은 따로 다시 요청할테니" 로 **이번 세션은 종료**. 다음 세션에서 보강안 진단을 다시 요청하기로 함.
 
-**현재 상태**: 해당 작업은 **별도로 commit 되어 origin/main 에 있습니다**:
-- `c544455 Add admin user list pagination and filtering`
-- `927ff4f Improve admin people management`
+제시한 보강 옵션 (다음 세션 참조용):
 
-PR1 커밋 (`3f7c7a9`, `dcced7a`) 과 섞이지 않았고, 작업 트리는 깨끗합니다. 이 섹션은 히스토리 보존용으로만 남겨둡니다.
+1. **User edit dialog 에 space 목록 (읽기 전용)** — PeopleSection 의 "Accessible apps" 아래에 "PMS Spaces" 섹션 추가. 작음 (1-2h). 진단 가능성 큰 효과.
+2. **PMS 바인딩 저장 시 orphan 경고** — WorkspacesSection 에서 nav.pms 바인딩 저장할 때 사용자가 team 에 안 속해있으면 경고 다이얼로그. 작음 (1h).
+3. **User edit dialog 에서 space membership 편집** — 1 을 읽기 전용 → 편집 가능으로 업그레이드. 중간 (반나절).
+4. **Access Group 에 workspace binding 템플릿** — 그룹에 사용자 넣으면 자동 fanout. 중간-큰 (1d). 데이터 파괴 위험 있어 신중.
+5. **403 응답에 설명적 메시지 추가** — cross-app 403 에 "ask admin for nav.pms" 같은 힌트. 작음 (30m).
+
+권장 순서: 1 → 2 → 3. 4 는 별도 세션 (fanout 위험), 5 는 1-3 후에 필요하면.
 
 ### 의도적으로 PR1 범위 밖
 [PR1-HANDOFF.md §1](PR1-HANDOFF.md) 의 표 그대로:
@@ -464,14 +603,14 @@ cd apps/api && uv run --python 3.12 alembic revision --autogenerate -m "..."
 
 ## 11. 절대 하지 말 것
 
-- ❌ §6 의 사전 수정 4 파일을 PR1 commit 에 stage
-- ❌ 원격 dev DB 의 legacy `pms_docs` 테이블 / stale 인덱스를 임의로 손댐 — 운영팀 작업
 - ❌ 사용자 승인 없이 prod 환경 손댐, force-push, hook 우회
+- ❌ 원격 dev DB 쓰기 작업 전 사용자 명시 승인 없이 진행
 - ❌ `_apply_postgres_schema_compat()` 류 손제작 SQL 부활
 - ❌ `Base.metadata.create_all()` 호출 추가
 - ❌ prod 환경에서 `DOOWON_API_AUTO_MIGRATE=1` 사용
 - ❌ 테스트 conftest 가 원격 DB 에 붙도록 변경
 - ❌ PR1 범위 밖 항목 추가 (rooms, calendar grid, conflict detection, transcription worker)
+- ❌ `ensure_seed_data` / `ensure_dev_login_seed_data` 의 guard 를 제거하거나 우회 — user data 파괴 회귀
 
 ## 12. 참조
 
@@ -484,3 +623,20 @@ cd apps/api && uv run --python 3.12 alembic revision --autogenerate -m "..."
 | 원격 DB DSN | [.env](.env) `DOOWON_POSTGRES_DSN` |
 | FastAPI app composition | [apps/api/src/aidoo_api/app.py](apps/api/src/aidoo_api/app.py) |
 | 디자인 토큰 단일 소스 | [packages/ui/styles.css](packages/ui/styles.css) |
+
+## 13. 이번 세션 commit 히스토리 (가장 최근 → 오래된 순)
+
+```
+0321c45 reset_dev_db: drop schema wholesale instead of via metadata graph     (round 8)
+1618b34 Seed must run on DB init only, not on every dev login                 (round 8)
+8d2f297 Merge member invite into CreateSpaceModal                             (round 8)
+bc6bdab Stop seed loop from deleting user-created space memberships           (round 7)
+742672c Preserve current_user_role in groupedSpaces so space menus show up    (round 7)
+98a4700 Add PMS space member management and remove ProjectMember zombie       (round 7)
+06bd0a1 Redesign SpaceMembersModal in Linear-style                            (round 7b)
+c81cdac Replace meeting delete confirm dialog                                 (round 7, user manual)
+86068b9 Meeting file attachments: create modal + explicit download button     (round 6)
+dcced7a Refine Meeting domain: fixes, permissions, file attachments           (round 5)
+```
+
+PR1 본체 skeleton (`3f7c7a9 Add Meeting domain skeleton (PR1)`) 와 PR0 (`8dd1458 Bootstrap Alembic with baseline migration`) 는 이전 세션.

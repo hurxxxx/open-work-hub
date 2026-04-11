@@ -63,13 +63,12 @@
 
 ## 미해결 / 인계 사항
 
-### legacy `pms_docs` 테이블
+### legacy `pms_docs` 테이블 — **해결됨 (2026-04-11, PR1 라운드 8)**
 
-- 원격 dev DB 에 `pms_docs` 테이블이 남아있음 (43개 - 36개 = 7개가 아니라 1개. 이전 분석 오차)
-- 모델 어디에도 선언되어 있지 않고 baseline 도 다루지 않음
-- PR1 작업 시작 전 운영팀이 백업 후 수동 DROP 하면 깔끔
-- 어디서 왔는지 출처는 미확인 (이전 prototype 흔적으로 추정)
-- **만약 PR1 마이그레이션이 우연히 같은 이름의 테이블을 만들면 충돌함** — 이름 겹치면 PR1 작업자가 알아서 피하거나 운영팀에 DROP 요청
+- ~~원격 dev DB 에 `pms_docs` 테이블이 남아있음~~
+- **제거 방법**: `reset_dev_db.py` 의 `Base.metadata.drop_all()` 을 `DROP SCHEMA public CASCADE; CREATE SCHEMA public;` 으로 교체하면서 orphan 테이블까지 한번에 날아감
+- 관련 commit: `0321c45 reset_dev_db: drop schema wholesale instead of via metadata graph`
+- PR1-STATUS.md §3d 참조
 
 ### MEETING-APP-PLAN.md 는 untracked 상태
 
