@@ -108,7 +108,7 @@ const IssueAgendaItem = ({ issue, isOverdue = false }: { issue: PmsIssue; isOver
       </div>
     </div>
     {issue.assignee_name && (
-      <div className="app-text-micro flex h-6 w-6 items-center justify-center rounded-full bg-indigo-500 font-medium text-white">
+      <div className="app-text-micro flex h-6 w-6 items-center justify-center rounded-full bg-app-accent font-medium text-app-accent-fg">
         {initials(issue.assignee_name)}
       </div>
     )}

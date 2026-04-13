@@ -359,7 +359,7 @@ export const AIView = () => {
                 <div
                   className={`max-w-[min(720px,80%)] rounded-lg border px-4 py-3 app-text-body-sm leading-relaxed ${
                     turn.role === 'user'
-                      ? 'border-app-accent bg-app-accent text-white'
+                      ? 'border-app-accent bg-app-accent text-app-accent-fg'
                       : 'border-app-border bg-app-surface text-app-ink'
                   }`}
                 >
@@ -416,7 +416,7 @@ export const AIView = () => {
                 value={input}
               />
               <button
-                className="app-text-control flex h-12 shrink-0 items-center gap-2 rounded-lg bg-app-accent px-4 text-white transition-colors hover:bg-app-accent-hover disabled:cursor-not-allowed disabled:opacity-60"
+                className="app-text-control flex h-12 shrink-0 items-center gap-2 rounded-lg bg-app-accent px-4 text-app-accent-fg transition-colors hover:bg-app-accent-hover disabled:cursor-not-allowed disabled:opacity-60"
                 disabled={!input.trim() || isSending}
                 type="submit"
               >

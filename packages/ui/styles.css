@@ -21,9 +21,16 @@
   --ui-color-ink-subtle: #9ca3af;
 
   /* ── Accent ── */
-  --ui-color-accent: #1c2385;
-  --ui-color-accent-hover: #161b6b;
-  --ui-color-accent-weak: #f0f1f4;
+  /* Monochrome / editorial accent. The brand does not yet have a hue
+     commitment, and dark-mode first design systems (Linear, Vercel, Notion,
+     Arc) land on near-black primary buttons with semantic colors reserved
+     for success/warning/danger. Slate-900 on white clears WCAG AAA by a
+     wide margin; slate-800 hover gives a gentle depth cue without shifting
+     hue. accent-weak is slate-100 so selected-row / badge backgrounds read
+     as subtle neutral fills, not colored tints. */
+  --ui-color-accent: #0f172a;
+  --ui-color-accent-hover: #1e293b;
+  --ui-color-accent-weak: #f1f5f9;
   --ui-color-accent-fg: #ffffff;
 
   /* ── Semantic ── */
@@ -96,10 +103,15 @@
      uses a Tailwind indigo-400 / indigo-300 pair. White button text on the
      base value passes WCAG AA Large; the same value as text on the dark
      surface (#2a2b2d) passes WCAG AA for body sizes. */
-  --ui-color-accent: #818cf8;
-  --ui-color-accent-hover: #a5b4fc;
+  /* Dark-mode monochrome accent. Near-white primary surface flipped from
+     the light-mode slate-900. accent-fg must flip to dark so that button
+     text stays legible when the button background is near-white. accent-weak
+     stays as the neutral dark surface (unchanged) because a "tinted fill"
+     on dark is already a subtle gray — no hue needed. */
+  --ui-color-accent: #f1f5f9;
+  --ui-color-accent-hover: #ffffff;
   --ui-color-accent-weak: #3a3b3d;
-  --ui-color-accent-fg: #ffffff;
+  --ui-color-accent-fg: #0f172a;
   --ui-color-success: #22c55e;
   --ui-color-warning: #f97316;
   --ui-color-danger: #ef4444;

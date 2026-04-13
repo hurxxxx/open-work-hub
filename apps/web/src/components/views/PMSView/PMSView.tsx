@@ -555,7 +555,7 @@ export const PMSView = () => {
                 <div className="w-px h-5 bg-app-border mx-1" />
                 <button
                   onClick={() => setIsNewTaskModalOpen(true)}
-                  className="app-text-body-sm flex h-8 items-center gap-1.5 rounded-md bg-app-accent px-3 font-semibold text-app-bg shadow-lg shadow-purple-500/20"
+                  className="app-text-body-sm flex h-8 items-center gap-1.5 rounded-md bg-app-accent px-3 font-semibold text-app-accent-fg shadow-sm"
                 >
                   <Plus size={14} />
                   <span>New Task</span>

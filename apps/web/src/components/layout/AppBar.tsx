@@ -329,7 +329,7 @@ export function AppBar({
 
         <button
           aria-label="마이페이지"
-          className="app-text-body-sm flex h-10 w-10 cursor-pointer items-center justify-center rounded-full bg-gradient-to-br from-app-accent to-purple-500 font-bold text-white shadow-md shadow-app-accent/20 outline-none ring-2 ring-transparent transition-all hover:ring-app-accent/40"
+          className="app-text-body-sm flex h-10 w-10 cursor-pointer items-center justify-center rounded-full bg-app-accent font-bold text-app-accent-fg shadow-sm outline-none ring-2 ring-transparent transition-all hover:ring-app-accent/40"
           onClick={onOpenAccount}
           title={`${currentUser.display_name || currentUser.full_name} · 마이페이지`}
           type="button"

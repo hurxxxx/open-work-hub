@@ -594,7 +594,7 @@ export const PlannerView = () => {
               className="flex-1 flex flex-col overflow-hidden"
             >
               <div className="p-6 border-b border-app-border flex items-center gap-6">
-                <div className="w-16 h-16 bg-app-accent rounded-xl flex flex-col items-center justify-center text-app-bg shadow-lg shadow-purple-500/20">
+                <div className="w-16 h-16 bg-app-accent rounded-xl flex flex-col items-center justify-center text-app-accent-fg shadow-sm">
                   <span className="app-text-overline">{MONTH_NAMES[viewMonth]}</span>
                   <span className="app-text-title-lg font-black">{selectedDate}</span>
                 </div>

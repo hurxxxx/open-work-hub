@@ -16,6 +16,7 @@
   --color-app-ink: var(--ui-color-ink);
   --color-app-accent: var(--ui-color-accent);
   --color-app-accent-hover: var(--ui-color-accent-hover);
+  --color-app-accent-fg: var(--ui-color-accent-fg);
 
   /* Register --ui-* tokens so Tailwind v4 resolves bg-[var(--ui-*)] as colors */
   --color-ui-bg: var(--ui-color-bg);
