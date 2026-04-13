@@ -110,6 +110,7 @@ export function TaskPickerModal({
         if (!open) onClose();
       }}
       title="태스크 첨부"
+      description="회의에 연결할 PMS 태스크를 선택합니다."
       maxWidth="max-w-xl"
       actions={
         <div className="flex w-full items-center justify-end">

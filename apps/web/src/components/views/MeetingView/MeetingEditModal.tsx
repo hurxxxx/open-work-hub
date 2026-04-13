@@ -183,6 +183,7 @@ export function MeetingEditModal({
         if (!open) onClose();
       }}
       title="Edit Meeting"
+      description="회의 제목, 시간, 참석자를 수정합니다."
       maxWidth="max-w-xl"
       dismissOnInteractOutside={false}
       actions={

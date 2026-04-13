@@ -85,6 +85,7 @@ export function DocPickerModal({
         if (!open) onClose();
       }}
       title="문서 첨부"
+      description="회의에 연결할 NativeDoc 문서를 선택합니다."
       maxWidth="max-w-xl"
       actions={
         <div className="flex w-full items-center justify-end">

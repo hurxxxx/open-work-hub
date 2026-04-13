@@ -1650,7 +1650,7 @@ def remove_space_member(
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
-@router.get("/projects", response_model=ProjectListResponse)
+@router.get("/projects", response_model=ProjectListResponse, include_in_schema=False)
 @router.get("/lists", response_model=ProjectListResponse)
 def list_projects(
     page: int = Query(default=1, ge=1),
@@ -1759,7 +1759,12 @@ def list_space_lists(
     )
 
 
-@router.post("/projects", response_model=ProjectListItem, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/projects",
+    response_model=ProjectListItem,
+    status_code=status.HTTP_201_CREATED,
+    include_in_schema=False,
+)
 @router.post("/lists", response_model=ProjectListItem, status_code=status.HTTP_201_CREATED)
 def create_project(
     payload: ProjectCreateRequest,
@@ -1812,7 +1817,7 @@ def create_project(
     return _serialize_project(project, "owner", resolved_team_name, member_count)
 
 
-@router.get("/projects/{project_id}", response_model=ProjectListItem)
+@router.get("/projects/{project_id}", response_model=ProjectListItem, include_in_schema=False)
 @router.get("/lists/{project_id}", response_model=ProjectListItem)
 def get_project(
     project_id: str,
@@ -1834,7 +1839,7 @@ def get_project(
     return _serialize_project(project, role, t_name, member_count)
 
 
-@router.patch("/projects/{project_id}", response_model=ProjectListItem)
+@router.patch("/projects/{project_id}", response_model=ProjectListItem, include_in_schema=False)
 @router.patch("/lists/{project_id}", response_model=ProjectListItem)
 def update_project(
     project_id: str,
@@ -1870,7 +1875,11 @@ def update_project(
     return _serialize_project(project, role, t_name, member_count)
 
 
-@router.get("/projects/{project_id}/members", response_model=SpaceMemberListResponse)
+@router.get(
+    "/projects/{project_id}/members",
+    response_model=SpaceMemberListResponse,
+    include_in_schema=False,
+)
 @router.get("/lists/{project_id}/members", response_model=SpaceMemberListResponse)
 def list_project_members(
     project_id: str,
@@ -1898,6 +1907,7 @@ def list_project_members(
     "/projects/{project_id}/members",
     response_model=SpaceMemberItem,
     status_code=status.HTTP_201_CREATED,
+    include_in_schema=False,
 )
 @router.post(
     "/lists/{project_id}/members",
@@ -1921,7 +1931,11 @@ def add_project_member(
     )
 
 
-@router.patch("/projects/{project_id}/members/{user_id}/role", response_model=SpaceMemberItem)
+@router.patch(
+    "/projects/{project_id}/members/{user_id}/role",
+    response_model=SpaceMemberItem,
+    include_in_schema=False,
+)
 @router.patch("/lists/{project_id}/members/{user_id}/role", response_model=SpaceMemberItem)
 def update_member_role(
     project_id: str,
@@ -1942,7 +1956,7 @@ def update_member_role(
     )
 
 
-@router.delete("/projects/{project_id}/members/{user_id}")
+@router.delete("/projects/{project_id}/members/{user_id}", include_in_schema=False)
 @router.delete("/lists/{project_id}/members/{user_id}")
 def remove_project_member(
     project_id: str,
@@ -1961,7 +1975,11 @@ def remove_project_member(
     )
 
 
-@router.get("/projects/{project_id}/milestones", response_model=MilestoneListResponse)
+@router.get(
+    "/projects/{project_id}/milestones",
+    response_model=MilestoneListResponse,
+    include_in_schema=False,
+)
 @router.get("/lists/{project_id}/milestones", response_model=MilestoneListResponse)
 def list_milestones(
     project_id: str,
@@ -1990,6 +2008,7 @@ def list_milestones(
     "/projects/{project_id}/milestones",
     response_model=MilestoneItem,
     status_code=status.HTTP_201_CREATED,
+    include_in_schema=False,
 )
 @router.post(
     "/lists/{project_id}/milestones",
@@ -2046,7 +2065,11 @@ def update_milestone(
     return _serialize_milestone(milestone)
 
 
-@router.get("/projects/{project_id}/labels", response_model=LabelListResponse)
+@router.get(
+    "/projects/{project_id}/labels",
+    response_model=LabelListResponse,
+    include_in_schema=False,
+)
 @router.get("/lists/{project_id}/labels", response_model=LabelListResponse)
 def list_project_labels(
     project_id: str,
@@ -2062,7 +2085,12 @@ def list_project_labels(
     return LabelListResponse(items=page_items, total=total, page=page, page_size=page_size)
 
 
-@router.post("/projects/{project_id}/labels", response_model=LabelItem, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/projects/{project_id}/labels",
+    response_model=LabelItem,
+    status_code=status.HTTP_201_CREATED,
+    include_in_schema=False,
+)
 @router.post("/lists/{project_id}/labels", response_model=LabelItem, status_code=status.HTTP_201_CREATED)
 def create_project_label(
     project_id: str,
@@ -2127,7 +2155,11 @@ def delete_label(
     db.commit()
 
 
-@router.get("/projects/{project_id}/issues", response_model=IssueListResponse)
+@router.get(
+    "/projects/{project_id}/issues",
+    response_model=IssueListResponse,
+    include_in_schema=False,
+)
 @router.get("/lists/{project_id}/issues", response_model=IssueListResponse)
 def list_issues(
     project_id: str,
@@ -2218,6 +2250,7 @@ def list_issues(
     "/projects/{project_id}/issues",
     response_model=IssueListItem,
     status_code=status.HTTP_201_CREATED,
+    include_in_schema=False,
 )
 @router.post(
     "/lists/{project_id}/issues",
@@ -2499,7 +2532,11 @@ def update_issue(
     return _serialize_issue(issue)
 
 
-@router.patch("/projects/{project_id}/issues/bulk", response_model=BulkUpdateResponse)
+@router.patch(
+    "/projects/{project_id}/issues/bulk",
+    response_model=BulkUpdateResponse,
+    include_in_schema=False,
+)
 @router.patch("/lists/{project_id}/issues/bulk", response_model=BulkUpdateResponse)
 def bulk_update_issues(
     project_id: str,
@@ -3311,7 +3348,11 @@ def _serialize_status(s: ProjectStatus) -> ProjectStatusItem:
     )
 
 
-@router.get("/projects/{project_id}/statuses", response_model=ProjectStatusListResponse)
+@router.get(
+    "/projects/{project_id}/statuses",
+    response_model=ProjectStatusListResponse,
+    include_in_schema=False,
+)
 @router.get("/lists/{project_id}/statuses", response_model=ProjectStatusListResponse)
 def list_project_statuses(
     project_id: str,
@@ -3344,6 +3385,7 @@ def list_project_statuses(
     "/projects/{project_id}/statuses",
     response_model=ProjectStatusItem,
     status_code=status.HTTP_201_CREATED,
+    include_in_schema=False,
 )
 @router.post(
     "/lists/{project_id}/statuses",
@@ -3449,7 +3491,7 @@ def delete_project_status(
 # ── CSV Export ──────────────────────────────────────────────────────
 
 
-@router.get("/projects/{project_id}/export")
+@router.get("/projects/{project_id}/export", include_in_schema=False)
 @router.get("/lists/{project_id}/export")
 def export_project_issues(
     project_id: str,
@@ -3537,7 +3579,11 @@ def _serialize_template(t: TaskTemplate) -> TaskTemplateItem:
     )
 
 
-@router.get("/projects/{project_id}/templates", response_model=TaskTemplateListResponse)
+@router.get(
+    "/projects/{project_id}/templates",
+    response_model=TaskTemplateListResponse,
+    include_in_schema=False,
+)
 @router.get("/lists/{project_id}/templates", response_model=TaskTemplateListResponse)
 def list_templates(
     project_id: str,
@@ -3559,6 +3605,7 @@ def list_templates(
     "/projects/{project_id}/templates",
     response_model=TaskTemplateItem,
     status_code=status.HTTP_201_CREATED,
+    include_in_schema=False,
 )
 @router.post(
     "/lists/{project_id}/templates",
@@ -3633,7 +3680,11 @@ def delete_template(
 # ── Custom Fields ───────────────────────────────────────────────────
 
 
-@router.get("/projects/{project_id}/custom-fields", response_model=CustomFieldListResponse)
+@router.get(
+    "/projects/{project_id}/custom-fields",
+    response_model=CustomFieldListResponse,
+    include_in_schema=False,
+)
 @router.get("/lists/{project_id}/custom-fields", response_model=CustomFieldListResponse)
 def list_custom_fields(
     project_id: str,
@@ -3667,6 +3718,7 @@ def list_custom_fields(
     "/projects/{project_id}/custom-fields",
     response_model=CustomFieldItem,
     status_code=status.HTTP_201_CREATED,
+    include_in_schema=False,
 )
 @router.post(
     "/lists/{project_id}/custom-fields",

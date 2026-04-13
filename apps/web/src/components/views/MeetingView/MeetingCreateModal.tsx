@@ -257,6 +257,7 @@ export function MeetingCreateModal({ isOpen, onClose, onCreated }: MeetingCreate
         if (!open) onClose();
       }}
       title="New Meeting"
+      description="참석자와 연결된 업무를 포함해 새 회의를 만듭니다."
       maxWidth="max-w-xl"
       dismissOnInteractOutside={false}
       actions={
