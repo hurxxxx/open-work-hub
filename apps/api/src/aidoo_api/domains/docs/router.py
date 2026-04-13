@@ -33,6 +33,7 @@ from aidoo_api.domains.docs.models import (
     NativeDocPage,
     NativeDocUserShare,
 )
+from aidoo_api.domains.docs.service import create_native_doc_for_user
 from aidoo_api.domains.media.router import sync_embedded_media
 from aidoo_api.domains.pms.models import SpaceDoc, SpaceDocPage
 
@@ -1000,23 +1001,14 @@ def create_native_doc(
     if current_workspace is None:
         raise HTTPException(status_code=403, detail="Docs requests require a workspace context.")
 
-    doc = NativeDoc(
-        id=new_id(),
+    doc, _page = create_native_doc_for_user(
+        db,
         workspace_id=current_workspace.id,
         owner_id=current_user.id,
-        title=payload.title.strip(),
-    )
-    db.add(doc)
-    page = NativeDocPage(
-        id=new_id(),
-        doc_id=doc.id,
-        parent_id=None,
-        title=(payload.first_page_title or payload.title).strip(),
+        title=payload.title,
+        first_page_title=payload.first_page_title,
         content_blocks=[],
-        sort_order=0,
-        created_by_id=current_user.id,
     )
-    db.add(page)
     db.commit()
     doc = _load_native_doc_for_access(db, doc.id)
     assert doc is not None

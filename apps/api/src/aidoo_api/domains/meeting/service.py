@@ -623,9 +623,11 @@ def update_meeting(
 
 def delete_meeting(db: Session, *, user: User, meeting_id: str) -> None:
     from aidoo_api.domains.meeting.permissions import ensure_meeting_organizer
+    from aidoo_api.domains.meeting.recordings import cleanup_meeting_recordings
 
     meeting = _load_meeting(db, meeting_id)
     ensure_meeting_organizer(db, user, meeting)
+    cleanup_meeting_recordings(db, meeting=meeting)
     revoke_grants_for_meeting(
         db,
         meeting_id=meeting.id,

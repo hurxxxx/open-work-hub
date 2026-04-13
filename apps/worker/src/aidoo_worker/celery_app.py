@@ -17,4 +17,15 @@ celery_app.conf.beat_schedule = {
         "task": "media.cleanup_orphans",
         "schedule": 3600.0,
     },
+    "cleanup-stale-meeting-recording-staging": {
+        "task": "meeting.cleanup_stale_staging",
+        "schedule": 3600.0,
+    },
 }
+celery_app.conf.task_routes = {
+    "meeting.transcribe": {"queue": "meeting_transcribe"},
+    "meeting.summarize": {"queue": "meeting_transcribe"},
+    "meeting.generate_doc": {"queue": "meeting_transcribe"},
+}
+celery_app.conf.task_reject_on_worker_lost = True
+celery_app.conf.worker_graceful_shutdown_timeout = 1200

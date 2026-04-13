@@ -43,6 +43,56 @@ class Settings(BaseSettings):
         default="aidoo-portal",
         validation_alias=AliasChoices("DOOWON_MINIO_BUCKET"),
     )
+    worker_broker_url: str = Field(
+        default="redis://127.0.0.1:6379/0",
+        validation_alias=AliasChoices("DOOWON_WORKER_BROKER_URL", "DOOWON_BROKER_URL"),
+    )
+    worker_result_backend: str = Field(
+        default="redis://127.0.0.1:6379/1",
+        validation_alias=AliasChoices("DOOWON_WORKER_RESULT_BACKEND", "DOOWON_RESULT_BACKEND"),
+    )
+    recording_spool_dir: str = Field(
+        default=str(WORKSPACE_ROOT / ".local-recording-spool"),
+        validation_alias=AliasChoices("DOOWON_API_RECORDING_SPOOL_DIR"),
+    )
+    recording_max_size_bytes: int = Field(
+        default=1024 * 1024 * 1024,
+        ge=1024 * 1024,
+        validation_alias=AliasChoices("DOOWON_API_RECORDING_MAX_SIZE_BYTES"),
+    )
+    recording_staging_retention_hours: int = Field(
+        default=24 * 7,
+        ge=1,
+        le=24 * 30,
+        validation_alias=AliasChoices("DOOWON_API_RECORDING_STAGING_RETENTION_HOURS"),
+    )
+    recording_chunk_seconds: int = Field(
+        default=2,
+        ge=1,
+        le=10,
+        validation_alias=AliasChoices("DOOWON_API_RECORDING_CHUNK_SECONDS"),
+    )
+    asr_backend: str = Field(
+        default="cohere",
+        validation_alias=AliasChoices("DOOWON_API_ASR_BACKEND", "DOOWON_ASR_BACKEND"),
+    )
+    asr_cohere_api_key: str = Field(
+        default="",
+        validation_alias=AliasChoices("DOOWON_API_COHERE_API_KEY", "COHERE_API_KEY"),
+    )
+    asr_cohere_model: str = Field(default="transcribe-v1")
+    asr_cohere_base_url: str = Field(default="https://api.cohere.com/v2")
+    asr_qwen_model: str = Field(default="Qwen/Qwen3-ASR-1.7B")
+    asr_qwen_device: str = Field(default="cuda")
+    asr_whisper_model: str = Field(default="large-v3")
+    asr_whisper_device: str = Field(default="cuda")
+    asr_whisper_compute_type: str = Field(default="float16")
+    asr_request_timeout_seconds: float = Field(
+        default=600.0,
+        gt=0,
+        le=3600,
+        validation_alias=AliasChoices("DOOWON_API_ASR_REQUEST_TIMEOUT_SECONDS"),
+    )
     llm_provider: str = Field(
         default="ollama",
         validation_alias=AliasChoices("DOOWON_LLM_PROVIDER"),

@@ -6,6 +6,7 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     Integer,
+    JSON,
     String,
     Text,
     UniqueConstraint,
@@ -61,6 +62,10 @@ class Meeting(Base):
         cascade="all, delete-orphan",
     )
     recordings: Mapped[list["MeetingRecording"]] = relationship(
+        back_populates="meeting",
+        cascade="all, delete-orphan",
+    )
+    recording_staging: Mapped[list["MeetingRecordingStaging"]] = relationship(
         back_populates="meeting",
         cascade="all, delete-orphan",
     )
@@ -172,6 +177,9 @@ class MeetingFileAttachment(Base):
 
 class MeetingRecording(Base):
     __tablename__ = "meeting_recordings"
+    __table_args__ = (
+        UniqueConstraint("meeting_id", "idempotency_key", name="uq_recording_idempotency"),
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     meeting_id: Mapped[str] = mapped_column(
@@ -179,22 +187,73 @@ class MeetingRecording(Base):
     )
     storage_key: Mapped[str] = mapped_column(String(512), unique=True, nullable=False)
     duration_sec: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    file_size: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    mime_type: Mapped[str] = mapped_column(String(120), default="audio/webm", nullable=False)
+    idempotency_key: Mapped[str] = mapped_column(String(80), nullable=False)
     uploaded_by_id: Mapped[str] = mapped_column(
         ForeignKey("users.id"), nullable=False
     )
-    source: Mapped[str] = mapped_column(String(16), default="upload", nullable=False)
+    source: Mapped[str] = mapped_column(String(16), default="manual_upload", nullable=False)
     transcription_status: Mapped[str] = mapped_column(
         String(24), default="pending", index=True, nullable=False
     )
+    progress_pct: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     transcript_text: Mapped[str | None] = mapped_column(Text, nullable=True)
     summary_text: Mapped[str | None] = mapped_column(Text, nullable=True)
-    failure_reason: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    failure_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     linked_doc_id: Mapped[str | None] = mapped_column(
         ForeignKey("docs_native_docs.id"), nullable=True
     )
+    linked_task_id: Mapped[str | None] = mapped_column(
+        ForeignKey("pms_issues.id"), index=True, nullable=True
+    )
+    celery_task_id: Mapped[str | None] = mapped_column(String(80), index=True, nullable=True)
+    transcribe_started_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    transcribe_completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime, default=utcnow_naive, nullable=False
     )
 
     meeting: Mapped["Meeting"] = relationship(back_populates="recordings")
+    uploaded_by = relationship("User")
+
+
+class MeetingRecordingStaging(Base):
+    __tablename__ = "meeting_recording_staging"
+    __table_args__ = (
+        UniqueConstraint("meeting_id", "idempotency_key", name="uq_recording_staging_idempotency"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    meeting_id: Mapped[str] = mapped_column(
+        ForeignKey("meetings.id"), index=True, nullable=False
+    )
+    uploaded_by_id: Mapped[str] = mapped_column(
+        ForeignKey("users.id"), nullable=False
+    )
+    idempotency_key: Mapped[str] = mapped_column(String(80), nullable=False)
+    status: Mapped[str] = mapped_column(String(24), default="recording", nullable=False)
+    spool_path: Mapped[str] = mapped_column(String(512), nullable=False)
+    storage_key: Mapped[str] = mapped_column(String(512), nullable=False)
+    mime_type: Mapped[str] = mapped_column(String(120), default="audio/webm", nullable=False)
+    bytes_received: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    chunk_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    highest_seq: Mapped[int] = mapped_column(Integer, default=-1, nullable=False)
+    chunks_meta: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    duration_sec_estimate: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    linked_task_id: Mapped[str | None] = mapped_column(
+        ForeignKey("pms_issues.id"), nullable=True
+    )
+    started_at: Mapped[datetime] = mapped_column(
+        DateTime, default=utcnow_naive, index=True, nullable=False
+    )
+    last_chunk_at: Mapped[datetime] = mapped_column(
+        DateTime, default=utcnow_naive, nullable=False
+    )
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    promoted_recording_id: Mapped[str | None] = mapped_column(
+        ForeignKey("meeting_recordings.id"), nullable=True
+    )
+
+    meeting: Mapped["Meeting"] = relationship(back_populates="recording_staging")
     uploaded_by = relationship("User")

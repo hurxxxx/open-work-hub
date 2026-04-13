@@ -223,9 +223,9 @@ function RecordingsPlaceholder() {
   return (
     <div className="flex h-64 flex-col items-center justify-center gap-2 text-app-ink/60">
       <Video size={28} className="text-app-ink/30" />
-      <p className="app-text-body">녹음 업로드는 PR3 에서 활성화됩니다.</p>
+      <p className="app-text-body">회의 녹음은 회의 상세 패널에서 사용할 수 있습니다.</p>
       <p className="app-text-caption text-app-ink/40">
-        AI 사이드바의 "회의록" 메뉴는 이 화면으로 연결됩니다.
+        회의를 선택하면 오른쪽 패널에서 녹음 시작과 음성 파일 업로드를 사용할 수 있습니다.
       </p>
     </div>
   );

@@ -1,5 +1,6 @@
 import logging
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import Depends, FastAPI
 from fastapi import Response, status
@@ -34,6 +35,7 @@ def create_app() -> FastAPI:
     settings = get_settings()
     init_db()
     ensure_bucket()
+    Path(settings.recording_spool_dir).expanduser().mkdir(parents=True, exist_ok=True)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):

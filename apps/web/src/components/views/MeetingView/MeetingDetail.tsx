@@ -5,6 +5,7 @@ import {
   Download,
   FileText,
   Loader2,
+  Mic,
   Paperclip,
   Pencil,
   Plus,
@@ -23,7 +24,9 @@ import {
   detachDocFromMeeting,
   detachTaskFromMeeting,
   getMeeting,
+  getRecordingPlaybackUrl,
   parseServerDateTime,
+  retryMeetingRecording,
   uploadMeetingFile,
   type MeetingDetail as MeetingDetailType,
 } from '@/src/domains/meeting/meeting-api';
@@ -40,6 +43,12 @@ import {
 import { MeetingEditModal } from './MeetingEditModal';
 import { TaskPickerModal } from './TaskPickerModal';
 import { DocPickerModal } from './DocPickerModal';
+import { RecordingControls } from './RecordingControls';
+import { RecordingProgressRail } from './RecordingProgressRail';
+import { RecordingRecoveryBanner } from './RecordingRecoveryBanner';
+import { useChunkedRecorder } from './useChunkedRecorder';
+import { useRecordingPoll } from './useRecordingPoll';
+import { useRecordingRecovery } from './useRecordingRecovery';
 
 interface MeetingDetailProps {
   meetingId: string;
@@ -83,6 +92,7 @@ export function MeetingDetail({
   const [editOpen, setEditOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [playbackUrls, setPlaybackUrls] = useState<Record<string, string>>({});
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const workspaceSlug = getCurrentOrLastWorkspaceSlug();
 
@@ -104,6 +114,22 @@ export function MeetingDetail({
   useEffect(() => {
     refresh();
   }, [refresh]);
+
+  const recovery = useRecordingRecovery(meetingId, token);
+  const recorder = useChunkedRecorder({
+    meetingId,
+    token,
+    onMeetingUpdated: (updated) => {
+      setMeeting(updated);
+      void recovery.refresh();
+      onChanged();
+    },
+  });
+
+  useRecordingPoll(token, meetingId, meeting, (updated) => {
+    setMeeting(updated);
+    onChanged();
+  });
 
   const editable = canEditMeeting(user, meeting);
   const canAttach = canAttachToMeeting(user, meeting);
@@ -234,6 +260,34 @@ export function MeetingDetail({
       onDeleted();
     } catch (err) {
       setError(err instanceof Error ? err.message : '회의를 삭제할 수 없습니다.');
+      setBusy(false);
+    }
+  }
+
+  async function handleRecordingPlayback(recordingId: string) {
+    if (!token) return;
+    if (playbackUrls[recordingId]) {
+      return;
+    }
+    try {
+      const playback = await getRecordingPlaybackUrl(token, meetingId, recordingId);
+      setPlaybackUrls((current) => ({ ...current, [recordingId]: playback.url }));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '녹음 재생 링크를 가져올 수 없습니다.');
+    }
+  }
+
+  async function handleRetryRecording(recordingId: string) {
+    if (!token) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const updated = await retryMeetingRecording(token, meetingId, recordingId);
+      setMeeting(updated);
+      onChanged();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '녹음 재시도에 실패했습니다.');
+    } finally {
       setBusy(false);
     }
   }
@@ -475,6 +529,168 @@ export function MeetingDetail({
               ))}
             </ul>
           )}
+        </Section>
+
+        <Section icon={<Mic size={14} />} title="녹음" count={meeting.recordings.length}>
+          {canAttach ? (
+            <RecordingControls
+              browserSupported={recorder.browserSupported}
+              taskLinks={meeting.task_links}
+              isRecording={recorder.isRecording}
+              isBusy={recorder.isBusy}
+              elapsedSec={recorder.elapsedSec}
+              queuedBytes={recorder.queuedBytes}
+              uploadedBytes={recorder.uploadedBytes}
+              persistWarning={recorder.persistWarning}
+              onStart={(linkedTaskId) => recorder.startRecording(linkedTaskId)}
+              onStop={recorder.stopRecording}
+              onImportFile={(file, linkedTaskId) => recorder.importAudioFile(file, linkedTaskId)}
+            />
+          ) : null}
+
+          {recorder.error ? (
+            <p className="app-text-caption mt-2 text-[var(--ui-color-danger)]">{recorder.error}</p>
+          ) : null}
+
+          {recovery.items.length > 0 ? (
+            <div className="mt-3 space-y-2">
+              {recovery.items.map((item) => {
+                const localSession = item.localSession;
+                const remoteStaging = item.remoteStaging;
+                return (
+                  <RecordingRecoveryBanner
+                    key={item.stagingId}
+                    item={item}
+                    onResumeUpload={
+                      localSession && remoteStaging
+                        ? () => {
+                            void recorder.resumeUpload(item.stagingId);
+                          }
+                        : undefined
+                    }
+                    onContinueRecording={
+                      localSession && remoteStaging
+                        ? () => {
+                            void recorder.continueRecording({
+                              stagingId: item.stagingId,
+                              idempotencyKey: localSession.idempotencyKey,
+                              mimeType: localSession.mimeType,
+                              linkedTaskId: localSession.linkedTaskId,
+                              highestSeq: Math.max(
+                                localSession.lastChunkSeq,
+                                remoteStaging.highest_seq,
+                              ),
+                            });
+                          }
+                        : undefined
+                    }
+                    onDownload={
+                      localSession
+                        ? () => {
+                            void recorder.downloadRecoveredSession(item.stagingId);
+                          }
+                        : undefined
+                    }
+                    onImport={
+                      localSession
+                        ? () => {
+                            void recorder
+                              .importRecoveredSession(item.stagingId, localSession.linkedTaskId)
+                              .then(() => recovery.refresh());
+                          }
+                        : undefined
+                    }
+                    onDiscard={() => {
+                      void recorder
+                        .discardSession(item.stagingId, Boolean(remoteStaging))
+                        .then(() => recovery.refresh());
+                    }}
+                    onFinalizeUploadedOnly={
+                      !localSession && remoteStaging
+                        ? () => {
+                            void recorder
+                              .finalizeUploadedOnly(item.stagingId)
+                              .then(() => recovery.refresh());
+                          }
+                        : undefined
+                    }
+                  />
+                );
+              })}
+            </div>
+          ) : null}
+
+          {meeting.recordings.length === 0 ? (
+            <EmptyRow text="완료된 녹음이 없습니다." />
+          ) : (
+            <ul className="mt-3 space-y-2">
+              {meeting.recordings.map((recording) => (
+                <li
+                  key={recording.id}
+                  className="rounded-md border border-app-border bg-app-surface-sidebar px-3 py-3"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="app-text-body text-app-ink">
+                        {recording.linked_doc_id && workspaceSlug ? (
+                          <Link
+                            to={buildWorkspaceAppPath(workspaceSlug, 'docs', recording.linked_doc_id)}
+                            className="hover:text-app-accent hover:underline"
+                          >
+                            {recording.source === 'manual_upload' ? '업로드 음성' : '회의 녹음'}
+                          </Link>
+                        ) : (
+                          recording.source === 'manual_upload' ? '업로드 음성' : '회의 녹음'
+                        )}
+                      </p>
+                      <p className="app-text-caption text-app-ink/50">
+                        {formatFileSize(recording.file_size)} · {recording.mime_type}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => void handleRecordingPlayback(recording.id)}
+                        className="app-text-caption text-app-accent hover:underline"
+                      >
+                        재생
+                      </button>
+                    </div>
+                  </div>
+                  {playbackUrls[recording.id] ? (
+                    <audio controls src={playbackUrls[recording.id]} className="mt-3 w-full" />
+                  ) : null}
+                  {['pending', 'transcribing', 'summarizing', 'generating_doc', 'failed'].includes(
+                    recording.transcription_status,
+                  ) ? (
+                    <div className="mt-3">
+                      <RecordingProgressRail
+                        recording={recording}
+                        onRetry={
+                          recording.transcription_status === 'failed'
+                            ? () => {
+                                void handleRetryRecording(recording.id);
+                              }
+                            : undefined
+                        }
+                      />
+                    </div>
+                  ) : null}
+                  {recording.transcription_status === 'done' ? (
+                    <p className="app-text-caption mt-3 text-app-ink/60">
+                      회의록 생성이 완료되었습니다.
+                    </p>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+          )}
+          {recovery.error ? (
+            <p className="app-text-caption mt-2 text-[var(--ui-color-danger)]">{recovery.error}</p>
+          ) : null}
+          {recovery.loading ? (
+            <p className="app-text-caption mt-2 text-app-ink/50">복구 가능한 녹음을 확인하는 중입니다.</p>
+          ) : null}
         </Section>
 
         <Section

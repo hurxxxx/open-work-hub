@@ -44,13 +44,47 @@ export interface MeetingFileAttachment {
 
 export interface MeetingRecording {
   id: string;
+  meeting_id: string;
   storage_key: string;
   duration_sec: number | null;
   source: string;
   transcription_status: string;
+  progress_pct: number;
+  file_size: number;
+  mime_type: string;
   failure_reason: string | null;
   linked_doc_id: string | null;
+  linked_task_id: string | null;
+  transcribe_started_at: string | null;
+  transcribe_completed_at: string | null;
   created_at: string;
+}
+
+export interface RecordingStagingItem {
+  id: string;
+  meeting_id: string;
+  uploaded_by_id: string;
+  idempotency_key: string;
+  status: string;
+  mime_type: string;
+  bytes_received: number;
+  chunk_count: number;
+  highest_seq: number;
+  linked_task_id: string | null;
+  started_at: string;
+  last_chunk_at: string;
+  completed_at: string | null;
+}
+
+export interface RecordingChunkAck {
+  seq: number;
+  bytes_received: number;
+  highest_seq: number;
+}
+
+export interface RecordingPlaybackResponse {
+  url: string;
+  expires_at: string;
 }
 
 export interface MeetingListItem {
@@ -180,6 +214,33 @@ async function request<T>(path: string, token: string, init: RequestInit = {}): 
     );
   }
 
+  return payload as T;
+}
+
+async function multipartRequest<T>(
+  path: string,
+  token: string,
+  init: RequestInit = {},
+): Promise<T> {
+  const response = await fetch(resolveMeetingPath(path), {
+    ...init,
+    headers: {
+      Accept: 'application/json',
+      Authorization: `Bearer ${token}`,
+      ...(init.headers ?? {}),
+    },
+    cache: 'no-store',
+  });
+  if (response.status === 204) {
+    return undefined as T;
+  }
+  const payload = await response.json().catch(() => null);
+  if (!response.ok) {
+    throw new MeetingApiError(
+      response.status,
+      payload?.detail ?? `Request failed with ${response.status}.`,
+    );
+  }
   return payload as T;
 }
 
@@ -315,6 +376,131 @@ export function deleteMeetingFile(
     `/api/v1/meeting/meetings/${meetingId}/files/${fileId}`,
     token,
     { method: 'DELETE' },
+  );
+}
+
+export function initRecordingStaging(
+  token: string,
+  meetingId: string,
+  payload: { idempotency_key: string; mime_type: string; linked_task_id?: string | null },
+): Promise<RecordingStagingItem> {
+  return request<RecordingStagingItem>(
+    `/api/v1/meeting/meetings/${meetingId}/recordings/staging`,
+    token,
+    {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    },
+  );
+}
+
+export async function uploadRecordingChunk(
+  token: string,
+  meetingId: string,
+  stagingId: string,
+  seq: number,
+  blob: Blob,
+  chunkSha256: string,
+): Promise<RecordingChunkAck> {
+  const formData = new FormData();
+  formData.append('file', blob, `chunk-${seq}.webm`);
+  return multipartRequest<RecordingChunkAck>(
+    `/api/v1/meeting/meetings/${meetingId}/recordings/staging/${stagingId}/chunks/${seq}`,
+    token,
+    {
+      method: 'PUT',
+      headers: {
+        'X-Chunk-Sha256': chunkSha256,
+      },
+      body: formData,
+    },
+  );
+}
+
+export function completeRecordingStaging(
+  token: string,
+  meetingId: string,
+  stagingId: string,
+  payload: { duration_sec_estimate?: number | null },
+): Promise<MeetingDetail> {
+  return request<MeetingDetail>(
+    `/api/v1/meeting/meetings/${meetingId}/recordings/staging/${stagingId}/complete`,
+    token,
+    {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    },
+  );
+}
+
+export function listRecordingStaging(
+  token: string,
+  meetingId: string,
+): Promise<RecordingStagingItem[]> {
+  return request<RecordingStagingItem[]>(
+    `/api/v1/meeting/meetings/${meetingId}/recordings/staging`,
+    token,
+  );
+}
+
+export function discardRecordingStaging(
+  token: string,
+  meetingId: string,
+  stagingId: string,
+): Promise<void> {
+  return request<void>(
+    `/api/v1/meeting/meetings/${meetingId}/recordings/staging/${stagingId}`,
+    token,
+    {
+      method: 'DELETE',
+    },
+  );
+}
+
+export async function importMeetingRecording(
+  token: string,
+  meetingId: string,
+  file: Blob | File,
+  linkedTaskId?: string | null,
+): Promise<MeetingDetail> {
+  const formData = new FormData();
+  const filename = file instanceof File ? file.name : 'recovered-recording.webm';
+  formData.append('file', file, filename);
+  if (linkedTaskId) {
+    formData.append('linked_task_id', linkedTaskId);
+  }
+  return multipartRequest<MeetingDetail>(
+    `/api/v1/meeting/meetings/${meetingId}/recordings/import`,
+    token,
+    {
+      method: 'POST',
+      body: formData,
+    },
+  );
+}
+
+export function getRecordingPlaybackUrl(
+  token: string,
+  meetingId: string,
+  recordingId: string,
+): Promise<RecordingPlaybackResponse> {
+  return request<RecordingPlaybackResponse>(
+    `/api/v1/meeting/meetings/${meetingId}/recordings/${recordingId}/playback`,
+    token,
+  );
+}
+
+export function retryMeetingRecording(
+  token: string,
+  meetingId: string,
+  recordingId: string,
+): Promise<MeetingDetail> {
+  return request<MeetingDetail>(
+    `/api/v1/meeting/meetings/${meetingId}/recordings/${recordingId}/retry`,
+    token,
+    {
+      method: 'POST',
+    },
   );
 }
 

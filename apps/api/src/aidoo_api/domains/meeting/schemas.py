@@ -47,6 +47,16 @@ class MeetingDocAttachRequest(BaseModel):
     doc_id: str
 
 
+class RecordingStagingInitRequest(BaseModel):
+    idempotency_key: str = Field(..., min_length=8, max_length=80)
+    mime_type: str = Field(..., min_length=3, max_length=120)
+    linked_task_id: str | None = None
+
+
+class RecordingCompleteRequest(BaseModel):
+    duration_sec_estimate: int | None = Field(default=None, ge=0)
+
+
 class MeetingAttendeeOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -97,13 +107,49 @@ class MeetingRecordingOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: str
+    meeting_id: str
     storage_key: str
     duration_sec: int | None
     source: str
     transcription_status: str
+    progress_pct: int
+    file_size: int
+    mime_type: str
     failure_reason: str | None
     linked_doc_id: str | None
+    linked_task_id: str | None
+    transcribe_started_at: datetime | None
+    transcribe_completed_at: datetime | None
     created_at: datetime
+
+
+class RecordingStagingItem(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    meeting_id: str
+    uploaded_by_id: str
+    idempotency_key: str
+    status: str
+    mime_type: str
+    bytes_received: int
+    chunk_count: int
+    highest_seq: int
+    linked_task_id: str | None
+    started_at: datetime
+    last_chunk_at: datetime
+    completed_at: datetime | None
+
+
+class RecordingChunkAck(BaseModel):
+    seq: int
+    bytes_received: int
+    highest_seq: int
+
+
+class RecordingPlaybackResponse(BaseModel):
+    url: str
+    expires_at: datetime
 
 
 class MeetingListItem(BaseModel):

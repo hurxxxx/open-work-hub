@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Literal
 
-from fastapi import APIRouter, Depends, Query, Response, UploadFile, status
+from fastapi import APIRouter, Depends, Form, Header, Query, Response, UploadFile, status
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
@@ -14,12 +14,18 @@ from aidoo_api.domains.auth.dependencies import (
     require_feature_access,
 )
 from aidoo_api.domains.auth.models import User
+from aidoo_api.domains.meeting import recordings as recording_service
 from aidoo_api.domains.meeting import service as meeting_service
 from aidoo_api.domains.meeting.schemas import (
     MeetingCreateRequest,
     MeetingDetail,
     MeetingDocAttachRequest,
     MeetingListResponse,
+    RecordingChunkAck,
+    RecordingCompleteRequest,
+    RecordingPlaybackResponse,
+    RecordingStagingInitRequest,
+    RecordingStagingItem,
     MeetingTaskAttachRequest,
     MeetingUpdateRequest,
     MeetingUserItem,
@@ -181,6 +187,157 @@ def detach_file(
 ) -> MeetingDetail:
     return meeting_service.detach_file(
         db, user=current_user, meeting_id=meeting_id, file_id=file_id
+    )
+
+
+@router.post(
+    "/meetings/{meeting_id}/recordings/staging",
+    response_model=RecordingStagingItem,
+    status_code=status.HTTP_201_CREATED,
+)
+def init_recording_staging(
+    meeting_id: str,
+    payload: RecordingStagingInitRequest,
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+) -> RecordingStagingItem:
+    return recording_service.init_staging(
+        db,
+        user=current_user,
+        meeting_id=meeting_id,
+        payload=payload,
+    )
+
+
+@router.put(
+    "/meetings/{meeting_id}/recordings/staging/{staging_id}/chunks/{seq}",
+    response_model=RecordingChunkAck,
+)
+async def upload_recording_chunk(
+    meeting_id: str,
+    staging_id: str,
+    seq: int,
+    file: UploadFile,
+    x_chunk_sha256: str | None = Header(default=None, alias="X-Chunk-Sha256"),
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+) -> RecordingChunkAck:
+    return await recording_service.upload_chunk(
+        db,
+        user=current_user,
+        meeting_id=meeting_id,
+        staging_id=staging_id,
+        seq=seq,
+        upload=file,
+        chunk_sha256=x_chunk_sha256,
+    )
+
+
+@router.post(
+    "/meetings/{meeting_id}/recordings/staging/{staging_id}/complete",
+    response_model=MeetingDetail,
+)
+def complete_recording_staging(
+    meeting_id: str,
+    staging_id: str,
+    payload: RecordingCompleteRequest,
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+) -> MeetingDetail:
+    return recording_service.complete_staging(
+        db,
+        user=current_user,
+        meeting_id=meeting_id,
+        staging_id=staging_id,
+        payload=payload,
+    )
+
+
+@router.get(
+    "/meetings/{meeting_id}/recordings/staging",
+    response_model=list[RecordingStagingItem],
+)
+def list_recording_staging(
+    meeting_id: str,
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+) -> list[RecordingStagingItem]:
+    return recording_service.list_my_staging(
+        db,
+        user=current_user,
+        meeting_id=meeting_id,
+    )
+
+
+@router.delete(
+    "/meetings/{meeting_id}/recordings/staging/{staging_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+def discard_recording_staging(
+    meeting_id: str,
+    staging_id: str,
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+) -> Response:
+    recording_service.discard_staging(
+        db,
+        user=current_user,
+        meeting_id=meeting_id,
+        staging_id=staging_id,
+    )
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.post("/meetings/{meeting_id}/recordings/import", response_model=MeetingDetail)
+def import_recording(
+    meeting_id: str,
+    file: UploadFile,
+    linked_task_id: str | None = Form(default=None),
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+) -> MeetingDetail:
+    return recording_service.import_recording(
+        db,
+        user=current_user,
+        meeting_id=meeting_id,
+        upload=file,
+        linked_task_id=linked_task_id,
+    )
+
+
+@router.get(
+    "/meetings/{meeting_id}/recordings/{recording_id}/playback",
+    response_model=RecordingPlaybackResponse,
+)
+def get_recording_playback(
+    meeting_id: str,
+    recording_id: str,
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+) -> RecordingPlaybackResponse:
+    return recording_service.get_recording_playback(
+        db,
+        user=current_user,
+        meeting_id=meeting_id,
+        recording_id=recording_id,
+    )
+
+
+@router.post(
+    "/meetings/{meeting_id}/recordings/{recording_id}/retry",
+    response_model=MeetingDetail,
+)
+def retry_recording(
+    meeting_id: str,
+    recording_id: str,
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+) -> MeetingDetail:
+    return recording_service.retry_recording(
+        db,
+        user=current_user,
+        meeting_id=meeting_id,
+        recording_id=recording_id,
     )
 
 
