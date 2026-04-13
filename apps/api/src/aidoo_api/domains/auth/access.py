@@ -3,13 +3,12 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import Any
 
-from sqlalchemy import inspect, select
+from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload, selectinload
 
 from aidoo_api.domains.auth.models import (
     AccessGroup,
     AuditLog,
-    FeaturePolicy,
     GroupSystemRole,
     OrgUnit,
     Team,
@@ -18,7 +17,6 @@ from aidoo_api.domains.auth.models import (
     UserAccessGroup,
     UserSystemRole,
     Workspace,
-    WorkspaceEnabledApp,
     WorkspaceGroupBinding,
     WorkspaceUserBinding,
 )
@@ -67,8 +65,6 @@ SYSTEM_ROLE_PERMISSION_MAP = {
             "workspace.write",
             "team.read",
             "team.write",
-            "feature_policy.read",
-            "feature_policy.write",
             "audit.read",
             "session.revoke",
         }
@@ -100,33 +96,11 @@ TEAM_ROLE_ALIASES = {
     "admin": "admin",
     "owner": "owner",
 }
-
-WORKSPACE_APP_ORDER = (
-    "ai",
-    "docs",
-    "pms",
-    "planner",
-    "meeting",
-)
-VALID_WORKSPACE_APP_CODES = frozenset(WORKSPACE_APP_ORDER)
-
-APP_FEATURE_CODES = {
-    "ai": "nav.ai",
-    "docs": "nav.docs",
-    "pms": "nav.pms",
-    "planner": "nav.planner",
-    "meeting": "nav.meeting",
-    "admin": "nav.admin",
-}
-FEATURE_APP_CODES = {value: key for key, value in APP_FEATURE_CODES.items()}
-
-DEFAULT_WORKSPACE_ENABLED_APPS = list(WORKSPACE_APP_ORDER)
 DEFAULT_WORKSPACE_SEEDS = [
     {
         "key": "hq",
         "name": "Aidoo HQ",
         "description": "Primary collaboration workspace.",
-        "enabled_apps": list(WORKSPACE_APP_ORDER),
     }
 ]
 DEV_WORKSPACE_SEEDS = [
@@ -134,25 +108,21 @@ DEV_WORKSPACE_SEEDS = [
         "key": "innovation-lab",
         "name": "Innovation Lab",
         "description": "Workspace for AI and exploratory collaboration.",
-        "enabled_apps": ["ai", "docs", "meeting"],
     },
     {
         "key": "knowledge-base",
         "name": "Knowledge Base",
         "description": "Workspace focused on shared documents and references.",
-        "enabled_apps": ["docs"],
     },
     {
         "key": "planning-desk",
         "name": "Planning Desk",
         "description": "Workspace focused on planning and schedules.",
-        "enabled_apps": ["planner"],
     },
     {
         "key": "delivery-hub",
         "name": "Delivery Hub",
         "description": "Workspace for delivery teams running PMS, Docs, and Meetings.",
-        "enabled_apps": ["docs", "pms", "planner", "meeting"],
     },
 ]
 DEV_WORKSPACE_SEED_KEYS = frozenset(definition["key"] for definition in DEV_WORKSPACE_SEEDS)
@@ -161,39 +131,6 @@ DEFAULT_PMS_SPACE_KEY = "team-space"
 DEFAULT_PMS_SPACE_NAME = "Team Space"
 DEFAULT_PMS_SPACE_DESCRIPTION = "Default PMS space for shared lists and docs."
 
-DEFAULT_FEATURE_POLICIES = [
-    {
-        "code": "nav.ai",
-        "name": "AI module access",
-        "description": "Expose the AI module inside enabled workspaces.",
-    },
-    {
-        "code": "nav.docs",
-        "name": "Docs module access",
-        "description": "Expose the Docs module inside enabled workspaces.",
-    },
-    {
-        "code": "nav.pms",
-        "name": "PMS module access",
-        "description": "Expose the PMS module inside enabled workspaces.",
-    },
-    {
-        "code": "nav.planner",
-        "name": "Planner module access",
-        "description": "Expose the Planner module inside enabled workspaces.",
-    },
-    {
-        "code": "nav.meeting",
-        "name": "Meeting module access",
-        "description": "Expose the Meeting module inside enabled workspaces.",
-    },
-    {
-        "code": "nav.admin",
-        "name": "Admin console access",
-        "description": "Expose the global admin console.",
-    },
-]
-
 DEV_LOGIN_PASSWORD = "Aidoo!dev1234"
 
 def _build_workspace_dev_login_accounts() -> list[dict[str, Any]]:
@@ -201,7 +138,7 @@ def _build_workspace_dev_login_accounts() -> list[dict[str, Any]]:
     for workspace_definition in [*DEFAULT_WORKSPACE_SEEDS, *DEV_WORKSPACE_SEEDS]:
         workspace_key = workspace_definition["key"]
         workspace_name = workspace_definition["name"]
-        has_pms = "pms" in workspace_definition["enabled_apps"]
+        has_pms = workspace_key in {"hq", "delivery-hub"}
 
         items.append(
             {
@@ -282,15 +219,11 @@ USER_GRAPH_OPTIONS = (
     selectinload(User.group_links)
     .joinedload(UserAccessGroup.group)
     .selectinload(AccessGroup.workspace_bindings)
-    .joinedload(WorkspaceGroupBinding.workspace)
-    .selectinload(Workspace.enabled_apps),
-    selectinload(User.workspace_bindings)
-    .joinedload(WorkspaceUserBinding.workspace)
-    .selectinload(Workspace.enabled_apps),
+    .joinedload(WorkspaceGroupBinding.workspace),
+    selectinload(User.workspace_bindings).joinedload(WorkspaceUserBinding.workspace),
     selectinload(User.team_memberships)
     .joinedload(TeamMember.team)
-    .joinedload(Team.workspace)
-    .selectinload(Workspace.enabled_apps),
+    .joinedload(Team.workspace),
     selectinload(User.sessions),
 )
 
@@ -323,13 +256,6 @@ def normalize_system_role(role: str | None) -> str | None:
     return SYSTEM_ROLE_ALIASES.get(role.strip().lower())
 
 
-def normalize_workspace_app_code(app_code: str | None) -> str | None:
-    if app_code is None:
-        return None
-    normalized = app_code.strip().lower()
-    return normalized if normalized in VALID_WORKSPACE_APP_CODES else None
-
-
 def is_valid_workspace_role(role: str) -> bool:
     return normalize_workspace_role(role) in VALID_WORKSPACE_ROLES
 
@@ -340,10 +266,6 @@ def is_valid_team_role(role: str) -> bool:
 
 def is_valid_system_role(role: str) -> bool:
     return normalize_system_role(role) in VALID_SYSTEM_ROLES
-
-
-def is_valid_workspace_app_code(app_code: str) -> bool:
-    return normalize_workspace_app_code(app_code) in VALID_WORKSPACE_APP_CODES
 
 
 def workspace_role_allows(role: str | None, min_role: str) -> bool:
@@ -534,103 +456,6 @@ def _ensure_user_system_role_migration(db: Session) -> None:
             _replace_user_system_roles(db, user.id, list(migrated_roles))
 
 
-def _workspace_seed_enabled_apps(workspace_key: str) -> list[str]:
-    legacy_app_code = normalize_workspace_app_code(workspace_key)
-    if legacy_app_code is not None:
-        return [legacy_app_code]
-    return list(DEFAULT_WORKSPACE_ENABLED_APPS)
-
-
-def _workspace_enabled_apps_table_exists(db: Session) -> bool:
-    cached = db.info.get("workspace_enabled_apps_table_exists")
-    if isinstance(cached, bool):
-        return cached
-    exists = inspect(db.get_bind()).has_table("workspace_enabled_apps")
-    db.info["workspace_enabled_apps_table_exists"] = exists
-    return exists
-
-
-def _sync_workspace_enabled_apps(
-    db: Session,
-    workspace: Workspace,
-    app_codes: Sequence[str],
-) -> list[str]:
-    normalized_codes = sorted(
-        {
-            normalized
-            for app_code in app_codes
-            if (normalized := normalize_workspace_app_code(app_code)) is not None
-        }
-    )
-    if not _workspace_enabled_apps_table_exists(db):
-        return normalized_codes
-    existing = {
-        item.app_code: item
-        for item in db.scalars(
-            select(WorkspaceEnabledApp).where(WorkspaceEnabledApp.workspace_id == workspace.id)
-        ).all()
-    }
-    for app_code, row in list(existing.items()):
-        if app_code not in normalized_codes:
-            db.delete(row)
-    for app_code in normalized_codes:
-        if app_code not in existing:
-            db.add(
-                WorkspaceEnabledApp(
-                    id=new_id(),
-                    workspace_id=workspace.id,
-                    app_code=app_code,
-                )
-            )
-    db.flush()
-    return normalized_codes
-
-
-def list_workspace_enabled_apps(db: Session, workspace_id: str) -> list[str]:
-    if not _workspace_enabled_apps_table_exists(db):
-        workspace = load_active_workspace_by_id(db, workspace_id)
-        return _workspace_seed_enabled_apps(workspace.key) if workspace is not None else []
-    return sorted(
-        {
-            item
-            for item in db.scalars(
-                select(WorkspaceEnabledApp.app_code).where(
-                    WorkspaceEnabledApp.workspace_id == workspace_id
-                )
-            ).all()
-            if item in VALID_WORKSPACE_APP_CODES
-        }
-    )
-
-
-def workspace_has_enabled_app(db: Session, workspace: Workspace, app_code: str) -> bool:
-    normalized = normalize_workspace_app_code(app_code)
-    if normalized is None:
-        return False
-    if not _workspace_enabled_apps_table_exists(db):
-        return normalized in _workspace_seed_enabled_apps(workspace.key)
-    loaded = getattr(workspace, "enabled_apps", None)
-    if loaded is not None:
-        return any(item.app_code == normalized for item in loaded)
-    return db.scalar(
-        select(WorkspaceEnabledApp.id).where(
-            WorkspaceEnabledApp.workspace_id == workspace.id,
-            WorkspaceEnabledApp.app_code == normalized,
-        )
-    ) is not None
-
-
-def replace_workspace_enabled_apps(
-    db: Session,
-    workspace_id: str,
-    app_codes: Sequence[str],
-) -> list[str]:
-    workspace = load_active_workspace_by_id(db, workspace_id)
-    if workspace is None:
-        raise ValueError("Workspace not found.")
-    return _sync_workspace_enabled_apps(db, workspace, app_codes)
-
-
 def _ensure_workspace_rows(
     db: Session,
     definitions: Sequence[dict[str, Any]],
@@ -659,40 +484,10 @@ def _ensure_workspace_rows(
             db.add(workspace)
             db.flush()
 
-        _sync_workspace_enabled_apps(db, workspace, definition["enabled_apps"])
         ensure_workspace_default_pms_space(db, workspace)
         ensured[workspace.key] = workspace
 
     return ensured
-
-
-def _ensure_feature_policies(db: Session) -> None:
-    existing = {policy.code: policy for policy in db.scalars(select(FeaturePolicy)).all()}
-    for definition in DEFAULT_FEATURE_POLICIES:
-        policy = existing.get(definition["code"])
-        if policy is None:
-            db.add(
-                FeaturePolicy(
-                    id=new_id(),
-                    code=definition["code"],
-                    name=definition["name"],
-                    description=definition["description"],
-                    enabled=True,
-                    required_permissions=[],
-                    allowed_workspace_keys=[],
-                    allowed_group_slugs=[],
-                )
-            )
-            continue
-        policy.name = definition["name"]
-        policy.description = definition["description"]
-        if policy.required_permissions is None:
-            policy.required_permissions = []
-        if policy.allowed_workspace_keys is None:
-            policy.allowed_workspace_keys = []
-        if policy.allowed_group_slugs is None:
-            policy.allowed_group_slugs = []
-        db.add(policy)
 
 
 def ensure_seed_data(db: Session) -> None:
@@ -705,11 +500,8 @@ def ensure_seed_data(db: Session) -> None:
         _ensure_workspace_rows(db, DEFAULT_WORKSPACE_SEEDS)
     else:
         for workspace in existing_workspaces:
-            if not list_workspace_enabled_apps(db, workspace.id):
-                _sync_workspace_enabled_apps(db, workspace, _workspace_seed_enabled_apps(workspace.key))
             ensure_workspace_default_pms_space(db, workspace)
 
-    _ensure_feature_policies(db)
     db.commit()
 
 
@@ -1085,33 +877,20 @@ def is_platform_admin_user(user: User, db: Session | None = None) -> bool:
     return has_system_role(db, user, SYSTEM_PLATFORM_ADMIN)
 
 
-def _workspace_loader_options(db: Session) -> list[object]:
-    return [selectinload(Workspace.enabled_apps)] if _workspace_enabled_apps_table_exists(db) else []
-
-
 def load_active_workspace_by_id(db: Session, workspace_id: str) -> Workspace | None:
     return db.scalar(
-        select(Workspace)
-        .options(*_workspace_loader_options(db))
-        .where(Workspace.id == workspace_id, Workspace.active.is_(True))
+        select(Workspace).where(Workspace.id == workspace_id, Workspace.active.is_(True))
     )
 
 
 def load_active_workspace_by_key(db: Session, workspace_key: str) -> Workspace | None:
     return db.scalar(
-        select(Workspace)
-        .options(*_workspace_loader_options(db))
-        .where(Workspace.key == workspace_key, Workspace.active.is_(True))
+        select(Workspace).where(Workspace.key == workspace_key, Workspace.active.is_(True))
     )
 
 
 def resolve_workspace_role_map(db: Session, user: User) -> dict[str, str]:
-    active_workspaces = db.scalars(select(Workspace).where(Workspace.active.is_(True))).all()
     role_map: dict[str, str] = {}
-
-    system_roles = set(resolve_system_roles(db, user))
-    if SYSTEM_PLATFORM_ADMIN in system_roles:
-        return {workspace.id: "admin" for workspace in active_workspaces}
 
     for binding in user.workspace_bindings:
         normalized_role = normalize_workspace_role(binding.role)
@@ -1142,9 +921,6 @@ def resolve_workspace_role(db: Session, user: User, workspace_id: str) -> str | 
 
 
 def resolve_team_role(db: Session, user: User, team: Team) -> str | None:
-    if is_platform_admin_user(user, db):
-        return "owner"
-
     effective_role = None
     workspace_role = resolve_workspace_role(db, user, team.workspace_id)
     if workspace_role == "admin":
@@ -1164,32 +940,10 @@ def resolve_group_slugs(user: User) -> list[str]:
     return sorted({link.group.slug for link in user.group_links if link.group.active})
 
 
-def _resolve_enabled_apps_by_workspace_id(db: Session) -> dict[str, list[str]]:
-    if not _workspace_enabled_apps_table_exists(db):
-        return {
-            workspace.id: _workspace_seed_enabled_apps(workspace.key)
-            for workspace in db.scalars(
-                select(Workspace).where(Workspace.active.is_(True))
-            ).all()
-        }
-    rows = db.scalars(select(WorkspaceEnabledApp)).all()
-    result: dict[str, list[str]] = {}
-    for row in rows:
-        app_code = normalize_workspace_app_code(row.app_code)
-        if app_code is None:
-            continue
-        result.setdefault(row.workspace_id, []).append(app_code)
-    return {
-        workspace_id: sorted(set(app_codes))
-        for workspace_id, app_codes in result.items()
-    }
-
-
 def resolve_workspaces(db: Session, user: User) -> list[dict[str, Any]]:
     active_workspaces = db.scalars(
         select(Workspace).where(Workspace.active.is_(True)).order_by(Workspace.name.asc(), Workspace.key.asc())
     ).all()
-    enabled_apps_by_workspace_id = _resolve_enabled_apps_by_workspace_id(db)
     role_map = resolve_workspace_role_map(db, user)
 
     items: list[dict[str, Any]] = []
@@ -1203,7 +957,6 @@ def resolve_workspaces(db: Session, user: User) -> list[dict[str, Any]]:
                 "slug": workspace.key,
                 "name": workspace.name,
                 "role": role,
-                "enabled_apps": enabled_apps_by_workspace_id.get(workspace.id, []),
             }
         )
     return items
@@ -1219,49 +972,6 @@ def resolve_workspace_roles(db: Session, user: User) -> list[dict[str, str]]:
         }
         for item in resolve_workspaces(db, user)
     ]
-
-
-def resolve_app_access(db: Session, user: User) -> list[dict[str, str | None]]:
-    enabled_policies = {
-        policy.code
-        for policy in db.scalars(select(FeaturePolicy).where(FeaturePolicy.enabled.is_(True))).all()
-    }
-    items: list[dict[str, str | None]] = []
-    for workspace in resolve_workspaces(db, user):
-        for app_code in workspace["enabled_apps"]:
-            feature_code = APP_FEATURE_CODES.get(app_code)
-            if feature_code is None or feature_code not in enabled_policies:
-                continue
-            items.append(
-                {
-                    "app": app_code,
-                    "workspace_id": workspace["id"],
-                    "workspace_key": workspace["slug"],
-                    "workspace_name": workspace["name"],
-                    "role": workspace["role"],
-                }
-            )
-
-    if set(resolve_system_roles(db, user)) and APP_FEATURE_CODES["admin"] in enabled_policies:
-        items.append(
-            {
-                "app": "admin",
-                "workspace_id": None,
-                "workspace_key": None,
-                "workspace_name": "Admin Console",
-                "role": "admin",
-            }
-        )
-    return items
-
-
-def resolve_visible_features(db: Session, user: User) -> list[str]:
-    features = {
-        APP_FEATURE_CODES[item["app"]]
-        for item in resolve_app_access(db, user)
-        if item["app"] in APP_FEATURE_CODES
-    }
-    return sorted(features)
 
 
 def serialize_org_unit(org_unit: OrgUnit | None) -> dict[str, Any] | None:
@@ -1298,7 +1008,6 @@ def serialize_auth_user(db: Session, user: User) -> dict[str, Any]:
             }
             for item in workspaces
         ],
-        "app_access": resolve_app_access(db, user),
         "group_ids": sorted({link.group_id for link in user.group_links if link.group.active}),
         "group_slugs": resolve_group_slugs(user),
         "must_change_password": user.must_change_password,

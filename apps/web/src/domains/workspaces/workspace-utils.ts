@@ -105,9 +105,9 @@ export function getWorkspaceBySlug(
 
 export function getFirstWorkspaceForApp(
   user: Pick<AuthUser, 'workspaces'> | null | undefined,
-  appId: WorkspaceAppId,
+  _appId: WorkspaceAppId,
 ) {
-  return user?.workspaces?.find((workspace) => workspace.enabled_apps.includes(appId)) ?? null;
+  return user?.workspaces?.[0] ?? null;
 }
 
 export function getPreferredWorkspace(
@@ -115,7 +115,7 @@ export function getPreferredWorkspace(
   appId?: WorkspaceAppId,
 ) {
   const lastWorkspace = getWorkspaceBySlug(user, readLastWorkspaceSlug());
-  if (lastWorkspace && (!appId || lastWorkspace.enabled_apps.includes(appId))) {
+  if (lastWorkspace) {
     return lastWorkspace;
   }
   if (appId) {
@@ -144,9 +144,9 @@ export function resolveShellWorkspaceSlug(
 export function hasWorkspaceApp(
   user: Pick<AuthUser, 'workspaces'> | null | undefined,
   workspaceSlug: string | null | undefined,
-  appId: WorkspaceAppId,
+  _appId: WorkspaceAppId,
 ): boolean {
-  return getWorkspaceBySlug(user, workspaceSlug)?.enabled_apps.includes(appId) ?? false;
+  return getWorkspaceBySlug(user, workspaceSlug) != null;
 }
 
 export function buildWorkspaceAppPath(
@@ -182,12 +182,12 @@ export function resolveWorkspaceSwitchPath(
   }
 
   const currentAppId = getWorkspaceAppIdFromPath(pathname);
-  if (currentAppId && nextWorkspace.enabled_apps.includes(currentAppId)) {
+  if (currentAppId) {
     return buildWorkspaceAppPath(nextWorkspace.slug, currentAppId);
   }
 
   const lastWorkspaceAppId = readLastWorkspaceAppId();
-  if (lastWorkspaceAppId && nextWorkspace.enabled_apps.includes(lastWorkspaceAppId)) {
+  if (lastWorkspaceAppId) {
     return buildWorkspaceAppPath(nextWorkspace.slug, lastWorkspaceAppId);
   }
 

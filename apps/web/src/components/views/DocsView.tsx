@@ -26,7 +26,7 @@ import { BlockEditor, BlockViewer, useConfirm, usePrompt } from '@aidoo/ui';
 
 import { useMediaUpload } from '@/src/domains/media/use-media-upload';
 import { useAuth } from '@/src/domains/auth/auth-provider';
-import { hasAppAccess } from '@/src/domains/auth/auth-api';
+import { hasWorkspaceMembership } from '@/src/domains/auth/auth-api';
 import { cn } from '@/src/lib/utils';
 import {
   createDocPage,
@@ -191,7 +191,7 @@ export const DocsView = () => {
   const tree = useMemo(() => buildTree(pages), [pages]);
   const activePage = pages.find((page) => page.id === selectedPageId) ?? pages[0] ?? null;
   const isListView = !activeItemId && !shareToken;
-  const hasDocsWorkspace = hasAppAccess(auth.user, 'docs', workspaceSlug);
+  const hasDocsWorkspace = hasWorkspaceMembership(auth.user, workspaceSlug);
   const docsRoot = workspaceSlug
     ? buildWorkspaceAppPath(workspaceSlug, 'docs')
     : resolveDefaultWorkspaceAppPath(auth.user, 'docs');

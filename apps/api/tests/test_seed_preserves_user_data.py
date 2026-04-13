@@ -267,7 +267,6 @@ def test_dev_login_recreates_missing_dev_workspace_seeds(
             .options(
                 selectinload(Workspace.user_bindings),
                 selectinload(Workspace.group_bindings),
-                selectinload(Workspace.enabled_apps),
                 selectinload(Workspace.teams).selectinload(Team.members),
             )
             .where(Workspace.key == "innovation-lab")

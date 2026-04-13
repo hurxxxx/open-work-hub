@@ -14,6 +14,7 @@ from aidoo_api.domains.auth.access import (
     SYSTEM_PLATFORM_ADMIN,
     ensure_dev_login_seed_data,
     ensure_seed_data,
+    ensure_workspace_default_pms_space,
     get_dev_login_user,
     list_dev_login_account_catalog,
     list_dev_login_accounts,
@@ -24,7 +25,7 @@ from aidoo_api.domains.auth.access import (
     serialize_auth_user,
 )
 from aidoo_api.domains.auth.dependencies import AuthContext, require_auth_context
-from aidoo_api.domains.auth.models import AuthSession, OrgUnit, User
+from aidoo_api.domains.auth.models import AuthSession, OrgUnit, User, Workspace, WorkspaceUserBinding
 from aidoo_api.domains.auth.security import (
     hash_password,
     issue_session_token,
@@ -60,7 +61,6 @@ class WorkspaceSummaryResponse(BaseModel):
     slug: str
     name: str
     role: str
-    enabled_apps: list[str]
 
 
 class AuthUserResponse(BaseModel):
@@ -285,6 +285,17 @@ def setup_first_user(
     db.add(user)
     db.flush()
     replace_user_system_roles(db, user.id, [SYSTEM_PLATFORM_ADMIN])
+    default_workspace = db.scalar(select(Workspace).where(Workspace.key == "hq"))
+    if default_workspace is not None:
+        db.add(
+            WorkspaceUserBinding(
+                id=new_id(),
+                workspace_id=default_workspace.id,
+                user_id=user.id,
+                role="admin",
+            )
+        )
+        ensure_workspace_default_pms_space(db, default_workspace)
     record_audit_log(
         db,
         actor_user_id=user.id,

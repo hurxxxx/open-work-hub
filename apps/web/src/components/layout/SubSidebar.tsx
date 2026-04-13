@@ -26,7 +26,7 @@ import { cn } from '@/src/lib/utils';
 import { NAV_ITEMS, APP_BAR_ITEMS } from '@/src/constants';
 import { hasAdminSectionAccess, type AdminSection } from '@/src/domains/admin/admin-permissions';
 import { useAuth } from '@/src/domains/auth/auth-provider';
-import { hasAppAccess, teamRoleAllows } from '@/src/domains/auth/auth-api';
+import { hasWorkspaceMembership, teamRoleAllows } from '@/src/domains/auth/auth-api';
 import { listFavoriteDocs, listRecentPages, type FavoriteDocItem, type RecentPageItem } from '@/src/domains/docs/docs-api';
 import { listPmsLists, listFolders, listSpaceDocs, createSpaceDoc, updateSpaceDoc, deleteSpaceDoc, updateFolder, deleteFolder, listSpaces, updateSpace, deleteSpace, type PmsFolder, type PmsList, type PmsSpace, type PmsSpaceDoc } from '@/src/domains/pms/pms-api';
 import {
@@ -838,8 +838,8 @@ export const SubSidebar = ({
     || location.pathname.match(/^\/w\/[^/]+\/docs\/[^/]+$/)
     || location.pathname.match(/^\/docs\/shared\/[^/]+$/)
   );
-  const canReadTeams = hasAppAccess(user, 'pms', currentWorkspaceSlug);
-  const canWriteTeams = hasAppAccess(user, 'pms', currentWorkspaceSlug);
+  const canReadTeams = hasWorkspaceMembership(user, currentWorkspaceSlug);
+  const canWriteTeams = hasWorkspaceMembership(user, currentWorkspaceSlug);
   const pmsRootPath = resolveDefaultWorkspaceAppPath(user, 'pms');
   const meetingRootPath = resolveDefaultWorkspaceAppPath(user, 'meeting');
   const canManageSpace = useCallback(

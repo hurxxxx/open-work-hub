@@ -1,7 +1,5 @@
-import { hasAnySystemRole, type AuthUser } from '@/src/domains/auth/auth-api';
+import type { AuthUser } from '@/src/domains/auth/auth-api';
 import type { MeetingDetail, MeetingListItem } from './meeting-api';
-
-const MEETING_ADMIN_ROLES = ['platform_admin'] as const;
 
 export function isOrganizer(
   user: AuthUser | null | undefined,
@@ -29,7 +27,6 @@ export function canEditMeeting(
   meeting: Pick<MeetingDetail | MeetingListItem, 'organizer_id'> | null | undefined,
 ): boolean {
   if (!user || !meeting) return false;
-  if (hasAnySystemRole(user, MEETING_ADMIN_ROLES)) return true;
   return isOrganizer(user, meeting);
 }
 
@@ -43,7 +40,6 @@ export function canAttachToMeeting(
   meeting: Pick<MeetingDetail, 'organizer_id' | 'attendees'> | null | undefined,
 ): boolean {
   if (!user || !meeting) return false;
-  if (hasAnySystemRole(user, MEETING_ADMIN_ROLES)) return true;
   return isParticipant(user, meeting);
 }
 
@@ -58,7 +54,6 @@ export function canRemoveAttachment(
   attachment: { added_by_id: string } | null | undefined,
 ): boolean {
   if (!user || !meeting || !attachment) return false;
-  if (hasAnySystemRole(user, MEETING_ADMIN_ROLES)) return true;
   if (user.id === meeting.organizer_id) return true;
   return attachment.added_by_id === user.id;
 }

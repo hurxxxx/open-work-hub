@@ -4,9 +4,6 @@ from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from aidoo_api.domains.auth.access import (
-    is_platform_admin_user,
-)
 from aidoo_api.domains.auth.models import User, Workspace
 from aidoo_api.domains.docs.models import NativeDoc
 from aidoo_api.domains.meeting.models import Meeting
@@ -24,8 +21,6 @@ def is_participant(user: User, meeting: Meeting) -> bool:
 
 
 def ensure_meeting_organizer(db: Session, user: User, meeting: Meeting) -> None:
-    if is_platform_admin_user(user, db):
-        return
     if not is_organizer(user, meeting):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -38,8 +33,6 @@ def ensure_meeting_participant(db: Session, user: User, meeting: Meeting) -> Non
     platform admin. Used for adding attachments (tasks/docs/files) where any
     meeting participant should be able to upload prep material before the
     meeting starts."""
-    if is_platform_admin_user(user, db):
-        return
     if not is_participant(user, meeting):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -53,8 +46,6 @@ def ensure_link_remover(
     """Allow removing an attachment only if the caller is the organizer,
     a platform admin, or the original adder. Attendees cannot delete each
     other's attachments."""
-    if is_platform_admin_user(user, db):
-        return
     if meeting.organizer_id == user.id:
         return
     if added_by_id == user.id:
@@ -88,14 +79,6 @@ def ensure_doc_attachable(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Document not found.",
         )
-
-    if is_platform_admin_user(user, db):
-        if doc.workspace_id != workspace.id:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="You do not have access to this document.",
-            )
-        return doc
 
     if doc.workspace_id != workspace.id:
         raise HTTPException(

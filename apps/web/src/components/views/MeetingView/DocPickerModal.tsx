@@ -4,7 +4,7 @@ import { Loader2 } from 'lucide-react';
 import { useParams } from 'react-router-dom';
 
 import { useAuth } from '@/src/domains/auth/auth-provider';
-import { hasAppAccess } from '@/src/domains/auth/auth-api';
+import { hasWorkspaceMembership } from '@/src/domains/auth/auth-api';
 import { NoAccessNotice } from '@/src/components/common/NoAccessNotice';
 import { listDocsHub, type DocsHubItem } from '@/src/domains/docs/docs-api';
 
@@ -23,7 +23,7 @@ export function DocPickerModal({
 }: DocPickerModalProps) {
   const { workspaceSlug } = useParams();
   const { token, user } = useAuth();
-  const canAccessDocs = hasAppAccess(user, 'docs', workspaceSlug);
+  const canAccessDocs = hasWorkspaceMembership(user, workspaceSlug);
   const [items, setItems] = useState<DocsHubItem[]>([]);
   const [query, setQuery] = useState('');
   const [loading, setLoading] = useState(false);

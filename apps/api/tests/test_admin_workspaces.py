@@ -75,7 +75,6 @@ def test_create_workspace_includes_creator_as_admin_and_count_fields(
     assert workspace["doc_count"] == 0
     assert workspace["created_at"] is not None
     assert workspace["updated_at"] is not None
-    assert "ai" in workspace["enabled_apps"]
 
     bindings = client.get(
         f"/api/v1/admin/workspaces/{workspace['id']}/bindings",

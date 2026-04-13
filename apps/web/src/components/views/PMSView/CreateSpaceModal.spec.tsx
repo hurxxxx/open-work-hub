@@ -68,7 +68,6 @@ function buildUser(overrides: Partial<AuthUser> = {}): AuthUser {
         slug: 'hq',
         name: 'HQ',
         role: 'member',
-        enabled_apps: ['pms'],
       },
     ],
     workspace_roles: [
@@ -78,9 +77,6 @@ function buildUser(overrides: Partial<AuthUser> = {}): AuthUser {
         name: 'PMS Workspace',
         role: 'member',
       },
-    ],
-    app_access: [
-      { app: 'pms', workspace_id: 'workspace-pms', workspace_key: 'pms', workspace_name: 'PMS Workspace', role: 'member' },
     ],
     system_roles: [],
     group_ids: [],
@@ -99,20 +95,11 @@ describe('CreateSpaceModal', () => {
     mockAddSpaceMember.mockResolvedValue(undefined);
   });
 
-  it('disables creation for users without workspace admin scope', () => {
+  it('disables creation for users without workspace access', () => {
     mockUseAuth.mockReturnValue({
       token: 'member-token',
       user: buildUser({
-        workspaces: [
-          {
-            id: 'workspace-hq',
-            slug: 'hq',
-            name: 'HQ',
-            role: 'member',
-            enabled_apps: [],
-          },
-        ],
-        app_access: [],
+        workspaces: [],
       }),
     });
 
@@ -123,11 +110,11 @@ describe('CreateSpaceModal', () => {
       />,
     );
 
-    expect(screen.getByText('PMS 앱 접근 권한이 없어 스페이스를 생성할 수 없습니다.')).toBeTruthy();
+    expect(screen.getByText('워크스페이스 접근 권한이 없어 스페이스를 생성할 수 없습니다.')).toBeTruthy();
     expect((screen.getByRole('button', { name: '스페이스 만들기' }) as HTMLButtonElement).disabled).toBe(true);
   });
 
-  it('creates a space for users with PMS app access', async () => {
+  it('creates a space for users with workspace access', async () => {
     mockUseAuth.mockReturnValue({
       token: 'workspace-member-token',
       user: buildUser(),

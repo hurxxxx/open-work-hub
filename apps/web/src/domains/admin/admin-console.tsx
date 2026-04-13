@@ -19,7 +19,6 @@ import {
   deleteAdminUser,
   listAdminUsers,
   listAuditLogs,
-  listFeaturePolicies,
   listGroups,
   listOrgUnits,
   listUserTeamMemberships,
@@ -32,10 +31,8 @@ import {
   resetUserPassword,
   updateGroup,
   updateAdminUser,
-  updateFeaturePolicies,
   type AccessGroupItem,
   type AuditLogItem,
-  type FeaturePolicyItem,
   type OrgUnitItem,
   type TeamItem,
   type WorkspaceItem,
@@ -48,7 +45,6 @@ import {
   SectionMessage,
   SurfaceCard,
   UserWorkspaceChips,
-  formatAppCodes,
   formatDateLabel,
   formatStatusLabel,
   formatUserApps,
@@ -75,7 +71,7 @@ const sectionMeta: Record<
 > = {
   general: {
     title: 'General settings',
-    description: '공통 사용자, 공간, 워크스페이스, 권한 정책의 현재 상태를 한곳에서 확인합니다.',
+    description: '공통 사용자, 공간, 워크스페이스 운영 현황을 한곳에서 확인합니다.',
   },
   people: {
     title: 'Manage people',
@@ -84,11 +80,11 @@ const sectionMeta: Record<
   },
   workspaces: {
     title: 'Workspaces',
-    description: '협업 공간을 만들고 멤버와 앱을 관리합니다.',
+    description: '협업 공간을 만들고 멤버 구성을 관리합니다.',
   },
   security: {
     title: 'Security & permissions',
-    description: '권한 그룹과 기능 노출 정책을 운영합니다.',
+    description: '권한 그룹과 관리자 역할을 운영합니다.',
   },
   audit: {
     title: 'Audit logs',
@@ -215,8 +211,6 @@ function GeneralSection({ token }: { token: string }) {
     groupCount: null as number | null,
     workspaceCount: null as number | null,
     teamCount: null as number | null,
-    policyCount: null as number | null,
-    enabledPolicyCount: null as number | null,
     auditCount: null as number | null,
   });
   const [error, setError] = useState<string | null>(null);
@@ -224,7 +218,6 @@ function GeneralSection({ token }: { token: string }) {
   const canReadGroups = auth.hasPermission('group.read');
   const canReadWorkspaces = auth.hasPermission('workspace.read');
   const canReadTeams = auth.hasPermission('team.read');
-  const canReadPolicies = auth.hasPermission('feature_policy.read');
   const canReadAudit = auth.hasPermission('audit.read');
 
   function formatCount(value: number | null) {
@@ -236,12 +229,11 @@ function GeneralSection({ token }: { token: string }) {
 
     async function load() {
       try {
-        const [users, groups, workspaces, teams, policies, audits] = await Promise.all([
+        const [users, groups, workspaces, teams, audits] = await Promise.all([
           canReadUsers ? listAdminUsers(token, { page_size: 100 }) : Promise.resolve(null),
           canReadGroups ? listGroups(token) : Promise.resolve(null),
           canReadWorkspaces ? listWorkspaces(token) : Promise.resolve(null),
           canReadTeams ? listTeams(token) : Promise.resolve(null),
-          canReadPolicies ? listFeaturePolicies(token) : Promise.resolve(null),
           canReadAudit ? listAuditLogs(token) : Promise.resolve(null),
         ]);
         if (cancelled) {
@@ -253,8 +245,6 @@ function GeneralSection({ token }: { token: string }) {
           groupCount: groups?.length ?? null,
           workspaceCount: workspaces?.length ?? null,
           teamCount: teams?.length ?? null,
-          policyCount: policies?.length ?? null,
-          enabledPolicyCount: policies?.filter((item) => item.enabled).length ?? null,
           auditCount: audits?.length ?? null,
         });
       } catch (caughtError) {
@@ -272,7 +262,6 @@ function GeneralSection({ token }: { token: string }) {
   }, [
     canReadAudit,
     canReadGroups,
-    canReadPolicies,
     canReadTeams,
     canReadUsers,
     canReadWorkspaces,
@@ -304,7 +293,6 @@ function GeneralSection({ token }: { token: string }) {
               <div className="app-text-body mt-3 space-y-2 text-gray-500">
                 <div>워크스페이스 {formatCount(summary.workspaceCount)}{summary.workspaceCount !== null ? '개' : ''}</div>
                 <div>PMS 공간 {formatCount(summary.teamCount)}{summary.teamCount !== null ? '개' : ''}</div>
-                <div>기능 정책 {formatCount(summary.policyCount)}{summary.policyCount !== null ? '개' : ''}</div>
               </div>
             </div>
           </div>
@@ -319,7 +307,7 @@ function GeneralSection({ token }: { token: string }) {
               프로필 아바타는 개인 설정으로만 이동하고, 조직 운영 기능은 모두 Settings 앱 안에서 다룹니다.
             </div>
             <div className="rounded-xl border border-app-border bg-app-surface-sidebar p-4">
-              사용자, PMS 공간, 워크스페이스, 권한 정책은 좌측 서브사이드바를 기준으로 분리합니다.
+              사용자, PMS 공간, 워크스페이스, 관리자 보안 설정은 좌측 서브사이드바를 기준으로 분리합니다.
             </div>
             <div className="rounded-xl border border-app-border bg-app-surface-sidebar p-4">
               관리자 이벤트와 인증 이벤트는 Audit 섹션에서 시간순으로 확인합니다.
@@ -428,11 +416,10 @@ function PeopleSection({ token }: { token: string }) {
   );
   const selectedWorkspaceAppSummary = useMemo(
     () =>
-      formatAppCodes(
-        availableWorkspaces
-          .filter((workspace) => effectiveCreateWorkspaceIds.includes(workspace.id))
-          .flatMap((workspace) => workspace.enabled_apps),
-      ),
+      availableWorkspaces
+        .filter((workspace) => effectiveCreateWorkspaceIds.includes(workspace.id))
+        .map((workspace) => workspace.name)
+        .join(', ') || '-',
     [availableWorkspaces, effectiveCreateWorkspaceIds],
   );
   const editInheritedWorkspaceIds = useMemo(
@@ -452,11 +439,10 @@ function PeopleSection({ token }: { token: string }) {
   );
   const editWorkspaceAppSummary = useMemo(
     () =>
-      formatAppCodes(
-        availableWorkspaces
-          .filter((workspace) => effectiveEditWorkspaceIds.includes(workspace.id))
-          .flatMap((workspace) => workspace.enabled_apps),
-      ),
+      availableWorkspaces
+        .filter((workspace) => effectiveEditWorkspaceIds.includes(workspace.id))
+        .map((workspace) => workspace.name)
+        .join(', ') || '-',
     [availableWorkspaces, effectiveEditWorkspaceIds],
   );
   const selectedPmsSpace = useMemo(
@@ -1274,14 +1260,14 @@ function PeopleSection({ token }: { token: string }) {
                     />
                     <span>{workspace.name}</span>
                     <span className="app-text-caption text-gray-500">
-                      · {formatAppCodes(workspace.enabled_apps)}
+                      · {workspace.key}
                     </span>
                   </label>
                 ))}
               </div>
             )}
             <div className="app-text-caption rounded-md border border-app-border bg-app-surface-sidebar px-3 py-3 text-gray-500">
-              Enabled apps: {selectedWorkspaceAppSummary}
+              Selected workspaces: {selectedWorkspaceAppSummary}
               <br />
               그룹으로 상속되는 workspace memberships 도 함께 반영됩니다.
             </div>
@@ -1406,14 +1392,14 @@ function PeopleSection({ token }: { token: string }) {
                     />
                     <span>{workspace.name}</span>
                     <span className="app-text-caption text-gray-500">
-                      · {formatAppCodes(workspace.enabled_apps)}
+                      · {workspace.key}
                     </span>
                   </label>
                 ))}
               </div>
             )}
             <div className="app-text-caption rounded-md border border-app-border bg-app-surface-sidebar px-3 py-3 text-gray-500">
-              Effective enabled apps: {editWorkspaceAppSummary}
+              Effective workspaces: {editWorkspaceAppSummary}
             </div>
             <div className="grid gap-2">
               <div className="app-text-caption text-gray-500">Inherited workspace access</div>
@@ -1824,7 +1810,7 @@ function WorkspacesSection({ token }: { token: string }) {
                         {workspace.name}
                       </div>
                       <div className="app-text-caption truncate text-app-ink/50">
-                        {workspace.key} · {workspace.member_count}명 · {workspace.enabled_apps.length}앱
+                        {workspace.key} · {workspace.member_count}명
                       </div>
                     </div>
                   </button>
@@ -1843,7 +1829,6 @@ function WorkspacesSection({ token }: { token: string }) {
             canReadGroups={canReadGroups}
             capabilities={{
               canEditProfile: canManage,
-              canManageApps: canManage,
               canManageMembers: canManage,
               canArchive: canManage,
               canDelete: canManage,
@@ -1874,20 +1859,15 @@ function SecuritySection({
   canReadUsers,
   canReadGroups,
   canWriteGroups,
-  canReadPolicies,
-  canWritePolicies,
 }: {
   token: string;
   canReadUsers: boolean;
   canReadGroups: boolean;
   canWriteGroups: boolean;
-  canReadPolicies: boolean;
-  canWritePolicies: boolean;
 }) {
   const [users, setUsers] = useState<AuthUser[]>([]);
   const [groups, setGroups] = useState<AccessGroupItem[]>([]);
   const [workspaces, setWorkspaces] = useState<WorkspaceItem[]>([]);
-  const [policies, setPolicies] = useState<FeaturePolicyItem[]>([]);
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [systemRoles, setSystemRoles] = useState('');
@@ -1931,9 +1911,8 @@ function SecuritySection({
         canReadUsers ? loadAllUsers() : Promise.resolve<AuthUser[]>([]),
         canReadGroups ? listGroups(token) : Promise.resolve<AccessGroupItem[]>([]),
         canReadGroups ? listWorkspaces(token) : Promise.resolve<WorkspaceItem[]>([]),
-        canReadPolicies ? listFeaturePolicies(token) : Promise.resolve<FeaturePolicyItem[]>([]),
       ]);
-      const [userResult, groupResult, workspaceResult, policyResult] = results;
+      const [userResult, groupResult, workspaceResult] = results;
 
       if (userResult.status === 'fulfilled') {
         setUsers(userResult.value);
@@ -1952,12 +1931,6 @@ function SecuritySection({
       } else if (canReadGroups) {
         setError((current) => current ?? getErrorMessage(workspaceResult.reason, '워크스페이스를 불러오지 못했습니다.'));
       }
-
-      if (policyResult.status === 'fulfilled') {
-        setPolicies(policyResult.value);
-      } else if (canReadPolicies) {
-        setError((current) => current ?? getErrorMessage(policyResult.reason, '기능 정책을 불러오지 못했습니다.'));
-      }
     } catch (caughtError) {
       setError(getErrorMessage(caughtError, '권한 설정을 불러오지 못했습니다.'));
     }
@@ -1965,7 +1938,7 @@ function SecuritySection({
 
   useEffect(() => {
     void load();
-  }, [canReadGroups, canReadPolicies, canReadUsers, token]);
+  }, [canReadGroups, canReadUsers, token]);
 
   useEffect(() => {
     setSelectedTemplateGroupId((current) => {
@@ -2100,26 +2073,6 @@ function SecuritySection({
       setError(getErrorMessage(caughtError, '그룹 멤버를 저장하지 못했습니다.'));
     } finally {
       setIsSavingGroupMembers(false);
-    }
-  }
-
-  async function handleSavePolicies() {
-    if (!canWritePolicies) return;
-    setMessage(null);
-    setError(null);
-
-    try {
-      const response = await updateFeaturePolicies(
-        token,
-        policies.map((policy) => ({
-          id: policy.id,
-          enabled: policy.enabled,
-        })),
-      );
-      setPolicies(response);
-      setMessage('기능 정책을 저장했습니다.');
-    } catch (caughtError) {
-      setError(getErrorMessage(caughtError, '기능 정책을 저장하지 못했습니다.'));
     }
   }
 
@@ -2428,7 +2381,7 @@ function SecuritySection({
                       <div>
                         <div className="font-medium text-app-ink">{workspace.name}</div>
                         <div className="app-text-caption mt-1 text-gray-500">
-                          {formatAppCodes(workspace.enabled_apps)} · {workspace.description || '설명 없음'}
+                          {workspace.description || '설명 없음'}
                         </div>
                       </div>
                     </label>
@@ -2457,58 +2410,6 @@ function SecuritySection({
         )}
       </SurfaceCard>
 
-      <SurfaceCard
-        actions={canReadPolicies && canWritePolicies ? <Button onClick={() => { void handleSavePolicies(); }} variant="primary">Save policies</Button> : undefined}
-        description="각 워크스페이스와 도구 노출을 개별 정책으로 토글합니다."
-        title="Feature access policies"
-      >
-        {canReadPolicies ? (
-          <div className="grid gap-3">
-            {policies.map((policy) => (
-              <label
-                key={policy.id}
-                className="flex items-start gap-4 rounded-xl border border-app-border bg-app-surface-sidebar px-4 py-4"
-              >
-                <input
-                  checked={policy.enabled}
-                  className="mt-1"
-                  disabled={!canWritePolicies}
-                  onChange={(event) => {
-                    setPolicies((current) =>
-                      current.map((item) =>
-                        item.id === policy.id ? { ...item, enabled: event.target.checked } : item,
-                      ),
-                    );
-                  }}
-                  type="checkbox"
-                />
-                <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <strong className="app-text-body text-app-ink">{policy.name}</strong>
-                    <Badge tone={policy.enabled ? 'green' : 'default'}>
-                      {policy.enabled ? 'enabled' : 'disabled'}
-                    </Badge>
-                  </div>
-                  <div className="app-text-body mt-1 text-gray-500">{policy.description}</div>
-                  <div className="app-text-caption mt-3 flex flex-wrap gap-2">
-                    <Badge>{policy.code}</Badge>
-                    {policy.allowed_workspace_keys.map((workspaceKey) => (
-                      <Badge key={`${policy.id}-${workspaceKey}`}>{workspaceKey}</Badge>
-                    ))}
-                  </div>
-                  {!canWritePolicies ? (
-                    <div className="app-text-caption mt-3 text-gray-500">읽기 전용 정책입니다.</div>
-                  ) : null}
-                </div>
-              </label>
-            ))}
-          </div>
-        ) : (
-          <InlineNotice tone="warning">
-            기능 정책 조회 권한이 없어 정책 목록을 볼 수 없습니다.
-          </InlineNotice>
-        )}
-      </SurfaceCard>
     </div>
   );
 }
@@ -2604,9 +2505,7 @@ export function AdminConsoleView({ section }: { section: AdminSection }) {
         <SecuritySection
           canReadUsers={auth.hasPermission('user.read')}
           canReadGroups={auth.hasPermission('group.read')}
-          canReadPolicies={auth.hasPermission('feature_policy.read')}
           canWriteGroups={auth.hasPermission('group.write')}
-          canWritePolicies={auth.hasPermission('feature_policy.write')}
           token={token}
         />
       );

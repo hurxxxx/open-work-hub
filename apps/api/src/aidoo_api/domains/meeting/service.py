@@ -11,7 +11,6 @@ from sqlalchemy.orm import Session, selectinload
 from aidoo_api.core.settings import get_settings
 from aidoo_api.core.storage import get_minio_client
 from aidoo_api.domains.auth.access import (
-    is_platform_admin_user,
     resolve_workspace_role,
 )
 from aidoo_api.domains.auth.models import User, Workspace
@@ -115,8 +114,6 @@ def _grant_issue_to_attendee(
 ) -> None:
     if attendee_user.id == granted_by_user_id:
         return
-    if is_platform_admin_user(attendee_user, db):
-        return
     if has_list_access(db, attendee_user, issue.list_id):
         return
     grant_issue_access(
@@ -141,8 +138,6 @@ def _grant_doc_to_attendee(
     if attendee_user.id == granted_by_user_id:
         return
     if attendee_user.id == doc.owner_id:
-        return
-    if is_platform_admin_user(attendee_user, db):
         return
     grant_doc_access(
         db,
@@ -641,38 +636,23 @@ def list_meetings(
 ) -> MeetingListResponse:
     base = select(Meeting).where(Meeting.workspace_id == workspace.id)
 
-    # Restrict to meetings the caller is involved in unless they are a
-    # platform admin viewing the workspace globally. Without this guard
-    # ``upcoming`` and ``all`` would expose every meeting in the workspace
-    # to any user with ``nav.meeting`` access.
-    is_admin = is_platform_admin_user(user, db)
-    if not is_admin:
-        attendee_meeting_ids = select(MeetingAttendee.meeting_id).where(
-            MeetingAttendee.user_id == user.id
+    attendee_meeting_ids = select(MeetingAttendee.meeting_id).where(
+        MeetingAttendee.user_id == user.id
+    )
+    base = base.where(
+        or_(
+            Meeting.organizer_id == user.id,
+            Meeting.id.in_(attendee_meeting_ids),
         )
-        base = base.where(
-            or_(
-                Meeting.organizer_id == user.id,
-                Meeting.id.in_(attendee_meeting_ids),
-            )
-        )
+    )
 
     if scope == "mine":
-        # ``mine`` always narrows to the caller, even for admins, so the
-        # tab label remains accurate when an admin opens it.
-        if is_admin:
-            attendee_meeting_ids = select(MeetingAttendee.meeting_id).where(
-                MeetingAttendee.user_id == user.id
-            )
-            base = base.where(
-                or_(
-                    Meeting.organizer_id == user.id,
-                    Meeting.id.in_(attendee_meeting_ids),
-                )
-            )
+        pass
     elif scope == "upcoming":
         now = datetime.now(UTC).replace(tzinfo=None)
-        base = base.where(Meeting.end_at >= now)
+        base = base.where(
+            Meeting.end_at >= now
+        )
     elif scope == "all":
         pass
     else:
@@ -845,7 +825,7 @@ def detach_file(
     db: Session, *, workspace: Workspace, user: User, meeting_id: str, file_id: str
 ) -> MeetingDetail:
     """Remove a file attachment. Only the meeting organizer or the user
-    who originally uploaded it (or a platform admin) may remove a file."""
+    who originally uploaded it may remove a file."""
     meeting = _load_meeting(db, workspace, meeting_id)
 
     attachment = db.scalar(

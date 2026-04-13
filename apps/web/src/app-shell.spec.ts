@@ -9,7 +9,6 @@ function buildWorkspace(overrides: Partial<WorkspaceSummary> = {}): WorkspaceSum
     slug: 'delivery-hub',
     name: 'Delivery Hub',
     role: 'member',
-    enabled_apps: ['ai', 'pms', 'docs', 'planner', 'meeting'],
     ...overrides,
   };
 }
@@ -25,7 +24,6 @@ function buildUser(overrides: Partial<AuthUser> = {}): AuthUser {
     primary_org_unit: null,
     workspaces: [buildWorkspace()],
     workspace_roles: [],
-    app_access: [],
     system_roles: [],
     group_ids: [],
     group_slugs: [],
@@ -35,9 +33,9 @@ function buildUser(overrides: Partial<AuthUser> = {}): AuthUser {
 }
 
 describe('resolveShellState', () => {
-  it('falls back to the home shell for unauthorized PMS routes', () => {
+  it('falls back to the home shell for users without workspace membership', () => {
     const userWithoutPms = buildUser({
-      workspaces: [buildWorkspace({ enabled_apps: ['ai'] })],
+      workspaces: [],
     });
     expect(resolveShellState('/w/delivery-hub/pms', userWithoutPms)).toEqual({
       activeAppId: 'home',

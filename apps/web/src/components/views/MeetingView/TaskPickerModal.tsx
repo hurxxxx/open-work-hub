@@ -4,7 +4,7 @@ import { Loader2 } from 'lucide-react';
 import { useParams } from 'react-router-dom';
 
 import { useAuth } from '@/src/domains/auth/auth-provider';
-import { hasAppAccess } from '@/src/domains/auth/auth-api';
+import { hasWorkspaceMembership } from '@/src/domains/auth/auth-api';
 import { NoAccessNotice } from '@/src/components/common/NoAccessNotice';
 import {
   listPmsProjects,
@@ -28,7 +28,7 @@ export function TaskPickerModal({
 }: TaskPickerModalProps) {
   const { workspaceSlug } = useParams();
   const { token, user } = useAuth();
-  const canAccessPms = hasAppAccess(user, 'pms', workspaceSlug);
+  const canAccessPms = hasWorkspaceMembership(user, workspaceSlug);
   const [projects, setProjects] = useState<PmsProject[]>([]);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [issues, setIssues] = useState<PmsIssue[]>([]);

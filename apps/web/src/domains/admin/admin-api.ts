@@ -34,7 +34,6 @@ export interface WorkspaceItem {
   description: string;
   active: boolean;
   team_count: number;
-  enabled_apps: string[];
   member_count: number;
   meeting_count: number;
   doc_count: number;
@@ -48,10 +47,6 @@ export interface WorkspaceBindingItem {
   subject_label: string;
   subject_secondary?: string | null;
   role: string;
-}
-
-export interface WorkspaceAppsResponse {
-  enabled_apps: string[];
 }
 
 export interface WorkspaceMemberCandidate {
@@ -130,15 +125,6 @@ export interface TeamItem {
   active: boolean;
   member_count: number;
   current_user_role?: string | null;
-}
-
-export interface FeaturePolicyItem {
-  id: string;
-  code: string;
-  name: string;
-  description: string;
-  enabled: boolean;
-  allowed_workspace_keys: string[];
 }
 
 export interface AuditLogItem {
@@ -526,24 +512,6 @@ export function bulkWorkspaceMembers(
   );
 }
 
-export function getWorkspaceApps(
-  token: string,
-  workspaceId: string,
-): Promise<WorkspaceAppsResponse> {
-  return request<WorkspaceAppsResponse>(token, `/api/v1/admin/workspaces/${workspaceId}/apps`);
-}
-
-export function updateWorkspaceApps(
-  token: string,
-  workspaceId: string,
-  enabledApps: string[],
-): Promise<WorkspaceAppsResponse> {
-  return request<WorkspaceAppsResponse>(token, `/api/v1/admin/workspaces/${workspaceId}/apps`, {
-    method: 'PUT',
-    body: JSON.stringify({ enabled_apps: enabledApps }),
-  });
-}
-
 export function listWorkspaceMemberCandidates(
   token: string,
   workspaceId: string,
@@ -609,23 +577,6 @@ export function replaceTeamMembers(
   return request<AuthUser[]>(token, `/api/v1/admin/teams/${teamId}/members`, {
     method: 'PUT',
     body: JSON.stringify({ user_ids: userIds }),
-  });
-}
-
-export function listFeaturePolicies(token: string): Promise<FeaturePolicyItem[]> {
-  return request<FeaturePolicyItem[]>(token, '/api/v1/admin/feature-policies');
-}
-
-export function updateFeaturePolicies(
-  token: string,
-  items: Array<{
-    id: string;
-    enabled: boolean;
-  }>,
-): Promise<FeaturePolicyItem[]> {
-  return request<FeaturePolicyItem[]>(token, '/api/v1/admin/feature-policies', {
-    method: 'PUT',
-    body: JSON.stringify({ items }),
   });
 }
 

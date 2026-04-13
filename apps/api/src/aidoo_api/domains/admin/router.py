@@ -15,8 +15,6 @@ from sqlalchemy.orm import Session, joinedload, selectinload
 
 from aidoo_api.core.db import get_db_session
 from aidoo_api.domains.auth.access import (
-    APP_FEATURE_CODES,
-    DEFAULT_WORKSPACE_ENABLED_APPS,
     SYSTEM_PLATFORM_ADMIN,
     SYSTEM_ROLE_ORDER,
     WORKSPACE_ROLE_RANK,
@@ -24,15 +22,11 @@ from aidoo_api.domains.auth.access import (
     ensure_workspace_default_pms_space,
     is_platform_admin_user,
     is_valid_workspace_role,
-    is_valid_workspace_app_code,
-    list_workspace_enabled_apps,
     load_user_graph,
     load_active_workspace_by_id,
     normalize_system_role,
     normalize_workspace_role,
-    normalize_workspace_app_code,
     replace_group_system_roles,
-    replace_workspace_enabled_apps,
     replace_user_system_roles,
     record_audit_log,
     resolve_team_role,
@@ -48,7 +42,6 @@ from aidoo_api.domains.auth.models import (
     AccessGroup,
     AuditLog,
     AuthSession,
-    FeaturePolicy,
     OrgUnit,
     Team,
     TeamMember,
@@ -89,7 +82,6 @@ class WorkspaceItemResponse(BaseModel):
     description: str
     active: bool
     team_count: int
-    enabled_apps: list[str]
     member_count: int = 0
     meeting_count: int = 0
     doc_count: int = 0
@@ -103,10 +95,6 @@ class WorkspaceBindingItemResponse(BaseModel):
     subject_label: str
     subject_secondary: str | None = None
     role: str
-
-
-class WorkspaceAppsResponse(BaseModel):
-    enabled_apps: list[str]
 
 
 class WorkspaceMemberCandidateResponse(BaseModel):
@@ -232,7 +220,6 @@ def _serialize_workspace(db: Session, workspace: Workspace) -> WorkspaceItemResp
         description=workspace.description,
         active=workspace.active,
         team_count=_visible_team_count(workspace),
-        enabled_apps=list_workspace_enabled_apps(db, workspace.id),
         member_count=_workspace_member_count(db, workspace.id),
         meeting_count=_workspace_meeting_count(db, workspace.id),
         doc_count=_workspace_doc_count(db, workspace.id),
@@ -326,15 +313,6 @@ def _ensure_team_scope(
     return team
 
 
-class FeaturePolicyItemResponse(BaseModel):
-    id: str
-    code: str
-    name: str
-    description: str
-    enabled: bool
-    allowed_workspace_keys: list[str]
-
-
 class AuditLogItemResponse(BaseModel):
     id: str
     actor_user_id: str | None
@@ -358,7 +336,6 @@ class AdminUserItemResponse(BaseModel):
     system_roles: list[str]
     workspaces: list[dict[str, object]]
     workspace_roles: list[dict[str, str]]
-    app_access: list[dict[str, str | None]]
     group_ids: list[str]
     group_slugs: list[str]
     must_change_password: bool
@@ -502,23 +479,6 @@ class TeamMembersUpdateRequest(BaseModel):
     user_ids: list[str] = Field(default_factory=list)
 
 
-class WorkspaceAppsUpdateRequest(BaseModel):
-    enabled_apps: list[str] = Field(default_factory=list)
-
-    @field_validator("enabled_apps")
-    @classmethod
-    def validate_enabled_apps(cls, value: list[str]) -> list[str]:
-        normalized: list[str] = []
-        for item in value:
-            if not is_valid_workspace_app_code(item):
-                raise ValueError("Invalid workspace app code.")
-            normalized_item = normalize_workspace_app_code(item)
-            assert normalized_item is not None
-            if normalized_item not in normalized:
-                normalized.append(normalized_item)
-        return normalized
-
-
 class AdminUserCreateRequest(BaseModel):
     email: str = Field(..., min_length=5, max_length=320)
     full_name: str = Field(..., min_length=2, max_length=120)
@@ -551,15 +511,6 @@ class ResetPasswordRequest(BaseModel):
 
 class ResetPasswordResponse(BaseModel):
     temporary_password: str
-
-
-class FeaturePolicyUpdateItem(BaseModel):
-    id: str
-    enabled: bool
-
-
-class FeaturePolicyUpdateRequest(BaseModel):
-    items: list[FeaturePolicyUpdateItem]
 
 
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -645,12 +596,8 @@ def _resolve_loaded_system_roles(user: User) -> list[str]:
 
 def _resolve_loaded_workspace_role_map(
     user: User,
-    system_roles: set[str],
     active_workspace_ids: set[str],
 ) -> dict[str, str]:
-    if SYSTEM_PLATFORM_ADMIN in system_roles:
-        return {workspace_id: "admin" for workspace_id in active_workspace_ids}
-
     role_map: dict[str, str] = {}
     for binding in user.workspace_bindings:
         normalized_role = normalize_workspace_role(binding.role)
@@ -714,18 +661,12 @@ def _serialize_admin_user_list(db: Session, users: list[User]) -> list[AdminUser
     workspaces = list(db.scalars(select(Workspace).where(Workspace.active.is_(True))).all())
     workspace_by_id = {workspace.id: workspace for workspace in workspaces}
     active_workspace_ids = set(workspace_by_id)
-    enabled_policies = {
-        policy.code: policy
-        for policy in db.scalars(select(FeaturePolicy).where(FeaturePolicy.enabled.is_(True))).all()
-    }
 
     items: list[AdminUserItemResponse] = []
     for user in users:
         system_roles = _resolve_loaded_system_roles(user)
-        system_role_set = set(system_roles)
         workspace_role_map = _resolve_loaded_workspace_role_map(
             user,
-            system_role_set,
             active_workspace_ids,
         )
         workspace_roles = [
@@ -744,38 +685,10 @@ def _serialize_admin_user_list(db: Session, users: list[User]) -> list[AdminUser
                 "slug": workspace.key,
                 "name": workspace.name,
                 "role": role,
-                "enabled_apps": list_workspace_enabled_apps(db, workspace.id),
             }
             for workspace in sorted(workspaces, key=lambda item: item.key)
             if (role := workspace_role_map.get(workspace.id)) is not None
         ]
-        app_access: list[dict[str, str | None]] = []
-
-        for workspace in workspace_summaries:
-            for app_code in workspace["enabled_apps"]:
-                feature_code = APP_FEATURE_CODES.get(app_code)
-                if feature_code is None or feature_code not in enabled_policies:
-                    continue
-                app_access.append(
-                    {
-                        "app": app_code,
-                        "workspace_id": workspace["id"],
-                        "workspace_key": workspace["slug"],
-                        "workspace_name": workspace["name"],
-                        "role": workspace["role"],
-                    }
-                )
-
-        if system_roles and APP_FEATURE_CODES["admin"] in enabled_policies:
-            app_access.append(
-                {
-                    "app": "admin",
-                    "workspace_id": None,
-                    "workspace_key": "admin",
-                    "workspace_name": "Admin Console",
-                    "role": "admin",
-                }
-            )
 
         items.append(
             AdminUserItemResponse.model_validate(
@@ -790,7 +703,6 @@ def _serialize_admin_user_list(db: Session, users: list[User]) -> list[AdminUser
                     "system_roles": system_roles,
                     "workspaces": workspace_summaries,
                     "workspace_roles": workspace_roles,
-                    "app_access": app_access,
                     "group_ids": sorted(
                         {link.group_id for link in user.group_links if link.group.active}
                     ),
@@ -1444,7 +1356,6 @@ def create_workspace(
     )
     db.add(workspace)
     db.flush()
-    replace_workspace_enabled_apps(db, workspace.id, DEFAULT_WORKSPACE_ENABLED_APPS)
     ensure_workspace_default_pms_space(db, workspace)
     db.add(
         WorkspaceUserBinding(
@@ -1534,11 +1445,6 @@ def delete_workspace(
             Team.trashed_at.is_not(None),
         )
     )
-    from aidoo_api.domains.auth.models import WorkspaceEnabledApp
-
-    db.execute(
-        sa_delete(WorkspaceEnabledApp).where(WorkspaceEnabledApp.workspace_id == workspace.id)
-    )
     db.delete(workspace)
     record_audit_log(
         db,
@@ -1550,39 +1456,6 @@ def delete_workspace(
         payload={"key": workspace_key, "name": workspace_name},
     )
     db.commit()
-
-
-@router.get("/workspaces/{workspace_id}/apps", response_model=WorkspaceAppsResponse)
-def get_workspace_apps(
-    workspace_id: str,
-    context: AuthContext = Depends(require_auth_context),
-    db: Session = Depends(get_db_session),
-) -> WorkspaceAppsResponse:
-    _ensure_workspace_scope(db, context.user, workspace_id, min_role="admin")
-    return WorkspaceAppsResponse(enabled_apps=list_workspace_enabled_apps(db, workspace_id))
-
-
-@router.put("/workspaces/{workspace_id}/apps", response_model=WorkspaceAppsResponse)
-def update_workspace_apps(
-    workspace_id: str,
-    payload: WorkspaceAppsUpdateRequest,
-    context: AuthContext = Depends(require_auth_context),
-    db: Session = Depends(get_db_session),
-) -> WorkspaceAppsResponse:
-    workspace = _ensure_workspace_scope(db, context.user, workspace_id, min_role="admin")
-    enabled_apps = replace_workspace_enabled_apps(db, workspace.id, payload.enabled_apps)
-    ensure_workspace_default_pms_space(db, workspace)
-    record_audit_log(
-        db,
-        actor_user_id=context.user.id,
-        action="admin.workspace.apps.update",
-        entity_kind="workspace",
-        entity_id=workspace.id,
-        summary=f"Updated enabled apps for {workspace.name}",
-        payload={"enabled_apps": enabled_apps},
-    )
-    db.commit()
-    return WorkspaceAppsResponse(enabled_apps=enabled_apps)
 
 
 @router.get("/workspaces/{workspace_id}/bindings", response_model=list[WorkspaceBindingItemResponse])
@@ -2489,53 +2362,6 @@ def replace_team_members(
     )
     db.commit()
     return list_team_members(team_id, context, db)
-
-
-@router.get("/feature-policies", response_model=list[FeaturePolicyItemResponse])
-def list_feature_policies(
-    context: AuthContext = Depends(require_permission("feature_policy.read")),
-    db: Session = Depends(get_db_session),
-) -> list[FeaturePolicyItemResponse]:
-    items = db.scalars(select(FeaturePolicy).order_by(FeaturePolicy.code.asc())).all()
-    return [
-        FeaturePolicyItemResponse(
-            id=item.id,
-            code=item.code,
-            name=item.name,
-            description=item.description,
-            enabled=item.enabled,
-            allowed_workspace_keys=list(item.allowed_workspace_keys or []),
-        )
-        for item in items
-    ]
-
-
-@router.put("/feature-policies", response_model=list[FeaturePolicyItemResponse])
-def update_feature_policies(
-    payload: FeaturePolicyUpdateRequest,
-    context: AuthContext = Depends(require_permission("feature_policy.write")),
-    db: Session = Depends(get_db_session),
-) -> list[FeaturePolicyItemResponse]:
-    policies = {
-        item.id: item for item in db.scalars(select(FeaturePolicy)).all()
-    }
-    for update in payload.items:
-        policy = policies.get(update.id)
-        if policy is None:
-            continue
-        policy.enabled = update.enabled
-        db.add(policy)
-
-    record_audit_log(
-        db,
-        actor_user_id=context.user.id,
-        action="admin.feature-policy.update",
-        entity_kind="feature-policy",
-        summary="Updated feature policies",
-        payload={"ids": [item.id for item in payload.items]},
-    )
-    db.commit()
-    return list_feature_policies(context, db)
 
 
 @router.get("/audit-logs", response_model=list[AuditLogItemResponse])

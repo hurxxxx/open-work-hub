@@ -8,7 +8,6 @@ from sqlalchemy.orm import Session, joinedload, selectinload
 
 from aidoo_api.domains.auth.access import (
     get_current_workspace,
-    is_platform_admin_user,
     resolve_team_role,
 )
 from aidoo_api.domains.auth.models import Team, User, Workspace
@@ -81,8 +80,6 @@ def has_list_access(db: Session, user: User, list_id: str) -> bool:
     team = _load_active_team(db, project.team_id)
     if team is None:
         return False
-    if is_platform_admin_user(user, db):
-        return True
     return resolve_team_role(db, user, team) is not None
 
 
@@ -96,9 +93,6 @@ def _ensure_list_member(db: Session, user: User, list_id: str) -> tuple[Project,
     team = _load_active_team(db, project.team_id)
     if team is None:
         raise HTTPException(status_code=404, detail="Project not found.")
-    if is_platform_admin_user(user, db):
-        return project, "owner"
-
     role = resolve_team_role(db, user, team)
     if role is None:
         raise HTTPException(status_code=403, detail="Project access required.")
@@ -107,14 +101,14 @@ def _ensure_list_member(db: Session, user: User, list_id: str) -> tuple[Project,
 
 def _ensure_list_owner(db: Session, user: User, list_id: str) -> tuple[Project, str]:
     project, role = _ensure_list_member(db, user, list_id)
-    if not is_platform_admin_user(user, db) and role not in {"owner", "admin"}:
+    if role not in {"owner", "admin"}:
         raise HTTPException(status_code=403, detail="Project owner/admin access required.")
     return project, role
 
 
 def _ensure_list_editor(db: Session, user: User, list_id: str) -> tuple[Project, str]:
     project, role = _ensure_list_member(db, user, list_id)
-    if not is_platform_admin_user(user, db) and role == "viewer":
+    if role == "viewer":
         raise HTTPException(status_code=403, detail="Viewer role cannot modify project data.")
     return project, role
 

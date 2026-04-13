@@ -52,7 +52,6 @@ def test_auth_bootstrap_and_protected_search(client: TestClient) -> None:
     assert auth_payload["user"]["theme_preference"] == "system"
     assert auth_payload["user"]["workspaces"]
     assert any(item["role"] == "admin" for item in auth_payload["user"]["workspaces"])
-    assert any("docs" in item["enabled_apps"] for item in auth_payload["user"]["workspaces"])
     assert "workspace_roles" not in auth_payload["user"]
     assert "app_access" not in auth_payload["user"]
     token = auth_payload["token"]
@@ -177,7 +176,7 @@ def test_seeded_dev_login_accounts_are_listed_and_can_log_in(client: TestClient)
     platform_admin_payload = platform_admin_login_response.json()
     assert platform_admin_payload["user"]["email"] == "platform-admin@aidoo.local"
     assert "platform_admin" in platform_admin_payload["user"]["system_roles"]
-    assert platform_admin_payload["user"]["workspaces"]
+    assert platform_admin_payload["user"]["workspaces"] == []
     assert "app_access" not in platform_admin_payload["user"]
 
     dev_login_response = client.post(
@@ -187,7 +186,7 @@ def test_seeded_dev_login_accounts_are_listed_and_can_log_in(client: TestClient)
     assert dev_login_response.status_code == 200
     login_payload = dev_login_response.json()
     assert login_payload["user"]["email"] == "delivery-hub-member@aidoo.local"
-    assert any("pms" in item["enabled_apps"] for item in login_payload["user"]["workspaces"])
+    assert [item["slug"] for item in login_payload["user"]["workspaces"]] == ["delivery-hub"]
     assert any(item["role"] == "member" for item in login_payload["user"]["workspaces"])
 
 
@@ -376,7 +375,6 @@ def _create_direct_user(
     is_admin: bool = False,
     system_roles: tuple[str, ...] = (),
     workspace_keys: tuple[str, ...] = (),
-    workspace_app_codes: tuple[str, ...] = (),
 ) -> tuple[str, str]:
     from sqlalchemy import select
 
@@ -386,7 +384,6 @@ def _create_direct_user(
         User,
         UserSystemRole,
         Workspace,
-        WorkspaceEnabledApp,
         WorkspaceUserBinding,
     )
     from aidoo_api.domains.auth.security import (
@@ -422,19 +419,6 @@ def _create_direct_user(
         bound_workspace_ids: set[str] = set()
         for workspace_key in workspace_keys:
             workspace = db.scalar(select(Workspace).where(Workspace.key == workspace_key))
-            if workspace is None:
-                continue
-            bound_workspace_ids.add(workspace.id)
-        for app_code in workspace_app_codes:
-            workspace = db.scalar(
-                select(Workspace)
-                .join(WorkspaceEnabledApp, WorkspaceEnabledApp.workspace_id == Workspace.id)
-                .where(
-                    Workspace.active.is_(True),
-                    WorkspaceEnabledApp.app_code == app_code,
-                )
-                .order_by(Workspace.created_at.asc(), Workspace.key.asc())
-            )
             if workspace is None:
                 continue
             bound_workspace_ids.add(workspace.id)
@@ -671,25 +655,6 @@ def test_admin_identity_management_endpoints(client: TestClient) -> None:
     assert team_members_response.status_code == 200
     assert team_members_response.json()[0]["email"] == "member@aidoo.local"
 
-    feature_policies_response = client.get("/api/v1/admin/feature-policies", headers=headers)
-    assert feature_policies_response.status_code == 200
-    first_policy_id = feature_policies_response.json()[0]["id"]
-
-    update_policy_response = client.put(
-        "/api/v1/admin/feature-policies",
-        headers=headers,
-        json={
-            "items": [
-                {
-                    "id": first_policy_id,
-                    "enabled": False,
-                }
-            ]
-        },
-    )
-    assert update_policy_response.status_code == 200
-    assert any(policy["enabled"] is False for policy in update_policy_response.json())
-
     audit_logs_response = client.get("/api/v1/admin/audit-logs", headers=headers)
     assert audit_logs_response.status_code == 200
     assert audit_logs_response.json()
@@ -801,7 +766,7 @@ def test_workspace_scoped_team_management_requires_workspace_admin_role(client: 
     assert create_team_other_workspace_response.status_code == 403
 
 
-def test_non_pms_routes_require_workspace_feature_access(client: TestClient) -> None:
+def test_non_workspace_routes_require_workspace_membership(client: TestClient) -> None:
     admin_token = _bootstrap_admin(client)
     admin_headers = {"Authorization": f"Bearer {admin_token}"}
 
@@ -815,14 +780,6 @@ def test_non_pms_routes_require_workspace_feature_access(client: TestClient) -> 
     )
     assert docs_workspace_response.status_code == 201
     docs_workspace = docs_workspace_response.json()
-
-    update_apps_response = client.put(
-        f"/api/v1/admin/workspaces/{docs_workspace['id']}/apps",
-        headers=admin_headers,
-        json={"enabled_apps": ["docs"]},
-    )
-    assert update_apps_response.status_code == 200
-    assert update_apps_response.json()["enabled_apps"] == ["docs"]
 
     user_response = client.post(
         "/api/v1/admin/users",
@@ -887,12 +844,19 @@ def test_non_pms_routes_require_workspace_feature_access(client: TestClient) -> 
     wiki_allowed_response = client.get("/api/v1/wiki/pages", headers=user_headers)
     assert wiki_allowed_response.status_code == 200
 
-    plm_still_forbidden_response = client.post(
+    plm_allowed_response = client.post(
         "/api/v1/search/plm",
         headers=user_headers,
         json={"query": "release delay"},
     )
-    assert plm_still_forbidden_response.status_code == 403
+    assert plm_allowed_response.status_code == 200
+
+    ocr_allowed_response = client.post(
+        "/api/v1/connectors/ocr/route",
+        headers=user_headers,
+        json={"asset_uri": "file://scan.pdf"},
+    )
+    assert ocr_allowed_response.status_code == 200
 
 
 def test_pms_project_workflow_and_dashboard(client: TestClient) -> None:
@@ -1047,7 +1011,7 @@ def test_pms_membership_permissions(client: TestClient) -> None:
     outsider_id, outsider_token = _create_direct_user(
         email="member@aidoo.local",
         full_name="Project Member",
-        workspace_app_codes=("pms",),
+        workspace_keys=("hq",),
     )
 
     project_response = client.post(
@@ -1083,7 +1047,7 @@ def test_pms_membership_permissions(client: TestClient) -> None:
     assert member_project_response.json()["role"] == "member"
 
 
-def test_pms_app_access_is_required_even_for_space_members(client: TestClient) -> None:
+def test_pms_space_members_still_need_workspace_membership(client: TestClient) -> None:
     admin_token = _bootstrap_admin(client)
     member_id, member_token = _create_direct_user(
         email="space-only@aidoo.local",
@@ -1121,7 +1085,7 @@ def test_pms_space_creator_becomes_owner_and_last_manager_is_protected(client: T
     creator_id, creator_token = _create_direct_user(
         email="space-creator@aidoo.local",
         full_name="Space Creator",
-        workspace_app_codes=("pms",),
+        workspace_keys=("hq",),
     )
 
     create_space_response = client.post(
@@ -1154,7 +1118,7 @@ def test_pms_space_creator_becomes_owner_and_last_manager_is_protected(client: T
     assert remove_response.status_code == 409
 
 
-def test_platform_admin_gets_pms_app_access_and_can_view_all_spaces(client: TestClient) -> None:
+def test_platform_admin_without_workspace_membership_cannot_view_pms_spaces(client: TestClient) -> None:
     admin_token = _bootstrap_admin(client)
     project_response = client.post(
         "/api/v1/pms/projects",
@@ -1162,7 +1126,6 @@ def test_platform_admin_gets_pms_app_access_and_can_view_all_spaces(client: Test
         json={"key": "PLATADM", "name": "Platform Admin Project", "description": "Visibility"},
     )
     assert project_response.status_code == 201
-    expected_space_id = project_response.json()["team_id"]
 
     _, platform_admin_token = _create_direct_user(
         email="platform-admin@aidoo.local",
@@ -1175,16 +1138,14 @@ def test_platform_admin_gets_pms_app_access_and_can_view_all_spaces(client: Test
         headers={"Authorization": f"Bearer {platform_admin_token}"},
     )
     assert me_response.status_code == 200
-    assert any("pms" in item["enabled_apps"] for item in me_response.json()["workspaces"])
-    assert any(item["role"] == "admin" for item in me_response.json()["workspaces"])
+    assert me_response.json()["workspaces"] == []
     assert "app_access" not in me_response.json()
 
     spaces_response = client.get(
         "/api/v1/pms/spaces",
         headers={"Authorization": f"Bearer {platform_admin_token}"},
     )
-    assert spaces_response.status_code == 200
-    assert any(item["id"] == expected_space_id for item in spaces_response.json())
+    assert spaces_response.status_code == 403
 
 
 def test_group_workspace_templates_grant_and_revoke_effective_workspace_access(
@@ -1284,7 +1245,7 @@ def test_group_workspace_templates_grant_and_revoke_effective_workspace_access(
         item for item in me_response.json()["workspaces"] if item["id"] == workspace["id"]
     )
     assert inherited_workspace["role"] == "admin"
-    assert sorted(inherited_workspace["enabled_apps"]) == sorted(workspace["enabled_apps"])
+    assert inherited_workspace["slug"] == workspace["key"]
 
     visible_workspaces_response = client.get("/api/v1/admin/workspaces", headers=user_headers)
     assert visible_workspaces_response.status_code == 200

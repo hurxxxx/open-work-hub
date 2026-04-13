@@ -8,8 +8,9 @@ import {
   developmentAdminLogin as developmentAdminLoginRequest,
   getBootstrapStatus,
   getCurrentUser,
-  hasFeatureAccess,
+  hasAdminConsoleAccess,
   hasAnySystemRole,
+  hasWorkspaceMembership,
   login as loginRequest,
   listSessions as listSessionsRequest,
   logout as logoutRequest,
@@ -84,8 +85,6 @@ const PERMISSION_ROLE_MAP: Record<string, string[]> = {
   'workspace.write': ['platform_admin'],
   'team.read': ['platform_admin'],
   'team.write': ['platform_admin'],
-  'feature_policy.read': ['platform_admin'],
-  'feature_policy.write': ['platform_admin'],
   'audit.read': ['platform_admin'],
   'session.revoke': ['platform_admin'],
 };
@@ -413,7 +412,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   function hasFeature(featureCode: string, workspaceSlug?: string | null) {
-    return hasFeatureAccess(state.user, featureCode, workspaceSlug);
+    if (featureCode === 'nav.admin') {
+      return hasAdminConsoleAccess(state.user);
+    }
+    return hasWorkspaceMembership(state.user, workspaceSlug);
   }
 
   return (

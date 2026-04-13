@@ -38,7 +38,8 @@ import {
   useAuth,
 } from './domains/auth/auth-provider';
 import {
-  hasFeatureAccess,
+  hasAdminConsoleAccess,
+  hasWorkspaceMembership,
   type ThemePreference,
 } from './domains/auth/auth-api';
 import {
@@ -56,7 +57,7 @@ import {
   NotFoundView,
   ProfilePage,
 } from './domains/auth/settings-pages';
-import { FEATURE_BY_APP_ID, resolveShellState, type ShellAppId } from './app-shell';
+import { resolveShellState, type ShellAppId } from './app-shell';
 
 function resolveThemePreference(themePreference: ThemePreference, systemDarkMode: boolean) {
   if (themePreference === 'system') {
@@ -67,22 +68,14 @@ function resolveThemePreference(themePreference: ThemePreference, systemDarkMode
 }
 
 function WorkspaceGate({
-  appId,
-  featureCode,
   children,
 }: {
-  appId?: WorkspaceAppId;
-  featureCode?: string;
   children: ReactNode;
 }) {
   const auth = useAuth();
   const { workspaceSlug } = useParams();
 
-  if ((featureCode || appId) && !hasFeatureAccess(
-    auth.user,
-    featureCode ?? FEATURE_BY_APP_ID[appId ?? 'ai'] ?? '',
-    workspaceSlug,
-  )) {
+  if (!hasWorkspaceMembership(auth.user, workspaceSlug)) {
     return (
       <AccessDeniedView description="현재 계정은 이 workspace에서 해당 앱을 사용할 수 없습니다." />
     );
@@ -99,7 +92,7 @@ function AdminGate({
   children: ReactNode;
 }) {
   const auth = useAuth();
-  if (!hasAdminSectionAccess(auth.user?.system_roles ?? [], section)) {
+  if (!hasAdminConsoleAccess(auth.user) || !hasAdminSectionAccess(auth.user?.system_roles ?? [], section)) {
     return <AccessDeniedView description="현재 계정에는 이 관리자 섹션을 볼 권한이 없습니다." />;
   }
 
@@ -132,8 +125,7 @@ const ToolViewWrapper = () => {
   }
 
   if (toolId?.startsWith('pms-list-') || /^pms-space-.+/.test(toolId ?? '')) {
-    const featureCode = FEATURE_BY_APP_ID['pms'];
-    if (featureCode && !hasFeatureAccess(auth.user, featureCode)) {
+    if (!hasWorkspaceMembership(auth.user)) {
       return (
         <AccessDeniedView description="현재 계정에는 이 도구가 속한 워크스페이스 접근 권한이 없습니다." />
       );
@@ -146,8 +138,7 @@ const ToolViewWrapper = () => {
     return <div className="p-8 text-gray-500">Tool not found</div>;
   }
 
-  const featureCode = item.appId === 'home' ? undefined : FEATURE_BY_APP_ID[item.appId];
-  if (featureCode && !hasFeatureAccess(auth.user, featureCode)) {
+  if (item.appId !== 'home' && !hasWorkspaceMembership(auth.user)) {
     return (
       <AccessDeniedView description="현재 계정에는 이 도구가 속한 워크스페이스 접근 권한이 없습니다." />
     );
@@ -262,7 +253,7 @@ const AppContent = () => {
             <Route
               path="/w/:workspaceSlug/ai"
               element={(
-                <WorkspaceGate appId="ai" featureCode="nav.ai">
+                <WorkspaceGate>
                   <AIView />
                 </WorkspaceGate>
               )}
@@ -270,7 +261,7 @@ const AppContent = () => {
             <Route
               path="/w/:workspaceSlug/pms"
               element={(
-                <WorkspaceGate appId="pms" featureCode="nav.pms">
+                <WorkspaceGate>
                   <PMSView />
                 </WorkspaceGate>
               )}
@@ -278,7 +269,7 @@ const AppContent = () => {
             <Route
               path="/w/:workspaceSlug/docs"
               element={(
-                <WorkspaceGate appId="docs" featureCode="nav.docs">
+                <WorkspaceGate>
                   <DocsView />
                 </WorkspaceGate>
               )}
@@ -286,7 +277,7 @@ const AppContent = () => {
             <Route
               path="/w/:workspaceSlug/docs/:docId"
               element={(
-                <WorkspaceGate appId="docs" featureCode="nav.docs">
+                <WorkspaceGate>
                   <DocsView />
                 </WorkspaceGate>
               )}
@@ -294,7 +285,7 @@ const AppContent = () => {
             <Route
               path="/w/:workspaceSlug/planner"
               element={(
-                <WorkspaceGate appId="planner" featureCode="nav.planner">
+                <WorkspaceGate>
                   <PlannerView />
                 </WorkspaceGate>
               )}
@@ -302,7 +293,7 @@ const AppContent = () => {
             <Route
               path="/w/:workspaceSlug/meeting/*"
               element={(
-                <WorkspaceGate appId="meeting" featureCode="nav.meeting">
+                <WorkspaceGate>
                   <MeetingView />
                 </WorkspaceGate>
               )}

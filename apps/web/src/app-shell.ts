@@ -1,5 +1,9 @@
 import { NAV_ITEMS } from './constants';
-import { hasFeatureAccess, type AuthUser } from './domains/auth/auth-api';
+import {
+  hasAdminConsoleAccess,
+  hasWorkspaceMembership,
+  type AuthUser,
+} from './domains/auth/auth-api';
 import { getWorkspaceSlugFromPath } from './domains/workspaces/workspace-utils';
 
 export type ShellAppId = 'home' | 'ai' | 'pms' | 'docs' | 'planner' | 'meeting' | 'settings' | 'profile';
@@ -7,15 +11,6 @@ export type ShellAppId = 'home' | 'ai' | 'pms' | 'docs' | 'planner' | 'meeting' 
 export type ShellState = {
   activeAppId: ShellAppId;
   activeNavItemId: string;
-};
-
-export const FEATURE_BY_APP_ID: Partial<Record<'ai' | 'pms' | 'docs' | 'planner' | 'meeting' | 'settings', string>> = {
-  ai: 'nav.ai',
-  docs: 'nav.docs',
-  pms: 'nav.pms',
-  planner: 'nav.planner',
-  meeting: 'nav.meeting',
-  settings: 'nav.admin',
 };
 
 const HOME_SHELL_STATE: ShellState = {
@@ -28,8 +23,10 @@ function canShowAppChrome(
   appId: 'ai' | 'pms' | 'docs' | 'planner' | 'meeting' | 'settings',
   workspaceSlug?: string | null,
 ): boolean {
-  const featureCode = FEATURE_BY_APP_ID[appId];
-  return featureCode ? hasFeatureAccess(user, featureCode, workspaceSlug) : true;
+  if (appId === 'settings') {
+    return hasAdminConsoleAccess(user);
+  }
+  return hasWorkspaceMembership(user, workspaceSlug);
 }
 
 function resolvePmsToolState(

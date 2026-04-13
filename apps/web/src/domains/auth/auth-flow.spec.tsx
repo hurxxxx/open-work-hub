@@ -20,6 +20,14 @@ function buildUser(overrides: Partial<AuthUser> = {}): AuthUser {
     status: 'active',
     theme_preference: 'system',
     primary_org_unit: null,
+    workspaces: [
+      {
+        id: 'workspace-hq',
+        slug: 'hq',
+        name: 'Aidoo HQ',
+        role: 'admin',
+      },
+    ],
     workspace_roles: [
       {
         workspace_id: 'workspace-pms',
@@ -27,12 +35,6 @@ function buildUser(overrides: Partial<AuthUser> = {}): AuthUser {
         name: 'PMS Workspace',
         role: 'admin',
       },
-    ],
-    app_access: [
-      { app: 'ai', workspace_id: 'workspace-ai', workspace_key: 'ai', workspace_name: 'AI Workspace', role: 'member' },
-      { app: 'docs', workspace_id: 'workspace-docs', workspace_key: 'docs', workspace_name: 'Docs Workspace', role: 'member' },
-      { app: 'pms', workspace_id: 'workspace-pms', workspace_key: 'pms', workspace_name: 'PMS Workspace', role: 'admin' },
-      { app: 'planner', workspace_id: 'workspace-planner', workspace_key: 'planner', workspace_name: 'Planner Workspace', role: 'member' },
     ],
     system_roles: [],
     group_ids: [],
@@ -112,10 +114,7 @@ describe('auth flow', () => {
               full_name: 'AIDOO Admin',
               display_name: 'AIDOO Admin',
               system_roles: ['platform_admin'],
-              app_access: [
-                { app: 'admin', workspace_id: 'workspace-admin', workspace_key: 'admin', workspace_name: 'Admin Console', role: 'admin' },
-                { app: 'pms', workspace_id: 'workspace-pms', workspace_key: 'pms', workspace_name: 'PMS Workspace', role: 'admin' },
-              ],
+              workspaces: [],
             }),
           }),
           {
@@ -213,10 +212,7 @@ describe('auth flow', () => {
               full_name: 'AIDOO Admin',
               display_name: 'AIDOO Admin',
               system_roles: ['platform_admin'],
-              app_access: [
-                { app: 'admin', workspace_id: 'workspace-admin', workspace_key: 'admin', workspace_name: 'Admin Console', role: 'admin' },
-                { app: 'pms', workspace_id: 'workspace-pms', workspace_key: 'pms', workspace_name: 'PMS Workspace', role: 'admin' },
-              ],
+              workspaces: [],
             }),
           }),
           {
@@ -289,12 +285,11 @@ describe('auth flow', () => {
                   role: 'member',
                 },
               ],
-              app_access: [
+              workspaces: [
                 {
-                  app: 'pms',
-                  workspace_id: 'workspace-pms',
-                  workspace_key: 'delivery-hub',
-                  workspace_name: 'Delivery Hub',
+                  id: 'workspace-delivery-hub',
+                  slug: 'delivery-hub',
+                  name: 'Delivery Hub',
                   role: 'member',
                 },
               ],

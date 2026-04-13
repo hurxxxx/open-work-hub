@@ -14,13 +14,9 @@ from aidoo_api.core.db import get_db_session
 from aidoo_api.domains.auth.access import (
     bind_current_workspace,
     get_current_workspace,
-    has_system_role,
     resolve_team_role,
-    resolve_visible_features,
     resolve_workspaces,
     resolve_workspace_role,
-    load_active_workspace_by_key,
-    workspace_has_enabled_app,
 )
 from aidoo_api.domains.auth.dependencies import require_current_user
 from aidoo_api.domains.auth.models import Team, TeamMember, User, Workspace
@@ -94,10 +90,6 @@ def _max_access_level(*levels: str | None) -> str | None:
     return max(ranked, key=lambda item: ACCESS_LEVEL_RANK[item])
 
 
-def _is_pms_super_admin(db: Session, user: User) -> bool:
-    return has_system_role(db, user, "platform_admin")
-
-
 def _team_role_allows(role: str | None, minimum: str) -> bool:
     current_rank = TEAM_ROLE_RANK.get(role or "", -1)
     minimum_rank = TEAM_ROLE_RANK.get(minimum, 999)
@@ -108,27 +100,22 @@ def _ensure_docs_workspace_access(db: Session, user: User) -> Workspace:
     current_workspace = get_current_workspace(db)
     if current_workspace is None:
         for summary in resolve_workspaces(db, user):
-            if "docs" not in summary["enabled_apps"]:
+            workspace = db.scalar(
+                select(Workspace).where(
+                    Workspace.id == summary["id"],
+                    Workspace.active.is_(True),
+                )
+            )
+            if workspace is None:
                 continue
-            current_workspace = load_active_workspace_by_key(db, summary["slug"])
-            if current_workspace is not None:
-                bind_current_workspace(db, current_workspace)
-                break
+            current_workspace = workspace
+            bind_current_workspace(db, current_workspace)
+            break
         if current_workspace is None:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Docs requests require a workspace context.",
             )
-    if "nav.docs" not in resolve_visible_features(db, user):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Feature access required: nav.docs",
-        )
-    if not workspace_has_enabled_app(db, current_workspace, "docs"):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="You need nav.docs. Ask a workspace admin to enable Docs.",
-        )
     return current_workspace
 
 
@@ -148,8 +135,6 @@ def _load_active_pms_team(db: Session, team_id: str) -> Team | None:
 
 
 def _resolve_pms_team_role(db: Session, user: User, team_id: str) -> str | None:
-    if _is_pms_super_admin(db, user):
-        return "owner" if has_system_role(db, user, "platform_admin") else "admin"
     team = _load_active_pms_team(db, team_id)
     if team is None:
         return None
@@ -158,17 +143,6 @@ def _resolve_pms_team_role(db: Session, user: User, team_id: str) -> str | None:
 
 def _accessible_pms_team_ids(db: Session, user: User) -> set[str]:
     current_workspace = get_current_workspace(db)
-    if _is_pms_super_admin(db, user):
-        return set(
-            db.scalars(
-                select(Team.id).where(
-                    Team.active.is_(True),
-                    Team.trashed_at.is_(None),
-                    Team.workspace.has(Workspace.active.is_(True)),
-                    Team.workspace_id == current_workspace.id if current_workspace is not None else True,
-                )
-            )
-        )
     return set(
         db.scalars(
             select(TeamMember.team_id)

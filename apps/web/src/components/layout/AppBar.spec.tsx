@@ -48,34 +48,21 @@ function buildUser(overrides: Partial<AuthUser> = {}): AuthUser {
         slug: 'hq',
         name: 'Aidoo HQ',
         role: 'owner',
-        enabled_apps: ['ai', 'docs', 'pms', 'planner', 'meeting'],
       },
       {
         id: 'workspace-delivery-hub',
         slug: 'delivery-hub',
         name: 'Delivery Hub',
         role: 'member',
-        enabled_apps: ['docs', 'meeting'],
       },
       {
         id: 'workspace-innovation-lab',
         slug: 'innovation-lab',
         name: 'Innovation Lab',
         role: 'member',
-        enabled_apps: ['docs'],
       },
     ],
     workspace_roles: [],
-    app_access: [
-      { app: 'ai', workspace_id: 'workspace-hq', workspace_key: 'hq', workspace_name: 'Aidoo HQ', role: 'owner' },
-      { app: 'docs', workspace_id: 'workspace-hq', workspace_key: 'hq', workspace_name: 'Aidoo HQ', role: 'owner' },
-      { app: 'pms', workspace_id: 'workspace-hq', workspace_key: 'hq', workspace_name: 'Aidoo HQ', role: 'owner' },
-      { app: 'planner', workspace_id: 'workspace-hq', workspace_key: 'hq', workspace_name: 'Aidoo HQ', role: 'owner' },
-      { app: 'meeting', workspace_id: 'workspace-hq', workspace_key: 'hq', workspace_name: 'Aidoo HQ', role: 'owner' },
-      { app: 'docs', workspace_id: 'workspace-delivery-hub', workspace_key: 'delivery-hub', workspace_name: 'Delivery Hub', role: 'member' },
-      { app: 'meeting', workspace_id: 'workspace-delivery-hub', workspace_key: 'delivery-hub', workspace_name: 'Delivery Hub', role: 'member' },
-      { app: 'docs', workspace_id: 'workspace-innovation-lab', workspace_key: 'innovation-lab', workspace_name: 'Innovation Lab', role: 'member' },
-    ],
     system_roles: [],
     group_ids: [],
     group_slugs: [],
@@ -143,9 +130,6 @@ describe('AppBar', () => {
     const { container } = renderAppBar({
       activeAppId: 'settings',
       currentUser: buildUser({
-        app_access: [
-          { app: 'admin', workspace_id: 'workspace-admin', workspace_key: 'admin', workspace_name: 'Admin Console', role: 'admin' },
-        ],
         system_roles: ['platform_admin'],
       }),
     });
@@ -184,7 +168,7 @@ describe('AppBar', () => {
 
     expect(shellWorkspaceSlug).toBe('innovation-lab');
     expect(container.querySelector('a[href="/w/innovation-lab/docs"]')).toBeTruthy();
-    expect(container.querySelector('a[href="/w/innovation-lab/ai"]')).toBeNull();
+    expect(container.querySelector('a[href="/w/innovation-lab/ai"]')).toBeTruthy();
 
     fireEvent.click(screen.getByRole('button', { name: '워크스페이스 전환' }));
     expect(screen.getByText('Innovation Lab')).toBeTruthy();
@@ -202,7 +186,7 @@ describe('AppBar', () => {
     await waitFor(() => {
       expect(screen.getByTestId('location').textContent).toBe('/');
       expect(container.querySelector('a[href="/w/innovation-lab/docs"]')).toBeTruthy();
-      expect(container.querySelector('a[href="/w/hq/ai"]')).toBeNull();
+      expect(container.querySelector('a[href="/w/innovation-lab/ai"]')).toBeTruthy();
     });
   });
 
@@ -221,7 +205,7 @@ describe('AppBar', () => {
     });
   });
 
-  it('falls back to home when the next workspace supports neither the current app nor a remembered app', async () => {
+  it('keeps the current app when switching workspaces from an app detail route', async () => {
     renderAppBar({
       activeAppId: 'docs',
       currentPathname: '/w/hq/docs/123',
@@ -232,14 +216,12 @@ describe('AppBar', () => {
             slug: 'hq',
             name: 'Aidoo HQ',
             role: 'owner',
-            enabled_apps: ['ai', 'docs', 'pms', 'planner', 'meeting'],
           },
           {
             id: 'workspace-ai-only',
             slug: 'ai-only',
             name: 'AI Only',
             role: 'member',
-            enabled_apps: ['ai'],
           },
         ],
       }),
@@ -250,7 +232,7 @@ describe('AppBar', () => {
     fireEvent.click(screen.getByRole('button', { name: /AI Only/ }));
 
     await waitFor(() => {
-      expect(screen.getByTestId('location').textContent).toBe('/');
+      expect(screen.getByTestId('location').textContent).toBe('/w/ai-only/docs');
     });
   });
 
@@ -284,7 +266,6 @@ describe('AppBar', () => {
             slug: 'innovation-lab',
             name: 'Innovation Lab',
             role: 'member',
-            enabled_apps: ['docs'],
           },
         ],
       }),

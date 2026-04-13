@@ -3,7 +3,7 @@ import { useParams } from 'react-router-dom';
 import { InlineNotice } from '@aidoo/ui';
 
 import { useAuth } from '@/src/domains/auth/auth-provider';
-import { workspaceRoleAllows } from '@/src/domains/auth/auth-api';
+import { hasWorkspaceAdminAccess, workspaceRoleAllows } from '@/src/domains/auth/auth-api';
 import { AccessDeniedView } from '@/src/domains/auth/settings-pages';
 import {
   listGroups,
@@ -27,7 +27,8 @@ export function WorkspaceSettingsView() {
     () => user?.workspaces.find((item) => item.slug === workspaceSlug) ?? null,
     [user?.workspaces, workspaceSlug],
   );
-  const canManageWorkspace = workspaceRoleAllows(currentWorkspaceSummary?.role, 'admin');
+  const canManageWorkspace = hasWorkspaceAdminAccess(user, workspaceSlug)
+    || workspaceRoleAllows(currentWorkspaceSummary?.role, 'admin');
   const canReadGroups = hasPermission('group.read');
   const canBrowseDirectory = hasPermission('user.read');
 
@@ -73,7 +74,7 @@ export function WorkspaceSettingsView() {
     };
   }, [token, workspaceSlug, canManageWorkspace, canReadGroups]);
 
-  if (!workspaceSlug || !currentWorkspaceSummary) {
+  if (!workspaceSlug) {
     return <AccessDeniedView description="현재 계정은 이 workspace 설정에 접근할 수 없습니다." />;
   }
 
@@ -87,10 +88,10 @@ export function WorkspaceSettingsView() {
         <header className="space-y-2 border-b border-app-border pb-6">
           <div className="app-text-overline text-app-ink/50">Workspace Settings</div>
           <h1 className="app-text-title-lg text-app-ink">
-            {workspace?.name ?? currentWorkspaceSummary.name}
+            {workspace?.name ?? currentWorkspaceSummary?.name ?? workspaceSlug}
           </h1>
           <p className="app-text-body text-app-ink/60">
-            이 협업 공간의 프로필, enabled apps, 멤버십을 관리합니다.
+            이 협업 공간의 프로필과 멤버십을 관리합니다.
           </p>
         </header>
 
@@ -109,7 +110,6 @@ export function WorkspaceSettingsView() {
             canReadGroups={canReadGroups}
             capabilities={{
               canEditProfile: true,
-              canManageApps: true,
               canManageMembers: true,
               canArchive: false,
               canDelete: false,

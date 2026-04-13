@@ -89,10 +89,6 @@ class Workspace(Base):
         back_populates="workspace",
         cascade="all, delete-orphan",
     )
-    enabled_apps: Mapped[list["WorkspaceEnabledApp"]] = relationship(
-        back_populates="workspace",
-        cascade="all, delete-orphan",
-    )
     teams: Mapped[list["Team"]] = relationship(
         back_populates="workspace",
         cascade="all, delete-orphan",
@@ -205,17 +201,6 @@ class WorkspaceGroupBinding(Base):
     group: Mapped[AccessGroup] = relationship(back_populates="workspace_bindings")
 
 
-class WorkspaceEnabledApp(Base):
-    __tablename__ = "workspace_enabled_apps"
-    __table_args__ = (UniqueConstraint("workspace_id", "app_code", name="uq_workspace_enabled_app"),)
-
-    id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    workspace_id: Mapped[str] = mapped_column(ForeignKey("workspaces.id"), index=True)
-    app_code: Mapped[str] = mapped_column(String(24), index=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow_naive, nullable=False)
-    workspace: Mapped[Workspace] = relationship(back_populates="enabled_apps")
-
-
 class Team(Base):
     __tablename__ = "teams"
     __table_args__ = (UniqueConstraint("workspace_id", "key", name="uq_workspace_team_key"),)
@@ -252,26 +237,6 @@ class TeamMember(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow_naive, nullable=False)
     team: Mapped[Team] = relationship(back_populates="members")
     user: Mapped[User] = relationship(back_populates="team_memberships")
-
-
-class FeaturePolicy(Base):
-    __tablename__ = "feature_policies"
-
-    id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    code: Mapped[str] = mapped_column(String(80), unique=True, index=True)
-    name: Mapped[str] = mapped_column(String(120))
-    description: Mapped[str] = mapped_column(Text, default="", nullable=False)
-    enabled: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
-    required_permissions: Mapped[list[str]] = mapped_column(JSON, default=list, nullable=False)
-    allowed_workspace_keys: Mapped[list[str]] = mapped_column(JSON, default=list, nullable=False)
-    allowed_group_slugs: Mapped[list[str]] = mapped_column(JSON, default=list, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow_naive, nullable=False)
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime,
-        default=utcnow_naive,
-        onupdate=utcnow_naive,
-        nullable=False,
-    )
 
 
 class AuditLog(Base):

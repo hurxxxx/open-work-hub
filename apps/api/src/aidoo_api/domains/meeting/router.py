@@ -8,17 +8,13 @@ from sqlalchemy import or_, select, union
 from sqlalchemy.orm import Session
 
 from aidoo_api.core.db import get_db_session
-from aidoo_api.domains.auth.access import SYSTEM_PLATFORM_ADMIN, SYSTEM_ROLE_ALIASES
 from aidoo_api.domains.auth.dependencies import (
     require_current_user,
     require_current_workspace,
-    require_feature_access,
 )
 from aidoo_api.domains.auth.models import (
-    GroupSystemRole,
     User,
     UserAccessGroup,
-    UserSystemRole,
     Workspace,
     WorkspaceGroupBinding,
     WorkspaceUserBinding,
@@ -44,13 +40,7 @@ from aidoo_api.domains.meeting.schemas import (
 router = APIRouter(
     prefix="/meeting",
     tags=["meeting"],
-    dependencies=[Depends(require_feature_access("nav.meeting"))],
 )
-
-PLATFORM_ADMIN_ROLE_VALUES = tuple(
-    dict.fromkeys([SYSTEM_PLATFORM_ADMIN, *SYSTEM_ROLE_ALIASES.keys()])
-)
-
 
 def _workspace_meeting_user_ids_subquery(workspace_id: str):
     direct_member_ids = select(WorkspaceUserBinding.user_id.label("user_id")).where(
@@ -64,19 +54,9 @@ def _workspace_meeting_user_ids_subquery(workspace_id: str):
         )
         .where(WorkspaceGroupBinding.workspace_id == workspace_id)
     )
-    direct_platform_admin_ids = select(UserSystemRole.user_id.label("user_id")).where(
-        UserSystemRole.role.in_(PLATFORM_ADMIN_ROLE_VALUES)
-    )
-    group_platform_admin_ids = (
-        select(UserAccessGroup.user_id.label("user_id"))
-        .join(GroupSystemRole, GroupSystemRole.group_id == UserAccessGroup.group_id)
-        .where(GroupSystemRole.role.in_(PLATFORM_ADMIN_ROLE_VALUES))
-    )
     return union(
         direct_member_ids,
         group_member_ids,
-        direct_platform_admin_ids,
-        group_platform_admin_ids,
     ).subquery()
 
 

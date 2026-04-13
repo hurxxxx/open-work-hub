@@ -16,7 +16,7 @@ import {
   hasAnyAdminReadPermission,
 } from '@/src/domains/admin/admin-permissions';
 import {
-  hasFeatureAccess,
+  hasAdminConsoleAccess,
   type AuthUser,
   workspaceRoleAllows,
 } from '@/src/domains/auth/auth-api';
@@ -167,7 +167,7 @@ export function AppBar({
 
     if (item.id === 'settings') {
       return (
-        hasFeatureAccess(currentUser, 'nav.admin')
+        hasAdminConsoleAccess(currentUser)
         || hasAnyAdminReadPermission(currentUser.system_roles)
       );
     }
@@ -369,7 +369,7 @@ function WorkspaceRow({
           {isCurrent ? <Check size={14} className="shrink-0 text-app-accent" /> : null}
         </div>
         <div className="app-text-caption mt-0.5 truncate text-gray-500">
-          {workspace.slug} · {workspace.enabled_apps.length}앱
+          {workspace.slug}
         </div>
       </div>
     </button>
@@ -384,7 +384,7 @@ function buildAppLink(
   const selectedWorkspace = (
     shellWorkspaceSlug
       ? currentUser.workspaces.find(
-        (workspace) => workspace.slug === shellWorkspaceSlug && workspace.enabled_apps.includes(appId),
+        (workspace) => workspace.slug === shellWorkspaceSlug,
       ) ?? null
       : null
   ) ?? getPreferredWorkspace(currentUser, appId);

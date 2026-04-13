@@ -16,11 +16,10 @@ from aidoo_api.domains.auth.access import (
     get_current_workspace,
     get_or_create_default_pms_space,
     has_system_role,
-    is_platform_admin_user,
     resolve_team_role,
     slugify,
 )
-from aidoo_api.domains.auth.dependencies import require_current_user, require_feature_access
+from aidoo_api.domains.auth.dependencies import require_current_user
 from aidoo_api.domains.auth.models import Team, TeamMember, User, Workspace
 from aidoo_api.domains.auth.security import new_id
 from aidoo_api.core.settings import get_settings
@@ -633,7 +632,6 @@ class DashboardSummaryResponse(BaseModel):
 router = APIRouter(
     prefix="/pms",
     tags=["pms"],
-    dependencies=[Depends(require_feature_access("nav.pms"))],
 )
 
 
@@ -744,9 +742,6 @@ def _ensure_space_access(db: Session, user: User, space_id: str) -> tuple[Team, 
     if team is None:
         raise HTTPException(status_code=404, detail="Space not found.")
 
-    if _is_pms_super_admin(db, user):
-        return team, "owner" if is_platform_admin_user(user, db) else "admin"
-
     role = resolve_team_role(db, user, team)
     if role is not None:
         return team, role
@@ -756,8 +751,6 @@ def _ensure_space_access(db: Session, user: User, space_id: str) -> tuple[Team, 
 
 def _ensure_space_editor(db: Session, user: User, space_id: str) -> tuple[Team, str]:
     team, role = _ensure_space_access(db, user, space_id)
-    if _is_pms_super_admin(db, user):
-        return team, role
 
     if role in SPACE_TEAM_EDITOR_ROLES:
         return team, role
@@ -767,8 +760,6 @@ def _ensure_space_editor(db: Session, user: User, space_id: str) -> tuple[Team, 
 
 def _ensure_space_manager(db: Session, user: User, space_id: str) -> tuple[Team, str]:
     team, role = _ensure_space_access(db, user, space_id)
-    if _is_pms_super_admin(db, user):
-        return team, role
 
     if role in SPACE_TEAM_MANAGER_ROLES:
         return team, role
@@ -778,8 +769,6 @@ def _ensure_space_manager(db: Session, user: User, space_id: str) -> tuple[Team,
 
 def _ensure_space_owner(db: Session, user: User, space_id: str) -> tuple[Team, str]:
     team, role = _ensure_space_access(db, user, space_id)
-    if _is_pms_super_admin(db, user):
-        return team, role
     if role == "owner":
         return team, role
     raise HTTPException(status_code=403, detail="Space owner access required.")
@@ -787,18 +776,6 @@ def _ensure_space_owner(db: Session, user: User, space_id: str) -> tuple[Team, s
 
 def _accessible_space_ids(db: Session, user: User) -> set[str]:
     workspace = _get_pms_workspace(db)
-    if _is_pms_super_admin(db, user):
-        return set(
-            db.scalars(
-                select(Team.id).where(
-                    Team.active.is_(True),
-                    Team.trashed_at.is_(None),
-                    Team.workspace.has(Workspace.active.is_(True)),
-                    Team.workspace_id == workspace.id,
-                )
-            )
-        )
-
     direct_space_ids = set(
         db.scalars(
             select(TeamMember.team_id)
@@ -861,8 +838,6 @@ def _ensure_space_admin_change_allowed(
     next_role: str | None,
 ) -> tuple[Team, str]:
     team, actor_role = _ensure_space_manager(db, user, space_id)
-    if _is_pms_super_admin(db, user):
-        return team, actor_role
     if actor_role != "owner" and (
         current_role in SPACE_TEAM_MANAGER_ROLES or next_role in SPACE_TEAM_MANAGER_ROLES
     ):
@@ -897,18 +872,6 @@ def _unique_space_key(db: Session, workspace_id: str, name: str) -> str:
 
 def _space_query_for_user(db: Session, user: User):
     workspace = _get_pms_workspace(db)
-    if _is_pms_super_admin(db, user):
-        return (
-            select(Team)
-            .options(joinedload(Team.workspace), selectinload(Team.members))
-            .where(
-                Team.active.is_(True),
-                Team.trashed_at.is_(None),
-                Team.workspace.has(Workspace.active.is_(True)),
-                Team.workspace_id == workspace.id,
-            )
-        )
-
     return (
         select(Team)
         .options(joinedload(Team.workspace), selectinload(Team.members))
@@ -1166,8 +1129,6 @@ def _serialize_activity(log: IssueActivityLog, reference_lookup: dict[str, str])
 
 
 def _project_role(db: Session, project: Project, user: User, team_lookup: dict[str, Team]) -> str:
-    if is_platform_admin_user(user, db):
-        return "owner"
     if project.team_id is None:
         return "viewer"
     team = team_lookup.get(project.team_id)
@@ -3889,20 +3850,7 @@ def list_folders(
     if team_id:
         _ensure_space_access(db, current_user, team_id)
         q = q.where(Folder.team_id == team_id)
-    elif is_platform_admin_user(current_user, db):
-        q = q.where(
-            or_(
-                Folder.team_id.is_(None),
-                Folder.team_id.in_(
-                    select(Team.id).where(
-                        Team.active.is_(True),
-                        Team.trashed_at.is_(None),
-                        Team.workspace.has(Workspace.active.is_(True)),
-                    )
-                ),
-            )
-        )
-    elif not is_platform_admin_user(current_user, db):
+    else:
         accessible_team_ids = _accessible_space_ids(db, current_user)
         if accessible_team_ids:
             q = q.where(Folder.team_id.in_(accessible_team_ids))

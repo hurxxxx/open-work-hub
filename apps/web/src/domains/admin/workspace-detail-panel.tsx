@@ -20,13 +20,11 @@ import {
 import {
   bulkWorkspaceMembers,
   deleteWorkspace,
-  getWorkspaceApps,
   listWorkspaceBindings,
   listWorkspaceMemberCandidates,
   listWorkspaceMembers,
   removeWorkspaceMember,
   updateWorkspace,
-  updateWorkspaceApps,
   updateWorkspaceMemberRole,
   type AccessGroupItem,
   type WorkspaceBindingItem,
@@ -36,15 +34,11 @@ import {
   type WorkspaceMembersResponse,
 } from './admin-api';
 import {
-  APP_DESCRIPTIONS,
-  APP_ICONS,
-  APP_ORDER,
   Badge,
   FORM_FIELD_CLASS,
   FilterChip,
   MemberRoleBadge,
   PeopleDirectoryGrid,
-  WORKSPACE_ENABLED_APP_LABELS,
   WORKSPACE_ROLE_LABELS,
   WORKSPACE_ROLE_OPTIONS,
   WORKSPACE_ROLE_RANK,
@@ -59,7 +53,6 @@ import {
 
 export interface WorkspaceDetailPanelCapabilities {
   canEditProfile: boolean;
-  canManageApps: boolean;
   canManageMembers: boolean;
   canArchive: boolean;
   canDelete: boolean;
@@ -98,8 +91,6 @@ export function WorkspaceDetailPanel({
   flashError,
 }: WorkspaceDetailPanelProps) {
   const [bindings, setBindings] = useState<WorkspaceBindingItem[]>([]);
-  const [selectedEnabledApps, setSelectedEnabledApps] = useState<string[]>([]);
-  const [originalEnabledApps, setOriginalEnabledApps] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [editBusy, setEditBusy] = useState(false);
@@ -133,21 +124,14 @@ export function WorkspaceDetailPanel({
   useEffect(() => {
     if (!workspaceId) {
       setBindings([]);
-      setSelectedEnabledApps([]);
-      setOriginalEnabledApps([]);
       return;
     }
     let cancelled = false;
     void (async () => {
       try {
-        const [nextBindings, nextApps] = await Promise.all([
-          listWorkspaceBindings(token, workspaceId),
-          getWorkspaceApps(token, workspaceId),
-        ]);
+        const nextBindings = await listWorkspaceBindings(token, workspaceId);
         if (!cancelled) {
           setBindings(nextBindings);
-          setSelectedEnabledApps(nextApps.enabled_apps);
-          setOriginalEnabledApps(nextApps.enabled_apps);
         }
       } catch (caughtError) {
         if (!cancelled) {
@@ -199,12 +183,6 @@ export function WorkspaceDetailPanel({
     () => new Set(bindings.map((binding) => binding.subject_id)),
     [bindings],
   );
-
-  const appsDirty = useMemo(() => {
-    if (selectedEnabledApps.length !== originalEnabledApps.length) return true;
-    const set = new Set(originalEnabledApps);
-    return selectedEnabledApps.some((app) => !set.has(app));
-  }, [selectedEnabledApps, originalEnabledApps]);
 
   async function reloadBindings(): Promise<WorkspaceBindingItem[]> {
     if (!workspaceId) return [];
@@ -365,22 +343,6 @@ export function WorkspaceDetailPanel({
     }
   }
 
-  async function handleSaveApps() {
-    if (!workspaceId || !workspace) return;
-    setBusy(true);
-    try {
-      const response = await updateWorkspaceApps(token, workspaceId, selectedEnabledApps);
-      setSelectedEnabledApps(response.enabled_apps);
-      setOriginalEnabledApps(response.enabled_apps);
-      onWorkspaceChanged({ ...workspace, enabled_apps: response.enabled_apps });
-      flashSuccess('Enabled apps 를 저장했습니다.');
-    } catch (caughtError) {
-      flashError(getErrorMessage(caughtError, 'Enabled apps 를 저장하지 못했습니다.'));
-    } finally {
-      setBusy(false);
-    }
-  }
-
   function openConfirm(spec: {
     title: string;
     description: string;
@@ -464,7 +426,7 @@ export function WorkspaceDetailPanel({
       onSelect: () =>
         openConfirm({
           title: '워크스페이스 영구 삭제',
-          description: `"${workspace.name}" 을 완전히 삭제하면 되돌릴 수 없습니다. 모든 멤버십과 enabled apps 가 함께 제거됩니다.`,
+          description: `"${workspace.name}" 을 완전히 삭제하면 되돌릴 수 없습니다. 모든 멤버십과 연관 데이터가 함께 제거됩니다.`,
           confirmLabel: '영구 삭제',
           variant: 'danger',
           onConfirm: () => handleDeleteWorkspace(workspace),
@@ -556,47 +518,6 @@ export function WorkspaceDetailPanel({
           </div>
         </header>
 
-        {/* Apps */}
-        <section className="border-b border-app-border px-4 py-3">
-          <div className="mb-2 flex items-center justify-between">
-            <h3 className="app-text-control text-app-ink">
-              앱{' '}
-              <span className="app-text-caption ml-1 text-app-ink/50">
-                {selectedEnabledApps.length} / {APP_ORDER.length} 활성
-              </span>
-            </h3>
-          </div>
-          <div className="divide-y divide-app-border rounded-md border border-app-border bg-app-bg">
-            {APP_ORDER.map((appCode) => {
-              const label =
-                WORKSPACE_ENABLED_APP_LABELS[
-                  appCode as keyof typeof WORKSPACE_ENABLED_APP_LABELS
-                ] ?? appCode;
-              const description = APP_DESCRIPTIONS[appCode] ?? '';
-              const checked = selectedEnabledApps.includes(appCode);
-              return (
-                <AppToggleRow
-                  key={appCode}
-                  appCode={appCode}
-                  label={label}
-                  description={description}
-                  checked={checked}
-                  disabled={!capabilities.canManageApps || busy}
-                  onChange={(next) => {
-                    setSelectedEnabledApps((current) =>
-                      next
-                        ? current.includes(appCode)
-                          ? current
-                          : [...current, appCode]
-                        : current.filter((item) => item !== appCode),
-                    );
-                  }}
-                />
-              );
-            })}
-          </div>
-        </section>
-
         {/* Groups (read-only binding preview, all shown) */}
         {groupBindings.length > 0 ? (
           <section className="border-b border-app-border px-4 py-3">
@@ -683,32 +604,6 @@ export function WorkspaceDetailPanel({
         </section>
       </div>
 
-      {/* Sticky save bar (apps dirty state) */}
-      {appsDirty ? (
-        <div className="flex items-center justify-between gap-3 border-t border-app-border bg-app-surface-sidebar px-6 py-3">
-          <div className="flex items-center gap-2 text-app-ink/80">
-            <span className="h-2 w-2 rounded-full bg-amber-500" />
-            <span className="app-text-body">앱 변경 사항이 저장되지 않았습니다.</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <Button
-              variant="ghost"
-              disabled={busy}
-              onClick={() => setSelectedEnabledApps(originalEnabledApps)}
-            >
-              되돌리기
-            </Button>
-            <Button
-              variant="primary"
-              disabled={busy || !capabilities.canManageApps}
-              onClick={() => void handleSaveApps()}
-            >
-              변경 저장
-            </Button>
-          </div>
-        </div>
-      ) : null}
-
       <WorkspaceEditModal
         open={editOpen}
         workspace={workspace}
@@ -787,71 +682,6 @@ export function WorkspaceDetailPanel({
 // ------------------------------------------------------------------
 // Sub-components
 // ------------------------------------------------------------------
-
-function ToggleSwitch({
-  checked,
-  disabled,
-  onChange,
-  ariaLabel,
-}: {
-  checked: boolean;
-  disabled?: boolean;
-  onChange: (next: boolean) => void;
-  ariaLabel: string;
-}) {
-  return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={checked}
-      aria-label={ariaLabel}
-      disabled={disabled}
-      onClick={() => onChange(!checked)}
-      className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors ${
-        checked ? 'bg-app-accent' : 'bg-app-border'
-      } ${disabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}`}
-    >
-      <span
-        className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
-          checked ? 'translate-x-[18px]' : 'translate-x-[2px]'
-        }`}
-      />
-    </button>
-  );
-}
-
-function AppToggleRow({
-  appCode,
-  label,
-  description,
-  checked,
-  disabled,
-  onChange,
-}: {
-  appCode: string;
-  label: string;
-  description: string;
-  checked: boolean;
-  disabled?: boolean;
-  onChange: (next: boolean) => void;
-}) {
-  const Icon = APP_ICONS[appCode] ?? (() => null);
-  return (
-    <div className="flex items-center gap-2 px-3 py-1.5">
-      <Icon size={14} className="shrink-0 text-app-ink/60" />
-      <div className="min-w-0 flex-1">
-        <span className="app-text-body-sm font-medium text-app-ink">{label}</span>
-        <span className="app-text-caption ml-2 text-app-ink/50">{description}</span>
-      </div>
-      <ToggleSwitch
-        ariaLabel={`${label} 토글`}
-        checked={checked}
-        disabled={disabled}
-        onChange={onChange}
-      />
-    </div>
-  );
-}
 
 export function WorkspaceMemberRow({
   binding,

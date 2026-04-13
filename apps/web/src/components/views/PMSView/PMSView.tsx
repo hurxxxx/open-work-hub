@@ -400,7 +400,7 @@ export const PMSView = () => {
               </div>
               <h1 className="app-text-title-lg text-app-ink">No Spaces Yet</h1>
               <p className="app-text-body mt-3 text-app-ink/60">
-                PMS 앱 접근은 준비됐지만 아직 속한 스페이스가 없습니다. 새 스페이스를 만들고 바로 리스트와 문서를 운영할 수 있습니다.
+                워크스페이스에는 접근할 수 있지만 아직 속한 스페이스가 없습니다. 새 스페이스를 만들고 바로 리스트와 문서를 운영할 수 있습니다.
               </p>
               <div className="mt-6 flex justify-center">
                 <button

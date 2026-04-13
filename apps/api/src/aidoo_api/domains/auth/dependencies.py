@@ -10,20 +10,15 @@ from sqlalchemy.orm import Session, joinedload
 
 from aidoo_api.core.db import get_db_session
 from aidoo_api.domains.auth.access import (
-    APP_FEATURE_CODES,
-    FEATURE_APP_CODES,
     bind_current_workspace,
     get_current_workspace,
-    is_platform_admin_user,
     load_active_workspace_by_key,
     load_user_graph,
     resolve_system_roles,
     resolve_team_role,
-    resolve_visible_features,
     resolve_workspaces,
     resolve_workspace_role,
     team_role_allows,
-    workspace_has_enabled_app,
     workspace_role_allows,
 )
 from aidoo_api.domains.auth.models import AuthSession, Team, User, Workspace
@@ -132,8 +127,6 @@ PERMISSION_COMPAT_ROLE_MAP = {
     "workspace.write": (("platform_admin",)),
     "team.read": (("platform_admin",)),
     "team.write": (("platform_admin",)),
-    "feature_policy.read": (("platform_admin",)),
-    "feature_policy.write": (("platform_admin",)),
     "audit.read": (("platform_admin",)),
     "session.revoke": (("platform_admin",)),
 }
@@ -152,63 +145,39 @@ def require_admin_context(
     return context
 
 
-def require_feature_access(feature_code: str):
-    def dependency(
-        context: AuthContext = Depends(require_auth_context),
-        db: Session = Depends(get_db_session),
-    ) -> AuthContext:
-        if feature_code not in resolve_visible_features(db, context.user):
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail=f"Feature access required: {feature_code}",
-            )
-        return context
-
-    return dependency
-
-
 def _resolve_workspace_role_for_request(
     db: Session,
     auth: AuthContext,
     workspace: Workspace,
 ) -> str | None:
-    if is_platform_admin_user(auth.user, db):
-        return "owner"
     return resolve_workspace_role(db, auth.user, workspace.id)
 
 
-def _select_legacy_workspace_for_feature(
+def _select_legacy_workspace_for_request(
     db: Session,
     auth: AuthContext,
-    feature_code: str,
-    app_or_workspace_key: str,
     min_role: str,
+    preferred_workspace_key: str | None = None,
 ) -> tuple[Workspace, str]:
-    explicit_workspace = load_active_workspace_by_key(db, app_or_workspace_key)
-    if explicit_workspace is not None:
-        explicit_role = _resolve_workspace_role_for_request(db, auth, explicit_workspace)
-        app_code = FEATURE_APP_CODES.get(feature_code)
-        if explicit_role is not None and workspace_role_allows(explicit_role, min_role):
-            if app_code is None or workspace_has_enabled_app(db, explicit_workspace, app_code):
+    if preferred_workspace_key:
+        explicit_workspace = load_active_workspace_by_key(db, preferred_workspace_key)
+        if explicit_workspace is not None:
+            explicit_role = _resolve_workspace_role_for_request(db, auth, explicit_workspace)
+            if explicit_role is not None and workspace_role_allows(explicit_role, min_role):
                 return explicit_workspace, explicit_role
 
-    app_code = FEATURE_APP_CODES.get(feature_code)
     for summary in resolve_workspaces(db, auth.user):
         if not workspace_role_allows(summary["role"], min_role):
             continue
-        if app_code is not None and app_code not in summary["enabled_apps"]:
-            continue
         workspace = db.scalar(
-            select(Workspace)
-            .options()
-            .where(Workspace.id == summary["id"], Workspace.active.is_(True))
+            select(Workspace).where(Workspace.id == summary["id"], Workspace.active.is_(True))
         )
         if workspace is not None:
             return workspace, summary["role"]
 
     raise HTTPException(
         status_code=status.HTTP_403_FORBIDDEN,
-        detail=f"Workspace access required: {feature_code}",
+        detail="Workspace access required.",
     )
 
 
@@ -268,26 +237,6 @@ def require_workspace_membership(min_role: str = "member"):
     return dependency
 
 
-def require_workspace_app_enabled(app_code: str, min_role: str = "member"):
-    feature_code = APP_FEATURE_CODES.get(app_code)
-    if feature_code is None:
-        raise ValueError(f"Unknown workspace app: {app_code}")
-
-    def dependency(
-        workspace_context: WorkspaceAccessContext = Depends(require_workspace_membership(min_role)),
-        _feature_context: AuthContext = Depends(require_feature_access(feature_code)),
-        db: Session = Depends(get_db_session),
-    ) -> WorkspaceAccessContext:
-        if not workspace_has_enabled_app(db, workspace_context.workspace, app_code):
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail=f"You need {feature_code}. Ask a workspace admin to enable {app_code}.",
-            )
-        return workspace_context
-
-    return dependency
-
-
 def require_workspace_access(workspace_key: str, min_role: str = "member"):
     async def dependency(
         request: Request,
@@ -313,27 +262,20 @@ def require_workspace_access(workspace_key: str, min_role: str = "member"):
     return dependency
 
 
-def require_workspace_feature_access(
-    app_or_workspace_key: str,
-    feature_code: str,
+def require_legacy_workspace_membership(
     min_role: str = "member",
+    preferred_workspace_key: str | None = None,
 ):
     async def dependency(
         request: Request,
         auth: AuthContext = Depends(require_auth_context),
         db: Session = Depends(get_db_session),
     ) -> WorkspaceAccessContext:
-        if feature_code not in resolve_visible_features(db, auth.user):
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail=f"Feature access required: {feature_code}",
-            )
-        workspace, role = _select_legacy_workspace_for_feature(
+        workspace, role = _select_legacy_workspace_for_request(
             db,
             auth,
-            feature_code,
-            app_or_workspace_key,
             min_role,
+            preferred_workspace_key=preferred_workspace_key,
         )
         bind_current_workspace(db, workspace)
         _store_request_workspace(request, workspace)

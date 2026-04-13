@@ -326,8 +326,8 @@ def test_workspace_scoped_default_pms_space_stays_inside_requested_workspace(
         "/api/v1/workspaces/delivery-hub/pms/spaces",
         headers=_auth_headers(platform_admin_token),
     )
-    assert before_delivery_spaces.status_code == 200
-    delivery_space_ids = {item["id"] for item in before_delivery_spaces.json()}
+    assert before_delivery_spaces.status_code == 403
+    delivery_space_ids: set[str] = set()
 
     create_list_response = client.post(
         "/api/v1/workspaces/hq/pms/lists",
@@ -341,7 +341,6 @@ def test_workspace_scoped_default_pms_space_stays_inside_requested_workspace(
     assert create_list_response.status_code == 201, create_list_response.text
     created_list = create_list_response.json()
     assert created_list["team_id"] in hq_space_ids
-    assert created_list["team_id"] not in delivery_space_ids
 
     create_folder_response = client.post(
         "/api/v1/workspaces/hq/pms/folders",
@@ -351,7 +350,6 @@ def test_workspace_scoped_default_pms_space_stays_inside_requested_workspace(
     assert create_folder_response.status_code == 201, create_folder_response.text
     created_folder = create_folder_response.json()
     assert created_folder["team_id"] in hq_space_ids
-    assert created_folder["team_id"] not in delivery_space_ids
 
 
 def test_space_docs_collection_permissions_and_soft_delete(client: TestClient) -> None:
@@ -652,9 +650,7 @@ def test_team_soft_delete_hides_space_data_and_untrashes_default_space(client: T
 
     workspaces_response = client.get("/api/v1/admin/workspaces", headers=headers)
     assert workspaces_response.status_code == 200
-    pms_workspace = next(
-        item for item in workspaces_response.json() if "pms" in item.get("enabled_apps", [])
-    )
+    pms_workspace = next(item for item in workspaces_response.json() if item["key"] == "hq")
     assert pms_workspace["team_count"] == 1
 
     folder_response = client.post(
@@ -743,7 +739,7 @@ def test_team_soft_delete_hides_space_data_and_untrashes_default_space(client: T
     workspaces_after_delete_response = client.get("/api/v1/admin/workspaces", headers=headers)
     assert workspaces_after_delete_response.status_code == 200
     pms_workspace_after_delete = next(
-        item for item in workspaces_after_delete_response.json() if "pms" in item.get("enabled_apps", [])
+        item for item in workspaces_after_delete_response.json() if item["key"] == "hq"
     )
     assert pms_workspace_after_delete["team_count"] == 0
 
@@ -771,7 +767,7 @@ def test_team_soft_delete_hides_space_data_and_untrashes_default_space(client: T
     workspaces_after_restore_response = client.get("/api/v1/admin/workspaces", headers=headers)
     assert workspaces_after_restore_response.status_code == 200
     pms_workspace_after_restore = next(
-        item for item in workspaces_after_restore_response.json() if "pms" in item.get("enabled_apps", [])
+        item for item in workspaces_after_restore_response.json() if item["key"] == "hq"
     )
     assert pms_workspace_after_restore["team_count"] == 1
 
@@ -909,17 +905,12 @@ def _grant_workspace_access(
         headers=_auth_headers(token),
     )
     assert workspaces_response.status_code == 200
-    matching_workspaces = [
-        item
-        for item in workspaces_response.json()
-        if item["key"] == workspace_key or workspace_key in item.get("enabled_apps", [])
-    ]
-    workspace = next((item for item in matching_workspaces if item["key"] == workspace_key), None)
+    workspace = next(
+        (item for item in workspaces_response.json() if item["key"] == workspace_key),
+        None,
+    )
     if workspace is None:
-        workspace = min(
-            matching_workspaces,
-            key=lambda item: (len(item.get("enabled_apps", [])), item["key"]),
-        ) if matching_workspaces else None
+        workspace = next(iter(workspaces_response.json()), None)
     assert workspace is not None
 
     bindings_response = client.get(

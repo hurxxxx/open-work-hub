@@ -21,7 +21,6 @@ def test_docs_native_docs_and_direct_user_share_grant_docs_access(client: TestCl
     me_response = client.get("/api/v1/auth/me", headers=_auth_headers(owner_token))
     assert me_response.status_code == 200
     me_payload = me_response.json()
-    assert any("docs" in item["enabled_apps"] for item in me_payload["workspaces"])
     assert len(me_payload["workspaces"]) == 1
 
     empty_hub_response = client.get("/api/v1/docs/hub", headers=_auth_headers(owner_token))
@@ -67,7 +66,7 @@ def test_docs_native_docs_and_direct_user_share_grant_docs_access(client: TestCl
 
     shared_me_response = client.get("/api/v1/auth/me", headers=_auth_headers(shared_user_token))
     assert shared_me_response.status_code == 200
-    assert any("docs" in item["enabled_apps"] for item in shared_me_response.json()["workspaces"])
+    assert len(shared_me_response.json()["workspaces"]) == 1
 
     shared_hub_response = client.get("/api/v1/docs/hub", headers=_auth_headers(shared_user_token))
     assert shared_hub_response.status_code == 200
@@ -422,17 +421,12 @@ def _grant_workspace_access(
         headers=_auth_headers(token),
     )
     assert workspaces_response.status_code == 200
-    matching_workspaces = [
-        item
-        for item in workspaces_response.json()
-        if item["key"] == workspace_key or workspace_key in item.get("enabled_apps", [])
-    ]
-    workspace = next((item for item in matching_workspaces if item["key"] == workspace_key), None)
+    workspace = next(
+        (item for item in workspaces_response.json() if item["key"] == workspace_key),
+        None,
+    )
     if workspace is None:
-        workspace = min(
-            matching_workspaces,
-            key=lambda item: (len(item.get("enabled_apps", [])), item["key"]),
-        ) if matching_workspaces else None
+        workspace = next(iter(workspaces_response.json()), None)
     assert workspace is not None
 
     bindings_response = client.get(

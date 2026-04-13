@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { Layout, UserPlus, X } from 'lucide-react';
 import { Dialog, Button } from '@aidoo/ui';
 import { useAuth } from '@/src/domains/auth/auth-provider';
-import { hasAppAccess } from '@/src/domains/auth/auth-api';
+import { hasWorkspaceMembership } from '@/src/domains/auth/auth-api';
 import {
   addSpaceMember,
   createSpace,
@@ -56,7 +56,7 @@ export const CreateSpaceModal = ({
   const [query, setQuery] = useState('');
   const [queryFocused, setQueryFocused] = useState(false);
 
-  const canCreateSpace = hasAppAccess(user, 'pms');
+  const canCreateSpace = hasWorkspaceMembership(user);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -191,7 +191,7 @@ export const CreateSpaceModal = ({
 
         {!canCreateSpace && (
           <div className="app-text-body rounded-md border border-[var(--ui-color-warning)]/30 bg-[var(--ui-color-warning)]/10 px-3 py-2 text-[var(--ui-color-warning)]">
-            PMS 앱 접근 권한이 없어 스페이스를 생성할 수 없습니다.
+            워크스페이스 접근 권한이 없어 스페이스를 생성할 수 없습니다.
           </div>
         )}
 

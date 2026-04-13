@@ -109,17 +109,9 @@ export function formatAppCodes(codes: string[]): string {
 }
 
 export function collectUserAppCodes(
-  user: Pick<AuthUser, 'workspaces' | 'app_access' | 'system_roles'>,
+  user: Pick<AuthUser, 'system_roles'>,
 ): string[] {
   const codes = new Set<string>();
-  for (const workspace of user.workspaces) {
-    for (const appCode of workspace.enabled_apps) {
-      codes.add(appCode);
-    }
-  }
-  for (const access of user.app_access ?? []) {
-    codes.add(access.app);
-  }
   if (user.system_roles.length > 0) {
     codes.add('admin');
   }
@@ -127,7 +119,7 @@ export function collectUserAppCodes(
 }
 
 export function formatUserApps(
-  user: Pick<AuthUser, 'workspaces' | 'app_access' | 'system_roles'>,
+  user: Pick<AuthUser, 'system_roles'>,
 ): string {
   return formatAppCodes(collectUserAppCodes(user));
 }

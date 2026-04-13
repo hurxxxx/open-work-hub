@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session, joinedload
 from aidoo_api.core.db import get_db_session
 from aidoo_api.core.settings import get_settings
 from aidoo_api.core.storage import get_minio_client
-from aidoo_api.domains.auth.access import is_platform_admin_user, resolve_team_role
+from aidoo_api.domains.auth.access import resolve_team_role
 from aidoo_api.domains.auth.dependencies import require_admin_context, require_current_user
 from aidoo_api.domains.auth.models import Team, User, Workspace
 from aidoo_api.domains.auth.security import new_id
@@ -147,8 +147,6 @@ def resolve_media_urls(
 
 def _can_resolve(db: Session, user: User, media: MediaFile) -> bool:
     """Check if the user is allowed to resolve this media file."""
-    if is_platform_admin_user(user, db):
-        return True
     # Unlinked media: only the uploader can resolve
     if media.resource_type is None:
         return media.uploaded_by_id == user.id
@@ -173,7 +171,7 @@ def _can_resolve(db: Session, user: User, media: MediaFile) -> bool:
 
 
 def _can_link_unlinked_media(db: Session, user: User, media: MediaFile) -> bool:
-    return is_platform_admin_user(user, db) or media.uploaded_by_id == user.id
+    return media.uploaded_by_id == user.id
 
 
 def _has_space_access(db: Session, user: User, team_id: str | None) -> bool:

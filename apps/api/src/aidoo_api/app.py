@@ -13,8 +13,8 @@ from aidoo_api.domains.ai.router import router as ai_router
 from aidoo_api.domains.admin.router import router as admin_router
 from aidoo_api.domains.auth.dependencies import (
     require_current_user,
-    require_workspace_app_enabled,
-    require_workspace_feature_access,
+    require_legacy_workspace_membership,
+    require_workspace_membership,
 )
 from aidoo_api.domains.auth.router import router as auth_router
 from aidoo_api.domains.docs.router import router as docs_router
@@ -78,7 +78,7 @@ def create_app() -> FastAPI:
         prefix=settings.api_prefix,
         dependencies=[
             *protected_dependencies,
-            Depends(require_workspace_feature_access("ai", "nav.ai")),
+            Depends(require_legacy_workspace_membership()),
         ],
     )
     app.include_router(
@@ -86,7 +86,7 @@ def create_app() -> FastAPI:
         prefix=f"{settings.api_prefix}/workspaces/{{workspace_slug}}",
         dependencies=[
             *protected_dependencies,
-            Depends(require_workspace_app_enabled("ai")),
+            Depends(require_workspace_membership()),
         ],
     )
     app.include_router(
@@ -99,7 +99,7 @@ def create_app() -> FastAPI:
         prefix=settings.api_prefix,
         dependencies=[
             *protected_dependencies,
-            Depends(require_workspace_feature_access("docs", "nav.docs")),
+            Depends(require_legacy_workspace_membership()),
         ],
     )
     app.include_router(
@@ -107,7 +107,7 @@ def create_app() -> FastAPI:
         prefix=f"{settings.api_prefix}/workspaces/{{workspace_slug}}",
         dependencies=[
             *protected_dependencies,
-            Depends(require_workspace_app_enabled("docs")),
+            Depends(require_workspace_membership()),
         ],
     )
     app.include_router(
@@ -120,7 +120,7 @@ def create_app() -> FastAPI:
         prefix=f"{settings.api_prefix}/workspaces/{{workspace_slug}}",
         dependencies=[
             *protected_dependencies,
-            Depends(require_workspace_app_enabled("docs")),
+            Depends(require_workspace_membership()),
         ],
     )
     app.include_router(
@@ -128,7 +128,7 @@ def create_app() -> FastAPI:
         prefix=settings.api_prefix,
         dependencies=[
             *protected_dependencies,
-            Depends(require_workspace_feature_access("ai", "nav.ai")),
+            Depends(require_legacy_workspace_membership()),
         ],
     )
     app.include_router(
@@ -136,7 +136,7 @@ def create_app() -> FastAPI:
         prefix=f"{settings.api_prefix}/workspaces/{{workspace_slug}}",
         dependencies=[
             *protected_dependencies,
-            Depends(require_workspace_app_enabled("ai")),
+            Depends(require_workspace_membership()),
         ],
     )
     app.include_router(
@@ -144,7 +144,7 @@ def create_app() -> FastAPI:
         prefix=settings.api_prefix,
         dependencies=[
             *protected_dependencies,
-            Depends(require_workspace_feature_access("docs", "nav.docs")),
+            Depends(require_legacy_workspace_membership()),
         ],
     )
     app.include_router(
@@ -152,7 +152,7 @@ def create_app() -> FastAPI:
         prefix=f"{settings.api_prefix}/workspaces/{{workspace_slug}}",
         dependencies=[
             *protected_dependencies,
-            Depends(require_workspace_app_enabled("docs")),
+            Depends(require_workspace_membership()),
         ],
     )
     app.include_router(
@@ -160,7 +160,7 @@ def create_app() -> FastAPI:
         prefix=settings.api_prefix,
         dependencies=[
             *protected_dependencies,
-            Depends(require_workspace_feature_access("ai", "nav.ai")),
+            Depends(require_legacy_workspace_membership()),
         ],
     )
     app.include_router(
@@ -168,7 +168,7 @@ def create_app() -> FastAPI:
         prefix=f"{settings.api_prefix}/workspaces/{{workspace_slug}}",
         dependencies=[
             *protected_dependencies,
-            Depends(require_workspace_app_enabled("ai")),
+            Depends(require_workspace_membership()),
         ],
     )
     app.include_router(
@@ -176,7 +176,7 @@ def create_app() -> FastAPI:
         prefix=settings.api_prefix,
         dependencies=[
             *protected_dependencies,
-            Depends(require_workspace_feature_access("docs", "nav.docs")),
+            Depends(require_legacy_workspace_membership()),
         ],
     )
     app.include_router(
@@ -184,7 +184,7 @@ def create_app() -> FastAPI:
         prefix=f"{settings.api_prefix}/workspaces/{{workspace_slug}}",
         dependencies=[
             *protected_dependencies,
-            Depends(require_workspace_app_enabled("docs")),
+            Depends(require_workspace_membership()),
         ],
     )
     app.include_router(
@@ -192,7 +192,7 @@ def create_app() -> FastAPI:
         prefix=settings.api_prefix,
         dependencies=[
             *protected_dependencies,
-            Depends(require_workspace_feature_access("pms", "nav.pms")),
+            Depends(require_legacy_workspace_membership()),
         ],
     )
     app.include_router(
@@ -200,7 +200,7 @@ def create_app() -> FastAPI:
         prefix=f"{settings.api_prefix}/workspaces/{{workspace_slug}}",
         dependencies=[
             *protected_dependencies,
-            Depends(require_workspace_app_enabled("pms")),
+            Depends(require_workspace_membership()),
         ],
     )
     app.include_router(
@@ -208,7 +208,7 @@ def create_app() -> FastAPI:
         prefix=settings.api_prefix,
         dependencies=[
             *protected_dependencies,
-            Depends(require_workspace_feature_access("meeting", "nav.meeting")),
+            Depends(require_legacy_workspace_membership()),
         ],
     )
     app.include_router(
@@ -216,7 +216,7 @@ def create_app() -> FastAPI:
         prefix=f"{settings.api_prefix}/workspaces/{{workspace_slug}}",
         dependencies=[
             *protected_dependencies,
-            Depends(require_workspace_app_enabled("meeting")),
+            Depends(require_workspace_membership()),
         ],
     )
     app.include_router(
