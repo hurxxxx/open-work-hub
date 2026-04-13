@@ -32,8 +32,27 @@ import { listPmsLists, listFolders, listSpaceDocs, createSpaceDoc, updateSpaceDo
 import {
   buildWorkspaceAppPath,
   resolveDefaultWorkspaceAppPath,
-  rewriteLegacyAppPath,
+  type WorkspaceAppId,
 } from '@/src/domains/workspaces/workspace-utils';
+import type { NavItem } from '@/src/constants';
+
+function resolveNavItemHref(
+  item: NavItem,
+  currentWorkspaceSlug: string | null | undefined,
+  user: Parameters<typeof resolveDefaultWorkspaceAppPath>[0],
+): string {
+  if (item.absolutePath) {
+    return item.absolutePath;
+  }
+  const targetApp = (item.linkAppId ?? item.appId) as WorkspaceAppId | 'home' | 'settings';
+  if (targetApp === 'home' || targetApp === 'settings') {
+    return `/tool/${item.id}`;
+  }
+  const suffix = item.pathSuffix ?? '';
+  return currentWorkspaceSlug
+    ? buildWorkspaceAppPath(currentWorkspaceSlug, targetApp, suffix)
+    : resolveDefaultWorkspaceAppPath(user, targetApp, suffix);
+}
 import { CreateProjectModal } from '@/src/components/views/PMSView/CreateProjectModal';
 import { CreateSpaceModal } from '@/src/components/views/PMSView/CreateSpaceModal';
 import { SpaceMembersModal } from '@/src/components/views/PMSView/SpaceMembersModal';
@@ -1585,9 +1604,7 @@ export const SubSidebar = ({
                         return (
                           <Link
                             key={item.id}
-                            to={item.path
-                              ? rewriteLegacyAppPath(item.path, currentWorkspaceSlug)
-                              : `/tool/${item.id}`}
+                            to={resolveNavItemHref(item, currentWorkspaceSlug, user)}
                             className={cn('sidebar-submenu-item ml-1', activeNavItemId === item.id && 'sidebar-submenu-item-active')}
                           >
                             <item.icon size={16} className="text-gray-500 dark:text-gray-400" />

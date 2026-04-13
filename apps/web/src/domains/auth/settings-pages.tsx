@@ -62,6 +62,28 @@ export function AccessDeniedView({
   );
 }
 
+/* ── Not Found ── */
+
+export function NotFoundView({
+  title = '페이지를 찾을 수 없습니다',
+  description = '요청한 주소는 존재하지 않거나 이동되었습니다.',
+}: {
+  title?: string;
+  description?: string;
+}) {
+  return (
+    <div className="p-6">
+      <div className="rounded-xl border border-app-border bg-app-surface-sidebar p-6">
+        <h2 className="app-text-title-md mb-2 text-app-ink">{title}</h2>
+        <p className="app-text-body mb-4 text-gray-500">{description}</p>
+        <InlineNotice tone="info">
+          상단 앱바 또는 홈에서 다시 이동하세요.
+        </InlineNotice>
+      </div>
+    </div>
+  );
+}
+
 /* ── Session Card ── */
 
 function SessionCard({

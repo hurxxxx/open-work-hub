@@ -43,25 +43,33 @@ export interface NavItem {
   icon: any;
   description?: string;
   category: string;
+  /** SubSidebar 필터링 기준 — 어느 AppBar 의 sub 항목인지 */
   appId: 'home' | 'ai' | 'pms' | 'docs' | 'planner' | 'meeting' | 'settings';
-  path?: string;
+  /**
+   * URL 빌드 시 실제 타겟 workspace app. 미지정 시 appId 사용.
+   * `meeting-minutes` 처럼 AI sidebar 에 있지만 meeting 앱으로 딥링크하는 케이스에 사용.
+   */
+  linkAppId?: 'ai' | 'pms' | 'docs' | 'planner' | 'meeting';
+  /** workspace app path 뒤에 붙는 query/hash suffix (예: `?tab=recordings`) */
+  pathSuffix?: string;
+  /** workspace-aware 가 아닌 절대 경로 (admin/settings 등) */
+  absolutePath?: string;
 }
 
 export interface AppBarItem {
   id: 'home' | 'ai' | 'pms' | 'docs' | 'planner' | 'meeting' | 'settings';
   title: string;
   icon: any;
-  path: string;
 }
 
 export const APP_BAR_ITEMS: AppBarItem[] = [
-  { id: 'home', title: 'HOME', icon: Home, path: '/' },
-  { id: 'ai', title: 'AI', icon: Brain, path: '/ai' },
-  { id: 'pms', title: 'PMS', icon: FolderKanban, path: '/pms' },
-  { id: 'docs', title: 'DOCS', icon: Files, path: '/docs' },
-  { id: 'planner', title: 'Planner', icon: Calendar, path: '/planner' },
-  { id: 'meeting', title: 'MEETING', icon: Users, path: '/meeting' },
-  { id: 'settings', title: 'Settings', icon: Settings, path: '/admin/people' },
+  { id: 'home', title: 'HOME', icon: Home },
+  { id: 'ai', title: 'AI', icon: Brain },
+  { id: 'pms', title: 'PMS', icon: FolderKanban },
+  { id: 'docs', title: 'DOCS', icon: Files },
+  { id: 'planner', title: 'Planner', icon: Calendar },
+  { id: 'meeting', title: 'MEETING', icon: Users },
+  { id: 'settings', title: 'Settings', icon: Settings },
 ];
 
 export const NAV_ITEMS: NavItem[] = [
@@ -73,7 +81,7 @@ export const NAV_ITEMS: NavItem[] = [
   { id: 'fmea-compare', title: 'FMEA 비교', icon: AlertTriangle, category: 'Core Tools', appId: 'ai', description: 'FMEA 리스크 항목과 조치안 비교' },
 
   // AI - Assistants
-  { id: 'meeting-minutes', title: '회의록', icon: Mic, category: 'Assistants', appId: 'ai', description: '음성 파일 STT, 화자 분리, 회의록 요약', path: '/meeting?tab=recordings' },
+  { id: 'meeting-minutes', title: '회의록', icon: Mic, category: 'Assistants', appId: 'ai', linkAppId: 'meeting', pathSuffix: '?tab=recordings', description: '음성 파일 STT, 화자 분리, 회의록 요약' },
   { id: 'email-assistant', title: '메일 작성 도우미', icon: Mail, category: 'Assistants', appId: 'ai', description: '업무 메일 초안 생성' },
   { id: 'ppt-assistant', title: 'PPT 발표 도우미', icon: Presentation, category: 'Assistants', appId: 'ai', description: '발표 스크립트와 예상 질문 정리' },
   { id: 'qa-assistant', title: '사내 관리팀 Q&A', icon: HelpCircle, category: 'Assistants', appId: 'ai', description: '내부 운영 문서와 FAQ 검색' },
@@ -106,14 +114,14 @@ export const NAV_ITEMS: NavItem[] = [
   { id: 'planner-timeline', title: '타임라인', icon: Activity, category: 'Schedule', appId: 'planner' },
 
   // Meeting
-  { id: 'meeting-upcoming', title: 'Upcoming', icon: Calendar, category: 'Meetings', appId: 'meeting', path: '/meeting' },
-  { id: 'meeting-mine', title: 'My Meetings', icon: User, category: 'Meetings', appId: 'meeting', path: '/meeting?scope=mine' },
-  { id: 'meeting-recordings', title: 'Recordings', icon: Video, category: 'Meetings', appId: 'meeting', path: '/meeting?tab=recordings' },
+  { id: 'meeting-upcoming', title: 'Upcoming', icon: Calendar, category: 'Meetings', appId: 'meeting' },
+  { id: 'meeting-mine', title: 'My Meetings', icon: User, category: 'Meetings', appId: 'meeting', pathSuffix: '?scope=mine' },
+  { id: 'meeting-recordings', title: 'Recordings', icon: Video, category: 'Meetings', appId: 'meeting', pathSuffix: '?tab=recordings' },
 
   // Settings
-  { id: 'settings-general', title: 'General', icon: Settings, category: 'Admin', appId: 'settings', path: '/admin/general' },
-  { id: 'settings-people', title: 'People', icon: User, category: 'Admin', appId: 'settings', path: '/admin/people' },
-  { id: 'settings-workspaces', title: 'Workspaces', icon: Database, category: 'Admin', appId: 'settings', path: '/admin/workspaces' },
-  { id: 'settings-security', title: 'Permissions', icon: Lock, category: 'Security', appId: 'settings', path: '/admin/security' },
-  { id: 'settings-audit', title: 'Audit Logs', icon: Activity, category: 'Security', appId: 'settings', path: '/admin/audit' },
+  { id: 'settings-general', title: 'General', icon: Settings, category: 'Admin', appId: 'settings', absolutePath: '/admin/general' },
+  { id: 'settings-people', title: 'People', icon: User, category: 'Admin', appId: 'settings', absolutePath: '/admin/people' },
+  { id: 'settings-workspaces', title: 'Workspaces', icon: Database, category: 'Admin', appId: 'settings', absolutePath: '/admin/workspaces' },
+  { id: 'settings-security', title: 'Permissions', icon: Lock, category: 'Security', appId: 'settings', absolutePath: '/admin/security' },
+  { id: 'settings-audit', title: 'Audit Logs', icon: Activity, category: 'Security', appId: 'settings', absolutePath: '/admin/audit' },
 ];

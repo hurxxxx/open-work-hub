@@ -78,9 +78,9 @@ export const BoardView = ({
                   key={issue.id}
                   layoutId={issue.id}
                   draggable
-	                  onDragStart={(e: React.DragEvent<HTMLDivElement>) => {
-	                    if (e.dataTransfer) e.dataTransfer.setData('text/plain', issue.id);
-	                  }}
+                  onDragStartCapture={(e: React.DragEvent<HTMLDivElement>) => {
+                    if (e.dataTransfer) e.dataTransfer.setData('text/plain', issue.id);
+                  }}
                   onClick={() => onSelectIssue(issue)}
                   className="card p-4 hover:border-app-accent transition-all cursor-pointer group space-y-4 relative"
                 >

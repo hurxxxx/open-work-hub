@@ -9,7 +9,7 @@ export const ADMIN_SECTION_ROLES = {
 export type AdminSection = keyof typeof ADMIN_SECTION_ROLES;
 
 export function hasAnyAdminReadPermission(systemRoles: readonly string[]): boolean {
-  const allowedRoles = new Set(Object.values(ADMIN_SECTION_ROLES).flat());
+  const allowedRoles = new Set<string>(Object.values(ADMIN_SECTION_ROLES).flat());
   return systemRoles.some((role) => allowedRoles.has(role));
 }
 

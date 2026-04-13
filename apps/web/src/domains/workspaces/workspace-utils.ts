@@ -155,7 +155,7 @@ export function buildWorkspaceAppPath(
   suffix = '',
 ): string {
   const normalizedSuffix = suffix
-    ? suffix.startsWith('/')
+    ? suffix.startsWith('/') || suffix.startsWith('?') || suffix.startsWith('#')
       ? suffix
       : `/${suffix}`
     : '';
@@ -192,23 +192,6 @@ export function resolveWorkspaceSwitchPath(
   }
 
   return '/';
-}
-
-export function rewriteLegacyAppPath(
-  rawPath: string,
-  workspaceSlug: string | null | undefined,
-): string {
-  if (!workspaceSlug) {
-    return rawPath;
-  }
-
-  const match = rawPath.match(/^\/(ai|pms|docs|planner|meeting)(.*)$/);
-  if (!match) {
-    return rawPath;
-  }
-
-  const [, appId, suffix] = match;
-  return buildWorkspaceAppPath(workspaceSlug, appId as WorkspaceAppId, suffix || '');
 }
 
 export function requireWorkspaceSlug(workspaceSlug?: string | null): string {

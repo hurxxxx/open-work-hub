@@ -189,6 +189,7 @@ export const PMSView = () => {
   // Keep project catalog in sync with the route so newly created projects open immediately.
   useEffect(() => {
     if (!token) return;
+    const activeToken = token;
     let cancelled = false;
 
     async function loadProjects() {
@@ -197,8 +198,8 @@ export const PMSView = () => {
 
       try {
         const [response, spaceItems] = await Promise.all([
-          listPmsProjects(token),
-          listSpaces(token),
+          listPmsProjects(activeToken),
+          listSpaces(activeToken),
         ]);
         if (cancelled) {
           return;
@@ -211,7 +212,7 @@ export const PMSView = () => {
         if (routeProjectId) {
           requestedProjectResolved = response.items.some((project) => project.id === routeProjectId);
           if (!requestedProjectResolved) {
-            const requestedProject = await getPmsList(token, routeProjectId);
+            const requestedProject = await getPmsList(activeToken, routeProjectId);
             if (cancelled) {
               return;
             }

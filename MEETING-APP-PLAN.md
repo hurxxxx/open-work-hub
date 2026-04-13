@@ -322,9 +322,12 @@ Both CEO reviewers and the user agree the minutes → PMS/Docs linkage is the hi
 
 1. **PR1**: `meeting` domain skeleton (Meeting, MeetingAttendee, MeetingTaskLink, MeetingDocLink, MeetingRecording tables), AppBar registration, MeetingView list + create modal (no calendar grid yet), TaskPickerModal, DocPickerModal, AI sidebar deep-link rewired.
 2. **PR2**: `IssueUserAccess` with audit/expiry/revocation (full treatment — see Phase 3 findings), `_ensure_project_access` split across the full 15 call sites (not just 2), Docs share grant (NativeDoc only for MVP, SpaceDoc deferred).
+   - **이월 from PR1 (2026-04-13)**: PMS 내부 명명 debt 정리 — API payload/router/모델의 `project_id` → `list_id` 리네이밍. router.py 에 155 callsite, models.py 10 참조, web 쪽 pms-api.ts + PMSView 컴포넌트 다수. Semantic 변경 (Project 개념 → Space 계층과 통합)이 포함되므로 ACL 리팩터링과 같은 PR 안에서 처리하는 게 리스크 최소.
 3. **PR3**: Recording upload + worker `meeting_transcription` job (faster-whisper + Ollama), auto Doc generation, status polling endpoint.
 4. **PR4**: `calendar` domain + shared events + Planner wiring, MeetingCalendar grid extraction, RoomPicker + meeting rooms admin, AttendeePicker with availability overlay, conflict detection.
 5. **PR5**: Home widget, conflict toast, ICS export, RRULE weekly, audit logs, accessibility, rate limits.
+   - **이월 from PR1 (2026-04-13)**: Space Docs 페이지 단위 reorder/move DnD UX — `NativeDocPage.sort_order` 필드와 router 의 sort_order 저장은 준비 완료 상태이나, DocsView 프런트에 drag-and-drop affordance 가 없음. dnd-kit 또는 유사 라이브러리로 트리 reorder + sibling 이동 UI 추가. 예상 4–6h.
+   - **이월 from PR1 (2026-04-13)**: 다크모드 색상 contrast audit — `.dark` 토큰과 약 130곳의 `text-app-ink/40` opacity 변형, 6곳의 direct `bg-gray-500` 사용처, shadow 대비를 WCAG AA (4.5:1) 기준으로 검증. D6 항목의 재강조.
 
 PR1–PR3 deliver the differentiated wedge. PR4–PR5 deliver the "standard meeting system" completeness the user asked for. If PR1–PR3 ship and usage metrics show meeting minutes is the whole value, PR4–PR5 can be trimmed. If usage shows scheduling conflicts are the real pain, PR4 gets invested in fully.
 

@@ -65,36 +65,37 @@ export function resolveShellState(
     return HOME_SHELL_STATE;
   }
 
-  if (path === '/ai' || /^\/w\/[^/]+\/ai(?:\/|$)/.test(path)) {
+  if (/^\/w\/[^/]+\/ai(?:\/|$)/.test(path)) {
     return canShowAppChrome(user, 'ai', workspaceSlug)
       ? { activeAppId: 'ai', activeNavItemId: '' }
       : HOME_SHELL_STATE;
   }
 
-  if (path === '/pms' || /^\/w\/[^/]+\/pms(?:\/|$)/.test(path)) {
+  if (/^\/w\/[^/]+\/pms(?:\/|$)/.test(path)) {
     return canShowAppChrome(user, 'pms', workspaceSlug)
       ? { activeAppId: 'pms', activeNavItemId: '' }
       : HOME_SHELL_STATE;
   }
 
-  if (path === '/docs' || path.startsWith('/docs/') || /^\/w\/[^/]+\/docs(?:\/|$)/.test(path)) {
-    if (path.startsWith('/docs/shared/')) {
-      return canShowAppChrome(user, 'docs')
-        ? { activeAppId: 'docs', activeNavItemId: '' }
-        : HOME_SHELL_STATE;
-    }
+  if (path.startsWith('/docs/shared/')) {
+    return canShowAppChrome(user, 'docs')
+      ? { activeAppId: 'docs', activeNavItemId: '' }
+      : HOME_SHELL_STATE;
+  }
+
+  if (/^\/w\/[^/]+\/docs(?:\/|$)/.test(path)) {
     return canShowAppChrome(user, 'docs', workspaceSlug)
       ? { activeAppId: 'docs', activeNavItemId: 'docs-all' }
       : HOME_SHELL_STATE;
   }
 
-  if (path === '/planner' || /^\/w\/[^/]+\/planner(?:\/|$)/.test(path)) {
+  if (/^\/w\/[^/]+\/planner(?:\/|$)/.test(path)) {
     return canShowAppChrome(user, 'planner', workspaceSlug)
       ? { activeAppId: 'planner', activeNavItemId: '' }
       : HOME_SHELL_STATE;
   }
 
-  if (path === '/meeting' || path.startsWith('/meeting/') || /^\/w\/[^/]+\/meeting(?:\/|$)/.test(path)) {
+  if (/^\/w\/[^/]+\/meeting(?:\/|$)/.test(path)) {
     return canShowAppChrome(user, 'meeting', workspaceSlug)
       ? { activeAppId: 'meeting', activeNavItemId: 'meeting-upcoming' }
       : HOME_SHELL_STATE;
@@ -142,7 +143,7 @@ export function resolveShellState(
     return HOME_SHELL_STATE;
   }
 
-  if (!canShowAppChrome(user, item.appId)) {
+  if (item.appId !== 'home' && !canShowAppChrome(user, item.appId)) {
     return HOME_SHELL_STATE;
   }
 

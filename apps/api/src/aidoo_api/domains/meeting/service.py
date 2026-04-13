@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from io import BytesIO
 from typing import Iterable
 
@@ -426,7 +426,7 @@ def list_meetings(
                 )
             )
     elif scope == "upcoming":
-        now = datetime.utcnow()
+        now = datetime.now(UTC).replace(tzinfo=None)
         base = base.where(Meeting.end_at >= now)
     elif scope == "all":
         pass

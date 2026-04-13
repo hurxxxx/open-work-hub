@@ -53,6 +53,7 @@ import {
 import { WorkspaceSettingsView } from './domains/workspaces/WorkspaceSettingsView';
 import {
   AccessDeniedView,
+  NotFoundView,
   ProfilePage,
 } from './domains/auth/settings-pages';
 import { FEATURE_BY_APP_ID, resolveShellState, type ShellAppId } from './app-shell';
@@ -88,11 +89,6 @@ function WorkspaceGate({
   }
 
   return <>{children}</>;
-}
-
-function WorkspaceAppRedirect({ appId }: { appId: WorkspaceAppId }) {
-  const auth = useAuth();
-  return <Navigate replace to={resolveDefaultWorkspaceAppPath(auth.user, appId)} />;
 }
 
 function AdminGate({
@@ -150,7 +146,7 @@ const ToolViewWrapper = () => {
     return <div className="p-8 text-gray-500">Tool not found</div>;
   }
 
-  const featureCode = FEATURE_BY_APP_ID[item.appId];
+  const featureCode = item.appId === 'home' ? undefined : FEATURE_BY_APP_ID[item.appId];
   if (featureCode && !hasFeatureAccess(auth.user, featureCode)) {
     return (
       <AccessDeniedView description="현재 계정에는 이 도구가 속한 워크스페이스 접근 권한이 없습니다." />
@@ -262,13 +258,7 @@ const AppContent = () => {
           <main className="flex-1 overflow-y-auto relative">
             <Routes>
             <Route path="/" element={<HomeView />} />
-            <Route path="/ai" element={<WorkspaceAppRedirect appId="ai" />} />
-            <Route path="/pms" element={<WorkspaceAppRedirect appId="pms" />} />
-            <Route path="/docs" element={<WorkspaceAppRedirect appId="docs" />} />
             <Route path="/docs/shared/:shareToken" element={<DocsView />} />
-            <Route path="/docs/:docId" element={<WorkspaceAppRedirect appId="docs" />} />
-            <Route path="/planner" element={<WorkspaceAppRedirect appId="planner" />} />
-            <Route path="/meeting/*" element={<WorkspaceAppRedirect appId="meeting" />} />
             <Route
               path="/w/:workspaceSlug/ai"
               element={(
@@ -365,6 +355,7 @@ const AppContent = () => {
                 </AdminGate>
               )}
             />
+            <Route path="*" element={<NotFoundView />} />
             </Routes>
           </main>
         </div>

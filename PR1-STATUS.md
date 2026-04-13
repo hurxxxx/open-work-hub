@@ -2,19 +2,74 @@
 
 > **새 세션 첫 메시지 예시**: "프로젝트 루트의 [PR1-STATUS.md](PR1-STATUS.md), [PR1-HANDOFF.md](PR1-HANDOFF.md), [PR0-RESULT.md](PR0-RESULT.md) 세 파일 읽고 이어서 진행해주세요."
 
-작성일: 2026-04-10 (라운드 1), 마지막 갱신: 2026-04-11 (라운드 10 — workspace rearchitecture + member flow polish, HEAD `6de0866`)
+작성일: 2026-04-10 (라운드 1), 마지막 갱신: 2026-04-13 (라운드 12 — PR1 마감 정리)
 모델: Claude Opus 4.6 (1M context)
-이전 세션 요약: PR1 skeleton 작성 → 자동화 검증 → 사용자 dog-food 디버깅 8 라운드 → workspace collaboration rearchitecture / member management 후속 2 라운드
+이전 세션 요약: PR1 skeleton 작성 → 자동화 검증 → 사용자 dog-food 디버깅 8 라운드 → workspace collaboration rearchitecture / member management 후속 2 라운드 → scenario 기반 workspace/ACL UI E2E 1 라운드 → **PR1 마감 라운드 12 (legacy URL 제거 + typecheck 0 + deprecation 정리)**
 
-## 현행화 메모 (2026-04-11 HEAD)
+## 현행화 메모 (2026-04-13 HEAD, 라운드 12 진행 중)
 
-아래 §2-§13 은 PR1 라운드 1-8의 상세 이력을 보존한 문서다. **현재 상태는 라운드 9-10의 후속 작업까지 포함해서 읽어야 한다.**
-
-- Alembic 최신 head: `2d4f6c9ab1ef`
-- 자동화 기준: `pytest apps/api/tests/` **75 passed**, `alembic check` drift 0, `pnpm nx typecheck web` 는 기존 오류 7건
-- 원격 dev DB 읽기 확인: `alembic_version=2d4f6c9ab1ef`, `workspaces=5`, `workspace_enabled_apps=14`, `users=18`, `teams=5`, `meetings=0`, `docs_native_docs=0`
-- 경로 체계: 실제 앱 경로는 `/w/:workspaceSlug/{ai|pms|docs|planner|meeting}`. legacy `/meeting`, `/docs`, `/pms`, `/planner`, `/ai` 는 기본 workspace redirect
+- Alembic 최신 head: `2d4f6c9ab1ef` (PR1 마감 범위 내 스키마 변경 없음)
+- 자동화 기준: `pytest apps/api/tests/` baseline **75 passed** (Docker 기동 후 재검증 예정), `alembic check` drift 0, `pnpm nx typecheck web` **0 errors** (기존 7건 해결), `pnpm nx test web` **35 passed** (기존 33 + 신규 shell spec 2건)
+- 경로 체계: 실제 앱 경로는 `/w/:workspaceSlug/{ai|pms|docs|planner|meeting}`. **legacy `/meeting`, `/docs`, `/pms`, `/planner`, `/ai` redirect 는 제거됨 — 직접 진입 시 404 NotFound 페이지 노출**
 - 시드 모델: workspace 5개 (`hq`, `innovation-lab`, `knowledge-base`, `planning-desk`, `delivery-hub`), dev login account 정의는 11개. 원격 dev DB 에는 legacy `*@aidoo.local` 계정도 함께 남아 총 18명
+
+## 라운드 12 — PR1 마감 정리 (2026-04-13, 진행 중)
+
+사용자 지시로 PR1 을 닫기 위해 §6 체크리스트의 잔여 항목을 범위별로 분리해서 일괄 처리. 후속 PR 로 이관할 항목은 [MEETING-APP-PLAN.md](MEETING-APP-PLAN.md) 의 PR 시퀀싱 섹션에 이월 메모를 추가.
+
+**처리 범위**:
+- ✅ **Legacy URL 호환 redirect 전면 제거**: `WorkspaceAppRedirect` + `rewriteLegacyAppPath` + `app-shell.ts` legacy 분기 + `NAV_ITEMS` legacy deep-link 전부 철거. `/meeting`, `/docs`, `/pms`, `/planner`, `/ai` 직접 진입 시 신규 `NotFoundView` 로 404. `/docs/shared/:shareToken` 공개 공유 라우트는 legacy 가 아니므로 유지.
+- ✅ **NAV_ITEMS 재설계**: `NavItem.path` 대신 `pathSuffix?` (query/hash), `absolutePath?` (admin 등 workspace-aware 아닌 경로), `linkAppId?` (cross-app 딥링크, `meeting-minutes` 용) 3필드로 분리. SubSidebar 가 `resolveNavItemHref` helper 로 URL 조립. `AppBarItem.path` 는 `buildAppLink` 가 런타임 계산하므로 필드 자체 제거.
+- ✅ **Web typecheck 7건 해결**: `canShowAppChrome('home')` 회로, `FEATURE_BY_APP_ID[home]` 가드, `motion.div` `onDragStartCapture` 로 네이티브 drag 타입 우회, PMSView 의 `token` narrowing 용 local binding, `admin-permissions.ts` 의 `Set<string>` literal widening. 최종 `pnpm nx typecheck web` **0 errors**.
+- ✅ **`datetime.utcnow()` deprecation**: [meeting/service.py:429](apps/api/src/aidoo_api/domains/meeting/service.py#L429) 에서 `datetime.now(UTC).replace(tzinfo=None)` 로 교체. [docs/models.py:12](apps/api/src/aidoo_api/domains/docs/models.py#L12) 와 동일 패턴. pytest 재검증은 Docker 기동 후 1회만 수행 필요 (testcontainer 기반).
+- ✅ **Meeting 회귀 QA (agent-browser)**: 시나리오 A~D 전부 통과 (아래 상세)
+- ⚠️ **다크모드 톤**: 구조만 확인. 실 QA 는 PR5 로 이관 (D6 와 함께).
+
+### Round 12 agent-browser QA — 2026-04-13
+
+- **시나리오 A 해피 패스** (`delivery-hub-admin@aidoo.local`, `/w/delivery-hub/meeting`):
+  - Meeting 생성 성공 (`PR1 마감 agent-browser QA smoke`, 시작 12:00 종료 13:00 KST 입력 → 목록에 `오후 12:00 – 오후 01:00` 정확히 표시)
+  - 참석자 검색 & 추가 정상 (`delivery-hub-member@aidoo.local`)
+  - 파일 업로드 성공 (`PR1-STATUS.md` 61.8 KB, MinIO presigned URL 반환)
+  - 파일 다운로드 버튼 노출 확인
+  - TaskPickerModal 오픈 + project dropdown 로드 + empty state 정상 (dev DB 이슈 0건)
+  - DocPickerModal 오픈 + empty state 정상 (dev DB NativeDoc 0건, "PR1 은 NativeDoc 만 첨부할 수 있습니다" 안내)
+  - Edit modal 에서 시간 14:00 → 16:00 수정 후 저장 → 목록/상세 모두 `오후 02:00 – 오후 04:00` 로 갱신 (KST roundtrip 회귀 없음)
+  - 회의 삭제 confirm dialog → 실제 삭제 → 목록 `예정된 회의가 없습니다` empty state
+- **시나리오 B Legacy URL → 404** (로그인 상태에서 직접 주소 입력):
+  - `/meeting`, `/docs`, `/pms`, `/planner`, `/ai` **전부** `NotFoundView` "페이지를 찾을 수 없습니다" 로 떨어짐. AppBar 는 정상 렌더링되어 재진입 가능.
+- **시나리오 C AI 사이드바 "회의록" deep-link** (`innovation-lab-admin@aidoo.local`, `/w/innovation-lab/ai`):
+  - SubSidebar 회의록 링크의 `href` = `/w/innovation-lab/meeting?tab=recordings` (workspace-aware + pathSuffix 조립 정상)
+  - 클릭 시 실제로 `/w/innovation-lab/meeting?tab=recordings` 로 이동 확인 — `NavItem.linkAppId='meeting' + pathSuffix='?tab=recordings'` 재설계 검증 완료
+- **시나리오 D 역할별 교차**: 라운드 11 (2026-04-12) 에서 이미 매트릭스 검증 완료. 라운드 12 변경점은 legacy URL + NavItem 재설계에 국한되므로 해당 검증은 생략.
+- **브라우저 신호**: 최종 상태에서 `browser_console_messages` level=error, level=warning 모두 0 건. page error 없음.
+- **테스트 데이터 정리**: `aaa1c942-6c89-433b-9daf-c77fc5133904` 생성 후 동일 세션에서 삭제. delivery-hub 의 meetings count 원상 복구.
+
+**이관된 부채** (MEETING-APP-PLAN.md §PR 시퀀싱 에 이월 메모 추가):
+- **PR2 이월**: PMS `project_id` → `list_id` 네이밍 정리 (models.py 10 참조, router.py 155 callsite, web 쪽 pms-api + PMSView 컴포넌트 다수). Semantic 변경이라 ACL 리팩터링과 같은 PR 에서 처리.
+- **PR5 이월**: Space Docs 페이지 reorder/move DnD UX (`NativeDocPage.sort_order` 준비됨, DocsView 에 DnD affordance 없음), 다크모드 contrast audit.
+
+**핵심 커밋/변경 파일**:
+- `apps/web/src/App.tsx` — `WorkspaceAppRedirect` 삭제, legacy route 5개 삭제, `<Route path="*" element={<NotFoundView />} />` catch-all 추가, `FEATURE_BY_APP_ID[home]` 가드
+- `apps/web/src/domains/auth/settings-pages.tsx` — `NotFoundView` 신규 추가
+- `apps/web/src/domains/workspaces/workspace-utils.ts` — `rewriteLegacyAppPath` 삭제, `buildWorkspaceAppPath` 가 `?`/`#` prefix suffix 지원
+- `apps/web/src/constants.ts` — `NavItem` 스키마 재설계 (`pathSuffix`/`absolutePath`/`linkAppId`), `AppBarItem.path` 제거
+- `apps/web/src/components/layout/SubSidebar.tsx` — `resolveNavItemHref` helper 도입, `rewriteLegacyAppPath` import 제거
+- `apps/web/src/app-shell.ts` — legacy path 분기 단순화, `canShowAppChrome('home')` 회로
+- `apps/web/src/app-shell.spec.ts` — legacy path 테스트 → `/w/delivery-hub/pms|meeting` 기반으로 교체 + legacy 는 홈 fallback 검증 추가
+- `apps/web/src/components/views/PMSView/BoardView.tsx` — `onDragStart` → `onDragStartCapture` (framer-motion drag handler 타입 회피)
+- `apps/web/src/components/views/PMSView/PMSView.tsx` — `token` local binding 으로 `string | null` narrowing
+- `apps/web/src/domains/admin/admin-permissions.ts` — `new Set<string>(...)` literal widening
+- `apps/api/src/aidoo_api/domains/meeting/service.py` — `datetime.now(UTC).replace(tzinfo=None)`
+- `MEETING-APP-PLAN.md` — PR2/PR5 이월 메모 추가
+- `PR1-STATUS.md` — 이 문서 업데이트
+
+## 현행화 메모 (2026-04-12 HEAD, 라운드 11)
+
+아래 §2-§13 은 PR1 라운드 1-8의 상세 이력을 보존한 문서다. **현재 상태는 라운드 9-12의 후속 작업까지 포함해서 읽어야 한다.**
+
+- 경로 체계 (라운드 12 이전): 실제 앱 경로는 `/w/:workspaceSlug/{ai|pms|docs|planner|meeting}`. legacy `/meeting`, `/docs`, `/pms`, `/planner`, `/ai` 는 기본 workspace redirect
+- 원격 dev DB 읽기 확인: `alembic_version=2d4f6c9ab1ef`, `workspaces=5`, `workspace_enabled_apps=14`, `users=18`, `teams=5`, `meetings=0`, `docs_native_docs=0`
 
 ### UI E2E smoke (agent-browser, 2026-04-11)
 
@@ -28,9 +83,39 @@
 - 음수 경로 확인: `delivery-hub-admin` 으로 `/w/knowledge-base/meeting` 접근 시 `접근 권한 없음`
 - page error 는 없었고, console 에는 `DialogContent` 의 `Description` / `aria-describedby` 누락 warning 2건이 남음
 
+### UI E2E scenario matrix (agent-browser, 2026-04-12)
+
+- 자동화 baseline 재확인: `pytest apps/api/tests/` **75 passed**, `pnpm nx typecheck web` 기존 오류 7건 유지
+- 역할별 앱 가시성 / 직접 URL 가드:
+  - `delivery-hub-member@aidoo.local` → AppBar `HOME/PMS/DOCS/Planner/MEETING`, `/w/delivery-hub/settings` 와 `/admin` 모두 `접근 권한 없음`
+  - `knowledge-base-member@aidoo.local` → AppBar `HOME/DOCS`, `/w/knowledge-base/meeting`, `/w/knowledge-base/pms` 모두 `접근 권한 없음`
+  - `innovation-lab-member@aidoo.local` → AppBar `HOME/AI/DOCS/MEETING`, `/w/innovation-lab/pms` 는 `접근 권한 없음`
+  - `planning-desk-member@aidoo.local` → AppBar `HOME/Planner`, `/w/planning-desk/docs` 는 `접근 권한 없음`
+  - `platform-admin@aidoo.local` 도 workspace `enabled_apps` 를 우회하지 못함. `/w/knowledge-base/meeting` 직접 진입 시 `접근 권한 없음`
+- workspace 전환/fallback:
+  - `planning-desk-member` 에게 임시 workspace 를 추가한 뒤 `/w/acl-e2e-lab-20260412/meeting` 접근 성공 확인
+  - 같은 세션에서 workspace switcher 로 `Planning Desk` 전환 시, 현재 app 이 지원되면 `/w/planning-desk/planner` 로 유지되고 지원되지 않으면 `/` 로 fallback
+  - 멤버 제거 후 기존 로그인 세션의 workspace switcher 에서 임시 workspace 가 즉시 사라짐
+- 권한 변경 전파:
+  - Admin Console 에서 임시 workspace 생성 → `planning-desk-member` bulk add 성공 → UI 멤버 수 `1명 → 2명`
+  - 같은 패널에서 멤버 제거 후 기존 세션으로 `/w/acl-e2e-lab-20260412/meeting` 직접 진입 시 즉시 `접근 권한 없음`
+  - 권한 제거 후 legacy `/meeting` 은 더 이상 제거된 workspace 로 가지 않고 `/` fallback
+- enabled apps 변경 전파:
+  - 임시 workspace 의 `Meeting` 토글 저장 시 `PUT /api/v1/admin/workspaces/{id}/apps` `200` 확인
+  - 저장 직후 `platform-admin` 본인으로 `/w/acl-e2e-lab-20260412/meeting` 직접 진입 시 `접근 권한 없음`
+- 음수/엣지 경로:
+  - 존재하지 않는 slug `/w/no-such-workspace/docs` 도 현재 UX 기준으로 `접근 권한 없음`
+  - 멤버 관리 drawer 에서 자기 자신은 제거 액션 대상으로 노출되지 않음
+- 브라우저 레벨 신호:
+  - `agent-browser errors` 기준 page error 없음
+  - console hard error 없음. Vite reconnect / React DevTools info 만 관찰
+- 테스트 데이터 정리:
+  - 시나리오 검증용 임시 workspace `acl-e2e-lab-20260412` 는 테스트 후 archive + DB cleanup 으로 제거
+  - 현재 dev DB workspace count 는 다시 `total=5`, `active=5`
+
 ## 1. 한 줄 요약
 
-**PR1 meeting 본체는 안정 상태를 유지한 채, 그 위에 workspace collaboration rearchitecture 와 멤버 관리 UX 가 main 에 반영된 상태입니다.** PR1 라운드 8에서 "다음 세션 과제"로 남겨뒀던 3-layer access UX 보강은 별도 소규모 진단으로 가지 않고, workspace별 enabled apps / `/w/:workspaceSlug/<app>` 라우팅 / 공용 `WorkspaceDetailPanel` / bulk member flows 로 흡수되었습니다. 현재 기준 검증은 `pytest 75 passed`, `alembic check` drift 0, 웹 typecheck 는 기존 오류 7건입니다.
+**PR1 meeting 본체는 안정 상태를 유지한 채, 그 위에 workspace collaboration rearchitecture 와 멤버 관리 UX 가 main 에 반영된 상태입니다.** PR1 라운드 8에서 "다음 세션 과제"로 남겨뒀던 3-layer access UX 보강은 별도 소규모 진단으로 가지 않고, workspace별 enabled apps / `/w/:workspaceSlug/<app>` 라우팅 / 공용 `WorkspaceDetailPanel` / bulk member flows 로 흡수되었습니다. 2026-04-12 scenario QA 기준으로 역할별 접근 매트릭스, workspace switch preserve/fallback, 멤버 제거 즉시 전파, enabled apps 토글 전파까지 모두 UI 에서 확인했습니다. 현재 기준 검증은 `pytest 75 passed`, `alembic check` drift 0, 웹 typecheck 는 기존 오류 7건입니다.
 
 ## 최신 라운드 (9-10) — 2026-04-11
 
@@ -495,25 +580,26 @@ NB: 권한 매트릭스 테스트는 task 가 아닌 **doc** 으로 작성. 이�
 원격 dev DB 는 workspace rearchitecture head 까지 올라와 있다. 현재 수동 QA 는 PR1 meeting 자체보다 **workspace shell/regression** 을 먼저 보는 게 맞다.
 
 **Workspace shell / routing**
-- [ ] AppBar workspace 전환 시 현재 app 유지 또는 fallback 동작 검증 (`/w/:workspaceSlug/<app>`)
-- [ ] legacy `/meeting`, `/docs`, `/pms`, `/planner`, `/ai` 진입 시 기본 workspace redirect 검증
-- [ ] enabled apps 가 없는 workspace 에서는 `AccessDeniedView` 가 뜨는지 검증
+- [x] AppBar workspace 전환 시 현재 app 유지 또는 fallback 동작 검증 (`planning-desk-member`: 지원 app 은 유지, 미지원 app 은 `/` fallback)
+- [ ] legacy `/meeting`, `/docs`, `/pms`, `/planner`, `/ai` 진입 시 기본 workspace redirect 전체 세트 검증 (`/meeting` 은 확인 완료)
+- [x] enabled apps 가 없는 workspace 에서는 `AccessDeniedView` 가 뜨는지 검증 (`knowledge-base/meeting`, 임시 workspace 의 disabled `meeting`)
 
 **Workspace settings / admin**
-- [ ] `/w/<slug>/settings` 에서 workspace admin 이 동일 `WorkspaceDetailPanel` 로 profile, enabled apps, members 를 관리 가능한지
-- [ ] Admin Console 의 workspace 상세 패널과 settings 패널이 동일 동작을 보이는지
-- [ ] member bulk add picker, candidate search, paginated drawer, near-fullscreen modal UX 확인
+- [x] `/w/<slug>/settings` 에서 workspace admin 이 동일 `WorkspaceDetailPanel` 로 profile, enabled apps, members 를 관리 가능한지
+- [x] Admin Console 의 workspace 상세 패널과 settings 패널이 동일 동작을 보이는지
+- [x] member bulk add picker, candidate search, paginated drawer, near-fullscreen modal UX 확인
 
-**Meeting 회귀**
+**Meeting 회귀** (라운드 12 agent-browser 로 진행 예정 — Docker 기동 후)
 - [ ] `/w/<slug>/meeting` 에서 생성/수정/태스크 첨부/문서 첨부/파일 업로드/다운로드 동작
 - [ ] attendee 의 PMS space access 경유 task attach 회귀 없는지
-- [ ] AI 사이드바 "회의록" deep-link 가 workspace path 기준으로 올바르게 landing 하는지
+- [ ] AI 사이드바 "회의록" deep-link 가 workspace path 기준으로 올바르게 landing 하는지 (라운드 12 의 `NavItem.linkAppId` 재설계 검증 포함)
+- [ ] legacy `/meeting`, `/docs`, `/pms`, `/planner`, `/ai` 직접 진입 시 404 NotFound 표시 확인
 
 **남겨둔 소규모 정리**
-- [ ] 다크모드 전체 톤 재확인
-- [ ] `datetime.utcnow()` warning 제거 여부 결정
+- [ ] 다크모드 전체 톤 재확인 → **PR5 로 이월** (D6 contrast audit 과 함께)
+- [x] `datetime.utcnow()` warning 제거 — 라운드 12 에서 `datetime.now(UTC).replace(tzinfo=None)` 로 교체
 
-## 7. 알려진 잔재 / 미해결 사항 — 2026-04-11 HEAD 시점
+## 7. 알려진 잔재 / 미해결 사항 — 2026-04-13 HEAD (라운드 12)
 
 ### 해결됨 (이전 세션 잔재)
 - ~~legacy `pms_docs` 테이블~~ — **round 8 의 `DROP SCHEMA public CASCADE` 로 제거됨**
@@ -521,20 +607,19 @@ NB: 권한 매트릭스 테스트는 task 가 아닌 **doc** 으로 작성. 이�
 - ~~`ProjectMember` 좀비 테이블~~ — round 7 에서 모델 + 마이그레이션으로 제거
 - ~~ensure_seed_data 가 user data 파괴~~ — round 8 의 guard 로 차단
 - ~~"3 레이어 권한 모델 보강" 별도 진단 필요~~ — 후속 workspace rearchitecture / member flow 작업으로 대부분 흡수
+- ~~legacy URL 호환 redirect~~ — **라운드 12 에서 전면 제거, 404 fallback 으로 교체**
+- ~~web typecheck 오류 7건~~ — **라운드 12 에서 0 errors** (아래 상세)
+- ~~meeting UTC warning (`datetime.utcnow()`)~~ — **라운드 12 에서 교체**
 
-### web typecheck 오류 7 개 (현재 main 잔재)
-- `src/app-shell.ts(145,31)` — NavItem.appId `home` widening
-- `src/App.tsx(153,23)` — `FEATURE_BY_APP_ID` indexer 에 `home` 누락
-- `src/components/views/PMSView/BoardView.tsx(81,20)` — motion drag handler
-- `src/components/views/PMSView/PMSView.tsx(200,27)` 등 — `string | null` 3 건
-- `src/domains/admin/admin-permissions.ts(13,54)` — string|literal mismatch
+### 이관된 부채 (PR2/PR5 로 이월, [MEETING-APP-PLAN.md](MEETING-APP-PLAN.md) §PR 시퀀싱에 반영됨)
 
-### 현재 남은 기능/운영 부채
+1. **PMS 내부 명명 debt** (PR2 이월) — API payload 의 `project_id` 등 legacy 필드명이 여전히 남아 있어 `list_id` 계열 정리가 필요. semantic 변경 포함이라 ACL 리팩터링과 같이 처리.
+2. **Space Docs 이동/정렬 UX** (PR5 이월) — `NativeDocPage.sort_order` 필드 준비 완료, DocsView 의 DnD affordance 가 없음.
+3. **다크모드 톤 재확인** (PR5 이월) — D6 contrast audit 과 통합 처리.
 
-1. **PMS 내부 명명 debt** — API payload 의 `project_id` 등 legacy 필드명이 여전히 남아 있어 `list_id` 계열 정리가 필요
-2. **Space Docs 이동/정렬 UX** — 페이지 단위 reorder / move affordance 는 여전히 약함
-3. **workspace shell 수동 QA** — `/w/:workspaceSlug/<app>` 전환, enabled apps gating, legacy redirect 경로를 사람 손으로 다시 눌러봐야 함
-4. **meeting UTC warning** — `service.py` 의 `datetime.utcnow()` 호출은 곧 바꿔야 함
+### 현재 남은 운영 부채 (라운드 12 기준)
+
+- **workspace shell 수동 QA** — `/w/:workspaceSlug/<app>` 전환, enabled apps gating, legacy URL → 404 경로를 사람 손으로 재검증 필요. 라운드 12 agent-browser QA 에서 해소 예정.
 
 ### 의도적으로 PR1 범위 밖
 [PR1-HANDOFF.md §1](PR1-HANDOFF.md) 의 표 그대로:
