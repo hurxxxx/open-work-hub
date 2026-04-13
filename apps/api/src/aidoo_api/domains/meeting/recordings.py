@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 
 from aidoo_api.core.settings import get_settings
 from aidoo_api.core.storage import get_minio_client
-from aidoo_api.domains.auth.models import User
+from aidoo_api.domains.auth.models import User, Workspace
 from aidoo_api.domains.auth.security import new_id
 from aidoo_api.domains.meeting import service as meeting_service
 from aidoo_api.domains.meeting.models import (
@@ -25,7 +25,8 @@ from aidoo_api.domains.meeting.models import (
     MeetingRecordingStaging,
     MeetingTaskLink,
 )
-from aidoo_api.domains.meeting.permissions import ensure_issue_readable, ensure_meeting_participant
+from aidoo_api.domains.meeting.permissions import ensure_meeting_participant
+from aidoo_api.domains.pms.access import _ensure_issue_readable as ensure_issue_readable
 from aidoo_api.domains.meeting.schemas import (
     RecordingChunkAck,
     RecordingCompleteRequest,
@@ -247,11 +248,12 @@ def _validate_linked_task_id(db: Session, *, meeting: Meeting, user: User, linke
 def init_staging(
     db: Session,
     *,
+    workspace: Workspace,
     user: User,
     meeting_id: str,
     payload: RecordingStagingInitRequest,
 ) -> RecordingStagingItem:
-    meeting = meeting_service._load_meeting(db, meeting_id)
+    meeting = meeting_service._load_meeting(db, workspace, meeting_id)
     ensure_meeting_participant(db, user, meeting)
     mime_type = _require_allowed_mime(payload.mime_type)
     _validate_linked_task_id(db, meeting=meeting, user=user, linked_task_id=payload.linked_task_id)
@@ -291,6 +293,7 @@ def init_staging(
 async def upload_chunk(
     db: Session,
     *,
+    workspace: Workspace,
     user: User,
     meeting_id: str,
     staging_id: str,
@@ -301,7 +304,7 @@ async def upload_chunk(
     if seq < 0:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Chunk sequence must be non-negative.")
 
-    meeting = meeting_service._load_meeting(db, meeting_id)
+    meeting = meeting_service._load_meeting(db, workspace, meeting_id)
     ensure_meeting_participant(db, user, meeting)
     staging = _load_staging_or_404(db, meeting_id=meeting.id, staging_id=staging_id)
     if staging.uploaded_by_id != user.id:
@@ -350,10 +353,11 @@ async def upload_chunk(
 def list_my_staging(
     db: Session,
     *,
+    workspace: Workspace,
     user: User,
     meeting_id: str,
 ) -> list[RecordingStagingItem]:
-    meeting = meeting_service._load_meeting(db, meeting_id)
+    meeting = meeting_service._load_meeting(db, workspace, meeting_id)
     ensure_meeting_participant(db, user, meeting)
     cutoff = _utcnow() - timedelta(hours=get_settings().recording_staging_retention_hours)
     items = db.scalars(
@@ -372,11 +376,12 @@ def list_my_staging(
 def discard_staging(
     db: Session,
     *,
+    workspace: Workspace,
     user: User,
     meeting_id: str,
     staging_id: str,
 ) -> None:
-    meeting = meeting_service._load_meeting(db, meeting_id)
+    meeting = meeting_service._load_meeting(db, workspace, meeting_id)
     ensure_meeting_participant(db, user, meeting)
     staging = _load_staging_or_404(db, meeting_id=meeting.id, staging_id=staging_id)
     if staging.uploaded_by_id != user.id:
@@ -413,19 +418,20 @@ def _assemble_chunks(staging: MeetingRecordingStaging) -> Path:
 def complete_staging(
     db: Session,
     *,
+    workspace: Workspace,
     user: User,
     meeting_id: str,
     staging_id: str,
     payload: RecordingCompleteRequest,
 ):
-    meeting = meeting_service._load_meeting(db, meeting_id)
+    meeting = meeting_service._load_meeting(db, workspace, meeting_id)
     ensure_meeting_participant(db, user, meeting)
     staging = _load_staging_or_404(db, meeting_id=meeting.id, staging_id=staging_id)
     if staging.uploaded_by_id != user.id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only the uploader can finalize this recording.")
 
     if staging.promoted_recording_id:
-        fresh = meeting_service._load_meeting(db, meeting.id)
+        fresh = meeting_service._load_meeting(db, workspace, meeting.id)
         return meeting_service._serialize_meeting(db, fresh)
 
     staging.status = "assembling"
@@ -437,7 +443,7 @@ def complete_staging(
 
     staging = _load_staging_or_404(db, meeting_id=meeting.id, staging_id=staging_id)
     if staging.promoted_recording_id:
-        fresh = meeting_service._load_meeting(db, meeting.id)
+        fresh = meeting_service._load_meeting(db, workspace, meeting.id)
         return meeting_service._serialize_meeting(db, fresh)
 
     staging.status = "uploading"
@@ -480,19 +486,20 @@ def complete_staging(
     db.commit()
     _enqueue_pipeline_or_mark_failed(db, recording=recording)
     _cleanup_spool_dir(staging.spool_path)
-    fresh = meeting_service._load_meeting(db, meeting.id)
+    fresh = meeting_service._load_meeting(db, workspace, meeting.id)
     return meeting_service._serialize_meeting(db, fresh)
 
 
 def import_recording(
     db: Session,
     *,
+    workspace: Workspace,
     user: User,
     meeting_id: str,
     upload: UploadFile,
     linked_task_id: str | None,
 ):
-    meeting = meeting_service._load_meeting(db, meeting_id)
+    meeting = meeting_service._load_meeting(db, workspace, meeting_id)
     ensure_meeting_participant(db, user, meeting)
     mime_type = _require_allowed_mime(upload.content_type)
     _validate_linked_task_id(db, meeting=meeting, user=user, linked_task_id=linked_task_id)
@@ -535,18 +542,19 @@ def import_recording(
     db.add(recording)
     db.commit()
     _enqueue_pipeline_or_mark_failed(db, recording=recording)
-    fresh = meeting_service._load_meeting(db, meeting.id)
+    fresh = meeting_service._load_meeting(db, workspace, meeting.id)
     return meeting_service._serialize_meeting(db, fresh)
 
 
 def get_recording_playback(
     db: Session,
     *,
+    workspace: Workspace,
     user: User,
     meeting_id: str,
     recording_id: str,
 ) -> RecordingPlaybackResponse:
-    meeting = meeting_service._load_meeting(db, meeting_id)
+    meeting = meeting_service._load_meeting(db, workspace, meeting_id)
     ensure_meeting_participant(db, user, meeting)
     recording = _load_recording_or_404(db, meeting_id=meeting.id, recording_id=recording_id)
     if recording.transcription_status == "cancelled":
@@ -563,11 +571,12 @@ def get_recording_playback(
 def retry_recording(
     db: Session,
     *,
+    workspace: Workspace,
     user: User,
     meeting_id: str,
     recording_id: str,
 ):
-    meeting = meeting_service._load_meeting(db, meeting_id)
+    meeting = meeting_service._load_meeting(db, workspace, meeting_id)
     ensure_meeting_participant(db, user, meeting)
     recording = _load_recording_or_404(db, meeting_id=meeting.id, recording_id=recording_id)
     if recording.transcription_status != "failed":
@@ -579,7 +588,7 @@ def retry_recording(
     db.add(recording)
     db.commit()
     _enqueue_pipeline_or_mark_failed(db, recording=recording)
-    fresh = meeting_service._load_meeting(db, meeting.id)
+    fresh = meeting_service._load_meeting(db, workspace, meeting.id)
     return meeting_service._serialize_meeting(db, fresh)
 
 
@@ -627,8 +636,15 @@ def cleanup_stale_staging_once(db: Session) -> dict[str, int]:
     return {"deleted": deleted}
 
 
-def fetch_local_recording_blob(db: Session, *, meeting_id: str, staging_id: str, user: User) -> bytes:
-    meeting = meeting_service._load_meeting(db, meeting_id)
+def fetch_local_recording_blob(
+    db: Session,
+    *,
+    workspace: Workspace,
+    meeting_id: str,
+    staging_id: str,
+    user: User,
+) -> bytes:
+    meeting = meeting_service._load_meeting(db, workspace, meeting_id)
     ensure_meeting_participant(db, user, meeting)
     staging = _load_staging_or_404(db, meeting_id=meeting.id, staging_id=staging_id)
     if staging.uploaded_by_id != user.id:

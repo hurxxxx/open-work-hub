@@ -1,6 +1,15 @@
 from fastapi.testclient import TestClient
 
 
+def _dev_login(client: TestClient, account_key: str) -> dict:
+    response = client.post(
+        "/api/v1/auth/dev-login",
+        json={"account_key": account_key},
+    )
+    assert response.status_code == 200, response.text
+    return response.json()
+
+
 def test_issue_list_archived_filters_and_bulk_restore(client: TestClient) -> None:
     token = _bootstrap_admin(client)
     project = _create_project(client, token)
@@ -294,6 +303,55 @@ def test_list_alias_space_docs_and_status_rename_behave_as_expected(client: Test
         headers=_auth_headers(admin_session["token"]),
     )
     assert deleted_child_response.status_code == 404
+
+
+def test_workspace_scoped_default_pms_space_stays_inside_requested_workspace(
+    client: TestClient,
+) -> None:
+    _bootstrap_admin_session(client)
+
+    hq_admin = _dev_login(client, "hq-admin")
+    platform_admin = _dev_login(client, "platform-admin")
+    hq_admin_token = hq_admin["token"]
+    platform_admin_token = platform_admin["token"]
+
+    before_hq_spaces = client.get(
+        "/api/v1/workspaces/hq/pms/spaces",
+        headers=_auth_headers(hq_admin_token),
+    )
+    assert before_hq_spaces.status_code == 200
+    hq_space_ids = {item["id"] for item in before_hq_spaces.json()}
+
+    before_delivery_spaces = client.get(
+        "/api/v1/workspaces/delivery-hub/pms/spaces",
+        headers=_auth_headers(platform_admin_token),
+    )
+    assert before_delivery_spaces.status_code == 200
+    delivery_space_ids = {item["id"] for item in before_delivery_spaces.json()}
+
+    create_list_response = client.post(
+        "/api/v1/workspaces/hq/pms/lists",
+        headers=_auth_headers(hq_admin_token),
+        json={
+            "key": "HQCTX",
+            "name": "HQ Context List",
+            "description": "Should bind to HQ default space",
+        },
+    )
+    assert create_list_response.status_code == 201, create_list_response.text
+    created_list = create_list_response.json()
+    assert created_list["team_id"] in hq_space_ids
+    assert created_list["team_id"] not in delivery_space_ids
+
+    create_folder_response = client.post(
+        "/api/v1/workspaces/hq/pms/folders",
+        headers=_auth_headers(hq_admin_token),
+        json={"name": "HQ Context Folder"},
+    )
+    assert create_folder_response.status_code == 201, create_folder_response.text
+    created_folder = create_folder_response.json()
+    assert created_folder["team_id"] in hq_space_ids
+    assert created_folder["team_id"] not in delivery_space_ids
 
 
 def test_space_docs_collection_permissions_and_soft_delete(client: TestClient) -> None:

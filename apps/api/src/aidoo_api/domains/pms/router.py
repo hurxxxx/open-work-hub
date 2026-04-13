@@ -21,7 +21,7 @@ from aidoo_api.domains.auth.access import (
     slugify,
 )
 from aidoo_api.domains.auth.dependencies import require_current_user, require_feature_access
-from aidoo_api.domains.auth.models import Team, TeamMember, User, Workspace, WorkspaceEnabledApp
+from aidoo_api.domains.auth.models import Team, TeamMember, User, Workspace
 from aidoo_api.domains.auth.security import new_id
 from aidoo_api.core.settings import get_settings
 from aidoo_api.core.storage import get_minio_client
@@ -874,19 +874,9 @@ def _ensure_space_admin_change_allowed(
 
 
 def _get_pms_workspace(db: Session) -> Workspace:
-    workspace = get_current_workspace()
+    workspace = get_current_workspace(db)
     if workspace is None:
-        workspace = db.scalar(
-            select(Workspace)
-            .join(WorkspaceEnabledApp, WorkspaceEnabledApp.workspace_id == Workspace.id)
-            .where(
-                Workspace.active.is_(True),
-                WorkspaceEnabledApp.app_code == "pms",
-            )
-            .order_by(Workspace.created_at.asc(), Workspace.key.asc())
-        )
-    if workspace is None:
-        raise HTTPException(status_code=500, detail="PMS workspace is not available.")
+        raise HTTPException(status_code=500, detail="PMS workspace context is not available.")
     return workspace
 
 
@@ -1779,7 +1769,7 @@ def create_project(
         team, _role = _ensure_space_editor(db, current_user, resolved_team_id)
         resolved_team_name = team.name
     else:
-        team = get_or_create_default_pms_space(db)
+        team = get_or_create_default_pms_space(db, workspace=_get_pms_workspace(db))
         resolved_team_id = team.id
         resolved_team_name = team.name
 
@@ -3950,7 +3940,10 @@ def create_folder(
 ) -> FolderItem:
     resolved_team_id = payload.team_id
     if resolved_team_id is None:
-        resolved_team_id = get_or_create_default_pms_space(db).id
+        resolved_team_id = get_or_create_default_pms_space(
+            db,
+            workspace=_get_pms_workspace(db),
+        ).id
     _ensure_space_manager(db, current_user, resolved_team_id)
     folder = Folder(
         id=new_id(),

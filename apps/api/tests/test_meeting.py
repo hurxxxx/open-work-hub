@@ -103,6 +103,15 @@ def _login(client: TestClient, email: str, password: str) -> str:
     return response.json()["token"]
 
 
+def _dev_login(client: TestClient, account_key: str) -> dict:
+    response = client.post(
+        "/api/v1/auth/dev-login",
+        json={"account_key": account_key},
+    )
+    assert response.status_code == 200, response.text
+    return response.json()
+
+
 def _create_meeting(
     client: TestClient,
     token: str,
@@ -531,6 +540,76 @@ def test_meeting_user_search_returns_users_without_pms_access(
     )
     assert email_response.status_code == 200
     assert [item["email"] for item in email_response.json()] == ["bob@aidoo.local"]
+
+
+def test_workspace_scoped_meeting_routes_keep_hq_context(client: TestClient) -> None:
+    _bootstrap_admin_session(client)
+
+    hq_admin = _dev_login(client, "hq-admin")
+    hq_member = _dev_login(client, "hq-member")
+    hq_admin_token = hq_admin["token"]
+    hq_member_token = hq_member["token"]
+    hq_member_id = hq_member["user"]["id"]
+
+    me_response = client.get("/api/v1/auth/me", headers=_auth_headers(hq_member_token))
+    assert me_response.status_code == 200
+    hq_workspace_id = next(
+        item["id"]
+        for item in me_response.json()["workspaces"]
+        if item["slug"] == "hq"
+    )
+
+    scoped_users_response = client.get(
+        "/api/v1/workspaces/hq/meeting/users",
+        headers=_auth_headers(hq_member_token),
+        params={"q": "Admin"},
+    )
+    assert scoped_users_response.status_code == 200
+    scoped_emails = {item["email"] for item in scoped_users_response.json()}
+    assert "hq-admin@aidoo.local" in scoped_emails
+    assert "innovation-lab-admin@aidoo.local" not in scoped_emails
+
+    legacy_users_response = client.get(
+        "/api/v1/meeting/users",
+        headers=_auth_headers(hq_member_token),
+        params={"q": "Admin"},
+    )
+    assert legacy_users_response.status_code == 200
+    legacy_emails = {item["email"] for item in legacy_users_response.json()}
+    assert "hq-admin@aidoo.local" in legacy_emails
+    assert "innovation-lab-admin@aidoo.local" not in legacy_emails
+
+    create_response = client.post(
+        "/api/v1/workspaces/hq/meeting/meetings",
+        headers=_auth_headers(hq_admin_token),
+        json={
+            "title": "HQ scoped meeting",
+            "agenda": "Workspace-bound meeting regression",
+            "start_at": datetime(2026, 5, 1, 10, 0, 0).isoformat(),
+            "end_at": datetime(2026, 5, 1, 11, 0, 0).isoformat(),
+            "attendees": [{"user_id": hq_member_id, "role": "required"}],
+            "task_ids": [],
+            "doc_ids": [],
+        },
+    )
+    assert create_response.status_code == 201, create_response.text
+    meeting = create_response.json()
+    assert meeting["workspace_id"] == hq_workspace_id
+
+    scoped_list_response = client.get(
+        "/api/v1/workspaces/hq/meeting/meetings",
+        headers=_auth_headers(hq_member_token),
+        params={"scope": "mine"},
+    )
+    assert scoped_list_response.status_code == 200
+    assert meeting["id"] in {item["id"] for item in scoped_list_response.json()["items"]}
+
+    scoped_detail_response = client.get(
+        f"/api/v1/workspaces/hq/meeting/meetings/{meeting['id']}",
+        headers=_auth_headers(hq_member_token),
+    )
+    assert scoped_detail_response.status_code == 200
+    assert scoped_detail_response.json()["workspace_id"] == hq_workspace_id
 
 
 def test_meeting_create_rolls_back_when_initial_attachments_fail(

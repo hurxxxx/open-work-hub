@@ -5,16 +5,11 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from aidoo_api.domains.auth.access import (
-    get_current_workspace,
     is_platform_admin_user,
 )
-from aidoo_api.domains.auth.models import User
+from aidoo_api.domains.auth.models import User, Workspace
 from aidoo_api.domains.docs.models import NativeDoc
 from aidoo_api.domains.meeting.models import Meeting
-from aidoo_api.domains.pms.access import (
-    _ensure_issue_readable as ensure_issue_readable,
-    ensure_issue_attachable,
-)
 
 
 def is_organizer(user: User, meeting: Meeting) -> bool:
@@ -70,7 +65,13 @@ def ensure_link_remover(
     )
 
 
-def ensure_doc_attachable(db: Session, user: User, doc_id: str) -> NativeDoc:
+def ensure_doc_attachable(
+    db: Session,
+    user: User,
+    doc_id: str,
+    *,
+    workspace: Workspace,
+) -> NativeDoc:
     """Meeting attachments keep the existing doc attach authority boundary.
 
     Meeting-origin read grants are intentionally excluded here so an attendee
@@ -89,16 +90,14 @@ def ensure_doc_attachable(db: Session, user: User, doc_id: str) -> NativeDoc:
         )
 
     if is_platform_admin_user(user, db):
-        current_workspace = get_current_workspace()
-        if current_workspace is not None and doc.workspace_id != current_workspace.id:
+        if doc.workspace_id != workspace.id:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="You do not have access to this document.",
             )
         return doc
 
-    current_workspace = get_current_workspace()
-    if current_workspace is not None and doc.workspace_id != current_workspace.id:
+    if doc.workspace_id != workspace.id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You do not have access to this document.",

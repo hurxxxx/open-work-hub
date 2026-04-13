@@ -5,17 +5,16 @@ from io import BytesIO
 from typing import Iterable
 
 from fastapi import HTTPException, UploadFile, status
-from sqlalchemy import and_, func, or_, select
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session, selectinload
 
 from aidoo_api.core.settings import get_settings
 from aidoo_api.core.storage import get_minio_client
 from aidoo_api.domains.auth.access import (
-    get_current_workspace,
     is_platform_admin_user,
     resolve_workspace_role,
 )
-from aidoo_api.domains.auth.models import User, Workspace, WorkspaceEnabledApp
+from aidoo_api.domains.auth.models import User, Workspace
 from aidoo_api.domains.auth.security import new_id
 from aidoo_api.domains.docs.access_grants import (
     bump_doc_grant_expiry_for_meeting,
@@ -34,7 +33,6 @@ from aidoo_api.domains.meeting.models import (
 )
 from aidoo_api.domains.meeting.permissions import (
     ensure_doc_attachable,
-    ensure_issue_attachable,
     ensure_link_remover,
     ensure_meeting_participant,
 )
@@ -51,7 +49,7 @@ from aidoo_api.domains.meeting.schemas import (
     MeetingTaskLinkOut,
     MeetingUpdateRequest,
 )
-from aidoo_api.domains.pms.access import has_list_access
+from aidoo_api.domains.pms.access import ensure_issue_attachable, has_list_access
 from aidoo_api.domains.pms.access_grants import (
     bump_grant_expiry_for_meeting,
     grant_issue_access,
@@ -59,30 +57,10 @@ from aidoo_api.domains.pms.access_grants import (
     revoke_grants_for_meeting,
     revoke_grants_for_meeting_attendee,
 )
-
-
-MAX_FILE_UPLOAD_SIZE = 100 * 1024 * 1024  # 100 MB
 from aidoo_api.domains.pms.models import Issue, Project
 
 
-def _get_meeting_workspace(db: Session) -> Workspace:
-    workspace = get_current_workspace()
-    if workspace is None:
-        workspace = db.scalar(
-            select(Workspace)
-            .join(WorkspaceEnabledApp, WorkspaceEnabledApp.workspace_id == Workspace.id)
-            .where(
-                Workspace.active.is_(True),
-                WorkspaceEnabledApp.app_code == "meeting",
-            )
-            .order_by(Workspace.created_at.asc(), Workspace.key.asc())
-        )
-    if workspace is None:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Meeting workspace is not provisioned.",
-        )
-    return workspace
+MAX_FILE_UPLOAD_SIZE = 100 * 1024 * 1024  # 100 MB
 
 
 def _validate_time_range(start_at: datetime, end_at: datetime) -> None:
@@ -357,8 +335,7 @@ def _serialize_meeting(db: Session, meeting: Meeting) -> MeetingDetail:
     )
 
 
-def _load_meeting(db: Session, meeting_id: str) -> Meeting:
-    current_workspace = get_current_workspace()
+def _load_meeting(db: Session, workspace: Workspace, meeting_id: str) -> Meeting:
     meeting = db.scalar(
         select(Meeting)
         .options(
@@ -373,7 +350,7 @@ def _load_meeting(db: Session, meeting_id: str) -> Meeting:
         )
         .where(
             Meeting.id == meeting_id,
-            Meeting.workspace_id == current_workspace.id if current_workspace is not None else True,
+            Meeting.workspace_id == workspace.id,
         )
     )
     if meeting is None:
@@ -410,7 +387,6 @@ def _replace_attendees(
 
     existing_by_user = {att.user_id: att for att in meeting.attendees}
     incoming_user_ids = {item.user_id for item in new_attendees}
-    removed_user_ids = set(existing_by_user) - incoming_user_ids
     added_user_ids = incoming_user_ids - set(existing_by_user)
 
     for user_id, attendee in list(existing_by_user.items()):
@@ -505,11 +481,11 @@ def _replace_attendees(
 def create_meeting(
     db: Session,
     *,
+    workspace: Workspace,
     organizer: User,
     payload: MeetingCreateRequest,
 ) -> MeetingDetail:
     _validate_time_range(payload.start_at, payload.end_at)
-    workspace = _get_meeting_workspace(db)
 
     attendees_input = list(payload.attendees)
     if not any(item.user_id == organizer.id for item in attendees_input):
@@ -548,30 +524,34 @@ def create_meeting(
             )
         )
     db.flush()
-    meeting = _load_meeting(db, meeting.id)
+    meeting = _load_meeting(db, workspace, meeting.id)
 
     issues = [ensure_issue_attachable(db, organizer, issue_id) for issue_id in payload.task_ids]
-    docs = [ensure_doc_attachable(db, organizer, doc_id) for doc_id in payload.doc_ids]
+    docs = [
+        ensure_doc_attachable(db, organizer, doc_id, workspace=workspace)
+        for doc_id in payload.doc_ids
+    ]
     for issue in issues:
         _attach_issue_link(db, meeting=meeting, issue=issue, added_by_id=organizer.id)
     for doc in docs:
         _attach_doc_link(db, meeting=meeting, doc=doc, added_by_id=organizer.id)
     db.commit()
 
-    fresh = _load_meeting(db, meeting.id)
+    fresh = _load_meeting(db, workspace, meeting.id)
     return _serialize_meeting(db, fresh)
 
 
 def update_meeting(
     db: Session,
     *,
+    workspace: Workspace,
     user: User,
     meeting_id: str,
     payload: MeetingUpdateRequest,
 ) -> MeetingDetail:
     from aidoo_api.domains.meeting.permissions import ensure_meeting_organizer
 
-    meeting = _load_meeting(db, meeting_id)
+    meeting = _load_meeting(db, workspace, meeting_id)
     ensure_meeting_organizer(db, user, meeting)
     original_end_at = meeting.end_at
 
@@ -617,15 +597,15 @@ def update_meeting(
     db.add(meeting)
     db.commit()
 
-    fresh = _load_meeting(db, meeting.id)
+    fresh = _load_meeting(db, workspace, meeting.id)
     return _serialize_meeting(db, fresh)
 
 
-def delete_meeting(db: Session, *, user: User, meeting_id: str) -> None:
+def delete_meeting(db: Session, *, workspace: Workspace, user: User, meeting_id: str) -> None:
     from aidoo_api.domains.meeting.permissions import ensure_meeting_organizer
     from aidoo_api.domains.meeting.recordings import cleanup_meeting_recordings
 
-    meeting = _load_meeting(db, meeting_id)
+    meeting = _load_meeting(db, workspace, meeting_id)
     ensure_meeting_organizer(db, user, meeting)
     cleanup_meeting_recordings(db, meeting=meeting)
     revoke_grants_for_meeting(
@@ -644,8 +624,8 @@ def delete_meeting(db: Session, *, user: User, meeting_id: str) -> None:
     db.commit()
 
 
-def get_meeting(db: Session, *, user: User, meeting_id: str) -> MeetingDetail:
-    meeting = _load_meeting(db, meeting_id)
+def get_meeting(db: Session, *, workspace: Workspace, user: User, meeting_id: str) -> MeetingDetail:
+    meeting = _load_meeting(db, workspace, meeting_id)
     _ensure_user_can_view(user, meeting)
     return _serialize_meeting(db, meeting)
 
@@ -653,13 +633,12 @@ def get_meeting(db: Session, *, user: User, meeting_id: str) -> MeetingDetail:
 def list_meetings(
     db: Session,
     *,
+    workspace: Workspace,
     user: User,
     scope: str = "mine",
     from_at: datetime | None = None,
     to_at: datetime | None = None,
 ) -> MeetingListResponse:
-    workspace = _get_meeting_workspace(db)
-
     base = select(Meeting).where(Meeting.workspace_id == workspace.id)
 
     # Restrict to meetings the caller is involved in unless they are a
@@ -734,22 +713,22 @@ def list_meetings(
 
 
 def attach_task(
-    db: Session, *, user: User, meeting_id: str, issue_id: str
+    db: Session, *, workspace: Workspace, user: User, meeting_id: str, issue_id: str
 ) -> MeetingDetail:
-    meeting = _load_meeting(db, meeting_id)
+    meeting = _load_meeting(db, workspace, meeting_id)
     ensure_meeting_participant(db, user, meeting)
     issue = ensure_issue_attachable(db, user, issue_id)
     _attach_issue_link(db, meeting=meeting, issue=issue, added_by_id=user.id)
     db.commit()
 
-    fresh = _load_meeting(db, meeting_id)
+    fresh = _load_meeting(db, workspace, meeting_id)
     return _serialize_meeting(db, fresh)
 
 
 def detach_task(
-    db: Session, *, user: User, meeting_id: str, issue_id: str
+    db: Session, *, workspace: Workspace, user: User, meeting_id: str, issue_id: str
 ) -> MeetingDetail:
-    meeting = _load_meeting(db, meeting_id)
+    meeting = _load_meeting(db, workspace, meeting_id)
 
     link = db.scalar(
         select(MeetingTaskLink).where(
@@ -769,27 +748,27 @@ def detach_task(
         db.delete(link)
         db.commit()
 
-    fresh = _load_meeting(db, meeting_id)
+    fresh = _load_meeting(db, workspace, meeting_id)
     return _serialize_meeting(db, fresh)
 
 
 def attach_doc(
-    db: Session, *, user: User, meeting_id: str, doc_id: str
+    db: Session, *, workspace: Workspace, user: User, meeting_id: str, doc_id: str
 ) -> MeetingDetail:
-    meeting = _load_meeting(db, meeting_id)
+    meeting = _load_meeting(db, workspace, meeting_id)
     ensure_meeting_participant(db, user, meeting)
-    doc = ensure_doc_attachable(db, user, doc_id)
+    doc = ensure_doc_attachable(db, user, doc_id, workspace=workspace)
     _attach_doc_link(db, meeting=meeting, doc=doc, added_by_id=user.id)
     db.commit()
 
-    fresh = _load_meeting(db, meeting_id)
+    fresh = _load_meeting(db, workspace, meeting_id)
     return _serialize_meeting(db, fresh)
 
 
 def detach_doc(
-    db: Session, *, user: User, meeting_id: str, doc_id: str
+    db: Session, *, workspace: Workspace, user: User, meeting_id: str, doc_id: str
 ) -> MeetingDetail:
-    meeting = _load_meeting(db, meeting_id)
+    meeting = _load_meeting(db, workspace, meeting_id)
 
     link = db.scalar(
         select(MeetingDocLink).where(
@@ -809,20 +788,21 @@ def detach_doc(
         db.delete(link)
         db.commit()
 
-    fresh = _load_meeting(db, meeting_id)
+    fresh = _load_meeting(db, workspace, meeting_id)
     return _serialize_meeting(db, fresh)
 
 
 async def attach_file(
     db: Session,
     *,
+    workspace: Workspace,
     user: User,
     meeting_id: str,
     upload: UploadFile,
 ) -> MeetingDetail:
     """Upload a binary file and attach it to the meeting. Any participant
     (organizer or attendee) can upload."""
-    meeting = _load_meeting(db, meeting_id)
+    meeting = _load_meeting(db, workspace, meeting_id)
     ensure_meeting_participant(db, user, meeting)
 
     data = await upload.read()
@@ -857,16 +837,16 @@ async def attach_file(
     db.add(attachment)
     db.commit()
 
-    fresh = _load_meeting(db, meeting_id)
+    fresh = _load_meeting(db, workspace, meeting_id)
     return _serialize_meeting(db, fresh)
 
 
 def detach_file(
-    db: Session, *, user: User, meeting_id: str, file_id: str
+    db: Session, *, workspace: Workspace, user: User, meeting_id: str, file_id: str
 ) -> MeetingDetail:
     """Remove a file attachment. Only the meeting organizer or the user
     who originally uploaded it (or a platform admin) may remove a file."""
-    meeting = _load_meeting(db, meeting_id)
+    meeting = _load_meeting(db, workspace, meeting_id)
 
     attachment = db.scalar(
         select(MeetingFileAttachment).where(
@@ -894,5 +874,5 @@ def detach_file(
     db.delete(attachment)
     db.commit()
 
-    fresh = _load_meeting(db, meeting_id)
+    fresh = _load_meeting(db, workspace, meeting_id)
     return _serialize_meeting(db, fresh)

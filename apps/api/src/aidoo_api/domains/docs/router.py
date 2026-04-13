@@ -104,15 +104,15 @@ def _team_role_allows(role: str | None, minimum: str) -> bool:
     return current_rank >= minimum_rank
 
 
-def _ensure_docs_workspace_access(db: Session, user: User) -> None:
-    current_workspace = get_current_workspace()
+def _ensure_docs_workspace_access(db: Session, user: User) -> Workspace:
+    current_workspace = get_current_workspace(db)
     if current_workspace is None:
         for summary in resolve_workspaces(db, user):
             if "docs" not in summary["enabled_apps"]:
                 continue
             current_workspace = load_active_workspace_by_key(db, summary["slug"])
             if current_workspace is not None:
-                bind_current_workspace(current_workspace)
+                bind_current_workspace(db, current_workspace)
                 break
         if current_workspace is None:
             raise HTTPException(
@@ -129,10 +129,11 @@ def _ensure_docs_workspace_access(db: Session, user: User) -> None:
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You need nav.docs. Ask a workspace admin to enable Docs.",
         )
+    return current_workspace
 
 
 def _load_active_pms_team(db: Session, team_id: str) -> Team | None:
-    current_workspace = get_current_workspace()
+    current_workspace = get_current_workspace(db)
     return db.scalar(
         select(Team)
         .options(joinedload(Team.workspace))
@@ -156,7 +157,7 @@ def _resolve_pms_team_role(db: Session, user: User, team_id: str) -> str | None:
 
 
 def _accessible_pms_team_ids(db: Session, user: User) -> set[str]:
-    current_workspace = get_current_workspace()
+    current_workspace = get_current_workspace(db)
     if _is_pms_super_admin(db, user):
         return set(
             db.scalars(
@@ -510,7 +511,7 @@ def _serialize_space_doc_item(
 
 
 def _load_accessible_native_docs(db: Session, user: User) -> list[NativeDoc]:
-    current_workspace = get_current_workspace()
+    current_workspace = get_current_workspace(db)
     if current_workspace is None:
         return []
     docs = list(
@@ -554,7 +555,7 @@ def _load_native_doc_for_access(
     db: Session,
     doc_id: str,
 ) -> NativeDoc | None:
-    current_workspace = get_current_workspace()
+    current_workspace = get_current_workspace(db)
     query = (
         select(NativeDoc)
         .options(
@@ -996,10 +997,7 @@ def create_native_doc(
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
 ) -> DocsHubItem:
-    _ensure_docs_workspace_access(db, current_user)
-    current_workspace = get_current_workspace()
-    if current_workspace is None:
-        raise HTTPException(status_code=403, detail="Docs requests require a workspace context.")
+    current_workspace = _ensure_docs_workspace_access(db, current_user)
 
     doc, _page = create_native_doc_for_user(
         db,
@@ -1150,7 +1148,7 @@ def duplicate_doc_item(
         raise HTTPException(status_code=404, detail="Doc not found.")
 
     # Create the new native doc shell.
-    current_workspace = get_current_workspace()
+    current_workspace = get_current_workspace(db)
     if current_workspace is None:
         raise HTTPException(status_code=403, detail="Docs requests require a workspace context.")
     new_doc = NativeDoc(
@@ -1610,10 +1608,7 @@ def list_shareable_users(
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
 ) -> list[ShareableUserItem]:
-    _ensure_docs_workspace_access(db, current_user)
-    current_workspace = get_current_workspace()
-    if current_workspace is None:
-        raise HTTPException(status_code=403, detail="Docs requests require a workspace context.")
+    current_workspace = _ensure_docs_workspace_access(db, current_user)
     query = select(User).where(User.status == "active").order_by(User.full_name.asc(), User.email.asc())
     search = q.strip()
     if search:

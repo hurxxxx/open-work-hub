@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from contextvars import ContextVar, Token
 from typing import Any
 
 from sqlalchemy import inspect, select
@@ -295,12 +294,6 @@ USER_GRAPH_OPTIONS = (
     selectinload(User.sessions),
 )
 
-_current_workspace: ContextVar[Workspace | None] = ContextVar(
-    "aidoo_current_workspace",
-    default=None,
-)
-
-
 def slugify(value: str) -> str:
     return (
         value.strip()
@@ -464,19 +457,23 @@ def load_user_graph(db: Session, user_id: str) -> User | None:
     return db.scalar(select(User).options(*USER_GRAPH_OPTIONS).where(User.id == user_id))
 
 
-def bind_current_workspace(workspace: Workspace | None) -> Token[Workspace | None]:
-    return _current_workspace.set(workspace)
+CURRENT_WORKSPACE_DB_INFO_KEY = "current_workspace"
 
 
-def reset_current_workspace(token: Token[Workspace | None]) -> None:
-    try:
-        _current_workspace.reset(token)
-    except ValueError:
-        _current_workspace.set(None)
+def bind_current_workspace(db: Session, workspace: Workspace | None) -> None:
+    if workspace is None:
+        db.info.pop(CURRENT_WORKSPACE_DB_INFO_KEY, None)
+        return
+    db.info[CURRENT_WORKSPACE_DB_INFO_KEY] = workspace
 
 
-def get_current_workspace() -> Workspace | None:
-    return _current_workspace.get()
+def reset_current_workspace(db: Session) -> None:
+    db.info.pop(CURRENT_WORKSPACE_DB_INFO_KEY, None)
+
+
+def get_current_workspace(db: Session) -> Workspace | None:
+    workspace = db.info.get(CURRENT_WORKSPACE_DB_INFO_KEY)
+    return workspace if isinstance(workspace, Workspace) else None
 
 
 def is_infrastructure_seeded(db: Session) -> bool:
@@ -1046,18 +1043,8 @@ def ensure_workspace_default_pms_space(db: Session, workspace: Workspace) -> Tea
     return team
 
 
-def get_or_create_default_pms_space(
-    db: Session,
-    workspace: Workspace | None = None,
-) -> Team:
-    current_workspace = workspace or get_current_workspace()
-    if current_workspace is None:
-        current_workspace = db.scalar(
-            select(Workspace).where(Workspace.active.is_(True)).order_by(Workspace.created_at.asc())
-        )
-    if current_workspace is None:
-        raise RuntimeError("At least one active workspace must exist before creating the default PMS space.")
-    return ensure_workspace_default_pms_space(db, current_workspace)
+def get_or_create_default_pms_space(db: Session, *, workspace: Workspace) -> Team:
+    return ensure_workspace_default_pms_space(db, workspace)
 
 
 def resolve_system_roles(db: Session, user: User) -> list[str]:

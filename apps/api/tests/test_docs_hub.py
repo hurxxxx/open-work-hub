@@ -1,6 +1,15 @@
 from fastapi.testclient import TestClient
 
 
+def _dev_login(client: TestClient, account_key: str) -> dict:
+    response = client.post(
+        "/api/v1/auth/dev-login",
+        json={"account_key": account_key},
+    )
+    assert response.status_code == 200, response.text
+    return response.json()
+
+
 def test_docs_native_docs_and_direct_user_share_grant_docs_access(client: TestClient) -> None:
     admin = _bootstrap_admin_session(client)
 
@@ -243,6 +252,35 @@ def test_internal_shared_links_require_auth_and_honor_read_vs_edit(client: TestC
         json={"content_blocks": [{"type": "paragraph", "content": "allowed"}]},
     )
     assert edit_via_link_response.status_code == 200
+
+
+def test_workspace_scoped_shareable_users_stay_in_requested_docs_workspace(
+    client: TestClient,
+) -> None:
+    _bootstrap_admin_session(client)
+
+    hq_member = _dev_login(client, "hq-member")
+    hq_member_token = hq_member["token"]
+
+    scoped_response = client.get(
+        "/api/v1/workspaces/hq/docs/shareable-users",
+        headers=_auth_headers(hq_member_token),
+        params={"q": "Admin"},
+    )
+    assert scoped_response.status_code == 200
+    scoped_emails = {item["email"] for item in scoped_response.json()}
+    assert "hq-admin@aidoo.local" in scoped_emails
+    assert "innovation-lab-admin@aidoo.local" not in scoped_emails
+
+    legacy_response = client.get(
+        "/api/v1/docs/shareable-users",
+        headers=_auth_headers(hq_member_token),
+        params={"q": "Admin"},
+    )
+    assert legacy_response.status_code == 200
+    legacy_emails = {item["email"] for item in legacy_response.json()}
+    assert "hq-admin@aidoo.local" in legacy_emails
+    assert "innovation-lab-admin@aidoo.local" not in legacy_emails
 
 
 def test_duplicate_native_doc_clones_pages_into_new_private_doc(client: TestClient) -> None:

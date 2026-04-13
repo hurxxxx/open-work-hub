@@ -59,7 +59,7 @@ function localInputToIso(value: string): string {
 }
 
 export function MeetingCreateModal({ isOpen, onClose, onCreated }: MeetingCreateModalProps) {
-  const { token } = useAuth();
+  const { token, user } = useAuth();
   const [title, setTitle] = useState('');
   const [agenda, setAgenda] = useState('');
   const [startAt, setStartAt] = useState(defaultStart());
@@ -87,7 +87,11 @@ export function MeetingCreateModal({ isOpen, onClose, onCreated }: MeetingCreate
     setAgenda('');
     setStartAt(defaultStart());
     setEndAt(defaultEnd());
-    setAttendees([]);
+    setAttendees(
+      user
+        ? [{ user_id: user.id, role: 'required' as const }]
+        : [],
+    );
     setPickedAttendeeUsers([]);
     setUsers([]);
     setUserQuery('');
@@ -128,7 +132,7 @@ export function MeetingCreateModal({ isOpen, onClose, onCreated }: MeetingCreate
         .finally(() => {
           if (!cancelled) setUsersLoading(false);
         });
-    }, 150);
+    }, 100);
     return () => {
       cancelled = true;
       window.clearTimeout(handle);
@@ -144,8 +148,15 @@ export function MeetingCreateModal({ isOpen, onClose, onCreated }: MeetingCreate
 
   const filteredUsers = useMemo(() => {
     const selectedIds = new Set(attendees.map((item) => item.user_id));
-    return users.filter((user) => !selectedIds.has(user.id)).slice(0, 8);
-  }, [users, attendees]);
+    return users
+      .filter((candidate) => candidate.id !== user?.id && !selectedIds.has(candidate.id))
+      .slice(0, 8);
+  }, [users, attendees, user?.id]);
+
+  const visibleAttendees = useMemo(
+    () => attendees.filter((attendee) => attendee.user_id !== user?.id),
+    [attendees, user?.id],
+  );
 
   function addAttendee(user: MeetingUser) {
     setAttendees((prev) => [
@@ -159,6 +170,9 @@ export function MeetingCreateModal({ isOpen, onClose, onCreated }: MeetingCreate
   }
 
   function removeAttendee(userId: string) {
+    if (userId === user?.id) {
+      return;
+    }
     setAttendees((prev) => prev.filter((item) => item.user_id !== userId));
   }
 
@@ -444,9 +458,12 @@ export function MeetingCreateModal({ isOpen, onClose, onCreated }: MeetingCreate
 
         <div className="space-y-2">
           <label className="app-text-control-sm text-app-ink/70">참석자</label>
-          {attendees.length > 0 ? (
+          <p className="app-text-caption text-app-ink/40">
+            본인은 자동 참석자로 포함됩니다.
+          </p>
+          {visibleAttendees.length > 0 ? (
             <div className="flex flex-wrap gap-1.5">
-              {attendees.map((attendee) => {
+              {visibleAttendees.map((attendee) => {
                 const user = userLookup.get(attendee.user_id);
                 return (
                   <span

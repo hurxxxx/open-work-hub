@@ -38,7 +38,7 @@ export function MeetingEditModal({
   onClose,
   onSaved,
 }: MeetingEditModalProps) {
-  const { token } = useAuth();
+  const { token, user } = useAuth();
   const [title, setTitle] = useState(meeting.title);
   const [agenda, setAgenda] = useState(meeting.agenda);
   const [startAt, setStartAt] = useState(toLocalInputValue(meeting.start_at));
@@ -113,7 +113,7 @@ export function MeetingEditModal({
         .finally(() => {
           if (!cancelled) setUsersLoading(false);
         });
-    }, 150);
+    }, 100);
     return () => {
       cancelled = true;
       window.clearTimeout(handle);
@@ -129,8 +129,23 @@ export function MeetingEditModal({
 
   const filteredUsers = useMemo(() => {
     const selectedIds = new Set(attendees.map((item) => item.user_id));
-    return users.filter((user) => !selectedIds.has(user.id)).slice(0, 8);
-  }, [users, attendees]);
+    return users
+      .filter((candidate) => {
+        if (selectedIds.has(candidate.id)) return false;
+        if (user?.id === meeting.organizer_id && candidate.id === meeting.organizer_id) {
+          return false;
+        }
+        return true;
+      })
+      .slice(0, 8);
+  }, [users, attendees, meeting.organizer_id, user?.id]);
+
+  const visibleAttendees = useMemo(() => {
+    if (user?.id !== meeting.organizer_id) {
+      return attendees;
+    }
+    return attendees.filter((attendee) => attendee.user_id !== meeting.organizer_id);
+  }, [attendees, meeting.organizer_id, user?.id]);
 
   function addAttendee(user: MeetingUser) {
     setAttendees((prev) => [
@@ -246,9 +261,14 @@ export function MeetingEditModal({
 
         <div className="space-y-2">
           <label className="app-text-control-sm text-app-ink/70">참석자</label>
-          {attendees.length > 0 ? (
+          {user?.id === meeting.organizer_id ? (
+            <p className="app-text-caption text-app-ink/40">
+              본인은 자동 참석자로 포함됩니다.
+            </p>
+          ) : null}
+          {visibleAttendees.length > 0 ? (
             <div className="flex flex-wrap gap-1.5">
-              {attendees.map((attendee) => {
+              {visibleAttendees.map((attendee) => {
                 const user = userLookup.get(attendee.user_id);
                 const isOrganizer = attendee.user_id === meeting.organizer_id;
                 return (

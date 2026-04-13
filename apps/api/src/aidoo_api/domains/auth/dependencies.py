@@ -17,7 +17,6 @@ from aidoo_api.domains.auth.access import (
     is_platform_admin_user,
     load_active_workspace_by_key,
     load_user_graph,
-    reset_current_workspace,
     resolve_system_roles,
     resolve_team_role,
     resolve_visible_features,
@@ -213,7 +212,28 @@ def _select_legacy_workspace_for_feature(
     )
 
 
-def require_workspace_context(
+def _store_request_workspace(request: Request, workspace: Workspace | None) -> None:
+    request.state.current_workspace = workspace
+
+
+def require_current_workspace(
+    request: Request,
+    db: Session = Depends(get_db_session),
+) -> Workspace:
+    request_workspace = getattr(request.state, "current_workspace", None)
+    if isinstance(request_workspace, Workspace):
+        return request_workspace
+    workspace = get_current_workspace(db)
+    if workspace is None:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Workspace context is not available.",
+        )
+    _store_request_workspace(request, workspace)
+    return workspace
+
+
+async def require_workspace_context(
     request: Request,
     auth: AuthContext = Depends(require_auth_context),
     db: Session = Depends(get_db_session),
@@ -229,11 +249,9 @@ def require_workspace_context(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Workspace not found.")
 
     role = _resolve_workspace_role_for_request(db, auth, workspace)
-    token = bind_current_workspace(workspace)
-    try:
-        yield WorkspaceAccessContext(auth=auth, workspace=workspace, role=role)
-    finally:
-        reset_current_workspace(token)
+    bind_current_workspace(db, workspace)
+    _store_request_workspace(request, workspace)
+    return WorkspaceAccessContext(auth=auth, workspace=workspace, role=role)
 
 
 def require_workspace_membership(min_role: str = "member"):
@@ -271,10 +289,11 @@ def require_workspace_app_enabled(app_code: str, min_role: str = "member"):
 
 
 def require_workspace_access(workspace_key: str, min_role: str = "member"):
-    def dependency(
+    async def dependency(
+        request: Request,
         auth: AuthContext = Depends(require_auth_context),
         db: Session = Depends(get_db_session),
-    ):
+    ) -> WorkspaceAccessContext:
         workspace = load_active_workspace_by_key(db, workspace_key)
         if workspace is None:
             raise HTTPException(
@@ -287,11 +306,9 @@ def require_workspace_access(workspace_key: str, min_role: str = "member"):
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=f"Workspace access required: {workspace.key}",
             )
-        token = bind_current_workspace(workspace)
-        try:
-            yield WorkspaceAccessContext(auth=auth, workspace=workspace, role=role)
-        finally:
-            reset_current_workspace(token)
+        bind_current_workspace(db, workspace)
+        _store_request_workspace(request, workspace)
+        return WorkspaceAccessContext(auth=auth, workspace=workspace, role=role)
 
     return dependency
 
@@ -301,10 +318,11 @@ def require_workspace_feature_access(
     feature_code: str,
     min_role: str = "member",
 ):
-    def dependency(
+    async def dependency(
+        request: Request,
         auth: AuthContext = Depends(require_auth_context),
         db: Session = Depends(get_db_session),
-    ):
+    ) -> WorkspaceAccessContext:
         if feature_code not in resolve_visible_features(db, auth.user):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
@@ -317,11 +335,9 @@ def require_workspace_feature_access(
             app_or_workspace_key,
             min_role,
         )
-        token = bind_current_workspace(workspace)
-        try:
-            yield WorkspaceAccessContext(auth=auth, workspace=workspace, role=role)
-        finally:
-            reset_current_workspace(token)
+        bind_current_workspace(db, workspace)
+        _store_request_workspace(request, workspace)
+        return WorkspaceAccessContext(auth=auth, workspace=workspace, role=role)
 
     return dependency
 
@@ -352,7 +368,10 @@ def require_team_access(min_role: str = "member", team_param: str = "team_id"):
         if team is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Team not found.")
 
-        bound_workspace = get_current_workspace()
+        request_workspace = getattr(request.state, "current_workspace", None)
+        bound_workspace = (
+            request_workspace if isinstance(request_workspace, Workspace) else get_current_workspace(db)
+        )
         if bound_workspace is not None and team.workspace_id != bound_workspace.id:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Team not found.")
 

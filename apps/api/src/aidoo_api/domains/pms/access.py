@@ -11,7 +11,7 @@ from aidoo_api.domains.auth.access import (
     is_platform_admin_user,
     resolve_team_role,
 )
-from aidoo_api.domains.auth.models import Team, User, Workspace, WorkspaceEnabledApp
+from aidoo_api.domains.auth.models import Team, User, Workspace
 from aidoo_api.domains.pms.models import Issue, IssueUserAccess, Project
 
 
@@ -19,19 +19,14 @@ def _utcnow() -> datetime:
     return datetime.now(UTC).replace(tzinfo=None)
 
 
-def _get_pms_workspace(db: Session) -> Workspace | None:
-    workspace = get_current_workspace()
-    if workspace is not None:
-        return workspace
-    return db.scalar(
-        select(Workspace)
-        .join(WorkspaceEnabledApp, WorkspaceEnabledApp.workspace_id == Workspace.id)
-        .where(
-            Workspace.active.is_(True),
-            WorkspaceEnabledApp.app_code == "pms",
+def _get_pms_workspace(db: Session) -> Workspace:
+    workspace = get_current_workspace(db)
+    if workspace is None:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="PMS workspace context is not available.",
         )
-        .order_by(Workspace.created_at.asc(), Workspace.key.asc())
-    )
+    return workspace
 
 
 def _load_active_team(db: Session, team_id: str | None) -> Team | None:

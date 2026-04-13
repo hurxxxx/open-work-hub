@@ -4,16 +4,25 @@ from datetime import datetime
 from typing import Literal
 
 from fastapi import APIRouter, Depends, Form, Header, Query, Response, UploadFile, status
-from sqlalchemy import or_, select
+from sqlalchemy import or_, select, union
 from sqlalchemy.orm import Session
 
 from aidoo_api.core.db import get_db_session
-from aidoo_api.domains.auth.access import get_current_workspace, resolve_workspace_role
+from aidoo_api.domains.auth.access import SYSTEM_PLATFORM_ADMIN, SYSTEM_ROLE_ALIASES
 from aidoo_api.domains.auth.dependencies import (
     require_current_user,
+    require_current_workspace,
     require_feature_access,
 )
-from aidoo_api.domains.auth.models import User
+from aidoo_api.domains.auth.models import (
+    GroupSystemRole,
+    User,
+    UserAccessGroup,
+    UserSystemRole,
+    Workspace,
+    WorkspaceGroupBinding,
+    WorkspaceUserBinding,
+)
 from aidoo_api.domains.meeting import recordings as recording_service
 from aidoo_api.domains.meeting import service as meeting_service
 from aidoo_api.domains.meeting.schemas import (
@@ -38,6 +47,38 @@ router = APIRouter(
     dependencies=[Depends(require_feature_access("nav.meeting"))],
 )
 
+PLATFORM_ADMIN_ROLE_VALUES = tuple(
+    dict.fromkeys([SYSTEM_PLATFORM_ADMIN, *SYSTEM_ROLE_ALIASES.keys()])
+)
+
+
+def _workspace_meeting_user_ids_subquery(workspace_id: str):
+    direct_member_ids = select(WorkspaceUserBinding.user_id.label("user_id")).where(
+        WorkspaceUserBinding.workspace_id == workspace_id
+    )
+    group_member_ids = (
+        select(UserAccessGroup.user_id.label("user_id"))
+        .join(
+            WorkspaceGroupBinding,
+            WorkspaceGroupBinding.group_id == UserAccessGroup.group_id,
+        )
+        .where(WorkspaceGroupBinding.workspace_id == workspace_id)
+    )
+    direct_platform_admin_ids = select(UserSystemRole.user_id.label("user_id")).where(
+        UserSystemRole.role.in_(PLATFORM_ADMIN_ROLE_VALUES)
+    )
+    group_platform_admin_ids = (
+        select(UserAccessGroup.user_id.label("user_id"))
+        .join(GroupSystemRole, GroupSystemRole.group_id == UserAccessGroup.group_id)
+        .where(GroupSystemRole.role.in_(PLATFORM_ADMIN_ROLE_VALUES))
+    )
+    return union(
+        direct_member_ids,
+        group_member_ids,
+        direct_platform_admin_ids,
+        group_platform_admin_ids,
+    ).subquery()
+
 
 @router.get("/meetings", response_model=MeetingListResponse)
 def list_meetings(
@@ -46,9 +87,11 @@ def list_meetings(
     to_at: datetime | None = Query(default=None, alias="to"),
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
+    workspace: Workspace = Depends(require_current_workspace),
 ) -> MeetingListResponse:
     return meeting_service.list_meetings(
         db,
+        workspace=workspace,
         user=current_user,
         scope=scope,
         from_at=from_at,
@@ -65,9 +108,10 @@ def create_meeting(
     payload: MeetingCreateRequest,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
+    workspace: Workspace = Depends(require_current_workspace),
 ) -> MeetingDetail:
     return meeting_service.create_meeting(
-        db, organizer=current_user, payload=payload
+        db, workspace=workspace, organizer=current_user, payload=payload
     )
 
 
@@ -76,9 +120,10 @@ def get_meeting(
     meeting_id: str,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
+    workspace: Workspace = Depends(require_current_workspace),
 ) -> MeetingDetail:
     return meeting_service.get_meeting(
-        db, user=current_user, meeting_id=meeting_id
+        db, workspace=workspace, user=current_user, meeting_id=meeting_id
     )
 
 
@@ -88,9 +133,10 @@ def update_meeting(
     payload: MeetingUpdateRequest,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
+    workspace: Workspace = Depends(require_current_workspace),
 ) -> MeetingDetail:
     return meeting_service.update_meeting(
-        db, user=current_user, meeting_id=meeting_id, payload=payload
+        db, workspace=workspace, user=current_user, meeting_id=meeting_id, payload=payload
     )
 
 
@@ -102,9 +148,10 @@ def delete_meeting(
     meeting_id: str,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
+    workspace: Workspace = Depends(require_current_workspace),
 ) -> Response:
     meeting_service.delete_meeting(
-        db, user=current_user, meeting_id=meeting_id
+        db, workspace=workspace, user=current_user, meeting_id=meeting_id
     )
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
@@ -115,9 +162,10 @@ def attach_task(
     payload: MeetingTaskAttachRequest,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
+    workspace: Workspace = Depends(require_current_workspace),
 ) -> MeetingDetail:
     return meeting_service.attach_task(
-        db, user=current_user, meeting_id=meeting_id, issue_id=payload.issue_id
+        db, workspace=workspace, user=current_user, meeting_id=meeting_id, issue_id=payload.issue_id
     )
 
 
@@ -130,9 +178,10 @@ def detach_task(
     issue_id: str,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
+    workspace: Workspace = Depends(require_current_workspace),
 ) -> MeetingDetail:
     return meeting_service.detach_task(
-        db, user=current_user, meeting_id=meeting_id, issue_id=issue_id
+        db, workspace=workspace, user=current_user, meeting_id=meeting_id, issue_id=issue_id
     )
 
 
@@ -142,9 +191,10 @@ def attach_doc(
     payload: MeetingDocAttachRequest,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
+    workspace: Workspace = Depends(require_current_workspace),
 ) -> MeetingDetail:
     return meeting_service.attach_doc(
-        db, user=current_user, meeting_id=meeting_id, doc_id=payload.doc_id
+        db, workspace=workspace, user=current_user, meeting_id=meeting_id, doc_id=payload.doc_id
     )
 
 
@@ -157,9 +207,10 @@ def detach_doc(
     doc_id: str,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
+    workspace: Workspace = Depends(require_current_workspace),
 ) -> MeetingDetail:
     return meeting_service.detach_doc(
-        db, user=current_user, meeting_id=meeting_id, doc_id=doc_id
+        db, workspace=workspace, user=current_user, meeting_id=meeting_id, doc_id=doc_id
     )
 
 
@@ -169,9 +220,10 @@ async def attach_file(
     file: UploadFile,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
+    workspace: Workspace = Depends(require_current_workspace),
 ) -> MeetingDetail:
     return await meeting_service.attach_file(
-        db, user=current_user, meeting_id=meeting_id, upload=file
+        db, workspace=workspace, user=current_user, meeting_id=meeting_id, upload=file
     )
 
 
@@ -184,9 +236,10 @@ def detach_file(
     file_id: str,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
+    workspace: Workspace = Depends(require_current_workspace),
 ) -> MeetingDetail:
     return meeting_service.detach_file(
-        db, user=current_user, meeting_id=meeting_id, file_id=file_id
+        db, workspace=workspace, user=current_user, meeting_id=meeting_id, file_id=file_id
     )
 
 
@@ -200,9 +253,11 @@ def init_recording_staging(
     payload: RecordingStagingInitRequest,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
+    workspace: Workspace = Depends(require_current_workspace),
 ) -> RecordingStagingItem:
     return recording_service.init_staging(
         db,
+        workspace=workspace,
         user=current_user,
         meeting_id=meeting_id,
         payload=payload,
@@ -221,9 +276,11 @@ async def upload_recording_chunk(
     x_chunk_sha256: str | None = Header(default=None, alias="X-Chunk-Sha256"),
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
+    workspace: Workspace = Depends(require_current_workspace),
 ) -> RecordingChunkAck:
     return await recording_service.upload_chunk(
         db,
+        workspace=workspace,
         user=current_user,
         meeting_id=meeting_id,
         staging_id=staging_id,
@@ -243,9 +300,11 @@ def complete_recording_staging(
     payload: RecordingCompleteRequest,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
+    workspace: Workspace = Depends(require_current_workspace),
 ) -> MeetingDetail:
     return recording_service.complete_staging(
         db,
+        workspace=workspace,
         user=current_user,
         meeting_id=meeting_id,
         staging_id=staging_id,
@@ -261,9 +320,11 @@ def list_recording_staging(
     meeting_id: str,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
+    workspace: Workspace = Depends(require_current_workspace),
 ) -> list[RecordingStagingItem]:
     return recording_service.list_my_staging(
         db,
+        workspace=workspace,
         user=current_user,
         meeting_id=meeting_id,
     )
@@ -278,9 +339,11 @@ def discard_recording_staging(
     staging_id: str,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
+    workspace: Workspace = Depends(require_current_workspace),
 ) -> Response:
     recording_service.discard_staging(
         db,
+        workspace=workspace,
         user=current_user,
         meeting_id=meeting_id,
         staging_id=staging_id,
@@ -295,9 +358,11 @@ def import_recording(
     linked_task_id: str | None = Form(default=None),
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
+    workspace: Workspace = Depends(require_current_workspace),
 ) -> MeetingDetail:
     return recording_service.import_recording(
         db,
+        workspace=workspace,
         user=current_user,
         meeting_id=meeting_id,
         upload=file,
@@ -314,9 +379,11 @@ def get_recording_playback(
     recording_id: str,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
+    workspace: Workspace = Depends(require_current_workspace),
 ) -> RecordingPlaybackResponse:
     return recording_service.get_recording_playback(
         db,
+        workspace=workspace,
         user=current_user,
         meeting_id=meeting_id,
         recording_id=recording_id,
@@ -332,9 +399,11 @@ def retry_recording(
     recording_id: str,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
+    workspace: Workspace = Depends(require_current_workspace),
 ) -> MeetingDetail:
     return recording_service.retry_recording(
         db,
+        workspace=workspace,
         user=current_user,
         meeting_id=meeting_id,
         recording_id=recording_id,
@@ -347,22 +416,27 @@ def list_meeting_users(
     limit: int = Query(default=100, ge=1, le=200),
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
+    workspace: Workspace = Depends(require_current_workspace),
 ) -> list[MeetingUserItem]:
     """Search workspace members for meeting attendee selection."""
-    current_workspace = get_current_workspace()
-    if current_workspace is None:
-        current_workspace = meeting_service._get_meeting_workspace(db)
-    query = select(User).where(User.status == "active")
+    member_user_ids = _workspace_meeting_user_ids_subquery(workspace.id)
+    query = (
+        select(User)
+        .join(member_user_ids, member_user_ids.c.user_id == User.id)
+        .where(User.status == "active")
+    )
     search = q.strip()
     if search:
         like = f"%{search}%"
-        query = query.where(or_(User.full_name.ilike(like), User.email.ilike(like)))
+        query = query.where(
+            or_(
+                User.full_name.ilike(like),
+                User.email.ilike(like),
+                User.display_name.ilike(like),
+            )
+        )
     query = query.order_by(User.full_name.asc(), User.email.asc()).limit(limit)
-    users = [
-        user
-        for user in db.scalars(query)
-        if resolve_workspace_role(db, user, current_workspace.id) is not None
-    ]
+    users = db.scalars(query).all()
     return [
         MeetingUserItem(id=user.id, email=user.email, full_name=user.full_name)
         for user in users
