@@ -71,7 +71,7 @@ vi.mock('@/src/domains/pms/pms-api', () => ({
 function buildIssue(overrides: Partial<PmsIssue> = {}): PmsIssue {
   return {
     id: 'issue-1',
-    project_id: 'project-1',
+    list_id: 'project-1',
     reference: 'AID-1',
     title: 'Initial task',
     description: 'Initial description',

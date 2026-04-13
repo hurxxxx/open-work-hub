@@ -107,6 +107,8 @@ export interface MeetingCreateInput {
   start_at: string;
   end_at: string;
   attendees: MeetingAttendeeInput[];
+  task_ids?: string[];
+  doc_ids?: string[];
 }
 
 export interface MeetingUpdateInput {

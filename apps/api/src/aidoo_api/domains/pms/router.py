@@ -7,7 +7,7 @@ from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, UploadFile, status
 from fastapi.responses import RedirectResponse
-from pydantic import BaseModel, Field
+from pydantic import AliasChoices, BaseModel, Field
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session, joinedload, selectinload
 
@@ -48,6 +48,12 @@ from aidoo_api.domains.pms.models import (
     TaskTemplate,
     TimeEntry,
     UserDocPref,
+)
+from aidoo_api.domains.pms.access import (
+    _ensure_issue_readable,
+    _ensure_list_editor,
+    _ensure_list_member,
+    _ensure_list_owner,
 )
 
 
@@ -277,7 +283,7 @@ class SpaceMemberRoleUpdateRequest(BaseModel):
 
 class MilestoneItem(BaseModel):
     id: str
-    project_id: str
+    list_id: str = Field(validation_alias=AliasChoices("list_id", "project_id"))
     title: str
     description: str
     status: str
@@ -339,7 +345,7 @@ class ProjectStatusUpdateRequest(BaseModel):
 
 class TaskTemplateItem(BaseModel):
     id: str
-    project_id: str
+    list_id: str = Field(validation_alias=AliasChoices("list_id", "project_id"))
     name: str
     description: str
     default_status: str
@@ -370,7 +376,7 @@ class TaskTemplateUpdateRequest(BaseModel):
 
 class CustomFieldItem(BaseModel):
     id: str
-    project_id: str
+    list_id: str = Field(validation_alias=AliasChoices("list_id", "project_id"))
     name: str
     field_type: str
     options: list[str] | None = None
@@ -457,7 +463,7 @@ class TimeEntryItem(BaseModel):
 
 class IssueListItem(BaseModel):
     id: str
-    project_id: str
+    list_id: str = Field(validation_alias=AliasChoices("list_id", "project_id"))
     reference: str
     title: str
     description: str
@@ -603,7 +609,7 @@ class RecentActivityItem(BaseModel):
 
 
 class DashboardProjectItem(BaseModel):
-    project_id: str
+    list_id: str = Field(validation_alias=AliasChoices("list_id", "project_id"))
     key: str
     name: str
     progress: float
@@ -963,37 +969,15 @@ def _validate_folder_membership(db: Session, team_id: str, folder_id: str | None
 
 
 def _ensure_project_access(db: Session, user: User, project_id: str) -> tuple[Project, str]:
-    project = db.scalar(
-        select(Project)
-        .options(
-            selectinload(Project.milestones),
-            joinedload(Project.folder),
-        )
-        .where(Project.id == project_id)
-    )
-    if project is None:
-        raise HTTPException(status_code=404, detail="Project not found.")
-    if project.team_id is not None and not _is_active_space_id(db, project.team_id):
-        raise HTTPException(status_code=404, detail="Project not found.")
-    if project.team_id is None:
-        raise HTTPException(status_code=409, detail="Project space is not set.")
-    _space, role = _ensure_space_access(db, user, project.team_id)
-    return project, role
+    return _ensure_list_member(db, user, project_id)
 
 
 def _ensure_project_owner(db: Session, user: User, project_id: str) -> tuple[Project, str]:
-    project, role = _ensure_project_access(db, user, project_id)
-    if not is_platform_admin_user(user, db) and role not in {"owner", "admin"}:
-        raise HTTPException(status_code=403, detail="Project owner/admin access required.")
-    return project, role
+    return _ensure_list_owner(db, user, project_id)
 
 
 def _ensure_project_editor(db: Session, user: User, project_id: str) -> tuple[Project, str]:
-    """Allow owner, admin, and member roles. Block viewers."""
-    project, role = _ensure_project_access(db, user, project_id)
-    if not is_platform_admin_user(user, db) and role == "viewer":
-        raise HTTPException(status_code=403, detail="Viewer role cannot modify project data.")
-    return project, role
+    return _ensure_list_editor(db, user, project_id)
 
 
 def _accessible_projects_query(db: Session, user: User):
@@ -1072,7 +1056,7 @@ def _issue_reference(issue: Issue) -> str:
 def _serialize_issue(issue: Issue) -> IssueListItem:
     return IssueListItem(
         id=issue.id,
-        project_id=issue.project_id,
+        list_id=issue.list_id,
         reference=_issue_reference(issue),
         title=issue.title,
         description=issue.description,
@@ -1150,7 +1134,7 @@ def _serialize_milestone(milestone: Milestone) -> MilestoneItem:
     completed_issue_count = sum(1 for issue in issues if _is_done_status(issue.status))
     return MilestoneItem(
         id=milestone.id,
-        project_id=milestone.project_id,
+        list_id=milestone.list_id,
         title=milestone.title,
         description=milestone.description,
         status=milestone.status,
@@ -1465,7 +1449,8 @@ def _get_issue_for_user(
     if require_editor:
         project, _ = _ensure_project_editor(db, user, issue.project_id)
     else:
-        project, _ = _ensure_project_access(db, user, issue.project_id)
+        _ensure_issue_readable(db, user, issue)
+        project = issue.project
     return issue, project
 
 
@@ -2953,7 +2938,7 @@ def download_attachment(
     attachment = db.scalar(select(Attachment).where(Attachment.id == attachment_id))
     if attachment is None:
         raise HTTPException(status_code=404, detail="Attachment not found.")
-    _ensure_project_access(db, current_user, db.scalar(select(Issue.project_id).where(Issue.id == attachment.issue_id)))
+    _ensure_issue_readable(db, current_user, attachment.issue_id)
 
     url = _build_attachment_download_url(attachment.storage_key)
     return RedirectResponse(url=url, status_code=302)
@@ -3739,7 +3724,7 @@ def list_issue_custom_field_values(
     issue = db.scalar(select(Issue).where(Issue.id == issue_id))
     if issue is None:
         raise HTTPException(status_code=404, detail="Issue not found.")
-    _ensure_project_access(db, current_user, issue.project_id)
+    _ensure_issue_readable(db, current_user, issue)
     values = list(
         db.scalars(select(CustomFieldValue).where(CustomFieldValue.issue_id == issue_id))
     )

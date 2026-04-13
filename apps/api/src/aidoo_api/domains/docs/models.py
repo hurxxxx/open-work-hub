@@ -2,7 +2,17 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, JSON, String, UniqueConstraint
+from sqlalchemy import (
+    Boolean,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    JSON,
+    String,
+    UniqueConstraint,
+    text,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from aidoo_api.core.db import Base
@@ -42,6 +52,10 @@ class NativeDoc(Base):
         cascade="all, delete-orphan",
     )
     link_shares: Mapped[list["NativeDocLinkShare"]] = relationship(
+        back_populates="doc",
+        cascade="all, delete-orphan",
+    )
+    meeting_access_grants: Mapped[list["DocMeetingAccess"]] = relationship(
         back_populates="doc",
         cascade="all, delete-orphan",
     )
@@ -131,6 +145,67 @@ class NativeDocLinkShare(Base):
     )
     doc: Mapped[NativeDoc] = relationship(back_populates="link_shares")
     created_by = relationship("User")
+
+
+class DocMeetingAccess(Base):
+    __tablename__ = "docs_meeting_access"
+    __table_args__ = (
+        Index("ix_docs_meeting_access_user_revoked", "user_id", "revoked_at"),
+        Index(
+            "ix_docs_meeting_access_meeting_revoked",
+            "granted_by_meeting_id",
+            "revoked_at",
+        ),
+        Index(
+            "ix_docs_meeting_access_expires_active",
+            "expires_at",
+            postgresql_where=text("revoked_at IS NULL"),
+        ),
+        Index(
+            "uq_docs_meeting_access_active",
+            "doc_id",
+            "user_id",
+            "granted_by_meeting_id",
+            unique=True,
+            postgresql_where=text("revoked_at IS NULL"),
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    doc_id: Mapped[str] = mapped_column(ForeignKey("docs_native_docs.id"), index=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
+    access_level: Mapped[str] = mapped_column(String(16), default="read")
+    granted_by_meeting_id: Mapped[str | None] = mapped_column(
+        ForeignKey("meetings.id"),
+        nullable=True,
+        index=True,
+    )
+    granted_by_user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
+    reason: Mapped[str] = mapped_column(String(24), default="meeting_attendee")
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    revoked_by_user_id: Mapped[str | None] = mapped_column(
+        ForeignKey("users.id"),
+        nullable=True,
+        index=True,
+    )
+    revoke_reason: Mapped[str | None] = mapped_column(String(24), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        default=utcnow_naive,
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        default=utcnow_naive,
+        onupdate=utcnow_naive,
+        nullable=False,
+    )
+
+    doc: Mapped[NativeDoc] = relationship(back_populates="meeting_access_grants")
+    user = relationship("User", foreign_keys=[user_id])
+    granted_by_user = relationship("User", foreign_keys=[granted_by_user_id])
+    revoked_by_user = relationship("User", foreign_keys=[revoked_by_user_id])
 
 
 class DocsUserItemPref(Base):

@@ -188,6 +188,22 @@ def test_list_alias_space_docs_and_status_rename_behave_as_expected(client: Test
     project = create_response.json()
     assert project["team_id"] is not None
 
+    create_issue_response = client.post(
+        f"/api/v1/pms/lists/{project['id']}/issues",
+        headers=_auth_headers(admin_session["token"]),
+        json={
+            "title": "List-id issue",
+            "description": "",
+            "status": "backlog",
+            "priority": "medium",
+            "label_ids": [],
+        },
+    )
+    assert create_issue_response.status_code == 201
+    issue = create_issue_response.json()
+    assert issue["list_id"] == project["id"]
+    assert "project_id" not in issue
+
     status_create_response = client.post(
         f"/api/v1/pms/lists/{project['id']}/statuses",
         headers=_auth_headers(admin_session["token"]),

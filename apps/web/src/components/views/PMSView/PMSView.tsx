@@ -335,7 +335,7 @@ export const PMSView = () => {
         return null;
       }
 
-      return current.project_id === selectedProjectId ? current : null;
+      return current.list_id === selectedProjectId ? current : null;
     });
     setSelectedIssueIds(new Set());
     setFilterParams(createDefaultIssueFilterParams());
@@ -362,7 +362,7 @@ export const PMSView = () => {
             archived_state: detail.issue.archived ? 'archived' : 'active',
           }),
         );
-        setSelectedProjectId(detail.issue.project_id);
+        setSelectedProjectId(detail.issue.list_id);
         setSelectedIssue(detail.issue);
       })
       .catch((caughtError) => {

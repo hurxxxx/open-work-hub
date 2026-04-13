@@ -4,8 +4,6 @@ import { CheckSquare, FileText, Paperclip, Plus, X } from 'lucide-react';
 
 import { useAuth } from '@/src/domains/auth/auth-provider';
 import {
-  attachDocToMeeting,
-  attachTaskToMeeting,
   createMeeting,
   listMeetingUsers,
   uploadMeetingFile,
@@ -206,35 +204,12 @@ export function MeetingCreateModal({ isOpen, onClose, onCreated }: MeetingCreate
         start_at: localInputToIso(startAt),
         end_at: localInputToIso(endAt),
         attendees,
+        task_ids: pickedTasks.map((task) => task.id),
+        doc_ids: pickedDocs.map((doc) => doc.id),
       });
 
       const failures: string[] = [];
-      const succeededTaskIds = new Set<string>();
-      const succeededDocIds = new Set<string>();
       const succeededFileNames = new Set<string>();
-
-      for (const task of pickedTasks) {
-        try {
-          await attachTaskToMeeting(token, meeting.id, task.id);
-          succeededTaskIds.add(task.id);
-        } catch (err) {
-          failures.push(
-            `태스크 "${task.reference || task.title}": ${
-              err instanceof Error ? err.message : '실패'
-            }`,
-          );
-        }
-      }
-      for (const doc of pickedDocs) {
-        try {
-          await attachDocToMeeting(token, meeting.id, doc.id);
-          succeededDocIds.add(doc.id);
-        } catch (err) {
-          failures.push(
-            `문서 "${doc.title}": ${err instanceof Error ? err.message : '실패'}`,
-          );
-        }
-      }
       for (const file of pickedFiles) {
         try {
           await uploadMeetingFile(token, meeting.id, file);
@@ -249,10 +224,8 @@ export function MeetingCreateModal({ isOpen, onClose, onCreated }: MeetingCreate
       if (failures.length > 0) {
         // Drop successfully attached items so the remaining chips are the
         // ones the user still needs to address, and keep the modal open so
-        // the error panel is visible. The created meeting id is stashed for
-        // an explicit "회의 보러 가기" action.
-        setPickedTasks((prev) => prev.filter((t) => !succeededTaskIds.has(t.id)));
-        setPickedDocs((prev) => prev.filter((d) => !succeededDocIds.has(d.id)));
+        // the error panel is visible. Task/doc attachment is now part of the
+        // meeting create transaction, so only file uploads can partially fail.
         setPickedFiles((prev) =>
           prev.filter((f) => !succeededFileNames.has(f.name)),
         );

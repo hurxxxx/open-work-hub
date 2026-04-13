@@ -85,7 +85,7 @@ export interface PmsUserSummary {
 
 export interface PmsMilestone {
   id: string;
-  project_id: string;
+  list_id: string;
   title: string;
   description: string;
   status: string;
@@ -113,7 +113,7 @@ export interface PmsLabel {
 
 export interface PmsIssue {
   id: string;
-  project_id: string;
+  list_id: string;
   reference: string;
   title: string;
   description: string;
@@ -257,7 +257,7 @@ export interface PmsDashboardPriorityCount {
 }
 
 export interface PmsDashboardProject {
-  project_id: string;
+  list_id: string;
   key: string;
   name: string;
   progress: number;
@@ -339,7 +339,7 @@ export interface PmsFoldersResponse {
 
 export interface PmsTaskTemplate {
   id: string;
-  project_id: string;
+  list_id: string;
   name: string;
   description: string;
   default_status: string;
@@ -356,7 +356,7 @@ export interface PmsTaskTemplatesResponse {
 
 export interface PmsCustomField {
   id: string;
-  project_id: string;
+  list_id: string;
   name: string;
   field_type: 'text' | 'number' | 'date' | 'select';
   options: string[] | null;

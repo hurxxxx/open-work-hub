@@ -13,9 +13,17 @@ from aidoo_api.core.storage import get_minio_client
 from aidoo_api.domains.auth.access import (
     get_current_workspace,
     is_platform_admin_user,
+    resolve_workspace_role,
 )
 from aidoo_api.domains.auth.models import User, Workspace, WorkspaceEnabledApp
 from aidoo_api.domains.auth.security import new_id
+from aidoo_api.domains.docs.access_grants import (
+    bump_doc_grant_expiry_for_meeting,
+    grant_doc_access,
+    revoke_doc_grants_for_attachment,
+    revoke_doc_grants_for_meeting,
+    revoke_doc_grants_for_meeting_attendee,
+)
 from aidoo_api.domains.docs.models import NativeDoc
 from aidoo_api.domains.meeting.models import (
     Meeting,
@@ -25,8 +33,8 @@ from aidoo_api.domains.meeting.models import (
     MeetingTaskLink,
 )
 from aidoo_api.domains.meeting.permissions import (
-    ensure_doc_readable,
-    ensure_issue_readable,
+    ensure_doc_attachable,
+    ensure_issue_attachable,
     ensure_link_remover,
     ensure_meeting_participant,
 )
@@ -42,6 +50,14 @@ from aidoo_api.domains.meeting.schemas import (
     MeetingRecordingOut,
     MeetingTaskLinkOut,
     MeetingUpdateRequest,
+)
+from aidoo_api.domains.pms.access import has_list_access
+from aidoo_api.domains.pms.access_grants import (
+    bump_grant_expiry_for_meeting,
+    grant_issue_access,
+    revoke_grants_for_issue_attachment,
+    revoke_grants_for_meeting,
+    revoke_grants_for_meeting_attendee,
 )
 
 
@@ -77,7 +93,16 @@ def _validate_time_range(start_at: datetime, end_at: datetime) -> None:
         )
 
 
-def _validate_attendee_users(db: Session, user_ids: Iterable[str]) -> dict[str, User]:
+def _meeting_grant_expires_at(meeting: Meeting) -> datetime:
+    return meeting.end_at + timedelta(days=7)
+
+
+def _validate_attendee_users(
+    db: Session,
+    user_ids: Iterable[str],
+    *,
+    workspace_id: str,
+) -> dict[str, User]:
     unique_ids = list({uid for uid in user_ids})
     if not unique_ids:
         return {}
@@ -91,7 +116,137 @@ def _validate_attendee_users(db: Session, user_ids: Iterable[str]) -> dict[str, 
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Unknown or inactive attendee user(s): {sorted(missing)}",
         )
+    non_members = sorted(
+        user.id for user in users if resolve_workspace_role(db, user, workspace_id) is None
+    )
+    if non_members:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Attendees must belong to the meeting workspace: {non_members}",
+        )
     return found
+
+
+def _grant_issue_to_attendee(
+    db: Session,
+    *,
+    meeting: Meeting,
+    issue: Issue,
+    attendee_user: User,
+    granted_by_user_id: str,
+) -> None:
+    if attendee_user.id == granted_by_user_id:
+        return
+    if is_platform_admin_user(attendee_user, db):
+        return
+    if has_list_access(db, attendee_user, issue.list_id):
+        return
+    grant_issue_access(
+        db,
+        issue_id=issue.id,
+        user_id=attendee_user.id,
+        granted_by_user_id=granted_by_user_id,
+        granted_by_meeting_id=meeting.id,
+        reason="meeting_attendee",
+        expires_at=_meeting_grant_expires_at(meeting),
+    )
+
+
+def _grant_doc_to_attendee(
+    db: Session,
+    *,
+    meeting: Meeting,
+    doc: NativeDoc,
+    attendee_user: User,
+    granted_by_user_id: str,
+) -> None:
+    if attendee_user.id == granted_by_user_id:
+        return
+    if attendee_user.id == doc.owner_id:
+        return
+    if is_platform_admin_user(attendee_user, db):
+        return
+    grant_doc_access(
+        db,
+        doc_id=doc.id,
+        user_id=attendee_user.id,
+        granted_by_user_id=granted_by_user_id,
+        granted_by_meeting_id=meeting.id,
+        reason="meeting_attendee",
+        expires_at=_meeting_grant_expires_at(meeting),
+    )
+
+
+def _attach_issue_link(
+    db: Session,
+    *,
+    meeting: Meeting,
+    issue: Issue,
+    added_by_id: str,
+) -> None:
+    existing = db.scalar(
+        select(MeetingTaskLink).where(
+            MeetingTaskLink.meeting_id == meeting.id,
+            MeetingTaskLink.issue_id == issue.id,
+        )
+    )
+    if existing is None:
+        db.add(
+            MeetingTaskLink(
+                id=new_id(),
+                meeting_id=meeting.id,
+                issue_id=issue.id,
+                added_by_id=added_by_id,
+            )
+        )
+        db.flush()
+
+    for attendee in meeting.attendees:
+        if attendee.user is None:
+            continue
+        _grant_issue_to_attendee(
+            db,
+            meeting=meeting,
+            issue=issue,
+            attendee_user=attendee.user,
+            granted_by_user_id=added_by_id,
+        )
+
+
+def _attach_doc_link(
+    db: Session,
+    *,
+    meeting: Meeting,
+    doc: NativeDoc,
+    added_by_id: str,
+) -> None:
+    existing = db.scalar(
+        select(MeetingDocLink).where(
+            MeetingDocLink.meeting_id == meeting.id,
+            MeetingDocLink.doc_id == doc.id,
+        )
+    )
+    if existing is None:
+        db.add(
+            MeetingDocLink(
+                id=new_id(),
+                meeting_id=meeting.id,
+                doc_id=doc.id,
+                added_by_id=added_by_id,
+            )
+        )
+        db.flush()
+
+    for attendee in meeting.attendees:
+        if attendee.user is None:
+            continue
+        _grant_doc_to_attendee(
+            db,
+            meeting=meeting,
+            doc=doc,
+            attendee_user=attendee.user,
+            granted_by_user_id=added_by_id,
+        )
 
 
 def _serialize_attendee(attendee: MeetingAttendee) -> MeetingAttendeeOut:
@@ -244,16 +399,36 @@ def _replace_attendees(
     db: Session,
     meeting: Meeting,
     new_attendees: list[MeetingAttendeeInput],
+    *,
+    acting_user_id: str,
 ) -> None:
     user_lookup = _validate_attendee_users(
-        db, [item.user_id for item in new_attendees]
+        db,
+        [item.user_id for item in new_attendees],
+        workspace_id=meeting.workspace_id,
     )
 
     existing_by_user = {att.user_id: att for att in meeting.attendees}
     incoming_user_ids = {item.user_id for item in new_attendees}
+    removed_user_ids = set(existing_by_user) - incoming_user_ids
+    added_user_ids = incoming_user_ids - set(existing_by_user)
 
     for user_id, attendee in list(existing_by_user.items()):
         if user_id not in incoming_user_ids:
+            revoke_grants_for_meeting_attendee(
+                db,
+                meeting_id=meeting.id,
+                user_id=user_id,
+                revoked_by_user_id=acting_user_id,
+                reason="attendee_removed",
+            )
+            revoke_doc_grants_for_meeting_attendee(
+                db,
+                meeting_id=meeting.id,
+                user_id=user_id,
+                revoked_by_user_id=acting_user_id,
+                reason="attendee_removed",
+            )
             db.delete(attendee)
 
     for item in new_attendees:
@@ -279,6 +454,52 @@ def _replace_attendees(
         # Force load `.user` so serialization sees the relationship.
         _ = attendee.user_id
         _ = user_lookup.get(attendee.user_id)
+        _ = attendee.user
+
+    if not added_user_ids:
+        return
+
+    issues_by_id = {
+        issue.id: issue
+        for issue in db.scalars(
+            select(Issue).where(
+                Issue.id.in_([link.issue_id for link in meeting.task_links] or ["__none__"])
+            )
+        )
+    }
+    docs_by_id = {
+        doc.id: doc
+        for doc in db.scalars(
+            select(NativeDoc).where(
+                NativeDoc.id.in_([link.doc_id for link in meeting.doc_links] or ["__none__"])
+            )
+        )
+    }
+    for attendee in meeting.attendees:
+        if attendee.user_id not in added_user_ids or attendee.user is None:
+            continue
+        for link in meeting.task_links:
+            issue = issues_by_id.get(link.issue_id)
+            if issue is None:
+                continue
+            _grant_issue_to_attendee(
+                db,
+                meeting=meeting,
+                issue=issue,
+                attendee_user=attendee.user,
+                granted_by_user_id=acting_user_id,
+            )
+        for link in meeting.doc_links:
+            doc = docs_by_id.get(link.doc_id)
+            if doc is None:
+                continue
+            _grant_doc_to_attendee(
+                db,
+                meeting=meeting,
+                doc=doc,
+                attendee_user=attendee.user,
+                granted_by_user_id=acting_user_id,
+            )
 
 
 def create_meeting(
@@ -295,7 +516,11 @@ def create_meeting(
         attendees_input.append(
             MeetingAttendeeInput(user_id=organizer.id, role="required")
         )
-    _validate_attendee_users(db, [item.user_id for item in attendees_input])
+    _validate_attendee_users(
+        db,
+        [item.user_id for item in attendees_input],
+        workspace_id=workspace.id,
+    )
 
     meeting = Meeting(
         id=new_id(),
@@ -322,6 +547,15 @@ def create_meeting(
                 ),
             )
         )
+    db.flush()
+    meeting = _load_meeting(db, meeting.id)
+
+    issues = [ensure_issue_attachable(db, organizer, issue_id) for issue_id in payload.task_ids]
+    docs = [ensure_doc_attachable(db, organizer, doc_id) for doc_id in payload.doc_ids]
+    for issue in issues:
+        _attach_issue_link(db, meeting=meeting, issue=issue, added_by_id=organizer.id)
+    for doc in docs:
+        _attach_doc_link(db, meeting=meeting, doc=doc, added_by_id=organizer.id)
     db.commit()
 
     fresh = _load_meeting(db, meeting.id)
@@ -339,6 +573,7 @@ def update_meeting(
 
     meeting = _load_meeting(db, meeting_id)
     ensure_meeting_organizer(db, user, meeting)
+    original_end_at = meeting.end_at
 
     if payload.title is not None:
         meeting.title = payload.title.strip()
@@ -360,7 +595,24 @@ def update_meeting(
                     user_id=meeting.organizer_id, role="required"
                 )
             )
-        _replace_attendees(db, meeting, attendees_input)
+        _replace_attendees(
+            db,
+            meeting,
+            attendees_input,
+            acting_user_id=user.id,
+        )
+
+    if meeting.end_at != original_end_at:
+        bump_grant_expiry_for_meeting(
+            db,
+            meeting_id=meeting.id,
+            new_end_at=meeting.end_at,
+        )
+        bump_doc_grant_expiry_for_meeting(
+            db,
+            meeting_id=meeting.id,
+            new_end_at=meeting.end_at,
+        )
 
     db.add(meeting)
     db.commit()
@@ -374,6 +626,18 @@ def delete_meeting(db: Session, *, user: User, meeting_id: str) -> None:
 
     meeting = _load_meeting(db, meeting_id)
     ensure_meeting_organizer(db, user, meeting)
+    revoke_grants_for_meeting(
+        db,
+        meeting_id=meeting.id,
+        revoked_by_user_id=user.id,
+        reason="meeting_deleted",
+    )
+    revoke_doc_grants_for_meeting(
+        db,
+        meeting_id=meeting.id,
+        revoked_by_user_id=user.id,
+        reason="meeting_deleted",
+    )
     db.delete(meeting)
     db.commit()
 
@@ -472,24 +736,9 @@ def attach_task(
 ) -> MeetingDetail:
     meeting = _load_meeting(db, meeting_id)
     ensure_meeting_participant(db, user, meeting)
-    ensure_issue_readable(db, user, issue_id)
-
-    existing = db.scalar(
-        select(MeetingTaskLink).where(
-            MeetingTaskLink.meeting_id == meeting_id,
-            MeetingTaskLink.issue_id == issue_id,
-        )
-    )
-    if existing is None:
-        db.add(
-            MeetingTaskLink(
-                id=new_id(),
-                meeting_id=meeting_id,
-                issue_id=issue_id,
-                added_by_id=user.id,
-            )
-        )
-        db.commit()
+    issue = ensure_issue_attachable(db, user, issue_id)
+    _attach_issue_link(db, meeting=meeting, issue=issue, added_by_id=user.id)
+    db.commit()
 
     fresh = _load_meeting(db, meeting_id)
     return _serialize_meeting(db, fresh)
@@ -508,6 +757,13 @@ def detach_task(
     )
     if link is not None:
         ensure_link_remover(db, user, meeting, link.added_by_id)
+        revoke_grants_for_issue_attachment(
+            db,
+            meeting_id=meeting.id,
+            issue_id=issue_id,
+            revoked_by_user_id=user.id,
+            reason="detach",
+        )
         db.delete(link)
         db.commit()
 
@@ -520,24 +776,9 @@ def attach_doc(
 ) -> MeetingDetail:
     meeting = _load_meeting(db, meeting_id)
     ensure_meeting_participant(db, user, meeting)
-    ensure_doc_readable(db, user, doc_id)
-
-    existing = db.scalar(
-        select(MeetingDocLink).where(
-            MeetingDocLink.meeting_id == meeting_id,
-            MeetingDocLink.doc_id == doc_id,
-        )
-    )
-    if existing is None:
-        db.add(
-            MeetingDocLink(
-                id=new_id(),
-                meeting_id=meeting_id,
-                doc_id=doc_id,
-                added_by_id=user.id,
-            )
-        )
-        db.commit()
+    doc = ensure_doc_attachable(db, user, doc_id)
+    _attach_doc_link(db, meeting=meeting, doc=doc, added_by_id=user.id)
+    db.commit()
 
     fresh = _load_meeting(db, meeting_id)
     return _serialize_meeting(db, fresh)
@@ -556,6 +797,13 @@ def detach_doc(
     )
     if link is not None:
         ensure_link_remover(db, user, meeting, link.added_by_id)
+        revoke_doc_grants_for_attachment(
+            db,
+            meeting_id=meeting.id,
+            doc_id=doc_id,
+            revoked_by_user_id=user.id,
+            reason="detach",
+        )
         db.delete(link)
         db.commit()
 

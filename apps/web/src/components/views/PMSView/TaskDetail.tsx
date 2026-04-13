@@ -278,7 +278,7 @@ export const TaskDetail = ({
     setAddingSubtask(true);
     setSaveError(null);
     try {
-      const sub = await createProjectIssue(token, issue.project_id, {
+      const sub = await createProjectIssue(token, issue.list_id, {
         title: newSubtaskTitle.trim(),
         description: '',
         status: 'todo',
@@ -296,7 +296,7 @@ export const TaskDetail = ({
     } finally {
       setAddingSubtask(false);
     }
-  }, [canEdit, token, issue.id, issue.project_id, newSubtaskTitle, onUpdate]);
+  }, [canEdit, token, issue.id, issue.list_id, newSubtaskTitle, onUpdate]);
 
   // ── Checklist handlers ──────────────────────────────────────────
 
@@ -409,11 +409,11 @@ export const TaskDetail = ({
     if (!token || !canEdit || !query.trim()) { setDepSearchResults([]); return; }
     setDepSearching(true);
     try {
-      const res = await listProjectIssues(token, issue.project_id, { q: query.trim() });
+      const res = await listProjectIssues(token, issue.list_id, { q: query.trim() });
       setDepSearchResults(res.items.filter(i => i.id !== issue.id));
     } catch { setDepSearchResults([]); }
     finally { setDepSearching(false); }
-  }, [canEdit, token, issue.id, issue.project_id]);
+  }, [canEdit, token, issue.id, issue.list_id]);
 
   const handleAddDependency = useCallback(async (targetId: string) => {
     if (!token || !canEdit) return;

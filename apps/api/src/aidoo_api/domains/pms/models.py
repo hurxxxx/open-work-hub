@@ -7,13 +7,15 @@ from sqlalchemy import (
     Date,
     DateTime,
     ForeignKey,
+    Index,
     Integer,
     JSON,
     String,
     Text,
     UniqueConstraint,
+    text,
 )
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, mapped_column, relationship, synonym
 
 from aidoo_api.core.db import Base
 
@@ -38,11 +40,11 @@ class Folder(Base):
         default=utcnow_naive,
         nullable=False,
     )
-    projects: Mapped[list["Project"]] = relationship(back_populates="folder")
+    projects: Mapped[list["PmsList"]] = relationship(back_populates="folder")
 
 
-class Project(Base):
-    __tablename__ = "pms_projects"
+class PmsList(Base):
+    __tablename__ = "pms_lists"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     key: Mapped[str] = mapped_column(String(24), unique=True, index=True)
@@ -91,22 +93,28 @@ class Project(Base):
     )
     folder: Mapped[Folder | None] = relationship(back_populates="projects")
     task_templates: Mapped[list["TaskTemplate"]] = relationship(
+        back_populates="project",
         cascade="all, delete-orphan",
     )
     custom_fields: Mapped[list["CustomField"]] = relationship(
+        back_populates="project",
         cascade="all, delete-orphan",
     )
+
+
+Project = PmsList
+
 
 class ProjectStatus(Base):
     """Custom workflow statuses per project."""
 
     __tablename__ = "pms_project_statuses"
     __table_args__ = (
-        UniqueConstraint("project_id", "slug", name="uq_pms_project_status_slug"),
+        UniqueConstraint("list_id", "slug", name="uq_pms_project_status_slug"),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    project_id: Mapped[str] = mapped_column(ForeignKey("pms_projects.id"), index=True)
+    list_id: Mapped[str] = mapped_column(ForeignKey("pms_lists.id"), index=True)
     slug: Mapped[str] = mapped_column(String(40), index=True)
     name: Mapped[str] = mapped_column(String(60))
     color: Mapped[str] = mapped_column(String(24), default="#6b7280")
@@ -119,14 +127,15 @@ class ProjectStatus(Base):
         default=utcnow_naive,
         nullable=False,
     )
-    project: Mapped[Project] = relationship(back_populates="statuses")
+    project_id = synonym("list_id")
+    project: Mapped[PmsList] = relationship(back_populates="statuses")
 
 
 class Milestone(Base):
     __tablename__ = "pms_milestones"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    project_id: Mapped[str] = mapped_column(ForeignKey("pms_projects.id"), index=True)
+    list_id: Mapped[str] = mapped_column(ForeignKey("pms_lists.id"), index=True)
     title: Mapped[str] = mapped_column(String(140))
     description: Mapped[str] = mapped_column(Text, default="", nullable=False)
     status: Mapped[str] = mapped_column(String(24), default="planned", index=True)
@@ -144,16 +153,17 @@ class Milestone(Base):
         onupdate=utcnow_naive,
         nullable=False,
     )
-    project: Mapped[Project] = relationship(back_populates="milestones")
+    project_id = synonym("list_id")
+    project: Mapped[PmsList] = relationship(back_populates="milestones")
     issues: Mapped[list["Issue"]] = relationship(back_populates="milestone")
 
 
 class Label(Base):
     __tablename__ = "pms_labels"
-    __table_args__ = (UniqueConstraint("project_id", "name", name="uq_pms_label_name"),)
+    __table_args__ = (UniqueConstraint("list_id", "name", name="uq_pms_label_name"),)
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    project_id: Mapped[str] = mapped_column(ForeignKey("pms_projects.id"), index=True)
+    list_id: Mapped[str] = mapped_column(ForeignKey("pms_lists.id"), index=True)
     name: Mapped[str] = mapped_column(String(48))
     color: Mapped[str] = mapped_column(String(24), default="#1f2d38")
     created_at: Mapped[datetime] = mapped_column(
@@ -161,7 +171,8 @@ class Label(Base):
         default=utcnow_naive,
         nullable=False,
     )
-    project: Mapped[Project] = relationship(back_populates="labels")
+    project_id = synonym("list_id")
+    project: Mapped[PmsList] = relationship(back_populates="labels")
     issue_links: Mapped[list["IssueLabel"]] = relationship(
         back_populates="label",
         cascade="all, delete-orphan",
@@ -170,10 +181,10 @@ class Label(Base):
 
 class Issue(Base):
     __tablename__ = "pms_issues"
-    __table_args__ = (UniqueConstraint("project_id", "issue_number", name="uq_pms_issue_number"),)
+    __table_args__ = (UniqueConstraint("list_id", "issue_number", name="uq_pms_issue_number"),)
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    project_id: Mapped[str] = mapped_column(ForeignKey("pms_projects.id"), index=True)
+    list_id: Mapped[str] = mapped_column(ForeignKey("pms_lists.id"), index=True)
     issue_number: Mapped[int] = mapped_column(Integer, nullable=False)
     title: Mapped[str] = mapped_column(String(180), index=True)
     description: Mapped[str] = mapped_column(Text, default="", nullable=False)
@@ -209,7 +220,8 @@ class Issue(Base):
         onupdate=utcnow_naive,
         nullable=False,
     )
-    project: Mapped[Project] = relationship(back_populates="issues")
+    project_id = synonym("list_id")
+    project: Mapped[PmsList] = relationship(back_populates="issues")
     parent: Mapped["Issue | None"] = relationship(
         back_populates="subtasks",
         remote_side="Issue.id",
@@ -246,6 +258,10 @@ class Issue(Base):
         cascade="all, delete-orphan",
     )
     assignee_links: Mapped[list["IssueAssignee"]] = relationship(
+        cascade="all, delete-orphan",
+    )
+    user_access_grants: Mapped[list["IssueUserAccess"]] = relationship(
+        back_populates="issue",
         cascade="all, delete-orphan",
     )
 
@@ -302,7 +318,7 @@ class ScheduleDependency(Base):
     __tablename__ = "pms_schedule_dependencies"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    project_id: Mapped[str] = mapped_column(ForeignKey("pms_projects.id"), index=True)
+    list_id: Mapped[str] = mapped_column(ForeignKey("pms_lists.id"), index=True)
     predecessor_kind: Mapped[str] = mapped_column(String(24), default="issue")
     predecessor_id: Mapped[str] = mapped_column(String(36), index=True)
     successor_kind: Mapped[str] = mapped_column(String(24), default="issue")
@@ -313,7 +329,8 @@ class ScheduleDependency(Base):
         default=utcnow_naive,
         nullable=False,
     )
-    project: Mapped[Project] = relationship(back_populates="dependencies")
+    project_id = synonym("list_id")
+    project: Mapped[PmsList] = relationship(back_populates="dependencies")
 
 
 class Attachment(Base):
@@ -393,7 +410,7 @@ class TaskTemplate(Base):
     __tablename__ = "pms_task_templates"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    project_id: Mapped[str] = mapped_column(ForeignKey("pms_projects.id"), index=True)
+    list_id: Mapped[str] = mapped_column(ForeignKey("pms_lists.id"), index=True)
     name: Mapped[str] = mapped_column(String(140))
     description: Mapped[str] = mapped_column(Text, default="", nullable=False)
     default_status: Mapped[str] = mapped_column(String(40), default="backlog")
@@ -404,6 +421,8 @@ class TaskTemplate(Base):
         default=utcnow_naive,
         nullable=False,
     )
+    project_id = synonym("list_id")
+    project: Mapped[PmsList] = relationship(back_populates="task_templates")
 
 
 class CustomField(Base):
@@ -412,7 +431,7 @@ class CustomField(Base):
     __tablename__ = "pms_custom_fields"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    project_id: Mapped[str] = mapped_column(ForeignKey("pms_projects.id"), index=True)
+    list_id: Mapped[str] = mapped_column(ForeignKey("pms_lists.id"), index=True)
     name: Mapped[str] = mapped_column(String(100))
     field_type: Mapped[str] = mapped_column(String(24))  # text | number | date | select
     options: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)  # for select type
@@ -422,6 +441,8 @@ class CustomField(Base):
         default=utcnow_naive,
         nullable=False,
     )
+    project_id = synonym("list_id")
+    project: Mapped[PmsList] = relationship(back_populates="custom_fields")
 
 
 class CustomFieldValue(Base):
@@ -450,6 +471,67 @@ class IssueAssignee(Base):
     issue_id: Mapped[str] = mapped_column(ForeignKey("pms_issues.id"), index=True)
     user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
     user = relationship("User")
+
+
+class IssueUserAccess(Base):
+    __tablename__ = "pms_issue_user_access"
+    __table_args__ = (
+        Index("ix_pms_issue_user_access_user_revoked", "user_id", "revoked_at"),
+        Index(
+            "ix_pms_issue_user_access_meeting_revoked",
+            "granted_by_meeting_id",
+            "revoked_at",
+        ),
+        Index(
+            "ix_pms_issue_user_access_expires_active",
+            "expires_at",
+            postgresql_where=text("revoked_at IS NULL"),
+        ),
+        Index(
+            "uq_pms_issue_user_access_active",
+            "issue_id",
+            "user_id",
+            "granted_by_meeting_id",
+            unique=True,
+            postgresql_where=text("revoked_at IS NULL"),
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    issue_id: Mapped[str] = mapped_column(ForeignKey("pms_issues.id"), index=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
+    access_level: Mapped[str] = mapped_column(String(16), default="read")
+    granted_by_meeting_id: Mapped[str | None] = mapped_column(
+        ForeignKey("meetings.id"),
+        nullable=True,
+        index=True,
+    )
+    granted_by_user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
+    reason: Mapped[str] = mapped_column(String(24), default="meeting_attendee")
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    revoked_by_user_id: Mapped[str | None] = mapped_column(
+        ForeignKey("users.id"),
+        nullable=True,
+        index=True,
+    )
+    revoke_reason: Mapped[str | None] = mapped_column(String(24), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        default=utcnow_naive,
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        default=utcnow_naive,
+        onupdate=utcnow_naive,
+        nullable=False,
+    )
+
+    issue: Mapped[Issue] = relationship(back_populates="user_access_grants")
+    user = relationship("User", foreign_keys=[user_id])
+    granted_by_user = relationship("User", foreign_keys=[granted_by_user_id])
+    revoked_by_user = relationship("User", foreign_keys=[revoked_by_user_id])
 
 
 class SpaceDoc(Base):

@@ -26,6 +26,7 @@ from aidoo_api.domains.auth.dependencies import require_current_user
 from aidoo_api.domains.auth.models import Team, TeamMember, User, Workspace
 from aidoo_api.domains.auth.security import new_id
 from aidoo_api.domains.docs.models import (
+    DocMeetingAccess,
     DocsUserItemPref,
     NativeDoc,
     NativeDocLinkShare,
@@ -192,6 +193,7 @@ class NativeAccess:
 
 
 def _resolve_native_doc_access(
+    db: Session,
     doc: NativeDoc,
     user: User,
     *,
@@ -217,9 +219,21 @@ def _resolve_native_doc_access(
         ),
         None,
     )
+    meeting_grant = db.scalar(
+        select(DocMeetingAccess).where(
+            DocMeetingAccess.doc_id == doc.id,
+            DocMeetingAccess.user_id == user.id,
+            DocMeetingAccess.revoked_at.is_(None),
+            (
+                DocMeetingAccess.expires_at.is_(None)
+                | (DocMeetingAccess.expires_at > _utcnow())
+            ),
+        )
+    )
     access_level = _max_access_level(
         getattr(direct_share, "access_level", None),
         getattr(matched_link, "access_level", None),
+        getattr(meeting_grant, "access_level", None),
     )
     return NativeAccess(
         access_level=access_level,
@@ -786,7 +800,7 @@ def _native_doc_from_item_or_404(
     doc = _load_native_doc_for_access(db, raw_id)
     if doc is None:
         raise HTTPException(status_code=404, detail="Doc not found.")
-    access = _resolve_native_doc_access(doc, current_user, share_token=share_token)
+    access = _resolve_native_doc_access(db, doc, current_user, share_token=share_token)
     if not access.can_view or doc.trashed_at is not None and not access.can_manage:
         raise HTTPException(status_code=404, detail="Doc not found.")
     return doc, access
@@ -822,7 +836,7 @@ def _lookup_item(
     if prefix in {SOURCE_NATIVE_DOC, None}:
         doc = _load_native_doc_for_access(db, raw_id)
         if doc is not None:
-            access = _resolve_native_doc_access(doc, current_user, share_token=share_token)
+            access = _resolve_native_doc_access(db, doc, current_user, share_token=share_token)
             if access.can_view and (doc.trashed_at is None or access.can_manage):
                 return _serialize_native_item(
                     doc,
@@ -936,11 +950,11 @@ def list_docs_hub(
     native_items = [
         _serialize_native_item(
             doc,
-            _resolve_native_doc_access(doc, current_user),
+            _resolve_native_doc_access(db, doc, current_user),
             pref_map.get((SOURCE_NATIVE_DOC, doc.id)),
         )
         for doc in _load_accessible_native_docs(db, current_user)
-        if _resolve_native_doc_access(doc, current_user).can_view
+        if _resolve_native_doc_access(db, doc, current_user).can_view
     ]
 
     space_items: list[DocsHubItem] = []
@@ -1008,7 +1022,7 @@ def create_native_doc(
     assert doc is not None
     return _serialize_native_item(
         doc,
-        _resolve_native_doc_access(doc, current_user),
+        _resolve_native_doc_access(db, doc, current_user),
         _get_pref_map(db, current_user.id).get((SOURCE_NATIVE_DOC, doc.id)),
     )
 
@@ -1207,7 +1221,7 @@ def duplicate_doc_item(
     assert new_doc is not None
     return _serialize_native_item(
         new_doc,
-        _resolve_native_doc_access(new_doc, current_user),
+        _resolve_native_doc_access(db, new_doc, current_user),
         _get_pref_map(db, current_user.id).get((SOURCE_NATIVE_DOC, new_doc.id)),
     )
 
@@ -1353,7 +1367,7 @@ def update_doc_page(
         if page is not None:
             doc = _load_native_doc_for_access(db, page.doc_id)
             assert doc is not None
-            access = _resolve_native_doc_access(doc, current_user, share_token=share_token)
+            access = _resolve_native_doc_access(db, doc, current_user, share_token=share_token)
             if not access.can_edit or page.trashed_at is not None or doc.trashed_at is not None:
                 raise HTTPException(status_code=403, detail="Doc edit access required.")
             if "parent_id" in payload.model_fields_set:
@@ -1427,7 +1441,7 @@ def delete_doc_page(
         if page is not None:
             doc = _load_native_doc_for_access(db, page.doc_id)
             assert doc is not None
-            access = _resolve_native_doc_access(doc, current_user, share_token=share_token)
+            access = _resolve_native_doc_access(db, doc, current_user, share_token=share_token)
             if not access.can_edit or page.trashed_at is not None or doc.trashed_at is not None:
                 raise HTTPException(status_code=403, detail="Doc edit access required.")
             deleted_at = _utcnow()
@@ -1802,7 +1816,7 @@ def resolve_shared_link(
     )
     if doc is None:
         raise HTTPException(status_code=404, detail="Shared document not found.")
-    access = _resolve_native_doc_access(doc, current_user, share_token=share_token)
+    access = _resolve_native_doc_access(db, doc, current_user, share_token=share_token)
     if not access.can_view:
         raise HTTPException(status_code=403, detail="Shared document access required.")
     pref = _get_pref_map(db, current_user.id).get((SOURCE_NATIVE_DOC, doc.id))

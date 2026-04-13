@@ -8,6 +8,7 @@ from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from aidoo_api.core.db import get_db_session
+from aidoo_api.domains.auth.access import get_current_workspace, resolve_workspace_role
 from aidoo_api.domains.auth.dependencies import (
     require_current_user,
     require_feature_access,
@@ -190,20 +191,21 @@ def list_meeting_users(
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
 ) -> list[MeetingUserItem]:
-    """Search active users for meeting attendee selection.
-
-    Returns active users matching the query against full_name or email.
-    Gated only by ``nav.meeting`` (router-level), so meeting users do not
-    need PMS or Docs workspace access to find attendees.
-    """
-    del current_user
+    """Search workspace members for meeting attendee selection."""
+    current_workspace = get_current_workspace()
+    if current_workspace is None:
+        current_workspace = meeting_service._get_meeting_workspace(db)
     query = select(User).where(User.status == "active")
     search = q.strip()
     if search:
         like = f"%{search}%"
         query = query.where(or_(User.full_name.ilike(like), User.email.ilike(like)))
     query = query.order_by(User.full_name.asc(), User.email.asc()).limit(limit)
-    users = list(db.scalars(query))
+    users = [
+        user
+        for user in db.scalars(query)
+        if resolve_workspace_role(db, user, current_workspace.id) is not None
+    ]
     return [
         MeetingUserItem(id=user.id, email=user.email, full_name=user.full_name)
         for user in users

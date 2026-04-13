@@ -31,7 +31,7 @@ export const AssignedToMeView = () => {
   }, [token, user]);
 
   const selectedProject = useMemo(
-    () => (selectedIssue ? projects.find((project) => project.id === selectedIssue.project_id) ?? null : null),
+    () => (selectedIssue ? projects.find((project) => project.id === selectedIssue.list_id) ?? null : null),
     [projects, selectedIssue],
   );
 

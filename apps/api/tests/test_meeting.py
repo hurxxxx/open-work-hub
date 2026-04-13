@@ -109,9 +109,13 @@ def _create_meeting(
     *,
     title: str = "Sprint planning",
     attendees: list[dict] | None = None,
+    start_at: datetime | None = None,
+    end_at: datetime | None = None,
+    task_ids: list[str] | None = None,
+    doc_ids: list[str] | None = None,
 ) -> dict:
-    start = datetime(2026, 5, 1, 10, 0, 0)
-    end = start + timedelta(hours=1)
+    start = start_at or datetime(2026, 5, 1, 10, 0, 0)
+    end = end_at or (start + timedelta(hours=1))
     response = client.post(
         "/api/v1/meeting/meetings",
         headers=_auth_headers(token),
@@ -121,6 +125,56 @@ def _create_meeting(
             "start_at": start.isoformat(),
             "end_at": end.isoformat(),
             "attendees": attendees or [],
+            "task_ids": task_ids or [],
+            "doc_ids": doc_ids or [],
+        },
+    )
+    assert response.status_code == 201, response.text
+    return response.json()
+
+
+def _create_project(
+    client: TestClient,
+    token: str,
+    *,
+    key: str = "MTG",
+    name: str = "Meeting Test",
+    description: str = "",
+    team_id: str | None = None,
+) -> dict:
+    payload = {
+        "key": key,
+        "name": name,
+        "description": description,
+    }
+    if team_id is not None:
+        payload["team_id"] = team_id
+    response = client.post(
+        "/api/v1/pms/projects",
+        headers=_auth_headers(token),
+        json=payload,
+    )
+    assert response.status_code == 201, response.text
+    return response.json()
+
+
+def _create_issue(
+    client: TestClient,
+    token: str,
+    project_id: str,
+    *,
+    title: str = "Plan Q2",
+    status: str = "backlog",
+) -> dict:
+    response = client.post(
+        f"/api/v1/pms/projects/{project_id}/issues",
+        headers=_auth_headers(token),
+        json={
+            "title": title,
+            "description": "",
+            "status": status,
+            "priority": "medium",
+            "label_ids": [],
         },
     )
     assert response.status_code == 201, response.text
@@ -232,27 +286,8 @@ def test_attach_task_requires_issue_access(client: TestClient) -> None:
     admin_token = admin["token"]
 
     # Admin creates a PMS project + issue.
-    project_response = client.post(
-        "/api/v1/pms/projects",
-        headers=_auth_headers(admin_token),
-        json={"key": "MTG", "name": "Meeting Test", "description": ""},
-    )
-    assert project_response.status_code == 201
-    project = project_response.json()
-
-    issue_response = client.post(
-        f"/api/v1/pms/projects/{project['id']}/issues",
-        headers=_auth_headers(admin_token),
-        json={
-            "title": "Plan Q2",
-            "description": "",
-            "status": "backlog",
-            "priority": "medium",
-            "label_ids": [],
-        },
-    )
-    assert issue_response.status_code == 201
-    issue = issue_response.json()
+    project = _create_project(client, admin_token)
+    issue = _create_issue(client, admin_token, project["id"])
 
     # Admin organizes a meeting and attaches the issue.
     meeting = _create_meeting(client, admin_token)
@@ -292,27 +327,18 @@ def test_attach_task_returns_403_for_user_without_project_access(
     admin = _bootstrap_admin_session(client)
     admin_token = admin["token"]
 
-    project_response = client.post(
-        "/api/v1/pms/projects",
-        headers=_auth_headers(admin_token),
-        json={"key": "PRIV", "name": "Private", "description": ""},
+    project = _create_project(
+        client,
+        admin_token,
+        key="PRIV",
+        name="Private",
     )
-    assert project_response.status_code == 201
-    project = project_response.json()
-
-    issue_response = client.post(
-        f"/api/v1/pms/projects/{project['id']}/issues",
-        headers=_auth_headers(admin_token),
-        json={
-            "title": "Confidential",
-            "description": "",
-            "status": "backlog",
-            "priority": "medium",
-            "label_ids": [],
-        },
+    issue = _create_issue(
+        client,
+        admin_token,
+        project["id"],
+        title="Confidential",
     )
-    assert issue_response.status_code == 201
-    issue = issue_response.json()
 
     organizer = _create_user_with_workspaces(
         client,
@@ -390,6 +416,37 @@ def test_meeting_create_rejects_invalid_time_range(client: TestClient) -> None:
     assert response.status_code == 400
 
 
+def test_meeting_create_rejects_attendees_outside_meeting_workspace(
+    client: TestClient,
+) -> None:
+    admin = _bootstrap_admin_session(client)
+    admin_token = admin["token"]
+
+    # User with no workspace memberships at all — they cannot belong to the
+    # meeting workspace either, so attempting to invite them must fail.
+    outsider = _create_user_with_workspaces(
+        client,
+        admin_token,
+        email="no-workspace@aidoo.local",
+        full_name="No Workspace",
+        workspace_keys=[],
+    )
+
+    response = client.post(
+        "/api/v1/meeting/meetings",
+        headers=_auth_headers(admin_token),
+        json={
+            "title": "Cross workspace attendee",
+            "agenda": "",
+            "start_at": datetime(2026, 5, 1, 10, 0, 0).isoformat(),
+            "end_at": datetime(2026, 5, 1, 11, 0, 0).isoformat(),
+            "attendees": [{"user_id": outsider["user"]["id"], "role": "required"}],
+        },
+    )
+    assert response.status_code == 422
+    assert "meeting workspace" in response.json()["detail"]
+
+
 def test_user_without_meeting_workspace_access_is_blocked(
     client: TestClient,
 ) -> None:
@@ -428,17 +485,24 @@ def test_meeting_user_search_returns_users_without_pms_access(
         admin_token,
         email="alice@aidoo.local",
         full_name="Alice Park",
-        workspace_keys=[],
+        workspace_keys=["meeting"],
     )
     _create_user_with_workspaces(
         client,
         admin_token,
         email="bob@aidoo.local",
         full_name="Bob Lee",
+        workspace_keys=["meeting"],
+    )
+    _create_user_with_workspaces(
+        client,
+        admin_token,
+        email="outsider@aidoo.local",
+        full_name="Outside Workspace",
         workspace_keys=[],
     )
 
-    # No query — returns all active users (admin + alice + bob).
+    # No query — returns only meeting-workspace members.
     response = client.get(
         "/api/v1/meeting/users",
         headers=_auth_headers(admin_token),
@@ -447,6 +511,7 @@ def test_meeting_user_search_returns_users_without_pms_access(
     payload = response.json()
     emails = {item["email"] for item in payload}
     assert {"admin@aidoo.local", "alice@aidoo.local", "bob@aidoo.local"} <= emails
+    assert "outsider@aidoo.local" not in emails
 
     # Partial-name query.
     name_response = client.get(
@@ -466,6 +531,57 @@ def test_meeting_user_search_returns_users_without_pms_access(
     )
     assert email_response.status_code == 200
     assert [item["email"] for item in email_response.json()] == ["bob@aidoo.local"]
+
+
+def test_meeting_create_rolls_back_when_initial_attachments_fail(
+    client: TestClient,
+) -> None:
+    admin = _bootstrap_admin_session(client)
+    admin_token = admin["token"]
+
+    before = client.get(
+        "/api/v1/meeting/meetings",
+        headers=_auth_headers(admin_token),
+        params={"scope": "mine"},
+    )
+    assert before.status_code == 200
+    assert before.json()["total"] == 0
+
+    missing_issue = client.post(
+        "/api/v1/meeting/meetings",
+        headers=_auth_headers(admin_token),
+        json={
+            "title": "Broken issue attach",
+            "agenda": "",
+            "start_at": datetime(2026, 5, 1, 10, 0, 0).isoformat(),
+            "end_at": datetime(2026, 5, 1, 11, 0, 0).isoformat(),
+            "attendees": [],
+            "task_ids": ["missing-issue"],
+        },
+    )
+    assert missing_issue.status_code == 404
+
+    missing_doc = client.post(
+        "/api/v1/meeting/meetings",
+        headers=_auth_headers(admin_token),
+        json={
+            "title": "Broken doc attach",
+            "agenda": "",
+            "start_at": datetime(2026, 5, 1, 10, 0, 0).isoformat(),
+            "end_at": datetime(2026, 5, 1, 11, 0, 0).isoformat(),
+            "attendees": [],
+            "doc_ids": ["missing-doc"],
+        },
+    )
+    assert missing_doc.status_code == 404
+
+    after = client.get(
+        "/api/v1/meeting/meetings",
+        headers=_auth_headers(admin_token),
+        params={"scope": "mine"},
+    )
+    assert after.status_code == 200
+    assert after.json()["total"] == 0
 
 
 class _FakeMinioClient:
@@ -517,6 +633,10 @@ def _create_native_doc(client: TestClient, token: str, title: str) -> str:
     )
     assert response.status_code == 201, response.text
     return response.json()["source_id"]
+
+
+def _native_item_id(doc_id: str) -> str:
+    return f"native_doc__{doc_id}"
 
 
 def test_attendee_can_attach_task_via_space_access(client: TestClient) -> None:
@@ -694,6 +814,250 @@ def test_attendee_can_attach_doc_and_only_adder_can_remove(
         headers=_auth_headers(admin_token),
     )
     assert organizer_removes_others.status_code == 200
+
+
+def test_meeting_attachment_grants_allow_read_but_not_metadata_or_sharing(
+    client: TestClient,
+) -> None:
+    admin = _bootstrap_admin_session(client)
+    admin_token = admin["token"]
+
+    project = _create_project(client, admin_token, key="ACL", name="ACL Project")
+    issue = _create_issue(client, admin_token, project["id"], title="Meeting-shared issue")
+    doc_id = _create_native_doc(client, admin_token, "Meeting-shared doc")
+
+    attendee = _create_user_with_workspaces(
+        client,
+        admin_token,
+        email="meeting-reader@aidoo.local",
+        full_name="Meeting Reader",
+        workspace_keys=["meeting", "pms", "docs"],
+    )
+    attendee_token = _login(
+        client,
+        attendee["user"]["email"],
+        attendee["temporary_password"],
+    )
+
+    _create_meeting(
+        client,
+        admin_token,
+        title="ACL grant meeting",
+        attendees=[{"user_id": attendee["user"]["id"], "role": "required"}],
+        task_ids=[issue["id"]],
+        doc_ids=[doc_id],
+    )
+
+    issue_detail = client.get(
+        f"/api/v1/pms/issues/{issue['id']}",
+        headers=_auth_headers(attendee_token),
+    )
+    assert issue_detail.status_code == 200, issue_detail.text
+    issue_payload = issue_detail.json()
+    assert issue_payload["issue"]["list_id"] == project["id"]
+    assert "project_id" not in issue_payload["issue"]
+
+    issue_list = client.get(
+        f"/api/v1/pms/projects/{project['id']}/issues",
+        headers=_auth_headers(attendee_token),
+    )
+    assert issue_list.status_code == 403
+
+    doc_item = client.get(
+        f"/api/v1/docs/items/{_native_item_id(doc_id)}",
+        headers=_auth_headers(attendee_token),
+    )
+    assert doc_item.status_code == 200, doc_item.text
+    doc_payload = doc_item.json()
+    assert doc_payload["source_id"] == doc_id
+    assert doc_payload["can_view"] is True
+    assert doc_payload["can_edit"] is False
+    assert doc_payload["can_share"] is False
+    assert doc_payload["can_manage"] is False
+
+    doc_pages = client.get(
+        f"/api/v1/docs/items/{_native_item_id(doc_id)}/pages",
+        headers=_auth_headers(attendee_token),
+    )
+    assert doc_pages.status_code == 200, doc_pages.text
+    assert len(doc_pages.json()["items"]) == 1
+
+    doc_sharing = client.get(
+        f"/api/v1/docs/items/{_native_item_id(doc_id)}/sharing",
+        headers=_auth_headers(attendee_token),
+    )
+    assert doc_sharing.status_code == 403
+
+
+def test_meeting_detach_preserves_other_meeting_grants_until_last_source_is_removed(
+    client: TestClient,
+) -> None:
+    admin = _bootstrap_admin_session(client)
+    admin_token = admin["token"]
+
+    project = _create_project(client, admin_token, key="SAFE", name="Safety Project")
+    issue = _create_issue(client, admin_token, project["id"], title="Multi-meeting issue")
+    doc_id = _create_native_doc(client, admin_token, "Multi-meeting doc")
+
+    attendee = _create_user_with_workspaces(
+        client,
+        admin_token,
+        email="multi-reader@aidoo.local",
+        full_name="Multi Reader",
+        workspace_keys=["meeting", "pms", "docs"],
+    )
+    attendee_token = _login(
+        client,
+        attendee["user"]["email"],
+        attendee["temporary_password"],
+    )
+
+    meeting_a = _create_meeting(
+        client,
+        admin_token,
+        title="Meeting A",
+        attendees=[{"user_id": attendee["user"]["id"], "role": "required"}],
+        task_ids=[issue["id"]],
+        doc_ids=[doc_id],
+    )
+    meeting_b = _create_meeting(
+        client,
+        admin_token,
+        title="Meeting B",
+        attendees=[{"user_id": attendee["user"]["id"], "role": "required"}],
+        task_ids=[issue["id"]],
+        doc_ids=[doc_id],
+    )
+
+    first_issue_detach = client.delete(
+        f"/api/v1/meeting/meetings/{meeting_a['id']}/tasks/{issue['id']}",
+        headers=_auth_headers(admin_token),
+    )
+    assert first_issue_detach.status_code == 200
+    first_doc_detach = client.delete(
+        f"/api/v1/meeting/meetings/{meeting_a['id']}/docs/{doc_id}",
+        headers=_auth_headers(admin_token),
+    )
+    assert first_doc_detach.status_code == 200
+
+    still_can_read_issue = client.get(
+        f"/api/v1/pms/issues/{issue['id']}",
+        headers=_auth_headers(attendee_token),
+    )
+    assert still_can_read_issue.status_code == 200
+    still_can_read_doc = client.get(
+        f"/api/v1/docs/items/{_native_item_id(doc_id)}",
+        headers=_auth_headers(attendee_token),
+    )
+    assert still_can_read_doc.status_code == 200
+
+    second_issue_detach = client.delete(
+        f"/api/v1/meeting/meetings/{meeting_b['id']}/tasks/{issue['id']}",
+        headers=_auth_headers(admin_token),
+    )
+    assert second_issue_detach.status_code == 200
+    second_doc_detach = client.delete(
+        f"/api/v1/meeting/meetings/{meeting_b['id']}/docs/{doc_id}",
+        headers=_auth_headers(admin_token),
+    )
+    assert second_doc_detach.status_code == 200
+
+    blocked_issue = client.get(
+        f"/api/v1/pms/issues/{issue['id']}",
+        headers=_auth_headers(attendee_token),
+    )
+    assert blocked_issue.status_code == 403
+    blocked_doc = client.get(
+        f"/api/v1/docs/items/{_native_item_id(doc_id)}",
+        headers=_auth_headers(attendee_token),
+    )
+    assert blocked_doc.status_code == 404
+
+
+def test_meeting_reschedule_resyncs_issue_and_doc_grant_expiry(
+    client: TestClient,
+) -> None:
+    admin = _bootstrap_admin_session(client)
+    admin_token = admin["token"]
+
+    project = _create_project(client, admin_token, key="TIME", name="Timing Project")
+    issue = _create_issue(client, admin_token, project["id"], title="Expiry issue")
+    doc_id = _create_native_doc(client, admin_token, "Expiry doc")
+
+    attendee = _create_user_with_workspaces(
+        client,
+        admin_token,
+        email="expiry-reader@aidoo.local",
+        full_name="Expiry Reader",
+        workspace_keys=["meeting", "pms", "docs"],
+    )
+    attendee_token = _login(
+        client,
+        attendee["user"]["email"],
+        attendee["temporary_password"],
+    )
+
+    meeting = _create_meeting(
+        client,
+        admin_token,
+        title="Expiry meeting",
+        attendees=[{"user_id": attendee["user"]["id"], "role": "required"}],
+        task_ids=[issue["id"]],
+        doc_ids=[doc_id],
+    )
+
+    initial_issue = client.get(
+        f"/api/v1/pms/issues/{issue['id']}",
+        headers=_auth_headers(attendee_token),
+    )
+    assert initial_issue.status_code == 200
+    initial_doc = client.get(
+        f"/api/v1/docs/items/{_native_item_id(doc_id)}",
+        headers=_auth_headers(attendee_token),
+    )
+    assert initial_doc.status_code == 200
+
+    expired_update = client.patch(
+        f"/api/v1/meeting/meetings/{meeting['id']}",
+        headers=_auth_headers(admin_token),
+        json={
+            "start_at": "2000-01-01T09:00:00",
+            "end_at": "2000-01-01T10:00:00",
+        },
+    )
+    assert expired_update.status_code == 200, expired_update.text
+
+    expired_issue = client.get(
+        f"/api/v1/pms/issues/{issue['id']}",
+        headers=_auth_headers(attendee_token),
+    )
+    assert expired_issue.status_code == 403
+    expired_doc = client.get(
+        f"/api/v1/docs/items/{_native_item_id(doc_id)}",
+        headers=_auth_headers(attendee_token),
+    )
+    assert expired_doc.status_code == 404
+
+    restored_update = client.patch(
+        f"/api/v1/meeting/meetings/{meeting['id']}",
+        headers=_auth_headers(admin_token),
+        json={
+            "start_at": "2100-01-01T09:00:00",
+            "end_at": "2100-01-01T10:00:00",
+        },
+    )
+    assert restored_update.status_code == 200, restored_update.text
+
+    restored_issue = client.get(
+        f"/api/v1/pms/issues/{issue['id']}",
+        headers=_auth_headers(attendee_token),
+    )
+    assert restored_issue.status_code == 200
+    restored_doc = client.get(
+        f"/api/v1/docs/items/{_native_item_id(doc_id)}",
+        headers=_auth_headers(attendee_token),
+    )
+    assert restored_doc.status_code == 200
 
 
 def test_meeting_file_attachment_upload_and_permission_matrix(
@@ -983,7 +1347,7 @@ def test_meeting_update_changes_time_and_attendees(client: TestClient) -> None:
         admin_token,
         email="invitee@aidoo.local",
         full_name="Invitee User",
-        workspace_keys=[],
+        workspace_keys=["meeting"],
     )
 
     meeting = _create_meeting(client, admin_token, title="Original")

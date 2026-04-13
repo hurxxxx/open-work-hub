@@ -22,6 +22,8 @@ class MeetingCreateRequest(BaseModel):
     start_at: datetime
     end_at: datetime
     attendees: list[MeetingAttendeeInput] = Field(default_factory=list)
+    task_ids: list[str] = Field(default_factory=list)
+    doc_ids: list[str] = Field(default_factory=list)
 
 
 class MeetingUpdateRequest(BaseModel):

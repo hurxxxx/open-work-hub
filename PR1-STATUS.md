@@ -2,18 +2,64 @@
 
 > **새 세션 첫 메시지 예시**: "프로젝트 루트의 [PR1-STATUS.md](PR1-STATUS.md), [PR1-HANDOFF.md](PR1-HANDOFF.md), [PR0-RESULT.md](PR0-RESULT.md) 세 파일 읽고 이어서 진행해주세요."
 
-작성일: 2026-04-10 (라운드 1), 마지막 갱신: 2026-04-13 (라운드 12 — PR1 마감 정리)
+작성일: 2026-04-10 (라운드 1), 마지막 갱신: 2026-04-13 (라운드 13 — PR2 ACL + Docs share + PMS rename)
 모델: Claude Opus 4.6 (1M context)
-이전 세션 요약: PR1 skeleton 작성 → 자동화 검증 → 사용자 dog-food 디버깅 8 라운드 → workspace collaboration rearchitecture / member management 후속 2 라운드 → scenario 기반 workspace/ACL UI E2E 1 라운드 → **PR1 마감 라운드 12 (legacy URL 제거 + typecheck 0 + deprecation 정리)**
+이전 세션 요약: PR1 skeleton → 자동화 검증 → dog-food 8 라운드 → workspace rearchitecture 2 라운드 → scenario E2E → **라운드 12 PR1 마감 (legacy URL 제거)** → **라운드 13 PR2 (IssueUserAccess + DocMeetingAccess + 3-mode ACL + PMS project→list rename + Meeting one-step + click UI)**
 
-## 현행화 메모 (2026-04-13 HEAD, 라운드 12 진행 중)
+## 현행화 메모 (2026-04-13 HEAD, 라운드 13)
 
-- Alembic 최신 head: `2d4f6c9ab1ef` (PR1 마감 범위 내 스키마 변경 없음)
-- 자동화 기준: `pytest apps/api/tests/` baseline **75 passed** (Docker 기동 후 재검증 예정), `alembic check` drift 0, `pnpm nx typecheck web` **0 errors** (기존 7건 해결), `pnpm nx test web` **35 passed** (기존 33 + 신규 shell spec 2건)
-- 경로 체계: 실제 앱 경로는 `/w/:workspaceSlug/{ai|pms|docs|planner|meeting}`. **legacy `/meeting`, `/docs`, `/pms`, `/planner`, `/ai` redirect 는 제거됨 — 직접 진입 시 404 NotFound 페이지 노출**
-- 시드 모델: workspace 5개 (`hq`, `innovation-lab`, `knowledge-base`, `planning-desk`, `delivery-hub`), dev login account 정의는 11개. 원격 dev DB 에는 legacy `*@aidoo.local` 계정도 함께 남아 총 18명
+- Alembic 최신 head: `8b1b7fa4b72b` (PR2 의 add_meeting_access_grants). 원격 dev DB 적용 완료.
+- 이전 head `2d4f6c9ab1ef` → `5f2f47dc2d11_rename_pms_project_to_list` → `8b1b7fa4b72b_add_meeting_access_grants`
+- 자동화 기준: `pytest apps/api/tests/` **80 passed** (baseline 75 + 신규 ACL 5), `alembic check` drift 0, `pnpm nx typecheck web` **0 errors**, `pnpm nx test web` **35 passed**
+- 경로 체계: 실제 앱 경로는 `/w/:workspaceSlug/{ai|pms|docs|planner|meeting}`. legacy redirect 는 라운드 12 에서 제거, 직접 진입 시 404 NotFound
+- PMS rename: `pms_projects` → `pms_lists`, FK 컬럼 `project_id` → `list_id`, `/api/v1/pms/projects/*` 는 `/api/v1/pms/lists/*` 의 deprecated alias 로 1 PR grace 동안 유지. SQLAlchemy attribute 도 `list_id` 로 통일, `project_id = synonym("list_id")` 로 backward compat
+- 시드 모델: workspace 5개 (`hq`, `innovation-lab`, `knowledge-base`, `planning-desk`, `delivery-hub`), dev login account 정의는 11개
 
-## 라운드 12 — PR1 마감 정리 (2026-04-13, 진행 중)
+## 라운드 13 — PR2: ACL refactor + Docs share fallback + PMS rename (2026-04-13)
+
+[MEETING-APP-PLAN.md §324](MEETING-APP-PLAN.md#L324) 의 PR2 를 [autoplan H2/H3/H4 lock decisions](MEETING-APP-PLAN.md#L557) + 1차 plan review 보완사항 모두 반영하여 구현.
+
+**핵심 변경**:
+- ✅ **3-mode PMS ACL split**: [pms/access.py](apps/api/src/aidoo_api/domains/pms/access.py) 에 `_ensure_list_member` / `_ensure_issue_readable` / `_ensure_issue_writable` 신규 모듈. [pms/router.py](apps/api/src/aidoo_api/domains/pms/router.py) 의 14 callsite 중 단 3 개 (`_get_issue_for_user`, `download_attachment`, `list_issue_custom_field_values`) 만 IssueUserAccess fallback 적용. 나머지 12 개는 list member only — list metadata (issues 목록, labels, statuses, templates, CSV export) 누출 차단
+- ✅ **IssueUserAccess full treatment**: `expires_at` (default = meeting.end_at + 7d), `revoked_at`, `granted_by_meeting_id`, `granted_by_user_id`, `reason` enum, `revoke_reason`. **Partial unique index** `(issue_id, user_id, granted_by_meeting_id) WHERE revoked_at IS NULL` — multi-meeting safety 의 핵심. 같은 issue 가 meeting A/B 양쪽에 첨부된 경우 row 2개로 분리되어, A detach 해도 B grant 가 살아있으면 read 유지
+- ✅ **DocMeetingAccess 신규 테이블**: [docs/models.py:150](apps/api/src/aidoo_api/domains/docs/models.py#L150). `upsert_native_doc_user_share` 재사용 거부 — meeting 출처 추적 불가, 참석자 제거 시 cleanup 불가능. 동일한 lifecycle 컬럼 + partial unique. [docs/router.py:222-237](apps/api/src/aidoo_api/domains/docs/router.py#L222) 의 `_compute_native_access` 가 fallback 으로 추가
+- ✅ **ensure_issue_attachable / ensure_doc_attachable 신규**: attach 권한과 read 권한 분리. **Chain abuse 방지** — meeting A 에서 grant 받은 user 가 그 issue/doc 을 meeting B 에 reattach 할 수 없음 (attach 는 list member / doc owner 만)
+- ✅ **Meeting attach/create grant 자동화**: [meeting/service.py](apps/api/src/aidoo_api/domains/meeting/service.py) 의 `_attach_issue_link` / `_attach_doc_link` 가 link upsert + 모든 attendee 에게 grant 생성. caller / platform_admin / list-member 는 skip. detach/delete/_replace_attendees 모두 service-layer revoke 함수 호출
+- ✅ **One-step Meeting create**: `MeetingCreateRequest.task_ids[]` / `doc_ids[]` 신설. [create_meeting](apps/api/src/aidoo_api/domains/meeting/service.py#L505) 가 create + attach + grant 를 단일 트랜잭션에 atomic 처리. 어느 한 attach 실패 → 전체 롤백 + meeting 미생성. file upload 는 여전히 two-step (multipart 라 atomic 묶기 비현실적), MeetingCreateModal 의 partial failure 패널은 file 만 표시
+- ✅ **Reschedule TTL sync**: `update_meeting` 이 `original_end_at` 비교 → `bump_grant_expiry_for_meeting` + `bump_doc_grant_expiry_for_meeting` 호출. end_at 이 새 시점으로 바뀌면 모든 active grant 의 `expires_at` 도 `new_end_at + 7d` 로 갱신
+- ✅ **Cross-workspace 차단**: `_validate_attendee_users` 가 `workspace_id` 받아서 `resolve_workspace_role` 검사. meeting workspace 외부 user invite 시 422
+- ✅ **PMS project_id → list_id rename (Strategy B)**: 신규 migration `5f2f47dc2d11_rename_pms_project_to_list` 가 `pms_projects` → `pms_lists` rename + 7개 child 테이블 FK 컬럼 rename + 14개 인덱스 rename. SQLAlchemy attribute 도 `list_id` 로 통일하되 `project_id = synonym("list_id")` 트릭으로 router.py 의 155 callsite 가 무중단 작동. response payload 도 `list_id` 로 전환, `validation_alias=AliasChoices("list_id", "project_id")` 로 input 양쪽 다 받음. URL `/api/v1/pms/projects/*` 는 dual-route alias 로 1 PR grace 동안 유지
+- ✅ **MeetingDetail click UI**: [MeetingDetail.tsx:333-389](apps/web/src/components/views/MeetingView/MeetingDetail.tsx#L333) 의 task title → `<Link to="/w/<slug>/pms?issue=<id>">`, doc title → `<Link to="/w/<slug>/docs/<id>">` 로 wrap. ACL fallback 의 시각적 dogfood 가능
+
+**테스트 추가** (test_meeting.py +452 줄, 19 신규):
+- `test_attendee_can_attach_task_via_space_access` — space 멤버십 경유 attach (PR1 회귀 검증)
+- `test_meeting_create_rejects_attendees_outside_meeting_workspace` — cross-workspace 차단 422
+- `test_meeting_user_search_returns_users_without_pms_access` — attendee picker workspace 필터
+- `test_meeting_create_rolls_back_when_initial_attachments_fail` — one-step rollback
+- `test_meeting_attachment_grants_allow_read_but_not_metadata_or_sharing` — list metadata 누출 차단, sharing endpoint 차단
+- `test_meeting_detach_preserves_other_meeting_grants_until_last_source_is_removed` — **multi-meeting safety**, 1차 review 의 핵심 지적 검증
+- `test_meeting_reschedule_resyncs_issue_and_doc_grant_expiry` — TTL sync (과거로 옮기면 즉시 만료, 미래로 복원하면 회복)
+
+**자동화 검증**:
+- `pytest apps/api/tests/` → **80 passed** (baseline 75 + 신규 5)
+- `pnpm nx typecheck web` → **0 errors**
+- `pnpm nx test web` → **35 passed**
+- 원격 dev DB → `alembic upgrade head` 적용 완료, `alembic check` drift 0
+- agent-browser dogfood → MeetingCreateModal 정상, TaskPickerModal 정상, console 0 errors
+
+**핵심 신규/수정 파일**:
+- 신규: [pms/access.py](apps/api/src/aidoo_api/domains/pms/access.py), [pms/access_grants.py](apps/api/src/aidoo_api/domains/pms/access_grants.py), [docs/access_grants.py](apps/api/src/aidoo_api/domains/docs/access_grants.py)
+- 신규 migration: [5f2f47dc2d11_rename_pms_project_to_list.py](apps/api/alembic/versions/5f2f47dc2d11_rename_pms_project_to_list.py), [8b1b7fa4b72b_add_meeting_access_grants.py](apps/api/alembic/versions/8b1b7fa4b72b_add_meeting_access_grants.py)
+- 수정: [pms/models.py](apps/api/src/aidoo_api/domains/pms/models.py) (PmsList rename + IssueUserAccess), [pms/router.py](apps/api/src/aidoo_api/domains/pms/router.py) (helper shim + dual-route), [docs/models.py](apps/api/src/aidoo_api/domains/docs/models.py) (DocMeetingAccess), [docs/router.py](apps/api/src/aidoo_api/domains/docs/router.py) (fallback), [meeting/service.py](apps/api/src/aidoo_api/domains/meeting/service.py) (grant 자동화), [meeting/permissions.py](apps/api/src/aidoo_api/domains/meeting/permissions.py) (재import + ensure_doc_attachable), [meeting/schemas.py](apps/api/src/aidoo_api/domains/meeting/schemas.py) (task_ids/doc_ids), [meeting/router.py](apps/api/src/aidoo_api/domains/meeting/router.py)
+- 프런트: [MeetingDetail.tsx](apps/web/src/components/views/MeetingView/MeetingDetail.tsx), [MeetingCreateModal.tsx](apps/web/src/components/views/MeetingView/MeetingCreateModal.tsx), [meeting-api.ts](apps/web/src/domains/meeting/meeting-api.ts), [pms-api.ts](apps/web/src/domains/pms/pms-api.ts), PMSView 컴포넌트 4개
+
+**이월 부채** (PR2 에서 처리하지 않고 후속 PR 로):
+- Daily expire sweep beat task → PR3 (worker 인프라 정비와 함께)
+- `/api/v1/pms/projects/*` deprecated alias 제거 → PR3
+- SpaceDoc share grant → PR4 또는 그 이후
+- 이전 PR1 이월 항목 (Space Docs reorder, 다크모드 contrast audit) → PR5 그대로
+
+## 라운드 12 — PR1 마감 정리 (2026-04-13)
 
 사용자 지시로 PR1 을 닫기 위해 §6 체크리스트의 잔여 항목을 범위별로 분리해서 일괄 처리. 후속 PR 로 이관할 항목은 [MEETING-APP-PLAN.md](MEETING-APP-PLAN.md) 의 PR 시퀀싱 섹션에 이월 메모를 추가.
 

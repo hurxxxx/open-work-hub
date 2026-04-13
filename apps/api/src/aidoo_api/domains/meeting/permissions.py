@@ -7,12 +7,14 @@ from sqlalchemy.orm import Session
 from aidoo_api.domains.auth.access import (
     get_current_workspace,
     is_platform_admin_user,
-    resolve_team_role,
 )
-from aidoo_api.domains.auth.models import Team, User
+from aidoo_api.domains.auth.models import User
 from aidoo_api.domains.docs.models import NativeDoc
 from aidoo_api.domains.meeting.models import Meeting
-from aidoo_api.domains.pms.models import Issue, Project
+from aidoo_api.domains.pms.access import (
+    _ensure_issue_readable as ensure_issue_readable,
+    ensure_issue_attachable,
+)
 
 
 def is_organizer(user: User, meeting: Meeting) -> bool:
@@ -68,55 +70,12 @@ def ensure_link_remover(
     )
 
 
-def ensure_issue_readable(db: Session, user: User, issue_id: str) -> Issue:
-    """Allow attaching an issue iff the caller has access to the issue's
-    owning PMS space. Mirrors ``_ensure_space_access`` in the PMS router so
-    the attachable set matches what the user can already see in the PMS UI."""
+def ensure_doc_attachable(db: Session, user: User, doc_id: str) -> NativeDoc:
+    """Meeting attachments keep the existing doc attach authority boundary.
 
-    issue = db.scalar(select(Issue).where(Issue.id == issue_id))
-    if issue is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Issue not found.",
-        )
-
-    if is_platform_admin_user(user, db):
-        return issue
-
-    project = db.scalar(select(Project).where(Project.id == issue.project_id))
-    if project is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Issue not found.",
-        )
-
-    if project.team_id is None:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="You do not have access to this issue.",
-        )
-
-    team = db.scalar(select(Team).where(Team.id == project.team_id))
-    if team is None or resolve_team_role(db, user, team) is None:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="You do not have access to this issue.",
-        )
-    current_workspace = get_current_workspace()
-    if current_workspace is not None and team.workspace_id != current_workspace.id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="You do not have access to this issue.",
-        )
-    return issue
-
-
-def ensure_doc_readable(db: Session, user: User, doc_id: str) -> NativeDoc:
-    """PR1: only the doc owner (or platform admin) can attach a NativeDoc.
-
-    The full Docs share fallback (NativeDocUserShare, link shares, SpaceDoc) is
-    deferred — PR1's surface is intentionally narrow."""
-
+    Meeting-origin read grants are intentionally excluded here so an attendee
+    who can open a doc via a meeting cannot reattach it to a different meeting.
+    """
     doc = db.scalar(
         select(NativeDoc).where(
             NativeDoc.id == doc_id,

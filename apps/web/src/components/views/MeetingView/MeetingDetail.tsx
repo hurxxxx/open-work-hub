@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
 import {
   CheckSquare,
   Download,
@@ -31,6 +32,10 @@ import {
   canEditMeeting,
   canRemoveAttachment,
 } from '@/src/domains/meeting/meeting-permissions';
+import {
+  buildWorkspaceAppPath,
+  getCurrentOrLastWorkspaceSlug,
+} from '@/src/domains/workspaces/workspace-utils';
 
 import { MeetingEditModal } from './MeetingEditModal';
 import { TaskPickerModal } from './TaskPickerModal';
@@ -79,6 +84,7 @@ export function MeetingDetail({
   const [busy, setBusy] = useState(false);
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const workspaceSlug = getCurrentOrLastWorkspaceSlug();
 
   const refresh = useCallback(async () => {
     if (!token) return;
@@ -324,7 +330,16 @@ export function MeetingDetail({
                 >
                   <div className="min-w-0">
                     <p className="app-text-body line-clamp-1 text-app-ink">
-                      {link.issue_title || '제목 없음'}
+                      {workspaceSlug ? (
+                        <Link
+                          to={buildWorkspaceAppPath(workspaceSlug, 'pms', `?issue=${encodeURIComponent(link.issue_id)}`)}
+                          className="hover:text-app-accent hover:underline"
+                        >
+                          {link.issue_title || '제목 없음'}
+                        </Link>
+                      ) : (
+                        link.issue_title || '제목 없음'
+                      )}
                     </p>
                     <p className="app-text-caption text-app-ink/40">
                       {link.project_key
@@ -365,7 +380,16 @@ export function MeetingDetail({
                   className="flex items-start justify-between rounded-md border border-app-border bg-app-surface-sidebar px-3 py-2"
                 >
                   <p className="app-text-body line-clamp-1 text-app-ink">
-                    {link.doc_title || '제목 없음'}
+                    {workspaceSlug ? (
+                      <Link
+                        to={buildWorkspaceAppPath(workspaceSlug, 'docs', link.doc_id)}
+                        className="hover:text-app-accent hover:underline"
+                      >
+                        {link.doc_title || '제목 없음'}
+                      </Link>
+                    ) : (
+                      link.doc_title || '제목 없음'
+                    )}
                   </p>
                   {canRemoveAttachment(user, meeting, link) ? (
                     <button
