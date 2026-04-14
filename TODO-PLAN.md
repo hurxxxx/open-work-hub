@@ -115,6 +115,12 @@
 - [ ] `/w/:workspaceSlug/<app>` 기반 workspace shell 수동 QA
 - [ ] web typecheck 잔재 7건 정리
 - [ ] meeting `datetime.utcnow()` deprecation warning 제거
+- [ ] Home을 워크스페이스 스코프로 전환 (`/w/:slug/home`)
+  - 현재 `/`의 전역 HomeView는 더미 데이터이고 앱바 HOME 진입 시 워크스페이스 컨텍스트가 증발함
+  - Notion "Jump back in" + Linear "My Issues" + ClickUp Agenda 패턴 차용: Greeting, Quick actions, 오늘 일정, 내 태스크, 최근 작업 5개 위젯
+  - 기존 워크스페이스 스코프 엔드포인트(`meeting/meetings?scope=upcoming`, `pms/docs-hub/recent-pages`, PMS assigned issues)만 재사용 — 신규 API 없음
+  - `WorkspaceAppId` 유니온에 `'home'` 추가, SubSidebar는 빈 필터 결과에서 접힘, `/` → `/w/{last}/home` 리다이렉트
+  - 세부 설계는 plan 파일 `nested-hopping-rainbow.md` 참고
 
 ## 검증
 
