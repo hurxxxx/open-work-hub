@@ -13,6 +13,7 @@
 ## Project Invariants
 
 - 사용자의 별도 요청이 없으면 `git commit` 과 `git push` 를 하지 않는다.
+- 사용자가 `git commit` 또는 `git push` 를 명시적으로 요청하고 브랜치를 따로 지정하지 않으면 기본 대상은 `main` 으로 간주한다.
 - `legacy_ai_portal_prototype/` 는 레거시 보관본이다. 새 구현의 기준 구조나 재사용 소스로 삼지 않는다.
 - 레거시 프로토타입은 기능 흐름, 화면 구성, 프롬프트, 샘플 데이터 확인이 필요할 때만 참고한다.
 - 특별히 요청받지 않은 한 `legacy_ai_portal_prototype/` 내부 파일은 수정하지 않는다.
