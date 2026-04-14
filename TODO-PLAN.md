@@ -130,10 +130,14 @@
 ## 검증
 
 - [x] `cd apps/api && uv run --python 3.12 --group dev pytest`
-  - 98 passed, 1 failed (2026-04-14) — `test_docs_hub.py::test_internal_shared_links_require_auth_and_honor_read_vs_edit` 는 docs-collab 하드닝 이후 남은 회귀, 별도 추적
+  - 99 passed, 1 warning (2026-04-14, 리네임 regression 테스트 포함) — 이전 세션의 `test_docs_hub::test_internal_shared_links_require_auth_and_honor_read_vs_edit` 회귀는 `deb4eef feat(docs): harden realtime collaboration stack` 이후 복구 확인
 - [x] `cd apps/api && uv run --python 3.12 --group dev alembic current`
-  - `9d26f5a7c1b4 (head)` (2026-04-14)
+  - `3e4983704c82 (head)` (2026-04-14, `rename_pms_list_to_task_list` 적용 후)
 - [x] `cd apps/api && uv run --python 3.12 --group dev alembic check`
   - drift 0
 - [x] `pnpm nx typecheck web`
   - 에러 0건 (2026-04-14)
+- [x] `cd apps/web && pnpm exec vitest run`
+  - 8 files, 35 passed (2026-04-14)
+- [x] prod-like E2E 스모크 (hq-admin 시드, playwright)
+  - `/w/hq/pms` → CreateTaskListModal → List 생성 → NewTaskModal 태스크 생성, `/tool/pms-tasks-assigned`, `/w/hq/meeting`, `/w/hq/docs/:docId` 콘솔 에러 0건 (2026-04-14)

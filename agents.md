@@ -47,7 +47,7 @@
 - 파일 업로드/다운로드가 포함된 화면은 가능하면 실제로 한 번 왕복 확인한다. 임시 산출물은 기본적으로 `/tmp` 아래를 사용한다.
 - 이 저장소의 로그인 화면에서 seed quick-login 카드 클릭은 자동화에서 불안정할 수 있다. 클릭이 먹지 않으면 로그인 폼에 이메일/비밀번호를 직접 채워서 진행한다.
 - workspace shell 회귀를 볼 때는 다음 조합을 우선 점검한다.
-  - legacy `/meeting`, `/docs`, `/pms`, `/planner`, `/ai` 가 `/w/:workspaceSlug/<app>` 로 리다이렉트되는지
+  - legacy 최상위 경로 `/meeting`, `/docs`, `/pms`, `/planner`, `/ai` 는 PR1 `cfe4215` 에서 라우트 제거됨. 워크스페이스 진입은 항상 `/w/:workspaceSlug/<app>` 를 사용하고, 위 경로는 `NotFoundView` 로 떨어져야 정상이다 (과거처럼 자동 리다이렉트하지 않는다).
   - 접근 가능한 workspace/app 조합의 정상 진입
   - 접근 불가 workspace/app 조합의 `접근 권한 없음` 차단
   - `/w/:workspaceSlug/settings` 와 `/admin/workspaces` 의 workspace detail/member flows
