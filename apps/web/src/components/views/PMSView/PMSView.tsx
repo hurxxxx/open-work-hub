@@ -23,25 +23,25 @@ import {
   resolveDefaultWorkspaceAppPath,
 } from '@/src/domains/workspaces/workspace-utils';
 import {
-  getPmsList,
-  listPmsProjects,
+  getPmsTaskList,
+  listPmsTaskLists,
   listSpaces,
-  listProjectIssues,
-  listProjectMembers,
-  listProjectMilestones,
-  listProjectLabels,
-  listProjectStatuses,
+  listTaskListIssues,
+  listTaskListMembers,
+  listTaskListMilestones,
+  listTaskListLabels,
+  listTaskListStatuses,
   getIssueDetail,
   updateIssue,
-  exportProjectCsv,
+  exportTaskListCsv,
   type IssueFilterParams,
-  type PmsList,
+  type PmsTaskList,
   type PmsIssue,
-  type PmsProjectMember,
+  type PmsTaskListMember,
   type PmsSpace,
   type PmsMilestone,
   type PmsLabel,
-  type PmsProjectStatus,
+  type PmsTaskListStatus,
 } from '@/src/domains/pms/pms-api';
 import {
   createDefaultIssueFilterParams,
@@ -59,15 +59,15 @@ import { NewTaskModal } from './NewTaskModal';
 import { AssignedToMeView } from './AssignedToMeView';
 import { TodayOverdueView } from './TodayOverdueView';
 import { PersonalListView } from './PersonalListView';
-import { ProjectSettingsPanel } from './ProjectSettingsPanel';
+import { TaskListSettingsPanel } from './TaskListSettingsPanel';
 import { CreateSpaceModal } from './CreateSpaceModal';
 import { FilterBar } from './FilterBar';
 import { BulkActionBar } from './BulkActionBar';
 import { SpaceDocsView } from './SpaceDocsView';
 import { SpaceOverviewView } from './SpaceOverviewView';
-import { projectRoleAllows } from '@/src/domains/pms/pms-permissions';
+import { taskListRoleAllows } from '@/src/domains/pms/pms-permissions';
 
-function isSameListCollection(left: PmsList[], right: PmsList[]): boolean {
+function isSameListCollection(left: PmsTaskList[], right: PmsTaskList[]): boolean {
   if (left.length !== right.length) {
     return false;
   }
@@ -94,62 +94,60 @@ export const PMSView = () => {
   const [selectedIssue, setSelectedIssue] = useState<PmsIssue | null>(null);
   const [isNewTaskModalOpen, setIsNewTaskModalOpen] = useState(false);
 
-  const [projects, setProjects] = useState<PmsList[]>([]);
+  const [taskLists, setTaskLists] = useState<PmsTaskList[]>([]);
   const [spaces, setSpaces] = useState<PmsSpace[]>([]);
-  const [selectedProjectId, setSelectedProjectId] = useState<string>('');
+  const [selectedTaskListId, setSelectedTaskListId] = useState<string>('');
   const [issues, setIssues] = useState<PmsIssue[]>([]);
-  const [members, setMembers] = useState<PmsProjectMember[]>([]);
+  const [members, setMembers] = useState<PmsTaskListMember[]>([]);
   const [milestones, setMilestones] = useState<PmsMilestone[]>([]);
   const [labels, setLabels] = useState<PmsLabel[]>([]);
-  const [projectStatuses, setProjectStatuses] = useState<PmsProjectStatus[]>([]);
+  const [taskListStatuses, setTaskListStatuses] = useState<PmsTaskListStatus[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [filterParams, setFilterParams] = useState<IssueFilterParams>(createDefaultIssueFilterParams());
   const [selectedIssueIds, setSelectedIssueIds] = useState<Set<string>>(new Set());
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [createSpaceOpen, setCreateSpaceOpen] = useState(false);
-  const [projectSwitcherOpen, setProjectSwitcherOpen] = useState(false);
+  const [taskListSwitcherOpen, setTaskListSwitcherOpen] = useState(false);
 
 
-  const projectSwitcherRef = useRef<HTMLDivElement>(null);
+  const taskListSwitcherRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (!projectSwitcherOpen) return;
+    if (!taskListSwitcherOpen) return;
     function onClick(e: MouseEvent) {
-      if (projectSwitcherRef.current && !projectSwitcherRef.current.contains(e.target as Node)) {
-        setProjectSwitcherOpen(false);
+      if (taskListSwitcherRef.current && !taskListSwitcherRef.current.contains(e.target as Node)) {
+        setTaskListSwitcherOpen(false);
       }
     }
     document.addEventListener('mousedown', onClick);
     return () => document.removeEventListener('mousedown', onClick);
-  }, [projectSwitcherOpen]);
+  }, [taskListSwitcherOpen]);
 
   const isAssignedTasksView = toolId === 'pms-tasks' || toolId === 'pms-tasks-assigned';
   const isTodayView = toolId === 'pms-tasks-today';
   const isPersonalView = toolId === 'pms-tasks-personal';
-  const routeProjectId = toolId?.startsWith('pms-list-')
+  const routeTaskListId = toolId?.startsWith('pms-list-')
     ? toolId.replace('pms-list-', '')
-    : toolId?.startsWith('pms-project-')
-      ? toolId.replace('pms-project-', '')
-      : null;
+    : null;
   const spaceDocsMatch = toolId?.match(/^pms-space-([0-9a-f-]+)-docs(?:-([0-9a-f-]+))?$/);
   const spaceDocsSpaceId = spaceDocsMatch?.[1] ?? null;
   const spaceDocsDocId = spaceDocsMatch?.[2] ?? null;
   const spaceOverviewId = (toolId && /^pms-space-.+$/.test(toolId) && !spaceDocsMatch) ? toolId.replace('pms-space-', '') : null;
   const isOverviewRoute = !toolId;
-  const selectedProject = projects.find(p => p.id === selectedProjectId);
-  const projectName = selectedProject?.name || 'List';
-  const canEditProject = projectRoleAllows(selectedProject?.role, 'member');
-  const canManageProject = projectRoleAllows(selectedProject?.role, 'admin');
+  const selectedTaskList = taskLists.find((taskList) => taskList.id === selectedTaskListId);
+  const taskListName = selectedTaskList?.name || 'List';
+  const canEditTaskList = taskListRoleAllows(selectedTaskList?.role, 'member');
+  const canManageTaskList = taskListRoleAllows(selectedTaskList?.role, 'admin');
   const requestedIssueId = searchParams.get('issue');
 
   // Listen for the SubSidebar header "+" button (and any future quick-create
   // entry points) so they can pop the New Task modal without needing a
   // direct ref into this component. Only respond when a list is selected
   // and the user can edit it — otherwise the modal would mount without a
-  // valid projectId.
+  // valid taskListId.
   const newTaskTriggerRef = useRef<{ enabled: boolean }>({ enabled: false });
-  newTaskTriggerRef.current.enabled = Boolean(selectedProjectId && canEditProject);
+  newTaskTriggerRef.current.enabled = Boolean(selectedTaskListId && canEditTaskList);
   useEffect(() => {
     const handler = () => {
       if (newTaskTriggerRef.current.enabled) setIsNewTaskModalOpen(true);
@@ -186,19 +184,19 @@ export const PMSView = () => {
     setSearchParams(nextParams, { replace: true });
   }, [requestedIssueId, searchParams, setSearchParams]);
 
-  // Keep project catalog in sync with the route so newly created projects open immediately.
+  // Keep the task list catalog in sync with the route so newly created lists open immediately.
   useEffect(() => {
     if (!token) return;
     const activeToken = token;
     let cancelled = false;
 
-    async function loadProjects() {
+    async function loadTaskLists() {
       setLoading(true);
       setError(null);
 
       try {
         const [response, spaceItems] = await Promise.all([
-          listPmsProjects(activeToken),
+          listPmsTaskLists(activeToken),
           listSpaces(activeToken),
         ]);
         if (cancelled) {
@@ -206,37 +204,37 @@ export const PMSView = () => {
         }
 
         setSpaces(spaceItems);
-        let nextProjects = response.items;
-        let requestedProjectResolved = false;
+        let nextTaskLists = response.items;
+        let requestedTaskListResolved = false;
 
-        if (routeProjectId) {
-          requestedProjectResolved = response.items.some((project) => project.id === routeProjectId);
-          if (!requestedProjectResolved) {
-            const requestedProject = await getPmsList(activeToken, routeProjectId);
+        if (routeTaskListId) {
+          requestedTaskListResolved = response.items.some((taskList) => taskList.id === routeTaskListId);
+          if (!requestedTaskListResolved) {
+            const requestedTaskList = await getPmsTaskList(activeToken, routeTaskListId);
             if (cancelled) {
               return;
             }
-            nextProjects = [...response.items, requestedProject];
-            requestedProjectResolved = true;
+            nextTaskLists = [...response.items, requestedTaskList];
+            requestedTaskListResolved = true;
           }
         }
 
-        setProjects((current) => (isSameListCollection(current, nextProjects) ? current : nextProjects));
-        setSelectedProjectId((current) => {
-          if (routeProjectId) {
-            return requestedProjectResolved ? routeProjectId : '';
+        setTaskLists((current) => (isSameListCollection(current, nextTaskLists) ? current : nextTaskLists));
+        setSelectedTaskListId((current) => {
+          if (routeTaskListId) {
+            return requestedTaskListResolved ? routeTaskListId : '';
           }
-          if (current && nextProjects.some((project) => project.id === current)) {
+          if (current && nextTaskLists.some((taskList) => taskList.id === current)) {
             return current;
           }
-          return nextProjects[0]?.id || '';
+          return nextTaskLists[0]?.id || '';
         });
       } catch (err) {
         if (cancelled) {
           return;
         }
-        setSelectedProjectId('');
-        setError(getErrorMessage(err, '프로젝트를 불러오지 못했습니다.'));
+        setSelectedTaskListId('');
+        setError(getErrorMessage(err, '리스트를 불러오지 못했습니다.'));
       } finally {
         if (!cancelled) {
           setLoading(false);
@@ -244,37 +242,37 @@ export const PMSView = () => {
       }
     }
 
-    void loadProjects();
+    void loadTaskLists();
 
     return () => {
       cancelled = true;
     };
-  }, [getErrorMessage, routeProjectId, token]);
+  }, [getErrorMessage, routeTaskListId, token]);
 
   const reloadIssues = useCallback(async () => {
-    if (!token || !selectedProjectId) return;
+    if (!token || !selectedTaskListId) return;
 
     try {
       setError(null);
-      const res = await listProjectIssues(token, selectedProjectId, filterParams);
+      const res = await listTaskListIssues(token, selectedTaskListId, filterParams);
       applyIssueCollection(res.items);
     } catch (err) {
       setError(getErrorMessage(err, '이슈 목록을 불러오지 못했습니다.'));
     }
-  }, [applyIssueCollection, getErrorMessage, filterParams, selectedProjectId, token]);
+  }, [applyIssueCollection, getErrorMessage, filterParams, selectedTaskListId, token]);
 
-  // Load issues + members + milestones when project changes
+  // Load issues, members, milestones, labels, and statuses when the selected list changes.
   useEffect(() => {
-    if (!token || !selectedProjectId) return;
+    if (!token || !selectedTaskListId) return;
     let cancelled = false;
     setLoading(true);
     setError(null);
     Promise.all([
-      listProjectIssues(token, selectedProjectId, filterParams),
-      listProjectMembers(token, selectedProjectId),
-      listProjectMilestones(token, selectedProjectId),
-      listProjectLabels(token, selectedProjectId),
-      listProjectStatuses(token, selectedProjectId),
+      listTaskListIssues(token, selectedTaskListId, filterParams),
+      listTaskListMembers(token, selectedTaskListId),
+      listTaskListMilestones(token, selectedTaskListId),
+      listTaskListLabels(token, selectedTaskListId),
+      listTaskListStatuses(token, selectedTaskListId),
     ])
       .then(([issueRes, memberRes, milestoneRes, labelRes, statusRes]) => {
         if (cancelled) return;
@@ -282,11 +280,11 @@ export const PMSView = () => {
         setMembers(memberRes.items);
         setMilestones(milestoneRes.items);
         setLabels(labelRes.items);
-        setProjectStatuses(statusRes.items);
+        setTaskListStatuses(statusRes.items);
       })
       .catch(err => {
         if (cancelled) return;
-        setError(getErrorMessage(err, '프로젝트 데이터를 불러오지 못했습니다.'));
+        setError(getErrorMessage(err, '리스트 데이터를 불러오지 못했습니다.'));
       })
       .finally(() => {
         if (!cancelled) {
@@ -297,7 +295,7 @@ export const PMSView = () => {
     return () => {
       cancelled = true;
     };
-  }, [applyIssueCollection, getErrorMessage, token, selectedProjectId, filterParams]);
+  }, [applyIssueCollection, getErrorMessage, token, selectedTaskListId, filterParams]);
 
   const toggleIssueSelection = useCallback((issueId: string) => {
     setSelectedIssueIds(prev => {
@@ -335,11 +333,11 @@ export const PMSView = () => {
         return null;
       }
 
-      return current.list_id === selectedProjectId ? current : null;
+      return current.list_id === selectedTaskListId ? current : null;
     });
     setSelectedIssueIds(new Set());
     setFilterParams(createDefaultIssueFilterParams());
-  }, [selectedProjectId]);
+  }, [selectedTaskListId]);
 
   useEffect(() => {
     if (!token || !requestedIssueId) {
@@ -362,7 +360,7 @@ export const PMSView = () => {
             archived_state: detail.issue.archived ? 'archived' : 'active',
           }),
         );
-        setSelectedProjectId(detail.issue.list_id);
+        setSelectedTaskListId(detail.issue.list_id);
         setSelectedIssue(detail.issue);
       })
       .catch((caughtError) => {
@@ -382,11 +380,11 @@ export const PMSView = () => {
   if (isTodayView) return <TodayOverdueView />;
   if (isPersonalView) return <PersonalListView />;
   if (spaceDocsSpaceId) {
-    const spaceName = projects.find((project) => project.team_id === spaceDocsSpaceId)?.team_name ?? null;
+    const spaceName = taskLists.find((taskList) => taskList.team_id === spaceDocsSpaceId)?.team_name ?? null;
     return <SpaceDocsView spaceId={spaceDocsSpaceId} spaceName={spaceName} docId={spaceDocsDocId} />;
   }
   if (spaceOverviewId) {
-    const spaceName = projects.find((project) => project.team_id === spaceOverviewId)?.team_name ?? null;
+    const spaceName = taskLists.find((taskList) => taskList.team_id === spaceOverviewId)?.team_name ?? null;
     return <SpaceOverviewView spaceId={spaceOverviewId} spaceName={spaceName} />;
   }
   if (isOverviewRoute) {
@@ -446,14 +444,14 @@ export const PMSView = () => {
       </div>
     );
   }
-  if (error && !loading && !selectedProjectId) {
+  if (error && !loading && !selectedTaskListId) {
     return (
       <div className="app-text-body flex h-full items-center justify-center text-red-400">
         {error}
       </div>
     );
   }
-  if (!selectedProjectId && !loading) {
+  if (!selectedTaskListId && !loading) {
     return (
       <div className="app-text-body flex h-full items-center justify-center text-gray-500">
         No lists found.
@@ -467,16 +465,16 @@ export const PMSView = () => {
         {/* Row 1: breadcrumb */}
         <nav className="app-text-caption flex items-center gap-1.5 text-gray-500 mb-1.5 min-w-0">
           <Link to={currentWorkspaceSlug ? `/w/${encodeURIComponent(currentWorkspaceSlug)}/pms` : pmsRoot} className="hover:text-app-ink transition-colors shrink-0">PMS</Link>
-          {selectedProject?.team_name ? (
+          {selectedTaskList?.team_name ? (
             <>
               <span className="text-gray-600 shrink-0">/</span>
-              <span className="truncate max-w-[160px]">{selectedProject.team_name}</span>
+              <span className="truncate max-w-[160px]">{selectedTaskList.team_name}</span>
             </>
           ) : null}
-          {selectedProject?.folder_name ? (
+          {selectedTaskList?.folder_name ? (
             <>
               <span className="text-gray-600 shrink-0">/</span>
-              <span className="truncate max-w-[160px]">{selectedProject.folder_name}</span>
+              <span className="truncate max-w-[160px]">{selectedTaskList.folder_name}</span>
             </>
           ) : null}
         </nav>
@@ -488,7 +486,7 @@ export const PMSView = () => {
               <Layout size={16} />
             </div>
             <h1 className="app-text-title-md text-app-ink truncate min-w-0">
-              {selectedProject?.name || projectName}
+              {selectedTaskList?.name || taskListName}
             </h1>
             <button
               type="button"
@@ -497,33 +495,33 @@ export const PMSView = () => {
             >
               <Star size={14} />
             </button>
-            {projects.length > 1 && (
-              <div ref={projectSwitcherRef} className="relative shrink-0">
+            {taskLists.length > 1 && (
+              <div ref={taskListSwitcherRef} className="relative shrink-0">
                 <button
                   type="button"
-                  onClick={() => setProjectSwitcherOpen(o => !o)}
+                  onClick={() => setTaskListSwitcherOpen((open) => !open)}
                   className="flex h-7 w-7 items-center justify-center rounded text-gray-500 transition-colors hover:bg-app-surface-hover hover:text-app-ink"
                   title="Switch list"
                 >
                   <ChevronDown size={14} />
                 </button>
-                {projectSwitcherOpen && (
+                {taskListSwitcherOpen && (
                   <div className="absolute top-full left-0 mt-1 z-30 min-w-[220px] max-h-72 overflow-y-auto custom-scrollbar bg-app-bg border border-app-border rounded-lg shadow-xl py-1">
-                    {projects.map(p => (
+                    {taskLists.map((taskList) => (
                       <button
-                        key={p.id}
+                        key={taskList.id}
                         type="button"
                         onClick={() => {
-                          setProjectSwitcherOpen(false);
+                          setTaskListSwitcherOpen(false);
                           clearSelectedIssue();
-                          navigate(`/tool/pms-list-${p.id}`);
+                          navigate(`/tool/pms-list-${taskList.id}`);
                         }}
                         className={cn(
                           'app-text-body-sm w-full px-3 py-1.5 text-left hover:bg-app-surface-hover truncate',
-                          p.id === selectedProjectId ? 'text-app-accent font-medium' : 'text-app-ink'
+                          taskList.id === selectedTaskListId ? 'text-app-accent font-medium' : 'text-app-ink'
                         )}
                       >
-                        {p.name}
+                        {taskList.name}
                       </button>
                     ))}
                   </div>
@@ -532,16 +530,16 @@ export const PMSView = () => {
             )}
           </div>
           <div className="flex items-center gap-1 shrink-0">
-            {selectedProjectId && (
+            {selectedTaskListId && (
               <button
-                onClick={() => { if (token) void exportProjectCsv(token, selectedProjectId); }}
+                onClick={() => { if (token) void exportTaskListCsv(token, selectedTaskListId); }}
                 className="flex h-8 w-8 items-center justify-center rounded text-gray-500 transition-colors hover:bg-app-surface-hover hover:text-app-ink"
                 title="Export CSV"
               >
                 <Download size={15} />
               </button>
             )}
-            {canManageProject ? (
+            {canManageTaskList ? (
               <button
                 onClick={() => setSettingsOpen(true)}
                 className="flex h-8 w-8 items-center justify-center rounded text-gray-500 transition-colors hover:bg-app-surface-hover hover:text-app-ink"
@@ -550,7 +548,7 @@ export const PMSView = () => {
                 <Settings size={15} />
               </button>
             ) : null}
-            {canEditProject ? (
+            {canEditTaskList ? (
               <>
                 <div className="w-px h-5 bg-app-border mx-1" />
                 <button
@@ -594,15 +592,15 @@ export const PMSView = () => {
         </div>
       </header>
 
-      {selectedProjectId && (
+      {selectedTaskListId && (
         <FilterBar
-          projectId={selectedProjectId}
+          taskListId={selectedTaskListId}
           filterParams={filterParams}
           setFilterParams={setFilterParams}
           members={members}
           milestones={milestones}
           labels={labels}
-          projectStatuses={projectStatuses}
+          taskListStatuses={taskListStatuses}
         />
       )}
 
@@ -620,27 +618,27 @@ export const PMSView = () => {
           <AnimatePresence mode="wait">
             {activeTab === 'List' && (
               <motion.div key="list" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}>
-                <ListView issues={issues} onSelectIssue={setSelectedIssue} selectedIds={selectedIssueIds} onToggleSelect={toggleIssueSelection} projectStatuses={projectStatuses} />
+                <ListView issues={issues} onSelectIssue={setSelectedIssue} selectedIds={selectedIssueIds} onToggleSelect={toggleIssueSelection} taskListStatuses={taskListStatuses} />
               </motion.div>
             )}
             {activeTab === 'Board' && (
               <motion.div key="board" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="h-full">
-                <BoardView issues={issues} onSelectIssue={setSelectedIssue} onUpdateIssue={handleUpdateIssue} selectedIds={selectedIssueIds} onToggleSelect={toggleIssueSelection} projectStatuses={projectStatuses} />
+                <BoardView issues={issues} onSelectIssue={setSelectedIssue} onUpdateIssue={handleUpdateIssue} selectedIds={selectedIssueIds} onToggleSelect={toggleIssueSelection} taskListStatuses={taskListStatuses} />
               </motion.div>
             )}
             {activeTab === 'Calendar' && (
               <motion.div key="calendar" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="h-full">
-                <CalendarView issues={issues} projectStatuses={projectStatuses} />
+                <CalendarView issues={issues} taskListStatuses={taskListStatuses} />
               </motion.div>
             )}
             {activeTab === 'Gantt' && (
               <motion.div key="gantt" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="h-full">
-                <GanttView issues={issues} projectStatuses={projectStatuses} />
+                <GanttView issues={issues} taskListStatuses={taskListStatuses} />
               </motion.div>
             )}
             {activeTab === 'Table' && (
               <motion.div key="table" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="h-full">
-                <TableView issues={issues} onSelectIssue={setSelectedIssue} selectedIds={selectedIssueIds} onToggleSelect={toggleIssueSelection} projectStatuses={projectStatuses} />
+                <TableView issues={issues} onSelectIssue={setSelectedIssue} selectedIds={selectedIssueIds} onToggleSelect={toggleIssueSelection} taskListStatuses={taskListStatuses} />
               </motion.div>
             )}
           </AnimatePresence>
@@ -669,10 +667,10 @@ export const PMSView = () => {
                 issue={selectedIssue}
                 members={members}
                 milestones={milestones}
-                projectLabels={labels}
-                projectStatuses={projectStatuses}
-                spaceName={selectedProject?.team_name}
-                canEdit={canEditProject}
+                taskListLabels={labels}
+                taskListStatuses={taskListStatuses}
+                spaceName={selectedTaskList?.team_name}
+                canEdit={canEditTaskList}
                 onClose={clearSelectedIssue}
                 onUpdate={reloadIssues}
               />
@@ -686,30 +684,30 @@ export const PMSView = () => {
           <NewTaskModal
             isOpen={isNewTaskModalOpen}
             onClose={() => setIsNewTaskModalOpen(false)}
-            projectId={selectedProjectId}
+            taskListId={selectedTaskListId}
             onCreated={reloadIssues}
-            projectStatuses={projectStatuses}
-            canCreate={canEditProject}
+            taskListStatuses={taskListStatuses}
+            canCreate={canEditTaskList}
           />
         )}
       </AnimatePresence>
 
       <AnimatePresence>
-        {settingsOpen && selectedProjectId && (
-          <ProjectSettingsPanel
-            projectId={selectedProjectId}
-            teamId={selectedProject?.team_id ?? null}
-            currentUserRole={selectedProject?.role ?? null}
+        {settingsOpen && selectedTaskListId && (
+          <TaskListSettingsPanel
+            taskListId={selectedTaskListId}
+            teamId={selectedTaskList?.team_id ?? null}
+            currentUserRole={selectedTaskList?.role ?? null}
             onClose={() => setSettingsOpen(false)}
             onLabelsChanged={(updated) => setLabels(updated)}
-            onStatusesChanged={(updated) => setProjectStatuses(updated)}
+            onStatusesChanged={(updated) => setTaskListStatuses(updated)}
           />
         )}
       </AnimatePresence>
 
-      {selectedIssueIds.size > 0 && selectedProjectId && (
+      {selectedIssueIds.size > 0 && selectedTaskListId && (
         <BulkActionBar
-          projectId={selectedProjectId}
+          taskListId={selectedTaskListId}
           selectedIds={selectedIssueIds}
           totalCount={issues.length}
           onSelectAll={() => setSelectedIssueIds(new Set(issues.map(i => i.id)))}
@@ -717,7 +715,7 @@ export const PMSView = () => {
           onDone={handleBulkDone}
           members={members}
           labels={labels}
-          projectStatuses={projectStatuses}
+          taskListStatuses={taskListStatuses}
         />
       )}
 

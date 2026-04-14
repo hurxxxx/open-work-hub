@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react';
 import { Dialog, Button } from '@aidoo/ui';
 import { useAuth } from '@/src/domains/auth/auth-provider';
-import { createPmsList, type PmsList } from '@/src/domains/pms/pms-api';
+import { createPmsTaskList, type PmsTaskList } from '@/src/domains/pms/pms-api';
 
-export const CreateProjectModal = ({
+export const CreateTaskListModal = ({
   isOpen,
   onClose,
   teamId = null,
@@ -14,7 +14,7 @@ export const CreateProjectModal = ({
   onClose: () => void;
   teamId?: string | null;
   folderId?: string | null;
-  onCreated?: (project: PmsList) => void;
+  onCreated?: (taskList: PmsTaskList) => void;
 }) => {
   const { token } = useAuth();
   const [name, setName] = useState('');
@@ -36,13 +36,13 @@ export const CreateProjectModal = ({
     setSubmitting(true);
     setError('');
     try {
-      const project = await createPmsList(token, {
+      const taskList = await createPmsTaskList(token, {
         name: name.trim(),
         description: description.trim(),
         team_id: teamId,
         folder_id: folderId,
       });
-      onCreated?.(project);
+      onCreated?.(taskList);
       onClose();
     } catch (err) {
       setError(err instanceof Error ? err.message : '리스트 생성에 실패했습니다.');
@@ -87,7 +87,7 @@ export const CreateProjectModal = ({
           </label>
           <input
             type="text"
-            placeholder="e.g. Project, List of items, Campaign"
+            placeholder="e.g. Sprint Backlog, Design Ops, Q2 Campaign"
             value={name}
             onChange={e => setName(e.target.value)}
             onKeyDown={e => { if (e.key === 'Enter' && !e.nativeEvent.isComposing && name.trim() && !submitting) handleCreate(); }}

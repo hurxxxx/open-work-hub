@@ -41,7 +41,7 @@ export const APP_ORDER: string[] = ['ai', 'docs', 'pms', 'planner', 'meeting'];
 export const APP_DESCRIPTIONS: Record<string, string> = {
   ai: 'AI 검색과 어시스턴트',
   docs: '문서 작성과 지식 베이스',
-  pms: '프로젝트와 이슈 관리',
+  pms: '리스트와 이슈 관리',
   planner: '일정과 캘린더',
   meeting: '회의록과 첨부 자료',
 };

@@ -120,11 +120,6 @@ const ToolViewWrapper = () => {
     return <Navigate replace to={{ pathname: pmsRoot, search: location.search }} />;
   }
 
-  if (toolId?.startsWith('pms-project-')) {
-    const listId = toolId.replace('pms-project-', '');
-    return <Navigate replace to={{ pathname: `/tool/pms-list-${listId}`, search: location.search }} />;
-  }
-
   if (toolId?.startsWith('pms-list-') || /^pms-space-.+/.test(toolId ?? '')) {
     if (!hasWorkspaceMembership(auth.user)) {
       return (

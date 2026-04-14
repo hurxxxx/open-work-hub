@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { X, Filter, ChevronDown, Save, BookmarkCheck, Search } from 'lucide-react';
-import type { IssueFilterParams, PmsProjectMember, PmsMilestone, PmsLabel, PmsProjectStatus } from '@/src/domains/pms/pms-api';
+import type { IssueFilterParams, PmsTaskListMember, PmsMilestone, PmsLabel, PmsTaskListStatus } from '@/src/domains/pms/pms-api';
 import {
   createDefaultIssueFilterParams,
   DEFAULT_ISSUE_ARCHIVED_STATE,
@@ -39,21 +39,21 @@ interface SavedFilter {
   params: IssueFilterParams;
 }
 
-function getStorageKey(projectId: string) {
-  return `pms_saved_filters_${projectId}`;
+function getStorageKey(taskListId: string) {
+  return `pms_saved_filters_${taskListId}`;
 }
 
-function loadSavedFilters(projectId: string): SavedFilter[] {
+function loadSavedFilters(taskListId: string): SavedFilter[] {
   try {
-    const raw = localStorage.getItem(getStorageKey(projectId));
+    const raw = localStorage.getItem(getStorageKey(taskListId));
     return raw ? JSON.parse(raw) : [];
   } catch {
     return [];
   }
 }
 
-function saveSavedFilters(projectId: string, filters: SavedFilter[]) {
-  localStorage.setItem(getStorageKey(projectId), JSON.stringify(filters));
+function saveSavedFilters(taskListId: string, filters: SavedFilter[]) {
+  localStorage.setItem(getStorageKey(taskListId), JSON.stringify(filters));
 }
 
 function isFilterActive(params: IssueFilterParams): boolean {
@@ -115,32 +115,32 @@ function Dropdown({
 }
 
 export const FilterBar = ({
-  projectId,
+  taskListId,
   filterParams,
   setFilterParams,
   members,
   milestones,
   labels,
-  projectStatuses,
+  taskListStatuses,
 }: {
-  projectId: string;
+  taskListId: string;
   filterParams: IssueFilterParams;
   setFilterParams: (params: IssueFilterParams) => void;
-  members: PmsProjectMember[];
+  members: PmsTaskListMember[];
   milestones: PmsMilestone[];
   labels: PmsLabel[];
-  projectStatuses?: PmsProjectStatus[];
+  taskListStatuses?: PmsTaskListStatus[];
 }) => {
-  const statusOptions = projectStatuses && projectStatuses.length > 0
-    ? projectStatuses.map(s => ({ value: s.slug, label: s.name }))
+  const statusOptions = taskListStatuses && taskListStatuses.length > 0
+    ? taskListStatuses.map(s => ({ value: s.slug, label: s.name }))
     : [...DEFAULT_statusOptions];
-  const [savedFilters, setSavedFilters] = useState<SavedFilter[]>(() => loadSavedFilters(projectId));
+  const [savedFilters, setSavedFilters] = useState<SavedFilter[]>(() => loadSavedFilters(taskListId));
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
   const [filterName, setFilterName] = useState('');
 
   useEffect(() => {
-    setSavedFilters(loadSavedFilters(projectId));
-  }, [projectId]);
+    setSavedFilters(loadSavedFilters(taskListId));
+  }, [taskListId]);
 
   const active = isFilterActive(filterParams);
 
@@ -157,7 +157,7 @@ export const FilterBar = ({
         params: createDefaultIssueFilterParams({ ...filterParams, q: undefined }),
       },
     ];
-    saveSavedFilters(projectId, next);
+    saveSavedFilters(taskListId, next);
     setSavedFilters(next);
     setFilterName('');
     setSaveDialogOpen(false);
@@ -165,7 +165,7 @@ export const FilterBar = ({
 
   const handleDeleteSaved = (idx: number) => {
     const next = savedFilters.filter((_, i) => i !== idx);
-    saveSavedFilters(projectId, next);
+    saveSavedFilters(taskListId, next);
     setSavedFilters(next);
   };
 

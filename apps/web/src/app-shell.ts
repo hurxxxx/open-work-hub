@@ -46,9 +46,7 @@ function resolvePmsToolState(
 
   return {
     activeAppId: 'pms',
-    activeNavItemId: toolId.startsWith('pms-project-')
-      ? toolId.replace('pms-project-', 'pms-list-')
-      : toolId,
+    activeNavItemId: toolId,
   };
 }
 
@@ -128,7 +126,6 @@ export function resolveShellState(
   const toolId = path.split('/')[2] ?? '';
   if (
     toolId === 'pms-space-team'
-    || toolId.startsWith('pms-project-')
     || toolId.startsWith('pms-list-')
     || /^pms-space-.+/.test(toolId)
   ) {

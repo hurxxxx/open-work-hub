@@ -151,15 +151,15 @@ def _can_resolve(db: Session, user: User, media: MediaFile) -> bool:
     # Unlinked media: only the uploader can resolve
     if media.resource_type is None:
         return media.uploaded_by_id == user.id
-    # Linked to an issue: check project membership
+    # Linked to an issue: check task list membership
     if media.resource_type == "issue":
-        from aidoo_api.domains.pms.models import Issue, Project
+        from aidoo_api.domains.pms.models import Issue, TaskList
 
         issue = db.scalar(select(Issue).where(Issue.id == media.resource_id))
         if issue is None:
             return False
-        project = db.scalar(select(Project).where(Project.id == issue.project_id))
-        return _has_space_access(db, user, project.team_id if project else None)
+        task_list = db.scalar(select(TaskList).where(TaskList.id == issue.list_id))
+        return _has_space_access(db, user, task_list.team_id if task_list else None)
     if media.resource_type == "space_doc_page":
         from aidoo_api.domains.pms.models import SpaceDocPage
 
@@ -241,15 +241,15 @@ def link_media(
 
 
 def _ensure_issue_access(db: Session, user: User, issue_id: str) -> None:
-    """Verify the user has access to the issue's project."""
-    from aidoo_api.domains.pms.models import Issue, Project
+    """Verify the user has access to the issue's task list."""
+    from aidoo_api.domains.pms.models import Issue, TaskList
 
     issue = db.scalar(select(Issue).where(Issue.id == issue_id))
     if issue is None:
         raise HTTPException(status_code=404, detail="Issue not found.")
-    project = db.scalar(select(Project).where(Project.id == issue.project_id))
-    if not _has_space_access(db, user, project.team_id if project else None):
-        raise HTTPException(status_code=403, detail="Project space access required.")
+    task_list = db.scalar(select(TaskList).where(TaskList.id == issue.list_id))
+    if not _has_space_access(db, user, task_list.team_id if task_list else None):
+        raise HTTPException(status_code=403, detail="Task list space access required.")
 
 
 def _ensure_space_doc_page_access(db: Session, user: User, page_id: str) -> None:

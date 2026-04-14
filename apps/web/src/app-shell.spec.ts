@@ -52,7 +52,7 @@ describe('resolveShellState', () => {
       activeAppId: 'pms',
       activeNavItemId: '',
     });
-    expect(resolveShellState('/tool/pms-project-demo', buildUser())).toEqual({
+    expect(resolveShellState('/tool/pms-list-demo', buildUser())).toEqual({
       activeAppId: 'pms',
       activeNavItemId: 'pms-list-demo',
     });

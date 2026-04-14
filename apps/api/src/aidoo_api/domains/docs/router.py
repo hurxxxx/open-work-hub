@@ -93,9 +93,13 @@ def _share_token_allows_item_without_docs_access(item_id: str) -> bool:
     return prefix == SOURCE_NATIVE_DOC
 
 
-def _share_token_allows_page_without_docs_access(page_id: str) -> bool:
-    prefix, _raw_id = _split_prefixed_id(page_id)
-    return prefix == PAGE_SOURCE_NATIVE_DOC
+def _share_token_allows_page_without_docs_access(db: Session, page_id: str) -> bool:
+    prefix, raw_id = _split_prefixed_id(page_id)
+    if prefix == PAGE_SOURCE_NATIVE_DOC:
+        return True
+    if prefix is not None:
+        return False
+    return db.scalar(select(NativeDocPage.id).where(NativeDocPage.id == raw_id)) is not None
 
 
 def _max_access_level(*levels: str | None) -> str | None:
@@ -1620,7 +1624,7 @@ def update_doc_page(
     current_user: User = Depends(require_current_user),
 ) -> DocsPageItem:
     prefix, raw_id = _split_prefixed_id(page_id)
-    if share_token is None or not _share_token_allows_page_without_docs_access(page_id):
+    if share_token is None or not _share_token_allows_page_without_docs_access(db, page_id):
         _ensure_docs_workspace_access(db, current_user)
 
     if prefix in {PAGE_SOURCE_NATIVE_DOC, None}:
@@ -1706,7 +1710,7 @@ def delete_doc_page(
     current_user: User = Depends(require_current_user),
 ) -> Response:
     prefix, raw_id = _split_prefixed_id(page_id)
-    if share_token is None or not _share_token_allows_page_without_docs_access(page_id):
+    if share_token is None or not _share_token_allows_page_without_docs_access(db, page_id):
         _ensure_docs_workspace_access(db, current_user)
 
     if prefix in {PAGE_SOURCE_NATIVE_DOC, None}:

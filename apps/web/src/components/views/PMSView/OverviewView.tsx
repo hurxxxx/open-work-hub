@@ -12,14 +12,14 @@ import { DonutChartCard, Panel } from '@aidoo/ui';
 import { useAuth } from '@/src/domains/auth/auth-provider';
 import {
   getPmsDashboardSummary,
-  listPmsLists,
+  listPmsTaskLists,
   type PmsDashboardSummary,
-  type PmsList,
+  type PmsTaskList,
 } from '@/src/domains/pms/pms-api';
-import { CreateProjectModal } from './CreateProjectModal';
+import { CreateTaskListModal } from './CreateTaskListModal';
 
-function upsertProject(projects: PmsList[], project: PmsList): PmsList[] {
-  return [project, ...projects.filter((item) => item.id !== project.id)].sort(
+function upsertTaskList(taskLists: PmsTaskList[], taskList: PmsTaskList): PmsTaskList[] {
+  return [taskList, ...taskLists.filter((item) => item.id !== taskList.id)].sort(
     (left, right) => right.updated_at.localeCompare(left.updated_at),
   );
 }
@@ -28,20 +28,20 @@ export const OverviewView = () => {
   const { token, user } = useAuth();
   const navigate = useNavigate();
   const [dashboard, setDashboard] = useState<PmsDashboardSummary | null>(null);
-  const [projects, setProjects] = useState<PmsList[]>([]);
+  const [taskLists, setTaskLists] = useState<PmsTaskList[]>([]);
   const [loading, setLoading] = useState(true);
-  const [createProjectOpen, setCreateProjectOpen] = useState(false);
+  const [createTaskListOpen, setCreateTaskListOpen] = useState(false);
 
   useEffect(() => {
     if (!token) return;
     setLoading(true);
     Promise.all([
       getPmsDashboardSummary(token),
-      listPmsLists(token),
+      listPmsTaskLists(token),
     ])
-      .then(([dash, projs]) => {
+      .then(([dash, taskListResponse]) => {
         setDashboard(dash);
-        setProjects(projs.items);
+        setTaskLists(taskListResponse.items);
       })
       .finally(() => setLoading(false));
   }, [token]);
@@ -67,7 +67,7 @@ export const OverviewView = () => {
         </h2>
         <p className="app-text-body max-w-xl text-app-ink/60">
           {dashboard
-            ? `${dashboard.project_count} lists · ${dashboard.active_issue_count} active issues · ${dashboard.overdue_issue_count} overdue`
+            ? `${dashboard.list_count} lists · ${dashboard.active_issue_count} active issues · ${dashboard.overdue_issue_count} overdue`
             : 'Loading summary...'}
         </p>
       </div>
@@ -81,7 +81,7 @@ export const OverviewView = () => {
               Lists
             </div>
             <button
-              onClick={() => setCreateProjectOpen(true)}
+              onClick={() => setCreateTaskListOpen(true)}
               className="app-text-control-sm flex items-center gap-1 text-app-accent transition-colors hover:text-app-accent/80"
             >
               <Plus size={14} />
@@ -89,10 +89,10 @@ export const OverviewView = () => {
             </button>
           </h3>
           <div className="space-y-3">
-            {projects.map((project) => (
+            {taskLists.map((taskList) => (
               <div
-                key={project.id}
-                onClick={() => navigate(`/tool/pms-list-${project.id}`)}
+                key={taskList.id}
+                onClick={() => navigate(`/tool/pms-list-${taskList.id}`)}
                 className="flex items-center gap-3 p-2 hover:bg-app-surface-hover rounded-md transition-colors group cursor-pointer"
               >
                 <div className="w-8 h-8 bg-blue-500/10 rounded flex items-center justify-center">
@@ -100,11 +100,11 @@ export const OverviewView = () => {
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="app-text-body-sm truncate font-medium text-app-ink transition-colors group-hover:text-app-accent">
-                    {project.name}
+                    {taskList.name}
                   </div>
                   <div className="app-text-micro text-app-ink/40">
-                    {project.team_name && <span>{project.team_name} · </span>}
-                    {project.issue_count} issues · {Math.round(project.progress * 100)}% done
+                    {taskList.team_name && <span>{taskList.team_name} · </span>}
+                    {taskList.issue_count} issues · {Math.round(taskList.progress * 100)}% done
                   </div>
                 </div>
                 <ChevronRight
@@ -113,7 +113,7 @@ export const OverviewView = () => {
                 />
               </div>
             ))}
-            {projects.length === 0 && (
+            {taskLists.length === 0 && (
               <p className="app-text-body text-app-ink/40">No lists yet</p>
             )}
           </div>
@@ -168,12 +168,12 @@ export const OverviewView = () => {
         </Panel>
       </div>
 
-      <CreateProjectModal
-        isOpen={createProjectOpen}
-        onClose={() => setCreateProjectOpen(false)}
-        onCreated={(project) => {
-          setProjects((current) => upsertProject(current, project));
-          navigate(`/tool/pms-list-${project.id}`);
+      <CreateTaskListModal
+        isOpen={createTaskListOpen}
+        onClose={() => setCreateTaskListOpen(false)}
+        onCreated={(taskList) => {
+          setTaskLists((current) => upsertTaskList(current, taskList));
+          navigate(`/tool/pms-list-${taskList.id}`);
           if (!token) return;
           void getPmsDashboardSummary(token).then((dash) => {
             setDashboard(dash);

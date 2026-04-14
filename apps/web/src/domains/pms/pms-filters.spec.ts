@@ -1,6 +1,6 @@
 import { describe, expect, it, vi, afterEach } from 'vitest';
 
-import { listProjectIssues } from './pms-api';
+import { listTaskListIssues } from './pms-api';
 import {
   createDefaultIssueFilterParams,
   reconcileSelectedIssueIds,
@@ -34,7 +34,7 @@ describe('pms filter helpers', () => {
   });
 });
 
-describe('listProjectIssues', () => {
+describe('listTaskListIssues', () => {
   afterEach(() => {
     vi.restoreAllMocks();
   });
@@ -47,13 +47,13 @@ describe('listProjectIssues', () => {
       }),
     );
 
-    await listProjectIssues('token', 'project-1', createDefaultIssueFilterParams());
+    await listTaskListIssues('token', 'task-list-1', createDefaultIssueFilterParams());
     expect(String(fetchSpy.mock.calls[0][0])).toContain('archived=false');
 
-    await listProjectIssues('token', 'project-1', { archived_state: 'archived' });
+    await listTaskListIssues('token', 'task-list-1', { archived_state: 'archived' });
     expect(String(fetchSpy.mock.calls[1][0])).toContain('archived=true');
 
-    await listProjectIssues('token', 'project-1', { archived_state: 'all' });
+    await listTaskListIssues('token', 'task-list-1', { archived_state: 'all' });
     expect(String(fetchSpy.mock.calls[2][0])).not.toContain('archived=');
   });
 });

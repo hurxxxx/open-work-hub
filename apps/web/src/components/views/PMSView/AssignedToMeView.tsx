@@ -2,8 +2,8 @@ import { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Loader2 } from 'lucide-react';
 import { useAuth } from '@/src/domains/auth/auth-provider';
-import { listPmsProjects, listProjectIssues, type PmsIssue, type PmsList } from '@/src/domains/pms/pms-api';
-import { projectRoleAllows } from '@/src/domains/pms/pms-permissions';
+import { listPmsTaskLists, listTaskListIssues, type PmsIssue, type PmsTaskList } from '@/src/domains/pms/pms-api';
+import { taskListRoleAllows } from '@/src/domains/pms/pms-permissions';
 import { ListView } from './ListView';
 import { TaskDetail } from './TaskDetail';
 
@@ -11,18 +11,18 @@ export const AssignedToMeView = () => {
   const { token, user } = useAuth();
   const [selectedIssue, setSelectedIssue] = useState<PmsIssue | null>(null);
   const [issues, setIssues] = useState<PmsIssue[]>([]);
-  const [projects, setProjects] = useState<PmsList[]>([]);
+  const [taskLists, setTaskLists] = useState<PmsTaskList[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (!token || !user) return;
     setLoading(true);
-    listPmsProjects(token)
+    listPmsTaskLists(token)
       .then(async (res) => {
-        setProjects(res.items);
+        setTaskLists(res.items);
         const allIssues: PmsIssue[] = [];
-        for (const project of res.items) {
-          const issueRes = await listProjectIssues(token, project.id);
+        for (const taskList of res.items) {
+          const issueRes = await listTaskListIssues(token, taskList.id);
           allIssues.push(...issueRes.items.filter(i => i.assignee_id === user.id));
         }
         setIssues(allIssues);
@@ -30,16 +30,16 @@ export const AssignedToMeView = () => {
       .finally(() => setLoading(false));
   }, [token, user]);
 
-  const selectedProject = useMemo(
-    () => (selectedIssue ? projects.find((project) => project.id === selectedIssue.list_id) ?? null : null),
-    [projects, selectedIssue],
+  const selectedTaskList = useMemo(
+    () => (selectedIssue ? taskLists.find((taskList) => taskList.id === selectedIssue.list_id) ?? null : null),
+    [taskLists, selectedIssue],
   );
 
   return (
     <div className="h-full flex flex-col relative">
       <header className="bg-app-bg border-b border-app-border px-8 pt-6 pb-4">
         <h1 className="app-text-title-lg text-app-ink">Assigned to me</h1>
-        <p className="app-text-body mt-1 text-gray-500">Tasks assigned to you across all projects</p>
+        <p className="app-text-body mt-1 text-gray-500">Tasks assigned to you across all lists</p>
       </header>
 
       <main className="flex-1 overflow-y-auto p-8 custom-scrollbar">
@@ -62,8 +62,8 @@ export const AssignedToMeView = () => {
             />
             <TaskDetail
               issue={selectedIssue}
-              spaceName={selectedProject?.team_name}
-              canEdit={projectRoleAllows(selectedProject?.role, 'member')}
+              spaceName={selectedTaskList?.team_name}
+              canEdit={taskListRoleAllows(selectedTaskList?.role, 'member')}
               onClose={() => setSelectedIssue(null)}
             />
           </>

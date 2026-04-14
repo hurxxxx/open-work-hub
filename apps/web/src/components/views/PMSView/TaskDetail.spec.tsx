@@ -10,7 +10,7 @@ const mockListIssueActivityLogs = vi.fn();
 const mockUpdateIssue = vi.fn();
 const mockDeleteIssue = vi.fn();
 const mockCreateIssueComment = vi.fn();
-const mockCreateProjectIssue = vi.fn();
+const mockCreateTaskListIssue = vi.fn();
 const mockUploadAttachment = vi.fn();
 const mockDeleteAttachment = vi.fn();
 const mockCreateChecklistItem = vi.fn();
@@ -20,7 +20,7 @@ const mockCreateTimeEntry = vi.fn();
 const mockDeleteTimeEntry = vi.fn();
 const mockCreateDependency = vi.fn();
 const mockDeleteDependency = vi.fn();
-const mockListProjectIssues = vi.fn();
+const mockListTaskListIssues = vi.fn();
 
 vi.mock('@aidoo/ui', () => ({
   Badge: ({ children }: { children: ReactNode }) => <span>{children}</span>,
@@ -55,7 +55,7 @@ vi.mock('@/src/domains/pms/pms-api', () => ({
   updateIssue: (...args: unknown[]) => mockUpdateIssue(...args),
   deleteIssue: (...args: unknown[]) => mockDeleteIssue(...args),
   createIssueComment: (...args: unknown[]) => mockCreateIssueComment(...args),
-  createProjectIssue: (...args: unknown[]) => mockCreateProjectIssue(...args),
+  createTaskListIssue: (...args: unknown[]) => mockCreateTaskListIssue(...args),
   uploadAttachment: (...args: unknown[]) => mockUploadAttachment(...args),
   deleteAttachment: (...args: unknown[]) => mockDeleteAttachment(...args),
   createChecklistItem: (...args: unknown[]) => mockCreateChecklistItem(...args),
@@ -65,13 +65,13 @@ vi.mock('@/src/domains/pms/pms-api', () => ({
   deleteTimeEntry: (...args: unknown[]) => mockDeleteTimeEntry(...args),
   createDependency: (...args: unknown[]) => mockCreateDependency(...args),
   deleteDependency: (...args: unknown[]) => mockDeleteDependency(...args),
-  listProjectIssues: (...args: unknown[]) => mockListProjectIssues(...args),
+  listTaskListIssues: (...args: unknown[]) => mockListTaskListIssues(...args),
 }));
 
 function buildIssue(overrides: Partial<PmsIssue> = {}): PmsIssue {
   return {
     id: 'issue-1',
-    list_id: 'project-1',
+    list_id: 'task-list-1',
     reference: 'AID-1',
     title: 'Initial task',
     description: 'Initial description',
@@ -121,7 +121,7 @@ describe('TaskDetail', () => {
     mockListIssueActivityLogs.mockResolvedValue({ items: [], total: 0, page: 1, page_size: 50 });
     mockDeleteIssue.mockResolvedValue(undefined);
     mockCreateIssueComment.mockResolvedValue(undefined);
-    mockCreateProjectIssue.mockResolvedValue(buildIssue({ id: 'issue-2', reference: 'AID-2' }));
+    mockCreateTaskListIssue.mockResolvedValue(buildIssue({ id: 'issue-2', reference: 'AID-2' }));
     mockUploadAttachment.mockResolvedValue(undefined);
     mockDeleteAttachment.mockResolvedValue(undefined);
     mockCreateChecklistItem.mockResolvedValue(undefined);
@@ -131,7 +131,7 @@ describe('TaskDetail', () => {
     mockDeleteTimeEntry.mockResolvedValue(undefined);
     mockCreateDependency.mockResolvedValue(undefined);
     mockDeleteDependency.mockResolvedValue(undefined);
-    mockListProjectIssues.mockResolvedValue({ items: [], total: 0, page: 1, page_size: 100 });
+    mockListTaskListIssues.mockResolvedValue({ items: [], total: 0, page: 1, page_size: 100 });
   });
 
   afterEach(() => {
@@ -153,7 +153,7 @@ describe('TaskDetail', () => {
         issue={buildIssue()}
         members={[]}
         milestones={[]}
-        projectLabels={[]}
+        taskListLabels={[]}
         onClose={onClose}
         onUpdate={onUpdate}
       />,
@@ -211,7 +211,7 @@ describe('TaskDetail', () => {
         issue={buildIssue()}
         members={[]}
         milestones={[]}
-        projectLabels={[]}
+        taskListLabels={[]}
         onClose={vi.fn()}
       />,
     );
@@ -233,7 +233,7 @@ describe('TaskDetail', () => {
         issue={buildIssue({ archived: true })}
         members={[]}
         milestones={[]}
-        projectLabels={[]}
+        taskListLabels={[]}
         onClose={vi.fn()}
       />,
     );
@@ -252,7 +252,7 @@ describe('TaskDetail', () => {
         issue={buildIssue()}
         members={[]}
         milestones={[]}
-        projectLabels={[]}
+        taskListLabels={[]}
         canEdit={false}
         onClose={vi.fn()}
       />,

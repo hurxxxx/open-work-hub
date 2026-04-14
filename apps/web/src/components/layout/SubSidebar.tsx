@@ -30,7 +30,7 @@ import { hasAdminSectionAccess, type AdminSection } from '@/src/domains/admin/ad
 import { useAuth } from '@/src/domains/auth/auth-provider';
 import { hasWorkspaceMembership, teamRoleAllows } from '@/src/domains/auth/auth-api';
 import { listFavoriteDocs, listRecentPages, type FavoriteDocItem, type RecentPageItem } from '@/src/domains/docs/docs-api';
-import { listPmsLists, listFolders, listSpaceDocs, createSpaceDoc, updateSpaceDoc, deleteSpaceDoc, updateFolder, deleteFolder, listSpaces, updateSpace, deleteSpace, type PmsFolder, type PmsList, type PmsSpace, type PmsSpaceDoc } from '@/src/domains/pms/pms-api';
+import { listPmsTaskLists, listFolders, listSpaceDocs, createSpaceDoc, updateSpaceDoc, deleteSpaceDoc, updateFolder, deleteFolder, listSpaces, updateSpace, deleteSpace, type PmsFolder, type PmsTaskList, type PmsSpace, type PmsSpaceDoc } from '@/src/domains/pms/pms-api';
 import {
   buildWorkspaceAppPath,
   resolveDefaultWorkspaceAppPath,
@@ -55,7 +55,7 @@ function resolveNavItemHref(
     ? buildWorkspaceAppPath(currentWorkspaceSlug, targetApp, suffix)
     : resolveDefaultWorkspaceAppPath(user, targetApp, suffix);
 }
-import { CreateProjectModal } from '@/src/components/views/PMSView/CreateProjectModal';
+import { CreateTaskListModal } from '@/src/components/views/PMSView/CreateTaskListModal';
 import { CreateSpaceModal } from '@/src/components/views/PMSView/CreateSpaceModal';
 import { SpaceMembersModal } from '@/src/components/views/PMSView/SpaceMembersModal';
 import { CreateFolderModal } from '@/src/components/views/PMSView/CreateFolderModal';
@@ -69,7 +69,7 @@ const SPACE_COLORS = [
   'bg-violet-500',
 ];
 
-function upsertList(lists: PmsList[], item: PmsList): PmsList[] {
+function upsertList(lists: PmsTaskList[], item: PmsTaskList): PmsTaskList[] {
   return [item, ...lists.filter((current) => current.id !== item.id)].sort(
     (left, right) => right.updated_at.localeCompare(left.updated_at),
   );
@@ -136,7 +136,7 @@ const SpaceAddPopover = ({
         <ListIcon size={16} className="text-gray-400" />
         <div className="text-left">
           <div className="app-text-control-sm text-app-ink">List</div>
-          <div className="app-text-micro text-app-ink/40">Track tasks, projects, people & more</div>
+          <div className="app-text-micro text-app-ink/40">Track tasks, lists, people & more</div>
         </div>
       </button>
       <button
@@ -384,7 +384,7 @@ const SpaceContextMenu = ({
 
 type FolderWithLists = {
   folder: PmsFolder;
-  lists: PmsList[];
+  lists: PmsTaskList[];
 };
 
 const SpaceItem = ({
@@ -416,7 +416,7 @@ const SpaceItem = ({
   spaceId: string;
   name: string;
   iconColor: string;
-  rootLists: PmsList[];
+  rootLists: PmsTaskList[];
   folders: FolderWithLists[];
   expanded: boolean;
   onToggle: () => void;
@@ -850,14 +850,14 @@ export const SubSidebar = ({
   );
 
   const [expandedCategories, setExpandedCategories] = useState<string[]>([]);
-  const [pmsLists, setPmsLists] = useState<PmsList[]>([]);
+  const [pmsLists, setPmsTaskLists] = useState<PmsTaskList[]>([]);
   const [pmsFolders, setPmsFolders] = useState<PmsFolder[]>([]);
   const [pmsTeams, setPmsTeams] = useState<PmsSpace[]>([]);
   const [pmsLoading, setPmsLoading] = useState(false);
   const [pmsError, setPmsError] = useState<string | null>(null);
-  const [createProjectOpen, setCreateProjectOpen] = useState(false);
-  const [createProjectTeamId, setCreateProjectTeamId] = useState<string | null>(null);
-  const [createProjectFolderId, setCreateProjectFolderId] = useState<string | null>(null);
+  const [createTaskListOpen, setCreateTaskListOpen] = useState(false);
+  const [createTaskListTeamId, setCreateTaskListTeamId] = useState<string | null>(null);
+  const [createTaskListFolderId, setCreateTaskListFolderId] = useState<string | null>(null);
   const [createSpaceOpen, setCreateSpaceOpen] = useState(false);
   const [manageMembersSpace, setManageMembersSpace] = useState<{
     id: string;
@@ -985,10 +985,10 @@ export const SubSidebar = ({
     setPmsLoading(true);
     setPmsError(null);
 
-    const listRequest = listPmsLists(token)
+    const listRequest = listPmsTaskLists(token)
       .then((response) => {
         if (cancelled) return;
-        setPmsLists(response.items);
+        setPmsTaskLists(response.items);
       });
 
     const folderRequest = listFolders(token)
@@ -1055,10 +1055,10 @@ export const SubSidebar = ({
     });
   };
 
-  const openCreateProject = (teamId: string | null) => {
-    setCreateProjectTeamId(teamId);
-    setCreateProjectFolderId(null);
-    setCreateProjectOpen(true);
+  const openCreateTaskList = (teamId: string | null) => {
+    setCreateTaskListTeamId(teamId);
+    setCreateTaskListFolderId(null);
+    setCreateTaskListOpen(true);
   };
 
   const [createFolderOpen, setCreateFolderOpen] = useState(false);
@@ -1182,7 +1182,7 @@ export const SubSidebar = ({
     try {
       await deleteFolder(token, folderId);
       setPmsFolders((current) => current.filter((f) => f.id !== folderId));
-      if (token) listPmsLists(token).then((res) => setPmsLists(res.items)).catch(() => undefined);
+      if (token) listPmsTaskLists(token).then((res) => setPmsTaskLists(res.items)).catch(() => undefined);
     } catch { /* ignore */ }
   }, [token]);
 
@@ -1207,7 +1207,7 @@ export const SubSidebar = ({
         || activeNavItemId.startsWith(`pms-space-${spaceId}-docs`);
 
       setPmsTeams((current) => current.filter((t) => t.id !== spaceId));
-      setPmsLists((current) => current.filter((l) => l.team_id !== spaceId));
+      setPmsTaskLists((current) => current.filter((l) => l.team_id !== spaceId));
       setPmsFolders((current) => current.filter((f) => f.team_id !== spaceId));
       setSpaceDocsMap((current) => {
         const next = new Map(current);
@@ -1232,7 +1232,7 @@ export const SubSidebar = ({
   const groupedSpaces = useMemo(() => {
     type SpaceGroup = {
       team: PmsSpace;
-      rootLists: PmsList[];
+      rootLists: PmsTaskList[];
       folders: Map<string, FolderWithLists>;
     };
 
@@ -1393,8 +1393,8 @@ export const SubSidebar = ({
                         expanded={expandedSpaces.has(space.id)}
                         onToggle={() => toggleSpace(space.id)}
                         onNavigate={() => navigate(`/tool/pms-space-${space.id}`)}
-                        onAddList={() => openCreateProject(space.id)}
-                        onAddListToFolder={(folderId) => { setCreateProjectTeamId(space.id); setCreateProjectFolderId(folderId); setCreateProjectOpen(true); }}
+                        onAddList={() => openCreateTaskList(space.id)}
+                        onAddListToFolder={(folderId) => { setCreateTaskListTeamId(space.id); setCreateTaskListFolderId(folderId); setCreateTaskListOpen(true); }}
                         onAddFolder={() => openCreateFolder(space.id)}
                         onOpenDocs={() => { void handleCreateDoc(space.id); }}
                         onMoveFolder={(folderId, direction) => { void handleMoveFolder(space.id, folderId, direction); }}
@@ -1726,13 +1726,13 @@ export const SubSidebar = ({
       </div>
       )}
 
-      <CreateProjectModal
-        isOpen={createProjectOpen}
-        onClose={() => setCreateProjectOpen(false)}
-        teamId={createProjectTeamId}
-        folderId={createProjectFolderId}
+      <CreateTaskListModal
+        isOpen={createTaskListOpen}
+        onClose={() => setCreateTaskListOpen(false)}
+        teamId={createTaskListTeamId}
+        folderId={createTaskListFolderId}
         onCreated={(list) => {
-          setPmsLists((current) => upsertList(current, list));
+          setPmsTaskLists((current) => upsertList(current, list));
           const teamId = list.team_id;
           if (teamId) {
             knownSpaceIdsRef.current.add(teamId);
@@ -1782,7 +1782,7 @@ export const SubSidebar = ({
           onCreated={(folder) => {
             setPmsFolders((current) => [...current, folder]);
             if (token) {
-              listPmsLists(token).then((res) => setPmsLists(res.items)).catch(() => undefined);
+              listPmsTaskLists(token).then((res) => setPmsTaskLists(res.items)).catch(() => undefined);
             }
           }}
         />

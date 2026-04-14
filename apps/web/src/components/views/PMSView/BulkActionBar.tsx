@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { X, ChevronDown, Trash2, Archive } from 'lucide-react';
-import { bulkUpdateIssues, type PmsProjectMember, type PmsLabel, type PmsProjectStatus } from '@/src/domains/pms/pms-api';
+import { bulkUpdateIssues, type PmsTaskListMember, type PmsLabel, type PmsTaskListStatus } from '@/src/domains/pms/pms-api';
 import { useAuth } from '@/src/domains/auth/auth-provider';
 
 const DEFAULT_STATUS_OPTIONS = [
@@ -55,7 +55,7 @@ function ActionDropdown({
 }
 
 export const BulkActionBar = ({
-  projectId,
+  taskListId,
   selectedIds,
   totalCount,
   onSelectAll,
@@ -63,20 +63,20 @@ export const BulkActionBar = ({
   onDone,
   members,
   labels,
-  projectStatuses,
+  taskListStatuses,
 }: {
-  projectId: string;
+  taskListId: string;
   selectedIds: Set<string>;
   totalCount: number;
   onSelectAll: () => void;
   onDeselectAll: () => void;
   onDone: () => void;
-  members: PmsProjectMember[];
+  members: PmsTaskListMember[];
   labels: PmsLabel[];
-  projectStatuses?: PmsProjectStatus[];
+  taskListStatuses?: PmsTaskListStatus[];
 }) => {
-  const statusOptions = projectStatuses && projectStatuses.length > 0
-    ? projectStatuses.map(s => ({ value: s.slug, label: s.name }))
+  const statusOptions = taskListStatuses && taskListStatuses.length > 0
+    ? taskListStatuses.map(s => ({ value: s.slug, label: s.name }))
     : [...DEFAULT_STATUS_OPTIONS];
   const { token } = useAuth();
   const [loading, setLoading] = useState(false);
@@ -88,7 +88,7 @@ export const BulkActionBar = ({
     if (!token || ids.length === 0) return;
     setLoading(true);
     try {
-      await bulkUpdateIssues(token, projectId, { issue_ids: ids, ...payload });
+      await bulkUpdateIssues(token, taskListId, { issue_ids: ids, ...payload });
       onDone();
     } finally {
       setLoading(false);

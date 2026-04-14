@@ -5,21 +5,21 @@ import { Button, InlineNotice, Select } from '@aidoo/ui';
 import { useAuth } from '@/src/domains/auth/auth-provider';
 import {
   addSpaceMember,
-  listProjectLabels,
+  listTaskListLabels,
   listPmsUsers,
-  createProjectLabel,
+  createTaskListLabel,
   updateLabel,
   deleteLabel,
   listSpaceMembers,
-  listProjectStatuses,
-  createProjectStatus,
-  updateProjectStatus,
-  deleteProjectStatus,
+  listTaskListStatuses,
+  createTaskListStatus,
+  updateTaskListStatus,
+  deleteTaskListStatus,
   updateSpaceMemberRole,
   removeSpaceMember,
   type PmsLabel,
   type PmsSpaceMember,
-  type PmsProjectStatus,
+  type PmsTaskListStatus,
   type PmsUserSummary,
 } from '@/src/domains/pms/pms-api';
 
@@ -42,26 +42,26 @@ const ROLE_OPTIONS = [
   { value: 'viewer', label: 'Viewer' },
 ];
 
-export function ProjectSettingsPanel({
-  projectId,
+export function TaskListSettingsPanel({
+  taskListId,
   teamId,
   currentUserRole,
   onClose,
   onLabelsChanged,
   onStatusesChanged,
 }: {
-  projectId: string;
+  taskListId: string;
   teamId: string | null;
   currentUserRole: string | null;
   onClose: () => void;
   onLabelsChanged?: (labels: PmsLabel[]) => void;
-  onStatusesChanged?: (statuses: PmsProjectStatus[]) => void;
+  onStatusesChanged?: (statuses: PmsTaskListStatus[]) => void;
 }) {
   const { token, user } = useAuth();
   const [members, setMembers] = useState<PmsSpaceMember[]>([]);
   const [availableUsers, setAvailableUsers] = useState<PmsUserSummary[]>([]);
   const [labels, setLabels] = useState<PmsLabel[]>([]);
-  const [statuses, setStatuses] = useState<PmsProjectStatus[]>([]);
+  const [statuses, setStatuses] = useState<PmsTaskListStatus[]>([]);
   const [loading, setLoading] = useState(true);
   const [newName, setNewName] = useState('');
   const [newColor, setNewColor] = useState(PRESET_COLORS[0]);
@@ -93,7 +93,7 @@ export function ProjectSettingsPanel({
     onLabelsChanged?.(updated);
   }, [onLabelsChanged]);
 
-  const notifyStatusParent = useCallback((updated: PmsProjectStatus[]) => {
+  const notifyStatusParent = useCallback((updated: PmsTaskListStatus[]) => {
     onStatusesChanged?.(updated);
   }, [onStatusesChanged]);
 
@@ -106,8 +106,8 @@ export function ProjectSettingsPanel({
       const [memberRes, userItems, labelRes, statusRes] = await Promise.all([
         teamId ? listSpaceMembers(token, teamId) : Promise.resolve({ items: [], total: 0, page: 1, page_size: 20 }),
         listPmsUsers(token),
-        listProjectLabels(token, projectId),
-        listProjectStatuses(token, projectId),
+        listTaskListLabels(token, taskListId),
+        listTaskListStatuses(token, taskListId),
       ]);
       setMembers(memberRes.items);
       setAvailableUsers(userItems);
@@ -120,7 +120,7 @@ export function ProjectSettingsPanel({
     } finally {
       setLoading(false);
     }
-  }, [notifyParent, notifyStatusParent, projectId, teamId, token]);
+  }, [notifyParent, notifyStatusParent, taskListId, teamId, token]);
 
   useEffect(() => {
     void loadAll();
@@ -131,7 +131,7 @@ export function ProjectSettingsPanel({
     setCreating(true);
     setError(null);
     try {
-      const label = await createProjectLabel(token, projectId, { name: newName.trim(), color: newColor });
+      const label = await createTaskListLabel(token, taskListId, { name: newName.trim(), color: newColor });
       const updated = [...labels, label];
       setLabels(updated);
       notifyParent(updated);
@@ -142,7 +142,7 @@ export function ProjectSettingsPanel({
     } finally {
       setCreating(false);
     }
-  }, [token, projectId, newName, newColor, labels, notifyParent]);
+  }, [token, taskListId, newName, newColor, labels, notifyParent]);
 
   const startEdit = (label: PmsLabel) => {
     setEditingId(label.id);
@@ -183,7 +183,7 @@ export function ProjectSettingsPanel({
     setCreatingStatus(true);
     setError(null);
     try {
-      const ps = await createProjectStatus(token, projectId, {
+      const ps = await createTaskListStatus(token, taskListId, {
         name: newStatusName.trim(),
         color: newStatusColor,
         category: newStatusCategory,
@@ -200,9 +200,9 @@ export function ProjectSettingsPanel({
     } finally {
       setCreatingStatus(false);
     }
-  }, [token, projectId, newStatusName, newStatusColor, newStatusCategory, statuses, notifyStatusParent]);
+  }, [token, taskListId, newStatusName, newStatusColor, newStatusCategory, statuses, notifyStatusParent]);
 
-  const startEditStatus = (ps: PmsProjectStatus) => {
+  const startEditStatus = (ps: PmsTaskListStatus) => {
     setEditingStatusId(ps.id);
     setEditStatusName(ps.name);
     setEditStatusColor(ps.color);
@@ -213,7 +213,7 @@ export function ProjectSettingsPanel({
     if (!token || !editingStatusId || !editStatusName.trim()) return;
     setError(null);
     try {
-      const updated = await updateProjectStatus(token, editingStatusId, {
+      const updated = await updateTaskListStatus(token, editingStatusId, {
         name: editStatusName.trim(),
         color: editStatusColor,
         category: editStatusCategory,
@@ -231,7 +231,7 @@ export function ProjectSettingsPanel({
     if (!token) return;
     setError(null);
     try {
-      await deleteProjectStatus(token, statusId);
+      await deleteTaskListStatus(token, statusId);
       const updated = statuses.filter(s => s.id !== statusId);
       setStatuses(updated);
       notifyStatusParent(updated);

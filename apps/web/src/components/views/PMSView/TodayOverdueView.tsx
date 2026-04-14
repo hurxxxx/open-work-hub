@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Calendar, AlertCircle, CheckCircle2, Loader2 } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 import { useAuth } from '@/src/domains/auth/auth-provider';
-import { listPmsProjects, listProjectIssues, type PmsIssue } from '@/src/domains/pms/pms-api';
+import { listPmsTaskLists, listTaskListIssues, type PmsIssue } from '@/src/domains/pms/pms-api';
 import { initials, formatDate } from './pms-constants';
 
 export const TodayOverdueView = () => {
@@ -13,11 +13,11 @@ export const TodayOverdueView = () => {
   useEffect(() => {
     if (!token) return;
     setLoading(true);
-    listPmsProjects(token)
+    listPmsTaskLists(token)
       .then(async (res) => {
         const allIssues: PmsIssue[] = [];
-        for (const project of res.items) {
-          const issueRes = await listProjectIssues(token, project.id);
+        for (const taskList of res.items) {
+          const issueRes = await listTaskListIssues(token, taskList.id);
           allIssues.push(...issueRes.items);
         }
         setIssues(allIssues);

@@ -101,7 +101,12 @@
 
 ## 후속 개선 후보
 
-- [ ] issue payload의 `project_id` 등 내부 필드명을 `list_id` 계열로 정리
+- [x] issue payload의 `project_id` 등 내부 필드명을 `list_id` 계열로 정리
+  - 2026-04-14 PMS router.py 전면 리네임: path param, 내부 헬퍼 인자, ORM 속성 접근, 레거시 `/projects/...` 데코레이터 placeholder 까지 `list_id` 로 통일
+  - 응답 Pydantic 모델 5종 (`MilestoneItem`, `TaskTemplateItem`, `CustomFieldItem`, `IssueListItem`, `DashboardProjectItem`) 은 `AliasChoices("list_id", "project_id")` 로 입력 호환 유지, 출력은 `list_id`
+  - `Issue.list_id` / `Label.list_id` / `ProjectStatus.list_id` 사용처를 `auth/access.py`, `meeting/service.py`, `media/router.py` 에서 정정
+  - Dashboard summary 쿼리파라미터를 `list_id` 로 전환, 백엔드는 `project_id` dual-accept
+  - 호환용 유지: `pms_projects` 테이블, `Project` ORM 클래스, `project_id = synonym("list_id")`, `/api/v1/pms/projects/...` URL
 - [x] Folder 정렬/이동 UI 추가
 - [x] Space 권한을 프로젝트 fallback 없이 완전한 Space ACL로 정리
   - 2026-04-11 PR1 라운드 7 에서 `ProjectMember` 좀비 테이블 완전 제거
@@ -113,8 +118,8 @@
 - [ ] Space Docs 페이지 이동/드래그 정렬 UX 개선
 - [x] Admin Console / Workspace Settings 공용 workspace 멤버 관리 UI 추가
 - [ ] `/w/:workspaceSlug/<app>` 기반 workspace shell 수동 QA
-- [ ] web typecheck 잔재 7건 정리
-- [ ] meeting `datetime.utcnow()` deprecation warning 제거
+- [x] web typecheck 잔재 7건 정리 (2026-04-14 확인, 이미 해결된 상태)
+- [x] meeting `datetime.utcnow()` deprecation warning 제거 (2026-04-14 확인, 전 도메인 `_utcnow()` / `utcnow_naive()` 헬퍼로 이미 전환 완료)
 - [ ] Home을 워크스페이스 스코프로 전환 (`/w/:slug/home`)
   - 현재 `/`의 전역 HomeView는 더미 데이터이고 앱바 HOME 진입 시 워크스페이스 컨텍스트가 증발함
   - Notion "Jump back in" + Linear "My Issues" + ClickUp Agenda 패턴 차용: Greeting, Quick actions, 오늘 일정, 내 태스크, 최근 작업 5개 위젯
@@ -125,10 +130,10 @@
 ## 검증
 
 - [x] `cd apps/api && uv run --python 3.12 --group dev pytest`
-  - 75 passed, 2 warnings (2026-04-11)
-- [x] `cd apps/api && uv run --python 3.12 alembic current`
-  - `2d4f6c9ab1ef (head)`
-- [x] `cd apps/api && uv run --python 3.12 alembic check`
+  - 98 passed, 1 failed (2026-04-14) — `test_docs_hub.py::test_internal_shared_links_require_auth_and_honor_read_vs_edit` 는 docs-collab 하드닝 이후 남은 회귀, 별도 추적
+- [x] `cd apps/api && uv run --python 3.12 --group dev alembic current`
+  - `9d26f5a7c1b4 (head)` (2026-04-14)
+- [x] `cd apps/api && uv run --python 3.12 --group dev alembic check`
   - drift 0
-- [ ] `pnpm nx typecheck web`
-  - 기존 오류 7건 남아 있음
+- [x] `pnpm nx typecheck web`
+  - 에러 0건 (2026-04-14)

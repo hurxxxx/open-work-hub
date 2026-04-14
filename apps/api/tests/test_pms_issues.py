@@ -12,10 +12,10 @@ def _dev_login(client: TestClient, account_key: str) -> dict:
 
 def test_issue_list_archived_filters_and_bulk_restore(client: TestClient) -> None:
     token = _bootstrap_admin(client)
-    project = _create_project(client, token)
+    task_list = _create_task_list(client, token)
 
-    active_issue = _create_issue(client, token, project["id"], title="Active issue")
-    archived_issue = _create_issue(client, token, project["id"], title="Archived issue")
+    active_issue = _create_issue(client, token, task_list["id"], title="Active issue")
+    archived_issue = _create_issue(client, token, task_list["id"], title="Archived issue")
 
     archive_response = client.patch(
         f"/api/v1/pms/issues/{archived_issue['id']}",
@@ -26,7 +26,7 @@ def test_issue_list_archived_filters_and_bulk_restore(client: TestClient) -> Non
     assert archive_response.json()["archived"] is True
 
     active_only_response = client.get(
-        f"/api/v1/pms/projects/{project['id']}/issues",
+        f"/api/v1/pms/lists/{task_list['id']}/issues",
         headers=_auth_headers(token),
         params={"archived": "false"},
     )
@@ -34,7 +34,7 @@ def test_issue_list_archived_filters_and_bulk_restore(client: TestClient) -> Non
     assert [item["id"] for item in active_only_response.json()["items"]] == [active_issue["id"]]
 
     archived_only_response = client.get(
-        f"/api/v1/pms/projects/{project['id']}/issues",
+        f"/api/v1/pms/lists/{task_list['id']}/issues",
         headers=_auth_headers(token),
         params={"archived": "true"},
     )
@@ -42,7 +42,7 @@ def test_issue_list_archived_filters_and_bulk_restore(client: TestClient) -> Non
     assert [item["id"] for item in archived_only_response.json()["items"]] == [archived_issue["id"]]
 
     restore_response = client.patch(
-        f"/api/v1/pms/projects/{project['id']}/issues/bulk",
+        f"/api/v1/pms/lists/{task_list['id']}/issues/bulk",
         headers=_auth_headers(token),
         json={"issue_ids": [archived_issue["id"]], "archived": False},
     )
@@ -50,7 +50,7 @@ def test_issue_list_archived_filters_and_bulk_restore(client: TestClient) -> Non
     assert restore_response.json() == {"updated_count": 1, "deleted_count": 0}
 
     archived_after_restore_response = client.get(
-        f"/api/v1/pms/projects/{project['id']}/issues",
+        f"/api/v1/pms/lists/{task_list['id']}/issues",
         headers=_auth_headers(token),
         params={"archived": "true"},
     )
@@ -58,7 +58,7 @@ def test_issue_list_archived_filters_and_bulk_restore(client: TestClient) -> Non
     assert archived_after_restore_response.json()["items"] == []
 
     active_after_restore_response = client.get(
-        f"/api/v1/pms/projects/{project['id']}/issues",
+        f"/api/v1/pms/lists/{task_list['id']}/issues",
         headers=_auth_headers(token),
         params={"archived": "false"},
     )
@@ -71,14 +71,14 @@ def test_issue_list_archived_filters_and_bulk_restore(client: TestClient) -> Non
 
 def test_bulk_status_updates_append_in_requested_order(client: TestClient) -> None:
     token = _bootstrap_admin(client)
-    project = _create_project(client, token)
+    task_list = _create_task_list(client, token)
 
-    existing_todo = _create_issue(client, token, project["id"], title="Existing todo", status="todo")
-    backlog_first = _create_issue(client, token, project["id"], title="Backlog first", status="backlog")
-    backlog_second = _create_issue(client, token, project["id"], title="Backlog second", status="backlog")
+    existing_todo = _create_issue(client, token, task_list["id"], title="Existing todo", status="todo")
+    backlog_first = _create_issue(client, token, task_list["id"], title="Backlog first", status="backlog")
+    backlog_second = _create_issue(client, token, task_list["id"], title="Backlog second", status="backlog")
 
     bulk_response = client.patch(
-        f"/api/v1/pms/projects/{project['id']}/issues/bulk",
+        f"/api/v1/pms/lists/{task_list['id']}/issues/bulk",
         headers=_auth_headers(token),
         json={
             "issue_ids": [backlog_second["id"], backlog_first["id"]],
@@ -89,7 +89,7 @@ def test_bulk_status_updates_append_in_requested_order(client: TestClient) -> No
     assert bulk_response.json() == {"updated_count": 2, "deleted_count": 0}
 
     todo_issues_response = client.get(
-        f"/api/v1/pms/projects/{project['id']}/issues",
+        f"/api/v1/pms/lists/{task_list['id']}/issues",
         headers=_auth_headers(token),
         params=[("status", "todo"), ("page_size", "100"), ("sort_by", "board_position"), ("sort_dir", "asc")],
     )
@@ -106,11 +106,11 @@ def test_bulk_status_updates_append_in_requested_order(client: TestClient) -> No
 
 def test_viewer_cannot_modify_issue_comment_or_folder(client: TestClient) -> None:
     admin_session = _bootstrap_admin_session(client)
-    project = _create_project(client, admin_session["token"])
-    issue = _create_issue(client, admin_session["token"], project["id"], title="Protected issue")
+    task_list = _create_task_list(client, admin_session["token"])
+    issue = _create_issue(client, admin_session["token"], task_list["id"], title="Protected issue")
 
     viewer = _create_user(client, admin_session["token"], email="viewer@aidoo.local", full_name="Viewer User")
-    _add_project_member(client, admin_session["token"], project["id"], viewer["user"]["id"], "viewer")
+    _add_task_list_member(client, admin_session["token"], task_list["id"], viewer["user"]["id"], "viewer")
     viewer_token = _login(client, viewer["user"]["email"], viewer["temporary_password"])
 
     update_response = client.patch(
@@ -130,18 +130,18 @@ def test_viewer_cannot_modify_issue_comment_or_folder(client: TestClient) -> Non
     folder_response = client.post(
         "/api/v1/pms/folders",
         headers=_auth_headers(viewer_token),
-        json={"name": "Viewer folder", "team_id": project["team_id"]},
+        json={"name": "Viewer folder", "team_id": task_list["team_id"]},
     )
     assert folder_response.status_code == 403
 
 
 def test_explicit_null_clears_nullable_issue_fields(client: TestClient) -> None:
     admin_session = _bootstrap_admin_session(client)
-    project = _create_project(client, admin_session["token"])
+    task_list = _create_task_list(client, admin_session["token"])
     issue = _create_issue(
         client,
         admin_session["token"],
-        project["id"],
+        task_list["id"],
         title="Clear me",
         assignee_id=admin_session["user"]["id"],
         start_date="2026-04-01",
@@ -169,8 +169,8 @@ def test_explicit_null_clears_nullable_issue_fields(client: TestClient) -> None:
 
 def test_issue_assignees_reject_non_members(client: TestClient) -> None:
     admin_session = _bootstrap_admin_session(client)
-    project = _create_project(client, admin_session["token"])
-    issue = _create_issue(client, admin_session["token"], project["id"], title="Assignee guard")
+    task_list = _create_task_list(client, admin_session["token"])
+    issue = _create_issue(client, admin_session["token"], task_list["id"], title="Assignee guard")
     outsider = _create_user(client, admin_session["token"], email="outsider@aidoo.local", full_name="Outsider User")
 
     response = client.put(
@@ -179,7 +179,7 @@ def test_issue_assignees_reject_non_members(client: TestClient) -> None:
         json={"user_ids": [outsider["user"]["id"]]},
     )
     assert response.status_code == 400
-    assert response.json()["detail"] == "Assignees must be project members."
+    assert response.json()["detail"] == "Assignees must be task list members."
 
 
 def test_list_alias_space_docs_and_status_rename_behave_as_expected(client: TestClient) -> None:
@@ -194,11 +194,11 @@ def test_list_alias_space_docs_and_status_rename_behave_as_expected(client: Test
         },
     )
     assert create_response.status_code == 201
-    project = create_response.json()
-    assert project["team_id"] is not None
+    task_list = create_response.json()
+    assert task_list["team_id"] is not None
 
     create_issue_response = client.post(
-        f"/api/v1/pms/lists/{project['id']}/issues",
+        f"/api/v1/pms/lists/{task_list['id']}/issues",
         headers=_auth_headers(admin_session["token"]),
         json={
             "title": "List-id issue",
@@ -210,11 +210,11 @@ def test_list_alias_space_docs_and_status_rename_behave_as_expected(client: Test
     )
     assert create_issue_response.status_code == 201
     issue = create_issue_response.json()
-    assert issue["list_id"] == project["id"]
+    assert issue["list_id"] == task_list["id"]
     assert "project_id" not in issue
 
     status_create_response = client.post(
-        f"/api/v1/pms/lists/{project['id']}/statuses",
+        f"/api/v1/pms/lists/{task_list['id']}/statuses",
         headers=_auth_headers(admin_session["token"]),
         json={"name": "QA Ready", "category": "active"},
     )
@@ -222,7 +222,7 @@ def test_list_alias_space_docs_and_status_rename_behave_as_expected(client: Test
     status_item = status_create_response.json()
 
     status_update_response = client.patch(
-        f"/api/v1/pms/project-statuses/{status_item['id']}",
+        f"/api/v1/pms/task-list-statuses/{status_item['id']}",
         headers=_auth_headers(admin_session["token"]),
         json={"name": "QA Signoff"},
     )
@@ -231,7 +231,7 @@ def test_list_alias_space_docs_and_status_rename_behave_as_expected(client: Test
     assert status_update_response.json()["slug"] == status_item["slug"]
 
     create_space_doc_response = client.post(
-        f"/api/v1/pms/spaces/{project['team_id']}/docs",
+        f"/api/v1/pms/spaces/{task_list['team_id']}/docs",
         headers=_auth_headers(admin_session["token"]),
         json={"title": "Space Collection"},
     )
@@ -239,14 +239,14 @@ def test_list_alias_space_docs_and_status_rename_behave_as_expected(client: Test
     space_doc = create_space_doc_response.json()
 
     missing_query_response = client.get(
-        f"/api/v1/pms/spaces/{project['team_id']}/docs/pages",
+        f"/api/v1/pms/spaces/{task_list['team_id']}/docs/pages",
         headers=_auth_headers(admin_session["token"]),
     )
     assert missing_query_response.status_code == 400
     assert missing_query_response.json()["detail"] == "space_doc_id is required."
 
     create_page_response = client.post(
-        f"/api/v1/pms/spaces/{project['team_id']}/docs/pages",
+        f"/api/v1/pms/spaces/{task_list['team_id']}/docs/pages",
         headers=_auth_headers(admin_session["token"]),
         json={"title": "Space Page", "space_doc_id": space_doc["id"]},
     )
@@ -255,7 +255,7 @@ def test_list_alias_space_docs_and_status_rename_behave_as_expected(client: Test
     assert page["space_doc_id"] == space_doc["id"]
 
     create_child_response = client.post(
-        f"/api/v1/pms/spaces/{project['team_id']}/docs/pages",
+        f"/api/v1/pms/spaces/{task_list['team_id']}/docs/pages",
         headers=_auth_headers(admin_session["token"]),
         json={"title": "Nested Space Page", "space_doc_id": space_doc["id"], "parent_id": page["id"]},
     )
@@ -263,7 +263,7 @@ def test_list_alias_space_docs_and_status_rename_behave_as_expected(client: Test
     child_page = create_child_response.json()
 
     list_pages_response = client.get(
-        f"/api/v1/pms/spaces/{project['team_id']}/docs/pages",
+        f"/api/v1/pms/spaces/{task_list['team_id']}/docs/pages",
         headers=_auth_headers(admin_session["token"]),
         params={"space_doc_id": space_doc["id"]},
     )
@@ -285,7 +285,7 @@ def test_list_alias_space_docs_and_status_rename_behave_as_expected(client: Test
     assert delete_page_response.status_code == 204
 
     list_pages_after_delete_response = client.get(
-        f"/api/v1/pms/spaces/{project['team_id']}/docs/pages",
+        f"/api/v1/pms/spaces/{task_list['team_id']}/docs/pages",
         headers=_auth_headers(admin_session["token"]),
         params={"space_doc_id": space_doc["id"]},
     )
@@ -354,8 +354,8 @@ def test_workspace_scoped_default_pms_space_stays_inside_requested_workspace(
 
 def test_space_docs_collection_permissions_and_soft_delete(client: TestClient) -> None:
     admin_session = _bootstrap_admin_session(client)
-    project = _create_project(client, admin_session["token"])
-    space_id = project["team_id"]
+    task_list = _create_task_list(client, admin_session["token"])
+    space_id = task_list["team_id"]
     assert space_id is not None
 
     collection_response = client.post(
@@ -398,49 +398,58 @@ def test_space_docs_collection_permissions_and_soft_delete(client: TestClient) -
     )
     assert outsider_create_response.status_code == 403
 
-    project_editor = _create_user(client, admin_session["token"], email="space-editor@aidoo.local", full_name="Project Editor")
-    _add_project_member(client, admin_session["token"], project["id"], project_editor["user"]["id"], "member")
-    project_editor_token = _login(client, project_editor["user"]["email"], project_editor["temporary_password"])
+    task_list_editor = _create_user(
+        client,
+        admin_session["token"],
+        email="space-editor@aidoo.local",
+        full_name="Task List Editor",
+    )
+    _add_task_list_member(client, admin_session["token"], task_list["id"], task_list_editor["user"]["id"], "member")
+    task_list_editor_token = _login(
+        client,
+        task_list_editor["user"]["email"],
+        task_list_editor["temporary_password"],
+    )
 
     editor_list_response = client.get(
         f"/api/v1/pms/spaces/{space_id}/docs",
-        headers=_auth_headers(project_editor_token),
+        headers=_auth_headers(task_list_editor_token),
     )
     assert editor_list_response.status_code == 200
     assert [item["id"] for item in editor_list_response.json()["items"]] == [collection["id"]]
 
     second_collection_response = client.post(
         f"/api/v1/pms/spaces/{space_id}/docs",
-        headers=_auth_headers(project_editor_token),
-        json={"title": "Project Notes"},
+        headers=_auth_headers(task_list_editor_token),
+        json={"title": "Task List Notes"},
     )
     assert second_collection_response.status_code == 403
 
     member_page_response = client.post(
         f"/api/v1/pms/spaces/{space_id}/docs/pages",
-        headers=_auth_headers(project_editor_token),
+        headers=_auth_headers(task_list_editor_token),
         json={"title": "Member page", "space_doc_id": collection["id"]},
     )
     assert member_page_response.status_code == 201
 
     second_collection_response = client.post(
         f"/api/v1/pms/spaces/{space_id}/docs",
-        headers=_auth_headers(project_editor_token),
-        json={"title": "Project Notes"},
+        headers=_auth_headers(task_list_editor_token),
+        json={"title": "Task List Notes"},
     )
     assert second_collection_response.status_code == 403
 
     second_collection_response = client.post(
         f"/api/v1/pms/spaces/{space_id}/docs",
         headers=_auth_headers(admin_session["token"]),
-        json={"title": "Project Notes"},
+        json={"title": "Task List Notes"},
     )
     assert second_collection_response.status_code == 201
     second_collection = second_collection_response.json()
 
     forbidden_folder_response = client.post(
         "/api/v1/pms/folders",
-        headers=_auth_headers(project_editor_token),
+        headers=_auth_headers(task_list_editor_token),
         json={"name": "Member cannot manage folders", "team_id": space_id},
     )
     assert forbidden_folder_response.status_code == 403
@@ -496,67 +505,67 @@ def test_space_docs_collection_permissions_and_soft_delete(client: TestClient) -
     assert deleted_collection_pages_response.status_code == 404
 
 
-def test_project_member_api_grants_space_scope_for_project_resources(client: TestClient) -> None:
+def test_task_list_member_api_grants_space_scope_for_task_list_resources(client: TestClient) -> None:
     admin_session = _bootstrap_admin_session(client)
-    project = _create_project(client, admin_session["token"])
-    space_id = project["team_id"]
+    task_list = _create_task_list(client, admin_session["token"])
+    space_id = task_list["team_id"]
     assert space_id is not None
 
-    issue = _create_issue(client, admin_session["token"], project["id"], title="Project-only issue")
+    issue = _create_issue(client, admin_session["token"], task_list["id"], title="List-only issue")
 
-    project_member = _create_user(
+    task_list_member = _create_user(
         client,
         admin_session["token"],
-        email="project-member@aidoo.local",
-        full_name="Project Member",
+        email="task-list-member@aidoo.local",
+        full_name="Task List Member",
     )
-    _add_project_member(client, admin_session["token"], project["id"], project_member["user"]["id"], "member")
-    project_member_token = _login(
+    _add_task_list_member(client, admin_session["token"], task_list["id"], task_list_member["user"]["id"], "member")
+    task_list_member_token = _login(
         client,
-        project_member["user"]["email"],
-        project_member["temporary_password"],
+        task_list_member["user"]["email"],
+        task_list_member["temporary_password"],
     )
 
-    project_detail_response = client.get(
-        f"/api/v1/pms/projects/{project['id']}",
-        headers=_auth_headers(project_member_token),
+    task_list_detail_response = client.get(
+        f"/api/v1/pms/lists/{task_list['id']}",
+        headers=_auth_headers(task_list_member_token),
     )
-    assert project_detail_response.status_code == 200
+    assert task_list_detail_response.status_code == 200
 
-    project_issue_detail_response = client.get(
+    task_list_issue_detail_response = client.get(
         f"/api/v1/pms/issues/{issue['id']}",
-        headers=_auth_headers(project_member_token),
+        headers=_auth_headers(task_list_member_token),
     )
-    assert project_issue_detail_response.status_code == 200
+    assert task_list_issue_detail_response.status_code == 200
 
     space_lists_response = client.get(
         f"/api/v1/pms/spaces/{space_id}/lists",
-        headers=_auth_headers(project_member_token),
+        headers=_auth_headers(task_list_member_token),
     )
     assert space_lists_response.status_code == 200
-    assert any(item["id"] == project["id"] for item in space_lists_response.json()["items"])
+    assert any(item["id"] == task_list["id"] for item in space_lists_response.json()["items"])
 
     space_folders_response = client.get(
         "/api/v1/pms/folders",
-        headers=_auth_headers(project_member_token),
+        headers=_auth_headers(task_list_member_token),
         params={"team_id": space_id},
     )
     assert space_folders_response.status_code == 200
 
     space_docs_response = client.get(
         f"/api/v1/pms/spaces/{space_id}/docs",
-        headers=_auth_headers(project_member_token),
+        headers=_auth_headers(task_list_member_token),
     )
     assert space_docs_response.status_code == 200
 
 
 def test_media_linking_follows_parent_resource_acl(client: TestClient) -> None:
     admin_session = _bootstrap_admin_session(client)
-    project = _create_project(client, admin_session["token"])
-    space_id = project["team_id"]
+    task_list = _create_task_list(client, admin_session["token"])
+    space_id = task_list["team_id"]
     assert space_id is not None
 
-    issue = _create_issue(client, admin_session["token"], project["id"], title="Media ACL issue")
+    issue = _create_issue(client, admin_session["token"], task_list["id"], title="Media ACL issue")
 
     collection_response = client.post(
         f"/api/v1/pms/spaces/{space_id}/docs",
@@ -577,10 +586,10 @@ def test_media_linking_follows_parent_resource_acl(client: TestClient) -> None:
     project_member = _create_user(
         client,
         admin_session["token"],
-        email="media-project-member@aidoo.local",
-        full_name="Media Project Member",
+        email="media-task-list-member@aidoo.local",
+        full_name="Media Task List Member",
     )
-    _add_project_member(client, admin_session["token"], project["id"], project_member["user"]["id"], "member")
+    _add_task_list_member(client, admin_session["token"], task_list["id"], project_member["user"]["id"], "member")
     project_member_token = _login(
         client,
         project_member["user"]["email"],
@@ -644,8 +653,8 @@ def test_media_linking_follows_parent_resource_acl(client: TestClient) -> None:
 def test_team_soft_delete_hides_space_data_and_untrashes_default_space(client: TestClient) -> None:
     admin_session = _bootstrap_admin_session(client)
     headers = _auth_headers(admin_session["token"])
-    project = _create_project(client, admin_session["token"])
-    space_id = project["team_id"]
+    task_list = _create_task_list(client, admin_session["token"])
+    space_id = task_list["team_id"]
     assert space_id is not None
 
     workspaces_response = client.get("/api/v1/admin/workspaces", headers=headers)
@@ -743,18 +752,18 @@ def test_team_soft_delete_hides_space_data_and_untrashes_default_space(client: T
     )
     assert pms_workspace_after_delete["team_count"] == 0
 
-    recreated_project_response = client.post(
-        "/api/v1/pms/projects",
+    recreated_task_list_response = client.post(
+        "/api/v1/pms/lists",
         headers=headers,
         json={
             "key": "PMS2",
-            "name": "Recovered Project",
-            "description": "Project after untrash",
+            "name": "Recovered List",
+            "description": "List after untrash",
         },
     )
-    assert recreated_project_response.status_code == 201
-    recreated_project = recreated_project_response.json()
-    assert recreated_project["team_id"] == space_id
+    assert recreated_task_list_response.status_code == 201
+    recreated_task_list = recreated_task_list_response.json()
+    assert recreated_task_list["team_id"] == space_id
 
     teams_after_restore_response = client.get(
         "/api/v1/admin/teams",
@@ -789,20 +798,20 @@ def _bootstrap_admin_session(client: TestClient) -> dict:
     return response.json()
 
 
-def _create_project(
+def _create_task_list(
     client: TestClient,
     token: str,
     *,
     key: str = "PMS",
-    name: str = "PMS Project",
+    name: str = "PMS List",
 ) -> dict:
     response = client.post(
-        "/api/v1/pms/projects",
+        "/api/v1/pms/lists",
         headers=_auth_headers(token),
         json={
             "key": key,
             "name": name,
-            "description": "Project for PMS issue tests",
+            "description": "List for PMS issue tests",
         },
     )
     assert response.status_code == 201
@@ -812,7 +821,7 @@ def _create_project(
 def _create_issue(
     client: TestClient,
     token: str,
-    project_id: str,
+    list_id: str,
     *,
     title: str,
     status: str = "backlog",
@@ -822,7 +831,7 @@ def _create_issue(
     recurrence_rule: str | None = None,
 ) -> dict:
     response = client.post(
-        f"/api/v1/pms/projects/{project_id}/issues",
+        f"/api/v1/pms/lists/{list_id}/issues",
         headers=_auth_headers(token),
         json={
             "title": title,
@@ -866,9 +875,9 @@ def _login(client: TestClient, email: str, password: str) -> str:
     return response.json()["token"]
 
 
-def _add_project_member(client: TestClient, token: str, project_id: str, user_id: str, role: str) -> dict:
+def _add_task_list_member(client: TestClient, token: str, list_id: str, user_id: str, role: str) -> dict:
     response = client.post(
-        f"/api/v1/pms/projects/{project_id}/members",
+        f"/api/v1/pms/lists/{list_id}/members",
         headers=_auth_headers(token),
         json={"user_id": user_id, "role": role},
     )

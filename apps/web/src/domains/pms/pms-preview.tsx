@@ -10,7 +10,7 @@ export function PmsPreview() {
   return (
     <Panel
       eyebrow="PMS"
-      title="프로젝트 운영 스냅샷"
+      title="리스트 운영 스냅샷"
       description="진행률, 상태 변화, 최근 운영 신호를 요약해서 보여주는 보조 패널입니다."
       status={<StatusBadge>live shell</StatusBadge>}
     >

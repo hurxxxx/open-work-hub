@@ -12,7 +12,7 @@ export const PersonalListView = () => {
   const [todos, setTodos] = useState<Todo[]>([
     { id: '1', text: 'Review weekly report', completed: false },
     { id: '2', text: 'Prepare for team meeting', completed: true },
-    { id: '3', text: 'Update project timeline', completed: false },
+    { id: '3', text: 'Update sprint timeline', completed: false },
   ]);
   const [newTaskText, setNewTaskText] = useState('');
 

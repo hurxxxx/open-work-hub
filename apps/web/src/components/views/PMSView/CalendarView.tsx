@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { cn } from '@/src/lib/utils';
-import type { PmsIssue, PmsProjectStatus } from '@/src/domains/pms/pms-api';
+import type { PmsIssue, PmsTaskListStatus } from '@/src/domains/pms/pms-api';
 
 const STATUS_COLORS: Record<string, string> = {
   backlog: '#6b7280',
@@ -10,13 +10,13 @@ const STATUS_COLORS: Record<string, string> = {
   canceled: '#ef4444',
 };
 
-function getStatusColor(slug: string, projectStatuses?: PmsProjectStatus[]): string {
+function getStatusColor(slug: string, taskListStatuses?: PmsTaskListStatus[]): string {
   if (STATUS_COLORS[slug]) return STATUS_COLORS[slug];
-  const ps = projectStatuses?.find(s => s.slug === slug);
+  const ps = taskListStatuses?.find(s => s.slug === slug);
   return ps?.color ?? '#6b7280';
 }
 
-export const CalendarView = ({ issues, projectStatuses }: { issues: PmsIssue[]; projectStatuses?: PmsProjectStatus[] }) => {
+export const CalendarView = ({ issues, taskListStatuses }: { issues: PmsIssue[]; taskListStatuses?: PmsTaskListStatus[] }) => {
   const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
   const { calendarDays, issuesByDate } = useMemo(() => {
@@ -70,7 +70,7 @@ export const CalendarView = ({ issues, projectStatuses }: { issues: PmsIssue[]; 
                 <div
                   key={issue.id}
                   className="app-text-micro truncate rounded border-l-2 bg-app-surface-sidebar/60 px-1.5 py-1 text-app-ink"
-                  style={{ borderLeftColor: getStatusColor(issue.status, projectStatuses) }}
+                  style={{ borderLeftColor: getStatusColor(issue.status, taskListStatuses) }}
                 >
                   {issue.reference} {issue.title}
                 </div>

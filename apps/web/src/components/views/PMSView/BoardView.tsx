@@ -1,7 +1,7 @@
 import { motion } from 'motion/react';
 import { Plus, MoreHorizontal, Flag, Calendar, User2, CheckSquare, Clock } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
-import type { PmsIssue, PmsProjectStatus } from '@/src/domains/pms/pms-api';
+import type { PmsIssue, PmsTaskListStatus } from '@/src/domains/pms/pms-api';
 import { getStatusSlugs, STATUS_DOT_COLOR, PRIORITY_COLOR, initials, formatDate } from './pms-constants';
 
 export const BoardView = ({
@@ -10,18 +10,18 @@ export const BoardView = ({
   onUpdateIssue,
   selectedIds,
   onToggleSelect,
-  projectStatuses,
+  taskListStatuses,
 }: {
   issues: PmsIssue[];
   onSelectIssue: (issue: PmsIssue) => void;
   onUpdateIssue?: (issueId: string, payload: Record<string, unknown>) => void;
   selectedIds?: Set<string>;
   onToggleSelect?: (issueId: string) => void;
-  projectStatuses?: PmsProjectStatus[];
+  taskListStatuses?: PmsTaskListStatus[];
 }) => {
-  const allSlugs = getStatusSlugs(projectStatuses);
+  const allSlugs = getStatusSlugs(taskListStatuses);
   const visibleStatuses = allSlugs.filter(s => {
-    const ps = projectStatuses?.find(st => st.slug === s);
+    const ps = taskListStatuses?.find(st => st.slug === s);
     return ps ? ps.category !== 'canceled' : s !== 'canceled';
   });
 
@@ -58,7 +58,7 @@ export const BoardView = ({
 	                  className={cn("w-2 h-2 rounded-full", STATUS_DOT_COLOR[status])}
 	                  style={!STATUS_DOT_COLOR[status]
 	                    ? (() => {
-	                        const matchedStatus = projectStatuses?.find((projectStatus) => projectStatus.slug === status);
+	                        const matchedStatus = taskListStatuses?.find((projectStatus) => projectStatus.slug === status);
 	                        return matchedStatus?.color ? { backgroundColor: matchedStatus.color } : undefined;
 	                      })()
 	                    : undefined}

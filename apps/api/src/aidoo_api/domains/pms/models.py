@@ -15,7 +15,7 @@ from sqlalchemy import (
     UniqueConstraint,
     text,
 )
-from sqlalchemy.orm import Mapped, mapped_column, relationship, synonym
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from aidoo_api.core.db import Base
 
@@ -25,7 +25,7 @@ def utcnow_naive() -> datetime:
 
 
 class Folder(Base):
-    """Intermediate grouping: Space > Folder > List (Project)."""
+    """Intermediate grouping: Space > Folder > List."""
 
     __tablename__ = "pms_folders"
 
@@ -40,11 +40,11 @@ class Folder(Base):
         default=utcnow_naive,
         nullable=False,
     )
-    projects: Mapped[list["PmsList"]] = relationship(back_populates="folder")
+    task_lists: Mapped[list["TaskList"]] = relationship(back_populates="folder")
 
 
-class PmsList(Base):
-    __tablename__ = "pms_lists"
+class TaskList(Base):
+    __tablename__ = "pms_task_lists"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     key: Mapped[str] = mapped_column(String(24), unique=True, index=True)
@@ -71,50 +71,47 @@ class PmsList(Base):
         nullable=False,
     )
     milestones: Mapped[list["Milestone"]] = relationship(
-        back_populates="project",
+        back_populates="task_list",
         cascade="all, delete-orphan",
     )
     labels: Mapped[list["Label"]] = relationship(
-        back_populates="project",
+        back_populates="task_list",
         cascade="all, delete-orphan",
     )
     issues: Mapped[list["Issue"]] = relationship(
-        back_populates="project",
+        back_populates="task_list",
         cascade="all, delete-orphan",
     )
     dependencies: Mapped[list["ScheduleDependency"]] = relationship(
-        back_populates="project",
+        back_populates="task_list",
         cascade="all, delete-orphan",
     )
-    statuses: Mapped[list["ProjectStatus"]] = relationship(
-        back_populates="project",
+    statuses: Mapped[list["TaskListStatus"]] = relationship(
+        back_populates="task_list",
         cascade="all, delete-orphan",
-        order_by="ProjectStatus.sort_order",
+        order_by="TaskListStatus.sort_order",
     )
-    folder: Mapped[Folder | None] = relationship(back_populates="projects")
+    folder: Mapped[Folder | None] = relationship(back_populates="task_lists")
     task_templates: Mapped[list["TaskTemplate"]] = relationship(
-        back_populates="project",
+        back_populates="task_list",
         cascade="all, delete-orphan",
     )
     custom_fields: Mapped[list["CustomField"]] = relationship(
-        back_populates="project",
+        back_populates="task_list",
         cascade="all, delete-orphan",
     )
 
 
-Project = PmsList
+class TaskListStatus(Base):
+    """Custom workflow statuses per task list."""
 
-
-class ProjectStatus(Base):
-    """Custom workflow statuses per project."""
-
-    __tablename__ = "pms_project_statuses"
+    __tablename__ = "pms_task_list_statuses"
     __table_args__ = (
-        UniqueConstraint("list_id", "slug", name="uq_pms_project_status_slug"),
+        UniqueConstraint("list_id", "slug", name="uq_pms_task_list_status_slug"),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    list_id: Mapped[str] = mapped_column(ForeignKey("pms_lists.id"), index=True)
+    list_id: Mapped[str] = mapped_column(ForeignKey("pms_task_lists.id"), index=True)
     slug: Mapped[str] = mapped_column(String(40), index=True)
     name: Mapped[str] = mapped_column(String(60))
     color: Mapped[str] = mapped_column(String(24), default="#6b7280")
@@ -127,15 +124,14 @@ class ProjectStatus(Base):
         default=utcnow_naive,
         nullable=False,
     )
-    project_id = synonym("list_id")
-    project: Mapped[PmsList] = relationship(back_populates="statuses")
+    task_list: Mapped[TaskList] = relationship(back_populates="statuses")
 
 
 class Milestone(Base):
     __tablename__ = "pms_milestones"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    list_id: Mapped[str] = mapped_column(ForeignKey("pms_lists.id"), index=True)
+    list_id: Mapped[str] = mapped_column(ForeignKey("pms_task_lists.id"), index=True)
     title: Mapped[str] = mapped_column(String(140))
     description: Mapped[str] = mapped_column(Text, default="", nullable=False)
     status: Mapped[str] = mapped_column(String(24), default="planned", index=True)
@@ -153,8 +149,7 @@ class Milestone(Base):
         onupdate=utcnow_naive,
         nullable=False,
     )
-    project_id = synonym("list_id")
-    project: Mapped[PmsList] = relationship(back_populates="milestones")
+    task_list: Mapped[TaskList] = relationship(back_populates="milestones")
     issues: Mapped[list["Issue"]] = relationship(back_populates="milestone")
 
 
@@ -163,7 +158,7 @@ class Label(Base):
     __table_args__ = (UniqueConstraint("list_id", "name", name="uq_pms_label_name"),)
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    list_id: Mapped[str] = mapped_column(ForeignKey("pms_lists.id"), index=True)
+    list_id: Mapped[str] = mapped_column(ForeignKey("pms_task_lists.id"), index=True)
     name: Mapped[str] = mapped_column(String(48))
     color: Mapped[str] = mapped_column(String(24), default="#1f2d38")
     created_at: Mapped[datetime] = mapped_column(
@@ -171,8 +166,7 @@ class Label(Base):
         default=utcnow_naive,
         nullable=False,
     )
-    project_id = synonym("list_id")
-    project: Mapped[PmsList] = relationship(back_populates="labels")
+    task_list: Mapped[TaskList] = relationship(back_populates="labels")
     issue_links: Mapped[list["IssueLabel"]] = relationship(
         back_populates="label",
         cascade="all, delete-orphan",
@@ -184,7 +178,7 @@ class Issue(Base):
     __table_args__ = (UniqueConstraint("list_id", "issue_number", name="uq_pms_issue_number"),)
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    list_id: Mapped[str] = mapped_column(ForeignKey("pms_lists.id"), index=True)
+    list_id: Mapped[str] = mapped_column(ForeignKey("pms_task_lists.id"), index=True)
     issue_number: Mapped[int] = mapped_column(Integer, nullable=False)
     title: Mapped[str] = mapped_column(String(180), index=True)
     description: Mapped[str] = mapped_column(Text, default="", nullable=False)
@@ -220,8 +214,7 @@ class Issue(Base):
         onupdate=utcnow_naive,
         nullable=False,
     )
-    project_id = synonym("list_id")
-    project: Mapped[PmsList] = relationship(back_populates="issues")
+    task_list: Mapped[TaskList] = relationship(back_populates="issues")
     parent: Mapped["Issue | None"] = relationship(
         back_populates="subtasks",
         remote_side="Issue.id",
@@ -318,7 +311,7 @@ class ScheduleDependency(Base):
     __tablename__ = "pms_schedule_dependencies"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    list_id: Mapped[str] = mapped_column(ForeignKey("pms_lists.id"), index=True)
+    list_id: Mapped[str] = mapped_column(ForeignKey("pms_task_lists.id"), index=True)
     predecessor_kind: Mapped[str] = mapped_column(String(24), default="issue")
     predecessor_id: Mapped[str] = mapped_column(String(36), index=True)
     successor_kind: Mapped[str] = mapped_column(String(24), default="issue")
@@ -329,8 +322,7 @@ class ScheduleDependency(Base):
         default=utcnow_naive,
         nullable=False,
     )
-    project_id = synonym("list_id")
-    project: Mapped[PmsList] = relationship(back_populates="dependencies")
+    task_list: Mapped[TaskList] = relationship(back_populates="dependencies")
 
 
 class Attachment(Base):
@@ -405,12 +397,12 @@ class Notification(Base):
 
 
 class TaskTemplate(Base):
-    """Reusable issue templates per project."""
+    """Reusable issue templates per task list."""
 
     __tablename__ = "pms_task_templates"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    list_id: Mapped[str] = mapped_column(ForeignKey("pms_lists.id"), index=True)
+    list_id: Mapped[str] = mapped_column(ForeignKey("pms_task_lists.id"), index=True)
     name: Mapped[str] = mapped_column(String(140))
     description: Mapped[str] = mapped_column(Text, default="", nullable=False)
     default_status: Mapped[str] = mapped_column(String(40), default="backlog")
@@ -421,17 +413,16 @@ class TaskTemplate(Base):
         default=utcnow_naive,
         nullable=False,
     )
-    project_id = synonym("list_id")
-    project: Mapped[PmsList] = relationship(back_populates="task_templates")
+    task_list: Mapped[TaskList] = relationship(back_populates="task_templates")
 
 
 class CustomField(Base):
-    """Custom fields per project (text, number, date, select)."""
+    """Custom fields per task list (text, number, date, select)."""
 
     __tablename__ = "pms_custom_fields"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    list_id: Mapped[str] = mapped_column(ForeignKey("pms_lists.id"), index=True)
+    list_id: Mapped[str] = mapped_column(ForeignKey("pms_task_lists.id"), index=True)
     name: Mapped[str] = mapped_column(String(100))
     field_type: Mapped[str] = mapped_column(String(24))  # text | number | date | select
     options: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)  # for select type
@@ -441,8 +432,7 @@ class CustomField(Base):
         default=utcnow_naive,
         nullable=False,
     )
-    project_id = synonym("list_id")
-    project: Mapped[PmsList] = relationship(back_populates="custom_fields")
+    task_list: Mapped[TaskList] = relationship(back_populates="custom_fields")
 
 
 class CustomFieldValue(Base):

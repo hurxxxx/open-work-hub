@@ -13,19 +13,19 @@ import {
 import { Panel } from '@aidoo/ui';
 import { useAuth } from '@/src/domains/auth/auth-provider';
 import {
-  listPmsLists,
+  listPmsTaskLists,
   listFolders,
   listSpaceDocs,
   listSpaceMembers,
   listSpaces,
-  type PmsList,
+  type PmsTaskList,
   type PmsFolder,
   type PmsSpace,
   type PmsSpaceDoc,
   type PmsSpaceMember,
 } from '@/src/domains/pms/pms-api';
 import { initials } from './pms-constants';
-import { CreateProjectModal } from './CreateProjectModal';
+import { CreateTaskListModal } from './CreateTaskListModal';
 import { SpaceMembersModal } from './SpaceMembersModal';
 
 const AVATAR_COLORS = [
@@ -62,7 +62,7 @@ export const SpaceOverviewView = ({
 }) => {
   const { token } = useAuth();
   const navigate = useNavigate();
-  const [lists, setLists] = useState<PmsList[]>([]);
+  const [lists, setLists] = useState<PmsTaskList[]>([]);
   const [folders, setFolders] = useState<PmsFolder[]>([]);
   const [spaceDocs, setSpaceDocs] = useState<PmsSpaceDoc[]>([]);
   const [members, setMembers] = useState<PmsSpaceMember[]>([]);
@@ -78,7 +78,7 @@ export const SpaceOverviewView = ({
     setLoading(true);
 
     Promise.all([
-      listPmsLists(token, spaceId),
+      listPmsTaskLists(token, spaceId),
       listFolders(token, spaceId),
       listSpaceDocs(token, spaceId).catch(() => ({ items: [] as PmsSpaceDoc[] })),
       listSpaceMembers(token, spaceId).catch(() => ({
@@ -121,7 +121,7 @@ export const SpaceOverviewView = ({
 
   const rootLists = lists.filter((l) => !l.folder_id);
   const folderMap = new Map(folders.map((f) => [f.id, f]));
-  const listsByFolder = new Map<string, PmsList[]>();
+  const listsByFolder = new Map<string, PmsTaskList[]>();
   for (const list of lists) {
     if (list.folder_id && folderMap.has(list.folder_id)) {
       const arr = listsByFolder.get(list.folder_id) ?? [];
@@ -325,13 +325,13 @@ export const SpaceOverviewView = ({
         </div>
       </main>
 
-      <CreateProjectModal
+      <CreateTaskListModal
         isOpen={createListOpen}
         onClose={() => setCreateListOpen(false)}
         teamId={spaceId}
-        onCreated={(project) => {
-          setLists((current) => [...current, project]);
-          navigate(`/tool/pms-list-${project.id}`);
+        onCreated={(taskList) => {
+          setLists((current) => [...current, taskList]);
+          navigate(`/tool/pms-list-${taskList.id}`);
         }}
       />
 

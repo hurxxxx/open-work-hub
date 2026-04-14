@@ -457,7 +457,7 @@ def _seed_dev_login_accounts() -> None:
         db.close()
 
 
-def _create_pms_project(
+def _create_pms_task_list(
     client: TestClient,
     token: str,
     *,
@@ -465,7 +465,7 @@ def _create_pms_project(
     name: str,
 ) -> dict[str, object]:
     response = client.post(
-        "/api/v1/pms/projects",
+        "/api/v1/pms/lists",
         headers={"Authorization": f"Bearer {token}"},
         json={
             "key": key,
@@ -480,13 +480,13 @@ def _create_pms_project(
 def _create_pms_issue(
     client: TestClient,
     token: str,
-    project_id: str,
+    list_id: str,
     *,
     title: str,
     parent_id: str | None = None,
 ) -> dict[str, object]:
     response = client.post(
-        f"/api/v1/pms/projects/{project_id}/issues",
+        f"/api/v1/pms/lists/{list_id}/issues",
         headers={"Authorization": f"Bearer {token}"},
         json={
             "title": title,
@@ -859,12 +859,12 @@ def test_non_workspace_routes_require_workspace_membership(client: TestClient) -
     assert ocr_allowed_response.status_code == 200
 
 
-def test_pms_project_workflow_and_dashboard(client: TestClient) -> None:
+def test_pms_task_list_workflow_and_dashboard(client: TestClient) -> None:
     token = _bootstrap_admin(client)
     overdue_date = (date.today() - timedelta(days=1)).isoformat()
 
-    project_response = client.post(
-        "/api/v1/pms/projects",
+    task_list_response = client.post(
+        "/api/v1/pms/lists",
         headers={"Authorization": f"Bearer {token}"},
         json={
             "key": "AID",
@@ -872,20 +872,20 @@ def test_pms_project_workflow_and_dashboard(client: TestClient) -> None:
             "description": "Execution management",
         },
     )
-    assert project_response.status_code == 201
-    project = project_response.json()
-    assert project["role"] == "owner"
-    project_id = project["id"]
+    assert task_list_response.status_code == 201
+    task_list = task_list_response.json()
+    assert task_list["role"] == "owner"
+    list_id = task_list["id"]
 
     members_response = client.get(
-        f"/api/v1/pms/projects/{project_id}/members",
+        f"/api/v1/pms/lists/{list_id}/members",
         headers={"Authorization": f"Bearer {token}"},
     )
     assert members_response.status_code == 200
     assert members_response.json()["items"][0]["role"] == "owner"
 
     milestone_response = client.post(
-        f"/api/v1/pms/projects/{project_id}/milestones",
+        f"/api/v1/pms/lists/{list_id}/milestones",
         headers={"Authorization": f"Bearer {token}"},
         json={
             "title": "Phase 1",
@@ -898,11 +898,11 @@ def test_pms_project_workflow_and_dashboard(client: TestClient) -> None:
     milestone_id = milestone_response.json()["id"]
 
     first_issue_response = client.post(
-        f"/api/v1/pms/projects/{project_id}/issues",
+        f"/api/v1/pms/lists/{list_id}/issues",
         headers={"Authorization": f"Bearer {token}"},
         json={
             "title": "Build dashboard",
-            "description": "Project-level rollup",
+            "description": "List-level rollup",
             "status": "backlog",
             "priority": "high",
             "milestone_id": milestone_id,
@@ -913,7 +913,7 @@ def test_pms_project_workflow_and_dashboard(client: TestClient) -> None:
     first_issue = first_issue_response.json()
 
     second_issue_response = client.post(
-        f"/api/v1/pms/projects/{project_id}/issues",
+        f"/api/v1/pms/lists/{list_id}/issues",
         headers={"Authorization": f"Bearer {token}"},
         json={
             "title": "Build board",
@@ -974,19 +974,19 @@ def test_pms_project_workflow_and_dashboard(client: TestClient) -> None:
     assert "commented" in log_actions
 
     issues_response = client.get(
-        f"/api/v1/pms/projects/{project_id}/issues?status=in_progress",
+        f"/api/v1/pms/lists/{list_id}/issues?status=in_progress",
         headers={"Authorization": f"Bearer {token}"},
     )
     assert issues_response.status_code == 200
     assert issues_response.json()["total"] == 1
 
-    project_detail_response = client.get(
-        f"/api/v1/pms/projects/{project_id}",
+    task_list_detail_response = client.get(
+        f"/api/v1/pms/lists/{list_id}",
         headers={"Authorization": f"Bearer {token}"},
     )
-    assert project_detail_response.status_code == 200
-    assert project_detail_response.json()["progress"] == 0.75
-    assert project_detail_response.json()["overdue_issue_count"] == 1
+    assert task_list_detail_response.status_code == 200
+    assert task_list_detail_response.json()["progress"] == 0.75
+    assert task_list_detail_response.json()["overdue_issue_count"] == 1
 
     dashboard_response = client.get(
         "/api/v1/pms/dashboard/summary",
@@ -994,10 +994,10 @@ def test_pms_project_workflow_and_dashboard(client: TestClient) -> None:
     )
     assert dashboard_response.status_code == 200
     dashboard = dashboard_response.json()
-    assert dashboard["project_count"] == 1
+    assert dashboard["list_count"] == 1
     assert dashboard["active_issue_count"] == 1
     assert dashboard["overdue_issue_count"] == 1
-    assert dashboard["projects"][0]["progress"] == 0.75
+    assert dashboard["lists"][0]["progress"] == 0.75
 
     dependency_delete = client.delete(
         f"/api/v1/pms/dependencies/{dependency_id}",
@@ -1010,41 +1010,41 @@ def test_pms_membership_permissions(client: TestClient) -> None:
     admin_token = _bootstrap_admin(client)
     outsider_id, outsider_token = _create_direct_user(
         email="member@aidoo.local",
-        full_name="Project Member",
+        full_name="List Member",
         workspace_keys=("hq",),
     )
 
-    project_response = client.post(
-        "/api/v1/pms/projects",
+    task_list_response = client.post(
+        "/api/v1/pms/lists",
         headers={"Authorization": f"Bearer {admin_token}"},
         json={
             "key": "PERM",
-            "name": "Permissions project",
+            "name": "Permissions list",
             "description": "Membership checks",
         },
     )
-    project_id = project_response.json()["id"]
+    list_id = task_list_response.json()["id"]
 
     forbidden_response = client.get(
-        f"/api/v1/pms/projects/{project_id}",
+        f"/api/v1/pms/lists/{list_id}",
         headers={"Authorization": f"Bearer {outsider_token}"},
     )
     assert forbidden_response.status_code == 403
 
     add_member_response = client.post(
-        f"/api/v1/pms/projects/{project_id}/members",
+        f"/api/v1/pms/lists/{list_id}/members",
         headers={"Authorization": f"Bearer {admin_token}"},
         json={"user_id": outsider_id, "role": "member"},
     )
     assert add_member_response.status_code == 201
     assert add_member_response.json()["role"] == "member"
 
-    member_project_response = client.get(
-        f"/api/v1/pms/projects/{project_id}",
+    member_list_response = client.get(
+        f"/api/v1/pms/lists/{list_id}",
         headers={"Authorization": f"Bearer {outsider_token}"},
     )
-    assert member_project_response.status_code == 200
-    assert member_project_response.json()["role"] == "member"
+    assert member_list_response.status_code == 200
+    assert member_list_response.json()["role"] == "member"
 
 
 def test_pms_space_members_still_need_workspace_membership(client: TestClient) -> None:
@@ -1054,30 +1054,30 @@ def test_pms_space_members_still_need_workspace_membership(client: TestClient) -
         full_name="Space Only Member",
     )
 
-    project_response = client.post(
-        "/api/v1/pms/projects",
+    task_list_response = client.post(
+        "/api/v1/pms/lists",
         headers={"Authorization": f"Bearer {admin_token}"},
         json={
             "key": "SPACEONLY",
-            "name": "Space-only project",
+            "name": "Space-only list",
             "description": "App access guard",
         },
     )
-    assert project_response.status_code == 201
-    project_id = project_response.json()["id"]
+    assert task_list_response.status_code == 201
+    list_id = task_list_response.json()["id"]
 
     add_member_response = client.post(
-        f"/api/v1/pms/projects/{project_id}/members",
+        f"/api/v1/pms/lists/{list_id}/members",
         headers={"Authorization": f"Bearer {admin_token}"},
         json={"user_id": member_id, "role": "member"},
     )
     assert add_member_response.status_code == 201
 
-    project_detail_response = client.get(
-        f"/api/v1/pms/projects/{project_id}",
+    task_list_detail_response = client.get(
+        f"/api/v1/pms/lists/{list_id}",
         headers={"Authorization": f"Bearer {member_token}"},
     )
-    assert project_detail_response.status_code == 403
+    assert task_list_detail_response.status_code == 403
 
 
 def test_pms_space_creator_becomes_owner_and_last_manager_is_protected(client: TestClient) -> None:
@@ -1120,12 +1120,12 @@ def test_pms_space_creator_becomes_owner_and_last_manager_is_protected(client: T
 
 def test_platform_admin_without_workspace_membership_cannot_view_pms_spaces(client: TestClient) -> None:
     admin_token = _bootstrap_admin(client)
-    project_response = client.post(
-        "/api/v1/pms/projects",
+    task_list_response = client.post(
+        "/api/v1/pms/lists",
         headers={"Authorization": f"Bearer {admin_token}"},
-        json={"key": "PLATADM", "name": "Platform Admin Project", "description": "Visibility"},
+        json={"key": "PLATADM", "name": "Platform Admin List", "description": "Visibility"},
     )
-    assert project_response.status_code == 201
+    assert task_list_response.status_code == 201
 
     _, platform_admin_token = _create_direct_user(
         email="platform-admin@aidoo.local",
@@ -1268,14 +1268,14 @@ def test_group_workspace_templates_grant_and_revoke_effective_workspace_access(
 
 def test_pms_parent_issue_validation_and_label_conflicts(client: TestClient) -> None:
     token = _bootstrap_admin(client)
-    primary_project = _create_pms_project(client, token, key="PARENT", name="Parent Project")
-    secondary_project = _create_pms_project(client, token, key="OTHER", name="Other Project")
+    primary_list = _create_pms_task_list(client, token, key="PARENT", name="Parent List")
+    secondary_list = _create_pms_task_list(client, token, key="OTHER", name="Other List")
 
-    parent_issue = _create_pms_issue(client, token, str(primary_project["id"]), title="Parent issue")
+    parent_issue = _create_pms_issue(client, token, str(primary_list["id"]), title="Parent issue")
     child_issue = _create_pms_issue(
         client,
         token,
-        str(primary_project["id"]),
+        str(primary_list["id"]),
         title="Child issue",
         parent_id=str(parent_issue["id"]),
     )
@@ -1302,21 +1302,21 @@ def test_pms_parent_issue_validation_and_label_conflicts(client: TestClient) -> 
     )
     assert cycle_response.status_code == 409
 
-    cross_project_response = client.post(
-        f"/api/v1/pms/projects/{secondary_project['id']}/issues",
+    cross_list_response = client.post(
+        f"/api/v1/pms/lists/{secondary_list['id']}/issues",
         headers={"Authorization": f"Bearer {token}"},
         json={
-            "title": "Cross project child",
+            "title": "Cross-list child",
             "description": "Should fail",
             "status": "todo",
             "priority": "medium",
             "parent_id": parent_issue["id"],
         },
     )
-    assert cross_project_response.status_code == 400
+    assert cross_list_response.status_code == 400
 
     labels_response = client.get(
-        f"/api/v1/pms/projects/{primary_project['id']}/labels",
+        f"/api/v1/pms/lists/{primary_list['id']}/labels",
         headers={"Authorization": f"Bearer {token}"},
     )
     assert labels_response.status_code == 200

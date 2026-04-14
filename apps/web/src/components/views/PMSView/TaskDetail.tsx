@@ -29,7 +29,7 @@ import {
   updateIssue,
   deleteIssue,
   createIssueComment,
-  createProjectIssue,
+  createTaskListIssue,
   listIssueActivityLogs,
   uploadAttachment,
   deleteAttachment,
@@ -40,7 +40,7 @@ import {
   deleteTimeEntry,
   createDependency,
   deleteDependency,
-  listProjectIssues,
+  listTaskListIssues,
   type PmsIssue,
   type PmsComment,
   type PmsActivityLog,
@@ -48,10 +48,10 @@ import {
   type PmsChecklistItem,
   type PmsTimeEntry,
   type PmsDependency,
-  type PmsProjectMember,
+  type PmsTaskListMember,
   type PmsMilestone,
   type PmsLabel,
-  type PmsProjectStatus,
+  type PmsTaskListStatus,
 } from '@/src/domains/pms/pms-api';
 import { toLocalDateInputValue } from '@/src/domains/pms/pms-filters';
 import { getStatusSlugs, getStatusTone, getStatusLabel, initials, formatDate } from './pms-constants';
@@ -70,18 +70,18 @@ export const TaskDetail = ({
   issue,
   members = [],
   milestones = [],
-  projectLabels = [],
-  projectStatuses,
+  taskListLabels = [],
+  taskListStatuses,
   spaceName,
   canEdit = true,
   onClose,
   onUpdate,
 }: {
   issue: PmsIssue;
-  members?: PmsProjectMember[];
+  members?: PmsTaskListMember[];
   milestones?: PmsMilestone[];
-  projectLabels?: PmsLabel[];
-  projectStatuses?: PmsProjectStatus[];
+  taskListLabels?: PmsLabel[];
+  taskListStatuses?: PmsTaskListStatus[];
   spaceName?: string | null;
   canEdit?: boolean;
   onClose: () => void;
@@ -278,7 +278,7 @@ export const TaskDetail = ({
     setAddingSubtask(true);
     setSaveError(null);
     try {
-      const sub = await createProjectIssue(token, issue.list_id, {
+      const sub = await createTaskListIssue(token, issue.list_id, {
         title: newSubtaskTitle.trim(),
         description: '',
         status: 'todo',
@@ -409,7 +409,7 @@ export const TaskDetail = ({
     if (!token || !canEdit || !query.trim()) { setDepSearchResults([]); return; }
     setDepSearching(true);
     try {
-      const res = await listProjectIssues(token, issue.list_id, { q: query.trim() });
+      const res = await listTaskListIssues(token, issue.list_id, { q: query.trim() });
       setDepSearchResults(res.items.filter(i => i.id !== issue.id));
     } catch { setDepSearchResults([]); }
     finally { setDepSearching(false); }
@@ -434,13 +434,13 @@ export const TaskDetail = ({
     const nextLabelIds = selectedLabelIds.includes(labelId)
       ? selectedLabelIds.filter(id => id !== labelId)
       : [...selectedLabelIds, labelId];
-    const nextLabels = projectLabels.filter((label) => nextLabelIds.includes(label.id));
+    const nextLabels = taskListLabels.filter((label) => nextLabelIds.includes(label.id));
     void persistIssueUpdate(
       { label_ids: nextLabelIds },
       (current) => ({ ...current, labels: nextLabels }),
       '라벨을 저장하지 못했습니다.',
     );
-  }, [canEdit, persistIssueUpdate, projectLabels, selectedLabelIds]);
+  }, [canEdit, persistIssueUpdate, taskListLabels, selectedLabelIds]);
 
   const handleCommentSubmit = useCallback(() => {
     if (!token || !canEdit || !commentDraft.trim()) return;
@@ -572,7 +572,7 @@ export const TaskDetail = ({
             <div className="grid grid-cols-[auto_1fr_auto_1fr] items-center gap-x-6 gap-y-3">
               <MetaLabel>Status</MetaLabel>
               <select value={issueState.status} onChange={e => patchField('status', e.target.value)} className={disabledFieldClass} disabled={!canEdit}>
-                {getStatusSlugs(projectStatuses).map(s => <option key={s} value={s}>{getStatusLabel(s, projectStatuses)}</option>)}
+                {getStatusSlugs(taskListStatuses).map(s => <option key={s} value={s}>{getStatusLabel(s, taskListStatuses)}</option>)}
               </select>
               <MetaLabel>Assignee</MetaLabel>
               <select value={issueState.assignee_id ?? ''} onChange={e => patchField('assignee_id', e.target.value || null)} className={disabledFieldClass} disabled={!canEdit}>
@@ -623,7 +623,7 @@ export const TaskDetail = ({
                 >
                   {selectedLabelIds.length > 0 ? (
                     selectedLabelIds.map(id => {
-                      const label = projectLabels.find(l => l.id === id);
+                      const label = taskListLabels.find(l => l.id === id);
                       return label ? (
                         <span
                           key={id}
@@ -645,10 +645,10 @@ export const TaskDetail = ({
                   <>
                     <div className="fixed inset-0 z-10" onClick={() => setLabelPickerOpen(false)} />
                     <div className="absolute left-0 top-8 z-20 w-48 bg-app-bg border border-app-border rounded-lg shadow-xl py-1">
-                      {projectLabels.length === 0 ? (
-                        <p className="app-text-caption px-3 py-2 text-app-ink/40">No labels in this project</p>
+                      {taskListLabels.length === 0 ? (
+                        <p className="app-text-caption px-3 py-2 text-app-ink/40">No labels in this list</p>
                       ) : (
-                        projectLabels.map(label => (
+                        taskListLabels.map(label => (
                           <button
                             key={label.id}
                             onClick={() => handleToggleLabel(label.id)}
@@ -820,7 +820,7 @@ export const TaskDetail = ({
                       <span className={`app-text-body flex-1 ${sub.status === 'done' ? 'line-through text-app-ink/40' : 'text-app-ink'}`}>
                         {sub.title}
                       </span>
-                      <Badge tone={getStatusTone(sub.status, projectStatuses)}>{sub.status_label}</Badge>
+                      <Badge tone={getStatusTone(sub.status, taskListStatuses)}>{sub.status_label}</Badge>
                       {sub.assignee_name && (
                         <div className="w-5 h-5 rounded-full bg-blue-500 flex items-center justify-center text-[8px] font-bold text-white">
                           {initials(sub.assignee_name)}

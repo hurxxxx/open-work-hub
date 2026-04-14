@@ -137,7 +137,7 @@ def _create_meeting(
     return response.json()
 
 
-def _create_project(
+def _create_task_list(
     client: TestClient,
     token: str,
     *,
@@ -154,7 +154,7 @@ def _create_project(
     if team_id is not None:
         payload["team_id"] = team_id
     response = client.post(
-        "/api/v1/pms/projects",
+        "/api/v1/pms/lists",
         headers=_auth_headers(token),
         json=payload,
     )
@@ -165,13 +165,13 @@ def _create_project(
 def _create_issue(
     client: TestClient,
     token: str,
-    project_id: str,
+    list_id: str,
     *,
     title: str = "Plan Q2",
     status: str = "backlog",
 ) -> dict:
     response = client.post(
-        f"/api/v1/pms/projects/{project_id}/issues",
+        f"/api/v1/pms/lists/{list_id}/issues",
         headers=_auth_headers(token),
         json={
             "title": title,
@@ -451,9 +451,9 @@ def test_attach_task_requires_issue_access(client: TestClient) -> None:
     admin = _bootstrap_admin_session(client)
     admin_token = admin["token"]
 
-    # Admin creates a PMS project + issue.
-    project = _create_project(client, admin_token)
-    issue = _create_issue(client, admin_token, project["id"])
+    # Admin creates a PMS list + issue.
+    task_list = _create_task_list(client, admin_token)
+    issue = _create_issue(client, admin_token, task_list["id"])
 
     # Admin organizes a meeting and attaches the issue.
     meeting = _create_meeting(client, admin_token)
@@ -487,13 +487,13 @@ def test_attach_task_requires_issue_access(client: TestClient) -> None:
     assert detach_response.json()["task_links"] == []
 
 
-def test_attach_task_returns_403_for_user_without_project_access(
+def test_attach_task_returns_403_for_user_without_list_access(
     client: TestClient,
 ) -> None:
     admin = _bootstrap_admin_session(client)
     admin_token = admin["token"]
 
-    project = _create_project(
+    task_list = _create_task_list(
         client,
         admin_token,
         key="PRIV",
@@ -502,7 +502,7 @@ def test_attach_task_returns_403_for_user_without_project_access(
     issue = _create_issue(
         client,
         admin_token,
-        project["id"],
+        task_list["id"],
         title="Confidential",
     )
 
@@ -877,16 +877,16 @@ def _native_item_id(doc_id: str) -> str:
 
 def test_attendee_can_attach_task_via_space_access(client: TestClient) -> None:
     """An attendee who has access to the issue's PMS space (Team) — but no
-    direct ProjectMember row — must be able to attach the issue. This was
+    direct list-member row — must be able to attach the issue. This was
     the regression behind '미팅2 에서 태스크가 등록되지 않는다' — meeting
-    permission used the ProjectMember table directly while PMS itself reads
+    permission used the old project-member path directly while PMS itself reads
     via space membership, so seed accounts (e.g. delivery-hub-member) were silently
     locked out."""
 
     admin = _bootstrap_admin_session(client)
     admin_token = admin["token"]
 
-    # Admin creates a PMS space, project, and an issue.
+    # Admin creates a PMS space, list, and an issue.
     space_response = client.post(
         "/api/v1/pms/spaces",
         headers=_auth_headers(admin_token),
@@ -895,21 +895,21 @@ def test_attendee_can_attach_task_via_space_access(client: TestClient) -> None:
     assert space_response.status_code == 201, space_response.text
     space = space_response.json()
 
-    project_response = client.post(
-        "/api/v1/pms/projects",
+    task_list_response = client.post(
+        "/api/v1/pms/lists",
         headers=_auth_headers(admin_token),
         json={
             "key": "MEETIN",
-            "name": "Meeting Attach Project",
+            "name": "Meeting Attach List",
             "description": "",
             "team_id": space["id"],
         },
     )
-    assert project_response.status_code == 201, project_response.text
-    project = project_response.json()
+    assert task_list_response.status_code == 201, task_list_response.text
+    task_list = task_list_response.json()
 
     issue_response = client.post(
-        f"/api/v1/pms/projects/{project['id']}/issues",
+        f"/api/v1/pms/lists/{task_list['id']}/issues",
         headers=_auth_headers(admin_token),
         json={
             "title": "Prep task",
@@ -923,7 +923,7 @@ def test_attendee_can_attach_task_via_space_access(client: TestClient) -> None:
     issue = issue_response.json()
 
     # Attendee user with both meeting and pms workspace access. We then
-    # add them as a member of the PMS space — NOT the project — exactly
+    # add them as a member of the PMS space — not the list directly — exactly
     # mirroring how the seeded delivery-hub-member account is provisioned.
     attendee = _create_user_with_workspaces(
         client,
@@ -1058,8 +1058,8 @@ def test_meeting_attachment_grants_allow_read_but_not_metadata_or_sharing(
     admin = _bootstrap_admin_session(client)
     admin_token = admin["token"]
 
-    project = _create_project(client, admin_token, key="ACL", name="ACL Project")
-    issue = _create_issue(client, admin_token, project["id"], title="Meeting-shared issue")
+    task_list = _create_task_list(client, admin_token, key="ACL", name="ACL List")
+    issue = _create_issue(client, admin_token, task_list["id"], title="Meeting-shared issue")
     doc_id = _create_native_doc(client, admin_token, "Meeting-shared doc")
 
     attendee = _create_user_with_workspaces(
@@ -1090,11 +1090,11 @@ def test_meeting_attachment_grants_allow_read_but_not_metadata_or_sharing(
     )
     assert issue_detail.status_code == 200, issue_detail.text
     issue_payload = issue_detail.json()
-    assert issue_payload["issue"]["list_id"] == project["id"]
+    assert issue_payload["issue"]["list_id"] == task_list["id"]
     assert "project_id" not in issue_payload["issue"]
 
     issue_list = client.get(
-        f"/api/v1/pms/projects/{project['id']}/issues",
+        f"/api/v1/pms/lists/{task_list['id']}/issues",
         headers=_auth_headers(attendee_token),
     )
     assert issue_list.status_code == 403
@@ -1131,8 +1131,8 @@ def test_meeting_detach_preserves_other_meeting_grants_until_last_source_is_remo
     admin = _bootstrap_admin_session(client)
     admin_token = admin["token"]
 
-    project = _create_project(client, admin_token, key="SAFE", name="Safety Project")
-    issue = _create_issue(client, admin_token, project["id"], title="Multi-meeting issue")
+    task_list = _create_task_list(client, admin_token, key="SAFE", name="Safety List")
+    issue = _create_issue(client, admin_token, task_list["id"], title="Multi-meeting issue")
     doc_id = _create_native_doc(client, admin_token, "Multi-meeting doc")
 
     attendee = _create_user_with_workspaces(
@@ -1216,8 +1216,8 @@ def test_meeting_reschedule_resyncs_issue_and_doc_grant_expiry(
     admin = _bootstrap_admin_session(client)
     admin_token = admin["token"]
 
-    project = _create_project(client, admin_token, key="TIME", name="Timing Project")
-    issue = _create_issue(client, admin_token, project["id"], title="Expiry issue")
+    task_list = _create_task_list(client, admin_token, key="TIME", name="Timing List")
+    issue = _create_issue(client, admin_token, task_list["id"], title="Expiry issue")
     doc_id = _create_native_doc(client, admin_token, "Expiry doc")
 
     attendee = _create_user_with_workspaces(

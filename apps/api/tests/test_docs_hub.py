@@ -86,10 +86,10 @@ def test_docs_native_docs_and_direct_user_share_grant_docs_access(client: TestCl
 def test_docs_hub_reuses_pms_acl_and_blocks_resharing_of_source_docs(client: TestClient) -> None:
     admin = _bootstrap_admin_session(client)
 
-    project = _create_project(client, admin["token"], key="DOCS", name="Docs Source Project")
+    task_list = _create_task_list(client, admin["token"], key="DOCS", name="Docs Source List")
 
     space_doc_response = client.post(
-        f"/api/v1/pms/spaces/{project['team_id']}/docs",
+        f"/api/v1/pms/spaces/{task_list['team_id']}/docs",
         headers=_auth_headers(admin["token"]),
         json={"title": "Space Handbook"},
     )
@@ -97,7 +97,7 @@ def test_docs_hub_reuses_pms_acl_and_blocks_resharing_of_source_docs(client: Tes
     space_doc = space_doc_response.json()
 
     create_page_response = client.post(
-        f"/api/v1/pms/spaces/{project['team_id']}/docs/pages",
+        f"/api/v1/pms/spaces/{task_list['team_id']}/docs/pages",
         headers=_auth_headers(admin["token"]),
         json={"title": "Overview", "space_doc_id": space_doc["id"], "content_blocks": []},
     )
@@ -107,7 +107,7 @@ def test_docs_hub_reuses_pms_acl_and_blocks_resharing_of_source_docs(client: Tes
     viewer = _create_user(client, admin["token"], email="docs-viewer@aidoo.local", full_name="Docs Viewer")
     _grant_workspace_access(client, admin["token"], viewer["user"]["id"], "docs")
     _grant_workspace_access(client, admin["token"], viewer["user"]["id"], "pms")
-    _add_project_member(client, admin["token"], project["id"], viewer["user"]["id"], "viewer")
+    _add_task_list_member(client, admin["token"], task_list["id"], viewer["user"]["id"], "viewer")
     viewer_token = _login(client, viewer["user"]["email"], viewer["temporary_password"])
 
     viewer_hub_response = client.get("/api/v1/docs/hub", headers=_auth_headers(viewer_token))
@@ -140,7 +140,7 @@ def test_docs_hub_reuses_pms_acl_and_blocks_resharing_of_source_docs(client: Tes
     member = _create_user(client, admin["token"], email="docs-user@aidoo.local", full_name="Docs User")
     _grant_workspace_access(client, admin["token"], member["user"]["id"], "docs")
     _grant_workspace_access(client, admin["token"], member["user"]["id"], "pms")
-    _add_project_member(client, admin["token"], project["id"], member["user"]["id"], "member")
+    _add_task_list_member(client, admin["token"], task_list["id"], member["user"]["id"], "member")
     member_token = _login(client, member["user"]["email"], member["temporary_password"])
 
     member_hub_response = client.get("/api/v1/docs/hub", headers=_auth_headers(member_token))
@@ -460,7 +460,7 @@ def _grant_workspace_access(
     assert update_response.status_code == 200
 
 
-def _create_project(
+def _create_task_list(
     client: TestClient,
     token: str,
     *,
@@ -468,7 +468,7 @@ def _create_project(
     name: str,
 ) -> dict:
     response = client.post(
-        "/api/v1/pms/projects",
+        "/api/v1/pms/lists",
         headers=_auth_headers(token),
         json={
             "key": key,
@@ -480,9 +480,9 @@ def _create_project(
     return response.json()
 
 
-def _add_project_member(client: TestClient, token: str, project_id: str, user_id: str, role: str) -> dict:
+def _add_task_list_member(client: TestClient, token: str, list_id: str, user_id: str, role: str) -> dict:
     response = client.post(
-        f"/api/v1/pms/projects/{project_id}/members",
+        f"/api/v1/pms/lists/{list_id}/members",
         headers=_auth_headers(token),
         json={"user_id": user_id, "role": role},
     )

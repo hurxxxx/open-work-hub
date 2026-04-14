@@ -57,7 +57,7 @@ from aidoo_api.domains.pms.access_grants import (
     revoke_grants_for_meeting,
     revoke_grants_for_meeting_attendee,
 )
-from aidoo_api.domains.pms.models import Issue, Project
+from aidoo_api.domains.pms.models import Issue, TaskList
 
 
 MAX_FILE_UPLOAD_SIZE = 100 * 1024 * 1024  # 100 MB
@@ -371,7 +371,7 @@ def _serialize_task_link(
     if issue is not None:
         issue_title = issue.title
         issue_number = issue.issue_number
-        pms_list = db.scalar(select(Project).where(Project.id == issue.project_id))
+        pms_list = db.scalar(select(TaskList).where(TaskList.id == issue.list_id))
         if pms_list is not None:
             list_key = pms_list.key
     return MeetingTaskLinkOut(

@@ -10,28 +10,28 @@ import { Dialog, Button, BlockEditor } from '@aidoo/ui';
 import type { BlockContent } from '@aidoo/ui';
 import { useAuth } from '@/src/domains/auth/auth-provider';
 import { useMediaUpload } from '@/src/domains/media/use-media-upload';
-import { createProjectIssue, listTaskTemplates, type PmsProjectStatus, type PmsTaskTemplate } from '@/src/domains/pms/pms-api';
+import { createTaskListIssue, listTaskTemplates, type PmsTaskListStatus, type PmsTaskTemplate } from '@/src/domains/pms/pms-api';
 import { getStatusSlugs, getStatusLabel } from './pms-constants';
 
 export const NewTaskModal = ({
   isOpen,
   onClose,
-  projectId,
+  taskListId,
   onCreated,
-  projectStatuses,
+  taskListStatuses,
   canCreate = true,
 }: {
   isOpen: boolean;
   onClose: () => void;
-  projectId: string;
+  taskListId: string;
   onCreated?: () => void;
-  projectStatuses?: PmsProjectStatus[];
+  taskListStatuses?: PmsTaskListStatus[];
   canCreate?: boolean;
 }) => {
   const { token } = useAuth();
   const { uploadFile, resolveFileUrl } = useMediaUpload();
   const [title, setTitle] = useState('');
-  const defaultStatus = projectStatuses && projectStatuses.length > 0 ? projectStatuses[0].slug : 'backlog';
+  const defaultStatus = taskListStatuses && taskListStatuses.length > 0 ? taskListStatuses[0].slug : 'backlog';
   const [status, setStatus] = useState(defaultStatus);
   const [priority, setPriority] = useState('medium');
   const [dueDate, setDueDate] = useState('');
@@ -43,10 +43,10 @@ export const NewTaskModal = ({
 
   // Load templates when menu opens
   const openTemplateMenu = async () => {
-    if (!token || !projectId) return;
+    if (!token || !taskListId) return;
     setTemplateMenuOpen(true);
     try {
-      const res = await listTaskTemplates(token, projectId);
+      const res = await listTaskTemplates(token, taskListId);
       setTemplates(res.items);
     } catch { /* ignore */ }
   };
@@ -60,10 +60,10 @@ export const NewTaskModal = ({
   };
 
   async function handleCreate() {
-    if (!token || !title.trim() || !projectId || !canCreate) return;
+    if (!token || !title.trim() || !taskListId || !canCreate) return;
     setSubmitting(true);
     try {
-      await createProjectIssue(token, projectId, {
+      await createTaskListIssue(token, taskListId, {
         title: title.trim(),
         description: '',
         description_blocks: descriptionBlocks ?? null,
@@ -186,8 +186,8 @@ export const NewTaskModal = ({
             className="app-text-body-sm rounded-md border border-app-border bg-app-surface-sidebar px-2 py-1 text-app-ink focus:outline-none"
             disabled={!canCreate}
           >
-            {getStatusSlugs(projectStatuses).map(s => (
-              <option key={s} value={s}>{getStatusLabel(s, projectStatuses)}</option>
+            {getStatusSlugs(taskListStatuses).map(s => (
+              <option key={s} value={s}>{getStatusLabel(s, taskListStatuses)}</option>
             ))}
           </select>
 

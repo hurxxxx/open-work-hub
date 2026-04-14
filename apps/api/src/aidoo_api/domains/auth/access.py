@@ -192,19 +192,19 @@ DEV_LOGIN_ACCOUNTS = [
 
 DEV_LOGIN_ACCOUNT_MAP = {item["key"]: item for item in DEV_LOGIN_ACCOUNTS}
 
-DEFAULT_DEV_PMS_PROJECT = {
+DEFAULT_DEV_PMS_TASK_LIST = {
     "key": "DEMO",
     "name": "Demo Workspace List",
     "description": "Seeded PMS list for role-based smoke checks.",
 }
-DEFAULT_DEV_PROJECT_STATUSES = [
+DEFAULT_DEV_TASK_LIST_STATUSES = [
     ("backlog", "Backlog", "#6b7280", "backlog", 0),
     ("todo", "Todo", "#3b82f6", "active", 1),
     ("in_progress", "In Progress", "#f59e0b", "active", 2),
     ("done", "Done", "#22c55e", "done", 3),
     ("canceled", "Canceled", "#ef4444", "canceled", 4),
 ]
-DEFAULT_DEV_PROJECT_LABELS = [
+DEFAULT_DEV_TASK_LIST_LABELS = [
     ("blocked", "#b45309"),
     ("customer", "#1d4ed8"),
     ("qa", "#0f766e"),
@@ -706,40 +706,40 @@ def ensure_dev_login_seed_data(db: Session) -> None:
         )
         seeded_users[definition["key"]] = user
 
-    from aidoo_api.domains.pms.models import Label, Project, ProjectStatus
+    from aidoo_api.domains.pms.models import Label, TaskList, TaskListStatus
 
     platform_admin = seeded_users.get("platform-admin")
     delivery_workspace = workspace_by_key.get("delivery-hub") or workspace_by_key.get("hq")
     if platform_admin is not None and delivery_workspace is not None:
         default_delivery_space = ensure_workspace_default_pms_space(db, delivery_workspace)
-        project = db.scalar(select(Project).where(Project.key == DEFAULT_DEV_PMS_PROJECT["key"]))
-        if project is None:
-            project = Project(
+        task_list = db.scalar(select(TaskList).where(TaskList.key == DEFAULT_DEV_PMS_TASK_LIST["key"]))
+        if task_list is None:
+            task_list = TaskList(
                 id=new_id(),
-                key=DEFAULT_DEV_PMS_PROJECT["key"],
-                name=DEFAULT_DEV_PMS_PROJECT["name"],
-                description=DEFAULT_DEV_PMS_PROJECT["description"],
+                key=DEFAULT_DEV_PMS_TASK_LIST["key"],
+                name=DEFAULT_DEV_PMS_TASK_LIST["name"],
+                description=DEFAULT_DEV_PMS_TASK_LIST["description"],
                 status="active",
                 team_id=default_delivery_space.id,
                 created_by_id=platform_admin.id,
             )
-            db.add(project)
+            db.add(task_list)
             db.flush()
         else:
-            project.name = DEFAULT_DEV_PMS_PROJECT["name"]
-            project.description = DEFAULT_DEV_PMS_PROJECT["description"]
-            project.status = "active"
-            project.archived = False
-            project.team_id = default_delivery_space.id
-            db.add(project)
+            task_list.name = DEFAULT_DEV_PMS_TASK_LIST["name"]
+            task_list.description = DEFAULT_DEV_PMS_TASK_LIST["description"]
+            task_list.status = "active"
+            task_list.archived = False
+            task_list.team_id = default_delivery_space.id
+            db.add(task_list)
             db.flush()
 
-        if not db.scalar(select(ProjectStatus.id).where(ProjectStatus.project_id == project.id)):
-            for slug, name, color, category, sort_order in DEFAULT_DEV_PROJECT_STATUSES:
+        if not db.scalar(select(TaskListStatus.id).where(TaskListStatus.list_id == task_list.id)):
+            for slug, name, color, category, sort_order in DEFAULT_DEV_TASK_LIST_STATUSES:
                 db.add(
-                    ProjectStatus(
+                    TaskListStatus(
                         id=new_id(),
-                        project_id=project.id,
+                        list_id=task_list.id,
                         slug=slug,
                         name=name,
                         color=color,
@@ -748,12 +748,12 @@ def ensure_dev_login_seed_data(db: Session) -> None:
                     )
                 )
 
-        if not db.scalar(select(Label.id).where(Label.project_id == project.id)):
-            for name, color in DEFAULT_DEV_PROJECT_LABELS:
+        if not db.scalar(select(Label.id).where(Label.list_id == task_list.id)):
+            for name, color in DEFAULT_DEV_TASK_LIST_LABELS:
                 db.add(
                     Label(
                         id=new_id(),
-                        project_id=project.id,
+                        list_id=task_list.id,
                         name=name,
                         color=color,
                     )

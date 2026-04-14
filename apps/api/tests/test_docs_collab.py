@@ -13,8 +13,8 @@ from aidoo_api.domains.docs.collab_codec import blocks_to_yjs_state, yjs_state_t
 from aidoo_api.domains.auth.security import new_id
 from aidoo_api.domains.media.models import MediaFile
 from aidoo_api.core.db import get_session_factory
-from tests.test_docs_hub import _add_project_member, _auth_headers, _create_project
-from tests.test_meeting import (
+from test_docs_hub import _add_task_list_member, _auth_headers, _create_task_list
+from test_meeting import (
     _bootstrap_admin_session,
     _create_meeting,
     _create_user_with_workspaces,
@@ -361,10 +361,10 @@ def test_pms_space_doc_collab_session_uses_workspace_acl_and_page_ref(client: Te
     admin_token = admin["token"]
     workspace_slug = _first_workspace_slug(client, admin_token)
 
-    project = _create_project(client, admin_token, key="CLAB", name="Collab Project")
+    task_list = _create_task_list(client, admin_token, key="CLAB", name="Collab List")
 
     create_space_doc_response = client.post(
-        f"/api/v1/pms/spaces/{project['team_id']}/docs",
+        f"/api/v1/pms/spaces/{task_list['team_id']}/docs",
         headers=_auth_headers(admin_token),
         json={"title": "Space Handbook"},
     )
@@ -372,7 +372,7 @@ def test_pms_space_doc_collab_session_uses_workspace_acl_and_page_ref(client: Te
     space_doc = create_space_doc_response.json()
 
     create_page_response = client.post(
-        f"/api/v1/pms/spaces/{project['team_id']}/docs/pages",
+        f"/api/v1/pms/spaces/{task_list['team_id']}/docs/pages",
         headers=_auth_headers(admin_token),
         json={"title": "Overview", "space_doc_id": space_doc["id"]},
     )
@@ -387,7 +387,7 @@ def test_pms_space_doc_collab_session_uses_workspace_acl_and_page_ref(client: Te
         full_name="Space Collab Member",
         workspace_keys=[workspace_slug],
     )
-    _add_project_member(client, admin_token, project["id"], member["user"]["id"], "member")
+    _add_task_list_member(client, admin_token, task_list["id"], member["user"]["id"], "member")
     member_token = _login(
         client,
         member["user"]["email"],

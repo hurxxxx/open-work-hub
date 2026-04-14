@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { cn } from '@/src/lib/utils';
-import type { PmsIssue, PmsProjectStatus } from '@/src/domains/pms/pms-api';
+import type { PmsIssue, PmsTaskListStatus } from '@/src/domains/pms/pms-api';
 import { STATUS_DOT_COLOR } from './pms-constants';
 
 function getGanttDotColor(slug: string): string {
@@ -8,13 +8,13 @@ function getGanttDotColor(slug: string): string {
   return '';
 }
 
-function getGanttDotStyle(slug: string, projectStatuses?: PmsProjectStatus[]): React.CSSProperties | undefined {
+function getGanttDotStyle(slug: string, taskListStatuses?: PmsTaskListStatus[]): React.CSSProperties | undefined {
   if (STATUS_DOT_COLOR[slug]) return undefined;
-  const ps = projectStatuses?.find(s => s.slug === slug);
+  const ps = taskListStatuses?.find(s => s.slug === slug);
   return ps ? { backgroundColor: ps.color } : { backgroundColor: '#6b7280' };
 }
 
-export const GanttView = ({ issues, projectStatuses }: { issues: PmsIssue[]; projectStatuses?: PmsProjectStatus[] }) => {
+export const GanttView = ({ issues, taskListStatuses }: { issues: PmsIssue[]; taskListStatuses?: PmsTaskListStatus[] }) => {
   const { dates, startDate } = useMemo(() => {
     const now = new Date();
     const start = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -56,7 +56,7 @@ export const GanttView = ({ issues, projectStatuses }: { issues: PmsIssue[]; pro
           return (
             <div key={issue.id} className="flex border-b border-app-border hover:bg-app-surface-hover transition-colors">
               <div className="w-64 border-r border-app-border p-4 flex items-center gap-3 shrink-0">
-	                <div className={cn("w-2 h-2 rounded-full shrink-0", getGanttDotColor(issue.status))} style={getGanttDotStyle(issue.status, projectStatuses)} />
+	                <div className={cn("w-2 h-2 rounded-full shrink-0", getGanttDotColor(issue.status))} style={getGanttDotStyle(issue.status, taskListStatuses)} />
                 <span className="app-text-body-sm truncate font-medium text-app-ink">{issue.title}</span>
               </div>
               <div className="flex-1 flex relative" style={{ minWidth: `${dates.length * 40}px` }}>

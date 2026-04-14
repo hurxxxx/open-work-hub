@@ -7,7 +7,7 @@ from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, UploadFile, status
 from fastapi.responses import RedirectResponse
-from pydantic import AliasChoices, BaseModel, Field
+from pydantic import BaseModel, Field
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session, joinedload, selectinload
 
@@ -44,8 +44,8 @@ from aidoo_api.domains.pms.models import (
     Label,
     Milestone,
     Notification,
-    Project,
-    ProjectStatus,
+    TaskList,
+    TaskListStatus,
     ScheduleDependency,
     SpaceDoc,
     SpaceDocPage,
@@ -75,7 +75,7 @@ ISSUE_STATUS_PROGRESS = {
     "done": 1.0,
     "canceled": None,
 }
-PROJECT_STATUS_LABELS = {
+TASK_LIST_STATUS_LABELS = {
     "planned": "Planned",
     "active": "Active",
     "on_hold": "On Hold",
@@ -106,7 +106,7 @@ class ListParams(BaseModel):
     q: str = ""
 
 
-class ProjectCreateRequest(BaseModel):
+class TaskListCreateRequest(BaseModel):
     key: str | None = Field(default=None, min_length=2, max_length=24, pattern=r"^[A-Za-z0-9_-]+$")
     name: str = Field(..., min_length=2, max_length=140)
     description: str = Field(default="", max_length=4000)
@@ -114,7 +114,7 @@ class ProjectCreateRequest(BaseModel):
     folder_id: str | None = None
 
 
-class ProjectUpdateRequest(BaseModel):
+class TaskListUpdateRequest(BaseModel):
     name: str | None = Field(default=None, min_length=2, max_length=140)
     description: str | None = Field(default=None, max_length=4000)
     status: Literal["planned", "active", "on_hold", "done"] | None = None
@@ -203,7 +203,7 @@ class BulkUpdateResponse(BaseModel):
     deleted_count: int
 
 
-class ProjectListItem(BaseModel):
+class TaskListItem(BaseModel):
     id: str
     key: str
     name: str
@@ -224,8 +224,8 @@ class ProjectListItem(BaseModel):
     updated_at: datetime
 
 
-class ProjectListResponse(BaseModel):
-    items: list[ProjectListItem]
+class TaskListsResponse(BaseModel):
+    items: list[TaskListItem]
     total: int
     page: int
     page_size: int
@@ -287,7 +287,7 @@ class SpaceMemberRoleUpdateRequest(BaseModel):
 
 class MilestoneItem(BaseModel):
     id: str
-    list_id: str = Field(validation_alias=AliasChoices("list_id", "project_id"))
+    list_id: str
     title: str
     description: str
     status: str
@@ -320,7 +320,7 @@ class LabelListResponse(BaseModel):
     page_size: int
 
 
-class ProjectStatusItem(BaseModel):
+class TaskListStatusItem(BaseModel):
     id: str
     slug: str
     name: str
@@ -329,18 +329,18 @@ class ProjectStatusItem(BaseModel):
     sort_order: int
 
 
-class ProjectStatusListResponse(BaseModel):
-    items: list[ProjectStatusItem]
+class TaskListStatusesResponse(BaseModel):
+    items: list[TaskListStatusItem]
 
 
-class ProjectStatusCreateRequest(BaseModel):
+class TaskListStatusCreateRequest(BaseModel):
     name: str = Field(..., min_length=1, max_length=60)
     color: str = Field(default="#6b7280", max_length=24)
     category: Literal["backlog", "active", "done", "canceled"] = "active"
     sort_order: int = 0
 
 
-class ProjectStatusUpdateRequest(BaseModel):
+class TaskListStatusUpdateRequest(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=60)
     color: str | None = Field(default=None, max_length=24)
     category: Literal["backlog", "active", "done", "canceled"] | None = None
@@ -349,7 +349,7 @@ class ProjectStatusUpdateRequest(BaseModel):
 
 class TaskTemplateItem(BaseModel):
     id: str
-    list_id: str = Field(validation_alias=AliasChoices("list_id", "project_id"))
+    list_id: str
     name: str
     description: str
     default_status: str
@@ -380,7 +380,7 @@ class TaskTemplateUpdateRequest(BaseModel):
 
 class CustomFieldItem(BaseModel):
     id: str
-    list_id: str = Field(validation_alias=AliasChoices("list_id", "project_id"))
+    list_id: str
     name: str
     field_type: str
     options: list[str] | None = None
@@ -467,7 +467,7 @@ class TimeEntryItem(BaseModel):
 
 class IssueListItem(BaseModel):
     id: str
-    list_id: str = Field(validation_alias=AliasChoices("list_id", "project_id"))
+    list_id: str
     reference: str
     title: str
     description: str
@@ -612,8 +612,8 @@ class RecentActivityItem(BaseModel):
     created_at: datetime
 
 
-class DashboardProjectItem(BaseModel):
-    list_id: str = Field(validation_alias=AliasChoices("list_id", "project_id"))
+class DashboardTaskListItem(BaseModel):
+    list_id: str
     key: str
     name: str
     progress: float
@@ -623,14 +623,14 @@ class DashboardProjectItem(BaseModel):
 
 
 class DashboardSummaryResponse(BaseModel):
-    project_count: int
+    list_count: int
     active_issue_count: int
     overdue_issue_count: int
     my_issue_count: int
     milestone_due_soon_count: int
     status_counts: list[StatusCountItem]
     priority_counts: list[PriorityCountItem]
-    projects: list[DashboardProjectItem]
+    lists: list[DashboardTaskListItem]
     recent_activity: list[RecentActivityItem]
 
 
@@ -647,7 +647,7 @@ def _paginate[T](items: list[T], page: int, page_size: int) -> tuple[list[T], in
     return items[start:end], total
 
 
-PROJECT_ROLE_RANK = {
+TASK_LIST_ROLE_RANK = {
     "viewer": 0,
     "member": 1,
     "admin": 2,
@@ -655,8 +655,8 @@ PROJECT_ROLE_RANK = {
 }
 SPACE_TEAM_EDITOR_ROLES = {"member", "admin", "owner"}
 SPACE_TEAM_MANAGER_ROLES = {"admin", "owner"}
-PROJECT_EDITOR_ROLES = {"member", "admin", "owner"}
-PROJECT_MANAGER_ROLES = {"admin", "owner"}
+TASK_LIST_EDITOR_ROLES = {"member", "admin", "owner"}
+TASK_LIST_MANAGER_ROLES = {"admin", "owner"}
 
 
 def _is_pms_super_admin(db: Session, user: User) -> bool:
@@ -708,7 +708,7 @@ def _serialize_space_member(db: Session, member: TeamMember) -> SpaceMemberItem:
     )
 
 
-def _best_project_role(db: Session, user: User, space_id: str) -> str | None:
+def _best_task_list_role(db: Session, user: User, space_id: str) -> str | None:
     workspace = _get_pms_workspace(db)
     team = db.scalar(
         select(Team)
@@ -926,23 +926,11 @@ def _validate_folder_membership(db: Session, team_id: str, folder_id: str | None
         raise HTTPException(status_code=400, detail="Folder must belong to the same space.")
 
 
-def _ensure_project_access(db: Session, user: User, project_id: str) -> tuple[Project, str]:
-    return _ensure_list_member(db, user, project_id)
-
-
-def _ensure_project_owner(db: Session, user: User, project_id: str) -> tuple[Project, str]:
-    return _ensure_list_owner(db, user, project_id)
-
-
-def _ensure_project_editor(db: Session, user: User, project_id: str) -> tuple[Project, str]:
-    return _ensure_list_editor(db, user, project_id)
-
-
-def _accessible_projects_query(db: Session, user: User):
+def _accessible_task_lists_query(db: Session, user: User):
     accessible_space_ids = _accessible_space_ids(db, user)
     if not accessible_space_ids:
-        return select(Project).where(Project.id == "__none__")
-    return select(Project).where(Project.team_id.in_(accessible_space_ids))
+        return select(TaskList).where(TaskList.id == "__none__")
+    return select(TaskList).where(TaskList.team_id.in_(accessible_space_ids))
 
 
 CATEGORY_PROGRESS = {
@@ -953,46 +941,46 @@ CATEGORY_PROGRESS = {
 }
 
 
-def _issue_progress(status_value: str, project: Project | None = None) -> float | None:
+def _issue_progress(status_value: str, task_list: TaskList | None = None) -> float | None:
     result = ISSUE_STATUS_PROGRESS.get(status_value)
     if result is not None or status_value in ISSUE_STATUS_PROGRESS:
         return result
-    # Fallback: look up category from project custom statuses
-    if project is not None:
-        for ps in getattr(project, "statuses", []):
+    # Fallback: look up category from task_list custom statuses
+    if task_list is not None:
+        for ps in getattr(task_list, "statuses", []):
             if ps.slug == status_value:
                 return CATEGORY_PROGRESS.get(ps.category, 0.5)
     return 0.5  # Unknown status defaults to active
 
 
-def _is_closed_status(status_value: str, project: Project | None = None) -> bool:
+def _is_closed_status(status_value: str, task_list: TaskList | None = None) -> bool:
     """Check if a status represents a closed state (done or canceled)."""
     if status_value in {"done", "canceled"}:
         return True
-    if project is not None:
-        for ps in getattr(project, "statuses", []):
+    if task_list is not None:
+        for ps in getattr(task_list, "statuses", []):
             if ps.slug == status_value:
                 return ps.category in {"done", "canceled"}
     return False
 
 
-def _is_done_status(status_value: str, project: Project | None = None) -> bool:
+def _is_done_status(status_value: str, task_list: TaskList | None = None) -> bool:
     """Check if a status represents a completed state."""
     if status_value == "done":
         return True
-    if project is not None:
-        for ps in getattr(project, "statuses", []):
+    if task_list is not None:
+        for ps in getattr(task_list, "statuses", []):
             if ps.slug == status_value:
                 return ps.category == "done"
     return False
 
 
-def _calculate_progress(issues: list[Issue], project: Project | None = None) -> float:
+def _calculate_progress(issues: list[Issue], task_list: TaskList | None = None) -> float:
     progress_values = [
         progress
         for issue in issues
         if not issue.archived
-        for progress in [_issue_progress(issue.status, project)]
+        for progress in [_issue_progress(issue.status, task_list)]
         if progress is not None
     ]
     if not progress_values:
@@ -1008,7 +996,7 @@ def _serialize_labels(issue: Issue) -> list[LabelItem]:
 
 
 def _issue_reference(issue: Issue) -> str:
-    return f"{issue.project.key}-{issue.issue_number}"
+    return f"{issue.task_list.key}-{issue.issue_number}"
 
 
 def _serialize_issue(issue: Issue) -> IssueListItem:
@@ -1037,7 +1025,7 @@ def _serialize_issue(issue: Issue) -> IssueListItem:
         due_date=issue.due_date,
         board_position=issue.board_position,
         archived=issue.archived,
-        progress=_issue_progress(issue.status, issue.project),
+        progress=_issue_progress(issue.status, issue.task_list),
         comments_count=len(issue.comments),
         checklist_total=len(issue.checklist_items) if issue.checklist_items else 0,
         checklist_done=sum(1 for ci in issue.checklist_items if ci.completed) if issue.checklist_items else 0,
@@ -1049,41 +1037,41 @@ def _serialize_issue(issue: Issue) -> IssueListItem:
     )
 
 
-def _serialize_project(
-    project: Project,
+def _serialize_task_list(
+    task_list: TaskList,
     role: str,
     team_name: str | None = None,
     member_count: int | None = None,
-) -> ProjectListItem:
+) -> TaskListItem:
     overdue_issue_count = sum(
         1
-        for issue in project.issues
+        for issue in task_list.issues
         if (
             not issue.archived
-            and not _is_closed_status(issue.status, project)
+            and not _is_closed_status(issue.status, task_list)
             and issue.due_date is not None
             and issue.due_date < date.today()
         )
     )
-    return ProjectListItem(
-        id=project.id,
-        key=project.key,
-        name=project.name,
-        description=project.description,
-        status=project.status,
-        archived=project.archived,
-        team_id=project.team_id,
+    return TaskListItem(
+        id=task_list.id,
+        key=task_list.key,
+        name=task_list.name,
+        description=task_list.description,
+        status=task_list.status,
+        archived=task_list.archived,
+        team_id=task_list.team_id,
         team_name=team_name,
-        folder_id=project.folder_id,
-        folder_name=getattr(project.folder, "name", None) if project.folder_id else None,
+        folder_id=task_list.folder_id,
+        folder_name=getattr(task_list.folder, "name", None) if task_list.folder_id else None,
         role=role,
-        progress=_calculate_progress(project.issues, project),
+        progress=_calculate_progress(task_list.issues, task_list),
         member_count=member_count if member_count is not None else 0,
-        milestone_count=len(project.milestones),
-        issue_count=len(project.issues),
+        milestone_count=len(task_list.milestones),
+        issue_count=len(task_list.issues),
         overdue_issue_count=overdue_issue_count,
-        created_at=project.created_at,
-        updated_at=project.updated_at,
+        created_at=task_list.created_at,
+        updated_at=task_list.updated_at,
     )
 
 
@@ -1133,16 +1121,16 @@ def _serialize_activity(log: IssueActivityLog, reference_lookup: dict[str, str])
     )
 
 
-def _project_role(db: Session, project: Project, user: User, team_lookup: dict[str, Team]) -> str:
-    if project.team_id is None:
+def _task_list_role(db: Session, task_list: TaskList, user: User, team_lookup: dict[str, Team]) -> str:
+    if task_list.team_id is None:
         return "viewer"
-    team = team_lookup.get(project.team_id)
+    team = team_lookup.get(task_list.team_id)
     if team is None:
         return "viewer"
     return resolve_team_role(db, user, team) or "viewer"
 
 
-DEFAULT_PROJECT_STATUSES: list[tuple[str, str, str, str, int]] = [
+DEFAULT_TASK_LIST_STATUSES: list[tuple[str, str, str, str, int]] = [
     # (slug, name, color, category, sort_order)
     ("backlog", "Backlog", "#6b7280", "backlog", 0),
     ("todo", "Todo", "#3b82f6", "active", 1),
@@ -1169,22 +1157,22 @@ def _auto_key_from_name(name: str) -> str:
 
 
 def _unique_key(db: Session, base_name: str) -> str:
-    """Generate a unique project key from a name."""
+    """Generate a unique task list key from a name."""
     resolved = _auto_key_from_name(base_name)
     base = resolved
     counter = 1
-    while db.scalar(select(Project).where(func.lower(Project.key) == resolved.lower())):
+    while db.scalar(select(TaskList).where(func.lower(TaskList.key) == resolved.lower())):
         resolved = f"{base}{counter}"
         counter += 1
     return resolved
 
 
-def _create_default_statuses(db: Session, project_id: str) -> None:
-    for slug, name, color, category, sort_order in DEFAULT_PROJECT_STATUSES:
+def _create_default_statuses(db: Session, list_id: str) -> None:
+    for slug, name, color, category, sort_order in DEFAULT_TASK_LIST_STATUSES:
         db.add(
-            ProjectStatus(
+            TaskListStatus(
                 id=new_id(),
-                project_id=project_id,
+                list_id=list_id,
                 slug=slug,
                 name=name,
                 color=color,
@@ -1194,13 +1182,13 @@ def _create_default_statuses(db: Session, project_id: str) -> None:
         )
 
 
-def _create_default_labels(db: Session, project_id: str) -> None:
+def _create_default_labels(db: Session, list_id: str) -> None:
     for name, color in [
         ("blocked", "#b45309"),
         ("customer", "#1d4ed8"),
         ("qa", "#0f766e"),
     ]:
-        db.add(Label(id=new_id(), project_id=project_id, name=name, color=color))
+        db.add(Label(id=new_id(), list_id=list_id, name=name, color=color))
 
 
 def _log_issue_activity(
@@ -1282,49 +1270,49 @@ def _build_attachment_download_url(storage_key: str) -> str:
     )
 
 
-def _next_issue_number(db: Session, project_id: str) -> int:
-    current = db.scalar(select(func.max(Issue.issue_number)).where(Issue.project_id == project_id))
+def _next_issue_number(db: Session, list_id: str) -> int:
+    current = db.scalar(select(func.max(Issue.issue_number)).where(Issue.list_id == list_id))
     return int(current or 0) + 1
 
 
-def _next_issue_board_position(db: Session, project_id: str, status_value: str) -> int:
+def _next_issue_board_position(db: Session, list_id: str, status_value: str) -> int:
     current = db.scalar(
         select(func.max(Issue.board_position)).where(
-            Issue.project_id == project_id,
+            Issue.list_id == list_id,
             Issue.status == status_value,
         )
     )
     return int(current or 0) + 1
 
 
-def _validate_member_user(db: Session, project: Project, user_id: str) -> User:
+def _validate_member_user(db: Session, task_list: TaskList, user_id: str) -> User:
     user = db.scalar(select(User).where(User.id == user_id))
     if user is None:
         raise HTTPException(status_code=404, detail="User not found.")
-    if project.team_id is None:
-        raise HTTPException(status_code=409, detail="Project space is not set.")
-    if user_id in _space_member_ids(db, project.team_id):
-        raise HTTPException(status_code=409, detail="User is already a project member.")
+    if task_list.team_id is None:
+        raise HTTPException(status_code=409, detail="Task list space is not set.")
+    if user_id in _space_member_ids(db, task_list.team_id):
+        raise HTTPException(status_code=409, detail="User is already a task list member.")
     return user
 
 
-def _validate_issue_assignee(db: Session, project: Project, assignee_id: str | None) -> None:
+def _validate_issue_assignee(db: Session, task_list: TaskList, assignee_id: str | None) -> None:
     if assignee_id is None:
         return
-    if project.team_id is None or assignee_id not in _space_member_ids(db, project.team_id):
-        raise HTTPException(status_code=400, detail="Assignee must be a project member.")
+    if task_list.team_id is None or assignee_id not in _space_member_ids(db, task_list.team_id):
+        raise HTTPException(status_code=400, detail="Assignee must be a task list member.")
 
 
-def _validate_milestone(project: Project, milestone_id: str | None) -> None:
+def _validate_milestone(task_list: TaskList, milestone_id: str | None) -> None:
     if milestone_id is None:
         return
-    if milestone_id not in {milestone.id for milestone in project.milestones}:
-        raise HTTPException(status_code=400, detail="Milestone does not belong to this project.")
+    if milestone_id not in {milestone.id for milestone in task_list.milestones}:
+        raise HTTPException(status_code=400, detail="Milestone does not belong to this list.")
 
 
 def _validate_parent_issue(
     db: Session,
-    project: Project,
+    task_list: TaskList,
     parent_id: str | None,
     *,
     issue_id: str | None = None,
@@ -1335,8 +1323,8 @@ def _validate_parent_issue(
     parent = db.scalar(select(Issue).where(Issue.id == parent_id))
     if parent is None:
         raise HTTPException(status_code=404, detail="Parent issue not found.")
-    if parent.project_id != project.id:
-        raise HTTPException(status_code=400, detail="Parent issue must belong to the same project.")
+    if parent.list_id != task_list.id:
+        raise HTTPException(status_code=400, detail="Parent issue must belong to the same list.")
     if issue_id is not None and parent.id == issue_id:
         raise HTTPException(status_code=409, detail="Issue cannot be its own parent.")
 
@@ -1353,14 +1341,14 @@ def _validate_parent_issue(
         ancestor = db.scalar(select(Issue).where(Issue.id == ancestor.parent_id))
 
 
-def _set_issue_labels(db: Session, issue: Issue, label_ids: list[str], project: Project) -> None:
+def _set_issue_labels(db: Session, issue: Issue, label_ids: list[str], task_list: TaskList) -> None:
     if not label_ids:
         issue.label_links.clear()
         return
 
-    allowed_labels = {label.id: label for label in project.labels}
+    allowed_labels = {label.id: label for label in task_list.labels}
     if any(label_id not in allowed_labels for label_id in label_ids):
-        raise HTTPException(status_code=400, detail="One or more labels are invalid for this project.")
+        raise HTTPException(status_code=400, detail="One or more labels are invalid for this list.")
 
     issue.label_links.clear()
     for label_id in label_ids:
@@ -1373,11 +1361,11 @@ def _get_issue_for_user(
     issue_id: str,
     *,
     require_editor: bool = False,
-) -> tuple[Issue, Project]:
+) -> tuple[Issue, TaskList]:
     issue = db.scalar(
         select(Issue)
         .options(
-            selectinload(Issue.project).selectinload(Project.labels),
+            selectinload(Issue.task_list).selectinload(TaskList.labels),
             selectinload(Issue.milestone),
             selectinload(Issue.assignee),
             selectinload(Issue.reporter),
@@ -1403,11 +1391,11 @@ def _get_issue_for_user(
         raise HTTPException(status_code=404, detail="Issue not found.")
 
     if require_editor:
-        project, _ = _ensure_project_editor(db, user, issue.project_id)
+        task_list, _ = _ensure_list_editor(db, user, issue.list_id)
     else:
         _ensure_issue_readable(db, user, issue)
-        project = issue.project
-    return issue, project
+        task_list = issue.task_list
+    return issue, task_list
 
 
 @router.get("/spaces", response_model=list[SpaceItem])
@@ -1606,9 +1594,8 @@ def remove_space_member(
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
-@router.get("/projects", response_model=ProjectListResponse, include_in_schema=False)
-@router.get("/lists", response_model=ProjectListResponse)
-def list_projects(
+@router.get("/lists", response_model=TaskListsResponse)
+def list_task_lists(
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
     sort_by: str = Query(default="updated_at"),
@@ -1618,47 +1605,47 @@ def list_projects(
     team_id: str | None = Query(default=None),
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-) -> ProjectListResponse:
+) -> TaskListsResponse:
     if team_id is not None:
         _ensure_space_access(db, current_user, team_id)
 
-    projects = list(
+    task_lists = list(
         db.scalars(
-            _accessible_projects_query(db, current_user).options(
-                selectinload(Project.milestones),
-                selectinload(Project.issues).selectinload(Issue.comments),
-                selectinload(Project.issues).selectinload(Issue.subtasks),
-                joinedload(Project.folder),
+            _accessible_task_lists_query(db, current_user).options(
+                selectinload(TaskList.milestones),
+                selectinload(TaskList.issues).selectinload(Issue.comments),
+                selectinload(TaskList.issues).selectinload(Issue.subtasks),
+                joinedload(TaskList.folder),
             )
         )
     )
 
     q_lower = q.strip().lower()
     if archived is not None:
-        projects = [project for project in projects if project.archived is archived]
+        task_lists = [task_list for task_list in task_lists if task_list.archived is archived]
     if team_id is not None:
-        projects = [project for project in projects if project.team_id == team_id]
+        task_lists = [task_list for task_list in task_lists if task_list.team_id == team_id]
     if q_lower:
-        projects = [
-            project
-            for project in projects
-            if q_lower in project.name.lower()
-            or q_lower in project.key.lower()
-            or q_lower in project.description.lower()
+        task_lists = [
+            task_list
+            for task_list in task_lists
+            if q_lower in task_list.name.lower()
+            or q_lower in task_list.key.lower()
+            or q_lower in task_list.description.lower()
         ]
 
     reverse = sort_dir == "desc"
     if sort_by == "name":
-        projects.sort(key=lambda project: project.name.lower(), reverse=reverse)
+        task_lists.sort(key=lambda task_list: task_list.name.lower(), reverse=reverse)
     elif sort_by == "key":
-        projects.sort(key=lambda project: project.key.lower(), reverse=reverse)
+        task_lists.sort(key=lambda task_list: task_list.key.lower(), reverse=reverse)
     elif sort_by == "progress":
-        projects.sort(key=lambda project: _calculate_progress(project.issues), reverse=reverse)
+        task_lists.sort(key=lambda task_list: _calculate_progress(task_list.issues), reverse=reverse)
     else:
-        projects.sort(key=lambda project: project.updated_at, reverse=reverse)
+        task_lists.sort(key=lambda task_list: task_list.updated_at, reverse=reverse)
 
     # Build team name lookup
-    team_ids = {p.team_id for p in projects if p.team_id}
+    team_ids = {p.team_id for p in task_lists if p.team_id}
     team_names: dict[str, str] = {}
     team_lookup: dict[str, Team] = {}
     team_member_counts: dict[str, int] = {}
@@ -1677,19 +1664,19 @@ def list_projects(
         team_member_counts = {t.id: len(t.members) for t in teams}
 
     serialized = [
-        _serialize_project(
-            project,
-            _project_role(db, project, current_user, team_lookup),
-            team_names.get(project.team_id, None) if project.team_id else None,
-            team_member_counts.get(project.team_id or "", 0),
+        _serialize_task_list(
+            task_list,
+            _task_list_role(db, task_list, current_user, team_lookup),
+            team_names.get(task_list.team_id, None) if task_list.team_id else None,
+            team_member_counts.get(task_list.team_id or "", 0),
         )
-        for project in projects
+        for task_list in task_lists
     ]
     page_items, total = _paginate(serialized, page, page_size)
-    return ProjectListResponse(items=page_items, total=total, page=page, page_size=page_size)
+    return TaskListsResponse(items=page_items, total=total, page=page, page_size=page_size)
 
 
-@router.get("/spaces/{space_id}/lists", response_model=ProjectListResponse)
+@router.get("/spaces/{space_id}/lists", response_model=TaskListsResponse)
 def list_space_lists(
     space_id: str,
     page: int = Query(default=1, ge=1),
@@ -1700,9 +1687,9 @@ def list_space_lists(
     archived: bool | None = None,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-) -> ProjectListResponse:
+) -> TaskListsResponse:
     _ensure_space_access(db, current_user, space_id)
-    return list_projects(
+    return list_task_lists(
         page=page,
         page_size=page_size,
         sort_by=sort_by,
@@ -1715,18 +1702,12 @@ def list_space_lists(
     )
 
 
-@router.post(
-    "/projects",
-    response_model=ProjectListItem,
-    status_code=status.HTTP_201_CREATED,
-    include_in_schema=False,
-)
-@router.post("/lists", response_model=ProjectListItem, status_code=status.HTTP_201_CREATED)
-def create_project(
-    payload: ProjectCreateRequest,
+@router.post("/lists", response_model=TaskListItem, status_code=status.HTTP_201_CREATED)
+def create_task_list(
+    payload: TaskListCreateRequest,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-) -> ProjectListItem:
+) -> TaskListItem:
     resolved_key = payload.key.upper() if payload.key else _unique_key(db, payload.name)
 
     resolved_team_name: str | None = None
@@ -1741,7 +1722,7 @@ def create_project(
 
     _validate_folder_membership(db, resolved_team_id, payload.folder_id)
 
-    project = Project(
+    task_list = TaskList(
         id=new_id(),
         key=resolved_key,
         name=payload.name.strip(),
@@ -1751,62 +1732,60 @@ def create_project(
         folder_id=payload.folder_id,
         created_by_id=current_user.id,
     )
-    db.add(project)
+    db.add(task_list)
     if not db.scalar(
         select(TeamMember.id).where(TeamMember.team_id == resolved_team_id, TeamMember.user_id == current_user.id)
     ):
         db.add(TeamMember(id=new_id(), team_id=resolved_team_id, user_id=current_user.id, role="owner"))
-    _create_default_labels(db, project.id)
-    _create_default_statuses(db, project.id)
+    _create_default_labels(db, task_list.id)
+    _create_default_statuses(db, task_list.id)
     db.commit()
-    db.refresh(project)
-    project = db.scalar(
-        select(Project)
+    db.refresh(task_list)
+    task_list = db.scalar(
+        select(TaskList)
         .options(
-            selectinload(Project.milestones),
-            selectinload(Project.issues).selectinload(Issue.comments),
-            joinedload(Project.folder),
+            selectinload(TaskList.milestones),
+            selectinload(TaskList.issues).selectinload(Issue.comments),
+            joinedload(TaskList.folder),
         )
-        .where(Project.id == project.id)
+        .where(TaskList.id == task_list.id)
     )
     member_count = len(_load_space_members(db, resolved_team_id))
-    return _serialize_project(project, "owner", resolved_team_name, member_count)
+    return _serialize_task_list(task_list, "owner", resolved_team_name, member_count)
 
 
-@router.get("/projects/{project_id}", response_model=ProjectListItem, include_in_schema=False)
-@router.get("/lists/{project_id}", response_model=ProjectListItem)
-def get_project(
-    project_id: str,
+@router.get("/lists/{list_id}", response_model=TaskListItem)
+def get_task_list(
+    list_id: str,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-) -> ProjectListItem:
-    project, role = _ensure_project_access(db, current_user, project_id)
-    project = db.scalar(
-        select(Project)
+) -> TaskListItem:
+    task_list, role = _ensure_list_member(db, current_user, list_id)
+    task_list = db.scalar(
+        select(TaskList)
         .options(
-            selectinload(Project.milestones),
-            selectinload(Project.issues).selectinload(Issue.comments),
-            joinedload(Project.folder),
+            selectinload(TaskList.milestones),
+            selectinload(TaskList.issues).selectinload(Issue.comments),
+            joinedload(TaskList.folder),
         )
-        .where(Project.id == project.id)
+        .where(TaskList.id == task_list.id)
     )
-    t_name = db.scalar(select(Team.name).where(Team.id == project.team_id)) if project.team_id else None
-    member_count = len(_load_space_members(db, project.team_id)) if project.team_id else 0
-    return _serialize_project(project, role, t_name, member_count)
+    t_name = db.scalar(select(Team.name).where(Team.id == task_list.team_id)) if task_list.team_id else None
+    member_count = len(_load_space_members(db, task_list.team_id)) if task_list.team_id else 0
+    return _serialize_task_list(task_list, role, t_name, member_count)
 
 
-@router.patch("/projects/{project_id}", response_model=ProjectListItem, include_in_schema=False)
-@router.patch("/lists/{project_id}", response_model=ProjectListItem)
-def update_project(
-    project_id: str,
-    payload: ProjectUpdateRequest,
+@router.patch("/lists/{list_id}", response_model=TaskListItem)
+def update_task_list(
+    list_id: str,
+    payload: TaskListUpdateRequest,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-) -> ProjectListItem:
-    project, role = _ensure_project_owner(db, current_user, project_id)
+) -> TaskListItem:
+    task_list, role = _ensure_list_owner(db, current_user, list_id)
     if "folder_id" in payload.model_fields_set:
-        _validate_folder_membership(db, project.team_id, payload.folder_id)
-        project.folder_id = payload.folder_id
+        _validate_folder_membership(db, task_list.team_id, payload.folder_id)
+        task_list.folder_id = payload.folder_id
 
     for field_name in ["name", "description", "status", "archived"]:
         if field_name not in payload.model_fields_set:
@@ -1814,44 +1793,39 @@ def update_project(
         value = getattr(payload, field_name)
         if value is None:
             continue
-        setattr(project, field_name, value.strip() if isinstance(value, str) else value)
+        setattr(task_list, field_name, value.strip() if isinstance(value, str) else value)
     db.commit()
-    db.refresh(project)
-    project = db.scalar(
-        select(Project)
+    db.refresh(task_list)
+    task_list = db.scalar(
+        select(TaskList)
         .options(
-            selectinload(Project.milestones),
-            selectinload(Project.issues).selectinload(Issue.comments),
-            joinedload(Project.folder),
+            selectinload(TaskList.milestones),
+            selectinload(TaskList.issues).selectinload(Issue.comments),
+            joinedload(TaskList.folder),
         )
-        .where(Project.id == project.id)
+        .where(TaskList.id == task_list.id)
     )
-    t_name = db.scalar(select(Team.name).where(Team.id == project.team_id)) if project.team_id else None
-    member_count = len(_load_space_members(db, project.team_id)) if project.team_id else 0
-    return _serialize_project(project, role, t_name, member_count)
+    t_name = db.scalar(select(Team.name).where(Team.id == task_list.team_id)) if task_list.team_id else None
+    member_count = len(_load_space_members(db, task_list.team_id)) if task_list.team_id else 0
+    return _serialize_task_list(task_list, role, t_name, member_count)
 
 
-@router.get(
-    "/projects/{project_id}/members",
-    response_model=SpaceMemberListResponse,
-    include_in_schema=False,
-)
-@router.get("/lists/{project_id}/members", response_model=SpaceMemberListResponse)
-def list_project_members(
-    project_id: str,
+@router.get("/lists/{list_id}/members", response_model=SpaceMemberListResponse)
+def list_task_list_members(
+    list_id: str,
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
 ) -> SpaceMemberListResponse:
-    """A project's members are the members of its owning space. The project-
-    level membership model was removed; this route remains as a thin alias so
+    """A list's members are the members of its owning space. The list-level
+    membership model was removed; this route remains as a thin alias so
     existing clients keep working."""
-    project, _ = _ensure_project_access(db, current_user, project_id)
-    if project.team_id is None:
-        raise HTTPException(status_code=409, detail="Project space is not set.")
+    task_list, _ = _ensure_list_member(db, current_user, list_id)
+    if task_list.team_id is None:
+        raise HTTPException(status_code=409, detail="Task list space is not set.")
     return list_space_members(
-        space_id=project.team_id,
+        space_id=task_list.team_id,
         page=page,
         page_size=page_size,
         db=db,
@@ -1860,51 +1834,40 @@ def list_project_members(
 
 
 @router.post(
-    "/projects/{project_id}/members",
-    response_model=SpaceMemberItem,
-    status_code=status.HTTP_201_CREATED,
-    include_in_schema=False,
-)
-@router.post(
-    "/lists/{project_id}/members",
+    "/lists/{list_id}/members",
     response_model=SpaceMemberItem,
     status_code=status.HTTP_201_CREATED,
 )
-def add_project_member(
-    project_id: str,
+def add_task_list_member(
+    list_id: str,
     payload: SpaceMemberCreateRequest,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
 ) -> SpaceMemberItem:
-    project, _ = _ensure_project_owner(db, current_user, project_id)
-    if project.team_id is None:
-        raise HTTPException(status_code=409, detail="Project space is not set.")
+    task_list, _ = _ensure_list_owner(db, current_user, list_id)
+    if task_list.team_id is None:
+        raise HTTPException(status_code=409, detail="Task list space is not set.")
     return add_space_member(
-        space_id=project.team_id,
+        space_id=task_list.team_id,
         payload=payload,
         db=db,
         current_user=current_user,
     )
 
 
-@router.patch(
-    "/projects/{project_id}/members/{user_id}/role",
-    response_model=SpaceMemberItem,
-    include_in_schema=False,
-)
-@router.patch("/lists/{project_id}/members/{user_id}/role", response_model=SpaceMemberItem)
+@router.patch("/lists/{list_id}/members/{user_id}/role", response_model=SpaceMemberItem)
 def update_member_role(
-    project_id: str,
+    list_id: str,
     user_id: str,
     payload: SpaceMemberRoleUpdateRequest,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
 ) -> SpaceMemberItem:
-    project, _ = _ensure_project_owner(db, current_user, project_id)
-    if project.team_id is None:
-        raise HTTPException(status_code=409, detail="Project space is not set.")
+    task_list, _ = _ensure_list_owner(db, current_user, list_id)
+    if task_list.team_id is None:
+        raise HTTPException(status_code=409, detail="Task list space is not set.")
     return update_space_member(
-        space_id=project.team_id,
+        space_id=task_list.team_id,
         user_id=user_id,
         payload=payload,
         db=db,
@@ -1912,33 +1875,27 @@ def update_member_role(
     )
 
 
-@router.delete("/projects/{project_id}/members/{user_id}", include_in_schema=False)
-@router.delete("/lists/{project_id}/members/{user_id}")
-def remove_project_member(
-    project_id: str,
+@router.delete("/lists/{list_id}/members/{user_id}")
+def remove_task_list_member(
+    list_id: str,
     user_id: str,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
 ) -> Response:
-    project, _ = _ensure_project_owner(db, current_user, project_id)
-    if project.team_id is None:
-        raise HTTPException(status_code=409, detail="Project space is not set.")
+    task_list, _ = _ensure_list_owner(db, current_user, list_id)
+    if task_list.team_id is None:
+        raise HTTPException(status_code=409, detail="Task list space is not set.")
     return remove_space_member(
-        space_id=project.team_id,
+        space_id=task_list.team_id,
         user_id=user_id,
         db=db,
         current_user=current_user,
     )
 
 
-@router.get(
-    "/projects/{project_id}/milestones",
-    response_model=MilestoneListResponse,
-    include_in_schema=False,
-)
-@router.get("/lists/{project_id}/milestones", response_model=MilestoneListResponse)
+@router.get("/lists/{list_id}/milestones", response_model=MilestoneListResponse)
 def list_milestones(
-    project_id: str,
+    list_id: str,
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
     sort_by: str = Query(default="sort_order"),
@@ -1946,8 +1903,8 @@ def list_milestones(
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
 ) -> MilestoneListResponse:
-    project, _ = _ensure_project_access(db, current_user, project_id)
-    milestones = list(project.milestones)
+    task_list, _ = _ensure_list_member(db, current_user, list_id)
+    milestones = list(task_list.milestones)
     reverse = sort_dir == "desc"
     if sort_by == "due_date":
         milestones.sort(key=lambda milestone: milestone.due_date or date.max, reverse=reverse)
@@ -1961,26 +1918,20 @@ def list_milestones(
 
 
 @router.post(
-    "/projects/{project_id}/milestones",
-    response_model=MilestoneItem,
-    status_code=status.HTTP_201_CREATED,
-    include_in_schema=False,
-)
-@router.post(
-    "/lists/{project_id}/milestones",
+    "/lists/{list_id}/milestones",
     response_model=MilestoneItem,
     status_code=status.HTTP_201_CREATED,
 )
 def create_milestone(
-    project_id: str,
+    list_id: str,
     payload: MilestoneCreateRequest,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
 ) -> MilestoneItem:
-    project, _ = _ensure_project_owner(db, current_user, project_id)
+    task_list, _ = _ensure_list_owner(db, current_user, list_id)
     milestone = Milestone(
         id=new_id(),
-        project_id=project.id,
+        list_id=task_list.id,
         title=payload.title.strip(),
         description=payload.description.strip(),
         status=payload.status,
@@ -2003,12 +1954,12 @@ def update_milestone(
 ) -> MilestoneItem:
     milestone = db.scalar(
         select(Milestone)
-        .options(selectinload(Milestone.project))
+        .options(selectinload(Milestone.task_list))
         .where(Milestone.id == milestone_id)
     )
     if milestone is None:
         raise HTTPException(status_code=404, detail="Milestone not found.")
-    _ensure_project_owner(db, current_user, milestone.project_id)
+    _ensure_list_owner(db, current_user, milestone.list_id)
     for field_name in ["title", "description", "status", "start_date", "due_date", "sort_order"]:
         value = getattr(payload, field_name)
         if value is not None:
@@ -2021,46 +1972,35 @@ def update_milestone(
     return _serialize_milestone(milestone)
 
 
-@router.get(
-    "/projects/{project_id}/labels",
-    response_model=LabelListResponse,
-    include_in_schema=False,
-)
-@router.get("/lists/{project_id}/labels", response_model=LabelListResponse)
-def list_project_labels(
-    project_id: str,
+@router.get("/lists/{list_id}/labels", response_model=LabelListResponse)
+def list_task_list_labels(
+    list_id: str,
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=100, ge=1, le=200),
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
 ) -> LabelListResponse:
-    _ensure_project_access(db, current_user, project_id)
-    labels = list(db.scalars(select(Label).where(Label.project_id == project_id).order_by(Label.name)))
+    _ensure_list_member(db, current_user, list_id)
+    labels = list(db.scalars(select(Label).where(Label.list_id == list_id).order_by(Label.name)))
     items = [LabelItem(id=label.id, name=label.name, color=label.color) for label in labels]
     page_items, total = _paginate(items, page, page_size)
     return LabelListResponse(items=page_items, total=total, page=page, page_size=page_size)
 
 
-@router.post(
-    "/projects/{project_id}/labels",
-    response_model=LabelItem,
-    status_code=status.HTTP_201_CREATED,
-    include_in_schema=False,
-)
-@router.post("/lists/{project_id}/labels", response_model=LabelItem, status_code=status.HTTP_201_CREATED)
-def create_project_label(
-    project_id: str,
+@router.post("/lists/{list_id}/labels", response_model=LabelItem, status_code=status.HTTP_201_CREATED)
+def create_task_list_label(
+    list_id: str,
     payload: LabelCreateRequest,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
 ) -> LabelItem:
-    _ensure_project_owner(db, current_user, project_id)
+    _ensure_list_owner(db, current_user, list_id)
     existing = db.scalar(
-        select(Label).where(Label.project_id == project_id, func.lower(Label.name) == payload.name.strip().lower())
+        select(Label).where(Label.list_id == list_id, func.lower(Label.name) == payload.name.strip().lower())
     )
     if existing is not None:
-        raise HTTPException(status_code=409, detail="Label name already exists in this project.")
-    label = Label(id=new_id(), project_id=project_id, name=payload.name.strip(), color=payload.color)
+        raise HTTPException(status_code=409, detail="Label name already exists in this list.")
+    label = Label(id=new_id(), list_id=list_id, name=payload.name.strip(), color=payload.color)
     db.add(label)
     db.commit()
     db.refresh(label)
@@ -2077,18 +2017,18 @@ def update_label(
     label = db.scalar(select(Label).where(Label.id == label_id))
     if label is None:
         raise HTTPException(status_code=404, detail="Label not found.")
-    _ensure_project_owner(db, current_user, label.project_id)
+    _ensure_list_owner(db, current_user, label.list_id)
     if payload.name is not None:
         normalized_name = payload.name.strip()
         existing = db.scalar(
             select(Label).where(
-                Label.project_id == label.project_id,
+                Label.list_id == label.list_id,
                 Label.id != label.id,
                 func.lower(Label.name) == normalized_name.lower(),
             )
         )
         if existing is not None:
-            raise HTTPException(status_code=409, detail="Label name already exists in this project.")
+            raise HTTPException(status_code=409, detail="Label name already exists in this list.")
         label.name = normalized_name
     if payload.color is not None:
         label.color = payload.color
@@ -2106,19 +2046,14 @@ def delete_label(
     label = db.scalar(select(Label).where(Label.id == label_id))
     if label is None:
         raise HTTPException(status_code=404, detail="Label not found.")
-    _ensure_project_owner(db, current_user, label.project_id)
+    _ensure_list_owner(db, current_user, label.list_id)
     db.delete(label)
     db.commit()
 
 
-@router.get(
-    "/projects/{project_id}/issues",
-    response_model=IssueListResponse,
-    include_in_schema=False,
-)
-@router.get("/lists/{project_id}/issues", response_model=IssueListResponse)
+@router.get("/lists/{list_id}/issues", response_model=IssueListResponse)
 def list_issues(
-    project_id: str,
+    list_id: str,
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=50, ge=1, le=100),
     sort_by: str = Query(default="board_position"),
@@ -2137,12 +2072,12 @@ def list_issues(
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
 ) -> IssueListResponse:
-    _ensure_project_access(db, current_user, project_id)
+    _ensure_list_member(db, current_user, list_id)
     issues = list(
         db.scalars(
             select(Issue)
             .options(
-                selectinload(Issue.project),
+                selectinload(Issue.task_list),
                 selectinload(Issue.milestone),
                 selectinload(Issue.assignee),
                 selectinload(Issue.reporter),
@@ -2153,7 +2088,7 @@ def list_issues(
                 selectinload(Issue.time_entries),
                 selectinload(Issue.assignee_links).selectinload(IssueAssignee.user),
             )
-            .where(Issue.project_id == project_id)
+            .where(Issue.list_id == list_id)
         )
     )
     q_lower = q.strip().lower()
@@ -2203,31 +2138,25 @@ def list_issues(
 
 
 @router.post(
-    "/projects/{project_id}/issues",
-    response_model=IssueListItem,
-    status_code=status.HTTP_201_CREATED,
-    include_in_schema=False,
-)
-@router.post(
-    "/lists/{project_id}/issues",
+    "/lists/{list_id}/issues",
     response_model=IssueListItem,
     status_code=status.HTTP_201_CREATED,
 )
 def create_issue(
-    project_id: str,
+    list_id: str,
     payload: IssueCreateRequest,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
 ) -> IssueListItem:
-    project, _ = _ensure_project_editor(db, current_user, project_id)
-    _validate_issue_assignee(db, project, payload.assignee_id)
-    _validate_milestone(project, payload.milestone_id)
-    _validate_parent_issue(db, project, payload.parent_id)
-    next_position = _next_issue_board_position(db, project_id, payload.status)
+    task_list, _ = _ensure_list_editor(db, current_user, list_id)
+    _validate_issue_assignee(db, task_list, payload.assignee_id)
+    _validate_milestone(task_list, payload.milestone_id)
+    _validate_parent_issue(db, task_list, payload.parent_id)
+    next_position = _next_issue_board_position(db, list_id, payload.status)
     issue = Issue(
         id=new_id(),
-        project_id=project.id,
-        issue_number=_next_issue_number(db, project.id),
+        list_id=task_list.id,
+        issue_number=_next_issue_number(db, task_list.id),
         title=payload.title.strip(),
         description=payload.description.strip(),
         description_blocks=payload.description_blocks,
@@ -2245,7 +2174,7 @@ def create_issue(
     )
     db.add(issue)
     db.flush()
-    _set_issue_labels(db, issue, payload.label_ids, project)
+    _set_issue_labels(db, issue, payload.label_ids, task_list)
     if payload.description_blocks:
         sync_embedded_media(db, payload.description_blocks, "issue", issue.id, current_user)
     _log_issue_activity(
@@ -2259,7 +2188,7 @@ def create_issue(
     issue = db.scalar(
         select(Issue)
         .options(
-            selectinload(Issue.project),
+            selectinload(Issue.task_list),
             selectinload(Issue.milestone),
             selectinload(Issue.assignee),
             selectinload(Issue.reporter),
@@ -2280,11 +2209,11 @@ def get_issue(
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
 ) -> IssueDetailResponse:
-    issue, project = _get_issue_for_user(db, current_user, issue_id)
+    issue, task_list = _get_issue_for_user(db, current_user, issue_id)
     dependencies = list(
         db.scalars(
             select(ScheduleDependency).where(
-                ScheduleDependency.project_id == project.id,
+                ScheduleDependency.list_id == task_list.id,
                 or_(
                     ScheduleDependency.predecessor_id == issue.id,
                     ScheduleDependency.successor_id == issue.id,
@@ -2359,13 +2288,13 @@ def update_issue(
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
 ) -> IssueListItem:
-    issue, project = _get_issue_for_user(db, current_user, issue_id, require_editor=True)
+    issue, task_list = _get_issue_for_user(db, current_user, issue_id, require_editor=True)
     if "assignee_id" in payload.model_fields_set:
-        _validate_issue_assignee(db, project, payload.assignee_id)
+        _validate_issue_assignee(db, task_list, payload.assignee_id)
     if "milestone_id" in payload.model_fields_set:
-        _validate_milestone(project, payload.milestone_id)
+        _validate_milestone(task_list, payload.milestone_id)
     if "parent_id" in payload.model_fields_set:
-        _validate_parent_issue(db, project, payload.parent_id, issue_id=issue.id)
+        _validate_parent_issue(db, task_list, payload.parent_id, issue_id=issue.id)
 
     old_status = issue.status
     nullable_fields = {
@@ -2439,7 +2368,7 @@ def update_issue(
         )
 
     if payload.label_ids is not None:
-        _set_issue_labels(db, issue, payload.label_ids, project)
+        _set_issue_labels(db, issue, payload.label_ids, task_list)
         _log_issue_activity(
             db,
             issue.id,
@@ -2450,7 +2379,7 @@ def update_issue(
         )
 
     if payload.status is not None and payload.status != old_status and payload.board_position is None:
-        issue.board_position = _next_issue_board_position(db, issue.project_id, payload.status)
+        issue.board_position = _next_issue_board_position(db, issue.list_id, payload.status)
 
     # Notification triggers
     ref = _issue_reference(issue)
@@ -2473,7 +2402,7 @@ def update_issue(
     issue = db.scalar(
         select(Issue)
         .options(
-            selectinload(Issue.project),
+            selectinload(Issue.task_list),
             selectinload(Issue.milestone),
             selectinload(Issue.assignee),
             selectinload(Issue.reporter),
@@ -2488,29 +2417,24 @@ def update_issue(
     return _serialize_issue(issue)
 
 
-@router.patch(
-    "/projects/{project_id}/issues/bulk",
-    response_model=BulkUpdateResponse,
-    include_in_schema=False,
-)
-@router.patch("/lists/{project_id}/issues/bulk", response_model=BulkUpdateResponse)
+@router.patch("/lists/{list_id}/issues/bulk", response_model=BulkUpdateResponse)
 def bulk_update_issues(
-    project_id: str,
+    list_id: str,
     payload: BulkUpdateRequest,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
 ) -> BulkUpdateResponse:
-    project, _role = _ensure_project_editor(db, current_user, project_id)
+    task_list, _role = _ensure_list_editor(db, current_user, list_id)
     issue_map = {
         issue.id: issue
         for issue in db.scalars(
             select(Issue)
             .options(
-                selectinload(Issue.project),
+                selectinload(Issue.task_list),
                 selectinload(Issue.label_links).selectinload(IssueLabel.label),
                 selectinload(Issue.assignee),
             )
-            .where(Issue.id.in_(payload.issue_ids), Issue.project_id == project_id)
+            .where(Issue.id.in_(payload.issue_ids), Issue.list_id == list_id)
         )
     }
     ordered_issues = [issue_map[issue_id] for issue_id in payload.issue_ids if issue_id in issue_map]
@@ -2535,11 +2459,11 @@ def bulk_update_issues(
                     pass
         return BulkUpdateResponse(updated_count=0, deleted_count=len(ordered_issues))
 
-    label_map = {label.id: label for label in project.labels}
+    label_map = {label.id: label for label in task_list.labels}
     updated = 0
     next_position = None
     if payload.status is not None:
-        next_position = _next_issue_board_position(db, project_id, payload.status)
+        next_position = _next_issue_board_position(db, list_id, payload.status)
 
     for issue in ordered_issues:
         changed = False
@@ -2555,7 +2479,7 @@ def bulk_update_issues(
             issue.priority = payload.priority
             changed = True
         if "assignee_id" in payload.model_fields_set and payload.assignee_id != issue.assignee_id:
-            _validate_issue_assignee(db, project, payload.assignee_id)
+            _validate_issue_assignee(db, task_list, payload.assignee_id)
             old_name = getattr(issue.assignee, "full_name", "Unassigned")
             issue.assignee_id = payload.assignee_id
             _log_issue_activity(db, issue.id, current_user.id, "updated", f"{current_user.full_name} updated assignee.", field_name="assignee", from_value=old_name, to_value=payload.assignee_id or "Unassigned")
@@ -2697,14 +2621,18 @@ def create_dependency(
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
 ) -> DependencyItem:
-    predecessor_issue, predecessor_project = _get_issue_for_user(db, current_user, payload.predecessor_id, require_editor=True)
-    successor_issue, successor_project = _get_issue_for_user(db, current_user, payload.successor_id, require_editor=True)
-    if predecessor_project.id != successor_project.id:
-        raise HTTPException(status_code=400, detail="Dependencies must stay within the same project.")
+    predecessor_issue, predecessor_task_list = _get_issue_for_user(
+        db, current_user, payload.predecessor_id, require_editor=True
+    )
+    successor_issue, successor_task_list = _get_issue_for_user(
+        db, current_user, payload.successor_id, require_editor=True
+    )
+    if predecessor_task_list.id != successor_task_list.id:
+        raise HTTPException(status_code=400, detail="Dependencies must stay within the same list.")
 
     dependency = ScheduleDependency(
         id=new_id(),
-        project_id=predecessor_project.id,
+        list_id=predecessor_task_list.id,
         predecessor_kind=payload.predecessor_kind,
         predecessor_id=predecessor_issue.id,
         successor_kind=payload.successor_kind,
@@ -2739,7 +2667,7 @@ def delete_dependency(
     dependency = db.scalar(select(ScheduleDependency).where(ScheduleDependency.id == dependency_id))
     if dependency is None:
         raise HTTPException(status_code=404, detail="Dependency not found.")
-    _ensure_project_editor(db, current_user, dependency.project_id)
+    _ensure_list_editor(db, current_user, dependency.list_id)
     db.delete(dependency)
     db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
@@ -2747,24 +2675,24 @@ def delete_dependency(
 
 @router.get("/dashboard/summary", response_model=DashboardSummaryResponse)
 def get_dashboard_summary(
-    project_id: str | None = None,
+    list_id: str | None = None,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
 ) -> DashboardSummaryResponse:
-    projects = list(
+    task_lists = list(
         db.scalars(
-            _accessible_projects_query(db, current_user).options(
-                selectinload(Project.milestones).selectinload(Milestone.issues),
-                selectinload(Project.issues)
+            _accessible_task_lists_query(db, current_user).options(
+                selectinload(TaskList.milestones).selectinload(Milestone.issues),
+                selectinload(TaskList.issues)
                 .selectinload(Issue.comments),
-                selectinload(Project.issues).selectinload(Issue.assignee),
-                selectinload(Project.issues).selectinload(Issue.reporter),
+                selectinload(TaskList.issues).selectinload(Issue.assignee),
+                selectinload(TaskList.issues).selectinload(Issue.reporter),
             )
         )
     )
-    if project_id:
-        projects = [project for project in projects if project.id == project_id]
-    issues = [issue for project in projects for issue in project.issues if not issue.archived]
+    if list_id:
+        task_lists = [task_list for task_list in task_lists if task_list.id == list_id]
+    issues = [issue for task_list in task_lists for issue in task_list.issues if not issue.archived]
     active_issues = [issue for issue in issues if issue.status not in {"done", "canceled"}]
     overdue_issues = [
         issue
@@ -2773,8 +2701,8 @@ def get_dashboard_summary(
     ]
     milestone_due_soon_count = sum(
         1
-        for project in projects
-        for milestone in project.milestones
+        for task_list in task_lists
+        for milestone in task_list.milestones
         if milestone.due_date is not None and milestone.due_date <= date.today() + timedelta(days=14)
     )
 
@@ -2799,8 +2727,8 @@ def get_dashboard_summary(
         db.scalars(
             select(IssueActivityLog)
             .join(Issue, Issue.id == IssueActivityLog.issue_id)
-            .options(selectinload(IssueActivityLog.actor), selectinload(IssueActivityLog.issue).selectinload(Issue.project))
-            .where(Issue.project_id.in_([project.id for project in projects] or ["__none__"]))
+            .options(selectinload(IssueActivityLog.actor), selectinload(IssueActivityLog.issue).selectinload(Issue.task_list))
+            .where(Issue.list_id.in_([task_list.id for task_list in task_lists] or ["__none__"]))
             .order_by(IssueActivityLog.created_at.desc())
             .limit(8)
         )
@@ -2817,9 +2745,9 @@ def get_dashboard_summary(
         for log in recent_logs
     ]
 
-    project_cards = []
-    for project in projects:
-        issue_progress_scope = [issue for issue in project.issues if not issue.archived]
+    list_cards = []
+    for task_list in task_lists:
+        issue_progress_scope = [issue for issue in task_list.issues if not issue.archived]
         open_issue_count = sum(
             1 for issue in issue_progress_scope if issue.status not in {"done", "canceled"}
         )
@@ -2835,11 +2763,11 @@ def get_dashboard_summary(
             for issue in issue_progress_scope
             if issue.due_date is not None and issue.status not in {"done", "canceled"}
         )
-        project_cards.append(
-            DashboardProjectItem(
-                project_id=project.id,
-                key=project.key,
-                name=project.name,
+        list_cards.append(
+            DashboardTaskListItem(
+                list_id=task_list.id,
+                key=task_list.key,
+                name=task_list.name,
                 progress=_calculate_progress(issue_progress_scope),
                 open_issue_count=open_issue_count,
                 overdue_issue_count=overdue_issue_count,
@@ -2848,14 +2776,14 @@ def get_dashboard_summary(
         )
 
     return DashboardSummaryResponse(
-        project_count=len(projects),
+        list_count=len(task_lists),
         active_issue_count=len(active_issues),
         overdue_issue_count=len(overdue_issues),
         my_issue_count=sum(1 for issue in active_issues if issue.assignee_id == current_user.id),
         milestone_due_soon_count=milestone_due_soon_count,
         status_counts=status_counts,
         priority_counts=priority_counts,
-        projects=project_cards,
+        lists=list_cards,
         recent_activity=recent_activity,
     )
 
@@ -2874,7 +2802,7 @@ async def upload_attachment(
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
 ) -> AttachmentItem:
-    issue, project = _get_issue_for_user(db, current_user, issue_id, require_editor=True)
+    issue, task_list = _get_issue_for_user(db, current_user, issue_id, require_editor=True)
     data = await file.read()
     if len(data) > MAX_UPLOAD_SIZE:
         raise HTTPException(status_code=413, detail="File size exceeds 50 MB limit.")
@@ -2882,7 +2810,7 @@ async def upload_attachment(
     settings = get_settings()
     client = get_minio_client()
     attachment_id = new_id()
-    storage_key = f"pms/{project.id}/{issue.id}/{attachment_id}/{file.filename}"
+    storage_key = f"pms/{task_list.id}/{issue.id}/{attachment_id}/{file.filename}"
     client.put_object(
         settings.minio_bucket,
         storage_key,
@@ -2944,11 +2872,11 @@ def delete_attachment(
     current_user: User = Depends(require_current_user),
 ) -> Response:
     attachment = db.scalar(
-        select(Attachment).options(selectinload(Attachment.issue).selectinload(Issue.project)).where(Attachment.id == attachment_id)
+        select(Attachment).options(selectinload(Attachment.issue).selectinload(Issue.task_list)).where(Attachment.id == attachment_id)
     )
     if attachment is None:
         raise HTTPException(status_code=404, detail="Attachment not found.")
-    _ensure_project_editor(db, current_user, attachment.issue.project_id)
+    _ensure_list_editor(db, current_user, attachment.issue.list_id)
 
     settings = get_settings()
     client = get_minio_client()
@@ -3103,12 +3031,12 @@ def update_checklist_item(
 ) -> ChecklistItemResponse:
     item = db.scalar(
         select(ChecklistItem)
-        .options(selectinload(ChecklistItem.issue).selectinload(Issue.project))
+        .options(selectinload(ChecklistItem.issue).selectinload(Issue.task_list))
         .where(ChecklistItem.id == item_id)
     )
     if item is None:
         raise HTTPException(status_code=404, detail="Checklist item not found.")
-    _ensure_project_editor(db, current_user, item.issue.project_id)
+    _ensure_list_editor(db, current_user, item.issue.list_id)
 
     if payload.text is not None:
         item.text = payload.text
@@ -3144,12 +3072,12 @@ def delete_checklist_item(
 ) -> Response:
     item = db.scalar(
         select(ChecklistItem)
-        .options(selectinload(ChecklistItem.issue).selectinload(Issue.project))
+        .options(selectinload(ChecklistItem.issue).selectinload(Issue.task_list))
         .where(ChecklistItem.id == item_id)
     )
     if item is None:
         raise HTTPException(status_code=404, detail="Checklist item not found.")
-    _ensure_project_editor(db, current_user, item.issue.project_id)
+    _ensure_list_editor(db, current_user, item.issue.list_id)
     _log_issue_activity(
         db,
         item.issue_id,
@@ -3233,12 +3161,12 @@ def update_time_entry(
 ) -> TimeEntryItem:
     entry = db.scalar(
         select(TimeEntry)
-        .options(selectinload(TimeEntry.issue).selectinload(Issue.project), selectinload(TimeEntry.user))
+        .options(selectinload(TimeEntry.issue).selectinload(Issue.task_list), selectinload(TimeEntry.user))
         .where(TimeEntry.id == entry_id)
     )
     if entry is None:
         raise HTTPException(status_code=404, detail="Time entry not found.")
-    _ensure_project_editor(db, current_user, entry.issue.project_id)
+    _ensure_list_editor(db, current_user, entry.issue.list_id)
 
     if payload.duration_minutes is not None:
         entry.duration_minutes = payload.duration_minutes
@@ -3268,12 +3196,12 @@ def delete_time_entry(
 ) -> Response:
     entry = db.scalar(
         select(TimeEntry)
-        .options(selectinload(TimeEntry.issue).selectinload(Issue.project))
+        .options(selectinload(TimeEntry.issue).selectinload(Issue.task_list))
         .where(TimeEntry.id == entry_id)
     )
     if entry is None:
         raise HTTPException(status_code=404, detail="Time entry not found.")
-    _ensure_project_editor(db, current_user, entry.issue.project_id)
+    _ensure_list_editor(db, current_user, entry.issue.list_id)
     _log_issue_activity(
         db,
         entry.issue_id,
@@ -3286,15 +3214,15 @@ def delete_time_entry(
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
-# ── Project Statuses (Custom Workflow) ──────────────────────────────
+# ── Task List Statuses (Custom Workflow) ─────────────────────────────
 
 
 def _slugify(name: str) -> str:
     return name.strip().lower().replace(" ", "_")[:40]
 
 
-def _serialize_status(s: ProjectStatus) -> ProjectStatusItem:
-    return ProjectStatusItem(
+def _serialize_status(s: TaskListStatus) -> TaskListStatusItem:
+    return TaskListStatusItem(
         id=s.id,
         slug=s.slug,
         name=s.name,
@@ -3304,70 +3232,59 @@ def _serialize_status(s: ProjectStatus) -> ProjectStatusItem:
     )
 
 
-@router.get(
-    "/projects/{project_id}/statuses",
-    response_model=ProjectStatusListResponse,
-    include_in_schema=False,
-)
-@router.get("/lists/{project_id}/statuses", response_model=ProjectStatusListResponse)
-def list_project_statuses(
-    project_id: str,
+@router.get("/lists/{list_id}/statuses", response_model=TaskListStatusesResponse)
+def list_task_list_statuses(
+    list_id: str,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-) -> ProjectStatusListResponse:
-    project, _ = _ensure_project_access(db, current_user, project_id)
+) -> TaskListStatusesResponse:
+    task_list, _ = _ensure_list_member(db, current_user, list_id)
     statuses = list(
         db.scalars(
-            select(ProjectStatus)
-            .where(ProjectStatus.project_id == project_id)
-            .order_by(ProjectStatus.sort_order)
+            select(TaskListStatus)
+            .where(TaskListStatus.list_id == list_id)
+            .order_by(TaskListStatus.sort_order)
         )
     )
-    # Auto-seed default statuses for existing projects that don't have any
+    # Auto-seed default statuses for existing task lists that don't have any
     if not statuses:
-        _create_default_statuses(db, project_id)
+        _create_default_statuses(db, list_id)
         db.commit()
         statuses = list(
             db.scalars(
-                select(ProjectStatus)
-                .where(ProjectStatus.project_id == project_id)
-                .order_by(ProjectStatus.sort_order)
+                select(TaskListStatus)
+                .where(TaskListStatus.list_id == list_id)
+                .order_by(TaskListStatus.sort_order)
             )
         )
-    return ProjectStatusListResponse(items=[_serialize_status(s) for s in statuses])
+    return TaskListStatusesResponse(items=[_serialize_status(s) for s in statuses])
 
 
 @router.post(
-    "/projects/{project_id}/statuses",
-    response_model=ProjectStatusItem,
-    status_code=status.HTTP_201_CREATED,
-    include_in_schema=False,
-)
-@router.post(
-    "/lists/{project_id}/statuses",
-    response_model=ProjectStatusItem,
+    "/lists/{list_id}/statuses",
+    response_model=TaskListStatusItem,
     status_code=status.HTTP_201_CREATED,
 )
-def create_project_status(
-    project_id: str,
-    payload: ProjectStatusCreateRequest,
+def create_task_list_status(
+    list_id: str,
+    payload: TaskListStatusCreateRequest,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-) -> ProjectStatusItem:
-    _ensure_project_owner(db, current_user, project_id)
+) -> TaskListStatusItem:
+    _ensure_list_owner(db, current_user, list_id)
     slug = _slugify(payload.name)
     existing = db.scalar(
-        select(ProjectStatus).where(
-            ProjectStatus.project_id == project_id,
-            ProjectStatus.slug == slug,
+        select(TaskListStatus).where(
+            TaskListStatus.list_id == list_id,
+            TaskListStatus.slug == slug,
         )
     )
     if existing is not None:
         raise HTTPException(status_code=409, detail="Status with this name already exists.")
 
-    ps = ProjectStatus(
+    ps = TaskListStatus(
         id=new_id(),
-        project_id=project_id,
+        list_id=list_id,
         slug=slug,
         name=payload.name.strip(),
         color=payload.color,
@@ -3380,25 +3297,25 @@ def create_project_status(
     return _serialize_status(ps)
 
 
-@router.patch("/project-statuses/{status_id}", response_model=ProjectStatusItem)
-def update_project_status(
+@router.patch("/task-list-statuses/{status_id}", response_model=TaskListStatusItem)
+def update_task_list_status(
     status_id: str,
-    payload: ProjectStatusUpdateRequest,
+    payload: TaskListStatusUpdateRequest,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
-) -> ProjectStatusItem:
-    ps = db.scalar(select(ProjectStatus).where(ProjectStatus.id == status_id))
+) -> TaskListStatusItem:
+    ps = db.scalar(select(TaskListStatus).where(TaskListStatus.id == status_id))
     if ps is None:
         raise HTTPException(status_code=404, detail="Status not found.")
-    _ensure_project_owner(db, current_user, ps.project_id)
+    _ensure_list_owner(db, current_user, ps.list_id)
 
     if payload.name is not None:
         normalized_name = payload.name.strip()
         existing = db.scalar(
-            select(ProjectStatus).where(
-                ProjectStatus.project_id == ps.project_id,
-                ProjectStatus.id != ps.id,
-                func.lower(ProjectStatus.name) == normalized_name.lower(),
+            select(TaskListStatus).where(
+                TaskListStatus.list_id == ps.list_id,
+                TaskListStatus.id != ps.id,
+                func.lower(TaskListStatus.name) == normalized_name.lower(),
             )
         )
         if existing is not None:
@@ -3416,22 +3333,22 @@ def update_project_status(
     return _serialize_status(ps)
 
 
-@router.delete("/project-statuses/{status_id}")
-def delete_project_status(
+@router.delete("/task-list-statuses/{status_id}")
+def delete_task_list_status(
     status_id: str,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
 ) -> Response:
-    ps = db.scalar(select(ProjectStatus).where(ProjectStatus.id == status_id))
+    ps = db.scalar(select(TaskListStatus).where(TaskListStatus.id == status_id))
     if ps is None:
         raise HTTPException(status_code=404, detail="Status not found.")
-    _ensure_project_owner(db, current_user, ps.project_id)
+    _ensure_list_owner(db, current_user, ps.list_id)
 
     # Prevent deleting if issues use this status
     count = db.scalar(
         select(func.count())
         .select_from(Issue)
-        .where(Issue.project_id == ps.project_id, Issue.status == ps.slug)
+        .where(Issue.list_id == ps.list_id, Issue.status == ps.slug)
     )
     if count and count > 0:
         raise HTTPException(
@@ -3447,21 +3364,20 @@ def delete_project_status(
 # ── CSV Export ──────────────────────────────────────────────────────
 
 
-@router.get("/projects/{project_id}/export", include_in_schema=False)
-@router.get("/lists/{project_id}/export")
-def export_project_issues(
-    project_id: str,
+@router.get("/lists/{list_id}/export")
+def export_task_list_issues(
+    list_id: str,
     format: str = Query(default="csv"),
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
 ) -> Response:
-    project, _ = _ensure_project_access(db, current_user, project_id)
+    task_list, _ = _ensure_list_member(db, current_user, list_id)
 
     issues = list(
         db.scalars(
             select(Issue)
             .options(
-                selectinload(Issue.project),
+                selectinload(Issue.task_list),
                 selectinload(Issue.assignee),
                 selectinload(Issue.reporter),
                 selectinload(Issue.milestone),
@@ -3471,7 +3387,7 @@ def export_project_issues(
                 selectinload(Issue.time_entries),
                 selectinload(Issue.subtasks),
             )
-            .where(Issue.project_id == project_id)
+            .where(Issue.list_id == list_id)
             .order_by(Issue.issue_number)
         )
     )
@@ -3487,7 +3403,7 @@ def export_project_issues(
         "Created", "Updated",
     ])
     for issue in issues:
-        ref = f"{project.key}-{issue.issue_number}"
+        ref = f"{task_list.key}-{issue.issue_number}"
         label_str = ", ".join(link.label.name for link in issue.label_links)
         checklist_str = f"{sum(1 for c in issue.checklist_items if c.completed)}/{len(issue.checklist_items)}" if issue.checklist_items else ""
         writer.writerow([
@@ -3514,7 +3430,7 @@ def export_project_issues(
         content=content,
         media_type="text/csv",
         headers={
-            "Content-Disposition": f'attachment; filename="{project.key}_issues.csv"',
+            "Content-Disposition": f'attachment; filename="{task_list.key}_issues.csv"',
         },
     )
 
@@ -3525,7 +3441,7 @@ def export_project_issues(
 def _serialize_template(t: TaskTemplate) -> TaskTemplateItem:
     return TaskTemplateItem(
         id=t.id,
-        project_id=t.project_id,
+        list_id=t.list_id,
         name=t.name,
         description=t.description,
         default_status=t.default_status,
@@ -3535,22 +3451,17 @@ def _serialize_template(t: TaskTemplate) -> TaskTemplateItem:
     )
 
 
-@router.get(
-    "/projects/{project_id}/templates",
-    response_model=TaskTemplateListResponse,
-    include_in_schema=False,
-)
-@router.get("/lists/{project_id}/templates", response_model=TaskTemplateListResponse)
+@router.get("/lists/{list_id}/templates", response_model=TaskTemplateListResponse)
 def list_templates(
-    project_id: str,
+    list_id: str,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
 ) -> TaskTemplateListResponse:
-    _ensure_project_access(db, current_user, project_id)
+    _ensure_list_member(db, current_user, list_id)
     templates = list(
         db.scalars(
             select(TaskTemplate)
-            .where(TaskTemplate.project_id == project_id)
+            .where(TaskTemplate.list_id == list_id)
             .order_by(TaskTemplate.created_at.desc())
         )
     )
@@ -3558,26 +3469,20 @@ def list_templates(
 
 
 @router.post(
-    "/projects/{project_id}/templates",
-    response_model=TaskTemplateItem,
-    status_code=status.HTTP_201_CREATED,
-    include_in_schema=False,
-)
-@router.post(
-    "/lists/{project_id}/templates",
+    "/lists/{list_id}/templates",
     response_model=TaskTemplateItem,
     status_code=status.HTTP_201_CREATED,
 )
 def create_template(
-    project_id: str,
+    list_id: str,
     payload: TaskTemplateCreateRequest,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
 ) -> TaskTemplateItem:
-    _ensure_project_editor(db, current_user, project_id)
+    _ensure_list_editor(db, current_user, list_id)
     t = TaskTemplate(
         id=new_id(),
-        project_id=project_id,
+        list_id=list_id,
         name=payload.name.strip(),
         description=payload.description.strip(),
         default_status=payload.default_status,
@@ -3600,7 +3505,7 @@ def update_template(
     t = db.scalar(select(TaskTemplate).where(TaskTemplate.id == template_id))
     if t is None:
         raise HTTPException(status_code=404, detail="Template not found.")
-    _ensure_project_editor(db, current_user, t.project_id)
+    _ensure_list_editor(db, current_user, t.list_id)
 
     if payload.name is not None:
         t.name = payload.name.strip()
@@ -3627,7 +3532,7 @@ def delete_template(
     t = db.scalar(select(TaskTemplate).where(TaskTemplate.id == template_id))
     if t is None:
         raise HTTPException(status_code=404, detail="Template not found.")
-    _ensure_project_editor(db, current_user, t.project_id)
+    _ensure_list_editor(db, current_user, t.list_id)
     db.delete(t)
     db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
@@ -3636,22 +3541,17 @@ def delete_template(
 # ── Custom Fields ───────────────────────────────────────────────────
 
 
-@router.get(
-    "/projects/{project_id}/custom-fields",
-    response_model=CustomFieldListResponse,
-    include_in_schema=False,
-)
-@router.get("/lists/{project_id}/custom-fields", response_model=CustomFieldListResponse)
+@router.get("/lists/{list_id}/custom-fields", response_model=CustomFieldListResponse)
 def list_custom_fields(
-    project_id: str,
+    list_id: str,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
 ) -> CustomFieldListResponse:
-    _ensure_project_access(db, current_user, project_id)
+    _ensure_list_member(db, current_user, list_id)
     fields = list(
         db.scalars(
             select(CustomField)
-            .where(CustomField.project_id == project_id)
+            .where(CustomField.list_id == list_id)
             .order_by(CustomField.sort_order)
         )
     )
@@ -3659,7 +3559,7 @@ def list_custom_fields(
         items=[
             CustomFieldItem(
                 id=f.id,
-                project_id=f.project_id,
+                list_id=f.list_id,
                 name=f.name,
                 field_type=f.field_type,
                 options=f.options,
@@ -3671,26 +3571,20 @@ def list_custom_fields(
 
 
 @router.post(
-    "/projects/{project_id}/custom-fields",
-    response_model=CustomFieldItem,
-    status_code=status.HTTP_201_CREATED,
-    include_in_schema=False,
-)
-@router.post(
-    "/lists/{project_id}/custom-fields",
+    "/lists/{list_id}/custom-fields",
     response_model=CustomFieldItem,
     status_code=status.HTTP_201_CREATED,
 )
 def create_custom_field(
-    project_id: str,
+    list_id: str,
     payload: CustomFieldCreateRequest,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
 ) -> CustomFieldItem:
-    _ensure_project_owner(db, current_user, project_id)
+    _ensure_list_owner(db, current_user, list_id)
     f = CustomField(
         id=new_id(),
-        project_id=project_id,
+        list_id=list_id,
         name=payload.name.strip(),
         field_type=payload.field_type,
         options=payload.options,
@@ -3700,7 +3594,7 @@ def create_custom_field(
     db.commit()
     db.refresh(f)
     return CustomFieldItem(
-        id=f.id, project_id=f.project_id, name=f.name,
+        id=f.id, list_id=f.list_id, name=f.name,
         field_type=f.field_type, options=f.options, sort_order=f.sort_order,
     )
 
@@ -3714,7 +3608,7 @@ def delete_custom_field(
     f = db.scalar(select(CustomField).where(CustomField.id == field_id))
     if f is None:
         raise HTTPException(status_code=404, detail="Custom field not found.")
-    _ensure_project_owner(db, current_user, f.project_id)
+    _ensure_list_owner(db, current_user, f.list_id)
     # Delete all values for this field
     for v in db.scalars(select(CustomFieldValue).where(CustomFieldValue.field_id == field_id)):
         db.delete(v)
@@ -3749,12 +3643,12 @@ def set_issue_custom_field_value(
     issue = db.scalar(select(Issue).where(Issue.id == issue_id))
     if issue is None:
         raise HTTPException(status_code=404, detail="Issue not found.")
-    _ensure_project_editor(db, current_user, issue.project_id)
+    _ensure_list_editor(db, current_user, issue.list_id)
 
-    # Validate field belongs to same project
+    # Validate field belongs to the same task list.
     field = db.scalar(select(CustomField).where(CustomField.id == payload.field_id))
-    if field is None or field.project_id != issue.project_id:
-        raise HTTPException(status_code=400, detail="Custom field does not belong to this project.")
+    if field is None or field.list_id != issue.list_id:
+        raise HTTPException(status_code=400, detail="Custom field does not belong to this list.")
 
     existing = db.scalar(
         select(CustomFieldValue).where(
@@ -3789,10 +3683,10 @@ def set_issue_assignees(
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
 ) -> list[IssueAssigneeItem]:
-    issue, project = _get_issue_for_user(db, current_user, issue_id, require_editor=True)
-    if project.team_id is None:
-        raise HTTPException(status_code=409, detail="Project space is not set.")
-    member_ids = _space_member_ids(db, project.team_id)
+    issue, task_list = _get_issue_for_user(db, current_user, issue_id, require_editor=True)
+    if task_list.team_id is None:
+        raise HTTPException(status_code=409, detail="Task list space is not set.")
+    member_ids = _space_member_ids(db, task_list.team_id)
 
     # Clear existing assignee links
     for link in list(issue.assignee_links):
@@ -3804,7 +3698,7 @@ def set_issue_assignees(
     validated_user_ids: list[str] = []
     for uid in payload.user_ids:
         if uid not in member_ids:
-            raise HTTPException(status_code=400, detail="Assignees must be project members.")
+            raise HTTPException(status_code=400, detail="Assignees must be task list members.")
         user = db.scalar(select(User).where(User.id == uid))
         if user is None:
             raise HTTPException(status_code=404, detail="User not found.")
@@ -3827,7 +3721,7 @@ class FolderItem(BaseModel):
     team_id: str | None
     name: str
     sort_order: int
-    project_count: int = 0
+    list_count: int = 0
 
 
 class FolderListResponse(BaseModel):
@@ -3863,22 +3757,22 @@ def list_folders(
             q = q.where(Folder.id == "__none__")
     folders = list(db.scalars(q))
 
-    # Count projects per folder
+    # Count task lists per folder.
     folder_ids = [f.id for f in folders]
-    project_counts: dict[str, int] = {}
+    list_counts: dict[str, int] = {}
     if folder_ids:
         for fid in folder_ids:
             cnt = db.scalar(
-                select(func.count()).select_from(Project).where(Project.folder_id == fid)
+                select(func.count()).select_from(TaskList).where(TaskList.folder_id == fid)
             )
-            project_counts[fid] = cnt or 0
+            list_counts[fid] = cnt or 0
 
     return FolderListResponse(
         items=[
             FolderItem(
                 id=f.id, team_id=f.team_id, name=f.name,
                 sort_order=f.sort_order,
-                project_count=project_counts.get(f.id, 0),
+                list_count=list_counts.get(f.id, 0),
             )
             for f in folders
         ]
@@ -3908,7 +3802,7 @@ def create_folder(
 
     # Auto-create a default list inside the new folder
     default_key = _unique_key(db, "List")
-    default_project = Project(
+    default_task_list = TaskList(
         id=new_id(),
         key=default_key,
         name="List",
@@ -3918,19 +3812,19 @@ def create_folder(
         folder_id=folder.id,
         created_by_id=current_user.id,
     )
-    db.add(default_project)
+    db.add(default_task_list)
     if not db.scalar(
         select(TeamMember.id).where(TeamMember.team_id == resolved_team_id, TeamMember.user_id == current_user.id)
     ):
         db.add(TeamMember(id=new_id(), team_id=resolved_team_id, user_id=current_user.id, role="owner"))
-    _create_default_statuses(db, default_project.id)
-    _create_default_labels(db, default_project.id)
+    _create_default_statuses(db, default_task_list.id)
+    _create_default_labels(db, default_task_list.id)
 
     db.commit()
     db.refresh(folder)
     return FolderItem(
         id=folder.id, team_id=folder.team_id, name=folder.name,
-        sort_order=folder.sort_order, project_count=1,
+        sort_order=folder.sort_order, list_count=1,
     )
 
 
@@ -3953,10 +3847,10 @@ def update_folder(
         folder.sort_order = payload.sort_order
     db.commit()
     db.refresh(folder)
-    cnt = db.scalar(select(func.count()).select_from(Project).where(Project.folder_id == folder_id)) or 0
+    cnt = db.scalar(select(func.count()).select_from(TaskList).where(TaskList.folder_id == folder_id)) or 0
     return FolderItem(
         id=folder.id, team_id=folder.team_id, name=folder.name,
-        sort_order=folder.sort_order, project_count=cnt,
+        sort_order=folder.sort_order, list_count=cnt,
     )
 
 
@@ -3972,8 +3866,8 @@ def delete_folder(
     if folder.team_id is None:
         raise HTTPException(status_code=409, detail="Folder space is not set.")
     _ensure_space_manager(db, current_user, folder.team_id)
-    # Unlink projects from this folder (don't delete them)
-    for p in db.scalars(select(Project).where(Project.folder_id == folder_id)):
+    # Unlink task lists from this folder without deleting them.
+    for p in db.scalars(select(TaskList).where(TaskList.folder_id == folder_id)):
         p.folder_id = None
     db.delete(folder)
     db.commit()

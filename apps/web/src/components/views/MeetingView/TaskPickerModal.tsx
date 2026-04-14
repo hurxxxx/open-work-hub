@@ -6,10 +6,10 @@ import { useAuth } from '@/src/domains/auth/auth-provider';
 import { hasWorkspaceMembership } from '@/src/domains/auth/auth-api';
 import { NoAccessNotice } from '@/src/components/common/NoAccessNotice';
 import {
-  listPmsProjects,
-  listProjectIssues,
+  listPmsTaskLists,
+  listTaskListIssues,
   type PmsIssue,
-  type PmsProject,
+  type PmsTaskList,
 } from '@/src/domains/pms/pms-api';
 
 interface TaskPickerModalProps {
@@ -29,8 +29,8 @@ export function TaskPickerModal({
 }: TaskPickerModalProps) {
   const { token, user } = useAuth();
   const canAccessPms = hasWorkspaceMembership(user, workspaceSlug);
-  const [projects, setProjects] = useState<PmsProject[]>([]);
-  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
+  const [taskLists, setTaskLists] = useState<PmsTaskList[]>([]);
+  const [selectedTaskListId, setSelectedTaskListId] = useState<string | null>(null);
   const [issues, setIssues] = useState<PmsIssue[]>([]);
   const [query, setQuery] = useState('');
   const [loading, setLoading] = useState(false);
@@ -42,24 +42,24 @@ export function TaskPickerModal({
     setQuery('');
     setError(null);
     setSubmittingId(null);
-    listPmsProjects(token, undefined, workspaceSlug)
+    listPmsTaskLists(token, undefined, workspaceSlug)
       .then((response) => {
-        setProjects(response.items);
+        setTaskLists(response.items);
         if (response.items.length > 0) {
-          setSelectedProjectId(response.items[0].id);
+          setSelectedTaskListId(response.items[0].id);
         }
       })
-      .catch((err: Error) => setError(err.message ?? '프로젝트 목록을 불러올 수 없습니다.'));
+      .catch((err: Error) => setError(err.message ?? '리스트 목록을 불러올 수 없습니다.'));
   }, [isOpen, token, canAccessPms, workspaceSlug]);
 
   useEffect(() => {
-    if (!isOpen || !token || !canAccessPms || !selectedProjectId) {
+    if (!isOpen || !token || !canAccessPms || !selectedTaskListId) {
       setIssues([]);
       return;
     }
     let cancelled = false;
     setLoading(true);
-    listProjectIssues(token, selectedProjectId, { archived_state: 'active' }, workspaceSlug)
+    listTaskListIssues(token, selectedTaskListId, { archived_state: 'active' }, workspaceSlug)
       .then((response) => {
         if (cancelled) return;
         setIssues(response.items);
@@ -75,7 +75,7 @@ export function TaskPickerModal({
     return () => {
       cancelled = true;
     };
-  }, [isOpen, token, canAccessPms, selectedProjectId, workspaceSlug]);
+  }, [isOpen, token, canAccessPms, selectedTaskListId, workspaceSlug]);
 
   const excludeSet = useMemo(() => new Set(excludeIssueIds), [excludeIssueIds]);
 
@@ -138,16 +138,16 @@ export function TaskPickerModal({
         {canAccessPms ? (
           <>
             <div className="space-y-1">
-              <label className="app-text-control-sm text-app-ink/70">프로젝트</label>
+              <label className="app-text-control-sm text-app-ink/70">리스트</label>
               <select
-                value={selectedProjectId ?? ''}
-                onChange={(e) => setSelectedProjectId(e.target.value || null)}
+                value={selectedTaskListId ?? ''}
+                onChange={(e) => setSelectedTaskListId(e.target.value || null)}
                 className="app-text-body w-full rounded-md border border-app-border bg-app-surface-sidebar px-3 py-2 text-app-ink focus:border-app-accent focus:outline-none"
               >
-                {projects.length === 0 ? <option value="">프로젝트 없음</option> : null}
-                {projects.map((project) => (
-                  <option key={project.id} value={project.id}>
-                    {project.key} · {project.name}
+                {taskLists.length === 0 ? <option value="">리스트 없음</option> : null}
+                {taskLists.map((taskList) => (
+                  <option key={taskList.id} value={taskList.id}>
+                    {taskList.key} · {taskList.name}
                   </option>
                 ))}
               </select>

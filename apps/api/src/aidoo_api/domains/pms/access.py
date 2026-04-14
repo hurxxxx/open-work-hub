@@ -11,7 +11,7 @@ from aidoo_api.domains.auth.access import (
     resolve_team_role,
 )
 from aidoo_api.domains.auth.models import Team, User, Workspace
-from aidoo_api.domains.pms.models import Issue, IssueUserAccess, Project
+from aidoo_api.domains.pms.models import Issue, IssueUserAccess, TaskList
 
 
 def _utcnow() -> datetime:
@@ -47,22 +47,22 @@ def _load_active_team(db: Session, team_id: str | None) -> Team | None:
     return db.scalar(query)
 
 
-def _load_list(db: Session, list_id: str) -> Project | None:
+def _load_list(db: Session, list_id: str) -> TaskList | None:
     return db.scalar(
-        select(Project)
+        select(TaskList)
         .options(
-            selectinload(Project.milestones),
-            selectinload(Project.statuses),
-            joinedload(Project.folder),
+            selectinload(TaskList.milestones),
+            selectinload(TaskList.statuses),
+            joinedload(TaskList.folder),
         )
-        .where(Project.id == list_id)
+        .where(TaskList.id == list_id)
     )
 
 
 def _load_issue(db: Session, issue_or_id: Issue | str) -> Issue:
     if isinstance(issue_or_id, Issue):
         return issue_or_id
-    issue = db.scalar(select(Issue).options(selectinload(Issue.project)).where(Issue.id == issue_or_id))
+    issue = db.scalar(select(Issue).options(selectinload(Issue.task_list)).where(Issue.id == issue_or_id))
     if issue is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -72,45 +72,45 @@ def _load_issue(db: Session, issue_or_id: Issue | str) -> Issue:
 
 
 def has_list_access(db: Session, user: User, list_id: str) -> bool:
-    project = _load_list(db, list_id)
-    if project is None:
+    task_list = _load_list(db, list_id)
+    if task_list is None:
         return False
-    if project.team_id is None:
+    if task_list.team_id is None:
         return False
-    team = _load_active_team(db, project.team_id)
+    team = _load_active_team(db, task_list.team_id)
     if team is None:
         return False
     return resolve_team_role(db, user, team) is not None
 
 
-def _ensure_list_member(db: Session, user: User, list_id: str) -> tuple[Project, str]:
-    project = _load_list(db, list_id)
-    if project is None:
-        raise HTTPException(status_code=404, detail="Project not found.")
-    if project.team_id is None:
-        raise HTTPException(status_code=409, detail="Project space is not set.")
+def _ensure_list_member(db: Session, user: User, list_id: str) -> tuple[TaskList, str]:
+    task_list = _load_list(db, list_id)
+    if task_list is None:
+        raise HTTPException(status_code=404, detail="TaskList not found.")
+    if task_list.team_id is None:
+        raise HTTPException(status_code=409, detail="Task list space is not set.")
 
-    team = _load_active_team(db, project.team_id)
+    team = _load_active_team(db, task_list.team_id)
     if team is None:
-        raise HTTPException(status_code=404, detail="Project not found.")
+        raise HTTPException(status_code=404, detail="TaskList not found.")
     role = resolve_team_role(db, user, team)
     if role is None:
-        raise HTTPException(status_code=403, detail="Project access required.")
-    return project, role
+        raise HTTPException(status_code=403, detail="TaskList access required.")
+    return task_list, role
 
 
-def _ensure_list_owner(db: Session, user: User, list_id: str) -> tuple[Project, str]:
-    project, role = _ensure_list_member(db, user, list_id)
+def _ensure_list_owner(db: Session, user: User, list_id: str) -> tuple[TaskList, str]:
+    task_list, role = _ensure_list_member(db, user, list_id)
     if role not in {"owner", "admin"}:
-        raise HTTPException(status_code=403, detail="Project owner/admin access required.")
-    return project, role
+        raise HTTPException(status_code=403, detail="TaskList owner/admin access required.")
+    return task_list, role
 
 
-def _ensure_list_editor(db: Session, user: User, list_id: str) -> tuple[Project, str]:
-    project, role = _ensure_list_member(db, user, list_id)
+def _ensure_list_editor(db: Session, user: User, list_id: str) -> tuple[TaskList, str]:
+    task_list, role = _ensure_list_member(db, user, list_id)
     if role == "viewer":
-        raise HTTPException(status_code=403, detail="Viewer role cannot modify project data.")
-    return project, role
+        raise HTTPException(status_code=403, detail="Viewer role cannot modify task list data.")
+    return task_list, role
 
 
 def _active_issue_grant(db: Session, *, issue_id: str, user_id: str) -> IssueUserAccess | None:
