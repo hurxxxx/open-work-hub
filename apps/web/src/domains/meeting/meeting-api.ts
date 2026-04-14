@@ -110,6 +110,8 @@ export interface MeetingDetail {
   workspace_id: string;
   organizer_id: string;
   organizer_name: string;
+  notes_doc_id: string | null;
+  notes_page_id: string | null;
   title: string;
   agenda: string;
   start_at: string;
@@ -190,8 +192,13 @@ export class MeetingApiError extends Error {
   }
 }
 
-async function request<T>(path: string, token: string, init: RequestInit = {}): Promise<T> {
-  const response = await fetch(resolveMeetingPath(path), {
+async function request<T>(
+  path: string,
+  token: string,
+  workspaceSlug: string,
+  init: RequestInit = {},
+): Promise<T> {
+  const response = await fetch(resolveMeetingPath(path, workspaceSlug), {
     ...init,
     headers: {
       Accept: 'application/json',
@@ -220,9 +227,10 @@ async function request<T>(path: string, token: string, init: RequestInit = {}): 
 async function multipartRequest<T>(
   path: string,
   token: string,
+  workspaceSlug: string,
   init: RequestInit = {},
 ): Promise<T> {
-  const response = await fetch(resolveMeetingPath(path), {
+  const response = await fetch(resolveMeetingPath(path, workspaceSlug), {
     ...init,
     headers: {
       Accept: 'application/json',
@@ -244,12 +252,13 @@ async function multipartRequest<T>(
   return payload as T;
 }
 
-function resolveMeetingPath(path: string): string {
-  return rewriteWorkspaceApiPath(path);
+function resolveMeetingPath(path: string, workspaceSlug: string): string {
+  return rewriteWorkspaceApiPath(path, workspaceSlug);
 }
 
 export function listMeetings(
   token: string,
+  workspaceSlug: string,
   options: { scope?: MeetingScope; from?: string; to?: string } = {},
 ): Promise<MeetingListResponse> {
   const params = new URLSearchParams();
@@ -260,103 +269,154 @@ export function listMeetings(
   return request<MeetingListResponse>(
     `/api/v1/meeting/meetings${query ? `?${query}` : ''}`,
     token,
+    workspaceSlug,
   );
 }
 
-export function getMeeting(token: string, meetingId: string): Promise<MeetingDetail> {
-  return request<MeetingDetail>(`/api/v1/meeting/meetings/${meetingId}`, token);
+export function getMeeting(token: string, workspaceSlug: string, meetingId: string): Promise<MeetingDetail> {
+  return request<MeetingDetail>(`/api/v1/meeting/meetings/${meetingId}`, token, workspaceSlug);
 }
 
 export function createMeeting(
   token: string,
+  workspaceSlug: string,
   payload: MeetingCreateInput,
 ): Promise<MeetingDetail> {
-  return request<MeetingDetail>('/api/v1/meeting/meetings', token, {
-    method: 'POST',
-    body: JSON.stringify(payload),
-  });
+  return request<MeetingDetail>(
+    '/api/v1/meeting/meetings',
+    token,
+    workspaceSlug,
+    {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    },
+  );
 }
 
 export function updateMeeting(
   token: string,
+  workspaceSlug: string,
   meetingId: string,
   payload: MeetingUpdateInput,
 ): Promise<MeetingDetail> {
-  return request<MeetingDetail>(`/api/v1/meeting/meetings/${meetingId}`, token, {
-    method: 'PATCH',
-    body: JSON.stringify(payload),
-  });
+  return request<MeetingDetail>(
+    `/api/v1/meeting/meetings/${meetingId}`,
+    token,
+    workspaceSlug,
+    {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    },
+  );
 }
 
-export function deleteMeeting(token: string, meetingId: string): Promise<void> {
-  return request<void>(`/api/v1/meeting/meetings/${meetingId}`, token, {
-    method: 'DELETE',
-  });
+export function ensureMeetingNotes(
+  token: string,
+  workspaceSlug: string,
+  meetingId: string,
+): Promise<MeetingDetail> {
+  return request<MeetingDetail>(
+    `/api/v1/meeting/meetings/${meetingId}/notes/ensure`,
+    token,
+    workspaceSlug,
+    { method: 'POST' },
+  );
+}
+
+export function deleteMeeting(token: string, workspaceSlug: string, meetingId: string): Promise<void> {
+  return request<void>(
+    `/api/v1/meeting/meetings/${meetingId}`,
+    token,
+    workspaceSlug,
+    {
+      method: 'DELETE',
+    },
+  );
 }
 
 export function attachTaskToMeeting(
   token: string,
+  workspaceSlug: string,
   meetingId: string,
   issueId: string,
 ): Promise<MeetingDetail> {
-  return request<MeetingDetail>(`/api/v1/meeting/meetings/${meetingId}/tasks`, token, {
-    method: 'POST',
-    body: JSON.stringify({ issue_id: issueId }),
-  });
+  return request<MeetingDetail>(
+    `/api/v1/meeting/meetings/${meetingId}/tasks`,
+    token,
+    workspaceSlug,
+    {
+      method: 'POST',
+      body: JSON.stringify({ issue_id: issueId }),
+    },
+  );
 }
 
 export function detachTaskFromMeeting(
   token: string,
+  workspaceSlug: string,
   meetingId: string,
   issueId: string,
 ): Promise<MeetingDetail> {
   return request<MeetingDetail>(
     `/api/v1/meeting/meetings/${meetingId}/tasks/${issueId}`,
     token,
+    workspaceSlug,
     { method: 'DELETE' },
   );
 }
 
 export function attachDocToMeeting(
   token: string,
+  workspaceSlug: string,
   meetingId: string,
   docId: string,
 ): Promise<MeetingDetail> {
-  return request<MeetingDetail>(`/api/v1/meeting/meetings/${meetingId}/docs`, token, {
-    method: 'POST',
-    body: JSON.stringify({ doc_id: docId }),
-  });
+  return request<MeetingDetail>(
+    `/api/v1/meeting/meetings/${meetingId}/docs`,
+    token,
+    workspaceSlug,
+    {
+      method: 'POST',
+      body: JSON.stringify({ doc_id: docId }),
+    },
+  );
 }
 
 export function detachDocFromMeeting(
   token: string,
+  workspaceSlug: string,
   meetingId: string,
   docId: string,
 ): Promise<MeetingDetail> {
   return request<MeetingDetail>(
     `/api/v1/meeting/meetings/${meetingId}/docs/${docId}`,
     token,
+    workspaceSlug,
     { method: 'DELETE' },
   );
 }
 
 export async function uploadMeetingFile(
   token: string,
+  workspaceSlug: string,
   meetingId: string,
   file: File,
 ): Promise<MeetingDetail> {
   const formData = new FormData();
   formData.append('file', file);
-  const response = await fetch(resolveMeetingPath(`/api/v1/meeting/meetings/${meetingId}/files`), {
-    method: 'POST',
-    headers: {
-      // Do not set Content-Type — the browser fills in the multipart boundary.
-      Accept: 'application/json',
-      Authorization: `Bearer ${token}`,
+  const response = await fetch(
+    resolveMeetingPath(`/api/v1/meeting/meetings/${meetingId}/files`, workspaceSlug),
+    {
+      method: 'POST',
+      headers: {
+        // Do not set Content-Type — the browser fills in the multipart boundary.
+        Accept: 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: formData,
+      cache: 'no-store',
     },
-    body: formData,
-    cache: 'no-store',
-  });
+  );
   const payload = await response.json().catch(() => null);
   if (!response.ok) {
     throw new MeetingApiError(
@@ -369,24 +429,28 @@ export async function uploadMeetingFile(
 
 export function deleteMeetingFile(
   token: string,
+  workspaceSlug: string,
   meetingId: string,
   fileId: string,
 ): Promise<MeetingDetail> {
   return request<MeetingDetail>(
     `/api/v1/meeting/meetings/${meetingId}/files/${fileId}`,
     token,
+    workspaceSlug,
     { method: 'DELETE' },
   );
 }
 
 export function initRecordingStaging(
   token: string,
+  workspaceSlug: string,
   meetingId: string,
   payload: { idempotency_key: string; mime_type: string; linked_task_id?: string | null },
 ): Promise<RecordingStagingItem> {
   return request<RecordingStagingItem>(
     `/api/v1/meeting/meetings/${meetingId}/recordings/staging`,
     token,
+    workspaceSlug,
     {
       method: 'POST',
       body: JSON.stringify(payload),
@@ -396,6 +460,7 @@ export function initRecordingStaging(
 
 export async function uploadRecordingChunk(
   token: string,
+  workspaceSlug: string,
   meetingId: string,
   stagingId: string,
   seq: number,
@@ -407,6 +472,7 @@ export async function uploadRecordingChunk(
   return multipartRequest<RecordingChunkAck>(
     `/api/v1/meeting/meetings/${meetingId}/recordings/staging/${stagingId}/chunks/${seq}`,
     token,
+    workspaceSlug,
     {
       method: 'PUT',
       headers: {
@@ -419,6 +485,7 @@ export async function uploadRecordingChunk(
 
 export function completeRecordingStaging(
   token: string,
+  workspaceSlug: string,
   meetingId: string,
   stagingId: string,
   payload: { duration_sec_estimate?: number | null },
@@ -426,6 +493,7 @@ export function completeRecordingStaging(
   return request<MeetingDetail>(
     `/api/v1/meeting/meetings/${meetingId}/recordings/staging/${stagingId}/complete`,
     token,
+    workspaceSlug,
     {
       method: 'POST',
       body: JSON.stringify(payload),
@@ -435,22 +503,26 @@ export function completeRecordingStaging(
 
 export function listRecordingStaging(
   token: string,
+  workspaceSlug: string,
   meetingId: string,
 ): Promise<RecordingStagingItem[]> {
   return request<RecordingStagingItem[]>(
     `/api/v1/meeting/meetings/${meetingId}/recordings/staging`,
     token,
+    workspaceSlug,
   );
 }
 
 export function discardRecordingStaging(
   token: string,
+  workspaceSlug: string,
   meetingId: string,
   stagingId: string,
 ): Promise<void> {
   return request<void>(
     `/api/v1/meeting/meetings/${meetingId}/recordings/staging/${stagingId}`,
     token,
+    workspaceSlug,
     {
       method: 'DELETE',
     },
@@ -459,6 +531,7 @@ export function discardRecordingStaging(
 
 export async function importMeetingRecording(
   token: string,
+  workspaceSlug: string,
   meetingId: string,
   file: Blob | File,
   linkedTaskId?: string | null,
@@ -472,6 +545,7 @@ export async function importMeetingRecording(
   return multipartRequest<MeetingDetail>(
     `/api/v1/meeting/meetings/${meetingId}/recordings/import`,
     token,
+    workspaceSlug,
     {
       method: 'POST',
       body: formData,
@@ -481,23 +555,27 @@ export async function importMeetingRecording(
 
 export function getRecordingPlaybackUrl(
   token: string,
+  workspaceSlug: string,
   meetingId: string,
   recordingId: string,
 ): Promise<RecordingPlaybackResponse> {
   return request<RecordingPlaybackResponse>(
     `/api/v1/meeting/meetings/${meetingId}/recordings/${recordingId}/playback`,
     token,
+    workspaceSlug,
   );
 }
 
 export function retryMeetingRecording(
   token: string,
+  workspaceSlug: string,
   meetingId: string,
   recordingId: string,
 ): Promise<MeetingDetail> {
   return request<MeetingDetail>(
     `/api/v1/meeting/meetings/${meetingId}/recordings/${recordingId}/retry`,
     token,
+    workspaceSlug,
     {
       method: 'POST',
     },
@@ -506,6 +584,7 @@ export function retryMeetingRecording(
 
 export function listMeetingUsers(
   token: string,
+  workspaceSlug: string,
   options: { q?: string; limit?: number } = {},
 ): Promise<MeetingUser[]> {
   const params = new URLSearchParams();
@@ -515,5 +594,6 @@ export function listMeetingUsers(
   return request<MeetingUser[]>(
     `/api/v1/meeting/users${query ? `?${query}` : ''}`,
     token,
+    workspaceSlug,
   );
 }

@@ -17,6 +17,7 @@ interface MeetingEditModalProps {
   meeting: MeetingDetail;
   onClose: () => void;
   onSaved: (updated: MeetingDetail) => void;
+  workspaceSlug: string;
 }
 
 function toLocalInputValue(iso: string): string {
@@ -37,6 +38,7 @@ export function MeetingEditModal({
   meeting,
   onClose,
   onSaved,
+  workspaceSlug,
 }: MeetingEditModalProps) {
   const { token, user } = useAuth();
   const [title, setTitle] = useState(meeting.title);
@@ -103,7 +105,7 @@ export function MeetingEditModal({
     let cancelled = false;
     setUsersLoading(true);
     const handle = window.setTimeout(() => {
-      listMeetingUsers(token, { q: trimmed, limit: 30 })
+      listMeetingUsers(token, workspaceSlug, { q: trimmed, limit: 30 })
         .then((response) => {
           if (!cancelled) setUsers(response);
         })
@@ -176,7 +178,7 @@ export function MeetingEditModal({
     setSubmitting(true);
     setError(null);
     try {
-      const updated = await updateMeeting(token, meeting.id, {
+      const updated = await updateMeeting(token, workspaceSlug, meeting.id, {
         title: title.trim(),
         agenda: agenda,
         start_at: localInputToIso(startAt),

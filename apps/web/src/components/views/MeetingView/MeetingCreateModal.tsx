@@ -18,6 +18,7 @@ interface MeetingCreateModalProps {
   isOpen: boolean;
   onClose: () => void;
   onCreated: (meetingId: string) => void;
+  workspaceSlug: string;
 }
 
 interface PickedTask {
@@ -58,7 +59,12 @@ function localInputToIso(value: string): string {
   return new Date(value).toISOString();
 }
 
-export function MeetingCreateModal({ isOpen, onClose, onCreated }: MeetingCreateModalProps) {
+export function MeetingCreateModal({
+  isOpen,
+  onClose,
+  onCreated,
+  workspaceSlug,
+}: MeetingCreateModalProps) {
   const { token, user } = useAuth();
   const [title, setTitle] = useState('');
   const [agenda, setAgenda] = useState('');
@@ -122,7 +128,7 @@ export function MeetingCreateModal({ isOpen, onClose, onCreated }: MeetingCreate
     let cancelled = false;
     setUsersLoading(true);
     const handle = window.setTimeout(() => {
-      listMeetingUsers(token, { q: trimmed, limit: 30 })
+      listMeetingUsers(token, workspaceSlug, { q: trimmed, limit: 30 })
         .then((response) => {
           if (!cancelled) setUsers(response);
         })
@@ -212,7 +218,7 @@ export function MeetingCreateModal({ isOpen, onClose, onCreated }: MeetingCreate
     setError(null);
     setPartialFailures([]);
     try {
-      const meeting = await createMeeting(token, {
+      const meeting = await createMeeting(token, workspaceSlug, {
         title: title.trim(),
         agenda: agenda.trim(),
         start_at: localInputToIso(startAt),
@@ -226,7 +232,7 @@ export function MeetingCreateModal({ isOpen, onClose, onCreated }: MeetingCreate
       const succeededFileNames = new Set<string>();
       for (const file of pickedFiles) {
         try {
-          await uploadMeetingFile(token, meeting.id, file);
+          await uploadMeetingFile(token, workspaceSlug, meeting.id, file);
           succeededFileNames.add(file.name);
         } catch (err) {
           failures.push(
@@ -548,6 +554,7 @@ export function MeetingCreateModal({ isOpen, onClose, onCreated }: MeetingCreate
       <TaskPickerModal
         isOpen={taskPickerOpen}
         onClose={() => setTaskPickerOpen(false)}
+        workspaceSlug={workspaceSlug}
         excludeIssueIds={pickedTasks.map((task) => task.id)}
         onPick={(issue) => {
           setPickedTasks((prev) => [
@@ -563,6 +570,7 @@ export function MeetingCreateModal({ isOpen, onClose, onCreated }: MeetingCreate
       <DocPickerModal
         isOpen={docPickerOpen}
         onClose={() => setDocPickerOpen(false)}
+        workspaceSlug={workspaceSlug}
         excludeDocIds={pickedDocs.map((doc) => doc.id)}
         onPick={(doc) => {
           setPickedDocs((prev) => [

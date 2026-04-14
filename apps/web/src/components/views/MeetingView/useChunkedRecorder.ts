@@ -31,6 +31,7 @@ interface ContinueSessionInput {
 }
 
 interface RecorderOptions {
+  workspaceSlug: string;
   meetingId: string;
   token: string | null;
   onMeetingUpdated: (meeting: MeetingDetail) => void;
@@ -56,7 +57,12 @@ async function sha256Hex(blob: Blob): Promise<string> {
   return bytes.map((byte) => byte.toString(16).padStart(2, '0')).join('');
 }
 
-export function useChunkedRecorder({ meetingId, token, onMeetingUpdated }: RecorderOptions) {
+export function useChunkedRecorder({
+  workspaceSlug,
+  meetingId,
+  token,
+  onMeetingUpdated,
+}: RecorderOptions) {
   const [isRecording, setIsRecording] = useState(false);
   const [isBusy, setIsBusy] = useState(false);
   const [elapsedSec, setElapsedSec] = useState(0);
@@ -125,9 +131,15 @@ export function useChunkedRecorder({ meetingId, token, onMeetingUpdated }: Recor
     const session = await getSession(stagingId);
     setIsBusy(true);
     try {
-      const updated = await completeRecordingStaging(token, meetingId, stagingId, {
+      const updated = await completeRecordingStaging(
+        token,
+        workspaceSlug,
+        meetingId,
+        stagingId,
+        {
         duration_sec_estimate: session?.startedAt ? Math.max(0, Math.round((Date.now() - session.startedAt) / 1000)) : undefined,
-      });
+        },
+      );
       pendingFinalizeRef.current = null;
       await markSessionComplete(stagingId);
       await clearSession(stagingId);
@@ -157,6 +169,7 @@ export function useChunkedRecorder({ meetingId, token, onMeetingUpdated }: Recor
         const chunk = pending[0];
         const ack = await uploadRecordingChunk(
           token,
+          workspaceSlug,
           meetingId,
           stagingId,
           chunk.seq,
@@ -242,7 +255,7 @@ export function useChunkedRecorder({ meetingId, token, onMeetingUpdated }: Recor
     setIsBusy(true);
     try {
       const idempotencyKey = createId();
-      const staging = await initRecordingStaging(token, meetingId, {
+      const staging = await initRecordingStaging(token, workspaceSlug, meetingId, {
         idempotency_key: idempotencyKey,
         mime_type: 'audio/webm',
         linked_task_id: linkedTaskId,
@@ -322,7 +335,13 @@ export function useChunkedRecorder({ meetingId, token, onMeetingUpdated }: Recor
     if (!token) return;
     setIsBusy(true);
     try {
-      const updated = await completeRecordingStaging(token, meetingId, stagingId, {});
+      const updated = await completeRecordingStaging(
+        token,
+        workspaceSlug,
+        meetingId,
+        stagingId,
+        {},
+      );
       await clearSession(stagingId);
       onMeetingUpdated(updated);
     } catch (err) {
@@ -340,7 +359,13 @@ export function useChunkedRecorder({ meetingId, token, onMeetingUpdated }: Recor
       if (!blob) {
         throw new Error('복구할 로컬 녹음이 없습니다.');
       }
-      const updated = await importMeetingRecording(token, meetingId, blob, linkedTaskId);
+      const updated = await importMeetingRecording(
+        token,
+        workspaceSlug,
+        meetingId,
+        blob,
+        linkedTaskId,
+      );
       await clearSession(stagingId);
       onMeetingUpdated(updated);
     } catch (err) {
@@ -354,7 +379,13 @@ export function useChunkedRecorder({ meetingId, token, onMeetingUpdated }: Recor
     if (!token) return;
     setIsBusy(true);
     try {
-      const updated = await importMeetingRecording(token, meetingId, file, linkedTaskId);
+      const updated = await importMeetingRecording(
+        token,
+        workspaceSlug,
+        meetingId,
+        file,
+        linkedTaskId,
+      );
       onMeetingUpdated(updated);
     } catch (err) {
       setError(err instanceof Error ? err.message : '음성 파일 업로드에 실패했습니다.');
@@ -371,7 +402,7 @@ export function useChunkedRecorder({ meetingId, token, onMeetingUpdated }: Recor
     setIsBusy(true);
     try {
       if (remoteExists) {
-        await discardRecordingStaging(token, meetingId, stagingId);
+        await discardRecordingStaging(token, workspaceSlug, meetingId, stagingId);
       }
       await clearSession(stagingId);
       if (activeSessionIdRef.current === stagingId) {

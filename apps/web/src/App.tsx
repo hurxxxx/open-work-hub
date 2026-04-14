@@ -22,6 +22,7 @@ import { AIView } from './components/views/AIView';
 import { DocsView } from './components/views/DocsView';
 import { HomeView } from './components/views/HomeView';
 import { MeetingView } from './components/views/MeetingView/MeetingView';
+import { MeetingWorkspaceView } from './components/views/MeetingView/MeetingWorkspaceView';
 import { PlannerView } from './components/views/PlannerView';
 import { PMSView } from './components/views/PMSView/PMSView';
 import { ToolView } from './components/views/ToolView';
@@ -291,10 +292,18 @@ const AppContent = () => {
               )}
             />
             <Route
-              path="/w/:workspaceSlug/meeting/*"
+              path="/w/:workspaceSlug/meeting"
               element={(
                 <WorkspaceGate>
                   <MeetingView />
+                </WorkspaceGate>
+              )}
+            />
+            <Route
+              path="/w/:workspaceSlug/meeting/:meetingId"
+              element={(
+                <WorkspaceGate>
+                  <MeetingWorkspaceView />
                 </WorkspaceGate>
               )}
             />

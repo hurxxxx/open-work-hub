@@ -6,6 +6,7 @@ const ACTIVE_STATUSES = new Set(['pending', 'transcribing', 'summarizing', 'gene
 
 export function useRecordingPoll(
   token: string | null,
+  workspaceSlug: string,
   meetingId: string,
   meeting: MeetingDetail | null,
   onMeetingUpdated: (meeting: MeetingDetail) => void,
@@ -22,12 +23,12 @@ export function useRecordingPoll(
     }
     const timer = window.setInterval(async () => {
       try {
-        const nextMeeting = await getMeeting(token, meetingId);
+        const nextMeeting = await getMeeting(token, workspaceSlug, meetingId);
         onMeetingUpdated(nextMeeting);
       } catch {
         // Keep the previous UI state and retry on the next interval.
       }
     }, 3000);
     return () => window.clearInterval(timer);
-  }, [meeting, meetingId, onMeetingUpdated, token]);
+  }, [meeting, meetingId, onMeetingUpdated, token, workspaceSlug]);
 }

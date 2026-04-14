@@ -120,6 +120,21 @@ def update_meeting(
     )
 
 
+@router.post("/meetings/{meeting_id}/notes/ensure", response_model=MeetingDetail)
+def ensure_meeting_notes(
+    meeting_id: str,
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+    workspace: Workspace = Depends(require_current_workspace),
+) -> MeetingDetail:
+    return meeting_service.ensure_meeting_notes(
+        db,
+        workspace=workspace,
+        user=current_user,
+        meeting_id=meeting_id,
+    )
+
+
 @router.delete(
     "/meetings/{meeting_id}",
     status_code=status.HTTP_204_NO_CONTENT,

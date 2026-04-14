@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Button, Dialog } from '@aidoo/ui';
 import { Loader2 } from 'lucide-react';
-import { useParams } from 'react-router-dom';
 
 import { useAuth } from '@/src/domains/auth/auth-provider';
 import { hasWorkspaceMembership } from '@/src/domains/auth/auth-api';
@@ -18,6 +17,7 @@ interface TaskPickerModalProps {
   onClose: () => void;
   onPick: (issue: PmsIssue) => Promise<void> | void;
   excludeIssueIds?: string[];
+  workspaceSlug: string;
 }
 
 export function TaskPickerModal({
@@ -25,8 +25,8 @@ export function TaskPickerModal({
   onClose,
   onPick,
   excludeIssueIds = [],
+  workspaceSlug,
 }: TaskPickerModalProps) {
-  const { workspaceSlug } = useParams();
   const { token, user } = useAuth();
   const canAccessPms = hasWorkspaceMembership(user, workspaceSlug);
   const [projects, setProjects] = useState<PmsProject[]>([]);
@@ -42,7 +42,7 @@ export function TaskPickerModal({
     setQuery('');
     setError(null);
     setSubmittingId(null);
-    listPmsProjects(token)
+    listPmsProjects(token, undefined, workspaceSlug)
       .then((response) => {
         setProjects(response.items);
         if (response.items.length > 0) {
@@ -50,7 +50,7 @@ export function TaskPickerModal({
         }
       })
       .catch((err: Error) => setError(err.message ?? '프로젝트 목록을 불러올 수 없습니다.'));
-  }, [isOpen, token, canAccessPms]);
+  }, [isOpen, token, canAccessPms, workspaceSlug]);
 
   useEffect(() => {
     if (!isOpen || !token || !canAccessPms || !selectedProjectId) {
@@ -59,7 +59,7 @@ export function TaskPickerModal({
     }
     let cancelled = false;
     setLoading(true);
-    listProjectIssues(token, selectedProjectId, { archived_state: 'active' })
+    listProjectIssues(token, selectedProjectId, { archived_state: 'active' }, workspaceSlug)
       .then((response) => {
         if (cancelled) return;
         setIssues(response.items);
@@ -75,7 +75,7 @@ export function TaskPickerModal({
     return () => {
       cancelled = true;
     };
-  }, [isOpen, token, canAccessPms, selectedProjectId]);
+  }, [isOpen, token, canAccessPms, selectedProjectId, workspaceSlug]);
 
   const excludeSet = useMemo(() => new Set(excludeIssueIds), [excludeIssueIds]);
 

@@ -9,8 +9,13 @@ export class DocsApiError extends Error {
   }
 }
 
-async function request<T>(path: string, token: string, init: RequestInit = {}): Promise<T> {
-  const resolvedPath = resolveDocsPath(path);
+async function request<T>(
+  path: string,
+  token: string,
+  init: RequestInit = {},
+  workspaceSlug?: string | null,
+): Promise<T> {
+  const resolvedPath = resolveDocsPath(path, workspaceSlug);
   const response = await fetch(resolvedPath, {
     ...init,
     headers: {
@@ -45,14 +50,14 @@ function withShareToken(path: string, shareToken?: string | null): string {
   return `${path}${separator}share_token=${encodeURIComponent(shareToken)}`;
 }
 
-function resolveDocsPath(path: string): string {
+function resolveDocsPath(path: string, workspaceSlug?: string | null): string {
   if (
     path.startsWith('/api/v1/docs/shared-links/')
     || path.includes('share_token=')
   ) {
     return path;
   }
-  return rewriteWorkspaceApiPath(path);
+  return rewriteWorkspaceApiPath(path, workspaceSlug);
 }
 
 export interface DocsShareSummary {
@@ -171,6 +176,7 @@ export function listDocsHub(
     page?: number;
     page_size?: number;
   } = {},
+  workspaceSlug?: string | null,
 ): Promise<DocsHubResponse> {
   const qs = new URLSearchParams();
   if (params.category) qs.set('category', params.category);
@@ -179,7 +185,7 @@ export function listDocsHub(
   if (params.sort_dir) qs.set('sort_dir', params.sort_dir);
   if (params.page) qs.set('page', String(params.page));
   if (params.page_size) qs.set('page_size', String(params.page_size));
-  return request<DocsHubResponse>(`/api/v1/docs/hub?${qs}`, token);
+  return request<DocsHubResponse>(`/api/v1/docs/hub?${qs}`, token, {}, workspaceSlug);
 }
 
 export function createNativeDoc(
@@ -192,8 +198,18 @@ export function createNativeDoc(
   });
 }
 
-export function getDocsItem(token: string, itemId: string, shareToken?: string | null): Promise<DocsHubItem> {
-  return request<DocsHubItem>(withShareToken(`/api/v1/docs/items/${itemId}`, shareToken), token);
+export function getDocsItem(
+  token: string,
+  itemId: string,
+  shareToken?: string | null,
+  workspaceSlug?: string | null,
+): Promise<DocsHubItem> {
+  return request<DocsHubItem>(
+    withShareToken(`/api/v1/docs/items/${itemId}`, shareToken),
+    token,
+    {},
+    workspaceSlug,
+  );
 }
 
 export function updateDocsItem(
@@ -224,8 +240,18 @@ export function duplicateDocsItem(
   });
 }
 
-export function listDocPages(token: string, itemId: string, shareToken?: string | null): Promise<DocsPageListResponse> {
-  return request<DocsPageListResponse>(withShareToken(`/api/v1/docs/items/${itemId}/pages`, shareToken), token);
+export function listDocPages(
+  token: string,
+  itemId: string,
+  shareToken?: string | null,
+  workspaceSlug?: string | null,
+): Promise<DocsPageListResponse> {
+  return request<DocsPageListResponse>(
+    withShareToken(`/api/v1/docs/items/${itemId}/pages`, shareToken),
+    token,
+    {},
+    workspaceSlug,
+  );
 }
 
 export function createDocPage(
@@ -255,11 +281,17 @@ export function updateDocPage(
     sort_order?: number | null;
   },
   shareToken?: string | null,
+  workspaceSlug?: string | null,
 ): Promise<DocsPageItem> {
-  return request<DocsPageItem>(withShareToken(`/api/v1/docs/pages/${pageId}`, shareToken), token, {
-    method: 'PATCH',
-    body: JSON.stringify(payload),
-  });
+  return request<DocsPageItem>(
+    withShareToken(`/api/v1/docs/pages/${pageId}`, shareToken),
+    token,
+    {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    },
+    workspaceSlug,
+  );
 }
 
 export function deleteDocPage(token: string, pageId: string, shareToken?: string | null): Promise<void> {
@@ -279,11 +311,17 @@ export function recordDocView(
   itemId: string,
   pageId?: string | null,
   shareToken?: string | null,
+  workspaceSlug?: string | null,
 ): Promise<void> {
-  return request<void>(withShareToken(`/api/v1/docs/items/${itemId}/view`, shareToken), token, {
-    method: 'POST',
-    body: JSON.stringify({ page_id: pageId ?? null }),
-  });
+  return request<void>(
+    withShareToken(`/api/v1/docs/items/${itemId}/view`, shareToken),
+    token,
+    {
+      method: 'POST',
+      body: JSON.stringify({ page_id: pageId ?? null }),
+    },
+    workspaceSlug,
+  );
 }
 
 export function listFavoriteDocs(token: string): Promise<FavoriteDocItem[]> {

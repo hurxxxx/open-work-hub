@@ -30,6 +30,12 @@ class Meeting(Base):
     organizer_id: Mapped[str] = mapped_column(
         ForeignKey("users.id"), index=True, nullable=False
     )
+    notes_doc_id: Mapped[str | None] = mapped_column(
+        ForeignKey("docs_native_docs.id"), nullable=True
+    )
+    notes_page_id: Mapped[str | None] = mapped_column(
+        ForeignKey("docs_native_doc_pages.id"), nullable=True
+    )
     title: Mapped[str] = mapped_column(String(200), nullable=False)
     agenda: Mapped[str] = mapped_column(Text, default="", nullable=False)
     start_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)

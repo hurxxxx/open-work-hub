@@ -22,7 +22,11 @@ function sumChunkBytes(blobs: Blob[]): number {
   return blobs.reduce((total, blob) => total + blob.size, 0);
 }
 
-export function useRecordingRecovery(meetingId: string, token: string | null) {
+export function useRecordingRecovery(
+  workspaceSlug: string,
+  meetingId: string,
+  token: string | null,
+) {
   const [items, setItems] = useState<RecoverySessionItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -33,7 +37,9 @@ export function useRecordingRecovery(meetingId: string, token: string | null) {
     try {
       const [localSessions, remoteSessions] = await Promise.all([
         listIncompleteSessions(meetingId),
-        token ? listRecordingStaging(token, meetingId) : Promise.resolve([]),
+        token
+          ? listRecordingStaging(token, workspaceSlug, meetingId)
+          : Promise.resolve([]),
       ]);
       const localById = new Map<string, RecordingSessionState>();
       for (const session of localSessions) {
@@ -73,7 +79,7 @@ export function useRecordingRecovery(meetingId: string, token: string | null) {
     } finally {
       setLoading(false);
     }
-  }, [meetingId, token]);
+  }, [meetingId, token, workspaceSlug]);
 
   useEffect(() => {
     void refresh();

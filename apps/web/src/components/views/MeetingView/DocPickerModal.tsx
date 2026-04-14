@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Button, Dialog } from '@aidoo/ui';
 import { Loader2 } from 'lucide-react';
-import { useParams } from 'react-router-dom';
 
 import { useAuth } from '@/src/domains/auth/auth-provider';
 import { hasWorkspaceMembership } from '@/src/domains/auth/auth-api';
@@ -13,6 +12,7 @@ interface DocPickerModalProps {
   onClose: () => void;
   onPick: (doc: DocsHubItem) => Promise<void> | void;
   excludeDocIds?: string[];
+  workspaceSlug: string;
 }
 
 export function DocPickerModal({
@@ -20,8 +20,8 @@ export function DocPickerModal({
   onClose,
   onPick,
   excludeDocIds = [],
+  workspaceSlug,
 }: DocPickerModalProps) {
-  const { workspaceSlug } = useParams();
   const { token, user } = useAuth();
   const canAccessDocs = hasWorkspaceMembership(user, workspaceSlug);
   const [items, setItems] = useState<DocsHubItem[]>([]);
@@ -37,7 +37,11 @@ export function DocPickerModal({
     setSubmittingId(null);
     let cancelled = false;
     setLoading(true);
-    listDocsHub(token, { sort_by: 'updated_at', sort_dir: 'desc', page_size: 50 })
+    listDocsHub(
+      token,
+      { sort_by: 'updated_at', sort_dir: 'desc', page_size: 50 },
+      workspaceSlug,
+    )
       .then((response) => {
         if (cancelled) return;
         setItems(response.items.filter((item) => item.source_type === 'native_doc'));
@@ -53,7 +57,7 @@ export function DocPickerModal({
     return () => {
       cancelled = true;
     };
-  }, [isOpen, token, canAccessDocs]);
+  }, [isOpen, token, canAccessDocs, workspaceSlug]);
 
   const excludeSet = useMemo(() => new Set(excludeDocIds), [excludeDocIds]);
 

@@ -22,7 +22,8 @@ from aidoo_api.domains.docs.access_grants import (
     revoke_doc_grants_for_meeting,
     revoke_doc_grants_for_meeting_attendee,
 )
-from aidoo_api.domains.docs.models import NativeDoc
+from aidoo_api.domains.docs.models import NativeDoc, NativeDocPage
+from aidoo_api.domains.docs.service import create_native_doc_for_user
 from aidoo_api.domains.meeting.models import (
     Meeting,
     MeetingAttendee,
@@ -60,6 +61,14 @@ from aidoo_api.domains.pms.models import Issue, Project
 
 
 MAX_FILE_UPLOAD_SIZE = 100 * 1024 * 1024  # 100 MB
+
+
+def _meeting_notes_doc_title(meeting: Meeting) -> str:
+    return f"회의 메모: {meeting.title} ({meeting.start_at:%Y-%m-%d})"
+
+
+def _meeting_notes_page_title() -> str:
+    return "회의 메모"
 
 
 def _validate_time_range(start_at: datetime, end_at: datetime) -> None:
@@ -148,6 +157,123 @@ def _grant_doc_to_attendee(
         reason="meeting_attendee",
         expires_at=_meeting_grant_expires_at(meeting),
     )
+
+
+def _grant_notes_doc_to_attendee(
+    db: Session,
+    *,
+    meeting: Meeting,
+    doc: NativeDoc,
+    attendee_user: User,
+    granted_by_user_id: str,
+) -> None:
+    if attendee_user.id == granted_by_user_id:
+        return
+    if attendee_user.id == doc.owner_id:
+        return
+    grant_doc_access(
+        db,
+        doc_id=doc.id,
+        user_id=attendee_user.id,
+        granted_by_user_id=granted_by_user_id,
+        granted_by_meeting_id=meeting.id,
+        reason="meeting_notes",
+        access_level="edit",
+        expires_at=None,
+    )
+
+
+def _load_active_native_doc(db: Session, *, workspace_id: str, doc_id: str | None) -> NativeDoc | None:
+    if not doc_id:
+        return None
+    return db.scalar(
+        select(NativeDoc).where(
+            NativeDoc.id == doc_id,
+            NativeDoc.workspace_id == workspace_id,
+            NativeDoc.trashed_at.is_(None),
+        )
+    )
+
+
+def _load_active_native_doc_page(
+    db: Session,
+    *,
+    doc_id: str,
+    page_id: str | None,
+) -> NativeDocPage | None:
+    if not page_id:
+        return None
+    return db.scalar(
+        select(NativeDocPage).where(
+            NativeDocPage.id == page_id,
+            NativeDocPage.doc_id == doc_id,
+            NativeDocPage.trashed_at.is_(None),
+        )
+    )
+
+
+def _create_meeting_notes_assets(
+    db: Session,
+    *,
+    meeting: Meeting,
+) -> tuple[NativeDoc, NativeDocPage]:
+    return create_native_doc_for_user(
+        db,
+        workspace_id=meeting.workspace_id,
+        owner_id=meeting.organizer_id,
+        title=_meeting_notes_doc_title(meeting),
+        first_page_title=_meeting_notes_page_title(),
+        content_blocks=[],
+    )
+
+
+def _sync_notes_doc_access(
+    db: Session,
+    *,
+    meeting: Meeting,
+    doc: NativeDoc,
+) -> None:
+    for attendee in meeting.attendees:
+        if attendee.user is None:
+            continue
+        _grant_notes_doc_to_attendee(
+            db,
+            meeting=meeting,
+            doc=doc,
+            attendee_user=attendee.user,
+            granted_by_user_id=meeting.organizer_id,
+        )
+
+
+def _ensure_meeting_notes_state(
+    db: Session,
+    *,
+    meeting: Meeting,
+) -> tuple[NativeDoc, NativeDocPage]:
+    doc = _load_active_native_doc(db, workspace_id=meeting.workspace_id, doc_id=meeting.notes_doc_id)
+    if doc is None:
+        doc, page = _create_meeting_notes_assets(db, meeting=meeting)
+    else:
+        page = _load_active_native_doc_page(db, doc_id=doc.id, page_id=meeting.notes_page_id)
+        if page is None:
+            page = NativeDocPage(
+                id=new_id(),
+                doc_id=doc.id,
+                parent_id=None,
+                title=_meeting_notes_page_title(),
+                content_blocks=[],
+                sort_order=0,
+                created_by_id=meeting.organizer_id,
+            )
+            db.add(page)
+            db.flush()
+
+    meeting.notes_doc_id = doc.id
+    meeting.notes_page_id = page.id
+    db.add(meeting)
+    db.flush()
+    _sync_notes_doc_access(db, meeting=meeting, doc=doc)
+    return doc, page
 
 
 def _attach_issue_link(
@@ -312,6 +438,8 @@ def _serialize_meeting(db: Session, meeting: Meeting) -> MeetingDetail:
         workspace_id=meeting.workspace_id,
         organizer_id=meeting.organizer_id,
         organizer_name=meeting.organizer.full_name if meeting.organizer else "",
+        notes_doc_id=meeting.notes_doc_id,
+        notes_page_id=meeting.notes_page_id,
         title=meeting.title,
         agenda=meeting.agenda,
         start_at=meeting.start_at,
@@ -446,6 +574,7 @@ def _replace_attendees(
             )
         )
     }
+    notes_doc = _load_active_native_doc(db, workspace_id=meeting.workspace_id, doc_id=meeting.notes_doc_id)
     for attendee in meeting.attendees:
         if attendee.user_id not in added_user_ids or attendee.user is None:
             continue
@@ -470,6 +599,14 @@ def _replace_attendees(
                 doc=doc,
                 attendee_user=attendee.user,
                 granted_by_user_id=acting_user_id,
+            )
+        if notes_doc is not None:
+            _grant_notes_doc_to_attendee(
+                db,
+                meeting=meeting,
+                doc=notes_doc,
+                attendee_user=attendee.user,
+                granted_by_user_id=meeting.organizer_id,
             )
 
 
@@ -623,6 +760,22 @@ def get_meeting(db: Session, *, workspace: Workspace, user: User, meeting_id: st
     meeting = _load_meeting(db, workspace, meeting_id)
     _ensure_user_can_view(user, meeting)
     return _serialize_meeting(db, meeting)
+
+
+def ensure_meeting_notes(
+    db: Session,
+    *,
+    workspace: Workspace,
+    user: User,
+    meeting_id: str,
+) -> MeetingDetail:
+    meeting = _load_meeting(db, workspace, meeting_id)
+    ensure_meeting_participant(db, user, meeting)
+    _ensure_meeting_notes_state(db, meeting=meeting)
+    db.commit()
+
+    fresh = _load_meeting(db, workspace, meeting_id)
+    return _serialize_meeting(db, fresh)
 
 
 def list_meetings(

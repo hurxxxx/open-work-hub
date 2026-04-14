@@ -177,6 +177,8 @@ class MeetingDetail(BaseModel):
     workspace_id: str
     organizer_id: str
     organizer_name: str
+    notes_doc_id: str | None
+    notes_page_id: str | None
     title: str
     agenda: str
     start_at: datetime

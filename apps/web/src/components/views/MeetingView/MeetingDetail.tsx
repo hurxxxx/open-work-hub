@@ -35,10 +35,7 @@ import {
   canEditMeeting,
   canRemoveAttachment,
 } from '@/src/domains/meeting/meeting-permissions';
-import {
-  buildWorkspaceAppPath,
-  getCurrentOrLastWorkspaceSlug,
-} from '@/src/domains/workspaces/workspace-utils';
+import { buildWorkspaceAppPath } from '@/src/domains/workspaces/workspace-utils';
 
 import { MeetingEditModal } from './MeetingEditModal';
 import { TaskPickerModal } from './TaskPickerModal';
@@ -51,10 +48,12 @@ import { useRecordingPoll } from './useRecordingPoll';
 import { useRecordingRecovery } from './useRecordingRecovery';
 
 interface MeetingDetailProps {
+  workspaceSlug: string;
   meetingId: string;
-  onClose: () => void;
+  onClose?: () => void;
   onChanged: () => void;
   onDeleted: () => void;
+  showCloseButton?: boolean;
 }
 
 const STATUS_LABELS: Record<string, string> = {
@@ -77,10 +76,12 @@ function formatRange(start: string, end: string): string {
 }
 
 export function MeetingDetail({
+  workspaceSlug,
   meetingId,
   onClose,
   onChanged,
   onDeleted,
+  showCloseButton = true,
 }: MeetingDetailProps) {
   const { token, user } = useAuth();
   const { confirm, confirmDialog } = useConfirm();
@@ -94,14 +95,13 @@ export function MeetingDetail({
   const [uploading, setUploading] = useState(false);
   const [playbackUrls, setPlaybackUrls] = useState<Record<string, string>>({});
   const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const workspaceSlug = getCurrentOrLastWorkspaceSlug();
 
   const refresh = useCallback(async () => {
     if (!token) return;
     setLoading(true);
     setError(null);
     try {
-      const detail = await getMeeting(token, meetingId);
+      const detail = await getMeeting(token, workspaceSlug, meetingId);
       setMeeting(detail);
     } catch (err) {
       setError(err instanceof Error ? err.message : '회의를 불러올 수 없습니다.');
@@ -109,14 +109,15 @@ export function MeetingDetail({
     } finally {
       setLoading(false);
     }
-  }, [token, meetingId]);
+  }, [meetingId, token, workspaceSlug]);
 
   useEffect(() => {
     refresh();
   }, [refresh]);
 
-  const recovery = useRecordingRecovery(meetingId, token);
+  const recovery = useRecordingRecovery(workspaceSlug, meetingId, token);
   const recorder = useChunkedRecorder({
+    workspaceSlug,
     meetingId,
     token,
     onMeetingUpdated: (updated) => {
@@ -126,7 +127,7 @@ export function MeetingDetail({
     },
   });
 
-  useRecordingPoll(token, meetingId, meeting, (updated) => {
+  useRecordingPoll(token, workspaceSlug, meetingId, meeting, (updated) => {
     setMeeting(updated);
     onChanged();
   });
@@ -136,7 +137,7 @@ export function MeetingDetail({
 
   async function handleAttachTask(issue: { id: string }) {
     if (!token) return;
-    const updated = await attachTaskToMeeting(token, meetingId, issue.id);
+    const updated = await attachTaskToMeeting(token, workspaceSlug, meetingId, issue.id);
     setMeeting(updated);
     onChanged();
   }
@@ -145,7 +146,12 @@ export function MeetingDetail({
     if (!token) return;
     setBusy(true);
     try {
-      const updated = await detachTaskFromMeeting(token, meetingId, issueId);
+      const updated = await detachTaskFromMeeting(
+        token,
+        workspaceSlug,
+        meetingId,
+        issueId,
+      );
       setMeeting(updated);
       onChanged();
     } catch (err) {
@@ -157,7 +163,12 @@ export function MeetingDetail({
 
   async function handleAttachDoc(doc: { source_id: string }) {
     if (!token) return;
-    const updated = await attachDocToMeeting(token, meetingId, doc.source_id);
+    const updated = await attachDocToMeeting(
+      token,
+      workspaceSlug,
+      meetingId,
+      doc.source_id,
+    );
     setMeeting(updated);
     onChanged();
   }
@@ -166,7 +177,7 @@ export function MeetingDetail({
     if (!token) return;
     setBusy(true);
     try {
-      const updated = await detachDocFromMeeting(token, meetingId, docId);
+      const updated = await detachDocFromMeeting(token, workspaceSlug, meetingId, docId);
       setMeeting(updated);
       onChanged();
     } catch (err) {
@@ -184,7 +195,7 @@ export function MeetingDetail({
     setUploading(true);
     setError(null);
     try {
-      const updated = await uploadMeetingFile(token, meetingId, file);
+      const updated = await uploadMeetingFile(token, workspaceSlug, meetingId, file);
       setMeeting(updated);
       onChanged();
     } catch (err) {
@@ -199,7 +210,7 @@ export function MeetingDetail({
     setBusy(true);
     setError(null);
     try {
-      const updated = await deleteMeetingFile(token, meetingId, fileId);
+      const updated = await deleteMeetingFile(token, workspaceSlug, meetingId, fileId);
       setMeeting(updated);
       onChanged();
     } catch (err) {
@@ -256,7 +267,7 @@ export function MeetingDetail({
     if (!ok) return;
     setBusy(true);
     try {
-      await deleteMeeting(token, meetingId);
+      await deleteMeeting(token, workspaceSlug, meetingId);
       onDeleted();
     } catch (err) {
       setError(err instanceof Error ? err.message : '회의를 삭제할 수 없습니다.');
@@ -270,7 +281,12 @@ export function MeetingDetail({
       return;
     }
     try {
-      const playback = await getRecordingPlaybackUrl(token, meetingId, recordingId);
+      const playback = await getRecordingPlaybackUrl(
+        token,
+        workspaceSlug,
+        meetingId,
+        recordingId,
+      );
       setPlaybackUrls((current) => ({ ...current, [recordingId]: playback.url }));
     } catch (err) {
       setError(err instanceof Error ? err.message : '녹음 재생 링크를 가져올 수 없습니다.');
@@ -282,7 +298,12 @@ export function MeetingDetail({
     setBusy(true);
     setError(null);
     try {
-      const updated = await retryMeetingRecording(token, meetingId, recordingId);
+      const updated = await retryMeetingRecording(
+        token,
+        workspaceSlug,
+        meetingId,
+        recordingId,
+      );
       setMeeting(updated);
       onChanged();
     } catch (err) {
@@ -305,14 +326,16 @@ export function MeetingDetail({
       <div className="p-6 text-app-ink/70">
         <div className="flex items-center justify-between">
           <p className="app-text-body">{error}</p>
-          <button
-            type="button"
-            onClick={onClose}
-            className="text-app-ink/50 hover:text-app-ink"
-            aria-label="닫기"
-          >
-            <X size={16} />
-          </button>
+          {showCloseButton && onClose ? (
+            <button
+              type="button"
+              onClick={onClose}
+              className="text-app-ink/50 hover:text-app-ink"
+              aria-label="닫기"
+            >
+              <X size={16} />
+            </button>
+          ) : null}
         </div>
       </div>
     );
@@ -346,14 +369,16 @@ export function MeetingDetail({
               <Pencil size={14} />
             </button>
           ) : null}
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-md p-1.5 text-app-ink/50 hover:bg-app-surface-hover hover:text-app-ink"
-            aria-label="패널 닫기"
-          >
-            <X size={16} />
-          </button>
+          {showCloseButton && onClose ? (
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-md p-1.5 text-app-ink/50 hover:bg-app-surface-hover hover:text-app-ink"
+              aria-label="닫기"
+            >
+              <X size={16} />
+            </button>
+          ) : null}
         </div>
       </header>
 
@@ -384,16 +409,12 @@ export function MeetingDetail({
                 >
                   <div className="min-w-0">
                     <p className="app-text-body line-clamp-1 text-app-ink">
-                      {workspaceSlug ? (
-                        <Link
-                          to={buildWorkspaceAppPath(workspaceSlug, 'pms', `?issue=${encodeURIComponent(link.issue_id)}`)}
-                          className="hover:text-app-accent hover:underline"
-                        >
-                          {link.issue_title || '제목 없음'}
-                        </Link>
-                      ) : (
-                        link.issue_title || '제목 없음'
-                      )}
+                      <Link
+                        to={buildWorkspaceAppPath(workspaceSlug, 'pms', `?issue=${encodeURIComponent(link.issue_id)}`)}
+                        className="hover:text-app-accent hover:underline"
+                      >
+                        {link.issue_title || '제목 없음'}
+                      </Link>
                     </p>
                     <p className="app-text-caption text-app-ink/40">
                       {link.list_key
@@ -434,16 +455,12 @@ export function MeetingDetail({
                   className="flex items-start justify-between rounded-md border border-app-border bg-app-surface-sidebar px-3 py-2"
                 >
                   <p className="app-text-body line-clamp-1 text-app-ink">
-                    {workspaceSlug ? (
-                      <Link
-                        to={buildWorkspaceAppPath(workspaceSlug, 'docs', link.doc_id)}
-                        className="hover:text-app-accent hover:underline"
-                      >
-                        {link.doc_title || '제목 없음'}
-                      </Link>
-                    ) : (
-                      link.doc_title || '제목 없음'
-                    )}
+                    <Link
+                      to={buildWorkspaceAppPath(workspaceSlug, 'docs', link.doc_id)}
+                      className="hover:text-app-accent hover:underline"
+                    >
+                      {link.doc_title || '제목 없음'}
+                    </Link>
                   </p>
                   {canRemoveAttachment(user, meeting, link) ? (
                     <button
@@ -632,7 +649,7 @@ export function MeetingDetail({
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <p className="app-text-body text-app-ink">
-                        {recording.linked_doc_id && workspaceSlug ? (
+                        {recording.linked_doc_id ? (
                           <Link
                             to={buildWorkspaceAppPath(workspaceSlug, 'docs', recording.linked_doc_id)}
                             className="hover:text-app-accent hover:underline"
@@ -755,12 +772,14 @@ export function MeetingDetail({
         onClose={() => setTaskPickerOpen(false)}
         onPick={handleAttachTask}
         excludeIssueIds={meeting.task_links.map((link) => link.issue_id)}
+        workspaceSlug={workspaceSlug}
       />
       <DocPickerModal
         isOpen={docPickerOpen}
         onClose={() => setDocPickerOpen(false)}
         onPick={handleAttachDoc}
         excludeDocIds={meeting.doc_links.map((link) => link.doc_id)}
+        workspaceSlug={workspaceSlug}
       />
       <MeetingEditModal
         isOpen={editOpen}
@@ -771,6 +790,7 @@ export function MeetingDetail({
           setEditOpen(false);
           onChanged();
         }}
+        workspaceSlug={workspaceSlug}
       />
       {confirmDialog}
     </div>

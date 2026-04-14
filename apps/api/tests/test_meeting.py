@@ -185,6 +185,17 @@ def _create_issue(
     return response.json()
 
 
+def _first_workspace_slug(client: TestClient, token: str) -> str:
+    response = client.get(
+        "/api/v1/auth/me",
+        headers=_auth_headers(token),
+    )
+    assert response.status_code == 200
+    workspaces = response.json()["workspaces"]
+    assert workspaces
+    return workspaces[0]["slug"]
+
+
 def test_meeting_create_get_update_delete_happy_path(client: TestClient) -> None:
     admin = _bootstrap_admin_session(client)
     token = admin["token"]
@@ -283,6 +294,157 @@ def test_non_organizer_attendee_cannot_modify_meeting(client: TestClient) -> Non
         headers=_auth_headers(member_token),
     )
     assert forbidden_delete.status_code == 403
+
+
+def test_meeting_notes_ensure_is_idempotent_and_separate_from_doc_links(client: TestClient) -> None:
+    admin = _bootstrap_admin_session(client)
+    admin_token = admin["token"]
+    workspace_slug = _first_workspace_slug(client, admin_token)
+
+    meeting = _create_meeting(client, admin_token, title="Notes ensure")
+
+    first_response = client.post(
+        f"/api/v1/workspaces/{workspace_slug}/meeting/meetings/{meeting['id']}/notes/ensure",
+        headers=_auth_headers(admin_token),
+    )
+    assert first_response.status_code == 200, first_response.text
+    first_payload = first_response.json()
+    assert first_payload["notes_doc_id"] is not None
+    assert first_payload["notes_page_id"] is not None
+    assert first_payload["doc_links"] == []
+
+    second_response = client.post(
+        f"/api/v1/workspaces/{workspace_slug}/meeting/meetings/{meeting['id']}/notes/ensure",
+        headers=_auth_headers(admin_token),
+    )
+    assert second_response.status_code == 200, second_response.text
+    second_payload = second_response.json()
+    assert second_payload["notes_doc_id"] == first_payload["notes_doc_id"]
+    assert second_payload["notes_page_id"] == first_payload["notes_page_id"]
+    assert second_payload["doc_links"] == []
+
+
+def test_meeting_notes_support_self_heal_and_wrong_workspace_slug_is_blocked(
+    client: TestClient,
+) -> None:
+    admin = _bootstrap_admin_session(client)
+    admin_token = admin["token"]
+    workspace_slug = _first_workspace_slug(client, admin_token)
+
+    _grant_workspace_access(client, admin_token, admin["user"]["id"], "delivery-hub")
+    meeting = _create_meeting(client, admin_token, title="Notes self heal")
+
+    initial_notes = client.post(
+        f"/api/v1/workspaces/{workspace_slug}/meeting/meetings/{meeting['id']}/notes/ensure",
+        headers=_auth_headers(admin_token),
+    )
+    assert initial_notes.status_code == 200, initial_notes.text
+    initial_payload = initial_notes.json()
+
+    wrong_workspace_response = client.post(
+        f"/api/v1/workspaces/delivery-hub/meeting/meetings/{meeting['id']}/notes/ensure",
+        headers=_auth_headers(admin_token),
+    )
+    assert wrong_workspace_response.status_code == 404
+
+    delete_doc_response = client.delete(
+        f"/api/v1/workspaces/{workspace_slug}/docs/items/{initial_payload['notes_doc_id']}",
+        headers=_auth_headers(admin_token),
+    )
+    assert delete_doc_response.status_code == 204
+
+    recreated_notes = client.post(
+        f"/api/v1/workspaces/{workspace_slug}/meeting/meetings/{meeting['id']}/notes/ensure",
+        headers=_auth_headers(admin_token),
+    )
+    assert recreated_notes.status_code == 200, recreated_notes.text
+    recreated_payload = recreated_notes.json()
+    assert recreated_payload["notes_doc_id"] != initial_payload["notes_doc_id"]
+    assert recreated_payload["notes_page_id"] != initial_payload["notes_page_id"]
+
+    delete_page_response = client.delete(
+        f"/api/v1/workspaces/{workspace_slug}/docs/pages/{recreated_payload['notes_page_id']}",
+        headers=_auth_headers(admin_token),
+    )
+    assert delete_page_response.status_code == 204
+
+    rehealed_notes = client.post(
+        f"/api/v1/workspaces/{workspace_slug}/meeting/meetings/{meeting['id']}/notes/ensure",
+        headers=_auth_headers(admin_token),
+    )
+    assert rehealed_notes.status_code == 200, rehealed_notes.text
+    rehealed_payload = rehealed_notes.json()
+    assert rehealed_payload["notes_doc_id"] == recreated_payload["notes_doc_id"]
+    assert rehealed_payload["notes_page_id"] != recreated_payload["notes_page_id"]
+
+
+def test_meeting_notes_attendee_can_edit_and_loses_access_when_removed(client: TestClient) -> None:
+    admin = _bootstrap_admin_session(client)
+    admin_token = admin["token"]
+    workspace_slug = _first_workspace_slug(client, admin_token)
+
+    attendee = _create_user_with_workspaces(
+        client,
+        admin_token,
+        email="notes-attendee@aidoo.local",
+        full_name="Notes Attendee",
+        workspace_keys=[workspace_slug],
+    )
+    attendee_token = _login(
+        client,
+        attendee["user"]["email"],
+        attendee["temporary_password"],
+    )
+
+    meeting = _create_meeting(
+        client,
+        admin_token,
+        title="Notes attendee edit",
+        attendees=[{"user_id": attendee["user"]["id"], "role": "required"}],
+    )
+
+    ensure_response = client.post(
+        f"/api/v1/workspaces/{workspace_slug}/meeting/meetings/{meeting['id']}/notes/ensure",
+        headers=_auth_headers(admin_token),
+    )
+    assert ensure_response.status_code == 200, ensure_response.text
+    notes = ensure_response.json()
+
+    pages_response = client.get(
+        f"/api/v1/workspaces/{workspace_slug}/docs/items/{notes['notes_doc_id']}/pages",
+        headers=_auth_headers(attendee_token),
+    )
+    assert pages_response.status_code == 200, pages_response.text
+    attendee_page = pages_response.json()["items"][0]
+    assert attendee_page["id"] == notes["notes_page_id"]
+    assert attendee_page["can_edit"] is True
+
+    update_page_response = client.patch(
+        f"/api/v1/workspaces/{workspace_slug}/docs/pages/{notes['notes_page_id']}",
+        headers=_auth_headers(attendee_token),
+        json={
+            "content_blocks": [
+                {
+                    "type": "paragraph",
+                    "content": [{"type": "text", "text": "Attendee updated notes"}],
+                }
+            ]
+        },
+    )
+    assert update_page_response.status_code == 200, update_page_response.text
+
+    remove_attendee_response = client.patch(
+        f"/api/v1/workspaces/{workspace_slug}/meeting/meetings/{meeting['id']}",
+        headers=_auth_headers(admin_token),
+        json={"attendees": []},
+    )
+    assert remove_attendee_response.status_code == 200, remove_attendee_response.text
+
+    after_removal_response = client.get(
+        f"/api/v1/workspaces/{workspace_slug}/docs/items/{notes['notes_doc_id']}",
+        headers=_auth_headers(attendee_token),
+    )
+    assert after_removal_response.status_code == 404
 
 
 def test_attach_task_requires_issue_access(client: TestClient) -> None:

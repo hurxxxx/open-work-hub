@@ -432,10 +432,14 @@ function resolvePmsPath(path: string, workspaceSlug?: string | null): string {
   return rewriteWorkspaceApiPath(path, workspaceSlug);
 }
 
-export function listPmsProjects(token: string, teamId?: string): Promise<PmsProjectsResponse> {
+export function listPmsProjects(
+  token: string,
+  teamId?: string,
+  workspaceSlug?: string | null,
+): Promise<PmsProjectsResponse> {
   const params = new URLSearchParams({ page: '1', page_size: '50' });
   if (teamId) params.set('team_id', teamId);
-  return request<PmsProjectsResponse>(`/api/v1/pms/lists?${params}`, token);
+  return request<PmsProjectsResponse>(`/api/v1/pms/lists?${params}`, token, {}, workspaceSlug);
 }
 
 export function listSpaces(token: string): Promise<PmsSpace[]> {
@@ -618,6 +622,7 @@ export function listProjectIssues(
   token: string,
   projectId: string,
   params: IssueFilterParams = {},
+  workspaceSlug?: string | null,
 ): Promise<PmsIssuesResponse> {
   const search = new URLSearchParams({
     page: '1',
@@ -641,6 +646,8 @@ export function listProjectIssues(
   return request<PmsIssuesResponse>(
     `/api/v1/pms/lists/${projectId}/issues?${search.toString()}`,
     token,
+    {},
+    workspaceSlug,
   );
 }
 
