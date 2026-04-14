@@ -9,6 +9,7 @@ from sqlalchemy import (
     Index,
     Integer,
     JSON,
+    LargeBinary,
     String,
     UniqueConstraint,
     text,
@@ -223,3 +224,39 @@ class DocsUserItemPref(Base):
     last_viewed_page_source_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     last_viewed_page_title: Mapped[str | None] = mapped_column(String(200), nullable=True)
     user = relationship("User")
+
+
+class DocsCollabDocument(Base):
+    __tablename__ = "docs_collab_documents"
+    __table_args__ = (
+        UniqueConstraint("room_key", name="uq_docs_collab_documents_room_key"),
+        UniqueConstraint(
+            "source_type",
+            "source_page_id",
+            name="uq_docs_collab_documents_source_page",
+        ),
+        Index(
+            "ix_docs_collab_documents_source_page",
+            "source_type",
+            "source_page_id",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    room_key: Mapped[str] = mapped_column(String(128), nullable=False)
+    source_type: Mapped[str] = mapped_column(String(40), nullable=False)
+    source_page_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    yjs_state: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
+    snapshot_content_blocks: Mapped[list[dict] | None] = mapped_column(JSON, nullable=True)
+    last_snapshot_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        default=utcnow_naive,
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        default=utcnow_naive,
+        onupdate=utcnow_naive,
+        nullable=False,
+    )

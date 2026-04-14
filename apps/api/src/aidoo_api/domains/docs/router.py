@@ -1,16 +1,19 @@
 from __future__ import annotations
 
+import asyncio
+import base64
+import json
 import secrets
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, WebSocket, status
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload, selectinload
 
-from aidoo_api.core.db import get_db_session
+from aidoo_api.core.db import get_db_session, get_session_factory
 from aidoo_api.domains.auth.access import (
     bind_current_workspace,
     get_current_workspace,
@@ -18,9 +21,19 @@ from aidoo_api.domains.auth.access import (
     resolve_workspaces,
     resolve_workspace_role,
 )
-from aidoo_api.domains.auth.dependencies import require_current_user
+from aidoo_api.domains.auth.dependencies import require_current_user, resolve_auth_context_from_token
 from aidoo_api.domains.auth.models import Team, TeamMember, User, Workspace
 from aidoo_api.domains.auth.security import new_id
+from aidoo_api.domains.docs.collab import (
+    DocsCollabHub,
+    FastAPIYjsWebsocket,
+    delete_collab_document,
+    get_collab_document,
+    persist_collab_snapshot_to_page,
+    resolve_collab_page_context,
+    sync_collab_record_from_rest_patch,
+    update_collab_snapshot_record,
+)
 from aidoo_api.domains.docs.models import (
     DocMeetingAccess,
     DocsUserItemPref,
@@ -35,6 +48,7 @@ from aidoo_api.domains.pms.models import SpaceDoc, SpaceDocPage
 
 
 router = APIRouter(prefix="/docs", tags=["docs"])
+ws_router = APIRouter(prefix="/docs", tags=["docs"])
 
 SOURCE_NATIVE_DOC = "native_doc"
 SOURCE_PMS_SPACE_DOC = "pms_space_doc"
@@ -274,6 +288,7 @@ class DocsPageItem(BaseModel):
     updated_at: datetime
     trashed_at: datetime | None = None
     can_edit: bool
+    realtime_collab: bool = True
 
 
 class DocsPageListResponse(BaseModel):
@@ -317,6 +332,123 @@ class UpdateDocPageRequest(BaseModel):
     parent_id: str | None = None
     content_blocks: list[dict] | None = None
     sort_order: int | None = None
+
+
+class DocsCollabSessionUser(BaseModel):
+    id: str
+    full_name: str
+
+
+class DocsCollabSessionResponse(BaseModel):
+    page_ref: str
+    source_type: Literal["native_doc_page", "pms_space_doc_page"]
+    source_page_id: str
+    room_key: str
+    ws_path: str
+    can_edit: bool
+    user: DocsCollabSessionUser
+    snapshot_content_blocks: list[dict] | None = None
+    yjs_state: str | None = None
+
+
+class DocsCollabSnapshotRequest(BaseModel):
+    content_blocks: list[dict] | None = None
+    yjs_state: str | None = None
+
+
+class DocsCollabSnapshotResponse(BaseModel):
+    updated_at: datetime
+    last_snapshot_at: datetime
+
+
+def _require_workspace_slug(request: Request) -> str:
+    workspace_slug = request.path_params.get("workspace_slug")
+    if not workspace_slug:
+        raise HTTPException(
+            status_code=400,
+            detail="Workspace-scoped collaboration routes require a workspace slug.",
+        )
+    return workspace_slug
+
+
+def _decode_collab_yjs_state(value: str | None) -> bytes | None:
+    if not value:
+        return None
+    try:
+        return base64.b64decode(value.encode("ascii"), validate=True)
+    except Exception as exc:  # pragma: no cover - defensive validation
+        raise HTTPException(status_code=400, detail="Invalid yjs_state payload.") from exc
+
+
+def _collab_ws_close_code_for_status(status_code: int) -> int:
+    if status_code == 401:
+        return 4401
+    if status_code == 403:
+        return 4403
+    if status_code == 404:
+        return 4404
+    return 1011
+
+
+async def _receive_collab_auth_frame(websocket: WebSocket) -> str:
+    message = await websocket.receive()
+    if message["type"] == "websocket.disconnect":
+        raise HTTPException(status_code=401, detail="Authentication required.")
+    payload = message.get("text")
+    if payload is None:
+        raise HTTPException(status_code=401, detail="Authentication required.")
+    try:
+        parsed = json.loads(payload)
+    except json.JSONDecodeError as exc:
+        raise HTTPException(status_code=401, detail="Authentication required.") from exc
+
+    token = parsed.get("token")
+    if parsed.get("type") != "auth" or not isinstance(token, str) or not token:
+        raise HTTPException(status_code=401, detail="Authentication required.")
+    return token
+
+
+async def _resolve_collab_ws_token(websocket: WebSocket) -> str:
+    query_token = websocket.query_params.get("token")
+    if query_token:
+        return query_token
+    return await _receive_collab_auth_frame(websocket)
+
+
+async def _close_websocket_for_http_error(websocket: WebSocket, exc: HTTPException) -> None:
+    try:
+        await websocket.close(
+            code=_collab_ws_close_code_for_status(exc.status_code),
+            reason=str(exc.detail),
+        )
+    except RuntimeError as close_error:
+        if "after sending 'websocket.close'" in str(close_error):
+            return
+        raise
+
+
+async def _monitor_collab_access(
+    websocket: WebSocket,
+    *,
+    workspace_slug: str,
+    page_ref: str,
+    token: str,
+) -> None:
+    session_factory = get_session_factory()
+    while True:
+        await asyncio.sleep(5)
+        db = session_factory()
+        try:
+            auth_context = resolve_auth_context_from_token(db, token, update_last_seen=False)
+            context = resolve_collab_page_context(db, auth_context.user, workspace_slug, page_ref)
+            if not context.can_edit:
+                await websocket.close(code=4403, reason="Doc edit access required.")
+                return
+        except HTTPException as exc:
+            await _close_websocket_for_http_error(websocket, exc)
+            return
+        finally:
+            db.close()
 
 
 class ToggleFavoriteResponse(BaseModel):
@@ -717,11 +849,11 @@ def _serialize_native_page(
     can_edit: bool,
 ) -> DocsPageItem:
     return DocsPageItem(
-        id=_make_page_id(PAGE_SOURCE_NATIVE_DOC, page.id),
+        id=page.id,
         doc_id=_make_item_id(SOURCE_NATIVE_DOC, doc.id),
         source_type=PAGE_SOURCE_NATIVE_DOC,
         source_page_id=page.id,
-        parent_id=_make_page_id(PAGE_SOURCE_NATIVE_DOC, page.parent_id) if page.parent_id else None,
+        parent_id=page.parent_id,
         title=page.title,
         content_blocks=page.content_blocks,
         sort_order=page.sort_order,
@@ -741,11 +873,11 @@ def _serialize_space_page(
     can_edit: bool,
 ) -> DocsPageItem:
     return DocsPageItem(
-        id=_make_page_id(PAGE_SOURCE_PMS_SPACE_DOC, page.id),
+        id=page.id,
         doc_id=_make_item_id(SOURCE_PMS_SPACE_DOC, doc.id),
         source_type=PAGE_SOURCE_PMS_SPACE_DOC,
         source_page_id=page.id,
-        parent_id=_make_page_id(PAGE_SOURCE_PMS_SPACE_DOC, page.parent_id) if page.parent_id else None,
+        parent_id=page.parent_id,
         title=page.title,
         content_blocks=page.content_blocks,
         sort_order=page.sort_order,
@@ -1001,6 +1133,141 @@ def get_doc_item(
     if share_token is None or not _share_token_allows_item_without_docs_access(item_id):
         _ensure_docs_workspace_access(db, current_user)
     return _lookup_item(db, item_id, current_user, share_token=share_token)
+
+
+@router.get("/collab/pages/{page_ref}/session", response_model=DocsCollabSessionResponse)
+def get_docs_collab_session(
+    page_ref: str,
+    request: Request,
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+) -> DocsCollabSessionResponse:
+    workspace_slug = _require_workspace_slug(request)
+    context = resolve_collab_page_context(db, current_user, workspace_slug, page_ref)
+    collab = get_collab_document(
+        db,
+        source_type=context.source_type,
+        source_page_id=context.source_page_id,
+    )
+    ws_path = request.url.path.removesuffix("/session") + "/ws"
+    return DocsCollabSessionResponse(
+        page_ref=context.page_ref,
+        source_type=context.source_type,
+        source_page_id=context.source_page_id,
+        room_key=collab.room_key if collab is not None else context.room_key,
+        ws_path=ws_path,
+        can_edit=context.can_edit,
+        user=DocsCollabSessionUser(id=current_user.id, full_name=current_user.full_name),
+        snapshot_content_blocks=(
+            collab.snapshot_content_blocks if collab is not None else context.content_blocks
+        ),
+        yjs_state=(
+            base64.b64encode(collab.yjs_state).decode("ascii")
+            if collab is not None and collab.yjs_state is not None
+            else None
+        ),
+    )
+
+
+@router.put("/collab/pages/{page_ref}/snapshot", response_model=DocsCollabSnapshotResponse)
+def save_docs_collab_snapshot(
+    page_ref: str,
+    payload: DocsCollabSnapshotRequest,
+    request: Request,
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+) -> DocsCollabSnapshotResponse:
+    workspace_slug = _require_workspace_slug(request)
+    context = resolve_collab_page_context(db, current_user, workspace_slug, page_ref)
+    if not context.can_edit:
+        raise HTTPException(status_code=403, detail="Doc edit access required.")
+
+    yjs_state = _decode_collab_yjs_state(payload.yjs_state)
+    persist_collab_snapshot_to_page(
+        db,
+        current_user=current_user,
+        source_type=context.source_type,
+        source_page_id=context.source_page_id,
+        content_blocks=payload.content_blocks,
+    )
+    collab = update_collab_snapshot_record(
+        db,
+        source_type=context.source_type,
+        source_page_id=context.source_page_id,
+        room_key=context.room_key,
+        snapshot_content_blocks=payload.content_blocks,
+        yjs_state=yjs_state,
+    )
+    db.commit()
+    snapshot_at = collab.last_snapshot_at or _utcnow()
+    return DocsCollabSnapshotResponse(
+        updated_at=snapshot_at,
+        last_snapshot_at=snapshot_at,
+    )
+
+
+@ws_router.websocket("/collab/pages/{page_ref}/ws")
+@ws_router.websocket("/collab/pages/{page_ref}/ws/{room_name}")
+async def docs_collab_websocket(
+    websocket: WebSocket,
+    page_ref: str,
+    room_name: str | None = None,
+) -> None:
+    await websocket.accept()
+
+    monitor_task: asyncio.Task[None] | None = None
+    room_key: str | None = None
+
+    try:
+        token = await _resolve_collab_ws_token(websocket)
+        workspace_slug = websocket.path_params.get("workspace_slug")
+        if not workspace_slug:
+            raise HTTPException(
+                status_code=400,
+                detail="Workspace-scoped collaboration routes require a workspace slug.",
+            )
+
+        session_factory = get_session_factory()
+        db = session_factory()
+        try:
+            auth_context = resolve_auth_context_from_token(db, token)
+            context = resolve_collab_page_context(db, auth_context.user, workspace_slug, page_ref)
+            if not context.can_edit:
+                raise HTTPException(status_code=403, detail="Doc edit access required.")
+            collab = get_collab_document(
+                db,
+                source_type=context.source_type,
+                source_page_id=context.source_page_id,
+            )
+        finally:
+            db.close()
+
+        room_key = context.room_key
+        if room_name and room_name != room_key:
+            raise HTTPException(status_code=404, detail="Room not found.")
+
+        await websocket.send_text(json.dumps({"type": "auth_ok"}))
+
+        hub: DocsCollabHub = websocket.app.state.docs_collab
+        room = await hub.get_room(room_key, collab.yjs_state if collab is not None else None)
+        monitor_task = asyncio.create_task(
+            _monitor_collab_access(
+                websocket,
+                workspace_slug=workspace_slug,
+                page_ref=page_ref,
+                token=token,
+            )
+        )
+        await room.serve(FastAPIYjsWebsocket(websocket, room_key))
+    except HTTPException as exc:
+        await _close_websocket_for_http_error(websocket, exc)
+    finally:
+        if monitor_task is not None:
+            monitor_task.cancel()
+            await asyncio.gather(monitor_task, return_exceptions=True)
+        if room_key is not None:
+            hub: DocsCollabHub = websocket.app.state.docs_collab
+            await hub.cleanup_room(room_key)
 
 
 @router.patch("/items/{item_id}", response_model=DocsHubItem)
@@ -1274,6 +1541,12 @@ def create_doc_page(
         db.flush()
         if payload.content_blocks is not None:
             sync_embedded_media(db, payload.content_blocks, "docs_native_page", page.id, current_user)
+            sync_collab_record_from_rest_patch(
+                db,
+                source_type=PAGE_SOURCE_NATIVE_DOC,
+                source_page_id=page.id,
+                snapshot_content_blocks=payload.content_blocks,
+            )
         db.commit()
         page = _load_native_page(db, page.id)
         assert page is not None
@@ -1308,6 +1581,12 @@ def create_doc_page(
     db.flush()
     if payload.content_blocks is not None:
         sync_embedded_media(db, payload.content_blocks, "space_doc_page", page.id, current_user)
+        sync_collab_record_from_rest_patch(
+            db,
+            source_type=PAGE_SOURCE_PMS_SPACE_DOC,
+            source_page_id=page.id,
+            snapshot_content_blocks=payload.content_blocks,
+        )
     db.commit()
     page = _load_space_doc_page_with_doc(db, page.id)
     assert page is not None and page.doc is not None
@@ -1348,6 +1627,12 @@ def update_doc_page(
             if "content_blocks" in payload.model_fields_set:
                 page.content_blocks = payload.content_blocks
                 sync_embedded_media(db, payload.content_blocks, "docs_native_page", page.id, current_user)
+                sync_collab_record_from_rest_patch(
+                    db,
+                    source_type=PAGE_SOURCE_NATIVE_DOC,
+                    source_page_id=page.id,
+                    snapshot_content_blocks=payload.content_blocks,
+                )
             if payload.sort_order is not None:
                 page.sort_order = payload.sort_order
             db.add(page)
@@ -1378,6 +1663,12 @@ def update_doc_page(
             if "content_blocks" in payload.model_fields_set:
                 page.content_blocks = payload.content_blocks
                 sync_embedded_media(db, payload.content_blocks, "space_doc_page", page.id, current_user)
+                sync_collab_record_from_rest_patch(
+                    db,
+                    source_type=PAGE_SOURCE_PMS_SPACE_DOC,
+                    source_page_id=page.id,
+                    snapshot_content_blocks=payload.content_blocks,
+                )
             if payload.sort_order is not None:
                 page.sort_order = payload.sort_order
             db.add(page)
@@ -1412,6 +1703,11 @@ def delete_doc_page(
             for node in _collect_native_page_subtree([item for item in doc.pages if item.trashed_at is None], page.id):
                 node.trashed_at = deleted_at
                 db.add(node)
+                delete_collab_document(
+                    db,
+                    source_type=PAGE_SOURCE_NATIVE_DOC,
+                    source_page_id=node.id,
+                )
             db.commit()
             return Response(status_code=status.HTTP_204_NO_CONTENT)
 
@@ -1425,6 +1721,11 @@ def delete_doc_page(
             for node in _collect_space_page_subtree([item for item in page.doc.pages if item.trashed_at is None], page.id):
                 node.trashed_at = deleted_at
                 db.add(node)
+                delete_collab_document(
+                    db,
+                    source_type=PAGE_SOURCE_PMS_SPACE_DOC,
+                    source_page_id=node.id,
+                )
             db.commit()
             return Response(status_code=status.HTTP_204_NO_CONTENT)
 

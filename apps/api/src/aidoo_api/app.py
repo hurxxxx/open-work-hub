@@ -17,7 +17,9 @@ from aidoo_api.domains.auth.dependencies import (
     require_workspace_membership,
 )
 from aidoo_api.domains.auth.router import router as auth_router
+from aidoo_api.domains.docs.collab import DocsCollabHub
 from aidoo_api.domains.docs.router import router as docs_router
+from aidoo_api.domains.docs.router import ws_router as docs_ws_router
 from aidoo_api.domains.documents.router import router as documents_router
 from aidoo_api.domains.drafts.router import router as drafts_router
 from aidoo_api.domains.media.router import router as media_router
@@ -39,12 +41,14 @@ def create_app() -> FastAPI:
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
+        app.state.docs_collab = DocsCollabHub()
         if settings.llm_healthcheck_on_startup:
             llm_health = check_llm_stack_health(settings)
             app.state.llm_health = llm_health.public_dict()
             if settings.llm_required and not llm_health.ready:
                 logger.warning("LLM readiness check failed: %s", llm_health.public_dict())
         yield
+        await app.state.docs_collab.shutdown()
 
     app = FastAPI(
         title=settings.app_name,
@@ -122,6 +126,10 @@ def create_app() -> FastAPI:
             *protected_dependencies,
             Depends(require_workspace_membership()),
         ],
+    )
+    app.include_router(
+        docs_ws_router,
+        prefix=f"{settings.api_prefix}/workspaces/{{workspace_slug}}",
     )
     app.include_router(
         plm_router,

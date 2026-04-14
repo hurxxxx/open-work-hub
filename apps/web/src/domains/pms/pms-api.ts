@@ -315,6 +315,7 @@ export interface PmsSpaceDocPage {
   created_at: string;
   updated_at: string;
   trashed_at: string | null;
+  realtime_collab: boolean;
 }
 
 export interface PmsSpaceDocPagesResponse {

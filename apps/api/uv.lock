@@ -19,6 +19,8 @@ dependencies = [
     { name = "redis" },
     { name = "sqlalchemy" },
     { name = "uvicorn", extra = ["standard"] },
+    { name = "y-py" },
+    { name = "ypy-websocket" },
 ]
 
 [package.dev-dependencies]
@@ -41,12 +43,23 @@ requires-dist = [
     { name = "redis", specifier = ">=5.2.0,<6.0.0" },
     { name = "sqlalchemy", specifier = ">=2.0.0,<3.0.0" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.34.0,<1.0.0" },
+    { name = "y-py", specifier = ">=0.6.2" },
+    { name = "ypy-websocket", specifier = ">=0.12.4" },
 ]
 
 [package.metadata.requires-dev]
 dev = [
     { name = "pytest", specifier = ">=8.3.0,<9.0.0" },
     { name = "ruff", specifier = ">=0.11.0,<0.12.0" },
+]
+
+[[package]]
+name = "aiosqlite"
+version = "0.22.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/4e/8a/64761f4005f17809769d23e518d915db74e6310474e733e3593cfc854ef1/aiosqlite-0.22.1.tar.gz", hash = "sha256:043e0bd78d32888c0a9ca90fc788b38796843360c855a7262a532813133a0650", size = 14821, upload-time = "2025-12-23T19:25:43.997Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/00/b7/e3bf5133d697a08128598c8d0abc5e16377b51465a33756de24fa7dee953/aiosqlite-0.22.1-py3-none-any.whl", hash = "sha256:21c002eb13823fad740196c5a2e9d8e62f6243bd9e7e4a1f87fb5e44ecb4fceb", size = 17405, upload-time = "2025-12-23T19:25:42.139Z" },
 ]
 
 [[package]]
@@ -956,4 +969,34 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/91/d6/7d4553ad4bf1c0421e1ebd4b18de5d9098383b5caa1d937b63df8d04b565/websockets-16.0-cp312-cp312-win32.whl", hash = "sha256:eaded469f5e5b7294e2bdca0ab06becb6756ea86894a47806456089298813c89", size = 178261, upload-time = "2026-01-10T09:22:56.251Z" },
     { url = "https://files.pythonhosted.org/packages/c3/f0/f3a17365441ed1c27f850a80b2bc680a0fa9505d733fe152fdf5e98c1c0b/websockets-16.0-cp312-cp312-win_amd64.whl", hash = "sha256:5569417dc80977fc8c2d43a86f78e0a5a22fee17565d78621b6bb264a115d4ea", size = 178693, upload-time = "2026-01-10T09:22:57.478Z" },
     { url = "https://files.pythonhosted.org/packages/6f/28/258ebab549c2bf3e64d2b0217b973467394a9cea8c42f70418ca2c5d0d2e/websockets-16.0-py3-none-any.whl", hash = "sha256:1637db62fad1dc833276dded54215f2c7fa46912301a24bd94d45d46a011ceec", size = 171598, upload-time = "2026-01-10T09:23:45.395Z" },
+]
+
+[[package]]
+name = "y-py"
+version = "0.6.2"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/7a/4f/af6e0c02d6876fc466f0ae74ac01693f00d822a93830a9c3e84d17b03f8d/y_py-0.6.2.tar.gz", hash = "sha256:4757a82a50406a0b3a333aa0122019a331bd6f16e49fed67dca423f928b3fd4d", size = 53013, upload-time = "2023-10-05T06:00:28.253Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/19/e0/7baf1d43bf922e91e54e9fa04858619d1957ec63292191e524456d146648/y_py-0.6.2-cp312-cp312-macosx_10_7_x86_64.whl", hash = "sha256:7cbefd4f1060f05768227ddf83be126397b1d430b026c64e0eb25d3cf50c5734", size = 752650, upload-time = "2023-10-05T05:58:34.025Z" },
+    { url = "https://files.pythonhosted.org/packages/05/41/b242e358c530d88053172617489a702cabaa00a4ea6462e02857f7ee173a/y_py-0.6.2-cp312-cp312-macosx_10_9_x86_64.macosx_11_0_arm64.macosx_10_9_universal2.whl", hash = "sha256:032365dfe932bfab8e80937ad6093b4c22e67d63ad880096b5fa8768f8d829ba", size = 1461497, upload-time = "2023-10-05T05:58:35.904Z" },
+    { url = "https://files.pythonhosted.org/packages/ca/ff/4cbe7961c0ddb421cee48a2dc754a43dde05f31ee15d76e089eeb4f541b8/y_py-0.6.2-cp312-cp312-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:a70aee572da3994238c974694767365f237fc5949a550bee78a650fe16f83184", size = 1687776, upload-time = "2023-10-05T05:58:37.766Z" },
+    { url = "https://files.pythonhosted.org/packages/ff/ff/7190c93d6f0f63d40514a10116512b788b2363a3f8a960851f435ccbab3f/y_py-0.6.2-cp312-cp312-manylinux_2_17_armv7l.manylinux2014_armv7l.whl", hash = "sha256:ae80d505aee7b3172cdcc2620ca6e2f85586337371138bb2b71aa377d2c31e9a", size = 1693306, upload-time = "2023-10-05T05:58:40.354Z" },
+    { url = "https://files.pythonhosted.org/packages/4e/29/df7d9b506deff4158b80433c19294889951afe0cef911ab99dbbcf8704d5/y_py-0.6.2-cp312-cp312-manylinux_2_17_ppc64le.manylinux2014_ppc64le.whl", hash = "sha256:2a497ebe617bec6a420fc47378856caae40ab0652e756f3ed40c5f1fe2a12220", size = 1844205, upload-time = "2023-10-05T05:58:42.409Z" },
+    { url = "https://files.pythonhosted.org/packages/1d/a1/be12ce76ae783838c4df08f37dc0b65e85fe762f49c8510e2ca388d4eb68/y_py-0.6.2-cp312-cp312-manylinux_2_17_s390x.manylinux2014_s390x.whl", hash = "sha256:e8638355ae2f996356f7f281e03a3e3ce31f1259510f9d551465356532e0302c", size = 2029472, upload-time = "2023-10-05T05:58:44.186Z" },
+    { url = "https://files.pythonhosted.org/packages/cc/60/cbf95e42656fd84af4bb341f253add1030184b39f86962434920e121a2e4/y_py-0.6.2-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:8448da4092265142662bbd3fc46cb8b0796b1e259189c020bc8f738899abd0b5", size = 1701647, upload-time = "2023-10-05T05:58:46.146Z" },
+    { url = "https://files.pythonhosted.org/packages/c9/84/31998386aa81982fac3097816e45db238c8259480a228b497c3b3dc5d57a/y_py-0.6.2-cp312-cp312-manylinux_2_5_i686.manylinux1_i686.whl", hash = "sha256:69cfbcbe0a05f43e780e6a198080ba28034bf2bb4804d7d28f71a0379bfd1b19", size = 1758480, upload-time = "2023-10-05T05:58:48.771Z" },
+]
+
+[[package]]
+name = "ypy-websocket"
+version = "0.12.4"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "aiosqlite" },
+    { name = "anyio" },
+    { name = "y-py" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/68/d1/a49775fddf5d1e0c967e8dee21d6eee6f88e4280762e6099f0914cf58491/ypy_websocket-0.12.4.tar.gz", hash = "sha256:cbbf5fdaa9a301a0b5f9455f1f29478b7c05b62773b2dd2a65c6502b4e10afa1", size = 17046, upload-time = "2023-10-04T14:48:06.597Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/3d/57/6dbc4fabc51f47112b4b11a6e9321fac3cfe830ff28b165d740e902a494f/ypy_websocket-0.12.4-py3-none-any.whl", hash = "sha256:ff04a206d8d6996ad30aff582dea0a152f933537efa404d1936ec68fffe0e910", size = 19732, upload-time = "2023-10-04T14:48:02.765Z" },
 ]

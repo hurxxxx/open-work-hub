@@ -16,7 +16,9 @@ dependencies = [
   "minio>=7.2.0,<8.0.0",
   "httpx>=0.28.0,<0.29.0",
   "openai>=2.0.0,<3.0.0",
-  "python-multipart>=0.0.18,<1.0.0"
+  "python-multipart>=0.0.18,<1.0.0",
+  "y-py>=0.6.2",
+  "ypy-websocket>=0.12.4",
 ]
 
 [dependency-groups]

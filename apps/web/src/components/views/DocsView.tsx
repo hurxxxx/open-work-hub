@@ -22,7 +22,7 @@ import {
   Trash2,
   X,
 } from 'lucide-react';
-import { BlockEditor, BlockViewer, useConfirm, usePrompt } from '@aidoo/ui';
+import { BlockEditor, BlockViewer, CollaborativeBlockEditor, useConfirm, usePrompt } from '@aidoo/ui';
 
 import { useMediaUpload } from '@/src/domains/media/use-media-upload';
 import { useAuth } from '@/src/domains/auth/auth-provider';
@@ -36,13 +36,16 @@ import {
   deleteDocLinkShare,
   deleteDocUserShare,
   duplicateDocsItem,
+  getDocsCollabSession,
   getDocsItem,
   getDocSharing,
   listDocPages,
   listDocsHub,
+  makeDocsPageRef,
   listShareableUsers,
   recordDocView,
   resolveSharedLink,
+  saveDocsCollabSnapshot,
   toggleDocFavorite,
   updateDocPage,
   updateDocsItem,
@@ -510,6 +513,18 @@ export const DocsView = () => {
     }
   };
 
+  const handleCollabPersisted = useCallback((pageId: string, content: Record<string, unknown>[], updatedAt?: string | null) => {
+    setPages((current) => current.map((page) => (
+      page.id === pageId
+        ? {
+            ...page,
+            content_blocks: content,
+            updated_at: updatedAt ?? page.updated_at,
+          }
+        : page
+    )));
+  }, []);
+
   const toggleExpand = (nodeId: string) => {
     setExpandedNodes((current) => {
       const next = new Set(current);
@@ -851,7 +866,51 @@ export const DocsView = () => {
                     </div>
                   </div>
                   <div className="prose dark:prose-invert max-w-none pt-4">
-                    {selectedDoc.can_edit && activePage.can_edit ? (
+                    {selectedDoc.can_edit && activePage.can_edit && activePage.realtime_collab && !shareToken && token ? (
+                      <CollaborativeBlockEditor
+                        sessionKey={`${workspaceSlug ?? 'current'}:${activePage.id}`}
+                        authToken={token}
+                        loadSession={async () => {
+                          const session = await getDocsCollabSession(
+                            token,
+                            makeDocsPageRef(activePage.source_type, activePage.source_page_id),
+                            workspaceSlug,
+                          );
+                          return {
+                            roomKey: session.room_key,
+                            wsPath: session.ws_path,
+                            user: {
+                              id: session.user.id,
+                              fullName: session.user.full_name,
+                            },
+                            snapshotContent: (session.snapshot_content_blocks ?? []) as never,
+                            yjsState: session.yjs_state,
+                          };
+                        }}
+                        saveSnapshot={async ({ content, yjsState }) => {
+                          const response = await saveDocsCollabSnapshot(
+                            token,
+                            makeDocsPageRef(activePage.source_type, activePage.source_page_id),
+                            {
+                              content_blocks: content,
+                              yjs_state: yjsState,
+                            },
+                            workspaceSlug,
+                          );
+                          return { updatedAt: response.updated_at };
+                        }}
+                        placeholder="Start writing..."
+                        uploadFile={uploadFile}
+                        resolveFileUrl={resolveFileUrl}
+                        onPersisted={({ content, updatedAt }) => {
+                          handleCollabPersisted(
+                            activePage.id,
+                            content as Record<string, unknown>[],
+                            updatedAt ?? null,
+                          );
+                        }}
+                      />
+                    ) : selectedDoc.can_edit && activePage.can_edit ? (
                       <BlockEditor
                         key={activePage.id}
                         initialContent={activePage.content_blocks as never}

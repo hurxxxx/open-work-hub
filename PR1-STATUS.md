@@ -15,6 +15,19 @@
 - PMS rename: `pms_projects` → `pms_lists`, FK 컬럼 `project_id` → `list_id`, `/api/v1/pms/projects/*` 는 `/api/v1/pms/lists/*` 의 deprecated alias 로 1 PR grace 동안 유지. SQLAlchemy attribute 도 `list_id` 로 통일, `project_id = synonym("list_id")` 로 backward compat
 - 시드 모델: workspace 5개 (`hq`, `innovation-lab`, `knowledge-base`, `planning-desk`, `delivery-hub`), dev login account 정의는 11개
 
+## 2026-04-14 로컬 협업 디버깅 메모
+
+- BlockNote 기반 docs/meeting 실시간 협업 로컬 검증 중 3개 문제를 수정했다.
+- web dev proxy `/api` 에 `ws: true` 가 빠져 websocket upgrade 가 API 로 전달되지 않던 문제를 [apps/web/vite.config.mts](apps/web/vite.config.mts) 에서 수정.
+- 커스텀 websocket 래퍼가 브라우저 `Event` 객체를 재-dispatch 하면서 `InvalidStateError` 를 내던 문제와, `y-websocket` 이 기대하는 instance `OPEN/CLOSED` 상수 부재를 [packages/ui/src/lib/editor/collaborative-block-editor.tsx](packages/ui/src/lib/editor/collaborative-block-editor.tsx) 에서 수정.
+- API 쪽 `DocsCollabHub.get_room()` 이 `await room.start()` 로 멈춰 `auth_ok` 이후 `room.serve()` 까지 진행되지 않던 문제를 [apps/api/src/aidoo_api/domains/docs/collab.py](apps/api/src/aidoo_api/domains/docs/collab.py) 에서 background task + `room.started.wait()` 패턴으로 수정.
+- 공식 BlockNote Yjs 유틸(`blocksToYDoc`) 직접 import 정렬 시도는 로컬 Vite/workspace dev 환경에서 `Yjs was already imported` 경고와 함께 실시간 sync 가 불안정해져 보류했다. 현재는 안정성을 우선해 `yjs_state` 가 있으면 collaboration state 로 부팅하고, 없는 초기 문서만 `initialContent` fallback 을 사용한다.
+- 로컬 브라우저 재검증:
+  - URL: `http://localhost:4200/w/hq/meeting/e1a27370-499d-4740-b82a-b3bae5882872`
+  - `agent-browser` 세션 `doowon-collab-a`, `doowon-collab-b`
+  - A 입력 `HELLOSYNC`, `NEWSYNC99` 가 B 쪽 `.bn-editor` DOM 에 반영됨을 확인
+- 주의: `agent-browser snapshot` 의 accessibility tree 는 BlockNote contenteditable 전체 텍스트를 일부만 보여줄 수 있어, 최종 판정은 `console` + `.bn-editor` DOM HTML 기준으로 확인했다.
+
 ## 라운드 13 — PR2: ACL refactor + Docs share fallback + PMS rename (2026-04-13)
 
 [MEETING-APP-PLAN.md §324](MEETING-APP-PLAN.md#L324) 의 PR2 를 [autoplan H2/H3/H4 lock decisions](MEETING-APP-PLAN.md#L557) + 1차 plan review 보완사항 모두 반영하여 구현.
@@ -785,6 +798,7 @@ cd apps/api && uv run --python 3.12 alembic revision --autogenerate -m "..."
 | PR1 의 원본 인계 (스펙) | [PR1-HANDOFF.md](PR1-HANDOFF.md) |
 | PR0 결과 + Alembic 인프라 상태 | [PR0-RESULT.md](PR0-RESULT.md) |
 | 전체 plan (Phase 0-3 결정 기록) | [MEETING-APP-PLAN.md](MEETING-APP-PLAN.md) |
+| 협업 노트 구현/회귀 참고 문서 | [docs/working/meeting-notes-collaboration-implementation.md](docs/working/meeting-notes-collaboration-implementation.md) |
 | Alembic 워크플로 | [apps/api/README.md](apps/api/README.md) "데이터베이스 마이그레이션" 섹션 |
 | 원격 DB DSN | [.env](.env) `DOOWON_POSTGRES_DSN` |
 | FastAPI app composition | [apps/api/src/aidoo_api/app.py](apps/api/src/aidoo_api/app.py) |
@@ -806,3 +820,18 @@ dcced7a Refine Meeting domain: fixes, permissions, file attachments           (r
 ```
 
 PR1 본체 skeleton (`3f7c7a9 Add Meeting domain skeleton (PR1)`) 와 PR0 (`8dd1458 Bootstrap Alembic with baseline migration`) 는 이전 세션.
+
+## 14. 2026-04-14 collab 회귀 메모
+
+- meeting notes realtime 회귀 원인은 `packages/ui/src/lib/editor/collaborative-block-editor.tsx` 의 cleanup 이었다.
+- React dev `StrictMode` 에서 effect cleanup 이 한 번 더 돌면서 `provider.disconnect()` 와 `ydoc.destroy()` 가 실제 live provider 에 적용되어 `shouldConnect=false`, `wsconnected=false` 상태로 고정됐다.
+- 정리:
+  - frontend: y-websocket 연결은 `params: { token }` 기반의 native websocket 으로 단순화
+  - frontend: provider/ydoc dispose 는 `setTimeout(0)` 지연 cleanup 으로 바꿔 StrictMode 재-setup 이 취소할 수 있게 조정
+  - backend: docs collab ws 는 query param token 을 허용하고, closed socket `send/close` 예외(`WebSocketDisconnect`, `ClientDisconnected`) 를 정상 종료로 흡수
+- 브라우저 검증:
+  - `agent-browser` 새 세션 `doowon-collab-k`, `doowon-collab-l`
+  - URL: `http://127.0.0.1:4200/w/hq/meeting/e1a27370-499d-4740-b82a-b3bae5882872`
+  - 양방향 입력 확인:
+    - `FIXED414OK` 가 반대 세션 `.bn-editor` 에 반영
+    - `REVERSE414YES` 가 다시 원 세션 `.bn-editor` 에 반영

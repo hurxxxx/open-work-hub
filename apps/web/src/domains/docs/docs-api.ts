@@ -113,10 +113,31 @@ export interface DocsPageItem {
   updated_at: string;
   trashed_at: string | null;
   can_edit: boolean;
+  realtime_collab: boolean;
 }
 
 export interface DocsPageListResponse {
   items: DocsPageItem[];
+}
+
+export interface DocsCollabSession {
+  page_ref: string;
+  source_type: 'native_doc_page' | 'pms_space_doc_page';
+  source_page_id: string;
+  room_key: string;
+  ws_path: string;
+  can_edit: boolean;
+  user: {
+    id: string;
+    full_name: string;
+  };
+  snapshot_content_blocks: Record<string, unknown>[] | null;
+  yjs_state: string | null;
+}
+
+export interface DocsCollabSnapshotResponse {
+  updated_at: string;
+  last_snapshot_at: string;
 }
 
 export interface FavoriteDocItem {
@@ -288,6 +309,46 @@ export function updateDocPage(
     token,
     {
       method: 'PATCH',
+      body: JSON.stringify(payload),
+    },
+    workspaceSlug,
+  );
+}
+
+export function makeDocsPageRef(
+  sourceType: 'native_doc_page' | 'pms_space_doc_page',
+  sourcePageId: string,
+): string {
+  return `${sourceType}__${sourcePageId}`;
+}
+
+export function getDocsCollabSession(
+  token: string,
+  pageRef: string,
+  workspaceSlug?: string | null,
+): Promise<DocsCollabSession> {
+  return request<DocsCollabSession>(
+    `/api/v1/docs/collab/pages/${encodeURIComponent(pageRef)}/session`,
+    token,
+    {},
+    workspaceSlug,
+  );
+}
+
+export function saveDocsCollabSnapshot(
+  token: string,
+  pageRef: string,
+  payload: {
+    content_blocks?: Record<string, unknown>[] | null;
+    yjs_state?: string | null;
+  },
+  workspaceSlug?: string | null,
+): Promise<DocsCollabSnapshotResponse> {
+  return request<DocsCollabSnapshotResponse>(
+    `/api/v1/docs/collab/pages/${encodeURIComponent(pageRef)}/snapshot`,
+    token,
+    {
+      method: 'PUT',
       body: JSON.stringify(payload),
     },
     workspaceSlug,

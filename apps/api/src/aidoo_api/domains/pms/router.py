@@ -24,6 +24,11 @@ from aidoo_api.domains.auth.models import Team, TeamMember, User, Workspace
 from aidoo_api.domains.auth.security import new_id
 from aidoo_api.core.settings import get_settings
 from aidoo_api.core.storage import get_minio_client
+from aidoo_api.domains.docs.collab import (
+    PAGE_SOURCE_PMS_SPACE_DOC,
+    delete_collab_document,
+    sync_collab_record_from_rest_patch,
+)
 from aidoo_api.domains.media.router import sync_embedded_media, cleanup_media_for_resource
 from aidoo_api.domains.pms.models import (
     Attachment,
@@ -4179,6 +4184,7 @@ class SpaceDocPageItem(BaseModel):
     created_at: datetime
     updated_at: datetime
     trashed_at: datetime | None = None
+    realtime_collab: bool = True
 
 
 class SpaceDocPageListResponse(BaseModel):
@@ -4348,8 +4354,14 @@ def create_space_doc_page(
     )
     db.add(page)
     db.flush()
-    if payload.content_blocks:
+    if payload.content_blocks is not None:
         sync_embedded_media(db, payload.content_blocks, "space_doc_page", page.id, current_user)
+        sync_collab_record_from_rest_patch(
+            db,
+            source_type=PAGE_SOURCE_PMS_SPACE_DOC,
+            source_page_id=page.id,
+            snapshot_content_blocks=payload.content_blocks,
+        )
     db.commit()
     page = db.scalar(
         select(SpaceDocPage)
@@ -4391,6 +4403,12 @@ def update_space_doc_page(
     if "content_blocks" in payload.model_fields_set:
         page.content_blocks = payload.content_blocks
         sync_embedded_media(db, payload.content_blocks, "space_doc_page", page.id, current_user)
+        sync_collab_record_from_rest_patch(
+            db,
+            source_type=PAGE_SOURCE_PMS_SPACE_DOC,
+            source_page_id=page.id,
+            snapshot_content_blocks=payload.content_blocks,
+        )
     if "sort_order" in payload.model_fields_set and payload.sort_order is not None:
         page.sort_order = payload.sort_order
     db.commit()
@@ -4412,6 +4430,11 @@ def delete_space_doc_page(
     for descendant in _collect_active_space_doc_page_subtree(db, page):
         descendant.trashed_at = deleted_at
         db.add(descendant)
+        delete_collab_document(
+            db,
+            source_type=PAGE_SOURCE_PMS_SPACE_DOC,
+            source_page_id=descendant.id,
+        )
     db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 

@@ -1,13 +1,16 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Link, Navigate, useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, ExternalLink, Loader2 } from 'lucide-react';
-import { BlockEditor, BlockViewer, Button } from '@aidoo/ui';
+import { BlockViewer, Button, CollaborativeBlockEditor } from '@aidoo/ui';
 
 import { useAuth } from '@/src/domains/auth/auth-provider';
 import {
+  getDocsCollabSession,
   getDocsItem,
   listDocPages,
+  makeDocsPageRef,
   recordDocView,
+  saveDocsCollabSnapshot,
   updateDocPage,
   type DocsHubItem,
   type DocsPageItem,
@@ -46,7 +49,6 @@ export function MeetingWorkspaceView() {
   const [notesPage, setNotesPage] = useState<DocsPageItem | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const meetingsRoot = workspaceSlug
     ? buildWorkspaceAppPath(workspaceSlug, 'meeting')
@@ -115,35 +117,6 @@ export function MeetingWorkspaceView() {
     }
     void recordDocView(token, notesDoc.id, notesPage.id, null, workspaceSlug);
   }, [notesDoc, notesPage, token, workspaceSlug]);
-
-  useEffect(() => () => {
-    if (saveTimerRef.current) {
-      clearTimeout(saveTimerRef.current);
-    }
-  }, []);
-
-  const handleEditorChange = useCallback((blocks: Record<string, unknown>[]) => {
-    if (!token || !workspaceSlug || !notesPage?.can_edit) {
-      return;
-    }
-    if (saveTimerRef.current) {
-      clearTimeout(saveTimerRef.current);
-    }
-    saveTimerRef.current = setTimeout(async () => {
-      try {
-        const updated = await updateDocPage(
-          token,
-          notesPage.id,
-          { content_blocks: blocks },
-          null,
-          workspaceSlug,
-        );
-        setNotesPage(updated);
-      } catch {
-        // Keep the in-memory editor state and retry on the next change.
-      }
-    }, 800);
-  }, [notesPage?.can_edit, notesPage?.id, token, workspaceSlug]);
 
   const handleTitleSave = useCallback(async (nextTitle: string) => {
     if (!token || !workspaceSlug || !notesPage) {
@@ -267,19 +240,58 @@ export function MeetingWorkspaceView() {
                   <h2 className="app-text-title-xl text-app-ink">{notesPage.title}</h2>
                 )}
                 <p className="app-text-caption text-app-ink/50">
-                  단일 notes page가 자동 저장됩니다.
+                  단일 notes page가 실시간으로 동기화됩니다.
                 </p>
               </div>
 
               <div className="prose max-w-none dark:prose-invert">
                 {canEditNotes ? (
-                  <BlockEditor
-                    key={notesPage.id}
-                    initialContent={(notesPage.content_blocks ?? []) as never}
+                  <CollaborativeBlockEditor
+                    sessionKey={`${workspaceSlug}:${notesPage.id}`}
+                    authToken={token!}
+                    loadSession={async () => {
+                      const session = await getDocsCollabSession(
+                        token!,
+                        makeDocsPageRef(notesPage.source_type, notesPage.source_page_id),
+                        workspaceSlug,
+                      );
+                      return {
+                        roomKey: session.room_key,
+                        wsPath: session.ws_path,
+                        user: {
+                          id: session.user.id,
+                          fullName: session.user.full_name,
+                        },
+                        snapshotContent: (session.snapshot_content_blocks ?? []) as never,
+                        yjsState: session.yjs_state,
+                      };
+                    }}
+                    saveSnapshot={async ({ content, yjsState }) => {
+                      const response = await saveDocsCollabSnapshot(
+                        token!,
+                        makeDocsPageRef(notesPage.source_type, notesPage.source_page_id),
+                        {
+                          content_blocks: content,
+                          yjs_state: yjsState,
+                        },
+                        workspaceSlug,
+                      );
+                      return { updatedAt: response.updated_at };
+                    }}
                     placeholder="회의 메모를 작성하세요..."
                     uploadFile={uploadFile}
                     resolveFileUrl={resolveFileUrl}
-                    onChange={handleEditorChange}
+                    onPersisted={({ content, updatedAt }) => {
+                      setNotesPage((current) => (
+                        current
+                          ? {
+                              ...current,
+                              content_blocks: content as Record<string, unknown>[],
+                              updated_at: updatedAt ?? current.updated_at,
+                            }
+                          : current
+                      ));
+                    }}
                   />
                 ) : (
                   <BlockViewer

@@ -49,18 +49,14 @@ class TeamAccessContext:
     role: str
 
 
-def require_auth_context(
-    credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
-    db: Session = Depends(get_db_session),
+def resolve_auth_context_from_token(
+    db: Session,
+    token: str,
+    *,
+    update_last_seen: bool = True,
 ) -> AuthContext:
-    if credentials is None or credentials.scheme.lower() != "bearer":
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Authentication required.",
-        )
-
     now = datetime.now(UTC).replace(tzinfo=None)
-    token_hash = hash_token(credentials.credentials)
+    token_hash = hash_token(token)
     auth_session = db.scalar(
         select(AuthSession).where(
             AuthSession.token_hash == token_hash,
@@ -86,15 +82,31 @@ def require_auth_context(
             detail="User account is inactive.",
         )
 
-    auth_session.last_seen_at = now
-    db.add(auth_session)
-    db.commit()
-    db.refresh(auth_session)
+    if update_last_seen:
+        auth_session.last_seen_at = now
+        db.add(auth_session)
+        db.commit()
+        db.refresh(auth_session)
 
     return AuthContext(
         user=user,
         session=auth_session,
         system_roles=frozenset(resolve_system_roles(db, user)),
+    )
+
+
+def require_auth_context(
+    credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
+    db: Session = Depends(get_db_session),
+) -> AuthContext:
+    if credentials is None or credentials.scheme.lower() != "bearer":
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication required.",
+        )
+    return resolve_auth_context_from_token(
+        db,
+        credentials.credentials,
     )
 
 

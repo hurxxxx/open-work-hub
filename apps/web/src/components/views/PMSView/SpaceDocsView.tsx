@@ -10,7 +10,7 @@ import {
   Plus,
   Trash2,
 } from 'lucide-react';
-import { BlockEditor, BlockViewer } from '@aidoo/ui';
+import { BlockViewer, CollaborativeBlockEditor } from '@aidoo/ui';
 import type { BlockContent } from '@aidoo/ui';
 
 import { useConfirm, usePrompt } from '@aidoo/ui';
@@ -20,6 +20,11 @@ import { teamRoleAllows } from '@/src/domains/auth/auth-api';
 import { useAuth } from '@/src/domains/auth/auth-provider';
 import { AccessDeniedView } from '@/src/domains/auth/settings-pages';
 import { useMediaUpload } from '@/src/domains/media/use-media-upload';
+import {
+  getDocsCollabSession,
+  makeDocsPageRef,
+  saveDocsCollabSnapshot,
+} from '@/src/domains/docs/docs-api';
 import {
   createSpaceDoc,
   createSpaceDocPage,
@@ -142,7 +147,7 @@ const PageTreeItem = ({
 
 export const SpaceDocsView = ({ spaceId, spaceName, docId: spaceDocId }: { spaceId: string; spaceName?: string | null; docId?: string | null }) => {
   const navigate = useNavigate();
-  const { docId: pageId } = useParams();
+  const { docId: pageId, workspaceSlug } = useParams();
   const { token } = useAuth();
   const { uploadFile, resolveFileUrl } = useMediaUpload();
   const { confirm, confirmDialog } = useConfirm();
@@ -156,7 +161,6 @@ export const SpaceDocsView = ({ spaceId, spaceName, docId: spaceDocId }: { space
   const [titleDraft, setTitleDraft] = useState('');
   const [spaceRole, setSpaceRole] = useState<string | null>(null);
   const [spaceRoleResolved, setSpaceRoleResolved] = useState(false);
-  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const navigateRef = useRef(navigate);
   navigateRef.current = navigate;
 
@@ -295,10 +299,6 @@ export const SpaceDocsView = ({ spaceId, spaceName, docId: spaceDocId }: { space
     setTitleDraft(selectedPage?.title ?? '');
   }, [selectedPage]);
 
-  useEffect(() => () => {
-    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-  }, []);
-
   const patchPage = useCallback(async (targetPageId: string, payload: Record<string, unknown>, fallbackMessage: string) => {
     if (!token || !canEditPages) return null;
     setSaving(true);
@@ -410,14 +410,6 @@ export const SpaceDocsView = ({ spaceId, spaceName, docId: spaceDocId }: { space
     if (!canEditPages || !selectedPage || titleDraft.trim() === selectedPage.title) return;
     await patchPage(selectedPage.id, { title: titleDraft.trim() || 'Untitled Page' }, '페이지 제목을 저장하지 못했습니다.');
   }, [canEditPages, patchPage, selectedPage, titleDraft]);
-
-  const handleContentChange = useCallback((content: BlockContent) => {
-    if (!canEditPages || !selectedPage) return;
-    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-    saveTimerRef.current = setTimeout(() => {
-      void patchPage(selectedPage.id, { content_blocks: content }, '페이지 내용을 저장하지 못했습니다.');
-    }, 500);
-  }, [canEditPages, patchPage, selectedPage]);
 
   if (!spaceRoleResolved) {
     return (
@@ -635,21 +627,60 @@ export const SpaceDocsView = ({ spaceId, spaceName, docId: spaceDocId }: { space
                 </div>
 
                 <div className="prose max-w-none dark:prose-invert">
-                  {canEditPages ? (
-                    <BlockEditor
-                      key={selectedPage.id}
-                      initialContent={(selectedPage.content_blocks as BlockContent | null) ?? undefined}
+                  {canEditPages && selectedPage.realtime_collab && token ? (
+                    <CollaborativeBlockEditor
+                      sessionKey={`${workspaceSlug ?? 'current'}:${selectedPage.id}`}
+                      authToken={token}
+                      loadSession={async () => {
+                        const session = await getDocsCollabSession(
+                          token,
+                          makeDocsPageRef('pms_space_doc_page', selectedPage.id),
+                          workspaceSlug,
+                        );
+                        return {
+                          roomKey: session.room_key,
+                          wsPath: session.ws_path,
+                          user: {
+                            id: session.user.id,
+                            fullName: session.user.full_name,
+                          },
+                          snapshotContent: (session.snapshot_content_blocks ?? []) as BlockContent,
+                          yjsState: session.yjs_state,
+                        };
+                      }}
+                      saveSnapshot={async ({ content, yjsState }) => {
+                        const response = await saveDocsCollabSnapshot(
+                          token,
+                          makeDocsPageRef('pms_space_doc_page', selectedPage.id),
+                          {
+                            content_blocks: content,
+                            yjs_state: yjsState,
+                          },
+                          workspaceSlug,
+                        );
+                        return { updatedAt: response.updated_at };
+                      }}
                       placeholder="Start writing..."
                       uploadFile={uploadFile}
                       resolveFileUrl={resolveFileUrl}
-                      onChange={handleContentChange}
+                      onPersisted={({ content, updatedAt }) => {
+                        setPages((current) => current.map((page) => (
+                          page.id === selectedPage.id
+                            ? {
+                                ...page,
+                                content_blocks: content as BlockContent,
+                                updated_at: updatedAt ?? page.updated_at,
+                              }
+                            : page
+                        )));
+                      }}
                     />
-                  ) : (
+                  ) : selectedPage ? (
                     <BlockViewer
                       key={selectedPage.id}
                       content={(selectedPage.content_blocks as BlockContent | null) ?? []}
                     />
-                  )}
+                  ) : null}
                 </div>
               </motion.div>
             </div>
