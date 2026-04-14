@@ -120,7 +120,7 @@
   - Notion "Jump back in" + Linear "My Issues" + ClickUp Agenda 패턴 차용: Greeting, Quick actions, 오늘 일정, 내 태스크, 최근 작업 5개 위젯
   - 기존 워크스페이스 스코프 엔드포인트(`meeting/meetings?scope=upcoming`, `pms/docs-hub/recent-pages`, PMS assigned issues)만 재사용 — 신규 API 없음
   - `WorkspaceAppId` 유니온에 `'home'` 추가, SubSidebar는 빈 필터 결과에서 접힘, `/` → `/w/{last}/home` 리다이렉트
-  - 세부 설계는 plan 파일 `nested-hopping-rainbow.md` 참고
+  - 세부 설계: [docs/planning/workspace-home-plan.md](docs/planning/workspace-home-plan.md)
 
 ## 검증
 
