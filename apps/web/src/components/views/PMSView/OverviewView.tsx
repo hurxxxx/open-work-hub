@@ -67,7 +67,7 @@ export const OverviewView = () => {
         </h2>
         <p className="app-text-body max-w-xl text-app-ink/60">
           {dashboard
-            ? `${dashboard.project_count} projects · ${dashboard.active_issue_count} active issues · ${dashboard.overdue_issue_count} overdue`
+            ? `${dashboard.project_count} lists · ${dashboard.active_issue_count} active issues · ${dashboard.overdue_issue_count} overdue`
             : 'Loading summary...'}
         </p>
       </div>

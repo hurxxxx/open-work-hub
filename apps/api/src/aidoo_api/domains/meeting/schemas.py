@@ -74,7 +74,7 @@ class MeetingTaskLinkOut(BaseModel):
     id: str
     issue_id: str
     issue_title: str
-    project_key: str
+    list_key: str
     issue_number: int
     added_by_id: str
     created_at: datetime

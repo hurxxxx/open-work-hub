@@ -396,8 +396,8 @@ export function MeetingDetail({
                       )}
                     </p>
                     <p className="app-text-caption text-app-ink/40">
-                      {link.project_key
-                        ? `${link.project_key}-${link.issue_number}`
+                      {link.list_key
+                        ? `${link.list_key}-${link.issue_number}`
                         : '#'}
                     </p>
                   </div>

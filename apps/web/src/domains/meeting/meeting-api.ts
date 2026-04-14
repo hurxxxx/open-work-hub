@@ -17,7 +17,7 @@ export interface MeetingTaskLink {
   id: string;
   issue_id: string;
   issue_title: string;
-  project_key: string;
+  list_key: string;
   issue_number: number;
   added_by_id: string;
   created_at: string;

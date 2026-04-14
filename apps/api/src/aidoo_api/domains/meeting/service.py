@@ -239,20 +239,20 @@ def _serialize_task_link(
     issue = db.scalar(
         select(Issue).where(Issue.id == link.issue_id)
     )
-    project_key = ""
+    list_key = ""
     issue_title = ""
     issue_number = 0
     if issue is not None:
         issue_title = issue.title
         issue_number = issue.issue_number
-        project = db.scalar(select(Project).where(Project.id == issue.project_id))
-        if project is not None:
-            project_key = project.key
+        pms_list = db.scalar(select(Project).where(Project.id == issue.project_id))
+        if pms_list is not None:
+            list_key = pms_list.key
     return MeetingTaskLinkOut(
         id=link.id,
         issue_id=link.issue_id,
         issue_title=issue_title,
-        project_key=project_key,
+        list_key=list_key,
         issue_number=issue_number,
         added_by_id=link.added_by_id,
         created_at=link.created_at,

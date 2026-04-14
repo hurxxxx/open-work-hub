@@ -305,7 +305,7 @@ def test_attach_task_requires_issue_access(client: TestClient) -> None:
     body = attach_response.json()
     assert len(body["task_links"]) == 1
     assert body["task_links"][0]["issue_id"] == issue["id"]
-    assert body["task_links"][0]["project_key"] == "MTG"
+    assert body["task_links"][0]["list_key"] == "MTG"
 
     # Re-attaching is idempotent.
     second_attach = client.post(

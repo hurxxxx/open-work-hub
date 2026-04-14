@@ -76,7 +76,7 @@ export function RecordingControls({
             <option value="">선택 안 함</option>
             {taskLinks.map((link) => (
               <option key={link.id} value={link.issue_id}>
-                {link.project_key ? `${link.project_key}-${link.issue_number}` : link.issue_title}
+                {link.list_key ? `${link.list_key}-${link.issue_number}` : link.issue_title}
               </option>
             ))}
           </select>
