@@ -106,7 +106,7 @@ export function RecordingControls({
             type="button"
             onClick={() => (isRecording ? onStop() : onStart(linkedTaskId))}
             disabled={isBusy}
-            className="inline-flex items-center gap-1 rounded-md bg-app-accent px-3 py-2 text-sm font-medium text-white disabled:opacity-60"
+            className="inline-flex items-center gap-1 rounded-md bg-app-accent px-3 py-2 text-sm font-medium text-app-accent-fg transition-colors hover:bg-app-accent-hover disabled:opacity-60"
           >
             {isRecording ? <Square size={14} /> : <Mic size={14} />}
             {isRecording ? '녹음 중지' : '녹음 시작'}
@@ -116,7 +116,7 @@ export function RecordingControls({
           type="button"
           onClick={() => fileInputRef.current?.click()}
           disabled={isBusy}
-          className="inline-flex items-center gap-1 rounded-md border border-app-border px-3 py-2 text-sm text-app-ink disabled:opacity-60"
+          className="inline-flex items-center gap-1 rounded-md border border-app-border bg-app-surface-raised px-3 py-2 text-sm text-app-ink transition-colors hover:bg-app-surface-hover disabled:opacity-60"
         >
           <Upload size={14} />
           음성 파일 업로드

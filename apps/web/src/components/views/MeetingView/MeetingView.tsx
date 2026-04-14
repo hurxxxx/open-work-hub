@@ -126,7 +126,11 @@ export function MeetingView() {
           <Users size={20} className="text-app-ink/60 dark:text-app-ink/70" />
           <h1 className="app-text-title-md text-app-ink">Meetings</h1>
         </div>
-        <Button variant="primary" onClick={() => setCreateOpen(true)}>
+        <Button
+          variant="primary"
+          onClick={() => setCreateOpen(true)}
+          className="dark:border-app-border dark:bg-app-surface-raised dark:text-app-ink dark:hover:bg-app-surface-hover"
+        >
           <Plus size={14} className="mr-1" />
           New Meeting
         </Button>

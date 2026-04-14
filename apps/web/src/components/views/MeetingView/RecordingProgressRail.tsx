@@ -37,7 +37,7 @@ export function RecordingProgressRail({
               <div
                 className={`flex h-6 w-6 items-center justify-center rounded-full border text-[11px] ${
                   done
-                    ? 'border-app-accent bg-app-accent text-white'
+                    ? 'border-app-accent bg-app-accent text-app-accent-fg'
                     : current
                       ? 'border-app-accent text-app-accent'
                       : 'border-app-border text-app-ink/40'
