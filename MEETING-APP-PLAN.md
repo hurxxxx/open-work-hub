@@ -1,4 +1,4 @@
-<!-- /autoplan restore point: captured 2026-04-10, branch=main, commit=5ecdd05 -->
+<!-- /autoplan restore point: captured 2026-04-10, commit=5ecdd05 -->
 <!-- Plan mode: restore point stored inline (external file write disallowed). Original plan state begins at "## Context" below. -->
 
 # Meeting 앱 신규 도입 계획
@@ -896,7 +896,6 @@ The /autoplan skill normally writes a restore point file, a test plan artifact, 
 | Eng Review | /autoplan phase 3 | Architecture & tests | 2 (Claude + Codex) | Confirmed 6/6 dimensions NO | 3 Critical (Alembic, media delete, Celery contract), 8 High, 9 Medium all auto-decided |
 
 **VERDICT:** APPROVED — 26 decisions recorded in audit trail, all findings either auto-decided or resolved via user gate. Plan is implementation-ready starting with PR0 (Alembic bootstrap).
-
 
 
 
