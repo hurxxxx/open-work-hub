@@ -16,6 +16,8 @@ import {
   FolderOpen,
   FileText,
   MoreHorizontal,
+  PanelLeftClose,
+  PanelLeftOpen,
   Pencil,
   Sparkles,
   Trash2,
@@ -899,6 +901,15 @@ export const SubSidebar = ({
     return SIDEBAR_DEFAULT_WIDTH;
   });
   const [isResizing, setIsResizing] = useState(false);
+  const [isCollapsed, setIsCollapsed] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    return window.localStorage.getItem('aidoo:sub-sidebar-collapsed') === '1';
+  });
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    window.localStorage.setItem('aidoo:sub-sidebar-collapsed', isCollapsed ? '1' : '0');
+  }, [isCollapsed]);
 
   useEffect(() => {
     if (!isResizing) return;
@@ -1431,6 +1442,19 @@ export const SubSidebar = ({
     <>
       {confirmDialog}
       {promptDialog}
+      {isCollapsed ? (
+        <div className="relative h-full w-10 shrink-0 border-r border-app-border bg-app-surface-sidebar flex flex-col items-center pt-4">
+          <button
+            type="button"
+            onClick={() => setIsCollapsed(false)}
+            title="서브 메뉴 펼치기"
+            aria-label="서브 메뉴 펼치기"
+            className="flex h-9 w-9 items-center justify-center rounded-lg border border-app-border bg-app-surface text-app-ink shadow-sm transition-colors hover:bg-app-accent/15 hover:text-app-accent hover:border-app-accent/40"
+          >
+            <PanelLeftOpen size={18} />
+          </button>
+        </div>
+      ) : (
       <div
         className="relative h-full bg-app-surface-sidebar border-r border-app-border flex flex-col overflow-hidden shrink-0"
         style={{ width: `${sidebarWidth}px` }}
@@ -1439,15 +1463,16 @@ export const SubSidebar = ({
           <h2 className="app-text-overline text-gray-600 dark:text-gray-300">
             {activeAppId === 'settings' ? 'All settings' : APP_BAR_ITEMS.find((item) => item.id === activeAppId)?.title}
           </h2>
+          <div className="flex items-center gap-1.5">
           {(activeAppId === 'pms' || activeAppId === 'docs' || activeAppId === 'planner' || activeAppId === 'ai' || activeAppId === 'meeting') ? (
             <div ref={createMenuRef} className="relative">
               <button
                 type="button"
                 onClick={() => setCreateMenuOpen((open) => !open)}
                 title="Create"
-                className="flex h-7 w-7 items-center justify-center rounded-md border border-app-border bg-app-surface text-app-ink shadow-sm transition-colors hover:bg-app-surface-hover"
+                className="flex h-8 w-8 items-center justify-center rounded-md border border-app-border bg-app-surface text-app-ink shadow-sm transition-colors hover:bg-app-surface-hover"
               >
-                <Plus size={14} />
+                <Plus size={16} />
               </button>
               {createMenuOpen ? (
                 <div className="absolute right-0 top-full mt-1 z-30 w-52 rounded-lg border border-app-border bg-app-surface py-1 shadow-xl">
@@ -1542,6 +1567,16 @@ export const SubSidebar = ({
               ) : null}
             </div>
           ) : null}
+          <button
+            type="button"
+            onClick={() => setIsCollapsed(true)}
+            title="서브 메뉴 접기"
+            aria-label="서브 메뉴 접기"
+            className="flex h-8 w-8 items-center justify-center rounded-md border border-app-border bg-app-surface text-app-ink shadow-sm transition-colors hover:bg-app-accent/15 hover:text-app-accent hover:border-app-accent/40"
+          >
+            <PanelLeftClose size={16} />
+          </button>
+          </div>
         </div>
 
         <div className="flex-1 overflow-y-auto py-4 px-2 space-y-6 custom-scrollbar">
@@ -1689,6 +1724,7 @@ export const SubSidebar = ({
           title="Drag to resize"
         />
       </div>
+      )}
 
       <CreateProjectModal
         isOpen={createProjectOpen}
