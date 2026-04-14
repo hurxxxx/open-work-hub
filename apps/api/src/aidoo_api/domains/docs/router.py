@@ -14,6 +14,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload, selectinload
 
 from aidoo_api.core.db import get_db_session, get_session_factory
+from aidoo_api.core.settings import get_settings
 from aidoo_api.domains.auth.access import (
     bind_current_workspace,
     get_current_workspace,
@@ -28,7 +29,7 @@ from aidoo_api.domains.docs.collab import (
     DocsCollabHub,
     FastAPIYjsWebsocket,
     delete_collab_document,
-    get_collab_document,
+    ensure_collab_document_state,
     persist_collab_snapshot_to_page,
     resolve_collab_page_context,
     sync_collab_record_from_rest_patch,
@@ -346,6 +347,8 @@ class DocsCollabSessionResponse(BaseModel):
     room_key: str
     ws_path: str
     can_edit: bool
+    realtime_status: Literal["enabled", "degraded"] = "enabled"
+    read_only_reason: Literal["relay_unavailable", "permission_revoked"] | None = None
     user: DocsCollabSessionUser
     snapshot_content_blocks: list[dict] | None = None
     yjs_state: str | None = None
@@ -435,8 +438,9 @@ async def _monitor_collab_access(
     token: str,
 ) -> None:
     session_factory = get_session_factory()
+    settings = get_settings()
     while True:
-        await asyncio.sleep(5)
+        await asyncio.sleep(settings.collab_acl_recheck_seconds)
         db = session_factory()
         try:
             auth_context = resolve_auth_context_from_token(db, token, update_last_seen=False)
@@ -1144,28 +1148,28 @@ def get_docs_collab_session(
 ) -> DocsCollabSessionResponse:
     workspace_slug = _require_workspace_slug(request)
     context = resolve_collab_page_context(db, current_user, workspace_slug, page_ref)
-    collab = get_collab_document(
+    collab = ensure_collab_document_state(
         db,
         source_type=context.source_type,
         source_page_id=context.source_page_id,
+        room_key=context.room_key,
+        snapshot_content_blocks=context.content_blocks,
     )
+    db.commit()
     ws_path = request.url.path.removesuffix("/session") + "/ws"
+    hub: DocsCollabHub = request.app.state.docs_collab
     return DocsCollabSessionResponse(
         page_ref=context.page_ref,
         source_type=context.source_type,
         source_page_id=context.source_page_id,
-        room_key=collab.room_key if collab is not None else context.room_key,
+        room_key=collab.room_key,
         ws_path=ws_path,
         can_edit=context.can_edit,
+        realtime_status="enabled" if hub.relay_available else "degraded",
+        read_only_reason=None if hub.relay_available else "relay_unavailable",
         user=DocsCollabSessionUser(id=current_user.id, full_name=current_user.full_name),
-        snapshot_content_blocks=(
-            collab.snapshot_content_blocks if collab is not None else context.content_blocks
-        ),
-        yjs_state=(
-            base64.b64encode(collab.yjs_state).decode("ascii")
-            if collab is not None and collab.yjs_state is not None
-            else None
-        ),
+        snapshot_content_blocks=collab.snapshot_content_blocks,
+        yjs_state=base64.b64encode(collab.yjs_state).decode("ascii") if collab.yjs_state is not None else None,
     )
 
 
@@ -1217,6 +1221,7 @@ async def docs_collab_websocket(
 
     monitor_task: asyncio.Task[None] | None = None
     room_key: str | None = None
+    hub: DocsCollabHub = websocket.app.state.docs_collab
 
     try:
         token = await _resolve_collab_ws_token(websocket)
@@ -1229,27 +1234,34 @@ async def docs_collab_websocket(
 
         session_factory = get_session_factory()
         db = session_factory()
+        collab_yjs_state: bytes | None = None
+        auth_user_id: str | None = None
         try:
             auth_context = resolve_auth_context_from_token(db, token)
+            auth_user_id = auth_context.user.id
             context = resolve_collab_page_context(db, auth_context.user, workspace_slug, page_ref)
             if not context.can_edit:
                 raise HTTPException(status_code=403, detail="Doc edit access required.")
-            collab = get_collab_document(
+            collab = ensure_collab_document_state(
                 db,
                 source_type=context.source_type,
                 source_page_id=context.source_page_id,
+                room_key=context.room_key,
+                snapshot_content_blocks=context.content_blocks,
             )
+            db.commit()
+            collab_yjs_state = collab.yjs_state
         finally:
             db.close()
 
         room_key = context.room_key
         if room_name and room_name != room_key:
             raise HTTPException(status_code=404, detail="Room not found.")
+        if not hub.relay_available:
+            await websocket.close(code=1013, reason="Collaboration relay unavailable.")
+            return
 
-        await websocket.send_text(json.dumps({"type": "auth_ok"}))
-
-        hub: DocsCollabHub = websocket.app.state.docs_collab
-        room = await hub.get_room(room_key, collab.yjs_state if collab is not None else None)
+        runtime = await hub.get_room(context, collab_yjs_state)
         monitor_task = asyncio.create_task(
             _monitor_collab_access(
                 websocket,
@@ -1258,7 +1270,14 @@ async def docs_collab_websocket(
                 token=token,
             )
         )
-        await room.serve(FastAPIYjsWebsocket(websocket, room_key))
+        await runtime.room.serve(
+            FastAPIYjsWebsocket(
+                websocket,
+                room_key,
+                runtime,
+                auth_user_id,
+            )
+        )
     except HTTPException as exc:
         await _close_websocket_for_http_error(websocket, exc)
     finally:
@@ -1266,7 +1285,6 @@ async def docs_collab_websocket(
             monitor_task.cancel()
             await asyncio.gather(monitor_task, return_exceptions=True)
         if room_key is not None:
-            hub: DocsCollabHub = websocket.app.state.docs_collab
             await hub.cleanup_room(room_key)
 
 

@@ -25,4 +25,5 @@ vite.config.*.timestamp*
 vitest.config.*.timestamp*
 .gstack/
 .playwright-mcp/
+.prod-like/
 *.png

@@ -23,7 +23,6 @@ import { useMediaUpload } from '@/src/domains/media/use-media-upload';
 import {
   getDocsCollabSession,
   makeDocsPageRef,
-  saveDocsCollabSnapshot,
 } from '@/src/domains/docs/docs-api';
 import {
   createSpaceDoc,
@@ -149,7 +148,7 @@ export const SpaceDocsView = ({ spaceId, spaceName, docId: spaceDocId }: { space
   const navigate = useNavigate();
   const { docId: pageId, workspaceSlug } = useParams();
   const { token } = useAuth();
-  const { uploadFile, resolveFileUrl } = useMediaUpload();
+  const { uploadFile, createLinkedUploadFile, resolveFileUrl } = useMediaUpload();
   const { confirm, confirmDialog } = useConfirm();
   const { prompt, promptDialog } = usePrompt();
   const [collections, setCollections] = useState<PmsSpaceDoc[]>([]);
@@ -170,6 +169,17 @@ export const SpaceDocsView = ({ spaceId, spaceName, docId: spaceDocId }: { space
 
   const selectedCollection = collections.find((doc) => doc.id === spaceDocId) ?? null;
   const selectedPage = pages.find((page) => page.id === pageId) ?? null;
+  const selectedPageUploadFile = useMemo(
+    () => createLinkedUploadFile?.(
+      selectedPage?.id
+        ? {
+            resourceType: 'space_doc_page',
+            resourceId: selectedPage.id,
+          }
+        : null
+    ) ?? uploadFile,
+    [createLinkedUploadFile, selectedPage?.id, uploadFile],
+  );
   const pageTree = useMemo(() => buildTree(pages), [pages]);
   const canAccessSpaceDocs = teamRoleAllows(spaceRole, 'viewer');
   const canEditPages = teamRoleAllows(spaceRole, 'member');
@@ -644,32 +654,21 @@ export const SpaceDocsView = ({ spaceId, spaceName, docId: spaceDocId }: { space
                             id: session.user.id,
                             fullName: session.user.full_name,
                           },
+                          realtimeStatus: session.realtime_status,
+                          readOnlyReason: session.read_only_reason,
                           snapshotContent: (session.snapshot_content_blocks ?? []) as BlockContent,
                           yjsState: session.yjs_state,
                         };
                       }}
-                      saveSnapshot={async ({ content, yjsState }) => {
-                        const response = await saveDocsCollabSnapshot(
-                          token,
-                          makeDocsPageRef('pms_space_doc_page', selectedPage.id),
-                          {
-                            content_blocks: content,
-                            yjs_state: yjsState,
-                          },
-                          workspaceSlug,
-                        );
-                        return { updatedAt: response.updated_at };
-                      }}
                       placeholder="Start writing..."
-                      uploadFile={uploadFile}
+                      uploadFile={selectedPageUploadFile}
                       resolveFileUrl={resolveFileUrl}
-                      onPersisted={({ content, updatedAt }) => {
+                      onChange={(content) => {
                         setPages((current) => current.map((page) => (
                           page.id === selectedPage.id
                             ? {
                                 ...page,
                                 content_blocks: content as BlockContent,
-                                updated_at: updatedAt ?? page.updated_at,
                               }
                             : page
                         )));

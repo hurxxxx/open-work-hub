@@ -1,12 +1,19 @@
 import { useCallback, useRef } from 'react';
 import { useAuth } from '@/src/domains/auth/auth-provider';
-import { uploadMedia, resolveMediaUrls } from './media-api';
+import { linkMedia, uploadMedia, resolveMediaUrls } from './media-api';
 
 const CACHE_TTL_MS = 50 * 60 * 1000; // 50 minutes (presigned URLs expire in 1h)
 
 interface CacheEntry {
   url: string;
   expiresAt: number;
+}
+
+export type MediaResourceType = 'issue' | 'space_doc_page' | 'docs_native_page';
+
+export interface MediaLinkTarget {
+  resourceType: MediaResourceType;
+  resourceId: string;
 }
 
 export function useMediaUpload() {
@@ -20,6 +27,25 @@ export function useMediaUpload() {
       if (!token) throw new Error('Authentication required.');
       const result = await uploadMedia(token, file);
       return result.url; // "media:{id}"
+    },
+    [token],
+  );
+
+  const createLinkedUploadFile = useCallback(
+    (target: MediaLinkTarget | null | undefined) => {
+      if (!token) return undefined;
+      return async (file: File): Promise<string> => {
+        const result = await uploadMedia(token, file);
+        if (target?.resourceId) {
+          await linkMedia(
+            token,
+            [result.id],
+            target.resourceType,
+            target.resourceId,
+          ).catch(() => undefined);
+        }
+        return result.url;
+      };
     },
     [token],
   );
@@ -76,6 +102,7 @@ export function useMediaUpload() {
 
   return {
     uploadFile: token ? uploadFile : undefined,
+    createLinkedUploadFile: token ? createLinkedUploadFile : undefined,
     resolveFileUrl: token ? resolveFileUrl : undefined,
   };
 }

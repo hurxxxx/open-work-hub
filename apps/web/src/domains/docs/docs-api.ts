@@ -120,6 +120,12 @@ export interface DocsPageListResponse {
   items: DocsPageItem[];
 }
 
+export function mediaResourceTypeForDocsPage(
+  sourceType: DocsPageItem['source_type'],
+): 'docs_native_page' | 'space_doc_page' {
+  return sourceType === 'native_doc_page' ? 'docs_native_page' : 'space_doc_page';
+}
+
 export interface DocsCollabSession {
   page_ref: string;
   source_type: 'native_doc_page' | 'pms_space_doc_page';
@@ -127,6 +133,8 @@ export interface DocsCollabSession {
   room_key: string;
   ws_path: string;
   can_edit: boolean;
+  realtime_status: 'enabled' | 'degraded';
+  read_only_reason: 'relay_unavailable' | 'permission_revoked' | null;
   user: {
     id: string;
     full_name: string;

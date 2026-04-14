@@ -2,6 +2,7 @@
   "extends": "./tsconfig.json",
   "compilerOptions": {
     "outDir": "../../dist/out-tsc",
+    "moduleResolution": "Bundler",
     "types": [
       "node",
       "@nx/react/typings/cssmodule.d.ts",

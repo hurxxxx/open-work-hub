@@ -25,22 +25,22 @@
 
 ## 전체 구조
 
-실시간 협업은 `BlockNote + Yjs + y-websocket + FastAPI websocket` 조합이다.
+실시간 협업은 `BlockNote + Yjs + y-websocket + FastAPI websocket + Redis relay` 조합이다.
 
 데이터 흐름:
 
-1. 클라이언트가 `GET /docs/collab/pages/{page_ref}/session` 으로 room 정보와 현재 `yjs_state` / snapshot blocks 를 받는다.
+1. 클라이언트가 `GET /docs/collab/pages/{page_ref}/session` 으로 room 정보와 현재 `yjs_state` / snapshot blocks / realtime 상태를 받는다.
 2. 프런트는 `Y.Doc` 을 만들고, `yjs_state` 가 있으면 apply 한다.
 3. 프런트는 `WebsocketProvider(serverUrl, roomKey, ydoc, { params: { token } })` 로 연결한다.
 4. `useCreateBlockNote({ collaboration })` 에 `fragment`, `provider`, `user` 를 넘겨 BlockNote 를 협업 모드로 띄운다.
-5. 사용자가 편집하면 Yjs update 는 websocket 으로 즉시 동기화된다.
-6. 별도로 2초 debounce 후 `PUT /docs/collab/pages/{page_ref}/snapshot` 으로 snapshot 과 `yjs_state` 를 저장한다.
+5. 사용자가 편집하면 Yjs update 는 websocket 으로 즉시 동기화되고, 인스턴스 간에는 Redis channel fan-out 으로 전달된다.
+6. 서버 room 은 2초 debounce 로 `yjs_state` 를 flush 하고, Node codec 으로 `snapshot_content_blocks` 를 materialize 해서 DB/page row 를 갱신한다.
 
 중요:
 
-- `snapshot PUT` 은 영속화 경로다.
 - `websocket sync` 는 실시간 전파 경로다.
-- `snapshot` 이 잘 저장된다고 해서 `실시간 sync` 가 정상이라는 뜻은 아니다.
+- `server room flush` 가 영속화 경로다.
+- 기존 `PUT /snapshot` 은 호환용이고, 현재 주 저장 경로가 아니다.
 
 ## 백엔드 구조
 
@@ -72,6 +72,9 @@
 - `GET /api/v1/workspaces/{workspace_slug}/docs/collab/pages/{page_ref}/session`
 - `PUT /api/v1/workspaces/{workspace_slug}/docs/collab/pages/{page_ref}/snapshot`
 - `WS /api/v1/workspaces/{workspace_slug}/docs/collab/pages/{page_ref}/ws`
+- session payload:
+  - `realtime_status`
+  - `read_only_reason`
 
 인증:
 
@@ -81,8 +84,10 @@
 room lifecycle:
 
 - `DocsCollabHub.get_room()` 이 room 단위 singleton 을 유지한다.
+- room 은 인스턴스 로컬 `YRoom` 이고, 같은 `room_key` Redis channel 을 subscribe 한다.
 - room 은 `YRoom.start()` background task 로 시작한다.
 - room 이 비면 `cleanup_room()` 이 stop 한다.
+- room flush 는 `DOOWON_API_COLLAB_SNAPSHOT_DEBOUNCE_MS` 기준으로 서버가 수행한다.
 
 closed socket 처리:
 
@@ -100,8 +105,8 @@ closed socket 처리:
 
 - websocket provider 는 `params: { token: authToken }` 방식으로 생성한다.
 - `session.yjsState` 가 있으면 그것으로 `Y.Doc` 을 복원한다.
-- `session.yjsState` 가 없는 새 문서만 `initialContent` fallback 으로 부팅한다.
-- snapshot 저장은 `editor.onChange()` 기준 2초 debounce 다.
+- 세션이 `degraded` 면 프런트는 read-only viewer + 배너로 전환한다.
+- 클라이언트는 더 이상 `snapshot PUT` 으로 DB 저장을 직접 수행하지 않는다.
 
 주의:
 
@@ -141,8 +146,9 @@ closed socket 처리:
 2. websocket auth 는 `params token` 주 경로를 유지한다.
 3. closed websocket send/close 예외는 정상 종료로 취급한다.
 4. `snapshot PUT` 성공을 실시간 sync 성공으로 오해하지 않는다.
-5. meeting/docs/pms 진입점 셋 모두 동일한 공용 `CollaborativeBlockEditor` 를 사용하도록 유지한다.
-6. `task description/comments` 같은 비문서 에디터에는 이 provider lifecycle 을 섞지 않는다.
+5. `realtime_status=degraded` 면 body 는 read-only 로 강등된다.
+6. meeting/docs/pms 진입점 셋 모두 동일한 공용 `CollaborativeBlockEditor` 를 사용하도록 유지한다.
+7. `task description/comments` 같은 비문서 에디터에는 이 provider lifecycle 을 섞지 않는다.
 
 ## 디버깅 체크리스트
 
@@ -152,8 +158,8 @@ closed socket 처리:
 2. websocket 연결이 실제로 `101/accepted` 되는지 서버 로그 확인
 3. 두 탭이 같은 `room_key` 를 쓰는지 확인
 4. 한 탭 입력이 다른 탭 `.bn-editor` 텍스트/DOM 에 반영되는지 확인
-5. `PUT /snapshot` 만 계속 성공하고 websocket 반영이 없다면 provider lifecycle 문제를 우선 의심
-6. backend 로그에 closed websocket send 예외가 연속으로 뜨는지 확인
+5. session payload 의 `realtime_status` 가 `enabled` 인지 확인
+6. backend 로그에 relay unavailable / closed websocket send 예외가 연속으로 뜨는지 확인
 
 실전 팁:
 
@@ -173,11 +179,11 @@ closed socket 처리:
 - 두 탭 모두 새로고침 후에도 같은 내용으로 복원되는지
 - `Open in Docs` 로 연 동일 문서가 meeting route 와 같은 room 을 쓰는지
 
-## 후속 개선 후보
+## 운영 유사 검증
 
-- snapshot materialization 을 client debounce 가 아니라 server-side update 기반으로 옮기기
-- websocket auth 를 지금처럼 token param 으로 유지하되, provider-specific auth 표준화 재검토
-- multi-instance 운영이 필요해지면 room fan-out / relay 구조 추가
+- 이 저장소의 web 은 `Next router` 가 아니라 `BrowserRouter SPA` 다.
+- 운영 유사 검증은 `정적 빌드 + Nginx + host api x2 + Redis + Postgres` 로 맞춘다.
+- 자세한 절차는 [prod-like-collab-validation.md](./prod-like-collab-validation.md) 를 본다.
 
 ## 참조
 

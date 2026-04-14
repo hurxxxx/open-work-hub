@@ -21,6 +21,10 @@ class Settings(BaseSettings):
     app_name: str = "아이두 API"
     environment: str = "development"
     allow_dev_admin_login: bool = True
+    instance_id: str = Field(
+        default="api",
+        validation_alias=AliasChoices("DOOWON_API_INSTANCE_ID"),
+    )
     api_prefix: str = "/api/v1"
     postgres_dsn: str = Field(
         ...,
@@ -50,6 +54,44 @@ class Settings(BaseSettings):
     worker_result_backend: str = Field(
         default="redis://127.0.0.1:6379/1",
         validation_alias=AliasChoices("DOOWON_WORKER_RESULT_BACKEND", "DOOWON_RESULT_BACKEND"),
+    )
+    collab_redis_url: str = Field(
+        default="redis://127.0.0.1:6379/0",
+        validation_alias=AliasChoices(
+            "DOOWON_API_COLLAB_REDIS_URL",
+            "DOOWON_REDIS_URL",
+            "DOOWON_WORKER_BROKER_URL",
+        ),
+    )
+    collab_acl_recheck_seconds: int = Field(
+        default=15,
+        ge=5,
+        le=300,
+        validation_alias=AliasChoices("DOOWON_API_COLLAB_ACL_RECHECK_SECONDS"),
+    )
+    collab_snapshot_debounce_ms: int = Field(
+        default=2000,
+        ge=250,
+        le=30000,
+        validation_alias=AliasChoices("DOOWON_API_COLLAB_SNAPSHOT_DEBOUNCE_MS"),
+    )
+    db_pool_size: int = Field(
+        default=10,
+        ge=1,
+        le=100,
+        validation_alias=AliasChoices("DOOWON_API_DB_POOL_SIZE"),
+    )
+    db_max_overflow: int = Field(
+        default=20,
+        ge=0,
+        le=100,
+        validation_alias=AliasChoices("DOOWON_API_DB_MAX_OVERFLOW"),
+    )
+    db_pool_timeout: int = Field(
+        default=30,
+        ge=1,
+        le=300,
+        validation_alias=AliasChoices("DOOWON_API_DB_POOL_TIMEOUT"),
     )
     recording_spool_dir: str = Field(
         default=str(WORKSPACE_ROOT / ".local-recording-spool"),

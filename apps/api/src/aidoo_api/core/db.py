@@ -19,9 +19,17 @@ class Base(DeclarativeBase):
 
 
 def _engine_options(database_url: str) -> dict[str, object]:
-    return {
+    settings = get_settings()
+    options: dict[str, object] = {
         "pool_pre_ping": True,
     }
+    if not database_url.startswith("sqlite"):
+        options.update(
+            pool_size=settings.db_pool_size,
+            max_overflow=settings.db_max_overflow,
+            pool_timeout=settings.db_pool_timeout,
+        )
+    return options
 
 
 @lru_cache(maxsize=1)

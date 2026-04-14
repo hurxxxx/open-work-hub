@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, Navigate, useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, ExternalLink, Loader2 } from 'lucide-react';
 import { BlockViewer, Button, CollaborativeBlockEditor } from '@aidoo/ui';
@@ -9,8 +9,8 @@ import {
   getDocsItem,
   listDocPages,
   makeDocsPageRef,
+  mediaResourceTypeForDocsPage,
   recordDocView,
-  saveDocsCollabSnapshot,
   updateDocPage,
   type DocsHubItem,
   type DocsPageItem,
@@ -42,7 +42,7 @@ export function MeetingWorkspaceView() {
   const { token } = useAuth();
   const navigate = useNavigate();
   const { workspaceSlug, meetingId } = useParams();
-  const { uploadFile, resolveFileUrl } = useMediaUpload();
+  const { uploadFile, createLinkedUploadFile, resolveFileUrl } = useMediaUpload();
 
   const [meeting, setMeeting] = useState<MeetingDetailType | null>(null);
   const [notesDoc, setNotesDoc] = useState<DocsHubItem | null>(null);
@@ -139,6 +139,18 @@ export function MeetingWorkspaceView() {
       // Keep the existing title when save fails.
     }
   }, [notesPage, token, workspaceSlug]);
+
+  const notesUploadFile = useMemo(
+    () => createLinkedUploadFile?.(
+      notesPage?.source_page_id
+        ? {
+            resourceType: mediaResourceTypeForDocsPage(notesPage.source_type),
+            resourceId: notesPage.source_page_id,
+          }
+        : null
+    ) ?? uploadFile,
+    [createLinkedUploadFile, notesPage?.source_page_id, notesPage?.source_type, uploadFile],
+  );
 
   if (!workspaceSlug || !meetingId) {
     return <Navigate replace to="/" />;
@@ -262,32 +274,21 @@ export function MeetingWorkspaceView() {
                           id: session.user.id,
                           fullName: session.user.full_name,
                         },
+                        realtimeStatus: session.realtime_status,
+                        readOnlyReason: session.read_only_reason,
                         snapshotContent: (session.snapshot_content_blocks ?? []) as never,
                         yjsState: session.yjs_state,
                       };
                     }}
-                    saveSnapshot={async ({ content, yjsState }) => {
-                      const response = await saveDocsCollabSnapshot(
-                        token!,
-                        makeDocsPageRef(notesPage.source_type, notesPage.source_page_id),
-                        {
-                          content_blocks: content,
-                          yjs_state: yjsState,
-                        },
-                        workspaceSlug,
-                      );
-                      return { updatedAt: response.updated_at };
-                    }}
                     placeholder="회의 메모를 작성하세요..."
-                    uploadFile={uploadFile}
+                    uploadFile={notesUploadFile}
                     resolveFileUrl={resolveFileUrl}
-                    onPersisted={({ content, updatedAt }) => {
+                    onChange={(content) => {
                       setNotesPage((current) => (
                         current
                           ? {
                               ...current,
                               content_blocks: content as Record<string, unknown>[],
-                              updated_at: updatedAt ?? current.updated_at,
                             }
                           : current
                       ));

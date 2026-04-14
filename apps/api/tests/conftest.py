@@ -11,6 +11,7 @@ import pytest
 
 
 POSTGRES_IMAGE = "postgres:18"
+REDIS_IMAGE = "redis:7"
 
 
 def _find_free_port() -> int:
@@ -36,6 +37,19 @@ def _wait_for_postgres(dsn: str, timeout_seconds: int = 45) -> None:
             time.sleep(1)
 
     raise RuntimeError(f"Timed out waiting for PostgreSQL: {last_error}")
+
+
+def _wait_for_tcp(host: str, port: int, timeout_seconds: int = 30) -> None:
+    deadline = time.time() + timeout_seconds
+    last_error: Exception | None = None
+    while time.time() < deadline:
+        try:
+            with socket.create_connection((host, port), timeout=1):
+                return
+        except Exception as error:  # pragma: no cover - exercised in retry loop
+            last_error = error
+            time.sleep(0.5)
+    raise RuntimeError(f"Timed out waiting for TCP service at {host}:{port}: {last_error}")
 
 
 @pytest.fixture(scope="session")
@@ -73,13 +87,48 @@ def postgres_dsn() -> str:
         subprocess.run(["docker", "rm", "-f", container_name], check=False)
 
 
-@pytest.fixture
-def client(monkeypatch: pytest.MonkeyPatch, postgres_dsn: str) -> TestClient:
+@pytest.fixture(scope="session")
+def redis_url() -> str:
+    subprocess.run(["docker", "pull", REDIS_IMAGE], check=True)
+    port = _find_free_port()
+    container_name = f"aidoo-api-redis-test-{uuid.uuid4().hex[:10]}"
+    url = f"redis://127.0.0.1:{port}/0"
+
+    subprocess.run(
+        [
+            "docker",
+            "run",
+            "--rm",
+            "-d",
+            "--name",
+            container_name,
+            "-p",
+            f"{port}:6379",
+            REDIS_IMAGE,
+        ],
+        check=True,
+    )
+
+    try:
+        _wait_for_tcp("127.0.0.1", port)
+        yield url
+    finally:
+        subprocess.run(["docker", "rm", "-f", container_name], check=False)
+
+
+def _build_client(
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    postgres_dsn: str,
+    collab_redis_url: str,
+) -> TestClient:
     monkeypatch.setenv("DOOWON_POSTGRES_DSN", postgres_dsn)
     monkeypatch.setenv("DOOWON_API_SESSION_TTL_HOURS", "1")
     monkeypatch.setenv("DOOWON_API_ALLOW_DEV_ADMIN_LOGIN", "1")
     monkeypatch.setenv("DOOWON_LLM_HEALTHCHECK_ON_STARTUP", "0")
     monkeypatch.setenv("DOOWON_API_AUTO_MIGRATE", "1")
+    monkeypatch.setenv("DOOWON_API_COLLAB_REDIS_URL", collab_redis_url)
+    monkeypatch.setenv("DOOWON_REDIS_URL", collab_redis_url)
 
     from aidoo_api.core.db import Base, get_engine, get_session_factory
     from aidoo_api.core.llm import get_llm_client
@@ -101,9 +150,15 @@ def client(monkeypatch: pytest.MonkeyPatch, postgres_dsn: str) -> TestClient:
     from aidoo_api.app import create_app
 
     app = create_app()
-    with TestClient(app) as test_client:
-        yield test_client
+    return TestClient(app)
 
+
+def _teardown_client_state() -> None:
+    from aidoo_api.core.db import Base, get_engine, get_session_factory
+    from aidoo_api.core.llm import get_llm_client
+    from aidoo_api.core.settings import get_settings
+
+    engine = get_engine()
     Base.metadata.drop_all(bind=engine)
     with engine.begin() as connection:
         connection.exec_driver_sql("DROP TABLE IF EXISTS alembic_version")
@@ -112,3 +167,27 @@ def client(monkeypatch: pytest.MonkeyPatch, postgres_dsn: str) -> TestClient:
     get_llm_client.cache_clear()
     get_engine.cache_clear()
     get_session_factory.cache_clear()
+
+
+@pytest.fixture
+def client(monkeypatch: pytest.MonkeyPatch, postgres_dsn: str, redis_url: str) -> TestClient:
+    test_client = _build_client(
+        monkeypatch,
+        postgres_dsn=postgres_dsn,
+        collab_redis_url=redis_url,
+    )
+    with test_client:
+        yield test_client
+    _teardown_client_state()
+
+
+@pytest.fixture
+def client_without_collab_relay(monkeypatch: pytest.MonkeyPatch, postgres_dsn: str) -> TestClient:
+    test_client = _build_client(
+        monkeypatch,
+        postgres_dsn=postgres_dsn,
+        collab_redis_url="redis://127.0.0.1:1/0",
+    )
+    with test_client:
+        yield test_client
+    _teardown_client_state()

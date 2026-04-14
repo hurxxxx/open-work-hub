@@ -42,10 +42,10 @@ import {
   listDocPages,
   listDocsHub,
   makeDocsPageRef,
+  mediaResourceTypeForDocsPage,
   listShareableUsers,
   recordDocView,
   resolveSharedLink,
-  saveDocsCollabSnapshot,
   toggleDocFavorite,
   updateDocPage,
   updateDocsItem,
@@ -141,7 +141,7 @@ export const DocsView = () => {
   const navigate = useNavigate();
   const auth = useAuth();
   const { token } = auth;
-  const { uploadFile, resolveFileUrl } = useMediaUpload();
+  const { uploadFile, createLinkedUploadFile, resolveFileUrl } = useMediaUpload();
   const { confirm, confirmDialog } = useConfirm();
   const { prompt, promptDialog } = usePrompt();
 
@@ -193,6 +193,17 @@ export const DocsView = () => {
   const activeItemId = docId ?? resolvedSharedDocId;
   const tree = useMemo(() => buildTree(pages), [pages]);
   const activePage = pages.find((page) => page.id === selectedPageId) ?? pages[0] ?? null;
+  const activePageUploadFile = useMemo(
+    () => createLinkedUploadFile?.(
+      activePage?.source_page_id
+        ? {
+            resourceType: mediaResourceTypeForDocsPage(activePage.source_type),
+            resourceId: activePage.source_page_id,
+          }
+        : null
+    ) ?? uploadFile,
+    [activePage?.source_page_id, activePage?.source_type, createLinkedUploadFile, uploadFile],
+  );
   const isListView = !activeItemId && !shareToken;
   const hasDocsWorkspace = hasWorkspaceMembership(auth.user, workspaceSlug);
   const docsRoot = workspaceSlug
@@ -513,13 +524,12 @@ export const DocsView = () => {
     }
   };
 
-  const handleCollabPersisted = useCallback((pageId: string, content: Record<string, unknown>[], updatedAt?: string | null) => {
+  const handleCollabChange = useCallback((pageId: string, content: Record<string, unknown>[]) => {
     setPages((current) => current.map((page) => (
       page.id === pageId
         ? {
             ...page,
             content_blocks: content,
-            updated_at: updatedAt ?? page.updated_at,
           }
         : page
     )));
@@ -883,30 +893,19 @@ export const DocsView = () => {
                               id: session.user.id,
                               fullName: session.user.full_name,
                             },
+                            realtimeStatus: session.realtime_status,
+                            readOnlyReason: session.read_only_reason,
                             snapshotContent: (session.snapshot_content_blocks ?? []) as never,
                             yjsState: session.yjs_state,
                           };
                         }}
-                        saveSnapshot={async ({ content, yjsState }) => {
-                          const response = await saveDocsCollabSnapshot(
-                            token,
-                            makeDocsPageRef(activePage.source_type, activePage.source_page_id),
-                            {
-                              content_blocks: content,
-                              yjs_state: yjsState,
-                            },
-                            workspaceSlug,
-                          );
-                          return { updatedAt: response.updated_at };
-                        }}
                         placeholder="Start writing..."
-                        uploadFile={uploadFile}
+                        uploadFile={activePageUploadFile}
                         resolveFileUrl={resolveFileUrl}
-                        onPersisted={({ content, updatedAt }) => {
-                          handleCollabPersisted(
+                        onChange={(content) => {
+                          handleCollabChange(
                             activePage.id,
                             content as Record<string, unknown>[],
-                            updatedAt ?? null,
                           );
                         }}
                       />
@@ -915,7 +914,7 @@ export const DocsView = () => {
                         key={activePage.id}
                         initialContent={activePage.content_blocks as never}
                         placeholder="Start writing..."
-                        uploadFile={uploadFile}
+                        uploadFile={activePageUploadFile}
                         resolveFileUrl={resolveFileUrl}
                         onChange={handleEditorChange}
                       />

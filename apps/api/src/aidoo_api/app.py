@@ -4,6 +4,7 @@ from pathlib import Path
 
 from fastapi import Depends, FastAPI
 from fastapi import Response, status
+from fastapi.responses import Response as FastAPIResponse
 
 from aidoo_api.core.db import init_db
 from aidoo_api.core.llm import check_llm_stack_health
@@ -42,6 +43,7 @@ def create_app() -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         app.state.docs_collab = DocsCollabHub()
+        await app.state.docs_collab.startup()
         if settings.llm_healthcheck_on_startup:
             llm_health = check_llm_stack_health(settings)
             app.state.llm_health = llm_health.public_dict()
@@ -58,9 +60,19 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
 
+    @app.middleware("http")
+    async def add_instance_headers(request, call_next) -> FastAPIResponse:
+        response = await call_next(request)
+        response.headers["X-Doowon-Instance-Id"] = settings.instance_id
+        return response
+
     @app.get("/healthz", tags=["system"])
     def healthz() -> dict[str, str]:
-        return {"status": "ok", "environment": settings.environment}
+        return {
+            "status": "ok",
+            "environment": settings.environment,
+            "instance_id": settings.instance_id,
+        }
 
     @app.get("/readyz", tags=["system"])
     def readyz(response: Response) -> dict[str, object]:
@@ -72,6 +84,7 @@ def create_app() -> FastAPI:
         return {
             "status": "ok" if ready else "degraded",
             "environment": settings.environment,
+            "instance_id": settings.instance_id,
             "llm": llm_health.public_dict(),
         }
 

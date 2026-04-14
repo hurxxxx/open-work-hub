@@ -19,6 +19,7 @@ from aidoo_api.domains.auth.access import resolve_team_role
 from aidoo_api.domains.auth.dependencies import require_admin_context, require_current_user
 from aidoo_api.domains.auth.models import Team, User, Workspace
 from aidoo_api.domains.auth.security import new_id
+from aidoo_api.domains.docs.models import DocMeetingAccess, NativeDocPage, NativeDocUserShare
 from aidoo_api.domains.media.models import MediaFile
 
 MAX_MEDIA_UPLOAD_SIZE = 10 * 1024 * 1024  # 10 MB
@@ -166,6 +167,8 @@ def _can_resolve(db: Session, user: User, media: MediaFile) -> bool:
         if page is None:
             return False
         return _has_space_access(db, user, page.team_id)
+    if media.resource_type == "docs_native_page":
+        return _can_access_docs_native_page(db, user, media.resource_id, require_edit=False)
     # Unknown resource type: allow uploader only
     return media.uploaded_by_id == user.id
 
@@ -213,6 +216,8 @@ def link_media(
     # Validate resource access
     if payload.resource_type == "issue":
         _ensure_issue_access(db, current_user, payload.resource_id)
+    elif payload.resource_type == "docs_native_page":
+        _ensure_docs_native_page_access(db, current_user, payload.resource_id)
     elif payload.resource_type == "space_doc_page":
         _ensure_space_doc_page_access(db, current_user, payload.resource_id)
     else:
@@ -256,6 +261,61 @@ def _ensure_space_doc_page_access(db: Session, user: User, page_id: str) -> None
         raise HTTPException(status_code=404, detail="Space doc page not found.")
     if not _has_space_access(db, user, page.team_id):
         raise HTTPException(status_code=403, detail="Space membership required.")
+
+
+def _can_access_docs_native_page(
+    db: Session,
+    user: User,
+    page_id: str,
+    *,
+    require_edit: bool,
+) -> bool:
+    page = db.scalar(
+        select(NativeDocPage)
+        .options(joinedload(NativeDocPage.doc))
+        .where(NativeDocPage.id == page_id)
+    )
+    if page is None or page.doc is None or page.trashed_at is not None or page.doc.trashed_at is not None:
+        return False
+    if page.doc.owner_id == user.id:
+        return True
+
+    direct_share = db.scalar(
+        select(NativeDocUserShare).where(
+            NativeDocUserShare.doc_id == page.doc_id,
+            NativeDocUserShare.user_id == user.id,
+        )
+    )
+    meeting_grant = db.scalar(
+        select(DocMeetingAccess).where(
+            DocMeetingAccess.doc_id == page.doc_id,
+            DocMeetingAccess.user_id == user.id,
+            DocMeetingAccess.revoked_at.is_(None),
+            (
+                DocMeetingAccess.expires_at.is_(None)
+                | (DocMeetingAccess.expires_at > datetime.now(UTC).replace(tzinfo=None))
+            ),
+        )
+    )
+
+    access_levels = [
+        level
+        for level in (
+            getattr(direct_share, "access_level", None),
+            getattr(meeting_grant, "access_level", None),
+        )
+        if level in {"read", "edit"}
+    ]
+    if not access_levels:
+        return False
+    if require_edit:
+        return "edit" in access_levels
+    return True
+
+
+def _ensure_docs_native_page_access(db: Session, user: User, page_id: str) -> None:
+    if not _can_access_docs_native_page(db, user, page_id, require_edit=True):
+        raise HTTPException(status_code=403, detail="Doc edit access required.")
 
 
 # ── Cleanup ───────────────────────────────────────────────────────────
