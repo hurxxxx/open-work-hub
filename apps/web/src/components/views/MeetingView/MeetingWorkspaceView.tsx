@@ -53,6 +53,8 @@ export function MeetingWorkspaceView() {
   const meetingsRoot = workspaceSlug
     ? buildWorkspaceAppPath(workspaceSlug, 'meeting')
     : '/';
+  const notesDocId = notesDoc?.id ?? null;
+  const notesPageId = notesPage?.id ?? null;
 
   const loadWorkspace = useCallback(async () => {
     if (!token || !workspaceSlug || !meetingId) {
@@ -112,11 +114,11 @@ export function MeetingWorkspaceView() {
   }, [loadWorkspace]);
 
   useEffect(() => {
-    if (!token || !notesDoc || !notesPage || !workspaceSlug) {
+    if (!token || !notesDocId || !notesPageId || !workspaceSlug) {
       return;
     }
-    void recordDocView(token, notesDoc.id, notesPage.id, null, workspaceSlug);
-  }, [notesDoc, notesPage, token, workspaceSlug]);
+    void recordDocView(token, notesDocId, notesPageId, null, workspaceSlug);
+  }, [notesDocId, notesPageId, token, workspaceSlug]);
 
   const handleTitleSave = useCallback(async (nextTitle: string) => {
     if (!token || !workspaceSlug || !notesPage) {

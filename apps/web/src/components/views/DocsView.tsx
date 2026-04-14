@@ -193,6 +193,8 @@ export const DocsView = () => {
   const activeItemId = docId ?? resolvedSharedDocId;
   const tree = useMemo(() => buildTree(pages), [pages]);
   const activePage = pages.find((page) => page.id === selectedPageId) ?? pages[0] ?? null;
+  const activeDocId = selectedDoc?.id ?? null;
+  const activePageId = activePage?.id ?? null;
   const activePageUploadFile = useMemo(
     () => createLinkedUploadFile?.(
       activePage?.source_page_id
@@ -298,9 +300,9 @@ export const DocsView = () => {
   }, [docId, loadDoc, shareToken, token]);
 
   useEffect(() => {
-    if (!token || !selectedDoc || !activePage) return;
-    void recordDocView(token, selectedDoc.id, activePage.id, shareToken);
-  }, [activePage, selectedDoc, shareToken, token]);
+    if (!token || !activeDocId || !activePageId) return;
+    void recordDocView(token, activeDocId, activePageId, shareToken);
+  }, [activeDocId, activePageId, shareToken, token]);
 
   const handleSearchChange = (value: string) => {
     if (searchTimerRef.current) {
