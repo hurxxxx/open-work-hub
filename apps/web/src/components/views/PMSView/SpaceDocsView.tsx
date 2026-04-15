@@ -182,6 +182,7 @@ export const SpaceDocsView = ({ spaceId, spaceName, docId: spaceDocId }: { space
   );
   const pageTree = useMemo(() => buildTree(pages), [pages]);
   const canAccessSpaceDocs = teamRoleAllows(spaceRole, 'viewer');
+  const canCreateCollections = teamRoleAllows(spaceRole, 'member');
   const canEditPages = teamRoleAllows(spaceRole, 'member');
   const canManageCollections = teamRoleAllows(spaceRole, 'admin');
 
@@ -326,7 +327,7 @@ export const SpaceDocsView = ({ spaceId, spaceName, docId: spaceDocId }: { space
   }, [canEditPages, token]);
 
   const handleCreateCollection = useCallback(async () => {
-    if (!token || !canManageCollections) return;
+    if (!token || !canCreateCollections) return;
     const title = await prompt({ title: 'New Document', placeholder: 'Document name', defaultValue: '' });
     if (!title) return;
     setSaving(true);
@@ -340,7 +341,7 @@ export const SpaceDocsView = ({ spaceId, spaceName, docId: spaceDocId }: { space
     } finally {
       setSaving(false);
     }
-  }, [canManageCollections, collectionPath, navigate, prompt, spaceId, token]);
+  }, [canCreateCollections, collectionPath, navigate, prompt, spaceId, token]);
 
   const handleRenameCollection = useCallback(async (doc: PmsSpaceDoc) => {
     if (!token || !canManageCollections) return;
@@ -445,7 +446,7 @@ export const SpaceDocsView = ({ spaceId, spaceName, docId: spaceDocId }: { space
               <div className="app-text-title-lg text-app-ink">{spaceName ?? 'Space'}</div>
               <div className="app-text-body text-gray-500">문서 컬렉션 단위로 페이지를 정리하고 관리합니다.</div>
             </div>
-            {canManageCollections ? (
+            {canCreateCollections ? (
               <button
                 onClick={() => { void handleCreateCollection(); }}
                 className="app-text-control flex items-center gap-2 rounded-md bg-app-accent px-4 py-2 text-app-bg"
@@ -510,7 +511,7 @@ export const SpaceDocsView = ({ spaceId, spaceName, docId: spaceDocId }: { space
               <FileText size={24} className="mb-4 text-gray-400" />
               <div className="app-text-title-md text-app-ink">No document collections yet</div>
               <div className="app-text-body mt-2 text-gray-500">첫 번째 컬렉션을 만들고 그 안에서 페이지를 관리하세요.</div>
-              {canManageCollections ? (
+              {canCreateCollections ? (
                 <button
                   onClick={() => { void handleCreateCollection(); }}
                   className="app-text-control mt-6 inline-flex items-center gap-2 rounded-md bg-app-accent px-4 py-2 text-app-bg"

@@ -337,6 +337,119 @@ def test_duplicate_native_doc_clones_pages_into_new_private_doc(client: TestClie
     assert new_child["parent_id"] != root_page["id"]
 
 
+def test_native_doc_page_patch_reorders_and_moves_parent(client: TestClient) -> None:
+    admin = _bootstrap_admin_session(client)
+    owner = _create_user(client, admin["token"], email="reorder-owner@aidoo.local", full_name="Reorder Owner")
+    _grant_workspace_access(client, admin["token"], owner["user"]["id"], "docs")
+    owner_token = _login(client, owner["user"]["email"], owner["temporary_password"])
+
+    doc = client.post(
+        "/api/v1/docs/native-docs",
+        headers=_auth_headers(owner_token),
+        json={"title": "Reorder Plan"},
+    ).json()
+
+    # Initial doc already contains a root page; add three more siblings.
+    root_pages = client.get(
+        f"/api/v1/docs/items/{doc['id']}/pages",
+        headers=_auth_headers(owner_token),
+    ).json()["items"]
+    assert len(root_pages) == 1
+
+    def _create_page(title: str, parent_id: str | None = None) -> dict:
+        response = client.post(
+            f"/api/v1/docs/items/{doc['id']}/pages",
+            headers=_auth_headers(owner_token),
+            json={"title": title, "parent_id": parent_id},
+        )
+        assert response.status_code == 201, response.text
+        return response.json()
+
+    page_a = _create_page("Alpha")
+    page_b = _create_page("Bravo")
+    page_c = _create_page("Charlie")
+
+    # Reorder: drop C before A by setting explicit sort_order gaps.
+    client.patch(
+        f"/api/v1/docs/pages/{page_a['id']}",
+        headers=_auth_headers(owner_token),
+        json={"sort_order": 1000},
+    )
+    client.patch(
+        f"/api/v1/docs/pages/{page_b['id']}",
+        headers=_auth_headers(owner_token),
+        json={"sort_order": 2000},
+    )
+    patch_c = client.patch(
+        f"/api/v1/docs/pages/{page_c['id']}",
+        headers=_auth_headers(owner_token),
+        json={"sort_order": 0},
+    )
+    assert patch_c.status_code == 200
+    assert patch_c.json()["sort_order"] == 0
+
+    listing = client.get(
+        f"/api/v1/docs/items/{doc['id']}/pages",
+        headers=_auth_headers(owner_token),
+    ).json()["items"]
+    siblings_order = [
+        page["title"]
+        for page in listing
+        if page["parent_id"] is None and page["title"] in {"Alpha", "Bravo", "Charlie"}
+    ]
+    # API sorts by (parent_id, sort_order, created_at) — grouping by parent.
+    assert siblings_order == ["Charlie", "Alpha", "Bravo"]
+
+    # Move: nest Bravo under Alpha.
+    move_b = client.patch(
+        f"/api/v1/docs/pages/{page_b['id']}",
+        headers=_auth_headers(owner_token),
+        json={"parent_id": page_a["id"], "sort_order": 0},
+    )
+    assert move_b.status_code == 200
+    assert move_b.json()["parent_id"] == page_a["id"]
+
+    listing = client.get(
+        f"/api/v1/docs/items/{doc['id']}/pages",
+        headers=_auth_headers(owner_token),
+    ).json()["items"]
+    bravo_after = next(page for page in listing if page["id"] == page_b["id"])
+    assert bravo_after["parent_id"] == page_a["id"]
+
+
+def test_native_doc_page_patch_rejects_cycle(client: TestClient) -> None:
+    admin = _bootstrap_admin_session(client)
+    owner = _create_user(client, admin["token"], email="cycle-owner@aidoo.local", full_name="Cycle Owner")
+    _grant_workspace_access(client, admin["token"], owner["user"]["id"], "docs")
+    owner_token = _login(client, owner["user"]["email"], owner["temporary_password"])
+
+    doc = client.post(
+        "/api/v1/docs/native-docs",
+        headers=_auth_headers(owner_token),
+        json={"title": "Cycle Plan"},
+    ).json()
+
+    parent = client.post(
+        f"/api/v1/docs/items/{doc['id']}/pages",
+        headers=_auth_headers(owner_token),
+        json={"title": "Parent"},
+    ).json()
+    child = client.post(
+        f"/api/v1/docs/items/{doc['id']}/pages",
+        headers=_auth_headers(owner_token),
+        json={"title": "Child", "parent_id": parent["id"]},
+    ).json()
+
+    # Attempt to move Parent underneath Child — should be rejected as a cycle.
+    reject = client.patch(
+        f"/api/v1/docs/pages/{parent['id']}",
+        headers=_auth_headers(owner_token),
+        json={"parent_id": child["id"]},
+    )
+    assert reject.status_code == 409
+    assert "cycle" in reject.json()["detail"].lower()
+
+
 def test_duplicate_doc_via_read_share_creates_private_copy_for_recipient(client: TestClient) -> None:
     admin = _bootstrap_admin_session(client)
 

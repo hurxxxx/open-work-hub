@@ -16,6 +16,7 @@ Options:
   --with-worker  Start the Celery worker in addition to web and api.
   --web-only     Start only the frontend dev server.
   --api-only     Start only the FastAPI dev server.
+  --no-infra     Skip starting the prod-like docker infra (redis, etc).
   --status       Show repo-managed dev server status for the selected projects and exit.
   --stop         Stop repo-managed dev servers for the selected projects and exit.
   --restart      Stop repo-managed dev servers for the selected projects, then start them again.
@@ -25,8 +26,11 @@ Options:
 
 Defaults:
   - Starts `web` and `api`
+  - Boots the prod-like docker infra (redis; postgres/minio when DOOWON_PRODLIKE_USE_LOCAL_* is on)
+    so features like the docs collab relay can reach redis at 127.0.0.1:56379
   - Uses `dynamic-legacy` Nx output for readable local logs
   - Stops all child servers when you press Ctrl+C or close the session
+    (docker infra keeps running across sessions; stop it with `docker compose -f compose.prod-like.yml stop`)
 EOF
 }
 
@@ -36,6 +40,7 @@ status_only=0
 stop_only=0
 restart=0
 reset_nx=0
+infra_enabled=1
 output_style="dynamic-legacy"
 
 while [[ $# -gt 0 ]]; do
@@ -48,6 +53,9 @@ while [[ $# -gt 0 ]]; do
       ;;
     --api-only)
       projects=("api")
+      ;;
+    --no-infra)
+      infra_enabled=0
       ;;
     --status)
       status_only=1
@@ -148,6 +156,61 @@ kill_if_running() {
   fi
 }
 
+start_dev_infra() {
+  if ! command -v docker >/dev/null 2>&1; then
+    echo "docker CLI not found; skipping prod-like infra startup." >&2
+    return 0
+  fi
+  if ! docker info >/dev/null 2>&1; then
+    echo "Docker daemon not reachable; skipping prod-like infra startup." >&2
+    return 0
+  fi
+
+  local services=(redis)
+  case "${DOOWON_PRODLIKE_USE_LOCAL_POSTGRES:-}" in
+    1|true|yes|on) services+=(postgres) ;;
+  esac
+  case "${DOOWON_PRODLIKE_USE_LOCAL_MINIO:-}" in
+    1|true|yes|on) services+=(minio) ;;
+  esac
+
+  # prodlike-nginx binds to 4200 (IPv6) and collides with the web dev server (IPv4).
+  # Since macOS resolves localhost to ::1 first, browsers would hit nginx and 502.
+  # Stop it defensively and clear its restart policy so Docker Desktop doesn't
+  # bring it back under us.
+  local web_in_projects=0
+  local project
+  for project in "${projects[@]}"; do
+    if [[ "$project" == "web" ]]; then
+      web_in_projects=1
+      break
+    fi
+  done
+  if (( web_in_projects )); then
+    if docker inspect doowon-prodlike-nginx >/dev/null 2>&1; then
+      echo "Neutralizing prodlike-nginx (conflicts with web dev server on 4200)..."
+      docker update --restart=no doowon-prodlike-nginx >/dev/null 2>&1 || true
+      docker stop doowon-prodlike-nginx >/dev/null 2>&1 || true
+    fi
+  fi
+
+  echo "Starting prod-like infra: ${services[*]}"
+  if ! docker compose -f compose.prod-like.yml up -d "${services[@]}"; then
+    echo "Failed to start prod-like infra via docker compose." >&2
+    exit 1
+  fi
+
+  local attempts=0
+  while (( attempts < 30 )); do
+    if docker compose -f compose.prod-like.yml exec -T redis redis-cli ping >/dev/null 2>&1; then
+      return 0
+    fi
+    attempts=$((attempts + 1))
+    sleep 0.3
+  done
+  echo "Warning: redis did not respond to PING within ~9s; continuing anyway." >&2
+}
+
 stop_project_processes() {
   local project="$1"
   local stopped=0
@@ -212,6 +275,10 @@ if (( status_only )); then
     echo
   done
   exit 0
+fi
+
+if (( infra_enabled )); then
+  start_dev_infra
 fi
 
 for project in "${projects[@]}"; do

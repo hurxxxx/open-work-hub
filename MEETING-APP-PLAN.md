@@ -325,7 +325,7 @@ Both CEO reviewers and the user agree the minutes → PMS/Docs linkage is the hi
 3. **PR3**: Recording upload + worker `meeting_transcription` job (faster-whisper + Ollama), auto Doc generation, status polling endpoint.
 4. **PR4**: `calendar` domain + shared events + Planner wiring, MeetingCalendar grid extraction, RoomPicker + meeting rooms admin, AttendeePicker with availability overlay, conflict detection.
 5. **PR5**: Home widget, conflict toast, ICS export, RRULE weekly, audit logs, accessibility, rate limits.
-   - **이월 from PR1 (2026-04-13)**: Space Docs 페이지 단위 reorder/move DnD UX — `NativeDocPage.sort_order` 필드와 router 의 sort_order 저장은 준비 완료 상태이나, DocsView 프런트에 drag-and-drop affordance 가 없음. dnd-kit 또는 유사 라이브러리로 트리 reorder + sibling 이동 UI 추가. 예상 4–6h.
+   - ~~**이월 from PR1 (2026-04-13)**: Space Docs 페이지 단위 reorder/move DnD UX — `NativeDocPage.sort_order` 필드와 router 의 sort_order 저장은 준비 완료 상태이나, DocsView 프런트에 drag-and-drop affordance 가 없음. dnd-kit 또는 유사 라이브러리로 트리 reorder + sibling 이동 UI 추가. 예상 4–6h.~~ **완료 2026-04-15** — `@dnd-kit` 도입 후 DocsView 를 `DocsPageTreeNode` + `DndContext` 로 재작성, 순수 유틸 + 14 vitest + 2 pytest + 키보드/포인터 E2E 확인. 상세는 TODO-PLAN.md:118.
    - **이월 from PR1 (2026-04-13)**: 다크모드 색상 contrast audit — `.dark` 토큰과 약 130곳의 `text-app-ink/40` opacity 변형, 6곳의 direct `bg-gray-500` 사용처, shadow 대비를 WCAG AA (4.5:1) 기준으로 검증. D6 항목의 재강조.
 
 PR1–PR3 deliver the differentiated wedge. PR4–PR5 deliver the "standard meeting system" completeness the user asked for. If PR1–PR3 ship and usage metrics show meeting minutes is the whole value, PR4–PR5 can be trimmed. If usage shows scheduling conflicts are the real pain, PR4 gets invested in fully.
@@ -374,7 +374,7 @@ Core verdict: "Plan serves the developer's data model first; it does not yet ser
 - **MeetingDetail hierarchy is a component inventory, not a layout.** Top of detail should be: meeting title/status, linked PMS task/Doc, next action. Recording/minutes generation belongs above secondary metadata when active. Attendees and room are supporting context.
 - **Transcription progress rail is missing.** `pending → transcribing → summarizing → done` is backend state. User should see `녹음 업로드됨 → 음성 인식 중 → 회의록 정리 중 → PMS 태스크에 첨부됨`. Show queue position or coarse ETA for on-prem workers. Completion must be discoverable from Home, MeetingDetail, AND the linked PMS task — not hidden inside Meeting.
 - **SchedulePopover is not a sufficient modal base** — it's a 400px bottom popover with placeholder "ClickUp tasks and docs" text (SchedulePopover.tsx:73). A real MeetingCreateModal needs a proper workflow, not a repainted planner quick-add.
-- **Planner reuse will haunt implementation.** PlannerView currently has `events = []` at line 176, mouse-only drag selection, no overlap layout, no timezone model, no keyboard nav. Extraction without a design spec produces a hollow grid with colored rectangles.
+- **Planner reuse will haunt implementation.** PlannerView currently has `events = []` at line 176, mouse-only drag selection, no overlap layout, no timezone model, no keyboard nav. Extraction without a design spec produces a hollow grid with colored rectangles. See PR4 block for the explicit must-have rewrite list (overlap math, now indicator, all-day strip, drag-move/resize, agenda view, Monday week-start, unscheduled PMS drawer).
 - **Accessibility cannot wait until PR5.** Create modal, conflict warning, recording controls, toast/feed, and calendar selection need a11y in the first PR where each appears. Planner cells are clickable `div`s, drag is mouse-only, icon buttons lack labels — copying this is a non-starter.
 
 ## DESIGN CONSENSUS TABLE
@@ -853,7 +853,21 @@ The /autoplan skill normally writes a restore point file, a test plan artifact, 
 **PR4: Calendar + events + rooms + availability + MeetingCalendar**
 - New `calendar/` backend domain: `Event`, `EventAttendee` (no start_at column — see H5), `POST /calendar/availability` batch endpoint.
 - Fix index per H5: `EventAttendee(user_id, event_id)` + `Event(workspace_id, start_at, end_at) WHERE cancelled_at IS NULL` partial index + `Event(source_type, source_id)`.
-- `MeetingCalendar` grid extracted from PlannerView into `components/views/PlannerView/CalendarGrid.tsx` shared component. BUT: implementer owns the rewrite of the data layer, overlap math, Korean timezone, and keyboard nav (per D6). This is budgeted as a significant sub-task, not "extract and reuse".
+- `MeetingCalendar` grid extracted from PlannerView into `components/views/PlannerView/CalendarGrid.tsx` shared component. This is NOT "extract and reuse" — it is a rewrite budgeted as the largest sub-task in PR4. Implementer owns:
+  - **Data layer**: replace hardcoded `events = []` (PlannerView.tsx:176) with `calendar-api` hook, keyed by visible date range.
+  - **Overlap/stack layout**: n-column interval-tree algorithm (GCal-style). Current `absolute top-1 left-1 right-1` (PlannerView.tsx:567) is broken for any 2 overlapping events.
+  - **All-day / multi-day strip**: sticky row above the hour grid. Multi-day events span horizontally. Required for 종일 회의, 휴가, 출장.
+  - **Now indicator**: horizontal line at current time on Week/Day, tick every 60s.
+  - **Event drag-to-move / drag-to-resize**: Pointer Events (touch-compatible), snap to 30 min default.
+  - **Event detail popover**: click existing event → read/edit popover with title, time, attendees, linked PMS/Docs chips, "Open meeting" deep-link. Separate from the create popover.
+  - **Agenda/List view**: 4th view mode alongside Month/Week/Day. Linear list of upcoming events with empty state.
+  - **Week starts Monday + ISO week numbers**: Korean business convention. Replace `PICKER_DAYS` (PlannerView.tsx:15) and `weekDates` calc (PlannerView.tsx:166-174). Sunday still rendered red.
+  - **Korean timezone (KST)**: all date math through a single helper; no raw `new Date(y,m,d)` in the render path.
+  - **Keyboard nav + ARIA grid per D6** (line 457): `button role="gridcell"`, arrow nav, Enter/Space, Esc, `:focus-visible`.
+- **Unscheduled PMS tasks drawer + drag-to-schedule** (product differentiation — ClickUp/Motion/Notion Calendar parity, the one thing our PMS-native position gives us for free): right-side drawer lists current user's open PMS issues (missing `dueAt` or overdue). Drag onto grid → POSTs calendar event with `source_type='pms'`, `source_id=issue_id`. No new backend — uses existing PMS list API + calendar-api POST.
+- **Calendar source toggles**: left mini-panel checkboxes (Meeting / PMS due / Focus / OOO / Personal) filter rendered events by `source_type`. Persist per-user in localStorage.
+- **Mini date-picker density dots**: `DatePickerPopover` (PlannerView.tsx:94-131) shows a dot per date based on event count (0 / 1 / 2+).
+- **Deferred to PR5 backlog unless PR4 has slack**: natural-language quick add, Cmd+K palette, copy/paste events, undo toast, working-hours shading, snap-granularity toggle, secondary TZ column, side-by-side user columns, focus/busy/OOO visual differentiation.
 - Planner migrates to `calendar-api` (behind `workspace_features.calendar.backend` feature flag per M1).
 - `MeetingCreateModal` gains drag-to-create from calendar grid (in addition to list "+" button from PR1).
 - `AttendeePicker` now calls batch availability endpoint. `AvailabilityOverlay` renders per D1 spec (virtualized after 8 rows, aggregate header for larger groups).

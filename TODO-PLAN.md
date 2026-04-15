@@ -115,7 +115,24 @@
   - SpaceMembersModal (Linear 스타일) 신규 — 사이드바 우클릭 / CreateSpaceModal 생성 시점에서 진입
   - Alembic 마이그레이션 `6b21fc0a74c8_drop_pms_project_members` 로 테이블 DROP, 원격 dev DB 적용 완료
   - 관련 commit: `98a4700`, `742672c`, `06bd0a1`, `8d2f297`
-- [ ] Space Docs 페이지 이동/드래그 정렬 UX 개선
+- [x] PMS 사이드바 List + Space Doc DnD (sibling reorder + cross-folder move)
+  - 2026-04-15 `pms_task_lists.sort_order` + `pms_space_docs.sort_order` 추가 (migration `7a3c2b9f11e8`, `updated_at DESC` 기반 backfill)
+  - Serializer + `PATCH /api/v1/pms/lists/{id}` 가 `sort_order` 와 `folder_id` 동시 업데이트, `sort_by=sort_order` 쿼리 파라미터로 사이드바 stable 정렬
+  - 프론트 공용 유틸 [apps/web/src/domains/pms/pms-sidebar-reorder.ts](apps/web/src/domains/pms/pms-sidebar-reorder.ts) — flat list 버전 (sibling + cross-parent move) + 9 vitest 단위
+  - `SubSidebar.tsx`: `SortableListLink` 컴포넌트 + space 단위 `DndContext` + optimistic 업데이트 + WIP 권한 게이팅 (canCreateSpaceContent / canManageSpace) 그대로 보존
+  - `groupedSpaces` 정렬을 `localeCompare` 에서 `(sort_order, name)` 으로 교체해 드래그 직후 UI 가 즉시 반영되도록 수정
+  - 백엔드 regression 2건: `test_task_list_patch_sort_order_and_cross_folder_move`, `test_space_doc_collection_patch_sort_order`
+  - E2E (hq-admin, playwright): DnD Alpha 를 folder-내 재정렬 → 새 sort_order 2000 적용, 이후 키보드 DnD 로 다른 folder 의 List 위에 드롭 → `folder_id` 바뀌고 양쪽 부모 sort_order 재번호 확인 (folder A: [Bravo:0, Charlie:1000, List:2000], folder B: [List:0, Alpha:1000])
+  - 루트 List/Doc 렌더 구조 개편: `rootItems` (이름순 mixed) → `rootListsOrdered` (sort_order) + `rootDocsOrdered` (sort_order) 두 블록으로 분리. Folder block 이후 하드코딩 순서 (folder → root lists → root docs)
+  - Space Doc 사이드바 DnD 추가: `SortableDocLink` 컴포넌트 (rename/menu UX 보존), `handleReorderDoc` optimistic + 롤백, `updateSpaceDoc({ sort_order })` 호출. E2E: Doc Alpha → Doc Charlie 뒤로 이동 확인 (sort_order 4000)
+  - 크로스-종류 드롭 차단: `onDragEnd` 가 `active.data.kind === over.data.kind` 체크, 불일치 시 skip
+  - 후속: Folder DnD (현재 arrow 메뉴 유지) — 같은 유틸로 추가 가능. Space 최상위 순서는 여전히 글로벌 vs per-user 결정 필요해 범위 외.
+- [x] Space Docs 페이지 이동/드래그 정렬 UX 개선
+  - 2026-04-15 `@dnd-kit/core` + `sortable` + `utilities` 도입, `DocsView` 트리를 `DocsPageTreeNode` + `DndContext` 로 재작성
+  - 순수 유틸 `apps/web/src/domains/docs/docs-page-reorder.ts` (sibling 재번호, 부모 이동, cycle 방지) + 14개 vitest 단위 테스트
+  - 기존 `PATCH /api/v1/docs/pages/{id}` 계약 그대로 재사용, optimistic 업데이트 + 실패 시 스냅샷 롤백
+  - 백엔드 regression 2건 추가: `test_native_doc_page_patch_reorders_and_moves_parent`, `test_native_doc_page_patch_rejects_cycle` (pytest 101 passed)
+  - E2E 확인 (hq-admin seed, playwright): 키보드 DnD 로 Alpha → [Root, Bravo, Charlie, Alpha] 재정렬 확인, 새로고침 후 순서 유지, 부모 이동 + cycle 거부(409) 확인
 - [x] Admin Console / Workspace Settings 공용 workspace 멤버 관리 UI 추가
 - [ ] `/w/:workspaceSlug/<app>` 기반 workspace shell 수동 QA
 - [x] web typecheck 잔재 7건 정리 (2026-04-14 확인, 이미 해결된 상태)

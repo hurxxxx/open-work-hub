@@ -23,6 +23,25 @@ import {
   X,
 } from 'lucide-react';
 import { BlockEditor, BlockViewer, CollaborativeBlockEditor, useConfirm, usePrompt } from '@aidoo/ui';
+import {
+  DndContext,
+  DragOverlay,
+  KeyboardSensor,
+  PointerSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+  type DragOverEvent,
+  type DragStartEvent,
+} from '@dnd-kit/core';
+import {
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 
 import { useMediaUpload } from '@/src/domains/media/use-media-upload';
 import { useAuth } from '@/src/domains/auth/auth-provider';
@@ -57,6 +76,14 @@ import {
   type ShareableUserItem,
 } from '@/src/domains/docs/docs-api';
 import {
+  applyReorder,
+  collectDescendantIds,
+  computeDropTarget,
+  flattenVisibleTree,
+  resolveDropZone,
+  type DropZone,
+} from '@/src/domains/docs/docs-page-reorder';
+import {
   buildWorkspaceAppPath,
   resolveDefaultWorkspaceAppPath,
 } from '@/src/domains/workspaces/workspace-utils';
@@ -87,24 +114,97 @@ const TEMPLATES = [
   { title: 'Wiki', desc: 'Organize information in one place', icon: '📚' },
 ];
 
-type TreeNode = DocsPageItem & { children: TreeNode[] };
+interface DocsPageTreeNodeProps {
+  page: DocsPageItem;
+  depth: number;
+  hasChildren: boolean;
+  isExpanded: boolean;
+  isSelected: boolean;
+  dropZone: DropZone | null;
+  canDrag: boolean;
+  onSelect: (pageId: string) => void;
+  onToggleExpand: (pageId: string) => void;
+  onDelete: (page: DocsPageItem) => void;
+}
 
-function buildTree(pages: DocsPageItem[]): TreeNode[] {
-  const roots: TreeNode[] = [];
-  const byId = new Map<string, TreeNode>();
-  for (const page of pages) {
-    byId.set(page.id, { ...page, children: [] });
-  }
-  for (const page of pages) {
-    const node = byId.get(page.id);
-    if (!node) continue;
-    if (page.parent_id && byId.has(page.parent_id)) {
-      byId.get(page.parent_id)?.children.push(node);
-    } else {
-      roots.push(node);
-    }
-  }
-  return roots.sort((left, right) => left.sort_order - right.sort_order || left.title.localeCompare(right.title, 'ko'));
+function DocsPageTreeNode({
+  page,
+  depth,
+  hasChildren,
+  isExpanded,
+  isSelected,
+  dropZone,
+  canDrag,
+  onSelect,
+  onToggleExpand,
+  onDelete,
+}: DocsPageTreeNodeProps) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: page.id,
+    disabled: !canDrag,
+  });
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+  };
+  return (
+    <div className="relative" style={style}>
+      {dropZone === 'before' ? (
+        <div className="pointer-events-none absolute inset-x-1 top-0 z-10 h-0.5 rounded bg-app-accent" />
+      ) : null}
+      <button
+        ref={setNodeRef}
+        {...attributes}
+        {...listeners}
+        onClick={() => onSelect(page.id)}
+        className={cn(
+          'app-text-body-sm group flex w-full items-center gap-1 rounded px-2 py-1.5 transition-all',
+          isSelected
+            ? 'bg-app-accent/10 text-app-accent'
+            : 'text-gray-400 hover:bg-app-surface-hover hover:text-gray-200',
+          isDragging && 'opacity-30',
+          dropZone === 'inside' && 'bg-app-accent/15 ring-1 ring-inset ring-app-accent/70',
+        )}
+        style={{ paddingLeft: `${8 + depth * 16}px`, touchAction: 'none' }}
+      >
+        {hasChildren ? (
+          <span
+            className="flex-shrink-0"
+            onPointerDown={(event) => event.stopPropagation()}
+            onClick={(event) => {
+              event.stopPropagation();
+              onToggleExpand(page.id);
+            }}
+          >
+            {isExpanded ? (
+              <ChevronDown size={12} className="text-gray-500" />
+            ) : (
+              <ChevronRight size={12} className="text-gray-500" />
+            )}
+          </span>
+        ) : (
+          <span className="w-3" />
+        )}
+        <FileText size={14} className={isSelected ? 'text-app-accent' : 'text-gray-500'} />
+        <span className="truncate flex-1 text-left">{page.title}</span>
+        {page.can_edit ? (
+          <span
+            className="opacity-0 group-hover:opacity-100"
+            onPointerDown={(event) => event.stopPropagation()}
+            onClick={(event) => {
+              event.stopPropagation();
+              onDelete(page);
+            }}
+          >
+            <Trash2 size={12} className="text-gray-500 hover:text-red-400" />
+          </span>
+        ) : null}
+      </button>
+      {dropZone === 'after' ? (
+        <div className="pointer-events-none absolute inset-x-1 bottom-0 z-10 h-0.5 rounded bg-app-accent" />
+      ) : null}
+    </div>
+  );
 }
 
 function timeAgo(dateStr: string): string {
@@ -191,7 +291,19 @@ export const DocsView = () => {
   const activeCategory = toolId ? (CATEGORY_MAP[toolId] ?? 'all') : 'all';
   const activeCategoryLabel = (toolId && CATEGORY_LABELS[toolId]) || 'All Docs';
   const activeItemId = docId ?? resolvedSharedDocId;
-  const tree = useMemo(() => buildTree(pages), [pages]);
+  const visibleTree = useMemo(() => flattenVisibleTree(pages, expandedNodes), [pages, expandedNodes]);
+  const pagesById = useMemo(() => {
+    const map = new Map<string, DocsPageItem>();
+    for (const page of pages) map.set(page.id, page);
+    return map;
+  }, [pages]);
+  const childCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const page of pages) {
+      if (page.parent_id) counts.set(page.parent_id, (counts.get(page.parent_id) ?? 0) + 1);
+    }
+    return counts;
+  }, [pages]);
   const activePage = pages.find((page) => page.id === selectedPageId) ?? pages[0] ?? null;
   const activeDocId = selectedDoc?.id ?? null;
   const activePageId = activePage?.id ?? null;
@@ -623,56 +735,107 @@ export const DocsView = () => {
     await navigator.clipboard.writeText(url);
   };
 
-  const renderTreeNode = (node: TreeNode, depth = 0) => {
-    const isExpanded = expandedNodes.has(node.id);
-    const hasChildren = node.children.length > 0;
-    return (
-      <div key={node.id}>
-        <button
-          onClick={() => setSelectedPageId(node.id)}
-          className={cn(
-            'app-text-body-sm group flex w-full items-center gap-1 rounded px-2 py-1.5 transition-all',
-            selectedPageId === node.id
-              ? 'bg-app-accent/10 text-app-accent'
-              : 'text-gray-400 hover:bg-app-surface-hover hover:text-gray-200',
-          )}
-          style={{ paddingLeft: `${8 + depth * 16}px` }}
-        >
-          {hasChildren ? (
-            <span
-              className="flex-shrink-0"
-              onClick={(event) => {
-                event.stopPropagation();
-                toggleExpand(node.id);
-              }}
-            >
-              {isExpanded ? (
-                <ChevronDown size={12} className="text-gray-500" />
-              ) : (
-                <ChevronRight size={12} className="text-gray-500" />
-              )}
-            </span>
-          ) : (
-            <span className="w-3" />
-          )}
-          <FileText size={14} className={selectedPageId === node.id ? 'text-app-accent' : 'text-gray-500'} />
-          <span className="truncate flex-1 text-left">{node.title}</span>
-          {node.can_edit ? (
-            <span
-              className="opacity-0 group-hover:opacity-100"
-              onClick={(event) => {
-                event.stopPropagation();
-                void handleDeletePage(node);
-              }}
-            >
-              <Trash2 size={12} className="text-gray-500 hover:text-red-400" />
-            </span>
-          ) : null}
-        </button>
-        {isExpanded ? node.children.sort((left, right) => left.sort_order - right.sort_order).map((child) => renderTreeNode(child, depth + 1)) : null}
-      </div>
-    );
-  };
+  const [activeDragId, setActiveDragId] = useState<string | null>(null);
+  const [dropIndicator, setDropIndicator] = useState<{ overId: string; zone: DropZone } | null>(null);
+  const dragDescendantsRef = useRef<Set<string> | null>(null);
+  const dragPointerYRef = useRef<number>(0);
+
+  const dndSensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
+
+  const handleDragPointerMove = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    dragPointerYRef.current = event.clientY;
+  }, []);
+
+  const handleDragStart = useCallback((event: DragStartEvent) => {
+    const activeId = String(event.active.id);
+    dragDescendantsRef.current = collectDescendantIds(pages, activeId);
+    setActiveDragId(activeId);
+    setDropIndicator(null);
+  }, [pages]);
+
+  const handleDragOver = useCallback((event: DragOverEvent) => {
+    const { active, over } = event;
+    if (!over || !active) {
+      setDropIndicator(null);
+      return;
+    }
+    const overId = String(over.id);
+    if (overId === String(active.id)) {
+      setDropIndicator(null);
+      return;
+    }
+    const descendants = dragDescendantsRef.current;
+    if (descendants && descendants.has(overId)) {
+      setDropIndicator(null);
+      return;
+    }
+    const rect = over.rect;
+    if (!rect) return;
+    const pointerY = dragPointerYRef.current;
+    const pointerWithinRow = pointerY >= rect.top && pointerY <= rect.top + rect.height;
+    let zone: DropZone;
+    if (pointerWithinRow) {
+      zone = resolveDropZone(pointerY, { top: rect.top, height: rect.height });
+    } else {
+      // Keyboard / out-of-row fallback: compare over vs active position.
+      const activeRect = active.rect?.current?.translated ?? active.rect?.current?.initial ?? null;
+      if (activeRect && rect.top < activeRect.top) {
+        zone = 'before';
+      } else {
+        zone = 'after';
+      }
+    }
+    setDropIndicator((current) => (
+      current && current.overId === overId && current.zone === zone
+        ? current
+        : { overId, zone }
+    ));
+  }, []);
+
+  const resetDragState = useCallback(() => {
+    setActiveDragId(null);
+    setDropIndicator(null);
+    dragDescendantsRef.current = null;
+  }, []);
+
+  const handleDragEnd = useCallback(async (event: DragEndEvent) => {
+    const indicator = dropIndicator;
+    const activeId = String(event.active.id);
+    resetDragState();
+    if (!token || !indicator) return;
+    const target = computeDropTarget(pages, indicator.overId, indicator.zone);
+    if (!target) return;
+    const result = applyReorder(pages, activeId, target);
+    if (!result) return;
+    const snapshot = pages;
+    setPages(result.nextPages);
+    if (target.parentId && !expandedNodes.has(target.parentId)) {
+      setExpandedNodes((current) => {
+        const next = new Set(current);
+        next.add(target.parentId as string);
+        return next;
+      });
+    }
+    try {
+      const updated = await Promise.all(
+        result.patches.map((patch) => updateDocPage(
+          token,
+          patch.id,
+          { parent_id: patch.parent_id, sort_order: patch.sort_order },
+          shareToken,
+        )),
+      );
+      setPages((current) => {
+        const byId = new Map(updated.map((page) => [page.id, page]));
+        return current.map((page) => byId.get(page.id) ?? page);
+      });
+    } catch {
+      setPages(snapshot);
+    }
+  }, [dropIndicator, expandedNodes, pages, resetDragState, shareToken, token]);
 
   const renderEditor = () => {
     if (editorLoading) {
@@ -814,18 +977,64 @@ export const DocsView = () => {
                 <div className="flex items-center justify-between px-2 mb-2">
                   <span className="app-text-overline text-gray-500">Pages</span>
                 </div>
-                <div className="space-y-0.5 overflow-y-auto custom-scrollbar max-h-[calc(100vh-250px)]">
-                  {tree.map((node) => renderTreeNode(node))}
-                  {selectedDoc.can_edit ? (
-                    <button
-                      onClick={() => void handleAddPage(null)}
-                      className="app-text-body-sm flex w-full items-center gap-2 rounded px-3 py-1.5 text-gray-500 transition-all hover:bg-app-surface-hover hover:text-app-accent"
+                <DndContext
+                  sensors={dndSensors}
+                  collisionDetection={closestCenter}
+                  onDragStart={handleDragStart}
+                  onDragOver={handleDragOver}
+                  onDragEnd={handleDragEnd}
+                  onDragCancel={resetDragState}
+                >
+                  <SortableContext
+                    items={visibleTree.map((node) => node.id)}
+                    strategy={verticalListSortingStrategy}
+                  >
+                    <div
+                      className="space-y-0.5 overflow-y-auto custom-scrollbar max-h-[calc(100vh-250px)]"
+                      onPointerMove={handleDragPointerMove}
                     >
-                      <Plus size={14} />
-                      <span>Add page</span>
-                    </button>
-                  ) : null}
-                </div>
+                      {visibleTree.map((node) => {
+                        const page = pagesById.get(node.id);
+                        if (!page) return null;
+                        const zone = dropIndicator && dropIndicator.overId === node.id
+                          ? dropIndicator.zone
+                          : null;
+                        return (
+                          <DocsPageTreeNode
+                            key={node.id}
+                            page={page}
+                            depth={node.depth}
+                            hasChildren={(childCounts.get(node.id) ?? 0) > 0}
+                            isExpanded={expandedNodes.has(node.id)}
+                            isSelected={selectedPageId === node.id}
+                            dropZone={zone}
+                            canDrag={Boolean(selectedDoc.can_edit && page.can_edit)}
+                            onSelect={setSelectedPageId}
+                            onToggleExpand={toggleExpand}
+                            onDelete={handleDeletePage}
+                          />
+                        );
+                      })}
+                      {selectedDoc.can_edit ? (
+                        <button
+                          onClick={() => void handleAddPage(null)}
+                          className="app-text-body-sm flex w-full items-center gap-2 rounded px-3 py-1.5 text-gray-500 transition-all hover:bg-app-surface-hover hover:text-app-accent"
+                        >
+                          <Plus size={14} />
+                          <span>Add page</span>
+                        </button>
+                      ) : null}
+                    </div>
+                  </SortableContext>
+                  <DragOverlay dropAnimation={null}>
+                    {activeDragId ? (
+                      <div className="app-text-body-sm flex items-center gap-1 rounded bg-app-surface-sidebar px-2 py-1.5 text-app-ink shadow-lg ring-1 ring-app-accent/40">
+                        <FileText size={14} className="text-app-accent" />
+                        <span className="truncate">{pagesById.get(activeDragId)?.title ?? ''}</span>
+                      </div>
+                    ) : null}
+                  </DragOverlay>
+                </DndContext>
               </div>
             </div>
 

@@ -37,7 +37,7 @@ type RoleValue = 'owner' | 'admin' | 'member' | 'viewer';
 
 const ROLE_OPTIONS: { value: RoleValue; label: string; description: string }[] = [
   { value: 'admin', label: '관리자', description: '멤버 관리 및 설정 변경 가능' },
-  { value: 'member', label: '멤버', description: '리스트와 문서 작성 및 편집' },
+  { value: 'member', label: '멤버', description: '리스트, 폴더, 문서 생성 및 편집' },
   { value: 'viewer', label: '뷰어', description: '읽기 전용' },
 ];
 
