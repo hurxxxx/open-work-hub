@@ -8,9 +8,12 @@ import {
 } from '@/src/domains/meeting/meeting-api';
 
 export const HALF_HOUR_MS = 30 * 60 * 1000;
+/** Legacy fixed-width constants — still referenced by inline previews that
+ *  use pixel-based layouts. The main availability modal now lays out the
+ *  week strip responsively with percentages. */
 export const DAY_WIDTH_PX = 192;
 export const SLOT_WIDTH_PX = DAY_WIDTH_PX / 48;
-export const AVAILABILITY_NAME_COLUMN_PX = 176;
+export const AVAILABILITY_NAME_COLUMN_PX = 208;
 
 const SHORT_DATE_FORMATTER = new Intl.DateTimeFormat('ko-KR', {
   month: 'numeric',

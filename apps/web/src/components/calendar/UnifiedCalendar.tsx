@@ -66,8 +66,15 @@ export interface UnifiedCalendarProps {
   }) => void;
   /** Fired when user clicks an existing event chip. */
   onEventClick?: (event: CalendarEvent, anchorEl: HTMLElement) => void;
-  /** Fired when user drag-selects an empty time range to create a new event. */
-  onDateSelect?: (range: { start: Date; end: Date; allDay: boolean }) => void;
+  /** Fired when user drag-selects an empty time range to create a new event.
+   *  ``anchor`` carries the pointer coordinates from the select gesture so the
+   *  host can position a popover near the click. */
+  onDateSelect?: (range: {
+    start: Date;
+    end: Date;
+    allDay: boolean;
+    anchor: { x: number; y: number } | null;
+  }) => void;
   /**
    * Fired when user drags an existing event to a new time slot.
    *
@@ -252,7 +259,17 @@ export const UnifiedCalendar = forwardRef<UnifiedCalendarHandle, UnifiedCalendar
               : undefined
           }
           select={(arg: DateSelectArg) => {
-            onDateSelect?.({ start: arg.start, end: arg.end, allDay: arg.allDay });
+            const native = arg.jsEvent as MouseEvent | null | undefined;
+            const anchor =
+              native && typeof native.clientX === 'number' && typeof native.clientY === 'number'
+                ? { x: native.clientX, y: native.clientY }
+                : null;
+            onDateSelect?.({
+              start: arg.start,
+              end: arg.end,
+              allDay: arg.allDay,
+              anchor,
+            });
           }}
           eventClick={(arg: EventClickArg) => {
             const original = arg.event.extendedProps.original as

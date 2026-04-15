@@ -20,6 +20,8 @@ interface MeetingCreateModalProps {
   onClose: () => void;
   onCreated: (meetingId: string) => void;
   workspaceSlug: string;
+  /** Pre-fill start/end when opened from a calendar slot selection. */
+  initialRange?: { start: Date; end: Date; allDay: boolean } | null;
 }
 
 interface PickedTask {
@@ -47,6 +49,33 @@ function defaultEnd(): string {
   return toLocalInputValue(now);
 }
 
+/** Derive (startAt, endAt) inputs from a calendar slot selection.
+ *  Month-view cells arrive as all-day ranges — convert to a 1-hour 09:00 slot
+ *  on the selected day since meetings aren't stored as all-day. */
+function rangeToInputs(range: { start: Date; end: Date; allDay: boolean }): {
+  start: string;
+  end: string;
+} {
+  if (range.allDay) {
+    const start = new Date(
+      range.start.getFullYear(),
+      range.start.getMonth(),
+      range.start.getDate(),
+      9,
+      0,
+      0,
+      0,
+    );
+    const end = new Date(start.getTime());
+    end.setHours(end.getHours() + 1);
+    return { start: toLocalInputValue(start), end: toLocalInputValue(end) };
+  }
+  return {
+    start: toLocalInputValue(range.start),
+    end: toLocalInputValue(range.end),
+  };
+}
+
 function toLocalInputValue(date: Date): string {
   // datetime-local expects YYYY-MM-DDTHH:mm in local time, no timezone suffix.
   const pad = (n: number) => n.toString().padStart(2, '0');
@@ -65,6 +94,7 @@ export function MeetingCreateModal({
   onClose,
   onCreated,
   workspaceSlug,
+  initialRange,
 }: MeetingCreateModalProps) {
   const { token, user } = useAuth();
   const [title, setTitle] = useState('');
@@ -92,8 +122,14 @@ export function MeetingCreateModal({
     if (!isOpen) return;
     setTitle('');
     setAgenda('');
-    setStartAt(defaultStart());
-    setEndAt(defaultEnd());
+    if (initialRange) {
+      const inputs = rangeToInputs(initialRange);
+      setStartAt(inputs.start);
+      setEndAt(inputs.end);
+    } else {
+      setStartAt(defaultStart());
+      setEndAt(defaultEnd());
+    }
     setAttendees(
       user
         ? [{ user_id: user.id, role: 'required' as const }]
@@ -112,7 +148,7 @@ export function MeetingCreateModal({
     setSubmitting(false);
     setCreatedMeetingId(null);
     setPartialFailures([]);
-  }, [isOpen]);
+  }, [isOpen, initialRange]);
 
   // Server-side user search. Only fires when there's an actual query so an
   // empty focus doesn't surface a misleading "first 8 alphabetical users"

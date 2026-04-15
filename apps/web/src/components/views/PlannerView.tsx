@@ -18,6 +18,7 @@ import {
 import { MeetingPreviewModal } from '@/src/components/calendar/MeetingPreviewModal';
 import { MeetingCreateModal } from '@/src/components/views/MeetingView/MeetingCreateModal';
 import { PlannerEventModal } from '@/src/components/views/PlannerEventModal';
+import { PlannerEventChoicePopover } from '@/src/components/views/PlannerEventChoicePopover';
 
 const MONTH_NAMES_LONG = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 const PICKER_DAYS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
@@ -289,6 +290,14 @@ export const PlannerView = () => {
   const [plannerEventId, setPlannerEventId] = useState<string | null>(null);
   const [plannerEventRange, setPlannerEventRange] = useState<PlannerEventDraftRange | null>(null);
   const [meetingCreateOpen, setMeetingCreateOpen] = useState(false);
+  const [meetingCreateRange, setMeetingCreateRange] = useState<PlannerEventDraftRange | null>(null);
+  const [creationChoice, setCreationChoice] = useState<
+    | {
+        range: PlannerEventDraftRange;
+        anchor: { x: number; y: number } | null;
+      }
+    | null
+  >(null);
 
   useEffect(() => {
     if (!pickerOpen) return;
@@ -376,6 +385,7 @@ export const PlannerView = () => {
     }
     function handlePlannerCreateMeeting() {
       setCreateMenuOpen(false);
+      setMeetingCreateRange(null);
       setMeetingCreateOpen(true);
     }
     window.addEventListener('planner:create-event', handlePlannerCreateEvent);
@@ -569,13 +579,34 @@ export const PlannerView = () => {
     // pms_due (single-day) — resize is meaningless. Revert.
     revert();
   };
-  const handleDateSelect = useCallback((range: { start: Date; end: Date; allDay: boolean }) => {
-    openPlannerEventCreate({
-      start: range.start,
-      end: range.end,
-      allDay: range.allDay,
-    });
-  }, [openPlannerEventCreate]);
+  const handleDateSelect = useCallback(
+    (range: {
+      start: Date;
+      end: Date;
+      allDay: boolean;
+      anchor: { x: number; y: number } | null;
+    }) => {
+      setCreationChoice({
+        range: { start: range.start, end: range.end, allDay: range.allDay },
+        anchor: range.anchor,
+      });
+    },
+    [],
+  );
+  const handleChoicePickEvent = useCallback(() => {
+    if (!creationChoice) return;
+    openPlannerEventCreate(creationChoice.range);
+    setCreationChoice(null);
+  }, [creationChoice, openPlannerEventCreate]);
+  const handleChoicePickMeeting = useCallback(() => {
+    if (!creationChoice) return;
+    setMeetingCreateRange(creationChoice.range);
+    setMeetingCreateOpen(true);
+    setCreationChoice(null);
+  }, [creationChoice]);
+  const handleChoiceDismiss = useCallback(() => {
+    setCreationChoice(null);
+  }, []);
   const handlePlannerEventSaved = useCallback(() => {
     setPlannerEventModalOpen(false);
     setPlannerEventId(null);
@@ -590,6 +621,7 @@ export const PlannerView = () => {
   }, [refresh]);
   const handleMeetingCreated = useCallback((meetingId: string) => {
     setMeetingCreateOpen(false);
+    setMeetingCreateRange(null);
     setPreviewMeetingId(meetingId);
     refresh();
   }, [refresh]);
@@ -707,6 +739,7 @@ export const PlannerView = () => {
                   type="button"
                   onClick={() => {
                     setCreateMenuOpen(false);
+                    setMeetingCreateRange(null);
                     setMeetingCreateOpen(true);
                   }}
                   className="app-text-control-sm flex w-full items-center gap-2 px-3 py-2 text-left text-app-ink transition-colors hover:bg-app-surface-hover"
@@ -769,10 +802,22 @@ export const PlannerView = () => {
       />
       <MeetingCreateModal
         isOpen={meetingCreateOpen && Boolean(workspaceSlug)}
-        onClose={() => setMeetingCreateOpen(false)}
+        onClose={() => {
+          setMeetingCreateOpen(false);
+          setMeetingCreateRange(null);
+        }}
         onCreated={handleMeetingCreated}
         workspaceSlug={workspaceSlug ?? ''}
+        initialRange={meetingCreateRange}
       />
+      {creationChoice ? (
+        <PlannerEventChoicePopover
+          anchor={creationChoice.anchor}
+          onPickEvent={handleChoicePickEvent}
+          onPickMeeting={handleChoicePickMeeting}
+          onDismiss={handleChoiceDismiss}
+        />
+      ) : null}
       <PlannerEventModal
         isOpen={plannerEventModalOpen}
         onClose={() => {
