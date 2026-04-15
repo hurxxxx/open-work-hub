@@ -44,6 +44,22 @@ export function canAttachToMeeting(
 }
 
 /**
+ * Can the caller invite additional attendees to the meeting?
+ * Any current participant — organizer or existing attendee. Backed by
+ * POST /meetings/{id}/attendees which is participant-permissioned.
+ *
+ * Removing or replacing attendees is still organizer-only — that goes
+ * through the full edit modal + PATCH /meetings/{id}.
+ */
+export function canInviteAttendees(
+  user: AuthUser | null | undefined,
+  meeting: Pick<MeetingDetail, 'organizer_id' | 'attendees'> | null | undefined,
+): boolean {
+  if (!user || !meeting) return false;
+  return isParticipant(user, meeting);
+}
+
+/**
  * Can the caller remove a specific attachment? Organizer, admins, or the
  * user who originally added it. Attendees cannot remove each other's
  * attachments.

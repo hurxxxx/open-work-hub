@@ -1,18 +1,43 @@
-import { useState, useRef, useEffect } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
-import { 
-  ChevronLeft, 
-  ChevronRight, 
-  Plus, 
-  MessageSquare 
-} from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
+import { motion } from 'motion/react';
+import { ChevronLeft, ChevronRight, Plus } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 import { getKoreanHolidayNames } from '@/src/lib/korean-holidays';
+import { useAuth } from '@/src/domains/auth/auth-provider';
+import { useCalendarEvents } from '@/src/domains/calendar/use-calendar-events';
+import type { CalendarEvent } from '@/src/domains/calendar/calendar-types';
+import { updateMeeting } from '@/src/domains/meeting/meeting-api';
+import { updateIssue } from '@/src/domains/pms/pms-api';
+import {
+  UnifiedCalendar,
+  type UnifiedCalendarHandle,
+  type UnifiedCalendarView,
+} from '@/src/components/calendar/UnifiedCalendar';
+import { MeetingPreviewModal } from '@/src/components/calendar/MeetingPreviewModal';
 import { SchedulePopover } from './SchedulePopover';
 
 const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const MONTH_NAMES_LONG = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 const PICKER_DAYS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
+
+type PlannerViewMode = 'Month' | 'Week' | 'Day' | 'Agenda';
+
+const VIEW_MODE_TO_FC: Record<PlannerViewMode, UnifiedCalendarView> = {
+  Month: 'dayGridMonth',
+  Week: 'timeGridWeek',
+  Day: 'timeGridDay',
+  Agenda: 'listWeek',
+};
+
+/** Subtract one day from a "YYYY-MM-DD" string. Used to convert FullCalendar's
+ *  exclusive all-day end (next day 00:00) into the stored inclusive due_date. */
+function decrementYmd(ymd: string): string {
+  const [y, m, d] = ymd.split('-').map(Number);
+  const date = new Date(Date.UTC(y, m - 1, d));
+  date.setUTCDate(date.getUTCDate() - 1);
+  return date.toISOString().slice(0, 10);
+}
 
 interface DatePickerPopoverProps {
   pickerYear: number;
@@ -39,9 +64,9 @@ function DatePickerPopover({
   onPickToday,
   onPickDate,
 }: DatePickerPopoverProps) {
-  // 6×7 grid: leading blanks for the days before the 1st, then days, then
-  // trailing blanks. We always render 42 cells so the popover height never
-  // jumps as the user browses across months.
+  // 6×7 grid: leading blanks for the days before the 1st (Sun-start, per user
+  // pref). Always render 42 cells so popover height never jumps as the user
+  // browses across months.
   const leadingBlanks = new Date(pickerYear, pickerMonth, 1).getDay();
   const daysInMonth = new Date(pickerYear, pickerMonth + 1, 0).getDate();
   const cells = Array.from({ length: 42 }, (_, i) => {
@@ -83,6 +108,7 @@ function DatePickerPopover({
             key={i}
             className={cn(
               'app-text-overline py-1 text-center',
+              // Sun-start: index 0 is Sunday (red).
               i === 0 ? 'text-red-500' : 'text-gray-500',
             )}
           >
@@ -145,47 +171,43 @@ function DatePickerPopover({
 
 export const PlannerView = () => {
   const today = new Date();
-  const [viewMode, setViewMode] = useState<'Month' | 'Week' | 'Day'>('Month');
-  const [selectedDate, setSelectedDate] = useState(today.getDate());
+  const navigate = useNavigate();
+  const { token } = useAuth();
+  const { workspaceSlug } = useParams();
+  const [viewMode, setViewMode] = useState<PlannerViewMode>('Month');
   const [viewYear, setViewYear] = useState(today.getFullYear());
   const [viewMonth, setViewMonth] = useState(today.getMonth());
-  const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  const [selectedDate, setSelectedDate] = useState(today.getDate());
 
-  // Build a 5-row month grid containing the active month, with leading/trailing
-  // padding from the surrounding months represented as <= 0 or > daysInMonth.
-  const dates = (() => {
-    const firstOfMonth = new Date(viewYear, viewMonth, 1);
-    const leadingBlanks = firstOfMonth.getDay();
-    const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
-    return Array.from({ length: 35 }, (_, i) => i - leadingBlanks + 1).map((d) => (
-      d >= 1 && d <= daysInMonth ? d : 0
-    ));
-  })();
+  const calendarRef = useRef<UnifiedCalendarHandle | null>(null);
 
-  // Week containing the currently selected date.
-  const weekDates = (() => {
-    const anchor = new Date(viewYear, viewMonth, selectedDate);
-    const sundayOffset = anchor.getDay();
-    return Array.from({ length: 7 }, (_, i) => {
-      const d = new Date(anchor);
-      d.setDate(anchor.getDate() - sundayOffset + i);
-      return d.getDate();
-    });
-  })();
+  // Calendar event range query — Phase 1.3 uses mock fixture; Phase 2 will swap
+  // useMockData → false to hit GET /api/v1/calendar/events.
+  const range = useMemo(() => {
+    // Fetch a generous window around the focused month so navigation is
+    // immediately populated without a refetch flicker.
+    const start = new Date(viewYear, viewMonth - 1, 1);
+    const end = new Date(viewYear, viewMonth + 2, 1);
+    return {
+      from: start.toISOString().slice(0, 10),
+      to: end.toISOString().slice(0, 10),
+    };
+  }, [viewYear, viewMonth]);
 
-  const events: { date: number; title: string; color: string; startHour: number; endHour: number }[] = [];
+  const { events, loading, error, refresh } = useCalendarEvents({
+    workspaceSlug,
+    from: range.from,
+    to: range.to,
+    // Phase 2 ships the backend endpoint — flip back to true to dev against mock.
+    useMockData: false,
+  });
 
-  const [isDragging, setIsDragging] = useState(false);
-  const [dragStart, setDragStart] = useState<{ date: number, hour: number } | null>(null);
-  const [dragEnd, setDragEnd] = useState<{ date: number, hour: number } | null>(null);
   const [popoverState, setPopoverState] = useState<{
     isOpen: boolean;
     initialDate?: string;
     initialStartTime?: string;
     initialEndTime?: string;
   }>({ isOpen: false });
-
-  const containerRef = useRef<HTMLDivElement>(null);
 
   // Mini date-picker popover. The picker has its own (year, month) cursor so
   // the user can browse without committing — the main view only updates when
@@ -220,16 +242,6 @@ export const PlannerView = () => {
     setPickerOpen(true);
   };
 
-  useEffect(() => {
-    const handleGlobalMouseUp = () => {
-      if (isDragging) {
-        setIsDragging(false);
-      }
-    };
-    window.addEventListener('mouseup', handleGlobalMouseUp);
-    return () => window.removeEventListener('mouseup', handleGlobalMouseUp);
-  }, [isDragging]);
-
   // Allow the SubSidebar header "+" button to open the schedule popover
   // without owning a reference to this component.
   useEffect(() => {
@@ -238,59 +250,24 @@ export const PlannerView = () => {
     return () => window.removeEventListener('planner:create-event', handler);
   }, []);
 
-  const handleDateClick = (_e: React.MouseEvent, date: number) => {
-    if (date > 0) {
-      if (viewMode === 'Month') {
-        setSelectedDate(date);
-        setPopoverState({
-          isOpen: true,
-          initialDate: `${MONTH_NAMES[viewMonth]} ${date}, ${viewYear}`,
-          initialStartTime: '09:00 AM',
-          initialEndTime: '10:00 AM',
-        });
-      } else {
-        setSelectedDate(date);
-        setViewMode('Day');
-      }
-    }
-  };
-
-  const formatHour = (h: number) => {
-    if (h === 0) return '12:00 AM';
-    if (h === 12) return '12:00 PM';
-    return h > 12 ? `${h - 12}:00 PM` : `${h}:00 AM`;
-  };
-
-  const formatHourShort = (h: number) => {
-    if (h === 0) return '12 AM';
-    if (h === 12) return '12 PM';
-    return h > 12 ? `${h - 12} PM` : `${h} AM`;
-  };
-
-  const handleMouseDown = (e: React.MouseEvent, date: number, hour: number) => {
-    e.preventDefault(); // Prevent text selection
-    setIsDragging(true);
-    setDragStart({ date, hour });
-    setDragEnd({ date, hour });
-    setPopoverState(prev => ({ ...prev, isOpen: false }));
-  };
-
-  const handleMouseEnter = (date: number, hour: number) => {
-    if (isDragging && dragStart && dragStart.date === date) {
-      setDragEnd({ date, hour });
-    }
+  const setMode = (mode: PlannerViewMode) => {
+    setViewMode(mode);
+    calendarRef.current?.changeView(VIEW_MODE_TO_FC[mode]);
+    setPopoverState((prev) => ({ ...prev, isOpen: false }));
   };
 
   const goToPreviousMonth = () => {
     const next = new Date(viewYear, viewMonth - 1, 1);
     setViewYear(next.getFullYear());
     setViewMonth(next.getMonth());
+    calendarRef.current?.prev();
   };
 
   const goToNextMonth = () => {
     const next = new Date(viewYear, viewMonth + 1, 1);
     setViewYear(next.getFullYear());
     setViewMonth(next.getMonth());
+    calendarRef.current?.next();
   };
 
   const goToToday = () => {
@@ -298,55 +275,161 @@ export const PlannerView = () => {
     setViewYear(now.getFullYear());
     setViewMonth(now.getMonth());
     setSelectedDate(now.getDate());
+    calendarRef.current?.today();
   };
 
-  const handleMouseUp = (_e: React.MouseEvent) => {
-    if (isDragging && dragStart && dragEnd) {
-      setIsDragging(false);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [previewMeetingId, setPreviewMeetingId] = useState<string | null>(null);
+  useEffect(() => {
+    if (!actionError) return;
+    const id = window.setTimeout(() => setActionError(null), 4000);
+    return () => window.clearTimeout(id);
+  }, [actionError]);
 
-      const startHour = Math.min(dragStart.hour, dragEnd.hour);
-      const endHour = Math.max(dragStart.hour, dragEnd.hour) + 1;
+  const handleEventClick = (event: CalendarEvent) => {
+    if (!workspaceSlug) return;
+    if (event.sourceType === 'meeting') {
+      // Open inline preview modal instead of navigating away — keeps user's
+      // place on the calendar. Modal has a "전체 열기" link for deep edits.
+      setPreviewMeetingId(event.sourceId);
+      return;
+    }
+    // pms_due / pms_block — both navigate to the task list with the issue panel open.
+    const listId = event.metadata.taskListId;
+    if (!listId) {
+      setActionError('태스크 위치를 찾을 수 없습니다.');
+      return;
+    }
+    navigate(`/tool/pms-list-${listId}?issue=${encodeURIComponent(event.sourceId)}`);
+  };
 
-      setPopoverState({
-        isOpen: true,
-        initialDate: `${MONTH_NAMES[viewMonth]} ${dragStart.date}, ${viewYear}`,
-        initialStartTime: formatHour(startHour),
-        initialEndTime: formatHour(endHour),
-      });
+  const handleEventDrop = async (
+    event: CalendarEvent,
+    newStartIso: string,
+    newEndIso: string,
+    revert: () => void,
+  ) => {
+    if (!token || !workspaceSlug) {
+      revert();
+      return;
+    }
+    if (event.sourceType === 'meeting') {
+      try {
+        // FullCalendar already formatted these in the calendar's named timezone
+        // (Asia/Seoul). Backend stores naive UTC — meeting-api accepts the
+        // offset-prefixed string and the request pipeline normalizes it.
+        await updateMeeting(token, workspaceSlug, event.sourceId, {
+          start_at: newStartIso,
+          end_at: newEndIso,
+        });
+        refresh();
+      } catch (err) {
+        revert();
+        setActionError(
+          err instanceof Error ? err.message : '미팅 시간을 변경할 수 없습니다.',
+        );
+      }
+      return;
+    }
+    // PMS issues — extract date portion only (all-day, no time component).
+    const newStartYmd = newStartIso.slice(0, 10);
+    // Exclusive end: FullCalendar's all-day end is the day AFTER the visible
+    // last day, so subtract one day for the stored due_date.
+    const newDueYmd = decrementYmd(newEndIso.slice(0, 10));
+    const payload: { due_date?: string | null; start_date?: string | null } = {
+      due_date: newDueYmd,
+    };
+    if (event.sourceType === 'pms_block') {
+      payload.start_date = newStartYmd;
+    }
+    try {
+      await updateIssue(token, event.sourceId, payload);
+      refresh();
+    } catch (err) {
+      revert();
+      setActionError(
+        err instanceof Error ? err.message : '태스크 일정을 변경할 수 없습니다.',
+      );
     }
   };
 
-  const isCellSelected = (date: number, hour: number) => {
-    if (!dragStart || !dragEnd) return false;
-    if (dragStart.date !== date) return false;
-    const minHour = Math.min(dragStart.hour, dragEnd.hour);
-    const maxHour = Math.max(dragStart.hour, dragEnd.hour);
-    return hour >= minHour && hour <= maxHour;
+  const handleEventResize = async (
+    event: CalendarEvent,
+    newEndIso: string,
+    revert: () => void,
+  ) => {
+    if (!token || !workspaceSlug) {
+      revert();
+      return;
+    }
+    if (event.sourceType === 'meeting') {
+      try {
+        await updateMeeting(token, workspaceSlug, event.sourceId, {
+          end_at: newEndIso,
+        });
+        refresh();
+      } catch (err) {
+        revert();
+        setActionError(
+          err instanceof Error ? err.message : '미팅 시간을 변경할 수 없습니다.',
+        );
+      }
+      return;
+    }
+    if (event.sourceType === 'pms_block') {
+      const newDueYmd = decrementYmd(newEndIso.slice(0, 10));
+      try {
+        await updateIssue(token, event.sourceId, { due_date: newDueYmd });
+        refresh();
+      } catch (err) {
+        revert();
+        setActionError(
+          err instanceof Error ? err.message : '태스크 일정을 변경할 수 없습니다.',
+        );
+      }
+      return;
+    }
+    // pms_due (single-day) — resize is meaningless. Revert.
+    revert();
+  };
+
+  const handleDateSelect = (range: { start: Date; end: Date; allDay: boolean }) => {
+    const start = range.start;
+    const end = range.end;
+    const formatTime = (d: Date) => {
+      const h = d.getHours();
+      const m = d.getMinutes();
+      const ampm = h >= 12 ? 'PM' : 'AM';
+      const h12 = h % 12 === 0 ? 12 : h % 12;
+      return `${h12}:${String(m).padStart(2, '0')} ${ampm}`;
+    };
+    setPopoverState({
+      isOpen: true,
+      initialDate: `${MONTH_NAMES[start.getMonth()]} ${start.getDate()}, ${start.getFullYear()}`,
+      initialStartTime: range.allDay ? '09:00 AM' : formatTime(start),
+      initialEndTime: range.allDay ? '10:00 AM' : formatTime(end),
+    });
   };
 
   return (
-    <motion.div 
+    <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       className="p-8 h-full flex flex-col space-y-6 relative"
-      ref={containerRef}
     >
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
           <h1 className="app-text-title-lg text-app-ink">Planner</h1>
           <div className="flex items-center bg-app-surface-sidebar border border-app-border rounded-md p-1">
-            {(['Month', 'Week', 'Day'] as const).map((mode) => (
-              <button 
+            {(['Month', 'Week', 'Day', 'Agenda'] as const).map((mode) => (
+              <button
                 key={mode}
-                onClick={() => {
-                  setViewMode(mode);
-                  setPopoverState(prev => ({ ...prev, isOpen: false }));
-                }}
+                onClick={() => setMode(mode)}
                 className={cn(
-                  "app-text-control-sm rounded px-3 py-1 transition-all",
-                  viewMode === mode 
-                    ? "bg-app-surface-hover text-app-ink shadow-sm" 
-                    : "text-gray-500 hover:text-app-ink"
+                  'app-text-control-sm rounded px-3 py-1 transition-all',
+                  viewMode === mode
+                    ? 'bg-app-surface-hover text-app-ink shadow-sm'
+                    : 'text-gray-500 hover:text-app-ink',
                 )}
               >
                 {mode}
@@ -416,264 +499,77 @@ export const PlannerView = () => {
                   setViewYear(year);
                   setViewMonth(month);
                   setSelectedDate(day);
+                  calendarRef.current?.gotoDate(new Date(year, month, day));
                   setPickerOpen(false);
                 }}
               />
             ) : null}
           </div>
-          <button className="app-text-control flex items-center gap-2 rounded-md bg-app-accent px-4 py-2 text-app-bg">
+          <button
+            type="button"
+            onClick={() => setPopoverState({ isOpen: true })}
+            className="app-text-control flex items-center gap-2 rounded-md bg-app-accent px-4 py-2 text-app-bg"
+          >
             <Plus size={16} />
             <span>Add Event</span>
           </button>
         </div>
       </div>
 
+      {actionError ? (
+        <div
+          role="alert"
+          className="rounded-md border border-red-500/40 bg-red-500/10 px-4 py-2 app-text-caption text-red-500"
+        >
+          {actionError}
+        </div>
+      ) : null}
+
       <div className="flex-1 card p-0 overflow-hidden flex flex-col relative">
-        <AnimatePresence mode="wait">
-          {viewMode === 'Month' && (
-            <motion.div 
-              key="month"
-              initial={{ opacity: 0, x: 20 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: -20 }}
-              className="flex-1 flex flex-col"
-            >
-              <div className="grid grid-cols-7 border-b border-app-border">
-                {days.map(day => (
-                  <div key={day} className="app-text-overline border-r border-app-border py-2 text-center text-gray-500 last:border-r-0">
-                    {day}
-                  </div>
-                ))}
+        {error ? (
+          <div className="flex-1 flex items-center justify-center p-8">
+            <div className="text-center space-y-2">
+              <p className="text-red-500 app-text-body">{error}</p>
+              <p className="text-gray-500 app-text-caption">
+                일정을 불러올 수 없습니다. 새로고침 후 다시 시도하세요.
+              </p>
+            </div>
+          </div>
+        ) : (
+          <div className="flex-1 relative">
+            {loading ? (
+              <div className="absolute inset-0 z-10 flex items-center justify-center bg-app-bg/40 pointer-events-none">
+                <div className="text-gray-500 app-text-caption">불러오는 중...</div>
               </div>
-              <div className="flex-1 grid grid-cols-7 grid-rows-5">
-                {dates.map((date, i) => {
-                  const isToday = date > 0
-                    && viewYear === today.getFullYear()
-                    && viewMonth === today.getMonth()
-                    && date === today.getDate();
-                  const cellDate = new Date(viewYear, viewMonth, date);
-                  const isSunday = date > 0 && cellDate.getDay() === 0;
-                  const holidayNames = date > 0
-                    ? getKoreanHolidayNames(viewYear, viewMonth, date)
-                    : null;
-                  return (
-                  <div
-                    key={i}
-                    onClick={(e) => handleDateClick(e, date)}
-                    className={cn(
-                      "p-2 border-r border-b border-app-border last:border-r-0 min-h-[100px] hover:bg-app-surface-hover transition-colors cursor-pointer group",
-                      date === 0 && "bg-app-surface-sidebar/50 cursor-default hover:bg-app-surface-sidebar/50"
-                    )}
-                  >
-                    <div className={cn(
-                      "app-text-control-sm mb-2",
-                      isToday
-                        ? "w-6 h-6 bg-app-accent text-app-bg rounded-full flex items-center justify-center -mt-1 -ml-1"
-                        : holidayNames || isSunday
-                          ? "text-red-500 font-medium"
-                          : "text-gray-500"
-                    )}>
-                      {date > 0 ? date : ''}
-                    </div>
-                    {holidayNames ? (
-                      <div className="app-text-micro mb-1 truncate text-red-500" title={holidayNames.join(', ')}>
-                        {holidayNames[0]}
-                      </div>
-                    ) : null}
-                    
-                    {events.filter(e => e.date === date).map((event, idx) => (
-                      <div key={idx} className={cn(
-                        "app-text-micro mb-1 truncate border-l-2 px-1.5 py-0.5",
-                        event.color === 'blue' && "bg-blue-500/20 border-blue-500 text-blue-400",
-                        event.color === 'purple' && "bg-purple-500/20 border-purple-500 text-purple-400",
-                        event.color === 'green' && "bg-green-500/20 border-green-500 text-green-400"
-                      )}>
-                        {event.title}
-                      </div>
-                    ))}
-                  </div>
-                  );
-                })}
-              </div>
-            </motion.div>
-          )}
+            ) : null}
+            <UnifiedCalendar
+              ref={calendarRef}
+              events={events}
+              initialView={VIEW_MODE_TO_FC[viewMode]}
+              initialDate={new Date(viewYear, viewMonth, selectedDate)}
+              onDateSelect={handleDateSelect}
+              onEventClick={handleEventClick}
+              onEventDrop={handleEventDrop}
+              onEventResize={handleEventResize}
+            />
+          </div>
+        )}
 
-          {viewMode === 'Week' && (
-            <motion.div 
-              key="week"
-              initial={{ opacity: 0, x: 20 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: -20 }}
-              className="flex-1 flex flex-col overflow-hidden"
-            >
-              <div className="flex border-b border-app-border">
-                <div className="w-16 shrink-0"></div>
-                <div className="flex-1 grid grid-cols-7">
-                  {days.map((day, i) => {
-                    const isToday = weekDates[i] === today.getDate()
-                      && viewMonth === today.getMonth()
-                      && viewYear === today.getFullYear();
-                    const isHoliday = !!getKoreanHolidayNames(viewYear, viewMonth, weekDates[i]);
-                    const isSunday = i === 0;
-                    return (
-                    <div
-                      key={day}
-                      onClick={() => {
-                        setSelectedDate(weekDates[i]);
-                        setViewMode('Day');
-                      }}
-                      className="py-3 text-center border-r border-app-border last:border-r-0 hover:bg-app-surface-hover cursor-pointer transition-colors"
-                    >
-                      <div className={cn(
-                        "app-text-overline mb-1",
-                        isHoliday || isSunday ? "text-red-500" : "text-gray-500"
-                      )}>{day}</div>
-                      <div className={cn(
-                        "app-text-title-md font-bold",
-                        isToday
-                          ? "text-app-accent"
-                          : isHoliday || isSunday
-                            ? "text-red-500"
-                            : "text-app-ink"
-                      )}>
-                        {weekDates[i]}
-                      </div>
-                    </div>
-                    );
-                  })}
-                </div>
-              </div>
-              <div className="flex-1 overflow-y-auto custom-scrollbar relative">
-                {Array.from({ length: 24 }, (_, i) => i).map(hour => (
-                  <div key={hour} className="flex">
-                    <div className="app-text-overline relative -top-3 w-16 shrink-0 py-2 pr-4 text-right text-gray-600">
-                      {formatHourShort(hour)}
-                    </div>
-                    <div className="flex-1 grid grid-cols-7">
-                      {weekDates.map(date => (
-                        <div 
-                          key={`${date}-${hour}`}
-                          className="border-t border-r border-app-border last:border-r-0 h-12 relative group"
-                          onMouseDown={(e) => handleMouseDown(e, date, hour)}
-                          onMouseEnter={() => handleMouseEnter(date, hour)}
-                          onMouseUp={handleMouseUp}
-                        >
-                          {isCellSelected(date, hour) && (
-                            <div className="absolute inset-0 bg-blue-500/20 border-x border-blue-500 z-10 pointer-events-none" />
-                          )}
-                          
-                          {/* Render events */}
-                          {events.filter(e => e.date === date && e.startHour === hour).map((event, idx) => (
-                            <div key={idx} className={cn(
-                              "app-text-micro absolute top-1 left-1 right-1 z-20 overflow-hidden rounded border-l-2 p-1.5 shadow-sm",
-                              event.color === 'blue' && "bg-blue-500/10 border-blue-500 text-blue-400",
-                              event.color === 'purple' && "bg-purple-500/10 border-purple-500 text-purple-400",
-                              event.color === 'green' && "bg-green-500/10 border-green-500 text-green-400"
-                            )}
-                            style={{ height: `${(event.endHour - event.startHour) * 48 - 8}px` }}
-                            >
-                              <div className="font-bold truncate">{event.title}</div>
-                              <div className="text-gray-500 truncate">{formatHour(event.startHour)}</div>
-                            </div>
-                          ))}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </motion.div>
-          )}
-
-          {viewMode === 'Day' && (
-            <motion.div 
-              key="day"
-              initial={{ opacity: 0, x: 20 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: -20 }}
-              className="flex-1 flex flex-col overflow-hidden"
-            >
-              <div className="p-6 border-b border-app-border flex items-center gap-6">
-                <div className="w-16 h-16 bg-app-accent rounded-xl flex flex-col items-center justify-center text-app-accent-fg shadow-sm">
-                  <span className="app-text-overline">{MONTH_NAMES[viewMonth]}</span>
-                  <span className="app-text-title-lg font-black">{selectedDate}</span>
-                </div>
-                <div>
-                  <h2 className="app-text-title-lg text-app-ink">
-                    {(() => {
-                      const dayLabels = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-                      return dayLabels[new Date(viewYear, viewMonth, selectedDate).getDay()];
-                    })()}
-                  </h2>
-                  {(() => {
-                    const holidayNames = getKoreanHolidayNames(viewYear, viewMonth, selectedDate);
-                    if (holidayNames) {
-                      return (
-                        <p className="app-text-body text-red-500 font-medium">
-                          {holidayNames.join(' · ')}
-                        </p>
-                      );
-                    }
-                    return (
-                      <p className="app-text-body text-gray-500">
-                        You have {events.filter(e => e.date === selectedDate).length} event(s) scheduled for today.
-                      </p>
-                    );
-                  })()}
-                </div>
-              </div>
-
-              <div className="flex-1 overflow-y-auto custom-scrollbar p-6">
-                <div className="max-w-4xl mx-auto">
-                  {Array.from({ length: 24 }, (_, i) => i).map(hour => (
-                    <div key={hour} className="flex group">
-                      <div className="app-text-label relative -top-3 w-20 shrink-0 py-2 pr-6 text-right text-gray-600">
-                        {formatHourShort(hour)}
-                      </div>
-                      <div 
-                        className="flex-1 border-t border-app-border h-16 relative"
-                        onMouseDown={(e) => handleMouseDown(e, selectedDate, hour)}
-                        onMouseEnter={() => handleMouseEnter(selectedDate, hour)}
-                        onMouseUp={handleMouseUp}
-                      >
-                        {isCellSelected(selectedDate, hour) && (
-                          <div className="absolute inset-0 bg-blue-500/20 border-x border-blue-500 z-10 pointer-events-none" />
-                        )}
-                        
-                        {events.filter(e => e.date === selectedDate && e.startHour === hour).map((event, idx) => (
-                          <div key={idx} className={cn(
-                            "app-text-caption absolute top-2 left-2 right-4 z-20 rounded border-l-4 p-3 shadow-sm",
-                            event.color === 'blue' && "bg-blue-500/10 border-blue-500 text-blue-400",
-                            event.color === 'purple' && "bg-purple-500/10 border-purple-500 text-purple-400",
-                            event.color === 'green' && "bg-green-500/10 border-green-500 text-green-400"
-                          )}
-                          style={{ height: `${(event.endHour - event.startHour) * 64 - 16}px` }}
-                          >
-                            <div className="font-bold mb-1">{formatHour(event.startHour)} - {formatHour(event.endHour)}</div>
-                            <div className="text-app-ink font-medium">{event.title}</div>
-                            <div className="text-gray-500 mt-1 flex items-center gap-1">
-                              <MessageSquare size={10} />
-                              <span>3 participants</span>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-        
         <SchedulePopover
           isOpen={popoverState.isOpen}
-          onClose={() => setPopoverState(prev => ({ ...prev, isOpen: false }))}
+          onClose={() => setPopoverState((prev) => ({ ...prev, isOpen: false }))}
           initialDate={popoverState.initialDate}
           initialStartTime={popoverState.initialStartTime}
           initialEndTime={popoverState.initialEndTime}
         />
       </div>
+
+      <MeetingPreviewModal
+        meetingId={previewMeetingId}
+        workspaceSlug={workspaceSlug}
+        onClose={() => setPreviewMeetingId(null)}
+        onChanged={refresh}
+      />
     </motion.div>
   );
 };

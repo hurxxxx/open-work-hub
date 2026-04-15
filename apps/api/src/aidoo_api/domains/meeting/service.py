@@ -845,6 +845,44 @@ def list_meetings(
     return MeetingListResponse(items=items, total=len(items))
 
 
+def add_attendees(
+    db: Session,
+    *,
+    workspace: Workspace,
+    user: User,
+    meeting_id: str,
+    attendees: list[MeetingAttendeeInput],
+) -> MeetingDetail:
+    """Append attendees to an existing meeting.
+
+    Permission: any meeting participant (organizer or existing attendee).
+    Existing attendees in the input are ignored (idempotent). The role is
+    updated for already-present users so callers can promote required ↔ optional.
+    """
+    meeting = _load_meeting(db, workspace, meeting_id)
+    ensure_meeting_participant(db, user, meeting)
+
+    # Build the merged attendee list: existing rows first, then any new ones
+    # from the request that are not already present. Pre-existing attendees
+    # whose role is updated keep their slot (handled by _replace_attendees).
+    incoming_by_user = {item.user_id: item for item in attendees}
+    merged: list[MeetingAttendeeInput] = []
+    for att in meeting.attendees:
+        override = incoming_by_user.pop(att.user_id, None)
+        if override is not None:
+            merged.append(override)
+        else:
+            merged.append(MeetingAttendeeInput(user_id=att.user_id, role=att.role))
+    for remaining in incoming_by_user.values():
+        merged.append(remaining)
+
+    _replace_attendees(db, meeting, merged, acting_user_id=user.id)
+    db.commit()
+
+    fresh = _load_meeting(db, workspace, meeting_id)
+    return _serialize_meeting(db, fresh)
+
+
 def attach_task(
     db: Session, *, workspace: Workspace, user: User, meeting_id: str, issue_id: str
 ) -> MeetingDetail:

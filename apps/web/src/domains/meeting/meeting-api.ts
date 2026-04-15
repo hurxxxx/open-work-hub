@@ -310,6 +310,28 @@ export function updateMeeting(
   );
 }
 
+/**
+ * Append attendees to an existing meeting. Allowed for any current participant
+ * (organizer or existing attendee), unlike ``updateMeeting`` whose attendee
+ * field is organizer-only because it can also remove people.
+ */
+export function addMeetingAttendees(
+  token: string,
+  workspaceSlug: string,
+  meetingId: string,
+  attendees: MeetingAttendeeInput[],
+): Promise<MeetingDetail> {
+  return request<MeetingDetail>(
+    `/api/v1/meeting/meetings/${meetingId}/attendees`,
+    token,
+    workspaceSlug,
+    {
+      method: 'POST',
+      body: JSON.stringify({ attendees }),
+    },
+  );
+}
+
 export function ensureMeetingNotes(
   token: string,
   workspaceSlug: string,

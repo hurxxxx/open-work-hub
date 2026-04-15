@@ -12,6 +12,7 @@ from aidoo_api.core.settings import get_settings
 from aidoo_api.core.storage import ensure_bucket
 from aidoo_api.domains.ai.router import router as ai_router
 from aidoo_api.domains.admin.router import router as admin_router
+from aidoo_api.domains.calendar.router import router as calendar_router
 from aidoo_api.domains.auth.dependencies import (
     require_current_user,
     require_legacy_workspace_membership,
@@ -234,6 +235,22 @@ def create_app() -> FastAPI:
     )
     app.include_router(
         meeting_router,
+        prefix=f"{settings.api_prefix}/workspaces/{{workspace_slug}}",
+        dependencies=[
+            *protected_dependencies,
+            Depends(require_workspace_membership()),
+        ],
+    )
+    app.include_router(
+        calendar_router,
+        prefix=settings.api_prefix,
+        dependencies=[
+            *protected_dependencies,
+            Depends(require_legacy_workspace_membership()),
+        ],
+    )
+    app.include_router(
+        calendar_router,
         prefix=f"{settings.api_prefix}/workspaces/{{workspace_slug}}",
         dependencies=[
             *protected_dependencies,

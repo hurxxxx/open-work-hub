@@ -296,6 +296,107 @@ def test_non_organizer_attendee_cannot_modify_meeting(client: TestClient) -> Non
     assert forbidden_delete.status_code == 403
 
 
+def test_attendee_can_invite_other_attendees(client: TestClient) -> None:
+    """A meeting attendee (non-organizer) can append additional attendees via
+    POST /meetings/{id}/attendees but cannot use the organizer-only PATCH path."""
+    admin = _bootstrap_admin_session(client)
+    admin_token = admin["token"]
+
+    invitee_a = _create_user_with_workspaces(
+        client,
+        admin_token,
+        email="invitee-a@aidoo.local",
+        full_name="Invitee A",
+        workspace_keys=["meeting"],
+    )
+    invitee_b = _create_user_with_workspaces(
+        client,
+        admin_token,
+        email="invitee-b@aidoo.local",
+        full_name="Invitee B",
+        workspace_keys=["meeting"],
+    )
+    outsider = _create_user_with_workspaces(
+        client,
+        admin_token,
+        email="outsider-meeting@aidoo.local",
+        full_name="Meeting Outsider",
+        workspace_keys=["meeting"],
+    )
+
+    invitee_a_token = _login(
+        client, invitee_a["user"]["email"], invitee_a["temporary_password"]
+    )
+    outsider_token = _login(
+        client, outsider["user"]["email"], outsider["temporary_password"]
+    )
+
+    # Admin creates a meeting with invitee_a as the only non-organizer attendee.
+    meeting = _create_meeting(
+        client,
+        admin_token,
+        title="Invite expansion",
+        attendees=[{"user_id": invitee_a["user"]["id"], "role": "required"}],
+    )
+
+    # invitee_a (an attendee, not organizer) can add invitee_b.
+    add_response = client.post(
+        f"/api/v1/meeting/meetings/{meeting['id']}/attendees",
+        headers=_auth_headers(invitee_a_token),
+        json={
+            "attendees": [
+                {"user_id": invitee_b["user"]["id"], "role": "required"}
+            ]
+        },
+    )
+    assert add_response.status_code == 200, add_response.text
+    body = add_response.json()
+    user_ids = {att["user_id"] for att in body["attendees"]}
+    assert invitee_b["user"]["id"] in user_ids
+    # Invitee A is preserved
+    assert invitee_a["user"]["id"] in user_ids
+    # Organizer is preserved
+    assert admin["user"]["id"] in user_ids
+
+    # Idempotent: re-adding invitee_b succeeds without dupes.
+    again = client.post(
+        f"/api/v1/meeting/meetings/{meeting['id']}/attendees",
+        headers=_auth_headers(invitee_a_token),
+        json={
+            "attendees": [
+                {"user_id": invitee_b["user"]["id"], "role": "optional"}
+            ]
+        },
+    )
+    assert again.status_code == 200
+    again_body = again.json()
+    invitee_b_records = [
+        att for att in again_body["attendees"] if att["user_id"] == invitee_b["user"]["id"]
+    ]
+    assert len(invitee_b_records) == 1
+    assert invitee_b_records[0]["role"] == "optional"
+
+    # Outsider (non-participant) cannot add anyone.
+    forbidden = client.post(
+        f"/api/v1/meeting/meetings/{meeting['id']}/attendees",
+        headers=_auth_headers(outsider_token),
+        json={
+            "attendees": [
+                {"user_id": invitee_b["user"]["id"], "role": "required"}
+            ]
+        },
+    )
+    assert forbidden.status_code == 403
+
+    # Invitee A still cannot use the PATCH path (organizer-only).
+    forbidden_patch = client.patch(
+        f"/api/v1/meeting/meetings/{meeting['id']}",
+        headers=_auth_headers(invitee_a_token),
+        json={"title": "Hijacked"},
+    )
+    assert forbidden_patch.status_code == 403
+
+
 def test_meeting_notes_ensure_is_idempotent_and_separate_from_doc_links(client: TestClient) -> None:
     admin = _bootstrap_admin_session(client)
     admin_token = admin["token"]

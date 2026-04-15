@@ -176,7 +176,11 @@ class Label(Base):
 
 class Issue(Base):
     __tablename__ = "pms_issues"
-    __table_args__ = (UniqueConstraint("list_id", "issue_number", name="uq_pms_issue_number"),)
+    __table_args__ = (
+        UniqueConstraint("list_id", "issue_number", name="uq_pms_issue_number"),
+        Index("ix_pms_issues_due_date", "due_date"),
+        Index("ix_pms_issues_start_date", "start_date"),
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     list_id: Mapped[str] = mapped_column(ForeignKey("pms_task_lists.id"), index=True)

@@ -39,6 +39,17 @@ class AttendeeResponseUpdateRequest(BaseModel):
     response: AttendeeResponse
 
 
+class MeetingAttendeesAddRequest(BaseModel):
+    """Append one or more attendees to an existing meeting.
+
+    Allowed for any current meeting participant (organizer or existing
+    attendee), unlike ``MeetingUpdateRequest.attendees`` which is organizer-only
+    because it can also remove people.
+    """
+
+    attendees: list[MeetingAttendeeInput] = Field(..., min_length=1)
+
+
 class MeetingTaskAttachRequest(BaseModel):
     issue_id: str
 

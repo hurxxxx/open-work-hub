@@ -33,10 +33,12 @@ import {
 import {
   canAttachToMeeting,
   canEditMeeting,
+  canInviteAttendees,
   canRemoveAttachment,
 } from '@/src/domains/meeting/meeting-permissions';
 import { buildWorkspaceAppPath } from '@/src/domains/workspaces/workspace-utils';
 
+import { AddAttendeesModal } from './AddAttendeesModal';
 import { MeetingEditModal } from './MeetingEditModal';
 import { TaskPickerModal } from './TaskPickerModal';
 import { DocPickerModal } from './DocPickerModal';
@@ -91,6 +93,7 @@ export function MeetingDetail({
   const [taskPickerOpen, setTaskPickerOpen] = useState(false);
   const [docPickerOpen, setDocPickerOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
+  const [addAttendeesOpen, setAddAttendeesOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [playbackUrls, setPlaybackUrls] = useState<Record<string, string>>({});
@@ -134,6 +137,7 @@ export function MeetingDetail({
 
   const editable = canEditMeeting(user, meeting);
   const canAttach = canAttachToMeeting(user, meeting);
+  const canInvite = canInviteAttendees(user, meeting);
 
   async function handleAttachTask(issue: { id: string }) {
     if (!token) return;
@@ -714,6 +718,7 @@ export function MeetingDetail({
           icon={<Users size={14} />}
           title="참석자"
           count={meeting.attendees.length}
+          onAdd={canInvite ? () => setAddAttendeesOpen(true) : undefined}
         >
           {meeting.attendees.length === 0 ? (
             <EmptyRow text="참석자가 없습니다." />
@@ -791,6 +796,17 @@ export function MeetingDetail({
           onChanged();
         }}
         workspaceSlug={workspaceSlug}
+      />
+      <AddAttendeesModal
+        isOpen={addAttendeesOpen}
+        meeting={meeting}
+        workspaceSlug={workspaceSlug}
+        onClose={() => setAddAttendeesOpen(false)}
+        onAdded={(updated) => {
+          setMeeting(updated);
+          setAddAttendeesOpen(false);
+          onChanged();
+        }}
       />
       {confirmDialog}
     </div>

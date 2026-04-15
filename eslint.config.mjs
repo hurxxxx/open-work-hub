@@ -58,6 +58,15 @@ export default [
           ],
           patterns: [
             { group: ['@radix-ui/*'], message: 'Use primitives from @aidoo/ui instead.' },
+            {
+              group: [
+                '@fullcalendar/resource-*',
+                '@fullcalendar/scrollgrid',
+                '@fullcalendar/adaptive',
+              ],
+              message:
+                'FullCalendar premium plugins are not licensed for this project. Only standard MIT plugins (core, react, daygrid, timegrid, list, interaction, luxon3) are allowed.',
+            },
           ],
         },
       ],

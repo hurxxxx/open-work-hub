@@ -22,6 +22,7 @@ from aidoo_api.domains.auth.models import (
 from aidoo_api.domains.meeting import recordings as recording_service
 from aidoo_api.domains.meeting import service as meeting_service
 from aidoo_api.domains.meeting.schemas import (
+    MeetingAttendeesAddRequest,
     MeetingCreateRequest,
     MeetingDetail,
     MeetingDocAttachRequest,
@@ -149,6 +150,28 @@ def delete_meeting(
         db, workspace=workspace, user=current_user, meeting_id=meeting_id
     )
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.post("/meetings/{meeting_id}/attendees", response_model=MeetingDetail)
+def add_meeting_attendees(
+    meeting_id: str,
+    payload: MeetingAttendeesAddRequest,
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+    workspace: Workspace = Depends(require_current_workspace),
+) -> MeetingDetail:
+    """Append attendees to an existing meeting.
+
+    Permission: any current participant (organizer or existing attendee). The
+    full attendee replace path stays organizer-only via ``PATCH /meetings/{id}``.
+    """
+    return meeting_service.add_attendees(
+        db,
+        workspace=workspace,
+        user=current_user,
+        meeting_id=meeting_id,
+        attendees=list(payload.attendees),
+    )
 
 
 @router.post("/meetings/{meeting_id}/tasks", response_model=MeetingDetail)
