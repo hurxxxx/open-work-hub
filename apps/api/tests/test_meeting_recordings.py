@@ -255,3 +255,266 @@ def test_complete_staging_keeps_recording_when_enqueue_fails(client, monkeypatch
         assert recording.celery_task_id is None
         assert recording.transcription_status == "failed"
         assert fake_minio.objects[recording.storage_key] == chunk
+
+
+def test_only_one_user_can_record_at_a_time(client, monkeypatch, tmp_path) -> None:
+    """Single-recorder lock: while one participant is staging an active
+    recording, other participants get a 409 with the active recorder name."""
+    _install_fake_recording_storage(monkeypatch, tmp_path)
+    from test_meeting import (
+        _create_user_with_workspaces,
+        _login,
+    )
+
+    admin = _bootstrap_admin_session(client)
+    admin_token = admin["token"]
+
+    second = _create_user_with_workspaces(
+        client,
+        admin_token,
+        email="second-recorder@aidoo.local",
+        full_name="Second Recorder",
+        workspace_keys=["meeting"],
+    )
+    second_token = _login(client, second["user"]["email"], second["temporary_password"])
+
+    meeting = _create_meeting(
+        client,
+        admin_token,
+        title="Single recorder lock",
+        attendees=[{"user_id": second["user"]["id"], "role": "required"}],
+    )
+
+    # Admin starts a recording.
+    first_init = client.post(
+        f"/api/v1/meeting/meetings/{meeting['id']}/recordings/staging",
+        headers=_auth_headers(admin_token),
+        json={"idempotency_key": "lock-test-admin", "mime_type": "audio/webm"},
+    )
+    assert first_init.status_code == 201, first_init.text
+    admin_staging_id = first_init.json()["id"]
+
+    # Second user tries to start a recording while admin is still active → 409.
+    blocked = client.post(
+        f"/api/v1/meeting/meetings/{meeting['id']}/recordings/staging",
+        headers=_auth_headers(second_token),
+        json={"idempotency_key": "lock-test-second", "mime_type": "audio/webm"},
+    )
+    assert blocked.status_code == 409, blocked.text
+    detail = blocked.json()["detail"]
+    assert detail["code"] == "recording_in_progress"
+    assert detail["active_recorder_id"] == admin["user"]["id"]
+    assert detail["active_recorder_name"] == admin["user"]["full_name"]
+    assert detail["active_staging_id"] == admin_staging_id
+
+    # Admin can still resume their own staging (idempotent path).
+    same_admin = client.post(
+        f"/api/v1/meeting/meetings/{meeting['id']}/recordings/staging",
+        headers=_auth_headers(admin_token),
+        json={"idempotency_key": "lock-test-admin", "mime_type": "audio/webm"},
+    )
+    assert same_admin.status_code == 201
+    assert same_admin.json()["id"] == admin_staging_id
+
+    # The meeting detail exposes the active recorder so the frontend can disable
+    # the start button on other users' UIs.
+    detail_response = client.get(
+        f"/api/v1/meeting/meetings/{meeting['id']}",
+        headers=_auth_headers(second_token),
+    )
+    assert detail_response.status_code == 200
+    body = detail_response.json()
+    lock = body["active_recording_lock"]
+    assert lock is not None
+    assert lock["user_id"] == admin["user"]["id"]
+    assert lock["user_name"] == admin["user"]["full_name"]
+    assert lock["staging_id"] == admin_staging_id
+
+    # Admin uploads a chunk and completes — releases the lock.
+    chunk = b"x"
+    digest = hashlib.sha256(chunk).hexdigest()
+    upload = client.put(
+        f"/api/v1/meeting/meetings/{meeting['id']}/recordings/staging/{admin_staging_id}/chunks/0",
+        headers={**_auth_headers(admin_token), "X-Chunk-Sha256": digest},
+        files={"file": ("0.webm", chunk, "audio/webm")},
+    )
+    assert upload.status_code == 200, upload.text
+    complete = client.post(
+        f"/api/v1/meeting/meetings/{meeting['id']}/recordings/staging/{admin_staging_id}/complete",
+        headers=_auth_headers(admin_token),
+        json={"duration_sec_estimate": 1},
+    )
+    assert complete.status_code == 200
+
+    # Second user can now start.
+    after_release = client.post(
+        f"/api/v1/meeting/meetings/{meeting['id']}/recordings/staging",
+        headers=_auth_headers(second_token),
+        json={"idempotency_key": "lock-test-second", "mime_type": "audio/webm"},
+    )
+    assert after_release.status_code == 201, after_release.text
+
+
+def test_delete_recording_permission_and_cleanup(client, monkeypatch, tmp_path) -> None:
+    """Recording delete: organizer or uploader can remove a finalized recording.
+    Other participants get 403, the minio object is removed, and the row is gone."""
+    fake_minio = _install_fake_recording_storage(monkeypatch, tmp_path)
+    from test_meeting import _create_user_with_workspaces, _login
+
+    admin = _bootstrap_admin_session(client)
+    admin_token = admin["token"]
+    other = _create_user_with_workspaces(
+        client,
+        admin_token,
+        email="other-recording@aidoo.local",
+        full_name="Other Recording",
+        workspace_keys=["meeting"],
+    )
+    other_token = _login(client, other["user"]["email"], other["temporary_password"])
+
+    meeting = _create_meeting(
+        client,
+        admin_token,
+        title="Delete recording test",
+        attendees=[{"user_id": other["user"]["id"], "role": "required"}],
+    )
+
+    # Admin uploads + finalizes a recording.
+    init = client.post(
+        f"/api/v1/meeting/meetings/{meeting['id']}/recordings/staging",
+        headers=_auth_headers(admin_token),
+        json={"idempotency_key": "delete-test", "mime_type": "audio/webm"},
+    )
+    assert init.status_code == 201
+    staging_id = init.json()["id"]
+    chunk = b"y"
+    digest = hashlib.sha256(chunk).hexdigest()
+    upload = client.put(
+        f"/api/v1/meeting/meetings/{meeting['id']}/recordings/staging/{staging_id}/chunks/0",
+        headers={**_auth_headers(admin_token), "X-Chunk-Sha256": digest},
+        files={"file": ("0.webm", chunk, "audio/webm")},
+    )
+    assert upload.status_code == 200, upload.text
+    complete = client.post(
+        f"/api/v1/meeting/meetings/{meeting['id']}/recordings/staging/{staging_id}/complete",
+        headers=_auth_headers(admin_token),
+        json={"duration_sec_estimate": 1},
+    )
+    assert complete.status_code == 200
+    body = complete.json()
+    assert len(body["recordings"]) == 1
+    recording_id = body["recordings"][0]["id"]
+    storage_key = body["recordings"][0]["storage_key"] if "storage_key" in body["recordings"][0] else None
+
+    # Capture the storage key directly from the DB so we can verify minio removal.
+    with Session(get_engine()) as session:
+        row = session.get(MeetingRecording, recording_id)
+        assert row is not None
+        storage_key = row.storage_key
+    assert storage_key in fake_minio.objects
+
+    # Non-uploader / non-organizer attendee cannot delete.
+    forbidden = client.delete(
+        f"/api/v1/meeting/meetings/{meeting['id']}/recordings/{recording_id}",
+        headers=_auth_headers(other_token),
+    )
+    assert forbidden.status_code == 403
+
+    # Admin (also the uploader here) deletes successfully.
+    deleted = client.delete(
+        f"/api/v1/meeting/meetings/{meeting['id']}/recordings/{recording_id}",
+        headers=_auth_headers(admin_token),
+    )
+    assert deleted.status_code == 200, deleted.text
+    after_body = deleted.json()
+    assert after_body["recordings"] == []
+
+    with Session(get_engine()) as session:
+        assert session.get(MeetingRecording, recording_id) is None
+
+    # Minio object was removed.
+    assert storage_key not in fake_minio.objects
+    assert storage_key in fake_minio.removed
+
+
+def test_stale_recording_lock_auto_releases(client, monkeypatch, tmp_path) -> None:
+    """If the recorder crashes (no chunk for > RECORDING_STALE_AFTER_SECONDS),
+    the lock auto-releases so other participants are not permanently blocked.
+    The abandoned staging row stays in the DB but is excluded from the active
+    lock calculation."""
+    from datetime import timedelta
+
+    _install_fake_recording_storage(monkeypatch, tmp_path)
+    from test_meeting import _create_user_with_workspaces, _login
+
+    admin = _bootstrap_admin_session(client)
+    admin_token = admin["token"]
+    second = _create_user_with_workspaces(
+        client,
+        admin_token,
+        email="stale-second@aidoo.local",
+        full_name="Stale Second",
+        workspace_keys=["meeting"],
+    )
+    second_token = _login(client, second["user"]["email"], second["temporary_password"])
+
+    meeting = _create_meeting(
+        client,
+        admin_token,
+        title="Stale lock test",
+        attendees=[{"user_id": second["user"]["id"], "role": "required"}],
+    )
+
+    # Admin starts a recording and then "crashes" (we simulate by aging the
+    # last_chunk_at back past the stale window).
+    init = client.post(
+        f"/api/v1/meeting/meetings/{meeting['id']}/recordings/staging",
+        headers=_auth_headers(admin_token),
+        json={"idempotency_key": "stale-test-admin", "mime_type": "audio/webm"},
+    )
+    assert init.status_code == 201
+    admin_staging_id = init.json()["id"]
+
+    # While the lock is fresh, second user is blocked.
+    blocked = client.post(
+        f"/api/v1/meeting/meetings/{meeting['id']}/recordings/staging",
+        headers=_auth_headers(second_token),
+        json={"idempotency_key": "stale-test-second-1", "mime_type": "audio/webm"},
+    )
+    assert blocked.status_code == 409
+
+    # Simulate a crash: bump last_chunk_at back 5 minutes.
+    with Session(get_engine()) as session:
+        staging = session.get(MeetingRecordingStaging, admin_staging_id)
+        assert staging is not None
+        staging.last_chunk_at = staging.last_chunk_at - timedelta(minutes=5)
+        session.commit()
+
+    # Now the meeting detail should report no active lock.
+    detail = client.get(
+        f"/api/v1/meeting/meetings/{meeting['id']}",
+        headers=_auth_headers(second_token),
+    )
+    assert detail.status_code == 200
+    assert detail.json()["active_recording_lock"] is None
+
+    # And the second user can start their own recording.
+    take_over = client.post(
+        f"/api/v1/meeting/meetings/{meeting['id']}/recordings/staging",
+        headers=_auth_headers(second_token),
+        json={"idempotency_key": "stale-test-second-2", "mime_type": "audio/webm"},
+    )
+    assert take_over.status_code == 201, take_over.text
+    second_staging_id = take_over.json()["id"]
+    assert second_staging_id != admin_staging_id
+
+    # The abandoned admin staging row is still in the DB (just no longer locking).
+    with Session(get_engine()) as session:
+        rows = (
+            session.query(MeetingRecordingStaging)
+            .filter(MeetingRecordingStaging.meeting_id == meeting["id"])
+            .all()
+        )
+        assert len(rows) == 2
+        admin_row = next(r for r in rows if r.id == admin_staging_id)
+        assert admin_row.completed_at is None  # still "incomplete" — just stale

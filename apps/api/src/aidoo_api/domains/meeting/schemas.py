@@ -119,6 +119,7 @@ class MeetingRecordingOut(BaseModel):
 
     id: str
     meeting_id: str
+    uploaded_by_id: str
     storage_key: str
     duration_sec: int | None
     source: str
@@ -183,6 +184,23 @@ class MeetingListResponse(BaseModel):
     total: int
 
 
+class ActiveRecordingLockOut(BaseModel):
+    """Indicates that a meeting currently has an in-progress recording.
+
+    When non-null, only the listed user can start / resume a recording on the
+    meeting; other participants must wait for the active recorder to stop.
+    The lock auto-releases when ``last_active_at`` falls behind the staleness
+    window (recorder crashed / network died), so this field is also useful for
+    "녹음 중 (마지막 활동: 5초 전)" UX.
+    """
+
+    staging_id: str
+    user_id: str
+    user_name: str
+    started_at: datetime
+    last_active_at: datetime
+
+
 class MeetingDetail(BaseModel):
     id: str
     workspace_id: str
@@ -200,6 +218,7 @@ class MeetingDetail(BaseModel):
     doc_links: list[MeetingDocLinkOut]
     file_attachments: list[MeetingFileAttachmentOut]
     recordings: list[MeetingRecordingOut]
+    active_recording_lock: ActiveRecordingLockOut | None = None
     created_at: datetime
     updated_at: datetime
 

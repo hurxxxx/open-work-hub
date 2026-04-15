@@ -369,6 +369,26 @@ def discard_recording_staging(
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
+@router.delete(
+    "/meetings/{meeting_id}/recordings/{recording_id}",
+    response_model=MeetingDetail,
+)
+def delete_meeting_recording(
+    meeting_id: str,
+    recording_id: str,
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+    workspace: Workspace = Depends(require_current_workspace),
+) -> MeetingDetail:
+    return recording_service.delete_recording(
+        db,
+        workspace=workspace,
+        user=current_user,
+        meeting_id=meeting_id,
+        recording_id=recording_id,
+    )
+
+
 @router.post("/meetings/{meeting_id}/recordings/import", response_model=MeetingDetail)
 def import_recording(
     meeting_id: str,

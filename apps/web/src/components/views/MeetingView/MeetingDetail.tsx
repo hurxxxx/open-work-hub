@@ -26,6 +26,7 @@ import {
   getMeeting,
   getRecordingPlaybackUrl,
   parseServerDateTime,
+  deleteMeetingRecording,
   retryMeetingRecording,
   uploadMeetingFile,
   type MeetingDetail as MeetingDetailType,
@@ -130,10 +131,27 @@ export function MeetingDetail({
     },
   });
 
-  useRecordingPoll(token, workspaceSlug, meetingId, meeting, (updated) => {
-    setMeeting(updated);
-    onChanged();
-  });
+  useRecordingPoll(
+    token,
+    workspaceSlug,
+    meetingId,
+    meeting,
+    (updated) => {
+      setMeeting(updated);
+      onChanged();
+    },
+    user?.id,
+  );
+
+  // The single-recorder lock from another participant. When this is set the
+  // local user cannot start a new recording — RecordingControls disables
+  // the start button and renders an inline notice. Auto-clears when the
+  // server stops returning the lock (recorder finishes OR stale window).
+  const lockedByOther = (() => {
+    if (!meeting?.active_recording_lock || !user) return null;
+    if (meeting.active_recording_lock.user_id === user.id) return null;
+    return meeting.active_recording_lock;
+  })();
 
   const editable = canEditMeeting(user, meeting);
   const canAttach = canAttachToMeeting(user, meeting);
@@ -312,6 +330,34 @@ export function MeetingDetail({
       onChanged();
     } catch (err) {
       setError(err instanceof Error ? err.message : '녹음 재시도에 실패했습니다.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleDeleteRecording(recordingId: string) {
+    if (!token) return;
+    const ok = await confirm({
+      title: '녹음 삭제',
+      description:
+        '이 녹음을 삭제하면 원본 음성 파일과 진행 중인 전사 작업이 함께 제거됩니다. 되돌릴 수 없습니다.',
+      confirmLabel: '삭제',
+      variant: 'danger',
+    });
+    if (!ok) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const updated = await deleteMeetingRecording(
+        token,
+        workspaceSlug,
+        meetingId,
+        recordingId,
+      );
+      setMeeting(updated);
+      onChanged();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '녹음을 삭제할 수 없습니다.');
     } finally {
       setBusy(false);
     }
@@ -563,6 +609,7 @@ export function MeetingDetail({
               queuedBytes={recorder.queuedBytes}
               uploadedBytes={recorder.uploadedBytes}
               persistWarning={recorder.persistWarning}
+              lockedByOther={lockedByOther}
               onStart={(linkedTaskId) => recorder.startRecording(linkedTaskId)}
               onStop={recorder.stopRecording}
               onImportFile={(file, linkedTaskId) => recorder.importAudioFile(file, linkedTaskId)}
@@ -676,6 +723,19 @@ export function MeetingDetail({
                       >
                         재생
                       </button>
+                      {user && (
+                        recording.uploaded_by_id === user.id
+                        || meeting.organizer_id === user.id
+                      ) ? (
+                        <button
+                          type="button"
+                          onClick={() => void handleDeleteRecording(recording.id)}
+                          disabled={busy}
+                          className="app-text-caption text-[var(--ui-color-danger)] hover:underline disabled:opacity-50"
+                        >
+                          삭제
+                        </button>
+                      ) : null}
                     </div>
                   </div>
                   {playbackUrls[recording.id] ? (

@@ -453,12 +453,52 @@ def _serialize_meeting(db: Session, meeting: Meeting) -> MeetingDetail:
             for att in sorted(meeting.file_attachments, key=lambda a: a.created_at)
         ],
         recordings=[_serialize_recording(r) for r in meeting.recordings],
+        active_recording_lock=_resolve_active_recording_lock(meeting),
         created_at=meeting.created_at,
         updated_at=meeting.updated_at,
     )
 
 
+def _resolve_active_recording_lock(meeting: Meeting):
+    """Return the active staging row that holds the single-recorder lock, if any.
+
+    Stale stagings (no chunk uploaded for ``RECORDING_STALE_AFTER_SECONDS``)
+    are treated as released so a crashed recorder doesn't permanently block
+    other participants. The abandoned row stays in the DB; only the lock
+    relaxes — see ``recordings._staging_is_stale``.
+
+    Used by the frontend to gate the start-recording button so other
+    participants see "X 님이 녹음 중" instead of getting a 409 mid-click,
+    and to auto-clear the lock client-side when the recorder dies.
+    """
+    from aidoo_api.domains.meeting.recordings import _staging_is_stale
+    from aidoo_api.domains.meeting.schemas import ActiveRecordingLockOut
+
+    if not meeting.recording_staging:
+        return None
+    active = next(
+        (
+            s
+            for s in meeting.recording_staging
+            if s.completed_at is None and not _staging_is_stale(s)
+        ),
+        None,
+    )
+    if active is None:
+        return None
+    user_name = active.uploaded_by.full_name if active.uploaded_by is not None else ""
+    return ActiveRecordingLockOut(
+        staging_id=active.id,
+        user_id=active.uploaded_by_id,
+        user_name=user_name,
+        started_at=active.started_at,
+        last_active_at=active.last_chunk_at,
+    )
+
+
 def _load_meeting(db: Session, workspace: Workspace, meeting_id: str) -> Meeting:
+    from aidoo_api.domains.meeting.models import MeetingRecordingStaging
+
     meeting = db.scalar(
         select(Meeting)
         .options(
@@ -469,6 +509,9 @@ def _load_meeting(db: Session, workspace: Workspace, meeting_id: str) -> Meeting
                 MeetingFileAttachment.added_by
             ),
             selectinload(Meeting.recordings),
+            selectinload(Meeting.recording_staging).selectinload(
+                MeetingRecordingStaging.uploaded_by
+            ),
             selectinload(Meeting.organizer),
         )
         .where(

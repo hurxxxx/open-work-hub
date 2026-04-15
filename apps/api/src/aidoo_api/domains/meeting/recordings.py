@@ -50,6 +50,21 @@ ALLOWED_RECORDING_MIME_TYPES = {
 ACTIVE_RECORDING_STATUSES = {"pending", "transcribing", "summarizing", "generating_doc"}
 ENQUEUE_FAILURE_REASON = "Background processing queue is unavailable. Raw audio was saved; retry later."
 
+# How long an active staging row may go without a chunk upload before we
+# consider it abandoned (recorder crashed / browser closed / network died).
+# After this window, the single-recorder lock auto-releases so other
+# participants can start their own recording. The abandoned row stays in the
+# DB so a separate cleanup beat can promote / discard it later.
+RECORDING_STALE_AFTER_SECONDS = 60
+
+
+def _staging_is_stale(staging: "MeetingRecordingStaging", *, now: datetime | None = None) -> bool:
+    if staging.completed_at is not None:
+        return True
+    reference = now or _utcnow()
+    threshold = reference - timedelta(seconds=RECORDING_STALE_AFTER_SECONDS)
+    return staging.last_chunk_at < threshold
+
 
 def _utcnow() -> datetime:
     return datetime.now(UTC).replace(tzinfo=None)
@@ -258,6 +273,9 @@ def init_staging(
     mime_type = _require_allowed_mime(payload.mime_type)
     _validate_linked_task_id(db, meeting=meeting, user=user, linked_task_id=payload.linked_task_id)
 
+    # Idempotent resume: same user + same idempotency key → return existing row.
+    # This must come BEFORE the cross-user lock check so that retrying a request
+    # the user already owns never trips the "someone else is recording" guard.
     existing = db.scalar(
         select(MeetingRecordingStaging).where(
             MeetingRecordingStaging.meeting_id == meeting.id,
@@ -268,6 +286,42 @@ def init_staging(
     )
     if existing is not None:
         return _serialize_staging(existing)
+
+    # Single-recorder lock: only one user may have an active staging on a
+    # meeting at any time. We serialize concurrent inits by acquiring a row
+    # lock on the meeting before inspecting active staging rows.
+    #
+    # Stale stagings (recorder crashed / network died → no chunk for >
+    # RECORDING_STALE_AFTER_SECONDS) are treated as released so other users
+    # can take over. The abandoned row stays in the DB; only the lock relaxes.
+    db.execute(
+        select(Meeting.id).where(Meeting.id == meeting.id).with_for_update()
+    )
+    stale_cutoff = _utcnow() - timedelta(seconds=RECORDING_STALE_AFTER_SECONDS)
+    other_active = db.scalar(
+        select(MeetingRecordingStaging).where(
+            MeetingRecordingStaging.meeting_id == meeting.id,
+            MeetingRecordingStaging.uploaded_by_id != user.id,
+            MeetingRecordingStaging.completed_at.is_(None),
+            MeetingRecordingStaging.last_chunk_at >= stale_cutoff,
+        )
+    )
+    if other_active is not None:
+        recorder_name = (
+            other_active.uploaded_by.full_name
+            if other_active.uploaded_by is not None
+            else "다른 사용자"
+        )
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "recording_in_progress",
+                "message": f"이미 {recorder_name} 님이 녹음 중입니다.",
+                "active_recorder_id": other_active.uploaded_by_id,
+                "active_recorder_name": recorder_name,
+                "active_staging_id": other_active.id,
+            },
+        )
 
     staging_id = new_id()
     spool_dir = _spool_dir_for_recording(staging_id)
@@ -588,6 +642,80 @@ def retry_recording(
     db.add(recording)
     db.commit()
     _enqueue_pipeline_or_mark_failed(db, recording=recording)
+    fresh = meeting_service._load_meeting(db, workspace, meeting.id)
+    return meeting_service._serialize_meeting(db, fresh)
+
+
+def delete_recording(
+    db: Session,
+    *,
+    workspace: Workspace,
+    user: User,
+    meeting_id: str,
+    recording_id: str,
+) -> "MeetingDetail":
+    """Hard-delete a finalized meeting recording.
+
+    Permission: organizer of the meeting OR the user who originally uploaded
+    the recording. Mirrors ``canRemoveAttachment`` for tasks/docs — attendees
+    cannot delete each other's recordings, organizer can delete any.
+
+    Side effects: cancels any pending celery transcription task, removes the
+    minio object, and clears any auto-generated notes doc reference if this
+    recording produced one. The DB row is removed entirely.
+    """
+    from aidoo_api.domains.meeting.schemas import MeetingDetail  # noqa: F401
+
+    meeting = meeting_service._load_meeting(db, workspace, meeting_id)
+    ensure_meeting_participant(db, user, meeting)
+
+    recording = db.scalar(
+        select(MeetingRecording).where(
+            MeetingRecording.id == recording_id,
+            MeetingRecording.meeting_id == meeting.id,
+        )
+    )
+    if recording is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Recording not found.",
+        )
+
+    if recording.uploaded_by_id != user.id and meeting.organizer_id != user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only the meeting organizer or the recording uploader can delete this recording.",
+        )
+
+    if recording.celery_task_id:
+        revoke_recording_task(recording.celery_task_id)
+
+    settings = get_settings()
+    client = get_minio_client()
+    try:
+        client.remove_object(settings.minio_bucket, recording.storage_key)
+    except Exception:
+        # The DB row deletion is the source of truth for "deleted". If the
+        # blob removal fails, the orphan-media sweeper will pick it up later.
+        pass
+
+    # The promoted staging row still has a FK on this recording. Clean up the
+    # staging artifact entirely (spool dir + DB row) so the FK is gone before
+    # we delete the recording itself. The staging is a transient upload
+    # artifact; once the recording is removed, there's no reason to keep it.
+    promoted_stagings = db.scalars(
+        select(MeetingRecordingStaging).where(
+            MeetingRecordingStaging.promoted_recording_id == recording.id,
+        )
+    ).all()
+    for staging in promoted_stagings:
+        _cleanup_spool_dir(staging.spool_path)
+        db.delete(staging)
+    db.flush()
+
+    db.delete(recording)
+    db.commit()
+
     fresh = meeting_service._load_meeting(db, workspace, meeting.id)
     return meeting_service._serialize_meeting(db, fresh)
 

@@ -45,6 +45,7 @@ export interface MeetingFileAttachment {
 export interface MeetingRecording {
   id: string;
   meeting_id: string;
+  uploaded_by_id: string;
   storage_key: string;
   duration_sec: number | null;
   source: string;
@@ -105,6 +106,15 @@ export interface MeetingListResponse {
   total: number;
 }
 
+export interface ActiveRecordingLock {
+  staging_id: string;
+  user_id: string;
+  user_name: string;
+  started_at: string;
+  /** When the recorder last uploaded a chunk. Used to render "x초 전 활동". */
+  last_active_at: string;
+}
+
 export interface MeetingDetail {
   id: string;
   workspace_id: string;
@@ -122,6 +132,13 @@ export interface MeetingDetail {
   doc_links: MeetingDocLink[];
   file_attachments: MeetingFileAttachment[];
   recordings: MeetingRecording[];
+  /**
+   * Non-null when another user (or the viewer themselves) currently holds
+   * the meeting's single-recorder lock. The backend auto-releases the lock
+   * after RECORDING_STALE_AFTER_SECONDS of inactivity so a crashed recorder
+   * never permanently blocks other participants.
+   */
+  active_recording_lock: ActiveRecordingLock | null;
   created_at: string;
   updated_at: string;
 }
@@ -329,6 +346,24 @@ export function addMeetingAttendees(
       method: 'POST',
       body: JSON.stringify({ attendees }),
     },
+  );
+}
+
+/**
+ * Hard-delete a finalized meeting recording. Permission: meeting organizer
+ * OR the user who originally uploaded the recording.
+ */
+export function deleteMeetingRecording(
+  token: string,
+  workspaceSlug: string,
+  meetingId: string,
+  recordingId: string,
+): Promise<MeetingDetail> {
+  return request<MeetingDetail>(
+    `/api/v1/meeting/meetings/${meetingId}/recordings/${recordingId}`,
+    token,
+    workspaceSlug,
+    { method: 'DELETE' },
   );
 }
 

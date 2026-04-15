@@ -10,6 +10,8 @@ export function useRecordingPoll(
   meetingId: string,
   meeting: MeetingDetail | null,
   onMeetingUpdated: (meeting: MeetingDetail) => void,
+  /** Current authenticated user id — used to gate the lock-watch poll. */
+  currentUserId?: string | null,
 ) {
   useEffect(() => {
     if (!token || !meeting) {
@@ -18,7 +20,14 @@ export function useRecordingPoll(
     const hasActiveRecording = meeting.recordings.some((recording) =>
       ACTIVE_STATUSES.has(recording.transcription_status),
     );
-    if (!hasActiveRecording) {
+    // Also poll when a recording lock is held by a DIFFERENT user — so the
+    // viewer's UI auto-clears the moment the recorder finishes (or crashes
+    // and the stale window expires server-side).
+    const lock = meeting.active_recording_lock;
+    const hasForeignLock = Boolean(
+      lock && currentUserId && lock.user_id !== currentUserId,
+    );
+    if (!hasActiveRecording && !hasForeignLock) {
       return;
     }
     const timer = window.setInterval(async () => {
@@ -30,5 +39,5 @@ export function useRecordingPoll(
       }
     }, 3000);
     return () => window.clearInterval(timer);
-  }, [meeting, meetingId, onMeetingUpdated, token, workspaceSlug]);
+  }, [meeting, meetingId, onMeetingUpdated, token, workspaceSlug, currentUserId]);
 }
