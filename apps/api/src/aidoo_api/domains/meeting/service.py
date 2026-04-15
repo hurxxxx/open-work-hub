@@ -250,6 +250,17 @@ def _ensure_meeting_notes_state(
     *,
     meeting: Meeting,
 ) -> tuple[NativeDoc, NativeDocPage]:
+    # Serialize concurrent notes-ensure calls. Without this lock, two
+    # simultaneous requests (e.g. the meeting modal opening + the collab
+    # session call firing in parallel) would both observe
+    # ``meeting.notes_doc_id is None`` and both call
+    # ``_create_meeting_notes_assets``, leaving one orphan NativeDoc row
+    # visible in the user's Docs hub forever.
+    db.execute(
+        select(Meeting.id).where(Meeting.id == meeting.id).with_for_update()
+    )
+    db.refresh(meeting, attribute_names=["notes_doc_id", "notes_page_id"])
+
     doc = _load_active_native_doc(db, workspace_id=meeting.workspace_id, doc_id=meeting.notes_doc_id)
     if doc is None:
         doc, page = _create_meeting_notes_assets(db, meeting=meeting)

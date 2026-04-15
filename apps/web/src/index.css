@@ -40,6 +40,16 @@
 }
 
 @layer base {
+  :root {
+    /* Tell Chromium/Firefox to paint form controls in the matching theme so
+       the native datetime-local picker icon inverts with dark mode instead of
+       sitting invisible on a light background. */
+    color-scheme: light;
+  }
+  :where(.dark, .dark *) {
+    color-scheme: dark;
+  }
+
   body {
     @apply bg-app-bg text-app-ink font-sans antialiased transition-colors duration-300;
   }
@@ -49,6 +59,30 @@
   select,
   textarea {
     font: inherit;
+  }
+
+  /* Make the native <input type="datetime-local"> calendar icon visible in
+     both light and dark mode. Chromium's default indicator can disappear on
+     our surfaces when ``color-scheme`` is not set explicitly. */
+  input[type='datetime-local']::-webkit-calendar-picker-indicator,
+  input[type='date']::-webkit-calendar-picker-indicator,
+  input[type='time']::-webkit-calendar-picker-indicator {
+    cursor: pointer;
+    opacity: 0.7;
+    filter: none;
+  }
+  input[type='datetime-local']::-webkit-calendar-picker-indicator:hover,
+  input[type='date']::-webkit-calendar-picker-indicator:hover,
+  input[type='time']::-webkit-calendar-picker-indicator:hover {
+    opacity: 1;
+  }
+  :where(.dark, .dark *)
+    input[type='datetime-local']::-webkit-calendar-picker-indicator,
+  :where(.dark, .dark *)
+    input[type='date']::-webkit-calendar-picker-indicator,
+  :where(.dark, .dark *)
+    input[type='time']::-webkit-calendar-picker-indicator {
+    filter: invert(1);
   }
 
   /* Custom scrollbar */

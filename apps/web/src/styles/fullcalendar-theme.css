@@ -85,13 +85,22 @@
   color: #ef4444;
 }
 
-/* Korean holiday background events (red). Light mode uses the existing red-100,
-   dark mode uses a dimmer red so the white text (dates) stays legible. */
-[data-unified-calendar] .fc .fc-bg-event.fc-korean-holiday {
-  opacity: 1;
-}
-[data-unified-calendar] .fc .fc-day:has(.fc-bg-event.fc-korean-holiday) .fc-daygrid-day-number {
+/* Korean holidays: color the day number red on public-holiday cells, no
+   background fill. A small red label is injected via dayCellDidMount so the
+   user still sees "어린이날" / "노동절" under the date number. */
+[data-unified-calendar] .fc .fc-korean-holiday .fc-daygrid-day-number {
   color: #ef4444;
+}
+[data-unified-calendar] .fc .fc-korean-holiday-label {
+  display: block;
+  padding: 2px 6px 0;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  line-height: 1.25;
+  color: #ef4444;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* Focus ring — match app convention (`:focus-visible` accent ring). FullCalendar's
@@ -106,7 +115,8 @@
   --fc-event-text-color: #ffffff;
 }
 
-:where(.dark, .dark *) [data-unified-calendar] .fc .fc-day:has(.fc-bg-event.fc-korean-holiday) .fc-daygrid-day-number {
+:where(.dark, .dark *) [data-unified-calendar] .fc .fc-korean-holiday .fc-daygrid-day-number,
+:where(.dark, .dark *) [data-unified-calendar] .fc .fc-korean-holiday-label {
   color: #f87171; /* red-400, brighter for dark backgrounds */
 }
 :where(.dark, .dark *) [data-unified-calendar] .fc .fc-day-sun .fc-daygrid-day-number,

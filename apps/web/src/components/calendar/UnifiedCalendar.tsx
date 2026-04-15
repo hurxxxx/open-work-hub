@@ -131,31 +131,13 @@ function calendarEventToFc(event: CalendarEvent): EventInput {
   };
 }
 
-function buildKoreanHolidayBackgroundEvents(initialDate: Date): EventInput[] {
-  // Inject the visible year + the next year so the calendar is correct when the
-  // user navigates forward. Cheap (~20 events). Re-derived on initialDate change.
-  const events: EventInput[] = [];
-  const currentYear = initialDate.getFullYear();
-  for (const year of [currentYear, currentYear + 1]) {
-    for (let month = 0; month < 12; month++) {
-      const daysInMonth = new Date(year, month + 1, 0).getDate();
-      for (let day = 1; day <= daysInMonth; day++) {
-        const names = getKoreanHolidayNames(year, month, day);
-        if (!names) continue;
-        const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-        events.push({
-          id: `holiday-${dateStr}`,
-          title: names.join(', '),
-          start: dateStr,
-          allDay: true,
-          display: 'background',
-          backgroundColor: '#fee2e2', // red-100 — overridden in dark mode via CSS var
-          classNames: ['fc-korean-holiday'],
-        });
-      }
-    }
-  }
-  return events;
+function koreanHolidayDayClass(date: Date): string[] {
+  // Tag the day cell so CSS can color the day number red. We previously
+  // injected a background event with a pink fill, but that clashed with the
+  // app's minimal styling — the user preferred a plain white background with
+  // just the date number in red. See fullcalendar-theme.css `.fc-korean-holiday`.
+  const names = getKoreanHolidayNames(date.getFullYear(), date.getMonth(), date.getDate());
+  return names ? ['fc-korean-holiday'] : [];
 }
 
 export const UnifiedCalendar = forwardRef<UnifiedCalendarHandle, UnifiedCalendarProps>(
@@ -188,17 +170,10 @@ export const UnifiedCalendar = forwardRef<UnifiedCalendarHandle, UnifiedCalendar
       [],
     );
 
-    const fcEvents = useMemo<EventInput[]>(() => {
-      const base = events.map(calendarEventToFc);
-      if (!showKoreanHolidays) return base;
-      const anchor =
-        initialDate instanceof Date
-          ? initialDate
-          : initialDate
-            ? new Date(initialDate)
-            : new Date();
-      return [...base, ...buildKoreanHolidayBackgroundEvents(anchor)];
-    }, [events, showKoreanHolidays, initialDate]);
+    const fcEvents = useMemo<EventInput[]>(
+      () => events.map(calendarEventToFc),
+      [events],
+    );
 
     return (
       <div
@@ -223,6 +198,40 @@ export const UnifiedCalendar = forwardRef<UnifiedCalendarHandle, UnifiedCalendar
           eventDurationEditable
           height={height}
           events={fcEvents}
+          dayCellClassNames={
+            showKoreanHolidays
+              ? (arg) => koreanHolidayDayClass(arg.date)
+              : undefined
+          }
+          dayCellDidMount={
+            showKoreanHolidays
+              ? (arg) => {
+                  const names = getKoreanHolidayNames(
+                    arg.date.getFullYear(),
+                    arg.date.getMonth(),
+                    arg.date.getDate(),
+                  );
+                  if (!names) return;
+                  // Inject the holiday label as a sibling of the day-top area
+                  // (inside the day frame) so it flows as its own block line
+                  // below the date number rather than being squeezed into the
+                  // tiny flex row next to the date. Month view only — week/day
+                  // cells don't have `.fc-daygrid-day-frame`.
+                  const frame = arg.el.querySelector('.fc-daygrid-day-frame');
+                  if (!frame) return;
+                  if (frame.querySelector('.fc-korean-holiday-label')) return;
+                  const top = frame.querySelector('.fc-daygrid-day-top');
+                  const label = document.createElement('div');
+                  label.className = 'fc-korean-holiday-label';
+                  label.textContent = names.join(', ');
+                  if (top && top.nextSibling) {
+                    frame.insertBefore(label, top.nextSibling);
+                  } else {
+                    frame.appendChild(label);
+                  }
+                }
+              : undefined
+          }
           select={(arg: DateSelectArg) => {
             onDateSelect?.({ start: arg.start, end: arg.end, allDay: arg.allDay });
           }}

@@ -13,6 +13,7 @@ from fastapi import HTTPException, WebSocket
 from redis import asyncio as redis_asyncio
 from redis.asyncio.client import PubSub
 from sqlalchemy import delete, select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session, joinedload, selectinload
 from starlette.websockets import WebSocketDisconnect, WebSocketState
 from uvicorn.protocols.utils import ClientDisconnected
@@ -323,6 +324,15 @@ def ensure_collab_document(
     room_key: str,
     snapshot_content_blocks: list[dict] | None,
 ) -> DocsCollabDocument:
+    """Get-or-create the collab document row for a page.
+
+    Two concurrent calls (e.g. two meeting-notes sessions opened at the same
+    instant) both missed the cache and raced to ``INSERT``, producing
+    ``UniqueViolation`` on ``uq_docs_collab_documents_room_key``. Use a
+    Postgres upsert (``INSERT ... ON CONFLICT DO NOTHING``) so the racing
+    insert is absorbed silently; whichever transaction wins owns the row
+    and the other re-queries it after the conflict.
+    """
     existing = get_collab_document(
         db,
         source_type=source_type,
@@ -337,15 +347,41 @@ def ensure_collab_document(
         db.flush()
         return existing
 
-    collab = DocsCollabDocument(
-        id=new_id(),
-        room_key=room_key,
+    stmt = (
+        pg_insert(DocsCollabDocument)
+        .values(
+            id=new_id(),
+            room_key=room_key,
+            source_type=source_type,
+            source_page_id=source_page_id,
+            snapshot_content_blocks=snapshot_content_blocks,
+        )
+        .on_conflict_do_nothing(
+            index_elements=[DocsCollabDocument.room_key],
+        )
+    )
+    db.execute(stmt)
+    db.flush()
+
+    # Re-fetch the canonical row. With DO NOTHING we cannot rely on RETURNING,
+    # so we always read back the state the winning transaction left us.
+    collab = get_collab_document(
+        db,
         source_type=source_type,
         source_page_id=source_page_id,
-        snapshot_content_blocks=snapshot_content_blocks,
     )
-    db.add(collab)
-    db.flush()
+    if collab is None:
+        # Extremely unlikely but not impossible if a concurrent delete raced
+        # between our upsert and re-read. Fall back to a hard insert and let
+        # any error propagate.
+        raise RuntimeError(
+            "Collab document disappeared immediately after upsert. "
+            f"source_type={source_type} source_page_id={source_page_id}"
+        )
+    if collab.snapshot_content_blocks is None and snapshot_content_blocks is not None:
+        collab.snapshot_content_blocks = snapshot_content_blocks
+        db.add(collab)
+        db.flush()
     return collab
 
 
