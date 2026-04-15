@@ -8,7 +8,7 @@ from pydantic import BaseModel, ConfigDict
 from pydantic.alias_generators import to_camel
 
 
-CalendarSourceType = Literal["meeting", "pms_due", "pms_block"]
+CalendarSourceType = Literal["meeting", "pms_due", "pms_block", "planner_event"]
 
 
 def _camel_config() -> ConfigDict:
@@ -34,6 +34,12 @@ class CalendarEventMetadata(BaseModel):
     issue_number: int | None = None
     status: str | None = None
     assignee_ids: list[str] | None = None
+    # Planner-only
+    planner_event_id: str | None = None
+    owner_id: str | None = None
+    owner_name: str | None = None
+    visibility: Literal["private", "public"] | None = None
+    location: str | None = None
 
 
 class CalendarEventOut(BaseModel):

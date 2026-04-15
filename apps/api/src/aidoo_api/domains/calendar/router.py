@@ -20,7 +20,7 @@ from .service import list_calendar_events, parse_iso_or_date
 router = APIRouter(prefix="/calendar", tags=["calendar"])
 
 
-_VALID_SOURCES: set[CalendarSourceType] = {"meeting", "pms_due", "pms_block"}
+_VALID_SOURCES: set[CalendarSourceType] = {"meeting", "pms_due", "pms_block", "planner_event"}
 _MAX_RANGE_DAYS = 366
 
 
@@ -29,7 +29,7 @@ def list_events(
     from_param: str = Query(..., alias="from", description="ISO date or datetime"),
     to_param: str = Query(..., alias="to", description="Exclusive end (ISO)"),
     sources: str = Query(
-        default="meeting,pms_due,pms_block",
+        default="meeting,pms_due,pms_block,planner_event",
         description="Comma-separated source types to include.",
     ),
     db: Session = Depends(get_db_session),

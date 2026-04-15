@@ -27,6 +27,7 @@ from __future__ import annotations
 
 from datetime import UTC, date, datetime, time
 from typing import Iterable
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session, selectinload
@@ -34,6 +35,7 @@ from sqlalchemy.orm import Session, selectinload
 from aidoo_api.domains.auth.models import Team, User, Workspace
 from aidoo_api.domains.meeting.models import Meeting, MeetingAttendee
 from aidoo_api.domains.pms.models import Issue, IssueAssignee, TaskList
+from aidoo_api.domains.planner.models import PlannerEvent
 
 from .schemas import (
     CalendarEventMetadata,
@@ -51,6 +53,7 @@ _SOURCE_COLORS: dict[CalendarSourceType, str] = {
     "meeting": "#3b82f6",   # blue-500
     "pms_due": "#f59e0b",   # amber-500
     "pms_block": "#22c55e", # green-500
+    "planner_event": "#14b8a6", # teal-500
 }
 
 
@@ -100,6 +103,16 @@ def list_calendar_events(
                 to_at=to_at,
                 include_due=wants_due,
                 include_block=wants_block,
+            )
+        )
+    if "planner_event" in source_set:
+        items.extend(
+            _planner_events(
+                db,
+                workspace=workspace,
+                user=user,
+                from_at=from_at,
+                to_at=to_at,
             )
         )
 
@@ -269,6 +282,65 @@ def _pms_events(
                     metadata=meta,
                 )
             )
+    return out
+
+
+def _planner_events(
+    db: Session,
+    *,
+    workspace: Workspace,
+    user: User,
+    from_at: datetime,
+    to_at: datetime,
+) -> list[CalendarEventOut]:
+    events = db.scalars(
+        select(PlannerEvent)
+        .where(
+            PlannerEvent.workspace_id == workspace.id,
+            PlannerEvent.owner_id == user.id,
+        )
+        .where(PlannerEvent.end_at > from_at)
+        .where(PlannerEvent.start_at < to_at)
+        .options(selectinload(PlannerEvent.owner))
+        .order_by(PlannerEvent.start_at.asc())
+    ).all()
+    out: list[CalendarEventOut] = []
+    for event in events:
+        if event.all_day:
+            start = (
+                event.start_at.replace(tzinfo=UTC)
+                .astimezone(ZoneInfo("Asia/Seoul"))
+                .date()
+                .isoformat()
+            )
+            end = (
+                event.end_at.replace(tzinfo=UTC)
+                .astimezone(ZoneInfo("Asia/Seoul"))
+                .date()
+                .isoformat()
+            )
+        else:
+            start = _utc_iso(event.start_at)
+            end = _utc_iso(event.end_at)
+        out.append(
+            CalendarEventOut(
+                id=f"planner-event-{event.id}",
+                title=event.title,
+                start=start,
+                end=end,
+                all_day=event.all_day,
+                source_type="planner_event",
+                source_id=event.id,
+                color=_SOURCE_COLORS["planner_event"],
+                metadata=CalendarEventMetadata(
+                    planner_event_id=event.id,
+                    owner_id=event.owner_id,
+                    owner_name=event.owner.full_name if event.owner else None,
+                    visibility=event.visibility,  # type: ignore[arg-type]
+                    location=event.location or None,
+                ),
+            )
+        )
     return out
 
 

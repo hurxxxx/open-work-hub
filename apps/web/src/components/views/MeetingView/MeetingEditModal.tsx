@@ -12,6 +12,8 @@ import {
   type MeetingUser,
 } from '@/src/domains/meeting/meeting-api';
 
+import { MeetingAvailabilityPanel } from './MeetingAvailabilityPanel';
+
 interface MeetingEditModalProps {
   isOpen: boolean;
   meeting: MeetingDetail;
@@ -148,6 +150,17 @@ export function MeetingEditModal({
     }
     return attendees.filter((attendee) => attendee.user_id !== meeting.organizer_id);
   }, [attendees, meeting.organizer_id, user?.id]);
+  const availabilityUsers = useMemo(
+    () => visibleAttendees.map((attendee) => {
+      const candidate = userLookup.get(attendee.user_id);
+      return {
+        id: attendee.user_id,
+        email: candidate?.email ?? '',
+        full_name: candidate?.full_name ?? attendee.user_id,
+      };
+    }),
+    [userLookup, visibleAttendees],
+  );
 
   function addAttendee(user: MeetingUser) {
     setAttendees((prev) => [
@@ -260,6 +273,13 @@ export function MeetingEditModal({
             />
           </div>
         </div>
+
+        <MeetingAvailabilityPanel
+          workspaceSlug={workspaceSlug}
+          attendeeUsers={availabilityUsers}
+          meetingStart={startAt ? new Date(startAt) : null}
+          meetingEnd={endAt ? new Date(endAt) : null}
+        />
 
         <div className="space-y-2">
           <label className="app-text-control-sm text-app-ink/70">참석자</label>

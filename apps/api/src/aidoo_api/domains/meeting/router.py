@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Literal
 
-from fastapi import APIRouter, Depends, Form, Header, Query, Response, UploadFile, status
-from sqlalchemy import or_, select, union
+from fastapi import APIRouter, Depends, Form, Header, HTTPException, Query, Response, UploadFile, status
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from aidoo_api.core.db import get_db_session
@@ -14,14 +14,12 @@ from aidoo_api.domains.auth.dependencies import (
 )
 from aidoo_api.domains.auth.models import (
     User,
-    UserAccessGroup,
     Workspace,
-    WorkspaceGroupBinding,
-    WorkspaceUserBinding,
 )
 from aidoo_api.domains.meeting import recordings as recording_service
 from aidoo_api.domains.meeting import service as meeting_service
 from aidoo_api.domains.meeting.schemas import (
+    MeetingAvailabilityResponse,
     MeetingAttendeesAddRequest,
     MeetingCreateRequest,
     MeetingDetail,
@@ -36,29 +34,13 @@ from aidoo_api.domains.meeting.schemas import (
     MeetingUpdateRequest,
     MeetingUserItem,
 )
+from aidoo_api.domains.planner.service import parse_iso_or_date
 
 
 router = APIRouter(
     prefix="/meeting",
     tags=["meeting"],
 )
-
-def _workspace_meeting_user_ids_subquery(workspace_id: str):
-    direct_member_ids = select(WorkspaceUserBinding.user_id.label("user_id")).where(
-        WorkspaceUserBinding.workspace_id == workspace_id
-    )
-    group_member_ids = (
-        select(UserAccessGroup.user_id.label("user_id"))
-        .join(
-            WorkspaceGroupBinding,
-            WorkspaceGroupBinding.group_id == UserAccessGroup.group_id,
-        )
-        .where(WorkspaceGroupBinding.workspace_id == workspace_id)
-    )
-    return union(
-        direct_member_ids,
-        group_member_ids,
-    ).subquery()
 
 
 @router.get("/meetings", response_model=MeetingListResponse)
@@ -457,7 +439,7 @@ def list_meeting_users(
     workspace: Workspace = Depends(require_current_workspace),
 ) -> list[MeetingUserItem]:
     """Search workspace members for meeting attendee selection."""
-    member_user_ids = _workspace_meeting_user_ids_subquery(workspace.id)
+    member_user_ids = meeting_service.workspace_meeting_user_ids_subquery(workspace.id)
     query = (
         select(User)
         .join(member_user_ids, member_user_ids.c.user_id == User.id)
@@ -479,3 +461,40 @@ def list_meeting_users(
         MeetingUserItem(id=user.id, email=user.email, full_name=user.full_name)
         for user in users
     ]
+
+
+@router.get("/availability", response_model=MeetingAvailabilityResponse)
+def get_meeting_availability(
+    user_ids: list[str] = Query(default=[], alias="user_ids"),
+    from_param: str = Query(..., alias="from", description="Inclusive start (ISO)"),
+    to_param: str = Query(..., alias="to", description="Exclusive end (ISO)"),
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+    workspace: Workspace = Depends(require_current_workspace),
+) -> MeetingAvailabilityResponse:
+    try:
+        from_at = parse_iso_or_date(from_param)
+        to_at = parse_iso_or_date(to_param)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid ISO date/datetime: {exc}",
+        ) from exc
+    if to_at <= from_at:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Range 'to' must be strictly after 'from'.",
+        )
+    if (to_at - from_at) > timedelta(days=31):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Availability range exceeds maximum 31 days.",
+        )
+    return meeting_service.list_meeting_availability(
+        db,
+        workspace=workspace,
+        viewer=current_user,
+        user_ids=user_ids,
+        from_at=from_at,
+        to_at=to_at,
+    )

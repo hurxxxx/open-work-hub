@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -19,6 +19,7 @@ const plannerHarness = vi.hoisted(() => {
       rangeStart: Date;
       rangeEnd: Date;
     }) => void;
+    onDateSelect?: (range: { start: Date; end: Date; allDay: boolean }) => void;
   } | null = null;
 
   const useCalendarEvents = vi.fn((options: unknown) => {
@@ -32,6 +33,7 @@ const plannerHarness = vi.hoisted(() => {
   });
   const updateMeeting = vi.fn();
   const updateIssue = vi.fn();
+  const updatePlannerEvent = vi.fn();
 
   const cloneDate = (date: Date) => new Date(date.getTime());
   const startOfDay = (date: Date) => new Date(date.getFullYear(), date.getMonth(), date.getDate());
@@ -73,10 +75,14 @@ const plannerHarness = vi.hoisted(() => {
     useCalendarEvents,
     updateMeeting,
     updateIssue,
+    updatePlannerEvent,
     setLatestProps(props: typeof latestProps) {
       latestProps = props;
     },
     emitDatesSet,
+    emitDateSelect(range: { start: Date; end: Date; allDay: boolean }) {
+      latestProps?.onDateSelect?.(range);
+    },
     resetCalendarState(next?: Partial<typeof calendarState>) {
       calendarState = {
         view: 'dayGridMonth',
@@ -148,8 +154,20 @@ vi.mock('@/src/domains/pms/pms-api', () => ({
   updateIssue: plannerHarness.updateIssue,
 }));
 
+vi.mock('@/src/domains/planner/planner-api', () => ({
+  updatePlannerEvent: plannerHarness.updatePlannerEvent,
+}));
+
 vi.mock('@/src/components/calendar/MeetingPreviewModal', () => ({
   MeetingPreviewModal: () => null,
+}));
+
+vi.mock('@/src/components/views/MeetingView/MeetingCreateModal', () => ({
+  MeetingCreateModal: ({ isOpen }: { isOpen: boolean }) => (isOpen ? <div data-testid="mock-meeting-create-modal" /> : null),
+}));
+
+vi.mock('@/src/components/views/PlannerEventModal', () => ({
+  PlannerEventModal: ({ isOpen }: { isOpen: boolean }) => (isOpen ? <div data-testid="mock-planner-event-modal" /> : null),
 }));
 
 vi.mock('@/src/components/calendar/UnifiedCalendar', async () => {
@@ -200,10 +218,11 @@ describe('PlannerView', () => {
     plannerHarness.useCalendarEvents.mockClear();
     plannerHarness.updateMeeting.mockClear();
     plannerHarness.updateIssue.mockClear();
+    plannerHarness.updatePlannerEvent.mockClear();
     plannerHarness.resetCalendarState();
   });
 
-  it('uses local YYYY-MM-DD ranges and disables placeholder event creation', async () => {
+  it('uses local YYYY-MM-DD ranges and opens planner event creation from the toolbar', async () => {
     renderPlannerView();
 
     await waitFor(() => {
@@ -212,10 +231,10 @@ describe('PlannerView', () => {
       expect(lastCall.to).toBe('2026-04-01');
     });
 
-    expect((screen.getByRole('button', { name: 'Add Event' }) as HTMLButtonElement).disabled).toBe(true);
-    expect(
-      screen.getByText('일정 생성은 아직 준비 중입니다. 회의 생성은 Meetings에서 사용할 수 있습니다.'),
-    ).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Add' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Event' }));
+
+    expect(screen.getByTestId('mock-planner-event-modal')).toBeTruthy();
   });
 
   it('keeps week navigation and Today in sync with the visible range', async () => {
@@ -270,6 +289,34 @@ describe('PlannerView', () => {
       expect(lastCall.from).toBe('2026-03-18');
       expect(lastCall.to).toBe('2026-03-19');
       expect(screen.getByRole('button', { name: 'March 18, 2026' })).toBeTruthy();
+    });
+  });
+
+  it('opens the planner event modal from empty-calendar selection', async () => {
+    renderPlannerView();
+
+    await act(async () => {
+      plannerHarness.emitDateSelect({
+        start: new Date(2026, 2, 21),
+        end: new Date(2026, 2, 22),
+        allDay: true,
+      });
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('mock-planner-event-modal')).toBeTruthy();
+    });
+  });
+
+  it('opens the planner meeting flow from the sidebar event bus', async () => {
+    renderPlannerView();
+
+    await act(async () => {
+      window.dispatchEvent(new CustomEvent('planner:create-meeting'));
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('mock-meeting-create-modal')).toBeTruthy();
     });
   });
 });

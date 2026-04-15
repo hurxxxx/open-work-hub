@@ -9,12 +9,15 @@ import { useCalendarEvents } from '@/src/domains/calendar/use-calendar-events';
 import type { CalendarEvent } from '@/src/domains/calendar/calendar-types';
 import { updateMeeting } from '@/src/domains/meeting/meeting-api';
 import { updateIssue } from '@/src/domains/pms/pms-api';
+import { updatePlannerEvent } from '@/src/domains/planner/planner-api';
 import {
   UnifiedCalendar,
   type UnifiedCalendarHandle,
   type UnifiedCalendarView,
 } from '@/src/components/calendar/UnifiedCalendar';
 import { MeetingPreviewModal } from '@/src/components/calendar/MeetingPreviewModal';
+import { MeetingCreateModal } from '@/src/components/views/MeetingView/MeetingCreateModal';
+import { PlannerEventModal } from '@/src/components/views/PlannerEventModal';
 
 const MONTH_NAMES_LONG = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 const PICKER_DAYS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
@@ -233,6 +236,27 @@ function DatePickerPopover({
   );
 }
 
+interface PlannerEventDraftRange {
+  start: Date;
+  end: Date;
+  allDay: boolean;
+}
+
+function buildDefaultPlannerEventRange(currentDate: Date): PlannerEventDraftRange {
+  const start = new Date(
+    currentDate.getFullYear(),
+    currentDate.getMonth(),
+    currentDate.getDate(),
+    9,
+    0,
+    0,
+    0,
+  );
+  const end = new Date(start.getTime());
+  end.setHours(end.getHours() + 1);
+  return { start, end, allDay: false };
+}
+
 export const PlannerView = () => {
   const today = new Date();
   const navigate = useNavigate();
@@ -259,6 +283,12 @@ export const PlannerView = () => {
   const [pickerYear, setPickerYear] = useState(today.getFullYear());
   const [pickerMonth, setPickerMonth] = useState(today.getMonth());
   const pickerRef = useRef<HTMLDivElement>(null);
+  const [createMenuOpen, setCreateMenuOpen] = useState(false);
+  const createMenuRef = useRef<HTMLDivElement>(null);
+  const [plannerEventModalOpen, setPlannerEventModalOpen] = useState(false);
+  const [plannerEventId, setPlannerEventId] = useState<string | null>(null);
+  const [plannerEventRange, setPlannerEventRange] = useState<PlannerEventDraftRange | null>(null);
+  const [meetingCreateOpen, setMeetingCreateOpen] = useState(false);
 
   useEffect(() => {
     if (!pickerOpen) return;
@@ -277,6 +307,24 @@ export const PlannerView = () => {
       document.removeEventListener('keydown', onKey);
     };
   }, [pickerOpen]);
+
+  useEffect(() => {
+    if (!createMenuOpen) return;
+    function onMouseDown(event: MouseEvent) {
+      if (createMenuRef.current && !createMenuRef.current.contains(event.target as Node)) {
+        setCreateMenuOpen(false);
+      }
+    }
+    function onKey(event: KeyboardEvent) {
+      if (event.key === 'Escape') setCreateMenuOpen(false);
+    }
+    document.addEventListener('mousedown', onMouseDown);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onMouseDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [createMenuOpen]);
 
   // When the popover opens, sync its cursor to whatever the main view is showing.
   const openPicker = () => {
@@ -302,6 +350,17 @@ export const PlannerView = () => {
     calendarRef.current?.today();
     setPickerOpen(false);
   };
+  const openPlannerEventCreate = useCallback((range?: PlannerEventDraftRange) => {
+    setPlannerEventId(null);
+    setPlannerEventRange(range ?? buildDefaultPlannerEventRange(calendarState.currentDate));
+    setPlannerEventModalOpen(true);
+    setCreateMenuOpen(false);
+  }, [calendarState.currentDate]);
+  const openPlannerEventEdit = useCallback((eventId: string) => {
+    setPlannerEventId(eventId);
+    setPlannerEventRange(null);
+    setPlannerEventModalOpen(true);
+  }, []);
 
   const [actionError, setActionError] = useState<string | null>(null);
   const [previewMeetingId, setPreviewMeetingId] = useState<string | null>(null);
@@ -310,6 +369,22 @@ export const PlannerView = () => {
     const id = window.setTimeout(() => setActionError(null), 4000);
     return () => window.clearTimeout(id);
   }, [actionError]);
+
+  useEffect(() => {
+    function handlePlannerCreateEvent() {
+      openPlannerEventCreate();
+    }
+    function handlePlannerCreateMeeting() {
+      setCreateMenuOpen(false);
+      setMeetingCreateOpen(true);
+    }
+    window.addEventListener('planner:create-event', handlePlannerCreateEvent);
+    window.addEventListener('planner:create-meeting', handlePlannerCreateMeeting);
+    return () => {
+      window.removeEventListener('planner:create-event', handlePlannerCreateEvent);
+      window.removeEventListener('planner:create-meeting', handlePlannerCreateMeeting);
+    };
+  }, [openPlannerEventCreate]);
 
   const handleDatesSet = useCallback(
     (nextState: {
@@ -343,6 +418,10 @@ export const PlannerView = () => {
 
   const handleEventClick = (event: CalendarEvent) => {
     if (!workspaceSlug) return;
+    if (event.sourceType === 'planner_event') {
+      openPlannerEventEdit(event.sourceId);
+      return;
+    }
     if (event.sourceType === 'meeting') {
       // Open inline preview modal instead of navigating away — keeps user's
       // place on the calendar. Modal has a "전체 열기" link for deep edits.
@@ -362,13 +441,35 @@ export const PlannerView = () => {
     event: CalendarEvent,
     newStartIso: string,
     newEndIso: string,
+    newAllDay: boolean,
     revert: () => void,
   ) => {
     if (!token || !workspaceSlug) {
       revert();
       return;
     }
+    if (event.sourceType === 'planner_event') {
+      try {
+        await updatePlannerEvent(token, workspaceSlug, event.sourceId, {
+          allDay: newAllDay,
+          start: newStartIso,
+          end: newEndIso,
+        });
+        refresh();
+      } catch (err) {
+        revert();
+        setActionError(
+          err instanceof Error ? err.message : '일정을 변경할 수 없습니다.',
+        );
+      }
+      return;
+    }
     if (event.sourceType === 'meeting') {
+      if (newAllDay) {
+        revert();
+        setActionError('미팅은 종일 일정으로 변경할 수 없습니다.');
+        return;
+      }
       try {
         // FullCalendar already formatted these in the calendar's named timezone
         // (Asia/Seoul). Backend stores naive UTC — meeting-api accepts the
@@ -384,6 +485,11 @@ export const PlannerView = () => {
           err instanceof Error ? err.message : '미팅 시간을 변경할 수 없습니다.',
         );
       }
+      return;
+    }
+    if (!newAllDay) {
+      revert();
+      setActionError('태스크 일정은 종일 일정으로만 이동할 수 있습니다.');
       return;
     }
     // PMS issues — extract date portion only (all-day, no time component).
@@ -431,6 +537,22 @@ export const PlannerView = () => {
       }
       return;
     }
+    if (event.sourceType === 'planner_event') {
+      try {
+        await updatePlannerEvent(token, workspaceSlug, event.sourceId, {
+          allDay: event.allDay,
+          start: event.start,
+          end: newEndIso,
+        });
+        refresh();
+      } catch (err) {
+        revert();
+        setActionError(
+          err instanceof Error ? err.message : '일정을 변경할 수 없습니다.',
+        );
+      }
+      return;
+    }
     if (event.sourceType === 'pms_block') {
       const newDueYmd = decrementYmd(newEndIso.slice(0, 10));
       try {
@@ -447,6 +569,30 @@ export const PlannerView = () => {
     // pms_due (single-day) — resize is meaningless. Revert.
     revert();
   };
+  const handleDateSelect = useCallback((range: { start: Date; end: Date; allDay: boolean }) => {
+    openPlannerEventCreate({
+      start: range.start,
+      end: range.end,
+      allDay: range.allDay,
+    });
+  }, [openPlannerEventCreate]);
+  const handlePlannerEventSaved = useCallback(() => {
+    setPlannerEventModalOpen(false);
+    setPlannerEventId(null);
+    setPlannerEventRange(null);
+    refresh();
+  }, [refresh]);
+  const handlePlannerEventDeleted = useCallback(() => {
+    setPlannerEventModalOpen(false);
+    setPlannerEventId(null);
+    setPlannerEventRange(null);
+    refresh();
+  }, [refresh]);
+  const handleMeetingCreated = useCallback((meetingId: string) => {
+    setMeetingCreateOpen(false);
+    setPreviewMeetingId(meetingId);
+    refresh();
+  }, [refresh]);
 
   return (
     <motion.div
@@ -537,19 +683,39 @@ export const PlannerView = () => {
               />
             ) : null}
           </div>
-          <div className="flex flex-col items-end gap-1">
+          <div ref={createMenuRef} className="relative">
             <button
               type="button"
-              disabled
-              title="플래너 직접 일정 생성은 아직 준비 중입니다. Meetings에서 회의를 생성하세요."
-              className="app-text-control flex items-center gap-2 rounded-md border border-app-border bg-app-surface-sidebar px-4 py-2 text-app-ink/50 opacity-60"
+              onClick={() => setCreateMenuOpen((open) => !open)}
+              className="app-text-control flex items-center gap-2 rounded-md border border-app-border bg-app-surface-sidebar px-4 py-2 text-app-ink transition-colors hover:bg-app-surface-hover"
             >
               <Plus size={16} />
-              <span>Add Event</span>
+              <span>Add</span>
             </button>
-            <p className="app-text-caption text-app-ink/50">
-              일정 생성은 아직 준비 중입니다. 회의 생성은 Meetings에서 사용할 수 있습니다.
-            </p>
+            {createMenuOpen ? (
+              <div className="absolute right-0 top-full z-30 mt-2 w-48 rounded-lg border border-app-border bg-app-surface py-1 shadow-xl">
+                <div className="app-text-overline px-3 pt-1.5 pb-1 text-app-ink/45">Create</div>
+                <button
+                  type="button"
+                  onClick={() => openPlannerEventCreate()}
+                  className="app-text-control-sm flex w-full items-center gap-2 px-3 py-2 text-left text-app-ink transition-colors hover:bg-app-surface-hover"
+                >
+                  <Plus size={14} className="text-app-ink/45" />
+                  <span>Event</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCreateMenuOpen(false);
+                    setMeetingCreateOpen(true);
+                  }}
+                  className="app-text-control-sm flex w-full items-center gap-2 px-3 py-2 text-left text-app-ink transition-colors hover:bg-app-surface-hover"
+                >
+                  <Plus size={14} className="text-app-ink/45" />
+                  <span>Meeting</span>
+                </button>
+              </div>
+            ) : null}
           </div>
         </div>
       </div>
@@ -586,6 +752,7 @@ export const PlannerView = () => {
               initialView={VIEW_MODE_TO_FC[viewMode]}
               initialDate={calendarState.currentDate}
               onDatesSet={handleDatesSet}
+              onDateSelect={handleDateSelect}
               onEventClick={handleEventClick}
               onEventDrop={handleEventDrop}
               onEventResize={handleEventResize}
@@ -599,6 +766,25 @@ export const PlannerView = () => {
         workspaceSlug={workspaceSlug}
         onClose={() => setPreviewMeetingId(null)}
         onChanged={refresh}
+      />
+      <MeetingCreateModal
+        isOpen={meetingCreateOpen && Boolean(workspaceSlug)}
+        onClose={() => setMeetingCreateOpen(false)}
+        onCreated={handleMeetingCreated}
+        workspaceSlug={workspaceSlug ?? ''}
+      />
+      <PlannerEventModal
+        isOpen={plannerEventModalOpen}
+        onClose={() => {
+          setPlannerEventModalOpen(false);
+          setPlannerEventId(null);
+          setPlannerEventRange(null);
+        }}
+        workspaceSlug={workspaceSlug}
+        eventId={plannerEventId}
+        initialRange={plannerEventRange}
+        onSaved={handlePlannerEventSaved}
+        onDeleted={handlePlannerEventDeleted}
       />
     </motion.div>
   );

@@ -11,6 +11,7 @@ import {
   type MeetingUser,
 } from '@/src/domains/meeting/meeting-api';
 
+import { MeetingAvailabilityPanel } from './MeetingAvailabilityPanel';
 import { TaskPickerModal } from './TaskPickerModal';
 import { DocPickerModal } from './DocPickerModal';
 
@@ -162,6 +163,17 @@ export function MeetingCreateModal({
   const visibleAttendees = useMemo(
     () => attendees.filter((attendee) => attendee.user_id !== user?.id),
     [attendees, user?.id],
+  );
+  const availabilityUsers = useMemo(
+    () => visibleAttendees.map((attendee) => {
+      const candidate = userLookup.get(attendee.user_id);
+      return {
+        id: attendee.user_id,
+        email: candidate?.email ?? '',
+        full_name: candidate?.full_name ?? attendee.user_id,
+      };
+    }),
+    [userLookup, visibleAttendees],
   );
 
   function addAttendee(user: MeetingUser) {
@@ -461,6 +473,13 @@ export function MeetingCreateModal({
             />
           </div>
         </div>
+
+        <MeetingAvailabilityPanel
+          workspaceSlug={workspaceSlug}
+          attendeeUsers={availabilityUsers}
+          meetingStart={startAt ? new Date(startAt) : null}
+          meetingEnd={endAt ? new Date(endAt) : null}
+        />
 
         <div className="space-y-2">
           <label className="app-text-control-sm text-app-ink/70">참석자</label>

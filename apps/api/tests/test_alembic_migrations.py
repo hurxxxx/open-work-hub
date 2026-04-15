@@ -67,6 +67,7 @@ def test_alembic_upgrade_head_creates_expected_tables(alembic_config, postgres_d
         "docs_native_docs",
         "docs_meeting_access",
         "media_files",
+        "planner_events",
         "alembic_version",
     }
     missing = expected - table_names

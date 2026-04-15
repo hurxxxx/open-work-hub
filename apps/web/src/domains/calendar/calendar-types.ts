@@ -10,7 +10,7 @@
 //   - metadata holds source-specific extras the UI wants to render in the popover
 //     without an extra fetch.
 
-export type CalendarSourceType = 'meeting' | 'pms_due' | 'pms_block';
+export type CalendarSourceType = 'meeting' | 'pms_due' | 'pms_block' | 'planner_event';
 
 export interface CalendarEventMetadata {
   // Meeting-only
@@ -22,6 +22,12 @@ export interface CalendarEventMetadata {
   issueNumber?: number;
   status?: string;
   assigneeIds?: string[];
+  // Planner-only
+  plannerEventId?: string;
+  ownerId?: string;
+  ownerName?: string;
+  visibility?: 'private' | 'public';
+  location?: string;
 }
 
 export interface CalendarEvent {
@@ -48,6 +54,7 @@ export const ALL_CALENDAR_SOURCES: CalendarSourceFilter = [
   'meeting',
   'pms_due',
   'pms_block',
+  'planner_event',
 ];
 
 // Color tokens per Design D5. Kept here so UnifiedCalendar + tests + mock fixture
@@ -57,4 +64,5 @@ export const CALENDAR_SOURCE_COLORS: Record<CalendarSourceType, string> = {
   meeting: '#3b82f6',  // blue-500
   pms_due: '#f59e0b',  // amber-500
   pms_block: '#22c55e', // green-500 fallback; pms_block ideally inherits status color from metadata
+  planner_event: '#14b8a6', // teal-500
 };

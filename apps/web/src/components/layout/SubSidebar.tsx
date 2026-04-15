@@ -1975,16 +1975,30 @@ export const SubSidebar = ({
                     </button>
                   ) : null}
                   {activeAppId === 'planner' ? (
-                    <button
-                      type="button"
-                      disabled
-                      title="플래너 직접 일정 생성은 아직 준비 중입니다. Meetings에서 회의를 생성하세요."
-                      className="app-text-control-sm flex w-full items-center gap-2 px-3 py-2 text-left text-app-ink/50 opacity-60"
-                    >
-                      <Calendar size={14} className="text-gray-500" />
-                      <span>Event</span>
-                      <span className="ml-auto app-text-overline text-app-ink/40">준비 중</span>
-                    </button>
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setCreateMenuOpen(false);
+                          window.dispatchEvent(new CustomEvent('planner:create-event'));
+                        }}
+                        className="app-text-control-sm flex w-full items-center gap-2 px-3 py-2 text-left text-app-ink hover:bg-app-surface-hover"
+                      >
+                        <Calendar size={14} className="text-gray-500" />
+                        <span>Event</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setCreateMenuOpen(false);
+                          window.dispatchEvent(new CustomEvent('planner:create-meeting'));
+                        }}
+                        className="app-text-control-sm flex w-full items-center gap-2 px-3 py-2 text-left text-app-ink hover:bg-app-surface-hover"
+                      >
+                        <Users size={14} className="text-gray-500" />
+                        <span>Meeting</span>
+                      </button>
+                    </>
                   ) : null}
                   {activeAppId === 'ai' ? (
                     <button

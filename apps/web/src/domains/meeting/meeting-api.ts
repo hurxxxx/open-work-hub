@@ -149,6 +149,27 @@ export interface MeetingUser {
   full_name: string;
 }
 
+export interface MeetingAvailabilityBlock {
+  id: string;
+  start: string;
+  end: string;
+  allDay: boolean;
+  sourceType: 'meeting' | 'planner_event';
+  masked: boolean;
+  title: string | null;
+  location: string | null;
+}
+
+export interface MeetingAvailabilityItem {
+  userId: string;
+  fullName: string;
+  blocks: MeetingAvailabilityBlock[];
+}
+
+export interface MeetingAvailabilityResponse {
+  items: MeetingAvailabilityItem[];
+}
+
 export interface MeetingAttendeeInput {
   user_id: string;
   role: AttendeeRole;
@@ -650,6 +671,24 @@ export function listMeetingUsers(
   const query = params.toString();
   return request<MeetingUser[]>(
     `/api/v1/meeting/users${query ? `?${query}` : ''}`,
+    token,
+    workspaceSlug,
+  );
+}
+
+export function getMeetingAvailability(
+  token: string,
+  workspaceSlug: string,
+  options: { userIds: string[]; from: string; to: string },
+): Promise<MeetingAvailabilityResponse> {
+  const params = new URLSearchParams();
+  for (const userId of options.userIds) {
+    params.append('user_ids', userId);
+  }
+  params.set('from', options.from);
+  params.set('to', options.to);
+  return request<MeetingAvailabilityResponse>(
+    `/api/v1/meeting/availability?${params.toString()}`,
     token,
     workspaceSlug,
   );

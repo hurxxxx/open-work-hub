@@ -3,9 +3,10 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from io import BytesIO
 from typing import Iterable
+from zoneinfo import ZoneInfo
 
 from fastapi import HTTPException, UploadFile, status
-from sqlalchemy import or_, select
+from sqlalchemy import or_, select, union
 from sqlalchemy.orm import Session, selectinload
 
 from aidoo_api.core.settings import get_settings
@@ -13,7 +14,13 @@ from aidoo_api.core.storage import get_minio_client
 from aidoo_api.domains.auth.access import (
     resolve_workspace_role,
 )
-from aidoo_api.domains.auth.models import User, Workspace
+from aidoo_api.domains.auth.models import (
+    User,
+    UserAccessGroup,
+    Workspace,
+    WorkspaceGroupBinding,
+    WorkspaceUserBinding,
+)
 from aidoo_api.domains.auth.security import new_id
 from aidoo_api.domains.docs.access_grants import (
     bump_doc_grant_expiry_for_meeting,
@@ -37,6 +44,9 @@ from aidoo_api.domains.meeting.permissions import (
     ensure_meeting_participant,
 )
 from aidoo_api.domains.meeting.schemas import (
+    MeetingAvailabilityBlock,
+    MeetingAvailabilityItem,
+    MeetingAvailabilityResponse,
     MeetingAttendeeInput,
     MeetingAttendeeOut,
     MeetingCreateRequest,
@@ -58,9 +68,11 @@ from aidoo_api.domains.pms.access_grants import (
     revoke_grants_for_meeting_attendee,
 )
 from aidoo_api.domains.pms.models import Issue, TaskList
+from aidoo_api.domains.planner.models import PlannerEvent
 
 
 MAX_FILE_UPLOAD_SIZE = 100 * 1024 * 1024  # 100 MB
+LOCAL_TIMEZONE = ZoneInfo("Asia/Seoul")
 
 
 def _meeting_notes_doc_title(meeting: Meeting) -> str:
@@ -69,6 +81,24 @@ def _meeting_notes_doc_title(meeting: Meeting) -> str:
 
 def _meeting_notes_page_title() -> str:
     return "회의 메모"
+
+
+def workspace_meeting_user_ids_subquery(workspace_id: str):
+    direct_member_ids = select(WorkspaceUserBinding.user_id.label("user_id")).where(
+        WorkspaceUserBinding.workspace_id == workspace_id
+    )
+    group_member_ids = (
+        select(UserAccessGroup.user_id.label("user_id"))
+        .join(
+            WorkspaceGroupBinding,
+            WorkspaceGroupBinding.group_id == UserAccessGroup.group_id,
+        )
+        .where(WorkspaceGroupBinding.workspace_id == workspace_id)
+    )
+    return union(
+        direct_member_ids,
+        group_member_ids,
+    ).subquery()
 
 
 def _validate_time_range(start_at: datetime, end_at: datetime) -> None:
@@ -465,6 +495,17 @@ def _serialize_file_attachment(
 
 def _serialize_recording(recording) -> MeetingRecordingOut:
     return MeetingRecordingOut.model_validate(recording)
+
+
+def _utc_iso(value: datetime) -> str:
+    if value.tzinfo is None:
+        return value.replace(tzinfo=UTC).isoformat()
+    return value.astimezone(UTC).isoformat()
+
+
+def _local_date_string(value: datetime) -> str:
+    aware = value.replace(tzinfo=UTC) if value.tzinfo is None else value.astimezone(UTC)
+    return aware.astimezone(LOCAL_TIMEZONE).date().isoformat()
 
 
 def _serialize_meeting(db: Session, meeting: Meeting) -> MeetingDetail:
@@ -929,6 +970,112 @@ def list_meetings(
         for m in meetings
     ]
     return MeetingListResponse(items=items, total=len(items))
+
+
+def list_meeting_availability(
+    db: Session,
+    *,
+    workspace: Workspace,
+    viewer: User,
+    user_ids: list[str],
+    from_at: datetime,
+    to_at: datetime,
+) -> MeetingAvailabilityResponse:
+    unique_user_ids = list(dict.fromkeys(user_ids))
+    if not unique_user_ids:
+        return MeetingAvailabilityResponse(items=[])
+
+    member_user_ids = workspace_meeting_user_ids_subquery(workspace.id)
+    users = db.scalars(
+        select(User)
+        .join(member_user_ids, member_user_ids.c.user_id == User.id)
+        .where(User.status == "active", User.id.in_(unique_user_ids))
+        .order_by(User.full_name.asc(), User.email.asc())
+    ).all()
+    users_by_id = {member.id: member for member in users}
+    missing = [user_id for user_id in unique_user_ids if user_id not in users_by_id]
+    if missing:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Requested users must belong to the meeting workspace: {missing}",
+        )
+
+    blocks_by_user_id: dict[str, list[MeetingAvailabilityBlock]] = {
+        user_id: []
+        for user_id in unique_user_ids
+    }
+
+    attendee_meeting_ids = select(MeetingAttendee.meeting_id).where(
+        MeetingAttendee.user_id.in_(unique_user_ids)
+    )
+    meetings = db.scalars(
+        select(Meeting)
+        .where(Meeting.workspace_id == workspace.id)
+        .where(
+            or_(
+                Meeting.organizer_id.in_(unique_user_ids),
+                Meeting.id.in_(attendee_meeting_ids),
+            )
+        )
+        .where(Meeting.end_at > from_at, Meeting.start_at < to_at)
+        .options(selectinload(Meeting.attendees))
+        .order_by(Meeting.start_at.asc())
+    ).all()
+    for meeting in meetings:
+        participant_ids = {meeting.organizer_id}
+        participant_ids.update(attendee.user_id for attendee in meeting.attendees)
+        for user_id in unique_user_ids:
+            if user_id not in participant_ids:
+                continue
+            blocks_by_user_id[user_id].append(
+                MeetingAvailabilityBlock(
+                    id=f"meeting-{meeting.id}",
+                    start=_utc_iso(meeting.start_at),
+                    end=_utc_iso(meeting.end_at),
+                    all_day=False,
+                    source_type="meeting",
+                    masked=True,
+                    title=None,
+                    location=None,
+                )
+            )
+
+    planner_events = db.scalars(
+        select(PlannerEvent)
+        .where(
+            PlannerEvent.workspace_id == workspace.id,
+            PlannerEvent.owner_id.in_(unique_user_ids),
+        )
+        .where(PlannerEvent.end_at > from_at, PlannerEvent.start_at < to_at)
+        .order_by(PlannerEvent.start_at.asc())
+    ).all()
+    for event in planner_events:
+        masked = event.visibility != "public" and event.owner_id != viewer.id
+        blocks_by_user_id[event.owner_id].append(
+            MeetingAvailabilityBlock(
+                id=f"planner-event-{event.id}",
+                start=_local_date_string(event.start_at) if event.all_day else _utc_iso(event.start_at),
+                end=_local_date_string(event.end_at) if event.all_day else _utc_iso(event.end_at),
+                all_day=event.all_day,
+                source_type="planner_event",
+                masked=masked,
+                title=None if masked else event.title,
+                location=None if masked or not event.location else event.location,
+            )
+        )
+
+    def _sort_key(block: MeetingAvailabilityBlock) -> str:
+        return f"{block.start}|{block.end}|{block.id}"
+
+    items = [
+        MeetingAvailabilityItem(
+            user_id=user_id,
+            full_name=users_by_id[user_id].full_name,
+            blocks=sorted(blocks_by_user_id[user_id], key=_sort_key),
+        )
+        for user_id in unique_user_ids
+    ]
+    return MeetingAvailabilityResponse(items=items)
 
 
 def add_attendees(

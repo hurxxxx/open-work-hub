@@ -4,11 +4,21 @@ from datetime import datetime
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
+from pydantic.alias_generators import to_camel
 
 
 AttendeeRole = Literal["required", "optional"]
 AttendeeResponse = Literal["pending", "accepted", "declined", "tentative"]
 MeetingStatus = Literal["scheduled", "in_progress", "completed", "cancelled"]
+AvailabilitySourceType = Literal["meeting", "planner_event"]
+
+
+def _camel_config() -> ConfigDict:
+    return ConfigDict(
+        alias_generator=to_camel,
+        populate_by_name=True,
+        serialize_by_alias=True,
+    )
 
 
 class MeetingAttendeeInput(BaseModel):
@@ -227,3 +237,30 @@ class MeetingUserItem(BaseModel):
     id: str
     email: str
     full_name: str
+
+
+class MeetingAvailabilityBlock(BaseModel):
+    model_config = _camel_config()
+
+    id: str
+    start: str
+    end: str
+    all_day: bool
+    source_type: AvailabilitySourceType
+    masked: bool
+    title: str | None = None
+    location: str | None = None
+
+
+class MeetingAvailabilityItem(BaseModel):
+    model_config = _camel_config()
+
+    user_id: str
+    full_name: str
+    blocks: list[MeetingAvailabilityBlock]
+
+
+class MeetingAvailabilityResponse(BaseModel):
+    model_config = _camel_config()
+
+    items: list[MeetingAvailabilityItem]

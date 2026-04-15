@@ -81,6 +81,7 @@ def init_db() -> None:
     from aidoo_api.domains.media import models as media_models  # noqa: F401
     from aidoo_api.domains.meeting import models as meeting_models  # noqa: F401
     from aidoo_api.domains.pms import models as pms_models  # noqa: F401
+    from aidoo_api.domains.planner import models as planner_models  # noqa: F401
 
     if os.environ.get("DOOWON_API_AUTO_MIGRATE", "").lower() in {"1", "true", "yes"}:
         run_migrations()

@@ -28,6 +28,7 @@ from aidoo_api.domains.media.router import router as media_router
 from aidoo_api.domains.meeting.router import router as meeting_router
 from aidoo_api.domains.ocr.router import router as ocr_router
 from aidoo_api.domains.pms.router import router as pms_router
+from aidoo_api.domains.planner.router import router as planner_router
 from aidoo_api.domains.plm.router import router as plm_router
 from aidoo_api.domains.wiki_pms.router import router as wiki_pms_router
 
@@ -251,6 +252,22 @@ def create_app() -> FastAPI:
     )
     app.include_router(
         calendar_router,
+        prefix=f"{settings.api_prefix}/workspaces/{{workspace_slug}}",
+        dependencies=[
+            *protected_dependencies,
+            Depends(require_workspace_membership()),
+        ],
+    )
+    app.include_router(
+        planner_router,
+        prefix=settings.api_prefix,
+        dependencies=[
+            *protected_dependencies,
+            Depends(require_legacy_workspace_membership()),
+        ],
+    )
+    app.include_router(
+        planner_router,
         prefix=f"{settings.api_prefix}/workspaces/{{workspace_slug}}",
         dependencies=[
             *protected_dependencies,

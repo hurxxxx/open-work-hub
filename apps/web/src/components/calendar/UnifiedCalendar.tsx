@@ -84,6 +84,7 @@ export interface UnifiedCalendarProps {
     event: CalendarEvent,
     newStart: string,
     newEnd: string,
+    newAllDay: boolean,
     revert: () => void,
   ) => void;
   /**
@@ -269,6 +270,7 @@ export const UnifiedCalendar = forwardRef<UnifiedCalendarHandle, UnifiedCalendar
               original,
               arg.event.startStr,
               arg.event.endStr || arg.event.startStr,
+              arg.event.allDay,
               arg.revert,
             );
           }}
