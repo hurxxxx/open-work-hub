@@ -11,6 +11,7 @@ export interface PmsTaskList {
   team_name: string | null;
   folder_id: string | null;
   folder_name: string | null;
+  sort_order: number;
   role: string;
   progress: number;
   member_count: number;
@@ -287,6 +288,7 @@ export interface PmsSpaceDoc {
   id: string;
   team_id: string;
   title: string;
+  sort_order: number;
   created_by_id: string;
   created_by_name: string;
   created_at: string;
@@ -534,6 +536,41 @@ export function createPmsTaskList(
 ): Promise<PmsTaskList> {
   return request<PmsTaskList>('/api/v1/pms/lists', token, {
     method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function updatePmsTaskList(
+  token: string,
+  taskListId: string,
+  payload: {
+    name?: string;
+    description?: string;
+    status?: string;
+    archived?: boolean;
+    folder_id?: string | null;
+    sort_order?: number;
+  },
+): Promise<PmsTaskList> {
+  return request<PmsTaskList>(`/api/v1/pms/lists/${taskListId}`, token, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function reorderPmsTaskLists(
+  token: string,
+  spaceId: string,
+  payload: {
+    items: Array<{
+      id: string;
+      folder_id: string | null;
+      sort_order: number;
+    }>;
+  },
+): Promise<void> {
+  return request<void>(`/api/v1/pms/spaces/${spaceId}/lists/reorder`, token, {
+    method: 'PATCH',
     body: JSON.stringify(payload),
   });
 }
@@ -1103,9 +1140,25 @@ export function createSpaceDoc(
 export function updateSpaceDoc(
   token: string,
   docId: string,
-  payload: { title?: string },
+  payload: { title?: string; sort_order?: number },
 ): Promise<PmsSpaceDoc> {
   return request<PmsSpaceDoc>(`/api/v1/pms/space-docs/${docId}`, token, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function reorderSpaceDocs(
+  token: string,
+  spaceId: string,
+  payload: {
+    items: Array<{
+      id: string;
+      sort_order: number;
+    }>;
+  },
+): Promise<void> {
+  return request<void>(`/api/v1/pms/spaces/${spaceId}/docs/reorder`, token, {
     method: 'PATCH',
     body: JSON.stringify(payload),
   });

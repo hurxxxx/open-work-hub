@@ -134,6 +134,13 @@ def test_viewer_cannot_modify_issue_comment_or_folder(client: TestClient) -> Non
     )
     assert folder_response.status_code == 403
 
+    space_doc_response = client.post(
+        f"/api/v1/pms/spaces/{task_list['team_id']}/docs",
+        headers=_auth_headers(viewer_token),
+        json={"title": "Viewer collection"},
+    )
+    assert space_doc_response.status_code == 403
+
 
 def test_explicit_null_clears_nullable_issue_fields(client: TestClient) -> None:
     admin_session = _bootstrap_admin_session(client)
@@ -418,12 +425,14 @@ def test_space_docs_collection_permissions_and_soft_delete(client: TestClient) -
     assert editor_list_response.status_code == 200
     assert [item["id"] for item in editor_list_response.json()["items"]] == [collection["id"]]
 
-    second_collection_response = client.post(
+    member_collection_response = client.post(
         f"/api/v1/pms/spaces/{space_id}/docs",
         headers=_auth_headers(task_list_editor_token),
         json={"title": "Task List Notes"},
     )
-    assert second_collection_response.status_code == 403
+    assert member_collection_response.status_code == 201
+    member_collection = member_collection_response.json()
+    assert member_collection["created_by_id"] == task_list_editor["user"]["id"]
 
     member_page_response = client.post(
         f"/api/v1/pms/spaces/{space_id}/docs/pages",
@@ -432,27 +441,22 @@ def test_space_docs_collection_permissions_and_soft_delete(client: TestClient) -
     )
     assert member_page_response.status_code == 201
 
-    second_collection_response = client.post(
-        f"/api/v1/pms/spaces/{space_id}/docs",
+    member_folder_response = client.post(
+        "/api/v1/pms/folders",
         headers=_auth_headers(task_list_editor_token),
-        json={"title": "Task List Notes"},
+        json={"name": "Member folder", "team_id": space_id},
     )
-    assert second_collection_response.status_code == 403
+    assert member_folder_response.status_code == 201
+    member_folder = member_folder_response.json()
+    assert member_folder["team_id"] == space_id
 
     second_collection_response = client.post(
         f"/api/v1/pms/spaces/{space_id}/docs",
         headers=_auth_headers(admin_session["token"]),
-        json={"title": "Task List Notes"},
+        json={"title": "Admin Notes"},
     )
     assert second_collection_response.status_code == 201
     second_collection = second_collection_response.json()
-
-    forbidden_folder_response = client.post(
-        "/api/v1/pms/folders",
-        headers=_auth_headers(task_list_editor_token),
-        json={"name": "Member cannot manage folders", "team_id": space_id},
-    )
-    assert forbidden_folder_response.status_code == 403
 
     cross_collection_parent_response = client.post(
         f"/api/v1/pms/spaces/{space_id}/docs/pages",
@@ -477,7 +481,8 @@ def test_space_docs_collection_permissions_and_soft_delete(client: TestClient) -
         headers=_auth_headers(admin_session["token"]),
     )
     assert visible_collections_response.status_code == 200
-    assert [item["id"] for item in visible_collections_response.json()["items"]] == [second_collection["id"]]
+    visible_ids = sorted(item["id"] for item in visible_collections_response.json()["items"])
+    assert visible_ids == sorted([member_collection["id"], second_collection["id"]])
 
     deleted_collection_response = client.get(
         f"/api/v1/pms/space-docs/{collection['id']}",
@@ -783,6 +788,294 @@ def test_team_soft_delete_hides_space_data_and_untrashes_default_space(client: T
 
 def _bootstrap_admin(client: TestClient) -> str:
     return _bootstrap_admin_session(client)["token"]
+
+
+def test_task_list_patch_sort_order_and_cross_folder_move(client: TestClient) -> None:
+    admin = _bootstrap_admin_session(client)
+    task_list_a = _create_task_list(client, admin["token"], key="REORD", name="Reorder List A")
+    space_id = task_list_a["team_id"]
+    assert space_id is not None
+
+    folder_one = client.post(
+        "/api/v1/pms/folders",
+        headers=_auth_headers(admin["token"]),
+        json={"name": "Alpha", "team_id": space_id},
+    ).json()
+    folder_two = client.post(
+        "/api/v1/pms/folders",
+        headers=_auth_headers(admin["token"]),
+        json={"name": "Bravo", "team_id": space_id},
+    ).json()
+
+    task_list_b = client.post(
+        "/api/v1/pms/lists",
+        headers=_auth_headers(admin["token"]),
+        json={"name": "Reorder List B", "description": "", "team_id": space_id, "folder_id": folder_one["id"]},
+    ).json()
+    task_list_c = client.post(
+        "/api/v1/pms/lists",
+        headers=_auth_headers(admin["token"]),
+        json={"name": "Reorder List C", "description": "", "team_id": space_id, "folder_id": folder_one["id"]},
+    ).json()
+
+    # Reorder: B and C both live in folder_one. Assign explicit sort_order values.
+    patch_b = client.patch(
+        f"/api/v1/pms/lists/{task_list_b['id']}",
+        headers=_auth_headers(admin["token"]),
+        json={"sort_order": 1000},
+    )
+    assert patch_b.status_code == 200
+    assert patch_b.json()["sort_order"] == 1000
+
+    patch_c = client.patch(
+        f"/api/v1/pms/lists/{task_list_c['id']}",
+        headers=_auth_headers(admin["token"]),
+        json={"sort_order": 0},
+    )
+    assert patch_c.status_code == 200
+    assert patch_c.json()["sort_order"] == 0
+
+    listed = client.get(
+        f"/api/v1/pms/spaces/{space_id}/lists",
+        headers=_auth_headers(admin["token"]),
+        params={"sort_by": "sort_order"},
+    ).json()["items"]
+    tracked_ids = {task_list_b["id"], task_list_c["id"]}
+    folder_one_order = [item["name"] for item in listed if item["id"] in tracked_ids]
+    assert folder_one_order == ["Reorder List C", "Reorder List B"]
+
+    # Cross-folder move: B → folder_two, with new sort_order.
+    move_b = client.patch(
+        f"/api/v1/pms/lists/{task_list_b['id']}",
+        headers=_auth_headers(admin["token"]),
+        json={"folder_id": folder_two["id"], "sort_order": 0},
+    )
+    assert move_b.status_code == 200
+    assert move_b.json()["folder_id"] == folder_two["id"]
+    assert move_b.json()["sort_order"] == 0
+
+    listed_after = client.get(
+        f"/api/v1/pms/spaces/{space_id}/lists",
+        headers=_auth_headers(admin["token"]),
+        params={"sort_by": "sort_order"},
+    ).json()["items"]
+    by_folder = {item["id"]: item["folder_id"] for item in listed_after}
+    assert by_folder[task_list_b["id"]] == folder_two["id"]
+    assert by_folder[task_list_c["id"]] == folder_one["id"]
+
+
+def test_space_doc_collection_patch_sort_order(client: TestClient) -> None:
+    admin = _bootstrap_admin_session(client)
+    task_list = _create_task_list(client, admin["token"], key="DOCORD", name="Doc Reorder List")
+    space_id = task_list["team_id"]
+    assert space_id is not None
+
+    doc_a = client.post(
+        f"/api/v1/pms/spaces/{space_id}/docs",
+        headers=_auth_headers(admin["token"]),
+        json={"title": "Alpha Doc"},
+    ).json()
+    doc_b = client.post(
+        f"/api/v1/pms/spaces/{space_id}/docs",
+        headers=_auth_headers(admin["token"]),
+        json={"title": "Bravo Doc"},
+    ).json()
+    doc_c = client.post(
+        f"/api/v1/pms/spaces/{space_id}/docs",
+        headers=_auth_headers(admin["token"]),
+        json={"title": "Charlie Doc"},
+    ).json()
+
+    # Reorder: C first, A second, B third.
+    client.patch(
+        f"/api/v1/pms/space-docs/{doc_c['id']}",
+        headers=_auth_headers(admin["token"]),
+        json={"sort_order": 0},
+    )
+    client.patch(
+        f"/api/v1/pms/space-docs/{doc_a['id']}",
+        headers=_auth_headers(admin["token"]),
+        json={"sort_order": 1000},
+    )
+    client.patch(
+        f"/api/v1/pms/space-docs/{doc_b['id']}",
+        headers=_auth_headers(admin["token"]),
+        json={"sort_order": 2000},
+    )
+
+    listed = client.get(
+        f"/api/v1/pms/spaces/{space_id}/docs",
+        headers=_auth_headers(admin["token"]),
+    ).json()["items"]
+    assert [item["title"] for item in listed] == ["Charlie Doc", "Alpha Doc", "Bravo Doc"]
+    assert [item["sort_order"] for item in listed] == [0, 1000, 2000]
+
+
+def test_space_member_can_reorder_task_list_without_owner_access(client: TestClient) -> None:
+    admin = _bootstrap_admin_session(client)
+    task_list_a = _create_task_list(client, admin["token"], key="LREORD", name="List Reorder A")
+    space_id = task_list_a["team_id"]
+    assert space_id is not None
+
+    folder = client.post(
+        "/api/v1/pms/folders",
+        headers=_auth_headers(admin["token"]),
+        json={"name": "Target Folder", "team_id": space_id},
+    ).json()
+    task_list_b = client.post(
+        "/api/v1/pms/lists",
+        headers=_auth_headers(admin["token"]),
+        json={"name": "List Reorder B", "description": "", "team_id": space_id},
+    ).json()
+
+    member = _create_user(client, admin["token"], email="list-reorder-member@aidoo.local", full_name="List Reorder Member")
+    _add_task_list_member(client, admin["token"], task_list_a["id"], member["user"]["id"], "member")
+    member_token = _login(client, member["user"]["email"], member["temporary_password"])
+
+    reorder_response = client.patch(
+        f"/api/v1/pms/lists/{task_list_b['id']}",
+        headers=_auth_headers(member_token),
+        json={"folder_id": folder["id"], "sort_order": 0},
+    )
+    assert reorder_response.status_code == 200
+    assert reorder_response.json()["folder_id"] == folder["id"]
+    assert reorder_response.json()["sort_order"] == 0
+
+    rename_response = client.patch(
+        f"/api/v1/pms/lists/{task_list_b['id']}",
+        headers=_auth_headers(member_token),
+        json={"name": "Should still fail"},
+    )
+    assert rename_response.status_code == 403
+
+
+def test_space_member_can_reorder_space_doc_without_manager_access(client: TestClient) -> None:
+    admin = _bootstrap_admin_session(client)
+    task_list = _create_task_list(client, admin["token"], key="DREORD", name="Doc Reorder Access")
+    space_id = task_list["team_id"]
+    assert space_id is not None
+
+    doc_a = client.post(
+        f"/api/v1/pms/spaces/{space_id}/docs",
+        headers=_auth_headers(admin["token"]),
+        json={"title": "Alpha Doc"},
+    ).json()
+    doc_b = client.post(
+        f"/api/v1/pms/spaces/{space_id}/docs",
+        headers=_auth_headers(admin["token"]),
+        json={"title": "Bravo Doc"},
+    ).json()
+
+    member = _create_user(client, admin["token"], email="doc-reorder-member@aidoo.local", full_name="Doc Reorder Member")
+    _add_task_list_member(client, admin["token"], task_list["id"], member["user"]["id"], "member")
+    member_token = _login(client, member["user"]["email"], member["temporary_password"])
+
+    reorder_response = client.patch(
+        f"/api/v1/pms/space-docs/{doc_b['id']}",
+        headers=_auth_headers(member_token),
+        json={"sort_order": 0},
+    )
+    assert reorder_response.status_code == 200
+    assert reorder_response.json()["sort_order"] == 0
+
+    rename_response = client.patch(
+        f"/api/v1/pms/space-docs/{doc_a['id']}",
+        headers=_auth_headers(member_token),
+        json={"title": "Should still fail"},
+    )
+    assert rename_response.status_code == 403
+
+
+def test_bulk_reorder_space_lists_updates_order_and_folder_in_one_request(client: TestClient) -> None:
+    admin = _bootstrap_admin_session(client)
+    task_list_a = _create_task_list(client, admin["token"], key="BLST1", name="Bulk List A")
+    space_id = task_list_a["team_id"]
+    assert space_id is not None
+
+    folder = client.post(
+        "/api/v1/pms/folders",
+        headers=_auth_headers(admin["token"]),
+        json={"name": "Bulk Folder", "team_id": space_id},
+    ).json()
+    task_list_b = client.post(
+        "/api/v1/pms/lists",
+        headers=_auth_headers(admin["token"]),
+        json={"name": "Bulk List B", "description": "", "team_id": space_id},
+    ).json()
+    task_list_c = client.post(
+        "/api/v1/pms/lists",
+        headers=_auth_headers(admin["token"]),
+        json={"name": "Bulk List C", "description": "", "team_id": space_id},
+    ).json()
+
+    reorder_response = client.patch(
+        f"/api/v1/pms/spaces/{space_id}/lists/reorder",
+        headers=_auth_headers(admin["token"]),
+        json={
+            "items": [
+                {"id": task_list_b["id"], "folder_id": folder["id"], "sort_order": 0},
+                {"id": task_list_a["id"], "folder_id": None, "sort_order": 1000},
+                {"id": task_list_c["id"], "folder_id": None, "sort_order": 2000},
+            ]
+        },
+    )
+    assert reorder_response.status_code == 204
+
+    listed = client.get(
+        f"/api/v1/pms/spaces/{space_id}/lists",
+        headers=_auth_headers(admin["token"]),
+        params={"sort_by": "sort_order"},
+    ).json()["items"]
+    by_id = {item["id"]: item for item in listed}
+    assert by_id[task_list_b["id"]]["folder_id"] == folder["id"]
+    root_order = [item["id"] for item in listed if item["folder_id"] is None]
+    assert root_order[:2] == [task_list_a["id"], task_list_c["id"]]
+
+
+def test_bulk_reorder_space_docs_allows_member_and_updates_order(client: TestClient) -> None:
+    admin = _bootstrap_admin_session(client)
+    task_list = _create_task_list(client, admin["token"], key="BDOC1", name="Bulk Doc List")
+    space_id = task_list["team_id"]
+    assert space_id is not None
+
+    doc_a = client.post(
+        f"/api/v1/pms/spaces/{space_id}/docs",
+        headers=_auth_headers(admin["token"]),
+        json={"title": "Bulk Doc A"},
+    ).json()
+    doc_b = client.post(
+        f"/api/v1/pms/spaces/{space_id}/docs",
+        headers=_auth_headers(admin["token"]),
+        json={"title": "Bulk Doc B"},
+    ).json()
+    doc_c = client.post(
+        f"/api/v1/pms/spaces/{space_id}/docs",
+        headers=_auth_headers(admin["token"]),
+        json={"title": "Bulk Doc C"},
+    ).json()
+
+    member = _create_user(client, admin["token"], email="bulk-doc-member@aidoo.local", full_name="Bulk Doc Member")
+    _add_task_list_member(client, admin["token"], task_list["id"], member["user"]["id"], "member")
+    member_token = _login(client, member["user"]["email"], member["temporary_password"])
+
+    reorder_response = client.patch(
+        f"/api/v1/pms/spaces/{space_id}/docs/reorder",
+        headers=_auth_headers(member_token),
+        json={
+            "items": [
+                {"id": doc_b["id"], "sort_order": 0},
+                {"id": doc_a["id"], "sort_order": 1000},
+                {"id": doc_c["id"], "sort_order": 2000},
+            ]
+        },
+    )
+    assert reorder_response.status_code == 204
+
+    listed = client.get(
+        f"/api/v1/pms/spaces/{space_id}/docs",
+        headers=_auth_headers(admin["token"]),
+    ).json()["items"]
+    assert [item["id"] for item in listed] == [doc_b["id"], doc_a["id"], doc_c["id"]]
 
 
 def _bootstrap_admin_session(client: TestClient) -> dict:

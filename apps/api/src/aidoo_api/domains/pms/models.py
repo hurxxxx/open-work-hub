@@ -58,6 +58,7 @@ class TaskList(Base):
     folder_id: Mapped[str | None] = mapped_column(
         ForeignKey("pms_folders.id"), nullable=True, index=True
     )
+    sort_order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     created_by_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime,
@@ -532,6 +533,7 @@ class SpaceDoc(Base):
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     team_id: Mapped[str] = mapped_column(ForeignKey("teams.id"), index=True)
     title: Mapped[str] = mapped_column(String(200))
+    sort_order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     created_by_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime,

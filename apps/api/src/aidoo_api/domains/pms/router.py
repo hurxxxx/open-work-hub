@@ -120,6 +120,17 @@ class TaskListUpdateRequest(BaseModel):
     status: Literal["planned", "active", "on_hold", "done"] | None = None
     archived: bool | None = None
     folder_id: str | None = None
+    sort_order: int | None = None
+
+
+class TaskListReorderItem(BaseModel):
+    id: str
+    folder_id: str | None = None
+    sort_order: int = Field(ge=0)
+
+
+class TaskListReorderRequest(BaseModel):
+    items: list[TaskListReorderItem] = Field(min_length=1, max_length=200)
 
 
 class MilestoneCreateRequest(BaseModel):
@@ -214,6 +225,7 @@ class TaskListItem(BaseModel):
     team_name: str | None
     folder_id: str | None = None
     folder_name: str | None = None
+    sort_order: int = 0
     role: str
     progress: float
     member_count: int
@@ -1064,6 +1076,7 @@ def _serialize_task_list(
         team_name=team_name,
         folder_id=task_list.folder_id,
         folder_name=getattr(task_list.folder, "name", None) if task_list.folder_id else None,
+        sort_order=task_list.sort_order,
         role=role,
         progress=_calculate_progress(task_list.issues, task_list),
         member_count=member_count if member_count is not None else 0,
@@ -1641,6 +1654,16 @@ def list_task_lists(
         task_lists.sort(key=lambda task_list: task_list.key.lower(), reverse=reverse)
     elif sort_by == "progress":
         task_lists.sort(key=lambda task_list: _calculate_progress(task_list.issues), reverse=reverse)
+    elif sort_by == "sort_order":
+        # Sidebar ordering: stable (folder_id, sort_order, name) — direction is
+        # ignored so clients always see the same tree order regardless of toggle.
+        task_lists.sort(
+            key=lambda task_list: (
+                task_list.folder_id or "",
+                task_list.sort_order,
+                task_list.name.lower(),
+            )
+        )
     else:
         task_lists.sort(key=lambda task_list: task_list.updated_at, reverse=reverse)
 
@@ -1782,10 +1805,16 @@ def update_task_list(
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
 ) -> TaskListItem:
-    task_list, role = _ensure_list_owner(db, current_user, list_id)
+    fields_set = set(payload.model_fields_set)
+    if fields_set and fields_set.issubset({"folder_id", "sort_order"}):
+        task_list, role = _ensure_list_editor(db, current_user, list_id)
+    else:
+        task_list, role = _ensure_list_owner(db, current_user, list_id)
     if "folder_id" in payload.model_fields_set:
         _validate_folder_membership(db, task_list.team_id, payload.folder_id)
         task_list.folder_id = payload.folder_id
+    if payload.sort_order is not None:
+        task_list.sort_order = payload.sort_order
 
     for field_name in ["name", "description", "status", "archived"]:
         if field_name not in payload.model_fields_set:
@@ -1808,6 +1837,40 @@ def update_task_list(
     t_name = db.scalar(select(Team.name).where(Team.id == task_list.team_id)) if task_list.team_id else None
     member_count = len(_load_space_members(db, task_list.team_id)) if task_list.team_id else 0
     return _serialize_task_list(task_list, role, t_name, member_count)
+
+
+@router.patch("/spaces/{space_id}/lists/reorder", status_code=status.HTTP_204_NO_CONTENT)
+def reorder_space_lists(
+    space_id: str,
+    payload: TaskListReorderRequest,
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+) -> Response:
+    _ensure_space_editor(db, current_user, space_id)
+    item_ids = [item.id for item in payload.items]
+    if len(set(item_ids)) != len(item_ids):
+        raise HTTPException(status_code=400, detail="Duplicate task list ids are not allowed.")
+
+    task_lists = list(
+        db.scalars(
+            select(TaskList).where(
+                TaskList.team_id == space_id,
+                TaskList.id.in_(item_ids),
+            )
+        )
+    )
+    task_list_map = {task_list.id: task_list for task_list in task_lists}
+    if len(task_list_map) != len(item_ids):
+        raise HTTPException(status_code=404, detail="TaskList not found.")
+
+    for item in payload.items:
+        _validate_folder_membership(db, space_id, item.folder_id)
+        task_list = task_list_map[item.id]
+        task_list.folder_id = item.folder_id
+        task_list.sort_order = item.sort_order
+
+    db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.get("/lists/{list_id}/members", response_model=SpaceMemberListResponse)
@@ -3791,7 +3854,7 @@ def create_folder(
             db,
             workspace=_get_pms_workspace(db),
         ).id
-    _ensure_space_manager(db, current_user, resolved_team_id)
+    _ensure_space_editor(db, current_user, resolved_team_id)
     folder = Folder(
         id=new_id(),
         team_id=resolved_team_id,
@@ -3881,6 +3944,7 @@ class SpaceDocItem(BaseModel):
     id: str
     team_id: str
     title: str
+    sort_order: int = 0
     created_by_id: str
     created_by_name: str
     created_at: datetime
@@ -3898,6 +3962,16 @@ class SpaceDocCreateRequest(BaseModel):
 
 class SpaceDocUpdateRequest(BaseModel):
     title: str | None = Field(default=None, min_length=1, max_length=200)
+    sort_order: int | None = None
+
+
+class SpaceDocReorderItem(BaseModel):
+    id: str
+    sort_order: int = Field(ge=0)
+
+
+class SpaceDocReorderRequest(BaseModel):
+    items: list[SpaceDocReorderItem] = Field(min_length=1, max_length=200)
 
 
 def _serialize_space_doc(doc: SpaceDoc) -> SpaceDocItem:
@@ -3905,6 +3979,7 @@ def _serialize_space_doc(doc: SpaceDoc) -> SpaceDocItem:
         id=doc.id,
         team_id=doc.team_id,
         title=doc.title,
+        sort_order=doc.sort_order,
         created_by_id=doc.created_by_id,
         created_by_name=getattr(doc.created_by, "full_name", ""),
         created_at=doc.created_at,
@@ -3981,7 +4056,7 @@ def list_space_docs(
             SpaceDoc.team_id == space_id,
             SpaceDoc.trashed_at.is_(None),
         )
-        .order_by(SpaceDoc.updated_at.desc())
+        .order_by(SpaceDoc.sort_order, SpaceDoc.updated_at.desc())
     ).all()
     return SpaceDocListResponse(items=[_serialize_space_doc(d) for d in items])
 
@@ -3993,7 +4068,7 @@ def create_space_doc(
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
 ) -> SpaceDocItem:
-    _ensure_space_manager(db, current_user, space_id)
+    _ensure_space_editor(db, current_user, space_id)
     doc = SpaceDoc(
         id=new_id(),
         team_id=space_id,
@@ -4026,13 +4101,51 @@ def update_space_doc(
     doc = _get_active_space_doc(db, doc_id, with_created_by=True)
     if doc is None:
         raise HTTPException(status_code=404, detail="SpaceDoc not found.")
-    _ensure_space_manager(db, current_user, doc.team_id)
+    fields_set = set(payload.model_fields_set)
+    if fields_set and fields_set.issubset({"sort_order"}):
+        _ensure_space_editor(db, current_user, doc.team_id)
+    else:
+        _ensure_space_manager(db, current_user, doc.team_id)
     if payload.title is not None:
         doc.title = payload.title.strip()
+    if payload.sort_order is not None:
+        doc.sort_order = payload.sort_order
     db.add(doc)
     db.commit()
     db.refresh(doc, ["created_by"])
     return _serialize_space_doc(doc)
+
+
+@router.patch("/spaces/{space_id}/docs/reorder", status_code=status.HTTP_204_NO_CONTENT)
+def reorder_space_docs(
+    space_id: str,
+    payload: SpaceDocReorderRequest,
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+) -> Response:
+    _ensure_space_editor(db, current_user, space_id)
+    item_ids = [item.id for item in payload.items]
+    if len(set(item_ids)) != len(item_ids):
+        raise HTTPException(status_code=400, detail="Duplicate space doc ids are not allowed.")
+
+    docs = list(
+        db.scalars(
+            select(SpaceDoc).where(
+                SpaceDoc.team_id == space_id,
+                SpaceDoc.trashed_at.is_(None),
+                SpaceDoc.id.in_(item_ids),
+            )
+        )
+    )
+    doc_map = {doc.id: doc for doc in docs}
+    if len(doc_map) != len(item_ids):
+        raise HTTPException(status_code=404, detail="SpaceDoc not found.")
+
+    for item in payload.items:
+        doc_map[item.id].sort_order = item.sort_order
+
+    db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.delete("/space-docs/{doc_id}", status_code=status.HTTP_204_NO_CONTENT)

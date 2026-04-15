@@ -3,8 +3,33 @@ import { createPortal } from 'react-dom';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import {
+  DndContext,
+  KeyboardSensor,
+  PointerSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+  type DragOverEvent,
+  type DragStartEvent,
+} from '@dnd-kit/core';
+import {
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
+import {
+  applyFlatReorder,
+  computeFlatDropTarget,
+  resolveFlatDropZone,
+  type FlatDropZone,
+} from '@/src/domains/pms/pms-sidebar-reorder';
+import {
   ArrowDown,
   ArrowUp,
+  ArrowUpDown,
   Calendar,
   CheckSquare,
   ChevronDown,
@@ -30,7 +55,7 @@ import { hasAdminSectionAccess, type AdminSection } from '@/src/domains/admin/ad
 import { useAuth } from '@/src/domains/auth/auth-provider';
 import { hasWorkspaceMembership, teamRoleAllows } from '@/src/domains/auth/auth-api';
 import { listFavoriteDocs, listRecentPages, type FavoriteDocItem, type RecentPageItem } from '@/src/domains/docs/docs-api';
-import { listPmsTaskLists, listFolders, listSpaceDocs, createSpaceDoc, updateSpaceDoc, deleteSpaceDoc, updateFolder, deleteFolder, listSpaces, updateSpace, deleteSpace, type PmsFolder, type PmsTaskList, type PmsSpace, type PmsSpaceDoc } from '@/src/domains/pms/pms-api';
+import { listPmsTaskLists, listFolders, listSpaceDocs, createSpaceDoc, updateSpaceDoc, deleteSpaceDoc, updateFolder, deleteFolder, listSpaces, updateSpace, deleteSpace, reorderPmsTaskLists, reorderSpaceDocs, updatePmsTaskList, type PmsFolder, type PmsTaskList, type PmsSpace, type PmsSpaceDoc } from '@/src/domains/pms/pms-api';
 import {
   buildWorkspaceAppPath,
   resolveDefaultWorkspaceAppPath,
@@ -59,6 +84,7 @@ import { CreateTaskListModal } from '@/src/components/views/PMSView/CreateTaskLi
 import { CreateSpaceModal } from '@/src/components/views/PMSView/CreateSpaceModal';
 import { SpaceMembersModal } from '@/src/components/views/PMSView/SpaceMembersModal';
 import { CreateFolderModal } from '@/src/components/views/PMSView/CreateFolderModal';
+import { SpaceOrderEditorModal } from './SpaceOrderEditorModal';
 import { buildSidebarCategories } from './sub-sidebar-categories';
 
 const SPACE_COLORS = [
@@ -387,6 +413,206 @@ type FolderWithLists = {
   lists: PmsTaskList[];
 };
 
+function useSuppressClickAfterDrag(isDragging: boolean) {
+  const justDraggedRef = useRef(false);
+  useEffect(() => {
+    if (isDragging) {
+      justDraggedRef.current = true;
+      return;
+    }
+    if (!justDraggedRef.current) return;
+    const timer = setTimeout(() => {
+      justDraggedRef.current = false;
+    }, 150);
+    return () => clearTimeout(timer);
+  }, [isDragging]);
+  return useCallback((event: React.MouseEvent) => {
+    if (justDraggedRef.current) {
+      event.preventDefault();
+      event.stopPropagation();
+    }
+  }, []);
+}
+
+const SortableListLink = ({
+  list,
+  activeNavItemId,
+  canDrag,
+  dropZone,
+}: {
+  list: PmsTaskList;
+  activeNavItemId: string;
+  canDrag: boolean;
+  dropZone: FlatDropZone | null;
+}) => {
+  const navigate = useNavigate();
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: list.id,
+    disabled: !canDrag,
+    data: { kind: 'list', parentId: list.folder_id ?? null },
+  });
+  const suppressClick = useSuppressClickAfterDrag(isDragging);
+  const handleClick = useCallback((event: React.MouseEvent<HTMLButtonElement>) => {
+    suppressClick(event);
+    if (event.defaultPrevented) return;
+    navigate(`/tool/pms-list-${list.id}`);
+  }, [list.id, navigate, suppressClick]);
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+  };
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      {...attributes}
+      {...listeners}
+      className={cn('relative', isDragging && 'opacity-30', canDrag && 'touch-none')}
+    >
+      {dropZone === 'before' ? (
+        <div className="pointer-events-none absolute inset-x-1 top-0 z-10 h-0.5 rounded bg-app-accent" />
+      ) : null}
+      <button
+        type="button"
+        onClick={handleClick}
+        className={cn(
+          'sidebar-submenu-item w-full text-left',
+          activeNavItemId === `pms-list-${list.id}` && 'sidebar-submenu-item-active',
+        )}
+      >
+        <ListIcon size={13} className="text-gray-500 shrink-0" />
+        <span className="sidebar-submenu-label">{list.name}</span>
+        <span className="sidebar-submenu-meta">({list.issue_count})</span>
+      </button>
+      {dropZone === 'after' ? (
+        <div className="pointer-events-none absolute inset-x-1 bottom-0 z-10 h-0.5 rounded bg-app-accent" />
+      ) : null}
+    </div>
+  );
+};
+
+const SortableDocLink = ({
+  doc,
+  spaceId,
+  activeNavItemId,
+  canDrag,
+  canManageCollections,
+  dropZone,
+  isRenaming,
+  docRenameValue,
+  docRenameInputRef,
+  docMenuBtnRefs,
+  isMenuOpen,
+  onRenameValueChange,
+  onCommitRename,
+  onCancelRename,
+  onBeginRename,
+  onDelete,
+  onToggleMenu,
+  onCloseMenu,
+}: {
+  doc: PmsSpaceDoc;
+  spaceId: string;
+  activeNavItemId: string;
+  canDrag: boolean;
+  canManageCollections: boolean;
+  dropZone: FlatDropZone | null;
+  isRenaming: boolean;
+  docRenameValue: string;
+  docRenameInputRef: React.RefObject<HTMLInputElement | null>;
+  docMenuBtnRefs: React.MutableRefObject<Map<string, HTMLButtonElement>>;
+  isMenuOpen: boolean;
+  onRenameValueChange: (value: string) => void;
+  onCommitRename: () => void;
+  onCancelRename: () => void;
+  onBeginRename: () => void;
+  onDelete: () => void;
+  onToggleMenu: () => void;
+  onCloseMenu: () => void;
+}) => {
+  const navigate = useNavigate();
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: doc.id,
+    disabled: !canDrag || isRenaming,
+    data: { kind: 'doc', parentId: doc.team_id },
+  });
+  const suppressClick = useSuppressClickAfterDrag(isDragging);
+  const style = { transform: CSS.Transform.toString(transform), transition };
+  const docNavId = `pms-space-${spaceId}-docs-${doc.id}`;
+  const handleClick = useCallback((event: React.MouseEvent<HTMLButtonElement>) => {
+    suppressClick(event);
+    if (event.defaultPrevented) return;
+    navigate(`/tool/${docNavId}`);
+  }, [docNavId, navigate, suppressClick]);
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      {...attributes}
+      {...listeners}
+      className={cn('group/doc relative flex items-center', isDragging && 'opacity-30', canDrag && !isRenaming && 'touch-none')}
+    >
+      {dropZone === 'before' ? (
+        <div className="pointer-events-none absolute inset-x-1 top-0 z-10 h-0.5 rounded bg-app-accent" />
+      ) : null}
+      {isRenaming ? (
+        <div className="sidebar-submenu-item flex-1 min-w-0">
+          <FileText size={13} className="text-gray-500 shrink-0" />
+          <input
+            ref={docRenameInputRef}
+            value={docRenameValue}
+            onChange={(e) => onRenameValueChange(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') onCommitRename();
+              else if (e.key === 'Escape') onCancelRename();
+            }}
+            onBlur={onCommitRename}
+            className="app-text-body-sm flex-1 min-w-0 rounded border border-blue-500 bg-transparent px-1 py-0.5 text-app-ink outline-none"
+            autoFocus
+          />
+        </div>
+      ) : (
+        <button
+          type="button"
+          onClick={handleClick}
+          className={cn('sidebar-submenu-item flex-1 min-w-0 text-left', activeNavItemId === docNavId && 'sidebar-submenu-item-active')}
+        >
+          <FileText size={13} className="text-gray-500 shrink-0" />
+          <span className="sidebar-submenu-label">{doc.title || 'Untitled'}</span>
+        </button>
+      )}
+      {canManageCollections && !isRenaming ? (
+        <>
+          <div className={cn('items-center gap-0.5 pr-1 shrink-0', isMenuOpen ? 'flex' : 'hidden group-hover/doc:flex')}>
+            <button
+              ref={(el) => { if (el) docMenuBtnRefs.current.set(doc.id, el); }}
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={(e) => {
+                e.stopPropagation();
+                onToggleMenu();
+              }}
+              className="p-0.5 hover:bg-app-surface-hover rounded text-gray-600 dark:text-gray-300 hover:text-app-ink dark:hover:text-white transition-colors"
+              title="Doc options"
+            >
+              <MoreHorizontal size={12} />
+            </button>
+          </div>
+          <FolderContextMenu
+            open={isMenuOpen}
+            anchorRef={{ current: docMenuBtnRefs.current.get(doc.id) ?? null }}
+            onClose={onCloseMenu}
+            onRename={onBeginRename}
+            onDelete={onDelete}
+          />
+        </>
+      ) : null}
+      {dropZone === 'after' ? (
+        <div className="pointer-events-none absolute inset-x-1 bottom-0 z-10 h-0.5 rounded bg-app-accent" />
+      ) : null}
+    </div>
+  );
+};
+
 const SpaceItem = ({
   spaceId,
   name,
@@ -406,10 +632,14 @@ const SpaceItem = ({
   onRenameSpace,
   onDeleteSpace,
   onManageMembers,
+  onOpenOrderEditor,
   spaceDocs,
   onRenameDoc,
   onDeleteDoc,
+  onReorderList,
+  onReorderDoc,
   activeNavItemId,
+  canCreateSpaceContent,
   canManageSpace,
   canManageCollections,
 }: {
@@ -431,10 +661,14 @@ const SpaceItem = ({
   onRenameSpace: (newName: string) => void;
   onDeleteSpace: () => void;
   onManageMembers: () => void;
+  onOpenOrderEditor: () => void;
   spaceDocs: PmsSpaceDoc[];
   onRenameDoc: (docId: string, newTitle: string) => void;
   onDeleteDoc: (docId: string) => void;
+  onReorderList: (activeListId: string, overListId: string, zone: FlatDropZone) => Promise<void>;
+  onReorderDoc: (activeDocId: string, overDocId: string, zone: FlatDropZone) => Promise<void>;
   activeNavItemId: string;
+  canCreateSpaceContent: boolean;
   canManageSpace: boolean;
   canManageCollections: boolean;
 }) => {
@@ -465,23 +699,18 @@ const SpaceItem = ({
     || rootLists.some((list) => activeNavItemId === `pms-list-${list.id}`)
     || folders.some(({ lists }) => lists.some((list) => activeNavItemId === `pms-list-${list.id}`));
 
-  type SidebarRootItem =
-    | { kind: 'list'; id: string; name: string; issueCount: number }
-    | { kind: 'doc'; id: string; title: string };
-
-  const rootItems: SidebarRootItem[] = useMemo(() => {
-    const listItems: SidebarRootItem[] = rootLists.map((list) => ({
-      kind: 'list', id: list.id, name: list.name, issueCount: list.issue_count,
-    }));
-    const docItems: SidebarRootItem[] = spaceDocs.map((doc) => ({
-      kind: 'doc', id: doc.id, title: doc.title,
-    }));
-    return [...listItems, ...docItems].sort((a, b) => {
-      const nameA = a.kind === 'list' ? a.name : a.title;
-      const nameB = b.kind === 'list' ? b.name : b.title;
-      return nameA.localeCompare(nameB, 'ko');
-    });
-  }, [rootLists, spaceDocs]);
+  const rootListsOrdered = useMemo(
+    () => [...rootLists].sort(
+      (left, right) => left.sort_order - right.sort_order || left.name.localeCompare(right.name, 'ko'),
+    ),
+    [rootLists],
+  );
+  const rootDocsOrdered = useMemo(
+    () => [...spaceDocs].sort(
+      (left, right) => left.sort_order - right.sort_order || left.title.localeCompare(right.title, 'ko'),
+    ),
+    [spaceDocs],
+  );
 
   useEffect(() => {
     setExpandedFolders((prev) => {
@@ -501,6 +730,73 @@ const SpaceItem = ({
       return next;
     });
   };
+
+  const [dropIndicator, setDropIndicator] = useState<{ overId: string; zone: FlatDropZone } | null>(null);
+  const dragPointerYRef = useRef<number>(0);
+  const dndSensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
+  const handleDragPointerMove = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    dragPointerYRef.current = event.clientY;
+  }, []);
+  const allListsInSpace = useMemo(() => {
+    const out: PmsTaskList[] = [...rootLists];
+    for (const folder of folders) out.push(...folder.lists);
+    return out;
+  }, [folders, rootLists]);
+  const sortableItemIds = useMemo(
+    () => [...allListsInSpace.map((list) => list.id), ...spaceDocs.map((doc) => doc.id)],
+    [allListsInSpace, spaceDocs],
+  );
+  const handleDragStart = useCallback((_event: DragStartEvent) => {
+    setDropIndicator(null);
+  }, []);
+  const handleDragOver = useCallback((event: DragOverEvent) => {
+    const { active, over } = event;
+    if (!over || !active || over.id === active.id) {
+      setDropIndicator(null);
+      return;
+    }
+    const activeKind = active.data.current?.kind as 'list' | 'doc' | undefined;
+    const overKind = over.data.current?.kind as 'list' | 'doc' | undefined;
+    if (!activeKind || !overKind || activeKind !== overKind) {
+      setDropIndicator(null);
+      return;
+    }
+    const overRect = over.rect;
+    if (!overRect) return;
+    const pointerY = dragPointerYRef.current;
+    const pointerWithinRow = pointerY >= overRect.top && pointerY <= overRect.top + overRect.height;
+    let zone: FlatDropZone;
+    if (pointerWithinRow) {
+      zone = resolveFlatDropZone(pointerY, { top: overRect.top, height: overRect.height });
+    } else {
+      const activeRect = active.rect?.current?.translated ?? active.rect?.current?.initial ?? null;
+      if (!activeRect) return;
+      zone = overRect.top < activeRect.top ? 'before' : 'after';
+    }
+    setDropIndicator((current) => (
+      current && current.overId === over.id && current.zone === zone
+        ? current
+        : { overId: String(over.id), zone }
+    ));
+  }, []);
+  const handleDragEnd = useCallback(async (event: DragEndEvent) => {
+    const indicator = dropIndicator;
+    setDropIndicator(null);
+    if (!indicator) return;
+    const activeId = String(event.active.id);
+    if (activeId === indicator.overId) return;
+    const activeKind = event.active.data.current?.kind as 'list' | 'doc' | undefined;
+    const overKind = event.over?.data.current?.kind as 'list' | 'doc' | undefined;
+    if (!activeKind || activeKind !== overKind) return;
+    if (activeKind === 'list') {
+      await onReorderList(activeId, indicator.overId, indicator.zone);
+    } else {
+      await onReorderDoc(activeId, indicator.overId, indicator.zone);
+    }
+  }, [dropIndicator, onReorderDoc, onReorderList]);
 
   return (
     <div className="space-y-0.5">
@@ -566,33 +862,50 @@ const SpaceItem = ({
           )}
         </div>
 
-        {canManageSpace ? (
+        {canCreateSpaceContent || canManageSpace ? (
           <>
             <div className={cn('items-center gap-0.5 pr-1 shrink-0', addPopoverOpen || spaceMenuOpen ? 'flex' : 'hidden group-hover:flex')}>
-              <button
-                ref={spaceMenuBtnRef}
-                onClick={(event) => {
-                  event.preventDefault();
-                  event.stopPropagation();
-                  setSpaceMenuOpen((current) => !current);
-                }}
-                className="p-0.5 hover:bg-app-surface-hover rounded text-gray-600 dark:text-gray-300 hover:text-app-ink dark:hover:text-white transition-colors"
-                title="More"
-              >
-                <MoreHorizontal size={14} />
-              </button>
-              <button
-                ref={addBtnRef}
-                onClick={(event) => {
-                  event.preventDefault();
-                  event.stopPropagation();
-                  setAddPopoverOpen((current) => !current);
-                }}
-                className="p-0.5 hover:bg-app-surface-hover rounded text-gray-600 dark:text-gray-300 hover:text-app-ink dark:hover:text-white transition-colors"
-                title="Add"
-              >
-                <Plus size={14} />
-              </button>
+              {canCreateSpaceContent ? (
+                <button
+                  onClick={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    onOpenOrderEditor();
+                  }}
+                  className="p-0.5 hover:bg-app-surface-hover rounded text-gray-600 dark:text-gray-300 hover:text-app-ink dark:hover:text-white transition-colors"
+                  title="순서 편집"
+                >
+                  <ArrowUpDown size={14} />
+                </button>
+              ) : null}
+              {canManageSpace ? (
+                <button
+                  ref={spaceMenuBtnRef}
+                  onClick={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    setSpaceMenuOpen((current) => !current);
+                  }}
+                  className="p-0.5 hover:bg-app-surface-hover rounded text-gray-600 dark:text-gray-300 hover:text-app-ink dark:hover:text-white transition-colors"
+                  title="More"
+                >
+                  <MoreHorizontal size={14} />
+                </button>
+              ) : null}
+              {canCreateSpaceContent ? (
+                <button
+                  ref={addBtnRef}
+                  onClick={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    setAddPopoverOpen((current) => !current);
+                  }}
+                  className="p-0.5 hover:bg-app-surface-hover rounded text-gray-600 dark:text-gray-300 hover:text-app-ink dark:hover:text-white transition-colors"
+                  title="Add"
+                >
+                  <Plus size={14} />
+                </button>
+              ) : null}
             </div>
 
             <SpaceContextMenu
@@ -624,7 +937,19 @@ const SpaceItem = ({
             exit={{ height: 0, opacity: 0 }}
             className="overflow-hidden"
           >
-            <div className="ml-4 pl-3 border-l border-app-border space-y-1">
+            <DndContext
+              sensors={dndSensors}
+              collisionDetection={closestCenter}
+              onDragStart={handleDragStart}
+              onDragOver={handleDragOver}
+              onDragEnd={handleDragEnd}
+              onDragCancel={() => setDropIndicator(null)}
+            >
+              <SortableContext items={sortableItemIds} strategy={verticalListSortingStrategy}>
+                <div
+                  className="ml-4 pl-3 border-l border-app-border space-y-1"
+                  onPointerMove={handleDragPointerMove}
+                >
               {folders.map(({ folder, lists }, folderIndex) => {
                 const isFolderExpanded = expandedFolders.has(folder.id);
                 const isFolderPopoverOpen = folderPopoverOpen === folder.id;
@@ -647,31 +972,35 @@ const SpaceItem = ({
                         </span>
                         <span className="sidebar-submenu-label">{folder.name}</span>
                       </button>
-                      {canManageSpace ? (
+                      {canCreateSpaceContent || canManageSpace ? (
                         <>
                           <div className={cn('items-center gap-0.5 pr-1 shrink-0', hasAnyPopup ? 'flex' : 'hidden group-hover/folder:flex')}>
-                            <button
-                              ref={(el) => { if (el) folderMenuBtnRefs.current.set(folder.id, el); }}
-                              onClick={(event) => {
-                                event.stopPropagation();
-                                setFolderMenuOpen((current) => (current === folder.id ? null : folder.id));
-                              }}
-                              className="p-0.5 hover:bg-app-surface-hover rounded text-gray-600 dark:text-gray-300 hover:text-app-ink dark:hover:text-white transition-colors"
-                              title="Folder options"
-                            >
-                              <MoreHorizontal size={12} />
-                            </button>
-                            <button
-                              ref={(el) => { if (el) folderAddBtnRefs.current.set(folder.id, el); }}
-                              onClick={(event) => {
-                                event.stopPropagation();
-                                setFolderPopoverOpen((current) => (current === folder.id ? null : folder.id));
-                              }}
-                              className="p-0.5 hover:bg-app-surface-hover rounded text-gray-600 dark:text-gray-300 hover:text-app-ink dark:hover:text-white transition-colors"
-                              title="Add to folder"
-                            >
-                              <Plus size={12} />
-                            </button>
+                            {canManageSpace ? (
+                              <button
+                                ref={(el) => { if (el) folderMenuBtnRefs.current.set(folder.id, el); }}
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  setFolderMenuOpen((current) => (current === folder.id ? null : folder.id));
+                                }}
+                                className="p-0.5 hover:bg-app-surface-hover rounded text-gray-600 dark:text-gray-300 hover:text-app-ink dark:hover:text-white transition-colors"
+                                title="Folder options"
+                              >
+                                <MoreHorizontal size={12} />
+                              </button>
+                            ) : null}
+                            {canCreateSpaceContent ? (
+                              <button
+                                ref={(el) => { if (el) folderAddBtnRefs.current.set(folder.id, el); }}
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  setFolderPopoverOpen((current) => (current === folder.id ? null : folder.id));
+                                }}
+                                className="p-0.5 hover:bg-app-surface-hover rounded text-gray-600 dark:text-gray-300 hover:text-app-ink dark:hover:text-white transition-colors"
+                                title="Add to folder"
+                              >
+                                <Plus size={12} />
+                              </button>
+                            ) : null}
                           </div>
                           <FolderAddPopover
                             open={isFolderPopoverOpen}
@@ -704,20 +1033,13 @@ const SpaceItem = ({
                         >
                           <div className="ml-4 space-y-0.5">
                             {lists.map((list) => (
-                              <Link
+                              <SortableListLink
                                 key={list.id}
-                                to={`/tool/pms-list-${list.id}`}
-                                className={cn(
-                                  'sidebar-submenu-item',
-                                  activeNavItemId === `pms-list-${list.id}` && 'sidebar-submenu-item-active',
-                                )}
-                              >
-                                <ListIcon size={13} className="text-gray-500 shrink-0" />
-                                <span className="sidebar-submenu-label">{list.name}</span>
-                                <span className="sidebar-submenu-meta">
-                                  ({list.issue_count})
-                                </span>
-                              </Link>
+                                list={list}
+                                activeNavItemId={activeNavItemId}
+                                canDrag={false}
+                                dropZone={dropIndicator && dropIndicator.overId === list.id ? dropIndicator.zone : null}
+                              />
                             ))}
                           </div>
                         </motion.div>
@@ -727,92 +1049,46 @@ const SpaceItem = ({
                 );
               })}
 
-              {rootItems.map((item) => {
-                if (item.kind === 'list') {
-                  return (
-                    <Link
-                      key={`list-${item.id}`}
-                      to={`/tool/pms-list-${item.id}`}
-                      className={cn(
-                        'sidebar-submenu-item',
-                        activeNavItemId === `pms-list-${item.id}` && 'sidebar-submenu-item-active',
-                      )}
-                    >
-                      <ListIcon size={13} className="text-gray-500 shrink-0" />
-                      <span className="sidebar-submenu-label">{item.name}</span>
-                      <span className="sidebar-submenu-meta">
-                        ({item.issueCount})
-                      </span>
-                    </Link>
-                  );
-                }
-                const docNavId = `pms-space-${spaceId}-docs-${item.id}`;
-                const isDocMenuOpen = docMenuOpen === item.id;
-                const isDocRenaming = renamingDocId === item.id;
-                return (
-                  <div key={`doc-${item.id}`} className="group/doc flex items-center">
-                    {isDocRenaming ? (
-                      <div className="sidebar-submenu-item flex-1 min-w-0">
-                        <FileText size={13} className="text-gray-500 shrink-0" />
-                        <input
-                          ref={docRenameInputRef}
-                          value={docRenameValue}
-                          onChange={(e) => setDocRenameValue(e.target.value)}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter') {
-                              const trimmed = docRenameValue.trim();
-                              if (trimmed && trimmed !== item.title) onRenameDoc(item.id, trimmed);
-                              setRenamingDocId(null);
-                            } else if (e.key === 'Escape') {
-                              setRenamingDocId(null);
-                            }
-                          }}
-                          onBlur={() => {
-                            const trimmed = docRenameValue.trim();
-                            if (trimmed && trimmed !== item.title) onRenameDoc(item.id, trimmed);
-                            setRenamingDocId(null);
-                          }}
-                          className="app-text-body-sm flex-1 min-w-0 rounded border border-blue-500 bg-transparent px-1 py-0.5 text-app-ink outline-none"
-                          autoFocus
-                        />
-                      </div>
-                    ) : (
-                      <Link
-                        to={`/tool/${docNavId}`}
-                        className={cn('sidebar-submenu-item flex-1 min-w-0', activeNavItemId === docNavId && 'sidebar-submenu-item-active')}
-                      >
-                        <FileText size={13} className="text-gray-500 shrink-0" />
-                        <span className="sidebar-submenu-label">{item.title || 'Untitled'}</span>
-                      </Link>
-                    )}
-                    {canManageCollections ? (
-                      <>
-                        <div className={cn('items-center gap-0.5 pr-1 shrink-0', isDocMenuOpen ? 'flex' : 'hidden group-hover/doc:flex')}>
-                          <button
-                            ref={(el) => { if (el) docMenuBtnRefs.current.set(item.id, el); }}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setDocMenuOpen((c) => (c === item.id ? null : item.id));
-                            }}
-                            className="p-0.5 hover:bg-app-surface-hover rounded text-gray-600 dark:text-gray-300 hover:text-app-ink dark:hover:text-white transition-colors"
-                            title="Doc options"
-                          >
-                            <MoreHorizontal size={12} />
-                          </button>
-                        </div>
-                        <FolderContextMenu
-                          open={isDocMenuOpen}
-                          anchorRef={{ current: docMenuBtnRefs.current.get(item.id) ?? null }}
-                          onClose={() => setDocMenuOpen(null)}
-                          onRename={() => { setDocRenameValue(item.title); setRenamingDocId(item.id); }}
-                          onDelete={() => onDeleteDoc(item.id)}
-                        />
-                      </>
-                    ) : null}
-                  </div>
-                );
-              })}
-            </div>
+              {rootListsOrdered.map((list) => (
+                <SortableListLink
+                  key={`list-${list.id}`}
+                  list={list}
+                  activeNavItemId={activeNavItemId}
+                  canDrag={false}
+                  dropZone={dropIndicator && dropIndicator.overId === list.id ? dropIndicator.zone : null}
+                />
+              ))}
+
+              {rootDocsOrdered.map((doc) => (
+                <SortableDocLink
+                  key={`doc-${doc.id}`}
+                  doc={doc}
+                  spaceId={spaceId}
+                  activeNavItemId={activeNavItemId}
+                  canDrag={false}
+                  canManageCollections={canManageCollections}
+                  dropZone={dropIndicator && dropIndicator.overId === doc.id ? dropIndicator.zone : null}
+                  isRenaming={renamingDocId === doc.id}
+                  docRenameValue={docRenameValue}
+                  docRenameInputRef={docRenameInputRef}
+                  docMenuBtnRefs={docMenuBtnRefs}
+                  isMenuOpen={docMenuOpen === doc.id}
+                  onRenameValueChange={setDocRenameValue}
+                  onCommitRename={() => {
+                    const trimmed = docRenameValue.trim();
+                    if (trimmed && trimmed !== doc.title) onRenameDoc(doc.id, trimmed);
+                    setRenamingDocId(null);
+                  }}
+                  onCancelRename={() => setRenamingDocId(null)}
+                  onBeginRename={() => { setDocRenameValue(doc.title); setRenamingDocId(doc.id); }}
+                  onDelete={() => onDeleteDoc(doc.id)}
+                  onToggleMenu={() => setDocMenuOpen((c) => (c === doc.id ? null : doc.id))}
+                  onCloseMenu={() => setDocMenuOpen(null)}
+                />
+              ))}
+                </div>
+              </SortableContext>
+            </DndContext>
           </motion.div>
         )}
       </AnimatePresence>
@@ -864,6 +1140,10 @@ export const SubSidebar = ({
     name: string;
     canManage: boolean;
     currentUserRole: string | null;
+  } | null>(null);
+  const [orderEditorSpace, setOrderEditorSpace] = useState<{
+    id: string;
+    name: string;
   } | null>(null);
   const [createMenuOpen, setCreateMenuOpen] = useState(false);
   const createMenuRef = useRef<HTMLDivElement>(null);
@@ -1130,6 +1410,86 @@ export const SubSidebar = ({
     } catch { /* ignore */ }
   }, [activeNavItemId, navigate, spaceDocsMap, token]);
 
+  const handleSaveSpaceOrder = useCallback(
+    async (
+      spaceId: string,
+      payload: {
+        lists: Array<{
+          id: string;
+          name: string;
+          folder_id: string | null;
+          sort_order: number;
+          issue_count: number;
+        }>;
+        docs: Array<{
+          id: string;
+          title: string;
+          sort_order: number;
+        }>;
+      },
+    ) => {
+      if (!token) return;
+      const currentLists = pmsLists.filter((list) => list.team_id === spaceId);
+      const currentDocs = spaceDocsMap.get(spaceId) ?? [];
+      const listChanges = payload.lists
+        .filter((item) => {
+          const current = currentLists.find((list) => list.id === item.id);
+          return current && ((current.folder_id ?? null) !== item.folder_id || current.sort_order !== item.sort_order);
+        })
+        .map((item) => ({
+          id: item.id,
+          folder_id: item.folder_id,
+          sort_order: item.sort_order,
+        }));
+      const docChanges = payload.docs
+        .filter((item) => {
+          const current = currentDocs.find((doc) => doc.id === item.id);
+          return current && current.sort_order !== item.sort_order;
+        })
+        .map((item) => ({
+          id: item.id,
+          sort_order: item.sort_order,
+        }));
+
+      if (listChanges.length === 0 && docChanges.length === 0) return;
+
+      const nextListMap = new Map(payload.lists.map((item) => [item.id, item]));
+      const nextDocMap = new Map(payload.docs.map((item) => [item.id, item]));
+      const listSnapshot = pmsLists;
+      const docSnapshot = spaceDocsMap;
+
+      setPmsTaskLists((current) => current.map((list) => {
+        const next = nextListMap.get(list.id);
+        return next ? { ...list, folder_id: next.folder_id, sort_order: next.sort_order } : list;
+      }));
+      setSpaceDocsMap((current) => {
+        const next = new Map(current);
+        const docs = (next.get(spaceId) ?? []).map((doc) => {
+          const updated = nextDocMap.get(doc.id);
+          return updated ? { ...doc, sort_order: updated.sort_order } : doc;
+        });
+        next.set(spaceId, docs);
+        return next;
+      });
+
+      try {
+        await Promise.all([
+          listChanges.length > 0
+            ? reorderPmsTaskLists(token, spaceId, { items: listChanges })
+            : Promise.resolve(),
+          docChanges.length > 0
+            ? reorderSpaceDocs(token, spaceId, { items: docChanges })
+            : Promise.resolve(),
+        ]);
+      } catch (error) {
+        setPmsTaskLists(listSnapshot);
+        setSpaceDocsMap(docSnapshot);
+        throw new Error(getErrorMessage(error, '순서를 저장하지 못했습니다.'));
+      }
+    },
+    [pmsLists, spaceDocsMap, token],
+  );
+
   const handleRenameFolder = useCallback(async (folderId: string, currentName: string) => {
     if (!token) return;
     const newName = await prompt({ title: 'Rename Folder', defaultValue: currentName, placeholder: 'Folder name' });
@@ -1139,6 +1499,83 @@ export const SubSidebar = ({
       setPmsFolders((current) => current.map((f) => (f.id === updated.id ? updated : f)));
     } catch { /* ignore */ }
   }, [token]);
+
+  const handleReorderDoc = useCallback(
+    async (spaceId: string, activeDocId: string, overDocId: string, zone: FlatDropZone) => {
+      if (!token) return;
+      setPmsError(null);
+      const docsInSpace = spaceDocsMap.get(spaceId) ?? [];
+      const items = docsInSpace.map((doc) => ({
+        id: doc.id,
+        parent_id: doc.team_id,
+        sort_order: doc.sort_order,
+        name: doc.title,
+      }));
+      const target = computeFlatDropTarget(items, overDocId, zone);
+      if (!target) return;
+      const result = applyFlatReorder(items, activeDocId, target, { allowCrossParent: false });
+      if (!result) return;
+      const patchMap = new Map(result.nextItems.map((item) => [item.id, item]));
+      const snapshot = spaceDocsMap;
+      setSpaceDocsMap((prev) => {
+        const next = new Map(prev);
+        const docs = (next.get(spaceId) ?? []).map((doc) => {
+          const p = patchMap.get(doc.id);
+          return p ? { ...doc, sort_order: p.sort_order } : doc;
+        });
+        next.set(spaceId, docs);
+        return next;
+      });
+      try {
+        await Promise.all(
+          result.patches.map((patch) => updateSpaceDoc(token, patch.id, {
+            sort_order: patch.sort_order,
+          })),
+        );
+      } catch (error) {
+        setSpaceDocsMap(snapshot);
+        setPmsError(getErrorMessage(error, '문서 순서를 변경하지 못했습니다.'));
+      }
+    },
+    [spaceDocsMap, token],
+  );
+
+  const handleReorderList = useCallback(
+    async (spaceId: string, activeListId: string, overListId: string, zone: FlatDropZone) => {
+      if (!token) return;
+      setPmsError(null);
+      const listsInSpace = pmsLists.filter((list) => list.team_id === spaceId);
+      const items = listsInSpace.map((list) => ({
+        id: list.id,
+        parent_id: list.folder_id ?? null,
+        sort_order: list.sort_order,
+        name: list.name,
+      }));
+      const target = computeFlatDropTarget(items, overListId, zone);
+      if (!target) return;
+      const result = applyFlatReorder(items, activeListId, target);
+      if (!result) return;
+      const patchMap = new Map(result.nextItems.map((item) => [item.id, item]));
+      const snapshot = pmsLists;
+      setPmsTaskLists((current) => current.map((list) => {
+        const next = patchMap.get(list.id);
+        if (!next) return list;
+        return { ...list, sort_order: next.sort_order, folder_id: next.parent_id };
+      }));
+      try {
+        await Promise.all(
+          result.patches.map((patch) => updatePmsTaskList(token, patch.id, {
+            folder_id: patch.parent_id,
+            sort_order: patch.sort_order,
+          })),
+        );
+      } catch (error) {
+        setPmsTaskLists(snapshot);
+        setPmsError(getErrorMessage(error, '리스트 순서를 변경하지 못했습니다.'));
+      }
+    },
+    [pmsLists, token],
+  );
 
   const handleMoveFolder = useCallback(async (spaceId: string, folderId: string, direction: 'up' | 'down') => {
     if (!token) return;
@@ -1304,14 +1741,17 @@ export const SubSidebar = ({
       }
     }
 
+    const sortByOrderThenName = (left: PmsTaskList, right: PmsTaskList) =>
+      left.sort_order - right.sort_order || left.name.localeCompare(right.name, 'ko');
+
     return Array.from(spaces.values())
       .map((space) => ({
         ...space.team,
-        rootLists: [...space.rootLists].sort((left, right) => left.name.localeCompare(right.name, 'ko')),
+        rootLists: [...space.rootLists].sort(sortByOrderThenName),
         folders: Array.from(space.folders.values())
           .map((entry) => ({
             folder: entry.folder,
-            lists: [...entry.lists].sort((left, right) => left.name.localeCompare(right.name, 'ko')),
+            lists: [...entry.lists].sort(sortByOrderThenName),
           }))
           .sort((left, right) => left.folder.sort_order - right.folder.sort_order || left.folder.name.localeCompare(right.folder.name, 'ko')),
       }))
@@ -1381,6 +1821,7 @@ export const SubSidebar = ({
                     </div>
                   ) : null}
                   {groupedSpaces.map((space, index) => {
+                    const spaceCanCreate = teamRoleAllows(space.current_user_role, 'member');
                     const spaceCanManage = canManageSpace(space);
                     return (
                       <SpaceItem
@@ -1410,10 +1851,16 @@ export const SubSidebar = ({
                                 currentUserRole: space.current_user_role,
                               });
                         }}
+                        onOpenOrderEditor={() => {
+                          setOrderEditorSpace({ id: space.id, name: space.name });
+                        }}
                         spaceDocs={spaceDocsMap.get(space.id) ?? []}
                         onRenameDoc={(pageId, newTitle) => { void handleRenameDoc(pageId, newTitle); }}
                         onDeleteDoc={(pageId) => { void handleDeleteDoc(pageId); }}
+                        onReorderList={(activeListId, overListId, zone) => handleReorderList(space.id, activeListId, overListId, zone)}
+                        onReorderDoc={(activeDocId, overDocId, zone) => handleReorderDoc(space.id, activeDocId, overDocId, zone)}
                         activeNavItemId={activeNavItemId}
+                        canCreateSpaceContent={spaceCanCreate}
                         canManageSpace={spaceCanManage}
                         canManageCollections={teamRoleAllows(space.current_user_role, 'admin')}
                       />
@@ -1442,6 +1889,18 @@ export const SubSidebar = ({
     <>
       {confirmDialog}
       {promptDialog}
+      <SpaceOrderEditorModal
+        isOpen={orderEditorSpace !== null}
+        onClose={() => setOrderEditorSpace(null)}
+        spaceName={orderEditorSpace?.name ?? ''}
+        folders={pmsFolders.filter((folder) => folder.team_id === orderEditorSpace?.id)}
+        lists={pmsLists.filter((list) => list.team_id === orderEditorSpace?.id)}
+        docs={orderEditorSpace ? (spaceDocsMap.get(orderEditorSpace.id) ?? []) : []}
+        onSave={async (payload) => {
+          if (!orderEditorSpace) return;
+          await handleSaveSpaceOrder(orderEditorSpace.id, payload);
+        }}
+      />
       {isCollapsed ? (
         <div className="relative h-full w-10 shrink-0 border-r border-app-border bg-app-surface-sidebar flex flex-col items-center pt-4">
           <button
