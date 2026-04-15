@@ -11,7 +11,6 @@ import {
   useSensors,
   type DragEndEvent,
   type DragOverEvent,
-  type DragStartEvent,
 } from '@dnd-kit/core';
 import {
   SortableContext,
@@ -749,7 +748,7 @@ const SpaceItem = ({
     () => [...allListsInSpace.map((list) => list.id), ...spaceDocs.map((doc) => doc.id)],
     [allListsInSpace, spaceDocs],
   );
-  const handleDragStart = useCallback((_event: DragStartEvent) => {
+  const handleDragStart = useCallback(() => {
     setDropIndicator(null);
   }, []);
   const handleDragOver = useCallback((event: DragOverEvent) => {
@@ -1978,14 +1977,13 @@ export const SubSidebar = ({
                   {activeAppId === 'planner' ? (
                     <button
                       type="button"
-                      onClick={() => {
-                        setCreateMenuOpen(false);
-                        window.dispatchEvent(new CustomEvent('planner:create-event'));
-                      }}
-                      className="app-text-control-sm flex w-full items-center gap-2 px-3 py-2 text-left text-app-ink hover:bg-app-surface-hover"
+                      disabled
+                      title="플래너 직접 일정 생성은 아직 준비 중입니다. Meetings에서 회의를 생성하세요."
+                      className="app-text-control-sm flex w-full items-center gap-2 px-3 py-2 text-left text-app-ink/50 opacity-60"
                     >
                       <Calendar size={14} className="text-gray-500" />
                       <span>Event</span>
+                      <span className="ml-auto app-text-overline text-app-ink/40">준비 중</span>
                     </button>
                   ) : null}
                   {activeAppId === 'ai' ? (

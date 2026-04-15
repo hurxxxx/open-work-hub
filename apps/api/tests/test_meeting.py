@@ -1609,6 +1609,51 @@ def test_meeting_time_roundtrip_with_utc_iso_input(client: TestClient) -> None:
     assert patched["end_at"] == "2026-05-10T15:00:00"
 
 
+def test_meeting_offset_datetime_patch_roundtrips_to_calendar(client: TestClient) -> None:
+    admin = _bootstrap_admin_session(client)
+    token = admin["token"]
+
+    meeting = _create_meeting(client, token, title="Offset patch")
+    patch_response = client.patch(
+        f"/api/v1/meeting/meetings/{meeting['id']}",
+        headers=_auth_headers(token),
+        json={
+            "start_at": "2026-05-10T19:00:00+09:00",
+            "end_at": "2026-05-10T20:00:00+09:00",
+        },
+    )
+    assert patch_response.status_code == 200, patch_response.text
+    patched = patch_response.json()
+    # Backend stores naive UTC wall time, so KST 19:00 becomes UTC 10:00.
+    assert patched["start_at"] == "2026-05-10T10:00:00"
+    assert patched["end_at"] == "2026-05-10T11:00:00"
+
+    fetched = client.get(
+        f"/api/v1/meeting/meetings/{meeting['id']}",
+        headers=_auth_headers(token),
+    )
+    assert fetched.status_code == 200, fetched.text
+    fetched_body = fetched.json()
+    assert fetched_body["start_at"] == "2026-05-10T10:00:00"
+    assert fetched_body["end_at"] == "2026-05-10T11:00:00"
+
+    calendar = client.get(
+        "/api/v1/calendar/events",
+        headers=_auth_headers(token),
+        params={
+            "from": "2026-05-10",
+            "to": "2026-05-11",
+            "sources": "meeting",
+        },
+    )
+    assert calendar.status_code == 200, calendar.text
+    items = calendar.json()["items"]
+    assert len(items) == 1
+    assert items[0]["sourceId"] == meeting["id"]
+    assert items[0]["start"] == "2026-05-10T10:00:00+00:00"
+    assert items[0]["end"] == "2026-05-10T11:00:00+00:00"
+
+
 def test_upcoming_scope_does_not_leak_other_users_meetings(
     client: TestClient,
 ) -> None:

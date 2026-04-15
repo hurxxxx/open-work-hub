@@ -77,6 +77,8 @@ def _create_issue_with_due_date(
     list_id: str,
     *,
     due_date: str,
+    start_date: str | None = None,
+    assignee_id: str | None = None,
     title: str = "Issue with due date",
 ) -> dict:
     create = client.post(
@@ -94,9 +96,13 @@ def _create_issue_with_due_date(
     issue = create.json()
     # Set due_date via update endpoint (setup endpoint doesn't take it directly)
     update = client.patch(
-        f"/api/v1/pms/lists/{list_id}/issues/{issue['id']}",
+        f"/api/v1/pms/issues/{issue['id']}",
         headers=_auth_headers(token),
-        json={"due_date": due_date},
+        json={
+            "due_date": due_date,
+            **({"start_date": start_date} if start_date is not None else {}),
+            **({"assignee_id": assignee_id} if assignee_id is not None else {}),
+        },
     )
     assert update.status_code == 200, update.text
     return update.json()
@@ -202,6 +208,107 @@ def test_calendar_events_returns_meeting_for_organizer(client: TestClient) -> No
     assert matching["sourceId"] == meeting["id"]
     assert matching["allDay"] is False
     assert matching["color"] == "#3b82f6"
+
+
+def test_calendar_events_excludes_meeting_starting_at_exclusive_end(client: TestClient) -> None:
+    admin = _bootstrap_admin_session(client)
+    token = admin["token"]
+    start = datetime(2026, 5, 1, 0, 0, 0)
+    end = start + timedelta(hours=1)
+    _create_meeting(
+        client,
+        token,
+        title="Boundary meeting",
+        start_at=start,
+        end_at=end,
+    )
+
+    response = client.get(
+        "/api/v1/calendar/events",
+        headers=_auth_headers(token),
+        params={
+            "from": "2026-04-01",
+            "to": "2026-05-01",
+            "sources": "meeting",
+        },
+    )
+    assert response.status_code == 200, response.text
+    assert "Boundary meeting" not in [item["title"] for item in response.json()["items"]]
+
+
+def test_calendar_events_date_only_and_offset_ranges_match(client: TestClient) -> None:
+    admin = _bootstrap_admin_session(client)
+    token = admin["token"]
+    start = datetime(2026, 4, 15, 1, 0, 0)
+    end = start + timedelta(hours=1)
+    _create_meeting(
+        client,
+        token,
+        title="Offset range meeting",
+        start_at=start,
+        end_at=end,
+    )
+
+    date_only = client.get(
+        "/api/v1/calendar/events",
+        headers=_auth_headers(token),
+        params={
+            "from": "2026-04-15",
+            "to": "2026-04-16",
+            "sources": "meeting",
+        },
+    )
+    offset_range = client.get(
+        "/api/v1/calendar/events",
+        headers=_auth_headers(token),
+        params={
+            "from": "2026-04-15T00:00:00+09:00",
+            "to": "2026-04-16T00:00:00+09:00",
+            "sources": "meeting",
+        },
+    )
+    assert date_only.status_code == 200, date_only.text
+    assert offset_range.status_code == 200, offset_range.text
+    assert date_only.json() == offset_range.json()
+
+
+def test_calendar_events_pms_all_day_end_is_exclusive(client: TestClient) -> None:
+    admin = _bootstrap_admin_session(client)
+    token = admin["token"]
+    task_list = _create_task_list(client, token)
+    due_issue = _create_issue_with_due_date(
+        client,
+        token,
+        task_list["id"],
+        due_date="2026-04-20",
+        assignee_id=admin["user"]["id"],
+        title="Due on Apr 20",
+    )
+    block_issue = _create_issue_with_due_date(
+        client,
+        token,
+        task_list["id"],
+        start_date="2026-04-18",
+        due_date="2026-04-20",
+        assignee_id=admin["user"]["id"],
+        title="Block through Apr 20",
+    )
+
+    response = client.get(
+        "/api/v1/calendar/events",
+        headers=_auth_headers(token),
+        params={
+            "from": "2026-04-01",
+            "to": "2026-05-01",
+            "sources": "pms_due,pms_block",
+        },
+    )
+    assert response.status_code == 200, response.text
+    items = {item["sourceId"]: item for item in response.json()["items"]}
+    assert items[due_issue["id"]]["start"] == "2026-04-20"
+    assert items[due_issue["id"]]["end"] == "2026-04-21"
+    assert items[block_issue["id"]]["start"] == "2026-04-18"
+    assert items[block_issue["id"]]["end"] == "2026-04-21"
 
 
 def test_calendar_events_assignee_id_query_param_is_ignored(client: TestClient) -> None:

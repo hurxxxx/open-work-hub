@@ -371,20 +371,14 @@ def _serialize_attendee(attendee: MeetingAttendee) -> MeetingAttendeeOut:
 
 
 def _serialize_task_link(
-    db: Session, link: MeetingTaskLink
+    link: MeetingTaskLink,
+    *,
+    issues_by_id: dict[str, Issue],
 ) -> MeetingTaskLinkOut:
-    issue = db.scalar(
-        select(Issue).where(Issue.id == link.issue_id)
-    )
-    list_key = ""
-    issue_title = ""
-    issue_number = 0
-    if issue is not None:
-        issue_title = issue.title
-        issue_number = issue.issue_number
-        pms_list = db.scalar(select(TaskList).where(TaskList.id == issue.list_id))
-        if pms_list is not None:
-            list_key = pms_list.key
+    issue = issues_by_id.get(link.issue_id)
+    list_key = issue.task_list.key if issue and issue.task_list else ""
+    issue_title = issue.title if issue is not None else ""
+    issue_number = issue.issue_number if issue is not None else 0
     return MeetingTaskLinkOut(
         id=link.id,
         issue_id=link.issue_id,
@@ -396,8 +390,12 @@ def _serialize_task_link(
     )
 
 
-def _serialize_doc_link(db: Session, link: MeetingDocLink) -> MeetingDocLinkOut:
-    doc = db.scalar(select(NativeDoc).where(NativeDoc.id == link.doc_id))
+def _serialize_doc_link(
+    link: MeetingDocLink,
+    *,
+    docs_by_id: dict[str, NativeDoc],
+) -> MeetingDocLinkOut:
+    doc = docs_by_id.get(link.doc_id)
     return MeetingDocLinkOut(
         id=link.id,
         doc_id=link.doc_id,
@@ -405,6 +403,32 @@ def _serialize_doc_link(db: Session, link: MeetingDocLink) -> MeetingDocLinkOut:
         added_by_id=link.added_by_id,
         created_at=link.created_at,
     )
+
+
+def _load_task_link_issue_map(
+    db: Session,
+    task_links: list[MeetingTaskLink],
+) -> dict[str, Issue]:
+    issue_ids = [link.issue_id for link in task_links]
+    if not issue_ids:
+        return {}
+    issues = db.scalars(
+        select(Issue)
+        .where(Issue.id.in_(issue_ids))
+        .options(selectinload(Issue.task_list))
+    ).all()
+    return {issue.id: issue for issue in issues}
+
+
+def _load_doc_link_doc_map(
+    db: Session,
+    doc_links: list[MeetingDocLink],
+) -> dict[str, NativeDoc]:
+    doc_ids = [link.doc_id for link in doc_links]
+    if not doc_ids:
+        return {}
+    docs = db.scalars(select(NativeDoc).where(NativeDoc.id.in_(doc_ids))).all()
+    return {doc.id: doc for doc in docs}
 
 
 def _build_file_download_url(storage_key: str) -> str:
@@ -444,6 +468,8 @@ def _serialize_recording(recording) -> MeetingRecordingOut:
 
 
 def _serialize_meeting(db: Session, meeting: Meeting) -> MeetingDetail:
+    issues_by_id = _load_task_link_issue_map(db, meeting.task_links)
+    docs_by_id = _load_doc_link_doc_map(db, meeting.doc_links)
     return MeetingDetail(
         id=meeting.id,
         workspace_id=meeting.workspace_id,
@@ -457,8 +483,14 @@ def _serialize_meeting(db: Session, meeting: Meeting) -> MeetingDetail:
         end_at=meeting.end_at,
         status=meeting.status,  # type: ignore[arg-type]
         attendees=[_serialize_attendee(a) for a in meeting.attendees],
-        task_links=[_serialize_task_link(db, link) for link in meeting.task_links],
-        doc_links=[_serialize_doc_link(db, link) for link in meeting.doc_links],
+        task_links=[
+            _serialize_task_link(link, issues_by_id=issues_by_id)
+            for link in meeting.task_links
+        ],
+        doc_links=[
+            _serialize_doc_link(link, docs_by_id=docs_by_id)
+            for link in meeting.doc_links
+        ],
         file_attachments=[
             _serialize_file_attachment(att)
             for att in sorted(meeting.file_attachments, key=lambda a: a.created_at)

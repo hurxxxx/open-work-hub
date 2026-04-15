@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { motion } from 'motion/react';
 import { ChevronLeft, ChevronRight, Plus } from 'lucide-react';
@@ -15,9 +15,7 @@ import {
   type UnifiedCalendarView,
 } from '@/src/components/calendar/UnifiedCalendar';
 import { MeetingPreviewModal } from '@/src/components/calendar/MeetingPreviewModal';
-import { SchedulePopover } from './SchedulePopover';
 
-const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const MONTH_NAMES_LONG = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 const PICKER_DAYS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 
@@ -30,6 +28,13 @@ const VIEW_MODE_TO_FC: Record<PlannerViewMode, UnifiedCalendarView> = {
   Agenda: 'listWeek',
 };
 
+const FC_VIEW_TO_MODE: Record<UnifiedCalendarView, PlannerViewMode> = {
+  dayGridMonth: 'Month',
+  timeGridWeek: 'Week',
+  timeGridDay: 'Day',
+  listWeek: 'Agenda',
+};
+
 /** Subtract one day from a "YYYY-MM-DD" string. Used to convert FullCalendar's
  *  exclusive all-day end (next day 00:00) into the stored inclusive due_date. */
 function decrementYmd(ymd: string): string {
@@ -37,6 +42,65 @@ function decrementYmd(ymd: string): string {
   const date = new Date(Date.UTC(y, m - 1, d));
   date.setUTCDate(date.getUTCDate() - 1);
   return date.toISOString().slice(0, 10);
+}
+
+function formatLocalYmd(date: Date): string {
+  return [
+    date.getFullYear(),
+    String(date.getMonth() + 1).padStart(2, '0'),
+    String(date.getDate()).padStart(2, '0'),
+  ].join('-');
+}
+
+function startOfLocalDay(date: Date): Date {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+}
+
+function addDays(date: Date, days: number): Date {
+  const next = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  next.setDate(next.getDate() + days);
+  return next;
+}
+
+function startOfWeek(date: Date): Date {
+  return addDays(startOfLocalDay(date), -startOfLocalDay(date).getDay());
+}
+
+function buildInitialPlannerRange(
+  currentDate: Date,
+  viewMode: PlannerViewMode,
+): { currentDate: Date; rangeStart: string; rangeEnd: string } {
+  const current = startOfLocalDay(currentDate);
+  if (viewMode === 'Month') {
+    const monthStart = new Date(current.getFullYear(), current.getMonth(), 1);
+    const rangeStart = startOfWeek(monthStart);
+    const rangeEnd = addDays(rangeStart, 42);
+    return {
+      currentDate: current,
+      rangeStart: formatLocalYmd(rangeStart),
+      rangeEnd: formatLocalYmd(rangeEnd),
+    };
+  }
+  if (viewMode === 'Day') {
+    return {
+      currentDate: current,
+      rangeStart: formatLocalYmd(current),
+      rangeEnd: formatLocalYmd(addDays(current, 1)),
+    };
+  }
+  const rangeStart = startOfWeek(current);
+  return {
+    currentDate: current,
+    rangeStart: formatLocalYmd(rangeStart),
+    rangeEnd: formatLocalYmd(addDays(rangeStart, 7)),
+  };
+}
+
+function formatPlannerHeading(viewMode: PlannerViewMode, currentDate: Date): string {
+  if (viewMode === 'Day') {
+    return `${MONTH_NAMES_LONG[currentDate.getMonth()]} ${currentDate.getDate()}, ${currentDate.getFullYear()}`;
+  }
+  return `${MONTH_NAMES_LONG[currentDate.getMonth()]} ${currentDate.getFullYear()}`;
 }
 
 interface DatePickerPopoverProps {
@@ -175,39 +239,18 @@ export const PlannerView = () => {
   const { token } = useAuth();
   const { workspaceSlug } = useParams();
   const [viewMode, setViewMode] = useState<PlannerViewMode>('Month');
-  const [viewYear, setViewYear] = useState(today.getFullYear());
-  const [viewMonth, setViewMonth] = useState(today.getMonth());
-  const [selectedDate, setSelectedDate] = useState(today.getDate());
+  const [calendarState, setCalendarState] = useState(() =>
+    buildInitialPlannerRange(today, 'Month'),
+  );
 
   const calendarRef = useRef<UnifiedCalendarHandle | null>(null);
 
-  // Calendar event range query — Phase 1.3 uses mock fixture; Phase 2 will swap
-  // useMockData → false to hit GET /api/v1/calendar/events.
-  const range = useMemo(() => {
-    // Fetch a generous window around the focused month so navigation is
-    // immediately populated without a refetch flicker.
-    const start = new Date(viewYear, viewMonth - 1, 1);
-    const end = new Date(viewYear, viewMonth + 2, 1);
-    return {
-      from: start.toISOString().slice(0, 10),
-      to: end.toISOString().slice(0, 10),
-    };
-  }, [viewYear, viewMonth]);
-
   const { events, loading, error, refresh } = useCalendarEvents({
     workspaceSlug,
-    from: range.from,
-    to: range.to,
-    // Phase 2 ships the backend endpoint — flip back to true to dev against mock.
+    from: calendarState.rangeStart,
+    to: calendarState.rangeEnd,
     useMockData: false,
   });
-
-  const [popoverState, setPopoverState] = useState<{
-    isOpen: boolean;
-    initialDate?: string;
-    initialStartTime?: string;
-    initialEndTime?: string;
-  }>({ isOpen: false });
 
   // Mini date-picker popover. The picker has its own (year, month) cursor so
   // the user can browse without committing — the main view only updates when
@@ -237,45 +280,27 @@ export const PlannerView = () => {
 
   // When the popover opens, sync its cursor to whatever the main view is showing.
   const openPicker = () => {
-    setPickerYear(viewYear);
-    setPickerMonth(viewMonth);
+    setPickerYear(calendarState.currentDate.getFullYear());
+    setPickerMonth(calendarState.currentDate.getMonth());
     setPickerOpen(true);
   };
-
-  // Allow the SubSidebar header "+" button to open the schedule popover
-  // without owning a reference to this component.
-  useEffect(() => {
-    const handler = () => setPopoverState({ isOpen: true });
-    window.addEventListener('planner:create-event', handler);
-    return () => window.removeEventListener('planner:create-event', handler);
-  }, []);
 
   const setMode = (mode: PlannerViewMode) => {
     setViewMode(mode);
     calendarRef.current?.changeView(VIEW_MODE_TO_FC[mode]);
-    setPopoverState((prev) => ({ ...prev, isOpen: false }));
   };
 
-  const goToPreviousMonth = () => {
-    const next = new Date(viewYear, viewMonth - 1, 1);
-    setViewYear(next.getFullYear());
-    setViewMonth(next.getMonth());
+  const goToPreviousPeriod = () => {
     calendarRef.current?.prev();
   };
 
-  const goToNextMonth = () => {
-    const next = new Date(viewYear, viewMonth + 1, 1);
-    setViewYear(next.getFullYear());
-    setViewMonth(next.getMonth());
+  const goToNextPeriod = () => {
     calendarRef.current?.next();
   };
 
   const goToToday = () => {
-    const now = new Date();
-    setViewYear(now.getFullYear());
-    setViewMonth(now.getMonth());
-    setSelectedDate(now.getDate());
     calendarRef.current?.today();
+    setPickerOpen(false);
   };
 
   const [actionError, setActionError] = useState<string | null>(null);
@@ -285,6 +310,36 @@ export const PlannerView = () => {
     const id = window.setTimeout(() => setActionError(null), 4000);
     return () => window.clearTimeout(id);
   }, [actionError]);
+
+  const handleDatesSet = useCallback(
+    (nextState: {
+      view: UnifiedCalendarView;
+      currentDate: Date;
+      rangeStart: Date;
+      rangeEnd: Date;
+    }) => {
+      const nextMode = FC_VIEW_TO_MODE[nextState.view];
+      setViewMode((current) => (current === nextMode ? current : nextMode));
+      setCalendarState((current) => {
+        const nextCurrentDate = startOfLocalDay(nextState.currentDate);
+        const nextRangeStart = formatLocalYmd(nextState.rangeStart);
+        const nextRangeEnd = formatLocalYmd(nextState.rangeEnd);
+        if (
+          current.currentDate.getTime() === nextCurrentDate.getTime()
+          && current.rangeStart === nextRangeStart
+          && current.rangeEnd === nextRangeEnd
+        ) {
+          return current;
+        }
+        return {
+          currentDate: nextCurrentDate,
+          rangeStart: nextRangeStart,
+          rangeEnd: nextRangeEnd,
+        };
+      });
+    },
+    [],
+  );
 
   const handleEventClick = (event: CalendarEvent) => {
     if (!workspaceSlug) return;
@@ -393,24 +448,6 @@ export const PlannerView = () => {
     revert();
   };
 
-  const handleDateSelect = (range: { start: Date; end: Date; allDay: boolean }) => {
-    const start = range.start;
-    const end = range.end;
-    const formatTime = (d: Date) => {
-      const h = d.getHours();
-      const m = d.getMinutes();
-      const ampm = h >= 12 ? 'PM' : 'AM';
-      const h12 = h % 12 === 0 ? 12 : h % 12;
-      return `${h12}:${String(m).padStart(2, '0')} ${ampm}`;
-    };
-    setPopoverState({
-      isOpen: true,
-      initialDate: `${MONTH_NAMES[start.getMonth()]} ${start.getDate()}, ${start.getFullYear()}`,
-      initialStartTime: range.allDay ? '09:00 AM' : formatTime(start),
-      initialEndTime: range.allDay ? '10:00 AM' : formatTime(end),
-    });
-  };
-
   return (
     <motion.div
       initial={{ opacity: 0 }}
@@ -448,8 +485,8 @@ export const PlannerView = () => {
           <div ref={pickerRef} className="relative flex items-center gap-1">
             <button
               type="button"
-              onClick={goToPreviousMonth}
-              aria-label="Previous month"
+              onClick={goToPreviousPeriod}
+              aria-label="Previous period"
               className="flex h-8 w-8 items-center justify-center rounded-md text-gray-500 transition-colors hover:bg-app-surface-hover hover:text-app-ink"
             >
               <ChevronLeft size={16} />
@@ -461,14 +498,12 @@ export const PlannerView = () => {
               aria-expanded={pickerOpen}
               className="app-text-control flex h-8 min-w-[180px] items-center justify-center rounded-md text-app-ink tabular-nums transition-colors hover:bg-app-surface-hover"
             >
-              {viewMode === 'Day'
-                ? `${MONTH_NAMES_LONG[viewMonth]} ${selectedDate}, ${viewYear}`
-                : `${MONTH_NAMES_LONG[viewMonth]} ${viewYear}`}
+              {formatPlannerHeading(viewMode, calendarState.currentDate)}
             </button>
             <button
               type="button"
-              onClick={goToNextMonth}
-              aria-label="Next month"
+              onClick={goToNextPeriod}
+              aria-label="Next period"
               className="flex h-8 w-8 items-center justify-center rounded-md text-gray-500 transition-colors hover:bg-app-surface-hover hover:text-app-ink"
             >
               <ChevronRight size={16} />
@@ -477,9 +512,9 @@ export const PlannerView = () => {
               <DatePickerPopover
                 pickerYear={pickerYear}
                 pickerMonth={pickerMonth}
-                viewYear={viewYear}
-                viewMonth={viewMonth}
-                selectedDate={selectedDate}
+                viewYear={calendarState.currentDate.getFullYear()}
+                viewMonth={calendarState.currentDate.getMonth()}
+                selectedDate={calendarState.currentDate.getDate()}
                 today={today}
                 onPrev={() => {
                   const next = new Date(pickerYear, pickerMonth - 1, 1);
@@ -496,23 +531,26 @@ export const PlannerView = () => {
                   setPickerOpen(false);
                 }}
                 onPickDate={(year, month, day) => {
-                  setViewYear(year);
-                  setViewMonth(month);
-                  setSelectedDate(day);
                   calendarRef.current?.gotoDate(new Date(year, month, day));
                   setPickerOpen(false);
                 }}
               />
             ) : null}
           </div>
-          <button
-            type="button"
-            onClick={() => setPopoverState({ isOpen: true })}
-            className="app-text-control flex items-center gap-2 rounded-md bg-app-accent px-4 py-2 text-app-bg"
-          >
-            <Plus size={16} />
-            <span>Add Event</span>
-          </button>
+          <div className="flex flex-col items-end gap-1">
+            <button
+              type="button"
+              disabled
+              title="플래너 직접 일정 생성은 아직 준비 중입니다. Meetings에서 회의를 생성하세요."
+              className="app-text-control flex items-center gap-2 rounded-md border border-app-border bg-app-surface-sidebar px-4 py-2 text-app-ink/50 opacity-60"
+            >
+              <Plus size={16} />
+              <span>Add Event</span>
+            </button>
+            <p className="app-text-caption text-app-ink/50">
+              일정 생성은 아직 준비 중입니다. 회의 생성은 Meetings에서 사용할 수 있습니다.
+            </p>
+          </div>
         </div>
       </div>
 
@@ -546,22 +584,14 @@ export const PlannerView = () => {
               ref={calendarRef}
               events={events}
               initialView={VIEW_MODE_TO_FC[viewMode]}
-              initialDate={new Date(viewYear, viewMonth, selectedDate)}
-              onDateSelect={handleDateSelect}
+              initialDate={calendarState.currentDate}
+              onDatesSet={handleDatesSet}
               onEventClick={handleEventClick}
               onEventDrop={handleEventDrop}
               onEventResize={handleEventResize}
             />
           </div>
         )}
-
-        <SchedulePopover
-          isOpen={popoverState.isOpen}
-          onClose={() => setPopoverState((prev) => ({ ...prev, isOpen: false }))}
-          initialDate={popoverState.initialDate}
-          initialStartTime={popoverState.initialStartTime}
-          initialEndTime={popoverState.initialEndTime}
-        />
       </div>
 
       <MeetingPreviewModal

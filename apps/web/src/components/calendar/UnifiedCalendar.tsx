@@ -28,6 +28,7 @@ import type {
   EventInput,
   EventClickArg,
   DateSelectArg,
+  DatesSetArg,
   EventDropArg,
 } from '@fullcalendar/core';
 import type { EventResizeDoneArg } from '@fullcalendar/interaction';
@@ -56,6 +57,13 @@ export interface UnifiedCalendarProps {
   events: CalendarEvent[];
   initialView?: UnifiedCalendarView;
   initialDate?: Date | string;
+  /** Fired when the calendar's visible range or active date changes. */
+  onDatesSet?: (state: {
+    view: UnifiedCalendarView;
+    currentDate: Date;
+    rangeStart: Date;
+    rangeEnd: Date;
+  }) => void;
   /** Fired when user clicks an existing event chip. */
   onEventClick?: (event: CalendarEvent, anchorEl: HTMLElement) => void;
   /** Fired when user drag-selects an empty time range to create a new event. */
@@ -146,6 +154,7 @@ export const UnifiedCalendar = forwardRef<UnifiedCalendarHandle, UnifiedCalendar
       events,
       initialView = 'dayGridMonth',
       initialDate,
+      onDatesSet,
       onEventClick,
       onDateSelect,
       onEventDrop,
@@ -193,11 +202,20 @@ export const UnifiedCalendar = forwardRef<UnifiedCalendarHandle, UnifiedCalendar
           headerToolbar={false}
           nowIndicator
           dayMaxEvents={2}
-          selectable
-          editable
-          eventDurationEditable
+          selectable={Boolean(onDateSelect)}
+          editable={Boolean(onEventDrop || onEventResize)}
+          eventDurationEditable={Boolean(onEventResize)}
           height={height}
           events={fcEvents}
+          datesSet={(arg: DatesSetArg) => {
+            const currentDate = calendarRef.current?.getApi().getDate() ?? arg.start;
+            onDatesSet?.({
+              view: arg.view.type as UnifiedCalendarView,
+              currentDate,
+              rangeStart: arg.start,
+              rangeEnd: arg.end,
+            });
+          }}
           dayCellClassNames={
             showKoreanHolidays
               ? (arg) => koreanHolidayDayClass(arg.date)

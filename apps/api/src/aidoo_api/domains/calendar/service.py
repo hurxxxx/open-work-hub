@@ -18,10 +18,10 @@ uses ``selectinload(Issue.assignee_links)`` for the same reason.
 ENG-HIGH-4: Caller is responsible for enforcing the 366-day range cap before
 calling this service. Router enforces it.
 
-ENG-MED-4: This service reuses ``meeting_service.list_meetings`` for the
-meeting half of the query (single source of truth for meeting filter logic).
-The PMS half lives here as a dedicated cross-list query because PMS does not
-have an equivalent service helper today.
+ENG-MED-4: This service owns its calendar-specific meeting overlap query
+instead of reusing ``meeting_service.list_meetings``. The meeting list API has
+different range semantics, so sharing the helper would leak inclusive-end
+behavior into the calendar endpoint.
 """
 from __future__ import annotations
 
@@ -32,7 +32,7 @@ from sqlalchemy import or_, select
 from sqlalchemy.orm import Session, selectinload
 
 from aidoo_api.domains.auth.models import Team, User, Workspace
-from aidoo_api.domains.meeting import service as meeting_service
+from aidoo_api.domains.meeting.models import Meeting, MeetingAttendee
 from aidoo_api.domains.pms.models import Issue, IssueAssignee, TaskList
 
 from .schemas import (
@@ -115,30 +115,41 @@ def _meeting_events(
     from_at: datetime,
     to_at: datetime,
 ) -> list[CalendarEventOut]:
-    response = meeting_service.list_meetings(
-        db,
-        workspace=workspace,
-        user=user,
-        scope="all",
-        from_at=from_at,
-        to_at=to_at,
+    attendee_meeting_ids = select(MeetingAttendee.meeting_id).where(
+        MeetingAttendee.user_id == user.id
     )
+    meetings = db.scalars(
+        select(Meeting)
+        .where(Meeting.workspace_id == workspace.id)
+        .where(
+            or_(
+                Meeting.organizer_id == user.id,
+                Meeting.id.in_(attendee_meeting_ids),
+            )
+        )
+        # Calendar contract is [from, to): exclude events starting exactly at
+        # the exclusive end, include events that overlap the range.
+        .where(Meeting.end_at > from_at)
+        .where(Meeting.start_at < to_at)
+        .options(selectinload(Meeting.attendees))
+        .order_by(Meeting.start_at.asc())
+    ).all()
     return [
         CalendarEventOut(
-            id=f"meeting-{item.id}",
-            title=item.title,
-            start=_utc_iso(item.start_at),
-            end=_utc_iso(item.end_at),
+            id=f"meeting-{meeting.id}",
+            title=meeting.title,
+            start=_utc_iso(meeting.start_at),
+            end=_utc_iso(meeting.end_at),
             all_day=False,
             source_type="meeting",
-            source_id=item.id,
+            source_id=meeting.id,
             color=_SOURCE_COLORS["meeting"],
             metadata=CalendarEventMetadata(
-                meeting_id=item.id,
-                attendee_count=item.attendee_count,
+                meeting_id=meeting.id,
+                attendee_count=len(meeting.attendees),
             ),
         )
-        for item in response.items
+        for meeting in meetings
     ]
 
 
@@ -265,13 +276,17 @@ def parse_iso_or_date(value: str) -> datetime:
     """Parse the from/to query parameter as either ISO date or datetime.
 
     Date-only inputs are treated as midnight UTC-naive (the SQL columns are
-    naive). Datetime inputs are accepted as-is.
+    naive). Offset-aware datetimes are normalized to naive UTC so SQL range
+    comparisons stay consistent regardless of the driver's timezone handling.
     """
     try:
-        return datetime.fromisoformat(value)
+        parsed = datetime.fromisoformat(value)
     except ValueError as exc:
         try:
             d = date.fromisoformat(value)
             return datetime.combine(d, time.min)
         except ValueError:
             raise exc
+    if parsed.tzinfo is not None:
+        return parsed.astimezone(UTC).replace(tzinfo=None)
+    return parsed
