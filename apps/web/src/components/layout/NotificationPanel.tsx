@@ -25,29 +25,35 @@ export function NotificationPanel({
   onClose,
   onNavigateToIssue,
   onCountChange,
+  workspaceSlug,
 }: {
   onClose: () => void;
   onNavigateToIssue?: (issueId: string) => void;
   onCountChange?: (count: number) => void;
+  workspaceSlug: string | null;
 }) {
   const { token } = useAuth();
   const [notifications, setNotifications] = useState<PmsNotification[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!token) return;
+    if (!token || !workspaceSlug) {
+      setNotifications([]);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
-    listNotifications(token)
+    listNotifications(token, 1, workspaceSlug)
       .then(res => setNotifications(res.items))
       .finally(() => setLoading(false));
-  }, [token]);
+  }, [token, workspaceSlug]);
 
   const handleRead = useCallback(async (n: PmsNotification) => {
-    if (!token || n.is_read) return;
-    await markNotificationRead(token, n.id);
+    if (!token || !workspaceSlug || n.is_read) return;
+    await markNotificationRead(token, n.id, workspaceSlug);
     setNotifications(prev => prev.map(item => item.id === n.id ? { ...item, is_read: true } : item));
     onCountChange?.(-1);
-  }, [token, onCountChange]);
+  }, [token, onCountChange, workspaceSlug]);
 
   const handleClick = useCallback((n: PmsNotification) => {
     void handleRead(n);
@@ -58,12 +64,12 @@ export function NotificationPanel({
   }, [handleRead, onNavigateToIssue, onClose]);
 
   const handleReadAll = useCallback(async () => {
-    if (!token) return;
-    await markAllNotificationsRead(token);
+    if (!token || !workspaceSlug) return;
+    await markAllNotificationsRead(token, workspaceSlug);
     const unreadCount = notifications.filter(n => !n.is_read).length;
     setNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
     onCountChange?.(-unreadCount);
-  }, [token, notifications, onCountChange]);
+  }, [token, notifications, onCountChange, workspaceSlug]);
 
   return (
     <>
@@ -95,31 +101,37 @@ export function NotificationPanel({
             <p className="app-text-body text-center text-app-ink/30 py-8">No notifications</p>
           ) : (
             notifications.map(n => (
-              <button
+              <div
                 key={n.id}
-                onClick={() => handleClick(n)}
                 className={`w-full text-left px-4 py-3 border-b border-app-border hover:bg-app-surface-hover transition-colors ${
                   n.is_read ? 'opacity-60' : ''
                 }`}
               >
                 <div className="flex items-start gap-2">
-                  {!n.is_read && <span className="w-2 h-2 rounded-full bg-app-accent shrink-0 mt-1.5" />}
-                  <div className="flex-1 min-w-0">
-                    <p className="app-text-body truncate font-medium text-app-ink">{n.title}</p>
-                    <p className="app-text-caption mt-0.5 truncate text-app-ink/50">{n.body}</p>
-                    <span className="app-text-micro text-app-ink/30">{timeAgo(n.created_at)}</span>
-                  </div>
+                  <button
+                    onClick={() => handleClick(n)}
+                    className="flex min-w-0 flex-1 items-start gap-2 text-left"
+                    type="button"
+                  >
+                    {!n.is_read && <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-app-accent" />}
+                    <div className="flex-1 min-w-0">
+                      <p className="app-text-body truncate font-medium text-app-ink">{n.title}</p>
+                      <p className="app-text-caption mt-0.5 truncate text-app-ink/50">{n.body}</p>
+                      <span className="app-text-micro text-app-ink/30">{timeAgo(n.created_at)}</span>
+                    </div>
+                  </button>
                   {!n.is_read && (
                     <button
-                      onClick={e => { e.stopPropagation(); void handleRead(n); }}
-                      className="text-app-ink/30 hover:text-app-accent shrink-0 mt-1"
+                      onClick={() => void handleRead(n)}
+                      className="mt-1 shrink-0 text-app-ink/30 hover:text-app-accent"
                       title="Mark as read"
+                      type="button"
                     >
                       <Check size={12} />
                     </button>
                   )}
                 </div>
-              </button>
+              </div>
             ))
           )}
         </div>

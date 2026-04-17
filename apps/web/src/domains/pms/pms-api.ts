@@ -943,20 +943,54 @@ export interface PmsUnreadCountResponse {
   count: number;
 }
 
-export function listNotifications(token: string, page = 1): Promise<PmsNotificationsResponse> {
-  return request<PmsNotificationsResponse>(`/api/v1/pms/notifications?page=${page}&page_size=20`, token);
+export function listNotifications(
+  token: string,
+  page = 1,
+  workspaceSlug?: string | null,
+): Promise<PmsNotificationsResponse> {
+  return request<PmsNotificationsResponse>(
+    `/api/v1/pms/notifications?page=${page}&page_size=20`,
+    token,
+    {},
+    workspaceSlug,
+  );
 }
 
-export function getUnreadNotificationCount(token: string): Promise<PmsUnreadCountResponse> {
-  return request<PmsUnreadCountResponse>('/api/v1/pms/notifications/unread-count', token);
+export function getUnreadNotificationCount(
+  token: string,
+  workspaceSlug?: string | null,
+): Promise<PmsUnreadCountResponse> {
+  return request<PmsUnreadCountResponse>(
+    '/api/v1/pms/notifications/unread-count',
+    token,
+    {},
+    workspaceSlug,
+  );
 }
 
-export function markNotificationRead(token: string, notificationId: string): Promise<PmsNotification> {
-  return request<PmsNotification>(`/api/v1/pms/notifications/${notificationId}/read`, token, { method: 'PATCH' });
+export function markNotificationRead(
+  token: string,
+  notificationId: string,
+  workspaceSlug?: string | null,
+): Promise<PmsNotification> {
+  return request<PmsNotification>(
+    `/api/v1/pms/notifications/${notificationId}/read`,
+    token,
+    { method: 'PATCH' },
+    workspaceSlug,
+  );
 }
 
-export function markAllNotificationsRead(token: string): Promise<void> {
-  return request<void>('/api/v1/pms/notifications/read-all', token, { method: 'PATCH' });
+export function markAllNotificationsRead(
+  token: string,
+  workspaceSlug?: string | null,
+): Promise<void> {
+  return request<void>(
+    '/api/v1/pms/notifications/read-all',
+    token,
+    { method: 'PATCH' },
+    workspaceSlug,
+  );
 }
 
 // ── Task List Statuses (Custom Workflow) ───────────────────────────

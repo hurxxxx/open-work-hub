@@ -135,7 +135,7 @@ export const PMSView = () => {
   const spaceDocsSpaceId = spaceDocsMatch?.[1] ?? null;
   const spaceDocsDocId = spaceDocsMatch?.[2] ?? null;
   const spaceOverviewId = (toolId && /^pms-space-.+$/.test(toolId) && !spaceDocsMatch) ? toolId.replace('pms-space-', '') : null;
-  const isOverviewRoute = !toolId && !createTaskRequested;
+  const isOverviewRoute = !toolId && !createTaskRequested && !isNewTaskModalOpen;
   const selectedTaskList = taskLists.find((taskList) => taskList.id === selectedTaskListId);
   const taskListName = selectedTaskList?.name || 'List';
   const canEditTaskList = taskListRoleAllows(selectedTaskList?.role, 'member');

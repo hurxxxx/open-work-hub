@@ -134,7 +134,13 @@
   - 백엔드 regression 2건 추가: `test_native_doc_page_patch_reorders_and_moves_parent`, `test_native_doc_page_patch_rejects_cycle` (pytest 101 passed)
   - E2E 확인 (hq-admin seed, playwright): 키보드 DnD 로 Alpha → [Root, Bravo, Charlie, Alpha] 재정렬 확인, 새로고침 후 순서 유지, 부모 이동 + cycle 거부(409) 확인
 - [x] Admin Console / Workspace Settings 공용 workspace 멤버 관리 UI 추가
-- [ ] `/w/:workspaceSlug/<app>` 기반 workspace shell 수동 QA
+- [x] `/w/:workspaceSlug/<app>` 기반 workspace shell 수동 QA
+  - 2026-04-17 Playwright MCP 로 `hq-admin` + `innovation-lab-admin` 시드 계정 스윕 완료
+  - 검증 통과: `/w/hq/{home,ai,pms,docs,planner,meeting}` 전 경로 0 콘솔 에러, `/w/innovation-lab/{home,meeting,settings}` 동일 패턴 확인, WorkspaceSwitcher 가 사용자 멤버십 워크스페이스만 노출, AppBar 크로스 앱 네비게이션 시 워크스페이스 컨텍스트 유지, 바깥 워크스페이스 직접 URL (`/w/delivery-hub/pms`) → AccessDeniedView, 존재하지 않는 slug (`/w/does-not-exist/home` + bare `/w/does-not-exist`) → AccessDeniedView, bare `/w/:slug` → `/w/:slug/home` 리다이렉트
+  - 발견 사항 후속 처리 (2026-04-17):
+    - **Platform Admin dead-end (해결 확인)**: 실제로는 이미 `resolveRootEntryPath` ([workspace-utils.ts:179-190](apps/web/src/domains/workspaces/workspace-utils.ts#L179-L190)) 가 워크스페이스 없는 admin 을 `/admin/general` 로 리다이렉트하도록 구현되어 있음. QA 에서 `/w/hq/home` 직접 URL 진입만 테스트해서 WorkspaceGate 차단을 dead-end 로 오해한 것. Playwright 로 Platform Admin HOME 클릭 플로 재확인 → `/` → `/admin/general` 정상 리다이렉트. 별도 수정 불필요
+    - **AppBar 알림 폴링 403 노이즈 (수정)**: `getUnreadNotificationCount(token, workspaceSlug?)` 시그니처로 slug 파라미터 추가 ([pms-api.ts:950-961](apps/web/src/domains/pms/pms-api.ts#L950-L961)). AppBar useEffect 가 `shellWorkspaceSlug` 를 명시적으로 전달하고 null 이면 폴링 자체 스킵 ([AppBar.tsx:88-117](apps/web/src/components/layout/AppBar.tsx#L88-L117)). 효과: URL 이 접근 권한 없는 워크스페이스여도 폴링은 사용자가 속한 shell 워크스페이스로 발사 → 403 사라짐. Platform Admin (워크스페이스 0개) 는 폴링 자체 스킵. AppBar.spec.tsx 어서션 하나 업데이트. 회귀 검증: typecheck 0건, vitest 8 passed (AppBar spec), Playwright 로 innovation-lab-admin 이 `/w/hq/home` 및 `/w/delivery-hub/pms` 진입 시 콘솔 에러 0건 확인
+  - 회귀: `pnpm nx typecheck web` 0건 (cache), vitest 70 passed + PlannerView 1건 기존 실패 (쓴 변경 무관), pytest 130 passed
 - [x] web typecheck 잔재 7건 정리 (2026-04-14 확인, 이미 해결된 상태)
 - [x] meeting `datetime.utcnow()` deprecation warning 제거 (2026-04-14 확인, 전 도메인 `_utcnow()` / `utcnow_naive()` 헬퍼로 이미 전환 완료)
 - [x] Home을 워크스페이스 스코프로 전환 (`/w/:slug/home`)

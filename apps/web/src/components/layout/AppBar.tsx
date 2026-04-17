@@ -86,7 +86,7 @@ export function AppBar({
     .sort((left, right) => left.name.localeCompare(right.name, 'ko'));
 
   useEffect(() => {
-    if (!token) {
+    if (!token || !shellWorkspaceSlug) {
       setUnreadCount(0);
       return;
     }
@@ -95,7 +95,7 @@ export function AppBar({
 
     const syncUnreadCount = async () => {
       try {
-        const res = await getUnreadNotificationCount(token);
+        const res = await getUnreadNotificationCount(token, shellWorkspaceSlug);
         if (active) {
           setUnreadCount(res.count);
         }
@@ -113,7 +113,7 @@ export function AppBar({
       active = false;
       window.clearInterval(interval);
     };
-  }, [token]);
+  }, [shellWorkspaceSlug, token]);
 
   useEffect(() => {
     if (!workspaceSwitcherOpen) {
@@ -323,6 +323,7 @@ export function AppBar({
               onClose={() => setNotifOpen(false)}
               onNavigateToIssue={handleNavigateToIssue}
               onCountChange={handleCountChange}
+              workspaceSlug={shellWorkspaceSlug}
             />
           )}
         </AnimatePresence>

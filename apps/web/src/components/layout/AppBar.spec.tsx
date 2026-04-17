@@ -137,7 +137,35 @@ describe('AppBar', () => {
     const settingsLink = container.querySelector('a[href="/admin/general"]');
     expect(settingsLink).toBeTruthy();
     await waitFor(() => {
-      expect(mockGetUnreadNotificationCount).toHaveBeenCalledWith('test-token');
+      expect(mockGetUnreadNotificationCount).toHaveBeenCalledWith('test-token', 'hq');
+    });
+  });
+
+  it('polls notifications using the shell workspace slug instead of the current URL workspace slug', async () => {
+    renderAppBar({
+      activeAppId: 'pms',
+      currentPathname: '/w/delivery-hub/pms',
+      shellWorkspaceSlug: 'hq',
+    });
+
+    await waitFor(() => {
+      expect(mockGetUnreadNotificationCount).toHaveBeenCalledWith('test-token', 'hq');
+    });
+  });
+
+  it('skips unread notification polling when no shell workspace is available', async () => {
+    renderAppBar({
+      activeAppId: 'settings',
+      currentPathname: '/admin/general',
+      currentUser: buildUser({
+        workspaces: [],
+        system_roles: ['platform_admin'],
+      }),
+      shellWorkspaceSlug: null,
+    });
+
+    await waitFor(() => {
+      expect(mockGetUnreadNotificationCount).not.toHaveBeenCalled();
     });
   });
 
