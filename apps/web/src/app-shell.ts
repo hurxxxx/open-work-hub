@@ -60,9 +60,31 @@ export function resolveShellState(
     return HOME_SHELL_STATE;
   }
 
+  if (/^\/w\/[^/]+\/home(?:\/|$)/.test(path)) {
+    return HOME_SHELL_STATE;
+  }
+
   if (/^\/w\/[^/]+\/ai(?:\/|$)/.test(path)) {
     return canShowAppChrome(user, 'ai', workspaceSlug)
       ? { activeAppId: 'ai', activeNavItemId: '' }
+      : HOME_SHELL_STATE;
+  }
+
+  if (/^\/w\/[^/]+\/pms\/assigned(?:\/|$)/.test(path)) {
+    return canShowAppChrome(user, 'pms', workspaceSlug)
+      ? { activeAppId: 'pms', activeNavItemId: 'pms-tasks-assigned' }
+      : HOME_SHELL_STATE;
+  }
+
+  if (/^\/w\/[^/]+\/pms\/today(?:\/|$)/.test(path)) {
+    return canShowAppChrome(user, 'pms', workspaceSlug)
+      ? { activeAppId: 'pms', activeNavItemId: 'pms-tasks-today' }
+      : HOME_SHELL_STATE;
+  }
+
+  if (/^\/w\/[^/]+\/pms\/personal(?:\/|$)/.test(path)) {
+    return canShowAppChrome(user, 'pms', workspaceSlug)
+      ? { activeAppId: 'pms', activeNavItemId: 'pms-tasks-personal' }
       : HOME_SHELL_STATE;
   }
 

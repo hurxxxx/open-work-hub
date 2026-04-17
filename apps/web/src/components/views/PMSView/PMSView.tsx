@@ -124,6 +124,7 @@ export const PMSView = () => {
     return () => document.removeEventListener('mousedown', onClick);
   }, [taskListSwitcherOpen]);
 
+  const createTaskRequested = searchParams.get('create') === '1';
   const isAssignedTasksView = toolId === 'pms-tasks' || toolId === 'pms-tasks-assigned';
   const isTodayView = toolId === 'pms-tasks-today';
   const isPersonalView = toolId === 'pms-tasks-personal';
@@ -134,7 +135,7 @@ export const PMSView = () => {
   const spaceDocsSpaceId = spaceDocsMatch?.[1] ?? null;
   const spaceDocsDocId = spaceDocsMatch?.[2] ?? null;
   const spaceOverviewId = (toolId && /^pms-space-.+$/.test(toolId) && !spaceDocsMatch) ? toolId.replace('pms-space-', '') : null;
-  const isOverviewRoute = !toolId;
+  const isOverviewRoute = !toolId && !createTaskRequested;
   const selectedTaskList = taskLists.find((taskList) => taskList.id === selectedTaskListId);
   const taskListName = selectedTaskList?.name || 'List';
   const canEditTaskList = taskListRoleAllows(selectedTaskList?.role, 'member');
@@ -224,6 +225,17 @@ export const PMSView = () => {
           if (routeTaskListId) {
             return requestedTaskListResolved ? routeTaskListId : '';
           }
+          if (createTaskRequested) {
+            if (
+              current
+              && nextTaskLists.some(
+                (taskList) => taskList.id === current && taskListRoleAllows(taskList.role, 'member'),
+              )
+            ) {
+              return current;
+            }
+            return nextTaskLists.find((taskList) => taskListRoleAllows(taskList.role, 'member'))?.id ?? '';
+          }
           if (current && nextTaskLists.some((taskList) => taskList.id === current)) {
             return current;
           }
@@ -247,7 +259,7 @@ export const PMSView = () => {
     return () => {
       cancelled = true;
     };
-  }, [getErrorMessage, routeTaskListId, token]);
+  }, [createTaskRequested, getErrorMessage, routeTaskListId, token]);
 
   const reloadIssues = useCallback(async () => {
     if (!token || !selectedTaskListId) return;
@@ -375,6 +387,24 @@ export const PMSView = () => {
       cancelled = true;
     };
   }, [getErrorMessage, requestedIssueId, token]);
+
+  useEffect(() => {
+    if (!createTaskRequested || loading) {
+      return;
+    }
+
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.delete('create');
+
+    if (!selectedTaskListId || !canEditTaskList) {
+      setError('태스크를 생성할 수 있는 리스트가 없습니다.');
+      setSearchParams(nextParams, { replace: true });
+      return;
+    }
+
+    setIsNewTaskModalOpen(true);
+    setSearchParams(nextParams, { replace: true });
+  }, [canEditTaskList, createTaskRequested, loading, searchParams, selectedTaskListId, setSearchParams]);
 
   if (isAssignedTasksView) return <AssignedToMeView />;
   if (isTodayView) return <TodayOverdueView />;

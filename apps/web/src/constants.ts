@@ -95,10 +95,10 @@ export const NAV_ITEMS: NavItem[] = [
 
   // PMS
   { id: 'pms-inbox', title: 'Inbox', icon: Inbox, category: 'Personal', appId: 'pms' },
-  { id: 'pms-tasks', title: 'My Tasks', icon: CheckCircle2, category: 'Personal', appId: 'pms' },
-  { id: 'pms-tasks-assigned', title: 'Assigned to me', icon: User, category: 'Personal', appId: 'pms' },
-  { id: 'pms-tasks-today', title: 'Today & Overdue', icon: Calendar, category: 'Personal', appId: 'pms' },
-  { id: 'pms-tasks-personal', title: 'Personal List', icon: ListIcon, category: 'Personal', appId: 'pms' },
+  { id: 'pms-tasks', title: 'My Tasks', icon: CheckCircle2, category: 'Personal', appId: 'pms', pathSuffix: '/assigned' },
+  { id: 'pms-tasks-assigned', title: 'Assigned to me', icon: User, category: 'Personal', appId: 'pms', pathSuffix: '/assigned' },
+  { id: 'pms-tasks-today', title: 'Today & Overdue', icon: Calendar, category: 'Personal', appId: 'pms', pathSuffix: '/today' },
+  { id: 'pms-tasks-personal', title: 'Personal List', icon: ListIcon, category: 'Personal', appId: 'pms', pathSuffix: '/personal' },
 
   // DOCS
   { id: 'docs-all', title: 'All Docs', icon: Files, category: 'Library', appId: 'docs' },

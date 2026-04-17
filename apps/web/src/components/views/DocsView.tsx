@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
   ChevronDown,
   ChevronRight,
@@ -239,6 +239,7 @@ function sharingLabel(item: DocsHubItem): string {
 export const DocsView = () => {
   const { toolId, docId, shareToken, workspaceSlug } = useParams();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const auth = useAuth();
   const { token } = auth;
   const { uploadFile, createLinkedUploadFile, resolveFileUrl } = useMediaUpload();
@@ -341,7 +342,7 @@ export const DocsView = () => {
         q: searchQuery || undefined,
         sort_by: sortBy,
         sort_dir: sortDir,
-      });
+      }, workspaceSlug);
       setDocs(response.items);
       setTotal(response.total);
     } catch {
@@ -350,15 +351,15 @@ export const DocsView = () => {
     } finally {
       setLoadingList(false);
     }
-  }, [activeCategory, searchQuery, sortBy, sortDir, token]);
+  }, [activeCategory, searchQuery, sortBy, sortDir, token, workspaceSlug]);
 
   const loadDoc = useCallback(async (itemId: string, currentShareToken?: string | null) => {
     if (!token) return;
     setEditorLoading(true);
     try {
       const [item, pageResponse] = await Promise.all([
-        getDocsItem(token, itemId, currentShareToken),
-        listDocPages(token, itemId, currentShareToken),
+        getDocsItem(token, itemId, currentShareToken, workspaceSlug),
+        listDocPages(token, itemId, currentShareToken, workspaceSlug),
       ]);
       setSelectedDoc(item);
       setPages(pageResponse.items);
@@ -376,7 +377,7 @@ export const DocsView = () => {
     } finally {
       setEditorLoading(false);
     }
-  }, [token]);
+  }, [token, workspaceSlug]);
 
   useEffect(() => {
     if (!token) return;
@@ -413,8 +414,8 @@ export const DocsView = () => {
 
   useEffect(() => {
     if (!token || !activeDocId || !activePageId) return;
-    void recordDocView(token, activeDocId, activePageId, shareToken);
-  }, [activeDocId, activePageId, shareToken, token]);
+    void recordDocView(token, activeDocId, activePageId, shareToken, workspaceSlug);
+  }, [activeDocId, activePageId, shareToken, token, workspaceSlug]);
 
   const handleSearchChange = (value: string) => {
     if (searchTimerRef.current) {
@@ -448,11 +449,21 @@ export const DocsView = () => {
     return () => window.removeEventListener('docs:create', handler);
   }, [openCreateModal]);
 
+  useEffect(() => {
+    if (searchParams.get('create') !== '1' || shareToken) {
+      return;
+    }
+    openCreateModal();
+    const next = new URLSearchParams(searchParams);
+    next.delete('create');
+    setSearchParams(next, { replace: true });
+  }, [openCreateModal, searchParams, setSearchParams, shareToken]);
+
   const handleCreateDoc = async () => {
     if (!token || !newDocTitle.trim()) return;
     setCreating(true);
     try {
-      const item = await createNativeDoc(token, { title: newDocTitle.trim() });
+      const item = await createNativeDoc(token, { title: newDocTitle.trim() }, workspaceSlug);
       setShowCreateModal(false);
       setNewDocTitle('');
       openDoc(item.id);

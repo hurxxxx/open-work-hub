@@ -2266,6 +2266,50 @@ def create_issue(
     return _serialize_issue(issue)
 
 
+@router.get("/issues/assigned", response_model=IssueListResponse)
+def list_assigned_issues(
+    limit: int = Query(default=10, ge=1, le=50),
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+) -> IssueListResponse:
+    accessible_list_ids_subquery = _accessible_task_lists_query(db, current_user).with_only_columns(TaskList.id)
+    issues = list(
+        db.scalars(
+            select(Issue)
+            .options(
+                selectinload(Issue.task_list),
+                selectinload(Issue.milestone),
+                selectinload(Issue.assignee),
+                selectinload(Issue.reporter),
+                selectinload(Issue.comments),
+                selectinload(Issue.label_links).selectinload(IssueLabel.label),
+                selectinload(Issue.subtasks),
+                selectinload(Issue.checklist_items),
+                selectinload(Issue.time_entries),
+                selectinload(Issue.assignee_links).selectinload(IssueAssignee.user),
+            )
+            .where(
+                Issue.assignee_id == current_user.id,
+                Issue.archived.is_(False),
+                Issue.list_id.in_(accessible_list_ids_subquery),
+            )
+        )
+    )
+
+    issues = [
+        issue for issue in issues if not _is_closed_status(issue.status, issue.task_list)
+    ]
+    issues.sort(
+        key=lambda issue: (
+            issue.due_date or date.max,
+            -issue.updated_at.timestamp(),
+        )
+    )
+    issues = issues[:limit]
+    serialized = [_serialize_issue(issue) for issue in issues]
+    return IssueListResponse(items=serialized, total=len(serialized), page=1, page_size=limit)
+
+
 @router.get("/issues/{issue_id}", response_model=IssueDetailResponse)
 def get_issue(
     issue_id: str,

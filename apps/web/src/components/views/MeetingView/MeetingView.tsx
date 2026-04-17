@@ -89,6 +89,14 @@ export function MeetingView() {
     return () => window.removeEventListener('meeting:create-event', handle);
   }, []);
 
+  useEffect(() => {
+    if (searchParams.get('create') !== '1') return;
+    setCreateOpen(true);
+    const next = new URLSearchParams(searchParams);
+    next.delete('create');
+    setSearchParams(next, { replace: true });
+  }, [searchParams, setSearchParams]);
+
   const handleSelect = useCallback(
     (id: string) => {
       if (!workspaceSlug) return;

@@ -20,11 +20,14 @@ import { AppBar } from './components/layout/AppBar';
 import { SubSidebar } from './components/layout/SubSidebar';
 import { AIView } from './components/views/AIView';
 import { DocsView } from './components/views/DocsView';
-import { HomeView } from './components/views/HomeView';
+import { WorkspaceHomeView } from './components/views/WorkspaceHomeView/WorkspaceHomeView';
 import { MeetingView } from './components/views/MeetingView/MeetingView';
 import { MeetingWorkspaceView } from './components/views/MeetingView/MeetingWorkspaceView';
 import { PlannerView } from './components/views/PlannerView';
 import { PMSView } from './components/views/PMSView/PMSView';
+import { AssignedToMeView } from './components/views/PMSView/AssignedToMeView';
+import { TodayOverdueView } from './components/views/PMSView/TodayOverdueView';
+import { PersonalListView } from './components/views/PMSView/PersonalListView';
 import { ToolView } from './components/views/ToolView';
 import { NAV_ITEMS } from './constants';
 import { AdminConsoleView } from './domains/admin/admin-console';
@@ -44,10 +47,13 @@ import {
   type ThemePreference,
 } from './domains/auth/auth-api';
 import {
+  buildWorkspaceAppPath,
   getWorkspaceAppIdFromPath,
+  getWorkspaceBySlug,
   getWorkspaceSlugFromPath,
   persistLastWorkspaceAppId,
   persistLastWorkspaceSlug,
+  resolveRootEntryPath,
   resolveShellWorkspaceSlug,
   resolveDefaultWorkspaceAppPath,
   type WorkspaceAppId,
@@ -108,6 +114,40 @@ function AdminLandingRedirect() {
   }
 
   return <Navigate replace to={getDefaultAdminPath(auth.user.system_roles)} />;
+}
+
+function HomeRootRedirect() {
+  const auth = useAuth();
+
+  if (!auth.user) {
+    return <Navigate replace to="/login" />;
+  }
+
+  const targetPath = resolveRootEntryPath(auth.user);
+  if (!targetPath) {
+    return (
+      <AccessDeniedView description="접근 가능한 워크스페이스가 없습니다. 관리자에게 문의해주세요." />
+    );
+  }
+
+  return <Navigate replace to={targetPath} />;
+}
+
+function WorkspaceRootRedirect() {
+  const auth = useAuth();
+  const { workspaceSlug } = useParams();
+
+  if (!auth.user) {
+    return <Navigate replace to="/login" />;
+  }
+
+  if (!workspaceSlug || !getWorkspaceBySlug(auth.user, workspaceSlug)) {
+    return (
+      <AccessDeniedView description="현재 계정은 이 workspace에 접근할 수 없습니다." />
+    );
+  }
+
+  return <Navigate replace to={buildWorkspaceAppPath(workspaceSlug, 'home')} />;
 }
 
 const ToolViewWrapper = () => {
@@ -244,8 +284,17 @@ const AppContent = () => {
         <div className="flex-1 flex flex-col overflow-hidden bg-app-bg transition-colors">
           <main className="flex-1 overflow-y-auto relative">
             <Routes>
-            <Route path="/" element={<HomeView />} />
+            <Route path="/" element={<HomeRootRedirect />} />
             <Route path="/docs/shared/:shareToken" element={<DocsView />} />
+            <Route path="/w/:workspaceSlug" element={<WorkspaceRootRedirect />} />
+            <Route
+              path="/w/:workspaceSlug/home"
+              element={(
+                <WorkspaceGate>
+                  <WorkspaceHomeView />
+                </WorkspaceGate>
+              )}
+            />
             <Route
               path="/w/:workspaceSlug/ai"
               element={(
@@ -259,6 +308,30 @@ const AppContent = () => {
               element={(
                 <WorkspaceGate>
                   <PMSView />
+                </WorkspaceGate>
+              )}
+            />
+            <Route
+              path="/w/:workspaceSlug/pms/assigned"
+              element={(
+                <WorkspaceGate>
+                  <AssignedToMeView />
+                </WorkspaceGate>
+              )}
+            />
+            <Route
+              path="/w/:workspaceSlug/pms/today"
+              element={(
+                <WorkspaceGate>
+                  <TodayOverdueView />
+                </WorkspaceGate>
+              )}
+            />
+            <Route
+              path="/w/:workspaceSlug/pms/personal"
+              element={(
+                <WorkspaceGate>
+                  <PersonalListView />
                 </WorkspaceGate>
               )}
             />

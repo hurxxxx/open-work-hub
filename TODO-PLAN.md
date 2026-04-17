@@ -137,12 +137,16 @@
 - [ ] `/w/:workspaceSlug/<app>` 기반 workspace shell 수동 QA
 - [x] web typecheck 잔재 7건 정리 (2026-04-14 확인, 이미 해결된 상태)
 - [x] meeting `datetime.utcnow()` deprecation warning 제거 (2026-04-14 확인, 전 도메인 `_utcnow()` / `utcnow_naive()` 헬퍼로 이미 전환 완료)
-- [ ] Home을 워크스페이스 스코프로 전환 (`/w/:slug/home`)
-  - 현재 `/`의 전역 HomeView는 더미 데이터이고 앱바 HOME 진입 시 워크스페이스 컨텍스트가 증발함
-  - Notion "Jump back in" + Linear "My Issues" + ClickUp Agenda 패턴 차용: Greeting, Quick actions, 오늘 일정, 내 태스크, 최근 작업 5개 위젯
-  - 기존 워크스페이스 스코프 엔드포인트(`meeting/meetings?scope=upcoming`, `pms/docs-hub/recent-pages`, PMS assigned issues)만 재사용 — 신규 API 없음
-  - `WorkspaceAppId` 유니온에 `'home'` 추가, SubSidebar는 빈 필터 결과에서 접힘, `/` → `/w/{last}/home` 리다이렉트
-  - 세부 설계: [docs/planning/workspace-home-plan.md](docs/planning/workspace-home-plan.md)
+- [x] Home을 워크스페이스 스코프로 전환 (`/w/:slug/home`)
+  - 2026-04-17 `WorkspaceAppId` 유니온에 `home` 추가, `WORKSPACE_APP_PATH_PATTERN` 확장, `app-shell.ts` 가 `/w/:slug/home` 을 `activeAppId='home'` 으로 매핑
+  - `/` → `resolveShellWorkspaceSlug` 기반 `/w/{last}/home` 리다이렉트, bare `/w/:slug` → `/w/:slug/home`, WorkspaceGate 에서 멤버십 체크
+  - 신규 `apps/web/src/components/views/WorkspaceHomeView/WorkspaceHomeView.tsx` — Greeting + 한국 공휴일 배너, Quick Actions (새 회의 / 새 태스크 / 새 Doc), 오늘의 회의 (`listMeetings scope=upcoming` 필터링), 내 태스크 (신규 `listAssignedIssues`), 최근 Docs (`listRecentPages`)
+  - 신규 백엔드 엔드포인트 `GET /api/v1/pms/issues/assigned?limit=10` — `_accessible_task_lists_query` 기반 워크스페이스 스코프, 본인 assignee 이면서 non-archived + non-closed, due_date ASC → updated_at DESC 정렬
+  - MeetingView 가 `?create=1` 쿼리 파라미터로 create 모달 자동 오픈 + URL 정리 (replace)
+  - SubSidebar 는 `activeAppId === 'home'` 에서 `return null` 로 접힘
+  - 기존 `HomeView.tsx` 삭제, `/tool/pms-tasks-assigned` 는 그대로 유지
+  - 검증: `pnpm nx typecheck web` 0건, pytest 130 passed (신규 2건 포함), prod-like E2E (playwright, delivery-hub-admin): `/` → `/w/delivery-hub/home`, Quick Actions "새 회의" → 모달 자동 오픈 + URL 정리, AppBar HOME 왕복 시 워크스페이스 컨텍스트 유지, bare `/w/:slug` → home, `/w/hq/home` (미접근) → AccessDeniedView, 콘솔 에러 0건
+  - 설계 문서: [docs/planning/workspace-home-plan.md](docs/planning/workspace-home-plan.md)
 
 ## 검증
 

@@ -682,6 +682,23 @@ export function listTaskListIssues(
   );
 }
 
+export function listAssignedIssues(
+  token: string,
+  options: { limit?: number; workspaceSlug?: string | null } = {},
+): Promise<PmsIssuesResponse> {
+  const search = new URLSearchParams();
+  if (options.limit !== undefined) {
+    search.set('limit', String(options.limit));
+  }
+  const query = search.toString();
+  return request<PmsIssuesResponse>(
+    `/api/v1/pms/issues/assigned${query ? `?${query}` : ''}`,
+    token,
+    {},
+    options.workspaceSlug,
+  );
+}
+
 export function createTaskListIssue(
   token: string,
   taskListId: string,

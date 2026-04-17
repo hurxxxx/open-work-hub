@@ -52,6 +52,10 @@ describe('resolveShellState', () => {
       activeAppId: 'pms',
       activeNavItemId: '',
     });
+    expect(resolveShellState('/w/delivery-hub/pms/assigned', buildUser())).toEqual({
+      activeAppId: 'pms',
+      activeNavItemId: 'pms-tasks-assigned',
+    });
     expect(resolveShellState('/tool/pms-list-demo', buildUser())).toEqual({
       activeAppId: 'pms',
       activeNavItemId: 'pms-list-demo',
@@ -62,6 +66,10 @@ describe('resolveShellState', () => {
     expect(resolveShellState('/w/delivery-hub/meeting', buildUser())).toEqual({
       activeAppId: 'meeting',
       activeNavItemId: 'meeting-upcoming',
+    });
+    expect(resolveShellState('/w/delivery-hub/home', buildUser())).toEqual({
+      activeAppId: 'home',
+      activeNavItemId: '',
     });
   });
 

@@ -220,11 +220,17 @@ export function listDocsHub(
 export function createNativeDoc(
   token: string,
   payload: { title: string; first_page_title?: string },
+  workspaceSlug?: string | null,
 ): Promise<DocsHubItem> {
-  return request<DocsHubItem>('/api/v1/docs/native-docs', token, {
-    method: 'POST',
-    body: JSON.stringify(payload),
-  });
+  return request<DocsHubItem>(
+    '/api/v1/docs/native-docs',
+    token,
+    {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    },
+    workspaceSlug,
+  );
 }
 
 export function getDocsItem(
@@ -397,8 +403,12 @@ export function listFavoriteDocs(token: string): Promise<FavoriteDocItem[]> {
   return request<FavoriteDocItem[]>('/api/v1/docs/favorites', token);
 }
 
-export function listRecentPages(token: string, limit = 10): Promise<RecentPageItem[]> {
-  return request<RecentPageItem[]>(`/api/v1/docs/recent-pages?limit=${limit}`, token);
+export function listRecentPages(
+  token: string,
+  limit = 10,
+  workspaceSlug?: string | null,
+): Promise<RecentPageItem[]> {
+  return request<RecentPageItem[]>(`/api/v1/docs/recent-pages?limit=${limit}`, token, {}, workspaceSlug);
 }
 
 export function listShareableUsers(token: string, q?: string): Promise<ShareableUserItem[]> {

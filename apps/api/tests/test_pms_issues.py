@@ -1078,6 +1078,141 @@ def test_bulk_reorder_space_docs_allows_member_and_updates_order(client: TestCli
     assert [item["id"] for item in listed] == [doc_b["id"], doc_a["id"], doc_c["id"]]
 
 
+def test_assigned_issues_returns_only_current_users_open_issues(client: TestClient) -> None:
+    admin = _bootstrap_admin_session(client)
+    task_list = _create_task_list(client, admin["token"], key="ASGN", name="Assigned List")
+
+    teammate = _create_user(client, admin["token"], email="assigned-teammate@aidoo.local", full_name="Teammate")
+    _add_task_list_member(client, admin["token"], task_list["id"], teammate["user"]["id"], "member")
+
+    _create_issue(
+        client,
+        admin["token"],
+        task_list["id"],
+        title="Assigned to admin (due soon)",
+        assignee_id=admin["user"]["id"],
+        due_date="2026-04-20",
+    )
+    _create_issue(
+        client,
+        admin["token"],
+        task_list["id"],
+        title="Assigned to admin (no due)",
+        assignee_id=admin["user"]["id"],
+    )
+    teammate_issue = _create_issue(
+        client,
+        admin["token"],
+        task_list["id"],
+        title="Assigned to teammate",
+        assignee_id=teammate["user"]["id"],
+    )
+    unassigned_issue = _create_issue(
+        client,
+        admin["token"],
+        task_list["id"],
+        title="Unassigned issue",
+    )
+
+    closed_issue = _create_issue(
+        client,
+        admin["token"],
+        task_list["id"],
+        title="Closed assigned issue",
+        assignee_id=admin["user"]["id"],
+    )
+    close_response = client.patch(
+        f"/api/v1/pms/issues/{closed_issue['id']}",
+        headers=_auth_headers(admin["token"]),
+        json={"status": "done"},
+    )
+    assert close_response.status_code == 200
+
+    response = client.get(
+        "/api/v1/pms/issues/assigned",
+        headers=_auth_headers(admin["token"]),
+    )
+    assert response.status_code == 200
+    payload = response.json()
+    titles = [item["title"] for item in payload["items"]]
+    assert titles == [
+        "Assigned to admin (due soon)",
+        "Assigned to admin (no due)",
+    ]
+    assert teammate_issue["id"] not in {item["id"] for item in payload["items"]}
+    assert unassigned_issue["id"] not in {item["id"] for item in payload["items"]}
+
+
+def test_assigned_issues_respects_limit_bounds(client: TestClient) -> None:
+    admin = _bootstrap_admin_session(client)
+    task_list = _create_task_list(client, admin["token"], key="LIMIT", name="Limit List")
+
+    for index in range(3):
+        _create_issue(
+            client,
+            admin["token"],
+            task_list["id"],
+            title=f"Assigned {index}",
+            assignee_id=admin["user"]["id"],
+        )
+
+    default_response = client.get(
+        "/api/v1/pms/issues/assigned",
+        headers=_auth_headers(admin["token"]),
+    )
+    assert default_response.status_code == 200
+    assert len(default_response.json()["items"]) == 3
+
+    capped_response = client.get(
+        "/api/v1/pms/issues/assigned",
+        headers=_auth_headers(admin["token"]),
+        params={"limit": 2},
+    )
+    assert capped_response.status_code == 200
+    assert len(capped_response.json()["items"]) == 2
+
+    too_low_response = client.get(
+        "/api/v1/pms/issues/assigned",
+        headers=_auth_headers(admin["token"]),
+        params={"limit": 0},
+    )
+    assert too_low_response.status_code == 422
+
+    too_high_response = client.get(
+        "/api/v1/pms/issues/assigned",
+        headers=_auth_headers(admin["token"]),
+        params={"limit": 999},
+    )
+    assert too_high_response.status_code == 422
+
+
+def test_assigned_issues_honors_workspace_scoped_route(client: TestClient) -> None:
+    _bootstrap_admin_session(client)
+    hq_admin = _dev_login(client, "hq-admin")
+
+    task_list = _create_task_list(client, hq_admin["token"], key="HQASGN", name="HQ Assigned Route")
+    _create_issue(
+        client,
+        hq_admin["token"],
+        task_list["id"],
+        title="HQ scoped assigned issue",
+        assignee_id=hq_admin["user"]["id"],
+    )
+
+    response = client.get(
+        "/api/v1/workspaces/hq/pms/issues/assigned",
+        headers=_auth_headers(hq_admin["token"]),
+    )
+    assert response.status_code == 200
+    assert [item["title"] for item in response.json()["items"]] == ["HQ scoped assigned issue"]
+
+    denied_response = client.get(
+        "/api/v1/workspaces/delivery-hub/pms/issues/assigned",
+        headers=_auth_headers(hq_admin["token"]),
+    )
+    assert denied_response.status_code == 403
+
+
 def _bootstrap_admin_session(client: TestClient) -> dict:
     response = client.post(
         "/api/v1/auth/setup",

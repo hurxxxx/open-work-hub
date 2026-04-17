@@ -1884,6 +1884,10 @@ export const SubSidebar = ({
     );
   };
 
+  if (activeAppId === 'home') {
+    return null;
+  }
+
   return (
     <>
       {confirmDialog}

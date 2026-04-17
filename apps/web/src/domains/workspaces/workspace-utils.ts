@@ -1,8 +1,13 @@
-import type { AuthUser } from '@/src/domains/auth/auth-api';
+import {
+  hasAdminConsoleAccess,
+  type AuthUser,
+} from '@/src/domains/auth/auth-api';
+import { getDefaultAdminPath } from '@/src/domains/admin/admin-permissions';
 
-export type WorkspaceAppId = 'ai' | 'pms' | 'docs' | 'planner' | 'meeting';
+export type WorkspaceAppId = 'home' | 'ai' | 'pms' | 'docs' | 'planner' | 'meeting';
 
 export const WORKSPACE_APP_IDS: readonly WorkspaceAppId[] = [
+  'home',
   'ai',
   'pms',
   'docs',
@@ -21,7 +26,7 @@ const WORKSPACE_API_PREFIXES = [
 
 const LAST_WORKSPACE_STORAGE_KEY = 'aidoo:last-workspace-slug';
 const LAST_WORKSPACE_APP_STORAGE_KEY = 'aidoo:last-workspace-app';
-const WORKSPACE_APP_PATH_PATTERN = /^\/w\/[^/]+\/(ai|pms|docs|planner|meeting)(?:\/|$)/;
+const WORKSPACE_APP_PATH_PATTERN = /^\/w\/[^/]+\/(home|ai|pms|docs|planner|meeting)(?:\/|$)/;
 
 function isWorkspaceAppId(value: string | null | undefined): value is WorkspaceAppId {
   return (WORKSPACE_APP_IDS as readonly string[]).includes(value ?? '');
@@ -169,6 +174,19 @@ export function resolveDefaultWorkspaceAppPath(
 ): string {
   const workspace = getPreferredWorkspace(user, appId);
   return workspace ? buildWorkspaceAppPath(workspace.slug, appId, suffix) : '/';
+}
+
+export function resolveRootEntryPath(
+  user: Pick<AuthUser, 'workspaces' | 'system_roles'> | null | undefined,
+): string | null {
+  const workspaceSlug = resolveShellWorkspaceSlug(user, null);
+  if (workspaceSlug) {
+    return buildWorkspaceAppPath(workspaceSlug, 'home');
+  }
+  if (hasAdminConsoleAccess(user)) {
+    return getDefaultAdminPath(user?.system_roles ?? []);
+  }
+  return null;
 }
 
 export function resolveWorkspaceSwitchPath(
