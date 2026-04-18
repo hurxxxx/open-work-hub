@@ -148,7 +148,7 @@ LOCAL POOL ────┐                    ┌──── EXTERNAL POOL
 
 **사전 작업**: 챗 UX 디자인 세션 (Envelope의 프론트 렌더 모델에도 영향).
 
-**상세 플랜 파일**: `02-phase2-envelope-streaming.md`
+**상세 플랜 파일**: 완료 (c30b818) — 요약은 [`docs/planning-log.md`](../docs/planning-log.md). 챗 뷰 디자인 기준은 [`DESIGN.md`](../DESIGN.md)에 고정.
 
 ---
 
