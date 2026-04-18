@@ -161,12 +161,14 @@ def _complete_single_backend(payload: ChatRequest, backend: LlmBackendName) -> C
 
 def _complete_chat(payload: ChatRequest, backend: LlmBackendName) -> ChatResponse:
     config = get_llm_backend(backend)
+    settings = get_settings()
     response = get_llm_client(backend).chat.completions.create(
         model=config.model,
         messages=[message.model_dump() for message in payload.messages],
         temperature=payload.temperature,
         max_tokens=payload.max_tokens,
         extra_body=_extra_body(payload, backend),
+        timeout=settings.llm_long_generation_timeout_seconds,
     )
 
     message = response.choices[0].message
@@ -209,7 +211,7 @@ def _llm_unavailable(
     return HTTPException(
         status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
         detail={
-            "message": "LLM request failed on both local Ollama and OpenRouter fallback.",
+            "message": "LLM request failed on both local mlx-lm and OpenRouter fallback.",
             "primary_error": primary_error,
             "fallback_error": fallback_error,
             "llm": {

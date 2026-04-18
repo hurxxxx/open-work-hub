@@ -45,7 +45,7 @@ const BACKEND_OPTIONS: Array<{
   description: string;
 }> = [
   { value: 'auto', label: '자동', description: '로컬 우선' },
-  { value: 'local', label: '로컬', description: 'Ollama 고정' },
+  { value: 'local', label: '로컬', description: 'mlx-lm 고정' },
   { value: 'openrouter', label: 'OpenRouter', description: 'Fallback 고정' },
 ];
 
@@ -68,7 +68,7 @@ function readInitialBackendMode(): AiBackendMode {
 
 function formatBackendMode(mode: AiBackendMode): string {
   if (mode === 'local') {
-    return '로컬 Ollama';
+    return '로컬 mlx-lm';
   }
 
   if (mode === 'openrouter') {
@@ -100,7 +100,7 @@ function formatHealthDetail(
 
   if (backendMode === 'local') {
     return health.primary.ready
-      ? '로컬 Ollama 사용'
+      ? '로컬 mlx-lm 사용'
       : `로컬 확인 필요: ${health.primary.status}`;
   }
 
@@ -116,8 +116,8 @@ function formatHealthDetail(
 
   if (health.primary.ready) {
     return health.fallback?.ready
-      ? 'Ollama 연결됨, fallback 대기'
-      : 'Ollama 연결됨';
+      ? 'mlx-lm 연결됨, fallback 대기'
+      : 'mlx-lm 연결됨';
   }
 
   return health.detail ?? 'LLM 연결 확인 필요';
@@ -368,7 +368,7 @@ export const AIView = () => {
                   </p>
                   {turn.role === 'assistant' && turn.backend && (
                     <div className="mt-2 app-text-micro text-gray-500">
-                      {turn.backend === 'fallback' ? 'OpenRouter' : 'Ollama'}{' '}
+                      {turn.backend === 'fallback' ? 'OpenRouter' : 'mlx-lm'}{' '}
                       응답
                       {turn.fallbackUsed ? ' · fallback' : ''}
                     </div>
@@ -458,7 +458,7 @@ export const AIView = () => {
           </div>
 
           <div className="mt-4 rounded-lg border border-app-border bg-app-surface px-3 py-2">
-            <BackendStatusRow health={health?.primary} label="로컬 Ollama" />
+            <BackendStatusRow health={health?.primary} label="로컬 mlx-lm" />
             <BackendStatusRow health={health?.fallback} label="OpenRouter" />
           </div>
 

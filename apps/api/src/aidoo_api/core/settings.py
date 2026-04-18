@@ -136,23 +136,23 @@ class Settings(BaseSettings):
         validation_alias=AliasChoices("DOOWON_API_ASR_REQUEST_TIMEOUT_SECONDS"),
     )
     llm_provider: str = Field(
-        default="ollama",
+        default="mlx-lm",
         validation_alias=AliasChoices("DOOWON_LLM_PROVIDER"),
     )
     llm_base_url: str = Field(
-        default="http://127.0.0.1:11434/v1",
+        default="http://127.0.0.1:8080/v1",
         validation_alias=AliasChoices("DOOWON_LLM_BASE_URL"),
     )
     llm_api_key: str = Field(
-        default="ollama",
+        default="mlx",
         validation_alias=AliasChoices("DOOWON_LLM_API_KEY"),
     )
     llm_default_model: str = Field(
-        default="qwen3.5:35b-a3b-q4_K_M",
+        default="mlx-community/Qwen3.6-35B-A3B-4bit",
         validation_alias=AliasChoices("DOOWON_LLM_DEFAULT_MODEL"),
     )
     llm_canonical_model: str = Field(
-        default="qwen/qwen3.5-35b-a3b",
+        default="qwen/qwen3.6-35b-a3b",
         validation_alias=AliasChoices("DOOWON_LLM_CANONICAL_MODEL", "DOOWON_LLM_MODEL_FAMILY"),
     )
     llm_fallback_enabled: bool = Field(
@@ -190,10 +190,16 @@ class Settings(BaseSettings):
         validation_alias=AliasChoices("DOOWON_LLM_FALLBACK_TITLE", "DOOWON_OPENROUTER_TITLE"),
     )
     llm_request_timeout_seconds: float = Field(
-        default=10.0,
+        default=60.0,
         gt=0,
-        le=300,
+        le=3600,
         validation_alias=AliasChoices("DOOWON_LLM_REQUEST_TIMEOUT_SECONDS"),
+    )
+    llm_long_generation_timeout_seconds: float = Field(
+        default=1200.0,
+        gt=0,
+        le=3600,
+        validation_alias=AliasChoices("DOOWON_LLM_LONG_GENERATION_TIMEOUT_SECONDS"),
     )
     llm_healthcheck_on_startup: bool = Field(
         default=True,
