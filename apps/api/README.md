@@ -15,10 +15,9 @@ cp .env.example .env
 pnpm nx dev api
 ```
 
-LLM 기본값은 Apple Silicon에서 **mlx-lm**의 OpenAI 호환 서버를 우선 사용하고, 로컬
-모델이 준비되지 않았거나 요청이 실패하면 OpenRouter를 fallback으로 사용한다. 로컬은
-Qwen3.6-35B-A3B(4bit), fallback은 OpenRouter에서 가장 가까운 Qwen3.5-35B-A3B를
-사용한다 (OpenRouter에 3.6이 올라오면 `DOOWON_LLM_FALLBACK_MODEL`로 전환).
+LLM 설정은 **로컬 풀**(Apple Silicon mlx-lm)과 **외부 풀**(OpenRouter)로 완전히 분리되어
+있다. 어느 풀을 쓸지는 `task_kind` 별 DB 정책(`LlmPolicy`)이 결정하며, 기본 정책은
+`local_only`다. 로컬 장애 시 외부로 자동 폴백하지 않는다 ([`plans/00-ai-platform-roadmap.md`](../../plans/00-ai-platform-roadmap.md) 참조).
 
 로컬 mlx-lm 서버 구동:
 
@@ -31,27 +30,37 @@ nohup bash scripts/mlx-serve.sh &  # background
 모델(약 19GB)은 `~/.cache/huggingface` 로 첫 요청 시 캐시된다.
 
 ```env
-DOOWON_LLM_PROVIDER=mlx-lm
-DOOWON_LLM_BASE_URL=http://127.0.0.1:8080/v1
-DOOWON_LLM_API_KEY=mlx
-DOOWON_LLM_DEFAULT_MODEL=mlx-community/Qwen3.6-35B-A3B-4bit
-DOOWON_LLM_CANONICAL_MODEL=qwen/qwen3.6-35b-a3b
-DOOWON_LLM_FALLBACK_ENABLED=true
-DOOWON_LLM_FALLBACK_PROVIDER=openrouter
-DOOWON_LLM_FALLBACK_MODEL=qwen/qwen3.5-35b-a3b
-DOOWON_OPENROUTER_API_KEY=
-DOOWON_OPENROUTER_BASE_URL=https://openrouter.ai/api/v1
+# Local pool
+DOOWON_LLM_LOCAL_PROVIDER=mlx-lm
+DOOWON_LLM_LOCAL_BASE_URL=http://127.0.0.1:8080/v1
+DOOWON_LLM_LOCAL_API_KEY=mlx
+DOOWON_LLM_LOCAL_DEFAULT_MODEL=mlx-community/Qwen3.6-35B-A3B-4bit
+DOOWON_LLM_LOCAL_CANONICAL_MODEL=qwen/qwen3.6-35b-a3b
+DOOWON_LLM_LOCAL_LONG_GENERATION_TIMEOUT_SECONDS=1200
+
+# External pool
+DOOWON_LLM_EXTERNAL_ENABLED=true
+DOOWON_LLM_EXTERNAL_PROVIDER=openrouter
+DOOWON_LLM_EXTERNAL_BASE_URL=https://openrouter.ai/api/v1
+DOOWON_LLM_EXTERNAL_DEFAULT_MODEL=qwen/qwen3.5-35b-a3b
+DOOWON_LLM_EXTERNAL_API_KEY=          # OPENROUTER_API_KEY로도 대체 가능
+DOOWON_LLM_EXTERNAL_LONG_GENERATION_TIMEOUT_SECONDS=900
 ```
+
+기존 `DOOWON_LLM_*` / `DOOWON_LLM_FALLBACK_*` 환경변수는 Phase 3 kickoff 전까지
+alias로 계속 인식된다. 특히 예전 shared 값이던
+`DOOWON_LLM_CANONICAL_MODEL`, `DOOWON_LLM_LONG_GENERATION_TIMEOUT_SECONDS` 는
+local/external 양쪽 풀의 fallback alias 로 함께 해석된다.
 
 준비 상태 확인:
 
 ```bash
-curl http://127.0.0.1:8000/readyz
+curl http://127.0.0.1:8000/readyz               # 무인증, 현재 정책 기준의 실제 AI readiness
+curl http://127.0.0.1:8000/api/v1/ai/health     # 인증 필요, raw local/external pool health
 ```
 
-챗봇 요청은 기본 `backend_mode=auto`로 로컬 mlx-lm을 먼저 사용하고 실패 시
-OpenRouter로 넘어간다. UI 또는 API 요청에서 `backend_mode=local`이나
-`backend_mode=openrouter`를 보내면 해당 backend만 사용한다.
+`/api/v1/ai/chat` 등 AI 엔드포인트는 app-level dependency 체인으로
+`require_current_user` + workspace membership 검증 뒤에만 mount된다.
 
 ## 데이터베이스 마이그레이션 (Alembic)
 

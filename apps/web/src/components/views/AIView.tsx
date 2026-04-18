@@ -15,8 +15,8 @@ import {
   sendAiChat,
   type AiBackendMode,
   type AiChatMessage,
-  type LlmBackendHealthResponse,
   type LlmHealthResponse,
+  type LlmPoolHealthResponse,
 } from '@/src/domains/ai/ai-api';
 import { useAuth } from '@/src/domains/auth/auth-provider';
 
@@ -24,9 +24,12 @@ interface ChatTurn {
   id: string;
   role: 'user' | 'assistant';
   content: string;
-  backend?: string;
   provider?: string;
-  fallbackUsed?: boolean;
+  policy?: string | null;
+  chosenPool?: 'local' | 'external' | null;
+  decisionReason?: string | null;
+  forcedLocal?: boolean;
+  piiHits?: string[];
 }
 
 const INITIAL_TURNS: ChatTurn[] = [
@@ -44,9 +47,8 @@ const BACKEND_OPTIONS: Array<{
   label: string;
   description: string;
 }> = [
-  { value: 'auto', label: '자동', description: '로컬 우선' },
-  { value: 'local', label: '로컬', description: 'mlx-lm 고정' },
-  { value: 'openrouter', label: 'OpenRouter', description: 'Fallback 고정' },
+  { value: 'auto', label: '자동', description: '정책 기반 라우팅' },
+  { value: 'local', label: '로컬', description: 'local 풀 고정' },
 ];
 
 function readInitialBackendMode(): AiBackendMode {
@@ -55,11 +57,7 @@ function readInitialBackendMode(): AiBackendMode {
   }
 
   const savedMode = window.localStorage.getItem(AI_BACKEND_MODE_STORAGE_KEY);
-  if (
-    savedMode === 'auto' ||
-    savedMode === 'local' ||
-    savedMode === 'openrouter'
-  ) {
+  if (savedMode === 'auto' || savedMode === 'local') {
     return savedMode;
   }
 
@@ -68,11 +66,7 @@ function readInitialBackendMode(): AiBackendMode {
 
 function formatBackendMode(mode: AiBackendMode): string {
   if (mode === 'local') {
-    return '로컬 mlx-lm';
-  }
-
-  if (mode === 'openrouter') {
-    return 'OpenRouter';
+    return '로컬 고정';
   }
 
   return '자동';
@@ -87,7 +81,11 @@ function formatHealth(
     return `${modeLabel}: 모델 상태 확인 중`;
   }
 
-  return `${modeLabel}: ${health.canonical_model}`;
+  if (backendMode === 'local') {
+    return `${modeLabel}: ${health.local.canonical_model}`;
+  }
+
+  return `${modeLabel}: 정책 기반`;
 }
 
 function formatHealthDetail(
@@ -99,32 +97,24 @@ function formatHealthDetail(
   }
 
   if (backendMode === 'local') {
-    return health.primary.ready
-      ? '로컬 mlx-lm 사용'
-      : `로컬 확인 필요: ${health.primary.status}`;
+    return health.local.ready
+      ? '로컬 풀만 사용'
+      : `로컬 확인 필요: ${health.local.status}`;
   }
 
-  if (backendMode === 'openrouter') {
-    return health.fallback?.ready
-      ? 'OpenRouter 사용'
-      : `OpenRouter 확인 필요: ${health.fallback?.status ?? 'not_configured'}`;
-  }
-
-  if (health.active_backend === 'fallback') {
-    return '로컬 모델 장애, OpenRouter fallback 사용 중';
-  }
-
-  if (health.primary.ready) {
-    return health.fallback?.ready
-      ? 'mlx-lm 연결됨, fallback 대기'
-      : 'mlx-lm 연결됨';
-  }
-
-  return health.detail ?? 'LLM 연결 확인 필요';
+  const externalStatus = health.external
+    ? health.external.ready
+      ? 'external 준비'
+      : `external ${health.external.status}`
+    : 'external 비활성';
+  const localStatus = health.local.ready
+    ? 'local 준비'
+    : `local ${health.local.status}`;
+  return `정책 기반 · ${localStatus} · ${externalStatus}`;
 }
 
 function formatBackendStatus(
-  backend: LlmBackendHealthResponse | null | undefined,
+  backend: LlmPoolHealthResponse | null | undefined,
 ): string {
   if (!backend) {
     return '확인 안 됨';
@@ -141,7 +131,7 @@ function BackendStatusRow({
   health,
   label,
 }: {
-  health: LlmBackendHealthResponse | null | undefined;
+  health: LlmPoolHealthResponse | null | undefined;
   label: string;
 }) {
   const ready = Boolean(health?.ready);
@@ -299,9 +289,12 @@ export const AIView = () => {
           id: `assistant-${Date.now()}`,
           role: 'assistant',
           content: response.content || '응답을 생성하지 못했습니다.',
-          backend: response.backend,
           provider: response.provider,
-          fallbackUsed: response.fallback_used,
+          policy: response.policy,
+          chosenPool: response.chosen_pool,
+          decisionReason: response.decision_reason,
+          forcedLocal: response.forced_local,
+          piiHits: response.pii_hits,
         },
       ]);
     } catch (error) {
@@ -329,7 +322,7 @@ export const AIView = () => {
             <div className="space-y-1">
               <h1 className="app-text-title-lg text-app-ink">업무 챗봇</h1>
               <p className="app-text-body-sm text-gray-500 dark:text-gray-400">
-                질문을 입력하면 로컬 Qwen 모델이 답합니다.
+                정책에 따라 local 또는 external 풀이 선택됩니다.
               </p>
             </div>
             <div className="rounded-md border border-app-border bg-app-bg px-3 py-2 text-right">
@@ -366,11 +359,15 @@ export const AIView = () => {
                   <p className="m-0 whitespace-pre-wrap break-words">
                     {turn.content}
                   </p>
-                  {turn.role === 'assistant' && turn.backend && (
+                  {turn.role === 'assistant' && turn.chosenPool && (
                     <div className="mt-2 app-text-micro text-gray-500">
-                      {turn.backend === 'fallback' ? 'OpenRouter' : 'mlx-lm'}{' '}
-                      응답
-                      {turn.fallbackUsed ? ' · fallback' : ''}
+                      {turn.chosenPool === 'external' ? 'external 풀' : 'local 풀'} ·{' '}
+                      {turn.policy ?? 'policy_unknown'}
+                      {turn.decisionReason ? ` · ${turn.decisionReason}` : ''}
+                      {turn.forcedLocal ? ' · local 강제' : ''}
+                      {turn.piiHits && turn.piiHits.length > 0
+                        ? ` · PII: ${turn.piiHits.join(', ')}`
+                        : ''}
                     </div>
                   )}
                 </div>
@@ -429,13 +426,13 @@ export const AIView = () => {
 
         <aside className="border-t border-app-border bg-app-surface-sidebar p-5 lg:border-l lg:border-t-0">
           <div className="space-y-2">
-            <h2 className="app-text-title-md text-app-ink">모델 경로</h2>
+            <h2 className="app-text-title-md text-app-ink">라우팅 모드</h2>
             <p className="app-text-body-sm text-gray-500 dark:text-gray-400">
-              응답 경로를 선택합니다.
+              정책 기반 또는 local 고정 모드를 선택합니다.
             </p>
           </div>
 
-          <div className="mt-4 grid grid-cols-3 gap-2">
+          <div className="mt-4 grid grid-cols-2 gap-2">
             {BACKEND_OPTIONS.map((option) => (
               <button
                 key={option.value}
@@ -458,8 +455,8 @@ export const AIView = () => {
           </div>
 
           <div className="mt-4 rounded-lg border border-app-border bg-app-surface px-3 py-2">
-            <BackendStatusRow health={health?.primary} label="로컬 mlx-lm" />
-            <BackendStatusRow health={health?.fallback} label="OpenRouter" />
+            <BackendStatusRow health={health?.local} label="Local pool" />
+            <BackendStatusRow health={health?.external} label="External pool" />
           </div>
 
           <button
@@ -472,7 +469,7 @@ export const AIView = () => {
               size={15}
               className={isCheckingHealth ? 'animate-spin' : ''}
             />
-            로컬 다시 확인
+            상태 새로고침
           </button>
 
           <div className="mt-8 border-t border-app-border pt-5">

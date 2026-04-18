@@ -6,8 +6,12 @@ from fastapi import Depends, FastAPI
 from fastapi import Response, status
 from fastapi.responses import Response as FastAPIResponse
 
-from aidoo_api.core.db import init_db
-from aidoo_api.core.llm import check_llm_stack_health
+from aidoo_api.core.db import get_session_factory, init_db
+from aidoo_api.core.llm import (
+    check_all_pools_health,
+    check_effective_llm_readiness,
+    check_llm_stack_health,
+)
 from aidoo_api.core.settings import get_settings
 from aidoo_api.core.storage import ensure_bucket
 from aidoo_api.domains.ai.router import router as ai_router
@@ -47,10 +51,19 @@ def create_app() -> FastAPI:
         app.state.docs_collab = DocsCollabHub()
         await app.state.docs_collab.startup()
         if settings.llm_healthcheck_on_startup:
-            llm_health = check_llm_stack_health(settings)
-            app.state.llm_health = llm_health.public_dict()
-            if settings.llm_required and not llm_health.ready:
-                logger.warning("LLM readiness check failed: %s", llm_health.public_dict())
+            dual = check_all_pools_health(settings)
+            with get_session_factory()() as session:
+                effective = check_effective_llm_readiness(session, settings)
+            app.state.llm_health = dual.public_dict()
+            app.state.llm_effective = effective.public_dict()
+            # Back-compat: keep legacy shape available under a sibling key so
+            # any lingering reader of the old primary/fallback structure can
+            # adapt at its own pace. Phase 3 drops both.
+            app.state.llm_health_legacy = check_llm_stack_health(settings).public_dict()
+            if settings.llm_required and not effective.ready:
+                logger.warning(
+                    "LLM effective readiness check failed: %s", effective.public_dict()
+                )
         yield
         await app.state.docs_collab.shutdown()
 
@@ -78,16 +91,23 @@ def create_app() -> FastAPI:
 
     @app.get("/readyz", tags=["system"])
     def readyz(response: Response) -> dict[str, object]:
-        llm_health = check_llm_stack_health(settings)
-        ready = llm_health.ready or not settings.llm_required
+        dual = check_all_pools_health(settings)
+        with get_session_factory()() as session:
+            effective = check_effective_llm_readiness(session, settings)
+        ready = effective.ready or not settings.llm_required
         if not ready:
             response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
 
+        # Expose both the pool-scoped ``llm`` payload (canonical) and the
+        # legacy primary/fallback shape under ``llm_legacy`` so the current
+        # web UI does not break while it migrates to ``/api/v1/ai/health``.
         return {
             "status": "ok" if ready else "degraded",
             "environment": settings.environment,
             "instance_id": settings.instance_id,
-            "llm": llm_health.public_dict(),
+            "llm": dual.public_dict(),
+            "llm_effective": effective.public_dict(),
+            "llm_legacy": check_llm_stack_health(settings).public_dict(),
         }
 
     app.include_router(auth_router, prefix=settings.api_prefix)

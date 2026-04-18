@@ -1,7 +1,7 @@
 import { rewriteWorkspaceApiPath } from '@/src/domains/workspaces/workspace-utils';
 
 export type AiChatRole = 'system' | 'user' | 'assistant';
-export type AiBackendMode = 'auto' | 'local' | 'openrouter';
+export type AiBackendMode = 'auto' | 'local';
 
 export interface AiChatMessage {
   role: AiChatRole;
@@ -31,10 +31,15 @@ export interface AiChatResponse {
   fallback_used: boolean;
   canonical_model: string;
   requested_backend_mode: AiBackendMode;
+  policy: string | null;
+  chosen_pool: 'local' | 'external' | null;
+  decision_reason: string | null;
+  forced_local: boolean;
+  pii_hits: string[];
 }
 
-export interface LlmBackendHealthResponse {
-  name: string;
+export interface LlmPoolHealthResponse {
+  pool: 'local' | 'external';
   provider: string;
   base_url: string;
   model: string;
@@ -44,10 +49,19 @@ export interface LlmBackendHealthResponse {
   detail: string | null;
 }
 
-export interface LlmHealthResponse extends LlmBackendHealthResponse {
-  active_backend: string | null;
-  primary: LlmBackendHealthResponse;
-  fallback: LlmBackendHealthResponse | null;
+export interface LlmTaskReadinessResponse {
+  task_kind: string;
+  description: string;
+  policy: string;
+  chosen_pool: 'local' | 'external' | null;
+  ready: boolean;
+  detail: string | null;
+}
+
+export interface LlmHealthResponse {
+  ready: boolean;
+  local: LlmPoolHealthResponse;
+  external: LlmPoolHealthResponse | null;
 }
 
 export class AiApiError extends Error {
@@ -122,7 +136,7 @@ async function aiRequest<T>(
 }
 
 export function getLlmHealth(token: string): Promise<LlmHealthResponse> {
-  return aiRequest<LlmHealthResponse>('/api/v1/ai/llm-health', token);
+  return aiRequest<LlmHealthResponse>('/api/v1/ai/health', token);
 }
 
 export function sendAiChat(

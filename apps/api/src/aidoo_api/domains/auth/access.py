@@ -502,7 +502,39 @@ def ensure_seed_data(db: Session) -> None:
         for workspace in existing_workspaces:
             ensure_workspace_default_pms_space(db, workspace)
 
+    ensure_llm_policy_seed_data(db)
+
     db.commit()
+
+
+def ensure_llm_policy_seed_data(db: Session) -> None:
+    """Idempotent insert-if-missing of baseline LlmPolicy rows.
+
+    Never overwrites existing rows — admins can mutate policies without worry
+    of seed drift. New task_kinds shipped in later phases are added here so
+    that booting against an existing DB fills in the missing rows.
+    """
+    from aidoo_api.domains.ai.models import LlmPolicy
+    from aidoo_api.domains.auth.security import new_id
+    from aidoo_api.core.llm import get_llm_policy_seed_data
+
+    existing_kinds = set(db.scalars(select(LlmPolicy.task_kind)).all())
+    to_insert = [
+        (task_kind, policy_mode, description)
+        for task_kind, policy_mode, description in get_llm_policy_seed_data()
+        if task_kind not in existing_kinds
+    ]
+    for task_kind, policy_mode, description in to_insert:
+        db.add(
+            LlmPolicy(
+                id=new_id(),
+                task_kind=task_kind,
+                policy_mode=policy_mode,
+                description=description,
+            )
+        )
+    if to_insert:
+        db.flush()
 
 
 def are_dev_login_accounts_seeded(db: Session) -> bool:

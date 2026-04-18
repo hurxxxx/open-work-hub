@@ -9,10 +9,12 @@ from alembic import context
 # Import Base and all model modules so Base.metadata is fully populated.
 from aidoo_api.core.db import Base
 from aidoo_api.core.settings import get_settings
+from aidoo_api.domains.ai import models as ai_models  # noqa: F401
 from aidoo_api.domains.auth import models as auth_models  # noqa: F401
 from aidoo_api.domains.docs import models as docs_models  # noqa: F401
 from aidoo_api.domains.media import models as media_models  # noqa: F401
 from aidoo_api.domains.meeting import models as meeting_models  # noqa: F401
+from aidoo_api.domains.planner import models as planner_models  # noqa: F401
 from aidoo_api.domains.pms import models as pms_models  # noqa: F401
 
 config = context.config

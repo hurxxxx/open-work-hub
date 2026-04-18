@@ -28,6 +28,7 @@ def _ensure_api_src_on_path() -> None:
 
 _ensure_api_src_on_path()
 
+from openai import OpenAIError  # noqa: E402
 from sqlalchemy import create_engine, select  # noqa: E402
 from sqlalchemy.orm import Session, selectinload  # noqa: E402
 
@@ -38,9 +39,8 @@ from aidoo_api.core.asr import (  # noqa: E402
     get_asr_backend,
 )
 from aidoo_api.core.llm import (  # noqa: E402
-    check_llm_stack_health,
-    get_llm_backend,
-    get_llm_client,
+    LlmTaskContext,
+    complete_chat,
 )
 from aidoo_api.domains.auth.models import Workspace  # noqa: E402
 from aidoo_api.domains.auth.security import new_id  # noqa: E402
@@ -231,17 +231,30 @@ def summarize_recording(self, recording_id: str) -> str:
             raise PermanentError("Transcript is missing.")
 
         _heartbeat(session, recording, max(recording.progress_pct, 60), "summarizing")
-        llm_health = check_llm_stack_health()
-        if not llm_health.ready:
-            raise TransientError("LLM stack is not ready.")
-        backend_name = "primary" if llm_health.primary.ready else "fallback"
-        backend = get_llm_backend(backend_name)
-        response = get_llm_client(backend_name).chat.completions.create(
-            model=backend.model,
-            messages=_summary_prompt(recording.transcript_text),
-            temperature=0.2,
-            max_tokens=4000,
+
+        # Build the LlmTaskContext for this system job. Routing is delegated to
+        # ``complete_chat()`` so policy changes take effect without touching the
+        # worker implementation.
+        workspace_id = recording.meeting.workspace_id if recording.meeting else None
+        if not workspace_id:
+            raise PermanentError("Recording is not linked to a workspace.")
+
+        context = LlmTaskContext(
+            source="worker.meeting.summarize",
+            actor_user_id=None,
+            workspace_id=workspace_id,
+            task_kind="meeting_summary",
         )
+        try:
+            response, _decision, _config = complete_chat(
+                context,
+                session,
+                messages=_summary_prompt(recording.transcript_text),
+                temperature=0.2,
+                max_tokens=4000,
+            )
+        except OpenAIError as error:
+            raise TransientError(str(error)) from error
         summary = (response.choices[0].message.content or "").strip()
         if not summary:
             raise PermanentError("LLM returned an empty summary.")

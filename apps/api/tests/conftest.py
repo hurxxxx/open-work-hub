@@ -14,6 +14,12 @@ POSTGRES_IMAGE = "postgres:18"
 REDIS_IMAGE = "redis:7"
 
 
+def _clear_cache(func) -> None:
+    cache_clear = getattr(func, "cache_clear", None)
+    if cache_clear is not None:
+        cache_clear()
+
+
 def _find_free_port() -> int:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
         sock.bind(("127.0.0.1", 0))
@@ -131,16 +137,17 @@ def _build_client(
     monkeypatch.setenv("DOOWON_REDIS_URL", collab_redis_url)
 
     from aidoo_api.core.db import Base, get_engine, get_session_factory
-    from aidoo_api.core.llm import get_llm_client
+    from aidoo_api.core.llm import get_llm_client, get_pool_client
     from aidoo_api.core.settings import get_settings
     from aidoo_api.domains.auth import models as auth_models  # noqa: F401
     from aidoo_api.domains.meeting import models as meeting_models  # noqa: F401
     from aidoo_api.domains.pms import models as pms_models  # noqa: F401
 
-    get_settings.cache_clear()
-    get_llm_client.cache_clear()
-    get_engine.cache_clear()
-    get_session_factory.cache_clear()
+    _clear_cache(get_settings)
+    _clear_cache(get_llm_client)
+    _clear_cache(get_pool_client)
+    _clear_cache(get_engine)
+    _clear_cache(get_session_factory)
 
     engine = get_engine()
     Base.metadata.drop_all(bind=engine)
@@ -155,7 +162,7 @@ def _build_client(
 
 def _teardown_client_state() -> None:
     from aidoo_api.core.db import Base, get_engine, get_session_factory
-    from aidoo_api.core.llm import get_llm_client
+    from aidoo_api.core.llm import get_llm_client, get_pool_client
     from aidoo_api.core.settings import get_settings
 
     engine = get_engine()
@@ -163,10 +170,11 @@ def _teardown_client_state() -> None:
     with engine.begin() as connection:
         connection.exec_driver_sql("DROP TABLE IF EXISTS alembic_version")
     engine.dispose()
-    get_settings.cache_clear()
-    get_llm_client.cache_clear()
-    get_engine.cache_clear()
-    get_session_factory.cache_clear()
+    _clear_cache(get_settings)
+    _clear_cache(get_llm_client)
+    _clear_cache(get_pool_client)
+    _clear_cache(get_engine)
+    _clear_cache(get_session_factory)
 
 
 @pytest.fixture

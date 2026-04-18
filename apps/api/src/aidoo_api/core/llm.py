@@ -1,17 +1,685 @@
+"""LLM pool routing + policy + health.
+
+Public surface added in Phase 1 (preferred for new callers):
+
+- ``LlmTaskContext`` — identity of an LLM request (source / actor_user_id /
+  workspace_id / task_kind). Mandatory input to ``choose_pool`` and
+  ``complete_chat``.
+- ``PolicyDecision`` — output of ``choose_pool``; records the policy mode, the
+  chosen pool, any PII hits, whether local was forced, and a short reason.
+- ``get_pool_client(pool)`` / ``get_pool_config(pool)`` — pool-scoped OpenAI
+  client + config, replacing the old ``primary/fallback`` wording.
+- ``check_pool_health(pool)`` / ``check_all_pools_health()`` — pool-independent
+  health. **No cross-pool fallback** in any public function.
+- ``complete_chat(context, db, ...)`` — the one call path for all chat
+  completions. Handles policy, PII, pool selection, timeout, and forwards to
+  the OpenAI-compatible client. Callers MUST supply a ``LlmTaskContext``.
+
+Backward-compat shim (scheduled for removal at Phase 3 kickoff per
+``plans/00-ai-platform-roadmap.md``):
+
+- ``LlmBackendName``, ``LlmBackendConfig``, ``LlmHealth``, ``LlmStackHealth``
+  and their ``check_llm_health`` / ``check_llm_stack_health`` /
+  ``get_llm_backend`` / ``get_llm_client`` / ``require_llm_ready`` accessors
+  still work by delegating to the pool-scoped implementations below. Existing
+  ``primary``/``fallback`` names map 1:1 onto ``local``/``external``.
+
+Nothing outside this module should construct the legacy ``primary/fallback``
+names going forward.
+"""
+
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
+import logging
+import time
+from collections.abc import Iterable
+from dataclasses import asdict, dataclass, field
 from functools import lru_cache
-from typing import Literal
+from typing import Any, Literal, Mapping
 
 from fastapi import HTTPException, status
 from openai import APIConnectionError, APIStatusError, APITimeoutError, OpenAI, OpenAIError
+from sqlalchemy.orm import Session
 
+from aidoo_api.core.pii import scan_pii
 from aidoo_api.core.settings import Settings, get_settings
+from aidoo_api.domains.ai.policy_service import LlmPolicyMode, resolve_policy
 
+
+logger = logging.getLogger(__name__)
+
+
+LlmPoolName = Literal["local", "external"]
+LlmPoolHint = Literal["local"]
+LlmHealthStatus = Literal[
+    "ready", "unavailable", "model_missing", "not_configured", "disabled"
+]
+
+
+@dataclass(frozen=True)
+class SupportedLlmTask:
+    task_kind: str
+    default_policy: LlmPolicyMode
+    description: str
+
+
+SUPPORTED_LLM_TASKS: tuple[SupportedLlmTask, ...] = (
+    SupportedLlmTask(
+        task_kind="chatbot",
+        default_policy="local_only",
+        description="Interactive chat — user-facing",
+    ),
+    SupportedLlmTask(
+        task_kind="meeting_summary",
+        default_policy="local_only",
+        description="Meeting transcript summarization (worker)",
+    ),
+    SupportedLlmTask(
+        task_kind="batch_generation",
+        default_policy="local_only",
+        description="Long-form batch generation (reports etc.)",
+    ),
+)
+
+
+def get_supported_llm_tasks() -> tuple[SupportedLlmTask, ...]:
+    return SUPPORTED_LLM_TASKS
+
+
+def get_llm_policy_seed_data() -> tuple[tuple[str, LlmPolicyMode, str], ...]:
+    return tuple(
+        (task.task_kind, task.default_policy, task.description)
+        for task in get_supported_llm_tasks()
+    )
+
+
+# ---------------------------------------------------------------------------
+# Config + identity types
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class LlmPoolConfig:
+    pool: LlmPoolName
+    provider: str
+    base_url: str
+    api_key: str
+    default_model: str
+    canonical_model: str
+    long_generation_timeout_seconds: float
+    enabled: bool = True
+    default_headers: Mapping[str, str] | None = None
+
+    @property
+    def configured(self) -> bool:
+        return (
+            self.enabled
+            and bool(self.base_url.strip())
+            and bool(self.api_key.strip())
+            and bool(self.default_model.strip())
+        )
+
+
+@dataclass(frozen=True)
+class LlmTaskContext:
+    source: str
+    workspace_id: str
+    task_kind: str
+    actor_user_id: str | None = None
+
+
+@dataclass(frozen=True)
+class PolicyDecision:
+    policy: LlmPolicyMode
+    chosen_pool: LlmPoolName
+    pii_hits: list[str] = field(default_factory=list)
+    forced_local: bool = False
+    reason: str = ""
+
+    def as_payload(self) -> dict[str, Any]:
+        return {
+            "policy": self.policy,
+            "chosen_pool": self.chosen_pool,
+            "pii_hits": list(self.pii_hits),
+            "forced_local": self.forced_local,
+            "decision_reason": self.reason,
+        }
+
+
+@dataclass(frozen=True)
+class LlmPoolHealth:
+    pool: LlmPoolName
+    provider: str
+    base_url: str
+    model: str
+    canonical_model: str
+    status: LlmHealthStatus
+    detail: str | None = None
+
+    @property
+    def ready(self) -> bool:
+        return self.status == "ready"
+
+    def public_dict(self) -> dict[str, Any]:
+        return {**asdict(self), "ready": self.ready}
+
+
+@dataclass(frozen=True)
+class LlmDualHealth:
+    local: LlmPoolHealth
+    external: LlmPoolHealth | None
+
+    @property
+    def ready(self) -> bool:
+        """Overall readiness = local is ready OR external is ready.
+
+        This is a signal for operations dashboards only. It is NOT used to
+        decide a route at request time — see ``choose_pool``.
+        """
+        return self.local.ready or bool(self.external and self.external.ready)
+
+    def public_dict(self) -> dict[str, Any]:
+        return {
+            "ready": self.ready,
+            "local": self.local.public_dict(),
+            "external": self.external.public_dict() if self.external else None,
+        }
+
+
+@dataclass(frozen=True)
+class LlmTaskReadiness:
+    task_kind: str
+    description: str
+    policy: LlmPolicyMode
+    chosen_pool: LlmPoolName | None
+    ready: bool
+    detail: str | None = None
+
+    def public_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass(frozen=True)
+class LlmEffectiveReadiness:
+    tasks: tuple[LlmTaskReadiness, ...]
+
+    @property
+    def ready(self) -> bool:
+        return all(task.ready for task in self.tasks)
+
+    def public_dict(self) -> dict[str, Any]:
+        return {
+            "ready": self.ready,
+            "tasks": [task.public_dict() for task in self.tasks],
+        }
+
+
+# ---------------------------------------------------------------------------
+# Pool config + client
+# ---------------------------------------------------------------------------
+
+
+def get_pool_config(
+    pool: LlmPoolName, settings: Settings | None = None
+) -> LlmPoolConfig:
+    settings = settings or get_settings()
+    if pool == "local":
+        return LlmPoolConfig(
+            pool="local",
+            provider=settings.llm_local_provider,
+            base_url=settings.llm_local_base_url,
+            api_key=settings.llm_local_api_key,
+            default_model=settings.llm_local_default_model,
+            canonical_model=settings.llm_local_canonical_model,
+            long_generation_timeout_seconds=(
+                settings.llm_local_long_generation_timeout_seconds
+            ),
+            enabled=True,  # the local pool is always a possibility
+        )
+
+    headers: dict[str, str] = {}
+    if settings.llm_external_http_referer.strip():
+        headers["HTTP-Referer"] = settings.llm_external_http_referer.strip()
+    if settings.llm_external_title.strip():
+        headers["X-OpenRouter-Title"] = settings.llm_external_title.strip()
+
+    return LlmPoolConfig(
+        pool="external",
+        provider=settings.llm_external_provider,
+        base_url=settings.llm_external_base_url,
+        api_key=settings.llm_external_api_key,
+        default_model=settings.llm_external_default_model,
+        canonical_model=settings.llm_external_canonical_model,
+        long_generation_timeout_seconds=(
+            settings.llm_external_long_generation_timeout_seconds
+        ),
+        enabled=settings.llm_external_enabled,
+        default_headers=headers or None,
+    )
+
+
+@lru_cache(maxsize=2)
+def get_pool_client(pool: LlmPoolName) -> OpenAI:
+    config = get_pool_config(pool)
+    settings = get_settings()
+    return OpenAI(
+        api_key=config.api_key or "placeholder",
+        base_url=config.base_url,
+        default_headers=dict(config.default_headers) if config.default_headers else None,
+        max_retries=0,
+        timeout=settings.llm_request_timeout_seconds,
+    )
+
+
+def _clear_pool_client_cache() -> None:
+    cache_clear = getattr(get_pool_client, "cache_clear", None)
+    if cache_clear is not None:
+        cache_clear()
+
+
+# ---------------------------------------------------------------------------
+# Health
+# ---------------------------------------------------------------------------
+
+
+def check_pool_health(
+    pool: LlmPoolName, settings: Settings | None = None
+) -> LlmPoolHealth:
+    settings = settings or get_settings()
+    config = get_pool_config(pool, settings)
+
+    if not config.enabled:
+        return LlmPoolHealth(
+            pool=config.pool,
+            provider=config.provider,
+            base_url=config.base_url,
+            model=config.default_model,
+            canonical_model=config.canonical_model,
+            status="disabled",
+            detail=f"{config.pool} pool is disabled.",
+        )
+
+    if not config.configured:
+        missing = [
+            name
+            for name, value in {
+                "base_url": config.base_url,
+                "api_key": config.api_key,
+                "default_model": config.default_model,
+            }.items()
+            if not str(value).strip()
+        ]
+        return LlmPoolHealth(
+            pool=config.pool,
+            provider=config.provider,
+            base_url=config.base_url,
+            model=config.default_model,
+            canonical_model=config.canonical_model,
+            status="not_configured",
+            detail=f"Missing LLM {config.pool} setting(s): {', '.join(missing)}",
+        )
+
+    # Route through the legacy ``get_llm_client`` accessor so that existing
+    # tests and callers that monkeypatch it continue to intercept. The compat
+    # wrapper delegates to :func:`get_pool_client` in production.
+    try:
+        models = get_llm_client(_backend_of(config.pool)).models.list()
+    except (APIConnectionError, APITimeoutError) as error:
+        return LlmPoolHealth(
+            pool=config.pool,
+            provider=config.provider,
+            base_url=config.base_url,
+            model=config.default_model,
+            canonical_model=config.canonical_model,
+            status="unavailable",
+            detail=str(error),
+        )
+    except APIStatusError as error:
+        return LlmPoolHealth(
+            pool=config.pool,
+            provider=config.provider,
+            base_url=config.base_url,
+            model=config.default_model,
+            canonical_model=config.canonical_model,
+            status="unavailable",
+            detail=f"{error.status_code}: {error.message}",
+        )
+    except OpenAIError as error:
+        return LlmPoolHealth(
+            pool=config.pool,
+            provider=config.provider,
+            base_url=config.base_url,
+            model=config.default_model,
+            canonical_model=config.canonical_model,
+            status="unavailable",
+            detail=str(error),
+        )
+
+    model_ids = {model.id for model in models.data}
+    if config.default_model not in model_ids:
+        return LlmPoolHealth(
+            pool=config.pool,
+            provider=config.provider,
+            base_url=config.base_url,
+            model=config.default_model,
+            canonical_model=config.canonical_model,
+            status="model_missing",
+            detail=(
+                f"Configured model was not found. Available models: "
+                f"{', '.join(sorted(model_ids))}"
+            ),
+        )
+
+    return LlmPoolHealth(
+        pool=config.pool,
+        provider=config.provider,
+        base_url=config.base_url,
+        model=config.default_model,
+        canonical_model=config.canonical_model,
+        status="ready",
+    )
+
+
+def check_all_pools_health(settings: Settings | None = None) -> LlmDualHealth:
+    settings = settings or get_settings()
+    local = check_pool_health("local", settings)
+    external: LlmPoolHealth | None = (
+        check_pool_health("external", settings)
+        if settings.llm_external_enabled
+        else None
+    )
+    return LlmDualHealth(local=local, external=external)
+
+
+def check_effective_llm_readiness(
+    db: Session, settings: Settings | None = None
+) -> LlmEffectiveReadiness:
+    settings = settings or get_settings()
+    dual = check_all_pools_health(settings)
+    tasks: list[LlmTaskReadiness] = []
+
+    for task in get_supported_llm_tasks():
+        try:
+            policy = resolve_policy(task.task_kind, db)
+        except Exception as error:
+            tasks.append(
+                LlmTaskReadiness(
+                    task_kind=task.task_kind,
+                    description=task.description,
+                    policy=task.default_policy,
+                    chosen_pool=None,
+                    ready=False,
+                    detail=f"policy_lookup_failed: {error}",
+                )
+            )
+            continue
+
+        chosen_pool: LlmPoolName = "external" if policy == "external" else "local"
+        pool_health = dual.external if chosen_pool == "external" else dual.local
+        if pool_health is None:
+            tasks.append(
+                LlmTaskReadiness(
+                    task_kind=task.task_kind,
+                    description=task.description,
+                    policy=policy,
+                    chosen_pool=chosen_pool,
+                    ready=False,
+                    detail="external pool is disabled",
+                )
+            )
+            continue
+
+        tasks.append(
+            LlmTaskReadiness(
+                task_kind=task.task_kind,
+                description=task.description,
+                policy=policy,
+                chosen_pool=chosen_pool,
+                ready=pool_health.ready,
+                detail=None if pool_health.ready else pool_health.detail or pool_health.status,
+            )
+        )
+
+    return LlmEffectiveReadiness(tasks=tuple(tasks))
+
+
+# ---------------------------------------------------------------------------
+# Pool selection + chat completion
+# ---------------------------------------------------------------------------
+
+
+def choose_pool(
+    context: LlmTaskContext,
+    text_inputs: Iterable[str],
+    db: Session,
+    *,
+    pool_hint: LlmPoolHint | None = None,
+) -> tuple[LlmPoolName, PolicyDecision]:
+    """Determine which pool to use for ``context``.
+
+    Rules:
+      1. Lookup ``policy_mode`` for ``context.task_kind``. Missing row ⇒ `local_only`.
+      2. If policy is ``external``, scan ``text_inputs`` for PII. A hit ⇒
+         force ``local`` (``forced_local=True``) and record the hit labels.
+      3. No cross-pool fallback is ever performed here.
+    """
+    policy = resolve_policy(context.task_kind, db)
+    if pool_hint == "local":
+        return "local", PolicyDecision(
+            policy=policy,
+            chosen_pool="local",
+            forced_local=True,
+            reason="local_hint",
+        )
+
+    if policy == "external":
+        hits = scan_pii(text_inputs)
+        if hits:
+            decision = PolicyDecision(
+                policy="external",
+                chosen_pool="local",
+                pii_hits=[hit.pattern for hit in hits],
+                forced_local=True,
+                reason="pii_detected",
+            )
+            return "local", decision
+        return "external", PolicyDecision(
+            policy="external",
+            chosen_pool="external",
+            reason="policy_external",
+        )
+
+    return "local", PolicyDecision(
+        policy="local_only",
+        chosen_pool="local",
+        reason="policy_local_only",
+    )
+
+
+def complete_chat(
+    context: LlmTaskContext,
+    db: Session,
+    *,
+    messages: list[dict[str, Any]],
+    temperature: float | None = None,
+    max_tokens: int | None = None,
+    reasoning_effort: str | None = None,
+    extra_body: Mapping[str, Any] | None = None,
+    timeout_seconds: float | None = None,
+    model: str | None = None,
+    audit_entity_id: str | None = None,
+    pool_hint: LlmPoolHint | None = None,
+) -> tuple[Any, PolicyDecision, LlmPoolConfig]:
+    """Run a chat completion against the pool selected by policy + PII.
+
+    The caller MUST supply an ``LlmTaskContext``. Every invocation — success,
+    provider error, or configuration error — produces one ``llm_call`` audit
+    log row. Raw prompt/content is never persisted; only identity + decision
+    + token counters + error summary are recorded.
+
+    Returns a 3-tuple of the raw completion response, the ``PolicyDecision``
+    that was applied, and the ``LlmPoolConfig`` actually used. Pool failure
+    surfaces as ``OpenAIError``; local pool failure does **not** transparently
+    re-try on external.
+    """
+    # Local import keeps core/llm.py free of domain-layer dependencies in the
+    # import graph (domains → core, not core → domains).
+    from aidoo_api.domains.ai.audit import log_llm_call
+
+    text_inputs = _collect_text_inputs(messages)
+    pool, decision = choose_pool(context, text_inputs, db, pool_hint=pool_hint)
+    config = get_pool_config(pool)
+    chosen_model = model or config.default_model
+
+    if not config.configured:
+        log_llm_call(
+            source=context.source,
+            actor_user_id=context.actor_user_id,
+            workspace_id=context.workspace_id,
+            task_kind=context.task_kind,
+            policy=decision.policy,
+            chosen_pool=decision.chosen_pool,
+            decision_reason=decision.reason,
+            forced_local=decision.forced_local,
+            pii_hits=decision.pii_hits,
+            model=chosen_model,
+            status="error",
+            latency_ms=0,
+            error=f"{pool} pool is not configured",
+            entity_id=audit_entity_id,
+        )
+        raise OpenAIError(f"{pool} pool is not configured")
+
+    client = get_pool_client(pool).with_options(
+        timeout=timeout_seconds or config.long_generation_timeout_seconds
+    )
+    payload: dict[str, Any] = {
+        "model": chosen_model,
+        "messages": messages,
+    }
+    if temperature is not None:
+        payload["temperature"] = temperature
+    if max_tokens is not None:
+        payload["max_tokens"] = max_tokens
+    merged_extra_body = _merge_extra_body(
+        _build_extra_body_for_pool(pool, reasoning_effort),
+        extra_body,
+    )
+    if merged_extra_body:
+        payload["extra_body"] = merged_extra_body
+
+    started = time.monotonic()
+    try:
+        response = client.chat.completions.create(**payload)
+    except Exception as error:
+        elapsed_ms = int((time.monotonic() - started) * 1000)
+        log_llm_call(
+            source=context.source,
+            actor_user_id=context.actor_user_id,
+            workspace_id=context.workspace_id,
+            task_kind=context.task_kind,
+            policy=decision.policy,
+            chosen_pool=decision.chosen_pool,
+            decision_reason=decision.reason,
+            forced_local=decision.forced_local,
+            pii_hits=decision.pii_hits,
+            model=chosen_model,
+            status="error",
+            latency_ms=elapsed_ms,
+            error=str(error),
+            entity_id=audit_entity_id,
+        )
+        raise
+    elapsed_ms = int((time.monotonic() - started) * 1000)
+
+    usage = _extract_usage(response)
+    log_llm_call(
+        source=context.source,
+        actor_user_id=context.actor_user_id,
+        workspace_id=context.workspace_id,
+        task_kind=context.task_kind,
+        policy=decision.policy,
+        chosen_pool=decision.chosen_pool,
+        decision_reason=decision.reason,
+        forced_local=decision.forced_local,
+        pii_hits=decision.pii_hits,
+        model=getattr(response, "model", chosen_model),
+        status="ok",
+        latency_ms=elapsed_ms,
+        usage=usage,
+        entity_id=audit_entity_id,
+    )
+    return response, decision, config
+
+
+def _extract_usage(response: Any) -> dict[str, int] | None:
+    """Normalise OpenAI-compatible usage payloads to the fixed audit shape.
+
+    Missing fields are dropped rather than zero-filled so that the audit log
+    does not confuse "unreported" with "zero".
+    """
+    usage_obj = getattr(response, "usage", None)
+    if usage_obj is None:
+        return None
+    out: dict[str, int] = {}
+    for field_name in ("prompt_tokens", "completion_tokens", "total_tokens"):
+        value = getattr(usage_obj, field_name, None)
+        if isinstance(value, int):
+            out[field_name] = value
+    return out or None
+
+
+def _collect_text_inputs(messages: list[dict[str, Any]]) -> list[str]:
+    out: list[str] = []
+    for message in messages:
+        content = message.get("content") if isinstance(message, dict) else None
+        if isinstance(content, str):
+            out.append(content)
+        elif isinstance(content, list):
+            for part in content:
+                if isinstance(part, dict):
+                    text = part.get("text")
+                    if isinstance(text, str):
+                        out.append(text)
+    return out
+
+
+def _build_extra_body_for_pool(
+    pool: LlmPoolName, reasoning_effort: str | None
+) -> dict[str, Any]:
+    if reasoning_effort is None:
+        return {}
+    if reasoning_effort == "none":
+        return {"think": False} if pool == "local" else {}
+    if pool == "external":
+        return {"reasoning": {"effort": reasoning_effort}}
+    return {"reasoning_effort": reasoning_effort}
+
+
+def _merge_extra_body(
+    base: Mapping[str, Any], extra: Mapping[str, Any] | None
+) -> dict[str, Any] | None:
+    if not base and not extra:
+        return None
+    merged = dict(base)
+    if extra:
+        merged.update(dict(extra))
+    return merged
+
+
+# ---------------------------------------------------------------------------
+# Backward-compat shim (scheduled for removal at Phase 3 kickoff).
+# ---------------------------------------------------------------------------
 
 LlmBackendName = Literal["primary", "fallback"]
-LlmHealthStatus = Literal["ready", "unavailable", "model_missing", "not_configured", "disabled"]
+
+
+def _pool_of(backend: LlmBackendName) -> LlmPoolName:
+    return "local" if backend == "primary" else "external"
+
+
+def _backend_of(pool: LlmPoolName) -> LlmBackendName:
+    return "primary" if pool == "local" else "fallback"
 
 
 @dataclass(frozen=True)
@@ -23,7 +691,7 @@ class LlmBackendConfig:
     model: str
     canonical_model: str
     enabled: bool = True
-    default_headers: dict[str, str] | None = None
+    default_headers: Mapping[str, str] | None = None
 
     @property
     def configured(self) -> bool:
@@ -49,7 +717,7 @@ class LlmHealth:
     def ready(self) -> bool:
         return self.status == "ready"
 
-    def public_dict(self) -> dict[str, str | bool | None]:
+    def public_dict(self) -> dict[str, Any]:
         return {**asdict(self), "ready": self.ready}
 
 
@@ -70,7 +738,7 @@ class LlmStackHealth:
             return self.fallback
         return self.primary
 
-    def public_dict(self) -> dict[str, object]:
+    def public_dict(self) -> dict[str, Any]:
         active = self.active
         return {
             **active.public_dict(),
@@ -84,136 +752,39 @@ class LlmStackHealth:
 def get_llm_backend(
     backend: LlmBackendName = "primary", settings: Settings | None = None
 ) -> LlmBackendConfig:
-    settings = settings or get_settings()
-    if backend == "primary":
-        return LlmBackendConfig(
-            name="primary",
-            provider=settings.llm_provider,
-            base_url=settings.llm_base_url,
-            api_key=settings.llm_api_key,
-            model=settings.llm_default_model,
-            canonical_model=settings.llm_canonical_model,
-        )
-
-    default_headers: dict[str, str] = {}
-    if settings.llm_fallback_http_referer.strip():
-        default_headers["HTTP-Referer"] = settings.llm_fallback_http_referer.strip()
-    if settings.llm_fallback_title.strip():
-        default_headers["X-OpenRouter-Title"] = settings.llm_fallback_title.strip()
-
+    pool = _pool_of(backend)
+    config = get_pool_config(pool, settings)
     return LlmBackendConfig(
-        name="fallback",
-        provider=settings.llm_fallback_provider,
-        base_url=settings.llm_fallback_base_url,
-        api_key=settings.llm_fallback_api_key,
-        model=settings.llm_fallback_model,
-        canonical_model=settings.llm_canonical_model,
-        enabled=settings.llm_fallback_enabled,
-        default_headers=default_headers or None,
-    )
-
-
-@lru_cache(maxsize=2)
-def get_llm_client(backend: LlmBackendName = "primary") -> OpenAI:
-    config = get_llm_backend(backend)
-    return OpenAI(
-        api_key=config.api_key,
+        name=backend,
+        provider=config.provider,
         base_url=config.base_url,
-        default_headers=config.default_headers,
-        max_retries=0,
-        timeout=get_settings().llm_request_timeout_seconds,
+        api_key=config.api_key,
+        model=config.default_model,
+        canonical_model=config.canonical_model,
+        enabled=config.enabled,
+        default_headers=dict(config.default_headers)
+        if config.default_headers
+        else None,
     )
+
+
+def get_llm_client(backend: LlmBackendName = "primary") -> OpenAI:
+    """Deprecated: prefer :func:`get_pool_client`."""
+    return get_pool_client(_pool_of(backend))
 
 
 def check_llm_health(
     settings: Settings | None = None, backend: LlmBackendName = "primary"
 ) -> LlmHealth:
-    settings = settings or get_settings()
-    config = get_llm_backend(backend, settings)
-
-    if not config.enabled:
-        return LlmHealth(
-            name=config.name,
-            provider=config.provider,
-            base_url=config.base_url,
-            model=config.model,
-            canonical_model=config.canonical_model,
-            status="disabled",
-            detail="LLM fallback is disabled.",
-        )
-
-    if not config.configured:
-        missing = [
-            name
-            for name, value in {
-                "base_url": config.base_url,
-                "api_key": config.api_key,
-                "model": config.model,
-            }.items()
-            if not value.strip()
-        ]
-        return LlmHealth(
-            name=config.name,
-            provider=config.provider,
-            base_url=config.base_url,
-            model=config.model,
-            canonical_model=config.canonical_model,
-            status="not_configured",
-            detail=f"Missing LLM {config.name} setting(s): {', '.join(missing)}",
-        )
-
-    try:
-        models = get_llm_client(backend).models.list()
-    except (APIConnectionError, APITimeoutError) as error:
-        return LlmHealth(
-            name=config.name,
-            provider=config.provider,
-            base_url=config.base_url,
-            model=config.model,
-            canonical_model=config.canonical_model,
-            status="unavailable",
-            detail=str(error),
-        )
-    except APIStatusError as error:
-        return LlmHealth(
-            name=config.name,
-            provider=config.provider,
-            base_url=config.base_url,
-            model=config.model,
-            canonical_model=config.canonical_model,
-            status="unavailable",
-            detail=f"{error.status_code}: {error.message}",
-        )
-    except OpenAIError as error:
-        return LlmHealth(
-            name=config.name,
-            provider=config.provider,
-            base_url=config.base_url,
-            model=config.model,
-            canonical_model=config.canonical_model,
-            status="unavailable",
-            detail=str(error),
-        )
-
-    model_ids = {model.id for model in models.data}
-    if config.model not in model_ids:
-        return LlmHealth(
-            name=config.name,
-            provider=config.provider,
-            base_url=config.base_url,
-            model=config.model,
-            canonical_model=config.canonical_model,
-            status="model_missing",
-            detail=f"Configured model was not found. Available models: {', '.join(sorted(model_ids))}",
-        )
-
+    pool_health = check_pool_health(_pool_of(backend), settings)
     return LlmHealth(
-        name=config.name,
-        provider=config.provider,
-        base_url=config.base_url,
-        model=config.model,
-        canonical_model=config.canonical_model,
-        status="ready",
+        name=backend,
+        provider=pool_health.provider,
+        base_url=pool_health.base_url,
+        model=pool_health.model,
+        canonical_model=pool_health.canonical_model,
+        status=pool_health.status,
+        detail=pool_health.detail,
     )
 
 
@@ -222,7 +793,9 @@ def check_llm_stack_health(
 ) -> LlmStackHealth:
     settings = settings or get_settings()
     primary = check_llm_health(settings, "primary")
-    fallback = check_llm_health(settings, "fallback") if check_fallback else None
+    fallback = (
+        check_llm_health(settings, "fallback") if check_fallback else None
+    )
     return LlmStackHealth(primary=primary, fallback=fallback)
 
 

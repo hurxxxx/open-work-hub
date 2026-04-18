@@ -1,7 +1,6 @@
 from types import SimpleNamespace
 
 import pytest
-from fastapi import HTTPException
 
 from aidoo_api.core import llm
 from aidoo_api.core.settings import get_settings
@@ -45,6 +44,12 @@ def _clear_llm_client_cache() -> None:
         cache_clear()
 
 
+def _clear_pool_client_cache() -> None:
+    cache_clear = getattr(llm.get_pool_client, "cache_clear", None)
+    if cache_clear is not None:
+        cache_clear()
+
+
 @pytest.fixture(autouse=True)
 def clear_settings_cache(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv(
@@ -53,9 +58,11 @@ def clear_settings_cache(monkeypatch: pytest.MonkeyPatch) -> None:
     )
     get_settings.cache_clear()
     _clear_llm_client_cache()
+    _clear_pool_client_cache()
     yield
     get_settings.cache_clear()
     _clear_llm_client_cache()
+    _clear_pool_client_cache()
 
 
 def test_llm_settings_default_to_local_mlx(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -131,98 +138,137 @@ def test_llm_stack_is_ready_when_fallback_has_same_canonical_model(
     assert health.active.canonical_model == "qwen/qwen3.6-35b-a3b"
 
 
-def test_chat_falls_back_to_openrouter_model(monkeypatch: pytest.MonkeyPatch) -> None:
-    from aidoo_api.domains.ai import router as ai_router
+def test_choose_pool_defaults_to_local_only_without_policy_row(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from aidoo_api.core.llm import LlmTaskContext, choose_pool
 
-    monkeypatch.setenv("DOOWON_LLM_DEFAULT_MODEL", "mlx-community/Qwen3.6-35B-A3B-4bit")
-    monkeypatch.setenv("DOOWON_LLM_FALLBACK_API_KEY", "test-openrouter-key")
-    monkeypatch.setenv("DOOWON_LLM_FALLBACK_MODEL", "qwen/qwen3.6-35b-a3b")
-    monkeypatch.setenv("DOOWON_LLM_LONG_GENERATION_TIMEOUT_SECONDS", "321")
-    get_settings.cache_clear()
+    class _FakeDb:
+        def execute(self, *_args, **_kwargs):
+            class _Result:
+                def scalar_one_or_none(self_inner):  # noqa: ANN001
+                    return None
 
-    clients = {
-        "primary": FakeClient(["gemma4:31b"]),
-        "fallback": FakeClient(["qwen/qwen3.6-35b-a3b"], content="fallback response"),
-    }
+            return _Result()
 
-    def fake_client(backend: llm.LlmBackendName = "primary") -> FakeClient:
-        return clients[backend]
+    context = LlmTaskContext(
+        source="api.chat",
+        actor_user_id="user-1",
+        workspace_id="ws-1",
+        task_kind="unknown_task_kind_xyz",
+    )
+    pool, decision = choose_pool(context, ["hello world"], _FakeDb())
 
-    monkeypatch.setattr(llm, "get_llm_client", fake_client)
-    monkeypatch.setattr(ai_router, "get_llm_client", fake_client)
+    assert pool == "local"
+    assert decision.policy == "local_only"
+    assert decision.chosen_pool == "local"
+    assert decision.reason == "policy_local_only"
+    assert decision.forced_local is False
+    assert decision.pii_hits == []
 
-    response = ai_router.chat(
-        ai_router.ChatRequest(
-            messages=[ai_router.ChatMessage(role="user", content="테스트")],
-        ),
+
+def test_choose_pool_local_hint_forces_local_even_on_external_policy() -> None:
+    from aidoo_api.core.llm import LlmTaskContext, choose_pool
+
+    class _FakeDb:
+        def execute(self, *_args, **_kwargs):
+            class _Result:
+                def scalar_one_or_none(self_inner):  # noqa: ANN001
+                    return "external"
+
+            return _Result()
+
+    context = LlmTaskContext(
+        source="api.chat",
+        actor_user_id="user-1",
+        workspace_id="ws-1",
+        task_kind="allowed_external",
+    )
+    pool, decision = choose_pool(
+        context,
+        ["benign sentence"],
+        _FakeDb(),
+        pool_hint="local",
     )
 
-    assert response.backend == "fallback"
-    assert response.provider == "openrouter"
-    assert response.fallback_used is True
-    assert response.content == "fallback response"
-    assert clients["fallback"].chat.completions.calls[0]["model"] == "qwen/qwen3.6-35b-a3b"
-    assert clients["fallback"].chat.completions.calls[0]["timeout"] == 321.0
+    assert pool == "local"
+    assert decision.policy == "external"
+    assert decision.chosen_pool == "local"
+    assert decision.forced_local is True
+    assert decision.reason == "local_hint"
 
 
-def test_chat_can_force_openrouter_backend(monkeypatch: pytest.MonkeyPatch) -> None:
-    from aidoo_api.domains.ai import router as ai_router
+def test_choose_pool_forces_local_when_pii_detected_in_external_policy() -> None:
+    from aidoo_api.core.llm import LlmTaskContext, choose_pool
 
-    monkeypatch.setenv("DOOWON_LLM_DEFAULT_MODEL", "mlx-community/Qwen3.6-35B-A3B-4bit")
-    monkeypatch.setenv("DOOWON_LLM_FALLBACK_API_KEY", "test-openrouter-key")
-    monkeypatch.setenv("DOOWON_LLM_FALLBACK_MODEL", "qwen/qwen3.6-35b-a3b")
-    get_settings.cache_clear()
+    class _FakeDb:
+        def execute(self, *_args, **_kwargs):
+            class _Result:
+                def scalar_one_or_none(self_inner):  # noqa: ANN001
+                    return "external"
 
-    clients = {
-        "primary": FakeClient(["mlx-community/Qwen3.6-35B-A3B-4bit"], content="local response"),
-        "fallback": FakeClient(["qwen/qwen3.6-35b-a3b"], content="openrouter response"),
-    }
+            return _Result()
 
-    def fake_client(backend: llm.LlmBackendName = "primary") -> FakeClient:
-        return clients[backend]
+    context = LlmTaskContext(
+        source="api.chat",
+        actor_user_id="user-1",
+        workspace_id="ws-1",
+        task_kind="allowed_external",
+    )
+    prompt = "주민번호는 900101-1234567 입니다."
+    pool, decision = choose_pool(context, [prompt], _FakeDb())
 
-    monkeypatch.setattr(llm, "get_llm_client", fake_client)
-    monkeypatch.setattr(ai_router, "get_llm_client", fake_client)
+    assert pool == "local"
+    assert decision.policy == "external"
+    assert decision.chosen_pool == "local"
+    assert decision.forced_local is True
+    assert decision.reason == "pii_detected"
+    assert "rrn_kr" in decision.pii_hits
 
-    response = ai_router.chat(
-        ai_router.ChatRequest(
-            backend_mode="openrouter",
-            messages=[ai_router.ChatMessage(role="user", content="테스트")],
-        ),
+
+def test_choose_pool_uses_external_when_policy_external_and_no_pii() -> None:
+    from aidoo_api.core.llm import LlmTaskContext, choose_pool
+
+    class _FakeDb:
+        def execute(self, *_args, **_kwargs):
+            class _Result:
+                def scalar_one_or_none(self_inner):  # noqa: ANN001
+                    return "external"
+
+            return _Result()
+
+    context = LlmTaskContext(
+        source="api.chat",
+        actor_user_id="user-1",
+        workspace_id="ws-1",
+        task_kind="allowed_external",
+    )
+    pool, decision = choose_pool(context, ["totally benign sentence"], _FakeDb())
+
+    assert pool == "external"
+    assert decision.policy == "external"
+    assert decision.chosen_pool == "external"
+    assert decision.reason == "policy_external"
+    assert decision.forced_local is False
+    assert decision.pii_hits == []
+
+
+def test_scan_pii_matches_space_separated_kr_rrn_and_phone() -> None:
+    from aidoo_api.core.pii import scan_pii
+
+    hits = scan_pii(
+        [
+            "주민번호는 900101 1234567 입니다.",
+            "연락처는 010 1234 5678 입니다.",
+        ]
     )
 
-    assert response.backend == "fallback"
-    assert response.requested_backend_mode == "openrouter"
-    assert response.content == "openrouter response"
-    assert clients["primary"].chat.completions.calls == []
+    assert [hit.pattern for hit in hits] == ["rrn_kr", "phone_kr"]
 
 
-def test_chat_can_force_local_without_fallback(monkeypatch: pytest.MonkeyPatch) -> None:
-    from aidoo_api.domains.ai import router as ai_router
+def test_scan_pii_matches_separatorless_kr_phone() -> None:
+    from aidoo_api.core.pii import scan_pii
 
-    monkeypatch.setenv("DOOWON_LLM_DEFAULT_MODEL", "mlx-community/Qwen3.6-35B-A3B-4bit")
-    monkeypatch.setenv("DOOWON_LLM_FALLBACK_API_KEY", "test-openrouter-key")
-    monkeypatch.setenv("DOOWON_LLM_FALLBACK_MODEL", "qwen/qwen3.6-35b-a3b")
-    get_settings.cache_clear()
+    hits = scan_pii(["연락처는 01012345678 입니다."])
 
-    clients = {
-        "primary": FakeClient(["gemma4:31b"], content="local response"),
-        "fallback": FakeClient(["qwen/qwen3.6-35b-a3b"], content="openrouter response"),
-    }
-
-    def fake_client(backend: llm.LlmBackendName = "primary") -> FakeClient:
-        return clients[backend]
-
-    monkeypatch.setattr(llm, "get_llm_client", fake_client)
-    monkeypatch.setattr(ai_router, "get_llm_client", fake_client)
-
-    with pytest.raises(HTTPException) as exc_info:
-        ai_router.chat(
-            ai_router.ChatRequest(
-                backend_mode="local",
-                messages=[ai_router.ChatMessage(role="user", content="테스트")],
-            ),
-        )
-
-    assert exc_info.value.status_code == 503
-    assert clients["fallback"].chat.completions.calls == []
+    assert [hit.pattern for hit in hits] == ["phone_kr"]

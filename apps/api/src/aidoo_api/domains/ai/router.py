@@ -1,18 +1,22 @@
 from typing import Literal
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from openai import OpenAIError
 from pydantic import BaseModel, Field
+from sqlalchemy.orm import Session
 
+from aidoo_api.core.db import get_db_session
 from aidoo_api.core.llm import (
-    LlmBackendName,
-    LlmHealth,
-    check_llm_health,
+    LlmPoolHint,
+    LlmPoolName,
+    LlmTaskContext,
+    check_all_pools_health,
     check_llm_stack_health,
-    get_llm_backend,
-    get_llm_client,
+    complete_chat,
 )
 from aidoo_api.core.settings import get_settings
+from aidoo_api.domains.auth.dependencies import require_current_user
+from aidoo_api.domains.auth.models import User
 
 
 LlmRequestBackendMode = Literal["auto", "local", "openrouter"]
@@ -33,6 +37,23 @@ class LlmHealthResponse(LlmBackendHealthResponse):
     active_backend: str | None = None
     primary: LlmBackendHealthResponse
     fallback: LlmBackendHealthResponse | None = None
+
+
+class LlmPoolHealthResponse(BaseModel):
+    pool: str
+    provider: str
+    base_url: str
+    model: str
+    canonical_model: str
+    status: str
+    ready: bool
+    detail: str | None = None
+
+
+class LlmDualHealthResponse(BaseModel):
+    ready: bool
+    local: LlmPoolHealthResponse
+    external: LlmPoolHealthResponse | None = None
 
 
 class ChatMessage(BaseModel):
@@ -64,6 +85,11 @@ class ChatResponse(BaseModel):
     fallback_used: bool = False
     canonical_model: str
     requested_backend_mode: str
+    policy: str | None = None
+    chosen_pool: str | None = None
+    decision_reason: str | None = None
+    forced_local: bool = False
+    pii_hits: list[str] = Field(default_factory=list)
 
 
 router = APIRouter(prefix="/ai", tags=["ai"])
@@ -71,56 +97,155 @@ router = APIRouter(prefix="/ai", tags=["ai"])
 
 @router.get("/llm-health", response_model=LlmHealthResponse)
 def llm_health() -> LlmHealthResponse:
+    """Deprecated legacy shape. Kept for the current web UI until it migrates
+    to ``/ai/health``; backed by the same pool-scoped checks underneath.
+    """
     return LlmHealthResponse.model_validate(check_llm_stack_health().public_dict())
 
 
+@router.get("/health", response_model=LlmDualHealthResponse)
+def ai_health() -> LlmDualHealthResponse:
+    """Pool-scoped AI readiness. Each pool's status is reported independently;
+    overall ``ready`` is true if at least one pool is usable. Routing decisions
+    are still policy-driven, not fallback-driven.
+    """
+    return LlmDualHealthResponse.model_validate(check_all_pools_health().public_dict())
+
+
 @router.post("/chat", response_model=ChatResponse)
-def chat(payload: ChatRequest) -> ChatResponse:
-    settings = get_settings()
-    _ensure_configured_model(payload.model, settings)
-
-    if payload.backend_mode == "local":
-        return _complete_single_backend(payload, "primary")
-
-    if payload.backend_mode == "openrouter":
-        return _complete_single_backend(payload, "fallback")
-
-    primary_health = check_llm_health(settings, "primary")
-    primary_error: str | None = None
-
-    if primary_health.ready:
-        try:
-            return _complete_chat(payload, "primary")
-        except OpenAIError as error:
-            primary_error = str(error)
-    else:
-        primary_error = primary_health.detail or primary_health.status
-
-    fallback_health = check_llm_health(settings, "fallback")
-    if fallback_health.ready:
-        try:
-            return _complete_chat(payload, "fallback")
-        except OpenAIError as error:
-            raise _llm_unavailable(
-                primary_health, fallback_health, primary_error, str(error)
-            ) from error
-
-    raise _llm_unavailable(
-        primary_health,
-        fallback_health,
-        primary_error,
-        fallback_health.detail or fallback_health.status,
+def chat(
+    payload: ChatRequest,
+    request: Request,
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+) -> ChatResponse:
+    _ensure_configured_model(payload.model)
+    _ensure_supported_backend_mode(payload.backend_mode)
+    context = _build_task_context(current_user, request)
+    return _complete_via_policy(
+        context,
+        payload,
+        db,
+        pool_hint="local" if payload.backend_mode == "local" else None,
     )
 
 
-def _ensure_configured_model(requested_model: str | None, settings) -> None:
+# ---------------------------------------------------------------------------
+# Internals
+# ---------------------------------------------------------------------------
+
+
+def _build_task_context(current_user: User, request: Request) -> LlmTaskContext:
+    workspace = getattr(request.state, "current_workspace", None)
+    workspace_id = getattr(workspace, "id", None) if workspace else None
+    if not workspace_id:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=(
+                "Workspace context missing on request.state; the AI router "
+                "must be mounted behind a workspace membership dependency."
+            ),
+        )
+    return LlmTaskContext(
+        source="api.chat",
+        actor_user_id=current_user.id,
+        workspace_id=workspace_id,
+        task_kind="chatbot",
+    )
+
+
+def _complete_via_policy(
+    context: LlmTaskContext,
+    payload: ChatRequest,
+    db: Session,
+    *,
+    pool_hint: LlmPoolHint | None,
+) -> ChatResponse:
+    try:
+        response, decision, config = complete_chat(
+            context,
+            db,
+            messages=[message.model_dump() for message in payload.messages],
+            temperature=payload.temperature,
+            max_tokens=payload.max_tokens,
+            reasoning_effort=payload.reasoning_effort,
+            model=payload.model,
+            pool_hint=pool_hint,
+        )
+    except OpenAIError as error:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={
+                "message": (
+                    "Local LLM pool unavailable for the requested override."
+                    if pool_hint == "local"
+                    else "LLM pool unavailable for the resolved policy."
+                ),
+                "error": str(error),
+            },
+        ) from error
+
+    return _build_response(
+        response,
+        config,
+        payload,
+        decision_policy=decision.policy,
+        decision_pool=decision.chosen_pool,
+        decision_reason=decision.reason,
+        decision_forced_local=decision.forced_local,
+        decision_pii=list(decision.pii_hits),
+    )
+
+
+def _build_response(
+    raw_response,
+    config,
+    payload: ChatRequest,
+    *,
+    decision_policy: str | None,
+    decision_pool: LlmPoolName | None,
+    decision_reason: str | None,
+    decision_forced_local: bool,
+    decision_pii: list[str],
+) -> ChatResponse:
+    message = raw_response.choices[0].message
+    usage = None
+    if raw_response.usage is not None:
+        usage = ChatUsage(
+            prompt_tokens=raw_response.usage.prompt_tokens,
+            completion_tokens=raw_response.usage.completion_tokens,
+            total_tokens=raw_response.usage.total_tokens,
+        )
+
+    backend_name = "fallback" if decision_pool == "external" else "primary"
+
+    return ChatResponse(
+        model=raw_response.model,
+        content=message.content or "",
+        usage=usage,
+        provider=config.provider,
+        backend=backend_name,
+        fallback_used=backend_name == "fallback",
+        canonical_model=config.canonical_model,
+        requested_backend_mode=payload.backend_mode,
+        policy=decision_policy,
+        chosen_pool=decision_pool,
+        decision_reason=decision_reason,
+        forced_local=decision_forced_local,
+        pii_hits=decision_pii,
+    )
+
+
+def _ensure_configured_model(requested_model: str | None) -> None:
     if requested_model is None:
         return
 
+    settings = get_settings()
     allowed_models = {
-        settings.llm_default_model,
-        settings.llm_canonical_model,
-        settings.llm_fallback_model,
+        settings.llm_local_default_model,
+        settings.llm_local_canonical_model,
+        settings.llm_external_default_model,
+        settings.llm_external_canonical_model,
     }
     if requested_model in allowed_models:
         return
@@ -129,94 +254,18 @@ def _ensure_configured_model(requested_model: str | None, settings) -> None:
         status_code=status.HTTP_400_BAD_REQUEST,
         detail=(
             "Only the configured LLM model is allowed. "
-            f"Use {settings.llm_canonical_model} for quality control."
+            f"Use {settings.llm_local_canonical_model} for quality control."
         ),
     )
 
 
-def _complete_single_backend(payload: ChatRequest, backend: LlmBackendName) -> ChatResponse:
-    settings = get_settings()
-    health = check_llm_health(settings, backend)
-    if not health.ready:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail={
-                "message": f"Requested LLM backend is not ready: {backend}",
-                "llm": health.public_dict(),
-            },
-        )
-
-    try:
-        return _complete_chat(payload, backend)
-    except OpenAIError as error:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail={
-                "message": f"Requested LLM backend failed: {backend}",
-                "error": str(error),
-                "llm": health.public_dict(),
-            },
-        ) from error
-
-
-def _complete_chat(payload: ChatRequest, backend: LlmBackendName) -> ChatResponse:
-    config = get_llm_backend(backend)
-    settings = get_settings()
-    response = get_llm_client(backend).chat.completions.create(
-        model=config.model,
-        messages=[message.model_dump() for message in payload.messages],
-        temperature=payload.temperature,
-        max_tokens=payload.max_tokens,
-        extra_body=_extra_body(payload, backend),
-        timeout=settings.llm_long_generation_timeout_seconds,
-    )
-
-    message = response.choices[0].message
-    usage = None
-    if response.usage is not None:
-        usage = ChatUsage(
-            prompt_tokens=response.usage.prompt_tokens,
-            completion_tokens=response.usage.completion_tokens,
-            total_tokens=response.usage.total_tokens,
-        )
-
-    return ChatResponse(
-        model=response.model,
-        content=message.content or "",
-        usage=usage,
-        provider=config.provider,
-        backend=config.name,
-        fallback_used=config.name == "fallback",
-        canonical_model=config.canonical_model,
-        requested_backend_mode=payload.backend_mode,
-    )
-
-
-def _extra_body(payload: ChatRequest, backend: LlmBackendName) -> dict[str, object]:
-    if payload.reasoning_effort == "none":
-        return {"think": False} if backend == "primary" else {}
-
-    if backend == "fallback":
-        return {"reasoning": {"effort": payload.reasoning_effort}}
-
-    return {"reasoning_effort": payload.reasoning_effort}
-
-
-def _llm_unavailable(
-    primary_health: LlmHealth,
-    fallback_health: LlmHealth,
-    primary_error: str | None,
-    fallback_error: str | None,
-) -> HTTPException:
-    return HTTPException(
-        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-        detail={
-            "message": "LLM request failed on both local mlx-lm and OpenRouter fallback.",
-            "primary_error": primary_error,
-            "fallback_error": fallback_error,
-            "llm": {
-                "primary": primary_health.public_dict(),
-                "fallback": fallback_health.public_dict(),
-            },
-        },
+def _ensure_supported_backend_mode(mode: LlmRequestBackendMode) -> None:
+    if mode != "openrouter":
+        return
+    raise HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail=(
+            "backend_mode=openrouter is no longer supported. "
+            "Use auto for policy-based routing or local to pin the local pool."
+        ),
     )
