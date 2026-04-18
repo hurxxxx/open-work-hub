@@ -148,3 +148,63 @@ export function sendAiChat(
     body: JSON.stringify(payload),
   });
 }
+
+export interface AiChatStreamRequest extends AiChatRequest {
+  stream_reasoning?: boolean;
+}
+
+export interface StreamAiChatArgs {
+  payload: AiChatStreamRequest;
+  token: string;
+  signal: AbortSignal;
+}
+
+/**
+ * Open an SSE stream to ``/api/v1/ai/chat/stream``. Returns the raw
+ * ``Response`` — the caller consumes ``response.body`` via ``iterSseEvents``
+ * and cancels with the ``AbortSignal``.
+ */
+export async function streamAiChat({
+  payload,
+  token,
+  signal,
+}: StreamAiChatArgs): Promise<Response> {
+  const url = rewriteWorkspaceApiPath('/api/v1/ai/chat/stream');
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      method: 'POST',
+      signal,
+      cache: 'no-store',
+      headers: {
+        'Accept': 'text/event-stream',
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    });
+  } catch (error) {
+    if ((error as Error).name === 'AbortError') {
+      throw error;
+    }
+    throw new AiApiError(
+      0,
+      'AI 서버에 연결하지 못했습니다. API 서버가 실행 중인지 확인해 주세요.',
+    );
+  }
+
+  if (!response.ok) {
+    const errPayload = await response.json().catch(() => null);
+    throw new AiApiError(
+      response.status,
+      resolveErrorMessage(
+        errPayload,
+        `AI 스트리밍을 시작하지 못했습니다. (${response.status})`,
+      ),
+    );
+  }
+  if (!response.body) {
+    throw new AiApiError(0, 'SSE 응답 본문이 비어 있습니다.');
+  }
+  return response;
+}

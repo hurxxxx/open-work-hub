@@ -108,6 +108,8 @@
   - 로딩/취소/에러 상태 화면
 - 의사결정 로그에 "DESIGN.md 업데이트 완료" 엔트리.
 
+상태 메모 (2026-04-18): DESIGN.md 업데이트 완료.
+
 완료 기준: 디자이너 승인된 DESIGN.md가 main에 있거나, 최소 이 Phase 내 PR로 합류.
 
 ### 2. AgentEventEnvelope 계약 확정 (구현 전)

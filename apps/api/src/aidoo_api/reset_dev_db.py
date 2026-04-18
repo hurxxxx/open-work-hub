@@ -5,7 +5,7 @@ from urllib.parse import urlparse
 
 from sqlalchemy.orm import Session
 
-from aidoo_api.core.db import Base, get_engine, run_migrations
+from aidoo_api.core.db import get_engine, run_migrations
 from aidoo_api.core.settings import get_settings
 from aidoo_api.domains.auth.access import (
     DEV_LOGIN_ACCOUNTS,

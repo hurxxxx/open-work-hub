@@ -334,7 +334,6 @@ def test_workspace_scoped_default_pms_space_stays_inside_requested_workspace(
         headers=_auth_headers(platform_admin_token),
     )
     assert before_delivery_spaces.status_code == 403
-    delivery_space_ids: set[str] = set()
 
     create_list_response = client.post(
         "/api/v1/workspaces/hq/pms/lists",

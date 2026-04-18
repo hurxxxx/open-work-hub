@@ -38,7 +38,8 @@ def log_llm_call(
 ) -> None:
     """Record a single LLM request to the audit log.
 
-    ``status`` is one of ``ok``, ``error``, or ``blocked_by_pii``. ``usage`` is
+    ``status`` is one of ``ok``, ``error``, ``blocked_by_pii``, or
+    ``cancelled`` (streaming: consumer closed the generator). ``usage`` is
     expected to carry the fixed shape
     ``{prompt_tokens, completion_tokens, total_tokens}``; individual fields
     may be missing when the provider did not report them.

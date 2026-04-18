@@ -1,0 +1,736 @@
+{
+  "$defs": {
+    "ApprovalRequiredData": {
+      "properties": {
+        "approval_id": {
+          "title": "Approval Id",
+          "type": "string"
+        },
+        "resource_preview": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Resource Preview"
+        },
+        "tool": {
+          "title": "Tool",
+          "type": "string"
+        }
+      },
+      "required": [
+        "approval_id",
+        "tool"
+      ],
+      "title": "ApprovalRequiredData",
+      "type": "object"
+    },
+    "ApprovalRequiredEvent": {
+      "properties": {
+        "data": {
+          "$ref": "#/$defs/ApprovalRequiredData"
+        },
+        "seq": {
+          "minimum": 0,
+          "title": "Seq",
+          "type": "integer"
+        },
+        "timestamp_ms": {
+          "minimum": 0,
+          "title": "Timestamp Ms",
+          "type": "integer"
+        },
+        "type": {
+          "const": "approval_required",
+          "default": "approval_required",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "seq",
+        "timestamp_ms",
+        "data"
+      ],
+      "title": "ApprovalRequiredEvent",
+      "type": "object"
+    },
+    "ApprovalResolvedData": {
+      "properties": {
+        "approval_id": {
+          "title": "Approval Id",
+          "type": "string"
+        },
+        "decision": {
+          "enum": [
+            "approved",
+            "rejected"
+          ],
+          "title": "Decision",
+          "type": "string"
+        }
+      },
+      "required": [
+        "approval_id",
+        "decision"
+      ],
+      "title": "ApprovalResolvedData",
+      "type": "object"
+    },
+    "ApprovalResolvedEvent": {
+      "properties": {
+        "data": {
+          "$ref": "#/$defs/ApprovalResolvedData"
+        },
+        "seq": {
+          "minimum": 0,
+          "title": "Seq",
+          "type": "integer"
+        },
+        "timestamp_ms": {
+          "minimum": 0,
+          "title": "Timestamp Ms",
+          "type": "integer"
+        },
+        "type": {
+          "const": "approval_resolved",
+          "default": "approval_resolved",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "seq",
+        "timestamp_ms",
+        "data"
+      ],
+      "title": "ApprovalResolvedEvent",
+      "type": "object"
+    },
+    "ContentDeltaData": {
+      "properties": {
+        "text": {
+          "title": "Text",
+          "type": "string"
+        }
+      },
+      "required": [
+        "text"
+      ],
+      "title": "ContentDeltaData",
+      "type": "object"
+    },
+    "ContentDeltaEvent": {
+      "properties": {
+        "data": {
+          "$ref": "#/$defs/ContentDeltaData"
+        },
+        "seq": {
+          "minimum": 0,
+          "title": "Seq",
+          "type": "integer"
+        },
+        "timestamp_ms": {
+          "minimum": 0,
+          "title": "Timestamp Ms",
+          "type": "integer"
+        },
+        "type": {
+          "const": "content_delta",
+          "default": "content_delta",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "seq",
+        "timestamp_ms",
+        "data"
+      ],
+      "title": "ContentDeltaEvent",
+      "type": "object"
+    },
+    "DoneData": {
+      "properties": {
+        "audit_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Audit Id"
+        },
+        "finish_reason": {
+          "enum": [
+            "stop",
+            "length",
+            "cancelled",
+            "error"
+          ],
+          "title": "Finish Reason",
+          "type": "string"
+        },
+        "meta": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DoneMeta"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "finish_reason"
+      ],
+      "title": "DoneData",
+      "type": "object"
+    },
+    "DoneEvent": {
+      "properties": {
+        "data": {
+          "$ref": "#/$defs/DoneData"
+        },
+        "seq": {
+          "minimum": 0,
+          "title": "Seq",
+          "type": "integer"
+        },
+        "timestamp_ms": {
+          "minimum": 0,
+          "title": "Timestamp Ms",
+          "type": "integer"
+        },
+        "type": {
+          "const": "done",
+          "default": "done",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "seq",
+        "timestamp_ms",
+        "data"
+      ],
+      "title": "DoneEvent",
+      "type": "object"
+    },
+    "DoneMeta": {
+      "properties": {
+        "canonical_model": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Canonical Model"
+        },
+        "chosen_model": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Chosen Model"
+        },
+        "chosen_pool": {
+          "anyOf": [
+            {
+              "enum": [
+                "local",
+                "external"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Chosen Pool"
+        },
+        "decision_reason": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Decision Reason"
+        },
+        "forced_local": {
+          "default": false,
+          "title": "Forced Local",
+          "type": "boolean"
+        },
+        "model": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Model"
+        },
+        "pii_hits": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Pii Hits",
+          "type": "array"
+        },
+        "policy": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Policy"
+        },
+        "provider": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Provider"
+        }
+      },
+      "title": "DoneMeta",
+      "type": "object"
+    },
+    "ErrorData": {
+      "properties": {
+        "code": {
+          "title": "Code",
+          "type": "string"
+        },
+        "message": {
+          "title": "Message",
+          "type": "string"
+        },
+        "retryable": {
+          "default": false,
+          "title": "Retryable",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ],
+      "title": "ErrorData",
+      "type": "object"
+    },
+    "ErrorEvent": {
+      "properties": {
+        "data": {
+          "$ref": "#/$defs/ErrorData"
+        },
+        "seq": {
+          "minimum": 0,
+          "title": "Seq",
+          "type": "integer"
+        },
+        "timestamp_ms": {
+          "minimum": 0,
+          "title": "Timestamp Ms",
+          "type": "integer"
+        },
+        "type": {
+          "const": "error",
+          "default": "error",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "seq",
+        "timestamp_ms",
+        "data"
+      ],
+      "title": "ErrorEvent",
+      "type": "object"
+    },
+    "ReasoningDeltaData": {
+      "properties": {
+        "text": {
+          "title": "Text",
+          "type": "string"
+        }
+      },
+      "required": [
+        "text"
+      ],
+      "title": "ReasoningDeltaData",
+      "type": "object"
+    },
+    "ReasoningDeltaEvent": {
+      "properties": {
+        "data": {
+          "$ref": "#/$defs/ReasoningDeltaData"
+        },
+        "seq": {
+          "minimum": 0,
+          "title": "Seq",
+          "type": "integer"
+        },
+        "timestamp_ms": {
+          "minimum": 0,
+          "title": "Timestamp Ms",
+          "type": "integer"
+        },
+        "type": {
+          "const": "reasoning_delta",
+          "default": "reasoning_delta",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "seq",
+        "timestamp_ms",
+        "data"
+      ],
+      "title": "ReasoningDeltaEvent",
+      "type": "object"
+    },
+    "ToolCallArgsDeltaData": {
+      "properties": {
+        "call_id": {
+          "title": "Call Id",
+          "type": "string"
+        },
+        "delta": {
+          "title": "Delta",
+          "type": "string"
+        }
+      },
+      "required": [
+        "call_id",
+        "delta"
+      ],
+      "title": "ToolCallArgsDeltaData",
+      "type": "object"
+    },
+    "ToolCallArgsDeltaEvent": {
+      "properties": {
+        "data": {
+          "$ref": "#/$defs/ToolCallArgsDeltaData"
+        },
+        "seq": {
+          "minimum": 0,
+          "title": "Seq",
+          "type": "integer"
+        },
+        "timestamp_ms": {
+          "minimum": 0,
+          "title": "Timestamp Ms",
+          "type": "integer"
+        },
+        "type": {
+          "const": "tool_call_args_delta",
+          "default": "tool_call_args_delta",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "seq",
+        "timestamp_ms",
+        "data"
+      ],
+      "title": "ToolCallArgsDeltaEvent",
+      "type": "object"
+    },
+    "ToolCallStartedData": {
+      "properties": {
+        "args_preview": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Args Preview"
+        },
+        "call_id": {
+          "title": "Call Id",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        }
+      },
+      "required": [
+        "call_id",
+        "name"
+      ],
+      "title": "ToolCallStartedData",
+      "type": "object"
+    },
+    "ToolCallStartedEvent": {
+      "properties": {
+        "data": {
+          "$ref": "#/$defs/ToolCallStartedData"
+        },
+        "seq": {
+          "minimum": 0,
+          "title": "Seq",
+          "type": "integer"
+        },
+        "timestamp_ms": {
+          "minimum": 0,
+          "title": "Timestamp Ms",
+          "type": "integer"
+        },
+        "type": {
+          "const": "tool_call_started",
+          "default": "tool_call_started",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "seq",
+        "timestamp_ms",
+        "data"
+      ],
+      "title": "ToolCallStartedEvent",
+      "type": "object"
+    },
+    "ToolResultData": {
+      "properties": {
+        "call_id": {
+          "title": "Call Id",
+          "type": "string"
+        },
+        "error": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Error"
+        },
+        "result_preview": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Result Preview"
+        },
+        "status": {
+          "enum": [
+            "ok",
+            "error"
+          ],
+          "title": "Status",
+          "type": "string"
+        }
+      },
+      "required": [
+        "call_id",
+        "status"
+      ],
+      "title": "ToolResultData",
+      "type": "object"
+    },
+    "ToolResultEvent": {
+      "properties": {
+        "data": {
+          "$ref": "#/$defs/ToolResultData"
+        },
+        "seq": {
+          "minimum": 0,
+          "title": "Seq",
+          "type": "integer"
+        },
+        "timestamp_ms": {
+          "minimum": 0,
+          "title": "Timestamp Ms",
+          "type": "integer"
+        },
+        "type": {
+          "const": "tool_result",
+          "default": "tool_result",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "seq",
+        "timestamp_ms",
+        "data"
+      ],
+      "title": "ToolResultEvent",
+      "type": "object"
+    },
+    "UsageData": {
+      "properties": {
+        "completion_tokens": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Completion Tokens"
+        },
+        "prompt_tokens": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Prompt Tokens"
+        },
+        "total_tokens": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Total Tokens"
+        }
+      },
+      "title": "UsageData",
+      "type": "object"
+    },
+    "UsageEvent": {
+      "properties": {
+        "data": {
+          "$ref": "#/$defs/UsageData"
+        },
+        "seq": {
+          "minimum": 0,
+          "title": "Seq",
+          "type": "integer"
+        },
+        "timestamp_ms": {
+          "minimum": 0,
+          "title": "Timestamp Ms",
+          "type": "integer"
+        },
+        "type": {
+          "const": "usage",
+          "default": "usage",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "seq",
+        "timestamp_ms",
+        "data"
+      ],
+      "title": "UsageEvent",
+      "type": "object"
+    }
+  },
+  "discriminator": {
+    "mapping": {
+      "approval_required": "#/$defs/ApprovalRequiredEvent",
+      "approval_resolved": "#/$defs/ApprovalResolvedEvent",
+      "content_delta": "#/$defs/ContentDeltaEvent",
+      "done": "#/$defs/DoneEvent",
+      "error": "#/$defs/ErrorEvent",
+      "reasoning_delta": "#/$defs/ReasoningDeltaEvent",
+      "tool_call_args_delta": "#/$defs/ToolCallArgsDeltaEvent",
+      "tool_call_started": "#/$defs/ToolCallStartedEvent",
+      "tool_result": "#/$defs/ToolResultEvent",
+      "usage": "#/$defs/UsageEvent"
+    },
+    "propertyName": "type"
+  },
+  "oneOf": [
+    {
+      "$ref": "#/$defs/ContentDeltaEvent"
+    },
+    {
+      "$ref": "#/$defs/ReasoningDeltaEvent"
+    },
+    {
+      "$ref": "#/$defs/UsageEvent"
+    },
+    {
+      "$ref": "#/$defs/DoneEvent"
+    },
+    {
+      "$ref": "#/$defs/ErrorEvent"
+    },
+    {
+      "$ref": "#/$defs/ToolCallStartedEvent"
+    },
+    {
+      "$ref": "#/$defs/ToolCallArgsDeltaEvent"
+    },
+    {
+      "$ref": "#/$defs/ToolResultEvent"
+    },
+    {
+      "$ref": "#/$defs/ApprovalRequiredEvent"
+    },
+    {
+      "$ref": "#/$defs/ApprovalResolvedEvent"
+    }
+  ]
+}

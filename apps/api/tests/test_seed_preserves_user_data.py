@@ -32,7 +32,7 @@ def _seed_dev_accounts() -> None:
 def test_seed_preserves_user_created_space_membership(client: TestClient) -> None:
     from aidoo_api.core.db import get_session_factory
     from aidoo_api.domains.auth.access import ensure_seed_data
-    from aidoo_api.domains.auth.models import TeamMember, User
+    from aidoo_api.domains.auth.models import TeamMember
 
     _seed_dev_accounts()
 
@@ -108,7 +108,7 @@ def test_dev_login_is_idempotent_and_preserves_user_spaces(
     TeamMember rows and wiped out anything outside the default PMS space,
     destroying user-created spaces on every login."""
     from aidoo_api.core.db import get_session_factory
-    from aidoo_api.domains.auth.models import Team, TeamMember, Workspace
+    from aidoo_api.domains.auth.models import TeamMember
     from sqlalchemy import select
 
     _seed_dev_accounts()

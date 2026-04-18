@@ -137,7 +137,11 @@ def _build_client(
     monkeypatch.setenv("DOOWON_REDIS_URL", collab_redis_url)
 
     from aidoo_api.core.db import Base, get_engine, get_session_factory
-    from aidoo_api.core.llm import get_llm_client, get_pool_client
+    from aidoo_api.core.llm import (
+        get_async_pool_client,
+        get_llm_client,
+        get_pool_client,
+    )
     from aidoo_api.core.settings import get_settings
     from aidoo_api.domains.auth import models as auth_models  # noqa: F401
     from aidoo_api.domains.meeting import models as meeting_models  # noqa: F401
@@ -145,6 +149,7 @@ def _build_client(
 
     _clear_cache(get_settings)
     _clear_cache(get_llm_client)
+    _clear_cache(get_async_pool_client)
     _clear_cache(get_pool_client)
     _clear_cache(get_engine)
     _clear_cache(get_session_factory)
@@ -162,7 +167,11 @@ def _build_client(
 
 def _teardown_client_state() -> None:
     from aidoo_api.core.db import Base, get_engine, get_session_factory
-    from aidoo_api.core.llm import get_llm_client, get_pool_client
+    from aidoo_api.core.llm import (
+        get_async_pool_client,
+        get_llm_client,
+        get_pool_client,
+    )
     from aidoo_api.core.settings import get_settings
 
     engine = get_engine()
@@ -172,6 +181,7 @@ def _teardown_client_state() -> None:
     engine.dispose()
     _clear_cache(get_settings)
     _clear_cache(get_llm_client)
+    _clear_cache(get_async_pool_client)
     _clear_cache(get_pool_client)
     _clear_cache(get_engine)
     _clear_cache(get_session_factory)

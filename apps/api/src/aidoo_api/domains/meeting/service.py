@@ -67,7 +67,7 @@ from aidoo_api.domains.pms.access_grants import (
     revoke_grants_for_meeting,
     revoke_grants_for_meeting_attendee,
 )
-from aidoo_api.domains.pms.models import Issue, TaskList
+from aidoo_api.domains.pms.models import Issue
 from aidoo_api.domains.planner.models import PlannerEvent
 
 

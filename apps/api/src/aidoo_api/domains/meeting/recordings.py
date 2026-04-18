@@ -28,6 +28,7 @@ from aidoo_api.domains.meeting.models import (
 from aidoo_api.domains.meeting.permissions import ensure_meeting_participant
 from aidoo_api.domains.pms.access import _ensure_issue_readable as ensure_issue_readable
 from aidoo_api.domains.meeting.schemas import (
+    MeetingDetail,
     RecordingChunkAck,
     RecordingCompleteRequest,
     RecordingPlaybackResponse,
@@ -653,7 +654,7 @@ def delete_recording(
     user: User,
     meeting_id: str,
     recording_id: str,
-) -> "MeetingDetail":
+) -> MeetingDetail:
     """Hard-delete a finalized meeting recording.
 
     Permission: organizer of the meeting OR the user who originally uploaded
@@ -664,8 +665,6 @@ def delete_recording(
     minio object, and clears any auto-generated notes doc reference if this
     recording produced one. The DB row is removed entirely.
     """
-    from aidoo_api.domains.meeting.schemas import MeetingDetail  # noqa: F401
-
     meeting = meeting_service._load_meeting(db, workspace, meeting_id)
     ensure_meeting_participant(db, user, meeting)
 

@@ -86,6 +86,9 @@ importers:
       clsx:
         specifier: ^2.1.1
         version: 2.1.1
+      eventsource-parser:
+        specifier: ^3.0.7
+        version: 3.0.7
       lucide-react:
         specifier: ^0.546.0
         version: 0.546.0(react@19.2.4)
@@ -4259,6 +4262,10 @@ packages:
   events@3.3.0:
     resolution: {integrity: sha512-mQw+2fkQbALzQ7V0MY0IqdnXNOeTtP4r0lN9z7AAawCXgqea7bDii20AYrIBrFd/Hx0M2Ocz6S111CaFkUcb0Q==}
     engines: {node: '>=0.8.x'}
+
+  eventsource-parser@3.0.7:
+    resolution: {integrity: sha512-zwxwiQqexizSXFZV13zMiEtW1E3lv7RlUv+1f5FBiR4x7wFhEjm3aFTyYkZQWzyN08WnPdox015GoRH5D/E5YA==}
+    engines: {node: '>=18.0.0'}
 
   execa@8.0.1:
     resolution: {integrity: sha512-VyhnebXciFV2DESc+p6B+y0LjSm0krU4OgJN44qFAhBY0TJ+1V61tYD2+wHusZ6F9n5K+vl8k0sTy7PEfV4qpg==}
@@ -11785,6 +11792,8 @@ snapshots:
       - bare-abort-controller
 
   events@3.3.0: {}
+
+  eventsource-parser@3.0.7: {}
 
   execa@8.0.1:
     dependencies:

@@ -1,36 +1,27 @@
 import { Link } from 'react-router-dom';
 import { motion } from 'motion/react';
-import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useState } from 'react';
 import {
-  Bot,
   ChevronRight,
   Loader2,
   RefreshCcw,
   Send,
-  User,
+  Square,
 } from 'lucide-react';
 import { NAV_ITEMS } from '@/src/constants';
 import {
   getLlmHealth,
-  sendAiChat,
   type AiBackendMode,
   type AiChatMessage,
   type LlmHealthResponse,
   type LlmPoolHealthResponse,
 } from '@/src/domains/ai/ai-api';
+import { useChatStream } from '@/src/domains/ai/useChatStream';
 import { useAuth } from '@/src/domains/auth/auth-provider';
-
-interface ChatTurn {
-  id: string;
-  role: 'user' | 'assistant';
-  content: string;
-  provider?: string;
-  policy?: string | null;
-  chosenPool?: 'local' | 'external' | null;
-  decisionReason?: string | null;
-  forcedLocal?: boolean;
-  piiHits?: string[];
-}
+import { ChatThread } from '@/src/components/views/chat/ChatThread';
+import { ApprovalModal } from '@/src/components/views/chat/ApprovalModal';
+import { ToolCallCard } from '@/src/components/views/chat/ToolCallCard';
+import type { ChatTurn } from '@/src/components/views/chat/MessageBubble';
 
 const INITIAL_TURNS: ChatTurn[] = [
   {
@@ -166,9 +157,21 @@ export const AIView = () => {
   );
   const [turns, setTurns] = useState<ChatTurn[]>(INITIAL_TURNS);
   const [input, setInput] = useState('');
-  const [isSending, setIsSending] = useState(false);
   const [chatError, setChatError] = useState<string | null>(null);
-  const scrollRef = useRef<HTMLDivElement | null>(null);
+  const [pendingUserTurnId, setPendingUserTurnId] = useState<string | null>(
+    null,
+  );
+  const [pendingUserInput, setPendingUserInput] = useState('');
+  const chat = useChatStream(token);
+  const isSending = chat.state.status === 'streaming';
+  const finalizedToolCalls = useMemo(
+    () => turns.flatMap((turn) => turn.toolCalls ?? []),
+    [turns],
+  );
+  const finalizedApprovals = useMemo(
+    () => turns.flatMap((turn) => turn.pendingApprovals ?? []),
+    [turns],
+  );
 
   const aiTools = useMemo(
     () => NAV_ITEMS.filter((item) => item.appId === 'ai'),
@@ -233,11 +236,60 @@ export const AIView = () => {
   }, [backendMode]);
 
   useEffect(() => {
-    scrollRef.current?.scrollTo({
-      top: scrollRef.current.scrollHeight,
-      behavior: 'smooth',
-    });
-  }, [turns, isSending]);
+    const status = chat.state.status;
+    if (status === 'idle' || status === 'streaming') {
+      return;
+    }
+
+    if (status === 'done' || status === 'cancelled' || chat.state.streamOpened) {
+      setTurns((current) => [
+        ...current,
+        {
+          id: `assistant-${Date.now()}`,
+          role: 'assistant',
+          content:
+            chat.state.contentBuffer ||
+            (status === 'cancelled'
+              ? '응답이 중단되었습니다.'
+              : status === 'error'
+                ? chat.state.errorMessage ?? '응답 중 오류가 발생했습니다.'
+                : '응답을 생성하지 못했습니다.'),
+          reasoning: chat.state.reasoningBuffer || undefined,
+          reasoningStatus: status,
+          responseStatus: status === 'done' ? undefined : status,
+          provider: chat.state.doneMeta?.provider ?? undefined,
+          policy: chat.state.doneMeta?.policy ?? null,
+          chosenPool: chat.state.doneMeta?.chosen_pool ?? null,
+          decisionReason: chat.state.doneMeta?.decision_reason ?? null,
+          forcedLocal: chat.state.doneMeta?.forced_local ?? false,
+          piiHits: chat.state.doneMeta?.pii_hits ?? [],
+          toolCalls: chat.state.toolCalls,
+          pendingApprovals: chat.state.pendingApprovals,
+        },
+      ]);
+      setChatError(null);
+      setPendingUserTurnId(null);
+      setPendingUserInput('');
+      chat.reset();
+    } else {
+      setChatError(chat.state.errorMessage ?? 'AI 응답에 실패했습니다.');
+      if (pendingUserTurnId) {
+        setTurns((current) =>
+          current.filter((turn) => turn.id !== pendingUserTurnId),
+        );
+      }
+      if (pendingUserInput && !input) {
+        setInput(pendingUserInput);
+      }
+      setPendingUserTurnId(null);
+      setPendingUserInput('');
+      chat.reset();
+    }
+    // intentionally excluding chat/pendingUserTurnId/pendingUserInput from deps:
+    // the hook's state transitions drive the effect; adding unstable refs to
+    // deps would retrigger the commit block.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chat.state.status]);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -255,8 +307,10 @@ export const AIView = () => {
     const nextTurns = [...turns, userTurn];
     setTurns(nextTurns);
     setInput('');
-    setIsSending(true);
     setChatError(null);
+    setPendingUserTurnId(userTurn.id);
+    setPendingUserInput(trimmed);
+    chat.reset();
 
     const messages: AiChatMessage[] = [
       {
@@ -272,42 +326,14 @@ export const AIView = () => {
         })),
     ];
 
-    try {
-      const response = await sendAiChat(
-        {
-          messages,
-          backend_mode: backendMode,
-          max_tokens: 1024,
-          temperature: 0.2,
-          reasoning_effort: 'none',
-        },
-        token,
-      );
-      setTurns((current) => [
-        ...current,
-        {
-          id: `assistant-${Date.now()}`,
-          role: 'assistant',
-          content: response.content || '응답을 생성하지 못했습니다.',
-          provider: response.provider,
-          policy: response.policy,
-          chosenPool: response.chosen_pool,
-          decisionReason: response.decision_reason,
-          forcedLocal: response.forced_local,
-          piiHits: response.pii_hits,
-        },
-      ]);
-    } catch (error) {
-      setChatError(
-        error instanceof Error
-          ? error.message
-          : 'AI 응답을 가져오지 못했습니다.',
-      );
-      setTurns((current) => current.filter((turn) => turn.id !== userTurn.id));
-      setInput(trimmed);
-    } finally {
-      setIsSending(false);
-    }
+    void chat.send({
+      messages,
+      backend_mode: backendMode,
+      max_tokens: 1024,
+      temperature: 0.2,
+      reasoning_effort: 'low',
+      stream_reasoning: true,
+    });
   }
 
   return (
@@ -335,58 +361,24 @@ export const AIView = () => {
             </div>
           </header>
 
-          <div
-            ref={scrollRef}
-            className="custom-scrollbar flex-1 space-y-4 overflow-y-auto bg-app-bg px-5 py-5"
-          >
-            {turns.map((turn) => (
-              <div
-                key={turn.id}
-                className={`flex gap-3 ${turn.role === 'user' ? 'justify-end' : 'justify-start'}`}
-              >
-                {turn.role === 'assistant' && (
-                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-app-border bg-app-surface text-app-accent">
-                    <Bot size={16} />
-                  </div>
-                )}
-                <div
-                  className={`max-w-[min(720px,80%)] rounded-lg border px-4 py-3 app-text-body-sm leading-relaxed ${
-                    turn.role === 'user'
-                      ? 'border-app-accent bg-app-accent text-app-accent-fg'
-                      : 'border-app-border bg-app-surface text-app-ink'
-                  }`}
-                >
-                  <p className="m-0 whitespace-pre-wrap break-words">
-                    {turn.content}
-                  </p>
-                  {turn.role === 'assistant' && turn.chosenPool && (
-                    <div className="mt-2 app-text-micro text-gray-500">
-                      {turn.chosenPool === 'external' ? 'external 풀' : 'local 풀'} ·{' '}
-                      {turn.policy ?? 'policy_unknown'}
-                      {turn.decisionReason ? ` · ${turn.decisionReason}` : ''}
-                      {turn.forcedLocal ? ' · local 강제' : ''}
-                      {turn.piiHits && turn.piiHits.length > 0
-                        ? ` · PII: ${turn.piiHits.join(', ')}`
-                        : ''}
-                    </div>
-                  )}
-                </div>
-                {turn.role === 'user' && (
-                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-app-border bg-app-surface text-gray-500">
-                    <User size={16} />
-                  </div>
-                )}
-              </div>
-            ))}
-            {isSending && (
-              <div className="flex items-center gap-3 text-gray-500">
-                <div className="flex h-8 w-8 items-center justify-center rounded-md border border-app-border bg-app-surface text-app-accent">
-                  <Loader2 size={16} className="animate-spin" />
-                </div>
-                <span className="app-text-body-sm">답변 작성 중</span>
-              </div>
-            )}
-          </div>
+          <ChatThread
+            turns={turns}
+            liveAssistant={
+              isSending
+                ? {
+                    content: chat.state.contentBuffer,
+                    reasoning: chat.state.reasoningBuffer,
+                    status: chat.state.status,
+                  }
+                : null
+            }
+          />
+          {finalizedToolCalls.map((call) => (
+            <ToolCallCard key={call.call_id} call={call} />
+          ))}
+          {finalizedApprovals.map((approval) => (
+            <ApprovalModal key={approval.approval_id} approval={approval} />
+          ))}
 
           <form
             className="border-t border-app-border bg-app-surface p-4"
@@ -412,14 +404,34 @@ export const AIView = () => {
                 rows={2}
                 value={input}
               />
-              <button
-                className="app-text-control flex h-12 shrink-0 items-center gap-2 rounded-lg bg-app-accent px-4 text-app-accent-fg transition-colors hover:bg-app-accent-hover disabled:cursor-not-allowed disabled:opacity-60"
-                disabled={!input.trim() || isSending}
-                type="submit"
-              >
-                <Send size={16} />
-                <span className="hidden sm:inline">전송</span>
-              </button>
+              {isSending && chat.state.transport === 'stream' ? (
+                <button
+                  className="app-text-control flex h-12 shrink-0 items-center gap-2 rounded-lg border border-app-border bg-app-surface px-4 text-app-ink transition-colors hover:border-app-accent"
+                  onClick={() => chat.abort()}
+                  type="button"
+                >
+                  <Square size={16} />
+                  <span className="hidden sm:inline">중단</span>
+                </button>
+              ) : isSending ? (
+                <button
+                  className="app-text-control flex h-12 shrink-0 items-center gap-2 rounded-lg border border-app-border bg-app-surface px-4 text-app-ink/70"
+                  disabled
+                  type="button"
+                >
+                  <Loader2 size={16} className="animate-spin" />
+                  <span className="hidden sm:inline">처리 중</span>
+                </button>
+              ) : (
+                <button
+                  className="app-text-control flex h-12 shrink-0 items-center gap-2 rounded-lg bg-app-accent px-4 text-app-accent-fg transition-colors hover:bg-app-accent-hover disabled:cursor-not-allowed disabled:opacity-60"
+                  disabled={!input.trim()}
+                  type="submit"
+                >
+                  <Send size={16} />
+                  <span className="hidden sm:inline">전송</span>
+                </button>
+              )}
             </div>
           </form>
         </div>

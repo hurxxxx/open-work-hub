@@ -1,20 +1,31 @@
-from typing import Literal
+import asyncio
+from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from openai import OpenAIError
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
+from sse_starlette.sse import EventSourceResponse
 
 from aidoo_api.core.db import get_db_session
 from aidoo_api.core.llm import (
+    LlmPoolConfig,
     LlmPoolHint,
     LlmPoolName,
     LlmTaskContext,
+    PolicyDecision,
     check_all_pools_health,
     check_llm_stack_health,
     complete_chat,
+    complete_chat_stream,
 )
+from aidoo_api.core.llm_adapters import StreamChunk
 from aidoo_api.core.settings import get_settings
+from aidoo_api.domains.ai.events import (
+    EnvelopeEncoder,
+    make_envelope,
+    serialize_sse,
+)
 from aidoo_api.domains.auth.dependencies import require_current_user
 from aidoo_api.domains.auth.models import User
 
@@ -127,6 +138,42 @@ def chat(
         payload,
         db,
         pool_hint="local" if payload.backend_mode == "local" else None,
+    )
+
+
+class ChatStreamRequest(ChatRequest):
+    stream_reasoning: bool = True
+
+
+@router.post("/chat/stream")
+async def chat_stream(
+    payload: ChatStreamRequest,
+    request: Request,
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+) -> EventSourceResponse:
+    """Agent-aware SSE stream.
+
+    Wire protocol is documented in
+    ``apps/api/src/aidoo_api/domains/ai/events_schema.md``. HTTP status is
+    always 200 once the stream opens — failures surface as ``error`` +
+    ``done(finish_reason=error)`` envelopes.
+    """
+    _ensure_configured_model(payload.model)
+    _ensure_supported_backend_mode(payload.backend_mode)
+    context = _build_task_context(current_user, request)
+    pool_hint: LlmPoolHint | None = (
+        "local" if payload.backend_mode == "local" else None
+    )
+
+    return EventSourceResponse(
+        _chat_stream_publisher(
+            payload=payload,
+            db=db,
+            context=context,
+            pool_hint=pool_hint,
+        ),
+        ping=25,
     )
 
 
@@ -269,3 +316,151 @@ def _ensure_supported_backend_mode(mode: LlmRequestBackendMode) -> None:
             "Use auto for policy-based routing or local to pin the local pool."
         ),
     )
+
+
+# ---------------------------------------------------------------------------
+# SSE stream publisher
+# ---------------------------------------------------------------------------
+
+
+async def _chat_stream_publisher(
+    *,
+    payload: "ChatStreamRequest",
+    db: Session,
+    context: LlmTaskContext,
+    pool_hint: LlmPoolHint | None,
+):
+    encoder = EnvelopeEncoder()
+    reasoning_gate = (
+        payload.stream_reasoning and payload.reasoning_effort != "none"
+    )
+    messages_dict = [message.model_dump() for message in payload.messages]
+
+    last_decision: PolicyDecision | None = None
+    last_config: LlmPoolConfig | None = None
+    chosen_model: str | None = None
+
+    try:
+        async for chunk, decision, config in complete_chat_stream(
+            context,
+            db,
+            messages=messages_dict,
+            temperature=payload.temperature,
+            max_tokens=payload.max_tokens,
+            reasoning_effort=payload.reasoning_effort,
+            model=payload.model,
+            pool_hint=pool_hint,
+            stream_reasoning=payload.stream_reasoning,
+        ):
+            last_decision, last_config = decision, config
+            chosen_model = payload.model or config.default_model
+            event = _chunk_to_envelope(
+                chunk,
+                encoder=encoder,
+                reasoning_gate=reasoning_gate,
+                decision=last_decision,
+                config=last_config,
+                model=chosen_model,
+            )
+            if event is not None:
+                yield event
+    except asyncio.CancelledError:
+        return
+    except Exception as error:  # noqa: BLE001 - converted to SSE contract
+        yield serialize_sse(
+            make_envelope(
+                "error",
+                encoder.next_seq(),
+                {
+                    "code": _error_code(error),
+                    "message": str(error),
+                    "retryable": False,
+                },
+            )
+        )
+        yield serialize_sse(
+            make_envelope(
+                "done",
+                encoder.next_seq(),
+                {
+                    "finish_reason": "error",
+                    "audit_id": None,
+                    "meta": _build_done_meta(
+                        last_decision,
+                        last_config,
+                        model=chosen_model,
+                    ),
+                },
+            )
+        )
+
+
+def _chunk_to_envelope(
+    chunk: StreamChunk,
+    *,
+    encoder: EnvelopeEncoder,
+    reasoning_gate: bool,
+    decision: PolicyDecision | None,
+    config: LlmPoolConfig | None,
+    model: str | None,
+) -> dict[str, str] | None:
+    if chunk.kind == "content" and chunk.text:
+        return serialize_sse(
+            make_envelope(
+                "content_delta",
+                encoder.next_seq(),
+                {"text": chunk.text},
+            )
+        )
+    if chunk.kind == "reasoning" and chunk.text and reasoning_gate:
+        return serialize_sse(
+            make_envelope(
+                "reasoning_delta",
+                encoder.next_seq(),
+                {"text": chunk.text},
+            )
+        )
+    if chunk.kind == "usage" and chunk.usage:
+        return serialize_sse(
+            make_envelope("usage", encoder.next_seq(), chunk.usage)
+        )
+    if chunk.kind == "done":
+        return serialize_sse(
+            make_envelope(
+                "done",
+                encoder.next_seq(),
+                {
+                    "finish_reason": chunk.finish_reason or "stop",
+                    "audit_id": None,
+                    "meta": _build_done_meta(decision, config, model=model),
+                },
+            )
+        )
+    return None
+
+
+def _build_done_meta(
+    decision: PolicyDecision | None,
+    config: LlmPoolConfig | None,
+    *,
+    model: str | None,
+) -> dict[str, Any] | None:
+    if decision is None or config is None:
+        return None
+    return {
+        "policy": decision.policy,
+        "chosen_pool": decision.chosen_pool,
+        "decision_reason": decision.reason,
+        "forced_local": decision.forced_local,
+        "pii_hits": list(decision.pii_hits),
+        "model": model or config.default_model,
+        "chosen_model": model or config.default_model,
+        "canonical_model": config.canonical_model,
+        "provider": config.provider,
+    }
+
+
+def _error_code(error: Exception) -> str:
+    if isinstance(error, OpenAIError):
+        return "provider_error"
+    return "adapter_error"

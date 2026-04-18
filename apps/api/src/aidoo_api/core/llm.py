@@ -38,7 +38,14 @@ from functools import lru_cache
 from typing import Any, Literal, Mapping
 
 from fastapi import HTTPException, status
-from openai import APIConnectionError, APIStatusError, APITimeoutError, OpenAI, OpenAIError
+from openai import (
+    APIConnectionError,
+    APIStatusError,
+    APITimeoutError,
+    AsyncOpenAI,
+    OpenAI,
+    OpenAIError,
+)
 from sqlalchemy.orm import Session
 
 from aidoo_api.core.pii import scan_pii
@@ -271,10 +278,26 @@ def get_pool_client(pool: LlmPoolName) -> OpenAI:
     )
 
 
+@lru_cache(maxsize=2)
+def get_async_pool_client(pool: LlmPoolName) -> AsyncOpenAI:
+    config = get_pool_config(pool)
+    settings = get_settings()
+    return AsyncOpenAI(
+        api_key=config.api_key or "placeholder",
+        base_url=config.base_url,
+        default_headers=dict(config.default_headers) if config.default_headers else None,
+        max_retries=0,
+        timeout=settings.llm_request_timeout_seconds,
+    )
+
+
 def _clear_pool_client_cache() -> None:
     cache_clear = getattr(get_pool_client, "cache_clear", None)
     if cache_clear is not None:
         cache_clear()
+    async_cache_clear = getattr(get_async_pool_client, "cache_clear", None)
+    if async_cache_clear is not None:
+        async_cache_clear()
 
 
 # ---------------------------------------------------------------------------
@@ -665,6 +688,128 @@ def _merge_extra_body(
     if extra:
         merged.update(dict(extra))
     return merged
+
+
+async def complete_chat_stream(
+    context: LlmTaskContext,
+    db: Session,
+    *,
+    messages: list[dict[str, Any]],
+    temperature: float | None = None,
+    max_tokens: int | None = None,
+    reasoning_effort: str | None = None,
+    extra_body: Mapping[str, Any] | None = None,
+    timeout_seconds: float | None = None,
+    model: str | None = None,
+    audit_entity_id: str | None = None,
+    pool_hint: LlmPoolHint | None = None,
+    stream_reasoning: bool = True,
+):
+    """Streaming twin of :func:`complete_chat`.
+
+    Yields ``(StreamChunk, PolicyDecision, LlmPoolConfig)`` tuples. The
+    caller (route layer) converts each chunk into an agent-event envelope
+    and uses ``decision``/``config`` to build the terminal ``done`` meta.
+
+    Exactly one ``llm_call`` audit row is committed per stream:
+      - ``status="ok"``        — finish_reason ∈ {stop, length}
+      - ``status="error"``     — provider/adapter exception or bad finish
+      - ``status="cancelled"`` — consumer closed the stream
+        (``asyncio.CancelledError``)
+
+    Raw prompt/content is never persisted — only usage/latency/status, mirror
+    of :func:`complete_chat`.
+    """
+    import asyncio
+
+    from aidoo_api.core.llm_adapters import get_stream_adapter
+    from aidoo_api.domains.ai.audit import log_llm_call
+
+    text_inputs = _collect_text_inputs(messages)
+    pool, decision = choose_pool(context, text_inputs, db, pool_hint=pool_hint)
+    config = get_pool_config(pool)
+    chosen_model = model or config.default_model
+
+    if not config.configured:
+        log_llm_call(
+            source=context.source,
+            actor_user_id=context.actor_user_id,
+            workspace_id=context.workspace_id,
+            task_kind=context.task_kind,
+            policy=decision.policy,
+            chosen_pool=decision.chosen_pool,
+            decision_reason=decision.reason,
+            forced_local=decision.forced_local,
+            pii_hits=decision.pii_hits,
+            model=chosen_model,
+            status="error",
+            latency_ms=0,
+            error=f"{pool} pool is not configured",
+            entity_id=audit_entity_id,
+        )
+        raise OpenAIError(f"{pool} pool is not configured")
+
+    client = get_async_pool_client(pool).with_options(
+        timeout=timeout_seconds or config.long_generation_timeout_seconds
+    )
+    payload: dict[str, Any] = {
+        "model": chosen_model,
+        "messages": messages,
+    }
+    if temperature is not None:
+        payload["temperature"] = temperature
+    if max_tokens is not None:
+        payload["max_tokens"] = max_tokens
+    effective_reasoning_effort = reasoning_effort if stream_reasoning else "none"
+    merged_extra_body = _merge_extra_body(
+        _build_extra_body_for_pool(pool, effective_reasoning_effort),
+        extra_body,
+    )
+    if merged_extra_body:
+        payload["extra_body"] = merged_extra_body
+
+    adapter = get_stream_adapter(pool)
+    started = time.monotonic()
+    status_final: str = "error"
+    error_message: str | None = None
+    accumulated_usage: dict[str, int] | None = None
+    try:
+        async for chunk in adapter.open_stream(client, payload):
+            if chunk.kind == "usage" and chunk.usage:
+                accumulated_usage = chunk.usage
+            if chunk.kind == "done":
+                status_final = (
+                    "ok"
+                    if chunk.finish_reason in ("stop", "length")
+                    else "error"
+                )
+            yield chunk, decision, config
+    except (asyncio.CancelledError, GeneratorExit):
+        status_final = "cancelled"
+        raise
+    except BaseException as error:  # noqa: BLE001 — we re-raise
+        status_final = "error"
+        error_message = str(error)
+        raise
+    finally:
+        elapsed_ms = int((time.monotonic() - started) * 1000)
+        log_llm_call(
+            source=context.source,
+            actor_user_id=context.actor_user_id,
+            workspace_id=context.workspace_id,
+            task_kind=context.task_kind,
+            policy=decision.policy,
+            chosen_pool=decision.chosen_pool,
+            decision_reason=decision.reason,
+            forced_local=decision.forced_local,
+            pii_hits=decision.pii_hits,
+            model=chosen_model,
+            status=status_final,
+            latency_ms=elapsed_ms,
+            usage=accumulated_usage,
+            error=error_message,
+            entity_id=audit_entity_id,
+        )
 
 
 # ---------------------------------------------------------------------------
