@@ -138,121 +138,73 @@ class Settings(BaseSettings):
     # LLM — Local pool (Apple Silicon mlx-lm by default)
     llm_local_provider: str = Field(
         default="mlx-lm",
-        validation_alias=AliasChoices(
-            "DOOWON_LLM_LOCAL_PROVIDER",
-            "DOOWON_LLM_PROVIDER",
-        ),
+        validation_alias=AliasChoices("DOOWON_LLM_LOCAL_PROVIDER"),
     )
     llm_local_base_url: str = Field(
         default="http://127.0.0.1:8080/v1",
-        validation_alias=AliasChoices(
-            "DOOWON_LLM_LOCAL_BASE_URL",
-            "DOOWON_LLM_BASE_URL",
-        ),
+        validation_alias=AliasChoices("DOOWON_LLM_LOCAL_BASE_URL"),
     )
     llm_local_api_key: str = Field(
         default="mlx",
-        validation_alias=AliasChoices(
-            "DOOWON_LLM_LOCAL_API_KEY",
-            "DOOWON_LLM_API_KEY",
-        ),
+        validation_alias=AliasChoices("DOOWON_LLM_LOCAL_API_KEY"),
     )
     llm_local_default_model: str = Field(
         default="mlx-community/Qwen3.6-35B-A3B-4bit",
-        validation_alias=AliasChoices(
-            "DOOWON_LLM_LOCAL_DEFAULT_MODEL",
-            "DOOWON_LLM_DEFAULT_MODEL",
-        ),
+        validation_alias=AliasChoices("DOOWON_LLM_LOCAL_DEFAULT_MODEL"),
     )
     llm_local_canonical_model: str = Field(
         default="qwen/qwen3.6-35b-a3b",
-        validation_alias=AliasChoices(
-            "DOOWON_LLM_LOCAL_CANONICAL_MODEL",
-            "DOOWON_LLM_CANONICAL_MODEL",
-            "DOOWON_LLM_MODEL_FAMILY",
-        ),
+        validation_alias=AliasChoices("DOOWON_LLM_LOCAL_CANONICAL_MODEL"),
     )
     llm_local_long_generation_timeout_seconds: float = Field(
         default=1200.0,
         gt=0,
         le=3600,
         validation_alias=AliasChoices(
-            "DOOWON_LLM_LOCAL_LONG_GENERATION_TIMEOUT_SECONDS",
-            "DOOWON_LLM_LONG_GENERATION_TIMEOUT_SECONDS",
+            "DOOWON_LLM_LOCAL_LONG_GENERATION_TIMEOUT_SECONDS"
         ),
     )
 
     # LLM — External pool (OpenRouter today; Anthropic/OpenAI extensions later)
     llm_external_enabled: bool = Field(
         default=True,
-        validation_alias=AliasChoices(
-            "DOOWON_LLM_EXTERNAL_ENABLED",
-            "DOOWON_LLM_FALLBACK_ENABLED",
-        ),
+        validation_alias=AliasChoices("DOOWON_LLM_EXTERNAL_ENABLED"),
     )
     llm_external_provider: str = Field(
         default="openrouter",
-        validation_alias=AliasChoices(
-            "DOOWON_LLM_EXTERNAL_PROVIDER",
-            "DOOWON_LLM_FALLBACK_PROVIDER",
-        ),
+        validation_alias=AliasChoices("DOOWON_LLM_EXTERNAL_PROVIDER"),
     )
     llm_external_base_url: str = Field(
         default="https://openrouter.ai/api/v1",
-        validation_alias=AliasChoices(
-            "DOOWON_LLM_EXTERNAL_BASE_URL",
-            "DOOWON_LLM_FALLBACK_BASE_URL",
-            "DOOWON_OPENROUTER_BASE_URL",
-        ),
+        validation_alias=AliasChoices("DOOWON_LLM_EXTERNAL_BASE_URL"),
     )
     llm_external_api_key: str = Field(
         default="",
-        validation_alias=AliasChoices(
-            "DOOWON_LLM_EXTERNAL_API_KEY",
-            "DOOWON_LLM_FALLBACK_API_KEY",
-            "DOOWON_OPENROUTER_API_KEY",
-            "OPENROUTER_API_KEY",
-        ),
+        validation_alias=AliasChoices("DOOWON_LLM_EXTERNAL_API_KEY"),
     )
     llm_external_default_model: str = Field(
         default="qwen/qwen3.5-35b-a3b",
-        validation_alias=AliasChoices(
-            "DOOWON_LLM_EXTERNAL_DEFAULT_MODEL",
-            "DOOWON_LLM_FALLBACK_MODEL",
-        ),
+        validation_alias=AliasChoices("DOOWON_LLM_EXTERNAL_DEFAULT_MODEL"),
     )
     llm_external_canonical_model: str = Field(
         default="qwen/qwen3.6-35b-a3b",
-        validation_alias=AliasChoices(
-            "DOOWON_LLM_EXTERNAL_CANONICAL_MODEL",
-            "DOOWON_LLM_CANONICAL_MODEL",
-            "DOOWON_LLM_MODEL_FAMILY",
-        ),
+        validation_alias=AliasChoices("DOOWON_LLM_EXTERNAL_CANONICAL_MODEL"),
     )
     llm_external_long_generation_timeout_seconds: float = Field(
         default=900.0,
         gt=0,
         le=3600,
         validation_alias=AliasChoices(
-            "DOOWON_LLM_EXTERNAL_LONG_GENERATION_TIMEOUT_SECONDS",
-            "DOOWON_LLM_LONG_GENERATION_TIMEOUT_SECONDS",
+            "DOOWON_LLM_EXTERNAL_LONG_GENERATION_TIMEOUT_SECONDS"
         ),
     )
     llm_external_http_referer: str = Field(
         default="",
-        validation_alias=AliasChoices(
-            "DOOWON_LLM_EXTERNAL_HTTP_REFERER",
-            "DOOWON_LLM_FALLBACK_HTTP_REFERER",
-            "DOOWON_OPENROUTER_HTTP_REFERER",
-        ),
+        validation_alias=AliasChoices("DOOWON_LLM_EXTERNAL_HTTP_REFERER"),
     )
     llm_external_title: str = Field(
         default="Doowon Aidoo",
-        validation_alias=AliasChoices(
-            "DOOWON_LLM_EXTERNAL_TITLE",
-            "DOOWON_LLM_FALLBACK_TITLE",
-            "DOOWON_OPENROUTER_TITLE",
-        ),
+        validation_alias=AliasChoices("DOOWON_LLM_EXTERNAL_TITLE"),
     )
 
     # LLM — shared control-plane settings
@@ -270,61 +222,6 @@ class Settings(BaseSettings):
         default=True,
         validation_alias=AliasChoices("DOOWON_LLM_REQUIRED"),
     )
-
-    # Backward-compat accessors (scheduled for removal at Phase 3 kickoff per
-    # plans/00-ai-platform-roadmap.md). Downstream code should migrate to the
-    # pool-scoped fields above.
-    @property
-    def llm_provider(self) -> str:
-        return self.llm_local_provider
-
-    @property
-    def llm_base_url(self) -> str:
-        return self.llm_local_base_url
-
-    @property
-    def llm_api_key(self) -> str:
-        return self.llm_local_api_key
-
-    @property
-    def llm_default_model(self) -> str:
-        return self.llm_local_default_model
-
-    @property
-    def llm_canonical_model(self) -> str:
-        return self.llm_local_canonical_model
-
-    @property
-    def llm_fallback_enabled(self) -> bool:
-        return self.llm_external_enabled
-
-    @property
-    def llm_fallback_provider(self) -> str:
-        return self.llm_external_provider
-
-    @property
-    def llm_fallback_base_url(self) -> str:
-        return self.llm_external_base_url
-
-    @property
-    def llm_fallback_api_key(self) -> str:
-        return self.llm_external_api_key
-
-    @property
-    def llm_fallback_model(self) -> str:
-        return self.llm_external_default_model
-
-    @property
-    def llm_fallback_http_referer(self) -> str:
-        return self.llm_external_http_referer
-
-    @property
-    def llm_fallback_title(self) -> str:
-        return self.llm_external_title
-
-    @property
-    def llm_long_generation_timeout_seconds(self) -> float:
-        return self.llm_local_long_generation_timeout_seconds
 
     model_config = SettingsConfigDict(
         env_prefix="DOOWON_API_",

@@ -135,11 +135,14 @@ def _build_client(
     monkeypatch.setenv("DOOWON_API_AUTO_MIGRATE", "1")
     monkeypatch.setenv("DOOWON_API_COLLAB_REDIS_URL", collab_redis_url)
     monkeypatch.setenv("DOOWON_REDIS_URL", collab_redis_url)
+    # Make tests independent of the developer's local `.env`: pin a dummy
+    # external pool key so ``LlmPoolConfig.configured`` is True when a test
+    # exercises the external pool via monkeypatched ``get_pool_client``.
+    monkeypatch.setenv("DOOWON_LLM_EXTERNAL_API_KEY", "test-external-key")
 
     from aidoo_api.core.db import Base, get_engine, get_session_factory
     from aidoo_api.core.llm import (
         get_async_pool_client,
-        get_llm_client,
         get_pool_client,
     )
     from aidoo_api.core.settings import get_settings
@@ -148,7 +151,6 @@ def _build_client(
     from aidoo_api.domains.pms import models as pms_models  # noqa: F401
 
     _clear_cache(get_settings)
-    _clear_cache(get_llm_client)
     _clear_cache(get_async_pool_client)
     _clear_cache(get_pool_client)
     _clear_cache(get_engine)
@@ -169,7 +171,6 @@ def _teardown_client_state() -> None:
     from aidoo_api.core.db import Base, get_engine, get_session_factory
     from aidoo_api.core.llm import (
         get_async_pool_client,
-        get_llm_client,
         get_pool_client,
     )
     from aidoo_api.core.settings import get_settings
@@ -180,7 +181,6 @@ def _teardown_client_state() -> None:
         connection.exec_driver_sql("DROP TABLE IF EXISTS alembic_version")
     engine.dispose()
     _clear_cache(get_settings)
-    _clear_cache(get_llm_client)
     _clear_cache(get_async_pool_client)
     _clear_cache(get_pool_client)
     _clear_cache(get_engine)

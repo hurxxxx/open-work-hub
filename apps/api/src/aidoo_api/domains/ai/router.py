@@ -15,7 +15,6 @@ from aidoo_api.core.llm import (
     LlmTaskContext,
     PolicyDecision,
     check_all_pools_health,
-    check_llm_stack_health,
     complete_chat,
     complete_chat_stream,
 )
@@ -31,23 +30,6 @@ from aidoo_api.domains.auth.models import User
 
 
 LlmRequestBackendMode = Literal["auto", "local", "openrouter"]
-
-
-class LlmBackendHealthResponse(BaseModel):
-    name: str
-    provider: str
-    base_url: str
-    model: str
-    canonical_model: str
-    status: str
-    ready: bool
-    detail: str | None = None
-
-
-class LlmHealthResponse(LlmBackendHealthResponse):
-    active_backend: str | None = None
-    primary: LlmBackendHealthResponse
-    fallback: LlmBackendHealthResponse | None = None
 
 
 class LlmPoolHealthResponse(BaseModel):
@@ -104,14 +86,6 @@ class ChatResponse(BaseModel):
 
 
 router = APIRouter(prefix="/ai", tags=["ai"])
-
-
-@router.get("/llm-health", response_model=LlmHealthResponse)
-def llm_health() -> LlmHealthResponse:
-    """Deprecated legacy shape. Kept for the current web UI until it migrates
-    to ``/ai/health``; backed by the same pool-scoped checks underneath.
-    """
-    return LlmHealthResponse.model_validate(check_llm_stack_health().public_dict())
 
 
 @router.get("/health", response_model=LlmDualHealthResponse)

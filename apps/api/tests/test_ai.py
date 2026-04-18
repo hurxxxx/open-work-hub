@@ -304,12 +304,12 @@ def test_readyz_uses_effective_readiness_while_ai_health_stays_raw(
     auth = _seeded_dev_login(client, "hq-admin")
     workspace_slug = auth["user"]["workspaces"][0]["slug"]
 
-    def fake_health_client(backend: llm_core.LlmBackendName = "primary") -> FakePoolClient:
-        if backend == "fallback":
+    def fake_pool_client(pool: llm_core.LlmPoolName) -> FakePoolClient:
+        if pool == "external":
             return FakePoolClient(["qwen/qwen3.5-35b-a3b"])
         return FakePoolClient(["gemma4:31b"])
 
-    monkeypatch.setattr(llm_core, "get_llm_client", fake_health_client)
+    monkeypatch.setattr(llm_core, "get_pool_client", fake_pool_client)
 
     readyz_response = client.get("/readyz")
     assert readyz_response.status_code == 503

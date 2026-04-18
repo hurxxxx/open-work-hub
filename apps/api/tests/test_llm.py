@@ -38,16 +38,13 @@ class FakeClient:
         self.chat = SimpleNamespace(completions=FakeChatCompletions(content))
 
 
-def _clear_llm_client_cache() -> None:
-    cache_clear = getattr(llm.get_llm_client, "cache_clear", None)
-    if cache_clear is not None:
-        cache_clear()
-
-
 def _clear_pool_client_cache() -> None:
     cache_clear = getattr(llm.get_pool_client, "cache_clear", None)
     if cache_clear is not None:
         cache_clear()
+    async_cache_clear = getattr(llm.get_async_pool_client, "cache_clear", None)
+    if async_cache_clear is not None:
+        async_cache_clear()
 
 
 @pytest.fixture(autouse=True)
@@ -57,85 +54,79 @@ def clear_settings_cache(monkeypatch: pytest.MonkeyPatch) -> None:
         "postgresql+psycopg://aidoo_test:aidoo_test@127.0.0.1:5432/aidoo_test",
     )
     get_settings.cache_clear()
-    _clear_llm_client_cache()
     _clear_pool_client_cache()
     yield
     get_settings.cache_clear()
-    _clear_llm_client_cache()
     _clear_pool_client_cache()
 
 
-def test_llm_settings_default_to_local_mlx(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv("DOOWON_LLM_PROVIDER", raising=False)
-    monkeypatch.delenv("DOOWON_LLM_BASE_URL", raising=False)
-    monkeypatch.delenv("DOOWON_LLM_API_KEY", raising=False)
-    monkeypatch.delenv("DOOWON_LLM_DEFAULT_MODEL", raising=False)
-    monkeypatch.delenv("DOOWON_LLM_CANONICAL_MODEL", raising=False)
-    monkeypatch.delenv("DOOWON_LLM_FALLBACK_ENABLED", raising=False)
-    monkeypatch.delenv("DOOWON_LLM_FALLBACK_MODEL", raising=False)
-
+def test_llm_settings_default_to_local_mlx() -> None:
     settings = get_settings()
 
-    assert settings.llm_provider == "mlx-lm"
-    assert settings.llm_base_url == "http://127.0.0.1:8080/v1"
-    assert settings.llm_api_key == "mlx"
-    assert settings.llm_default_model == "mlx-community/Qwen3.6-35B-A3B-4bit"
-    assert settings.llm_canonical_model == "qwen/qwen3.6-35b-a3b"
-    assert settings.llm_fallback_enabled is True
-    assert settings.llm_fallback_model == "qwen/qwen3.5-35b-a3b"
+    assert settings.llm_local_provider == "mlx-lm"
+    assert settings.llm_local_base_url == "http://127.0.0.1:8080/v1"
+    assert settings.llm_local_api_key == "mlx"
+    assert settings.llm_local_default_model == "mlx-community/Qwen3.6-35B-A3B-4bit"
+    assert settings.llm_local_canonical_model == "qwen/qwen3.6-35b-a3b"
+    assert settings.llm_external_enabled is True
+    assert settings.llm_external_default_model == "qwen/qwen3.5-35b-a3b"
     assert settings.llm_request_timeout_seconds == 60.0
-    assert settings.llm_long_generation_timeout_seconds == 1200.0
+    assert settings.llm_local_long_generation_timeout_seconds == 1200.0
 
 
-def test_llm_health_ready_when_configured_model_exists(
+def test_pool_health_ready_when_configured_model_exists(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setenv("DOOWON_LLM_DEFAULT_MODEL", "mlx-community/Qwen3.6-35B-A3B-4bit")
+    monkeypatch.setenv(
+        "DOOWON_LLM_LOCAL_DEFAULT_MODEL", "mlx-community/Qwen3.6-35B-A3B-4bit"
+    )
     monkeypatch.setattr(
         llm,
-        "get_llm_client",
-        lambda backend="primary": FakeClient(["mlx-community/Qwen3.6-35B-A3B-4bit"]),
+        "get_pool_client",
+        lambda pool: FakeClient(["mlx-community/Qwen3.6-35B-A3B-4bit"]),
     )
 
-    health = llm.check_llm_health()
+    health = llm.check_pool_health("local")
 
     assert health.ready is True
     assert health.status == "ready"
 
 
-def test_llm_health_reports_missing_model(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("DOOWON_LLM_DEFAULT_MODEL", "mlx-community/Qwen3.6-35B-A3B-4bit")
-    monkeypatch.setattr(llm, "get_llm_client", lambda backend="primary": FakeClient(["gemma4:31b"]))
+def test_pool_health_reports_missing_model(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv(
+        "DOOWON_LLM_LOCAL_DEFAULT_MODEL", "mlx-community/Qwen3.6-35B-A3B-4bit"
+    )
+    monkeypatch.setattr(llm, "get_pool_client", lambda pool: FakeClient(["gemma4:31b"]))
 
-    health = llm.check_llm_health()
+    health = llm.check_pool_health("local")
 
     assert health.ready is False
     assert health.status == "model_missing"
     assert "gemma4:31b" in (health.detail or "")
 
 
-def test_llm_stack_is_ready_when_fallback_has_same_canonical_model(
+def test_dual_health_reports_each_pool_independently(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setenv("DOOWON_LLM_DEFAULT_MODEL", "mlx-community/Qwen3.6-35B-A3B-4bit")
-    monkeypatch.setenv("DOOWON_LLM_FALLBACK_API_KEY", "test-openrouter-key")
-    monkeypatch.setenv("DOOWON_LLM_FALLBACK_MODEL", "qwen/qwen3.6-35b-a3b")
+    monkeypatch.setenv(
+        "DOOWON_LLM_LOCAL_DEFAULT_MODEL", "mlx-community/Qwen3.6-35B-A3B-4bit"
+    )
+    monkeypatch.setenv("DOOWON_LLM_EXTERNAL_API_KEY", "test-openrouter-key")
+    monkeypatch.setenv("DOOWON_LLM_EXTERNAL_DEFAULT_MODEL", "qwen/qwen3.6-35b-a3b")
 
-    def fake_client(backend: llm.LlmBackendName = "primary") -> FakeClient:
-        if backend == "fallback":
+    def fake_pool_client(pool: str) -> FakeClient:
+        if pool == "external":
             return FakeClient(["qwen/qwen3.6-35b-a3b"])
         return FakeClient(["gemma4:31b"])
 
-    monkeypatch.setattr(llm, "get_llm_client", fake_client)
+    monkeypatch.setattr(llm, "get_pool_client", fake_pool_client)
 
-    health = llm.check_llm_stack_health()
+    dual = llm.check_all_pools_health()
 
-    assert health.ready is True
-    assert health.primary.status == "model_missing"
-    assert health.fallback is not None
-    assert health.fallback.ready is True
-    assert health.active.name == "fallback"
-    assert health.active.canonical_model == "qwen/qwen3.6-35b-a3b"
+    assert dual.local.status == "model_missing"
+    assert dual.external is not None
+    assert dual.external.ready is True
+    assert dual.external.canonical_model == "qwen/qwen3.6-35b-a3b"
 
 
 def test_choose_pool_defaults_to_local_only_without_policy_row(

@@ -10,7 +10,6 @@ from aidoo_api.core.db import get_session_factory, init_db
 from aidoo_api.core.llm import (
     check_all_pools_health,
     check_effective_llm_readiness,
-    check_llm_stack_health,
 )
 from aidoo_api.core.settings import get_settings
 from aidoo_api.core.storage import ensure_bucket
@@ -56,10 +55,6 @@ def create_app() -> FastAPI:
                 effective = check_effective_llm_readiness(session, settings)
             app.state.llm_health = dual.public_dict()
             app.state.llm_effective = effective.public_dict()
-            # Back-compat: keep legacy shape available under a sibling key so
-            # any lingering reader of the old primary/fallback structure can
-            # adapt at its own pace. Phase 3 drops both.
-            app.state.llm_health_legacy = check_llm_stack_health(settings).public_dict()
             if settings.llm_required and not effective.ready:
                 logger.warning(
                     "LLM effective readiness check failed: %s", effective.public_dict()
@@ -98,16 +93,12 @@ def create_app() -> FastAPI:
         if not ready:
             response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
 
-        # Expose both the pool-scoped ``llm`` payload (canonical) and the
-        # legacy primary/fallback shape under ``llm_legacy`` so the current
-        # web UI does not break while it migrates to ``/api/v1/ai/health``.
         return {
             "status": "ok" if ready else "degraded",
             "environment": settings.environment,
             "instance_id": settings.instance_id,
             "llm": dual.public_dict(),
             "llm_effective": effective.public_dict(),
-            "llm_legacy": check_llm_stack_health(settings).public_dict(),
         }
 
     app.include_router(auth_router, prefix=settings.api_prefix)

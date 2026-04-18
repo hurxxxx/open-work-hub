@@ -1,31 +1,20 @@
 """LLM pool routing + policy + health.
 
-Public surface added in Phase 1 (preferred for new callers):
+Public surface:
 
 - ``LlmTaskContext`` — identity of an LLM request (source / actor_user_id /
   workspace_id / task_kind). Mandatory input to ``choose_pool`` and
   ``complete_chat``.
 - ``PolicyDecision`` — output of ``choose_pool``; records the policy mode, the
   chosen pool, any PII hits, whether local was forced, and a short reason.
-- ``get_pool_client(pool)`` / ``get_pool_config(pool)`` — pool-scoped OpenAI
-  client + config, replacing the old ``primary/fallback`` wording.
+- ``get_pool_client(pool)`` / ``get_async_pool_client(pool)`` /
+  ``get_pool_config(pool)`` — pool-scoped OpenAI clients + config.
 - ``check_pool_health(pool)`` / ``check_all_pools_health()`` — pool-independent
   health. **No cross-pool fallback** in any public function.
-- ``complete_chat(context, db, ...)`` — the one call path for all chat
-  completions. Handles policy, PII, pool selection, timeout, and forwards to
-  the OpenAI-compatible client. Callers MUST supply a ``LlmTaskContext``.
-
-Backward-compat shim (scheduled for removal at Phase 3 kickoff per
-``plans/00-ai-platform-roadmap.md``):
-
-- ``LlmBackendName``, ``LlmBackendConfig``, ``LlmHealth``, ``LlmStackHealth``
-  and their ``check_llm_health`` / ``check_llm_stack_health`` /
-  ``get_llm_backend`` / ``get_llm_client`` / ``require_llm_ready`` accessors
-  still work by delegating to the pool-scoped implementations below. Existing
-  ``primary``/``fallback`` names map 1:1 onto ``local``/``external``.
-
-Nothing outside this module should construct the legacy ``primary/fallback``
-names going forward.
+- ``complete_chat(context, db, ...)`` / ``complete_chat_stream(...)`` — the two
+  call paths for chat completions (sync + SSE streaming). Handle policy, PII,
+  pool selection, timeout, and forward to the OpenAI-compatible client.
+  Callers MUST supply a ``LlmTaskContext``.
 """
 
 from __future__ import annotations
@@ -37,7 +26,6 @@ from dataclasses import asdict, dataclass, field
 from functools import lru_cache
 from typing import Any, Literal, Mapping
 
-from fastapi import HTTPException, status
 from openai import (
     APIConnectionError,
     APIStatusError,
@@ -342,11 +330,8 @@ def check_pool_health(
             detail=f"Missing LLM {config.pool} setting(s): {', '.join(missing)}",
         )
 
-    # Route through the legacy ``get_llm_client`` accessor so that existing
-    # tests and callers that monkeypatch it continue to intercept. The compat
-    # wrapper delegates to :func:`get_pool_client` in production.
     try:
-        models = get_llm_client(_backend_of(config.pool)).models.list()
+        models = get_pool_client(config.pool).models.list()
     except (APIConnectionError, APITimeoutError) as error:
         return LlmPoolHealth(
             pool=config.pool,
@@ -812,147 +797,3 @@ async def complete_chat_stream(
         )
 
 
-# ---------------------------------------------------------------------------
-# Backward-compat shim (scheduled for removal at Phase 3 kickoff).
-# ---------------------------------------------------------------------------
-
-LlmBackendName = Literal["primary", "fallback"]
-
-
-def _pool_of(backend: LlmBackendName) -> LlmPoolName:
-    return "local" if backend == "primary" else "external"
-
-
-def _backend_of(pool: LlmPoolName) -> LlmBackendName:
-    return "primary" if pool == "local" else "fallback"
-
-
-@dataclass(frozen=True)
-class LlmBackendConfig:
-    name: LlmBackendName
-    provider: str
-    base_url: str
-    api_key: str
-    model: str
-    canonical_model: str
-    enabled: bool = True
-    default_headers: Mapping[str, str] | None = None
-
-    @property
-    def configured(self) -> bool:
-        return (
-            self.enabled
-            and bool(self.base_url.strip())
-            and bool(self.api_key.strip())
-            and bool(self.model.strip())
-        )
-
-
-@dataclass(frozen=True)
-class LlmHealth:
-    name: LlmBackendName
-    provider: str
-    base_url: str
-    model: str
-    canonical_model: str
-    status: LlmHealthStatus
-    detail: str | None = None
-
-    @property
-    def ready(self) -> bool:
-        return self.status == "ready"
-
-    def public_dict(self) -> dict[str, Any]:
-        return {**asdict(self), "ready": self.ready}
-
-
-@dataclass(frozen=True)
-class LlmStackHealth:
-    primary: LlmHealth
-    fallback: LlmHealth | None
-
-    @property
-    def ready(self) -> bool:
-        return self.primary.ready or bool(self.fallback and self.fallback.ready)
-
-    @property
-    def active(self) -> LlmHealth:
-        if self.primary.ready:
-            return self.primary
-        if self.fallback and self.fallback.ready:
-            return self.fallback
-        return self.primary
-
-    def public_dict(self) -> dict[str, Any]:
-        active = self.active
-        return {
-            **active.public_dict(),
-            "ready": self.ready,
-            "active_backend": active.name if active.ready else None,
-            "primary": self.primary.public_dict(),
-            "fallback": self.fallback.public_dict() if self.fallback else None,
-        }
-
-
-def get_llm_backend(
-    backend: LlmBackendName = "primary", settings: Settings | None = None
-) -> LlmBackendConfig:
-    pool = _pool_of(backend)
-    config = get_pool_config(pool, settings)
-    return LlmBackendConfig(
-        name=backend,
-        provider=config.provider,
-        base_url=config.base_url,
-        api_key=config.api_key,
-        model=config.default_model,
-        canonical_model=config.canonical_model,
-        enabled=config.enabled,
-        default_headers=dict(config.default_headers)
-        if config.default_headers
-        else None,
-    )
-
-
-def get_llm_client(backend: LlmBackendName = "primary") -> OpenAI:
-    """Deprecated: prefer :func:`get_pool_client`."""
-    return get_pool_client(_pool_of(backend))
-
-
-def check_llm_health(
-    settings: Settings | None = None, backend: LlmBackendName = "primary"
-) -> LlmHealth:
-    pool_health = check_pool_health(_pool_of(backend), settings)
-    return LlmHealth(
-        name=backend,
-        provider=pool_health.provider,
-        base_url=pool_health.base_url,
-        model=pool_health.model,
-        canonical_model=pool_health.canonical_model,
-        status=pool_health.status,
-        detail=pool_health.detail,
-    )
-
-
-def check_llm_stack_health(
-    settings: Settings | None = None, check_fallback: bool = True
-) -> LlmStackHealth:
-    settings = settings or get_settings()
-    primary = check_llm_health(settings, "primary")
-    fallback = (
-        check_llm_health(settings, "fallback") if check_fallback else None
-    )
-    return LlmStackHealth(primary=primary, fallback=fallback)
-
-
-def require_llm_ready(settings: Settings | None = None) -> LlmStackHealth:
-    health = check_llm_stack_health(settings)
-    if health.ready:
-        return health
-
-    raise HTTPException(
-        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-        detail={
-            "message": "No LLM backend is ready.",
-            "llm": health.public_dict(),
-        },
-    )

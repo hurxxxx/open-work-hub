@@ -6,7 +6,7 @@
 #   nohup bash scripts/mlx-serve.sh &    # background
 #
 # Default model: mlx-community/Qwen3.6-35B-A3B-4bit
-# Default port:  8080 (matches DOOWON_LLM_BASE_URL default)
+# Default port:  8080 (matches DOOWON_LLM_LOCAL_BASE_URL default)
 #
 # Override via env:
 #   MLX_MODEL=mlx-community/Qwen3.6-35B-A3B-8bit MLX_PORT=8090 bash scripts/mlx-serve.sh
