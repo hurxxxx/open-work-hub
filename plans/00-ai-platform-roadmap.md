@@ -125,7 +125,7 @@ LOCAL POOL ────┐                    ┌──── EXTERNAL POOL
 
 **완료 조건**: LOCAL_ONLY 작업이 절대 external 호출 안 함. 워커 호출도 동일 제약. PII hit 시 강제 local. 모든 호출 audit에 actor/workspace/source 포함. 기존 AI route 보호 체인이 회귀 없이 유지되고 신규 `/ai/health`도 동일 보호를 받음. 무인증 AI 호출은 401, workspace access 불가 시 403.
 
-**상세 플랜 파일**: `01-phase1-foundation.md` (Phase 1 킥오프 시 작성)
+**상세 플랜 파일**: 완료 (fe23cff) — 요약은 [`docs/planning-log.md`](../docs/planning-log.md)
 
 ---
 
@@ -304,6 +304,7 @@ Phase별 신규 영역:
 | PII 탐지 | 기본 정규식 탐지 포함 (라우팅 결정 용도) |
 | Phasing | P1→P6 점진, 일부 병렬 제한 (Phase 로드맵 주석 참조) |
 | **P1 범위 확장** | 단순 라우팅이 아니라 **LlmTaskContext + 인증·워크스페이스 주입 + 감사 + 라우팅** 묶음 |
+| **Phase 1 머지 완료 (2026-04-18, fe23cff)** | 세부 플랜 제거, 후속 요약은 [`docs/planning-log.md`](../docs/planning-log.md) 참조 |
 | **P2 선행 작업** | 구현 전에 AgentEventEnvelope 계약 확정 (P3~P4 이벤트도 포함) |
 | **P3 선행 작업** | PoC 전에 **도메인별 tool-facing service layer 추출** |
 | **P5 ACL 모델** | 팀 기반 전파 ❌ → **Resource-level ACL projection** (ingest 시 visibility set + query 시 principal_set, raw link token 외부 전파 금지) |

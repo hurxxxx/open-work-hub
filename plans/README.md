@@ -43,6 +43,7 @@ NN-<kebab-slug>.md
 
 | 파일 | 유형 | 상태 |
 |---|---|---|
-| [`00-ai-platform-roadmap.md`](./00-ai-platform-roadmap.md) | 로드맵 | 승인 완료, Phase 1 대기 |
+| [`00-ai-platform-roadmap.md`](./00-ai-platform-roadmap.md) | 로드맵 | 승인 완료, Phase 2 진입 |
+| [`02-phase2-envelope-streaming.md`](./02-phase2-envelope-streaming.md) | Phase 2 실행 | 킥오프 대기 |
 
 완료된 플랜은 [`docs/planning-log.md`](../docs/planning-log.md)에서 확인.

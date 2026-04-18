@@ -23,15 +23,9 @@
 
 ## 엔트리
 
-<!--
-여기에 완료된 플랜을 추가하세요. 템플릿:
+## 2026-04-18 · Phase 1 — LLM Pool Routing Foundation
 
-## 2026-04-20 · Phase 1 — LLM Pool Routing Foundation
-
-- **요약**: 로컬/외부 풀 완전 분리, LlmPolicy DB 테이블 도입, PII 정규식 탐지, 감사 로그 통합.
-- **PR/커밋**: #XX, ...
-- **영향 파일**: `apps/api/src/aidoo_api/core/`, `apps/api/src/aidoo_api/domains/ai/`
-- **남은 후속 작업**: 관리자 알람 채널 결정 (Phase 6 연계)
--->
-
-_아직 완료된 플랜이 없다._
+- **요약**: local/external 풀 완전 분리, `LlmTaskContext` + `LlmPolicy` 도입, PII 기반 강제 local, 감사 로그 독립 세션 커밋, `/readyz`는 effective readiness, `/ai/health`는 raw pool 상태로 분리, 워커 summarize도 정책 경로로 통합.
+- **PR/커밋**: fe23cff
+- **영향 파일**: `apps/api/src/aidoo_api/core/llm.py`, `apps/api/src/aidoo_api/core/pii.py`, `apps/api/src/aidoo_api/domains/ai/`, `apps/api/alembic/versions/c7a2f1e8b3d4_add_llm_policies.py`, `apps/worker/src/aidoo_worker/`, `apps/web/src/domains/ai/`
+- **남은 후속 작업**: deprecated env alias 제거(Phase 3 kickoff), `/api/v1/ai/llm-health` 제거 시점 재검토(P2 이후)
