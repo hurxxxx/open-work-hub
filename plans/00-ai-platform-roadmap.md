@@ -108,14 +108,14 @@ LOCAL POOL ────┐                    ┌──── EXTERNAL POOL
 
 **핵심 산출물**:
 1. **LlmTaskContext dataclass** (`core/llm.py`) — source/actor_user_id/workspace_id/task_kind 필드. 모든 LLM 호출 진입점이 반드시 구성.
-2. **AI route 보호 체인 명시화 + 회귀 고정**: `/ai/chat`, `/ai/llm-health`, 그리고 신규 `/ai/health`가 기존 app-level `require_current_user` + workspace membership dependency 뒤에만 mount되도록 고정. route/service 진입점에서 `LlmTaskContext` builder가 auth/workspace를 전제로 동작함을 문서화하고, 무인증 401 / 무워크스페이스 403 회귀 테스트 추가.
+2. **AI route 보호 체인 명시화 + 회귀 고정**: `/ai/chat`과 `/ai/health`가 기존 app-level `require_current_user` + workspace membership dependency 뒤에만 mount되도록 고정. route/service 진입점에서 `LlmTaskContext` builder가 auth/workspace를 전제로 동작함을 문서화하고, 무인증 401 / 무워크스페이스 403 회귀 테스트 추가.
 3. **워커 시스템-잡 정체성**: `worker/tasks/meeting.py`의 LLM 호출부를 `LlmTaskContext(source="worker.meeting.summarize", actor_user_id=None, workspace_id=recording.meeting.workspace_id, task_kind="meeting_summary")`로 전환. **자동 primary→fallback 로직 제거**.
 4. **Settings 재구조** (`local_*` / `external_*` 분리).
 5. **`LlmPolicy` DB 테이블** + 초기 seed + `resolve_policy()` 서비스.
 6. **Routing 모듈 재작성** (`core/llm.py`): pool별 client + `choose_pool(task_kind, text_inputs, session)` → `(pool, PolicyDecision)`. **크로스풀 폴백 API 제거**.
 7. **PII 탐지 모듈** (`core/pii.py`) — 정규식 기반. `external` 정책 task에만 적용, hit 시 `force_local_only`.
 8. **Audit 통합** — `llm_call` action, payload에 LlmTaskContext + pool + model + status + pii_hits + tokens + latency.
-9. **`/readyz` + `/api/v1/ai/health` + lifespan 전환** — 풀별 독립 상태. `/readyz`의 LLM 필드도 pool별 구조로. `app.py` lifespan startup health check(`check_llm_stack_health`)도 pool별 독립 체크로 전환. `/readyz`는 무인증 유지, `/ai/health`는 보호 체인 뒤.
+9. **`/readyz` + `/api/v1/ai/health` + lifespan 전환** — 풀별 독립 상태. `/readyz`의 LLM 필드도 pool별 구조로. `app.py` startup health check도 `check_all_pools_health`/effective readiness 기준으로 정리. `/readyz`는 무인증 유지, `/ai/health`는 보호 체인 뒤.
 10. **테스트**:
     - 크로스풀 폴백 금지 (API + worker 양쪽).
     - 워커 system-job `LlmTaskContext` 감사 검증 (actor_user_id=None, workspace_id는 resource에서 유도).
@@ -347,17 +347,16 @@ Phase별 신규 영역:
 
 ## 다음 단계
 
-이 로드맵 승인 시 → **Phase 1 (Foundation) 세부 플랜**을 별도 파일(`plans/01-phase1-foundation.md`)로 작성하는 것이 다음 작업.
+현재 다음 작업은 **Phase 3 (Tool Service Layer + Tool Calling Read) 세부 플랜**을 별도 파일(`plans/03-phase3-services-tools-read.md`)로 작성하는 것이다.
 
-Phase 1 세부 플랜은 본 문서의 Phase 1 섹션을 확장해서:
-- `LlmTaskContext` 필드 확정 + 타입 정의
-- AI 라우트 보호 체인 확인 목록 (`/ai/chat`, `/ai/llm-health`, `/ai/health`) + app-level mount dependency 회귀 테스트
-- 워커 system-job 전환: `worker/tasks/meeting.py` diff (자동 primary/fallback 제거 포함)
-- Settings 재구조 diff 범위
-- `LlmPolicy` DB 마이그레이션 스크립트 + seed
-- PII 정규식 모듈 스펙
-- Audit payload 스키마
-- 테스트 케이스 — 특히 **크로스풀 폴백 금지 검증** + **AI route 보호 체인 회귀(401/403) 검증** + **워커 system-job 감사 검증**
+Phase 3 세부 플랜은 본 문서의 Phase 3 섹션을 확장해서:
+- `domains/pms|meeting|planner|docs/services/` 추출 범위와 router slimming diff 확정
+- mlx-lm `tools` 파라미터 수용 여부를 검증하는 function-calling PoC 절차와 성공/실패 분기 정의
+- `TOOL_REGISTRY`/permission precheck/audit 파이프라인의 책임 경계 고정
+- read-only 툴 스키마(`pms.search_issues`, `meeting.find_availability`, `docs.list_hub` 등)와 ACL 검증 포인트 명시
+- Phase 2에서 고정한 `tool_call_*` envelope를 실제 발행으로 연결하는 서버/프론트 작업 순서 정리
+- tool 실행 audit payload와 실패 코드 표준화
+- 테스트 케이스 — 특히 read-only ACL 403, unknown tool/invalid args 방어, tool call envelope 순서 보존, function-calling PoC fallback 분기 검증
 - 롤백 계획
 - 예상 작업 기간
 
