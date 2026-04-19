@@ -19,6 +19,7 @@ from aidoo_api.domains.auth.access import (
     SYSTEM_ROLE_ORDER,
     WORKSPACE_ROLE_RANK,
     assign_user_groups,
+    ensure_workspace_app_entitlements,
     ensure_workspace_default_pms_space,
     is_platform_admin_user,
     is_valid_workspace_role,
@@ -1357,6 +1358,7 @@ def create_workspace(
     db.add(workspace)
     db.flush()
     ensure_workspace_default_pms_space(db, workspace)
+    ensure_workspace_app_entitlements(db)
     db.add(
         WorkspaceUserBinding(
             id=new_id(),

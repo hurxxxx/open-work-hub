@@ -5,6 +5,7 @@ import { vi } from 'vitest';
 
 import type { AuthUser } from '@/src/domains/auth/auth-api';
 import { resolveShellWorkspaceSlug } from '@/src/domains/workspaces/workspace-utils';
+import type { WorkspaceBootstrapApp } from '@/src/domains/workspaces/workspaces-api';
 import { AppBar } from './AppBar';
 
 const mockGetUnreadNotificationCount = vi.fn();
@@ -78,16 +79,29 @@ function LocationDisplay() {
   return <div data-testid="location">{`${location.pathname}${location.search}`}</div>;
 }
 
+function buildWorkspaceApps(): WorkspaceBootstrapApp[] {
+  return [
+    { app_id: 'home', title: 'HOME', route_base: '/home', icon_key: 'home', enabled: true, nav_items: [] },
+    { app_id: 'ai', title: 'AI', route_base: '/ai', icon_key: 'brain', enabled: true, nav_items: [] },
+    { app_id: 'pms', title: 'PMS', route_base: '/pms', icon_key: 'folder-kanban', enabled: true, nav_items: [] },
+    { app_id: 'docs', title: 'DOCS', route_base: '/docs', icon_key: 'files', enabled: true, nav_items: [] },
+    { app_id: 'planner', title: 'Planner', route_base: '/planner', icon_key: 'calendar', enabled: true, nav_items: [] },
+    { app_id: 'meeting', title: 'MEETING', route_base: '/meeting', icon_key: 'users', enabled: true, nav_items: [] },
+  ];
+}
+
 function renderAppBar({
   activeAppId = 'home',
   currentPathname = '/',
   currentUser = buildUser(),
   shellWorkspaceSlug = 'hq',
+  workspaceApps = buildWorkspaceApps(),
 }: {
   activeAppId?: string;
   currentPathname?: string;
   currentUser?: AuthUser;
   shellWorkspaceSlug?: string | null;
+  workspaceApps?: WorkspaceBootstrapApp[];
 } = {}) {
   function Harness() {
     const [selectedShellWorkspaceSlug, setSelectedShellWorkspaceSlug] = useState(shellWorkspaceSlug);
@@ -101,6 +115,7 @@ function renderAppBar({
           onOpenAccount={vi.fn()}
           onShellWorkspaceChange={setSelectedShellWorkspaceSlug}
           shellWorkspaceSlug={selectedShellWorkspaceSlug}
+          workspaceApps={workspaceApps}
         />
         <LocationDisplay />
       </>
@@ -216,6 +231,16 @@ describe('AppBar', () => {
       expect(container.querySelector('a[href="/w/innovation-lab/docs"]')).toBeTruthy();
       expect(container.querySelector('a[href="/w/innovation-lab/ai"]')).toBeTruthy();
     });
+  });
+
+  it('hides app icons that are not enabled by the workspace bootstrap', () => {
+    const { container } = renderAppBar({
+      currentPathname: '/',
+      workspaceApps: buildWorkspaceApps().filter((item) => item.app_id !== 'docs'),
+    });
+
+    expect(container.querySelector('a[href="/w/hq/docs"]')).toBeFalsy();
+    expect(container.querySelector('a[href="/w/hq/ai"]')).toBeTruthy();
   });
 
   it('switches from a docs detail route to the same app root when the next workspace supports it', async () => {

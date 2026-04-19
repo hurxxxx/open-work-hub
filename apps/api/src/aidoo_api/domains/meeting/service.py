@@ -9,9 +9,11 @@ from fastapi import HTTPException, UploadFile, status
 from sqlalchemy import or_, select, union
 from sqlalchemy.orm import Session, selectinload
 
+from aidoo_api.core.principal import CallerPrincipal
 from aidoo_api.core.settings import get_settings
 from aidoo_api.core.storage import get_minio_client
 from aidoo_api.domains.auth.access import (
+    bind_current_workspace,
     resolve_workspace_role,
 )
 from aidoo_api.domains.auth.models import (
@@ -73,6 +75,26 @@ from aidoo_api.domains.planner.models import PlannerEvent
 
 MAX_FILE_UPLOAD_SIZE = 100 * 1024 * 1024  # 100 MB
 LOCAL_TIMEZONE = ZoneInfo("Asia/Seoul")
+
+
+def _bind_workspace_context(
+    db: Session,
+    *,
+    workspace: Workspace,
+    principal: CallerPrincipal,
+    user: User,
+) -> None:
+    bind_current_workspace(db, workspace)
+    if principal.workspace_id != workspace.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Meeting principal workspace mismatch.",
+        )
+    if principal.kind == "user" and principal.user_id not in {None, user.id}:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Meeting principal user mismatch.",
+        )
 
 
 def _meeting_notes_doc_title(meeting: Meeting) -> str:
@@ -883,7 +905,15 @@ def delete_meeting(db: Session, *, workspace: Workspace, user: User, meeting_id:
     db.commit()
 
 
-def get_meeting(db: Session, *, workspace: Workspace, user: User, meeting_id: str) -> MeetingDetail:
+def get_meeting(
+    db: Session,
+    *,
+    workspace: Workspace,
+    principal: CallerPrincipal,
+    user: User,
+    meeting_id: str,
+) -> MeetingDetail:
+    _bind_workspace_context(db, workspace=workspace, principal=principal, user=user)
     meeting = _load_meeting(db, workspace, meeting_id)
     _ensure_user_can_view(user, meeting)
     return _serialize_meeting(db, meeting)
@@ -909,11 +939,13 @@ def list_meetings(
     db: Session,
     *,
     workspace: Workspace,
+    principal: CallerPrincipal,
     user: User,
     scope: str = "mine",
     from_at: datetime | None = None,
     to_at: datetime | None = None,
 ) -> MeetingListResponse:
+    _bind_workspace_context(db, workspace=workspace, principal=principal, user=user)
     base = select(Meeting).where(Meeting.workspace_id == workspace.id)
 
     attendee_meeting_ids = select(MeetingAttendee.meeting_id).where(
@@ -976,11 +1008,13 @@ def list_meeting_availability(
     db: Session,
     *,
     workspace: Workspace,
+    principal: CallerPrincipal,
     viewer: User,
     user_ids: list[str],
     from_at: datetime,
     to_at: datetime,
 ) -> MeetingAvailabilityResponse:
+    _bind_workspace_context(db, workspace=workspace, principal=principal, user=viewer)
     unique_user_ids = list(dict.fromkeys(user_ids))
     if not unique_user_ids:
         return MeetingAvailabilityResponse(items=[])

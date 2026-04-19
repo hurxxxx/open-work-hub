@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import {
   BrowserRouter as Router,
   Navigate,
@@ -58,6 +58,7 @@ import {
   resolveDefaultWorkspaceAppPath,
   type WorkspaceAppId,
 } from './domains/workspaces/workspace-utils';
+import { useWorkspaceBootstrap } from './domains/workspaces/workspaces-api';
 import { WorkspaceSettingsView } from './domains/workspaces/WorkspaceSettingsView';
 import {
   AccessDeniedView,
@@ -76,8 +77,16 @@ function resolveThemePreference(themePreference: ThemePreference, systemDarkMode
 
 function WorkspaceGate({
   children,
+  appId,
+  bootstrapAppIds,
+  bootstrapError,
+  bootstrapLoading,
 }: {
   children: ReactNode;
+  appId: string;
+  bootstrapAppIds: string[] | null;
+  bootstrapError: string | null;
+  bootstrapLoading: boolean;
 }) {
   const auth = useAuth();
   const { workspaceSlug } = useParams();
@@ -86,6 +95,20 @@ function WorkspaceGate({
     return (
       <AccessDeniedView description="현재 계정은 이 workspace에서 해당 앱을 사용할 수 없습니다." />
     );
+  }
+
+  if (workspaceSlug) {
+    if (bootstrapLoading || bootstrapAppIds === null) {
+      return <div className="p-8 text-gray-500">워크스페이스 구성을 불러오는 중입니다.</div>;
+    }
+    if (bootstrapError) {
+      return <AccessDeniedView description={bootstrapError} />;
+    }
+    if (!bootstrapAppIds.includes(appId)) {
+      return (
+        <AccessDeniedView description="현재 workspace에서는 이 앱이 활성화되어 있지 않습니다." />
+      );
+    }
   }
 
   return <>{children}</>;
@@ -204,6 +227,16 @@ const AppContent = () => {
   const [shellWorkspaceSlug, setShellWorkspaceSlug] = useState<string | null>(null);
   const themePreference = currentUser?.theme_preference ?? 'system';
   const resolvedTheme = resolveThemePreference(themePreference, systemDarkMode);
+  const bootstrapWorkspaceSlug = routeWorkspaceSlug ?? shellWorkspaceSlug;
+  const workspaceBootstrap = useWorkspaceBootstrap(auth.token, bootstrapWorkspaceSlug);
+  const enabledWorkspaceAppIds = useMemo(
+    () => workspaceBootstrap.data
+      ? workspaceBootstrap.data.apps
+          .filter((app) => app.enabled)
+          .map((app) => app.app_id)
+      : null,
+    [workspaceBootstrap.data],
+  );
 
   useEffect(() => {
     const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
@@ -225,10 +258,14 @@ const AppContent = () => {
   }, [resolvedTheme]);
 
   useEffect(() => {
-    const nextState = resolveShellState(location.pathname, currentUser);
+    const nextState = resolveShellState(
+      location.pathname,
+      currentUser,
+      enabledWorkspaceAppIds ?? undefined,
+    );
     setActiveAppId(nextState.activeAppId);
     setActiveNavItemId(nextState.activeNavItemId);
-  }, [currentUser, location.pathname]);
+  }, [currentUser, enabledWorkspaceAppIds, location.pathname]);
 
   useEffect(() => {
     if (!currentUser) {
@@ -271,6 +308,7 @@ const AppContent = () => {
         currentPathname={location.pathname}
         onShellWorkspaceChange={setShellWorkspaceSlug}
         shellWorkspaceSlug={shellWorkspaceSlug}
+        workspaceApps={workspaceBootstrap.data?.apps ?? []}
         onOpenAccount={() => setProfileOpen(true)}
       />
 
@@ -278,7 +316,9 @@ const AppContent = () => {
         <SubSidebar
           activeAppId={activeAppId}
           activeNavItemId={activeNavItemId}
-          currentWorkspaceSlug={routeWorkspaceSlug}
+          currentWorkspaceSlug={bootstrapWorkspaceSlug}
+          workspaceApps={workspaceBootstrap.data?.apps ?? []}
+          workspaceNavItems={workspaceBootstrap.data?.nav ?? []}
         />
 
         <div className="flex-1 flex flex-col overflow-hidden bg-app-bg transition-colors">
@@ -290,7 +330,12 @@ const AppContent = () => {
             <Route
               path="/w/:workspaceSlug/home"
               element={(
-                <WorkspaceGate>
+                <WorkspaceGate
+                  appId="home"
+                  bootstrapAppIds={enabledWorkspaceAppIds}
+                  bootstrapError={workspaceBootstrap.error}
+                  bootstrapLoading={workspaceBootstrap.loading}
+                >
                   <WorkspaceHomeView />
                 </WorkspaceGate>
               )}
@@ -298,7 +343,12 @@ const AppContent = () => {
             <Route
               path="/w/:workspaceSlug/ai"
               element={(
-                <WorkspaceGate>
+                <WorkspaceGate
+                  appId="ai"
+                  bootstrapAppIds={enabledWorkspaceAppIds}
+                  bootstrapError={workspaceBootstrap.error}
+                  bootstrapLoading={workspaceBootstrap.loading}
+                >
                   <AIView />
                 </WorkspaceGate>
               )}
@@ -306,7 +356,12 @@ const AppContent = () => {
             <Route
               path="/w/:workspaceSlug/pms"
               element={(
-                <WorkspaceGate>
+                <WorkspaceGate
+                  appId="pms"
+                  bootstrapAppIds={enabledWorkspaceAppIds}
+                  bootstrapError={workspaceBootstrap.error}
+                  bootstrapLoading={workspaceBootstrap.loading}
+                >
                   <PMSView />
                 </WorkspaceGate>
               )}
@@ -314,7 +369,12 @@ const AppContent = () => {
             <Route
               path="/w/:workspaceSlug/pms/assigned"
               element={(
-                <WorkspaceGate>
+                <WorkspaceGate
+                  appId="pms"
+                  bootstrapAppIds={enabledWorkspaceAppIds}
+                  bootstrapError={workspaceBootstrap.error}
+                  bootstrapLoading={workspaceBootstrap.loading}
+                >
                   <AssignedToMeView />
                 </WorkspaceGate>
               )}
@@ -322,7 +382,12 @@ const AppContent = () => {
             <Route
               path="/w/:workspaceSlug/pms/today"
               element={(
-                <WorkspaceGate>
+                <WorkspaceGate
+                  appId="pms"
+                  bootstrapAppIds={enabledWorkspaceAppIds}
+                  bootstrapError={workspaceBootstrap.error}
+                  bootstrapLoading={workspaceBootstrap.loading}
+                >
                   <TodayOverdueView />
                 </WorkspaceGate>
               )}
@@ -330,7 +395,12 @@ const AppContent = () => {
             <Route
               path="/w/:workspaceSlug/pms/personal"
               element={(
-                <WorkspaceGate>
+                <WorkspaceGate
+                  appId="pms"
+                  bootstrapAppIds={enabledWorkspaceAppIds}
+                  bootstrapError={workspaceBootstrap.error}
+                  bootstrapLoading={workspaceBootstrap.loading}
+                >
                   <PersonalListView />
                 </WorkspaceGate>
               )}
@@ -338,7 +408,12 @@ const AppContent = () => {
             <Route
               path="/w/:workspaceSlug/docs"
               element={(
-                <WorkspaceGate>
+                <WorkspaceGate
+                  appId="docs"
+                  bootstrapAppIds={enabledWorkspaceAppIds}
+                  bootstrapError={workspaceBootstrap.error}
+                  bootstrapLoading={workspaceBootstrap.loading}
+                >
                   <DocsView />
                 </WorkspaceGate>
               )}
@@ -346,7 +421,12 @@ const AppContent = () => {
             <Route
               path="/w/:workspaceSlug/docs/:docId"
               element={(
-                <WorkspaceGate>
+                <WorkspaceGate
+                  appId="docs"
+                  bootstrapAppIds={enabledWorkspaceAppIds}
+                  bootstrapError={workspaceBootstrap.error}
+                  bootstrapLoading={workspaceBootstrap.loading}
+                >
                   <DocsView />
                 </WorkspaceGate>
               )}
@@ -354,7 +434,12 @@ const AppContent = () => {
             <Route
               path="/w/:workspaceSlug/planner"
               element={(
-                <WorkspaceGate>
+                <WorkspaceGate
+                  appId="planner"
+                  bootstrapAppIds={enabledWorkspaceAppIds}
+                  bootstrapError={workspaceBootstrap.error}
+                  bootstrapLoading={workspaceBootstrap.loading}
+                >
                   <PlannerView />
                 </WorkspaceGate>
               )}
@@ -362,7 +447,12 @@ const AppContent = () => {
             <Route
               path="/w/:workspaceSlug/meeting"
               element={(
-                <WorkspaceGate>
+                <WorkspaceGate
+                  appId="meeting"
+                  bootstrapAppIds={enabledWorkspaceAppIds}
+                  bootstrapError={workspaceBootstrap.error}
+                  bootstrapLoading={workspaceBootstrap.loading}
+                >
                   <MeetingView />
                 </WorkspaceGate>
               )}
@@ -370,7 +460,12 @@ const AppContent = () => {
             <Route
               path="/w/:workspaceSlug/meeting/:meetingId"
               element={(
-                <WorkspaceGate>
+                <WorkspaceGate
+                  appId="meeting"
+                  bootstrapAppIds={enabledWorkspaceAppIds}
+                  bootstrapError={workspaceBootstrap.error}
+                  bootstrapLoading={workspaceBootstrap.loading}
+                >
                   <MeetingWorkspaceView />
                 </WorkspaceGate>
               )}

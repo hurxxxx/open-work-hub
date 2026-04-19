@@ -96,6 +96,7 @@ def resolve_auth_context_from_token(
 
 
 def require_auth_context(
+    request: Request,
     credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
     db: Session = Depends(get_db_session),
 ) -> AuthContext:
@@ -104,10 +105,12 @@ def require_auth_context(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Authentication required.",
         )
-    return resolve_auth_context_from_token(
+    context = resolve_auth_context_from_token(
         db,
         credentials.credentials,
     )
+    request.state.auth_context = context
+    return context
 
 
 def require_current_user(context: AuthContext = Depends(require_auth_context)) -> User:

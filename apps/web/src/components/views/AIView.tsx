@@ -1,4 +1,4 @@
-import { Link } from 'react-router-dom';
+import { Link, useParams } from 'react-router-dom';
 import { motion } from 'motion/react';
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import {
@@ -18,6 +18,7 @@ import {
 } from '@/src/domains/ai/ai-api';
 import { useChatStream } from '@/src/domains/ai/useChatStream';
 import { useAuth } from '@/src/domains/auth/auth-provider';
+import { useWorkspaceBootstrap } from '@/src/domains/workspaces/workspaces-api';
 import { ChatThread } from '@/src/components/views/chat/ChatThread';
 import { ApprovalModal } from '@/src/components/views/chat/ApprovalModal';
 import { ToolCallCard } from '@/src/components/views/chat/ToolCallCard';
@@ -118,6 +119,30 @@ function formatBackendStatus(
   return backend.status;
 }
 
+function resolveAssistantTurnContent(
+  contentBuffer: string,
+  options: {
+    status: 'done' | 'cancelled' | 'error';
+    errorMessage: string | null;
+    finishReason: 'stop' | 'length' | 'cancelled' | 'error' | null;
+  },
+): string {
+  const { status, errorMessage, finishReason } = options;
+  if (contentBuffer) {
+    return contentBuffer;
+  }
+  if (status === 'cancelled') {
+    return '응답이 중단되었습니다.';
+  }
+  if (status === 'error') {
+    return errorMessage ?? '응답 중 오류가 발생했습니다.';
+  }
+  if (finishReason === 'length') {
+    return '응답이 토큰 한도에 도달해 중간에서 잘렸습니다. 질문 범위를 줄이거나 이어서 요청하세요.';
+  }
+  return '응답을 생성하지 못했습니다.';
+}
+
 function BackendStatusRow({
   health,
   label,
@@ -149,6 +174,7 @@ function BackendStatusRow({
 
 export const AIView = () => {
   const { token } = useAuth();
+  const { workspaceSlug } = useParams();
   const [health, setHealth] = useState<LlmHealthResponse | null>(null);
   const [healthError, setHealthError] = useState<string | null>(null);
   const [isCheckingHealth, setIsCheckingHealth] = useState(false);
@@ -163,6 +189,7 @@ export const AIView = () => {
   );
   const [pendingUserInput, setPendingUserInput] = useState('');
   const chat = useChatStream(token);
+  const workspaceBootstrap = useWorkspaceBootstrap(token, workspaceSlug);
   const isSending = chat.state.status === 'streaming';
   const finalizedToolCalls = useMemo(
     () => turns.flatMap((turn) => turn.toolCalls ?? []),
@@ -174,8 +201,24 @@ export const AIView = () => {
   );
 
   const aiTools = useMemo(
-    () => NAV_ITEMS.filter((item) => item.appId === 'ai'),
-    [],
+    () => {
+      const registry = new Map(NAV_ITEMS.map((item) => [item.id, item]));
+      return (workspaceBootstrap.data?.nav ?? [])
+        .filter((item) => item.app_id === 'ai')
+        .map((item) => {
+          const localItem = registry.get(item.id);
+          if (!localItem) {
+            return null;
+          }
+          return {
+            ...localItem,
+            title: item.title,
+            category: item.category,
+          };
+        })
+        .filter((item): item is (typeof NAV_ITEMS)[number] => Boolean(item));
+    },
+    [workspaceBootstrap.data],
   );
 
   async function refreshHealth() {
@@ -247,15 +290,14 @@ export const AIView = () => {
         {
           id: `assistant-${Date.now()}`,
           role: 'assistant',
-          content:
-            chat.state.contentBuffer ||
-            (status === 'cancelled'
-              ? '응답이 중단되었습니다.'
-              : status === 'error'
-                ? chat.state.errorMessage ?? '응답 중 오류가 발생했습니다.'
-                : '응답을 생성하지 못했습니다.'),
+          content: resolveAssistantTurnContent(chat.state.contentBuffer, {
+            status,
+            errorMessage: chat.state.errorMessage,
+            finishReason: chat.state.finishReason,
+          }),
           reasoning: chat.state.reasoningBuffer || undefined,
           reasoningStatus: status,
+          finishReason: chat.state.finishReason,
           responseStatus: status === 'done' ? undefined : status,
           provider: chat.state.doneMeta?.provider ?? undefined,
           policy: chat.state.doneMeta?.policy ?? null,
@@ -329,9 +371,7 @@ export const AIView = () => {
     void chat.send({
       messages,
       backend_mode: backendMode,
-      max_tokens: 1024,
       temperature: 0.2,
-      reasoning_effort: 'low',
       stream_reasoning: true,
     });
   }

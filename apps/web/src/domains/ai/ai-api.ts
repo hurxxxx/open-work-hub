@@ -26,6 +26,7 @@ export interface AiChatResponse {
   model: string;
   content: string;
   usage: AiChatUsage | null;
+  finish_reason?: string | null;
   provider: string;
   backend: string;
   fallback_used: boolean;

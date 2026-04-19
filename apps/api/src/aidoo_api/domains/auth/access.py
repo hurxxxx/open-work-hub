@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+import logging
 from collections.abc import Sequence
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import inspect, select
 from sqlalchemy.orm import Session, joinedload, selectinload
 
 from aidoo_api.domains.auth.models import (
@@ -17,10 +18,17 @@ from aidoo_api.domains.auth.models import (
     UserAccessGroup,
     UserSystemRole,
     Workspace,
+    WorkspaceAppEntitlement,
     WorkspaceGroupBinding,
     WorkspaceUserBinding,
 )
+from aidoo_api.domains.auth.workspace_apps import (
+    WORKSPACE_APP_IDS,
+    iter_workspace_app_catalog,
+)
 from aidoo_api.domains.auth.security import hash_password, new_id
+
+logger = logging.getLogger(__name__)
 
 
 SYSTEM_PLATFORM_ADMIN = "platform_admin"
@@ -502,6 +510,13 @@ def ensure_seed_data(db: Session) -> None:
         for workspace in existing_workspaces:
             ensure_workspace_default_pms_space(db, workspace)
 
+    if _workspace_app_entitlements_table_exists(db):
+        ensure_workspace_app_entitlements(db)
+    else:
+        logger.warning(
+            "workspace_app_entitlements table is missing; skipping entitlement seed "
+            "and falling back to the default app catalog until alembic migrations are applied."
+        )
     ensure_llm_policy_seed_data(db)
 
     db.commit()
@@ -534,6 +549,37 @@ def ensure_llm_policy_seed_data(db: Session) -> None:
             )
         )
     if to_insert:
+        db.flush()
+
+
+def _workspace_app_entitlements_table_exists(db: Session) -> bool:
+    return inspect(db.get_bind()).has_table(WorkspaceAppEntitlement.__tablename__)
+
+
+def ensure_workspace_app_entitlements(db: Session) -> None:
+    if not _workspace_app_entitlements_table_exists(db):
+        return
+    existing_pairs = {
+        (workspace_id, app_id)
+        for workspace_id, app_id in db.execute(
+            select(WorkspaceAppEntitlement.workspace_id, WorkspaceAppEntitlement.app_id)
+        ).all()
+    }
+    workspace_ids = list(db.scalars(select(Workspace.id)).all())
+    for workspace_id in workspace_ids:
+        for app in iter_workspace_app_catalog():
+            pair = (workspace_id, app.app_id)
+            if pair in existing_pairs:
+                continue
+            db.add(
+                WorkspaceAppEntitlement(
+                    id=new_id(),
+                    workspace_id=workspace_id,
+                    app_id=app.app_id,
+                    enabled=app.enabled_by_default,
+                )
+            )
+    if workspace_ids:
         db.flush()
 
 
@@ -655,6 +701,7 @@ def ensure_dev_login_seed_data(db: Session) -> None:
         },
         **_ensure_workspace_rows(db, DEV_WORKSPACE_SEEDS),
     }
+    ensure_workspace_app_entitlements(db)
     default_spaces_by_workspace_key = {
         workspace_key: ensure_workspace_default_pms_space(db, workspace)
         for workspace_key, workspace in workspace_by_key.items()
@@ -992,6 +1039,87 @@ def resolve_workspaces(db: Session, user: User) -> list[dict[str, Any]]:
             }
         )
     return items
+
+
+def resolve_workspace_enabled_app_ids(db: Session, workspace_id: str) -> list[str]:
+    if not _workspace_app_entitlements_table_exists(db):
+        return [
+            app.app_id for app in iter_workspace_app_catalog() if app.enabled_by_default
+        ]
+    enabled_ids = {
+        app_id
+        for app_id, enabled in db.execute(
+            select(WorkspaceAppEntitlement.app_id, WorkspaceAppEntitlement.enabled).where(
+                WorkspaceAppEntitlement.workspace_id == workspace_id
+            )
+        ).all()
+        if enabled
+    }
+    if not enabled_ids:
+        enabled_ids = {
+            app.app_id for app in iter_workspace_app_catalog() if app.enabled_by_default
+        }
+    return [app_id for app_id in WORKSPACE_APP_IDS if app_id in enabled_ids]
+
+
+def build_workspace_bootstrap(
+    db: Session,
+    *,
+    user: User,
+    workspace: Workspace,
+    source: str,
+    session_id: str | None = None,
+) -> dict[str, Any]:
+    role = resolve_workspace_role(db, user, workspace.id)
+    enabled_app_ids = set(resolve_workspace_enabled_app_ids(db, workspace.id))
+    apps: list[dict[str, Any]] = []
+    nav: list[dict[str, Any]] = []
+
+    for app in iter_workspace_app_catalog():
+        if app.app_id not in enabled_app_ids:
+            continue
+        nav_items = [
+            {
+                "id": item.id,
+                "app_id": item.app_id,
+                "title": item.title,
+                "category": item.category,
+                "icon_key": item.icon_key,
+                "link_app_id": item.link_app_id,
+                "path_suffix": item.path_suffix,
+                "absolute_path": item.absolute_path,
+            }
+            for item in app.nav_items
+        ]
+        apps.append(
+            {
+                "app_id": app.app_id,
+                "title": app.title,
+                "route_base": app.route_base,
+                "icon_key": app.icon_key,
+                "enabled": True,
+                "nav_items": nav_items,
+            }
+        )
+        nav.extend(nav_items)
+
+    return {
+        "workspace": {
+            "id": workspace.id,
+            "slug": workspace.key,
+            "name": workspace.name,
+            "role": role or "member",
+        },
+        "apps": apps,
+        "nav": nav,
+        "principal": {
+            "kind": "user",
+            "workspace_id": workspace.id,
+            "source": source,
+            "user_id": user.id,
+            "session_id": session_id,
+        },
+    }
 
 
 def resolve_workspace_roles(db: Session, user: User) -> list[dict[str, str]]:

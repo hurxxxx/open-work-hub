@@ -3,6 +3,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy.orm import Session
 
+from aidoo_api.core.principal import user_principal
 from aidoo_api.core.db import get_db_session
 from aidoo_api.domains.auth.dependencies import (
     require_current_user,
@@ -48,6 +49,11 @@ def list_planner_events(
     return list_events(
         db,
         workspace=workspace,
+        principal=user_principal(
+            workspace_id=workspace.id,
+            user_id=current_user.id,
+            source="api.planner.list_events",
+        ),
         user=current_user,
         from_at=from_at,
         to_at=to_at,
@@ -71,7 +77,17 @@ def get_planner_event(
     current_user: User = Depends(require_current_user),
     workspace: Workspace = Depends(require_current_workspace),
 ) -> PlannerEventOut:
-    return get_event(db, workspace=workspace, user=current_user, event_id=event_id)
+    return get_event(
+        db,
+        workspace=workspace,
+        principal=user_principal(
+            workspace_id=workspace.id,
+            user_id=current_user.id,
+            source="api.planner.get_event",
+        ),
+        user=current_user,
+        event_id=event_id,
+    )
 
 
 @router.patch("/events/{event_id}", response_model=PlannerEventOut)

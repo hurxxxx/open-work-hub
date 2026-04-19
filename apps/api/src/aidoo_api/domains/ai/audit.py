@@ -22,6 +22,8 @@ def log_llm_call(
     *,
     source: str,
     actor_user_id: str | None,
+    principal_kind: str,
+    principal_id: str | None,
     workspace_id: str,
     task_kind: str,
     policy: str | None,
@@ -47,6 +49,8 @@ def log_llm_call(
     payload: dict[str, Any] = {
         "source": source,
         "actor_user_id": actor_user_id,
+        "principal_kind": principal_kind,
+        "principal_id": principal_id,
         "workspace_id": workspace_id,
         "task_kind": task_kind,
         "policy": policy,

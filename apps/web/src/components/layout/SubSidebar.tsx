@@ -60,7 +60,17 @@ import {
   resolveDefaultWorkspaceAppPath,
   type WorkspaceAppId,
 } from '@/src/domains/workspaces/workspace-utils';
+import type {
+  WorkspaceBootstrapApp,
+  WorkspaceBootstrapNavItem,
+} from '@/src/domains/workspaces/workspaces-api';
 import type { NavItem } from '@/src/constants';
+import { CreateTaskListModal } from '@/src/components/views/PMSView/CreateTaskListModal';
+import { CreateSpaceModal } from '@/src/components/views/PMSView/CreateSpaceModal';
+import { SpaceMembersModal } from '@/src/components/views/PMSView/SpaceMembersModal';
+import { CreateFolderModal } from '@/src/components/views/PMSView/CreateFolderModal';
+import { SpaceOrderEditorModal } from './SpaceOrderEditorModal';
+import { buildSidebarCategories } from './sub-sidebar-categories';
 
 function resolveNavItemHref(
   item: NavItem,
@@ -79,12 +89,6 @@ function resolveNavItemHref(
     ? buildWorkspaceAppPath(currentWorkspaceSlug, targetApp, suffix)
     : resolveDefaultWorkspaceAppPath(user, targetApp, suffix);
 }
-import { CreateTaskListModal } from '@/src/components/views/PMSView/CreateTaskListModal';
-import { CreateSpaceModal } from '@/src/components/views/PMSView/CreateSpaceModal';
-import { SpaceMembersModal } from '@/src/components/views/PMSView/SpaceMembersModal';
-import { CreateFolderModal } from '@/src/components/views/PMSView/CreateFolderModal';
-import { SpaceOrderEditorModal } from './SpaceOrderEditorModal';
-import { buildSidebarCategories } from './sub-sidebar-categories';
 
 const SPACE_COLORS = [
   'bg-emerald-500',
@@ -108,6 +112,10 @@ function upsertSpace(spaces: PmsSpace[], space: PmsSpace): PmsSpace[] {
 
 function getErrorMessage(error: unknown, fallback: string): string {
   return error instanceof Error && error.message ? error.message : fallback;
+}
+
+function isDefined<T>(value: T | null): value is T {
+  return value !== null;
 }
 
 const SpaceAddPopover = ({
@@ -1099,10 +1107,14 @@ export const SubSidebar = ({
   activeAppId,
   activeNavItemId,
   currentWorkspaceSlug,
+  workspaceApps,
+  workspaceNavItems,
 }: {
   activeAppId: string;
   activeNavItemId: string;
   currentWorkspaceSlug: string | null;
+  workspaceApps: WorkspaceBootstrapApp[];
+  workspaceNavItems: WorkspaceBootstrapNavItem[];
 }) => {
   const location = useLocation();
   const navigate = useNavigate();
@@ -1221,14 +1233,45 @@ export const SubSidebar = ({
   }, [sidebarWidth]);
 
   const knownSpaceIdsRef = useRef(new Set<string>());
+  const navItemRegistry = useMemo(
+    () => new Map(NAV_ITEMS.map((item) => [item.id, item])),
+    [],
+  );
+  const workspaceAppRegistry = useMemo(
+    () => new Map(workspaceApps.map((item) => [item.app_id, item])),
+    [workspaceApps],
+  );
 
   const filteredItems = useMemo(
     () => {
-      const items = NAV_ITEMS.filter((item) => item.appId === activeAppId);
       if (activeAppId !== 'settings') {
-        return items;
+        return workspaceNavItems
+          .filter((item) => item.app_id === activeAppId)
+          .map((item) => {
+            const localItem = navItemRegistry.get(item.id);
+            if (!localItem) {
+              return null;
+            }
+            const nextItem: NavItem = {
+              ...localItem,
+              title: item.title,
+              category: item.category,
+            };
+            if (item.path_suffix !== undefined && item.path_suffix !== null) {
+              nextItem.pathSuffix = item.path_suffix;
+            }
+            if (item.absolute_path !== undefined && item.absolute_path !== null) {
+              nextItem.absolutePath = item.absolute_path;
+            }
+            if (item.link_app_id !== undefined && item.link_app_id !== null) {
+              nextItem.linkAppId = item.link_app_id as NavItem['linkAppId'];
+            }
+            return nextItem;
+          })
+          .filter(isDefined);
       }
 
+      const items = NAV_ITEMS.filter((item) => item.appId === activeAppId);
       const sectionByItemId: Partial<Record<string, AdminSection>> = {
         'settings-general': 'general',
         'settings-people': 'people',
@@ -1242,7 +1285,7 @@ export const SubSidebar = ({
         return section ? hasAdminSectionAccess(user?.system_roles ?? [], section) : false;
       });
     },
-    [activeAppId, user?.system_roles],
+    [activeAppId, navItemRegistry, user?.system_roles, workspaceNavItems],
   );
   const categories = useMemo(
     () => buildSidebarCategories(
@@ -1923,7 +1966,10 @@ export const SubSidebar = ({
       >
         <div className="flex items-center justify-between p-4 border-b border-app-border">
           <h2 className="app-text-overline text-gray-600 dark:text-gray-300">
-            {activeAppId === 'settings' ? 'All settings' : APP_BAR_ITEMS.find((item) => item.id === activeAppId)?.title}
+            {activeAppId === 'settings'
+              ? 'All settings'
+              : workspaceAppRegistry.get(activeAppId)?.title
+                ?? APP_BAR_ITEMS.find((item) => item.id === activeAppId)?.title}
           </h2>
           <div className="flex items-center gap-1.5">
           {(activeAppId === 'pms' || activeAppId === 'docs' || activeAppId === 'planner' || activeAppId === 'ai' || activeAppId === 'meeting') ? (

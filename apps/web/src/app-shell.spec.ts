@@ -79,4 +79,13 @@ describe('resolveShellState', () => {
       activeNavItemId: '',
     });
   });
+
+  it('falls back to home when the workspace bootstrap disables the app', () => {
+    expect(
+      resolveShellState('/w/delivery-hub/ai', buildUser(), ['home', 'pms', 'docs']),
+    ).toEqual({
+      activeAppId: 'home',
+      activeNavItemId: '',
+    });
+  });
 });

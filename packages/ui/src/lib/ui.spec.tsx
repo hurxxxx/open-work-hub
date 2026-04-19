@@ -3,6 +3,7 @@ import { fireEvent, render } from '@testing-library/react';
 import { Button } from './primitives/button';
 import { DataTable } from './data-display/data-table';
 import { DetailDrawer } from './layout/detail-drawer';
+import { Dialog } from './primitives/dialog';
 import {
   ToastProvider,
   ToastViewport,
@@ -52,6 +53,22 @@ describe('shared ui', () => {
 
     expect(getByText(/Document details/i)).toBeTruthy();
     expect(getByText(/Evidence block/i)).toBeTruthy();
+  });
+
+  it('opens dialogs without descriptions without emitting accessibility warnings', () => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    const { getByText } = render(
+      <Dialog open onOpenChange={() => undefined} title="Quick create">
+        <div>Body content</div>
+      </Dialog>,
+    );
+
+    expect(getByText(/Quick create/i)).toBeTruthy();
+    expect(getByText(/Body content/i)).toBeTruthy();
+    expect(errorSpy).not.toHaveBeenCalled();
+
+    errorSpy.mockRestore();
   });
 
   it('shows toast notifications through the shared provider', () => {

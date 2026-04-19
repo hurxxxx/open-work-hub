@@ -57,6 +57,11 @@ export function Dialog({
   const blockOutside = dismissOnInteractOutside
     ? undefined
     : (event: Event) => event.preventDefault();
+  // Radix warns when DialogContent omits a Description unless callers
+  // explicitly opt out with aria-describedby={undefined}.
+  const accessibilityProps = description
+    ? {}
+    : ({ 'aria-describedby': undefined } as const);
   return (
     <DialogPrimitive.Root open={open} onOpenChange={onOpenChange}>
       <DialogPrimitive.Portal>
@@ -71,6 +76,7 @@ export function Dialog({
           )}
           onPointerDownOutside={blockOutside}
           onInteractOutside={blockOutside}
+          {...accessibilityProps}
         >
           {embedded ? (
             <>

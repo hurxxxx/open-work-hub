@@ -13,6 +13,7 @@ from aidoo_api.core.llm import (
 )
 from aidoo_api.core.settings import get_settings
 from aidoo_api.core.storage import ensure_bucket
+from aidoo_api.domains.ai.registry import initialize_ai_capability_registry
 from aidoo_api.domains.ai.router import router as ai_router
 from aidoo_api.domains.admin.router import router as admin_router
 from aidoo_api.domains.calendar.router import router as calendar_router
@@ -22,6 +23,7 @@ from aidoo_api.domains.auth.dependencies import (
     require_workspace_membership,
 )
 from aidoo_api.domains.auth.router import router as auth_router
+from aidoo_api.domains.auth.workspace_router import router as workspace_router
 from aidoo_api.domains.docs.collab import DocsCollabHub
 from aidoo_api.domains.docs.router import router as docs_router
 from aidoo_api.domains.docs.router import ws_router as docs_ws_router
@@ -41,6 +43,7 @@ logger = logging.getLogger(__name__)
 
 def create_app() -> FastAPI:
     settings = get_settings()
+    initialize_ai_capability_registry()
     init_db()
     ensure_bucket()
     Path(settings.recording_spool_dir).expanduser().mkdir(parents=True, exist_ok=True)
@@ -103,6 +106,14 @@ def create_app() -> FastAPI:
 
     app.include_router(auth_router, prefix=settings.api_prefix)
     protected_dependencies = [Depends(require_current_user)]
+    app.include_router(
+        workspace_router,
+        prefix=settings.api_prefix,
+        dependencies=[
+            *protected_dependencies,
+            Depends(require_workspace_membership()),
+        ],
+    )
     app.include_router(
         ai_router,
         prefix=settings.api_prefix,

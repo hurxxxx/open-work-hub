@@ -206,6 +206,72 @@ def test_ai_chat_external_policy_uses_external_reasoning_shape(
     }
 
 
+def test_ai_chat_local_defaults_disable_reasoning_and_use_30k_budget(
+    client: TestClient,
+    monkeypatch,
+) -> None:
+    auth = _seeded_dev_login(client, "hq-admin")
+    workspace_slug = auth["user"]["workspaces"][0]["slug"]
+    _set_policy("chatbot", "local_only")
+
+    local_client = FakePoolClient(
+        ["mlx-community/Qwen3.6-35B-A3B-4bit"],
+        content="local response",
+    )
+    monkeypatch.setattr(llm_core, "get_pool_client", lambda pool: local_client)
+
+    response = client.post(
+        _workspace_ai_path(workspace_slug, "/chat"),
+        headers=_auth_headers(auth["token"]),
+        json={
+            "backend_mode": "local",
+            "messages": [{"role": "user", "content": "길게 설명해줘"}],
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    call = local_client.chat.completions.calls[0]
+    assert call["max_tokens"] == llm_core.LOCAL_DEFAULT_MAX_TOKENS
+    assert call["extra_body"] == {"think": False}
+
+
+def test_ai_chat_external_defaults_use_medium_reasoning_and_256k_budget(
+    client: TestClient,
+    monkeypatch,
+) -> None:
+    auth = _seeded_dev_login(client, "hq-admin")
+    workspace_slug = auth["user"]["workspaces"][0]["slug"]
+    _set_policy("chatbot", "external")
+
+    local_client = FakePoolClient(
+        ["mlx-community/Qwen3.6-35B-A3B-4bit"],
+        content="local response",
+    )
+    external_client = FakePoolClient(
+        ["qwen/qwen3.5-35b-a3b"],
+        content="external response",
+    )
+    monkeypatch.setattr(
+        llm_core,
+        "get_pool_client",
+        lambda pool: local_client if pool == "local" else external_client,
+    )
+
+    response = client.post(
+        _workspace_ai_path(workspace_slug, "/chat"),
+        headers=_auth_headers(auth["token"]),
+        json={
+            "backend_mode": "auto",
+            "messages": [{"role": "user", "content": "LLM과 머신러닝 차이를 길게 설명해줘"}],
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    call = external_client.chat.completions.calls[0]
+    assert call["max_tokens"] == llm_core.EXTERNAL_DEFAULT_MAX_TOKENS
+    assert call["extra_body"] == {"reasoning": {"effort": "medium"}}
+
+
 def test_ai_chat_external_policy_forces_local_on_pii(
     client: TestClient,
     monkeypatch,

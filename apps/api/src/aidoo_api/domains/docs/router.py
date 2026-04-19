@@ -14,6 +14,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload, selectinload
 
 from aidoo_api.core.db import get_db_session, get_session_factory
+from aidoo_api.core.principal import user_principal
 from aidoo_api.core.settings import get_settings
 from aidoo_api.domains.auth.access import (
     bind_current_workspace,
@@ -22,7 +23,10 @@ from aidoo_api.domains.auth.access import (
     resolve_workspaces,
     resolve_workspace_role,
 )
-from aidoo_api.domains.auth.dependencies import require_current_user, resolve_auth_context_from_token
+from aidoo_api.domains.auth.dependencies import (
+    require_current_user,
+    resolve_auth_context_from_token,
+)
 from aidoo_api.domains.auth.models import Team, TeamMember, User, Workspace
 from aidoo_api.domains.auth.security import new_id
 from aidoo_api.domains.docs.collab import (
@@ -43,7 +47,7 @@ from aidoo_api.domains.docs.models import (
     NativeDocPage,
     NativeDocUserShare,
 )
-from aidoo_api.domains.docs.service import create_native_doc_for_user
+from aidoo_api.domains.docs import service as docs_service
 from aidoo_api.domains.media.router import sync_embedded_media
 from aidoo_api.domains.pms.models import SpaceDoc, SpaceDocPage
 
@@ -1059,47 +1063,20 @@ def list_docs_hub(
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
 ) -> DocsHubResponse:
-    _ensure_docs_workspace_access(db, current_user)
-
-    pref_map = _get_pref_map(db, current_user.id)
-
-    native_items = [
-        _serialize_native_item(
-            doc,
-            _resolve_native_doc_access(db, doc, current_user),
-            pref_map.get((SOURCE_NATIVE_DOC, doc.id)),
-        )
-        for doc in _load_accessible_native_docs(db, current_user)
-        if _resolve_native_doc_access(db, doc, current_user).can_view
-    ]
-
-    space_items: list[DocsHubItem] = []
-    for doc in _load_accessible_space_docs(db, current_user):
-        role = _resolve_pms_team_role(db, current_user, doc.team_id)
-        if role is None:
-            continue
-        space_items.append(
-            _serialize_space_doc_item(
-                doc,
-                location_label=_space_location_label(db, doc.team_id),
-                role=role,
-                pref=pref_map.get((SOURCE_PMS_SPACE_DOC, doc.id)),
-            )
-        )
-
-    docs = _filter_docs_by_category(
-        [*native_items, *space_items],
-        current_user_id=current_user.id,
+    workspace = _ensure_docs_workspace_access(db, current_user)
+    return docs_service.list_hub(
+        db,
+        workspace=workspace,
+        principal=user_principal(
+            workspace_id=workspace.id,
+            user_id=current_user.id,
+            source="api.docs.list_hub",
+        ),
+        user=current_user,
         category=category,
         q=q,
-    )
-    docs = _sort_docs(docs, sort_by=sort_by, sort_dir=sort_dir)
-    total = len(docs)
-    start = (page - 1) * page_size
-    end = start + page_size
-    return DocsHubResponse(
-        items=docs[start:end],
-        total=total,
+        sort_by=sort_by,
+        sort_dir=sort_dir,
         page=page,
         page_size=page_size,
     )
@@ -1113,7 +1090,7 @@ def create_native_doc(
 ) -> DocsHubItem:
     current_workspace = _ensure_docs_workspace_access(db, current_user)
 
-    doc, _page = create_native_doc_for_user(
+    doc, _page = docs_service.create_native_doc_for_user(
         db,
         workspace_id=current_workspace.id,
         owner_id=current_user.id,
@@ -1138,9 +1115,24 @@ def get_doc_item(
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
 ) -> DocsHubItem:
-    if share_token is None or not _share_token_allows_item_without_docs_access(item_id):
-        _ensure_docs_workspace_access(db, current_user)
-    return _lookup_item(db, item_id, current_user, share_token=share_token)
+    workspace = get_current_workspace(db)
+    principal = (
+        user_principal(
+            workspace_id=workspace.id,
+            user_id=current_user.id,
+            source="api.docs.get_item",
+        )
+        if workspace is not None
+        else None
+    )
+    return docs_service.get_item(
+        db,
+        workspace=workspace,
+        principal=principal,
+        user=current_user,
+        item_id=item_id,
+        share_token=share_token,
+    )
 
 
 @router.get("/collab/pages/{page_ref}/session", response_model=DocsCollabSessionResponse)
@@ -1486,40 +1478,24 @@ def list_doc_pages(
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
 ) -> DocsPageListResponse:
-    if share_token is None or not _share_token_allows_item_without_docs_access(item_id):
-        _ensure_docs_workspace_access(db, current_user)
-    item = _lookup_item(db, item_id, current_user, share_token=share_token)
-    if item.source_type == SOURCE_NATIVE_DOC:
-        doc, access = _native_doc_from_item_or_404(db, item_id, current_user, share_token=share_token)
-        items = [
-            _serialize_native_page(doc, page, can_edit=access.can_edit)
-            for page in sorted(
-                [page for page in doc.pages if page.trashed_at is None],
-                key=lambda page: (
-                    "" if page.parent_id is None else page.parent_id,
-                    page.sort_order,
-                    page.created_at,
-                ),
-            )
-        ]
-        return DocsPageListResponse(items=items)
-
-    if item.source_type == SOURCE_PMS_SPACE_DOC:
-        doc, role = _space_doc_from_item_or_404(db, item_id, current_user)
-        items = [
-            _serialize_space_page(doc, page, can_edit=_team_role_allows(role, "member"))
-            for page in sorted(
-                [page for page in doc.pages if page.trashed_at is None],
-                key=lambda page: (
-                    "" if page.parent_id is None else page.parent_id,
-                    page.sort_order,
-                    page.created_at,
-                ),
-            )
-        ]
-        return DocsPageListResponse(items=items)
-
-    raise HTTPException(status_code=404, detail="Doc not found.")
+    workspace = get_current_workspace(db)
+    principal = (
+        user_principal(
+            workspace_id=workspace.id,
+            user_id=current_user.id,
+            source="api.docs.list_pages",
+        )
+        if workspace is not None
+        else None
+    )
+    return docs_service.list_pages(
+        db,
+        workspace=workspace,
+        principal=principal,
+        user=current_user,
+        item_id=item_id,
+        share_token=share_token,
+    )
 
 
 @router.post("/items/{item_id}/pages", response_model=DocsPageItem, status_code=status.HTTP_201_CREATED)

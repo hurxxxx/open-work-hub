@@ -34,6 +34,7 @@ export interface ChatStreamState {
   reasoningBuffer: string;
   usage: AiChatUsage | null;
   doneMeta: DoneMeta | null;
+  finishReason: 'stop' | 'length' | 'cancelled' | 'error' | null;
   status: ChatStreamStatus;
   errorMessage: string | null;
   toolCalls: ToolCallBuffer[];
@@ -56,6 +57,7 @@ const INITIAL_STATE: ChatStreamState = {
   reasoningBuffer: '',
   usage: null,
   doneMeta: null,
+  finishReason: null,
   status: 'idle',
   errorMessage: null,
   toolCalls: [],
@@ -228,6 +230,13 @@ function syncResponseToState(response: AiChatResponse): ChatStreamState {
       canonical_model: response.canonical_model,
       provider: response.provider,
     },
+    finishReason:
+      response.finish_reason === 'stop' ||
+      response.finish_reason === 'length' ||
+      response.finish_reason === 'cancelled' ||
+      response.finish_reason === 'error'
+        ? response.finish_reason
+        : null,
     status: 'done',
     transport: 'sync',
     streamOpened: false,
@@ -310,7 +319,12 @@ function applyEnvelope(
             ? 'cancelled'
             : 'done';
       return {
-        next: { ...prev, status, doneMeta: data.meta ?? null },
+        next: {
+          ...prev,
+          status,
+          doneMeta: data.meta ?? null,
+          finishReason: reason,
+        },
         terminal: true,
       };
     }

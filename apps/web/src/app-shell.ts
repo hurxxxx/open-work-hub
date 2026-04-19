@@ -22,9 +22,13 @@ function canShowAppChrome(
   user: AuthUser | null | undefined,
   appId: 'ai' | 'pms' | 'docs' | 'planner' | 'meeting' | 'settings',
   workspaceSlug?: string | null,
+  enabledWorkspaceAppIds?: readonly string[],
 ): boolean {
   if (appId === 'settings') {
     return hasAdminConsoleAccess(user);
+  }
+  if (enabledWorkspaceAppIds && !enabledWorkspaceAppIds.includes(appId)) {
+    return false;
   }
   return hasWorkspaceMembership(user, workspaceSlug);
 }
@@ -32,8 +36,9 @@ function canShowAppChrome(
 function resolvePmsToolState(
   toolId: string,
   user: AuthUser | null | undefined,
+  enabledWorkspaceAppIds?: readonly string[],
 ): ShellState {
-  if (!canShowAppChrome(user, 'pms')) {
+  if (!canShowAppChrome(user, 'pms', undefined, enabledWorkspaceAppIds)) {
     return HOME_SHELL_STATE;
   }
 
@@ -53,6 +58,7 @@ function resolvePmsToolState(
 export function resolveShellState(
   path: string,
   user: AuthUser | null | undefined,
+  enabledWorkspaceAppIds?: readonly string[],
 ): ShellState {
   const workspaceSlug = getWorkspaceSlugFromPath(path);
 
@@ -65,31 +71,31 @@ export function resolveShellState(
   }
 
   if (/^\/w\/[^/]+\/ai(?:\/|$)/.test(path)) {
-    return canShowAppChrome(user, 'ai', workspaceSlug)
+    return canShowAppChrome(user, 'ai', workspaceSlug, enabledWorkspaceAppIds)
       ? { activeAppId: 'ai', activeNavItemId: '' }
       : HOME_SHELL_STATE;
   }
 
   if (/^\/w\/[^/]+\/pms\/assigned(?:\/|$)/.test(path)) {
-    return canShowAppChrome(user, 'pms', workspaceSlug)
+    return canShowAppChrome(user, 'pms', workspaceSlug, enabledWorkspaceAppIds)
       ? { activeAppId: 'pms', activeNavItemId: 'pms-tasks-assigned' }
       : HOME_SHELL_STATE;
   }
 
   if (/^\/w\/[^/]+\/pms\/today(?:\/|$)/.test(path)) {
-    return canShowAppChrome(user, 'pms', workspaceSlug)
+    return canShowAppChrome(user, 'pms', workspaceSlug, enabledWorkspaceAppIds)
       ? { activeAppId: 'pms', activeNavItemId: 'pms-tasks-today' }
       : HOME_SHELL_STATE;
   }
 
   if (/^\/w\/[^/]+\/pms\/personal(?:\/|$)/.test(path)) {
-    return canShowAppChrome(user, 'pms', workspaceSlug)
+    return canShowAppChrome(user, 'pms', workspaceSlug, enabledWorkspaceAppIds)
       ? { activeAppId: 'pms', activeNavItemId: 'pms-tasks-personal' }
       : HOME_SHELL_STATE;
   }
 
   if (/^\/w\/[^/]+\/pms(?:\/|$)/.test(path)) {
-    return canShowAppChrome(user, 'pms', workspaceSlug)
+    return canShowAppChrome(user, 'pms', workspaceSlug, enabledWorkspaceAppIds)
       ? { activeAppId: 'pms', activeNavItemId: '' }
       : HOME_SHELL_STATE;
   }
@@ -101,19 +107,19 @@ export function resolveShellState(
   }
 
   if (/^\/w\/[^/]+\/docs(?:\/|$)/.test(path)) {
-    return canShowAppChrome(user, 'docs', workspaceSlug)
+    return canShowAppChrome(user, 'docs', workspaceSlug, enabledWorkspaceAppIds)
       ? { activeAppId: 'docs', activeNavItemId: 'docs-all' }
       : HOME_SHELL_STATE;
   }
 
   if (/^\/w\/[^/]+\/planner(?:\/|$)/.test(path)) {
-    return canShowAppChrome(user, 'planner', workspaceSlug)
+    return canShowAppChrome(user, 'planner', workspaceSlug, enabledWorkspaceAppIds)
       ? { activeAppId: 'planner', activeNavItemId: '' }
       : HOME_SHELL_STATE;
   }
 
   if (/^\/w\/[^/]+\/meeting(?:\/|$)/.test(path)) {
-    return canShowAppChrome(user, 'meeting', workspaceSlug)
+    return canShowAppChrome(user, 'meeting', workspaceSlug, enabledWorkspaceAppIds)
       ? { activeAppId: 'meeting', activeNavItemId: 'meeting-upcoming' }
       : HOME_SHELL_STATE;
   }
@@ -151,7 +157,7 @@ export function resolveShellState(
     || toolId.startsWith('pms-list-')
     || /^pms-space-.+/.test(toolId)
   ) {
-    return resolvePmsToolState(toolId, user);
+    return resolvePmsToolState(toolId, user, enabledWorkspaceAppIds);
   }
 
   const item = NAV_ITEMS.find((entry) => entry.id === toolId);
@@ -159,7 +165,7 @@ export function resolveShellState(
     return HOME_SHELL_STATE;
   }
 
-  if (item.appId !== 'home' && !canShowAppChrome(user, item.appId)) {
+  if (item.appId !== 'home' && !canShowAppChrome(user, item.appId, undefined, enabledWorkspaceAppIds)) {
     return HOME_SHELL_STATE;
   }
 

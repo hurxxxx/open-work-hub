@@ -142,7 +142,26 @@ describe('useChatStream', () => {
     expect(result.current.state.status).toBe('error');
     expect(result.current.state.errorMessage).toBe('backend down');
     expect(result.current.state.contentBuffer).toBe('partial');
+    expect(result.current.state.finishReason).toBe('error');
     expect(result.current.state.streamOpened).toBe(true);
+  });
+
+  it('stores finish_reason=length so the UI can surface truncation guidance', async () => {
+    const body = sseBytes([
+      frame('content_delta', 0, { text: 'partial' }),
+      frame('done', 1, { finish_reason: 'length', audit_id: null, meta: null }),
+    ]);
+    globalThis.fetch = vi
+      .fn()
+      .mockResolvedValue(mockStreamResponse([body])) as typeof globalThis.fetch;
+
+    const { result } = renderHook(() => useChatStream('token-abc'));
+    await act(async () => {
+      await result.current.send(SEND_PAYLOAD);
+    });
+    expect(result.current.state.status).toBe('done');
+    expect(result.current.state.finishReason).toBe('length');
+    expect(result.current.state.contentBuffer).toBe('partial');
   });
 
   it('abort() transitions to cancelled status', async () => {
@@ -182,6 +201,7 @@ describe('useChatStream', () => {
         mockJsonResponse({
           model: 'mlx-community/model',
           content: 'sync answer',
+          finish_reason: 'length',
           usage: { prompt_tokens: 1, completion_tokens: 2, total_tokens: 3 },
           provider: 'mlx-lm',
           backend: 'primary',
@@ -204,6 +224,7 @@ describe('useChatStream', () => {
     expect(result.current.state.transport).toBe('sync');
     expect(result.current.state.streamOpened).toBe(false);
     expect(result.current.state.contentBuffer).toBe('sync answer');
+    expect(result.current.state.finishReason).toBe('length');
     expect(result.current.state.doneMeta?.provider).toBe('mlx-lm');
     expect(globalThis.fetch).toHaveBeenCalledTimes(1);
     expect((globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls[0][0]).toContain('/api/v1/ai/chat');

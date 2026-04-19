@@ -8,10 +8,11 @@ from typing import Annotated, Literal
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, UploadFile, status
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, Field
-from sqlalchemy import func, or_, select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session, joinedload, selectinload
 
 from aidoo_api.core.db import get_db_session
+from aidoo_api.core.principal import user_principal
 from aidoo_api.domains.auth.access import (
     get_current_workspace,
     get_or_create_default_pms_space,
@@ -19,7 +20,7 @@ from aidoo_api.domains.auth.access import (
     resolve_team_role,
     slugify,
 )
-from aidoo_api.domains.auth.dependencies import require_current_user
+from aidoo_api.domains.auth.dependencies import require_current_user, require_current_workspace
 from aidoo_api.domains.auth.models import Team, TeamMember, User, Workspace
 from aidoo_api.domains.auth.security import new_id
 from aidoo_api.core.settings import get_settings
@@ -59,6 +60,7 @@ from aidoo_api.domains.pms.access import (
     _ensure_list_member,
     _ensure_list_owner,
 )
+from aidoo_api.domains.pms import service as pms_service
 
 
 ISSUE_STATUS_LABELS = {
@@ -1415,12 +1417,18 @@ def _get_issue_for_user(
 def list_spaces(
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
+    workspace: Workspace = Depends(require_current_workspace),
 ) -> list[SpaceItem]:
-    spaces = list(db.scalars(_space_query_for_user(db, current_user).order_by(Team.name.asc())))
-    return [
-        _serialize_space(space, resolve_team_role(db, current_user, space))
-        for space in spaces
-    ]
+    return pms_service.list_spaces(
+        db,
+        workspace=workspace,
+        principal=user_principal(
+            workspace_id=workspace.id,
+            user_id=current_user.id,
+            source="api.pms.list_spaces",
+        ),
+        user=current_user,
+    )
 
 
 @router.get("/users", response_model=list[SpaceUserItem])
@@ -1618,85 +1626,25 @@ def list_task_lists(
     team_id: str | None = Query(default=None),
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
+    workspace: Workspace = Depends(require_current_workspace),
 ) -> TaskListsResponse:
-    if team_id is not None:
-        _ensure_space_access(db, current_user, team_id)
-
-    task_lists = list(
-        db.scalars(
-            _accessible_task_lists_query(db, current_user).options(
-                selectinload(TaskList.milestones),
-                selectinload(TaskList.issues).selectinload(Issue.comments),
-                selectinload(TaskList.issues).selectinload(Issue.subtasks),
-                joinedload(TaskList.folder),
-            )
-        )
+    return pms_service.list_task_lists(
+        db,
+        workspace=workspace,
+        principal=user_principal(
+            workspace_id=workspace.id,
+            user_id=current_user.id,
+            source="api.pms.list_task_lists",
+        ),
+        user=current_user,
+        page=page,
+        page_size=page_size,
+        sort_by=sort_by,
+        sort_dir=sort_dir,
+        q=q,
+        archived=archived,
+        team_id=team_id,
     )
-
-    q_lower = q.strip().lower()
-    if archived is not None:
-        task_lists = [task_list for task_list in task_lists if task_list.archived is archived]
-    if team_id is not None:
-        task_lists = [task_list for task_list in task_lists if task_list.team_id == team_id]
-    if q_lower:
-        task_lists = [
-            task_list
-            for task_list in task_lists
-            if q_lower in task_list.name.lower()
-            or q_lower in task_list.key.lower()
-            or q_lower in task_list.description.lower()
-        ]
-
-    reverse = sort_dir == "desc"
-    if sort_by == "name":
-        task_lists.sort(key=lambda task_list: task_list.name.lower(), reverse=reverse)
-    elif sort_by == "key":
-        task_lists.sort(key=lambda task_list: task_list.key.lower(), reverse=reverse)
-    elif sort_by == "progress":
-        task_lists.sort(key=lambda task_list: _calculate_progress(task_list.issues), reverse=reverse)
-    elif sort_by == "sort_order":
-        # Sidebar ordering: stable (folder_id, sort_order, name) — direction is
-        # ignored so clients always see the same tree order regardless of toggle.
-        task_lists.sort(
-            key=lambda task_list: (
-                task_list.folder_id or "",
-                task_list.sort_order,
-                task_list.name.lower(),
-            )
-        )
-    else:
-        task_lists.sort(key=lambda task_list: task_list.updated_at, reverse=reverse)
-
-    # Build team name lookup
-    team_ids = {p.team_id for p in task_lists if p.team_id}
-    team_names: dict[str, str] = {}
-    team_lookup: dict[str, Team] = {}
-    team_member_counts: dict[str, int] = {}
-    if team_ids:
-        teams = list(
-            db.scalars(
-            select(Team).where(
-                Team.id.in_(team_ids),
-                Team.trashed_at.is_(None),
-            )
-            .options(joinedload(Team.workspace), selectinload(Team.members))
-        )
-        )
-        team_names = {t.id: t.name for t in teams}
-        team_lookup = {t.id: t for t in teams}
-        team_member_counts = {t.id: len(t.members) for t in teams}
-
-    serialized = [
-        _serialize_task_list(
-            task_list,
-            _task_list_role(db, task_list, current_user, team_lookup),
-            team_names.get(task_list.team_id, None) if task_list.team_id else None,
-            team_member_counts.get(task_list.team_id or "", 0),
-        )
-        for task_list in task_lists
-    ]
-    page_items, total = _paginate(serialized, page, page_size)
-    return TaskListsResponse(items=page_items, total=total, page=page, page_size=page_size)
 
 
 @router.get("/spaces/{space_id}/lists", response_model=TaskListsResponse)
@@ -1710,9 +1658,17 @@ def list_space_lists(
     archived: bool | None = None,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
+    workspace: Workspace = Depends(require_current_workspace),
 ) -> TaskListsResponse:
-    _ensure_space_access(db, current_user, space_id)
-    return list_task_lists(
+    return pms_service.list_task_lists(
+        db,
+        workspace=workspace,
+        principal=user_principal(
+            workspace_id=workspace.id,
+            user_id=current_user.id,
+            source="api.pms.list_space_lists",
+        ),
+        user=current_user,
         page=page,
         page_size=page_size,
         sort_by=sort_by,
@@ -1720,8 +1676,6 @@ def list_space_lists(
         q=q,
         archived=archived,
         team_id=space_id,
-        db=db,
-        current_user=current_user,
     )
 
 
@@ -2134,70 +2088,34 @@ def list_issues(
     start_date_to: date | None = None,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
+    workspace: Workspace = Depends(require_current_workspace),
 ) -> IssueListResponse:
-    _ensure_list_member(db, current_user, list_id)
-    issues = list(
-        db.scalars(
-            select(Issue)
-            .options(
-                selectinload(Issue.task_list),
-                selectinload(Issue.milestone),
-                selectinload(Issue.assignee),
-                selectinload(Issue.reporter),
-                selectinload(Issue.comments),
-                selectinload(Issue.label_links).selectinload(IssueLabel.label),
-                selectinload(Issue.subtasks),
-                selectinload(Issue.checklist_items),
-                selectinload(Issue.time_entries),
-                selectinload(Issue.assignee_links).selectinload(IssueAssignee.user),
-            )
-            .where(Issue.list_id == list_id)
-        )
+    return pms_service.list_issues(
+        db,
+        workspace=workspace,
+        principal=user_principal(
+            workspace_id=workspace.id,
+            user_id=current_user.id,
+            source="api.pms.list_issues",
+        ),
+        user=current_user,
+        list_id=list_id,
+        page=page,
+        page_size=page_size,
+        sort_by=sort_by,
+        sort_dir=sort_dir,
+        q=q,
+        status_filter=status_filter,
+        assignee_id=assignee_id,
+        priority=priority,
+        label_id=label_id,
+        milestone_id=milestone_id,
+        archived=archived,
+        due_date_from=due_date_from,
+        due_date_to=due_date_to,
+        start_date_from=start_date_from,
+        start_date_to=start_date_to,
     )
-    q_lower = q.strip().lower()
-    if archived is not None:
-        issues = [issue for issue in issues if issue.archived is archived]
-    if status_filter:
-        issues = [issue for issue in issues if issue.status in status_filter]
-    if assignee_id:
-        issues = [issue for issue in issues if issue.assignee_id == assignee_id]
-    if priority:
-        issues = [issue for issue in issues if issue.priority == priority]
-    if label_id:
-        issues = [issue for issue in issues if any(link.label_id == label_id for link in issue.label_links)]
-    if milestone_id:
-        issues = [issue for issue in issues if issue.milestone_id == milestone_id]
-    if due_date_from:
-        issues = [issue for issue in issues if issue.due_date and issue.due_date >= due_date_from]
-    if due_date_to:
-        issues = [issue for issue in issues if issue.due_date and issue.due_date <= due_date_to]
-    if start_date_from:
-        issues = [issue for issue in issues if issue.start_date and issue.start_date >= start_date_from]
-    if start_date_to:
-        issues = [issue for issue in issues if issue.start_date and issue.start_date <= start_date_to]
-    if q_lower:
-        issues = [
-            issue
-            for issue in issues
-            if q_lower in issue.title.lower()
-            or q_lower in issue.description.lower()
-            or q_lower in _issue_reference(issue).lower()
-        ]
-
-    reverse = sort_dir == "desc"
-    if sort_by == "priority":
-        order = {"critical": 3, "high": 2, "medium": 1, "low": 0}
-        issues.sort(key=lambda issue: order[issue.priority], reverse=reverse)
-    elif sort_by == "due_date":
-        issues.sort(key=lambda issue: issue.due_date or date.max, reverse=reverse)
-    elif sort_by == "updated_at":
-        issues.sort(key=lambda issue: issue.updated_at, reverse=reverse)
-    else:
-        issues.sort(key=lambda issue: (issue.status, issue.board_position), reverse=reverse)
-
-    serialized = [_serialize_issue(issue) for issue in issues]
-    page_items, total = _paginate(serialized, page, page_size)
-    return IssueListResponse(items=page_items, total=total, page=page, page_size=page_size)
 
 
 @router.post(
@@ -2271,43 +2189,19 @@ def list_assigned_issues(
     limit: int = Query(default=10, ge=1, le=50),
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
+    workspace: Workspace = Depends(require_current_workspace),
 ) -> IssueListResponse:
-    accessible_list_ids_subquery = _accessible_task_lists_query(db, current_user).with_only_columns(TaskList.id)
-    issues = list(
-        db.scalars(
-            select(Issue)
-            .options(
-                selectinload(Issue.task_list),
-                selectinload(Issue.milestone),
-                selectinload(Issue.assignee),
-                selectinload(Issue.reporter),
-                selectinload(Issue.comments),
-                selectinload(Issue.label_links).selectinload(IssueLabel.label),
-                selectinload(Issue.subtasks),
-                selectinload(Issue.checklist_items),
-                selectinload(Issue.time_entries),
-                selectinload(Issue.assignee_links).selectinload(IssueAssignee.user),
-            )
-            .where(
-                Issue.assignee_id == current_user.id,
-                Issue.archived.is_(False),
-                Issue.list_id.in_(accessible_list_ids_subquery),
-            )
-        )
+    return pms_service.list_assigned_issues(
+        db,
+        workspace=workspace,
+        principal=user_principal(
+            workspace_id=workspace.id,
+            user_id=current_user.id,
+            source="api.pms.list_assigned_issues",
+        ),
+        user=current_user,
+        limit=limit,
     )
-
-    issues = [
-        issue for issue in issues if not _is_closed_status(issue.status, issue.task_list)
-    ]
-    issues.sort(
-        key=lambda issue: (
-            issue.due_date or date.max,
-            -issue.updated_at.timestamp(),
-        )
-    )
-    issues = issues[:limit]
-    serialized = [_serialize_issue(issue) for issue in issues]
-    return IssueListResponse(items=serialized, total=len(serialized), page=1, page_size=limit)
 
 
 @router.get("/issues/{issue_id}", response_model=IssueDetailResponse)
@@ -2315,76 +2209,18 @@ def get_issue(
     issue_id: str,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
+    workspace: Workspace = Depends(require_current_workspace),
 ) -> IssueDetailResponse:
-    issue, task_list = _get_issue_for_user(db, current_user, issue_id)
-    dependencies = list(
-        db.scalars(
-            select(ScheduleDependency).where(
-                ScheduleDependency.list_id == task_list.id,
-                or_(
-                    ScheduleDependency.predecessor_id == issue.id,
-                    ScheduleDependency.successor_id == issue.id,
-                ),
-            )
-        )
-    )
-    return IssueDetailResponse(
-        issue=_serialize_issue(issue),
-        comments=[_serialize_comment(comment) for comment in sorted(issue.comments, key=lambda item: item.created_at)],
-        dependencies=[
-            DependencyItem(
-                id=dependency.id,
-                predecessor_kind=dependency.predecessor_kind,
-                predecessor_id=dependency.predecessor_id,
-                successor_kind=dependency.successor_kind,
-                successor_id=dependency.successor_id,
-                relation_type=dependency.relation_type,
-            )
-            for dependency in dependencies
-        ],
-        subtasks=[
-            _serialize_issue(sub)
-            for sub in sorted(issue.subtasks, key=lambda s: s.created_at)
-            if not sub.archived
-        ],
-        attachments=[
-            AttachmentItem(
-                id=att.id,
-                issue_id=att.issue_id,
-                filename=att.filename,
-                content_type=att.content_type,
-                size_bytes=att.size_bytes,
-                download_url=_build_attachment_download_url(att.storage_key),
-                uploaded_by_id=att.uploaded_by_id,
-                uploaded_by_name=att.uploaded_by.full_name,
-                created_at=att.created_at,
-            )
-            for att in sorted(issue.attachments, key=lambda a: a.created_at)
-        ],
-        checklist_items=[
-            ChecklistItemResponse(
-                id=ci.id,
-                issue_id=ci.issue_id,
-                text=ci.text,
-                completed=ci.completed,
-                sort_order=ci.sort_order,
-                created_at=ci.created_at,
-            )
-            for ci in sorted(issue.checklist_items, key=lambda c: c.sort_order)
-        ],
-        time_entries=[
-            TimeEntryItem(
-                id=te.id,
-                issue_id=te.issue_id,
-                user_id=te.user_id,
-                user_name=te.user.full_name,
-                duration_minutes=te.duration_minutes,
-                description=te.description,
-                entry_date=te.entry_date,
-                created_at=te.created_at,
-            )
-            for te in sorted(issue.time_entries, key=lambda t: t.created_at, reverse=True)
-        ],
+    return pms_service.get_issue_detail(
+        db,
+        workspace=workspace,
+        principal=user_principal(
+            workspace_id=workspace.id,
+            user_id=current_user.id,
+            source="api.pms.get_issue",
+        ),
+        user=current_user,
+        issue_id=issue_id,
     )
 
 

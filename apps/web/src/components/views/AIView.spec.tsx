@@ -216,4 +216,53 @@ describe('AIView', () => {
     expect((input as HTMLTextAreaElement).value).toBe('');
     expect(aiHarness.sendAiChat).not.toHaveBeenCalled();
   });
+
+  it('lets the backend choose defaults and surfaces token-limit truncation on length finish', async () => {
+    aiHarness.streamAiChat.mockResolvedValue(
+      mockStreamResponse([
+        sseBytes([
+          frame('content_delta', 0, { text: '부분 응답' }),
+          frame('done', 1, {
+            finish_reason: 'length',
+            audit_id: null,
+            meta: {
+              policy: 'external',
+              chosen_pool: 'external',
+              decision_reason: 'policy_external',
+              forced_local: false,
+              pii_hits: [],
+              model: 'qwen/qwen3.6-35b-a3b',
+              canonical_model: 'qwen/qwen3.6-35b-a3b',
+              provider: 'openrouter',
+            },
+          }),
+        ]),
+      ]),
+    );
+
+    renderAIView();
+
+    const input = screen.getByPlaceholderText('메시지를 입력하세요');
+    fireEvent.change(input, { target: { value: '긴 설명을 해줘' } });
+    fireEvent.click(screen.getByRole('button', { name: /전송/i }));
+
+    await screen.findByText('부분 응답');
+    await waitFor(() => {
+      expect(document.body.textContent).toContain('토큰 한도 도달');
+    });
+
+    expect(aiHarness.streamAiChat).toHaveBeenCalledTimes(1);
+    expect(aiHarness.streamAiChat.mock.calls[0][0].payload).toEqual({
+      messages: expect.any(Array),
+      backend_mode: 'auto',
+      temperature: 0.2,
+      stream_reasoning: true,
+    });
+    expect(aiHarness.streamAiChat.mock.calls[0][0].payload).not.toHaveProperty(
+      'max_tokens',
+    );
+    expect(aiHarness.streamAiChat.mock.calls[0][0].payload).not.toHaveProperty(
+      'reasoning_effort',
+    );
+  });
 });

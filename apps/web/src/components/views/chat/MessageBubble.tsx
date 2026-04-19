@@ -13,6 +13,7 @@ export interface ChatTurn {
   content: string;
   reasoning?: string;
   reasoningStatus?: ChatStreamStatus;
+  finishReason?: 'stop' | 'length' | 'cancelled' | 'error' | null;
   provider?: string;
   policy?: string | null;
   chosenPool?: 'local' | 'external' | null;
@@ -40,11 +41,32 @@ function poolLabel(pool: ChatTurn['chosenPool']): string {
 
 export function MessageBubble({ turn }: MessageBubbleProps) {
   const isUser = turn.role === 'user';
+  const metaParts: string[] = [];
+  if (!isUser) {
+    if (turn.finishReason === 'length') {
+      metaParts.push('토큰 한도 도달');
+    }
+    if (turn.responseStatus === 'error') {
+      metaParts.push('응답 실패');
+    }
+    if (turn.responseStatus === 'cancelled') {
+      metaParts.push('응답 중단');
+    }
+    if (turn.chosenPool) {
+      metaParts.push(`${poolLabel(turn.chosenPool)} · ${turn.policy ?? 'policy_unknown'}`);
+    }
+    if (turn.decisionReason) {
+      metaParts.push(turn.decisionReason);
+    }
+    if (turn.forcedLocal) {
+      metaParts.push('local 강제');
+    }
+    if (turn.piiHits && turn.piiHits.length > 0) {
+      metaParts.push(`PII: ${turn.piiHits.join(', ')}`);
+    }
+  }
   const showMeta =
-    !isUser &&
-    (turn.chosenPool ||
-      turn.responseStatus === 'error' ||
-      turn.responseStatus === 'cancelled');
+    !isUser && metaParts.length > 0;
 
   return (
     <div
@@ -71,16 +93,7 @@ export function MessageBubble({ turn }: MessageBubbleProps) {
         ) : null}
         {showMeta && (
           <div className="mt-2 app-text-micro text-gray-500">
-            {turn.responseStatus === 'error' ? '응답 실패' : ''}
-            {turn.responseStatus === 'cancelled' ? '응답 중단' : ''}
-            {turn.chosenPool
-              ? `${turn.responseStatus ? ' · ' : ''}${poolLabel(turn.chosenPool)} · ${turn.policy ?? 'policy_unknown'}`
-              : ''}
-            {turn.decisionReason ? ` · ${turn.decisionReason}` : ''}
-            {turn.forcedLocal ? ' · local 강제' : ''}
-            {turn.piiHits && turn.piiHits.length > 0
-              ? ` · PII: ${turn.piiHits.join(', ')}`
-              : ''}
+            {metaParts.join(' · ')}
           </div>
         )}
       </div>

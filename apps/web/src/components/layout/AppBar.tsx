@@ -23,11 +23,11 @@ import {
 import {
   buildWorkspaceAppPath,
   getPreferredWorkspace,
-  hasWorkspaceApp,
   persistLastWorkspaceSlug,
   resolveWorkspaceSwitchPath,
   type WorkspaceAppId,
 } from '@/src/domains/workspaces/workspace-utils';
+import type { WorkspaceBootstrapApp } from '@/src/domains/workspaces/workspaces-api';
 import { useAuth } from '@/src/domains/auth/auth-provider';
 import { getUnreadNotificationCount } from '@/src/domains/pms/pms-api';
 import { cn } from '@/src/lib/utils';
@@ -50,6 +50,7 @@ export function AppBar({
   currentUser,
   onShellWorkspaceChange,
   shellWorkspaceSlug,
+  workspaceApps,
   onOpenAccount,
 }: {
   activeAppId: string;
@@ -57,6 +58,7 @@ export function AppBar({
   currentUser: AuthUser;
   onShellWorkspaceChange: (workspaceSlug: string | null) => void;
   shellWorkspaceSlug: string | null;
+  workspaceApps: WorkspaceBootstrapApp[];
   onOpenAccount: () => void;
 }) {
   const { hasPermission, token } = useAuth();
@@ -160,22 +162,26 @@ export function AppBar({
     navigate(resolveWorkspaceSwitchPath(currentUser, currentPathname, nextWorkspaceSlug));
   }, [currentPathname, currentUser, navigate, onShellWorkspaceChange, shellWorkspaceSlug]);
 
-  const visibleItems = APP_BAR_ITEMS.filter((item) => {
-    if (item.id === 'home') {
-      return true;
-    }
-
-    if (item.id === 'settings') {
-      return (
-        hasAdminConsoleAccess(currentUser)
-        || hasAnyAdminReadPermission(currentUser.system_roles)
-      );
-    }
-
-    return shellWorkspaceSlug
-      ? hasWorkspaceApp(currentUser, shellWorkspaceSlug, item.id as WorkspaceAppId)
-      : false;
-  });
+  const appBarItemById = new Map(APP_BAR_ITEMS.map((item) => [item.id, item]));
+  const visibleItems = workspaceApps
+    .filter((item) => item.enabled)
+    .map((item) => {
+      const localItem = appBarItemById.get(item.app_id as (typeof APP_BAR_ITEMS)[number]['id']);
+      if (!localItem) {
+        return null;
+      }
+      return {
+        id: item.app_id as WorkspaceAppId,
+        title: item.title,
+        icon: localItem.icon,
+      };
+    })
+    .filter((item): item is { id: WorkspaceAppId; title: string; icon: (typeof APP_BAR_ITEMS)[number]['icon'] } => Boolean(item));
+  const canShowSettings = (
+    hasAdminConsoleAccess(currentUser)
+    || hasAnyAdminReadPermission(currentUser.system_roles)
+  );
+  const settingsItem = appBarItemById.get('settings');
 
   return (
     <div className="w-16 h-full bg-app-bg-strong border-r border-app-border flex flex-col items-center py-4 gap-4 z-20">
@@ -282,9 +288,7 @@ export function AppBar({
       {visibleItems.map((item) => (
         <Link
           key={item.id}
-          to={item.id === 'settings'
-            ? getDefaultAdminPath(currentUser.system_roles)
-            : buildAppLink(item.id as WorkspaceAppId, currentUser, shellWorkspaceSlug)}
+          to={buildAppLink(item.id as WorkspaceAppId, currentUser, shellWorkspaceSlug)}
           className={cn(
             'p-3 rounded-xl transition-all group relative',
             activeAppId === item.id
@@ -301,6 +305,26 @@ export function AppBar({
           ) : null}
         </Link>
       ))}
+
+      {canShowSettings ? (
+        <Link
+          to={getDefaultAdminPath(currentUser.system_roles)}
+          className={cn(
+            'p-3 rounded-xl transition-all group relative',
+            activeAppId === 'settings'
+              ? 'bg-app-surface-sidebar text-app-accent shadow-inner'
+              : 'text-gray-500 hover:text-gray-300 hover:bg-app-surface-hover',
+          )}
+        >
+          {settingsItem ? <settingsItem.icon size={22} /> : <SettingsIcon size={22} />}
+          <div className="app-text-micro absolute left-full ml-2 rounded bg-black px-2 py-1 text-white opacity-0 pointer-events-none whitespace-nowrap z-50 group-hover:opacity-100">
+            Settings
+          </div>
+          {activeAppId === 'settings' ? (
+            <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 bg-app-accent rounded-r-full" />
+          ) : null}
+        </Link>
+      ) : null}
 
       <div className="mt-auto flex flex-col items-center gap-3 relative">
         <button

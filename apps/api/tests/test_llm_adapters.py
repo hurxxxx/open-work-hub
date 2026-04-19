@@ -418,6 +418,34 @@ async def test_complete_chat_stream_uses_external_reasoning_shape(
     assert completions.calls[0]["extra_body"] == {"reasoning": {"effort": "low"}}
 
 
+async def test_complete_chat_stream_uses_local_defaults_when_unset(
+    monkeypatch: pytest.MonkeyPatch, client_seed_workspace: None
+) -> None:
+    _set_policy("chatbot", "local_only")
+    completions = _install_fake_pool(
+        monkeypatch,
+        [_delta_chunk(content="x", finish_reason="stop")],
+    )
+    await _drain(messages=[{"role": "user", "content": "hi"}])
+    call = completions.calls[0]
+    assert call["max_tokens"] == llm_core.LOCAL_DEFAULT_MAX_TOKENS
+    assert call["extra_body"] == {"think": False}
+
+
+async def test_complete_chat_stream_uses_external_defaults_when_unset(
+    monkeypatch: pytest.MonkeyPatch, client_seed_workspace: None
+) -> None:
+    _set_policy("chatbot", "external")
+    completions = _install_fake_pool(
+        monkeypatch,
+        [_delta_chunk(content="x", finish_reason="stop")],
+    )
+    await _drain(messages=[{"role": "user", "content": "hi"}])
+    call = completions.calls[0]
+    assert call["max_tokens"] == llm_core.EXTERNAL_DEFAULT_MAX_TOKENS
+    assert call["extra_body"] == {"reasoning": {"effort": "medium"}}
+
+
 @pytest.fixture(name="client_seed_workspace")
 def _client_seed_workspace(client):
     """Reuse the existing app bootstrap to ensure seed policies exist."""

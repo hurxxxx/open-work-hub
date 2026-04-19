@@ -19,14 +19,16 @@ from aidoo_api.core.llm import (
     complete_chat_stream,
 )
 from aidoo_api.core.llm_adapters import StreamChunk
+from aidoo_api.core.principal import user_principal
 from aidoo_api.core.settings import get_settings
 from aidoo_api.domains.ai.events import (
     EnvelopeEncoder,
     make_envelope,
     serialize_sse,
 )
-from aidoo_api.domains.auth.dependencies import require_current_user
-from aidoo_api.domains.auth.models import User
+from aidoo_api.domains.ai.tool_service import execute_tool as execute_ai_tool
+from aidoo_api.domains.auth.dependencies import require_current_user, require_current_workspace
+from aidoo_api.domains.auth.models import User, Workspace
 
 
 LlmRequestBackendMode = Literal["auto", "local", "openrouter"]
@@ -59,8 +61,8 @@ class ChatRequest(BaseModel):
     model: str | None = None
     backend_mode: LlmRequestBackendMode = "auto"
     temperature: float = Field(default=0.2, ge=0, le=2)
-    max_tokens: int = Field(default=1024, ge=1, le=8192)
-    reasoning_effort: Literal["none", "low", "medium", "high"] = "none"
+    max_tokens: int | None = Field(default=None, ge=1, le=262144)
+    reasoning_effort: Literal["none", "low", "medium", "high"] | None = None
 
 
 class ChatUsage(BaseModel):
@@ -73,6 +75,7 @@ class ChatResponse(BaseModel):
     model: str
     content: str
     usage: ChatUsage | None = None
+    finish_reason: str | None = None
     provider: str
     backend: str
     fallback_used: bool = False
@@ -83,6 +86,17 @@ class ChatResponse(BaseModel):
     decision_reason: str | None = None
     forced_local: bool = False
     pii_hits: list[str] = Field(default_factory=list)
+
+
+class ToolInvokeRequest(BaseModel):
+    arguments: dict[str, Any] = Field(default_factory=dict)
+
+
+class ToolInvokeResponse(BaseModel):
+    tool: str
+    owner_domain: str
+    approval_required: bool
+    result: Any
 
 
 router = APIRouter(prefix="/ai", tags=["ai"])
@@ -106,7 +120,7 @@ def chat(
 ) -> ChatResponse:
     _ensure_configured_model(payload.model)
     _ensure_supported_backend_mode(payload.backend_mode)
-    context = _build_task_context(current_user, request)
+    context = _build_task_context(current_user, request, source="api.chat")
     return _complete_via_policy(
         context,
         payload,
@@ -135,7 +149,7 @@ async def chat_stream(
     """
     _ensure_configured_model(payload.model)
     _ensure_supported_backend_mode(payload.backend_mode)
-    context = _build_task_context(current_user, request)
+    context = _build_task_context(current_user, request, source="api.stream")
     pool_hint: LlmPoolHint | None = (
         "local" if payload.backend_mode == "local" else None
     )
@@ -151,12 +165,45 @@ async def chat_stream(
     )
 
 
+@router.post("/tools/{tool_name}/invoke", response_model=ToolInvokeResponse)
+def invoke_tool(
+    tool_name: str,
+    payload: ToolInvokeRequest,
+    request: Request,
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+    current_workspace: Workspace = Depends(require_current_workspace),
+) -> ToolInvokeResponse:
+    auth_context = getattr(request.state, "auth_context", None)
+    principal = user_principal(
+        workspace_id=current_workspace.id,
+        user_id=current_user.id,
+        source=f"api.ai.tool.{tool_name}",
+        session_id=getattr(getattr(auth_context, "session", None), "id", None),
+    )
+    return ToolInvokeResponse.model_validate(
+        execute_ai_tool(
+            db,
+            workspace=current_workspace,
+            principal=principal,
+            user=current_user,
+            tool_name=tool_name,
+            arguments=payload.arguments,
+        )
+    )
+
+
 # ---------------------------------------------------------------------------
 # Internals
 # ---------------------------------------------------------------------------
 
 
-def _build_task_context(current_user: User, request: Request) -> LlmTaskContext:
+def _build_task_context(
+    current_user: User,
+    request: Request,
+    *,
+    source: str,
+) -> LlmTaskContext:
     workspace = getattr(request.state, "current_workspace", None)
     workspace_id = getattr(workspace, "id", None) if workspace else None
     if not workspace_id:
@@ -167,10 +214,19 @@ def _build_task_context(current_user: User, request: Request) -> LlmTaskContext:
                 "must be mounted behind a workspace membership dependency."
             ),
         )
-    return LlmTaskContext(
-        source="api.chat",
-        actor_user_id=current_user.id,
+    auth_context = getattr(request.state, "auth_context", None)
+    principal = user_principal(
         workspace_id=workspace_id,
+        user_id=current_user.id,
+        source=source,
+        session_id=getattr(getattr(auth_context, "session", None), "id", None),
+    )
+    return LlmTaskContext(
+        source=principal.source,
+        actor_user_id=principal.user_id,
+        principal_kind=principal.kind,
+        principal_id=principal.principal_id,
+        workspace_id=principal.workspace_id,
         task_kind="chatbot",
     )
 
@@ -229,7 +285,8 @@ def _build_response(
     decision_forced_local: bool,
     decision_pii: list[str],
 ) -> ChatResponse:
-    message = raw_response.choices[0].message
+    choice = raw_response.choices[0]
+    message = choice.message
     usage = None
     if raw_response.usage is not None:
         usage = ChatUsage(
@@ -244,6 +301,7 @@ def _build_response(
         model=raw_response.model,
         content=message.content or "",
         usage=usage,
+        finish_reason=getattr(choice, "finish_reason", None),
         provider=config.provider,
         backend=backend_name,
         fallback_used=backend_name == "fallback",

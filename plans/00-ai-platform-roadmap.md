@@ -1,6 +1,6 @@
 # Doowon AI Platform — 마스터 로드맵
 
-> **이 문서의 성격**: 6개 Phase로 구성된 AI 플랫폼 구축의 **최상위 로드맵**이다.
+> **이 문서의 성격**: 7개 Phase로 구성된 AI 플랫폼 구축의 **최상위 로드맵**이다.
 > 각 Phase의 상세 실행 계획은 **해당 Phase 킥오프 시점에 개별 플랜 파일**로 작성한다.
 > 본 문서는 방향·원칙·Phase 경계·공통 제약만 담는다.
 
@@ -89,6 +89,38 @@ LOCAL POOL ────┐                    ┌──── EXTERNAL POOL
 - 별도 프로젝트, OpenAPI 계약.
 - 본 프로젝트는 client + **문서 단위 visibility set 인제스트** + **요청 단위 principal_set 투영** 담당. 팀 ID 단일 필드 필터 금지 (Docs ACL = owner + direct_share + link_share + meeting_grant 복합).
 - 단, **raw link-share token은 Doowon 경계를 벗어나지 않는다**. 외부 RAG 서비스에는 token 자체 대신 `link_share_ref`(예: 내부 share_id 또는 stable HMAC digest) 같은 파생 식별자만 전달한다.
+
+## P3 Entry Contracts
+
+Phase 3로 넘어가기 전에 아래 4개 계약을 먼저 고정한다. 목표는 새 앱, 새 AI capability, 외부 클라이언트 연계를 추가할 때 `domains/ai/*` 또는 특정 프론트 화면을 중심으로 다시 뜯지 않도록 만드는 것이다.
+
+### 1. Workspace bootstrap = 앱 셸 진실원
+- `/api/v1/auth/me`는 **identity-only** 계약을 유지한다. 사용자 신원, 시스템 역할, workspace 목록만 포함한다.
+- 새 `GET /api/v1/workspaces/{workspace_slug}/bootstrap`가 workspace별 앱 노출, sidebar/nav 메타데이터, entitlement를 제공하는 단일 진실원이 된다.
+- 프론트는 bootstrap 응답으로 AppBar/SubSidebar/route gating을 구성한다.
+- 서버는 **메타데이터와 entitlement만** 결정한다. 실제 컴포넌트 매핑은 프론트 로컬 registry가 소유한다.
+- 글로벌 앱 카탈로그는 코드 소유, workspace별 활성화 여부는 `WorkspaceAppEntitlement` DB 소유로 분리한다.
+- 기존의 "workspace membership이면 모든 앱 허용" 규칙은 폐기한다.
+
+### 2. 도메인 소유 AI capability 등록
+- 각 도메인은 선택적으로 `register_ai_capabilities(registry)` 훅을 노출한다.
+- AI registry는 최소 `task_kind`, `tool definitions`, `approval-required operations` 메타데이터를 수집한다.
+- `task_kind` seed, readiness, policy lookup은 registry 기반으로 동작한다.
+- 새 도메인 capability 추가 시 `domains/ai/*`를 직접 수정하지 않는다. 도메인 훅만 추가하고 registry bootstrap이 이를 합류시킨다.
+- 자동 파일 스캔 기반 discovery는 도입하지 않는다. 등록 대상 도메인은 부트스트랩 코드에서 명시적으로 관리한다.
+
+### 3. Application service layer를 단일 진입점으로 고정
+- router와 AI tool은 같은 application service를 호출한다.
+- 우선 대상 도메인은 `pms`, `meeting`, `docs`, `planner`다.
+- 서비스 계층은 raw DB helper가 아니라 `workspace + principal + input`을 받는 application boundary로 둔다.
+- 외부 API, 웹 프론트, AI tool, worker는 동일 서비스 경계를 재사용하는 것을 원칙으로 한다.
+
+### 4. CallerPrincipal + external hub 호환성
+- 공통 타입 `CallerPrincipal`을 도입한다.
+- 최소 필드는 `kind(user|service_account|system)`, `workspace_id`, `user_id?`, `service_account_id?`, `session_id?`, `source`다.
+- LLM context와 audit payload는 principal-aware로 유지한다.
+- 외부 소비자 기본 모델은 `workspace`에 귀속된 `ServiceAccount + API Key`다.
+- API key 인증, rate limit, webhook, 공개 문서 포털은 뒤 Phase로 미루되, 현재 구조가 이 요구를 막지 않도록 설계한다.
 
 ---
 
@@ -245,6 +277,23 @@ LOCAL POOL ────┐                    ┌──── EXTERNAL POOL
 **완료 조건**: 30K 보고서 비동기 생성. 관리자가 DB 통해 정책 변경. 변경 즉시 라우팅 반영.
 
 **상세 플랜 파일**: `06-phase6-batch-admin.md`
+
+---
+
+### Phase 7 — External Integration
+**목표**: Doowon 백엔드를 first-party 프론트 전용이 아니라 **workspace-scoped AI hub**로 공개 가능한 상태까지 확장한다.
+
+**핵심 산출물**:
+- workspace 단위 `ServiceAccount` + `API Key` 설계/구현
+- API key bearer auth resolver → `CallerPrincipal(kind="service_account")`
+- route-family 기준 scope (`ai.invoke`부터 시작, 이후 domain read/write로 확장)
+- 외부 소비자용 rate limit / quota
+- webhook / async completion callback
+- 외부 공개용 OpenAPI 보강 문서와 integration guide
+
+**완료 조건**: first-party web 클라이언트와 동일 서비스 계층을 사용하면서도, 외부 시스템이 workspace-bound principal과 scope만으로 안전하게 AI/API를 호출할 수 있다.
+
+**상세 플랜 파일**: `07-phase7-external-integration.md`
 
 ---
 

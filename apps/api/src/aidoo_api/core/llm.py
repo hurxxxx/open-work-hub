@@ -38,6 +38,7 @@ from sqlalchemy.orm import Session
 
 from aidoo_api.core.pii import scan_pii
 from aidoo_api.core.settings import Settings, get_settings
+from aidoo_api.domains.ai.registry import RegisteredLlmTask, get_ai_capability_registry
 from aidoo_api.domains.ai.policy_service import LlmPolicyMode, resolve_policy
 
 
@@ -50,35 +51,23 @@ LlmHealthStatus = Literal[
     "ready", "unavailable", "model_missing", "not_configured", "disabled"
 ]
 
-
-@dataclass(frozen=True)
-class SupportedLlmTask:
-    task_kind: str
-    default_policy: LlmPolicyMode
-    description: str
+LOCAL_DEFAULT_MAX_TOKENS = 30_000
+EXTERNAL_DEFAULT_MAX_TOKENS = 262_144
+LOCAL_DEFAULT_REASONING_EFFORT = "none"
+EXTERNAL_DEFAULT_REASONING_EFFORT = "medium"
 
 
-SUPPORTED_LLM_TASKS: tuple[SupportedLlmTask, ...] = (
-    SupportedLlmTask(
-        task_kind="chatbot",
-        default_policy="local_only",
-        description="Interactive chat — user-facing",
-    ),
-    SupportedLlmTask(
-        task_kind="meeting_summary",
-        default_policy="local_only",
-        description="Meeting transcript summarization (worker)",
-    ),
-    SupportedLlmTask(
-        task_kind="batch_generation",
-        default_policy="local_only",
-        description="Long-form batch generation (reports etc.)",
-    ),
-)
+SupportedLlmTask = RegisteredLlmTask
 
 
 def get_supported_llm_tasks() -> tuple[SupportedLlmTask, ...]:
-    return SUPPORTED_LLM_TASKS
+    registry = get_ai_capability_registry()
+    return tuple(
+        sorted(
+            registry.llm_tasks.values(),
+            key=lambda item: item.task_kind,
+        )
+    )
 
 
 def get_llm_policy_seed_data() -> tuple[tuple[str, LlmPolicyMode, str], ...]:
@@ -121,6 +110,8 @@ class LlmTaskContext:
     workspace_id: str
     task_kind: str
     actor_user_id: str | None = None
+    principal_kind: Literal["user", "service_account", "system"] = "user"
+    principal_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -538,11 +529,18 @@ def complete_chat(
     pool, decision = choose_pool(context, text_inputs, db, pool_hint=pool_hint)
     config = get_pool_config(pool)
     chosen_model = model or config.default_model
+    resolved_max_tokens, resolved_reasoning_effort = _resolve_generation_defaults(
+        pool,
+        max_tokens=max_tokens,
+        reasoning_effort=reasoning_effort,
+    )
 
     if not config.configured:
         log_llm_call(
             source=context.source,
             actor_user_id=context.actor_user_id,
+            principal_kind=context.principal_kind,
+            principal_id=context.principal_id,
             workspace_id=context.workspace_id,
             task_kind=context.task_kind,
             policy=decision.policy,
@@ -567,10 +565,9 @@ def complete_chat(
     }
     if temperature is not None:
         payload["temperature"] = temperature
-    if max_tokens is not None:
-        payload["max_tokens"] = max_tokens
+    payload["max_tokens"] = resolved_max_tokens
     merged_extra_body = _merge_extra_body(
-        _build_extra_body_for_pool(pool, reasoning_effort),
+        _build_extra_body_for_pool(pool, resolved_reasoning_effort),
         extra_body,
     )
     if merged_extra_body:
@@ -584,6 +581,8 @@ def complete_chat(
         log_llm_call(
             source=context.source,
             actor_user_id=context.actor_user_id,
+            principal_kind=context.principal_kind,
+            principal_id=context.principal_id,
             workspace_id=context.workspace_id,
             task_kind=context.task_kind,
             policy=decision.policy,
@@ -604,6 +603,8 @@ def complete_chat(
     log_llm_call(
         source=context.source,
         actor_user_id=context.actor_user_id,
+        principal_kind=context.principal_kind,
+        principal_id=context.principal_id,
         workspace_id=context.workspace_id,
         task_kind=context.task_kind,
         policy=decision.policy,
@@ -664,6 +665,23 @@ def _build_extra_body_for_pool(
     return {"reasoning_effort": reasoning_effort}
 
 
+def _resolve_generation_defaults(
+    pool: LlmPoolName,
+    *,
+    max_tokens: int | None,
+    reasoning_effort: str | None,
+) -> tuple[int, str]:
+    if pool == "external":
+        return (
+            max_tokens or EXTERNAL_DEFAULT_MAX_TOKENS,
+            reasoning_effort or EXTERNAL_DEFAULT_REASONING_EFFORT,
+        )
+    return (
+        max_tokens or LOCAL_DEFAULT_MAX_TOKENS,
+        reasoning_effort or LOCAL_DEFAULT_REASONING_EFFORT,
+    )
+
+
 def _merge_extra_body(
     base: Mapping[str, Any], extra: Mapping[str, Any] | None
 ) -> dict[str, Any] | None:
@@ -714,11 +732,18 @@ async def complete_chat_stream(
     pool, decision = choose_pool(context, text_inputs, db, pool_hint=pool_hint)
     config = get_pool_config(pool)
     chosen_model = model or config.default_model
+    resolved_max_tokens, resolved_reasoning_effort = _resolve_generation_defaults(
+        pool,
+        max_tokens=max_tokens,
+        reasoning_effort=reasoning_effort,
+    )
 
     if not config.configured:
         log_llm_call(
             source=context.source,
             actor_user_id=context.actor_user_id,
+            principal_kind=context.principal_kind,
+            principal_id=context.principal_id,
             workspace_id=context.workspace_id,
             task_kind=context.task_kind,
             policy=decision.policy,
@@ -743,9 +768,10 @@ async def complete_chat_stream(
     }
     if temperature is not None:
         payload["temperature"] = temperature
-    if max_tokens is not None:
-        payload["max_tokens"] = max_tokens
-    effective_reasoning_effort = reasoning_effort if stream_reasoning else "none"
+    payload["max_tokens"] = resolved_max_tokens
+    effective_reasoning_effort = (
+        resolved_reasoning_effort if stream_reasoning else "none"
+    )
     merged_extra_body = _merge_extra_body(
         _build_extra_body_for_pool(pool, effective_reasoning_effort),
         extra_body,
@@ -781,6 +807,8 @@ async def complete_chat_stream(
         log_llm_call(
             source=context.source,
             actor_user_id=context.actor_user_id,
+            principal_kind=context.principal_kind,
+            principal_id=context.principal_id,
             workspace_id=context.workspace_id,
             task_kind=context.task_kind,
             policy=decision.policy,
@@ -795,5 +823,3 @@ async def complete_chat_stream(
             error=error_message,
             entity_id=audit_entity_id,
         )
-
-

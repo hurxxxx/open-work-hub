@@ -7,6 +7,8 @@ from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
+from aidoo_api.core.principal import CallerPrincipal
+from aidoo_api.domains.auth.access import bind_current_workspace
 from aidoo_api.domains.auth.models import User, Workspace
 from aidoo_api.domains.auth.security import new_id
 
@@ -21,6 +23,26 @@ from .schemas import (
 
 LOCAL_TIMEZONE = ZoneInfo("Asia/Seoul")
 MAX_LIST_RANGE_DAYS = 366
+
+
+def _bind_workspace_context(
+    db: Session,
+    *,
+    workspace: Workspace,
+    principal: CallerPrincipal,
+    user: User,
+) -> None:
+    bind_current_workspace(db, workspace)
+    if principal.workspace_id != workspace.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Planner principal workspace mismatch.",
+        )
+    if principal.kind == "user" and principal.user_id not in {None, user.id}:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Planner principal user mismatch.",
+        )
 
 
 def parse_iso_or_date(value: str) -> datetime:
@@ -172,9 +194,11 @@ def get_event(
     db: Session,
     *,
     workspace: Workspace,
+    principal: CallerPrincipal,
     user: User,
     event_id: str,
 ) -> PlannerEventOut:
+    _bind_workspace_context(db, workspace=workspace, principal=principal, user=user)
     event = _load_event(db, workspace=workspace, event_id=event_id)
     _ensure_owner(user, event)
     return _serialize_event(event)
@@ -184,10 +208,12 @@ def list_events(
     db: Session,
     *,
     workspace: Workspace,
+    principal: CallerPrincipal,
     user: User,
     from_at: datetime | None = None,
     to_at: datetime | None = None,
 ) -> PlannerEventsResponse:
+    _bind_workspace_context(db, workspace=workspace, principal=principal, user=user)
     if (from_at is None) != (to_at is None):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -274,4 +300,3 @@ def delete_event(
     _ensure_owner(user, event)
     db.delete(event)
     db.commit()
-

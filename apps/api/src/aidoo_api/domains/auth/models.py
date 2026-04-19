@@ -89,6 +89,10 @@ class Workspace(Base):
         back_populates="workspace",
         cascade="all, delete-orphan",
     )
+    app_entitlements: Mapped[list["WorkspaceAppEntitlement"]] = relationship(
+        back_populates="workspace",
+        cascade="all, delete-orphan",
+    )
     teams: Mapped[list["Team"]] = relationship(
         back_populates="workspace",
         cascade="all, delete-orphan",
@@ -199,6 +203,26 @@ class WorkspaceGroupBinding(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow_naive, nullable=False)
     workspace: Mapped[Workspace] = relationship(back_populates="group_bindings")
     group: Mapped[AccessGroup] = relationship(back_populates="workspace_bindings")
+
+
+class WorkspaceAppEntitlement(Base):
+    __tablename__ = "workspace_app_entitlements"
+    __table_args__ = (
+        UniqueConstraint("workspace_id", "app_id", name="uq_workspace_app_entitlement"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    workspace_id: Mapped[str] = mapped_column(ForeignKey("workspaces.id"), index=True)
+    app_id: Mapped[str] = mapped_column(String(64), index=True)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow_naive, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        default=utcnow_naive,
+        onupdate=utcnow_naive,
+        nullable=False,
+    )
+    workspace: Mapped[Workspace] = relationship(back_populates="app_entitlements")
 
 
 class Team(Base):

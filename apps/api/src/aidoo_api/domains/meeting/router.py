@@ -8,6 +8,7 @@ from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from aidoo_api.core.db import get_db_session
+from aidoo_api.core.principal import user_principal
 from aidoo_api.domains.auth.dependencies import (
     require_current_user,
     require_current_workspace,
@@ -55,6 +56,11 @@ def list_meetings(
     return meeting_service.list_meetings(
         db,
         workspace=workspace,
+        principal=user_principal(
+            workspace_id=workspace.id,
+            user_id=current_user.id,
+            source="api.meeting.list_meetings",
+        ),
         user=current_user,
         scope=scope,
         from_at=from_at,
@@ -86,7 +92,15 @@ def get_meeting(
     workspace: Workspace = Depends(require_current_workspace),
 ) -> MeetingDetail:
     return meeting_service.get_meeting(
-        db, workspace=workspace, user=current_user, meeting_id=meeting_id
+        db,
+        workspace=workspace,
+        principal=user_principal(
+            workspace_id=workspace.id,
+            user_id=current_user.id,
+            source="api.meeting.get_meeting",
+        ),
+        user=current_user,
+        meeting_id=meeting_id,
     )
 
 
@@ -493,6 +507,11 @@ def get_meeting_availability(
     return meeting_service.list_meeting_availability(
         db,
         workspace=workspace,
+        principal=user_principal(
+            workspace_id=workspace.id,
+            user_id=current_user.id,
+            source="api.meeting.find_availability",
+        ),
         viewer=current_user,
         user_ids=user_ids,
         from_at=from_at,
