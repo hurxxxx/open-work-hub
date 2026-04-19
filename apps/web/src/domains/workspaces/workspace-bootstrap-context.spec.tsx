@@ -61,12 +61,27 @@ describe('WorkspaceBootstrapContext', () => {
       <WorkspaceBootstrapProvider
         value={makeValue({
           data: {
+            workspace: { id: 'w1', slug: 'hq', name: 'HQ', role: 'admin' },
             apps: [
-              { app_id: 'ai', enabled: true },
-              { app_id: 'pms', enabled: true },
+              {
+                app_id: 'ai',
+                title: 'AI',
+                route_base: 'ai',
+                icon_key: 'ai',
+                enabled: true,
+                nav_items: [],
+              },
+              {
+                app_id: 'pms',
+                title: 'PMS',
+                route_base: 'pms',
+                icon_key: 'pms',
+                enabled: true,
+                nav_items: [],
+              },
             ],
             nav: [],
-          } as WorkspaceBootstrapContextValue['data'],
+          },
         })}
       >
         <Probe />

@@ -27,3 +27,9 @@ vitest.config.*.timestamp*
 .playwright-mcp/
 .prod-like/
 *.png
+
+# Playwright E2E run artifacts
+test-results/
+playwright-report/
+apps/web/test-results/
+apps/web/playwright-report/
