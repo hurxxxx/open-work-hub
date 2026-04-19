@@ -21,6 +21,7 @@ from aidoo_api.core import llm as llm_core
 from aidoo_api.core.db import get_engine
 from aidoo_api.core.settings import get_settings
 from aidoo_api.domains.ai.models import LlmPolicy
+from aidoo_api.domains.ai import router as ai_router
 from aidoo_api.domains.auth.models import AuditLog
 from test_meeting import (
     _auth_headers,
@@ -45,12 +46,14 @@ def _delta(
     *,
     content: str | None = None,
     reasoning_content: str | None = None,
+    tool_calls: list[Any] | None = None,
     finish_reason: str | None = None,
 ) -> SimpleNamespace:
     delta = SimpleNamespace(
         content=content,
         reasoning_content=reasoning_content,
         reasoning=None,
+        tool_calls=tool_calls,
     )
     return SimpleNamespace(
         choices=[SimpleNamespace(delta=delta, finish_reason=finish_reason)],
@@ -159,6 +162,31 @@ class _FakeAsyncPoolClient:
         return self
 
 
+class _SequencedAsyncChatCompletions:
+    def __init__(self, chunk_sequences: list[list[Any]]) -> None:
+        self._chunk_sequences = [list(chunks) for chunks in chunk_sequences]
+        self.calls: list[dict[str, Any]] = []
+        self.last_stream: _FakeAsyncStream | None = None
+
+    async def create(self, **kwargs: Any) -> Any:
+        self.calls.append(kwargs)
+        assert kwargs.get("stream") is True
+        chunks = self._chunk_sequences.pop(0)
+        self.last_stream = _FakeAsyncStream(chunks)
+        return self.last_stream
+
+
+class _SequencedAsyncPoolClient:
+    def __init__(self, chunk_sequences: list[list[Any]]) -> None:
+        self.chat = SimpleNamespace(
+            completions=_SequencedAsyncChatCompletions(chunk_sequences)
+        )
+        self.models = _FakeModels()
+
+    def with_options(self, **_: Any) -> "_SequencedAsyncPoolClient":
+        return self
+
+
 def _workspace_ai_path(slug: str, suffix: str) -> str:
     return f"/api/v1/workspaces/{slug}/ai{suffix}"
 
@@ -192,6 +220,31 @@ def _llm_audit_rows() -> list[AuditLog]:
                 .order_by(AuditLog.created_at.asc())
             ).all()
         )
+
+
+def _tool_audit_rows() -> list[AuditLog]:
+    with Session(get_engine()) as session:
+        return list(
+            session.scalars(
+                select(AuditLog)
+                .where(AuditLog.action == "llm_tool_call")
+                .order_by(AuditLog.created_at.asc())
+            ).all()
+        )
+
+
+def _tool_call_delta(
+    *,
+    index: int,
+    tool_id: str,
+    name: str | None = None,
+    arguments: str | None = None,
+) -> SimpleNamespace:
+    return SimpleNamespace(
+        index=index,
+        id=tool_id,
+        function=SimpleNamespace(name=name, arguments=arguments),
+    )
 
 
 def _parse_sse(body: str) -> list[dict[str, Any]]:
@@ -498,6 +551,106 @@ def test_chat_stream_tool_command_emits_tool_events_without_llm_call(
     assert "AI stream tool issue" in events[3]["data"]["text"]
     assert events[4]["data"]["finish_reason"] == "stop"
     assert events[4]["data"]["meta"]["provider"] == "tool"
+
+
+def test_chat_stream_agent_loop_executes_tool_and_keeps_shared_agent_run_id(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    auth = _seeded_dev_login(client, "delivery-hub-admin")
+    slug = "delivery-hub"
+    _set_policy("chatbot", "local_only")
+
+    task_list_response = client.post(
+        "/api/v1/pms/lists",
+        headers=_auth_headers(auth["token"]),
+        json={
+            "key": "AIACT",
+            "name": "AI Agent Loop List",
+            "description": "agent loop source",
+        },
+    )
+    assert task_list_response.status_code == 201, task_list_response.text
+    task_list = task_list_response.json()
+
+    issue_response = client.post(
+        f"/api/v1/pms/lists/{task_list['id']}/issues",
+        headers=_auth_headers(auth["token"]),
+        json={"title": "Agent loop issue", "description": "agent result target"},
+    )
+    assert issue_response.status_code == 201, issue_response.text
+    issue = issue_response.json()
+
+    pool_client = _SequencedAsyncPoolClient(
+        [
+            [
+                _delta(
+                    tool_calls=[
+                        _tool_call_delta(
+                            index=0,
+                            tool_id="call-1",
+                            name="pms.search_issues",
+                            arguments='{"q":"Agent loop issue","limit":5}',
+                        )
+                    ]
+                ),
+                _delta(finish_reason="tool_calls"),
+            ],
+            [
+                _delta(content="Agent loop issue를 찾았습니다.", finish_reason="stop"),
+                _usage_tail(1, 2, 3),
+            ],
+        ]
+    )
+    monkeypatch.setattr(llm_core, "get_async_pool_client", lambda pool: pool_client)
+
+    status_code, events = _stream_post(
+        client,
+        _workspace_ai_path(slug, "/chat/stream"),
+        headers=_auth_headers(auth["token"]),
+        json_body={"messages": [{"role": "user", "content": "오늘 내 이슈 보여줘"}]},
+    )
+
+    assert status_code == 200
+    assert [event["type"] for event in events] == [
+        "tool_call_started",
+        "tool_call_args_delta",
+        "tool_result",
+        "content_delta",
+        "usage",
+        "done",
+    ]
+    assert events[2]["data"]["status"] == "ok"
+    assert issue["id"] in _tool_audit_rows()[-1].payload["resource_ids"]
+
+    llm_rows = _llm_audit_rows()[-2:]
+    tool_row = _tool_audit_rows()[-1]
+    assert len({row.payload["agent_run_id"] for row in llm_rows}) == 1
+    assert tool_row.payload["agent_run_id"] == llm_rows[-1].payload["agent_run_id"]
+
+
+def test_chat_stream_falls_back_to_plain_chat_when_tools_are_not_supported(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    auth = _seeded_dev_login(client, "hq-admin")
+    slug = auth["user"]["workspaces"][0]["slug"]
+    _set_policy("chatbot", "local_only")
+
+    pool_client = _FakeAsyncPoolClient(
+        [_delta(content="plain response", finish_reason="stop")]
+    )
+    monkeypatch.setattr(llm_core, "get_async_pool_client", lambda pool: pool_client)
+    monkeypatch.setattr(ai_router, "supports_tool_calling", lambda pool: False)
+
+    status_code, events = _stream_post(
+        client,
+        _workspace_ai_path(slug, "/chat/stream"),
+        headers=_auth_headers(auth["token"]),
+        json_body={"messages": [{"role": "user", "content": "hi"}]},
+    )
+
+    assert status_code == 200
+    assert [event["type"] for event in events] == ["content_delta", "done"]
+    assert pool_client.chat.completions.calls[0].get("tools") is None
 
 
 def test_chat_stream_provider_error_emits_error_and_done_and_audits_error(

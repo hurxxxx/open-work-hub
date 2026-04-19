@@ -5,6 +5,7 @@ from dataclasses import dataclass, field
 from functools import lru_cache
 from typing import TYPE_CHECKING, Any
 
+from pydantic import BaseModel
 
 if TYPE_CHECKING:
     from sqlalchemy.orm import Session
@@ -18,6 +19,7 @@ ToolHandler = Callable[
     ["Session", "Workspace", "CallerPrincipal", "User", Mapping[str, Any]],
     Any,
 ]
+ToolArgsModel = type[BaseModel]
 
 
 @dataclass(frozen=True)
@@ -34,6 +36,31 @@ class RegisteredToolDefinition:
     owner_domain: str
     approval_required: bool = False
     handler: ToolHandler | None = None
+    args_model: ToolArgsModel | None = None
+
+    def validate_arguments(self, arguments: Mapping[str, Any]) -> BaseModel | None:
+        if self.args_model is None:
+            return None
+        return self.args_model.model_validate(dict(arguments))
+
+    def openai_function_spec(self) -> dict[str, Any]:
+        parameters_schema: dict[str, Any]
+        if self.args_model is None:
+            parameters_schema = {
+                "type": "object",
+                "properties": {},
+                "additionalProperties": True,
+            }
+        else:
+            parameters_schema = self.args_model.model_json_schema()
+        return {
+            "type": "function",
+            "function": {
+                "name": self.name,
+                "description": self.description,
+                "parameters": parameters_schema,
+            },
+        }
 
 
 @dataclass
@@ -62,6 +89,7 @@ class AiCapabilityRegistry:
         owner_domain: str,
         approval_required: bool = False,
         handler: ToolHandler | None = None,
+        args_model: ToolArgsModel | None = None,
     ) -> None:
         self.tools[name] = RegisteredToolDefinition(
             name=name,
@@ -69,7 +97,23 @@ class AiCapabilityRegistry:
             owner_domain=owner_domain,
             approval_required=approval_required,
             handler=handler,
+            args_model=args_model,
         )
+
+    def openai_tool_specs(
+        self,
+        *,
+        include_approval_required: bool = False,
+    ) -> list[dict[str, Any]]:
+        definitions = [
+            definition
+            for definition in self.tools.values()
+            if include_approval_required or not definition.approval_required
+        ]
+        return [
+            definition.openai_function_spec()
+            for definition in sorted(definitions, key=lambda item: item.name)
+        ]
 
 
 def _register_domain(

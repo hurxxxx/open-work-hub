@@ -3,9 +3,13 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 
 from fastapi.testclient import TestClient
+from sqlalchemy import select
+from sqlalchemy.orm import Session
 
+from aidoo_api.core.db import get_engine
 from aidoo_api.core.db import get_session_factory
 from aidoo_api.domains.auth.access import ensure_dev_login_seed_data
+from aidoo_api.domains.auth.models import AuditLog
 
 
 def _dev_login(client: TestClient, account_key: str) -> dict:
@@ -22,6 +26,17 @@ def _auth_headers(token: str) -> dict[str, str]:
 
 def _workspace_tool_path(workspace_slug: str, tool_name: str) -> str:
     return f"/api/v1/workspaces/{workspace_slug}/ai/tools/{tool_name}/invoke"
+
+
+def _tool_audit_rows() -> list[AuditLog]:
+    with Session(get_engine()) as session:
+        return list(
+            session.scalars(
+                select(AuditLog)
+                .where(AuditLog.action == "llm_tool_call")
+                .order_by(AuditLog.created_at.asc())
+            ).all()
+        )
 
 
 def test_ai_tool_invoke_search_issues_returns_workspace_results(client: TestClient) -> None:
@@ -55,6 +70,11 @@ def test_ai_tool_invoke_search_issues_returns_workspace_results(client: TestClie
 
     assert payload["tool"] == "pms.search_issues"
     assert any(item["id"] == issue["id"] for item in payload["result"]["items"])
+    audit_payload = _tool_audit_rows()[-1].payload
+    assert audit_payload["tool_name"] == "pms.search_issues"
+    assert audit_payload["status"] == "ok"
+    assert audit_payload["source"] == "api.tool_invoke"
+    assert issue["id"] in audit_payload["resource_ids"]
 
 
 def test_ai_tool_invoke_docs_read_page_returns_page_content(client: TestClient) -> None:
@@ -192,3 +212,6 @@ def test_ai_tool_invoke_rejects_unknown_tool(client: TestClient) -> None:
     )
     assert response.status_code == 404
     assert "Unknown AI tool" in response.json()["detail"]
+    audit_payload = _tool_audit_rows()[-1].payload
+    assert audit_payload["tool_name"] == "unknown.tool"
+    assert audit_payload["status"] == "error"

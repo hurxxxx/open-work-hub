@@ -23,6 +23,10 @@ import { ChatThread } from '@/src/components/views/chat/ChatThread';
 import { ApprovalModal } from '@/src/components/views/chat/ApprovalModal';
 import { ToolCallCard } from '@/src/components/views/chat/ToolCallCard';
 import type { ChatTurn } from '@/src/components/views/chat/MessageBubble';
+import type {
+  PendingApproval,
+  ToolCallBuffer,
+} from '@/src/domains/ai/agent-events';
 
 const INITIAL_TURNS: ChatTurn[] = [
   {
@@ -198,6 +202,14 @@ export const AIView = () => {
   const finalizedApprovals = useMemo(
     () => turns.flatMap((turn) => turn.pendingApprovals ?? []),
     [turns],
+  );
+  const visibleToolCalls = useMemo(
+    () => mergeToolCalls(finalizedToolCalls, chat.state.toolCalls),
+    [chat.state.toolCalls, finalizedToolCalls],
+  );
+  const visibleApprovals = useMemo(
+    () => mergeApprovals(finalizedApprovals, chat.state.pendingApprovals),
+    [chat.state.pendingApprovals, finalizedApprovals],
   );
 
   const aiTools = useMemo(
@@ -413,10 +425,10 @@ export const AIView = () => {
                 : null
             }
           />
-          {finalizedToolCalls.map((call) => (
+          {visibleToolCalls.map((call) => (
             <ToolCallCard key={call.call_id} call={call} />
           ))}
-          {finalizedApprovals.map((approval) => (
+          {visibleApprovals.map((approval) => (
             <ApprovalModal key={approval.approval_id} approval={approval} />
           ))}
 
@@ -563,3 +575,25 @@ export const AIView = () => {
     </motion.div>
   );
 };
+
+function mergeToolCalls(
+  finalized: ToolCallBuffer[],
+  live: ToolCallBuffer[],
+): ToolCallBuffer[] {
+  const merged = new Map<string, ToolCallBuffer>();
+  for (const call of [...finalized, ...live]) {
+    merged.set(call.call_id, call);
+  }
+  return Array.from(merged.values());
+}
+
+function mergeApprovals(
+  finalized: PendingApproval[],
+  live: PendingApproval[],
+): PendingApproval[] {
+  const merged = new Map<string, PendingApproval>();
+  for (const approval of [...finalized, ...live]) {
+    merged.set(approval.approval_id, approval);
+  }
+  return Array.from(merged.values());
+}

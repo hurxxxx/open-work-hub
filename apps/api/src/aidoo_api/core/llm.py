@@ -133,6 +133,16 @@ class PolicyDecision:
 
 
 @dataclass(frozen=True)
+class ResolvedLlmExecution:
+    pool: LlmPoolName
+    decision: PolicyDecision
+    config: LlmPoolConfig
+    chosen_model: str
+    resolved_max_tokens: int
+    resolved_reasoning_effort: str
+
+
+@dataclass(frozen=True)
 class LlmPoolHealth:
     pool: LlmPoolName
     provider: str
@@ -495,6 +505,35 @@ def choose_pool(
     )
 
 
+def resolve_chat_execution(
+    context: LlmTaskContext,
+    db: Session,
+    *,
+    messages: list[dict[str, Any]],
+    max_tokens: int | None = None,
+    reasoning_effort: str | None = None,
+    model: str | None = None,
+    pool_hint: LlmPoolHint | None = None,
+) -> ResolvedLlmExecution:
+    text_inputs = _collect_text_inputs(messages)
+    pool, decision = choose_pool(context, text_inputs, db, pool_hint=pool_hint)
+    config = get_pool_config(pool)
+    chosen_model = model or config.default_model
+    resolved_max_tokens, resolved_reasoning_effort = _resolve_generation_defaults(
+        pool,
+        max_tokens=max_tokens,
+        reasoning_effort=reasoning_effort,
+    )
+    return ResolvedLlmExecution(
+        pool=pool,
+        decision=decision,
+        config=config,
+        chosen_model=chosen_model,
+        resolved_max_tokens=resolved_max_tokens,
+        resolved_reasoning_effort=resolved_reasoning_effort,
+    )
+
+
 def complete_chat(
     context: LlmTaskContext,
     db: Session,
@@ -508,6 +547,10 @@ def complete_chat(
     model: str | None = None,
     audit_entity_id: str | None = None,
     pool_hint: LlmPoolHint | None = None,
+    tools: list[dict[str, Any]] | None = None,
+    tool_choice: str | dict[str, Any] | None = None,
+    resolved_execution: ResolvedLlmExecution | None = None,
+    agent_run_id: str | None = None,
 ) -> tuple[Any, PolicyDecision, LlmPoolConfig]:
     """Run a chat completion against the pool selected by policy + PII.
 
@@ -525,15 +568,17 @@ def complete_chat(
     # import graph (domains → core, not core → domains).
     from aidoo_api.domains.ai.audit import log_llm_call
 
-    text_inputs = _collect_text_inputs(messages)
-    pool, decision = choose_pool(context, text_inputs, db, pool_hint=pool_hint)
-    config = get_pool_config(pool)
-    chosen_model = model or config.default_model
-    resolved_max_tokens, resolved_reasoning_effort = _resolve_generation_defaults(
-        pool,
+    execution = resolved_execution or resolve_chat_execution(
+        context,
+        db,
+        messages=messages,
         max_tokens=max_tokens,
         reasoning_effort=reasoning_effort,
+        model=model,
+        pool_hint=pool_hint,
     )
+    config = execution.config
+    decision = execution.decision
 
     if not config.configured:
         log_llm_call(
@@ -548,30 +593,26 @@ def complete_chat(
             decision_reason=decision.reason,
             forced_local=decision.forced_local,
             pii_hits=decision.pii_hits,
-            model=chosen_model,
+            model=execution.chosen_model,
             status="error",
             latency_ms=0,
-            error=f"{pool} pool is not configured",
+            error=f"{execution.pool} pool is not configured",
             entity_id=audit_entity_id,
+            agent_run_id=agent_run_id,
         )
-        raise OpenAIError(f"{pool} pool is not configured")
+        raise OpenAIError(f"{execution.pool} pool is not configured")
 
-    client = get_pool_client(pool).with_options(
+    client = get_pool_client(execution.pool).with_options(
         timeout=timeout_seconds or config.long_generation_timeout_seconds
     )
-    payload: dict[str, Any] = {
-        "model": chosen_model,
-        "messages": messages,
-    }
-    if temperature is not None:
-        payload["temperature"] = temperature
-    payload["max_tokens"] = resolved_max_tokens
-    merged_extra_body = _merge_extra_body(
-        _build_extra_body_for_pool(pool, resolved_reasoning_effort),
-        extra_body,
+    payload = _build_chat_payload(
+        execution,
+        messages=messages,
+        temperature=temperature,
+        extra_body=extra_body,
+        tools=tools,
+        tool_choice=tool_choice,
     )
-    if merged_extra_body:
-        payload["extra_body"] = merged_extra_body
 
     started = time.monotonic()
     try:
@@ -590,11 +631,12 @@ def complete_chat(
             decision_reason=decision.reason,
             forced_local=decision.forced_local,
             pii_hits=decision.pii_hits,
-            model=chosen_model,
+            model=execution.chosen_model,
             status="error",
             latency_ms=elapsed_ms,
             error=str(error),
             entity_id=audit_entity_id,
+            agent_run_id=agent_run_id,
         )
         raise
     elapsed_ms = int((time.monotonic() - started) * 1000)
@@ -612,11 +654,12 @@ def complete_chat(
         decision_reason=decision.reason,
         forced_local=decision.forced_local,
         pii_hits=decision.pii_hits,
-        model=getattr(response, "model", chosen_model),
+        model=getattr(response, "model", execution.chosen_model),
         status="ok",
         latency_ms=elapsed_ms,
         usage=usage,
         entity_id=audit_entity_id,
+        agent_run_id=agent_run_id,
     )
     return response, decision, config
 
@@ -693,6 +736,42 @@ def _merge_extra_body(
     return merged
 
 
+def _build_chat_payload(
+    execution: ResolvedLlmExecution,
+    *,
+    messages: list[dict[str, Any]],
+    temperature: float | None,
+    extra_body: Mapping[str, Any] | None,
+    tools: list[dict[str, Any]] | None = None,
+    tool_choice: str | dict[str, Any] | None = None,
+    stream_reasoning: bool = True,
+) -> dict[str, Any]:
+    payload: dict[str, Any] = {
+        "model": execution.chosen_model,
+        "messages": messages,
+        "max_tokens": execution.resolved_max_tokens,
+    }
+    if temperature is not None:
+        payload["temperature"] = temperature
+    effective_reasoning_effort = (
+        execution.resolved_reasoning_effort if stream_reasoning else "none"
+    )
+    merged_extra_body = _merge_extra_body(
+        _build_extra_body_for_pool(
+            execution.pool,
+            effective_reasoning_effort,
+        ),
+        extra_body,
+    )
+    if merged_extra_body:
+        payload["extra_body"] = merged_extra_body
+    if tools is not None:
+        payload["tools"] = tools
+    if tool_choice is not None:
+        payload["tool_choice"] = tool_choice
+    return payload
+
+
 async def complete_chat_stream(
     context: LlmTaskContext,
     db: Session,
@@ -707,6 +786,10 @@ async def complete_chat_stream(
     audit_entity_id: str | None = None,
     pool_hint: LlmPoolHint | None = None,
     stream_reasoning: bool = True,
+    tools: list[dict[str, Any]] | None = None,
+    tool_choice: str | dict[str, Any] | None = None,
+    resolved_execution: ResolvedLlmExecution | None = None,
+    agent_run_id: str | None = None,
 ):
     """Streaming twin of :func:`complete_chat`.
 
@@ -728,15 +811,17 @@ async def complete_chat_stream(
     from aidoo_api.core.llm_adapters import get_stream_adapter
     from aidoo_api.domains.ai.audit import log_llm_call
 
-    text_inputs = _collect_text_inputs(messages)
-    pool, decision = choose_pool(context, text_inputs, db, pool_hint=pool_hint)
-    config = get_pool_config(pool)
-    chosen_model = model or config.default_model
-    resolved_max_tokens, resolved_reasoning_effort = _resolve_generation_defaults(
-        pool,
+    execution = resolved_execution or resolve_chat_execution(
+        context,
+        db,
+        messages=messages,
         max_tokens=max_tokens,
         reasoning_effort=reasoning_effort,
+        model=model,
+        pool_hint=pool_hint,
     )
+    config = execution.config
+    decision = execution.decision
 
     if not config.configured:
         log_llm_call(
@@ -751,35 +836,29 @@ async def complete_chat_stream(
             decision_reason=decision.reason,
             forced_local=decision.forced_local,
             pii_hits=decision.pii_hits,
-            model=chosen_model,
+            model=execution.chosen_model,
             status="error",
             latency_ms=0,
-            error=f"{pool} pool is not configured",
+            error=f"{execution.pool} pool is not configured",
             entity_id=audit_entity_id,
+            agent_run_id=agent_run_id,
         )
-        raise OpenAIError(f"{pool} pool is not configured")
+        raise OpenAIError(f"{execution.pool} pool is not configured")
 
-    client = get_async_pool_client(pool).with_options(
+    client = get_async_pool_client(execution.pool).with_options(
         timeout=timeout_seconds or config.long_generation_timeout_seconds
     )
-    payload: dict[str, Any] = {
-        "model": chosen_model,
-        "messages": messages,
-    }
-    if temperature is not None:
-        payload["temperature"] = temperature
-    payload["max_tokens"] = resolved_max_tokens
-    effective_reasoning_effort = (
-        resolved_reasoning_effort if stream_reasoning else "none"
+    payload = _build_chat_payload(
+        execution,
+        messages=messages,
+        temperature=temperature,
+        extra_body=extra_body,
+        tools=tools,
+        tool_choice=tool_choice,
+        stream_reasoning=stream_reasoning,
     )
-    merged_extra_body = _merge_extra_body(
-        _build_extra_body_for_pool(pool, effective_reasoning_effort),
-        extra_body,
-    )
-    if merged_extra_body:
-        payload["extra_body"] = merged_extra_body
 
-    adapter = get_stream_adapter(pool)
+    adapter = get_stream_adapter(execution.pool)
     started = time.monotonic()
     status_final: str = "error"
     error_message: str | None = None
@@ -791,7 +870,7 @@ async def complete_chat_stream(
             if chunk.kind == "done":
                 status_final = (
                     "ok"
-                    if chunk.finish_reason in ("stop", "length")
+                    if chunk.finish_reason in ("stop", "length", "tool_calls")
                     else "error"
                 )
             yield chunk, decision, config
@@ -816,10 +895,11 @@ async def complete_chat_stream(
             decision_reason=decision.reason,
             forced_local=decision.forced_local,
             pii_hits=decision.pii_hits,
-            model=chosen_model,
+            model=execution.chosen_model,
             status=status_final,
             latency_ms=elapsed_ms,
             usage=accumulated_usage,
             error=error_message,
             entity_id=audit_entity_id,
+            agent_run_id=agent_run_id,
         )

@@ -342,6 +342,9 @@ function applyEnvelope(
         name: data.name,
         args_preview: data.args_preview ?? null,
         argsBuffer: '',
+        startedAtMs: event.timestamp_ms,
+        completedAtMs: null,
+        status: 'running',
         result: null,
       };
       return {
@@ -360,10 +363,14 @@ function applyEnvelope(
     }
     case 'tool_result': {
       const data = (event as ToolResultEvent).data;
+      const nextStatus: ToolCallBuffer['status'] =
+        data.status === 'ok' ? 'ok' : 'error';
       const next = prev.toolCalls.map((call) =>
         call.call_id === data.call_id
           ? {
               ...call,
+              completedAtMs: event.timestamp_ms,
+              status: nextStatus,
               result: {
                 status: data.status,
                 preview: data.result_preview ?? null,

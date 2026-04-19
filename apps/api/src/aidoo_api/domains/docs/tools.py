@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import Any
+from typing import Any, Literal
 
-from fastapi import HTTPException, status
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 
 from aidoo_api.core.principal import CallerPrincipal
@@ -12,36 +12,32 @@ from aidoo_api.domains.auth.models import User, Workspace
 from aidoo_api.domains.docs import service as docs_service
 
 
-def _optional_str(arguments: Mapping[str, Any], key: str) -> str | None:
-    value = arguments.get(key)
-    if value is None:
-        return None
-    if not isinstance(value, str):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Tool argument '{key}' must be a string.",
-        )
-    return value
+class _ToolArgsModel(BaseModel):
+    model_config = ConfigDict(extra="forbid")
 
 
-def _required_str(arguments: Mapping[str, Any], key: str) -> str:
-    value = _optional_str(arguments, key)
-    if value is None or not value.strip():
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Tool argument '{key}' is required.",
-        )
-    return value
+class ListHubArgs(_ToolArgsModel):
+    category: str = "all"
+    q: str = ""
+    sort_by: str = "updated_at"
+    sort_dir: Literal["asc", "desc"] = "desc"
+    page: int = Field(default=1, ge=1)
+    page_size: int = Field(default=50, ge=1)
 
 
-def _optional_int(arguments: Mapping[str, Any], key: str, default: int) -> int:
-    value = arguments.get(key, default)
-    if not isinstance(value, int):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Tool argument '{key}' must be an integer.",
-        )
-    return value
+class GetItemArgs(_ToolArgsModel):
+    item_id: str = Field(..., min_length=1)
+    share_token: str | None = None
+
+
+class ListPagesArgs(_ToolArgsModel):
+    item_id: str = Field(..., min_length=1)
+    share_token: str | None = None
+
+
+class ReadPageArgs(_ToolArgsModel):
+    page_id: str = Field(..., min_length=1)
+    share_token: str | None = None
 
 
 def _list_hub(
@@ -56,12 +52,12 @@ def _list_hub(
         workspace=workspace,
         principal=principal,
         user=user,
-        category=_optional_str(arguments, "category") or "all",
-        q=_optional_str(arguments, "q") or "",
-        sort_by=_optional_str(arguments, "sort_by") or "updated_at",
-        sort_dir=_optional_str(arguments, "sort_dir") or "desc",
-        page=_optional_int(arguments, "page", 1),
-        page_size=_optional_int(arguments, "page_size", 50),
+        category=str(arguments.get("category", "all")),
+        q=str(arguments.get("q", "")),
+        sort_by=str(arguments.get("sort_by", "updated_at")),
+        sort_dir=str(arguments.get("sort_dir", "desc")),
+        page=int(arguments.get("page", 1)),
+        page_size=int(arguments.get("page_size", 50)),
     )
 
 
@@ -77,8 +73,8 @@ def _get_item(
         workspace=workspace,
         principal=principal,
         user=user,
-        item_id=_required_str(arguments, "item_id"),
-        share_token=_optional_str(arguments, "share_token"),
+        item_id=str(arguments["item_id"]),
+        share_token=arguments.get("share_token"),
     )
 
 
@@ -94,8 +90,8 @@ def _list_pages(
         workspace=workspace,
         principal=principal,
         user=user,
-        item_id=_required_str(arguments, "item_id"),
-        share_token=_optional_str(arguments, "share_token"),
+        item_id=str(arguments["item_id"]),
+        share_token=arguments.get("share_token"),
     )
 
 
@@ -111,8 +107,8 @@ def _read_page(
         workspace=workspace,
         principal=principal,
         user=user,
-        page_id=_required_str(arguments, "page_id"),
-        share_token=_optional_str(arguments, "share_token"),
+        page_id=str(arguments["page_id"]),
+        share_token=arguments.get("share_token"),
     )
 
 
@@ -122,22 +118,26 @@ def register_ai_capabilities(registry: AiCapabilityRegistry) -> None:
         description="List visible docs for the current workspace.",
         owner_domain="docs",
         handler=_list_hub,
+        args_model=ListHubArgs,
     )
     registry.register_tool(
         name="docs.get_item",
         description="Load one docs item in the current workspace.",
         owner_domain="docs",
         handler=_get_item,
+        args_model=GetItemArgs,
     )
     registry.register_tool(
         name="docs.list_pages",
         description="List pages for a docs item in the current workspace.",
         owner_domain="docs",
         handler=_list_pages,
+        args_model=ListPagesArgs,
     )
     registry.register_tool(
         name="docs.read_page",
         description="Read one docs page in the current workspace.",
         owner_domain="docs",
         handler=_read_page,
+        args_model=ReadPageArgs,
     )

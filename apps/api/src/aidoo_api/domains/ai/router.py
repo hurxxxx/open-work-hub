@@ -20,16 +20,22 @@ from aidoo_api.core.llm import (
     check_all_pools_health,
     complete_chat,
     complete_chat_stream,
+    resolve_chat_execution,
 )
-from aidoo_api.core.llm_adapters import StreamChunk
+from aidoo_api.core.llm_adapters import StreamChunk, supports_tool_calling
 from aidoo_api.core.settings import get_settings
+from aidoo_api.domains.ai.agent import run_agent_turn_stream
 from aidoo_api.domains.ai.events import (
     EnvelopeEncoder,
     make_envelope,
     serialize_sse,
 )
 from aidoo_api.domains.ai.registry import get_ai_capability_registry
-from aidoo_api.domains.ai.tool_service import execute_tool as execute_ai_tool
+from aidoo_api.domains.ai.tool_runtime import execute_tool_call, iter_tool_call_events
+from aidoo_api.domains.ai.tool_service import (
+    execute_tool as execute_ai_tool,
+    render_tool_result_message,
+)
 from aidoo_api.domains.auth.dependencies import require_current_user, require_current_workspace
 from aidoo_api.domains.auth.models import User, Workspace
 from aidoo_api.domains.auth.security import new_id
@@ -216,6 +222,7 @@ def invoke_tool(
             user=current_user,
             tool_name=tool_name,
             arguments=payload.arguments,
+            source="api.tool_invoke",
         )
     )
 
@@ -315,10 +322,11 @@ def _execute_tool_chat_command(
         user=current_user,
         tool_name=command.tool_name,
         arguments=command.arguments,
+        source="api.chat",
     )
     return ChatResponse(
         model=f"tool://{result['tool']}",
-        content=_render_tool_result_message(result["tool"], result["result"]),
+        content=render_tool_result_message(result["tool"], result["result"]),
         usage=None,
         finish_reason="stop",
         provider="tool",
@@ -473,6 +481,7 @@ async def _chat_stream_publisher(
         payload.stream_reasoning and payload.reasoning_effort != "none"
     )
     messages_dict = [message.model_dump() for message in payload.messages]
+    settings = get_settings()
 
     last_decision: PolicyDecision | None = None
     last_config: LlmPoolConfig | None = None
@@ -492,6 +501,44 @@ async def _chat_stream_publisher(
                 yield event
             return
 
+        execution = resolve_chat_execution(
+            context,
+            db,
+            messages=messages_dict,
+            max_tokens=payload.max_tokens,
+            reasoning_effort=payload.reasoning_effort,
+            model=payload.model,
+            pool_hint=pool_hint,
+        )
+        last_decision = execution.decision
+        last_config = execution.config
+        chosen_model = execution.chosen_model
+
+        if (
+            settings.ai_tool_calling_enabled
+            and supports_tool_calling(execution.pool)
+            and bool(get_ai_capability_registry().openai_tool_specs())
+        ):
+            agent_run_id = new_id()
+            async for event in run_agent_turn_stream(
+                context=context,
+                execution=execution,
+                db=db,
+                workspace=workspace,
+                principal=principal,
+                user=current_user,
+                messages=messages_dict,
+                temperature=payload.temperature,
+                stream_reasoning=payload.stream_reasoning,
+                encoder=encoder,
+                max_turns=settings.ai_agent_max_turns,
+                max_tool_calls=settings.ai_agent_max_tool_calls,
+                max_consecutive_tool_errors=settings.ai_agent_max_consecutive_tool_errors,
+                agent_run_id=agent_run_id,
+            ):
+                yield serialize_sse(event)
+            return
+
         async for chunk, decision, config in complete_chat_stream(
             context,
             db,
@@ -502,9 +549,10 @@ async def _chat_stream_publisher(
             model=payload.model,
             pool_hint=pool_hint,
             stream_reasoning=payload.stream_reasoning,
+            resolved_execution=execution,
         ):
             last_decision, last_config = decision, config
-            chosen_model = payload.model or config.default_model
+            chosen_model = execution.chosen_model
             event = _chunk_to_envelope(
                 chunk,
                 encoder=encoder,
@@ -555,83 +603,20 @@ def _tool_command_events(
     current_user: User,
     command: ToolChatCommand,
 ):
-    call_id = new_id()
-    arguments_json = json.dumps(command.arguments, ensure_ascii=False, sort_keys=True)
-    yield serialize_sse(
-        make_envelope(
-            "tool_call_started",
-            encoder.next_seq(),
-            {
-                "call_id": call_id,
-                "name": command.tool_name,
-                "args_preview": _preview_text(arguments_json, limit=240),
-            },
-        )
+    execution = execute_tool_call(
+        db,
+        workspace=workspace,
+        principal=principal,
+        user=current_user,
+        tool_name=command.tool_name,
+        arguments=command.arguments,
+        source="api.stream",
     )
-    yield serialize_sse(
-        make_envelope(
-            "tool_call_args_delta",
-            encoder.next_seq(),
-            {
-                "call_id": call_id,
-                "delta": arguments_json,
-            },
-        )
-    )
+    for event in iter_tool_call_events(encoder=encoder, execution=execution):
+        yield serialize_sse(event)
 
-    registry = get_ai_capability_registry()
-    definition = registry.tools.get(command.tool_name)
-    if definition is None:
-        message = f"Unknown AI tool: {command.tool_name}"
-        yield serialize_sse(
-            make_envelope(
-                "tool_result",
-                encoder.next_seq(),
-                {
-                    "call_id": call_id,
-                    "status": "error",
-                    "error": message,
-                },
-            )
-        )
-        yield serialize_sse(
-            make_envelope(
-                "error",
-                encoder.next_seq(),
-                {
-                    "code": "request_error",
-                    "message": message,
-                    "retryable": False,
-                },
-            )
-        )
-        yield serialize_sse(
-            make_envelope(
-                "done",
-                encoder.next_seq(),
-                {
-                    "finish_reason": "error",
-                    "audit_id": None,
-                    "meta": _tool_done_meta(command.tool_name),
-                },
-            )
-        )
-        return
-
-    if definition.approval_required:
-        approval_id = new_id()
-        message = f"도구 {command.tool_name} 실행에는 승인 절차가 필요합니다."
-        yield serialize_sse(
-            make_envelope(
-                "approval_required",
-                encoder.next_seq(),
-                {
-                    "approval_id": approval_id,
-                    "tool": command.tool_name,
-                    "resource_preview": _preview_text(arguments_json, limit=240),
-                },
-            )
-        )
+    if execution.status == "blocked":
+        message = execution.error_message or f"도구 {command.tool_name} 실행에는 승인 절차가 필요합니다."
         yield serialize_sse(
             make_envelope(
                 "content_delta",
@@ -652,28 +637,8 @@ def _tool_command_events(
         )
         return
 
-    try:
-        result = execute_ai_tool(
-            db,
-            workspace=workspace,
-            principal=principal,
-            user=current_user,
-            tool_name=command.tool_name,
-            arguments=command.arguments,
-        )
-    except HTTPException as error:
-        message = _error_message(error)
-        yield serialize_sse(
-            make_envelope(
-                "tool_result",
-                encoder.next_seq(),
-                {
-                    "call_id": call_id,
-                    "status": "error",
-                    "error": message,
-                },
-            )
-        )
+    if execution.status == "error":
+        message = execution.error_message or "AI tool execution failed."
         yield serialize_sse(
             make_envelope(
                 "error",
@@ -698,23 +663,16 @@ def _tool_command_events(
         )
         return
 
-    yield serialize_sse(
-        make_envelope(
-            "tool_result",
-            encoder.next_seq(),
-            {
-                "call_id": call_id,
-                "status": "ok",
-                "result_preview": _preview_text(_dump_json(result["result"]), limit=1200),
-            },
-        )
-    )
+    assert execution.response is not None
     yield serialize_sse(
         make_envelope(
             "content_delta",
             encoder.next_seq(),
             {
-                "text": _render_tool_result_message(result["tool"], result["result"]),
+                "text": render_tool_result_message(
+                    execution.response["tool"],
+                    execution.response["result"],
+                ),
             },
         )
     )
@@ -725,7 +683,7 @@ def _tool_command_events(
             {
                 "finish_reason": "stop",
                 "audit_id": None,
-                "meta": _tool_done_meta(result["tool"]),
+                "meta": _tool_done_meta(execution.response["tool"]),
             },
         )
     )
@@ -760,6 +718,22 @@ def _chunk_to_envelope(
         return serialize_sse(
             make_envelope("usage", encoder.next_seq(), chunk.usage)
         )
+    if chunk.kind == "tool_call_start" and chunk.tool_call_id and chunk.tool_name:
+        return serialize_sse(
+            make_envelope(
+                "tool_call_started",
+                encoder.next_seq(),
+                {"call_id": chunk.tool_call_id, "name": chunk.tool_name},
+            )
+        )
+    if chunk.kind == "tool_call_args" and chunk.tool_call_id and chunk.args_delta:
+        return serialize_sse(
+            make_envelope(
+                "tool_call_args_delta",
+                encoder.next_seq(),
+                {"call_id": chunk.tool_call_id, "delta": chunk.args_delta},
+            )
+        )
     if chunk.kind == "done":
         return serialize_sse(
             make_envelope(
@@ -773,23 +747,6 @@ def _chunk_to_envelope(
             )
         )
     return None
-
-
-def _dump_json(value: Any) -> str:
-    return json.dumps(value, ensure_ascii=False, indent=2, sort_keys=True)
-
-
-def _preview_text(text: str, *, limit: int) -> str:
-    if len(text) <= limit:
-        return text
-    return f"{text[: limit - 1]}…"
-
-
-def _render_tool_result_message(tool_name: str, result: Any) -> str:
-    return (
-        f"도구 {tool_name} 실행 결과입니다.\n"
-        f"{_preview_text(_dump_json(result), limit=4000)}"
-    )
 
 
 def _tool_done_meta(tool_name: str) -> dict[str, Any]:

@@ -143,6 +143,9 @@ export interface ToolCallBuffer {
   name: string;
   args_preview: string | null;
   argsBuffer: string;
+  startedAtMs: number;
+  completedAtMs: number | null;
+  status: 'running' | 'ok' | 'error';
   result: { status: 'ok' | 'error'; preview: string | null; error: string | null } | null;
 }
 

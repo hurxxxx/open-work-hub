@@ -222,6 +222,44 @@ class Settings(BaseSettings):
         default=True,
         validation_alias=AliasChoices("DOOWON_LLM_REQUIRED"),
     )
+    ai_tool_calling_enabled: bool = Field(
+        default=True,
+        validation_alias=AliasChoices(
+            "AI_TOOL_CALLING_ENABLED",
+            "DOOWON_AI_TOOL_CALLING_ENABLED",
+            "DOOWON_API_AI_TOOL_CALLING_ENABLED",
+        ),
+    )
+    ai_agent_max_turns: int = Field(
+        default=8,
+        ge=1,
+        le=32,
+        validation_alias=AliasChoices(
+            "AI_AGENT_MAX_TURNS",
+            "DOOWON_AI_AGENT_MAX_TURNS",
+            "DOOWON_API_AI_AGENT_MAX_TURNS",
+        ),
+    )
+    ai_agent_max_tool_calls: int = Field(
+        default=16,
+        ge=1,
+        le=64,
+        validation_alias=AliasChoices(
+            "AI_AGENT_MAX_TOOL_CALLS",
+            "DOOWON_AI_AGENT_MAX_TOOL_CALLS",
+            "DOOWON_API_AI_AGENT_MAX_TOOL_CALLS",
+        ),
+    )
+    ai_agent_max_consecutive_tool_errors: int = Field(
+        default=3,
+        ge=1,
+        le=16,
+        validation_alias=AliasChoices(
+            "AI_AGENT_MAX_CONSECUTIVE_TOOL_ERRORS",
+            "DOOWON_AI_AGENT_MAX_CONSECUTIVE_TOOL_ERRORS",
+            "DOOWON_API_AI_AGENT_MAX_CONSECUTIVE_TOOL_ERRORS",
+        ),
+    )
 
     model_config = SettingsConfigDict(
         env_prefix="DOOWON_API_",

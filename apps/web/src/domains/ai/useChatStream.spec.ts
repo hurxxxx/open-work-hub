@@ -325,6 +325,9 @@ describe('useChatStream', () => {
     expect(result.current.state.toolCalls).toHaveLength(1);
     expect(result.current.state.toolCalls[0].name).toBe('pms.search_issues');
     expect(result.current.state.toolCalls[0].argsBuffer).toBe('{"q":"x"}');
+    expect(result.current.state.toolCalls[0].startedAtMs).toBe(0);
+    expect(result.current.state.toolCalls[0].completedAtMs).toBe(0);
+    expect(result.current.state.toolCalls[0].status).toBe('ok');
     expect(result.current.state.toolCalls[0].result?.status).toBe('ok');
   });
 

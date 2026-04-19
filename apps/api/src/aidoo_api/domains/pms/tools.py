@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import Any
+from typing import Any, Literal
 
-from fastapi import HTTPException, status
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 
 from aidoo_api.core.principal import CallerPrincipal
@@ -12,60 +12,35 @@ from aidoo_api.domains.auth.models import User, Workspace
 from aidoo_api.domains.pms import service as pms_service
 
 
-def _optional_str(arguments: Mapping[str, Any], key: str) -> str | None:
-    value = arguments.get(key)
-    if value is None:
-        return None
-    if not isinstance(value, str):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Tool argument '{key}' must be a string.",
-        )
-    return value
+class _ToolArgsModel(BaseModel):
+    model_config = ConfigDict(extra="forbid")
 
 
-def _required_str(arguments: Mapping[str, Any], key: str) -> str:
-    value = _optional_str(arguments, key)
-    if value is None or not value.strip():
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Tool argument '{key}' is required.",
-        )
-    return value
+class SearchIssuesArgs(_ToolArgsModel):
+    q: str = ""
+    list_id: str | None = None
+    assignee_id: str | None = None
+    status_filter: list[str] | None = None
+    archived: bool | None = None
+    limit: int = Field(default=20, ge=1)
 
 
-def _optional_int(arguments: Mapping[str, Any], key: str, default: int) -> int:
-    value = arguments.get(key, default)
-    if not isinstance(value, int):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Tool argument '{key}' must be an integer.",
-        )
-    return value
+class GetIssueArgs(_ToolArgsModel):
+    issue_id: str = Field(..., min_length=1)
 
 
-def _optional_bool(arguments: Mapping[str, Any], key: str) -> bool | None:
-    value = arguments.get(key)
-    if value is None:
-        return None
-    if not isinstance(value, bool):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Tool argument '{key}' must be a boolean.",
-        )
-    return value
+class ListSpacesArgs(_ToolArgsModel):
+    pass
 
 
-def _optional_str_list(arguments: Mapping[str, Any], key: str) -> list[str] | None:
-    value = arguments.get(key)
-    if value is None:
-        return None
-    if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Tool argument '{key}' must be a list of strings.",
-        )
-    return list(value)
+class ListTaskListsArgs(_ToolArgsModel):
+    page: int = Field(default=1, ge=1)
+    page_size: int = Field(default=20, ge=1)
+    sort_by: str = "updated_at"
+    sort_dir: Literal["asc", "desc"] = "desc"
+    q: str = ""
+    archived: bool | None = None
+    team_id: str | None = None
 
 
 def _search_issues(
@@ -80,12 +55,12 @@ def _search_issues(
         workspace=workspace,
         principal=principal,
         user=user,
-        q=_optional_str(arguments, "q") or "",
-        list_id=_optional_str(arguments, "list_id"),
-        assignee_id=_optional_str(arguments, "assignee_id"),
-        status_filter=_optional_str_list(arguments, "status_filter"),
-        archived=_optional_bool(arguments, "archived"),
-        limit=_optional_int(arguments, "limit", 20),
+        q=str(arguments.get("q", "")),
+        list_id=arguments.get("list_id"),
+        assignee_id=arguments.get("assignee_id"),
+        status_filter=arguments.get("status_filter"),
+        archived=arguments.get("archived"),
+        limit=int(arguments.get("limit", 20)),
     )
 
 
@@ -101,7 +76,7 @@ def _get_issue(
         workspace=workspace,
         principal=principal,
         user=user,
-        issue_id=_required_str(arguments, "issue_id"),
+        issue_id=str(arguments["issue_id"]),
     )
 
 
@@ -129,24 +104,19 @@ def _list_task_lists(
     user: User,
     arguments: Mapping[str, Any],
 ) -> dict[str, Any]:
-    sort_dir = _optional_str(arguments, "sort_dir") or "desc"
-    if sort_dir not in {"asc", "desc"}:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Tool argument 'sort_dir' must be 'asc' or 'desc'.",
-        )
+    sort_dir = str(arguments.get("sort_dir", "desc"))
     return pms_service.list_task_lists(
         db,
         workspace=workspace,
         principal=principal,
         user=user,
-        page=_optional_int(arguments, "page", 1),
-        page_size=_optional_int(arguments, "page_size", 20),
-        sort_by=_optional_str(arguments, "sort_by") or "updated_at",
+        page=int(arguments.get("page", 1)),
+        page_size=int(arguments.get("page_size", 20)),
+        sort_by=str(arguments.get("sort_by", "updated_at")),
         sort_dir=sort_dir,
-        q=_optional_str(arguments, "q") or "",
-        archived=_optional_bool(arguments, "archived"),
-        team_id=_optional_str(arguments, "team_id"),
+        q=str(arguments.get("q", "")),
+        archived=arguments.get("archived"),
+        team_id=arguments.get("team_id"),
     )
 
 
@@ -156,22 +126,26 @@ def register_ai_capabilities(registry: AiCapabilityRegistry) -> None:
         description="Search issues in the current workspace.",
         owner_domain="pms",
         handler=_search_issues,
+        args_model=SearchIssuesArgs,
     )
     registry.register_tool(
         name="pms.get_issue",
         description="Load one issue in the current workspace.",
         owner_domain="pms",
         handler=_get_issue,
+        args_model=GetIssueArgs,
     )
     registry.register_tool(
         name="pms.list_spaces",
         description="List PMS spaces in the current workspace.",
         owner_domain="pms",
         handler=_list_spaces,
+        args_model=ListSpacesArgs,
     )
     registry.register_tool(
         name="pms.list_task_lists",
         description="List PMS task lists in the current workspace.",
         owner_domain="pms",
         handler=_list_task_lists,
+        args_model=ListTaskListsArgs,
     )

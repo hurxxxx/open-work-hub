@@ -34,12 +34,14 @@ def _delta_chunk(
     content: str | None = None,
     reasoning_content: str | None = None,
     reasoning: Any = None,
+    tool_calls: list[Any] | None = None,
     finish_reason: str | None = None,
 ) -> SimpleNamespace:
     delta = SimpleNamespace(
         content=content,
         reasoning_content=reasoning_content,
         reasoning=reasoning,
+        tool_calls=tool_calls,
     )
     return SimpleNamespace(
         choices=[SimpleNamespace(delta=delta, finish_reason=finish_reason)],
@@ -213,6 +215,61 @@ async def test_adapter_close_called_even_when_consumer_breaks_early() -> None:
     assert completions.last_stream.closed is True
 
 
+def _tool_call_delta(
+    *,
+    index: int,
+    tool_id: str,
+    name: str | None = None,
+    arguments: str | None = None,
+) -> SimpleNamespace:
+    return SimpleNamespace(
+        index=index,
+        id=tool_id,
+        function=SimpleNamespace(name=name, arguments=arguments),
+    )
+
+
+async def test_adapter_emits_tool_call_chunks_and_done_tool_calls() -> None:
+    chunks = [
+        _delta_chunk(
+            tool_calls=[
+                _tool_call_delta(
+                    index=0,
+                    tool_id="call-1",
+                    name="pms.search_issues",
+                    arguments='{"q":"AI',
+                )
+            ]
+        ),
+        _delta_chunk(
+            tool_calls=[
+                _tool_call_delta(
+                    index=0,
+                    tool_id="call-1",
+                    arguments=' bug"}',
+                )
+            ]
+        ),
+        _delta_chunk(finish_reason="tool_calls"),
+    ]
+    client = _FakeAsyncPoolClient(_FakeAsyncChatCompletions(chunks))
+    out = await _collect_chunks(
+        MlxLmStreamAdapter().open_stream(client, {"model": "m", "messages": []})
+    )
+    assert [chunk.kind for chunk in out] == [
+        "tool_call_start",
+        "tool_call_args",
+        "tool_call_args",
+        "tool_call_end",
+        "done",
+    ]
+    assert out[0].tool_call_id == "call-1"
+    assert out[0].tool_name == "pms.search_issues"
+    assert out[1].args_delta == '{"q":"AI'
+    assert out[2].args_delta == ' bug"}'
+    assert out[-1].finish_reason == "tool_calls"
+
+
 def _ctx() -> LlmTaskContext:
     return LlmTaskContext(
         source="test.stream",
@@ -341,6 +398,34 @@ async def test_complete_chat_stream_audits_cancelled_on_generator_close(
     rows = _audit_rows()
     assert len(rows) == before + 1
     assert rows[-1].payload["status"] == "cancelled"
+
+
+async def test_complete_chat_stream_treats_tool_calls_finish_as_ok_for_audit(
+    monkeypatch: pytest.MonkeyPatch, client_seed_workspace: None
+) -> None:
+    _set_policy("chatbot", "local_only")
+    _install_fake_pool(
+        monkeypatch,
+        [
+            _delta_chunk(
+                tool_calls=[
+                    _tool_call_delta(
+                        index=0,
+                        tool_id="call-1",
+                        name="docs.read_page",
+                        arguments='{"page_id":"p1"}',
+                    )
+                ]
+            ),
+            _delta_chunk(finish_reason="tool_calls"),
+        ],
+    )
+    before = len(_audit_rows())
+    chunks = await _drain(messages=[{"role": "user", "content": "hi"}], tools=[])
+    assert [chunk.kind for chunk in chunks][-1] == "done"
+    rows = _audit_rows()
+    assert len(rows) == before + 1
+    assert rows[-1].payload["status"] == "ok"
 
 
 async def test_complete_chat_stream_unconfigured_pool_audits_error_and_raises(
