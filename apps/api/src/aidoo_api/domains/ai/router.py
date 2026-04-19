@@ -1,3 +1,5 @@
+import json
+from dataclasses import dataclass
 import asyncio
 from typing import Any, Literal
 
@@ -8,6 +10,7 @@ from sqlalchemy.orm import Session
 from sse_starlette.sse import EventSourceResponse
 
 from aidoo_api.core.db import get_db_session
+from aidoo_api.core.principal import CallerPrincipal, user_principal
 from aidoo_api.core.llm import (
     LlmPoolConfig,
     LlmPoolHint,
@@ -19,16 +22,17 @@ from aidoo_api.core.llm import (
     complete_chat_stream,
 )
 from aidoo_api.core.llm_adapters import StreamChunk
-from aidoo_api.core.principal import user_principal
 from aidoo_api.core.settings import get_settings
 from aidoo_api.domains.ai.events import (
     EnvelopeEncoder,
     make_envelope,
     serialize_sse,
 )
+from aidoo_api.domains.ai.registry import get_ai_capability_registry
 from aidoo_api.domains.ai.tool_service import execute_tool as execute_ai_tool
 from aidoo_api.domains.auth.dependencies import require_current_user, require_current_workspace
 from aidoo_api.domains.auth.models import User, Workspace
+from aidoo_api.domains.auth.security import new_id
 
 
 LlmRequestBackendMode = Literal["auto", "local", "openrouter"]
@@ -99,6 +103,12 @@ class ToolInvokeResponse(BaseModel):
     result: Any
 
 
+@dataclass(frozen=True)
+class ToolChatCommand:
+    tool_name: str
+    arguments: dict[str, Any]
+
+
 router = APIRouter(prefix="/ai", tags=["ai"])
 
 
@@ -120,7 +130,19 @@ def chat(
 ) -> ChatResponse:
     _ensure_configured_model(payload.model)
     _ensure_supported_backend_mode(payload.backend_mode)
-    context = _build_task_context(current_user, request, source="api.chat")
+    workspace = _require_request_workspace(request)
+    principal = _build_request_principal(current_user, request, source="api.chat")
+    command = _parse_tool_chat_command(payload.messages)
+    if command is not None:
+        return _execute_tool_chat_command(
+            payload,
+            db,
+            workspace=workspace,
+            principal=principal,
+            current_user=current_user,
+            command=command,
+        )
+    context = _task_context_from_principal(principal)
     return _complete_via_policy(
         context,
         payload,
@@ -149,7 +171,9 @@ async def chat_stream(
     """
     _ensure_configured_model(payload.model)
     _ensure_supported_backend_mode(payload.backend_mode)
-    context = _build_task_context(current_user, request, source="api.stream")
+    workspace = _require_request_workspace(request)
+    principal = _build_request_principal(current_user, request, source="api.stream")
+    context = _task_context_from_principal(principal)
     pool_hint: LlmPoolHint | None = (
         "local" if payload.backend_mode == "local" else None
     )
@@ -160,6 +184,9 @@ async def chat_stream(
             db=db,
             context=context,
             pool_hint=pool_hint,
+            workspace=workspace,
+            principal=principal,
+            current_user=current_user,
         ),
         ping=25,
     )
@@ -198,15 +225,9 @@ def invoke_tool(
 # ---------------------------------------------------------------------------
 
 
-def _build_task_context(
-    current_user: User,
-    request: Request,
-    *,
-    source: str,
-) -> LlmTaskContext:
+def _require_request_workspace(request: Request) -> Workspace:
     workspace = getattr(request.state, "current_workspace", None)
-    workspace_id = getattr(workspace, "id", None) if workspace else None
-    if not workspace_id:
+    if workspace is None:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=(
@@ -214,13 +235,26 @@ def _build_task_context(
                 "must be mounted behind a workspace membership dependency."
             ),
         )
+    return workspace
+
+
+def _build_request_principal(
+    current_user: User,
+    request: Request,
+    *,
+    source: str,
+) -> CallerPrincipal:
+    workspace = _require_request_workspace(request)
     auth_context = getattr(request.state, "auth_context", None)
-    principal = user_principal(
-        workspace_id=workspace_id,
+    return user_principal(
+        workspace_id=workspace.id,
         user_id=current_user.id,
         source=source,
         session_id=getattr(getattr(auth_context, "session", None), "id", None),
     )
+
+
+def _task_context_from_principal(principal: CallerPrincipal) -> LlmTaskContext:
     return LlmTaskContext(
         source=principal.source,
         actor_user_id=principal.user_id,
@@ -228,6 +262,75 @@ def _build_task_context(
         principal_id=principal.principal_id,
         workspace_id=principal.workspace_id,
         task_kind="chatbot",
+    )
+
+
+def _parse_tool_chat_command(messages: list[ChatMessage]) -> ToolChatCommand | None:
+    last_user_message = next(
+        (message.content.strip() for message in reversed(messages) if message.role == "user"),
+        None,
+    )
+    if not last_user_message or not last_user_message.startswith("/tool"):
+        return None
+
+    parts = last_user_message.split(maxsplit=2)
+    if len(parts) < 2 or parts[0] != "/tool":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Tool command syntax: /tool <tool_name> {\"arg\":\"value\"}",
+        )
+
+    arguments: dict[str, Any] = {}
+    if len(parts) == 3 and parts[2].strip():
+        try:
+            parsed = json.loads(parts[2])
+        except json.JSONDecodeError as error:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid tool argument JSON: {error.msg}",
+            ) from error
+        if not isinstance(parsed, dict):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Tool arguments must decode to a JSON object.",
+            )
+        arguments = parsed
+
+    return ToolChatCommand(tool_name=parts[1], arguments=arguments)
+
+
+def _execute_tool_chat_command(
+    payload: ChatRequest,
+    db: Session,
+    *,
+    workspace: Workspace,
+    principal: CallerPrincipal,
+    current_user: User,
+    command: ToolChatCommand,
+) -> ChatResponse:
+    result = execute_ai_tool(
+        db,
+        workspace=workspace,
+        principal=principal,
+        user=current_user,
+        tool_name=command.tool_name,
+        arguments=command.arguments,
+    )
+    return ChatResponse(
+        model=f"tool://{result['tool']}",
+        content=_render_tool_result_message(result["tool"], result["result"]),
+        usage=None,
+        finish_reason="stop",
+        provider="tool",
+        backend="primary",
+        fallback_used=False,
+        canonical_model=f"tool://{result['tool']}",
+        requested_backend_mode=payload.backend_mode,
+        policy=None,
+        chosen_pool=None,
+        decision_reason="direct_tool_command",
+        forced_local=False,
+        pii_hits=[],
     )
 
 
@@ -361,6 +464,9 @@ async def _chat_stream_publisher(
     db: Session,
     context: LlmTaskContext,
     pool_hint: LlmPoolHint | None,
+    workspace: Workspace,
+    principal: CallerPrincipal,
+    current_user: User,
 ):
     encoder = EnvelopeEncoder()
     reasoning_gate = (
@@ -373,6 +479,19 @@ async def _chat_stream_publisher(
     chosen_model: str | None = None
 
     try:
+        command = _parse_tool_chat_command(payload.messages)
+        if command is not None:
+            for event in _tool_command_events(
+                encoder=encoder,
+                db=db,
+                workspace=workspace,
+                principal=principal,
+                current_user=current_user,
+                command=command,
+            ):
+                yield event
+            return
+
         async for chunk, decision, config in complete_chat_stream(
             context,
             db,
@@ -405,7 +524,7 @@ async def _chat_stream_publisher(
                 encoder.next_seq(),
                 {
                     "code": _error_code(error),
-                    "message": str(error),
+                    "message": _error_message(error),
                     "retryable": False,
                 },
             )
@@ -425,6 +544,191 @@ async def _chat_stream_publisher(
                 },
             )
         )
+
+
+def _tool_command_events(
+    *,
+    encoder: EnvelopeEncoder,
+    db: Session,
+    workspace: Workspace,
+    principal: CallerPrincipal,
+    current_user: User,
+    command: ToolChatCommand,
+):
+    call_id = new_id()
+    arguments_json = json.dumps(command.arguments, ensure_ascii=False, sort_keys=True)
+    yield serialize_sse(
+        make_envelope(
+            "tool_call_started",
+            encoder.next_seq(),
+            {
+                "call_id": call_id,
+                "name": command.tool_name,
+                "args_preview": _preview_text(arguments_json, limit=240),
+            },
+        )
+    )
+    yield serialize_sse(
+        make_envelope(
+            "tool_call_args_delta",
+            encoder.next_seq(),
+            {
+                "call_id": call_id,
+                "delta": arguments_json,
+            },
+        )
+    )
+
+    registry = get_ai_capability_registry()
+    definition = registry.tools.get(command.tool_name)
+    if definition is None:
+        message = f"Unknown AI tool: {command.tool_name}"
+        yield serialize_sse(
+            make_envelope(
+                "tool_result",
+                encoder.next_seq(),
+                {
+                    "call_id": call_id,
+                    "status": "error",
+                    "error": message,
+                },
+            )
+        )
+        yield serialize_sse(
+            make_envelope(
+                "error",
+                encoder.next_seq(),
+                {
+                    "code": "request_error",
+                    "message": message,
+                    "retryable": False,
+                },
+            )
+        )
+        yield serialize_sse(
+            make_envelope(
+                "done",
+                encoder.next_seq(),
+                {
+                    "finish_reason": "error",
+                    "audit_id": None,
+                    "meta": _tool_done_meta(command.tool_name),
+                },
+            )
+        )
+        return
+
+    if definition.approval_required:
+        approval_id = new_id()
+        message = f"도구 {command.tool_name} 실행에는 승인 절차가 필요합니다."
+        yield serialize_sse(
+            make_envelope(
+                "approval_required",
+                encoder.next_seq(),
+                {
+                    "approval_id": approval_id,
+                    "tool": command.tool_name,
+                    "resource_preview": _preview_text(arguments_json, limit=240),
+                },
+            )
+        )
+        yield serialize_sse(
+            make_envelope(
+                "content_delta",
+                encoder.next_seq(),
+                {"text": message},
+            )
+        )
+        yield serialize_sse(
+            make_envelope(
+                "done",
+                encoder.next_seq(),
+                {
+                    "finish_reason": "stop",
+                    "audit_id": None,
+                    "meta": _tool_done_meta(command.tool_name),
+                },
+            )
+        )
+        return
+
+    try:
+        result = execute_ai_tool(
+            db,
+            workspace=workspace,
+            principal=principal,
+            user=current_user,
+            tool_name=command.tool_name,
+            arguments=command.arguments,
+        )
+    except HTTPException as error:
+        message = _error_message(error)
+        yield serialize_sse(
+            make_envelope(
+                "tool_result",
+                encoder.next_seq(),
+                {
+                    "call_id": call_id,
+                    "status": "error",
+                    "error": message,
+                },
+            )
+        )
+        yield serialize_sse(
+            make_envelope(
+                "error",
+                encoder.next_seq(),
+                {
+                    "code": "request_error",
+                    "message": message,
+                    "retryable": False,
+                },
+            )
+        )
+        yield serialize_sse(
+            make_envelope(
+                "done",
+                encoder.next_seq(),
+                {
+                    "finish_reason": "error",
+                    "audit_id": None,
+                    "meta": _tool_done_meta(command.tool_name),
+                },
+            )
+        )
+        return
+
+    yield serialize_sse(
+        make_envelope(
+            "tool_result",
+            encoder.next_seq(),
+            {
+                "call_id": call_id,
+                "status": "ok",
+                "result_preview": _preview_text(_dump_json(result["result"]), limit=1200),
+            },
+        )
+    )
+    yield serialize_sse(
+        make_envelope(
+            "content_delta",
+            encoder.next_seq(),
+            {
+                "text": _render_tool_result_message(result["tool"], result["result"]),
+            },
+        )
+    )
+    yield serialize_sse(
+        make_envelope(
+            "done",
+            encoder.next_seq(),
+            {
+                "finish_reason": "stop",
+                "audit_id": None,
+                "meta": _tool_done_meta(result["tool"]),
+            },
+        )
+    )
 
 
 def _chunk_to_envelope(
@@ -471,6 +775,38 @@ def _chunk_to_envelope(
     return None
 
 
+def _dump_json(value: Any) -> str:
+    return json.dumps(value, ensure_ascii=False, indent=2, sort_keys=True)
+
+
+def _preview_text(text: str, *, limit: int) -> str:
+    if len(text) <= limit:
+        return text
+    return f"{text[: limit - 1]}…"
+
+
+def _render_tool_result_message(tool_name: str, result: Any) -> str:
+    return (
+        f"도구 {tool_name} 실행 결과입니다.\n"
+        f"{_preview_text(_dump_json(result), limit=4000)}"
+    )
+
+
+def _tool_done_meta(tool_name: str) -> dict[str, Any]:
+    tool_model = f"tool://{tool_name}"
+    return {
+        "policy": None,
+        "chosen_pool": None,
+        "decision_reason": "direct_tool_command",
+        "forced_local": False,
+        "pii_hits": [],
+        "model": tool_model,
+        "chosen_model": tool_model,
+        "canonical_model": tool_model,
+        "provider": "tool",
+    }
+
+
 def _build_done_meta(
     decision: PolicyDecision | None,
     config: LlmPoolConfig | None,
@@ -493,6 +829,21 @@ def _build_done_meta(
 
 
 def _error_code(error: Exception) -> str:
+    if isinstance(error, HTTPException):
+        return "request_error"
     if isinstance(error, OpenAIError):
         return "provider_error"
     return "adapter_error"
+
+
+def _error_message(error: Exception) -> str:
+    if isinstance(error, HTTPException):
+        detail = error.detail
+        if isinstance(detail, str):
+            return detail
+        if isinstance(detail, dict):
+            message = detail.get("message")
+            if isinstance(message, str) and message.strip():
+                return message
+        return "AI request failed."
+    return str(error)

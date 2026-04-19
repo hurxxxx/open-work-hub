@@ -441,6 +441,65 @@ def test_chat_stream_suppresses_reasoning_when_stream_reasoning_false(
     assert pool_client.chat.completions.calls[0]["extra_body"] == {"think": False}
 
 
+def test_chat_stream_tool_command_emits_tool_events_without_llm_call(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    auth = _seeded_dev_login(client, "delivery-hub-admin")
+    slug = "delivery-hub"
+
+    task_list_response = client.post(
+        "/api/v1/pms/lists",
+        headers=_auth_headers(auth["token"]),
+        json={
+            "key": "AISTRM",
+            "name": "AI Stream Tool List",
+            "description": "tool command source",
+        },
+    )
+    assert task_list_response.status_code == 201, task_list_response.text
+    task_list = task_list_response.json()
+
+    issue_response = client.post(
+        f"/api/v1/pms/lists/{task_list['id']}/issues",
+        headers=_auth_headers(auth["token"]),
+        json={"title": "AI stream tool issue", "description": "stream search target"},
+    )
+    assert issue_response.status_code == 201, issue_response.text
+
+    def _unexpected_pool_call(pool):  # type: ignore[no-untyped-def]
+        raise AssertionError(f"LLM pool should not be called for /tool commands: {pool}")
+
+    monkeypatch.setattr(llm_core, "get_async_pool_client", _unexpected_pool_call)
+
+    status_code, events = _stream_post(
+        client,
+        _workspace_ai_path(slug, "/chat/stream"),
+        headers=_auth_headers(auth["token"]),
+        json_body={
+            "messages": [
+                {
+                    "role": "user",
+                    "content": '/tool pms.search_issues {"q":"AI stream tool issue","limit":5}',
+                }
+            ]
+        },
+    )
+
+    assert status_code == 200
+    assert [event["type"] for event in events] == [
+        "tool_call_started",
+        "tool_call_args_delta",
+        "tool_result",
+        "content_delta",
+        "done",
+    ]
+    assert events[0]["data"]["name"] == "pms.search_issues"
+    assert events[2]["data"]["status"] == "ok"
+    assert "AI stream tool issue" in events[3]["data"]["text"]
+    assert events[4]["data"]["finish_reason"] == "stop"
+    assert events[4]["data"]["meta"]["provider"] == "tool"
+
+
 def test_chat_stream_provider_error_emits_error_and_done_and_audits_error(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:

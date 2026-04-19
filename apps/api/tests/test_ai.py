@@ -272,6 +272,57 @@ def test_ai_chat_external_defaults_use_medium_reasoning_and_256k_budget(
     assert call["extra_body"] == {"reasoning": {"effort": "medium"}}
 
 
+def test_ai_chat_tool_command_executes_without_llm_call(
+    client: TestClient,
+    monkeypatch,
+) -> None:
+    auth = _seeded_dev_login(client, "delivery-hub-admin")
+    workspace_slug = "delivery-hub"
+
+    task_list_response = client.post(
+        "/api/v1/pms/lists",
+        headers=_auth_headers(auth["token"]),
+        json={
+            "key": "AICHAT",
+            "name": "AI Chat Tool List",
+            "description": "tool command source",
+        },
+    )
+    assert task_list_response.status_code == 201, task_list_response.text
+    task_list = task_list_response.json()
+
+    issue_response = client.post(
+        f"/api/v1/pms/lists/{task_list['id']}/issues",
+        headers=_auth_headers(auth["token"]),
+        json={"title": "AI chat tool issue", "description": "search target"},
+    )
+    assert issue_response.status_code == 201, issue_response.text
+
+    def _unexpected_pool_call(pool):  # type: ignore[no-untyped-def]
+        raise AssertionError(f"LLM pool should not be called for /tool commands: {pool}")
+
+    monkeypatch.setattr(llm_core, "get_pool_client", _unexpected_pool_call)
+
+    response = client.post(
+        _workspace_ai_path(workspace_slug, "/chat"),
+        headers=_auth_headers(auth["token"]),
+        json={
+            "messages": [
+                {
+                    "role": "user",
+                    "content": '/tool pms.search_issues {"q":"AI chat tool issue","limit":5}',
+                }
+            ],
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["provider"] == "tool"
+    assert payload["decision_reason"] == "direct_tool_command"
+    assert "AI chat tool issue" in payload["content"]
+
+
 def test_ai_chat_external_policy_forces_local_on_pii(
     client: TestClient,
     monkeypatch,
