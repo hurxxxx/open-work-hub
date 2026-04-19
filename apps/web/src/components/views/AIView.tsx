@@ -224,17 +224,14 @@ export const AIView = () => {
     setPendingUserInput(trimmed);
     chat.reset();
 
-    const messages: AiChatMessage[] = [
-      {
-        role: 'system',
-        content:
-          '너는 두원공조 사내 업무를 돕는 한국어 AI 비서다. 답변은 간결하고 실행 가능하게 작성한다.',
-      },
-      ...nextTurns.map((turn) => ({
-        role: turn.role,
-        content: turn.content,
-      })),
-    ];
+    // No client-side system message: the API prepends its own AGENT_SYSTEM_PROMPT
+    // (apps/api/src/aidoo_api/domains/ai/agent.py) on every turn. Sending one
+    // here produced two consecutive system messages, which providers like
+    // mlx-lm reject with "System message must be at the beginning" (HTTP 404).
+    const messages: AiChatMessage[] = nextTurns.map((turn) => ({
+      role: turn.role,
+      content: turn.content,
+    }));
 
     void chat.send({
       messages,

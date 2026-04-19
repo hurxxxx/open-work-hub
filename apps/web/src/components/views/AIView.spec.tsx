@@ -268,5 +268,16 @@ describe('AIView', () => {
     expect(aiHarness.streamAiChat.mock.calls[0][0].payload).not.toHaveProperty(
       'reasoning_effort',
     );
+
+    // Regression: the API already prepends its own AGENT_SYSTEM_PROMPT on every
+    // turn (apps/api/src/aidoo_api/domains/ai/agent.py). Sending a client-side
+    // system message produced two consecutive system messages, which mlx-lm
+    // rejected with "System message must be at the beginning" (HTTP 404).
+    const sentMessages = aiHarness.streamAiChat.mock.calls[0][0].payload
+      .messages as Array<{ role: string }>;
+    expect(sentMessages.every((message) => message.role !== 'system')).toBe(
+      true,
+    );
+    expect(sentMessages[0].role).toBe('user');
   });
 });
