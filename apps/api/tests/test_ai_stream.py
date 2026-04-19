@@ -279,6 +279,17 @@ def _stream_post(
     return response.status_code, []
 
 
+def _chat_events(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Return events after the leading ``conversation_attached`` prefix.
+
+    Every chat stream now opens with a ``conversation_attached`` envelope
+    carrying the persisted conversation id — tests that only care about the
+    content/tool/done contract use this helper to keep their assertions
+    focused on the streamed response shape.
+    """
+    return [event for event in events if event.get("type") != "conversation_attached"]
+
+
 def _find_free_port() -> int:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
         sock.bind(("127.0.0.1", 0))
@@ -441,12 +452,17 @@ def test_chat_stream_emits_content_and_reasoning_in_order(
         headers=_auth_headers(auth["token"]),
         json_body={
             "backend_mode": "local",
+            "persist": True,
             "messages": [{"role": "user", "content": "hi"}],
             "reasoning_effort": "medium",
         },
     )
     assert status_code == 200
+    # When persistence is enabled, `conversation_attached` is emitted first
+    # so the client learns which persisted conversation the turns are being
+    # appended to before any rendering begins.
     assert [event["type"] for event in events] == [
+        "conversation_attached",
         "reasoning_delta",
         "content_delta",
         "content_delta",
@@ -454,6 +470,7 @@ def test_chat_stream_emits_content_and_reasoning_in_order(
         "done",
     ]
     assert [event["seq"] for event in events] == list(range(len(events)))
+    assert events[0]["data"]["conversation_id"]
     done = events[-1]
     assert done["data"]["finish_reason"] == "stop"
     assert done["data"]["meta"]["chosen_pool"] == "local"
@@ -490,7 +507,10 @@ def test_chat_stream_suppresses_reasoning_when_stream_reasoning_false(
             "stream_reasoning": False,
         },
     )
-    assert [event["type"] for event in events] == ["content_delta", "done"]
+    assert [event["type"] for event in _chat_events(events)] == [
+        "content_delta",
+        "done",
+    ]
     assert pool_client.chat.completions.calls[0]["extra_body"] == {"think": False}
 
 
@@ -539,18 +559,19 @@ def test_chat_stream_tool_command_emits_tool_events_without_llm_call(
     )
 
     assert status_code == 200
-    assert [event["type"] for event in events] == [
+    chat = _chat_events(events)
+    assert [event["type"] for event in chat] == [
         "tool_call_started",
         "tool_call_args_delta",
         "tool_result",
         "content_delta",
         "done",
     ]
-    assert events[0]["data"]["name"] == "pms.search_issues"
-    assert events[2]["data"]["status"] == "ok"
-    assert "AI stream tool issue" in events[3]["data"]["text"]
-    assert events[4]["data"]["finish_reason"] == "stop"
-    assert events[4]["data"]["meta"]["provider"] == "tool"
+    assert chat[0]["data"]["name"] == "pms.search_issues"
+    assert chat[2]["data"]["status"] == "ok"
+    assert "AI stream tool issue" in chat[3]["data"]["text"]
+    assert chat[4]["data"]["finish_reason"] == "stop"
+    assert chat[4]["data"]["meta"]["provider"] == "tool"
 
 
 def test_chat_stream_agent_loop_executes_tool_and_keeps_shared_agent_run_id(
@@ -611,7 +632,8 @@ def test_chat_stream_agent_loop_executes_tool_and_keeps_shared_agent_run_id(
     )
 
     assert status_code == 200
-    assert [event["type"] for event in events] == [
+    chat = _chat_events(events)
+    assert [event["type"] for event in chat] == [
         "tool_call_started",
         "tool_call_args_delta",
         "tool_result",
@@ -619,7 +641,7 @@ def test_chat_stream_agent_loop_executes_tool_and_keeps_shared_agent_run_id(
         "usage",
         "done",
     ]
-    assert events[2]["data"]["status"] == "ok"
+    assert chat[2]["data"]["status"] == "ok"
     assert issue["id"] in _tool_audit_rows()[-1].payload["resource_ids"]
 
     llm_rows = _llm_audit_rows()[-2:]
@@ -649,7 +671,10 @@ def test_chat_stream_falls_back_to_plain_chat_when_tools_are_not_supported(
     )
 
     assert status_code == 200
-    assert [event["type"] for event in events] == ["content_delta", "done"]
+    assert [event["type"] for event in _chat_events(events)] == [
+        "content_delta",
+        "done",
+    ]
     assert pool_client.chat.completions.calls[0].get("tools") is None
 
 
@@ -669,9 +694,10 @@ def test_chat_stream_provider_error_emits_error_and_done_and_audits_error(
         json_body={"messages": [{"role": "user", "content": "hi"}]},
     )
     assert status_code == 200
-    assert [event["type"] for event in events] == ["error", "done"]
-    assert events[0]["data"]["code"] == "provider_error"
-    assert events[1]["data"]["finish_reason"] == "error"
+    chat = _chat_events(events)
+    assert [event["type"] for event in chat] == ["error", "done"]
+    assert chat[0]["data"]["code"] == "provider_error"
+    assert chat[1]["data"]["finish_reason"] == "error"
     assert _llm_audit_rows()[-1].payload["status"] == "error"
 
 
@@ -691,9 +717,10 @@ def test_chat_stream_generic_adapter_error_emits_error_contract(
         json_body={"messages": [{"role": "user", "content": "hi"}]},
     )
     assert status_code == 200
-    assert [event["type"] for event in events] == ["error", "done"]
-    assert events[0]["data"]["code"] == "adapter_error"
-    assert events[0]["data"]["message"] == "adapter boom"
+    chat = _chat_events(events)
+    assert [event["type"] for event in chat] == ["error", "done"]
+    assert chat[0]["data"]["code"] == "adapter_error"
+    assert chat[0]["data"]["message"] == "adapter boom"
     assert _llm_audit_rows()[-1].payload["status"] == "error"
 
 
@@ -720,7 +747,7 @@ def test_chat_stream_local_only_policy_local_fail_no_external_call(
         headers=_auth_headers(auth["token"]),
         json_body={"messages": [{"role": "user", "content": "hi"}]},
     )
-    assert [event["type"] for event in events] == ["error", "done"]
+    assert [event["type"] for event in _chat_events(events)] == ["error", "done"]
     assert external_pool.chat.completions.calls == []
     assert _llm_audit_rows()[-1].payload["status"] == "error"
 
@@ -784,4 +811,229 @@ def test_chat_stream_mounts_on_legacy_and_slug_paths(
             json_body={"messages": [{"role": "user", "content": "hi"}]},
         )
         assert status_code == 200, path
-        assert [event["type"] for event in events] == ["content_delta", "done"]
+        assert [event["type"] for event in _chat_events(events)] == [
+            "content_delta",
+            "done",
+        ]
+
+
+def test_chat_stream_persists_user_and_assistant_turns(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A full round trip through the stream must land the user message and the
+    # finalized assistant message on the attached Conversation so reloading
+    # the sidebar later restores the thread exactly as it was.
+    auth = _seeded_dev_login(client, "hq-admin")
+    slug = auth["user"]["workspaces"][0]["slug"]
+    _set_policy("chatbot", "local_only")
+
+    pool_client = _FakeAsyncPoolClient(
+        [
+            _delta(content="echo: "),
+            _delta(content="hi"),
+            _delta(finish_reason="stop"),
+        ]
+    )
+    monkeypatch.setattr(llm_core, "get_async_pool_client", lambda pool: pool_client)
+
+    status_code, events = _stream_post(
+        client,
+        _workspace_ai_path(slug, "/chat/stream"),
+        headers=_auth_headers(auth["token"]),
+        json_body={
+            "backend_mode": "local",
+            "persist": True,
+            "messages": [{"role": "user", "content": "hi"}],
+        },
+    )
+    assert status_code == 200
+    attached = [e for e in events if e["type"] == "conversation_attached"]
+    assert len(attached) == 1
+    conversation_id = attached[0]["data"]["conversation_id"]
+
+    # Detail API should now return the user + assistant turn pair.
+    detail = client.get(
+        f"/api/v1/workspaces/{slug}/conversations/{conversation_id}",
+        headers=_auth_headers(auth["token"]),
+    ).json()
+    assert [t["role"] for t in detail["turns"]] == ["user", "assistant"]
+    assert detail["turns"][0]["content"] == "hi"
+    assert detail["turns"][1]["content"] == "echo: hi"
+    # Auto-title picks up the first user message.
+    assert detail["title"].startswith("hi")
+
+    # Listing surfaces the new conversation newest-first.
+    listing = client.get(
+        f"/api/v1/workspaces/{slug}/conversations",
+        headers=_auth_headers(auth["token"]),
+    ).json()
+    assert listing["items"][0]["id"] == conversation_id
+
+
+def test_chat_stream_appends_to_existing_conversation(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    auth = _seeded_dev_login(client, "hq-admin")
+    slug = auth["user"]["workspaces"][0]["slug"]
+    _set_policy("chatbot", "local_only")
+
+    # Start a conversation with a first exchange.
+    pool_client = _FakeAsyncPoolClient(
+        [_delta(content="first", finish_reason="stop")]
+    )
+    monkeypatch.setattr(llm_core, "get_async_pool_client", lambda pool: pool_client)
+    _, events = _stream_post(
+        client,
+        _workspace_ai_path(slug, "/chat/stream"),
+        headers=_auth_headers(auth["token"]),
+        json_body={
+            "backend_mode": "local",
+            "persist": True,
+            "messages": [{"role": "user", "content": "first question"}],
+        },
+    )
+    conversation_id = next(
+        e for e in events if e["type"] == "conversation_attached"
+    )["data"]["conversation_id"]
+
+    # Resume the same conversation — passing conversation_id must NOT create a
+    # new row and the second turn pair must append after seq 0/1.
+    pool_client_second = _FakeAsyncPoolClient(
+        [_delta(content="second", finish_reason="stop")]
+    )
+    monkeypatch.setattr(llm_core, "get_async_pool_client", lambda pool: pool_client_second)
+    _, events2 = _stream_post(
+        client,
+        _workspace_ai_path(slug, "/chat/stream"),
+        headers=_auth_headers(auth["token"]),
+        json_body={
+            "backend_mode": "local",
+            "conversation_id": conversation_id,
+            "messages": [{"role": "user", "content": "follow up"}],
+        },
+    )
+    attached2 = next(e for e in events2 if e["type"] == "conversation_attached")
+    assert attached2["data"]["conversation_id"] == conversation_id
+
+    detail = client.get(
+        f"/api/v1/workspaces/{slug}/conversations/{conversation_id}",
+        headers=_auth_headers(auth["token"]),
+    ).json()
+    assert [t["role"] for t in detail["turns"]] == [
+        "user",
+        "assistant",
+        "user",
+        "assistant",
+    ]
+    assert detail["turns"][2]["content"] == "follow up"
+    assert detail["turns"][3]["content"] == "second"
+
+
+def test_chat_stream_rejects_unknown_conversation_id(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A bogus conversation_id must NOT silently create a fresh conversation —
+    # surface an SSE error envelope so the client can recover deterministically.
+    auth = _seeded_dev_login(client, "hq-admin")
+    slug = auth["user"]["workspaces"][0]["slug"]
+    _set_policy("chatbot", "local_only")
+
+    def _should_not_be_called(_pool):
+        raise AssertionError("stream should short-circuit before hitting the LLM")
+
+    monkeypatch.setattr(llm_core, "get_async_pool_client", _should_not_be_called)
+
+    status_code, events = _stream_post(
+        client,
+        _workspace_ai_path(slug, "/chat/stream"),
+        headers=_auth_headers(auth["token"]),
+        json_body={
+            "backend_mode": "local",
+            "conversation_id": "does-not-exist",
+            "messages": [{"role": "user", "content": "hi"}],
+        },
+    )
+    assert status_code == 200
+    # Must emit both error AND done — the client's useChatStream state
+    # machine only leaves `streaming` on a terminal `done` envelope, so an
+    # error-only response would leave the UI hung forever.
+    assert [e["type"] for e in events] == ["error", "done"]
+    assert events[0]["data"]["code"] == "conversation_not_found"
+    assert events[1]["data"]["finish_reason"] == "error"
+
+
+def test_chat_stream_persist_false_skips_conversation_creation(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Default behavior for legacy callers: no conversation_id and no persist
+    # flag means the stream completes without creating a Conversation row —
+    # otherwise every request from the current web client would fork a new
+    # one-turn conversation until Phase 3.3 threads conversation_id back.
+    auth = _seeded_dev_login(client, "hq-admin")
+    slug = auth["user"]["workspaces"][0]["slug"]
+    _set_policy("chatbot", "local_only")
+
+    pool_client = _FakeAsyncPoolClient(
+        [_delta(content="ok", finish_reason="stop")]
+    )
+    monkeypatch.setattr(llm_core, "get_async_pool_client", lambda pool: pool_client)
+
+    _, events = _stream_post(
+        client,
+        _workspace_ai_path(slug, "/chat/stream"),
+        headers=_auth_headers(auth["token"]),
+        json_body={
+            "backend_mode": "local",
+            "messages": [{"role": "user", "content": "hi"}],
+        },
+    )
+    assert not [e for e in events if e["type"] == "conversation_attached"]
+    listing = client.get(
+        f"/api/v1/workspaces/{slug}/conversations",
+        headers=_auth_headers(auth["token"]),
+    ).json()
+    assert listing["items"] == []
+
+
+def test_chat_stream_persists_failure_with_empty_body(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Regression: when the provider errors before emitting any content, the
+    # assistant turn still has to land so the reloaded history reflects what
+    # the live stream showed (an error bubble). An empty, body-less turn was
+    # previously dropped, making the request look unanswered.
+    auth = _seeded_dev_login(client, "hq-admin")
+    slug = auth["user"]["workspaces"][0]["slug"]
+    _set_policy("chatbot", "local_only")
+
+    pool_client = _FakeAsyncPoolClient(error=RuntimeError("boom"))
+    monkeypatch.setattr(llm_core, "get_async_pool_client", lambda pool: pool_client)
+
+    status_code, events = _stream_post(
+        client,
+        _workspace_ai_path(slug, "/chat/stream"),
+        headers=_auth_headers(auth["token"]),
+        json_body={
+            "backend_mode": "local",
+            "persist": True,
+            "messages": [{"role": "user", "content": "please fail"}],
+        },
+    )
+    assert status_code == 200
+    conversation_id = next(
+        e for e in events if e["type"] == "conversation_attached"
+    )["data"]["conversation_id"]
+
+    detail = client.get(
+        f"/api/v1/workspaces/{slug}/conversations/{conversation_id}",
+        headers=_auth_headers(auth["token"]),
+    ).json()
+    roles = [t["role"] for t in detail["turns"]]
+    assert roles == ["user", "assistant"], f"expected user+assistant, got {roles}"
+    assistant_turn = detail["turns"][1]
+    # The streamed error message becomes the assistant content so reloaded
+    # threads show the failure text the live bubble displayed, rather than
+    # an empty assistant bubble.
+    assert "boom" in assistant_turn["content"]
+    assert assistant_turn["responseStatus"] == "error"
+    assert assistant_turn["finishReason"] == "error"

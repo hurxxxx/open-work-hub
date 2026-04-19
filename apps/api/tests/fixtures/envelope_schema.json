@@ -155,6 +155,50 @@
       "title": "ContentDeltaEvent",
       "type": "object"
     },
+    "ConversationAttachedData": {
+      "description": "Emitted once at stream start so the client learns which persisted\nconversation row its turns are being appended to.\n\nAlways precedes the first ``content_delta``/``reasoning_delta`` so a UI\nthat tracks conversation ids can bind the id before any rendering begins.",
+      "properties": {
+        "conversation_id": {
+          "title": "Conversation Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "conversation_id"
+      ],
+      "title": "ConversationAttachedData",
+      "type": "object"
+    },
+    "ConversationAttachedEvent": {
+      "properties": {
+        "data": {
+          "$ref": "#/$defs/ConversationAttachedData"
+        },
+        "seq": {
+          "minimum": 0,
+          "title": "Seq",
+          "type": "integer"
+        },
+        "timestamp_ms": {
+          "minimum": 0,
+          "title": "Timestamp Ms",
+          "type": "integer"
+        },
+        "type": {
+          "const": "conversation_attached",
+          "default": "conversation_attached",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "seq",
+        "timestamp_ms",
+        "data"
+      ],
+      "title": "ConversationAttachedEvent",
+      "type": "object"
+    },
     "DoneData": {
       "properties": {
         "audit_id": {
@@ -691,6 +735,7 @@
       "approval_required": "#/$defs/ApprovalRequiredEvent",
       "approval_resolved": "#/$defs/ApprovalResolvedEvent",
       "content_delta": "#/$defs/ContentDeltaEvent",
+      "conversation_attached": "#/$defs/ConversationAttachedEvent",
       "done": "#/$defs/DoneEvent",
       "error": "#/$defs/ErrorEvent",
       "reasoning_delta": "#/$defs/ReasoningDeltaEvent",
@@ -716,6 +761,9 @@
     },
     {
       "$ref": "#/$defs/ErrorEvent"
+    },
+    {
+      "$ref": "#/$defs/ConversationAttachedEvent"
     },
     {
       "$ref": "#/$defs/ToolCallStartedEvent"

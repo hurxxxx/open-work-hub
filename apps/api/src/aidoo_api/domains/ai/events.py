@@ -67,6 +67,18 @@ class ErrorData(BaseModel):
     retryable: bool = False
 
 
+class ConversationAttachedData(BaseModel):
+    """Emitted once at stream start so the client learns which persisted
+    conversation row its turns are being appended to.
+
+    Always precedes the first ``content_delta``/``reasoning_delta`` so a UI
+    that tracks conversation ids can bind the id before any rendering begins.
+    """
+
+    model_config = ConfigDict(frozen=True)
+    conversation_id: str
+
+
 # Reserved P3 payloads (not emitted in P2).
 class ToolCallStartedData(BaseModel):
     model_config = ConfigDict(frozen=True)
@@ -139,6 +151,11 @@ class ErrorEvent(_EnvelopeBase):
     data: ErrorData
 
 
+class ConversationAttachedEvent(_EnvelopeBase):
+    type: Literal["conversation_attached"] = "conversation_attached"
+    data: ConversationAttachedData
+
+
 class ToolCallStartedEvent(_EnvelopeBase):
     type: Literal["tool_call_started"] = "tool_call_started"
     data: ToolCallStartedData
@@ -171,6 +188,7 @@ AgentEventEnvelope = Annotated[
         UsageEvent,
         DoneEvent,
         ErrorEvent,
+        ConversationAttachedEvent,
         ToolCallStartedEvent,
         ToolCallArgsDeltaEvent,
         ToolResultEvent,
@@ -190,6 +208,7 @@ _PUBLISHED_TYPES: dict[str, type[_EnvelopeBase]] = {
     "usage": UsageEvent,
     "done": DoneEvent,
     "error": ErrorEvent,
+    "conversation_attached": ConversationAttachedEvent,
     "tool_call_started": ToolCallStartedEvent,
     "tool_call_args_delta": ToolCallArgsDeltaEvent,
     "tool_result": ToolResultEvent,

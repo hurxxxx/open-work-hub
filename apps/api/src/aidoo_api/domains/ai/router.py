@@ -1,5 +1,5 @@
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import asyncio
 from typing import Any, Literal
 
@@ -39,6 +39,8 @@ from aidoo_api.domains.ai.tool_service import (
 from aidoo_api.domains.auth.dependencies import require_current_user, require_current_workspace
 from aidoo_api.domains.auth.models import User, Workspace
 from aidoo_api.domains.auth.security import new_id
+from aidoo_api.domains.conversations import service as conversations_service
+from aidoo_api.domains.conversations.models import Conversation
 
 
 LlmRequestBackendMode = Literal["auto", "local", "openrouter"]
@@ -159,6 +161,14 @@ def chat(
 
 class ChatStreamRequest(ChatRequest):
     stream_reasoning: bool = True
+    # If set, append to the named conversation (must belong to the caller).
+    conversation_id: str | None = None
+    # Opt-in flag to have the server allocate a fresh conversation row when
+    # ``conversation_id`` is absent. Defaults to False so legacy callers (no
+    # awareness of the ``conversation_attached`` envelope, no follow-up
+    # plumbing to reuse the allocated id) don't silently fragment their
+    # history into one-turn conversations on every request.
+    persist: bool = False
 
 
 @router.post("/chat/stream")
@@ -487,6 +497,73 @@ async def _chat_stream_publisher(
     last_config: LlmPoolConfig | None = None
     chosen_model: str | None = None
 
+    # Bind the turn-persistence context before any events fire. On a
+    # validation-style error the helper returns a full terminal
+    # (error, done) envelope pair so the client leaves the streaming state
+    # cleanly; on success the stream proceeds normally.
+    conversation, terminal_envelopes = _bind_conversation_for_stream(
+        db=db,
+        workspace=workspace,
+        user=current_user,
+        payload=payload,
+    )
+    if terminal_envelopes is not None:
+        for envelope in terminal_envelopes:
+            yield envelope
+        return
+
+    if conversation is not None:
+        yield serialize_sse(
+            make_envelope(
+                "conversation_attached",
+                encoder.next_seq(),
+                {"conversation_id": conversation.id},
+            )
+        )
+        # Persist the user turn inside the SSE error contract — if the write
+        # fails (retry budget exhausted on a concurrent insert, DB down),
+        # surface it as a normal error+done pair rather than tearing the
+        # stream down mid-flight, which would leave the client hanging.
+        try:
+            _record_user_turn(
+                db=db,
+                conversation=conversation,
+                messages=payload.messages,
+            )
+        except Exception as exc:  # noqa: BLE001
+            import logging
+
+            logging.getLogger(__name__).exception(
+                "user turn persistence failed conversation_id=%s: %s",
+                conversation.id,
+                exc,
+            )
+            yield serialize_sse(
+                make_envelope(
+                    "error",
+                    encoder.next_seq(),
+                    {
+                        "code": "conversation_persist_error",
+                        "message": "채팅 기록 저장 중 오류가 발생했습니다.",
+                        "retryable": True,
+                    },
+                )
+            )
+            yield serialize_sse(
+                make_envelope(
+                    "done",
+                    encoder.next_seq(),
+                    {
+                        "finish_reason": "error",
+                        "audit_id": None,
+                        "meta": None,
+                    },
+                )
+            )
+            return
+
+    buffer = _AssistantTurnBuffer()
+
     try:
         command = _parse_tool_chat_command(payload.messages)
         if command is not None:
@@ -498,6 +575,7 @@ async def _chat_stream_publisher(
                 current_user=current_user,
                 command=command,
             ):
+                buffer.observe(event)
                 yield event
             return
 
@@ -536,7 +614,9 @@ async def _chat_stream_publisher(
                 max_consecutive_tool_errors=settings.ai_agent_max_consecutive_tool_errors,
                 agent_run_id=agent_run_id,
             ):
-                yield serialize_sse(event)
+                serialized = serialize_sse(event)
+                buffer.observe(serialized)
+                yield serialized
             return
 
         async for chunk, decision, config in complete_chat_stream(
@@ -562,11 +642,19 @@ async def _chat_stream_publisher(
                 model=chosen_model,
             )
             if event is not None:
+                buffer.observe(event)
                 yield event
-    except asyncio.CancelledError:
+    except (asyncio.CancelledError, GeneratorExit):
+        # Client aborted mid-stream. The SSE framework can close the
+        # generator with either exception depending on how the disconnect
+        # propagates — both must mark the assistant turn as cancelled so the
+        # reload path matches what the user saw. The finally block still
+        # runs and persists the partial response with
+        # ``response_status="cancelled"``.
+        buffer.cancelled = True
         return
     except Exception as error:  # noqa: BLE001 - converted to SSE contract
-        yield serialize_sse(
+        error_event = serialize_sse(
             make_envelope(
                 "error",
                 encoder.next_seq(),
@@ -577,7 +665,7 @@ async def _chat_stream_publisher(
                 },
             )
         )
-        yield serialize_sse(
+        done_event = serialize_sse(
             make_envelope(
                 "done",
                 encoder.next_seq(),
@@ -592,6 +680,20 @@ async def _chat_stream_publisher(
                 },
             )
         )
+        buffer.observe(error_event)
+        buffer.observe(done_event)
+        yield error_event
+        yield done_event
+    finally:
+        if conversation is not None:
+            _persist_assistant_turn(
+                db,
+                conversation=conversation,
+                buffer=buffer,
+                last_decision=last_decision,
+                last_config=last_config,
+                chosen_model=chosen_model,
+            )
 
 
 def _tool_command_events(
@@ -804,3 +906,321 @@ def _error_message(error: Exception) -> str:
                 return message
         return "AI request failed."
     return str(error)
+
+
+# ---------------------------------------------------------------------------
+# Conversation turn persistence helpers
+# ---------------------------------------------------------------------------
+
+
+def _bind_conversation_for_stream(
+    *,
+    db: Session,
+    workspace: Workspace,
+    user: User,
+    payload: "ChatStreamRequest",
+) -> tuple[Conversation | None, list[dict[str, str]] | None]:
+    """Resolve (or create) the Conversation row the stream will append to.
+
+    Returns ``(conversation, None)`` on success, where ``conversation`` may be
+    ``None`` when the caller hasn't opted into persistence yet. On a
+    validation-style failure (client asked for an unknown/foreign
+    ``conversation_id``) returns ``(None, [error_envelope, done_envelope])`` so
+    the publisher yields the full terminal pair — the SSE contract requires
+    every stream to close with a ``done`` envelope so clients leave the
+    streaming state.
+    """
+    encoder_for_errors = EnvelopeEncoder()
+    if payload.conversation_id:
+        try:
+            conversation = conversations_service.get_conversation(
+                db,
+                workspace=workspace,
+                user=user,
+                conversation_id=payload.conversation_id,
+            )
+        except HTTPException as exc:
+            error_envelope = serialize_sse(
+                make_envelope(
+                    "error",
+                    encoder_for_errors.next_seq(),
+                    {
+                        "code": "conversation_not_found",
+                        "message": exc.detail
+                        if isinstance(exc.detail, str)
+                        else "Conversation not found.",
+                        "retryable": False,
+                    },
+                )
+            )
+            done_envelope = serialize_sse(
+                make_envelope(
+                    "done",
+                    encoder_for_errors.next_seq(),
+                    {
+                        "finish_reason": "error",
+                        "audit_id": None,
+                        "meta": None,
+                    },
+                )
+            )
+            return None, [error_envelope, done_envelope]
+        return conversation, None
+
+    if not payload.persist:
+        # Legacy caller that hasn't flipped the opt-in flag yet — keep the
+        # stream running but skip persistence. Phase 3.3 will set persist=True
+        # on the web client so new user sessions get their own Conversation.
+        return None, None
+
+    conversation = conversations_service.create_conversation(
+        db, workspace=workspace, user=user, title=""
+    )
+    return conversation, None
+
+
+def _record_user_turn(
+    *,
+    db: Session,
+    conversation: Conversation,
+    messages: list[ChatMessage],
+) -> None:
+    """Persist the caller-supplied history onto the attached conversation.
+
+    If the conversation is empty (just created) we persist every non-system
+    turn in ``messages`` so the saved thread matches the exact context the
+    model is about to see — a client that sent
+    ``[user, assistant, user]`` on the first persisted request would
+    otherwise reload with only the last turn. If the conversation already
+    has turns we only store the new trailing user message; the earlier
+    history is already on disk from prior requests.
+    """
+    non_system = [m for m in messages if m.role in ("user", "assistant")]
+    if not non_system:
+        return
+    conversation_is_empty = len(conversation.turns) == 0
+    if conversation_is_empty:
+        first_user = next((m for m in non_system if m.role == "user"), None)
+        if first_user is not None:
+            conversations_service.autotitle_from_turn(
+                db,
+                conversation=conversation,
+                first_user_content=first_user.content,
+            )
+        for message in non_system:
+            conversations_service.append_turn(
+                db,
+                conversation=conversation,
+                role=message.role,
+                content=message.content,
+            )
+        return
+
+    last_user_content: str | None = None
+    for message in reversed(messages):
+        if message.role == "user":
+            last_user_content = message.content
+            break
+    if not last_user_content:
+        return
+    conversations_service.append_turn(
+        db,
+        conversation=conversation,
+        role="user",
+        content=last_user_content,
+    )
+
+
+@dataclass
+class _AssistantTurnBuffer:
+    """Accumulates streamed envelopes so we can persist a final assistant turn.
+
+    Observes the already-serialized ``{event, data}`` dicts as they flow
+    through the publisher — JSON-parsing the tiny ``data`` payloads is cheaper
+    than refactoring every yield site to pass an envelope object. Tool call
+    state is threaded across three event types (``tool_call_started`` →
+    ``tool_call_args_delta`` → ``tool_result``) into one record per
+    ``call_id`` so a reloaded turn can render the same cards the live UI did.
+    """
+
+    content: str = ""
+    reasoning: str = ""
+    tool_call_records: dict[str, dict[str, Any]] = field(default_factory=dict)
+    tool_call_order: list[str] = field(default_factory=list)
+    pending_approvals: list[dict[str, Any]] = field(default_factory=list)
+    done_meta: dict[str, Any] | None = None
+    finish_reason: str | None = None
+    response_status: str = "done"
+    cancelled: bool = False
+    # Captured from ``error`` envelopes so a stream that fails before any
+    # content_delta still persists with the failure text the live UI showed
+    # — MessageBubble reads ``content`` for all roles, so an empty-content
+    # turn would reload as a blank bubble otherwise.
+    error_message: str | None = None
+
+    def _touch_tool_call(self, call_id: str) -> dict[str, Any]:
+        # Mirrors the frontend ToolCallBuffer shape so a reloaded turn renders
+        # the same tool card — `result` is a nested object with its own status
+        # + preview + error, not top-level fields.
+        if call_id not in self.tool_call_records:
+            self.tool_call_order.append(call_id)
+            self.tool_call_records[call_id] = {
+                "call_id": call_id,
+                "name": None,
+                "args_preview": None,
+                "argsBuffer": "",
+                "status": "running",
+                "result": None,
+                "startedAtMs": None,
+                "completedAtMs": None,
+            }
+        return self.tool_call_records[call_id]
+
+    @property
+    def tool_calls(self) -> list[dict[str, Any]]:
+        return [self.tool_call_records[call_id] for call_id in self.tool_call_order]
+
+    def observe(self, event_dict: dict[str, str]) -> None:
+        # serialize_sse serialises the full envelope `{seq, timestamp_ms,
+        # type, data: {...}}` into the SSE `data` field, so the interesting
+        # payload we want to inspect sits at `envelope["data"]`.
+        try:
+            envelope = json.loads(event_dict.get("data", ""))
+        except (ValueError, TypeError):
+            return
+        event_type = event_dict.get("event")
+        payload = envelope.get("data") or {}
+        timestamp_ms = envelope.get("timestamp_ms")
+        if event_type == "content_delta":
+            self.content += payload.get("text", "")
+        elif event_type == "reasoning_delta":
+            self.reasoning += payload.get("text", "")
+        elif event_type == "tool_call_started":
+            call_id = payload.get("call_id")
+            if call_id:
+                record = self._touch_tool_call(call_id)
+                record["name"] = payload.get("name") or record["name"]
+                record["args_preview"] = (
+                    payload.get("args_preview") or record["args_preview"]
+                )
+                if record["startedAtMs"] is None:
+                    record["startedAtMs"] = timestamp_ms
+        elif event_type == "tool_call_args_delta":
+            call_id = payload.get("call_id")
+            if call_id:
+                record = self._touch_tool_call(call_id)
+                record["argsBuffer"] += payload.get("delta", "")
+        elif event_type == "tool_result":
+            call_id = payload.get("call_id")
+            if call_id:
+                record = self._touch_tool_call(call_id)
+                status = payload.get("status") or record["status"]
+                record["status"] = status
+                record["result"] = {
+                    "status": status,
+                    "preview": payload.get("result_preview"),
+                    "error": payload.get("error"),
+                }
+                record["completedAtMs"] = timestamp_ms
+        elif event_type == "approval_required":
+            self.pending_approvals.append(payload)
+        elif event_type == "error":
+            message = payload.get("message")
+            if isinstance(message, str) and message.strip():
+                self.error_message = message
+        elif event_type == "done":
+            self.done_meta = payload.get("meta") or {}
+            self.finish_reason = payload.get("finish_reason")
+            if self.finish_reason == "error":
+                self.response_status = "error"
+
+
+def _persist_assistant_turn(
+    db: Session,
+    *,
+    conversation: Conversation,
+    buffer: _AssistantTurnBuffer,
+    last_decision: PolicyDecision | None,
+    last_config: LlmPoolConfig | None,
+    chosen_model: str | None,
+) -> None:
+    """Write a single assistant turn summarizing the streamed response.
+
+    Runs from the publisher's ``finally`` so the row lands on every exit
+    path — normal completion, mid-stream error, and client cancellation.
+    Empty streams still get persisted when the finish reason was terminal
+    (error/cancelled) so the reloaded conversation reflects that the live
+    UI showed a failure response rather than an absent assistant turn.
+    """
+    response_status = "cancelled" if buffer.cancelled else buffer.response_status
+    has_body = bool(
+        buffer.content
+        or buffer.reasoning
+        or buffer.tool_calls
+        or buffer.pending_approvals
+    )
+    # A terminal failure OR a length-limited reply should still persist even
+    # with an empty body — the live UI renders a "token limit reached" /
+    # error bubble in those cases, so a reloaded conversation must show the
+    # same assistant turn rather than look unanswered.
+    is_terminal_failure = response_status in {"cancelled", "error"} or (
+        buffer.finish_reason in {"cancelled", "error", "length"}
+    )
+    if not has_body and not is_terminal_failure:
+        return
+
+    # Fall back to the streamed error text when the provider failed before
+    # any content_delta — MessageBubble renders `content` for every role, so
+    # an empty assistant turn would reload as a blank bubble otherwise.
+    persisted_content = buffer.content
+    if not persisted_content and buffer.error_message:
+        persisted_content = buffer.error_message
+
+    fallback_meta = _build_done_meta(last_decision, last_config, model=chosen_model)
+    done_meta = buffer.done_meta or fallback_meta or {}
+
+    # Propagate the stream's terminal state onto the reasoning panel too so
+    # reloaded threads don't falsely show a completed ThinkingPanel after an
+    # error or cancellation. MessageBubble treats a missing field as "done",
+    # which would misrepresent the live behavior.
+    reasoning_status = (
+        response_status if buffer.reasoning and response_status != "done" else None
+    )
+
+    meta: dict[str, Any] = {
+        "reasoning": buffer.reasoning or None,
+        "reasoning_status": reasoning_status,
+        "policy": done_meta.get("policy"),
+        "chosen_pool": done_meta.get("chosen_pool"),
+        "decision_reason": done_meta.get("decision_reason"),
+        "forced_local": done_meta.get("forced_local"),
+        "pii_hits": done_meta.get("pii_hits") or [],
+        "provider": done_meta.get("provider"),
+        "finish_reason": buffer.finish_reason,
+        "response_status": response_status,
+        "tool_calls": buffer.tool_calls,
+        "pending_approvals": buffer.pending_approvals,
+    }
+    # Drop None values so the persisted JSON isn't noisy with defaults.
+    meta = {key: value for key, value in meta.items() if value not in (None, [], "")}
+
+    try:
+        conversations_service.append_turn(
+            db,
+            conversation=conversation,
+            role="assistant",
+            content=persisted_content,
+            meta=meta or None,
+        )
+    except Exception as exc:  # noqa: BLE001 - persistence failure must not crash the stream
+        # The stream has already delivered its terminal done/error envelope
+        # to the client, so failing to persist history shouldn't rewrite
+        # that contract — log and roll back instead of raising.
+        import logging
+
+        logging.getLogger(__name__).exception(
+            "conversation turn persistence failed conversation_id=%s: %s",
+            conversation.id,
+            exc,
+        )
+        db.rollback()
