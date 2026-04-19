@@ -25,6 +25,7 @@ from aidoo_api.domains.auth.dependencies import (
 from aidoo_api.domains.auth.router import router as auth_router
 from aidoo_api.domains.auth.workspace_router import router as workspace_router
 from aidoo_api.domains.docs.collab import DocsCollabHub
+from aidoo_api.domains.conversations.router import router as conversations_router
 from aidoo_api.domains.docs.router import router as docs_router
 from aidoo_api.domains.docs.router import ws_router as docs_ws_router
 from aidoo_api.domains.documents.router import router as documents_router
@@ -290,6 +291,19 @@ def create_app() -> FastAPI:
     )
     app.include_router(
         planner_router,
+        prefix=f"{settings.api_prefix}/workspaces/{{workspace_slug}}",
+        dependencies=[
+            *protected_dependencies,
+            Depends(require_workspace_membership()),
+        ],
+    )
+    # Conversations are a new workspace-scoped feature with no pre-scoped
+    # clients, so we intentionally mount only the /workspaces/:slug/ shape.
+    # The legacy /api/v1/conversations mount would auto-bind to whichever
+    # workspace `require_legacy_workspace_membership()` returned first, which
+    # silently hides conversations from a user's other workspaces.
+    app.include_router(
+        conversations_router,
         prefix=f"{settings.api_prefix}/workspaces/{{workspace_slug}}",
         dependencies=[
             *protected_dependencies,

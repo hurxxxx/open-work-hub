@@ -77,6 +77,9 @@ def init_db() -> None:
     """
     from aidoo_api.domains.auth import models  # noqa: F401
     from aidoo_api.domains.auth.access import ensure_seed_data
+    from aidoo_api.domains.conversations import (  # noqa: F401
+        models as conversations_models,
+    )
     from aidoo_api.domains.docs import models as docs_models  # noqa: F401
     from aidoo_api.domains.media import models as media_models  # noqa: F401
     from aidoo_api.domains.meeting import models as meeting_models  # noqa: F401
