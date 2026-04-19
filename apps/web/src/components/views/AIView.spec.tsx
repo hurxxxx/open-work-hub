@@ -5,6 +5,7 @@ import type { ComponentProps } from 'react';
 // vi.mock calls below are hoisted by vitest, so it's safe for this import to
 // appear before them in source order — keeps import/first satisfied.
 import { AIView } from './AIView';
+import { WorkspaceBootstrapProvider } from '@/src/domains/workspaces/workspace-bootstrap-context';
 
 const aiHarness = vi.hoisted(() => ({
   getLlmHealth: vi.fn(),
@@ -38,15 +39,6 @@ vi.mock('@/src/domains/ai/ai-api', async () => {
   };
 });
 
-// Stub the workspace bootstrap hook so AIView's slash-menu candidate merge
-// doesn't hit the network during tests. null data → fallback to local NAV_ITEMS.
-vi.mock('@/src/domains/workspaces/workspaces-api', () => ({
-  useWorkspaceBootstrap: () => ({
-    data: null,
-    error: null,
-    loading: false,
-  }),
-}));
 
 vi.mock('@/src/components/views/chat/ToolCallCard', () => ({
   ToolCallCard: ({ call }: { call: { call_id: string; name: string; argsBuffer: string } }) => (
@@ -127,9 +119,13 @@ function healthPayload() {
 function renderAIView() {
   return render(
     <MemoryRouter initialEntries={['/w/hq/ai']}>
-      <Routes>
-        <Route path="/w/:workspaceSlug/ai" element={<AIView />} />
-      </Routes>
+      <WorkspaceBootstrapProvider
+        value={{ data: null, error: null, loading: false }}
+      >
+        <Routes>
+          <Route path="/w/:workspaceSlug/ai" element={<AIView />} />
+        </Routes>
+      </WorkspaceBootstrapProvider>
     </MemoryRouter>,
   );
 }

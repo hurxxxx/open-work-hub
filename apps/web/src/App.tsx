@@ -59,6 +59,7 @@ import {
   type WorkspaceAppId,
 } from './domains/workspaces/workspace-utils';
 import { useWorkspaceBootstrap } from './domains/workspaces/workspaces-api';
+import { WorkspaceBootstrapProvider } from './domains/workspaces/workspace-bootstrap-context';
 import { WorkspaceSettingsView } from './domains/workspaces/WorkspaceSettingsView';
 import {
   AccessDeniedView,
@@ -301,6 +302,7 @@ const AppContent = () => {
   }
 
   return (
+    <WorkspaceBootstrapProvider value={workspaceBootstrap}>
     <div className="flex h-screen bg-app-surface-sidebar text-app-ink overflow-hidden transition-colors">
       <AppBar
         activeAppId={activeAppId}
@@ -545,6 +547,7 @@ const AppContent = () => {
         </div>
       )}
     </div>
+    </WorkspaceBootstrapProvider>
   );
 };
 

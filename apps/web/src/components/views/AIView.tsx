@@ -10,7 +10,7 @@ import {
 import { useChatStream } from '@/src/domains/ai/useChatStream';
 import { useAuth } from '@/src/domains/auth/auth-provider';
 import { resolveToolInvocationHref } from '@/src/domains/workspaces/workspace-utils';
-import { useWorkspaceBootstrap } from '@/src/domains/workspaces/workspaces-api';
+import { useWorkspaceBootstrapContext } from '@/src/domains/workspaces/workspace-bootstrap-context';
 import { NAV_ITEMS } from '@/src/constants';
 import { ChatThread } from '@/src/components/views/chat/ChatThread';
 import { ApprovalModal } from '@/src/components/views/chat/ApprovalModal';
@@ -68,12 +68,11 @@ export const AIView = () => {
   const { token, user } = useAuth();
   const navigate = useNavigate();
   const { workspaceSlug } = useParams();
-  // TODO: AppContent already fetches this — lift bootstrap data into a
-  // WorkspaceBootstrapContext so AIView (and other views) can reuse it instead
-  // of issuing a second GET /api/v1/workspaces/:slug/bootstrap on every mount.
-  // Until then the slash-menu falls back to the static NAV_ITEMS AI slice
-  // during the loading window.
-  const workspaceBootstrap = useWorkspaceBootstrap(token, workspaceSlug);
+  // Read bootstrap state from the shell context (AppContent already fetched
+  // it). Previously AIView issued its own GET /api/v1/workspaces/:slug/bootstrap
+  // on every mount, which also briefly fell back to the full static NAV_ITEMS
+  // slice in the slash menu while the duplicate request was in flight.
+  const workspaceBootstrap = useWorkspaceBootstrapContext();
   const [health, setHealth] = useState<LlmHealthResponse | null>(null);
   const [healthError, setHealthError] = useState<string | null>(null);
   const [isCheckingHealth, setIsCheckingHealth] = useState(false);
