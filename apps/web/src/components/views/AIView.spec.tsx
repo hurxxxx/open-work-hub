@@ -2,6 +2,9 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ComponentProps } from 'react';
+// vi.mock calls below are hoisted by vitest, so it's safe for this import to
+// appear before them in source order — keeps import/first satisfied.
+import { AIView } from './AIView';
 
 const aiHarness = vi.hoisted(() => ({
   getLlmHealth: vi.fn(),
@@ -54,8 +57,6 @@ vi.mock('@/src/components/views/chat/ApprovalModal', () => ({
     </div>
   ),
 }));
-
-import { AIView } from './AIView';
 
 function frame(type: string, seq: number, data: unknown): string {
   const payload = JSON.stringify({
@@ -213,7 +214,10 @@ describe('AIView', () => {
       'docs.create_page:pending',
     );
     expect(screen.queryByText('backend down')).toBeNull();
-    expect((input as HTMLTextAreaElement).value).toBe('');
+    // After a successful submit the view transitions empty → active, which
+    // remounts the composer; re-query the currently mounted textarea.
+    const currentInput = screen.getByPlaceholderText('메시지를 입력하세요');
+    expect((currentInput as HTMLTextAreaElement).value).toBe('');
     expect(aiHarness.sendAiChat).not.toHaveBeenCalled();
   });
 

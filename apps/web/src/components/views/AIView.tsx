@@ -1,6 +1,5 @@
 import { motion } from 'motion/react';
-import { FormEvent, useEffect, useMemo, useState } from 'react';
-import { Loader2, Send, Square } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   getLlmHealth,
   type AiBackendMode,
@@ -13,19 +12,13 @@ import { ChatThread } from '@/src/components/views/chat/ChatThread';
 import { ApprovalModal } from '@/src/components/views/chat/ApprovalModal';
 import { ToolCallCard } from '@/src/components/views/chat/ToolCallCard';
 import { ChatTopBar } from '@/src/components/views/chat/ChatTopBar';
+import { ChatComposer } from '@/src/components/views/chat/ChatComposer';
+import { EmptyState } from '@/src/components/views/chat/EmptyState';
 import type { ChatTurn } from '@/src/components/views/chat/MessageBubble';
 import type {
   PendingApproval,
   ToolCallBuffer,
 } from '@/src/domains/ai/agent-events';
-
-const INITIAL_TURNS: ChatTurn[] = [
-  {
-    id: 'welcome',
-    role: 'assistant',
-    content: '무엇을 도와드릴까요?',
-  },
-];
 
 const AI_BACKEND_MODE_STORAGE_KEY = 'aidoo.ai.backendMode';
 
@@ -74,7 +67,7 @@ export const AIView = () => {
   const [backendMode, setBackendMode] = useState<AiBackendMode>(
     readInitialBackendMode,
   );
-  const [turns, setTurns] = useState<ChatTurn[]>(INITIAL_TURNS);
+  const [turns, setTurns] = useState<ChatTurn[]>([]);
   const [input, setInput] = useState('');
   const [chatError, setChatError] = useState<string | null>(null);
   const [pendingUserTurnId, setPendingUserTurnId] = useState<string | null>(
@@ -212,9 +205,7 @@ export const AIView = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chat.state.status]);
 
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-
+  function handleSubmit() {
     const trimmed = input.trim();
     if (!trimmed || !token || isSending) {
       return;
@@ -239,12 +230,10 @@ export const AIView = () => {
         content:
           '너는 두원공조 사내 업무를 돕는 한국어 AI 비서다. 답변은 간결하고 실행 가능하게 작성한다.',
       },
-      ...nextTurns
-        .filter((turn) => turn.id !== 'welcome')
-        .map((turn) => ({
-          role: turn.role,
-          content: turn.content,
-        })),
+      ...nextTurns.map((turn) => ({
+        role: turn.role,
+        content: turn.content,
+      })),
     ];
 
     void chat.send({
@@ -273,79 +262,54 @@ export const AIView = () => {
           canRefresh={Boolean(token)}
         />
 
-        <ChatThread
-          turns={turns}
-          liveAssistant={
-            isSending
-              ? {
-                  content: chat.state.contentBuffer,
-                  reasoning: chat.state.reasoningBuffer,
-                  status: chat.state.status,
-                }
-              : null
-          }
-        />
-        {visibleToolCalls.map((call) => (
-          <ToolCallCard key={call.call_id} call={call} />
-        ))}
-        {visibleApprovals.map((approval) => (
-          <ApprovalModal key={approval.approval_id} approval={approval} />
-        ))}
-
-        <form
-          className="border-t border-app-border bg-app-surface p-4"
-          onSubmit={handleSubmit}
-        >
-          {chatError && (
-            <div className="mb-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 app-text-body-sm text-red-700 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-300">
-              {chatError}
-            </div>
-          )}
-          <div className="flex min-h-12 gap-3">
-            <textarea
-              className="app-text-body-sm min-h-12 flex-1 resize-none rounded-lg border border-app-border bg-app-bg px-4 py-3 text-app-ink outline-none transition-colors placeholder:text-gray-400 focus:border-app-accent"
-              disabled={isSending}
-              onChange={(event) => setInput(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter' && !event.shiftKey) {
-                  event.preventDefault();
-                  event.currentTarget.form?.requestSubmit();
-                }
-              }}
-              placeholder="메시지를 입력하세요"
-              rows={2}
-              value={input}
+        {turns.length === 0 && !isSending ? (
+          <EmptyState
+            composer={
+              <ChatComposer
+                input={input}
+                onInputChange={setInput}
+                onSubmit={handleSubmit}
+                onAbort={() => chat.abort()}
+                isSending={isSending}
+                isStreaming={chat.state.transport === 'stream'}
+                chatError={chatError}
+                autoFocus
+              />
+            }
+          />
+        ) : (
+          <>
+            <ChatThread
+              turns={turns}
+              liveAssistant={
+                isSending
+                  ? {
+                      content: chat.state.contentBuffer,
+                      reasoning: chat.state.reasoningBuffer,
+                      status: chat.state.status,
+                    }
+                  : null
+              }
             />
-            {isSending && chat.state.transport === 'stream' ? (
-              <button
-                className="app-text-control flex h-12 shrink-0 items-center gap-2 rounded-lg border border-app-border bg-app-surface px-4 text-app-ink transition-colors hover:border-app-accent"
-                onClick={() => chat.abort()}
-                type="button"
-              >
-                <Square size={16} />
-                <span className="hidden sm:inline">중단</span>
-              </button>
-            ) : isSending ? (
-              <button
-                className="app-text-control flex h-12 shrink-0 items-center gap-2 rounded-lg border border-app-border bg-app-surface px-4 text-app-ink/70"
-                disabled
-                type="button"
-              >
-                <Loader2 size={16} className="animate-spin" />
-                <span className="hidden sm:inline">처리 중</span>
-              </button>
-            ) : (
-              <button
-                className="app-text-control flex h-12 shrink-0 items-center gap-2 rounded-lg bg-app-accent px-4 text-app-accent-fg transition-colors hover:bg-app-accent-hover disabled:cursor-not-allowed disabled:opacity-60"
-                disabled={!input.trim()}
-                type="submit"
-              >
-                <Send size={16} />
-                <span className="hidden sm:inline">전송</span>
-              </button>
-            )}
-          </div>
-        </form>
+            {visibleToolCalls.map((call) => (
+              <ToolCallCard key={call.call_id} call={call} />
+            ))}
+            {visibleApprovals.map((approval) => (
+              <ApprovalModal key={approval.approval_id} approval={approval} />
+            ))}
+            <div className="border-t border-app-border bg-app-surface p-4">
+              <ChatComposer
+                input={input}
+                onInputChange={setInput}
+                onSubmit={handleSubmit}
+                onAbort={() => chat.abort()}
+                isSending={isSending}
+                isStreaming={chat.state.transport === 'stream'}
+                chatError={chatError}
+              />
+            </div>
+          </>
+        )}
       </section>
     </motion.div>
   );
