@@ -58,6 +58,7 @@ import { listPmsTaskLists, listFolders, listSpaceDocs, createSpaceDoc, updateSpa
 import {
   buildWorkspaceAppPath,
   resolveDefaultWorkspaceAppPath,
+  resolveNavItemHref,
   type WorkspaceAppId,
 } from '@/src/domains/workspaces/workspace-utils';
 import type {
@@ -71,24 +72,6 @@ import { SpaceMembersModal } from '@/src/components/views/PMSView/SpaceMembersMo
 import { CreateFolderModal } from '@/src/components/views/PMSView/CreateFolderModal';
 import { SpaceOrderEditorModal } from './SpaceOrderEditorModal';
 import { buildSidebarCategories } from './sub-sidebar-categories';
-
-function resolveNavItemHref(
-  item: NavItem,
-  currentWorkspaceSlug: string | null | undefined,
-  user: Parameters<typeof resolveDefaultWorkspaceAppPath>[0],
-): string {
-  if (item.absolutePath) {
-    return item.absolutePath;
-  }
-  const targetApp = (item.linkAppId ?? item.appId) as WorkspaceAppId | 'home' | 'settings';
-  if (targetApp === 'home' || targetApp === 'settings') {
-    return `/tool/${item.id}`;
-  }
-  const suffix = item.pathSuffix ?? '';
-  return currentWorkspaceSlug
-    ? buildWorkspaceAppPath(currentWorkspaceSlug, targetApp, suffix)
-    : resolveDefaultWorkspaceAppPath(user, targetApp, suffix);
-}
 
 const SPACE_COLORS = [
   'bg-emerald-500',

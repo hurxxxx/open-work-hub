@@ -38,6 +38,16 @@ vi.mock('@/src/domains/ai/ai-api', async () => {
   };
 });
 
+// Stub the workspace bootstrap hook so AIView's slash-menu candidate merge
+// doesn't hit the network during tests. null data → fallback to local NAV_ITEMS.
+vi.mock('@/src/domains/workspaces/workspaces-api', () => ({
+  useWorkspaceBootstrap: () => ({
+    data: null,
+    error: null,
+    loading: false,
+  }),
+}));
+
 vi.mock('@/src/components/views/chat/ToolCallCard', () => ({
   ToolCallCard: ({ call }: { call: { call_id: string; name: string; argsBuffer: string } }) => (
     <div data-testid={`tool-call-${call.call_id}`}>

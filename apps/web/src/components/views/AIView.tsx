@@ -1,5 +1,6 @@
 import { motion } from 'motion/react';
 import { useEffect, useMemo, useState } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
 import {
   getLlmHealth,
   type AiBackendMode,
@@ -8,6 +9,9 @@ import {
 } from '@/src/domains/ai/ai-api';
 import { useChatStream } from '@/src/domains/ai/useChatStream';
 import { useAuth } from '@/src/domains/auth/auth-provider';
+import { resolveToolInvocationHref } from '@/src/domains/workspaces/workspace-utils';
+import { useWorkspaceBootstrap } from '@/src/domains/workspaces/workspaces-api';
+import { NAV_ITEMS } from '@/src/constants';
 import { ChatThread } from '@/src/components/views/chat/ChatThread';
 import { ApprovalModal } from '@/src/components/views/chat/ApprovalModal';
 import { ToolCallCard } from '@/src/components/views/chat/ToolCallCard';
@@ -19,6 +23,7 @@ import type {
   PendingApproval,
   ToolCallBuffer,
 } from '@/src/domains/ai/agent-events';
+import type { NavItem } from '@/src/constants';
 
 const AI_BACKEND_MODE_STORAGE_KEY = 'aidoo.ai.backendMode';
 
@@ -60,7 +65,15 @@ function resolveAssistantTurnContent(
 }
 
 export const AIView = () => {
-  const { token } = useAuth();
+  const { token, user } = useAuth();
+  const navigate = useNavigate();
+  const { workspaceSlug } = useParams();
+  // TODO: AppContent already fetches this — lift bootstrap data into a
+  // WorkspaceBootstrapContext so AIView (and other views) can reuse it instead
+  // of issuing a second GET /api/v1/workspaces/:slug/bootstrap on every mount.
+  // Until then the slash-menu falls back to the static NAV_ITEMS AI slice
+  // during the loading window.
+  const workspaceBootstrap = useWorkspaceBootstrap(token, workspaceSlug);
   const [health, setHealth] = useState<LlmHealthResponse | null>(null);
   const [healthError, setHealthError] = useState<string | null>(null);
   const [isCheckingHealth, setIsCheckingHealth] = useState(false);
@@ -92,6 +105,32 @@ export const AIView = () => {
     () => mergeApprovals(finalizedApprovals, chat.state.pendingApprovals),
     [chat.state.pendingApprovals, finalizedApprovals],
   );
+
+  // Slash-command candidates: merge workspace bootstrap nav (filters out
+  // disabled/unauthorized tools) with the local NAV_ITEMS registry (supplies
+  // icons + full metadata). Falls back to the local AI-only list while
+  // bootstrap is still loading so the menu stays usable.
+  const slashCommandItems = useMemo(() => {
+    const registry = new Map(NAV_ITEMS.map((item) => [item.id, item]));
+    const bootstrapNav = workspaceBootstrap.data?.nav ?? null;
+    if (!bootstrapNav) {
+      return NAV_ITEMS.filter((item) => item.appId === 'ai');
+    }
+    return bootstrapNav
+      .filter((entry) => entry.app_id === 'ai')
+      .map((entry) => {
+        const localItem = registry.get(entry.id);
+        if (!localItem) {
+          return null;
+        }
+        return {
+          ...localItem,
+          title: entry.title,
+          category: entry.category,
+        };
+      })
+      .filter((item): item is NavItem => item !== null);
+  }, [workspaceBootstrap.data]);
 
   async function refreshHealth() {
     if (!token) {
@@ -205,6 +244,12 @@ export const AIView = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chat.state.status]);
 
+  function handleSelectTool(item: NavItem) {
+    // Tool invocation semantics: plain AI items land on their /tool/:id page,
+    // deep-links (linkAppId, absolutePath) honor their NavItem metadata.
+    navigate(resolveToolInvocationHref(item, workspaceSlug, user));
+  }
+
   function handleSubmit() {
     const trimmed = input.trim();
     if (!trimmed || !token || isSending) {
@@ -270,6 +315,8 @@ export const AIView = () => {
                 isSending={isSending}
                 isStreaming={chat.state.transport === 'stream'}
                 chatError={chatError}
+                onSelectTool={handleSelectTool}
+                toolItems={slashCommandItems}
                 autoFocus
               />
             }
@@ -303,6 +350,8 @@ export const AIView = () => {
                 isSending={isSending}
                 isStreaming={chat.state.transport === 'stream'}
                 chatError={chatError}
+                onSelectTool={handleSelectTool}
+                toolItems={slashCommandItems}
               />
             </div>
           </>

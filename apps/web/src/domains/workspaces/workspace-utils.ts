@@ -3,6 +3,7 @@ import {
   type AuthUser,
 } from '@/src/domains/auth/auth-api';
 import { getDefaultAdminPath } from '@/src/domains/admin/admin-permissions';
+import type { NavItem } from '@/src/constants';
 
 export type WorkspaceAppId = 'home' | 'ai' | 'pms' | 'docs' | 'planner' | 'meeting';
 
@@ -218,6 +219,62 @@ export function requireWorkspaceSlug(workspaceSlug?: string | null): string {
     throw new Error('Workspace context is not available.');
   }
   return resolved;
+}
+
+/**
+ * Resolve the href for invoking a specific tool (e.g. from a shortcut list or
+ * slash command palette). Unlike `resolveNavItemHref`, a plain in-app item
+ * (appId === currentApp, no linkAppId) routes to its dedicated /tool/:id page
+ * rather than the app's generic landing, so selecting "search" from the AI
+ * chat slash menu opens the search tool instead of no-op-ing on /w/:slug/ai.
+ *
+ * Precedence:
+ *   1. `absolutePath` — admin/static routes win outright.
+ *   2. `linkAppId` that differs from `appId` — deep-link to another app
+ *      (e.g. meeting-minutes → /w/:slug/meeting?tab=recordings), delegated
+ *      to `resolveNavItemHref` so pathSuffix is honored.
+ *   3. Otherwise — `/tool/:id` (the tool's working UI).
+ */
+export function resolveToolInvocationHref(
+  item: NavItem,
+  currentWorkspaceSlug: string | null | undefined,
+  user: Parameters<typeof resolveDefaultWorkspaceAppPath>[0],
+): string {
+  if (item.absolutePath) {
+    return item.absolutePath;
+  }
+  if (item.linkAppId && item.linkAppId !== item.appId) {
+    return resolveNavItemHref(item, currentWorkspaceSlug, user);
+  }
+  return `/tool/${item.id}`;
+}
+
+/**
+ * Resolve the routing destination for a sidebar-style NavItem.
+ * Respects `absolutePath` (admin routes), `linkAppId` (AI items that deep-link
+ * into another app like meeting-minutes → meeting), and `pathSuffix` (tab/query
+ * targets like ?tab=recordings). Used by the left sub-sidebar and the slash
+ * command palette so both routing paths stay in sync.
+ */
+export function resolveNavItemHref(
+  item: NavItem,
+  currentWorkspaceSlug: string | null | undefined,
+  user: Parameters<typeof resolveDefaultWorkspaceAppPath>[0],
+): string {
+  if (item.absolutePath) {
+    return item.absolutePath;
+  }
+  const targetApp = (item.linkAppId ?? item.appId) as
+    | WorkspaceAppId
+    | 'home'
+    | 'settings';
+  if (targetApp === 'home' || targetApp === 'settings') {
+    return `/tool/${item.id}`;
+  }
+  const suffix = item.pathSuffix ?? '';
+  return currentWorkspaceSlug
+    ? buildWorkspaceAppPath(currentWorkspaceSlug, targetApp, suffix)
+    : resolveDefaultWorkspaceAppPath(user, targetApp, suffix);
 }
 
 export function rewriteWorkspaceApiPath(
