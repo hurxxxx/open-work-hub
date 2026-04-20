@@ -279,6 +279,118 @@
   font-size: 0.85em;
 }
 
+/* highlight.js dark-mode overrides — we ship github.css (light) as the
+   base theme. In dark mode its `#24292e` tokens disappear against the
+   dark panel, so we layer github-dark's palette under the app's `.dark`
+   variant. Kept scoped to artifact containers so this doesn't bleed
+   into any other syntax block a neighbour feature might introduce. */
+:where(.dark, .dark *) .artifact-markdown .hljs,
+:where(.dark, .dark *) .artifact-code .hljs {
+  color: #c9d1d9;
+  background: #0d1117;
+}
+:where(.dark, .dark *) .artifact-markdown pre,
+:where(.dark, .dark *) .artifact-code pre {
+  background-color: #0d1117;
+}
+:where(.dark, .dark *) .artifact-markdown .hljs-comment,
+:where(.dark, .dark *) .artifact-code .hljs-comment {
+  color: #8b949e;
+}
+:where(.dark, .dark *) .artifact-markdown .hljs-keyword,
+:where(.dark, .dark *) .artifact-markdown .hljs-doctag,
+:where(.dark, .dark *) .artifact-markdown .hljs-template-tag,
+:where(.dark, .dark *) .artifact-markdown .hljs-template-variable,
+:where(.dark, .dark *) .artifact-markdown .hljs-type,
+:where(.dark, .dark *) .artifact-markdown .hljs-variable.language_,
+:where(.dark, .dark *) .artifact-code .hljs-keyword,
+:where(.dark, .dark *) .artifact-code .hljs-doctag,
+:where(.dark, .dark *) .artifact-code .hljs-template-tag,
+:where(.dark, .dark *) .artifact-code .hljs-template-variable,
+:where(.dark, .dark *) .artifact-code .hljs-type,
+:where(.dark, .dark *) .artifact-code .hljs-variable.language_ {
+  color: #ff7b72;
+}
+:where(.dark, .dark *) .artifact-markdown .hljs-title,
+:where(.dark, .dark *) .artifact-markdown .hljs-title.class_,
+:where(.dark, .dark *) .artifact-markdown .hljs-title.function_,
+:where(.dark, .dark *) .artifact-code .hljs-title,
+:where(.dark, .dark *) .artifact-code .hljs-title.class_,
+:where(.dark, .dark *) .artifact-code .hljs-title.function_ {
+  color: #d2a8ff;
+}
+:where(.dark, .dark *) .artifact-markdown .hljs-attr,
+:where(.dark, .dark *) .artifact-markdown .hljs-attribute,
+:where(.dark, .dark *) .artifact-markdown .hljs-literal,
+:where(.dark, .dark *) .artifact-markdown .hljs-meta,
+:where(.dark, .dark *) .artifact-markdown .hljs-number,
+:where(.dark, .dark *) .artifact-markdown .hljs-variable,
+:where(.dark, .dark *) .artifact-markdown .hljs-selector-attr,
+:where(.dark, .dark *) .artifact-markdown .hljs-selector-class,
+:where(.dark, .dark *) .artifact-markdown .hljs-selector-id,
+:where(.dark, .dark *) .artifact-code .hljs-attr,
+:where(.dark, .dark *) .artifact-code .hljs-attribute,
+:where(.dark, .dark *) .artifact-code .hljs-literal,
+:where(.dark, .dark *) .artifact-code .hljs-meta,
+:where(.dark, .dark *) .artifact-code .hljs-number,
+:where(.dark, .dark *) .artifact-code .hljs-variable,
+:where(.dark, .dark *) .artifact-code .hljs-selector-attr,
+:where(.dark, .dark *) .artifact-code .hljs-selector-class,
+:where(.dark, .dark *) .artifact-code .hljs-selector-id {
+  color: #79c0ff;
+}
+:where(.dark, .dark *) .artifact-markdown .hljs-regexp,
+:where(.dark, .dark *) .artifact-markdown .hljs-string,
+:where(.dark, .dark *) .artifact-markdown .hljs-meta .hljs-string,
+:where(.dark, .dark *) .artifact-code .hljs-regexp,
+:where(.dark, .dark *) .artifact-code .hljs-string,
+:where(.dark, .dark *) .artifact-code .hljs-meta .hljs-string {
+  color: #a5d6ff;
+}
+:where(.dark, .dark *) .artifact-markdown .hljs-built_in,
+:where(.dark, .dark *) .artifact-markdown .hljs-symbol,
+:where(.dark, .dark *) .artifact-code .hljs-built_in,
+:where(.dark, .dark *) .artifact-code .hljs-symbol {
+  color: #ffa657;
+}
+:where(.dark, .dark *) .artifact-markdown .hljs-name,
+:where(.dark, .dark *) .artifact-markdown .hljs-quote,
+:where(.dark, .dark *) .artifact-markdown .hljs-selector-tag,
+:where(.dark, .dark *) .artifact-code .hljs-name,
+:where(.dark, .dark *) .artifact-code .hljs-quote,
+:where(.dark, .dark *) .artifact-code .hljs-selector-tag {
+  color: #7ee787;
+}
+:where(.dark, .dark *) .artifact-markdown .hljs-section,
+:where(.dark, .dark *) .artifact-code .hljs-section {
+  color: #1f6feb;
+  font-weight: 700;
+}
+:where(.dark, .dark *) .artifact-markdown .hljs-bullet,
+:where(.dark, .dark *) .artifact-code .hljs-bullet {
+  color: #f2cc60;
+}
+:where(.dark, .dark *) .artifact-markdown .hljs-emphasis,
+:where(.dark, .dark *) .artifact-code .hljs-emphasis {
+  color: #c9d1d9;
+  font-style: italic;
+}
+:where(.dark, .dark *) .artifact-markdown .hljs-strong,
+:where(.dark, .dark *) .artifact-code .hljs-strong {
+  color: #c9d1d9;
+  font-weight: 700;
+}
+:where(.dark, .dark *) .artifact-markdown .hljs-addition,
+:where(.dark, .dark *) .artifact-code .hljs-addition {
+  color: #aff5b4;
+  background-color: #033a16;
+}
+:where(.dark, .dark *) .artifact-markdown .hljs-deletion,
+:where(.dark, .dark *) .artifact-code .hljs-deletion {
+  color: #ffdcd7;
+  background-color: #67060c;
+}
+
 /* Full-document code artifact (type="code"). Same light treatment as the
    markdown fenced block but the <pre> fills the panel so long source
    files scroll inside it rather than pushing the header around. */
