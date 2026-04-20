@@ -119,8 +119,8 @@ Phase 3로 넘어가기 전에 아래 4개 계약을 먼저 고정한다. 목표
 - 공통 타입 `CallerPrincipal`을 도입한다.
 - 최소 필드는 `kind(user|service_account|system)`, `workspace_id`, `user_id?`, `service_account_id?`, `session_id?`, `source`다.
 - LLM context와 audit payload는 principal-aware로 유지한다.
-- 외부 소비자 기본 모델은 `workspace`에 귀속된 `ServiceAccount + API Key`다.
-- API key 인증, rate limit, webhook, 공개 문서 포털은 뒤 Phase로 미루되, 현재 구조가 이 요구를 막지 않도록 설계한다.
+- 외부 소비자 모델은 `workspace` 에 귀속된 `ServiceAccount` 를 기본으로 하고, 인증 수단은 API key 호환 경로와 OAuth 2.1 호환 경로를 모두 수용할 수 있게 설계한다.
+- rate limit, webhook, 공개 문서 포털은 뒤 Phase로 미루되, 현재 구조가 이 요구를 막지 않도록 설계한다.
 
 ---
 
@@ -214,6 +214,22 @@ Phase 3로 넘어가기 전에 아래 4개 계약을 먼저 고정한다. 목표
 
 ---
 
+### Phase 3.5 — MCP-First Capability Bridge
+**목표**: AI capability 정본을 legacy OpenAI spec registry가 아니라 **MCP-shaped descriptor + InProc bridge** 로 고정한다. 이후 Phase 4의 write/approval/meeting 기능은 이 bridge 위 consumer slice로 쌓는다.
+
+**핵심 산출물**:
+- `AiCapabilityDescriptor` / MCP manifest compiler / `AiMcpClient`
+- derived OpenAI function schema / derived OpenAPI export
+- discoverability filtering + execute 시점 재검증
+- legacy `openai_tool_specs()` 호환 유지
+- inspection/debug manifest/openapi endpoint
+
+**완료 조건**: read capability discovery 정본이 MCP bridge로 전환되고, 기존 read tool 이름/args shape 및 stream/agent loop 회귀가 유지된다.
+
+**상세 플랜 파일**: 완료 — MCP bridge/canonical refactor 머지됨
+
+---
+
 ### Phase 4 — Tool Calling (Write) + Meeting Intelligence
 **목표**: 상태 변경 툴 + 승인 게이트 + 회의 지능화.
 
@@ -224,8 +240,10 @@ Phase 3로 넘어가기 전에 아래 4개 계약을 먼저 고정한다. 목표
   - `meeting.extract_actions` (전사 → 액션 아이템)
   - `meeting.extract_decisions`
   - `meeting.draft_followup_schedule`
-- `MeetingInsight` 저장 (스키마 결정 필요)
+  - `MeetingInsight` 저장 (별도 테이블 + `payload_json`)
 - 회의 컨텍스트로 chat 진입 (scope_ref)
+
+**전제**: tool discovery 정본은 MCP bridge다. write capability는 `AiCapabilityDescriptor` 로 등록하고, OpenAI function spec은 bridge 산출물로만 사용한다.
 
 **완료 조건**: "어제 회의 액션 아이템 이슈로" 플로우 완성. ACL 통과 검증. 다건 작업을 순차 승인으로 완료 가능.
 
@@ -256,7 +274,7 @@ Phase 3로 넘어가기 전에 아래 4개 계약을 먼저 고정한다. 목표
 
 **전제**: RAG 서비스 자체 구현은 별도 프로젝트. 본 프로젝트는 client + 계약 + ingest 훅만.
 
-**결정 의존**: MCP 도입 여부 이 시점 재검토. ACL 체크 RAG가 맡을지, client에서 필터링할지도 이 단계에 결정 (성능 vs 단순성).
+**결정 의존**: ACL 체크를 RAG가 맡을지, client에서 필터링할지도 이 단계에 결정 (성능 vs 단순성).
 
 **상세 플랜 파일**: `05-phase5-rag-acl-projection.md`
 
@@ -284,8 +302,9 @@ Phase 3로 넘어가기 전에 아래 4개 계약을 먼저 고정한다. 목표
 **목표**: Doowon 백엔드를 first-party 프론트 전용이 아니라 **workspace-scoped AI hub**로 공개 가능한 상태까지 확장한다.
 
 **핵심 산출물**:
-- workspace 단위 `ServiceAccount` + `API Key` 설계/구현
-- API key bearer auth resolver → `CallerPrincipal(kind="service_account")`
+- workspace 단위 `ServiceAccount` + external caller auth 설계/구현
+- 1차 호환 경로는 API key, 장기 기본 경로는 OAuth 2.1 / external hub 호환 principal 매핑
+- 외부 auth resolver → `CallerPrincipal(kind="service_account"|...)`
 - route-family 기준 scope (`ai.invoke`부터 시작, 이후 domain read/write로 확장)
 - 외부 소비자용 rate limit / quota
 - webhook / async completion callback
@@ -361,16 +380,16 @@ Phase별 신규 영역:
 | **AI route 보호 회귀** | legacy + slug 이중 mount 모두 커버. `/readyz`는 공개 유지. |
 | 챗 UI 디자인 | Phase 2 킥오프 전 전용 디자인 세션 (P3/P4 컴포넌트까지 커버) |
 | Tool calling 프로토콜 | Phase 3 두 번째 작업으로 mlx-lm function-calling PoC |
+| **Phase 3.5 완료 (2026-04-20)** | MCP-shaped descriptor + InProc bridge를 capability 정본으로 채택. OpenAI function spec / OpenAPI는 파생 산출물로 유지. |
+| **Phase 4 계획 결정** | `MeetingInsight` 는 별도 테이블 + `payload_json`, approval flow는 halt당 1건 순차 승인, scope conversation은 `scope_ref` + `scope_resource_id` 두 컬럼으로 간다. |
 | 전사 프로바이더 | 기존 `core/asr.py` 설정 유지 |
 | 챗 히스토리 | 영구 보존, soft delete |
 
 ### 차후 결정 (Phase 킥오프 시)
 | 항목 | 결정 시점 |
 |---|---|
-| MCP 도입 여부 | Phase 5 |
 | PII 값 자체 마스킹 | 법무 검토 후 (외부 풀 사용 업무 한정) |
 | 장애 알람 채널 (Slack/이메일/Jira) | 인프라 구축 단계 |
-| `MeetingInsight` 스키마 (JSON 컬럼 vs 별도 테이블) | Phase 4 |
 | 비용/성능 모니터링 UI | Phase 6 확장 후보 |
 | 외부 풀 프로바이더 확장 순서 (Anthropic/OpenAI) | 도입 필요 시점 |
 | 로컬 whisper 전환 시점 | ASR 품질 측정 후 |
