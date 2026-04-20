@@ -53,6 +53,13 @@ import { NAV_ITEMS, APP_BAR_ITEMS } from '@/src/constants';
 import { hasAdminSectionAccess, type AdminSection } from '@/src/domains/admin/admin-permissions';
 import { useAuth } from '@/src/domains/auth/auth-provider';
 import { hasWorkspaceMembership, teamRoleAllows } from '@/src/domains/auth/auth-api';
+import {
+  CONVERSATIONS_UPDATED_EVENT,
+  deleteConversation,
+  listConversations,
+  type ConversationSummary,
+} from '@/src/domains/ai/conversations-api';
+import { AiConversationsSection } from './AiConversationsSection';
 import { listFavoriteDocs, listRecentPages, type FavoriteDocItem, type RecentPageItem } from '@/src/domains/docs/docs-api';
 import { listPmsTaskLists, listFolders, listSpaceDocs, createSpaceDoc, updateSpaceDoc, deleteSpaceDoc, updateFolder, deleteFolder, listSpaces, updateSpace, deleteSpace, reorderPmsTaskLists, reorderSpaceDocs, updatePmsTaskList, type PmsFolder, type PmsTaskList, type PmsSpace, type PmsSpaceDoc } from '@/src/domains/pms/pms-api';
 import {
@@ -1120,6 +1127,16 @@ export const SubSidebar = ({
   );
 
   const [expandedCategories, setExpandedCategories] = useState<string[]>([]);
+  // Recent chat conversations for the AI sidebar. Fetched once on workspace
+  // switch + refetched any time the user starts/selects a thread, so the
+  // "최근 대화" list stays current without a manual refresh. Kept local to
+  // the sidebar — AIView is the source of truth for the active thread.
+  const [aiConversations, setAiConversations] = useState<ConversationSummary[]>(
+    [],
+  );
+  const [aiConversationsError, setAiConversationsError] = useState<
+    string | null
+  >(null);
   const [pmsLists, setPmsTaskLists] = useState<PmsTaskList[]>([]);
   const [pmsFolders, setPmsFolders] = useState<PmsFolder[]>([]);
   const [pmsTeams, setPmsTeams] = useState<PmsSpace[]>([]);
@@ -1331,6 +1348,61 @@ export const SubSidebar = ({
       cancelled = true;
     };
   }, [activeAppId, canReadTeams, token]);
+
+  // Monotonic counter that AIView's `CONVERSATIONS_UPDATED_EVENT` bumps
+  // after every persisted turn. `location.search` alone doesn't cover
+  // follow-up replies to the currently open conversation — `?c=` stays
+  // the same while the server's `updated_at` moves, so the sidebar's
+  // recency ordering would otherwise go stale until reload.
+  const [aiConversationsRefreshKey, setAiConversationsRefreshKey] = useState(0);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+    const handler = () => {
+      setAiConversationsRefreshKey((prev) => prev + 1);
+    };
+    window.addEventListener(CONVERSATIONS_UPDATED_EVENT, handler);
+    return () => {
+      window.removeEventListener(CONVERSATIONS_UPDATED_EVENT, handler);
+    };
+  }, []);
+
+  // Fetch recent AI conversations for the "최근 대화" sidebar section. Refires
+  // when the URL search changes (new `?c=` attached) OR when the refresh
+  // key bumps from a same-thread reply, so the list stays in sync without
+  // a full reload.
+  useEffect(() => {
+    if (activeAppId !== 'ai' || !token || !currentWorkspaceSlug) {
+      setAiConversations([]);
+      setAiConversationsError(null);
+      return;
+    }
+    let cancelled = false;
+    listConversations(token, { limit: 20 })
+      .then((response) => {
+        if (cancelled) return;
+        setAiConversations(response.items);
+        setAiConversationsError(null);
+      })
+      .catch((error: unknown) => {
+        if (cancelled) return;
+        setAiConversations([]);
+        setAiConversationsError(
+          error instanceof Error
+            ? error.message
+            : '대화 목록을 불러오지 못했습니다.',
+        );
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    activeAppId,
+    aiConversationsRefreshKey,
+    currentWorkspaceSlug,
+    location.search,
+    token,
+  ]);
 
   // Fetch docs sidebar data (favorites + recent pages)
   useEffect(() => {
@@ -2084,6 +2156,49 @@ export const SubSidebar = ({
         </div>
 
         <div className="flex-1 overflow-y-auto py-4 px-2 space-y-6 custom-scrollbar">
+          {activeAppId === 'ai' && currentWorkspaceSlug ? (
+            <AiConversationsSection
+              conversations={aiConversations}
+              error={aiConversationsError}
+              activeConversationId={
+                new URLSearchParams(location.search).get('c')
+              }
+              workspaceSlug={currentWorkspaceSlug}
+              onSelect={(conversationId) => {
+                navigate(
+                  `${buildWorkspaceAppPath(
+                    currentWorkspaceSlug,
+                    'ai',
+                  )}?c=${encodeURIComponent(conversationId)}`,
+                );
+              }}
+              onNewConversation={() => {
+                navigate(buildWorkspaceAppPath(currentWorkspaceSlug, 'ai'));
+              }}
+              onDelete={async (conversationId) => {
+                if (!token) return;
+                const confirmed = await confirm({
+                  title: '대화 삭제',
+                  description:
+                    '이 대화를 삭제하면 목록에서 숨겨집니다. 복구는 관리자만 가능합니다.',
+                  confirmLabel: '삭제',
+                  variant: 'danger',
+                });
+                if (!confirmed) return;
+                await deleteConversation(token, conversationId);
+                setAiConversations((current) =>
+                  current.filter((item) => item.id !== conversationId),
+                );
+                // If the currently open thread is the one we just deleted,
+                // fall back to the empty state so the user isn't staring at
+                // stale history.
+                const activeId = new URLSearchParams(location.search).get('c');
+                if (activeId === conversationId) {
+                  navigate(buildWorkspaceAppPath(currentWorkspaceSlug, 'ai'));
+                }
+              }}
+            />
+          ) : null}
           {categories.map((category) => {
             if (activeAppId === 'pms' && category === 'Spaces') {
               return <div key={category}>{renderPmsSpaces()}</div>;

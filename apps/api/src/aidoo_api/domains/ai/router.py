@@ -25,13 +25,24 @@ from aidoo_api.core.llm import (
 from aidoo_api.core.llm_adapters import StreamChunk, supports_tool_calling
 from aidoo_api.core.settings import get_settings
 from aidoo_api.domains.ai.agent import run_agent_turn_stream
+from aidoo_api.domains.ai.artifact_parser import (
+    ArtifactStreamParser,
+    ParsedArtifactBody,
+    ParsedArtifactEnd,
+    ParsedArtifactStart,
+    ParsedText,
+)
 from aidoo_api.domains.ai.events import (
     EnvelopeEncoder,
     make_envelope,
     serialize_sse,
 )
 from aidoo_api.domains.ai.registry import get_ai_capability_registry
-from aidoo_api.domains.ai.tool_runtime import execute_tool_call, iter_tool_call_events
+from aidoo_api.domains.ai.tool_runtime import (
+    ToolCallExecution,
+    execute_tool_call,
+    iter_tool_call_events,
+)
 from aidoo_api.domains.ai.tool_service import (
     execute_tool as execute_ai_tool,
     render_tool_result_message,
@@ -77,10 +88,30 @@ class ChatRequest(BaseModel):
     reasoning_effort: Literal["none", "low", "medium", "high"] | None = None
 
 
+class ConversationBoundChatRequest(ChatRequest):
+    # If set, append to the named conversation (must belong to the caller).
+    conversation_id: str | None = None
+    # Opt-in flag to have the server allocate a fresh conversation row when
+    # ``conversation_id`` is absent. Defaults to False so legacy callers
+    # don't silently fragment their history into one-turn conversations.
+    persist: bool = False
+
+
 class ChatUsage(BaseModel):
     prompt_tokens: int | None = None
     completion_tokens: int | None = None
     total_tokens: int | None = None
+
+
+class ChatArtifact(BaseModel):
+    """Server-parsed artifact returned with a sync /chat response so the
+    client doesn't have to re-parse the markup (which would invent its own
+    ids that wouldn't match the persisted row on reload)."""
+
+    id: str
+    type: str
+    title: str | None = None
+    content: str
 
 
 class ChatResponse(BaseModel):
@@ -98,6 +129,8 @@ class ChatResponse(BaseModel):
     decision_reason: str | None = None
     forced_local: bool = False
     pii_hits: list[str] = Field(default_factory=list)
+    conversation_id: str | None = None
+    artifacts: list[ChatArtifact] = Field(default_factory=list)
 
 
 class ToolInvokeRequest(BaseModel):
@@ -131,7 +164,7 @@ def ai_health() -> LlmDualHealthResponse:
 
 @router.post("/chat", response_model=ChatResponse)
 def chat(
-    payload: ChatRequest,
+    payload: ConversationBoundChatRequest,
     request: Request,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
@@ -140,9 +173,17 @@ def chat(
     _ensure_supported_backend_mode(payload.backend_mode)
     workspace = _require_request_workspace(request)
     principal = _build_request_principal(current_user, request, source="api.chat")
+    conversation = _resolve_requested_conversation(
+        db=db,
+        workspace=workspace,
+        user=current_user,
+        conversation_id=payload.conversation_id,
+    )
     command = _parse_tool_chat_command(payload.messages)
-    if command is not None:
-        return _execute_tool_chat_command(
+    is_tool_command_response = command is not None
+    tool_execution: ToolCallExecution | None = None
+    if is_tool_command_response:
+        response, tool_execution = _execute_tool_chat_command(
             payload,
             db,
             workspace=workspace,
@@ -150,25 +191,80 @@ def chat(
             current_user=current_user,
             command=command,
         )
-    context = _task_context_from_principal(principal)
-    return _complete_via_policy(
-        context,
-        payload,
-        db,
-        pool_hint="local" if payload.backend_mode == "local" else None,
-    )
+    else:
+        context = _task_context_from_principal(principal)
+        response = _complete_via_policy(
+            context,
+            payload,
+            db,
+            pool_hint="local" if payload.backend_mode == "local" else None,
+        )
+
+    # Parse `<artifact>` markup out of the sync reply once — using the same
+    # parser the streaming path uses. This gives us canonical server-side
+    # artifact ids that both the wire response (``response.artifacts``) and
+    # the persisted row (``turn.meta.artifacts``) reference, so a client
+    # URL like ``?a=<id>`` still resolves after reload. Without this
+    # step the client would invent its own ids during fallback parsing and
+    # they would drift from the saved thread.
+    #
+    # Skip parsing for direct tool-command responses — those contain
+    # serialized tool output (arbitrary JSON / user data) and the streaming
+    # path's ``_tool_command_events`` also bypasses the artifact parser.
+    # Routing them through the parser here would strip any literal
+    # ``<artifact>`` text in tool output and diverge the sync/stream
+    # transports.
+    if is_tool_command_response:
+        assert tool_execution is not None
+        sync_buffer = _assistant_buffer_from_sync_response(
+            response,
+            parse_artifacts=False,
+            tool_execution=tool_execution,
+        )
+    else:
+        sync_buffer = _assistant_buffer_from_sync_response(response)
+        response.content = sync_buffer.content
+        response.artifacts = [
+            ChatArtifact(
+                id=record["id"],
+                type=record.get("type") or "document",
+                title=record.get("title"),
+                content=record.get("content") or "",
+            )
+            for record in sync_buffer.artifacts
+        ]
+
+    # Never let a persistence failure turn a successful model reply into a
+    # 500 — history is best-effort, the actual answer is already in hand.
+    # Log the failure and return the reply without a conversation_id so the
+    # client at least shows what the model produced. The streaming publisher
+    # has an equivalent guard in `_persist_assistant_turn`.
+    try:
+        response.conversation_id = _persist_sync_chat_response(
+            db=db,
+            workspace=workspace,
+            user=current_user,
+            payload=payload,
+            conversation=conversation,
+            buffer=sync_buffer,
+        )
+    except Exception as exc:  # noqa: BLE001 - persistence is best-effort
+        import logging
+
+        logging.getLogger(__name__).exception(
+            "sync chat persistence failed conversation_id=%s: %s",
+            conversation.id if conversation is not None else None,
+            exc,
+        )
+        db.rollback()
+        response.conversation_id = (
+            conversation.id if conversation is not None else None
+        )
+    return response
 
 
-class ChatStreamRequest(ChatRequest):
+class ChatStreamRequest(ConversationBoundChatRequest):
     stream_reasoning: bool = True
-    # If set, append to the named conversation (must belong to the caller).
-    conversation_id: str | None = None
-    # Opt-in flag to have the server allocate a fresh conversation row when
-    # ``conversation_id`` is absent. Defaults to False so legacy callers (no
-    # awareness of the ``conversation_attached`` envelope, no follow-up
-    # plumbing to reuse the allocated id) don't silently fragment their
-    # history into one-turn conversations on every request.
-    persist: bool = False
 
 
 @router.post("/chat/stream")
@@ -324,8 +420,15 @@ def _execute_tool_chat_command(
     principal: CallerPrincipal,
     current_user: User,
     command: ToolChatCommand,
-) -> ChatResponse:
-    result = execute_ai_tool(
+) -> tuple[ChatResponse, ToolCallExecution]:
+    """Run a direct ``/tool ...`` chat command.
+
+    Returns both the wire response and the underlying tool execution so
+    the sync path can synthesize the same ``tool_call_started`` /
+    ``tool_result`` envelopes the streaming path records — keeping the
+    persisted turn's ``tool_calls`` metadata identical across transports.
+    """
+    execution = execute_tool_call(
         db,
         workspace=workspace,
         principal=principal,
@@ -334,15 +437,32 @@ def _execute_tool_chat_command(
         arguments=command.arguments,
         source="api.chat",
     )
-    return ChatResponse(
-        model=f"tool://{result['tool']}",
-        content=render_tool_result_message(result["tool"], result["result"]),
+    if execution.status == "ok":
+        assert execution.response is not None
+        tool_name = execution.response["tool"]
+        result_payload = execution.response["result"]
+        content = render_tool_result_message(tool_name, result_payload)
+        finish_reason = "stop"
+    elif execution.status == "blocked":
+        tool_name = execution.tool_name
+        content = (
+            execution.error_message
+            or f"도구 {tool_name} 실행에는 승인 절차가 필요합니다."
+        )
+        finish_reason = "stop"
+    else:
+        tool_name = execution.tool_name
+        content = execution.error_message or "AI tool execution failed."
+        finish_reason = "error"
+    response = ChatResponse(
+        model=f"tool://{tool_name}",
+        content=content,
         usage=None,
-        finish_reason="stop",
+        finish_reason=finish_reason,
         provider="tool",
         backend="primary",
         fallback_used=False,
-        canonical_model=f"tool://{result['tool']}",
+        canonical_model=f"tool://{tool_name}",
         requested_backend_mode=payload.backend_mode,
         policy=None,
         chosen_pool=None,
@@ -350,6 +470,7 @@ def _execute_tool_chat_command(
         forced_local=False,
         pii_hits=[],
     )
+    return response, execution
 
 
 def _complete_via_policy(
@@ -433,6 +554,7 @@ def _build_response(
         decision_reason=decision_reason,
         forced_local=decision_forced_local,
         pii_hits=decision_pii,
+        conversation_id=None,
     )
 
 
@@ -563,10 +685,17 @@ async def _chat_stream_publisher(
             return
 
     buffer = _AssistantTurnBuffer()
+    # Artifact parser is stateful across the entire stream (one per request).
+    # It converts `<artifact>...</artifact>` markup embedded in content_deltas
+    # into artifact_started/delta/completed envelopes so the client renders
+    # those bodies in a side panel instead of the chat bubble.
+    artifact_parser = ArtifactStreamParser()
 
     try:
         command = _parse_tool_chat_command(payload.messages)
         if command is not None:
+            # Direct tool commands bypass the LLM so they can never produce
+            # artifact markup — no parser wiring needed on this path.
             for event in _tool_command_events(
                 encoder=encoder,
                 db=db,
@@ -614,9 +743,69 @@ async def _chat_stream_publisher(
                 max_consecutive_tool_errors=settings.ai_agent_max_consecutive_tool_errors,
                 agent_run_id=agent_run_id,
             ):
-                serialized = serialize_sse(event)
-                buffer.observe(serialized)
-                yield serialized
+                # Route content_delta through the artifact parser so embedded
+                # `<artifact>` blocks become their own envelope stream. All
+                # other event types pass through as-is. Before the agent's
+                # terminal `done` event, flush the parser so any artifacts
+                # still open (malformed close, model cut off) get synthetic
+                # artifact_completed envelopes — the client's buffers must
+                # terminate before it reads `done`.
+                if event.type == "done":
+                    # Flush any dangling artifact first. When flush emits
+                    # synthesized ``artifact_completed`` envelopes they
+                    # consume fresh seqs from the shared encoder, which has
+                    # already moved past the agent's pre-allocated ``done``
+                    # seq — in that case re-allocate ``done`` so the wire
+                    # stays monotone (events_schema.md guarantee). When
+                    # flush is a no-op, keep the original seq to avoid a
+                    # gap in the common case.
+                    flushed_envelopes = _flush_parser(
+                        artifact_parser, encoder=encoder
+                    )
+                    for flushed in flushed_envelopes:
+                        buffer.observe(flushed)
+                        yield flushed
+                    if flushed_envelopes:
+                        reissued = serialize_sse(
+                            make_envelope(
+                                "done",
+                                encoder.next_seq(),
+                                event.data.model_dump(),
+                                timestamp_ms=event.timestamp_ms,
+                            )
+                        )
+                        buffer.observe(reissued)
+                        yield reissued
+                    else:
+                        serialized = serialize_sse(event)
+                        buffer.observe(serialized)
+                        yield serialized
+                elif event.type == "content_delta":
+                    text = event.data.text
+                    parsed_events = artifact_parser.feed(text)
+                    # Fast path: the parser saw only plain text (no markup,
+                    # no buffered partial tag). Reuse the agent's pre-
+                    # allocated seq so seqs stay contiguous for the common
+                    # case; the slow path accepts a rare gap when markup
+                    # produces multiple envelopes from one input chunk.
+                    if (
+                        len(parsed_events) == 1
+                        and isinstance(parsed_events[0], ParsedText)
+                        and parsed_events[0].text == text
+                    ):
+                        serialized = serialize_sse(event)
+                        buffer.observe(serialized)
+                        yield serialized
+                    else:
+                        for parsed_out in _parser_events_to_envelopes(
+                            parsed_events, encoder=encoder
+                        ):
+                            buffer.observe(parsed_out)
+                            yield parsed_out
+                else:
+                    serialized = serialize_sse(event)
+                    buffer.observe(serialized)
+                    yield serialized
             return
 
         async for chunk, decision, config in complete_chat_stream(
@@ -633,6 +822,26 @@ async def _chat_stream_publisher(
         ):
             last_decision, last_config = decision, config
             chosen_model = execution.chosen_model
+            # Content chunks feed the artifact parser; every other kind
+            # (reasoning/usage/tool_*/done) goes through _chunk_to_envelope.
+            # The ``done`` chunk must be preceded by a parser flush so the
+            # client receives terminal artifact_completed envelopes before
+            # it reads ``done``.
+            if chunk.kind == "content" and chunk.text:
+                for parsed_event in _emit_content_through_parser(
+                    chunk.text,
+                    parser=artifact_parser,
+                    encoder=encoder,
+                ):
+                    buffer.observe(parsed_event)
+                    yield parsed_event
+                continue
+            if chunk.kind == "done":
+                for flushed in _flush_parser(
+                    artifact_parser, encoder=encoder
+                ):
+                    buffer.observe(flushed)
+                    yield flushed
             event = _chunk_to_envelope(
                 chunk,
                 encoder=encoder,
@@ -652,8 +861,18 @@ async def _chat_stream_publisher(
         # runs and persists the partial response with
         # ``response_status="cancelled"``.
         buffer.cancelled = True
+        # Drain the artifact parser into the buffer (not the wire — the
+        # generator is already being torn down) so any in-flight artifact
+        # lands on disk with an artifact_completed synthesized by flush().
+        for flushed in _flush_parser(artifact_parser, encoder=encoder):
+            buffer.observe(flushed)
         return
     except Exception as error:  # noqa: BLE001 - converted to SSE contract
+        # Flush artifact parser before the terminal error/done pair so the
+        # client finalizes any open artifact buffers before acting on `done`.
+        for flushed in _flush_parser(artifact_parser, encoder=encoder):
+            buffer.observe(flushed)
+            yield flushed
         error_event = serialize_sse(
             make_envelope(
                 "error",
@@ -800,14 +1019,10 @@ def _chunk_to_envelope(
     config: LlmPoolConfig | None,
     model: str | None,
 ) -> dict[str, str] | None:
-    if chunk.kind == "content" and chunk.text:
-        return serialize_sse(
-            make_envelope(
-                "content_delta",
-                encoder.next_seq(),
-                {"text": chunk.text},
-            )
-        )
+    # `content` chunks are routed through the artifact parser in the
+    # publisher loop, not this helper — see `_emit_content_through_parser`.
+    if chunk.kind == "content":
+        return None
     if chunk.kind == "reasoning" and chunk.text and reasoning_gate:
         return serialize_sse(
             make_envelope(
@@ -909,8 +1124,115 @@ def _error_message(error: Exception) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Artifact parser emission helpers
+# ---------------------------------------------------------------------------
+
+
+def _parser_events_to_envelopes(
+    parsed_events: list[Any],
+    *,
+    encoder: EnvelopeEncoder,
+) -> list[dict[str, str]]:
+    """Turn ArtifactStreamParser output into serialized SSE envelopes.
+
+    Keeps the envelope construction in one place so both the agent and the
+    direct chat paths emit identical wire shapes. Plain text outside artifacts
+    is rewrapped as ``content_delta`` — it looks the same to the client as if
+    the parser weren't in the pipeline at all.
+    """
+    envelopes: list[dict[str, str]] = []
+    for parsed in parsed_events:
+        if isinstance(parsed, ParsedText):
+            if not parsed.text:
+                continue
+            envelopes.append(
+                serialize_sse(
+                    make_envelope(
+                        "content_delta",
+                        encoder.next_seq(),
+                        {"text": parsed.text},
+                    )
+                )
+            )
+        elif isinstance(parsed, ParsedArtifactStart):
+            envelopes.append(
+                serialize_sse(
+                    make_envelope(
+                        "artifact_started",
+                        encoder.next_seq(),
+                        {
+                            "artifact_id": parsed.artifact_id,
+                            "artifact_type": parsed.attrs.get("type", "document"),
+                            "title": parsed.attrs.get("title"),
+                        },
+                    )
+                )
+            )
+        elif isinstance(parsed, ParsedArtifactBody):
+            if not parsed.text:
+                continue
+            envelopes.append(
+                serialize_sse(
+                    make_envelope(
+                        "artifact_delta",
+                        encoder.next_seq(),
+                        {
+                            "artifact_id": parsed.artifact_id,
+                            "delta": parsed.text,
+                        },
+                    )
+                )
+            )
+        elif isinstance(parsed, ParsedArtifactEnd):
+            envelopes.append(
+                serialize_sse(
+                    make_envelope(
+                        "artifact_completed",
+                        encoder.next_seq(),
+                        {"artifact_id": parsed.artifact_id},
+                    )
+                )
+            )
+    return envelopes
+
+
+def _emit_content_through_parser(
+    text: str,
+    *,
+    parser: ArtifactStreamParser,
+    encoder: EnvelopeEncoder,
+) -> list[dict[str, str]]:
+    return _parser_events_to_envelopes(parser.feed(text), encoder=encoder)
+
+
+def _flush_parser(
+    parser: ArtifactStreamParser,
+    *,
+    encoder: EnvelopeEncoder,
+) -> list[dict[str, str]]:
+    return _parser_events_to_envelopes(parser.flush(), encoder=encoder)
+
+
+# ---------------------------------------------------------------------------
 # Conversation turn persistence helpers
 # ---------------------------------------------------------------------------
+
+
+def _resolve_requested_conversation(
+    *,
+    db: Session,
+    workspace: Workspace,
+    user: User,
+    conversation_id: str | None,
+) -> Conversation | None:
+    if not conversation_id:
+        return None
+    return conversations_service.get_conversation(
+        db,
+        workspace=workspace,
+        user=user,
+        conversation_id=conversation_id,
+    )
 
 
 def _bind_conversation_for_stream(
@@ -931,40 +1253,40 @@ def _bind_conversation_for_stream(
     streaming state.
     """
     encoder_for_errors = EnvelopeEncoder()
-    if payload.conversation_id:
-        try:
-            conversation = conversations_service.get_conversation(
-                db,
-                workspace=workspace,
-                user=user,
-                conversation_id=payload.conversation_id,
+    try:
+        conversation = _resolve_requested_conversation(
+            db=db,
+            workspace=workspace,
+            user=user,
+            conversation_id=payload.conversation_id,
+        )
+    except HTTPException as exc:
+        error_envelope = serialize_sse(
+            make_envelope(
+                "error",
+                encoder_for_errors.next_seq(),
+                {
+                    "code": "conversation_not_found",
+                    "message": exc.detail
+                    if isinstance(exc.detail, str)
+                    else "Conversation not found.",
+                    "retryable": False,
+                },
             )
-        except HTTPException as exc:
-            error_envelope = serialize_sse(
-                make_envelope(
-                    "error",
-                    encoder_for_errors.next_seq(),
-                    {
-                        "code": "conversation_not_found",
-                        "message": exc.detail
-                        if isinstance(exc.detail, str)
-                        else "Conversation not found.",
-                        "retryable": False,
-                    },
-                )
+        )
+        done_envelope = serialize_sse(
+            make_envelope(
+                "done",
+                encoder_for_errors.next_seq(),
+                {
+                    "finish_reason": "error",
+                    "audit_id": None,
+                    "meta": None,
+                },
             )
-            done_envelope = serialize_sse(
-                make_envelope(
-                    "done",
-                    encoder_for_errors.next_seq(),
-                    {
-                        "finish_reason": "error",
-                        "audit_id": None,
-                        "meta": None,
-                    },
-                )
-            )
-            return None, [error_envelope, done_envelope]
+        )
+        return None, [error_envelope, done_envelope]
+    if conversation is not None:
         return conversation, None
 
     if not payload.persist:
@@ -1031,6 +1353,40 @@ def _record_user_turn(
     )
 
 
+def _persist_sync_chat_response(
+    *,
+    db: Session,
+    workspace: Workspace,
+    user: User,
+    payload: ConversationBoundChatRequest,
+    conversation: Conversation | None,
+    buffer: "_AssistantTurnBuffer",
+) -> str | None:
+    if conversation is None and not payload.persist:
+        return None
+
+    bound_conversation = conversation
+    if bound_conversation is None:
+        bound_conversation = conversations_service.create_conversation(
+            db, workspace=workspace, user=user, title=""
+        )
+
+    _record_user_turn(
+        db=db,
+        conversation=bound_conversation,
+        messages=payload.messages,
+    )
+    _persist_assistant_turn(
+        db,
+        conversation=bound_conversation,
+        buffer=buffer,
+        last_decision=None,
+        last_config=None,
+        chosen_model=None,
+    )
+    return bound_conversation.id
+
+
 @dataclass
 class _AssistantTurnBuffer:
     """Accumulates streamed envelopes so we can persist a final assistant turn.
@@ -1041,12 +1397,17 @@ class _AssistantTurnBuffer:
     state is threaded across three event types (``tool_call_started`` →
     ``tool_call_args_delta`` → ``tool_result``) into one record per
     ``call_id`` so a reloaded turn can render the same cards the live UI did.
+    Artifacts are threaded across ``artifact_started`` → ``artifact_delta`` →
+    ``artifact_completed`` the same way so the reload path reopens the side
+    panel with the original body.
     """
 
     content: str = ""
     reasoning: str = ""
     tool_call_records: dict[str, dict[str, Any]] = field(default_factory=dict)
     tool_call_order: list[str] = field(default_factory=list)
+    artifact_records: dict[str, dict[str, Any]] = field(default_factory=dict)
+    artifact_order: list[str] = field(default_factory=list)
     pending_approvals: list[dict[str, Any]] = field(default_factory=list)
     done_meta: dict[str, Any] | None = None
     finish_reason: str | None = None
@@ -1076,9 +1437,28 @@ class _AssistantTurnBuffer:
             }
         return self.tool_call_records[call_id]
 
+    def _touch_artifact(self, artifact_id: str) -> dict[str, Any]:
+        # Persisted artifact shape mirrors the client's ArtifactEntry: one
+        # record per artifact_id collecting the full body text so reload
+        # can re-open the side panel with the same content.
+        if artifact_id not in self.artifact_records:
+            self.artifact_order.append(artifact_id)
+            self.artifact_records[artifact_id] = {
+                "id": artifact_id,
+                "type": "document",
+                "title": None,
+                "content": "",
+                "status": "open",
+            }
+        return self.artifact_records[artifact_id]
+
     @property
     def tool_calls(self) -> list[dict[str, Any]]:
         return [self.tool_call_records[call_id] for call_id in self.tool_call_order]
+
+    @property
+    def artifacts(self) -> list[dict[str, Any]]:
+        return [self.artifact_records[artifact_id] for artifact_id in self.artifact_order]
 
     def observe(self, event_dict: dict[str, str]) -> None:
         # serialize_sse serialises the full envelope `{seq, timestamp_ms,
@@ -1124,6 +1504,22 @@ class _AssistantTurnBuffer:
                 record["completedAtMs"] = timestamp_ms
         elif event_type == "approval_required":
             self.pending_approvals.append(payload)
+        elif event_type == "artifact_started":
+            artifact_id = payload.get("artifact_id")
+            if artifact_id:
+                record = self._touch_artifact(artifact_id)
+                record["type"] = payload.get("artifact_type") or record["type"]
+                record["title"] = payload.get("title") or record["title"]
+        elif event_type == "artifact_delta":
+            artifact_id = payload.get("artifact_id")
+            if artifact_id:
+                record = self._touch_artifact(artifact_id)
+                record["content"] += payload.get("delta", "")
+        elif event_type == "artifact_completed":
+            artifact_id = payload.get("artifact_id")
+            if artifact_id:
+                record = self._touch_artifact(artifact_id)
+                record["status"] = "closed"
         elif event_type == "error":
             message = payload.get("message")
             if isinstance(message, str) and message.strip():
@@ -1133,6 +1529,63 @@ class _AssistantTurnBuffer:
             self.finish_reason = payload.get("finish_reason")
             if self.finish_reason == "error":
                 self.response_status = "error"
+
+
+_SYNC_FINISH_REASONS = {"stop", "length", "cancelled", "error"}
+
+
+def _assistant_buffer_from_sync_response(
+    response: ChatResponse,
+    *,
+    parse_artifacts: bool = True,
+    tool_execution: ToolCallExecution | None = None,
+) -> _AssistantTurnBuffer:
+    buffer = _AssistantTurnBuffer(
+        done_meta={
+            "policy": response.policy,
+            "chosen_pool": response.chosen_pool,
+            "decision_reason": response.decision_reason,
+            "forced_local": response.forced_local,
+            "pii_hits": list(response.pii_hits),
+            "model": response.model,
+            "chosen_model": response.model,
+            "canonical_model": response.canonical_model,
+            "provider": response.provider,
+        },
+        finish_reason=(
+            response.finish_reason
+            if response.finish_reason in _SYNC_FINISH_REASONS
+            else None
+        ),
+        response_status="error" if response.finish_reason == "error" else "done",
+    )
+    if not parse_artifacts:
+        # Tool-command responses go straight into ``content`` without
+        # re-parsing — the caller already knows the payload is serialized
+        # tool output, not model prose that might embed ``<artifact>``.
+        # When the caller hands us the underlying ToolCallExecution, feed
+        # synthetic ``tool_call_started`` / ``tool_result`` envelopes
+        # through the buffer so the persisted turn ships the same
+        # ``tool_calls`` metadata the streaming transport records.
+        if tool_execution is not None:
+            encoder = EnvelopeEncoder()
+            for event in iter_tool_call_events(
+                encoder=encoder, execution=tool_execution
+            ):
+                buffer.observe(serialize_sse(event))
+        buffer.content = response.content or ""
+        return buffer
+    parser = ArtifactStreamParser()
+    encoder = EnvelopeEncoder()
+    for event in _emit_content_through_parser(
+        response.content or "",
+        parser=parser,
+        encoder=encoder,
+    ):
+        buffer.observe(event)
+    for event in _flush_parser(parser, encoder=encoder):
+        buffer.observe(event)
+    return buffer
 
 
 def _persist_assistant_turn(
@@ -1158,6 +1611,10 @@ def _persist_assistant_turn(
         or buffer.reasoning
         or buffer.tool_calls
         or buffer.pending_approvals
+        # Artifact-only responses (the model emitted only an <artifact> block
+        # with no surrounding summary) still need persistence so reload
+        # restores the generated document.
+        or buffer.artifacts
     )
     # A terminal failure OR a length-limited reply should still persist even
     # with an empty body — the live UI renders a "token limit reached" /
@@ -1200,6 +1657,7 @@ def _persist_assistant_turn(
         "response_status": response_status,
         "tool_calls": buffer.tool_calls,
         "pending_approvals": buffer.pending_approvals,
+        "artifacts": buffer.artifacts,
     }
     # Drop None values so the persisted JSON isn't noisy with defaults.
     meta = {key: value for key, value in meta.items() if value not in (None, [], "")}

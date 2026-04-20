@@ -30,13 +30,28 @@ class ConversationSummary(_CamelModel):
     updated_at: datetime
 
 
+class ArtifactOut(_CamelModel):
+    """One saved artifact attached to an assistant turn.
+
+    Mirrors the live ``ArtifactBuffer`` the UI builds during streaming so
+    reopening a conversation re-opens the side panel with the same content.
+    """
+
+    id: str
+    type: str
+    title: str | None = None
+    content: str
+    status: str | None = None
+
+
 class ConversationTurnOut(_CamelModel):
     """Flattened turn shape matching the frontend ChatTurn contract.
 
-    Rendering metadata (reasoning, tool calls, policy decisions, PII hits)
-    is lifted from the stored ``meta`` dict into top-level fields so the
-    existing MessageBubble / ThinkingPanel / ToolCallCard renderers don't
-    need a second translation step when a saved conversation is reloaded.
+    Rendering metadata (reasoning, tool calls, policy decisions, PII hits,
+    artifacts) is lifted from the stored ``meta`` dict into top-level fields
+    so the existing MessageBubble / ThinkingPanel / ToolCallCard / Artifact
+    renderers don't need a second translation step when a saved conversation
+    is reloaded.
     """
 
     id: str
@@ -55,6 +70,7 @@ class ConversationTurnOut(_CamelModel):
     pii_hits: list[str] = Field(default_factory=list)
     tool_calls: list[dict[str, Any]] = Field(default_factory=list)
     pending_approvals: list[dict[str, Any]] = Field(default_factory=list)
+    artifacts: list[ArtifactOut] = Field(default_factory=list)
     created_at: datetime
 
 

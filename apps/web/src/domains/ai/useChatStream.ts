@@ -1,4 +1,3 @@
-import type { Dispatch, SetStateAction } from 'react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   AiApiError,
@@ -11,8 +10,13 @@ import {
 import type {
   ApprovalRequiredEvent,
   ApprovalResolvedEvent,
+  ArtifactBuffer,
+  ArtifactCompletedEvent,
+  ArtifactDeltaEvent,
+  ArtifactStartedEvent,
   ChatStreamStatus,
   ContentDeltaEvent,
+  ConversationAttachedEvent,
   DoneEvent,
   DoneMeta,
   ErrorEvent,
@@ -39,8 +43,14 @@ export interface ChatStreamState {
   errorMessage: string | null;
   toolCalls: ToolCallBuffer[];
   pendingApprovals: PendingApproval[];
+  artifacts: ArtifactBuffer[];
   transport: ChatTransport;
   streamOpened: boolean;
+  /** Populated from the `conversation_attached` envelope that opens every
+   *  persisted stream. The web client reads this on the `done` transition
+   *  and threads it back on follow-up `send()` calls so the backend keeps
+   *  appending to the same Conversation row. */
+  conversationId: string | null;
 }
 
 export interface UseChatStreamApi {
@@ -62,19 +72,44 @@ const INITIAL_STATE: ChatStreamState = {
   errorMessage: null,
   toolCalls: [],
   pendingApprovals: [],
+  artifacts: [],
   transport: null,
   streamOpened: false,
+  conversationId: null,
 };
 
 export function useChatStream(token: string | null): UseChatStreamApi {
   const [state, setState] = useState<ChatStreamState>(INITIAL_STATE);
   const abortRef = useRef<AbortController | null>(null);
+  const runIdRef = useRef(0);
 
   const abort = useCallback(() => {
     abortRef.current?.abort();
   }, []);
 
+  const setStateForRun = useCallback(
+    (
+      runId: number,
+      next:
+        | ChatStreamState
+        | ((prev: ChatStreamState) => ChatStreamState),
+    ) => {
+      setState((prev) => {
+        if (runIdRef.current !== runId) {
+          return prev;
+        }
+        return typeof next === 'function'
+          ? next(prev)
+          : next;
+      });
+    },
+    [],
+  );
+
   const reset = useCallback(() => {
+    runIdRef.current += 1;
+    abortRef.current?.abort();
+    abortRef.current = null;
     setState(INITIAL_STATE);
   }, []);
 
@@ -85,6 +120,8 @@ export function useChatStream(token: string | null): UseChatStreamApi {
       }
 
       abortRef.current?.abort();
+      const runId = runIdRef.current + 1;
+      runIdRef.current = runId;
       const controller = new AbortController();
       abortRef.current = controller;
 
@@ -92,12 +129,13 @@ export function useChatStream(token: string | null): UseChatStreamApi {
         await sendViaSyncFallback({
           payload,
           token,
-          setState,
+          runId,
+          setStateForRun,
         });
         return;
       }
 
-      setState({
+      setStateForRun(runId, {
         ...INITIAL_STATE,
         status: 'streaming',
         transport: 'stream',
@@ -115,7 +153,7 @@ export function useChatStream(token: string | null): UseChatStreamApi {
         }
 
         streamOpened = true;
-        setState((prev) => ({
+        setStateForRun(runId, (prev) => ({
           ...prev,
           streamOpened: true,
         }));
@@ -129,7 +167,7 @@ export function useChatStream(token: string | null): UseChatStreamApi {
             continue;
           }
           let shouldBreak = false;
-          setState((prev) => {
+          setStateForRun(runId, (prev) => {
             const { next, terminal } = applyEnvelope(prev, parsed);
             if (terminal) {
               shouldBreak = true;
@@ -142,34 +180,61 @@ export function useChatStream(token: string | null): UseChatStreamApi {
         }
       } catch (error) {
         if ((error as Error).name === 'AbortError') {
-          setState((prev) => ({
+          setStateForRun(runId, (prev) => ({
             ...prev,
             status: 'cancelled',
+            // Any artifacts still streaming are implicitly terminal now.
+            // Flipping status prevents the card from rendering as
+            // "생성 중…" forever in the finalized turn.
+            artifacts: prev.artifacts.map((artifact) =>
+              artifact.status === 'open'
+                ? { ...artifact, status: 'closed' as const }
+                : artifact,
+            ),
           }));
           return;
         }
 
         if (!streamOpened) {
+          // Auto-fallback to the sync endpoint when SSE never opened (proxy
+          // buffering, transient gateway, etc.) so the user still gets a
+          // reply. `/api/v1/ai/chat` now accepts the same persistence
+          // fields as `/chat/stream`, so conversation history continues to
+          // append even when the transport downgrades.
           await sendViaSyncFallback({
             payload,
             token,
-            setState,
+            runId,
+            setStateForRun,
             fallbackReason: error,
           });
           return;
         }
 
-        setState((prev) => ({
+        setStateForRun(runId, (prev) => ({
           ...prev,
           status: 'error',
           errorMessage:
             error instanceof Error
               ? error.message
               : prev.errorMessage ?? 'AI 스트리밍에 실패했습니다.',
+          // Same rationale as the AbortError branch: any artifact still in
+          // the ``open`` state has no more deltas coming, so flip it to
+          // closed before AIView finalizes the turn. Otherwise the saved
+          // card sits as "생성 중…" forever.
+          artifacts: prev.artifacts.map((artifact) =>
+            artifact.status === 'open'
+              ? { ...artifact, status: 'closed' as const }
+              : artifact,
+          ),
         }));
+      } finally {
+        if (abortRef.current === controller) {
+          abortRef.current = null;
+        }
       }
     },
-    [token],
+    [setStateForRun, token],
   );
 
   useEffect(() => {
@@ -184,26 +249,39 @@ export function useChatStream(token: string | null): UseChatStreamApi {
 async function sendViaSyncFallback({
   payload,
   token,
-  setState,
+  runId,
+  setStateForRun,
   fallbackReason,
 }: {
   payload: AiChatStreamRequest;
   token: string;
-  setState: Dispatch<SetStateAction<ChatStreamState>>;
+  runId: number;
+  setStateForRun: (
+    runId: number,
+    next:
+      | ChatStreamState
+      | ((prev: ChatStreamState) => ChatStreamState),
+  ) => void;
   fallbackReason?: unknown;
 }) {
-  setState({
+  setStateForRun(runId, {
     ...INITIAL_STATE,
     status: 'streaming',
     transport: 'sync',
   });
 
+  const {
+    stream_reasoning: _streamReasoning,
+    ...syncPayload
+  } = payload;
+  void _streamReasoning;
+
   try {
-    const response = await sendAiChat(payload, token);
-    setState(syncResponseToState(response));
+    const response = await sendAiChat(syncPayload, token);
+    setStateForRun(runId, syncResponseToState(response));
   } catch (error) {
     const resolved = error instanceof Error ? error : fallbackReason;
-    setState((prev) => ({
+    setStateForRun(runId, (prev) => ({
       ...prev,
       status: 'error',
       errorMessage:
@@ -215,9 +293,26 @@ async function sendViaSyncFallback({
 }
 
 function syncResponseToState(response: AiChatResponse): ChatStreamState {
+  // Trust the server's artifact parse result. The field is always present
+  // on any backend that ships `<artifact>` markup at all — older servers
+  // that predate Phase C never emit the markup, so there's nothing to
+  // extract client-side. Re-parsing here would only diverge from the
+  // server's fence/inline-code suppression rules during a rolling deploy.
+  const serverArtifacts = response.artifacts ?? [];
+  const content = response.content || '';
+  const artifacts = serverArtifacts.map(
+    (artifact): ArtifactBuffer => ({
+      id: artifact.id,
+      type: artifact.type,
+      title: artifact.title ?? null,
+      content: artifact.content,
+      status: 'closed',
+    }),
+  );
   return {
     ...INITIAL_STATE,
-    contentBuffer: response.content || '',
+    contentBuffer: content,
+    artifacts,
     usage: response.usage,
     doneMeta: {
       policy: response.policy,
@@ -240,6 +335,7 @@ function syncResponseToState(response: AiChatResponse): ChatStreamState {
     status: 'done',
     transport: 'sync',
     streamOpened: false,
+    conversationId: response.conversation_id ?? null,
   };
 }
 
@@ -405,6 +501,47 @@ function applyEnvelope(
           : item,
       );
       return { next: { ...prev, pendingApprovals: next }, terminal: false };
+    }
+    case 'conversation_attached': {
+      const data = (event as ConversationAttachedEvent).data;
+      return {
+        next: { ...prev, conversationId: data.conversation_id },
+        terminal: false,
+      };
+    }
+    case 'artifact_started': {
+      const data = (event as ArtifactStartedEvent).data;
+      const entry: ArtifactBuffer = {
+        id: data.artifact_id,
+        type: data.artifact_type,
+        title: data.title ?? null,
+        content: '',
+        status: 'open',
+      };
+      // Artifacts arrive in order; append preserves that ordering for the
+      // side panel's "next / previous" navigation.
+      return {
+        next: { ...prev, artifacts: [...prev.artifacts, entry] },
+        terminal: false,
+      };
+    }
+    case 'artifact_delta': {
+      const data = (event as ArtifactDeltaEvent).data;
+      const next = prev.artifacts.map((artifact) =>
+        artifact.id === data.artifact_id
+          ? { ...artifact, content: artifact.content + data.delta }
+          : artifact,
+      );
+      return { next: { ...prev, artifacts: next }, terminal: false };
+    }
+    case 'artifact_completed': {
+      const data = (event as ArtifactCompletedEvent).data;
+      const next = prev.artifacts.map((artifact) =>
+        artifact.id === data.artifact_id
+          ? { ...artifact, status: 'closed' as const }
+          : artifact,
+      );
+      return { next: { ...prev, artifacts: next }, terminal: false };
     }
     default:
       console.debug('[useChatStream] unknown envelope type', event.type);

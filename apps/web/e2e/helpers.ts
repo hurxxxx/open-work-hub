@@ -187,6 +187,78 @@ export async function stubShellBackend(page: Page): Promise<void> {
   );
 }
 
+export interface ConversationStubs {
+  list?: Array<{
+    id: string;
+    title: string;
+    createdAt: string;
+    updatedAt: string;
+  }>;
+  detail?: Record<
+    string,
+    {
+      id: string;
+      title: string;
+      createdAt: string;
+      updatedAt: string;
+      turns: Array<{
+        id: string;
+        seq: number;
+        role: string;
+        content: string;
+        createdAt: string;
+      }>;
+    }
+  >;
+}
+
+/**
+ * Stub the conversations CRUD endpoints so the sidebar list and detail
+ * hydration render from a fixture instead of a live API. Accepts optional
+ * list + detail maps; unknown ids return 404 and DELETE always succeeds.
+ */
+export async function stubConversationsApi(
+  page: Page,
+  stubs: ConversationStubs = {},
+): Promise<void> {
+  const list = stubs.list ?? [];
+  const detail = stubs.detail ?? {};
+
+  // Regex matches both the list/create (`/conversations` with optional query)
+  // and the detail/patch/delete (`/conversations/<id>`) endpoints in one
+  // handler. Playwright's glob patterns had trouble matching query strings
+  // reliably in cross-browser runs, so a regex is cheaper to reason about.
+  await page.route(/\/conversations(?:\/[^?]*)?(?:\?.*)?$/, (route: Route) => {
+    const url = new URL(route.request().url());
+    const segmentsAfter = url.pathname.split('/conversations');
+    const tail = segmentsAfter[segmentsAfter.length - 1] ?? '';
+    const method = route.request().method();
+    if (tail === '' || tail === '/') {
+      if (method === 'POST') {
+        return route.fulfill({
+          json: {
+            id: 'new-conversation',
+            title: '',
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            turns: [],
+          },
+        });
+      }
+      return route.fulfill({ json: { items: list, nextCursor: null } });
+    }
+    const id = tail.replace(/^\//, '');
+    if (method === 'DELETE') {
+      return route.fulfill({ status: 204, body: '' });
+    }
+    const row = detail[id];
+    if (!row) {
+      return route.fulfill({ status: 404, json: { detail: 'not found' } });
+    }
+    return route.fulfill({ json: row });
+  });
+}
+
 /**
  * Serve a canned SSE response for /api/v1/ai/chat/stream so the empty →
  * active transition test can exercise the streaming code path without a real

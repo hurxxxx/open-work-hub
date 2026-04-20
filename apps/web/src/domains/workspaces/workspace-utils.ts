@@ -23,6 +23,7 @@ const WORKSPACE_API_PREFIXES = [
   '/api/v1/meeting',
   '/api/v1/search',
   '/api/v1/connectors/ocr',
+  '/api/v1/conversations',
 ] as const;
 
 const LAST_WORKSPACE_STORAGE_KEY = 'aidoo:last-workspace-slug';

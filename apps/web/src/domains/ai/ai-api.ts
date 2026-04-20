@@ -14,12 +14,21 @@ export interface AiChatRequest {
   max_tokens?: number;
   temperature?: number;
   reasoning_effort?: 'none' | 'low' | 'medium' | 'high';
+  conversation_id?: string | null;
+  persist?: boolean;
 }
 
 export interface AiChatUsage {
   prompt_tokens: number | null;
   completion_tokens: number | null;
   total_tokens: number | null;
+}
+
+export interface AiChatResponseArtifact {
+  id: string;
+  type: string;
+  title: string | null;
+  content: string;
 }
 
 export interface AiChatResponse {
@@ -37,6 +46,8 @@ export interface AiChatResponse {
   decision_reason: string | null;
   forced_local: boolean;
   pii_hits: string[];
+  conversation_id?: string | null;
+  artifacts?: AiChatResponseArtifact[];
 }
 
 export interface LlmPoolHealthResponse {

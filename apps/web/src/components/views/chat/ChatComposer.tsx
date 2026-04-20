@@ -26,6 +26,7 @@ export interface ChatComposerProps {
   placeholder?: string;
   rows?: number;
   autoFocus?: boolean;
+  isDisabled?: boolean;
 }
 
 const DEFAULT_TOOL_ITEMS = NAV_ITEMS.filter((item) => item.appId === 'ai');
@@ -94,7 +95,7 @@ export function ChatComposer(props: ChatComposerProps) {
         <textarea
           autoFocus={props.autoFocus}
           className="app-text-body-sm min-h-12 flex-1 resize-none rounded-lg border border-app-border bg-app-bg px-4 py-3 text-app-ink outline-none transition-colors placeholder:text-gray-400 focus:border-app-accent"
-          disabled={props.isSending}
+          disabled={props.isSending || props.isDisabled}
           onChange={(event) => props.onInputChange(event.target.value)}
           onKeyDown={(event) => {
             if (isSlashOpen && slashItems) {
@@ -136,7 +137,7 @@ export function ChatComposer(props: ChatComposerProps) {
             // Mirror the send-button disabled rule so keyboard submit cannot
             // diverge from the visible button state if the component is
             // reused outside AIView's handleSubmit guard.
-            if (!props.input.trim() || props.isSending) {
+            if (!props.input.trim() || props.isSending || props.isDisabled) {
               return;
             }
             event.currentTarget.form?.requestSubmit();
@@ -166,9 +167,9 @@ export function ChatComposer(props: ChatComposerProps) {
         ) : (
           <button
             className="app-text-control flex h-12 shrink-0 items-center gap-2 rounded-lg bg-app-accent px-4 text-app-accent-fg transition-colors hover:bg-app-accent-hover disabled:cursor-not-allowed disabled:opacity-60"
-            disabled={!props.input.trim() || isSlashOpen}
-            type="submit"
-          >
+          disabled={!props.input.trim() || isSlashOpen || props.isDisabled}
+          type="submit"
+        >
             <Send size={16} />
             <span className="hidden sm:inline">전송</span>
           </button>

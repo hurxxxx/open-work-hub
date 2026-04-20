@@ -72,6 +72,51 @@ export interface ErrorEvent {
   data: { code: string; message: string; retryable: boolean };
 }
 
+/**
+ * Emitted once at stream open when the backend has bound the turns to a
+ * persisted Conversation row. Always precedes the first content/reasoning
+ * delta so the client can store the id before any rendering begins and
+ * thread it back on follow-up requests.
+ */
+export interface ConversationAttachedEvent {
+  type: 'conversation_attached';
+  seq: number;
+  timestamp_ms: number;
+  data: { conversation_id: string };
+}
+
+/**
+ * Artifact channel envelopes. Opens when the server detects an
+ * ``<artifact type="..." title="...">`` tag inside the LLM output, streams
+ * the body as deltas, then closes with ``artifact_completed``. Bodies are
+ * rendered in a side panel rather than the chat bubble — see ArtifactCard /
+ * ArtifactPanel.
+ */
+export interface ArtifactStartedEvent {
+  type: 'artifact_started';
+  seq: number;
+  timestamp_ms: number;
+  data: {
+    artifact_id: string;
+    artifact_type: string;
+    title?: string | null;
+  };
+}
+
+export interface ArtifactDeltaEvent {
+  type: 'artifact_delta';
+  seq: number;
+  timestamp_ms: number;
+  data: { artifact_id: string; delta: string };
+}
+
+export interface ArtifactCompletedEvent {
+  type: 'artifact_completed';
+  seq: number;
+  timestamp_ms: number;
+  data: { artifact_id: string };
+}
+
 /** Reserved P3 events (not emitted in Phase 2). */
 export interface ToolCallStartedEvent {
   type: 'tool_call_started';
@@ -120,6 +165,10 @@ export type AgentEventEnvelope =
   | UsageEvent
   | DoneEvent
   | ErrorEvent
+  | ConversationAttachedEvent
+  | ArtifactStartedEvent
+  | ArtifactDeltaEvent
+  | ArtifactCompletedEvent
   | ToolCallStartedEvent
   | ToolCallArgsDeltaEvent
   | ToolResultEvent
@@ -154,4 +203,17 @@ export interface PendingApproval {
   tool: string;
   resource_preview: string | null;
   decision: 'approved' | 'rejected' | null;
+}
+
+/**
+ * Accumulated artifact state during a stream. Mirrors the server-side
+ * ``_AssistantTurnBuffer.artifact_records`` shape so a persisted turn's
+ * ``artifacts[]`` array can hydrate straight into this shape on reload.
+ */
+export interface ArtifactBuffer {
+  id: string;
+  type: string;
+  title: string | null;
+  content: string;
+  status: 'open' | 'closed';
 }

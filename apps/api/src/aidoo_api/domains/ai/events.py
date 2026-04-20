@@ -79,6 +79,43 @@ class ConversationAttachedData(BaseModel):
     conversation_id: str
 
 
+class ArtifactStartedData(BaseModel):
+    """Opens a new artifact payload channel inside the assistant turn.
+
+    Emitted when the LLM output begins a ``<artifact type="..." title="...">``
+    block. The server assigns the ``artifact_id`` so the client can index
+    subsequent ``artifact_delta`` chunks without needing a unique id from
+    the model.
+    """
+
+    model_config = ConfigDict(frozen=True)
+    artifact_id: str
+    artifact_type: str
+    title: str | None = None
+
+
+class ArtifactDeltaData(BaseModel):
+    """Incremental body text for an in-flight artifact.
+
+    Semantically analogous to ``content_delta`` but routed into the
+    artifact channel identified by ``artifact_id`` so the UI can render it
+    in a side panel instead of the chat bubble.
+    """
+
+    model_config = ConfigDict(frozen=True)
+    artifact_id: str
+    delta: str
+
+
+class ArtifactCompletedData(BaseModel):
+    """Terminal marker for the artifact channel. A synthesized completion
+    is emitted for any artifact that was opened but never closed so the
+    client never waits indefinitely on an in-progress buffer."""
+
+    model_config = ConfigDict(frozen=True)
+    artifact_id: str
+
+
 # Reserved P3 payloads (not emitted in P2).
 class ToolCallStartedData(BaseModel):
     model_config = ConfigDict(frozen=True)
@@ -156,6 +193,21 @@ class ConversationAttachedEvent(_EnvelopeBase):
     data: ConversationAttachedData
 
 
+class ArtifactStartedEvent(_EnvelopeBase):
+    type: Literal["artifact_started"] = "artifact_started"
+    data: ArtifactStartedData
+
+
+class ArtifactDeltaEvent(_EnvelopeBase):
+    type: Literal["artifact_delta"] = "artifact_delta"
+    data: ArtifactDeltaData
+
+
+class ArtifactCompletedEvent(_EnvelopeBase):
+    type: Literal["artifact_completed"] = "artifact_completed"
+    data: ArtifactCompletedData
+
+
 class ToolCallStartedEvent(_EnvelopeBase):
     type: Literal["tool_call_started"] = "tool_call_started"
     data: ToolCallStartedData
@@ -189,6 +241,9 @@ AgentEventEnvelope = Annotated[
         DoneEvent,
         ErrorEvent,
         ConversationAttachedEvent,
+        ArtifactStartedEvent,
+        ArtifactDeltaEvent,
+        ArtifactCompletedEvent,
         ToolCallStartedEvent,
         ToolCallArgsDeltaEvent,
         ToolResultEvent,
@@ -209,6 +264,9 @@ _PUBLISHED_TYPES: dict[str, type[_EnvelopeBase]] = {
     "done": DoneEvent,
     "error": ErrorEvent,
     "conversation_attached": ConversationAttachedEvent,
+    "artifact_started": ArtifactStartedEvent,
+    "artifact_delta": ArtifactDeltaEvent,
+    "artifact_completed": ArtifactCompletedEvent,
     "tool_call_started": ToolCallStartedEvent,
     "tool_call_args_delta": ToolCallArgsDeltaEvent,
     "tool_result": ToolResultEvent,

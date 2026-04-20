@@ -1,7 +1,9 @@
 import { Bot, User } from 'lucide-react';
 
+import { ArtifactCard } from '@/src/components/views/chat/ArtifactCard';
 import { ThinkingPanel } from '@/src/components/views/chat/ThinkingPanel';
 import type {
+  ArtifactBuffer,
   ChatStreamStatus,
   PendingApproval,
   ToolCallBuffer,
@@ -23,10 +25,13 @@ export interface ChatTurn {
   responseStatus?: Exclude<ChatStreamStatus, 'idle' | 'streaming'>;
   toolCalls?: ToolCallBuffer[];
   pendingApprovals?: PendingApproval[];
+  artifacts?: ArtifactBuffer[];
 }
 
 export interface MessageBubbleProps {
   turn: ChatTurn;
+  activeArtifactId?: string | null;
+  onOpenArtifact?: (artifactId: string) => void;
 }
 
 function poolLabel(pool: ChatTurn['chosenPool']): string {
@@ -39,7 +44,11 @@ function poolLabel(pool: ChatTurn['chosenPool']): string {
   return '';
 }
 
-export function MessageBubble({ turn }: MessageBubbleProps) {
+export function MessageBubble({
+  turn,
+  activeArtifactId = null,
+  onOpenArtifact,
+}: MessageBubbleProps) {
   const isUser = turn.role === 'user';
   const metaParts: string[] = [];
   if (!isUser) {
@@ -96,6 +105,16 @@ export function MessageBubble({ turn }: MessageBubbleProps) {
             {metaParts.join(' · ')}
           </div>
         )}
+        {!isUser && turn.artifacts && turn.artifacts.length > 0
+          ? turn.artifacts.map((artifact) => (
+              <ArtifactCard
+                key={artifact.id}
+                artifact={artifact}
+                isActive={activeArtifactId === artifact.id}
+                onOpen={(id) => onOpenArtifact?.(id)}
+              />
+            ))
+          : null}
       </div>
       {isUser && (
         <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-app-border bg-app-surface text-gray-500">

@@ -1,25 +1,37 @@
 import { useEffect, useRef } from 'react';
 import { Bot, Loader2 } from 'lucide-react';
 
+import { ArtifactCard } from '@/src/components/views/chat/ArtifactCard';
 import {
   MessageBubble,
   type ChatTurn,
 } from '@/src/components/views/chat/MessageBubble';
 import { ThinkingPanel } from '@/src/components/views/chat/ThinkingPanel';
-import type { ChatStreamStatus } from '@/src/domains/ai/agent-events';
+import type {
+  ArtifactBuffer,
+  ChatStreamStatus,
+} from '@/src/domains/ai/agent-events';
 
 export interface LiveAssistant {
   content: string;
   reasoning: string;
   status: ChatStreamStatus;
+  artifacts?: ArtifactBuffer[];
 }
 
 export interface ChatThreadProps {
   turns: ChatTurn[];
   liveAssistant: LiveAssistant | null;
+  activeArtifactId?: string | null;
+  onOpenArtifact?: (artifactId: string) => void;
 }
 
-export function ChatThread({ turns, liveAssistant }: ChatThreadProps) {
+export function ChatThread({
+  turns,
+  liveAssistant,
+  activeArtifactId = null,
+  onOpenArtifact,
+}: ChatThreadProps) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -31,6 +43,7 @@ export function ChatThread({ turns, liveAssistant }: ChatThreadProps) {
     turns,
     liveAssistant?.content.length,
     liveAssistant?.reasoning.length,
+    liveAssistant?.artifacts?.length,
     liveAssistant?.status,
   ]);
 
@@ -38,7 +51,8 @@ export function ChatThread({ turns, liveAssistant }: ChatThreadProps) {
     liveAssistant !== null &&
     liveAssistant.status === 'streaming' &&
     liveAssistant.content.length === 0 &&
-    liveAssistant.reasoning.length === 0;
+    liveAssistant.reasoning.length === 0 &&
+    (liveAssistant.artifacts?.length ?? 0) === 0;
 
   return (
     <div
@@ -46,7 +60,12 @@ export function ChatThread({ turns, liveAssistant }: ChatThreadProps) {
       className="custom-scrollbar flex-1 space-y-4 overflow-y-auto bg-app-bg px-5 py-5"
     >
       {turns.map((turn) => (
-        <MessageBubble key={turn.id} turn={turn} />
+        <MessageBubble
+          key={turn.id}
+          turn={turn}
+          activeArtifactId={activeArtifactId}
+          onOpenArtifact={onOpenArtifact}
+        />
       ))}
       {liveAssistant && !showTypingHint && (
         <div className="flex gap-3 justify-start">
@@ -64,6 +83,16 @@ export function ChatThread({ turns, liveAssistant }: ChatThreadProps) {
               reasoning={liveAssistant.reasoning}
               status={liveAssistant.status}
             />
+            {liveAssistant.artifacts && liveAssistant.artifacts.length > 0
+              ? liveAssistant.artifacts.map((artifact) => (
+                  <ArtifactCard
+                    key={artifact.id}
+                    artifact={artifact}
+                    isActive={activeArtifactId === artifact.id}
+                    onOpen={(id) => onOpenArtifact?.(id)}
+                  />
+                ))
+              : null}
           </div>
         </div>
       )}

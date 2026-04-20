@@ -1,5 +1,11 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import {
+  MemoryRouter,
+  Route,
+  Routes,
+  useLocation,
+  useNavigate,
+} from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ComponentProps } from 'react';
 // vi.mock calls below are hoisted by vitest, so it's safe for this import to
@@ -11,6 +17,9 @@ const aiHarness = vi.hoisted(() => ({
   getLlmHealth: vi.fn(),
   sendAiChat: vi.fn(),
   streamAiChat: vi.fn(),
+}));
+const conversationsHarness = vi.hoisted(() => ({
+  getConversation: vi.fn(),
 }));
 
 vi.mock('motion/react', () => ({
@@ -39,6 +48,15 @@ vi.mock('@/src/domains/ai/ai-api', async () => {
   };
 });
 
+vi.mock('@/src/domains/ai/conversations-api', async () => {
+  const actual = await vi.importActual<
+    typeof import('@/src/domains/ai/conversations-api')
+  >('@/src/domains/ai/conversations-api');
+  return {
+    ...actual,
+    getConversation: conversationsHarness.getConversation,
+  };
+});
 
 vi.mock('@/src/components/views/chat/ToolCallCard', () => ({
   ToolCallCard: ({ call }: { call: { call_id: string; name: string; argsBuffer: string } }) => (
@@ -116,14 +134,35 @@ function healthPayload() {
   };
 }
 
-function renderAIView() {
+function RouteProbe() {
+  const location = useLocation();
+  const navigate = useNavigate();
+  return (
+    <>
+      <div data-testid="location-search">{location.search}</div>
+      <button type="button" onClick={() => navigate('/w/hq/ai?c=missing')}>
+        go-missing
+      </button>
+    </>
+  );
+}
+
+function renderAIView(options: { initialEntries?: string[] } = {}) {
   return render(
-    <MemoryRouter initialEntries={['/w/hq/ai']}>
+    <MemoryRouter initialEntries={options.initialEntries ?? ['/w/hq/ai']}>
       <WorkspaceBootstrapProvider
         value={{ data: null, error: null, loading: false }}
       >
         <Routes>
-          <Route path="/w/:workspaceSlug/ai" element={<AIView />} />
+          <Route
+            path="/w/:workspaceSlug/ai"
+            element={(
+              <>
+                <AIView />
+                <RouteProbe />
+              </>
+            )}
+          />
         </Routes>
       </WorkspaceBootstrapProvider>
     </MemoryRouter>,
@@ -135,6 +174,7 @@ describe('AIView', () => {
     aiHarness.getLlmHealth.mockReset();
     aiHarness.sendAiChat.mockReset();
     aiHarness.streamAiChat.mockReset();
+    conversationsHarness.getConversation.mockReset();
     aiHarness.getLlmHealth.mockResolvedValue(healthPayload());
     Object.defineProperty(HTMLElement.prototype, 'scrollTo', {
       configurable: true,
@@ -227,6 +267,129 @@ describe('AIView', () => {
     expect(aiHarness.sendAiChat).not.toHaveBeenCalled();
   });
 
+  it('updates ?c= from conversation_attached without hydrating over the live stream', async () => {
+    aiHarness.streamAiChat.mockResolvedValue(
+      mockStreamResponse([
+        sseBytes([
+          frame('conversation_attached', 0, {
+            conversation_id: 'c-attached',
+          }),
+          frame('content_delta', 1, { text: '저장된 응답' }),
+          frame('done', 2, {
+            finish_reason: 'stop',
+            audit_id: null,
+            meta: null,
+          }),
+        ]),
+      ]),
+    );
+
+    renderAIView();
+
+    const input = screen.getByPlaceholderText('메시지를 입력하세요');
+    fireEvent.change(input, { target: { value: '대화 저장 테스트' } });
+    fireEvent.click(screen.getByRole('button', { name: /전송/i }));
+
+    await screen.findByText('저장된 응답');
+    await waitFor(() => {
+      expect(screen.getByTestId('location-search').textContent).toBe(
+        '?c=c-attached',
+      );
+    });
+    expect(conversationsHarness.getConversation).not.toHaveBeenCalled();
+  });
+
+  it('updates ?c= from sync fallback conversation_id without hydrating over the finalized turn', async () => {
+    aiHarness.streamAiChat.mockRejectedValue(new Error('stream unreachable'));
+    aiHarness.sendAiChat.mockResolvedValue({
+      model: 'mlx-community/model',
+      content: '동기 응답',
+      usage: null,
+      finish_reason: 'stop',
+      provider: 'mlx-lm',
+      backend: 'primary',
+      fallback_used: false,
+      canonical_model: 'qwen3',
+      requested_backend_mode: 'auto',
+      policy: 'local_only',
+      chosen_pool: 'local',
+      decision_reason: 'policy_local_only',
+      forced_local: false,
+      pii_hits: [],
+      conversation_id: 'c-sync',
+    });
+
+    renderAIView();
+
+    const input = screen.getByPlaceholderText('메시지를 입력하세요');
+    fireEvent.change(input, { target: { value: 'fallback 저장 테스트' } });
+    fireEvent.click(screen.getByRole('button', { name: /전송/i }));
+
+    await screen.findByText('동기 응답');
+    await waitFor(() => {
+      expect(screen.getByTestId('location-search').textContent).toBe(
+        '?c=c-sync',
+      );
+    });
+    expect(conversationsHarness.getConversation).not.toHaveBeenCalled();
+  });
+
+  it('disables submit until an existing conversation finishes hydrating', async () => {
+    conversationsHarness.getConversation.mockReturnValue(new Promise(() => {}));
+
+    renderAIView({ initialEntries: ['/w/hq/ai?c=c-existing'] });
+
+    await waitFor(() => {
+      expect(conversationsHarness.getConversation).toHaveBeenCalledWith(
+        'test-token',
+        'c-existing',
+      );
+    });
+    const input = screen.getByPlaceholderText('대화를 불러오는 중입니다.');
+    expect((input as HTMLTextAreaElement).disabled).toBe(true);
+    expect(
+      (
+        screen.getByRole('button', { name: /전송/i }) as HTMLButtonElement
+      ).disabled,
+    ).toBe(true);
+    expect(aiHarness.streamAiChat).not.toHaveBeenCalled();
+  });
+
+  it('clears stale turns when navigating from a valid conversation to an invalid one', async () => {
+    conversationsHarness.getConversation
+      .mockResolvedValueOnce({
+        id: 'c-valid',
+        title: '기존 대화',
+        createdAt: '2026-04-19T00:00:00',
+        updatedAt: '2026-04-19T00:01:00',
+        turns: [
+          {
+            id: 'turn-1',
+            seq: 0,
+            role: 'user',
+            content: '기존 대화 내용',
+            createdAt: '2026-04-19T00:00:10',
+          },
+        ],
+      })
+      .mockRejectedValueOnce(new Error('없는 대화입니다.'));
+
+    renderAIView({ initialEntries: ['/w/hq/ai?c=c-valid'] });
+
+    await screen.findByText('기존 대화 내용');
+    fireEvent.click(screen.getByRole('button', { name: 'go-missing' }));
+
+    await screen.findByText('없는 대화입니다.');
+    expect(screen.queryByText('기존 대화 내용')).toBeNull();
+    expect(
+      (
+        screen.getByPlaceholderText(
+          '이 대화를 열 수 없습니다. 새 대화를 시작하거나 다른 대화를 선택하세요.',
+        ) as HTMLTextAreaElement
+      ).disabled,
+    ).toBe(true);
+  });
+
   it('lets the backend choose defaults and surfaces token-limit truncation on length finish', async () => {
     aiHarness.streamAiChat.mockResolvedValue(
       mockStreamResponse([
@@ -262,11 +425,16 @@ describe('AIView', () => {
     });
 
     expect(aiHarness.streamAiChat).toHaveBeenCalledTimes(1);
+    // persist: true opts the stream into conversation history so the "최근
+    // 대화" sidebar gets populated; conversation_id is undefined on the first
+    // request because the backend has not yet returned an id.
     expect(aiHarness.streamAiChat.mock.calls[0][0].payload).toEqual({
       messages: expect.any(Array),
       backend_mode: 'auto',
       temperature: 0.2,
       stream_reasoning: true,
+      persist: true,
+      conversation_id: undefined,
     });
     expect(aiHarness.streamAiChat.mock.calls[0][0].payload).not.toHaveProperty(
       'max_tokens',

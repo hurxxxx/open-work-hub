@@ -20,6 +20,7 @@ from aidoo_api.domains.auth.dependencies import (
 from aidoo_api.domains.auth.models import User, Workspace
 
 from .schemas import (
+    ArtifactOut,
     ConversationCreateRequest,
     ConversationDetail,
     ConversationListResponse,
@@ -54,6 +55,23 @@ def _turn_out(turn) -> ConversationTurnOut:
     # reloaded conversation identically to a live one; unknown extra keys are
     # dropped silently rather than leaking into the API contract.
     meta = turn.meta or {}
+    raw_artifacts = meta.get("artifacts") or []
+    artifacts: list[ArtifactOut] = []
+    for record in raw_artifacts:
+        if not isinstance(record, dict):
+            continue
+        artifact_id = record.get("id")
+        if not artifact_id:
+            continue
+        artifacts.append(
+            ArtifactOut(
+                id=artifact_id,
+                type=record.get("type") or "document",
+                title=record.get("title"),
+                content=record.get("content") or "",
+                status=record.get("status"),
+            )
+        )
     return ConversationTurnOut(
         id=turn.id,
         seq=turn.seq,
@@ -71,6 +89,7 @@ def _turn_out(turn) -> ConversationTurnOut:
         pii_hits=list(meta.get("pii_hits") or []),
         tool_calls=list(meta.get("tool_calls") or []),
         pending_approvals=list(meta.get("pending_approvals") or []),
+        artifacts=artifacts,
         created_at=turn.created_at,
     )
 

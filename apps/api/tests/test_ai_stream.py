@@ -162,6 +162,60 @@ class _FakeAsyncPoolClient:
         return self
 
 
+class _FakeSyncChatCompletions:
+    def __init__(
+        self,
+        *,
+        content: str = "ok",
+        finish_reason: str | None = "stop",
+        error: Exception | None = None,
+    ) -> None:
+        self._content = content
+        self._finish_reason = finish_reason
+        self._error = error
+        self.calls: list[dict[str, Any]] = []
+
+    def create(self, **kwargs: Any) -> Any:
+        self.calls.append(kwargs)
+        if self._error is not None:
+            raise self._error
+        return SimpleNamespace(
+            model=str(kwargs["model"]),
+            choices=[
+                SimpleNamespace(
+                    message=SimpleNamespace(content=self._content),
+                    finish_reason=self._finish_reason,
+                )
+            ],
+            usage=SimpleNamespace(
+                prompt_tokens=1,
+                completion_tokens=1,
+                total_tokens=2,
+            ),
+        )
+
+
+class _FakeSyncPoolClient:
+    def __init__(
+        self,
+        *,
+        content: str = "ok",
+        finish_reason: str | None = "stop",
+        error: Exception | None = None,
+    ) -> None:
+        self.chat = SimpleNamespace(
+            completions=_FakeSyncChatCompletions(
+                content=content,
+                finish_reason=finish_reason,
+                error=error,
+            )
+        )
+        self.models = _FakeModels()
+
+    def with_options(self, **_: Any) -> "_FakeSyncPoolClient":
+        return self
+
+
 class _SequencedAsyncChatCompletions:
     def __init__(self, chunk_sequences: list[list[Any]]) -> None:
         self._chunk_sequences = [list(chunks) for chunks in chunk_sequences]
@@ -817,6 +871,177 @@ def test_chat_stream_mounts_on_legacy_and_slug_paths(
         ]
 
 
+def test_chat_sync_persists_user_and_assistant_turns_and_returns_conversation_id(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    auth = _seeded_dev_login(client, "hq-admin")
+    slug = auth["user"]["workspaces"][0]["slug"]
+    _set_policy("chatbot", "local_only")
+
+    pool_client = _FakeSyncPoolClient(content="echo: hi")
+    monkeypatch.setattr(llm_core, "get_pool_client", lambda pool: pool_client)
+
+    response = client.post(
+        _workspace_ai_path(slug, "/chat"),
+        headers=_auth_headers(auth["token"]),
+        json={
+            "backend_mode": "local",
+            "persist": True,
+            "messages": [{"role": "user", "content": "hi"}],
+        },
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    conversation_id = body["conversation_id"]
+    assert conversation_id
+    assert body["content"] == "echo: hi"
+
+    detail = client.get(
+        f"/api/v1/workspaces/{slug}/conversations/{conversation_id}",
+        headers=_auth_headers(auth["token"]),
+    ).json()
+    assert [turn["role"] for turn in detail["turns"]] == ["user", "assistant"]
+    assert detail["turns"][0]["content"] == "hi"
+    assert detail["turns"][1]["content"] == "echo: hi"
+
+
+def test_chat_sync_appends_to_existing_conversation(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    auth = _seeded_dev_login(client, "hq-admin")
+    slug = auth["user"]["workspaces"][0]["slug"]
+    _set_policy("chatbot", "local_only")
+
+    monkeypatch.setattr(
+        llm_core, "get_pool_client", lambda pool: _FakeSyncPoolClient(content="first")
+    )
+    first = client.post(
+        _workspace_ai_path(slug, "/chat"),
+        headers=_auth_headers(auth["token"]),
+        json={
+            "backend_mode": "local",
+            "persist": True,
+            "messages": [{"role": "user", "content": "first question"}],
+        },
+    )
+    assert first.status_code == 200, first.text
+    conversation_id = first.json()["conversation_id"]
+
+    monkeypatch.setattr(
+        llm_core, "get_pool_client", lambda pool: _FakeSyncPoolClient(content="second")
+    )
+    second = client.post(
+        _workspace_ai_path(slug, "/chat"),
+        headers=_auth_headers(auth["token"]),
+        json={
+            "backend_mode": "local",
+            "conversation_id": conversation_id,
+            "messages": [{"role": "user", "content": "follow up"}],
+        },
+    )
+    assert second.status_code == 200, second.text
+    assert second.json()["conversation_id"] == conversation_id
+
+    detail = client.get(
+        f"/api/v1/workspaces/{slug}/conversations/{conversation_id}",
+        headers=_auth_headers(auth["token"]),
+    ).json()
+    assert [turn["role"] for turn in detail["turns"]] == [
+        "user",
+        "assistant",
+        "user",
+        "assistant",
+    ]
+    assert detail["turns"][2]["content"] == "follow up"
+    assert detail["turns"][3]["content"] == "second"
+
+
+def test_chat_sync_persists_artifact_only_response_into_turn_meta(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    auth = _seeded_dev_login(client, "hq-admin")
+    slug = auth["user"]["workspaces"][0]["slug"]
+    _set_policy("chatbot", "local_only")
+
+    monkeypatch.setattr(
+        llm_core,
+        "get_pool_client",
+        lambda pool: _FakeSyncPoolClient(
+            content='<artifact type="document" title="Draft">body</artifact>'
+        ),
+    )
+
+    response = client.post(
+        _workspace_ai_path(slug, "/chat"),
+        headers=_auth_headers(auth["token"]),
+        json={
+            "backend_mode": "local",
+            "persist": True,
+            "messages": [{"role": "user", "content": "generate draft"}],
+        },
+    )
+    assert response.status_code == 200, response.text
+    conversation_id = response.json()["conversation_id"]
+
+    detail = client.get(
+        f"/api/v1/workspaces/{slug}/conversations/{conversation_id}",
+        headers=_auth_headers(auth["token"]),
+    ).json()
+    assistant = detail["turns"][-1]
+    assert assistant["content"] == ""
+    assert assistant["artifacts"] == [
+        {
+            "id": assistant["artifacts"][0]["id"],
+            "type": "document",
+            "title": "Draft",
+            "content": "body",
+            "status": "closed",
+        }
+    ]
+
+
+def test_chat_sync_preserves_literal_artifact_syntax_examples_as_plain_content(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    auth = _seeded_dev_login(client, "hq-admin")
+    slug = auth["user"]["workspaces"][0]["slug"]
+    _set_policy("chatbot", "local_only")
+
+    literal_example = (
+        "형식은 다음과 같습니다:\n"
+        '    <artifact type="document" title="Draft">\n'
+        "    markdown 본문...\n"
+        "    </artifact>"
+    )
+    monkeypatch.setattr(
+        llm_core,
+        "get_pool_client",
+        lambda pool: _FakeSyncPoolClient(content=literal_example),
+    )
+
+    response = client.post(
+        _workspace_ai_path(slug, "/chat"),
+        headers=_auth_headers(auth["token"]),
+        json={
+            "backend_mode": "local",
+            "persist": True,
+            "messages": [{"role": "user", "content": "artifact 형식을 설명해줘"}],
+        },
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["content"] == literal_example
+    assert body["artifacts"] == []
+
+    detail = client.get(
+        f"/api/v1/workspaces/{slug}/conversations/{body['conversation_id']}",
+        headers=_auth_headers(auth["token"]),
+    ).json()
+    assistant = detail["turns"][-1]
+    assert assistant["content"] == literal_example
+    assert assistant["artifacts"] == []
+
+
 def test_chat_stream_persists_user_and_assistant_turns(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -1037,3 +1262,180 @@ def test_chat_stream_persists_failure_with_empty_body(
     assert "boom" in assistant_turn["content"]
     assert assistant_turn["responseStatus"] == "error"
     assert assistant_turn["finishReason"] == "error"
+
+
+def test_chat_stream_extracts_artifact_markup_into_dedicated_envelopes(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A single content chunk carrying `<artifact>...</artifact>` must surface
+    # as content_delta (prefix) → artifact_started/delta/completed →
+    # content_delta (suffix). The inline markup never reaches the client as
+    # plain content.
+    auth = _seeded_dev_login(client, "hq-admin")
+    slug = auth["user"]["workspaces"][0]["slug"]
+    _set_policy("chatbot", "local_only")
+    monkeypatch.setattr(ai_router, "supports_tool_calling", lambda pool: False)
+
+    pool_client = _FakeAsyncPoolClient([
+        _delta(
+            content=(
+                "Here you go: "
+                '<artifact type="document" title="Email">**draft** body</artifact>'
+                " — let me know."
+            ),
+        ),
+        _delta(finish_reason="stop"),
+    ])
+    monkeypatch.setattr(llm_core, "get_async_pool_client", lambda pool: pool_client)
+
+    status_code, events = _stream_post(
+        client,
+        _workspace_ai_path(slug, "/chat/stream"),
+        headers=_auth_headers(auth["token"]),
+        json_body={
+            "backend_mode": "local",
+            "persist": True,
+            "messages": [{"role": "user", "content": "write an email draft"}],
+        },
+    )
+    assert status_code == 200
+    chat = _chat_events(events)
+    types = [event["type"] for event in chat]
+    assert types == [
+        "content_delta",
+        "artifact_started",
+        "artifact_delta",
+        "artifact_completed",
+        "content_delta",
+        "done",
+    ]
+    # Prefix / suffix text flows as plain content_delta, artifact body is
+    # routed exclusively through artifact_delta.
+    assert chat[0]["data"]["text"] == "Here you go: "
+    start_data = chat[1]["data"]
+    assert start_data["artifact_type"] == "document"
+    assert start_data["title"] == "Email"
+    assert chat[2]["data"]["artifact_id"] == start_data["artifact_id"]
+    assert chat[2]["data"]["delta"] == "**draft** body"
+    assert chat[3]["data"]["artifact_id"] == start_data["artifact_id"]
+    assert chat[4]["data"]["text"] == " — let me know."
+
+
+def test_chat_stream_persists_artifact_into_turn_meta(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The assistant turn row on disk must include the artifact so reload
+    # restores the side panel content.
+    auth = _seeded_dev_login(client, "hq-admin")
+    slug = auth["user"]["workspaces"][0]["slug"]
+    _set_policy("chatbot", "local_only")
+    monkeypatch.setattr(ai_router, "supports_tool_calling", lambda pool: False)
+
+    pool_client = _FakeAsyncPoolClient([
+        _delta(
+            content=(
+                'summary<artifact type="document" title="Report">'
+                "- line one\n- line two</artifact>"
+            ),
+        ),
+        _delta(finish_reason="stop"),
+    ])
+    monkeypatch.setattr(llm_core, "get_async_pool_client", lambda pool: pool_client)
+
+    status_code, events = _stream_post(
+        client,
+        _workspace_ai_path(slug, "/chat/stream"),
+        headers=_auth_headers(auth["token"]),
+        json_body={
+            "backend_mode": "local",
+            "persist": True,
+            "messages": [{"role": "user", "content": "generate report"}],
+        },
+    )
+    assert status_code == 200
+    conversation_id = next(
+        e for e in events if e["type"] == "conversation_attached"
+    )["data"]["conversation_id"]
+
+    detail = client.get(
+        f"/api/v1/workspaces/{slug}/conversations/{conversation_id}",
+        headers=_auth_headers(auth["token"]),
+    ).json()
+    assistant = detail["turns"][-1]
+    assert assistant["role"] == "assistant"
+    artifacts = assistant["artifacts"]
+    assert len(artifacts) == 1
+    assert artifacts[0]["type"] == "document"
+    assert artifacts[0]["title"] == "Report"
+    assert artifacts[0]["content"] == "- line one\n- line two"
+
+
+def test_chat_stream_synthesizes_completed_for_unclosed_artifact_on_error(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # If the model opens an artifact and then the provider errors before
+    # the close tag arrives, the stream must still emit
+    # artifact_completed so the client's buffer is released.
+    auth = _seeded_dev_login(client, "hq-admin")
+    slug = auth["user"]["workspaces"][0]["slug"]
+    _set_policy("chatbot", "local_only")
+    monkeypatch.setattr(ai_router, "supports_tool_calling", lambda pool: False)
+
+    class _ErrorAfterContentStream:
+        def __init__(self) -> None:
+            self._emitted = False
+
+        def __aiter__(self) -> "_ErrorAfterContentStream":
+            return self
+
+        async def __anext__(self):
+            if not self._emitted:
+                self._emitted = True
+                return _delta(
+                    content='<artifact type="document">opened but never closed'
+                )
+            raise OpenAIError("provider died")
+
+        async def aclose(self) -> None:  # pragma: no cover - interface glue
+            pass
+
+    class _ErrorChatCompletions:
+        def __init__(self) -> None:
+            self.calls: list = []
+
+        async def create(self, **kwargs):
+            self.calls.append(kwargs)
+            assert kwargs.get("stream") is True
+            return _ErrorAfterContentStream()
+
+    class _ErrorPoolClient:
+        def __init__(self) -> None:
+            self.chat = SimpleNamespace(completions=_ErrorChatCompletions())
+            self.models = _FakeModels()
+
+        def with_options(self, **_) -> "_ErrorPoolClient":
+            return self
+
+    monkeypatch.setattr(
+        llm_core, "get_async_pool_client", lambda pool: _ErrorPoolClient()
+    )
+
+    status_code, events = _stream_post(
+        client,
+        _workspace_ai_path(slug, "/chat/stream"),
+        headers=_auth_headers(auth["token"]),
+        json_body={
+            "backend_mode": "local",
+            "persist": True,
+            "messages": [{"role": "user", "content": "crash mid-artifact"}],
+        },
+    )
+    assert status_code == 200
+    types = [event["type"] for event in _chat_events(events)]
+    # The synthesized artifact_completed lands before the error+done pair.
+    assert "artifact_started" in types
+    assert "artifact_completed" in types
+    started_idx = types.index("artifact_started")
+    completed_idx = types.index("artifact_completed")
+    error_idx = types.index("error")
+    assert started_idx < completed_idx < error_idx
