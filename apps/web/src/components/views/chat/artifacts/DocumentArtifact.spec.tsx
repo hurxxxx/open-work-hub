@@ -48,4 +48,13 @@ describe('DocumentArtifact', () => {
     expect(screen.getByRole('heading', { name: /가이드/ })).not.toBeNull();
     expect(container.querySelector('pre code.language-js')).not.toBeNull();
   });
+
+  it('does not unwrap a document whose whole body is just a plain code fence', () => {
+    const { container } = render(
+      <DocumentArtifact content={'```\nconst answer = 42;\n```'} />,
+    );
+    const code = container.querySelector('pre code');
+    expect(code).not.toBeNull();
+    expect(code?.textContent).toContain('const answer = 42;');
+  });
 });

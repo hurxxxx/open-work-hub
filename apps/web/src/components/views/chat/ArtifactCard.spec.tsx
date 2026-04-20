@@ -160,6 +160,19 @@ describe('ArtifactCard', () => {
     expect(screen.getByText('python · 4줄')).not.toBeNull();
   });
 
+  it('strips the leading image marker and keeps only alt text in previews', () => {
+    render(
+      <ArtifactCard
+        artifact={buildArtifact({
+          content: '![아키텍처 다이어그램](https://example.com/diagram.png)',
+        })}
+        isActive={false}
+        onOpen={vi.fn()}
+      />,
+    );
+    expect(screen.getByText('아키텍처 다이어그램')).not.toBeNull();
+  });
+
   it('falls back to type-specific placeholder when the title is missing', () => {
     render(
       <ArtifactCard

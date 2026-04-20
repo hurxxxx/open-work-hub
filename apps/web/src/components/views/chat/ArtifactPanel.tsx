@@ -84,7 +84,11 @@ function ArtifactBody({ artifact }: { artifact: ArtifactBuffer }) {
   switch (artifact.type) {
     case 'html':
       return (
-        <HtmlArtifact content={artifact.content} title={artifact.title} />
+        <HtmlArtifact
+          key={artifact.id}
+          content={artifact.content}
+          title={artifact.title}
+        />
       );
     case 'code':
       return (

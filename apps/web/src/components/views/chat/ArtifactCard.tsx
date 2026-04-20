@@ -135,10 +135,10 @@ function stripMarkdownTokens(line: string): string {
   if (/^`{3,}\s*[\w-]*$/.test(out)) return '';
   // Pipe-only table separator rows like `|:---|:---|`.
   if (/^\|?[-:|\s]+\|?$/.test(out)) return '';
-  // Link `[text](url)` → `text`.
-  out = out.replace(/\[([^\]]+)\]\([^)]*\)/g, '$1');
   // Image `![alt](url)` → `alt`.
   out = out.replace(/!\[([^\]]*)\]\([^)]*\)/g, '$1');
+  // Link `[text](url)` → `text`.
+  out = out.replace(/\[([^\]]+)\]\([^)]*\)/g, '$1');
   // Emphasis wrappers: bold `**x**` / `__x__`, italic `*x*` / `_x_`,
   // strikethrough `~~x~~`, inline code `` `x` ``.
   out = out.replace(/\*\*([^*]+)\*\*/g, '$1');

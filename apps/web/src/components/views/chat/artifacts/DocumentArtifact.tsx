@@ -14,7 +14,7 @@ const REHYPE_PLUGINS = [rehypeHighlight];
 // wrapper and peel it so existing conversations render correctly. Anything
 // else — including legitimate ``` blocks inside a larger document — is
 // passed through untouched.
-const UNWRAP_MARKDOWN_FENCE = /^\s*```(?:markdown|md)?\s*\n([\s\S]*?)\n\s*```\s*$/;
+const UNWRAP_MARKDOWN_FENCE = /^\s*```(?:markdown|md)\s*\n([\s\S]*?)\n\s*```\s*$/i;
 
 export interface DocumentArtifactProps {
   content: string;

@@ -127,6 +127,42 @@ describe('ArtifactPanel', () => {
     expect(iframe?.getAttribute('sandbox')).toBe('allow-scripts');
   });
 
+  it('resets html artifacts back to the Preview tab when switching artifact ids', () => {
+    const { container, rerender } = render(
+      <ArtifactPanel
+        artifact={buildArtifact({
+          id: 'html-1',
+          type: 'html',
+          title: '첫 번째',
+          content: '<!doctype html><title>one</title><body>1</body>',
+        })}
+        onClose={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('tab', { name: '소스' }));
+    expect(container.querySelector('iframe')).toBeNull();
+
+    rerender(
+      <ArtifactPanel
+        artifact={buildArtifact({
+          id: 'html-2',
+          type: 'html',
+          title: '두 번째',
+          content: '<!doctype html><title>two</title><body>2</body>',
+        })}
+        onClose={vi.fn()}
+      />,
+    );
+
+    const iframe = container.querySelector('iframe');
+    expect(iframe).not.toBeNull();
+    expect(iframe?.getAttribute('srcdoc')).toContain('<title>two</title>');
+    expect(
+      screen.getByRole('tab', { name: '프리뷰' }).getAttribute('aria-selected'),
+    ).toBe('true');
+  });
+
   it('dispatches code artifacts to the pure syntax highlighter', () => {
     const { container } = render(
       <ArtifactPanel
