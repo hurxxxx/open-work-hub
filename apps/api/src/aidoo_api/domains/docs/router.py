@@ -50,8 +50,6 @@ from aidoo_api.domains.docs.models import (
 )
 from aidoo_api.domains.docs.registry import (
     ContainerRef,
-    ContainerTreeNode,
-    default_container_tree,
     describe_source,
     project_container_access,
     resolve_container_label,
@@ -430,18 +428,6 @@ class ResolveSharedLinkResponse(BaseModel):
     item: DocsHubItem
 
 
-class DocsContainerTreeNodeModel(BaseModel):
-    app: str
-    type: str
-    id: str
-    label: str
-    item_count: int
-    children: list["DocsContainerTreeNodeModel"] = Field(default_factory=list)
-
-
-DocsContainerTreeNodeModel.model_rebuild()
-
-
 class UpdateDocContainerRequest(BaseModel):
     app: str = Field(..., min_length=1, max_length=64)
     type: str = Field(..., min_length=1, max_length=64)
@@ -491,7 +477,7 @@ def _serialize_native_share_summary(doc: NativeDoc) -> DocsShareSummary:
     active_link = next((item for item in doc.link_shares if item.active), None)
     user_share_count = len(doc.user_shares)
     primary_container = _primary_container(doc)
-    is_container_shared = primary_container is not None and primary_container.container_app != "docs"
+    is_container_shared = primary_container is not None
     is_meeting_note = doc.source_app == "meeting" and doc.source_kind == "meeting_notes"
     return DocsShareSummary(
         visibility="shared" if user_share_count > 0 or active_link is not None or is_container_shared or is_meeting_note else "private",
@@ -969,15 +955,6 @@ def _sort_docs(
     return sorted(docs, key=sort_key, reverse=reverse)
 
 
-def _default_container_payload(workspace: Workspace) -> UpdateDocContainerRequest:
-    return UpdateDocContainerRequest(
-        app="docs",
-        type="workspace_sidebar",
-        id=workspace.id,
-        sort_order=0,
-    )
-
-
 def _container_write_allowed(
     *,
     db: Session,
@@ -1090,36 +1067,6 @@ def _clone_page_tree(
             clone_subtree(page.id, cloned.id)
 
     clone_subtree(None, None)
-
-
-def _attach_container_counts(
-    *,
-    docs: list[DocsHubItem],
-    nodes: list[ContainerTreeNode],
-) -> list[DocsContainerTreeNodeModel]:
-    counts: dict[tuple[str, str, str], int] = {}
-    for item in docs:
-        if item.primary_container is None or item.trashed_at is not None:
-            continue
-        key = (
-            item.primary_container.app,
-            item.primary_container.type,
-            item.primary_container.id,
-        )
-        counts[key] = counts.get(key, 0) + 1
-
-    def convert(node: ContainerTreeNode) -> DocsContainerTreeNodeModel:
-        key = (node.app, node.type, node.id)
-        return DocsContainerTreeNodeModel(
-            app=node.app,
-            type=node.type,
-            id=node.id,
-            label=node.label,
-            item_count=counts.get(key, 0),
-            children=[convert(child) for child in node.children],
-        )
-
-    return [convert(node) for node in nodes]
 
 
 def list_hub_internal(
@@ -1259,8 +1206,8 @@ def create_doc_item(
     current_user: User = Depends(require_current_user),
 ) -> DocsHubItem:
     workspace = _ensure_docs_workspace_access(db, current_user)
-    container_payload = payload.primary_container or _default_container_payload(workspace)
-    if not _container_write_allowed(
+    container_payload = payload.primary_container
+    if container_payload is not None and not _container_write_allowed(
         db=db,
         user=current_user,
         workspace=workspace,
@@ -1290,12 +1237,13 @@ def create_doc_item(
     )
     db.add(page)
     db.flush()
-    _upsert_primary_container(
-        db,
-        doc=doc,
-        payload=UpdateDocContainerRequest.model_validate(container_payload.model_dump()),
-        current_user=current_user,
-    )
+    if container_payload is not None:
+        _upsert_primary_container(
+            db,
+            doc=doc,
+            payload=UpdateDocContainerRequest.model_validate(container_payload.model_dump()),
+            current_user=current_user,
+        )
     db.commit()
     return _lookup_item(db, doc.id, current_user)
 
@@ -1613,25 +1561,6 @@ def delete_doc_container(
     _delete_primary_container(db, doc)
     db.commit()
     return _lookup_item(db, doc.id, current_user)
-
-
-@router.get("/containers/tree", response_model=list[DocsContainerTreeNodeModel])
-def get_docs_container_tree(
-    db: Session = Depends(get_db_session),
-    current_user: User = Depends(require_current_user),
-) -> list[DocsContainerTreeNodeModel]:
-    workspace = _ensure_docs_workspace_access(db, current_user)
-    docs = list_hub_internal(
-        db,
-        user=current_user,
-        query=DocsHubQuery(
-            view="all",
-            page=1,
-            page_size=500,
-        ),
-    ).items
-    nodes = default_container_tree(db=db, user=current_user, workspace=workspace)
-    return _attach_container_counts(docs=docs, nodes=nodes)
 
 
 @router.patch("/items/{item_id}/favorite", response_model=ToggleFavoriteResponse)

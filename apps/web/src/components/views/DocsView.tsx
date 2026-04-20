@@ -20,6 +20,7 @@ import {
   Sparkles,
   Star,
   Trash2,
+  Users,
   X,
 } from 'lucide-react';
 import { BlockEditor, BlockViewer, CollaborativeBlockEditor, useConfirm, usePrompt } from '@aidoo/ui';
@@ -54,8 +55,8 @@ import {
   deleteDocsItem,
   deleteDocLinkShare,
   deleteDocUserShare,
+  deleteDocContainer,
   duplicateDocsItem,
-  getDocsContainersTree,
   getDocsCollabSession,
   getDocsItem,
   getDocSharing,
@@ -67,11 +68,11 @@ import {
   recordDocView,
   resolveSharedLink,
   toggleDocFavorite,
+  updateDocContainer,
   updateDocPage,
   updateDocsItem,
   upsertDocLinkShare,
   upsertDocUserShare,
-  type DocsContainerTreeNode,
   type DocsHubItem,
   type DocsPageItem,
   type NativeDocSharingResponse,
@@ -89,6 +90,7 @@ import {
   buildWorkspaceAppPath,
   resolveDefaultWorkspaceAppPath,
 } from '@/src/domains/workspaces/workspace-utils';
+import { listSpaces, type PmsSpace } from '@/src/domains/pms/pms-api';
 
 const CATEGORY_MAP: Record<string, string> = {
   'docs-all': 'all',
@@ -118,16 +120,6 @@ const VIEW_LABELS: Record<string, string> = {
   meeting_notes: 'Meeting Notes',
   recent: 'Recent Pages',
   archived: 'Archived',
-};
-
-const VIEW_ROUTE_MAP: Record<string, string> = {
-  all: 'docs-all',
-  mine: 'docs-my',
-  shared: 'docs-shared',
-  private: 'docs-private',
-  meeting_notes: 'docs-notes',
-  recent: 'docs-recent',
-  archived: 'docs-archived',
 };
 
 const TEMPLATES = [
@@ -229,6 +221,70 @@ function DocsPageTreeNode({
   );
 }
 
+interface LocationOption {
+  value: string;
+  icon: typeof Globe;
+  title: string;
+  desc: string;
+  disabled?: boolean;
+  disabledReason?: string;
+}
+
+interface LocationPickerProps {
+  value: string;
+  onChange: (value: string) => void;
+  options: LocationOption[];
+  busy?: boolean;
+}
+
+function LocationPicker({ value, onChange, options, busy }: LocationPickerProps) {
+  return (
+    <div className="space-y-1.5">
+      {options.map((option) => {
+        const Icon = option.icon;
+        const isSelected = value === option.value;
+        const isDisabled = busy || option.disabled;
+        return (
+          <button
+            key={option.value}
+            type="button"
+            onClick={() => !isDisabled && onChange(option.value)}
+            disabled={isDisabled}
+            title={option.disabled ? option.disabledReason : undefined}
+            className={cn(
+              'flex w-full items-center gap-3 rounded-md border px-3 py-2.5 text-left transition-colors',
+              isSelected
+                ? 'border-app-accent bg-app-accent/10 ring-1 ring-app-accent'
+                : 'border-app-border bg-app-bg hover:border-app-accent/50 hover:bg-app-surface-hover',
+              isDisabled && 'cursor-not-allowed opacity-50 hover:border-app-border hover:bg-app-bg',
+            )}
+          >
+            <span
+              className={cn(
+                'flex h-8 w-8 shrink-0 items-center justify-center rounded-full',
+                isSelected ? 'bg-app-accent text-app-accent-fg' : 'bg-app-surface-hover text-gray-500',
+              )}
+            >
+              <Icon size={15} />
+            </span>
+            <span className="flex-1 min-w-0">
+              <span className="app-text-control block truncate text-app-ink">{option.title}</span>
+              <span className="app-text-micro block truncate text-gray-500">{option.desc}</span>
+            </span>
+            {isSelected ? (
+              <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-app-accent">
+                <span className="block h-1.5 w-1.5 rounded-full bg-app-accent-fg" />
+              </span>
+            ) : (
+              <span className="block h-4 w-4 shrink-0 rounded-full border border-app-border" />
+            )}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 function timeAgo(dateStr: string): string {
   const diff = Date.now() - new Date(dateStr).getTime();
   const mins = Math.floor(diff / 60000);
@@ -293,6 +349,8 @@ export const DocsView = () => {
 
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [newDocTitle, setNewDocTitle] = useState('');
+  const [newDocLocation, setNewDocLocation] = useState<string>('workspace');
+  const [availableSpaces, setAvailableSpaces] = useState<PmsSpace[]>([]);
   const [creating, setCreating] = useState(false);
 
   const [selectedDoc, setSelectedDoc] = useState<DocsHubItem | null>(null);
@@ -300,15 +358,16 @@ export const DocsView = () => {
   const [selectedPageId, setSelectedPageId] = useState<string | null>(null);
   const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set());
   const [resolvedSharedDocId, setResolvedSharedDocId] = useState<string | null>(null);
-  const [containerTree, setContainerTree] = useState<DocsContainerTreeNode[]>([]);
-  const [loadingContainers, setLoadingContainers] = useState(false);
 
   const [showShareModal, setShowShareModal] = useState(false);
   const [sharingState, setSharingState] = useState<NativeDocSharingResponse | null>(null);
   const [shareableUsers, setShareableUsers] = useState<ShareableUserItem[]>([]);
-  const [shareUserId, setShareUserId] = useState('');
   const [shareAccessLevel, setShareAccessLevel] = useState<'read' | 'edit'>('read');
   const [shareLoading, setShareLoading] = useState(false);
+  const [inviteQuery, setInviteQuery] = useState('');
+  const [inviteFocused, setInviteFocused] = useState(false);
+  const [linkCopied, setLinkCopied] = useState(false);
+  const [shareLinkCopied, setShareLinkCopied] = useState(false);
 
   const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -319,10 +378,6 @@ export const DocsView = () => {
   const activeCategoryLabel = (toolId && CATEGORY_LABELS[toolId]) || VIEW_LABELS[activeCategory] || 'All Docs';
   const activeSourceApp = searchParams.get('source_app') ?? undefined;
   const activeSourceKind = searchParams.get('source_kind') ?? undefined;
-  const activeContainerApp = searchParams.get('container_app') ?? undefined;
-  const activeContainerType = searchParams.get('container_type') ?? undefined;
-  const activeContainerId = searchParams.get('container_id') ?? undefined;
-  const showContainerBrowser = loadingContainers || containerTree.length > 0;
   const activeFilterQuery = searchParams.toString();
   const activeItemId = docId ?? resolvedSharedDocId;
   const visibleTree = useMemo(() => flattenVisibleTree(pages, expandedNodes), [pages, expandedNodes]);
@@ -354,6 +409,12 @@ export const DocsView = () => {
   );
   const isListView = !activeItemId && !shareToken;
   const hasDocsWorkspace = hasWorkspaceMembership(auth.user, workspaceSlug);
+  const currentWorkspace = useMemo(
+    () => auth.user?.workspaces.find((workspace) => workspace.slug === workspaceSlug)
+      ?? auth.user?.workspaces[0]
+      ?? null,
+    [auth.user, workspaceSlug],
+  );
   const docsRoot = workspaceSlug
     ? buildWorkspaceAppPath(workspaceSlug, 'docs')
     : resolveDefaultWorkspaceAppPath(auth.user, 'docs');
@@ -377,9 +438,6 @@ export const DocsView = () => {
         sort_dir: sortDir,
         source_app: activeSourceApp,
         source_kind: activeSourceKind,
-        container_app: activeContainerApp,
-        container_type: activeContainerType,
-        container_id: activeContainerId,
       }, workspaceSlug);
       setDocs(response.items);
       setTotal(response.total);
@@ -391,9 +449,6 @@ export const DocsView = () => {
     }
   }, [
     activeCategory,
-    activeContainerApp,
-    activeContainerId,
-    activeContainerType,
     activeSourceApp,
     activeSourceKind,
     searchQuery,
@@ -435,15 +490,6 @@ export const DocsView = () => {
       void fetchDocs();
     }
   }, [fetchDocs, isListView, token]);
-
-  useEffect(() => {
-    if (!token || !isListView) return;
-    setLoadingContainers(true);
-    void getDocsContainersTree(token, workspaceSlug)
-      .then((nodes) => setContainerTree(nodes))
-      .catch(() => setContainerTree([]))
-      .finally(() => setLoadingContainers(false));
-  }, [isListView, token, workspaceSlug]);
 
   useEffect(() => {
     if (!token) return;
@@ -488,28 +534,6 @@ export const DocsView = () => {
     navigate(activeFilterQuery ? `${basePath}?${activeFilterQuery}` : basePath);
   };
 
-  const navigateListView = useCallback((
-    view: string,
-    container?: { app: string; type: string; id: string } | null,
-  ) => {
-    const next = new URLSearchParams(searchParams);
-    if (!toolId) {
-      if (view === 'all') next.delete('view');
-      else next.set('view', view);
-    }
-    if (container) {
-      next.set('container_app', container.app);
-      next.set('container_type', container.type);
-      next.set('container_id', container.id);
-    } else {
-      next.delete('container_app');
-      next.delete('container_type');
-      next.delete('container_id');
-    }
-    const basePath = toolId ? `/tool/${VIEW_ROUTE_MAP[view] ?? 'docs-all'}` : docsRoot;
-    navigate(next.toString() ? `${basePath}?${next.toString()}` : basePath);
-  }, [docsRoot, navigate, searchParams, toolId]);
-
   const handleBack = () => {
     if (shareToken && !hasDocsWorkspace) {
       navigate('/');
@@ -521,8 +545,14 @@ export const DocsView = () => {
 
   const openCreateModal = useCallback((templateTitle?: string) => {
     setNewDocTitle(templateTitle ?? '');
+    setNewDocLocation('workspace');
     setShowCreateModal(true);
-  }, []);
+    if (token) {
+      void listSpaces(token)
+        .then((spaces) => setAvailableSpaces(Array.isArray(spaces) ? spaces : []))
+        .catch(() => setAvailableSpaces([]));
+    }
+  }, [token]);
 
   // Allow other parts of the shell (e.g. SubSidebar header "+" button) to
   // open the New Doc modal without owning a reference to this component.
@@ -542,19 +572,55 @@ export const DocsView = () => {
     setSearchParams(next, { replace: true });
   }, [openCreateModal, searchParams, setSearchParams, shareToken]);
 
+  const locationOptions = useMemo<LocationOption[]>(() => [
+    {
+      value: 'workspace',
+      icon: Globe,
+      title: currentWorkspace ? `Workspace · ${currentWorkspace.name}` : 'Workspace',
+      desc: '워크스페이스 전체 멤버가 볼 수 있어요',
+    },
+    ...availableSpaces.map((space) => ({
+      value: `space:${space.id}`,
+      icon: Users,
+      title: space.name,
+      desc: '팀스페이스 멤버만 볼 수 있어요',
+    })),
+    {
+      value: 'private',
+      icon: Lock,
+      title: 'Private',
+      desc: '나만 볼 수 있어요',
+    },
+  ], [availableSpaces, currentWorkspace]);
+
+  const resolveContainerFromLocationValue = useCallback((locationValue: string) => {
+    if (locationValue === 'private') return null;
+    if (locationValue === 'workspace') {
+      return currentWorkspace
+        ? { app: 'docs', type: 'workspace_sidebar', id: currentWorkspace.id }
+        : null;
+    }
+    if (locationValue.startsWith('space:')) {
+      const spaceId = locationValue.slice('space:'.length);
+      return { app: 'pms', type: 'space', id: spaceId };
+    }
+    return null;
+  }, [currentWorkspace]);
+
+  const resolveLocationValueFromContainer = useCallback((container: { app: string; type: string; id: string } | null) => {
+    if (container === null) return 'private';
+    if (container.app === 'docs' && container.type === 'workspace_sidebar') return 'workspace';
+    if (container.app === 'pms' && container.type === 'space') return `space:${container.id}`;
+    return 'private';
+  }, []);
+
   const handleCreateDoc = async () => {
     if (!token || !newDocTitle.trim()) return;
     setCreating(true);
     try {
       const item = await createNativeDoc(token, {
         title: newDocTitle.trim(),
-        primary_container: activeContainerApp && activeContainerType && activeContainerId
-          ? {
-              app: activeContainerApp,
-              type: activeContainerType,
-              id: activeContainerId,
-            }
-          : null,
+        primary_container: resolveContainerFromLocationValue(newDocLocation),
       }, workspaceSlug);
       setShowCreateModal(false);
       setNewDocTitle('');
@@ -775,6 +841,9 @@ export const DocsView = () => {
     if (!selectedDoc?.can_share || !token) return;
     setShareLoading(true);
     setShowShareModal(true);
+    void listSpaces(token)
+      .then((spaces) => setAvailableSpaces(Array.isArray(spaces) ? spaces : []))
+      .catch(() => setAvailableSpaces([]));
     try {
       await refreshSharing(selectedDoc.id);
     } finally {
@@ -782,17 +851,25 @@ export const DocsView = () => {
     }
   };
 
-  const handleAddUserShare = async () => {
-    if (!token || !selectedDoc || !shareUserId) return;
-    setShareLoading(true);
+  const [changingLocation, setChangingLocation] = useState(false);
+
+  const handleChangeLocation = async (nextLocation: string) => {
+    if (!token || !selectedDoc || !selectedDoc.can_manage) return;
+    const current = resolveLocationValueFromContainer(selectedDoc.primary_container);
+    if (current === nextLocation) return;
+    setChangingLocation(true);
     try {
-      const updated = await upsertDocUserShare(token, selectedDoc.id, shareUserId, shareAccessLevel);
-      setSharingState(updated);
-      setShareUserId('');
+      const nextContainer = resolveContainerFromLocationValue(nextLocation);
+      const updated = nextContainer === null
+        ? await deleteDocContainer(token, selectedDoc.id, workspaceSlug)
+        : await updateDocContainer(token, selectedDoc.id, nextContainer, workspaceSlug);
+      setSelectedDoc(updated);
+      setDocs((current) => current.map((doc) => (doc.id === updated.id ? updated : doc)));
     } finally {
-      setShareLoading(false);
+      setChangingLocation(false);
     }
   };
+
 
   const handleRemoveUserShare = async (userId: string) => {
     if (!token || !selectedDoc) return;
@@ -835,7 +912,61 @@ export const DocsView = () => {
     const tokenValue = sharingState?.link_share?.token;
     if (!tokenValue) return;
     const url = `${window.location.origin}/docs/shared/${tokenValue}`;
-    await navigator.clipboard.writeText(url);
+    try {
+      await navigator.clipboard.writeText(url);
+      setShareLinkCopied(true);
+      window.setTimeout(() => setShareLinkCopied(false), 1500);
+    } catch {
+      // no-op
+    }
+  };
+
+  const copyDirectLink = async () => {
+    if (!selectedDoc) return;
+    try {
+      await navigator.clipboard.writeText(docUrlFor(selectedDoc));
+      setLinkCopied(true);
+      window.setTimeout(() => setLinkCopied(false), 1500);
+    } catch {
+      // no-op
+    }
+  };
+
+  const invitedUserIds = useMemo(
+    () => new Set(sharingState?.users.map((user) => user.user_id) ?? []),
+    [sharingState?.users],
+  );
+
+  const inviteSuggestions = useMemo(() => {
+    const query = inviteQuery.trim().toLowerCase();
+    if (!query) return [];
+    return shareableUsers
+      .filter((user) => !invitedUserIds.has(user.id))
+      .filter((user) => user.full_name.toLowerCase().includes(query) || user.email.toLowerCase().includes(query))
+      .slice(0, 6);
+  }, [inviteQuery, invitedUserIds, shareableUsers]);
+
+  const handleInviteUser = async (userId: string) => {
+    if (!token || !selectedDoc) return;
+    setShareLoading(true);
+    try {
+      const updated = await upsertDocUserShare(token, selectedDoc.id, userId, shareAccessLevel);
+      setSharingState(updated);
+      setInviteQuery('');
+    } finally {
+      setShareLoading(false);
+    }
+  };
+
+  const handleChangeUserAccess = async (userId: string, level: 'read' | 'edit') => {
+    if (!token || !selectedDoc) return;
+    setShareLoading(true);
+    try {
+      const updated = await upsertDocUserShare(token, selectedDoc.id, userId, level);
+      setSharingState(updated);
+    } finally {
+      setShareLoading(false);
+    }
   };
 
   const [activeDragId, setActiveDragId] = useState<string | null>(null);
@@ -1287,6 +1418,14 @@ export const DocsView = () => {
                 }}
               />
             </div>
+            <div>
+              <label className="app-text-caption text-gray-500 mb-1.5 block">Location</label>
+              <LocationPicker
+                value={newDocLocation}
+                onChange={setNewDocLocation}
+                options={locationOptions}
+              />
+            </div>
             <div className="flex justify-end gap-2 pt-2">
               <button
                 onClick={() => setShowCreateModal(false)}
@@ -1325,12 +1464,136 @@ export const DocsView = () => {
               </div>
             ) : (
               <>
+                {/* 1. Invite by name/email (top, most common action) */}
+                <div className="space-y-3">
+                  <div className="relative flex items-center gap-2">
+                    <div className="relative flex-1">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" size={14} />
+                      <input
+                        type="text"
+                        value={inviteQuery}
+                        onChange={(event) => setInviteQuery(event.target.value)}
+                        onFocus={() => setInviteFocused(true)}
+                        onBlur={() => window.setTimeout(() => setInviteFocused(false), 150)}
+                        placeholder="Invite by name or email..."
+                        className="app-text-body w-full rounded-md border border-app-border bg-app-bg py-2 pl-9 pr-3 text-app-ink focus:border-app-accent focus:outline-none"
+                      />
+                      {inviteFocused && inviteSuggestions.length > 0 ? (
+                        <div className="absolute left-0 right-0 top-full z-10 mt-1 max-h-60 overflow-y-auto rounded-md border border-app-border bg-app-surface-sidebar shadow-lg">
+                          {inviteSuggestions.map((user) => (
+                            <button
+                              key={user.id}
+                              type="button"
+                              onMouseDown={(event) => {
+                                event.preventDefault();
+                                void handleInviteUser(user.id);
+                              }}
+                              className="flex w-full items-center gap-2 px-3 py-2 text-left hover:bg-app-surface-hover"
+                            >
+                              <div className="app-text-micro flex h-7 w-7 items-center justify-center rounded-full bg-app-accent/20 font-bold text-app-accent">
+                                {user.full_name.split(' ').map((name) => name[0]).join('').slice(0, 2)}
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <div className="app-text-control text-app-ink truncate">{user.full_name}</div>
+                                <div className="app-text-micro text-gray-500 truncate">{user.email}</div>
+                              </div>
+                            </button>
+                          ))}
+                        </div>
+                      ) : null}
+                    </div>
+                    <select
+                      value={shareAccessLevel}
+                      onChange={(event) => setShareAccessLevel(event.target.value as 'read' | 'edit')}
+                      className="app-text-body rounded-md border border-app-border bg-app-bg px-3 py-2 text-app-ink focus:border-app-accent focus:outline-none"
+                    >
+                      <option value="read">Can read</option>
+                      <option value="edit">Can edit</option>
+                    </select>
+                  </div>
+
+                  {sharingState?.users.length ? (
+                    <div className="space-y-1.5">
+                      <div className="app-text-overline text-gray-500">People with access</div>
+                      {sharingState.users.map((user) => (
+                        <div key={user.user_id} className="flex items-center justify-between rounded-md border border-app-border bg-app-bg px-3 py-2">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <div className="app-text-micro flex h-7 w-7 items-center justify-center rounded-full bg-app-accent/20 font-bold text-app-accent shrink-0">
+                              {user.full_name.split(' ').map((name) => name[0]).join('').slice(0, 2)}
+                            </div>
+                            <div className="min-w-0">
+                              <div className="app-text-control text-app-ink truncate">{user.full_name}</div>
+                              <div className="app-text-micro text-gray-500 truncate">{user.email}</div>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2 shrink-0">
+                            <select
+                              value={user.access_level}
+                              onChange={(event) => void handleChangeUserAccess(user.user_id, event.target.value as 'read' | 'edit')}
+                              className="app-text-caption rounded border border-app-border bg-app-surface-sidebar px-2 py-1 text-app-ink focus:border-app-accent focus:outline-none"
+                            >
+                              <option value="read">Can read</option>
+                              <option value="edit">Can edit</option>
+                            </select>
+                            <button
+                              onClick={() => void handleRemoveUserShare(user.user_id)}
+                              className="app-text-caption rounded border border-app-border px-2 py-1 text-app-ink hover:bg-app-surface-hover"
+                            >
+                              Remove
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+
+                {/* 2. Who can access — container visibility */}
+                <div className="rounded-lg border border-app-border bg-app-bg p-4 space-y-3">
+                  <div>
+                    <div className="app-text-control text-app-ink">Who can access</div>
+                    <div className="app-text-caption text-gray-500">
+                      이 문서를 기본으로 볼 수 있는 범위예요.
+                    </div>
+                  </div>
+                  <LocationPicker
+                    value={resolveLocationValueFromContainer(selectedDoc.primary_container)}
+                    onChange={(value) => void handleChangeLocation(value)}
+                    options={locationOptions}
+                    busy={changingLocation || !selectedDoc.can_manage}
+                  />
+                  {!selectedDoc.can_manage ? (
+                    <div className="app-text-micro text-gray-500">
+                      공개 범위는 문서 소유자나 관리자만 변경할 수 있어요.
+                    </div>
+                  ) : null}
+                </div>
+
+                {/* 3. Copy link — always visible direct doc URL */}
+                <div className="flex items-center gap-2 rounded-lg border border-app-border bg-app-bg px-3 py-2">
+                  <Link2 size={16} className="text-gray-500 shrink-0" />
+                  <input
+                    type="text"
+                    readOnly
+                    value={docUrlFor(selectedDoc)}
+                    className="app-text-body-sm flex-1 min-w-0 bg-transparent text-app-ink focus:outline-none"
+                  />
+                  <button
+                    onClick={() => void copyDirectLink()}
+                    className="app-text-control-sm flex items-center gap-1 rounded-md border border-app-border px-2.5 py-1 text-app-ink hover:bg-app-surface-hover"
+                  >
+                    <Copy size={12} />
+                    <span>{linkCopied ? 'Copied!' : 'Copy link'}</span>
+                  </button>
+                </div>
+
+                {/* 4. Internal share link — token-based toggle */}
                 <div className="rounded-lg border border-app-border bg-app-bg p-4 space-y-3">
                   <div className="flex items-center justify-between gap-4">
                     <div>
-                      <div className="app-text-control text-app-ink">Internal link</div>
+                      <div className="app-text-control text-app-ink">Internal share link</div>
                       <div className="app-text-caption text-gray-500">
-                        Logged-in internal users can access this document through the generated link.
+                        로그인한 모든 내부 사용자가 이 링크로 문서에 접근할 수 있어요.
                       </div>
                     </div>
                     {sharingState?.link_share?.active ? (
@@ -1370,9 +1633,10 @@ export const DocsView = () => {
                       />
                       <button
                         onClick={() => void copyShareLink()}
-                        className="app-text-control rounded-md border border-app-border px-3 py-2 text-app-ink hover:bg-app-surface-hover"
+                        className="app-text-control flex items-center gap-1 rounded-md border border-app-border px-3 py-2 text-app-ink hover:bg-app-surface-hover"
                       >
                         <Copy size={14} />
+                        <span>{shareLinkCopied ? 'Copied!' : 'Copy'}</span>
                       </button>
                       <button
                         onClick={() => void handleEnableLinkShare(sharingState.link_share?.access_level ?? 'read', true)}
@@ -1383,67 +1647,6 @@ export const DocsView = () => {
                     </div>
                   ) : null}
                 </div>
-
-                <div className="rounded-lg border border-app-border bg-app-bg p-4 space-y-4">
-                  <div>
-                    <div className="app-text-control text-app-ink">Invite internal users</div>
-                    <div className="app-text-caption text-gray-500">
-                      Grant read or edit access to specific internal users.
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-2">
-                    <select
-                      value={shareUserId}
-                      onChange={(event) => setShareUserId(event.target.value)}
-                      className="app-text-body flex-1 rounded-md border border-app-border bg-app-surface-sidebar px-3 py-2 text-app-ink focus:border-app-accent focus:outline-none"
-                    >
-                      <option value="">Select user...</option>
-                      {shareableUsers.map((user) => (
-                        <option key={user.id} value={user.id}>
-                          {user.full_name} ({user.email})
-                        </option>
-                      ))}
-                    </select>
-                    <select
-                      value={shareAccessLevel}
-                      onChange={(event) => setShareAccessLevel(event.target.value as 'read' | 'edit')}
-                      className="app-text-body rounded-md border border-app-border bg-app-surface-sidebar px-3 py-2 text-app-ink focus:border-app-accent focus:outline-none"
-                    >
-                      <option value="read">Can read</option>
-                      <option value="edit">Can edit</option>
-                    </select>
-                    <button
-                      onClick={() => void handleAddUserShare()}
-                      disabled={!shareUserId}
-                      className="app-text-control rounded-md bg-app-accent px-3 py-2 text-app-bg hover:opacity-90 disabled:opacity-50"
-                    >
-                      Add
-                    </button>
-                  </div>
-
-                  <div className="space-y-2">
-                    {sharingState?.users.length ? sharingState.users.map((user) => (
-                      <div key={user.user_id} className="flex items-center justify-between rounded-md border border-app-border bg-app-surface-sidebar px-3 py-2">
-                        <div>
-                          <div className="app-text-control text-app-ink">{user.full_name}</div>
-                          <div className="app-text-caption text-gray-500">{user.email}</div>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <span className="app-text-caption text-gray-500">{user.access_level === 'edit' ? 'Can edit' : 'Can read'}</span>
-                          <button
-                            onClick={() => void handleRemoveUserShare(user.user_id)}
-                            className="app-text-control rounded-md border border-app-border px-3 py-1.5 text-app-ink hover:bg-app-surface-hover"
-                          >
-                            Remove
-                          </button>
-                        </div>
-                      </div>
-                    )) : (
-                      <div className="app-text-caption text-gray-500">No individual users have access.</div>
-                    )}
-                  </div>
-                </div>
               </>
             )}
           </div>
@@ -1451,57 +1654,8 @@ export const DocsView = () => {
       ) : null}
 
       {isListView ? (
-        <div className="flex-1 flex min-h-0 overflow-hidden">
-          {showContainerBrowser ? (
-            <aside className="hidden w-72 shrink-0 border-r border-app-border bg-app-surface-sidebar/60 xl:flex xl:flex-col">
-              <div className="border-b border-app-border px-5 py-4">
-                <div className="app-text-overline text-gray-500">Browse by Container</div>
-              </div>
-              <div className="min-h-0 flex-1 overflow-y-auto px-2 py-3 custom-scrollbar">
-                {loadingContainers ? (
-                  <div className="flex items-center justify-center py-10">
-                    <Loader2 size={18} className="animate-spin text-app-accent" />
-                  </div>
-                ) : (
-                  <div className="space-y-1">
-                    {containerTree.map((node) => {
-                      const renderNode = (current: DocsContainerTreeNode, depth = 0) => {
-                        const isSelected = activeContainerApp === current.app
-                          && activeContainerType === current.type
-                          && activeContainerId === current.id;
-                        return (
-                          <div key={`${current.app}:${current.type}:${current.id}`}>
-                            <button
-                              onClick={() => navigateListView('all', {
-                                app: current.app,
-                                type: current.type,
-                                id: current.id,
-                              })}
-                              className={cn(
-                                'app-text-control-sm flex w-full items-center justify-between rounded-md px-3 py-2 text-left transition-colors',
-                                isSelected
-                                  ? 'bg-app-accent/10 text-app-accent'
-                                  : 'text-app-ink/75 hover:bg-app-surface-hover hover:text-app-ink',
-                              )}
-                              style={{ paddingLeft: `${12 + depth * 14}px` }}
-                            >
-                              <span className="truncate">{current.label}</span>
-                              <span className="app-text-micro text-gray-500">{current.item_count}</span>
-                            </button>
-                            {current.children.map((child) => renderNode(child, depth + 1))}
-                          </div>
-                        );
-                      };
-                      return renderNode(node);
-                    })}
-                  </div>
-                )}
-              </div>
-            </aside>
-          ) : null}
-
-          <div className="flex-1 flex flex-col overflow-hidden">
-            <div className="p-8 space-y-5 overflow-y-auto h-full custom-scrollbar">
+        <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+          <div className="p-8 space-y-5 overflow-y-auto h-full custom-scrollbar">
             <div className="flex items-center justify-between">
               <div>
                 <h1 className="app-text-title-lg text-app-ink">{activeCategoryLabel}</h1>
@@ -1698,7 +1852,6 @@ export const DocsView = () => {
               </div>
             )}
           </div>
-        </div>
         </div>
       ) : (
         renderEditor()

@@ -417,27 +417,6 @@ export function makeDocsPageRef(
   return `${sourceType}__${sourcePageId}`;
 }
 
-export interface DocsContainerTreeNode {
-  app: string;
-  type: string;
-  id: string;
-  label: string;
-  item_count: number;
-  children: DocsContainerTreeNode[];
-}
-
-export function getDocsContainersTree(
-  token: string,
-  workspaceSlug?: string | null,
-): Promise<DocsContainerTreeNode[]> {
-  return request<DocsContainerTreeNode[]>(
-    '/api/v1/docs/containers/tree',
-    token,
-    {},
-    workspaceSlug,
-  );
-}
-
 export function updateDocContainer(
   token: string,
   itemId: string,

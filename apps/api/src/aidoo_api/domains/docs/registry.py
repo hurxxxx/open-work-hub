@@ -1,12 +1,17 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Protocol
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from aidoo_api.domains.auth.access import resolve_team_role, team_role_allows
+from aidoo_api.domains.auth.access import (
+    resolve_team_role,
+    resolve_workspace_role,
+    team_role_allows,
+    workspace_role_allows,
+)
 from aidoo_api.domains.auth.models import Team, User, Workspace
 from aidoo_api.domains.docs.models import NativeDoc, NativeDocContainer
 
@@ -16,16 +21,6 @@ class ContainerRef:
     app: str
     type: str
     id: str
-
-
-@dataclass
-class ContainerTreeNode:
-    app: str
-    type: str
-    id: str
-    label: str
-    children: list["ContainerTreeNode"] = field(default_factory=list)
-    item_count: int = 0
 
 
 @dataclass(frozen=True)
@@ -53,14 +48,6 @@ class DocsSourceAdapter(Protocol):
 
 
 class DocsContainerAdapter(Protocol):
-    def list_nodes(
-        self,
-        *,
-        db: Session,
-        user: User,
-        workspace: Workspace,
-    ) -> list[ContainerTreeNode]: ...
-
     def label_for(
         self,
         *,
@@ -177,22 +164,6 @@ class _GenericSourceAdapter:
 
 
 class _DocsContainerAdapter:
-    def list_nodes(
-        self,
-        *,
-        db: Session,
-        user: User,
-        workspace: Workspace,
-    ) -> list[ContainerTreeNode]:
-        return [
-            ContainerTreeNode(
-                app="docs",
-                type="workspace_sidebar",
-                id=workspace.id,
-                label="Workspace Docs",
-            )
-        ]
-
     def label_for(
         self,
         *,
@@ -212,7 +183,9 @@ class _DocsContainerAdapter:
         workspace: Workspace,
         ref: ContainerRef,
     ) -> bool:
-        return ref.type == "workspace_sidebar" and ref.id == workspace.id
+        if ref.type != "workspace_sidebar" or ref.id != workspace.id:
+            return False
+        return resolve_workspace_role(db, user, workspace.id) is not None
 
     def project_access(
         self,
@@ -222,43 +195,17 @@ class _DocsContainerAdapter:
         workspace: Workspace,
         ref: ContainerRef,
     ) -> ContainerAccessProjection:
+        if ref.type != "workspace_sidebar" or ref.id != workspace.id:
+            return ContainerAccessProjection(False, False, False)
+        role = resolve_workspace_role(db, user, workspace.id)
         return ContainerAccessProjection(
-            can_view=False,
-            can_edit=False,
-            can_manage=False,
+            can_view=role is not None,
+            can_edit=workspace_role_allows(role, "member"),
+            can_manage=workspace_role_allows(role, "admin"),
         )
 
 
 class _PmsContainerAdapter:
-    def list_nodes(
-        self,
-        *,
-        db: Session,
-        user: User,
-        workspace: Workspace,
-    ) -> list[ContainerTreeNode]:
-        teams = db.scalars(
-            select(Team).where(
-                Team.workspace_id == workspace.id,
-                Team.active.is_(True),
-                Team.trashed_at.is_(None),
-            )
-        ).all()
-        nodes: list[ContainerTreeNode] = []
-        for team in teams:
-            if resolve_team_role(db, user, team) is None:
-                continue
-            nodes.append(
-                ContainerTreeNode(
-                    app="pms",
-                    type="space",
-                    id=team.id,
-                    label=team.name,
-                )
-            )
-        nodes.sort(key=lambda node: node.label.lower())
-        return nodes
-
     def label_for(
         self,
         *,
@@ -357,18 +304,6 @@ def resolve_container_label(
         id=container.container_id,
     )
     return adapter.label_for(db=db, workspace=workspace, ref=ref) or "Unfiled"
-
-
-def default_container_tree(
-    *,
-    db: Session,
-    user: User,
-    workspace: Workspace,
-) -> list[ContainerTreeNode]:
-    nodes: list[ContainerTreeNode] = []
-    for adapter in _container_adapters.values():
-        nodes.extend(adapter.list_nodes(db=db, user=user, workspace=workspace))
-    return nodes
 
 
 def container_access_allowed(
