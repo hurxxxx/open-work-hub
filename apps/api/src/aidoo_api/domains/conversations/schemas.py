@@ -40,6 +40,9 @@ class ArtifactOut(_CamelModel):
     id: str
     type: str
     title: str | None = None
+    # Only populated for ``type="code"`` artifacts — the client uses it
+    # to pick a syntax highlighter. Other types leave it null.
+    language: str | None = None
     content: str
     status: str | None = None
 

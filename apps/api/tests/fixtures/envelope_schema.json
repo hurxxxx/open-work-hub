@@ -216,6 +216,18 @@
           "title": "Artifact Type",
           "type": "string"
         },
+        "language": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Language"
+        },
         "title": {
           "anyOf": [
             {

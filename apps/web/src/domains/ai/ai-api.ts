@@ -28,6 +28,9 @@ export interface AiChatResponseArtifact {
   id: string;
   type: string;
   title: string | null;
+  /** Optional language hint for ``type="code"`` artifacts. Null for
+   *  other types (``document``, ``html``, ``svg``). */
+  language?: string | null;
   content: string;
 }
 

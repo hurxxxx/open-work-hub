@@ -639,6 +639,7 @@ describe('useChatStream', () => {
         id: 'art-1',
         type: 'document',
         title: 'Email',
+        language: null,
         content: 'Hello world',
         status: 'closed',
       },

@@ -66,4 +66,117 @@ describe('ArtifactPanel', () => {
     const dialog = screen.getByRole('dialog', { hidden: true });
     expect(dialog.getAttribute('aria-hidden')).toBe('true');
   });
+
+  it('renders GFM tables as real <table> elements', () => {
+    // remark-gfm turns `| col1 | col2 |` into a proper table; without the
+    // plugin the pipes would leak through as raw text.
+    const content = [
+      '| 항목 | 진행률 |',
+      '|---|---|',
+      '| 설계 | 100% |',
+      '| 개발 | 60% |',
+    ].join('\n');
+    render(
+      <ArtifactPanel
+        artifact={buildArtifact({ content })}
+        onClose={vi.fn()}
+      />,
+    );
+    const table = screen.getByRole('table');
+    expect(table).not.toBeNull();
+    expect(screen.getByRole('columnheader', { name: '항목' })).not.toBeNull();
+    expect(screen.getByRole('cell', { name: '설계' })).not.toBeNull();
+    expect(screen.getByRole('cell', { name: '60%' })).not.toBeNull();
+  });
+
+  it('applies syntax-highlight classes to fenced code blocks', () => {
+    // rehype-highlight adds `hljs` + `language-*` classes so the panel's
+    // CSS theme can style tokens. We don't assert specific color spans —
+    // that's the library's responsibility — only that it wired up.
+    const content = [
+      '```html',
+      '<!doctype html>',
+      '<html><body>hi</body></html>',
+      '```',
+    ].join('\n');
+    const { container } = render(
+      <ArtifactPanel
+        artifact={buildArtifact({ content })}
+        onClose={vi.fn()}
+      />,
+    );
+    const code = container.querySelector('pre code');
+    expect(code).not.toBeNull();
+    expect(code?.className).toMatch(/hljs/);
+    expect(code?.className).toMatch(/language-html/);
+  });
+
+  it('dispatches html artifacts to the Preview/Source tab renderer', () => {
+    const { container } = render(
+      <ArtifactPanel
+        artifact={buildArtifact({
+          type: 'html',
+          content: '<!doctype html><title>demo</title><body>hi</body>',
+        })}
+        onClose={vi.fn()}
+      />,
+    );
+    // Preview-first → iframe should be mounted with srcDoc.
+    const iframe = container.querySelector('iframe');
+    expect(iframe).not.toBeNull();
+    expect(iframe?.getAttribute('sandbox')).toBe('allow-scripts');
+  });
+
+  it('dispatches code artifacts to the pure syntax highlighter', () => {
+    const { container } = render(
+      <ArtifactPanel
+        artifact={buildArtifact({
+          type: 'code',
+          language: 'python',
+          content: 'print("hi")',
+        })}
+        onClose={vi.fn()}
+      />,
+    );
+    const code = container.querySelector('pre code');
+    expect(code?.className).toMatch(/language-python/);
+    // The code renderer does not run the markdown pipeline, so no <h1> / tables.
+    expect(container.querySelector('h1')).toBeNull();
+  });
+
+  it('dispatches svg artifacts to the sanitized SVG renderer', () => {
+    const { container } = render(
+      <ArtifactPanel
+        artifact={buildArtifact({
+          type: 'svg',
+          content:
+            '<svg viewBox="0 0 10 10"><circle cx="5" cy="5" r="4"/></svg>',
+        })}
+        onClose={vi.fn()}
+      />,
+    );
+    expect(container.querySelector('svg')).not.toBeNull();
+    expect(container.querySelector('circle')).not.toBeNull();
+  });
+
+  it('always opens at the wide layout — no narrow/maximize split', () => {
+    // Phase C.3 iteration removed the maximize toggle: every artifact
+    // needs room to breathe (tables, iframes, long code), so the panel
+    // always ships at the wide width.
+    render(<ArtifactPanel artifact={buildArtifact()} onClose={vi.fn()} />);
+    const dialog = screen.getByRole('dialog');
+    expect(dialog.className).toMatch(/w-\[min\(1200px,96vw\)\]/);
+    expect(screen.queryByRole('button', { name: '패널 확대' })).toBeNull();
+    expect(screen.queryByRole('button', { name: '패널 축소' })).toBeNull();
+  });
+
+  it('renders the type + language badge in the header', () => {
+    render(
+      <ArtifactPanel
+        artifact={buildArtifact({ type: 'code', language: 'typescript' })}
+        onClose={vi.fn()}
+      />,
+    );
+    expect(screen.getByText(/code · typescript/)).not.toBeNull();
+  });
 });

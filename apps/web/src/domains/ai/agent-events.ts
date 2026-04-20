@@ -100,6 +100,8 @@ export interface ArtifactStartedEvent {
     artifact_id: string;
     artifact_type: string;
     title?: string | null;
+    /** Optional language hint for ``type="code"`` artifacts. */
+    language?: string | null;
   };
 }
 
@@ -214,6 +216,9 @@ export interface ArtifactBuffer {
   id: string;
   type: string;
   title: string | null;
+  /** Optional language hint for ``type="code"`` artifacts. Other types
+   *  leave it null and the renderer falls back to auto-detection. */
+  language?: string | null;
   content: string;
   status: 'open' | 'closed';
 }

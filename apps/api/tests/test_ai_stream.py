@@ -994,6 +994,7 @@ def test_chat_sync_persists_artifact_only_response_into_turn_meta(
             "id": assistant["artifacts"][0]["id"],
             "type": "document",
             "title": "Draft",
+            "language": None,
             "content": "body",
             "status": "closed",
         }
@@ -1368,6 +1369,127 @@ def test_chat_stream_persists_artifact_into_turn_meta(
     assert artifacts[0]["type"] == "document"
     assert artifacts[0]["title"] == "Report"
     assert artifacts[0]["content"] == "- line one\n- line two"
+
+
+def test_chat_stream_code_artifact_language_roundtrips_through_stream_and_persistence(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # `type="code"` artifacts carry a `language` hint on the open tag. It
+    # must surface on the live `artifact_started` envelope AND on the
+    # persisted turn so reload picks the right syntax highlighter.
+    auth = _seeded_dev_login(client, "hq-admin")
+    slug = auth["user"]["workspaces"][0]["slug"]
+    _set_policy("chatbot", "local_only")
+    monkeypatch.setattr(ai_router, "supports_tool_calling", lambda pool: False)
+
+    pool_client = _FakeAsyncPoolClient([
+        _delta(
+            content=(
+                '<artifact type="code" language="python" title="Hello">'
+                'print("hi")</artifact>'
+            ),
+        ),
+        _delta(finish_reason="stop"),
+    ])
+    monkeypatch.setattr(llm_core, "get_async_pool_client", lambda pool: pool_client)
+
+    status_code, events = _stream_post(
+        client,
+        _workspace_ai_path(slug, "/chat/stream"),
+        headers=_auth_headers(auth["token"]),
+        json_body={
+            "backend_mode": "local",
+            "persist": True,
+            "messages": [{"role": "user", "content": "python hello"}],
+        },
+    )
+    assert status_code == 200
+    chat = _chat_events(events)
+    started = next(event for event in chat if event["type"] == "artifact_started")
+    assert started["data"]["artifact_type"] == "code"
+    assert started["data"]["language"] == "python"
+
+    conversation_id = next(
+        e for e in events if e["type"] == "conversation_attached"
+    )["data"]["conversation_id"]
+    detail = client.get(
+        f"/api/v1/workspaces/{slug}/conversations/{conversation_id}",
+        headers=_auth_headers(auth["token"]),
+    ).json()
+    assistant = detail["turns"][-1]
+    assert assistant["role"] == "assistant"
+    artifacts = assistant["artifacts"]
+    assert len(artifacts) == 1
+    assert artifacts[0]["type"] == "code"
+    assert artifacts[0]["language"] == "python"
+    assert artifacts[0]["content"] == 'print("hi")'
+
+
+def test_chat_sync_code_artifact_language_roundtrips(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Sync `/chat` must also carry the `language` hint on the response's
+    # `artifacts` array so clients without SSE see the same metadata.
+    auth = _seeded_dev_login(client, "hq-admin")
+    slug = auth["user"]["workspaces"][0]["slug"]
+    _set_policy("chatbot", "local_only")
+
+    def _fake_complete_chat(context, db, *, messages, **kwargs):  # type: ignore[no-untyped-def]
+        class _Usage:
+            prompt_tokens = completion_tokens = total_tokens = 0
+
+        class _Msg:
+            role = "assistant"
+            reasoning_content = None
+            content = (
+                'intro <artifact type="code" language="sql" title="Q">'
+                "SELECT 1;</artifact> done"
+            )
+
+        class _Choice:
+            finish_reason = "stop"
+            message = _Msg()
+
+        class _Response:
+            model = "dev"
+            choices = [_Choice()]
+            usage = _Usage()
+
+        class _Decision:
+            policy = "local_only"
+            chosen_pool = "local"
+            reason = "policy_local_only"
+            forced_local = False
+            pii_hits: list[str] = []
+
+        class _Cfg:
+            model = "dev"
+            canonical_model = "dev"
+            provider = "local"
+            backend = "primary"
+            base_url = ""
+            api_key = ""
+
+        return _Response(), _Decision(), _Cfg()
+
+    monkeypatch.setattr(ai_router, "complete_chat", _fake_complete_chat)
+
+    response = client.post(
+        _workspace_ai_path(slug, "/chat"),
+        headers=_auth_headers(auth["token"]),
+        json={
+            "backend_mode": "local",
+            "persist": True,
+            "messages": [{"role": "user", "content": "sql hello"}],
+        },
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["content"].strip() == "intro  done"
+    assert len(body["artifacts"]) == 1
+    assert body["artifacts"][0]["type"] == "code"
+    assert body["artifacts"][0]["language"] == "sql"
+    assert body["artifacts"][0]["content"] == "SELECT 1;"
 
 
 def test_chat_stream_synthesizes_completed_for_unclosed_artifact_on_error(

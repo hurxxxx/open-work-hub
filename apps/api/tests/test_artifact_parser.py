@@ -219,6 +219,20 @@ def test_close_tag_prefix_collision_stays_inside_body() -> None:
     assert len(ends) == 1
 
 
+def test_parser_captures_language_attribute_verbatim() -> None:
+    # ``type="code"`` artifacts carry a ``language`` hint the client uses
+    # to pick a syntax highlighter. Attrs scanning must preserve it
+    # alongside ``type`` and ``title`` without reordering or dropping.
+    events = _collect([
+        '<artifact type="code" language="python" title="Hello">'
+        'print("hi")</artifact>',
+    ])
+    start = next(e for e in events if isinstance(e, ParsedArtifactStart))
+    assert start.attrs["type"] == "code"
+    assert start.attrs["language"] == "python"
+    assert start.attrs["title"] == "Hello"
+
+
 def test_bare_artifact_without_type_stays_plain_text() -> None:
     # The model may quote `<artifact>` literally in help text. Without a
     # `type=` attribute we don't treat it as a real open — the whole tag

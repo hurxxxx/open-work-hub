@@ -27,6 +27,7 @@ import { ChatComposer } from '@/src/components/views/chat/ChatComposer';
 import { EmptyState } from '@/src/components/views/chat/EmptyState';
 import type { ChatTurn } from '@/src/components/views/chat/MessageBubble';
 import type {
+  ArtifactBuffer,
   PendingApproval,
   ToolCallBuffer,
 } from '@/src/domains/ai/agent-events';
@@ -407,7 +408,7 @@ export const AIView = () => {
   // finalized turns) and live (from the in-flight stream) — so the side
   // panel can resolve its active id regardless of where the artifact lives.
   const allArtifacts = useMemo(() => {
-    const entries: { id: string; type: string; title: string | null; content: string; status: 'open' | 'closed' }[] = [];
+    const entries: ArtifactBuffer[] = [];
     for (const turn of turns) {
       if (!turn.artifacts) continue;
       for (const artifact of turn.artifacts) {
@@ -415,6 +416,7 @@ export const AIView = () => {
           id: artifact.id,
           type: artifact.type,
           title: artifact.title ?? null,
+          language: artifact.language ?? null,
           content: artifact.content,
           status: artifact.status,
         });
@@ -687,7 +689,12 @@ function serializeTurnForModel(turn: ChatTurn): string {
     const titleAttr = artifact.title
       ? ` title="${artifact.title.replace(/"/g, '\u201d')}"`
       : '';
-    return `<artifact type="${artifact.type}"${titleAttr}>\n${artifact.content}\n</artifact>`;
+    // ``type="code"`` artifacts also carry a language attribute so the
+    // model sees the full original tag when revisiting in a follow-up.
+    const languageAttr = artifact.language
+      ? ` language="${artifact.language.replace(/"/g, '\u201d')}"`
+      : '';
+    return `<artifact type="${artifact.type}"${languageAttr}${titleAttr}>\n${artifact.content}\n</artifact>`;
   });
   if (!turn.content.trim()) {
     return blocks.join('\n\n');
@@ -717,6 +724,7 @@ function apiTurnToChatTurn(turn: ApiConversationTurn): ChatTurn {
       id: artifact.id,
       type: artifact.type,
       title: artifact.title ?? null,
+      language: artifact.language ?? null,
       content: artifact.content,
       status: artifact.status === 'open' ? 'open' : 'closed',
     })),

@@ -68,6 +68,7 @@ def _turn_out(turn) -> ConversationTurnOut:
                 id=artifact_id,
                 type=record.get("type") or "document",
                 title=record.get("title"),
+                language=record.get("language"),
                 content=record.get("content") or "",
                 status=record.get("status"),
             )

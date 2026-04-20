@@ -111,6 +111,9 @@ class ChatArtifact(BaseModel):
     id: str
     type: str
     title: str | None = None
+    # Only populated for ``type="code"`` artifacts. Other types leave it
+    # null so the client falls back to highlight.js auto-detection.
+    language: str | None = None
     content: str
 
 
@@ -229,6 +232,7 @@ def chat(
                 id=record["id"],
                 type=record.get("type") or "document",
                 title=record.get("title"),
+                language=record.get("language"),
                 content=record.get("content") or "",
             )
             for record in sync_buffer.artifacts
@@ -1164,6 +1168,7 @@ def _parser_events_to_envelopes(
                             "artifact_id": parsed.artifact_id,
                             "artifact_type": parsed.attrs.get("type", "document"),
                             "title": parsed.attrs.get("title"),
+                            "language": parsed.attrs.get("language"),
                         },
                     )
                 )
@@ -1440,13 +1445,16 @@ class _AssistantTurnBuffer:
     def _touch_artifact(self, artifact_id: str) -> dict[str, Any]:
         # Persisted artifact shape mirrors the client's ArtifactEntry: one
         # record per artifact_id collecting the full body text so reload
-        # can re-open the side panel with the same content.
+        # can re-open the side panel with the same content. ``language`` is
+        # only set for ``type="code"`` artifacts — other types leave it
+        # null and the client falls back to highlight.js auto-detection.
         if artifact_id not in self.artifact_records:
             self.artifact_order.append(artifact_id)
             self.artifact_records[artifact_id] = {
                 "id": artifact_id,
                 "type": "document",
                 "title": None,
+                "language": None,
                 "content": "",
                 "status": "open",
             }
@@ -1510,6 +1518,11 @@ class _AssistantTurnBuffer:
                 record = self._touch_artifact(artifact_id)
                 record["type"] = payload.get("artifact_type") or record["type"]
                 record["title"] = payload.get("title") or record["title"]
+                # ``language`` is an optional code-artifact hint; only
+                # overwrite when the envelope actually carries a value.
+                language = payload.get("language")
+                if language:
+                    record["language"] = language
         elif event_type == "artifact_delta":
             artifact_id = payload.get("artifact_id")
             if artifact_id:

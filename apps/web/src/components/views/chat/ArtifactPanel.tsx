@@ -1,19 +1,30 @@
-import ReactMarkdown from 'react-markdown';
 import { X } from 'lucide-react';
+import 'highlight.js/styles/github.css';
 
 import type { ArtifactBuffer } from '@/src/domains/ai/agent-events';
+
+import {
+  CodeArtifact,
+  DocumentArtifact,
+  HtmlArtifact,
+  SvgArtifact,
+} from './artifacts';
 
 export interface ArtifactPanelProps {
   artifact: ArtifactBuffer | null;
   onClose: () => void;
 }
 
-// Right-hand read-only document viewer. Mounted as a fixed slide-over so the
-// surrounding chat layout doesn't reshuffle when opening/closing. Content is
-// safe-by-default — react-markdown ignores raw HTML so the rendered output
-// can't carry script tags even if the model tried to inject them.
+// Right-hand read-only artifact viewer. Mounted as a fixed slide-over so the
+// surrounding chat layout doesn't reshuffle when opening/closing. The body
+// is dispatched by `artifact.type` into one of four renderers: markdown
+// document / HTML preview + source / code with syntax highlight / SVG. The
+// panel always opens at the wide layout — rendered HTML, long code, and
+// data tables all need the room, and a maximize toggle was just friction
+// for no real gain since nothing displayed well at 560px anyway.
 export function ArtifactPanel({ artifact, onClose }: ArtifactPanelProps) {
   const open = artifact !== null;
+
   return (
     <>
       {/* Dimmed backdrop doubles as the click-to-close affordance. */}
@@ -28,7 +39,7 @@ export function ArtifactPanel({ artifact, onClose }: ArtifactPanelProps) {
         role="dialog"
         aria-label={artifact?.title ?? '아티팩트 패널'}
         aria-hidden={!open}
-        className={`fixed right-0 top-0 z-50 flex h-full w-[min(560px,100vw)] flex-col border-l border-app-border bg-app-surface shadow-xl transition-transform ${
+        className={`fixed right-0 top-0 z-50 flex h-full w-[min(1200px,96vw)] flex-col border-l border-app-border bg-app-surface shadow-xl transition-transform duration-200 ${
           open ? 'translate-x-0' : 'translate-x-full'
         }`}
       >
@@ -38,6 +49,7 @@ export function ArtifactPanel({ artifact, onClose }: ArtifactPanelProps) {
               <div className="min-w-0 space-y-0.5">
                 <div className="app-text-caption text-gray-500">
                   {artifact.type}
+                  {artifact.language ? ` · ${artifact.language}` : ''}
                 </div>
                 <h2 className="app-text-title-md truncate text-app-ink">
                   {artifact.title?.trim() || '(제목 없는 문서)'}
@@ -54,9 +66,7 @@ export function ArtifactPanel({ artifact, onClose }: ArtifactPanelProps) {
             </header>
             <div className="custom-scrollbar flex-1 overflow-y-auto px-5 py-4">
               {artifact.content.trim() ? (
-                <div className="app-markdown prose prose-sm max-w-none dark:prose-invert">
-                  <ReactMarkdown>{artifact.content}</ReactMarkdown>
-                </div>
+                <ArtifactBody artifact={artifact} />
               ) : (
                 <div className="app-text-body-sm text-gray-500">
                   아직 내용이 없습니다.
@@ -68,4 +78,29 @@ export function ArtifactPanel({ artifact, onClose }: ArtifactPanelProps) {
       </aside>
     </>
   );
+}
+
+function ArtifactBody({ artifact }: { artifact: ArtifactBuffer }) {
+  switch (artifact.type) {
+    case 'html':
+      return (
+        <HtmlArtifact content={artifact.content} title={artifact.title} />
+      );
+    case 'code':
+      return (
+        <CodeArtifact
+          content={artifact.content}
+          language={artifact.language ?? null}
+        />
+      );
+    case 'svg':
+      return <SvgArtifact content={artifact.content} />;
+    case 'document':
+    default:
+      // Unknown/future types fall back to the document renderer —
+      // markdown tolerates arbitrary content gracefully, and that keeps
+      // the client forward-compatible with server-side type expansions
+      // (mermaid, react, etc.) without a hard crash in the meantime.
+      return <DocumentArtifact content={artifact.content} />;
+  }
 }

@@ -238,3 +238,78 @@
     color: black !important;
   }
 }
+
+/* ArtifactPanel markdown tuning. The Tailwind `prose` class already covers
+   most typography. GFM tables need explicit borders to look like data
+   tables (prose leaves them bare), and fenced code blocks get a light
+   bordered card — highlight.js/styles/github.css already provides the
+   light `#f6f8fa` token background, so we only layer the shell here. */
+.artifact-markdown table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 0.875rem;
+}
+.artifact-markdown th,
+.artifact-markdown td {
+  border: 1px solid var(--color-app-border);
+  padding: 0.375rem 0.75rem;
+  text-align: left;
+  vertical-align: top;
+}
+.artifact-markdown thead {
+  background-color: var(--color-app-surface-hover);
+}
+.artifact-markdown pre {
+  overflow-x: auto;
+  border: 1px solid var(--color-app-border);
+  border-radius: 0.5rem;
+  padding: 0.75rem;
+}
+.artifact-markdown pre code,
+.artifact-markdown pre code.hljs {
+  display: block;
+  padding: 0;
+  font-size: 0.75rem;
+  line-height: 1.55;
+}
+.artifact-markdown :not(pre) > code {
+  background-color: var(--color-app-surface-hover);
+  padding: 0.125rem 0.375rem;
+  border-radius: 0.25rem;
+  font-size: 0.85em;
+}
+
+/* Full-document code artifact (type="code"). Same light treatment as the
+   markdown fenced block but the <pre> fills the panel so long source
+   files scroll inside it rather than pushing the header around. */
+.artifact-code pre {
+  margin: 0;
+  height: 100%;
+  overflow: auto;
+  border: 1px solid var(--color-app-border);
+  border-radius: 0.5rem;
+  padding: 0.75rem;
+}
+.artifact-code pre code,
+.artifact-code pre code.hljs {
+  display: block;
+  padding: 0;
+  font-size: 0.8125rem;
+  line-height: 1.6;
+}
+
+/* SVG artifact: center the graphic inside the panel body and keep it
+   bounded so a viewBox-less diagram doesn't blow past the viewport. */
+.artifact-svg {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  min-height: 16rem;
+}
+.artifact-svg > svg {
+  max-width: 100%;
+  max-height: 70vh;
+  height: auto;
+  width: auto;
+}

@@ -4,6 +4,7 @@ export interface ConversationArtifact {
   id: string;
   type: string;
   title: string | null;
+  language?: string | null;
   content: string;
   status?: string | null;
 }

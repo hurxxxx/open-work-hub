@@ -92,6 +92,10 @@ class ArtifactStartedData(BaseModel):
     artifact_id: str
     artifact_type: str
     title: str | None = None
+    # Optional language hint for ``type="code"`` artifacts (e.g. "python",
+    # "html", "sql"). The client uses it to pick a syntax highlighter;
+    # other artifact types leave it null.
+    language: str | None = None
 
 
 class ArtifactDeltaData(BaseModel):

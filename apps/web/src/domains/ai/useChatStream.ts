@@ -305,6 +305,7 @@ function syncResponseToState(response: AiChatResponse): ChatStreamState {
       id: artifact.id,
       type: artifact.type,
       title: artifact.title ?? null,
+      language: artifact.language ?? null,
       content: artifact.content,
       status: 'closed',
     }),
@@ -515,6 +516,7 @@ function applyEnvelope(
         id: data.artifact_id,
         type: data.artifact_type,
         title: data.title ?? null,
+        language: data.language ?? null,
         content: '',
         status: 'open',
       };
