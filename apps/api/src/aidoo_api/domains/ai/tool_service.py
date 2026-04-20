@@ -12,7 +12,11 @@ from sqlalchemy.orm import Session
 
 from aidoo_api.core.principal import CallerPrincipal
 from aidoo_api.domains.ai.audit import log_llm_tool_call
-from aidoo_api.domains.ai.registry import get_ai_capability_registry
+from aidoo_api.domains.ai.registry import (
+    build_workspace_context,
+    get_ai_capability_registry,
+    resolve_workspace_entitlement_view,
+)
 from aidoo_api.domains.auth.models import User, Workspace
 
 
@@ -31,6 +35,7 @@ def execute_tool(
     started = perf_counter()
     registry = get_ai_capability_registry()
     definition = registry.tools.get(tool_name)
+    descriptor = registry.get_descriptor(tool_name)
     args_summary = preview_text(
         json.dumps(dict(arguments), ensure_ascii=False, default=str),
         limit=500,
@@ -52,7 +57,55 @@ def execute_tool(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Unknown AI tool: {tool_name}",
         )
-    if definition.handler is None:
+    handler = definition.handler
+    if descriptor is not None:
+        resolved_handler = registry.resolve_service_handler(descriptor.service_handler_id)
+        if resolved_handler is not None:
+            handler = resolved_handler
+        predicate = registry.resolve_discoverability_predicate(
+            descriptor.discoverability_predicate_id
+        )
+        if predicate is None:
+            _log_tool_call(
+                source=source,
+                principal=principal,
+                workspace=workspace,
+                tool_name=tool_name,
+                args_summary=args_summary,
+                status="error",
+                latency_ms=_elapsed_ms(started),
+                call_id=call_id,
+                error=(
+                    "AI tool discoverability predicate is not registered: "
+                    f"{descriptor.discoverability_predicate_id}"
+                ),
+                agent_run_id=agent_run_id,
+            )
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"AI tool discoverability predicate is not registered: {tool_name}",
+            )
+        workspace_context = build_workspace_context(workspace)
+        entitlements = resolve_workspace_entitlement_view(db, workspace=workspace)
+        if not predicate(principal, workspace_context, entitlements):
+            _log_tool_call(
+                source=source,
+                principal=principal,
+                workspace=workspace,
+                tool_name=tool_name,
+                args_summary=args_summary,
+                status="blocked",
+                latency_ms=_elapsed_ms(started),
+                call_id=call_id,
+                error=f"AI tool is not available in this workspace: {tool_name}",
+                agent_run_id=agent_run_id,
+            )
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"AI tool is not available in this workspace: {tool_name}",
+            )
+
+    if handler is None:
         _log_tool_call(
             source=source,
             principal=principal,
@@ -69,7 +122,12 @@ def execute_tool(
             status_code=status.HTTP_501_NOT_IMPLEMENTED,
             detail=f"AI tool is registered but not executable yet: {tool_name}",
         )
-    if definition.approval_required:
+    approval_required = (
+        descriptor.approval_policy == "required"
+        if descriptor is not None
+        else definition.approval_required
+    )
+    if approval_required:
         _log_tool_call(
             source=source,
             principal=principal,
@@ -88,9 +146,10 @@ def execute_tool(
         )
 
     validated_arguments = dict(arguments)
-    if definition.args_model is not None:
+    args_model = descriptor.ai_input_model if descriptor is not None else definition.args_model
+    if args_model is not None:
         try:
-            validated = definition.validate_arguments(arguments)
+            validated = args_model.model_validate(dict(arguments))
         except ValidationError as error:
             message = _validation_error_message(error)
             _log_tool_call(
@@ -117,7 +176,7 @@ def execute_tool(
         )
 
     try:
-        result = definition.handler(
+        result = handler(
             db,
             workspace,
             principal,
@@ -157,7 +216,7 @@ def execute_tool(
     payload = {
         "tool": definition.name,
         "owner_domain": definition.owner_domain,
-        "approval_required": definition.approval_required,
+        "approval_required": approval_required,
         "result": encoded_result,
     }
     _log_tool_call(
@@ -186,10 +245,7 @@ def preview_text(text: str, *, limit: int) -> str:
 
 
 def render_tool_result_message(tool_name: str, result: Any) -> str:
-    return (
-        f"도구 {tool_name} 실행 결과입니다.\n"
-        f"{preview_text(dump_json(result), limit=4000)}"
-    )
+    return f"도구 {tool_name} 실행 결과입니다.\n{preview_text(dump_json(result), limit=4000)}"
 
 
 def serialize_tool_result_for_llm(

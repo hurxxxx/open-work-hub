@@ -31,6 +31,15 @@
 - `docs/planning/`, `docs/product/`, `docs/meetings/` 는 사용자가 특정 문서를 보라고 지시할 때만 읽는다.
 - 사용자가 명시하지 않으면 문서보다 현재 코드와 테스트를 우선한다.
 
+## AI Capability Platform
+
+- AI capability / MCP bridge 규칙의 상세 정본은 [`adr/0002-mcp-capability-platform.md`](./adr/0002-mcp-capability-platform.md) 로 관리한다.
+- 새 AI tool 또는 capability를 추가할 때는 ad-hoc router/agent 분기 대신 `register_ai_capabilities(registry)` + `AiCapabilityRegistry` 경로를 사용한다.
+- AI capability는 인간용 REST request model을 재사용하지 않고 **AI 전용 DTO** 로 정의한다.
+- AI tool handler는 router 로직을 복제하지 말고 **application service 경계** 를 호출한다.
+- write capability는 승인 게이트를 우회하지 않는다. `approval_required=True` 인 경우 preview builder와 discoverability predicate를 함께 등록한다.
+- capability 계약을 바꾸는 PR은 코드만 수정하지 말고 ADR/관련 테스트도 같은 PR에서 함께 갱신한다.
+
 ## UI E2E Testing
 
 - 사용자가 실제 UI 검증이나 E2E 를 요청하면 로컬 서버 + `agent-browser` 로 **실제 상호작용 기반** 점검을 우선한다.

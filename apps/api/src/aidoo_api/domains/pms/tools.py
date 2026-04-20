@@ -7,7 +7,12 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 
 from aidoo_api.core.principal import CallerPrincipal
-from aidoo_api.domains.ai.registry import AiCapabilityRegistry
+from aidoo_api.domains.ai.registry import (
+    AiCapabilityRegistry,
+    ApprovalPreview,
+    PreviewField,
+    WorkspaceContext,
+)
 from aidoo_api.domains.auth.models import User, Workspace
 from aidoo_api.domains.pms import service as pms_service
 
@@ -41,6 +46,15 @@ class ListTaskListsArgs(_ToolArgsModel):
     q: str = ""
     archived: bool | None = None
     team_id: str | None = None
+
+
+class PmsCreateIssueAiInput(_ToolArgsModel):
+    list_id: str = Field(..., min_length=1)
+    title: str = Field(..., min_length=1)
+    description: str | None = None
+    priority: Literal["low", "medium", "high", "urgent"] | None = None
+    assignee_id: str | None = None
+    due_at: str | None = None
 
 
 def _search_issues(
@@ -120,7 +134,42 @@ def _list_task_lists(
     )
 
 
+def _build_create_issue_preview(
+    principal: CallerPrincipal,
+    workspace: WorkspaceContext,
+    parsed_args: BaseModel | Mapping[str, Any],
+) -> ApprovalPreview:
+    if isinstance(parsed_args, BaseModel):
+        values = parsed_args.model_dump(mode="python", by_alias=True, exclude_none=True)
+    else:
+        values = dict(parsed_args)
+    fields: list[PreviewField] = [
+        PreviewField(label="List", value=str(values.get("list_id", "-"))),
+        PreviewField(label="Title", value=str(values.get("title", "-"))),
+    ]
+    if values.get("priority") is not None:
+        fields.append(PreviewField(label="Priority", value=str(values["priority"])))
+    if values.get("assignee_id") is not None:
+        fields.append(PreviewField(label="Assignee", value=str(values["assignee_id"])))
+    if values.get("due_at") is not None:
+        fields.append(PreviewField(label="Due", value=str(values["due_at"])))
+    description = str(values.get("description") or "").strip()
+    summary = description or "Create a PMS issue from AI."
+    return ApprovalPreview(
+        title=f"[{workspace.display_name}] Create PMS issue",
+        summary=summary,
+        fields=tuple(fields),
+    )
+
+
 def register_ai_capabilities(registry: AiCapabilityRegistry) -> None:
+    # Phase 3.5 only lays down the DTO + preview anchor for the future
+    # approval-gated write tool. The executable `pms.create_issue` capability
+    # is intentionally deferred to Phase 4.
+    registry.register_preview_builder(
+        preview_builder_id="pms.issue_create_preview",
+        builder=_build_create_issue_preview,
+    )
     registry.register_tool(
         name="pms.search_issues",
         description="Search issues in the current workspace.",

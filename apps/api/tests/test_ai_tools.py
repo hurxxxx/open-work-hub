@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from aidoo_api.core.db import get_engine
 from aidoo_api.core.db import get_session_factory
 from aidoo_api.domains.auth.access import ensure_dev_login_seed_data
-from aidoo_api.domains.auth.models import AuditLog
+from aidoo_api.domains.auth.models import AuditLog, Workspace, WorkspaceAppEntitlement
 
 
 def _dev_login(client: TestClient, account_key: str) -> dict:
@@ -26,6 +26,22 @@ def _auth_headers(token: str) -> dict[str, str]:
 
 def _workspace_tool_path(workspace_slug: str, tool_name: str) -> str:
     return f"/api/v1/workspaces/{workspace_slug}/ai/tools/{tool_name}/invoke"
+
+
+def _disable_workspace_app(workspace_slug: str, app_id: str) -> None:
+    with Session(get_engine()) as session:
+        workspace = session.scalar(select(Workspace).where(Workspace.key == workspace_slug))
+        assert workspace is not None
+        entitlement = session.scalar(
+            select(WorkspaceAppEntitlement).where(
+                WorkspaceAppEntitlement.workspace_id == workspace.id,
+                WorkspaceAppEntitlement.app_id == app_id,
+            )
+        )
+        assert entitlement is not None
+        entitlement.enabled = False
+        session.add(entitlement)
+        session.commit()
 
 
 def _tool_audit_rows() -> list[AuditLog]:
@@ -215,3 +231,21 @@ def test_ai_tool_invoke_rejects_unknown_tool(client: TestClient) -> None:
     audit_payload = _tool_audit_rows()[-1].payload
     assert audit_payload["tool_name"] == "unknown.tool"
     assert audit_payload["status"] == "error"
+
+
+def test_ai_tool_invoke_blocks_hidden_tool_and_audits_blocked(client: TestClient) -> None:
+    session = _dev_login(client, "delivery-hub-admin")
+    token = session["token"]
+    _disable_workspace_app("delivery-hub", "planner")
+
+    response = client.post(
+        _workspace_tool_path("delivery-hub", "planner.list_events"),
+        headers=_auth_headers(token),
+        json={"arguments": {}},
+    )
+
+    assert response.status_code == 403, response.text
+    assert "not available in this workspace" in response.json()["detail"]
+    audit_payload = _tool_audit_rows()[-1].payload
+    assert audit_payload["tool_name"] == "planner.list_events"
+    assert audit_payload["status"] == "blocked"

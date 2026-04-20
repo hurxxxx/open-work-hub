@@ -83,6 +83,20 @@ async def _collect_events(monkeypatch: pytest.MonkeyPatch, streams: list[list[St
             max_tool_calls=8,
             max_consecutive_tool_errors=3,
             agent_run_id="agent-run-1",
+            tool_specs=[
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "pms.search_issues",
+                        "description": "Search issues",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {},
+                            "additionalProperties": False,
+                        },
+                    },
+                }
+            ],
         )
     ]
 

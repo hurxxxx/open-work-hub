@@ -160,9 +160,7 @@ class Settings(BaseSettings):
         default=1200.0,
         gt=0,
         le=3600,
-        validation_alias=AliasChoices(
-            "DOOWON_LLM_LOCAL_LONG_GENERATION_TIMEOUT_SECONDS"
-        ),
+        validation_alias=AliasChoices("DOOWON_LLM_LOCAL_LONG_GENERATION_TIMEOUT_SECONDS"),
     )
 
     # LLM — External pool (OpenRouter today; Anthropic/OpenAI extensions later)
@@ -194,9 +192,7 @@ class Settings(BaseSettings):
         default=900.0,
         gt=0,
         le=3600,
-        validation_alias=AliasChoices(
-            "DOOWON_LLM_EXTERNAL_LONG_GENERATION_TIMEOUT_SECONDS"
-        ),
+        validation_alias=AliasChoices("DOOWON_LLM_EXTERNAL_LONG_GENERATION_TIMEOUT_SECONDS"),
     )
     llm_external_http_referer: str = Field(
         default="",
@@ -228,6 +224,14 @@ class Settings(BaseSettings):
             "AI_TOOL_CALLING_ENABLED",
             "DOOWON_AI_TOOL_CALLING_ENABLED",
             "DOOWON_API_AI_TOOL_CALLING_ENABLED",
+        ),
+    )
+    ai_mcp_bridge_enabled: bool = Field(
+        default=False,
+        validation_alias=AliasChoices(
+            "AIDOO_AI_MCP_BRIDGE_ENABLED",
+            "DOOWON_AIDOO_AI_MCP_BRIDGE_ENABLED",
+            "DOOWON_API_AIDOO_AI_MCP_BRIDGE_ENABLED",
         ),
     )
     ai_agent_max_turns: int = Field(

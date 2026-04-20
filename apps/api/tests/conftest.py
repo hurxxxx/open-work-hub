@@ -135,6 +135,7 @@ def _build_client(
     monkeypatch.setenv("DOOWON_API_AUTO_MIGRATE", "1")
     monkeypatch.setenv("DOOWON_API_COLLAB_REDIS_URL", collab_redis_url)
     monkeypatch.setenv("DOOWON_REDIS_URL", collab_redis_url)
+    monkeypatch.setenv("AIDOO_AI_MCP_BRIDGE_ENABLED", "1")
     # Make tests independent of the developer's local `.env`: pin a dummy
     # external pool key so ``LlmPoolConfig.configured`` is True when a test
     # exercises the external pool via monkeypatched ``get_pool_client``.

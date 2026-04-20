@@ -37,6 +37,7 @@ from aidoo_api.domains.ai.events import (
     make_envelope,
     serialize_sse,
 )
+from aidoo_api.domains.ai.mcp import AiMcpClient
 from aidoo_api.domains.ai.registry import get_ai_capability_registry
 from aidoo_api.domains.ai.tool_runtime import (
     ToolCallExecution,
@@ -49,6 +50,7 @@ from aidoo_api.domains.ai.tool_service import (
 )
 from aidoo_api.domains.auth.dependencies import require_current_user, require_current_workspace
 from aidoo_api.domains.auth.models import User, Workspace
+from aidoo_api.domains.auth.workspace_apps import WORKSPACE_APP_IDS
 from aidoo_api.domains.auth.security import new_id
 from aidoo_api.domains.conversations import service as conversations_service
 from aidoo_api.domains.conversations.models import Conversation
@@ -156,6 +158,98 @@ class ToolChatCommand:
 router = APIRouter(prefix="/ai", tags=["ai"])
 
 
+@router.get("/capabilities/manifest")
+def capability_manifest(
+    request: Request,
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+    current_workspace: Workspace = Depends(require_current_workspace),
+) -> dict[str, Any]:
+    _ensure_mcp_bridge_enabled()
+    principal = _build_request_principal(
+        current_user,
+        request,
+        source="api.ai.capabilities.manifest",
+    )
+    _ = current_workspace
+    return AiMcpClient().build_manifest(
+        db,
+        workspace=_require_request_workspace(request),
+        principal=principal,
+        include_meta=True,
+    )
+
+
+@router.get("/apps/{app_id}/manifest")
+def app_capability_manifest(
+    app_id: str,
+    request: Request,
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+    current_workspace: Workspace = Depends(require_current_workspace),
+) -> dict[str, Any]:
+    _ensure_mcp_bridge_enabled()
+    _ensure_known_workspace_app(app_id)
+    principal = _build_request_principal(
+        current_user,
+        request,
+        source=f"api.ai.apps.{app_id}.manifest",
+    )
+    _ = current_workspace
+    return AiMcpClient().build_manifest(
+        db,
+        workspace=_require_request_workspace(request),
+        principal=principal,
+        app_id=app_id,
+        include_meta=True,
+    )
+
+
+@router.get("/capabilities/openapi.json")
+def capability_openapi_export(
+    request: Request,
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+    current_workspace: Workspace = Depends(require_current_workspace),
+) -> dict[str, Any]:
+    _ensure_mcp_bridge_enabled()
+    principal = _build_request_principal(
+        current_user,
+        request,
+        source="api.ai.capabilities.openapi",
+    )
+    _ = current_workspace
+    return AiMcpClient().build_openapi_export(
+        db,
+        workspace=_require_request_workspace(request),
+        principal=principal,
+    )
+
+
+@router.get("/apps/{app_id}/openapi.json")
+def app_capability_openapi_export(
+    app_id: str,
+    request: Request,
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+    current_workspace: Workspace = Depends(require_current_workspace),
+) -> dict[str, Any]:
+    _ensure_mcp_bridge_enabled()
+    _ensure_known_workspace_app(app_id)
+    principal = _build_request_principal(
+        current_user,
+        request,
+        source=f"api.ai.apps.{app_id}.openapi",
+    )
+    _ = current_workspace
+    return AiMcpClient().build_openapi_export(
+        db,
+        workspace=_require_request_workspace(request),
+        principal=principal,
+        app_id=app_id,
+    )
+
+
 @router.get("/health", response_model=LlmDualHealthResponse)
 def ai_health() -> LlmDualHealthResponse:
     """Pool-scoped AI readiness. Each pool's status is reported independently;
@@ -261,9 +355,7 @@ def chat(
             exc,
         )
         db.rollback()
-        response.conversation_id = (
-            conversation.id if conversation is not None else None
-        )
+        response.conversation_id = conversation.id if conversation is not None else None
     return response
 
 
@@ -290,9 +382,7 @@ async def chat_stream(
     workspace = _require_request_workspace(request)
     principal = _build_request_principal(current_user, request, source="api.stream")
     context = _task_context_from_principal(principal)
-    pool_hint: LlmPoolHint | None = (
-        "local" if payload.backend_mode == "local" else None
-    )
+    pool_hint: LlmPoolHint | None = "local" if payload.backend_mode == "local" else None
 
     return EventSourceResponse(
         _chat_stream_publisher(
@@ -324,8 +414,9 @@ def invoke_tool(
         source=f"api.ai.tool.{tool_name}",
         session_id=getattr(getattr(auth_context, "session", None), "id", None),
     )
-    return ToolInvokeResponse.model_validate(
-        execute_ai_tool(
+    settings = get_settings()
+    if settings.ai_mcp_bridge_enabled:
+        response = AiMcpClient().call_tool(
             db,
             workspace=current_workspace,
             principal=principal,
@@ -334,7 +425,17 @@ def invoke_tool(
             arguments=payload.arguments,
             source="api.tool_invoke",
         )
-    )
+    else:
+        response = execute_ai_tool(
+            db,
+            workspace=current_workspace,
+            principal=principal,
+            user=current_user,
+            tool_name=tool_name,
+            arguments=payload.arguments,
+            source="api.tool_invoke",
+        )
+    return ToolInvokeResponse.model_validate(response)
 
 
 # ---------------------------------------------------------------------------
@@ -353,6 +454,25 @@ def _require_request_workspace(request: Request) -> Workspace:
             ),
         )
     return workspace
+
+
+def _ensure_mcp_bridge_enabled() -> None:
+    settings = get_settings()
+    if settings.ai_mcp_bridge_enabled:
+        return
+    raise HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail="AI MCP bridge inspection endpoints are disabled.",
+    )
+
+
+def _ensure_known_workspace_app(app_id: str) -> None:
+    if app_id in WORKSPACE_APP_IDS:
+        return
+    raise HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail=f"Unknown workspace app: {app_id}",
+    )
 
 
 def _build_request_principal(
@@ -394,7 +514,7 @@ def _parse_tool_chat_command(messages: list[ChatMessage]) -> ToolChatCommand | N
     if len(parts) < 2 or parts[0] != "/tool":
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Tool command syntax: /tool <tool_name> {\"arg\":\"value\"}",
+            detail='Tool command syntax: /tool <tool_name> {"arg":"value"}',
         )
 
     arguments: dict[str, Any] = {}
@@ -449,10 +569,7 @@ def _execute_tool_chat_command(
         finish_reason = "stop"
     elif execution.status == "blocked":
         tool_name = execution.tool_name
-        content = (
-            execution.error_message
-            or f"도구 {tool_name} 실행에는 승인 절차가 필요합니다."
-        )
+        content = execution.error_message or f"도구 {tool_name} 실행에는 승인 절차가 필요합니다."
         finish_reason = "stop"
     else:
         tool_name = execution.tool_name
@@ -613,9 +730,7 @@ async def _chat_stream_publisher(
     current_user: User,
 ):
     encoder = EnvelopeEncoder()
-    reasoning_gate = (
-        payload.stream_reasoning and payload.reasoning_effort != "none"
-    )
+    reasoning_gate = payload.stream_reasoning and payload.reasoning_effort != "none"
     messages_dict = [message.model_dump() for message in payload.messages]
     settings = get_settings()
 
@@ -725,10 +840,21 @@ async def _chat_stream_publisher(
         last_config = execution.config
         chosen_model = execution.chosen_model
 
+        mcp_client = AiMcpClient()
+        filtered_tool_specs = (
+            mcp_client.list_openai_function_specs(
+                db,
+                workspace=workspace,
+                principal=principal,
+                include_approval_required=False,
+            )
+            if settings.ai_mcp_bridge_enabled
+            else get_ai_capability_registry().openai_tool_specs()
+        )
         if (
             settings.ai_tool_calling_enabled
             and supports_tool_calling(execution.pool)
-            and bool(get_ai_capability_registry().openai_tool_specs())
+            and bool(filtered_tool_specs)
         ):
             agent_run_id = new_id()
             async for event in run_agent_turn_stream(
@@ -746,6 +872,7 @@ async def _chat_stream_publisher(
                 max_tool_calls=settings.ai_agent_max_tool_calls,
                 max_consecutive_tool_errors=settings.ai_agent_max_consecutive_tool_errors,
                 agent_run_id=agent_run_id,
+                tool_specs=filtered_tool_specs,
             ):
                 # Route content_delta through the artifact parser so embedded
                 # `<artifact>` blocks become their own envelope stream. All
@@ -763,9 +890,7 @@ async def _chat_stream_publisher(
                     # stays monotone (events_schema.md guarantee). When
                     # flush is a no-op, keep the original seq to avoid a
                     # gap in the common case.
-                    flushed_envelopes = _flush_parser(
-                        artifact_parser, encoder=encoder
-                    )
+                    flushed_envelopes = _flush_parser(artifact_parser, encoder=encoder)
                     for flushed in flushed_envelopes:
                         buffer.observe(flushed)
                         yield flushed
@@ -841,9 +966,7 @@ async def _chat_stream_publisher(
                     yield parsed_event
                 continue
             if chunk.kind == "done":
-                for flushed in _flush_parser(
-                    artifact_parser, encoder=encoder
-                ):
+                for flushed in _flush_parser(artifact_parser, encoder=encoder):
                     buffer.observe(flushed)
                     yield flushed
             event = _chunk_to_envelope(
@@ -941,7 +1064,9 @@ def _tool_command_events(
         yield serialize_sse(event)
 
     if execution.status == "blocked":
-        message = execution.error_message or f"도구 {command.tool_name} 실행에는 승인 절차가 필요합니다."
+        message = (
+            execution.error_message or f"도구 {command.tool_name} 실행에는 승인 절차가 필요합니다."
+        )
         yield serialize_sse(
             make_envelope(
                 "content_delta",
@@ -1036,9 +1161,7 @@ def _chunk_to_envelope(
             )
         )
     if chunk.kind == "usage" and chunk.usage:
-        return serialize_sse(
-            make_envelope("usage", encoder.next_seq(), chunk.usage)
-        )
+        return serialize_sse(make_envelope("usage", encoder.next_seq(), chunk.usage))
     if chunk.kind == "tool_call_start" and chunk.tool_call_id and chunk.tool_name:
         return serialize_sse(
             make_envelope(
@@ -1488,9 +1611,7 @@ class _AssistantTurnBuffer:
             if call_id:
                 record = self._touch_tool_call(call_id)
                 record["name"] = payload.get("name") or record["name"]
-                record["args_preview"] = (
-                    payload.get("args_preview") or record["args_preview"]
-                )
+                record["args_preview"] = payload.get("args_preview") or record["args_preview"]
                 if record["startedAtMs"] is None:
                     record["startedAtMs"] = timestamp_ms
         elif event_type == "tool_call_args_delta":
@@ -1566,9 +1687,7 @@ def _assistant_buffer_from_sync_response(
             "provider": response.provider,
         },
         finish_reason=(
-            response.finish_reason
-            if response.finish_reason in _SYNC_FINISH_REASONS
-            else None
+            response.finish_reason if response.finish_reason in _SYNC_FINISH_REASONS else None
         ),
         response_status="error" if response.finish_reason == "error" else "done",
     )
@@ -1582,9 +1701,7 @@ def _assistant_buffer_from_sync_response(
         # ``tool_calls`` metadata the streaming transport records.
         if tool_execution is not None:
             encoder = EnvelopeEncoder()
-            for event in iter_tool_call_events(
-                encoder=encoder, execution=tool_execution
-            ):
+            for event in iter_tool_call_events(encoder=encoder, execution=tool_execution):
                 buffer.observe(serialize_sse(event))
         buffer.content = response.content or ""
         return buffer
@@ -1653,9 +1770,7 @@ def _persist_assistant_turn(
     # reloaded threads don't falsely show a completed ThinkingPanel after an
     # error or cancellation. MessageBubble treats a missing field as "done",
     # which would misrepresent the live behavior.
-    reasoning_status = (
-        response_status if buffer.reasoning and response_status != "done" else None
-    )
+    reasoning_status = response_status if buffer.reasoning and response_status != "done" else None
 
     meta: dict[str, Any] = {
         "reasoning": buffer.reasoning or None,

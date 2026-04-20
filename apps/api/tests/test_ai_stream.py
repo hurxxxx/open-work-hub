@@ -22,7 +22,7 @@ from aidoo_api.core.db import get_engine
 from aidoo_api.core.settings import get_settings
 from aidoo_api.domains.ai.models import LlmPolicy
 from aidoo_api.domains.ai import router as ai_router
-from aidoo_api.domains.auth.models import AuditLog
+from aidoo_api.domains.auth.models import AuditLog, Workspace, WorkspaceAppEntitlement
 from test_meeting import (
     _auth_headers,
     _bootstrap_admin_session,
@@ -59,6 +59,22 @@ def _delta(
         choices=[SimpleNamespace(delta=delta, finish_reason=finish_reason)],
         usage=None,
     )
+
+
+def _disable_workspace_app(workspace_slug: str, app_id: str) -> None:
+    with Session(get_engine()) as session:
+        workspace = session.scalar(select(Workspace).where(Workspace.key == workspace_slug))
+        assert workspace is not None
+        entitlement = session.scalar(
+            select(WorkspaceAppEntitlement).where(
+                WorkspaceAppEntitlement.workspace_id == workspace.id,
+                WorkspaceAppEntitlement.app_id == app_id,
+            )
+        )
+        assert entitlement is not None
+        entitlement.enabled = False
+        session.add(entitlement)
+        session.commit()
 
 
 def _usage_tail(pt: int, ct: int, tt: int) -> SimpleNamespace:
@@ -123,11 +139,7 @@ class _FakeAsyncChatCompletions:
             return self.last_stream
         return SimpleNamespace(
             model=str(kwargs["model"]),
-            choices=[
-                SimpleNamespace(
-                    message=SimpleNamespace(content=self._non_stream_content)
-                )
-            ],
+            choices=[SimpleNamespace(message=SimpleNamespace(content=self._non_stream_content))],
             usage=SimpleNamespace(
                 prompt_tokens=1,
                 completion_tokens=1,
@@ -232,9 +244,7 @@ class _SequencedAsyncChatCompletions:
 
 class _SequencedAsyncPoolClient:
     def __init__(self, chunk_sequences: list[list[Any]]) -> None:
-        self.chat = SimpleNamespace(
-            completions=_SequencedAsyncChatCompletions(chunk_sequences)
-        )
+        self.chat = SimpleNamespace(completions=_SequencedAsyncChatCompletions(chunk_sequences))
         self.models = _FakeModels()
 
     def with_options(self, **_: Any) -> "_SequencedAsyncPoolClient":
@@ -256,9 +266,7 @@ def _seeded_dev_login(client: TestClient, account_key: str) -> dict:
 
 def _set_policy(task_kind: str, mode: str) -> None:
     with Session(get_engine()) as session:
-        policy = session.scalar(
-            select(LlmPolicy).where(LlmPolicy.task_kind == task_kind)
-        )
+        policy = session.scalar(select(LlmPolicy).where(LlmPolicy.task_kind == task_kind))
         assert policy is not None
         policy.policy_mode = mode
         session.add(policy)
@@ -704,6 +712,80 @@ def test_chat_stream_agent_loop_executes_tool_and_keeps_shared_agent_run_id(
     assert tool_row.payload["agent_run_id"] == llm_rows[-1].payload["agent_run_id"]
 
 
+def test_chat_stream_agent_loop_uses_filtered_tool_specs_from_mcp_manifest(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    auth = _seeded_dev_login(client, "delivery-hub-admin")
+    slug = "delivery-hub"
+    _set_policy("chatbot", "local_only")
+    _disable_workspace_app(slug, "planner")
+
+    task_list_response = client.post(
+        "/api/v1/pms/lists",
+        headers=_auth_headers(auth["token"]),
+        json={
+            "key": "AIFILTER",
+            "name": "AI Filtered Loop List",
+            "description": "filtered agent loop source",
+        },
+    )
+    assert task_list_response.status_code == 201, task_list_response.text
+    task_list = task_list_response.json()
+
+    issue_response = client.post(
+        f"/api/v1/pms/lists/{task_list['id']}/issues",
+        headers=_auth_headers(auth["token"]),
+        json={"title": "Filtered loop issue", "description": "visible result"},
+    )
+    assert issue_response.status_code == 201, issue_response.text
+
+    pool_client = _SequencedAsyncPoolClient(
+        [
+            [
+                _delta(
+                    tool_calls=[
+                        _tool_call_delta(
+                            index=0,
+                            tool_id="call-1",
+                            name="pms.search_issues",
+                            arguments='{"q":"Filtered loop issue","limit":5}',
+                        )
+                    ]
+                ),
+                _delta(finish_reason="tool_calls"),
+            ],
+            [
+                _delta(content="Filtered loop issue를 찾았습니다.", finish_reason="stop"),
+                _usage_tail(1, 2, 3),
+            ],
+        ]
+    )
+    monkeypatch.setattr(llm_core, "get_async_pool_client", lambda pool: pool_client)
+
+    status_code, events = _stream_post(
+        client,
+        _workspace_ai_path(slug, "/chat/stream"),
+        headers=_auth_headers(auth["token"]),
+        json_body={"messages": [{"role": "user", "content": "필터된 도구로 이슈 보여줘"}]},
+    )
+
+    assert status_code == 200
+    chat = _chat_events(events)
+    assert [event["type"] for event in chat] == [
+        "tool_call_started",
+        "tool_call_args_delta",
+        "tool_result",
+        "content_delta",
+        "usage",
+        "done",
+    ]
+    tool_names = [
+        tool["function"]["name"] for tool in pool_client.chat.completions.calls[0]["tools"]
+    ]
+    assert "pms.search_issues" in tool_names
+    assert "planner.list_events" not in tool_names
+
+
 def test_chat_stream_falls_back_to_plain_chat_when_tools_are_not_supported(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -711,9 +793,7 @@ def test_chat_stream_falls_back_to_plain_chat_when_tools_are_not_supported(
     slug = auth["user"]["workspaces"][0]["slug"]
     _set_policy("chatbot", "local_only")
 
-    pool_client = _FakeAsyncPoolClient(
-        [_delta(content="plain response", finish_reason="stop")]
-    )
+    pool_client = _FakeAsyncPoolClient([_delta(content="plain response", finish_reason="stop")])
     monkeypatch.setattr(llm_core, "get_async_pool_client", lambda pool: pool_client)
     monkeypatch.setattr(ai_router, "supports_tool_calling", lambda pool: False)
 
@@ -814,9 +894,7 @@ def test_chat_stream_done_meta_uses_requested_model(
     _set_policy("chatbot", "external")
     settings = get_settings()
 
-    pool_client = _FakeAsyncPoolClient(
-        [_delta(content="ok", finish_reason="stop")]
-    )
+    pool_client = _FakeAsyncPoolClient([_delta(content="ok", finish_reason="stop")])
     monkeypatch.setattr(llm_core, "get_async_pool_client", lambda pool: pool_client)
 
     _, events = _stream_post(
@@ -848,9 +926,7 @@ def test_chat_stream_mounts_on_legacy_and_slug_paths(
     _set_policy("chatbot", "local_only")
 
     def build_pool(_pool: str) -> _FakeAsyncPoolClient:
-        return _FakeAsyncPoolClient(
-            [_delta(content="ok", finish_reason="stop")]
-        )
+        return _FakeAsyncPoolClient([_delta(content="ok", finish_reason="stop")])
 
     monkeypatch.setattr(llm_core, "get_async_pool_client", build_pool)
 
@@ -1104,9 +1180,7 @@ def test_chat_stream_appends_to_existing_conversation(
     _set_policy("chatbot", "local_only")
 
     # Start a conversation with a first exchange.
-    pool_client = _FakeAsyncPoolClient(
-        [_delta(content="first", finish_reason="stop")]
-    )
+    pool_client = _FakeAsyncPoolClient([_delta(content="first", finish_reason="stop")])
     monkeypatch.setattr(llm_core, "get_async_pool_client", lambda pool: pool_client)
     _, events = _stream_post(
         client,
@@ -1118,15 +1192,13 @@ def test_chat_stream_appends_to_existing_conversation(
             "messages": [{"role": "user", "content": "first question"}],
         },
     )
-    conversation_id = next(
-        e for e in events if e["type"] == "conversation_attached"
-    )["data"]["conversation_id"]
+    conversation_id = next(e for e in events if e["type"] == "conversation_attached")["data"][
+        "conversation_id"
+    ]
 
     # Resume the same conversation — passing conversation_id must NOT create a
     # new row and the second turn pair must append after seq 0/1.
-    pool_client_second = _FakeAsyncPoolClient(
-        [_delta(content="second", finish_reason="stop")]
-    )
+    pool_client_second = _FakeAsyncPoolClient([_delta(content="second", finish_reason="stop")])
     monkeypatch.setattr(llm_core, "get_async_pool_client", lambda pool: pool_client_second)
     _, events2 = _stream_post(
         client,
@@ -1199,9 +1271,7 @@ def test_chat_stream_persist_false_skips_conversation_creation(
     slug = auth["user"]["workspaces"][0]["slug"]
     _set_policy("chatbot", "local_only")
 
-    pool_client = _FakeAsyncPoolClient(
-        [_delta(content="ok", finish_reason="stop")]
-    )
+    pool_client = _FakeAsyncPoolClient([_delta(content="ok", finish_reason="stop")])
     monkeypatch.setattr(llm_core, "get_async_pool_client", lambda pool: pool_client)
 
     _, events = _stream_post(
@@ -1246,9 +1316,9 @@ def test_chat_stream_persists_failure_with_empty_body(
         },
     )
     assert status_code == 200
-    conversation_id = next(
-        e for e in events if e["type"] == "conversation_attached"
-    )["data"]["conversation_id"]
+    conversation_id = next(e for e in events if e["type"] == "conversation_attached")["data"][
+        "conversation_id"
+    ]
 
     detail = client.get(
         f"/api/v1/workspaces/{slug}/conversations/{conversation_id}",
@@ -1277,16 +1347,18 @@ def test_chat_stream_extracts_artifact_markup_into_dedicated_envelopes(
     _set_policy("chatbot", "local_only")
     monkeypatch.setattr(ai_router, "supports_tool_calling", lambda pool: False)
 
-    pool_client = _FakeAsyncPoolClient([
-        _delta(
-            content=(
-                "Here you go: "
-                '<artifact type="document" title="Email">**draft** body</artifact>'
-                " — let me know."
+    pool_client = _FakeAsyncPoolClient(
+        [
+            _delta(
+                content=(
+                    "Here you go: "
+                    '<artifact type="document" title="Email">**draft** body</artifact>'
+                    " — let me know."
+                ),
             ),
-        ),
-        _delta(finish_reason="stop"),
-    ])
+            _delta(finish_reason="stop"),
+        ]
+    )
     monkeypatch.setattr(llm_core, "get_async_pool_client", lambda pool: pool_client)
 
     status_code, events = _stream_post(
@@ -1332,15 +1404,17 @@ def test_chat_stream_persists_artifact_into_turn_meta(
     _set_policy("chatbot", "local_only")
     monkeypatch.setattr(ai_router, "supports_tool_calling", lambda pool: False)
 
-    pool_client = _FakeAsyncPoolClient([
-        _delta(
-            content=(
-                'summary<artifact type="document" title="Report">'
-                "- line one\n- line two</artifact>"
+    pool_client = _FakeAsyncPoolClient(
+        [
+            _delta(
+                content=(
+                    'summary<artifact type="document" title="Report">'
+                    "- line one\n- line two</artifact>"
+                ),
             ),
-        ),
-        _delta(finish_reason="stop"),
-    ])
+            _delta(finish_reason="stop"),
+        ]
+    )
     monkeypatch.setattr(llm_core, "get_async_pool_client", lambda pool: pool_client)
 
     status_code, events = _stream_post(
@@ -1354,9 +1428,9 @@ def test_chat_stream_persists_artifact_into_turn_meta(
         },
     )
     assert status_code == 200
-    conversation_id = next(
-        e for e in events if e["type"] == "conversation_attached"
-    )["data"]["conversation_id"]
+    conversation_id = next(e for e in events if e["type"] == "conversation_attached")["data"][
+        "conversation_id"
+    ]
 
     detail = client.get(
         f"/api/v1/workspaces/{slug}/conversations/{conversation_id}",
@@ -1382,15 +1456,16 @@ def test_chat_stream_code_artifact_language_roundtrips_through_stream_and_persis
     _set_policy("chatbot", "local_only")
     monkeypatch.setattr(ai_router, "supports_tool_calling", lambda pool: False)
 
-    pool_client = _FakeAsyncPoolClient([
-        _delta(
-            content=(
-                '<artifact type="code" language="python" title="Hello">'
-                'print("hi")</artifact>'
+    pool_client = _FakeAsyncPoolClient(
+        [
+            _delta(
+                content=(
+                    '<artifact type="code" language="python" title="Hello">print("hi")</artifact>'
+                ),
             ),
-        ),
-        _delta(finish_reason="stop"),
-    ])
+            _delta(finish_reason="stop"),
+        ]
+    )
     monkeypatch.setattr(llm_core, "get_async_pool_client", lambda pool: pool_client)
 
     status_code, events = _stream_post(
@@ -1409,9 +1484,9 @@ def test_chat_stream_code_artifact_language_roundtrips_through_stream_and_persis
     assert started["data"]["artifact_type"] == "code"
     assert started["data"]["language"] == "python"
 
-    conversation_id = next(
-        e for e in events if e["type"] == "conversation_attached"
-    )["data"]["conversation_id"]
+    conversation_id = next(e for e in events if e["type"] == "conversation_attached")["data"][
+        "conversation_id"
+    ]
     detail = client.get(
         f"/api/v1/workspaces/{slug}/conversations/{conversation_id}",
         headers=_auth_headers(auth["token"]),
@@ -1442,8 +1517,7 @@ def test_chat_sync_code_artifact_language_roundtrips(
             role = "assistant"
             reasoning_content = None
             content = (
-                'intro <artifact type="code" language="sql" title="Q">'
-                "SELECT 1;</artifact> done"
+                'intro <artifact type="code" language="sql" title="Q">SELECT 1;</artifact> done'
             )
 
         class _Choice:
@@ -1513,9 +1587,7 @@ def test_chat_stream_synthesizes_completed_for_unclosed_artifact_on_error(
         async def __anext__(self):
             if not self._emitted:
                 self._emitted = True
-                return _delta(
-                    content='<artifact type="document">opened but never closed'
-                )
+                return _delta(content='<artifact type="document">opened but never closed')
             raise OpenAIError("provider died")
 
         async def aclose(self) -> None:  # pragma: no cover - interface glue
@@ -1538,9 +1610,7 @@ def test_chat_stream_synthesizes_completed_for_unclosed_artifact_on_error(
         def with_options(self, **_) -> "_ErrorPoolClient":
             return self
 
-    monkeypatch.setattr(
-        llm_core, "get_async_pool_client", lambda pool: _ErrorPoolClient()
-    )
+    monkeypatch.setattr(llm_core, "get_async_pool_client", lambda pool: _ErrorPoolClient())
 
     status_code, events = _stream_post(
         client,
