@@ -633,7 +633,7 @@ def test_attach_doc_links_native_doc_to_meeting(client: TestClient) -> None:
     admin_token = admin["token"]
 
     create_doc = client.post(
-        "/api/v1/docs/native-docs",
+        "/api/v1/docs/items",
         headers=_auth_headers(admin_token),
         json={"title": "Meeting reference"},
     )
@@ -964,7 +964,7 @@ def _install_fake_minio(monkeypatch) -> _FakeMinioClient:
 
 def _create_native_doc(client: TestClient, token: str, title: str) -> str:
     response = client.post(
-        "/api/v1/docs/native-docs",
+        "/api/v1/docs/items",
         headers=_auth_headers(token),
         json={"title": title},
     )

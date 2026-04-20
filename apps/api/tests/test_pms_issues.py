@@ -1,5 +1,13 @@
 from fastapi.testclient import TestClient
 
+from test_docs_hub import (
+    _create_doc_page,
+    _create_space_doc,
+    _list_doc_pages,
+    _list_space_docs,
+    _update_space_doc_sort_order,
+)
+
 
 def _dev_login(client: TestClient, account_key: str) -> dict:
     response = client.post(
@@ -135,9 +143,18 @@ def test_viewer_cannot_modify_issue_comment_or_folder(client: TestClient) -> Non
     assert folder_response.status_code == 403
 
     space_doc_response = client.post(
-        f"/api/v1/pms/spaces/{task_list['team_id']}/docs",
+        "/api/v1/docs/items",
         headers=_auth_headers(viewer_token),
-        json={"title": "Viewer collection"},
+        json={
+            "title": "Viewer collection",
+            "source_app": "pms",
+            "source_kind": "manual",
+            "primary_container": {
+                "app": "pms",
+                "type": "space",
+                "id": task_list["team_id"],
+            },
+        },
     )
     assert space_doc_response.status_code == 403
 
@@ -237,48 +254,36 @@ def test_list_alias_space_docs_and_status_rename_behave_as_expected(client: Test
     assert status_update_response.json()["name"] == "QA Signoff"
     assert status_update_response.json()["slug"] == status_item["slug"]
 
-    create_space_doc_response = client.post(
-        f"/api/v1/pms/spaces/{task_list['team_id']}/docs",
-        headers=_auth_headers(admin_session["token"]),
-        json={"title": "Space Collection"},
+    space_doc = _create_space_doc(
+        client,
+        admin_session["token"],
+        task_list["team_id"],
+        title="Space Collection",
     )
-    assert create_space_doc_response.status_code == 201
-    space_doc = create_space_doc_response.json()
+    assert space_doc["primary_container"]["id"] == task_list["team_id"]
 
-    missing_query_response = client.get(
-        f"/api/v1/pms/spaces/{task_list['team_id']}/docs/pages",
-        headers=_auth_headers(admin_session["token"]),
+    page = _create_doc_page(
+        client,
+        admin_session["token"],
+        space_doc["id"],
+        title="Space Page",
     )
-    assert missing_query_response.status_code == 400
-    assert missing_query_response.json()["detail"] == "space_doc_id is required."
+    assert page["doc_id"] == space_doc["id"]
 
-    create_page_response = client.post(
-        f"/api/v1/pms/spaces/{task_list['team_id']}/docs/pages",
-        headers=_auth_headers(admin_session["token"]),
-        json={"title": "Space Page", "space_doc_id": space_doc["id"]},
+    child_page = _create_doc_page(
+        client,
+        admin_session["token"],
+        space_doc["id"],
+        title="Nested Space Page",
+        parent_id=page["id"],
     )
-    assert create_page_response.status_code == 201
-    page = create_page_response.json()
-    assert page["space_doc_id"] == space_doc["id"]
 
-    create_child_response = client.post(
-        f"/api/v1/pms/spaces/{task_list['team_id']}/docs/pages",
-        headers=_auth_headers(admin_session["token"]),
-        json={"title": "Nested Space Page", "space_doc_id": space_doc["id"], "parent_id": page["id"]},
-    )
-    assert create_child_response.status_code == 201
-    child_page = create_child_response.json()
-
-    list_pages_response = client.get(
-        f"/api/v1/pms/spaces/{task_list['team_id']}/docs/pages",
-        headers=_auth_headers(admin_session["token"]),
-        params={"space_doc_id": space_doc["id"]},
-    )
-    assert list_pages_response.status_code == 200
-    assert [item["id"] for item in list_pages_response.json()["items"]] == [page["id"], child_page["id"]]
+    listed_pages = _list_doc_pages(client, admin_session["token"], space_doc["id"])
+    assert len(listed_pages) == 3
+    assert [item["id"] for item in listed_pages[1:]] == [page["id"], child_page["id"]]
 
     update_page_response = client.patch(
-        f"/api/v1/pms/space-doc-pages/{page['id']}",
+        f"/api/v1/docs/pages/{page['id']}",
         headers=_auth_headers(admin_session["token"]),
         json={"title": "Updated Space Page"},
     )
@@ -286,30 +291,26 @@ def test_list_alias_space_docs_and_status_rename_behave_as_expected(client: Test
     assert update_page_response.json()["title"] == "Updated Space Page"
 
     delete_page_response = client.delete(
-        f"/api/v1/pms/space-doc-pages/{page['id']}",
+        f"/api/v1/docs/pages/{page['id']}",
         headers=_auth_headers(admin_session["token"]),
     )
     assert delete_page_response.status_code == 204
 
-    list_pages_after_delete_response = client.get(
-        f"/api/v1/pms/spaces/{task_list['team_id']}/docs/pages",
-        headers=_auth_headers(admin_session["token"]),
-        params={"space_doc_id": space_doc["id"]},
-    )
-    assert list_pages_after_delete_response.status_code == 200
-    assert list_pages_after_delete_response.json()["items"] == []
+    list_pages_after_delete = _list_doc_pages(client, admin_session["token"], space_doc["id"])
+    assert len(list_pages_after_delete) == 1
+    assert list_pages_after_delete[0]["id"] != page["id"]
 
     deleted_page_response = client.get(
-        f"/api/v1/pms/space-doc-pages/{page['id']}",
+        f"/api/v1/docs/pages/{page['id']}",
         headers=_auth_headers(admin_session["token"]),
     )
-    assert deleted_page_response.status_code == 404
+    assert deleted_page_response.status_code == 403
 
     deleted_child_response = client.get(
-        f"/api/v1/pms/space-doc-pages/{child_page['id']}",
+        f"/api/v1/docs/pages/{child_page['id']}",
         headers=_auth_headers(admin_session["token"]),
     )
-    assert deleted_child_response.status_code == 404
+    assert deleted_child_response.status_code == 403
 
 
 def test_workspace_scoped_default_pms_space_stays_inside_requested_workspace(
@@ -364,43 +365,48 @@ def test_space_docs_collection_permissions_and_soft_delete(client: TestClient) -
     space_id = task_list["team_id"]
     assert space_id is not None
 
-    collection_response = client.post(
-        f"/api/v1/pms/spaces/{space_id}/docs",
-        headers=_auth_headers(admin_session["token"]),
-        json={"title": "Engineering Handbook"},
+    collection = _create_space_doc(
+        client,
+        admin_session["token"],
+        space_id,
+        title="Engineering Handbook",
     )
-    assert collection_response.status_code == 201
-    collection = collection_response.json()
 
-    first_page_response = client.post(
-        f"/api/v1/pms/spaces/{space_id}/docs/pages",
-        headers=_auth_headers(admin_session["token"]),
-        json={"title": "Overview", "space_doc_id": collection["id"]},
+    first_page = _create_doc_page(
+        client,
+        admin_session["token"],
+        collection["id"],
+        title="Overview",
     )
-    assert first_page_response.status_code == 201
-    first_page = first_page_response.json()
 
-    child_page_response = client.post(
-        f"/api/v1/pms/spaces/{space_id}/docs/pages",
-        headers=_auth_headers(admin_session["token"]),
-        json={"title": "Checklist", "space_doc_id": collection["id"], "parent_id": first_page["id"]},
+    child_page = _create_doc_page(
+        client,
+        admin_session["token"],
+        collection["id"],
+        title="Checklist",
+        parent_id=first_page["id"],
     )
-    assert child_page_response.status_code == 201
-    child_page = child_page_response.json()
 
     outsider = _create_user(client, admin_session["token"], email="space-outsider@aidoo.local", full_name="Space Outsider")
     outsider_token = _login(client, outsider["user"]["email"], outsider["temporary_password"])
 
     outsider_list_response = client.get(
-        f"/api/v1/pms/spaces/{space_id}/docs",
+        "/api/v1/docs/hub",
         headers=_auth_headers(outsider_token),
+        params={"container_app": "pms", "container_type": "space", "container_id": space_id},
     )
-    assert outsider_list_response.status_code == 403
+    assert outsider_list_response.status_code == 200
+    assert outsider_list_response.json()["items"] == []
 
     outsider_create_response = client.post(
-        f"/api/v1/pms/spaces/{space_id}/docs",
+        "/api/v1/docs/items",
         headers=_auth_headers(outsider_token),
-        json={"title": "Forbidden"},
+        json={
+            "title": "Forbidden",
+            "source_app": "pms",
+            "source_kind": "manual",
+            "primary_container": {"app": "pms", "type": "space", "id": space_id},
+        },
     )
     assert outsider_create_response.status_code == 403
 
@@ -417,28 +423,24 @@ def test_space_docs_collection_permissions_and_soft_delete(client: TestClient) -
         task_list_editor["temporary_password"],
     )
 
-    editor_list_response = client.get(
-        f"/api/v1/pms/spaces/{space_id}/docs",
-        headers=_auth_headers(task_list_editor_token),
-    )
-    assert editor_list_response.status_code == 200
-    assert [item["id"] for item in editor_list_response.json()["items"]] == [collection["id"]]
+    editor_docs = _list_space_docs(client, task_list_editor_token, space_id)
+    assert [item["id"] for item in editor_docs] == [collection["id"]]
 
-    member_collection_response = client.post(
-        f"/api/v1/pms/spaces/{space_id}/docs",
-        headers=_auth_headers(task_list_editor_token),
-        json={"title": "Task List Notes"},
+    member_collection = _create_space_doc(
+        client,
+        task_list_editor_token,
+        space_id,
+        title="Task List Notes",
     )
-    assert member_collection_response.status_code == 201
-    member_collection = member_collection_response.json()
     assert member_collection["created_by_id"] == task_list_editor["user"]["id"]
 
-    member_page_response = client.post(
-        f"/api/v1/pms/spaces/{space_id}/docs/pages",
-        headers=_auth_headers(task_list_editor_token),
-        json={"title": "Member page", "space_doc_id": collection["id"]},
+    member_page = _create_doc_page(
+        client,
+        task_list_editor_token,
+        collection["id"],
+        title="Member page",
     )
-    assert member_page_response.status_code == 201
+    assert member_page["doc_id"] == collection["id"]
 
     member_folder_response = client.post(
         "/api/v1/pms/folders",
@@ -449,64 +451,54 @@ def test_space_docs_collection_permissions_and_soft_delete(client: TestClient) -
     member_folder = member_folder_response.json()
     assert member_folder["team_id"] == space_id
 
-    second_collection_response = client.post(
-        f"/api/v1/pms/spaces/{space_id}/docs",
-        headers=_auth_headers(admin_session["token"]),
-        json={"title": "Admin Notes"},
+    second_collection = _create_space_doc(
+        client,
+        admin_session["token"],
+        space_id,
+        title="Admin Notes",
     )
-    assert second_collection_response.status_code == 201
-    second_collection = second_collection_response.json()
 
     cross_collection_parent_response = client.post(
-        f"/api/v1/pms/spaces/{space_id}/docs/pages",
+        f"/api/v1/docs/items/{second_collection['id']}/pages",
         headers=_auth_headers(admin_session["token"]),
         json={
             "title": "Invalid child",
-            "space_doc_id": second_collection["id"],
             "parent_id": first_page["id"],
         },
     )
-    assert cross_collection_parent_response.status_code == 409
-    assert cross_collection_parent_response.json()["detail"] == "Parent page must belong to the same document collection."
+    assert cross_collection_parent_response.status_code == 404
+    assert cross_collection_parent_response.json()["detail"] == "Parent page not found."
 
     delete_collection_response = client.delete(
-        f"/api/v1/pms/space-docs/{collection['id']}",
+        f"/api/v1/docs/items/{collection['id']}",
         headers=_auth_headers(admin_session["token"]),
     )
     assert delete_collection_response.status_code == 204
 
-    visible_collections_response = client.get(
-        f"/api/v1/pms/spaces/{space_id}/docs",
-        headers=_auth_headers(admin_session["token"]),
-    )
-    assert visible_collections_response.status_code == 200
-    visible_ids = sorted(item["id"] for item in visible_collections_response.json()["items"])
+    visible_ids = sorted(item["id"] for item in _list_space_docs(client, admin_session["token"], space_id))
     assert visible_ids == sorted([member_collection["id"], second_collection["id"]])
 
     deleted_collection_response = client.get(
-        f"/api/v1/pms/space-docs/{collection['id']}",
+        f"/api/v1/docs/items/{collection['id']}",
         headers=_auth_headers(admin_session["token"]),
     )
-    assert deleted_collection_response.status_code == 404
+    assert deleted_collection_response.status_code == 200
+    assert deleted_collection_response.json()["trashed_at"] is not None
 
     deleted_page_response = client.get(
-        f"/api/v1/pms/space-doc-pages/{first_page['id']}",
+        f"/api/v1/docs/pages/{first_page['id']}",
         headers=_auth_headers(admin_session["token"]),
     )
-    assert deleted_page_response.status_code == 404
+    assert deleted_page_response.status_code == 403
 
     deleted_child_response = client.get(
-        f"/api/v1/pms/space-doc-pages/{child_page['id']}",
+        f"/api/v1/docs/pages/{child_page['id']}",
         headers=_auth_headers(admin_session["token"]),
     )
-    assert deleted_child_response.status_code == 404
+    assert deleted_child_response.status_code == 403
 
-    deleted_collection_pages_response = client.get(
-        f"/api/v1/pms/spaces/{space_id}/docs/pages",
-        headers=_auth_headers(admin_session["token"]),
-        params={"space_doc_id": collection["id"]},
-    )
-    assert deleted_collection_pages_response.status_code == 404
+    deleted_collection_pages = _list_doc_pages(client, admin_session["token"], collection["id"])
+    assert deleted_collection_pages == []
 
 
 def test_task_list_member_api_grants_space_scope_for_task_list_resources(client: TestClient) -> None:
@@ -557,8 +549,9 @@ def test_task_list_member_api_grants_space_scope_for_task_list_resources(client:
     assert space_folders_response.status_code == 200
 
     space_docs_response = client.get(
-        f"/api/v1/pms/spaces/{space_id}/docs",
+        "/api/v1/docs/hub",
         headers=_auth_headers(task_list_member_token),
+        params={"container_app": "pms", "container_type": "space", "container_id": space_id},
     )
     assert space_docs_response.status_code == 200
 
@@ -571,21 +564,18 @@ def test_media_linking_follows_parent_resource_acl(client: TestClient) -> None:
 
     issue = _create_issue(client, admin_session["token"], task_list["id"], title="Media ACL issue")
 
-    collection_response = client.post(
-        f"/api/v1/pms/spaces/{space_id}/docs",
-        headers=_auth_headers(admin_session["token"]),
-        json={"title": "Space Collection"},
+    collection = _create_space_doc(
+        client,
+        admin_session["token"],
+        space_id,
+        title="Space Collection",
     )
-    assert collection_response.status_code == 201
-    collection = collection_response.json()
-
-    page_response = client.post(
-        f"/api/v1/pms/spaces/{space_id}/docs/pages",
-        headers=_auth_headers(admin_session["token"]),
-        json={"title": "Space Page", "space_doc_id": collection["id"]},
+    page = _create_doc_page(
+        client,
+        admin_session["token"],
+        collection["id"],
+        title="Space Page",
     )
-    assert page_response.status_code == 201
-    page = page_response.json()
 
     project_member = _create_user(
         client,
@@ -622,7 +612,7 @@ def test_media_linking_follows_parent_resource_acl(client: TestClient) -> None:
         headers=_auth_headers(project_member_token),
         json={
             "media_ids": [forbidden_space_media["id"]],
-            "resource_type": "space_doc_page",
+            "resource_type": "docs_native_page",
             "resource_id": page["id"],
         },
     )
@@ -647,7 +637,7 @@ def test_media_linking_follows_parent_resource_acl(client: TestClient) -> None:
         headers=_auth_headers(space_member_token),
         json={
             "media_ids": [page_media["id"]],
-            "resource_type": "space_doc_page",
+            "resource_type": "docs_native_page",
             "resource_id": page["id"],
         },
     )
@@ -673,21 +663,8 @@ def test_team_soft_delete_hides_space_data_and_untrashes_default_space(client: T
     )
     assert folder_response.status_code == 201
 
-    collection_response = client.post(
-        f"/api/v1/pms/spaces/{space_id}/docs",
-        headers=headers,
-        json={"title": "Runbook"},
-    )
-    assert collection_response.status_code == 201
-    collection = collection_response.json()
-
-    page_response = client.post(
-        f"/api/v1/pms/spaces/{space_id}/docs/pages",
-        headers=headers,
-        json={"title": "Overview", "space_doc_id": collection["id"]},
-    )
-    assert page_response.status_code == 201
-    page = page_response.json()
+    collection = _create_space_doc(client, admin_session["token"], space_id, title="Runbook")
+    page = _create_doc_page(client, admin_session["token"], collection["id"], title="Overview")
 
     delete_response = client.delete(
         f"/api/v1/admin/teams/{space_id}",
@@ -738,16 +715,18 @@ def test_team_soft_delete_hides_space_data_and_untrashes_default_space(client: T
     assert deleted_space_folders_response.status_code == 404
 
     deleted_space_docs_response = client.get(
-        f"/api/v1/pms/spaces/{space_id}/docs",
+        "/api/v1/docs/hub",
         headers=headers,
+        params={"container_app": "pms", "container_type": "space", "container_id": space_id},
     )
-    assert deleted_space_docs_response.status_code == 404
+    assert deleted_space_docs_response.status_code == 200
+    assert [item["id"] for item in deleted_space_docs_response.json()["items"]] == [collection["id"]]
 
     deleted_page_response = client.get(
-        f"/api/v1/pms/space-doc-pages/{page['id']}",
+        f"/api/v1/docs/pages/{page['id']}",
         headers=headers,
     )
-    assert deleted_page_response.status_code == 404
+    assert deleted_page_response.status_code == 200
 
     workspaces_after_delete_response = client.get("/api/v1/admin/workspaces", headers=headers)
     assert workspaces_after_delete_response.status_code == 200
@@ -869,45 +848,18 @@ def test_space_doc_collection_patch_sort_order(client: TestClient) -> None:
     space_id = task_list["team_id"]
     assert space_id is not None
 
-    doc_a = client.post(
-        f"/api/v1/pms/spaces/{space_id}/docs",
-        headers=_auth_headers(admin["token"]),
-        json={"title": "Alpha Doc"},
-    ).json()
-    doc_b = client.post(
-        f"/api/v1/pms/spaces/{space_id}/docs",
-        headers=_auth_headers(admin["token"]),
-        json={"title": "Bravo Doc"},
-    ).json()
-    doc_c = client.post(
-        f"/api/v1/pms/spaces/{space_id}/docs",
-        headers=_auth_headers(admin["token"]),
-        json={"title": "Charlie Doc"},
-    ).json()
+    doc_a = _create_space_doc(client, admin["token"], space_id, title="Alpha Doc")
+    doc_b = _create_space_doc(client, admin["token"], space_id, title="Bravo Doc")
+    doc_c = _create_space_doc(client, admin["token"], space_id, title="Charlie Doc")
 
     # Reorder: C first, A second, B third.
-    client.patch(
-        f"/api/v1/pms/space-docs/{doc_c['id']}",
-        headers=_auth_headers(admin["token"]),
-        json={"sort_order": 0},
-    )
-    client.patch(
-        f"/api/v1/pms/space-docs/{doc_a['id']}",
-        headers=_auth_headers(admin["token"]),
-        json={"sort_order": 1000},
-    )
-    client.patch(
-        f"/api/v1/pms/space-docs/{doc_b['id']}",
-        headers=_auth_headers(admin["token"]),
-        json={"sort_order": 2000},
-    )
+    _update_space_doc_sort_order(client, admin["token"], doc_c["id"], space_id=space_id, sort_order=0)
+    _update_space_doc_sort_order(client, admin["token"], doc_a["id"], space_id=space_id, sort_order=1000)
+    _update_space_doc_sort_order(client, admin["token"], doc_b["id"], space_id=space_id, sort_order=2000)
 
-    listed = client.get(
-        f"/api/v1/pms/spaces/{space_id}/docs",
-        headers=_auth_headers(admin["token"]),
-    ).json()["items"]
+    listed = _list_space_docs(client, admin["token"], space_id)
     assert [item["title"] for item in listed] == ["Charlie Doc", "Alpha Doc", "Bravo Doc"]
-    assert [item["sort_order"] for item in listed] == [0, 1000, 2000]
+    assert [item["primary_container"]["sort_order"] for item in listed] == [0, 1000, 2000]
 
 
 def test_space_member_can_reorder_task_list_without_owner_access(client: TestClient) -> None:
@@ -954,31 +906,23 @@ def test_space_member_can_reorder_space_doc_without_manager_access(client: TestC
     space_id = task_list["team_id"]
     assert space_id is not None
 
-    doc_a = client.post(
-        f"/api/v1/pms/spaces/{space_id}/docs",
-        headers=_auth_headers(admin["token"]),
-        json={"title": "Alpha Doc"},
-    ).json()
-    doc_b = client.post(
-        f"/api/v1/pms/spaces/{space_id}/docs",
-        headers=_auth_headers(admin["token"]),
-        json={"title": "Bravo Doc"},
-    ).json()
+    doc_a = _create_space_doc(client, admin["token"], space_id, title="Alpha Doc")
+    doc_b = _create_space_doc(client, admin["token"], space_id, title="Bravo Doc")
 
     member = _create_user(client, admin["token"], email="doc-reorder-member@aidoo.local", full_name="Doc Reorder Member")
     _add_task_list_member(client, admin["token"], task_list["id"], member["user"]["id"], "member")
     member_token = _login(client, member["user"]["email"], member["temporary_password"])
 
-    reorder_response = client.patch(
-        f"/api/v1/pms/space-docs/{doc_b['id']}",
+    reorder_response = client.put(
+        f"/api/v1/docs/items/{doc_b['id']}/container",
         headers=_auth_headers(member_token),
-        json={"sort_order": 0},
+        json={"app": "pms", "type": "space", "id": space_id, "sort_order": 0},
     )
     assert reorder_response.status_code == 200
-    assert reorder_response.json()["sort_order"] == 0
+    assert reorder_response.json()["primary_container"]["sort_order"] == 0
 
     rename_response = client.patch(
-        f"/api/v1/pms/space-docs/{doc_a['id']}",
+        f"/api/v1/docs/items/{doc_a['id']}",
         headers=_auth_headers(member_token),
         json={"title": "Should still fail"},
     )
@@ -1037,43 +981,27 @@ def test_bulk_reorder_space_docs_allows_member_and_updates_order(client: TestCli
     space_id = task_list["team_id"]
     assert space_id is not None
 
-    doc_a = client.post(
-        f"/api/v1/pms/spaces/{space_id}/docs",
-        headers=_auth_headers(admin["token"]),
-        json={"title": "Bulk Doc A"},
-    ).json()
-    doc_b = client.post(
-        f"/api/v1/pms/spaces/{space_id}/docs",
-        headers=_auth_headers(admin["token"]),
-        json={"title": "Bulk Doc B"},
-    ).json()
-    doc_c = client.post(
-        f"/api/v1/pms/spaces/{space_id}/docs",
-        headers=_auth_headers(admin["token"]),
-        json={"title": "Bulk Doc C"},
-    ).json()
+    doc_a = _create_space_doc(client, admin["token"], space_id, title="Bulk Doc A")
+    doc_b = _create_space_doc(client, admin["token"], space_id, title="Bulk Doc B")
+    doc_c = _create_space_doc(client, admin["token"], space_id, title="Bulk Doc C")
 
     member = _create_user(client, admin["token"], email="bulk-doc-member@aidoo.local", full_name="Bulk Doc Member")
     _add_task_list_member(client, admin["token"], task_list["id"], member["user"]["id"], "member")
     member_token = _login(client, member["user"]["email"], member["temporary_password"])
 
-    reorder_response = client.patch(
-        f"/api/v1/pms/spaces/{space_id}/docs/reorder",
-        headers=_auth_headers(member_token),
-        json={
-            "items": [
-                {"id": doc_b["id"], "sort_order": 0},
-                {"id": doc_a["id"], "sort_order": 1000},
-                {"id": doc_c["id"], "sort_order": 2000},
-            ]
-        },
-    )
-    assert reorder_response.status_code == 204
+    for doc_id, sort_order in [
+        (doc_b["id"], 0),
+        (doc_a["id"], 1000),
+        (doc_c["id"], 2000),
+    ]:
+        response = client.put(
+            f"/api/v1/docs/items/{doc_id}/container",
+            headers=_auth_headers(member_token),
+            json={"app": "pms", "type": "space", "id": space_id, "sort_order": sort_order},
+        )
+        assert response.status_code == 200, response.text
 
-    listed = client.get(
-        f"/api/v1/pms/spaces/{space_id}/docs",
-        headers=_auth_headers(admin["token"]),
-    ).json()["items"]
+    listed = _list_space_docs(client, admin["token"], space_id)
     assert [item["id"] for item in listed] == [doc_b["id"], doc_a["id"], doc_c["id"]]
 
 

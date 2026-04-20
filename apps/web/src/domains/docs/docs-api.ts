@@ -67,13 +67,27 @@ export interface DocsShareSummary {
   link_access_level: 'read' | 'edit' | null;
 }
 
+export interface DocsPrimaryContainer {
+  app: string;
+  type: string;
+  id: string;
+  sort_order: number;
+}
+
 export interface DocsHubItem {
   id: string;
   source_app: string;
-  source_type: 'native_doc' | 'pms_space_doc';
+  source_type: 'native_doc';
   source_id: string;
+  source_kind: string;
+  source_ref: string | null;
+  generation_kind: string;
   structure_kind: 'page_tree';
   location_label: string;
+  container_label: string;
+  primary_container: DocsPrimaryContainer | null;
+  source_badge: string;
+  source_deeplink: string | null;
   title: string;
   page_count: number;
   created_by_id: string;
@@ -98,10 +112,48 @@ export interface DocsHubResponse {
   page_size: number;
 }
 
+export function getDocsItemPrimaryContainerId(
+  item: DocsHubItem,
+  app?: string,
+  type?: string,
+): string | null {
+  const container = item.primary_container;
+  if (!container) {
+    return null;
+  }
+  if (app && container.app !== app) {
+    return null;
+  }
+  if (type && container.type !== type) {
+    return null;
+  }
+  return container.id;
+}
+
+export function getDocsItemPrimaryContainerSortOrder(item: DocsHubItem): number {
+  return item.primary_container?.sort_order ?? 0;
+}
+
+export function withDocsItemPrimaryContainerSortOrder(
+  item: DocsHubItem,
+  sortOrder: number,
+): DocsHubItem {
+  if (!item.primary_container) {
+    return item;
+  }
+  return {
+    ...item,
+    primary_container: {
+      ...item.primary_container,
+      sort_order: sortOrder,
+    },
+  };
+}
+
 export interface DocsPageItem {
   id: string;
   doc_id: string;
-  source_type: 'native_doc_page' | 'pms_space_doc_page';
+  source_type: 'native_doc_page';
   source_page_id: string;
   parent_id: string | null;
   title: string;
@@ -122,13 +174,13 @@ export interface DocsPageListResponse {
 
 export function mediaResourceTypeForDocsPage(
   sourceType: DocsPageItem['source_type'],
-): 'docs_native_page' | 'space_doc_page' {
-  return sourceType === 'native_doc_page' ? 'docs_native_page' : 'space_doc_page';
+): 'docs_native_page' {
+  return 'docs_native_page';
 }
 
 export interface DocsCollabSession {
   page_ref: string;
-  source_type: 'native_doc_page' | 'pms_space_doc_page';
+  source_type: 'native_doc_page';
   source_page_id: string;
   room_key: string;
   ws_path: string;
@@ -159,7 +211,7 @@ export interface RecentPageItem {
   page_title: string;
   doc_id: string;
   doc_title: string;
-  source_type: string;
+  source_type: 'native_doc';
   location_label: string;
   last_viewed_at: string;
 }
@@ -198,32 +250,55 @@ export interface ResolveSharedLinkResponse {
 export function listDocsHub(
   token: string,
   params: {
-    category?: string;
+    view?: string;
     q?: string;
     sort_by?: string;
     sort_dir?: string;
     page?: number;
     page_size?: number;
+    source_app?: string;
+    source_kind?: string;
+    container_app?: string;
+    container_type?: string;
+    container_id?: string;
   } = {},
   workspaceSlug?: string | null,
 ): Promise<DocsHubResponse> {
   const qs = new URLSearchParams();
-  if (params.category) qs.set('category', params.category);
+  if (params.view) qs.set('view', params.view);
   if (params.q) qs.set('q', params.q);
   if (params.sort_by) qs.set('sort_by', params.sort_by);
   if (params.sort_dir) qs.set('sort_dir', params.sort_dir);
   if (params.page) qs.set('page', String(params.page));
   if (params.page_size) qs.set('page_size', String(params.page_size));
+  if (params.source_app) qs.set('source_app', params.source_app);
+  if (params.source_kind) qs.set('source_kind', params.source_kind);
+  if (params.container_app) qs.set('container_app', params.container_app);
+  if (params.container_type) qs.set('container_type', params.container_type);
+  if (params.container_id) qs.set('container_id', params.container_id);
   return request<DocsHubResponse>(`/api/v1/docs/hub?${qs}`, token, {}, workspaceSlug);
 }
 
 export function createNativeDoc(
   token: string,
-  payload: { title: string; first_page_title?: string },
+  payload: {
+    title: string;
+    first_page_title?: string;
+    source_app?: string;
+    source_kind?: string;
+    source_ref?: string | null;
+    generation_kind?: string;
+    primary_container?: {
+      app: string;
+      type: string;
+      id: string;
+      sort_order?: number;
+    } | null;
+  },
   workspaceSlug?: string | null,
 ): Promise<DocsHubItem> {
   return request<DocsHubItem>(
-    '/api/v1/docs/native-docs',
+    '/api/v1/docs/items',
     token,
     {
       method: 'POST',
@@ -252,11 +327,17 @@ export function updateDocsItem(
   itemId: string,
   payload: { title?: string },
   shareToken?: string | null,
+  workspaceSlug?: string | null,
 ): Promise<DocsHubItem> {
-  return request<DocsHubItem>(withShareToken(`/api/v1/docs/items/${itemId}`, shareToken), token, {
-    method: 'PATCH',
-    body: JSON.stringify(payload),
-  });
+  return request<DocsHubItem>(
+    withShareToken(`/api/v1/docs/items/${itemId}`, shareToken),
+    token,
+    {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    },
+    workspaceSlug,
+  );
 }
 
 export function deleteDocsItem(token: string, itemId: string, shareToken?: string | null): Promise<void> {
@@ -330,10 +411,66 @@ export function updateDocPage(
 }
 
 export function makeDocsPageRef(
-  sourceType: 'native_doc_page' | 'pms_space_doc_page',
+  sourceType: 'native_doc_page',
   sourcePageId: string,
 ): string {
   return `${sourceType}__${sourcePageId}`;
+}
+
+export interface DocsContainerTreeNode {
+  app: string;
+  type: string;
+  id: string;
+  label: string;
+  item_count: number;
+  children: DocsContainerTreeNode[];
+}
+
+export function getDocsContainersTree(
+  token: string,
+  workspaceSlug?: string | null,
+): Promise<DocsContainerTreeNode[]> {
+  return request<DocsContainerTreeNode[]>(
+    '/api/v1/docs/containers/tree',
+    token,
+    {},
+    workspaceSlug,
+  );
+}
+
+export function updateDocContainer(
+  token: string,
+  itemId: string,
+  payload: {
+    app: string;
+    type: string;
+    id: string;
+    sort_order?: number;
+  },
+  workspaceSlug?: string | null,
+): Promise<DocsHubItem> {
+  return request<DocsHubItem>(
+    `/api/v1/docs/items/${itemId}/container`,
+    token,
+    {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    },
+    workspaceSlug,
+  );
+}
+
+export function deleteDocContainer(
+  token: string,
+  itemId: string,
+  workspaceSlug?: string | null,
+): Promise<DocsHubItem> {
+  return request<DocsHubItem>(
+    `/api/v1/docs/items/${itemId}/container`,
+    token,
+    { method: 'DELETE' },
+    workspaceSlug,
+  );
 }
 
 export function getDocsCollabSession(

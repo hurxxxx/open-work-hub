@@ -147,7 +147,7 @@ def test_docs_tool_invoke_blocks_cross_workspace_page_access_and_audits_error(
     outsider = _dev_login(client, "knowledge-base-admin")
 
     doc_response = client.post(
-        "/api/v1/workspaces/delivery-hub/docs/native-docs",
+        "/api/v1/workspaces/delivery-hub/docs/items",
         headers=_auth_headers(owner["token"]),
         json={"title": "Restricted Doc"},
     )
@@ -171,7 +171,7 @@ def test_docs_tool_invoke_blocks_cross_workspace_page_access_and_audits_error(
         json={"arguments": {"page_id": page["id"]}},
     )
 
-    assert response.status_code == 403
+    assert response.status_code == 404
     audit_payload = _tool_audit_rows()[-1].payload
     assert audit_payload["tool_name"] == "docs.read_page"
     assert audit_payload["status"] == "error"
@@ -186,7 +186,7 @@ def test_agent_loop_tool_error_does_not_leak_cross_workspace_doc_content(
     _set_policy("chatbot", "local_only")
 
     doc_response = client.post(
-        "/api/v1/workspaces/delivery-hub/docs/native-docs",
+        "/api/v1/workspaces/delivery-hub/docs/items",
         headers=_auth_headers(owner["token"]),
         json={"title": "Restricted Agent Doc"},
     )

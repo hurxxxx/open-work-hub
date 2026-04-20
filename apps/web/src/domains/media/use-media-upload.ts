@@ -9,7 +9,7 @@ interface CacheEntry {
   expiresAt: number;
 }
 
-export type MediaResourceType = 'issue' | 'space_doc_page' | 'docs_native_page';
+export type MediaResourceType = 'issue' | 'docs_native_page';
 
 export interface MediaLinkTarget {
   resourceType: MediaResourceType;

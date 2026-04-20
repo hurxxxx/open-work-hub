@@ -60,8 +60,22 @@ import {
   type ConversationSummary,
 } from '@/src/domains/ai/conversations-api';
 import { AiConversationsSection } from './AiConversationsSection';
-import { listFavoriteDocs, listRecentPages, type FavoriteDocItem, type RecentPageItem } from '@/src/domains/docs/docs-api';
-import { listPmsTaskLists, listFolders, listSpaceDocs, createSpaceDoc, updateSpaceDoc, deleteSpaceDoc, updateFolder, deleteFolder, listSpaces, updateSpace, deleteSpace, reorderPmsTaskLists, reorderSpaceDocs, updatePmsTaskList, type PmsFolder, type PmsTaskList, type PmsSpace, type PmsSpaceDoc } from '@/src/domains/pms/pms-api';
+import {
+  createNativeDoc,
+  deleteDocsItem,
+  getDocsItemPrimaryContainerId,
+  getDocsItemPrimaryContainerSortOrder,
+  listDocsHub,
+  listFavoriteDocs,
+  listRecentPages,
+  updateDocContainer,
+  updateDocsItem,
+  withDocsItemPrimaryContainerSortOrder,
+  type DocsHubItem,
+  type FavoriteDocItem,
+  type RecentPageItem,
+} from '@/src/domains/docs/docs-api';
+import { listPmsTaskLists, listFolders, updateFolder, deleteFolder, listSpaces, updateSpace, deleteSpace, reorderPmsTaskLists, updatePmsTaskList, type PmsFolder, type PmsTaskList, type PmsSpace } from '@/src/domains/pms/pms-api';
 import {
   buildWorkspaceAppPath,
   resolveDefaultWorkspaceAppPath,
@@ -97,6 +111,21 @@ function upsertList(lists: PmsTaskList[], item: PmsTaskList): PmsTaskList[] {
 function upsertSpace(spaces: PmsSpace[], space: PmsSpace): PmsSpace[] {
   return [space, ...spaces.filter((item) => item.id !== space.id)].sort(
     (left, right) => left.name.localeCompare(right.name, 'ko'),
+  );
+}
+
+function getSpaceDocSpaceId(doc: DocsHubItem): string {
+  return getDocsItemPrimaryContainerId(doc, 'pms', 'space') ?? '';
+}
+
+function getSpaceDocSortOrder(doc: DocsHubItem): number {
+  return getDocsItemPrimaryContainerSortOrder(doc);
+}
+
+function sortSpaceDocs(items: DocsHubItem[]): DocsHubItem[] {
+  return [...items].sort(
+    (left, right) => getSpaceDocSortOrder(left) - getSpaceDocSortOrder(right)
+      || left.title.localeCompare(right.title, 'ko'),
   );
 }
 
@@ -508,7 +537,7 @@ const SortableDocLink = ({
   onToggleMenu,
   onCloseMenu,
 }: {
-  doc: PmsSpaceDoc;
+  doc: DocsHubItem;
   spaceId: string;
   activeNavItemId: string;
   canDrag: boolean;
@@ -531,7 +560,7 @@ const SortableDocLink = ({
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: doc.id,
     disabled: !canDrag || isRenaming,
-    data: { kind: 'doc', parentId: doc.team_id },
+    data: { kind: 'doc', parentId: getSpaceDocSpaceId(doc) },
   });
   const suppressClick = useSuppressClickAfterDrag(isDragging);
   const style = { transform: CSS.Transform.toString(transform), transition };
@@ -659,7 +688,7 @@ const SpaceItem = ({
   onDeleteSpace: () => void;
   onManageMembers: () => void;
   onOpenOrderEditor: () => void;
-  spaceDocs: PmsSpaceDoc[];
+  spaceDocs: DocsHubItem[];
   onRenameDoc: (docId: string, newTitle: string) => void;
   onDeleteDoc: (docId: string) => void;
   onReorderList: (activeListId: string, overListId: string, zone: FlatDropZone) => Promise<void>;
@@ -703,9 +732,7 @@ const SpaceItem = ({
     [rootLists],
   );
   const rootDocsOrdered = useMemo(
-    () => [...spaceDocs].sort(
-      (left, right) => left.sort_order - right.sort_order || left.title.localeCompare(right.title, 'ko'),
-    ),
+    () => sortSpaceDocs(spaceDocs),
     [spaceDocs],
   );
 
@@ -1451,17 +1478,26 @@ export const SubSidebar = ({
     const title = await prompt({ title: 'New Document', placeholder: 'Document name', defaultValue: '' });
     if (!title) return;
     try {
-      const doc = await createSpaceDoc(token, spaceId, { title });
+      const doc = await createNativeDoc(token, {
+        title,
+        source_app: 'pms',
+        source_kind: 'manual',
+        primary_container: {
+          app: 'pms',
+          type: 'space',
+          id: spaceId,
+        },
+      });
       setSpaceDocsMap((prev) => {
         const next = new Map(prev);
-        next.set(spaceId, [...(next.get(spaceId) ?? []), doc]);
+        next.set(spaceId, sortSpaceDocs([...(next.get(spaceId) ?? []), doc]));
         return next;
       });
       navigate(`/tool/pms-space-${spaceId}-docs-${doc.id}`);
     } catch { /* ignore */ }
   }, [navigate, prompt, token]);
 
-  const [spaceDocsMap, setSpaceDocsMap] = useState<Map<string, PmsSpaceDoc[]>>(new Map());
+  const [spaceDocsMap, setSpaceDocsMap] = useState<Map<string, DocsHubItem[]>>(new Map());
 
   useEffect(() => {
     if (!token) return;
@@ -1469,8 +1505,16 @@ export const SubSidebar = ({
       if (!teamRoleAllows(team.current_user_role, 'viewer')) {
         continue;
       }
-      listSpaceDocs(token, team.id)
-        .then((res) => setSpaceDocsMap((prev) => new Map(prev).set(team.id, res.items)))
+      listDocsHub(token, {
+        view: 'all',
+        container_app: 'pms',
+        container_type: 'space',
+        container_id: team.id,
+        page_size: 200,
+        sort_by: 'container_sort_order',
+        sort_dir: 'asc',
+      })
+        .then((res) => setSpaceDocsMap((prev) => new Map(prev).set(team.id, sortSpaceDocs(res.items))))
         .catch(() => undefined);
     }
   }, [token, pmsTeams]);
@@ -1478,11 +1522,13 @@ export const SubSidebar = ({
   const handleRenameDoc = useCallback(async (docId: string, newTitle: string) => {
     if (!token) return;
     try {
-      const updated = await updateSpaceDoc(token, docId, { title: newTitle });
+      const updated = await updateDocsItem(token, docId, { title: newTitle });
+      const teamId = getSpaceDocSpaceId(updated);
+      if (!teamId) return;
       setSpaceDocsMap((prev) => {
         const next = new Map(prev);
-        const docs = next.get(updated.team_id) ?? [];
-        next.set(updated.team_id, docs.map((d) => (d.id === updated.id ? updated : d)));
+        const docs = next.get(teamId) ?? [];
+        next.set(teamId, sortSpaceDocs(docs.map((d) => (d.id === updated.id ? updated : d))));
         return next;
       });
     } catch { /* ignore */ }
@@ -1493,7 +1539,7 @@ export const SubSidebar = ({
     if (!await confirm({ title: 'Delete Collection', description: 'Move this document collection and all its pages to Trash?', confirmLabel: 'Move to Trash', variant: 'danger' })) return;
     const deletedTeamId = [...spaceDocsMap.entries()].find(([, docs]) => docs.some((doc) => doc.id === docId))?.[0] ?? null;
     try {
-      await deleteSpaceDoc(token, docId);
+      await deleteDocsItem(token, docId);
       setSpaceDocsMap((prev) => {
         const next = new Map(prev);
         for (const [teamId, docs] of next) {
@@ -1541,7 +1587,7 @@ export const SubSidebar = ({
       const docChanges = payload.docs
         .filter((item) => {
           const current = currentDocs.find((doc) => doc.id === item.id);
-          return current && current.sort_order !== item.sort_order;
+          return current && getSpaceDocSortOrder(current) !== item.sort_order;
         })
         .map((item) => ({
           id: item.id,
@@ -1563,9 +1609,9 @@ export const SubSidebar = ({
         const next = new Map(current);
         const docs = (next.get(spaceId) ?? []).map((doc) => {
           const updated = nextDocMap.get(doc.id);
-          return updated ? { ...doc, sort_order: updated.sort_order } : doc;
+          return updated ? withDocsItemPrimaryContainerSortOrder(doc, updated.sort_order) : doc;
         });
-        next.set(spaceId, docs);
+        next.set(spaceId, sortSpaceDocs(docs));
         return next;
       });
 
@@ -1575,7 +1621,14 @@ export const SubSidebar = ({
             ? reorderPmsTaskLists(token, spaceId, { items: listChanges })
             : Promise.resolve(),
           docChanges.length > 0
-            ? reorderSpaceDocs(token, spaceId, { items: docChanges })
+            ? Promise.all(
+              docChanges.map((item) => updateDocContainer(token, item.id, {
+                app: 'pms',
+                type: 'space',
+                id: spaceId,
+                sort_order: item.sort_order,
+              })),
+            ).then(() => undefined)
             : Promise.resolve(),
         ]);
       } catch (error) {
@@ -1604,8 +1657,8 @@ export const SubSidebar = ({
       const docsInSpace = spaceDocsMap.get(spaceId) ?? [];
       const items = docsInSpace.map((doc) => ({
         id: doc.id,
-        parent_id: doc.team_id,
-        sort_order: doc.sort_order,
+        parent_id: getSpaceDocSpaceId(doc),
+        sort_order: getSpaceDocSortOrder(doc),
         name: doc.title,
       }));
       const target = computeFlatDropTarget(items, overDocId, zone);
@@ -1618,14 +1671,17 @@ export const SubSidebar = ({
         const next = new Map(prev);
         const docs = (next.get(spaceId) ?? []).map((doc) => {
           const p = patchMap.get(doc.id);
-          return p ? { ...doc, sort_order: p.sort_order } : doc;
+          return p ? withDocsItemPrimaryContainerSortOrder(doc, p.sort_order) : doc;
         });
-        next.set(spaceId, docs);
+        next.set(spaceId, sortSpaceDocs(docs));
         return next;
       });
       try {
         await Promise.all(
-          result.patches.map((patch) => updateSpaceDoc(token, patch.id, {
+          result.patches.map((patch) => updateDocContainer(token, patch.id, {
+            app: 'pms',
+            type: 'space',
+            id: spaceId,
             sort_order: patch.sort_order,
           })),
         );

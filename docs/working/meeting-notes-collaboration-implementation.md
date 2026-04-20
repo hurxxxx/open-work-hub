@@ -55,10 +55,8 @@
 
 - `page_ref`
   - `native_doc_page__{id}`
-  - `pms_space_doc_page__{id}`
 - `room_key`
   - `native_doc_page:{id}`
-  - `pms_space_doc_page:{id}`
 - 영속 테이블: `docs_collab_documents`
   - `room_key`
   - `source_type`

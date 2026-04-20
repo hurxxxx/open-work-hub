@@ -17,7 +17,7 @@ class _ToolArgsModel(BaseModel):
 
 
 class ListHubArgs(_ToolArgsModel):
-    category: str = "all"
+    view: str = "all"
     q: str = ""
     sort_by: str = "updated_at"
     sort_dir: Literal["asc", "desc"] = "desc"
@@ -49,10 +49,8 @@ def _list_hub(
 ) -> dict[str, Any]:
     return docs_service.list_hub(
         db,
-        workspace=workspace,
-        principal=principal,
         user=user,
-        category=str(arguments.get("category", "all")),
+        view=str(arguments.get("view", "all")),
         q=str(arguments.get("q", "")),
         sort_by=str(arguments.get("sort_by", "updated_at")),
         sort_dir=str(arguments.get("sort_dir", "desc")),
@@ -70,8 +68,6 @@ def _get_item(
 ) -> dict[str, Any]:
     return docs_service.get_item(
         db,
-        workspace=workspace,
-        principal=principal,
         user=user,
         item_id=str(arguments["item_id"]),
         share_token=arguments.get("share_token"),
@@ -87,8 +83,6 @@ def _list_pages(
 ) -> dict[str, Any]:
     return docs_service.list_pages(
         db,
-        workspace=workspace,
-        principal=principal,
         user=user,
         item_id=str(arguments["item_id"]),
         share_token=arguments.get("share_token"),
@@ -104,8 +98,6 @@ def _read_page(
 ) -> dict[str, Any]:
     return docs_service.read_page(
         db,
-        workspace=workspace,
-        principal=principal,
         user=user,
         page_id=str(arguments["page_id"]),
         share_token=arguments.get("share_token"),

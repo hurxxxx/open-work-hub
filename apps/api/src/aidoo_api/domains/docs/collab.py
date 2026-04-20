@@ -25,29 +25,27 @@ from aidoo_api.core.db import get_session_factory
 from aidoo_api.core.settings import get_settings
 from aidoo_api.domains.auth.access import (
     load_active_workspace_by_key,
-    resolve_team_role,
     resolve_workspace_role,
-    team_role_allows,
     workspace_role_allows,
 )
-from aidoo_api.domains.auth.models import Team, User
+from aidoo_api.domains.auth.models import User
 from aidoo_api.domains.auth.security import new_id
 from aidoo_api.domains.docs.collab_codec import blocks_to_yjs_state, yjs_state_to_blocks
 from aidoo_api.domains.docs.models import (
     DocMeetingAccess,
     DocsCollabDocument,
     NativeDoc,
+    NativeDocContainer,
     NativeDocPage,
     NativeDocUserShare,
 )
+from aidoo_api.domains.docs.registry import ContainerRef, project_container_access
 from aidoo_api.domains.media.router import sync_embedded_media
-from aidoo_api.domains.pms.models import SpaceDocPage
 
 
 logger = logging.getLogger(__name__)
 
 PAGE_SOURCE_NATIVE_DOC = "native_doc_page"
-PAGE_SOURCE_PMS_SPACE_DOC = "pms_space_doc_page"
 
 COLLAB_RELAY_CHANNEL_PREFIX = "docs-collab"
 COLLAB_CLOSE_CODE_RELAY_UNAVAILABLE = 1013
@@ -167,21 +165,12 @@ def _load_native_page_for_collab(db: Session, page_id: str) -> NativeDocPage | N
         .options(
             selectinload(NativeDocPage.created_by),
             joinedload(NativeDocPage.doc)
+            .selectinload(NativeDoc.containers),
+            joinedload(NativeDocPage.doc)
             .selectinload(NativeDoc.user_shares)
             .selectinload(NativeDocUserShare.user),
         )
         .where(NativeDocPage.id == page_id)
-    )
-
-
-def _load_space_page_for_collab(db: Session, page_id: str) -> SpaceDocPage | None:
-    return db.scalar(
-        select(SpaceDocPage)
-        .options(
-            selectinload(SpaceDocPage.created_by),
-            joinedload(SpaceDocPage.doc),
-        )
-        .where(SpaceDocPage.id == page_id)
     )
 
 
@@ -219,10 +208,33 @@ def _resolve_native_page_context(
                 ),
             )
         )
+        container_access_level = None
+        for container in page.doc.containers:
+            projection = project_container_access(
+                db=db,
+                user=user,
+                workspace=workspace,
+                ref=ContainerRef(
+                    app=container.container_app,
+                    type=container.container_type,
+                    id=container.container_id,
+                ),
+            )
+            candidate = (
+                "edit"
+                if projection.can_edit or projection.can_manage
+                else "read" if projection.can_view else None
+            )
+            if candidate == "edit":
+                container_access_level = "edit"
+                break
+            if container_access_level is None and candidate == "read":
+                container_access_level = "read"
         access_level = None
         for candidate in (
             getattr(direct_share, "access_level", None),
             getattr(meeting_grant, "access_level", None),
+            container_access_level,
         ):
             if candidate == "edit":
                 access_level = "edit"
@@ -246,48 +258,6 @@ def _resolve_native_page_context(
     )
 
 
-def _resolve_space_page_context(
-    db: Session,
-    user: User,
-    workspace_slug: str,
-    page_id: str,
-) -> CollabPageContext:
-    workspace = load_active_workspace_by_key(db, workspace_slug)
-    if workspace is None:
-        raise HTTPException(status_code=404, detail="Workspace not found.")
-    if not workspace_role_allows(resolve_workspace_role(db, user, workspace.id), "member"):
-        raise HTTPException(status_code=403, detail="Workspace access required.")
-
-    page = _load_space_page_for_collab(db, page_id)
-    if page is None or page.doc is None or page.trashed_at is not None or page.doc.trashed_at is not None:
-        raise HTTPException(status_code=404, detail="Page not found.")
-
-    team = db.scalar(
-        select(Team).where(
-            Team.id == page.team_id,
-            Team.workspace_id == workspace.id,
-            Team.active.is_(True),
-            Team.trashed_at.is_(None),
-        )
-    )
-    if team is None:
-        raise HTTPException(status_code=404, detail="Page not found.")
-
-    role = resolve_team_role(db, user, team)
-    if not team_role_allows(role, "viewer"):
-        raise HTTPException(status_code=404, detail="Page not found.")
-
-    return CollabPageContext(
-        page_ref=make_page_ref(PAGE_SOURCE_PMS_SPACE_DOC, page.id),
-        source_type=PAGE_SOURCE_PMS_SPACE_DOC,
-        source_page_id=page.id,
-        room_key=make_room_key(PAGE_SOURCE_PMS_SPACE_DOC, page.id),
-        can_edit=team_role_allows(role, "member"),
-        content_blocks=page.content_blocks,
-        default_actor_user_id=page.created_by_id,
-    )
-
-
 def resolve_collab_page_context(
     db: Session,
     user: User,
@@ -297,8 +267,6 @@ def resolve_collab_page_context(
     source_type, source_page_id = split_page_ref(page_ref)
     if source_type == PAGE_SOURCE_NATIVE_DOC:
         return _resolve_native_page_context(db, user, workspace_slug, source_page_id)
-    if source_type == PAGE_SOURCE_PMS_SPACE_DOC:
-        return _resolve_space_page_context(db, user, workspace_slug, source_page_id)
     raise HTTPException(status_code=404, detail="Page not found.")
 
 
@@ -478,16 +446,6 @@ def persist_collab_snapshot_to_page(
             raise HTTPException(status_code=404, detail="Page not found.")
         page.content_blocks = content_blocks
         sync_embedded_media(db, content_blocks, "docs_native_page", page.id, current_user)
-        db.add(page)
-        db.flush()
-        return
-
-    if source_type == PAGE_SOURCE_PMS_SPACE_DOC:
-        page = _load_space_page_for_collab(db, source_page_id)
-        if page is None or page.doc is None or page.trashed_at is not None or page.doc.trashed_at is not None:
-            raise HTTPException(status_code=404, detail="Page not found.")
-        page.content_blocks = content_blocks
-        sync_embedded_media(db, content_blocks, "space_doc_page", page.id, current_user)
         db.add(page)
         db.flush()
         return

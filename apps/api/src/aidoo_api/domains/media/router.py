@@ -20,6 +20,7 @@ from aidoo_api.domains.auth.dependencies import require_admin_context, require_c
 from aidoo_api.domains.auth.models import Team, User, Workspace
 from aidoo_api.domains.auth.security import new_id
 from aidoo_api.domains.docs.models import DocMeetingAccess, NativeDocPage, NativeDocUserShare
+from aidoo_api.domains.docs.registry import ContainerRef, project_container_access
 from aidoo_api.domains.media.models import MediaFile
 
 MAX_MEDIA_UPLOAD_SIZE = 10 * 1024 * 1024  # 10 MB
@@ -160,13 +161,6 @@ def _can_resolve(db: Session, user: User, media: MediaFile) -> bool:
             return False
         task_list = db.scalar(select(TaskList).where(TaskList.id == issue.list_id))
         return _has_space_access(db, user, task_list.team_id if task_list else None)
-    if media.resource_type == "space_doc_page":
-        from aidoo_api.domains.pms.models import SpaceDocPage
-
-        page = db.scalar(select(SpaceDocPage).where(SpaceDocPage.id == media.resource_id))
-        if page is None:
-            return False
-        return _has_space_access(db, user, page.team_id)
     if media.resource_type == "docs_native_page":
         return _can_access_docs_native_page(db, user, media.resource_id, require_edit=False)
     # Unknown resource type: allow uploader only
@@ -218,8 +212,6 @@ def link_media(
         _ensure_issue_access(db, current_user, payload.resource_id)
     elif payload.resource_type == "docs_native_page":
         _ensure_docs_native_page_access(db, current_user, payload.resource_id)
-    elif payload.resource_type == "space_doc_page":
-        _ensure_space_doc_page_access(db, current_user, payload.resource_id)
     else:
         raise HTTPException(status_code=400, detail="Unsupported media resource type.")
 
@@ -250,17 +242,6 @@ def _ensure_issue_access(db: Session, user: User, issue_id: str) -> None:
     task_list = db.scalar(select(TaskList).where(TaskList.id == issue.list_id))
     if not _has_space_access(db, user, task_list.team_id if task_list else None):
         raise HTTPException(status_code=403, detail="Task list space access required.")
-
-
-def _ensure_space_doc_page_access(db: Session, user: User, page_id: str) -> None:
-    """Verify the user has access to the page's space."""
-    from aidoo_api.domains.pms.models import SpaceDocPage
-
-    page = db.scalar(select(SpaceDocPage).where(SpaceDocPage.id == page_id))
-    if page is None:
-        raise HTTPException(status_code=404, detail="Space doc page not found.")
-    if not _has_space_access(db, user, page.team_id):
-        raise HTTPException(status_code=403, detail="Space membership required.")
 
 
 def _can_access_docs_native_page(
@@ -306,6 +287,28 @@ def _can_access_docs_native_page(
         )
         if level in {"read", "edit"}
     ]
+    workspace = db.scalar(
+        select(Workspace).where(
+            Workspace.id == page.doc.workspace_id,
+            Workspace.active.is_(True),
+        )
+    )
+    if workspace is not None:
+        for container in page.doc.containers:
+            projection = project_container_access(
+                db=db,
+                user=user,
+                workspace=workspace,
+                ref=ContainerRef(
+                    app=container.container_app,
+                    type=container.container_type,
+                    id=container.container_id,
+                ),
+            )
+            if projection.can_manage or projection.can_edit:
+                access_levels.append("edit")
+            elif projection.can_view:
+                access_levels.append("read")
     if not access_levels:
         return False
     if require_edit:

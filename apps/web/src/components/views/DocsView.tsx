@@ -55,6 +55,7 @@ import {
   deleteDocLinkShare,
   deleteDocUserShare,
   duplicateDocsItem,
+  getDocsContainersTree,
   getDocsCollabSession,
   getDocsItem,
   getDocSharing,
@@ -70,6 +71,7 @@ import {
   updateDocsItem,
   upsertDocLinkShare,
   upsertDocUserShare,
+  type DocsContainerTreeNode,
   type DocsHubItem,
   type DocsPageItem,
   type NativeDocSharingResponse,
@@ -90,10 +92,10 @@ import {
 
 const CATEGORY_MAP: Record<string, string> = {
   'docs-all': 'all',
-  'docs-my': 'my',
+  'docs-my': 'mine',
   'docs-shared': 'shared',
   'docs-private': 'private',
-  'docs-notes': 'all',
+  'docs-notes': 'meeting_notes',
   'docs-recent': 'recent',
   'docs-archived': 'archived',
 };
@@ -106,6 +108,26 @@ const CATEGORY_LABELS: Record<string, string> = {
   'docs-notes': 'Meeting Notes',
   'docs-recent': 'Recent Pages',
   'docs-archived': 'Archived',
+};
+
+const VIEW_LABELS: Record<string, string> = {
+  all: 'All Docs',
+  mine: 'Created by me',
+  shared: 'Shared with me',
+  private: 'Private',
+  meeting_notes: 'Meeting Notes',
+  recent: 'Recent Pages',
+  archived: 'Archived',
+};
+
+const VIEW_ROUTE_MAP: Record<string, string> = {
+  all: 'docs-all',
+  mine: 'docs-my',
+  shared: 'docs-shared',
+  private: 'docs-private',
+  meeting_notes: 'docs-notes',
+  recent: 'docs-recent',
+  archived: 'docs-archived',
 };
 
 const TEMPLATES = [
@@ -278,6 +300,8 @@ export const DocsView = () => {
   const [selectedPageId, setSelectedPageId] = useState<string | null>(null);
   const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set());
   const [resolvedSharedDocId, setResolvedSharedDocId] = useState<string | null>(null);
+  const [containerTree, setContainerTree] = useState<DocsContainerTreeNode[]>([]);
+  const [loadingContainers, setLoadingContainers] = useState(false);
 
   const [showShareModal, setShowShareModal] = useState(false);
   const [sharingState, setSharingState] = useState<NativeDocSharingResponse | null>(null);
@@ -289,8 +313,17 @@ export const DocsView = () => {
   const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const activeCategory = toolId ? (CATEGORY_MAP[toolId] ?? 'all') : 'all';
-  const activeCategoryLabel = (toolId && CATEGORY_LABELS[toolId]) || 'All Docs';
+  const activeCategory = toolId
+    ? (CATEGORY_MAP[toolId] ?? 'all')
+    : (searchParams.get('view') ?? 'all');
+  const activeCategoryLabel = (toolId && CATEGORY_LABELS[toolId]) || VIEW_LABELS[activeCategory] || 'All Docs';
+  const activeSourceApp = searchParams.get('source_app') ?? undefined;
+  const activeSourceKind = searchParams.get('source_kind') ?? undefined;
+  const activeContainerApp = searchParams.get('container_app') ?? undefined;
+  const activeContainerType = searchParams.get('container_type') ?? undefined;
+  const activeContainerId = searchParams.get('container_id') ?? undefined;
+  const showContainerBrowser = loadingContainers || containerTree.length > 0;
+  const activeFilterQuery = searchParams.toString();
   const activeItemId = docId ?? resolvedSharedDocId;
   const visibleTree = useMemo(() => flattenVisibleTree(pages, expandedNodes), [pages, expandedNodes]);
   const pagesById = useMemo(() => {
@@ -338,10 +371,15 @@ export const DocsView = () => {
     setLoadingList(true);
     try {
       const response = await listDocsHub(token, {
-        category: activeCategory,
+        view: activeCategory,
         q: searchQuery || undefined,
         sort_by: sortBy,
         sort_dir: sortDir,
+        source_app: activeSourceApp,
+        source_kind: activeSourceKind,
+        container_app: activeContainerApp,
+        container_type: activeContainerType,
+        container_id: activeContainerId,
       }, workspaceSlug);
       setDocs(response.items);
       setTotal(response.total);
@@ -351,7 +389,19 @@ export const DocsView = () => {
     } finally {
       setLoadingList(false);
     }
-  }, [activeCategory, searchQuery, sortBy, sortDir, token, workspaceSlug]);
+  }, [
+    activeCategory,
+    activeContainerApp,
+    activeContainerId,
+    activeContainerType,
+    activeSourceApp,
+    activeSourceKind,
+    searchQuery,
+    sortBy,
+    sortDir,
+    token,
+    workspaceSlug,
+  ]);
 
   const loadDoc = useCallback(async (itemId: string, currentShareToken?: string | null) => {
     if (!token) return;
@@ -385,6 +435,15 @@ export const DocsView = () => {
       void fetchDocs();
     }
   }, [fetchDocs, isListView, token]);
+
+  useEffect(() => {
+    if (!token || !isListView) return;
+    setLoadingContainers(true);
+    void getDocsContainersTree(token, workspaceSlug)
+      .then((nodes) => setContainerTree(nodes))
+      .catch(() => setContainerTree([]))
+      .finally(() => setLoadingContainers(false));
+  }, [isListView, token, workspaceSlug]);
 
   useEffect(() => {
     if (!token) return;
@@ -425,15 +484,39 @@ export const DocsView = () => {
   };
 
   const openDoc = (itemId: string) => {
-    navigate(toolId ? `/tool/${toolId}/${itemId}` : docPathFor(itemId));
+    const basePath = toolId ? `/tool/${toolId}/${itemId}` : docPathFor(itemId);
+    navigate(activeFilterQuery ? `${basePath}?${activeFilterQuery}` : basePath);
   };
+
+  const navigateListView = useCallback((
+    view: string,
+    container?: { app: string; type: string; id: string } | null,
+  ) => {
+    const next = new URLSearchParams(searchParams);
+    if (!toolId) {
+      if (view === 'all') next.delete('view');
+      else next.set('view', view);
+    }
+    if (container) {
+      next.set('container_app', container.app);
+      next.set('container_type', container.type);
+      next.set('container_id', container.id);
+    } else {
+      next.delete('container_app');
+      next.delete('container_type');
+      next.delete('container_id');
+    }
+    const basePath = toolId ? `/tool/${VIEW_ROUTE_MAP[view] ?? 'docs-all'}` : docsRoot;
+    navigate(next.toString() ? `${basePath}?${next.toString()}` : basePath);
+  }, [docsRoot, navigate, searchParams, toolId]);
 
   const handleBack = () => {
     if (shareToken && !hasDocsWorkspace) {
       navigate('/');
       return;
     }
-    navigate(toolId ? `/tool/${toolId}` : docsRoot);
+    const basePath = toolId ? `/tool/${toolId}` : docsRoot;
+    navigate(activeFilterQuery ? `${basePath}?${activeFilterQuery}` : basePath);
   };
 
   const openCreateModal = useCallback((templateTitle?: string) => {
@@ -463,7 +546,16 @@ export const DocsView = () => {
     if (!token || !newDocTitle.trim()) return;
     setCreating(true);
     try {
-      const item = await createNativeDoc(token, { title: newDocTitle.trim() }, workspaceSlug);
+      const item = await createNativeDoc(token, {
+        title: newDocTitle.trim(),
+        primary_container: activeContainerApp && activeContainerType && activeContainerId
+          ? {
+              app: activeContainerApp,
+              type: activeContainerType,
+              id: activeContainerId,
+            }
+          : null,
+      }, workspaceSlug);
       setShowCreateModal(false);
       setNewDocTitle('');
       openDoc(item.id);
@@ -494,7 +586,7 @@ export const DocsView = () => {
     const nextTitle = await prompt({ title: 'Rename Document', defaultValue: item.title });
     if (!nextTitle || nextTitle.trim() === item.title) return;
     try {
-      const updated = await updateDocsItem(token, item.id, { title: nextTitle.trim() }, shareToken);
+      const updated = await updateDocsItem(token, item.id, { title: nextTitle.trim() }, shareToken, workspaceSlug);
       setDocs((current) => current.map((doc) => (doc.id === updated.id ? updated : doc)));
       if (selectedDoc?.id === updated.id) {
         setSelectedDoc(updated);
@@ -1359,8 +1451,57 @@ export const DocsView = () => {
       ) : null}
 
       {isListView ? (
-        <div className="flex-1 flex flex-col overflow-hidden">
-          <div className="p-8 space-y-5 overflow-y-auto h-full custom-scrollbar">
+        <div className="flex-1 flex min-h-0 overflow-hidden">
+          {showContainerBrowser ? (
+            <aside className="hidden w-72 shrink-0 border-r border-app-border bg-app-surface-sidebar/60 xl:flex xl:flex-col">
+              <div className="border-b border-app-border px-5 py-4">
+                <div className="app-text-overline text-gray-500">Browse by Container</div>
+              </div>
+              <div className="min-h-0 flex-1 overflow-y-auto px-2 py-3 custom-scrollbar">
+                {loadingContainers ? (
+                  <div className="flex items-center justify-center py-10">
+                    <Loader2 size={18} className="animate-spin text-app-accent" />
+                  </div>
+                ) : (
+                  <div className="space-y-1">
+                    {containerTree.map((node) => {
+                      const renderNode = (current: DocsContainerTreeNode, depth = 0) => {
+                        const isSelected = activeContainerApp === current.app
+                          && activeContainerType === current.type
+                          && activeContainerId === current.id;
+                        return (
+                          <div key={`${current.app}:${current.type}:${current.id}`}>
+                            <button
+                              onClick={() => navigateListView('all', {
+                                app: current.app,
+                                type: current.type,
+                                id: current.id,
+                              })}
+                              className={cn(
+                                'app-text-control-sm flex w-full items-center justify-between rounded-md px-3 py-2 text-left transition-colors',
+                                isSelected
+                                  ? 'bg-app-accent/10 text-app-accent'
+                                  : 'text-app-ink/75 hover:bg-app-surface-hover hover:text-app-ink',
+                              )}
+                              style={{ paddingLeft: `${12 + depth * 14}px` }}
+                            >
+                              <span className="truncate">{current.label}</span>
+                              <span className="app-text-micro text-gray-500">{current.item_count}</span>
+                            </button>
+                            {current.children.map((child) => renderNode(child, depth + 1))}
+                          </div>
+                        );
+                      };
+                      return renderNode(node);
+                    })}
+                  </div>
+                )}
+              </div>
+            </aside>
+          ) : null}
+
+          <div className="flex-1 flex flex-col overflow-hidden">
+            <div className="p-8 space-y-5 overflow-y-auto h-full custom-scrollbar">
             <div className="flex items-center justify-between">
               <div>
                 <h1 className="app-text-title-lg text-app-ink">{activeCategoryLabel}</h1>
@@ -1557,6 +1698,7 @@ export const DocsView = () => {
               </div>
             )}
           </div>
+        </div>
         </div>
       ) : (
         renderEditor()

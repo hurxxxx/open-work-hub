@@ -83,7 +83,7 @@ def test_ai_tool_invoke_docs_read_page_returns_page_content(client: TestClient) 
     workspace_slug = "delivery-hub"
 
     doc_response = client.post(
-        f"/api/v1/workspaces/{workspace_slug}/docs/native-docs",
+        f"/api/v1/workspaces/{workspace_slug}/docs/items",
         headers=_auth_headers(token),
         json={"title": "AI Tool Doc"},
     )

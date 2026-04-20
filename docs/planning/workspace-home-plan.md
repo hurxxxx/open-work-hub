@@ -39,7 +39,7 @@
 - 기존 meeting/pms/docs 도메인 hook
 - 백엔드 엔드포인트:
   - `GET /api/v1/workspaces/:slug/meeting/meetings?scope=upcoming` — [meeting/router.py:63-79](../../apps/api/src/aidoo_api/domains/meeting/router.py#L63-L79)
-  - `GET /api/v1/workspaces/:slug/pms/docs-hub/recent-pages?limit=10` — [pms/router.py:4701](../../apps/api/src/aidoo_api/domains/pms/router.py#L4701)
+  - `GET /api/v1/workspaces/:slug/docs/recent-pages?limit=10` — [docs/router.py:1714](../../apps/api/src/aidoo_api/domains/docs/router.py#L1714)
   - PMS assigned-to-me — 존재 여부 사전 확인 필요, 없으면 해당 위젯만 다음 라운드로
 
 ## 구현 시 검증 루틴

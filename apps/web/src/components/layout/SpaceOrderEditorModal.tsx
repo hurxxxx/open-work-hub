@@ -2,7 +2,11 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Button, Dialog } from '@aidoo/ui';
 import { ArrowDown, ArrowUp, FileText, FolderOpen, List as ListIcon } from 'lucide-react';
 
-import type { PmsFolder, PmsSpaceDoc, PmsTaskList } from '@/src/domains/pms/pms-api';
+import {
+  getDocsItemPrimaryContainerSortOrder,
+  type DocsHubItem,
+} from '@/src/domains/docs/docs-api';
+import type { PmsFolder, PmsTaskList } from '@/src/domains/pms/pms-api';
 import {
   applyFlatReorder,
   computeFlatDropTarget,
@@ -11,7 +15,11 @@ import {
 } from '@/src/domains/pms/pms-sidebar-reorder';
 
 type DraftList = Pick<PmsTaskList, 'id' | 'name' | 'folder_id' | 'sort_order' | 'issue_count'>;
-type DraftDoc = Pick<PmsSpaceDoc, 'id' | 'title' | 'sort_order'>;
+type DraftDoc = {
+  id: string;
+  title: string;
+  sort_order: number;
+};
 
 interface SpaceOrderEditorModalProps {
   isOpen: boolean;
@@ -19,7 +27,7 @@ interface SpaceOrderEditorModalProps {
   spaceName: string;
   folders: PmsFolder[];
   lists: PmsTaskList[];
-  docs: PmsSpaceDoc[];
+  docs: DocsHubItem[];
   onSave: (payload: { lists: DraftList[]; docs: DraftDoc[] }) => Promise<void>;
 }
 
@@ -82,7 +90,7 @@ export function SpaceOrderEditorModal({
         docs.map((doc) => ({
           id: doc.id,
           title: doc.title,
-          sort_order: doc.sort_order,
+          sort_order: getDocsItemPrimaryContainerSortOrder(doc),
         })),
       );
       setSaving(false);
@@ -96,7 +104,7 @@ export function SpaceOrderEditorModal({
     [lists],
   );
   const originalDocMap = useMemo(
-    () => new Map(docs.map((doc) => [doc.id, { sort_order: doc.sort_order }])),
+    () => new Map(docs.map((doc) => [doc.id, { sort_order: getDocsItemPrimaryContainerSortOrder(doc) }])),
     [docs],
   );
 

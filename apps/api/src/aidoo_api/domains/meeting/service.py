@@ -276,6 +276,9 @@ def _create_meeting_notes_assets(
         title=_meeting_notes_doc_title(meeting),
         first_page_title=_meeting_notes_page_title(),
         content_blocks=[],
+        source_app="meeting",
+        source_kind="meeting_notes",
+        source_ref=meeting.id,
     )
 
 

@@ -13,15 +13,18 @@ import {
 import { Panel } from '@aidoo/ui';
 import { useAuth } from '@/src/domains/auth/auth-provider';
 import {
+  getDocsItemPrimaryContainerSortOrder,
+  listDocsHub,
+  type DocsHubItem,
+} from '@/src/domains/docs/docs-api';
+import {
   listPmsTaskLists,
   listFolders,
-  listSpaceDocs,
   listSpaceMembers,
   listSpaces,
   type PmsTaskList,
   type PmsFolder,
   type PmsSpace,
-  type PmsSpaceDoc,
   type PmsSpaceMember,
 } from '@/src/domains/pms/pms-api';
 import { initials } from './pms-constants';
@@ -53,6 +56,14 @@ function avatarColor(seed: string): string {
   return AVATAR_COLORS[hash % AVATAR_COLORS.length];
 }
 
+function sortSpaceDocs(items: DocsHubItem[]): DocsHubItem[] {
+  return [...items].sort(
+    (left, right) => getDocsItemPrimaryContainerSortOrder(left)
+      - getDocsItemPrimaryContainerSortOrder(right)
+      || left.title.localeCompare(right.title, 'ko'),
+  );
+}
+
 export const SpaceOverviewView = ({
   spaceId,
   spaceName,
@@ -64,7 +75,7 @@ export const SpaceOverviewView = ({
   const navigate = useNavigate();
   const [lists, setLists] = useState<PmsTaskList[]>([]);
   const [folders, setFolders] = useState<PmsFolder[]>([]);
-  const [spaceDocs, setSpaceDocs] = useState<PmsSpaceDoc[]>([]);
+  const [spaceDocs, setSpaceDocs] = useState<DocsHubItem[]>([]);
   const [members, setMembers] = useState<PmsSpaceMember[]>([]);
   const [spaceMeta, setSpaceMeta] = useState<PmsSpace | null>(null);
   const [loading, setLoading] = useState(true);
@@ -80,7 +91,15 @@ export const SpaceOverviewView = ({
     Promise.all([
       listPmsTaskLists(token, spaceId),
       listFolders(token, spaceId),
-      listSpaceDocs(token, spaceId).catch(() => ({ items: [] as PmsSpaceDoc[] })),
+      listDocsHub(token, {
+        view: 'all',
+        container_app: 'pms',
+        container_type: 'space',
+        container_id: spaceId,
+        page_size: 200,
+        sort_by: 'container_sort_order',
+        sort_dir: 'asc',
+      }).catch(() => ({ items: [] as DocsHubItem[], total: 0, page: 1, page_size: 200 })),
       listSpaceMembers(token, spaceId).catch(() => ({
         items: [] as PmsSpaceMember[],
         total: 0,
@@ -93,7 +112,7 @@ export const SpaceOverviewView = ({
         if (cancelled) return;
         setLists(listRes.items);
         setFolders(folderRes.items);
-        setSpaceDocs(docsRes.items);
+        setSpaceDocs(sortSpaceDocs(docsRes.items));
         setMembers(memberRes.items);
         const me = Array.isArray(spaces)
           ? spaces.find((s) => s.id === spaceId) ?? null

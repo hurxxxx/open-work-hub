@@ -528,7 +528,7 @@ Concrete a11y requirements shipped with each feature's first PR (not polish PR5)
 - Verified:
   - `apps/api/src/aidoo_api/domains/media/router.py:24` — upload reads entire file into memory via `await file.read()`
   - `apps/api/src/aidoo_api/domains/media/router.py:50` — size cap is 10 MB (`MAX_MEDIA_UPLOAD_SIZE`)
-  - `apps/api/src/aidoo_api/domains/media/router.py:216` — `resource_type` accepts only `issue` and `space_doc_page`
+  - `apps/api/src/aidoo_api/domains/media/router.py:213` — `resource_type` accepts only `issue` and `docs_native_page`
   - `apps/worker/src/aidoo_worker/celery_app.py:15` — beat schedule includes `cleanup_orphan_media` hourly
   - `apps/worker/src/aidoo_worker/tasks/media.py:50` — task deletes media rows older than 24h where `resource_type IS NULL`
 - Impact: A 4-hour recording is ~115 MB and will be rejected by the 10 MB cap. Even if uploaded, if the ingest code forgets to set `resource_type='meeting_recording'`, the hourly beat task silently deletes the file. This is a **data loss** bug waiting to happen.
@@ -910,6 +910,5 @@ The /autoplan skill normally writes a restore point file, a test plan artifact, 
 | Eng Review | /autoplan phase 3 | Architecture & tests | 2 (Claude + Codex) | Confirmed 6/6 dimensions NO | 3 Critical (Alembic, media delete, Celery contract), 8 High, 9 Medium all auto-decided |
 
 **VERDICT:** APPROVED — 26 decisions recorded in audit trail, all findings either auto-decided or resolved via user gate. Plan is implementation-ready starting with PR0 (Alembic bootstrap).
-
 
 

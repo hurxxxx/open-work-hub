@@ -16,18 +16,18 @@ from sqlalchemy.orm import Session, joinedload, selectinload
 from aidoo_api.core.db import get_db_session, get_session_factory
 from aidoo_api.core.principal import user_principal
 from aidoo_api.core.settings import get_settings
+from aidoo_api.core.storage import get_minio_client
 from aidoo_api.domains.auth.access import (
     bind_current_workspace,
     get_current_workspace,
-    resolve_team_role,
-    resolve_workspaces,
     resolve_workspace_role,
+    resolve_workspaces,
 )
 from aidoo_api.domains.auth.dependencies import (
     require_current_user,
     resolve_auth_context_from_token,
 )
-from aidoo_api.domains.auth.models import Team, TeamMember, User, Workspace
+from aidoo_api.domains.auth.models import User, Workspace
 from aidoo_api.domains.auth.security import new_id
 from aidoo_api.domains.docs.collab import (
     DocsCollabHub,
@@ -43,31 +43,29 @@ from aidoo_api.domains.docs.models import (
     DocMeetingAccess,
     DocsUserItemPref,
     NativeDoc,
+    NativeDocContainer,
     NativeDocLinkShare,
     NativeDocPage,
     NativeDocUserShare,
 )
-from aidoo_api.domains.docs import service as docs_service
-from aidoo_api.domains.media.router import sync_embedded_media
-from aidoo_api.domains.pms.models import SpaceDoc, SpaceDocPage
+from aidoo_api.domains.docs.registry import (
+    ContainerRef,
+    ContainerTreeNode,
+    default_container_tree,
+    describe_source,
+    project_container_access,
+    resolve_container_label,
+)
+from aidoo_api.domains.media.router import cleanup_media_for_resource, sync_embedded_media
 
 
 router = APIRouter(prefix="/docs", tags=["docs"])
 ws_router = APIRouter(prefix="/docs", tags=["docs"])
 
 SOURCE_NATIVE_DOC = "native_doc"
-SOURCE_PMS_SPACE_DOC = "pms_space_doc"
-
 PAGE_SOURCE_NATIVE_DOC = "native_doc_page"
-PAGE_SOURCE_PMS_SPACE_DOC = "pms_space_doc_page"
 
-TEAM_ROLE_RANK = {
-    "viewer": 10,
-    "member": 20,
-    "admin": 30,
-    "owner": 40,
-}
-ACCESS_LEVEL_RANK = {
+TEAM_ACCESS_LEVEL_RANK = {
     "read": 10,
     "edit": 20,
 }
@@ -77,14 +75,6 @@ def _utcnow() -> datetime:
     return datetime.now(UTC).replace(tzinfo=None)
 
 
-def _make_item_id(source_type: str, source_id: str) -> str:
-    return f"{source_type}__{source_id}"
-
-
-def _make_page_id(source_type: str, source_id: str) -> str:
-    return f"{source_type}__{source_id}"
-
-
 def _split_prefixed_id(value: str) -> tuple[str | None, str]:
     if "__" not in value:
         return None, value
@@ -92,284 +82,35 @@ def _split_prefixed_id(value: str) -> tuple[str | None, str]:
     return prefix, raw_id
 
 
+def _normalize_doc_id(value: str) -> str:
+    prefix, raw_id = _split_prefixed_id(value)
+    if prefix not in {None, SOURCE_NATIVE_DOC}:
+        raise HTTPException(status_code=404, detail="Doc not found.")
+    return raw_id
+
+
+def _normalize_page_id(value: str) -> str:
+    prefix, raw_id = _split_prefixed_id(value)
+    if prefix not in {None, PAGE_SOURCE_NATIVE_DOC}:
+        raise HTTPException(status_code=404, detail="Page not found.")
+    return raw_id
+
+
 def _share_token_allows_item_without_docs_access(item_id: str) -> bool:
     prefix, _raw_id = _split_prefixed_id(item_id)
-    return prefix == SOURCE_NATIVE_DOC
+    return prefix in {None, SOURCE_NATIVE_DOC}
 
 
-def _share_token_allows_page_without_docs_access(db: Session, page_id: str) -> bool:
-    prefix, raw_id = _split_prefixed_id(page_id)
-    if prefix == PAGE_SOURCE_NATIVE_DOC:
-        return True
-    if prefix is not None:
-        return False
-    return db.scalar(select(NativeDocPage.id).where(NativeDocPage.id == raw_id)) is not None
+def _share_token_allows_page_without_docs_access(page_id: str) -> bool:
+    prefix, _raw_id = _split_prefixed_id(page_id)
+    return prefix in {None, PAGE_SOURCE_NATIVE_DOC}
 
 
 def _max_access_level(*levels: str | None) -> str | None:
-    ranked = [level for level in levels if level in ACCESS_LEVEL_RANK]
+    ranked = [level for level in levels if level in TEAM_ACCESS_LEVEL_RANK]
     if not ranked:
         return None
-    return max(ranked, key=lambda item: ACCESS_LEVEL_RANK[item])
-
-
-def _team_role_allows(role: str | None, minimum: str) -> bool:
-    current_rank = TEAM_ROLE_RANK.get(role or "", -1)
-    minimum_rank = TEAM_ROLE_RANK.get(minimum, 999)
-    return current_rank >= minimum_rank
-
-
-def _ensure_docs_workspace_access(db: Session, user: User) -> Workspace:
-    current_workspace = get_current_workspace(db)
-    if current_workspace is None:
-        for summary in resolve_workspaces(db, user):
-            workspace = db.scalar(
-                select(Workspace).where(
-                    Workspace.id == summary["id"],
-                    Workspace.active.is_(True),
-                )
-            )
-            if workspace is None:
-                continue
-            current_workspace = workspace
-            bind_current_workspace(db, current_workspace)
-            break
-        if current_workspace is None:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Docs requests require a workspace context.",
-            )
-    return current_workspace
-
-
-def _load_active_pms_team(db: Session, team_id: str) -> Team | None:
-    current_workspace = get_current_workspace(db)
-    return db.scalar(
-        select(Team)
-        .options(joinedload(Team.workspace))
-        .where(
-            Team.id == team_id,
-            Team.active.is_(True),
-            Team.trashed_at.is_(None),
-            Team.workspace.has(Workspace.active.is_(True)),
-            Team.workspace_id == current_workspace.id if current_workspace is not None else True,
-        )
-    )
-
-
-def _resolve_pms_team_role(db: Session, user: User, team_id: str) -> str | None:
-    team = _load_active_pms_team(db, team_id)
-    if team is None:
-        return None
-    return resolve_team_role(db, user, team)
-
-
-def _accessible_pms_team_ids(db: Session, user: User) -> set[str]:
-    current_workspace = get_current_workspace(db)
-    return set(
-        db.scalars(
-            select(TeamMember.team_id)
-            .join(Team, Team.id == TeamMember.team_id)
-            .where(
-                TeamMember.user_id == user.id,
-                Team.active.is_(True),
-                Team.trashed_at.is_(None),
-                Team.workspace.has(Workspace.active.is_(True)),
-                Team.workspace_id == current_workspace.id if current_workspace is not None else True,
-            )
-        )
-    )
-
-
-@dataclass
-class NativeAccess:
-    access_level: str | None
-    can_view: bool
-    can_edit: bool
-    can_share: bool
-    can_manage: bool
-    matched_link: NativeDocLinkShare | None
-
-
-def _resolve_native_doc_access(
-    db: Session,
-    doc: NativeDoc,
-    user: User,
-    *,
-    share_token: str | None = None,
-) -> NativeAccess:
-    if doc.owner_id == user.id:
-        link_match = next((item for item in doc.link_shares if item.active), None)
-        return NativeAccess(
-            access_level="edit",
-            can_view=True,
-            can_edit=True,
-            can_share=True,
-            can_manage=True,
-            matched_link=link_match,
-        )
-
-    direct_share = next((item for item in doc.user_shares if item.user_id == user.id), None)
-    matched_link = next(
-        (
-            item
-            for item in doc.link_shares
-            if item.active and share_token and item.token == share_token
-        ),
-        None,
-    )
-    meeting_grant = db.scalar(
-        select(DocMeetingAccess).where(
-            DocMeetingAccess.doc_id == doc.id,
-            DocMeetingAccess.user_id == user.id,
-            DocMeetingAccess.revoked_at.is_(None),
-            (
-                DocMeetingAccess.expires_at.is_(None)
-                | (DocMeetingAccess.expires_at > _utcnow())
-            ),
-        )
-    )
-    access_level = _max_access_level(
-        getattr(direct_share, "access_level", None),
-        getattr(matched_link, "access_level", None),
-        getattr(meeting_grant, "access_level", None),
-    )
-    return NativeAccess(
-        access_level=access_level,
-        can_view=access_level in ACCESS_LEVEL_RANK,
-        can_edit=access_level == "edit",
-        can_share=False,
-        can_manage=False,
-        matched_link=matched_link,
-    )
-
-
-class DocsShareSummary(BaseModel):
-    visibility: Literal["private", "shared"]
-    user_share_count: int
-    link_active: bool
-    link_access_level: Literal["read", "edit"] | None = None
-
-
-class DocsHubItem(BaseModel):
-    id: str
-    source_app: str
-    source_type: str
-    source_id: str
-    structure_kind: Literal["page_tree"]
-    location_label: str
-    title: str
-    page_count: int
-    created_by_id: str
-    created_by_name: str
-    created_at: datetime
-    updated_at: datetime
-    trashed_at: datetime | None = None
-    is_favorite: bool
-    is_private: bool
-    last_viewed_at: datetime | None = None
-    can_view: bool
-    can_edit: bool
-    can_share: bool
-    can_manage: bool
-    sharing_summary: DocsShareSummary | None = None
-
-
-class DocsHubResponse(BaseModel):
-    items: list[DocsHubItem]
-    total: int
-    page: int
-    page_size: int
-
-
-class DocsPageItem(BaseModel):
-    id: str
-    doc_id: str
-    source_type: str
-    source_page_id: str
-    parent_id: str | None = None
-    title: str
-    content_blocks: list[dict] | None = None
-    sort_order: int
-    created_by_id: str
-    created_by_name: str
-    created_at: datetime
-    updated_at: datetime
-    trashed_at: datetime | None = None
-    can_edit: bool
-    realtime_collab: bool = True
-
-
-class DocsPageListResponse(BaseModel):
-    items: list[DocsPageItem]
-
-
-class FavoriteDocItem(BaseModel):
-    id: str
-    title: str
-    source_type: str
-
-
-class RecentPageItem(BaseModel):
-    page_id: str
-    page_title: str
-    doc_id: str
-    doc_title: str
-    source_type: str
-    location_label: str
-    last_viewed_at: datetime
-
-
-class CreateNativeDocRequest(BaseModel):
-    title: str = Field(..., min_length=1, max_length=200)
-    first_page_title: str | None = Field(default=None, min_length=1, max_length=200)
-
-
-class UpdateDocItemRequest(BaseModel):
-    title: str | None = Field(default=None, min_length=1, max_length=200)
-
-
-class CreateDocPageRequest(BaseModel):
-    title: str = Field(..., min_length=1, max_length=200)
-    parent_id: str | None = None
-    content_blocks: list[dict] | None = None
-    sort_order: int | None = None
-
-
-class UpdateDocPageRequest(BaseModel):
-    title: str | None = Field(default=None, min_length=1, max_length=200)
-    parent_id: str | None = None
-    content_blocks: list[dict] | None = None
-    sort_order: int | None = None
-
-
-class DocsCollabSessionUser(BaseModel):
-    id: str
-    full_name: str
-
-
-class DocsCollabSessionResponse(BaseModel):
-    page_ref: str
-    source_type: Literal["native_doc_page", "pms_space_doc_page"]
-    source_page_id: str
-    room_key: str
-    ws_path: str
-    can_edit: bool
-    realtime_status: Literal["enabled", "degraded"] = "enabled"
-    read_only_reason: Literal["relay_unavailable", "permission_revoked"] | None = None
-    user: DocsCollabSessionUser
-    snapshot_content_blocks: list[dict] | None = None
-    yjs_state: str | None = None
-
-
-class DocsCollabSnapshotRequest(BaseModel):
-    content_blocks: list[dict] | None = None
-    yjs_state: str | None = None
-
-
-class DocsCollabSnapshotResponse(BaseModel):
-    updated_at: datetime
-    last_snapshot_at: datetime
+    return max(ranked, key=lambda item: TEAM_ACCESS_LEVEL_RANK[item])
 
 
 def _require_workspace_slug(request: Request) -> str:
@@ -412,7 +153,6 @@ async def _receive_collab_auth_frame(websocket: WebSocket) -> str:
         parsed = json.loads(payload)
     except json.JSONDecodeError as exc:
         raise HTTPException(status_code=401, detail="Authentication required.") from exc
-
     token = parsed.get("token")
     if parsed.get("type") != "auth" or not isinstance(token, str) or not token:
         raise HTTPException(status_code=401, detail="Authentication required.")
@@ -463,12 +203,190 @@ async def _monitor_collab_access(
             db.close()
 
 
+@dataclass
+class NativeAccess:
+    access_level: str | None
+    can_view: bool
+    can_edit: bool
+    can_share: bool
+    can_manage: bool
+    matched_link: NativeDocLinkShare | None
+
+
+class DocsShareSummary(BaseModel):
+    visibility: Literal["private", "shared"]
+    user_share_count: int
+    link_active: bool
+    link_access_level: Literal["read", "edit"] | None = None
+
+
+class DocsPrimaryContainer(BaseModel):
+    app: str
+    type: str
+    id: str
+    sort_order: int
+
+
+class DocsHubItem(BaseModel):
+    id: str
+    source_app: str
+    source_type: Literal["native_doc"] = SOURCE_NATIVE_DOC
+    source_id: str
+    source_kind: str
+    source_ref: str | None = None
+    generation_kind: str
+    structure_kind: Literal["page_tree"] = "page_tree"
+    location_label: str
+    container_label: str
+    primary_container: DocsPrimaryContainer | None = None
+    source_badge: str
+    source_deeplink: str | None = None
+    title: str
+    page_count: int
+    created_by_id: str
+    created_by_name: str
+    created_at: datetime
+    updated_at: datetime
+    trashed_at: datetime | None = None
+    is_favorite: bool
+    is_private: bool
+    last_viewed_at: datetime | None = None
+    can_view: bool
+    can_edit: bool
+    can_share: bool
+    can_manage: bool
+    sharing_summary: DocsShareSummary | None = None
+
+
+class DocsHubResponse(BaseModel):
+    items: list[DocsHubItem]
+    total: int
+    page: int
+    page_size: int
+
+
+class DocsPageItem(BaseModel):
+    id: str
+    doc_id: str
+    source_type: Literal["native_doc_page"] = PAGE_SOURCE_NATIVE_DOC
+    source_page_id: str
+    parent_id: str | None = None
+    title: str
+    content_blocks: list[dict] | None = None
+    sort_order: int
+    created_by_id: str
+    created_by_name: str
+    created_at: datetime
+    updated_at: datetime
+    trashed_at: datetime | None = None
+    can_edit: bool
+    realtime_collab: bool = True
+
+
+class DocsPageListResponse(BaseModel):
+    items: list[DocsPageItem]
+
+
+class DocsCollabSessionUser(BaseModel):
+    id: str
+    full_name: str
+
+
+class DocsCollabSessionResponse(BaseModel):
+    page_ref: str
+    source_type: Literal["native_doc_page"] = PAGE_SOURCE_NATIVE_DOC
+    source_page_id: str
+    room_key: str
+    ws_path: str
+    can_edit: bool
+    realtime_status: Literal["enabled", "degraded"] = "enabled"
+    read_only_reason: Literal["relay_unavailable", "permission_revoked"] | None = None
+    user: DocsCollabSessionUser
+    snapshot_content_blocks: list[dict] | None = None
+    yjs_state: str | None = None
+
+
+class DocsCollabSnapshotRequest(BaseModel):
+    content_blocks: list[dict] | None = None
+    yjs_state: str | None = None
+
+
+class DocsCollabSnapshotResponse(BaseModel):
+    updated_at: datetime
+    last_snapshot_at: datetime
+
+
+class DocsHubQuery(BaseModel):
+    view: Literal["all", "mine", "shared", "private", "meeting_notes", "recent", "archived"] = "all"
+    q: str = ""
+    sort_by: str = "updated_at"
+    sort_dir: Literal["asc", "desc"] = "desc"
+    page: int = 1
+    page_size: int = 50
+    source_app: str | None = None
+    source_kind: str | None = None
+    container_app: str | None = None
+    container_type: str | None = None
+    container_id: str | None = None
+
+
+class DocContainerPayload(BaseModel):
+    app: str = Field(..., min_length=1, max_length=64)
+    type: str = Field(..., min_length=1, max_length=64)
+    id: str = Field(..., min_length=1, max_length=128)
+    sort_order: int = 0
+
+
+class CreateDocItemRequest(BaseModel):
+    title: str = Field(..., min_length=1, max_length=200)
+    first_page_title: str | None = Field(default=None, min_length=1, max_length=200)
+    source_app: str = Field(default="docs", min_length=1, max_length=64)
+    source_kind: str = Field(default="manual", min_length=1, max_length=64)
+    source_ref: str | None = Field(default=None, max_length=128)
+    generation_kind: str = Field(default="human", min_length=1, max_length=32)
+    primary_container: DocContainerPayload | None = None
+
+
+class UpdateDocItemRequest(BaseModel):
+    title: str | None = Field(default=None, min_length=1, max_length=200)
+
+
+class CreateDocPageRequest(BaseModel):
+    title: str = Field(..., min_length=1, max_length=200)
+    parent_id: str | None = None
+    content_blocks: list[dict] | None = None
+    sort_order: int | None = None
+
+
+class UpdateDocPageRequest(BaseModel):
+    title: str | None = Field(default=None, min_length=1, max_length=200)
+    parent_id: str | None = None
+    content_blocks: list[dict] | None = None
+    sort_order: int | None = None
+
+
 class ToggleFavoriteResponse(BaseModel):
     is_favorite: bool
 
 
 class RecordViewRequest(BaseModel):
     page_id: str | None = None
+
+
+class FavoriteDocItem(BaseModel):
+    id: str
+    title: str
+    source_type: Literal["native_doc"] = SOURCE_NATIVE_DOC
+
+
+class RecentPageItem(BaseModel):
+    page_id: str
+    page_title: str
+    doc_id: str
+    doc_title: str
+    source_type: Literal["native_doc"] = SOURCE_NATIVE_DOC
+    location_label: str
+    last_viewed_at: datetime
 
 
 class ShareableUserItem(BaseModel):
@@ -512,6 +430,225 @@ class ResolveSharedLinkResponse(BaseModel):
     item: DocsHubItem
 
 
+class DocsContainerTreeNodeModel(BaseModel):
+    app: str
+    type: str
+    id: str
+    label: str
+    item_count: int
+    children: list["DocsContainerTreeNodeModel"] = Field(default_factory=list)
+
+
+DocsContainerTreeNodeModel.model_rebuild()
+
+
+class UpdateDocContainerRequest(BaseModel):
+    app: str = Field(..., min_length=1, max_length=64)
+    type: str = Field(..., min_length=1, max_length=64)
+    id: str = Field(..., min_length=1, max_length=128)
+    sort_order: int = 0
+
+
+def _workspace_for_doc(db: Session, doc: NativeDoc) -> Workspace:
+    current_workspace = get_current_workspace(db)
+    if current_workspace is not None and current_workspace.id == doc.workspace_id:
+        return current_workspace
+    workspace = db.scalar(
+        select(Workspace).where(
+            Workspace.id == doc.workspace_id,
+            Workspace.active.is_(True),
+        )
+    )
+    if workspace is None:
+        raise HTTPException(status_code=404, detail="Workspace not found.")
+    return workspace
+
+
+def _ensure_docs_workspace_access(db: Session, user: User) -> Workspace:
+    current_workspace = get_current_workspace(db)
+    if current_workspace is None:
+        for summary in resolve_workspaces(db, user):
+            workspace = db.scalar(
+                select(Workspace).where(
+                    Workspace.id == summary["id"],
+                    Workspace.active.is_(True),
+                )
+            )
+            if workspace is None:
+                continue
+            current_workspace = workspace
+            bind_current_workspace(db, current_workspace)
+            break
+        if current_workspace is None:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Docs requests require a workspace context.",
+            )
+    return current_workspace
+
+
+def _serialize_native_share_summary(doc: NativeDoc) -> DocsShareSummary:
+    active_link = next((item for item in doc.link_shares if item.active), None)
+    user_share_count = len(doc.user_shares)
+    primary_container = _primary_container(doc)
+    is_container_shared = primary_container is not None and primary_container.container_app != "docs"
+    is_meeting_note = doc.source_app == "meeting" and doc.source_kind == "meeting_notes"
+    return DocsShareSummary(
+        visibility="shared" if user_share_count > 0 or active_link is not None or is_container_shared or is_meeting_note else "private",
+        user_share_count=user_share_count,
+        link_active=active_link is not None,
+        link_access_level=active_link.access_level if active_link is not None else None,
+    )
+
+
+def _primary_container(doc: NativeDoc) -> NativeDocContainer | None:
+    active = list(doc.containers)
+    if not active:
+        return None
+    active.sort(
+        key=lambda item: (
+            0 if item.is_primary else 1,
+            item.sort_order,
+            item.created_at,
+        )
+    )
+    return active[0]
+
+
+def _container_access_level(
+    db: Session,
+    doc: NativeDoc,
+    user: User,
+) -> tuple[str | None, bool]:
+    workspace = _workspace_for_doc(db, doc)
+    best_level: str | None = None
+    can_manage = False
+    for container in doc.containers:
+        ref = ContainerRef(
+            app=container.container_app,
+            type=container.container_type,
+            id=container.container_id,
+        )
+        projection = project_container_access(
+            db=db,
+            user=user,
+            workspace=workspace,
+            ref=ref,
+        )
+        if projection.can_manage:
+            can_manage = True
+        candidate = (
+            "edit"
+            if projection.can_edit or projection.can_manage
+            else "read" if projection.can_view else None
+        )
+        best_level = _max_access_level(best_level, candidate)
+    return best_level, can_manage
+
+
+def _resolve_native_doc_access(
+    db: Session,
+    doc: NativeDoc,
+    user: User,
+    *,
+    share_token: str | None = None,
+) -> NativeAccess:
+    if doc.owner_id == user.id:
+        link_match = next((item for item in doc.link_shares if item.active), None)
+        return NativeAccess(
+            access_level="edit",
+            can_view=True,
+            can_edit=True,
+            can_share=True,
+            can_manage=True,
+            matched_link=link_match,
+        )
+
+    direct_share = next((item for item in doc.user_shares if item.user_id == user.id), None)
+    matched_link = next(
+        (
+            item
+            for item in doc.link_shares
+            if item.active and share_token and item.token == share_token
+        ),
+        None,
+    )
+    meeting_grant = db.scalar(
+        select(DocMeetingAccess).where(
+            DocMeetingAccess.doc_id == doc.id,
+            DocMeetingAccess.user_id == user.id,
+            DocMeetingAccess.revoked_at.is_(None),
+            (
+                DocMeetingAccess.expires_at.is_(None)
+                | (DocMeetingAccess.expires_at > _utcnow())
+            ),
+        )
+    )
+    container_access_level, container_can_manage = _container_access_level(db, doc, user)
+    access_level = _max_access_level(
+        getattr(direct_share, "access_level", None),
+        getattr(matched_link, "access_level", None),
+        getattr(meeting_grant, "access_level", None),
+        container_access_level,
+    )
+    return NativeAccess(
+        access_level=access_level,
+        can_view=access_level in TEAM_ACCESS_LEVEL_RANK,
+        can_edit=access_level == "edit",
+        can_share=container_can_manage,
+        can_manage=container_can_manage,
+        matched_link=matched_link,
+    )
+
+
+def _doc_query() -> select[tuple[NativeDoc]]:
+    return (
+        select(NativeDoc)
+        .options(
+            selectinload(NativeDoc.owner),
+            selectinload(NativeDoc.pages).selectinload(NativeDocPage.created_by),
+            selectinload(NativeDoc.user_shares).selectinload(NativeDocUserShare.user),
+            selectinload(NativeDoc.link_shares),
+            selectinload(NativeDoc.containers),
+        )
+    )
+
+
+def _load_accessible_native_docs(db: Session, user: User) -> list[NativeDoc]:
+    current_workspace = get_current_workspace(db)
+    if current_workspace is None:
+        return []
+    docs = list(
+        db.scalars(
+            _doc_query().where(NativeDoc.workspace_id == current_workspace.id)
+        )
+    )
+    return [
+        doc
+        for doc in docs
+        if _resolve_native_doc_access(db, doc, user).can_view
+    ]
+
+
+def _load_native_doc_for_access(
+    db: Session,
+    doc_id: str,
+) -> NativeDoc | None:
+    current_workspace = get_current_workspace(db)
+    query = _doc_query().where(NativeDoc.id == doc_id)
+    if current_workspace is not None:
+        query = query.where(NativeDoc.workspace_id == current_workspace.id)
+    return db.scalar(query)
+
+
+def _load_native_page(db: Session, page_id: str) -> NativeDocPage | None:
+    return db.scalar(
+        select(NativeDocPage)
+        .options(selectinload(NativeDocPage.created_by), joinedload(NativeDocPage.doc))
+        .where(NativeDocPage.id == page_id)
+    )
+
+
 def _get_pref_map(
     db: Session,
     user_id: str,
@@ -530,13 +667,12 @@ def _get_pref_map(
 def _get_or_create_pref(
     db: Session,
     user_id: str,
-    source_type: str,
     source_doc_id: str,
 ) -> DocsUserItemPref:
     pref = db.scalar(
         select(DocsUserItemPref).where(
             DocsUserItemPref.user_id == user_id,
-            DocsUserItemPref.source_type == source_type,
+            DocsUserItemPref.source_type == SOURCE_NATIVE_DOC,
             DocsUserItemPref.source_doc_id == source_doc_id,
         )
     )
@@ -545,7 +681,7 @@ def _get_or_create_pref(
     pref = DocsUserItemPref(
         id=new_id(),
         user_id=user_id,
-        source_type=source_type,
+        source_type=SOURCE_NATIVE_DOC,
         source_doc_id=source_doc_id,
     )
     db.add(pref)
@@ -553,30 +689,49 @@ def _get_or_create_pref(
     return pref
 
 
-def _serialize_native_share_summary(doc: NativeDoc) -> DocsShareSummary:
-    active_link = next((item for item in doc.link_shares if item.active), None)
-    user_share_count = len(doc.user_shares)
-    return DocsShareSummary(
-        visibility="private" if user_share_count == 0 and active_link is None else "shared",
-        user_share_count=user_share_count,
-        link_active=active_link is not None,
-        link_access_level=active_link.access_level if active_link is not None else None,
+def _serialize_primary_container(container: NativeDocContainer | None) -> DocsPrimaryContainer | None:
+    if container is None:
+        return None
+    return DocsPrimaryContainer(
+        app=container.container_app,
+        type=container.container_type,
+        id=container.container_id,
+        sort_order=container.sort_order,
     )
 
 
 def _serialize_native_item(
+    db: Session,
     doc: NativeDoc,
     access: NativeAccess,
     pref: DocsUserItemPref | None,
 ) -> DocsHubItem:
+    workspace = _workspace_for_doc(db, doc)
+    primary_container = _primary_container(doc)
+    location_label = resolve_container_label(
+        db=db,
+        workspace=workspace,
+        container=primary_container,
+    )
+    source = describe_source(
+        workspace=workspace,
+        doc=doc,
+        primary_container=primary_container,
+    )
     active_pages = [page for page in doc.pages if page.trashed_at is None]
+    sharing_summary = _serialize_native_share_summary(doc)
     return DocsHubItem(
-        id=_make_item_id(SOURCE_NATIVE_DOC, doc.id),
-        source_app="docs",
-        source_type=SOURCE_NATIVE_DOC,
+        id=doc.id,
+        source_app=doc.source_app,
         source_id=doc.id,
-        structure_kind="page_tree",
-        location_label="My Docs",
+        source_kind=doc.source_kind,
+        source_ref=doc.source_ref,
+        generation_kind=doc.generation_kind,
+        location_label=location_label,
+        container_label=location_label,
+        primary_container=_serialize_primary_container(primary_container),
+        source_badge=source.badge,
+        source_deeplink=source.deep_link,
         title=doc.title,
         page_count=len(active_pages),
         created_by_id=doc.owner_id,
@@ -585,118 +740,35 @@ def _serialize_native_item(
         updated_at=doc.updated_at,
         trashed_at=doc.trashed_at,
         is_favorite=bool(pref and pref.is_favorite),
-        is_private=_serialize_native_share_summary(doc).visibility == "private",
+        is_private=sharing_summary.visibility == "private",
         last_viewed_at=pref.last_viewed_at if pref else None,
         can_view=access.can_view,
         can_edit=access.can_edit,
         can_share=access.can_share,
         can_manage=access.can_manage,
-        sharing_summary=_serialize_native_share_summary(doc),
+        sharing_summary=sharing_summary,
     )
 
 
-def _serialize_space_doc_item(
-    doc: SpaceDoc,
+def _serialize_native_page(
+    page: NativeDocPage,
     *,
-    location_label: str,
-    role: str,
-    pref: DocsUserItemPref | None,
-) -> DocsHubItem:
-    active_pages = [page for page in doc.pages if page.trashed_at is None]
-    return DocsHubItem(
-        id=_make_item_id(SOURCE_PMS_SPACE_DOC, doc.id),
-        source_app="pms",
-        source_type=SOURCE_PMS_SPACE_DOC,
-        source_id=doc.id,
-        structure_kind="page_tree",
-        location_label=location_label,
-        title=doc.title,
-        page_count=len(active_pages),
-        created_by_id=doc.created_by_id,
-        created_by_name=getattr(doc.created_by, "full_name", ""),
-        created_at=doc.created_at,
-        updated_at=doc.updated_at,
-        trashed_at=doc.trashed_at,
-        is_favorite=bool(pref and pref.is_favorite),
-        is_private=False,
-        last_viewed_at=pref.last_viewed_at if pref else None,
-        can_view=True,
-        can_edit=_team_role_allows(role, "member"),
-        can_share=False,
-        can_manage=_team_role_allows(role, "admin"),
-        sharing_summary=None,
-    )
-
-
-def _load_accessible_native_docs(db: Session, user: User) -> list[NativeDoc]:
-    current_workspace = get_current_workspace(db)
-    if current_workspace is None:
-        return []
-    docs = list(
-        db.scalars(
-            select(NativeDoc)
-            .options(
-                selectinload(NativeDoc.owner),
-                selectinload(NativeDoc.pages).selectinload(NativeDocPage.created_by),
-                selectinload(NativeDoc.user_shares).selectinload(NativeDocUserShare.user),
-                selectinload(NativeDoc.link_shares),
-            )
-            .where(
-                NativeDoc.owner_id == user.id,
-                NativeDoc.workspace_id == current_workspace.id,
-            )
-        )
-    )
-    shared_docs = list(
-        db.scalars(
-            select(NativeDoc)
-            .join(NativeDocUserShare, NativeDocUserShare.doc_id == NativeDoc.id)
-            .options(
-                selectinload(NativeDoc.owner),
-                selectinload(NativeDoc.pages).selectinload(NativeDocPage.created_by),
-                selectinload(NativeDoc.user_shares).selectinload(NativeDocUserShare.user),
-                selectinload(NativeDoc.link_shares),
-            )
-            .where(
-                NativeDocUserShare.user_id == user.id,
-                NativeDoc.workspace_id == current_workspace.id,
-            )
-        )
-    )
-    by_id = {doc.id: doc for doc in docs}
-    for doc in shared_docs:
-        by_id.setdefault(doc.id, doc)
-    return list(by_id.values())
-
-
-def _load_native_doc_for_access(
-    db: Session,
-    doc_id: str,
-) -> NativeDoc | None:
-    current_workspace = get_current_workspace(db)
-    query = (
-        select(NativeDoc)
-        .options(
-            selectinload(NativeDoc.owner),
-            selectinload(NativeDoc.pages).selectinload(NativeDocPage.created_by),
-            selectinload(NativeDoc.user_shares).selectinload(NativeDocUserShare.user),
-            selectinload(NativeDoc.link_shares),
-        )
-        .where(NativeDoc.id == doc_id)
-    )
-    if current_workspace is not None:
-        query = query.where(NativeDoc.workspace_id == current_workspace.id)
-    return db.scalar(query)
-
-
-def _load_native_page(
-    db: Session,
-    page_id: str,
-) -> NativeDocPage | None:
-    return db.scalar(
-        select(NativeDocPage)
-        .options(selectinload(NativeDocPage.created_by), joinedload(NativeDocPage.doc))
-        .where(NativeDocPage.id == page_id)
+    can_edit: bool,
+) -> DocsPageItem:
+    return DocsPageItem(
+        id=page.id,
+        doc_id=page.doc_id,
+        source_page_id=page.id,
+        parent_id=page.parent_id,
+        title=page.title,
+        content_blocks=page.content_blocks,
+        sort_order=page.sort_order,
+        created_by_id=page.created_by_id,
+        created_by_name=getattr(page.created_by, "full_name", ""),
+        created_at=page.created_at,
+        updated_at=page.updated_at,
+        trashed_at=page.trashed_at,
+        can_edit=can_edit,
     )
 
 
@@ -756,157 +828,6 @@ def _validate_native_parent(
         ancestor = active_pages.get(ancestor.parent_id)
 
 
-def _load_accessible_space_docs(
-    db: Session,
-    user: User,
-) -> list[SpaceDoc]:
-    team_ids = _accessible_pms_team_ids(db, user)
-    if not team_ids:
-        return []
-    return list(
-        db.scalars(
-            select(SpaceDoc)
-            .options(
-                selectinload(SpaceDoc.created_by),
-                selectinload(SpaceDoc.pages).selectinload(SpaceDocPage.created_by),
-            )
-            .where(SpaceDoc.team_id.in_(team_ids))
-        )
-    )
-
-
-def _load_space_doc_with_pages(db: Session, doc_id: str) -> SpaceDoc | None:
-    return db.scalar(
-        select(SpaceDoc)
-        .options(
-            selectinload(SpaceDoc.created_by),
-            selectinload(SpaceDoc.pages).selectinload(SpaceDocPage.created_by),
-        )
-        .where(SpaceDoc.id == doc_id)
-    )
-
-
-def _load_space_doc_page_with_doc(db: Session, page_id: str) -> SpaceDocPage | None:
-    return db.scalar(
-        select(SpaceDocPage)
-        .options(
-            selectinload(SpaceDocPage.created_by),
-            joinedload(SpaceDocPage.doc).selectinload(SpaceDoc.pages),
-        )
-        .where(SpaceDocPage.id == page_id)
-    )
-
-
-def _validate_space_doc_parent(
-    doc: SpaceDoc,
-    parent_id: str | None,
-    *,
-    page_id: str | None = None,
-) -> None:
-    if parent_id is None:
-        return
-    active_pages = {
-        page.id: page
-        for page in doc.pages
-        if page.trashed_at is None
-    }
-    parent = active_pages.get(parent_id)
-    if parent is None:
-        raise HTTPException(status_code=404, detail="Parent page not found.")
-    if page_id is not None and parent.id == page_id:
-        raise HTTPException(status_code=409, detail="Page cannot be its own parent.")
-    if parent.space_doc_id != doc.id:
-        raise HTTPException(status_code=409, detail="Parent page must belong to the same document collection.")
-    ancestor = parent
-    visited: set[str] = set()
-    while ancestor is not None:
-        if ancestor.id in visited:
-            raise HTTPException(status_code=409, detail="Page parent relationship cannot contain a cycle.")
-        visited.add(ancestor.id)
-        if page_id is not None and ancestor.parent_id == page_id:
-            raise HTTPException(status_code=409, detail="Page parent relationship cannot contain a cycle.")
-        if ancestor.parent_id is None:
-            break
-        ancestor = active_pages.get(ancestor.parent_id)
-
-
-def _collect_space_page_subtree(
-    pages: list[SpaceDocPage],
-    root_page_id: str,
-) -> list[SpaceDocPage]:
-    by_parent: dict[str | None, list[SpaceDocPage]] = {}
-    by_id = {page.id: page for page in pages}
-    for page in pages:
-        by_parent.setdefault(page.parent_id, []).append(page)
-    root = by_id.get(root_page_id)
-    if root is None:
-        return []
-    result: list[SpaceDocPage] = []
-    stack = [root]
-    seen: set[str] = set()
-    while stack:
-        current = stack.pop()
-        if current.id in seen:
-            continue
-        seen.add(current.id)
-        result.append(current)
-        stack.extend(by_parent.get(current.id, []))
-    return result
-
-
-def _serialize_native_page(
-    doc: NativeDoc,
-    page: NativeDocPage,
-    *,
-    can_edit: bool,
-) -> DocsPageItem:
-    return DocsPageItem(
-        id=page.id,
-        doc_id=_make_item_id(SOURCE_NATIVE_DOC, doc.id),
-        source_type=PAGE_SOURCE_NATIVE_DOC,
-        source_page_id=page.id,
-        parent_id=page.parent_id,
-        title=page.title,
-        content_blocks=page.content_blocks,
-        sort_order=page.sort_order,
-        created_by_id=page.created_by_id,
-        created_by_name=getattr(page.created_by, "full_name", ""),
-        created_at=page.created_at,
-        updated_at=page.updated_at,
-        trashed_at=page.trashed_at,
-        can_edit=can_edit,
-    )
-
-
-def _serialize_space_page(
-    doc: SpaceDoc,
-    page: SpaceDocPage,
-    *,
-    can_edit: bool,
-) -> DocsPageItem:
-    return DocsPageItem(
-        id=page.id,
-        doc_id=_make_item_id(SOURCE_PMS_SPACE_DOC, doc.id),
-        source_type=PAGE_SOURCE_PMS_SPACE_DOC,
-        source_page_id=page.id,
-        parent_id=page.parent_id,
-        title=page.title,
-        content_blocks=page.content_blocks,
-        sort_order=page.sort_order,
-        created_by_id=page.created_by_id,
-        created_by_name=getattr(page.created_by, "full_name", ""),
-        created_at=page.created_at,
-        updated_at=page.updated_at,
-        trashed_at=page.trashed_at,
-        can_edit=can_edit,
-    )
-
-
-def _space_location_label(db: Session, team_id: str) -> str:
-    team = _load_active_pms_team(db, team_id)
-    return f"PMS / {team.name}" if team is not None else "PMS"
-
-
 def _native_doc_from_item_or_404(
     db: Session,
     item_id: str,
@@ -914,33 +835,13 @@ def _native_doc_from_item_or_404(
     *,
     share_token: str | None,
 ) -> tuple[NativeDoc, NativeAccess]:
-    prefix, raw_id = _split_prefixed_id(item_id)
-    if prefix not in {None, SOURCE_NATIVE_DOC}:
-        raise HTTPException(status_code=404, detail="Doc not found.")
-    doc = _load_native_doc_for_access(db, raw_id)
+    doc = _load_native_doc_for_access(db, _normalize_doc_id(item_id))
     if doc is None:
         raise HTTPException(status_code=404, detail="Doc not found.")
     access = _resolve_native_doc_access(db, doc, current_user, share_token=share_token)
-    if not access.can_view or doc.trashed_at is not None and not access.can_manage:
+    if not access.can_view or (doc.trashed_at is not None and not access.can_manage):
         raise HTTPException(status_code=404, detail="Doc not found.")
     return doc, access
-
-
-def _space_doc_from_item_or_404(
-    db: Session,
-    item_id: str,
-    current_user: User,
-) -> tuple[SpaceDoc, str]:
-    prefix, raw_id = _split_prefixed_id(item_id)
-    if prefix not in {None, SOURCE_PMS_SPACE_DOC}:
-        raise HTTPException(status_code=404, detail="Doc not found.")
-    doc = _load_space_doc_with_pages(db, raw_id)
-    if doc is None:
-        raise HTTPException(status_code=404, detail="Doc not found.")
-    role = _resolve_pms_team_role(db, current_user, doc.team_id)
-    if role is None or doc.trashed_at is not None and not _team_role_allows(role, "admin"):
-        raise HTTPException(status_code=404, detail="Doc not found.")
-    return doc, role
 
 
 def _lookup_item(
@@ -950,84 +851,98 @@ def _lookup_item(
     *,
     share_token: str | None = None,
 ) -> DocsHubItem:
-    prefix, raw_id = _split_prefixed_id(item_id)
+    doc, access = _native_doc_from_item_or_404(
+        db,
+        item_id,
+        current_user,
+        share_token=share_token,
+    )
     pref_map = _get_pref_map(db, current_user.id)
-
-    if prefix in {SOURCE_NATIVE_DOC, None}:
-        doc = _load_native_doc_for_access(db, raw_id)
-        if doc is not None:
-            access = _resolve_native_doc_access(db, doc, current_user, share_token=share_token)
-            if access.can_view and (doc.trashed_at is None or access.can_manage):
-                return _serialize_native_item(
-                    doc,
-                    access,
-                    pref_map.get((SOURCE_NATIVE_DOC, doc.id)),
-                )
-
-    if share_token is not None and prefix in {SOURCE_NATIVE_DOC, None}:
-        raise HTTPException(status_code=404, detail="Doc not found.")
-
-    if prefix in {SOURCE_PMS_SPACE_DOC, None}:
-        doc = _load_space_doc_with_pages(db, raw_id)
-        if doc is not None:
-            role = _resolve_pms_team_role(db, current_user, doc.team_id)
-            if role is not None and (doc.trashed_at is None or _team_role_allows(role, "admin")):
-                return _serialize_space_doc_item(
-                    doc,
-                    location_label=_space_location_label(db, doc.team_id),
-                    role=role,
-                    pref=pref_map.get((SOURCE_PMS_SPACE_DOC, doc.id)),
-                )
-
-    raise HTTPException(status_code=404, detail="Doc not found.")
+    return _serialize_native_item(
+        db,
+        doc,
+        access,
+        pref_map.get((SOURCE_NATIVE_DOC, doc.id)),
+    )
 
 
-def _filter_docs_by_category(
+def _filter_docs(
     docs: list[DocsHubItem],
     *,
     current_user_id: str,
-    category: str,
-    q: str,
+    query: DocsHubQuery,
 ) -> list[DocsHubItem]:
     filtered = docs
-    if category == "my":
+    if query.view == "mine":
         filtered = [
             item
             for item in filtered
             if item.trashed_at is None and item.created_by_id == current_user_id
         ]
-    elif category == "shared":
+    elif query.view == "shared":
         filtered = [
             item
             for item in filtered
             if item.trashed_at is None and item.created_by_id != current_user_id
         ]
-    elif category == "private":
+    elif query.view == "private":
         filtered = [
             item
             for item in filtered
             if item.trashed_at is None
-            and item.source_type == SOURCE_NATIVE_DOC
-            and item.is_private
             and item.created_by_id == current_user_id
+            and item.is_private
         ]
-    elif category == "recent":
+    elif query.view == "meeting_notes":
+        filtered = [
+            item
+            for item in filtered
+            if item.trashed_at is None
+            and item.source_app == "meeting"
+            and item.source_kind == "meeting_notes"
+        ]
+    elif query.view == "recent":
         filtered = [
             item
             for item in filtered
             if item.trashed_at is None and item.last_viewed_at is not None
         ]
-    elif category == "archived":
+    elif query.view == "archived":
         filtered = [item for item in filtered if item.trashed_at is not None]
     else:
         filtered = [item for item in filtered if item.trashed_at is None]
 
-    query = q.strip().lower()
-    if query:
+    if query.source_app:
+        filtered = [item for item in filtered if item.source_app == query.source_app]
+    if query.source_kind:
+        filtered = [item for item in filtered if item.source_kind == query.source_kind]
+    if query.container_app:
         filtered = [
             item
             for item in filtered
-            if query in item.title.lower() or query in item.location_label.lower()
+            if item.primary_container is not None and item.primary_container.app == query.container_app
+        ]
+    if query.container_type:
+        filtered = [
+            item
+            for item in filtered
+            if item.primary_container is not None and item.primary_container.type == query.container_type
+        ]
+    if query.container_id:
+        filtered = [
+            item
+            for item in filtered
+            if item.primary_container is not None and item.primary_container.id == query.container_id
+        ]
+
+    search = query.q.strip().lower()
+    if search:
+        filtered = [
+            item
+            for item in filtered
+            if search in item.title.lower()
+            or search in item.location_label.lower()
+            or search in item.source_badge.lower()
         ]
     return filtered
 
@@ -1036,7 +951,7 @@ def _sort_docs(
     docs: list[DocsHubItem],
     *,
     sort_by: str,
-    sort_dir: str,
+    sort_dir: Literal["asc", "desc"],
 ) -> list[DocsHubItem]:
     reverse = sort_dir != "asc"
 
@@ -1047,65 +962,342 @@ def _sort_docs(
             return item.created_at
         if sort_by == "last_viewed_at":
             return item.last_viewed_at or datetime.min
+        if sort_by == "container_sort_order":
+            return item.primary_container.sort_order if item.primary_container is not None else 0
         return item.updated_at
 
     return sorted(docs, key=sort_key, reverse=reverse)
 
 
+def _default_container_payload(workspace: Workspace) -> UpdateDocContainerRequest:
+    return UpdateDocContainerRequest(
+        app="docs",
+        type="workspace_sidebar",
+        id=workspace.id,
+        sort_order=0,
+    )
+
+
+def _container_write_allowed(
+    *,
+    db: Session,
+    user: User,
+    workspace: Workspace,
+    ref: ContainerRef,
+) -> bool:
+    if ref.app == "docs" and ref.type == "workspace_sidebar" and ref.id == workspace.id:
+        return True
+    projection = project_container_access(
+        db=db,
+        user=user,
+        workspace=workspace,
+        ref=ref,
+    )
+    return projection.can_edit or projection.can_manage
+
+
+def _upsert_primary_container(
+    db: Session,
+    *,
+    doc: NativeDoc,
+    payload: UpdateDocContainerRequest,
+    current_user: User,
+) -> NativeDocContainer:
+    workspace = _workspace_for_doc(db, doc)
+    ref = ContainerRef(app=payload.app, type=payload.type, id=payload.id)
+    if not _container_write_allowed(
+        db=db,
+        user=current_user,
+        workspace=workspace,
+        ref=ref,
+    ):
+        raise HTTPException(status_code=403, detail="Container edit access required.")
+
+    for container in doc.containers:
+        container.is_primary = False
+        db.add(container)
+
+    existing = next(
+        (
+            container
+            for container in doc.containers
+            if container.container_app == payload.app
+            and container.container_type == payload.type
+            and container.container_id == payload.id
+        ),
+        None,
+    )
+    if existing is None:
+        existing = NativeDocContainer(
+            id=new_id(),
+            doc_id=doc.id,
+            container_app=payload.app,
+            container_type=payload.type,
+            container_id=payload.id,
+            is_primary=True,
+            sort_order=payload.sort_order,
+        )
+        db.add(existing)
+        doc.containers.append(existing)
+    else:
+        existing.is_primary = True
+        existing.sort_order = payload.sort_order
+        db.add(existing)
+    db.flush()
+    return existing
+
+
+def _delete_primary_container(db: Session, doc: NativeDoc) -> None:
+    for container in list(doc.containers):
+        if container.is_primary:
+            db.delete(container)
+
+
+def _clone_page_tree(
+    db: Session,
+    *,
+    source_doc: NativeDoc,
+    destination_doc_id: str,
+    actor_user_id: str,
+) -> None:
+    by_parent: dict[str | None, list[NativeDocPage]] = {}
+    for page in source_doc.pages:
+        if page.trashed_at is not None:
+            continue
+        by_parent.setdefault(page.parent_id, []).append(page)
+    for bucket in by_parent.values():
+        bucket.sort(key=lambda page: (page.sort_order, page.created_at))
+
+    def clone_subtree(parent_id: str | None, destination_parent_id: str | None) -> None:
+        for page in by_parent.get(parent_id, []):
+            cloned = NativeDocPage(
+                id=new_id(),
+                doc_id=destination_doc_id,
+                parent_id=destination_parent_id,
+                title=page.title,
+                content_blocks=page.content_blocks,
+                sort_order=page.sort_order,
+                created_by_id=actor_user_id,
+            )
+            db.add(cloned)
+            db.flush()
+            sync_collab_record_from_rest_patch(
+                db,
+                source_type=PAGE_SOURCE_NATIVE_DOC,
+                source_page_id=cloned.id,
+                snapshot_content_blocks=cloned.content_blocks,
+            )
+            clone_subtree(page.id, cloned.id)
+
+    clone_subtree(None, None)
+
+
+def _attach_container_counts(
+    *,
+    docs: list[DocsHubItem],
+    nodes: list[ContainerTreeNode],
+) -> list[DocsContainerTreeNodeModel]:
+    counts: dict[tuple[str, str, str], int] = {}
+    for item in docs:
+        if item.primary_container is None or item.trashed_at is not None:
+            continue
+        key = (
+            item.primary_container.app,
+            item.primary_container.type,
+            item.primary_container.id,
+        )
+        counts[key] = counts.get(key, 0) + 1
+
+    def convert(node: ContainerTreeNode) -> DocsContainerTreeNodeModel:
+        key = (node.app, node.type, node.id)
+        return DocsContainerTreeNodeModel(
+            app=node.app,
+            type=node.type,
+            id=node.id,
+            label=node.label,
+            item_count=counts.get(key, 0),
+            children=[convert(child) for child in node.children],
+        )
+
+    return [convert(node) for node in nodes]
+
+
+def list_hub_internal(
+    db: Session,
+    *,
+    user: User,
+    query: DocsHubQuery,
+) -> DocsHubResponse:
+    _ensure_docs_workspace_access(db, user)
+    pref_map = _get_pref_map(db, user.id)
+    docs = [
+        _serialize_native_item(
+            db,
+            doc,
+            _resolve_native_doc_access(db, doc, user),
+            pref_map.get((SOURCE_NATIVE_DOC, doc.id)),
+        )
+        for doc in _load_accessible_native_docs(db, user)
+    ]
+    docs = _filter_docs(docs, current_user_id=user.id, query=query)
+    docs = _sort_docs(docs, sort_by=query.sort_by, sort_dir=query.sort_dir)
+    total = len(docs)
+    start = (query.page - 1) * query.page_size
+    end = start + query.page_size
+    return DocsHubResponse(
+        items=docs[start:end],
+        total=total,
+        page=query.page,
+        page_size=query.page_size,
+    )
+
+
+def get_item_internal(
+    db: Session,
+    *,
+    user: User,
+    item_id: str,
+    share_token: str | None,
+) -> DocsHubItem:
+    if share_token is None or not _share_token_allows_item_without_docs_access(item_id):
+        _ensure_docs_workspace_access(db, user)
+    return _lookup_item(db, item_id, user, share_token=share_token)
+
+
+def list_pages_internal(
+    db: Session,
+    *,
+    user: User,
+    item_id: str,
+    share_token: str | None,
+) -> DocsPageListResponse:
+    if share_token is None or not _share_token_allows_item_without_docs_access(item_id):
+        _ensure_docs_workspace_access(db, user)
+    doc, access = _native_doc_from_item_or_404(db, item_id, user, share_token=share_token)
+    pages = [
+        _serialize_native_page(page, can_edit=access.can_edit)
+        for page in sorted(
+            [page for page in doc.pages if page.trashed_at is None],
+            key=lambda page: (
+                "" if page.parent_id is None else page.parent_id,
+                page.sort_order,
+                page.created_at,
+            ),
+        )
+    ]
+    return DocsPageListResponse(items=pages)
+
+
+def read_page_internal(
+    db: Session,
+    *,
+    user: User,
+    page_id: str,
+    share_token: str | None,
+) -> DocsPageItem:
+    if share_token is None or not _share_token_allows_page_without_docs_access(page_id):
+        _ensure_docs_workspace_access(db, user)
+    page = _load_native_page(db, _normalize_page_id(page_id))
+    if page is None or page.doc is None:
+        raise HTTPException(status_code=404, detail="Page not found.")
+    doc = _load_native_doc_for_access(db, page.doc_id)
+    if doc is None:
+        raise HTTPException(status_code=404, detail="Page not found.")
+    access = _resolve_native_doc_access(db, doc, user, share_token=share_token)
+    if not access.can_view or page.trashed_at is not None or doc.trashed_at is not None:
+        raise HTTPException(status_code=403, detail="Page access required.")
+    return _serialize_native_page(page, can_edit=access.can_edit)
+
+
 @router.get("/hub", response_model=DocsHubResponse)
 def list_docs_hub(
-    category: str = Query(default="all"),
+    view: Literal["all", "mine", "shared", "private", "meeting_notes", "recent", "archived"] | None = Query(default=None),
+    category: str | None = Query(default=None),
     q: str = Query(default=""),
     sort_by: str = Query(default="updated_at"),
-    sort_dir: str = Query(default="desc"),
+    sort_dir: Literal["asc", "desc"] = Query(default="desc"),
     page: int = Query(default=1, ge=1),
-    page_size: int = Query(default=50, ge=1, le=100),
+    page_size: int = Query(default=50, ge=1, le=200),
+    source_app: str | None = Query(default=None),
+    source_kind: str | None = Query(default=None),
+    container_app: str | None = Query(default=None),
+    container_type: str | None = Query(default=None),
+    container_id: str | None = Query(default=None),
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
 ) -> DocsHubResponse:
-    workspace = _ensure_docs_workspace_access(db, current_user)
-    return docs_service.list_hub(
-        db,
-        workspace=workspace,
-        principal=user_principal(
-            workspace_id=workspace.id,
-            user_id=current_user.id,
-            source="api.docs.list_hub",
-        ),
-        user=current_user,
-        category=category,
+    resolved_view = view or {
+        "all": "all",
+        "my": "mine",
+        "shared": "shared",
+        "private": "private",
+        "recent": "recent",
+        "archived": "archived",
+        "notes": "meeting_notes",
+        "meeting_notes": "meeting_notes",
+    }.get(category or "all", "all")
+    query = DocsHubQuery(
+        view=resolved_view,
         q=q,
         sort_by=sort_by,
         sort_dir=sort_dir,
         page=page,
         page_size=page_size,
+        source_app=source_app,
+        source_kind=source_kind,
+        container_app=container_app,
+        container_type=container_type,
+        container_id=container_id,
     )
+    return list_hub_internal(db, user=current_user, query=query)
 
 
-@router.post("/native-docs", response_model=DocsHubItem, status_code=status.HTTP_201_CREATED)
-def create_native_doc(
-    payload: CreateNativeDocRequest,
+@router.post("/items", response_model=DocsHubItem, status_code=status.HTTP_201_CREATED)
+def create_doc_item(
+    payload: CreateDocItemRequest,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
 ) -> DocsHubItem:
-    current_workspace = _ensure_docs_workspace_access(db, current_user)
+    workspace = _ensure_docs_workspace_access(db, current_user)
+    container_payload = payload.primary_container or _default_container_payload(workspace)
+    if not _container_write_allowed(
+        db=db,
+        user=current_user,
+        workspace=workspace,
+        ref=ContainerRef(app=container_payload.app, type=container_payload.type, id=container_payload.id),
+    ):
+        raise HTTPException(status_code=403, detail="Container edit access required.")
 
-    doc, _page = docs_service.create_native_doc_for_user(
-        db,
-        workspace_id=current_workspace.id,
+    doc = NativeDoc(
+        id=new_id(),
+        workspace_id=workspace.id,
         owner_id=current_user.id,
-        title=payload.title,
-        first_page_title=payload.first_page_title,
+        title=payload.title.strip(),
+        source_app=payload.source_app,
+        source_kind=payload.source_kind,
+        source_ref=payload.source_ref,
+        generation_kind=payload.generation_kind,
+    )
+    db.add(doc)
+    page = NativeDocPage(
+        id=new_id(),
+        doc_id=doc.id,
+        parent_id=None,
+        title=(payload.first_page_title or payload.title).strip(),
         content_blocks=[],
+        sort_order=0,
+        created_by_id=current_user.id,
+    )
+    db.add(page)
+    db.flush()
+    _upsert_primary_container(
+        db,
+        doc=doc,
+        payload=UpdateDocContainerRequest.model_validate(container_payload.model_dump()),
+        current_user=current_user,
     )
     db.commit()
-    doc = _load_native_doc_for_access(db, doc.id)
-    assert doc is not None
-    return _serialize_native_item(
-        doc,
-        _resolve_native_doc_access(db, doc, current_user),
-        _get_pref_map(db, current_user.id).get((SOURCE_NATIVE_DOC, doc.id)),
-    )
+    return _lookup_item(db, doc.id, current_user)
 
 
 @router.get("/items/{item_id}", response_model=DocsHubItem)
@@ -1115,24 +1307,650 @@ def get_doc_item(
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
 ) -> DocsHubItem:
-    workspace = get_current_workspace(db)
-    principal = (
-        user_principal(
-            workspace_id=workspace.id,
-            user_id=current_user.id,
-            source="api.docs.get_item",
-        )
-        if workspace is not None
-        else None
-    )
-    return docs_service.get_item(
+    return get_item_internal(
         db,
-        workspace=workspace,
-        principal=principal,
         user=current_user,
         item_id=item_id,
         share_token=share_token,
     )
+
+
+@router.patch("/items/{item_id}", response_model=DocsHubItem)
+def update_doc_item(
+    item_id: str,
+    payload: UpdateDocItemRequest,
+    share_token: str | None = Query(default=None),
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+) -> DocsHubItem:
+    if share_token is None or not _share_token_allows_item_without_docs_access(item_id):
+        _ensure_docs_workspace_access(db, current_user)
+    doc, access = _native_doc_from_item_or_404(db, item_id, current_user, share_token=share_token)
+    if not access.can_manage:
+        raise HTTPException(status_code=403, detail="Doc manage access required.")
+    if payload.title is not None:
+        doc.title = payload.title.strip()
+        db.add(doc)
+        db.commit()
+    return _lookup_item(db, doc.id, current_user, share_token=share_token)
+
+
+@router.delete("/items/{item_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_doc_item(
+    item_id: str,
+    share_token: str | None = Query(default=None),
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+) -> Response:
+    if share_token is None or not _share_token_allows_item_without_docs_access(item_id):
+        _ensure_docs_workspace_access(db, current_user)
+    doc, access = _native_doc_from_item_or_404(db, item_id, current_user, share_token=share_token)
+    if not access.can_manage:
+        raise HTTPException(status_code=403, detail="Doc manage access required.")
+
+    deleted_at = _utcnow()
+    doc.trashed_at = deleted_at
+    media_keys: list[str] = []
+    for page in doc.pages:
+        if page.trashed_at is None:
+            page.trashed_at = deleted_at
+            db.add(page)
+            delete_collab_document(
+                db,
+                source_type=PAGE_SOURCE_NATIVE_DOC,
+                source_page_id=page.id,
+            )
+            media_keys.extend(cleanup_media_for_resource(db, "docs_native_page", page.id))
+    db.add(doc)
+    db.commit()
+
+    if media_keys:
+        settings = get_settings()
+        client = get_minio_client()
+        for key in media_keys:
+            try:
+                client.remove_object(settings.minio_bucket, key)
+            except Exception:
+                pass
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.post("/items/{item_id}/duplicate", response_model=DocsHubItem, status_code=status.HTTP_201_CREATED)
+def duplicate_doc_item(
+    item_id: str,
+    share_token: str | None = Query(default=None),
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+) -> DocsHubItem:
+    if share_token is None or not _share_token_allows_item_without_docs_access(item_id):
+        _ensure_docs_workspace_access(db, current_user)
+    source_doc, access = _native_doc_from_item_or_404(db, item_id, current_user, share_token=share_token)
+    if not access.can_view:
+        raise HTTPException(status_code=403, detail="Doc access required.")
+
+    duplicate = NativeDoc(
+        id=new_id(),
+        workspace_id=source_doc.workspace_id,
+        owner_id=current_user.id,
+        title=f"{source_doc.title} Copy",
+        source_app=source_doc.source_app,
+        source_kind=source_doc.source_kind,
+        source_ref=source_doc.source_ref,
+        generation_kind=source_doc.generation_kind,
+    )
+    db.add(duplicate)
+    db.flush()
+    for container in source_doc.containers:
+        db.add(
+            NativeDocContainer(
+                id=new_id(),
+                doc_id=duplicate.id,
+                container_app=container.container_app,
+                container_type=container.container_type,
+                container_id=container.container_id,
+                is_primary=container.is_primary,
+                sort_order=container.sort_order,
+            )
+        )
+    _clone_page_tree(
+        db,
+        source_doc=source_doc,
+        destination_doc_id=duplicate.id,
+        actor_user_id=current_user.id,
+    )
+    db.commit()
+    return _lookup_item(db, duplicate.id, current_user)
+
+
+@router.get("/items/{item_id}/pages", response_model=DocsPageListResponse)
+def list_doc_pages(
+    item_id: str,
+    share_token: str | None = Query(default=None),
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+) -> DocsPageListResponse:
+    return list_pages_internal(
+        db,
+        user=current_user,
+        item_id=item_id,
+        share_token=share_token,
+    )
+
+
+@router.post("/items/{item_id}/pages", response_model=DocsPageItem, status_code=status.HTTP_201_CREATED)
+def create_doc_page(
+    item_id: str,
+    payload: CreateDocPageRequest,
+    share_token: str | None = Query(default=None),
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+) -> DocsPageItem:
+    if share_token is None or not _share_token_allows_item_without_docs_access(item_id):
+        _ensure_docs_workspace_access(db, current_user)
+    doc, access = _native_doc_from_item_or_404(db, item_id, current_user, share_token=share_token)
+    if not access.can_edit:
+        raise HTTPException(status_code=403, detail="Doc edit access required.")
+
+    parent_id = _normalize_page_id(payload.parent_id) if payload.parent_id else None
+    _validate_native_parent(doc, parent_id)
+    sibling_count = len([
+        page
+        for page in doc.pages
+        if page.trashed_at is None and page.parent_id == parent_id
+    ])
+    page = NativeDocPage(
+        id=new_id(),
+        doc_id=doc.id,
+        parent_id=parent_id,
+        title=payload.title.strip(),
+        content_blocks=payload.content_blocks,
+        sort_order=payload.sort_order if payload.sort_order is not None else sibling_count,
+        created_by_id=current_user.id,
+    )
+    db.add(page)
+    db.flush()
+    if payload.content_blocks is not None:
+        sync_embedded_media(db, payload.content_blocks, "docs_native_page", page.id, current_user)
+        sync_collab_record_from_rest_patch(
+            db,
+            source_type=PAGE_SOURCE_NATIVE_DOC,
+            source_page_id=page.id,
+            snapshot_content_blocks=payload.content_blocks,
+        )
+    db.commit()
+    page = _load_native_page(db, page.id)
+    assert page is not None
+    return _serialize_native_page(page, can_edit=access.can_edit)
+
+
+@router.get("/pages/{page_id}", response_model=DocsPageItem)
+def get_doc_page(
+    page_id: str,
+    share_token: str | None = Query(default=None),
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+) -> DocsPageItem:
+    return read_page_internal(
+        db,
+        user=current_user,
+        page_id=page_id,
+        share_token=share_token,
+    )
+
+
+@router.patch("/pages/{page_id}", response_model=DocsPageItem)
+def update_doc_page(
+    page_id: str,
+    payload: UpdateDocPageRequest,
+    share_token: str | None = Query(default=None),
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+) -> DocsPageItem:
+    if share_token is None or not _share_token_allows_page_without_docs_access(page_id):
+        _ensure_docs_workspace_access(db, current_user)
+    page = _load_native_page(db, _normalize_page_id(page_id))
+    if page is None or page.doc is None:
+        raise HTTPException(status_code=404, detail="Page not found.")
+    doc = _load_native_doc_for_access(db, page.doc_id)
+    if doc is None:
+        raise HTTPException(status_code=404, detail="Page not found.")
+    access = _resolve_native_doc_access(db, doc, current_user, share_token=share_token)
+    if not access.can_edit or page.trashed_at is not None or doc.trashed_at is not None:
+        raise HTTPException(status_code=403, detail="Doc edit access required.")
+
+    if "parent_id" in payload.model_fields_set:
+        next_parent_id = _normalize_page_id(payload.parent_id) if payload.parent_id else None
+        _validate_native_parent(doc, next_parent_id, page_id=page.id)
+        page.parent_id = next_parent_id
+    if payload.title is not None:
+        page.title = payload.title.strip()
+    if "content_blocks" in payload.model_fields_set:
+        page.content_blocks = payload.content_blocks
+        sync_embedded_media(db, payload.content_blocks, "docs_native_page", page.id, current_user)
+        sync_collab_record_from_rest_patch(
+            db,
+            source_type=PAGE_SOURCE_NATIVE_DOC,
+            source_page_id=page.id,
+            snapshot_content_blocks=payload.content_blocks,
+        )
+    if payload.sort_order is not None:
+        page.sort_order = payload.sort_order
+    db.add(page)
+    db.commit()
+    page = _load_native_page(db, page.id)
+    assert page is not None
+    return _serialize_native_page(page, can_edit=access.can_edit)
+
+
+@router.delete("/pages/{page_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_doc_page(
+    page_id: str,
+    share_token: str | None = Query(default=None),
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+) -> Response:
+    if share_token is None or not _share_token_allows_page_without_docs_access(page_id):
+        _ensure_docs_workspace_access(db, current_user)
+    page = _load_native_page(db, _normalize_page_id(page_id))
+    if page is None or page.doc is None:
+        raise HTTPException(status_code=404, detail="Page not found.")
+    doc = _load_native_doc_for_access(db, page.doc_id)
+    if doc is None:
+        raise HTTPException(status_code=404, detail="Page not found.")
+    access = _resolve_native_doc_access(db, doc, current_user, share_token=share_token)
+    if not access.can_edit or page.trashed_at is not None or doc.trashed_at is not None:
+        raise HTTPException(status_code=403, detail="Doc edit access required.")
+
+    deleted_at = _utcnow()
+    media_keys: list[str] = []
+    for node in _collect_native_page_subtree([item for item in doc.pages if item.trashed_at is None], page.id):
+        node.trashed_at = deleted_at
+        db.add(node)
+        delete_collab_document(
+            db,
+            source_type=PAGE_SOURCE_NATIVE_DOC,
+            source_page_id=node.id,
+        )
+        media_keys.extend(cleanup_media_for_resource(db, "docs_native_page", node.id))
+    db.commit()
+    if media_keys:
+        settings = get_settings()
+        client = get_minio_client()
+        for key in media_keys:
+            try:
+                client.remove_object(settings.minio_bucket, key)
+            except Exception:
+                pass
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.put("/items/{item_id}/container", response_model=DocsHubItem)
+def update_doc_container(
+    item_id: str,
+    payload: UpdateDocContainerRequest,
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+) -> DocsHubItem:
+    _ensure_docs_workspace_access(db, current_user)
+    doc, access = _native_doc_from_item_or_404(db, item_id, current_user, share_token=None)
+    if not access.can_edit:
+        raise HTTPException(status_code=403, detail="Doc edit access required.")
+    _upsert_primary_container(db, doc=doc, payload=payload, current_user=current_user)
+    db.commit()
+    return _lookup_item(db, doc.id, current_user)
+
+
+@router.delete("/items/{item_id}/container", response_model=DocsHubItem)
+def delete_doc_container(
+    item_id: str,
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+) -> DocsHubItem:
+    _ensure_docs_workspace_access(db, current_user)
+    doc, access = _native_doc_from_item_or_404(db, item_id, current_user, share_token=None)
+    if not access.can_edit:
+        raise HTTPException(status_code=403, detail="Doc edit access required.")
+    _delete_primary_container(db, doc)
+    db.commit()
+    return _lookup_item(db, doc.id, current_user)
+
+
+@router.get("/containers/tree", response_model=list[DocsContainerTreeNodeModel])
+def get_docs_container_tree(
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+) -> list[DocsContainerTreeNodeModel]:
+    workspace = _ensure_docs_workspace_access(db, current_user)
+    docs = list_hub_internal(
+        db,
+        user=current_user,
+        query=DocsHubQuery(
+            view="all",
+            page=1,
+            page_size=500,
+        ),
+    ).items
+    nodes = default_container_tree(db=db, user=current_user, workspace=workspace)
+    return _attach_container_counts(docs=docs, nodes=nodes)
+
+
+@router.patch("/items/{item_id}/favorite", response_model=ToggleFavoriteResponse)
+def toggle_doc_favorite(
+    item_id: str,
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+) -> ToggleFavoriteResponse:
+    _ensure_docs_workspace_access(db, current_user)
+    item = _lookup_item(db, item_id, current_user)
+    pref = _get_or_create_pref(db, current_user.id, item.source_id)
+    pref.is_favorite = not pref.is_favorite
+    db.add(pref)
+    db.commit()
+    return ToggleFavoriteResponse(is_favorite=pref.is_favorite)
+
+
+@router.post("/items/{item_id}/view")
+def record_doc_view(
+    item_id: str,
+    payload: RecordViewRequest,
+    share_token: str | None = Query(default=None),
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+) -> dict[str, bool]:
+    if share_token is None or not _share_token_allows_item_without_docs_access(item_id):
+        _ensure_docs_workspace_access(db, current_user)
+    item = _lookup_item(db, item_id, current_user, share_token=share_token)
+    pref = _get_or_create_pref(db, current_user.id, item.source_id)
+    pref.last_viewed_at = _utcnow()
+    page_title = item.title
+    page_source_id = item.source_id
+    if payload.page_id:
+        raw_page_id = _normalize_page_id(payload.page_id)
+        page = next(
+            (
+                current_page
+                for current_page in _native_doc_from_item_or_404(db, item_id, current_user, share_token=share_token)[0].pages
+                if current_page.id == raw_page_id and current_page.trashed_at is None
+            ),
+            None,
+        )
+        if page is not None:
+            page_title = page.title
+            page_source_id = page.id
+    pref.last_viewed_page_source_id = page_source_id
+    pref.last_viewed_page_title = page_title
+    db.add(pref)
+    db.commit()
+    return {"ok": True}
+
+
+@router.get("/favorites", response_model=list[FavoriteDocItem])
+def list_favorite_docs(
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+) -> list[FavoriteDocItem]:
+    _ensure_docs_workspace_access(db, current_user)
+    items: list[DocsHubItem] = []
+    for pref in db.scalars(
+        select(DocsUserItemPref).where(
+            DocsUserItemPref.user_id == current_user.id,
+            DocsUserItemPref.source_type == SOURCE_NATIVE_DOC,
+            DocsUserItemPref.is_favorite.is_(True),
+        )
+    ):
+        try:
+            item = _lookup_item(db, pref.source_doc_id, current_user)
+        except HTTPException:
+            continue
+        if item.trashed_at is None and item.is_favorite:
+            items.append(item)
+    items = _sort_docs(items, sort_by="updated_at", sort_dir="desc")
+    return [
+        FavoriteDocItem(id=item.id, title=item.title)
+        for item in items
+    ]
+
+
+@router.get("/recent-pages", response_model=list[RecentPageItem])
+def list_recent_pages(
+    limit: int = Query(default=10, ge=1, le=20),
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+) -> list[RecentPageItem]:
+    _ensure_docs_workspace_access(db, current_user)
+    prefs = list(
+        db.scalars(
+            select(DocsUserItemPref)
+            .where(
+                DocsUserItemPref.user_id == current_user.id,
+                DocsUserItemPref.source_type == SOURCE_NATIVE_DOC,
+                DocsUserItemPref.last_viewed_at.is_not(None),
+            )
+            .order_by(DocsUserItemPref.last_viewed_at.desc())
+        )
+    )
+    items: list[RecentPageItem] = []
+    for pref in prefs:
+        try:
+            doc = _lookup_item(db, pref.source_doc_id, current_user)
+        except HTTPException:
+            continue
+        if doc.trashed_at is not None:
+            continue
+        items.append(
+            RecentPageItem(
+                page_id=pref.last_viewed_page_source_id or pref.source_doc_id,
+                page_title=pref.last_viewed_page_title or doc.title,
+                doc_id=doc.id,
+                doc_title=doc.title,
+                location_label=doc.location_label,
+                last_viewed_at=pref.last_viewed_at or doc.updated_at,
+            )
+        )
+        if len(items) >= limit:
+            break
+    return items
+
+
+@router.get("/shareable-users", response_model=list[ShareableUserItem])
+def list_shareable_users(
+    q: str = Query(default=""),
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+) -> list[ShareableUserItem]:
+    current_workspace = _ensure_docs_workspace_access(db, current_user)
+    query = select(User).where(User.status == "active").order_by(User.full_name.asc(), User.email.asc())
+    search = q.strip()
+    if search:
+        query = query.where(
+            (User.full_name.ilike(f"%{search}%")) | (User.email.ilike(f"%{search}%"))
+        )
+    users = list(db.scalars(query.limit(30)))
+    return [
+        ShareableUserItem(id=user.id, email=user.email, full_name=user.full_name)
+        for user in users
+        if user.id != current_user.id
+        and resolve_workspace_role(db, user, current_workspace.id) is not None
+    ]
+
+
+def _serialize_sharing_response(doc: NativeDoc) -> NativeDocSharingResponse:
+    link_share = next((item for item in doc.link_shares if item.active), None)
+    return NativeDocSharingResponse(
+        doc_id=doc.id,
+        owner_id=doc.owner_id,
+        users=[
+            NativeUserShareItem(
+                user_id=item.user_id,
+                email=item.user.email,
+                full_name=item.user.full_name,
+                access_level=item.access_level,
+            )
+            for item in sorted(
+                doc.user_shares,
+                key=lambda row: (row.user.full_name.lower(), row.user.email.lower()),
+            )
+        ],
+        link_share=(
+            NativeLinkShareItem(
+                token=link_share.token,
+                access_level=link_share.access_level,
+                active=link_share.active,
+                share_path=f"/docs/shared/{link_share.token}",
+            )
+            if link_share is not None
+            else None
+        ),
+    )
+
+
+def _load_native_doc_for_share_or_403(
+    db: Session,
+    item_id: str,
+    current_user: User,
+) -> NativeDoc:
+    doc, access = _native_doc_from_item_or_404(db, item_id, current_user, share_token=None)
+    if not access.can_share:
+        raise HTTPException(status_code=403, detail="Doc share access required.")
+    return doc
+
+
+@router.get("/items/{item_id}/sharing", response_model=NativeDocSharingResponse)
+def get_native_doc_sharing(
+    item_id: str,
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+) -> NativeDocSharingResponse:
+    _ensure_docs_workspace_access(db, current_user)
+    doc = _load_native_doc_for_share_or_403(db, item_id, current_user)
+    return _serialize_sharing_response(doc)
+
+
+@router.put("/items/{item_id}/sharing/users/{user_id}", response_model=NativeDocSharingResponse)
+def upsert_native_doc_user_share(
+    item_id: str,
+    user_id: str,
+    payload: UpsertUserShareRequest,
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+) -> NativeDocSharingResponse:
+    _ensure_docs_workspace_access(db, current_user)
+    doc = _load_native_doc_for_share_or_403(db, item_id, current_user)
+    if user_id == current_user.id:
+        raise HTTPException(status_code=409, detail="Owner already has full access.")
+    target_user = db.scalar(select(User).where(User.id == user_id, User.status == "active"))
+    if target_user is None:
+        raise HTTPException(status_code=404, detail="User not found.")
+    if resolve_workspace_role(db, target_user, doc.workspace_id) is None:
+        raise HTTPException(
+            status_code=409,
+            detail="Shared users must be members of the same workspace.",
+        )
+    share = next((item for item in doc.user_shares if item.user_id == user_id), None)
+    if share is None:
+        share = NativeDocUserShare(
+            id=new_id(),
+            doc_id=doc.id,
+            user_id=user_id,
+            access_level=payload.access_level,
+            created_by_id=current_user.id,
+        )
+        db.add(share)
+    else:
+        share.access_level = payload.access_level
+        db.add(share)
+    db.commit()
+    doc = _load_native_doc_for_access(db, doc.id)
+    assert doc is not None
+    return _serialize_sharing_response(doc)
+
+
+@router.delete("/items/{item_id}/sharing/users/{user_id}", response_model=NativeDocSharingResponse)
+def delete_native_doc_user_share(
+    item_id: str,
+    user_id: str,
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+) -> NativeDocSharingResponse:
+    _ensure_docs_workspace_access(db, current_user)
+    doc = _load_native_doc_for_share_or_403(db, item_id, current_user)
+    share = next((item for item in doc.user_shares if item.user_id == user_id), None)
+    if share is not None:
+        db.delete(share)
+        db.commit()
+    doc = _load_native_doc_for_access(db, doc.id)
+    assert doc is not None
+    return _serialize_sharing_response(doc)
+
+
+@router.put("/items/{item_id}/sharing/link", response_model=NativeDocSharingResponse)
+def upsert_native_doc_link_share(
+    item_id: str,
+    payload: UpsertLinkShareRequest,
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+) -> NativeDocSharingResponse:
+    _ensure_docs_workspace_access(db, current_user)
+    doc = _load_native_doc_for_share_or_403(db, item_id, current_user)
+    link_share = next(iter(doc.link_shares), None)
+    if link_share is None:
+        link_share = NativeDocLinkShare(
+            id=new_id(),
+            doc_id=doc.id,
+            token=secrets.token_urlsafe(24),
+            access_level=payload.access_level,
+            active=payload.active,
+            created_by_id=current_user.id,
+        )
+        db.add(link_share)
+    else:
+        if payload.regenerate_token or not link_share.token:
+            link_share.token = secrets.token_urlsafe(24)
+        link_share.access_level = payload.access_level
+        link_share.active = payload.active
+        db.add(link_share)
+    db.commit()
+    doc = _load_native_doc_for_access(db, doc.id)
+    assert doc is not None
+    return _serialize_sharing_response(doc)
+
+
+@router.delete("/items/{item_id}/sharing/link", response_model=NativeDocSharingResponse)
+def disable_native_doc_link_share(
+    item_id: str,
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+) -> NativeDocSharingResponse:
+    _ensure_docs_workspace_access(db, current_user)
+    doc = _load_native_doc_for_share_or_403(db, item_id, current_user)
+    link_share = next(iter(doc.link_shares), None)
+    if link_share is not None:
+        link_share.active = False
+        db.add(link_share)
+        db.commit()
+    doc = _load_native_doc_for_access(db, doc.id)
+    assert doc is not None
+    return _serialize_sharing_response(doc)
+
+
+@router.get("/shared-links/{share_token}", response_model=ResolveSharedLinkResponse)
+def resolve_shared_link(
+    share_token: str,
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+) -> ResolveSharedLinkResponse:
+    doc = db.scalar(
+        _doc_query()
+        .join(NativeDocLinkShare, NativeDocLinkShare.doc_id == NativeDoc.id)
+        .where(
+            NativeDocLinkShare.token == share_token,
+            NativeDocLinkShare.active.is_(True),
+        )
+    )
+    if doc is None:
+        raise HTTPException(status_code=404, detail="Shared link not found.")
+    item = _lookup_item(db, doc.id, current_user, share_token=share_token)
+    return ResolveSharedLinkResponse(item=item)
 
 
 @router.get("/collab/pages/{page_ref}/session", response_model=DocsCollabSessionResponse)
@@ -1156,7 +1974,6 @@ def get_docs_collab_session(
     hub: DocsCollabHub = request.app.state.docs_collab
     return DocsCollabSessionResponse(
         page_ref=context.page_ref,
-        source_type=context.source_type,
         source_page_id=context.source_page_id,
         room_key=collab.room_key,
         ws_path=ws_path,
@@ -1165,7 +1982,11 @@ def get_docs_collab_session(
         read_only_reason=None if hub.relay_available else "relay_unavailable",
         user=DocsCollabSessionUser(id=current_user.id, full_name=current_user.full_name),
         snapshot_content_blocks=collab.snapshot_content_blocks,
-        yjs_state=base64.b64encode(collab.yjs_state).decode("ascii") if collab.yjs_state is not None else None,
+        yjs_state=(
+            base64.b64encode(collab.yjs_state).decode("ascii")
+            if collab.yjs_state is not None
+            else None
+        ),
     )
 
 
@@ -1282,804 +2103,3 @@ async def docs_collab_websocket(
             await asyncio.gather(monitor_task, return_exceptions=True)
         if room_key is not None:
             await hub.cleanup_room(room_key)
-
-
-@router.patch("/items/{item_id}", response_model=DocsHubItem)
-def update_doc_item(
-    item_id: str,
-    payload: UpdateDocItemRequest,
-    share_token: str | None = Query(default=None),
-    db: Session = Depends(get_db_session),
-    current_user: User = Depends(require_current_user),
-) -> DocsHubItem:
-    if share_token is None or not _share_token_allows_item_without_docs_access(item_id):
-        _ensure_docs_workspace_access(db, current_user)
-
-    item = _lookup_item(db, item_id, current_user, share_token=share_token)
-    if not item.can_manage:
-        raise HTTPException(status_code=403, detail="Doc manage access required.")
-
-    if payload.title is None:
-        return item
-
-    if item.source_type == SOURCE_NATIVE_DOC:
-        doc, _access = _native_doc_from_item_or_404(
-            db,
-            item_id,
-            current_user,
-            share_token=share_token,
-        )
-        doc.title = payload.title.strip()
-        db.add(doc)
-        db.commit()
-        return _lookup_item(db, item_id, current_user, share_token=share_token)
-
-    if item.source_type == SOURCE_PMS_SPACE_DOC:
-        doc, _role = _space_doc_from_item_or_404(db, item_id, current_user)
-        doc.title = payload.title.strip()
-        db.add(doc)
-        db.commit()
-        return _lookup_item(db, item_id, current_user)
-
-    raise HTTPException(status_code=404, detail="Doc not found.")
-
-
-@router.delete("/items/{item_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_doc_item(
-    item_id: str,
-    share_token: str | None = Query(default=None),
-    db: Session = Depends(get_db_session),
-    current_user: User = Depends(require_current_user),
-) -> Response:
-    if share_token is None or not _share_token_allows_item_without_docs_access(item_id):
-        _ensure_docs_workspace_access(db, current_user)
-    item = _lookup_item(db, item_id, current_user, share_token=share_token)
-    if not item.can_manage:
-        raise HTTPException(status_code=403, detail="Doc manage access required.")
-
-    if item.source_type == SOURCE_NATIVE_DOC:
-        doc, _access = _native_doc_from_item_or_404(
-            db,
-            item_id,
-            current_user,
-            share_token=share_token,
-        )
-        deleted_at = _utcnow()
-        doc.trashed_at = deleted_at
-        for page in doc.pages:
-            if page.trashed_at is None:
-                page.trashed_at = deleted_at
-                db.add(page)
-        db.add(doc)
-        db.commit()
-        return Response(status_code=status.HTTP_204_NO_CONTENT)
-
-    if item.source_type == SOURCE_PMS_SPACE_DOC:
-        doc, _role = _space_doc_from_item_or_404(db, item_id, current_user)
-        deleted_at = _utcnow()
-        doc.trashed_at = deleted_at
-        for page in doc.pages:
-            if page.trashed_at is None:
-                page.trashed_at = deleted_at
-                db.add(page)
-        db.add(doc)
-        db.commit()
-        return Response(status_code=status.HTTP_204_NO_CONTENT)
-
-    raise HTTPException(status_code=404, detail="Doc not found.")
-
-
-@router.post(
-    "/items/{item_id}/duplicate",
-    response_model=DocsHubItem,
-    status_code=status.HTTP_201_CREATED,
-)
-def duplicate_doc_item(
-    item_id: str,
-    share_token: str | None = Query(default=None),
-    db: Session = Depends(get_db_session),
-    current_user: User = Depends(require_current_user),
-) -> DocsHubItem:
-    """Duplicate any doc the user can view into a new private native doc owned by them."""
-    if share_token is None or not _share_token_allows_item_without_docs_access(item_id):
-        _ensure_docs_workspace_access(db, current_user)
-
-    item = _lookup_item(db, item_id, current_user, share_token=share_token)
-    if not item.can_view:
-        raise HTTPException(status_code=403, detail="Doc view access required.")
-
-    # Collect non-trashed source pages, regardless of source type.
-    if item.source_type == SOURCE_NATIVE_DOC:
-        source_doc, _access = _native_doc_from_item_or_404(
-            db, item_id, current_user, share_token=share_token,
-        )
-        source_title = source_doc.title
-        source_pages = [page for page in source_doc.pages if page.trashed_at is None]
-    elif item.source_type == SOURCE_PMS_SPACE_DOC:
-        source_doc, _role = _space_doc_from_item_or_404(db, item_id, current_user)
-        source_title = source_doc.title
-        source_pages = [page for page in source_doc.pages if page.trashed_at is None]
-    else:
-        raise HTTPException(status_code=404, detail="Doc not found.")
-
-    # Create the new native doc shell.
-    current_workspace = get_current_workspace(db)
-    if current_workspace is None:
-        raise HTTPException(status_code=403, detail="Docs requests require a workspace context.")
-    new_doc = NativeDoc(
-        id=new_id(),
-        workspace_id=current_workspace.id,
-        owner_id=current_user.id,
-        title=f"{source_title} (copy)"[:200],
-    )
-    db.add(new_doc)
-
-    # Clone pages preserving parent/child hierarchy via id mapping.
-    sorted_pages = sorted(
-        source_pages,
-        key=lambda page: (
-            "" if page.parent_id is None else page.parent_id,
-            page.sort_order,
-            page.created_at,
-        ),
-    )
-    id_map: dict[str, str] = {}
-    cloned_pages: list[tuple[NativeDocPage, list[dict] | None]] = []
-    for source_page in sorted_pages:
-        new_page_id = new_id()
-        id_map[source_page.id] = new_page_id
-        new_parent_id = id_map.get(source_page.parent_id) if source_page.parent_id else None
-        content_blocks = source_page.content_blocks or []
-        new_page = NativeDocPage(
-            id=new_page_id,
-            doc_id=new_doc.id,
-            parent_id=new_parent_id,
-            title=source_page.title,
-            content_blocks=content_blocks,
-            sort_order=source_page.sort_order,
-            created_by_id=current_user.id,
-        )
-        db.add(new_page)
-        cloned_pages.append((new_page, content_blocks))
-
-    # Always include at least one page so the new doc opens to something.
-    if not cloned_pages:
-        empty_page = NativeDocPage(
-            id=new_id(),
-            doc_id=new_doc.id,
-            parent_id=None,
-            title=source_title,
-            content_blocks=[],
-            sort_order=0,
-            created_by_id=current_user.id,
-        )
-        db.add(empty_page)
-
-    db.commit()
-
-    # Re-link any embedded media to the cloned pages.
-    for new_page, content_blocks in cloned_pages:
-        if content_blocks:
-            sync_embedded_media(db, content_blocks, "docs_native_page", new_page.id, current_user)
-
-    new_doc = _load_native_doc_for_access(db, new_doc.id)
-    assert new_doc is not None
-    return _serialize_native_item(
-        new_doc,
-        _resolve_native_doc_access(db, new_doc, current_user),
-        _get_pref_map(db, current_user.id).get((SOURCE_NATIVE_DOC, new_doc.id)),
-    )
-
-
-@router.get("/items/{item_id}/pages", response_model=DocsPageListResponse)
-def list_doc_pages(
-    item_id: str,
-    share_token: str | None = Query(default=None),
-    db: Session = Depends(get_db_session),
-    current_user: User = Depends(require_current_user),
-) -> DocsPageListResponse:
-    workspace = get_current_workspace(db)
-    principal = (
-        user_principal(
-            workspace_id=workspace.id,
-            user_id=current_user.id,
-            source="api.docs.list_pages",
-        )
-        if workspace is not None
-        else None
-    )
-    return docs_service.list_pages(
-        db,
-        workspace=workspace,
-        principal=principal,
-        user=current_user,
-        item_id=item_id,
-        share_token=share_token,
-    )
-
-
-@router.post("/items/{item_id}/pages", response_model=DocsPageItem, status_code=status.HTTP_201_CREATED)
-def create_doc_page(
-    item_id: str,
-    payload: CreateDocPageRequest,
-    share_token: str | None = Query(default=None),
-    db: Session = Depends(get_db_session),
-    current_user: User = Depends(require_current_user),
-) -> DocsPageItem:
-    if share_token is None or not _share_token_allows_item_without_docs_access(item_id):
-        _ensure_docs_workspace_access(db, current_user)
-    item = _lookup_item(db, item_id, current_user, share_token=share_token)
-    if not item.can_edit:
-        raise HTTPException(status_code=403, detail="Doc edit access required.")
-
-    if item.source_type == SOURCE_NATIVE_DOC:
-        doc, access = _native_doc_from_item_or_404(db, item_id, current_user, share_token=share_token)
-        parent_id = payload.parent_id
-        if parent_id:
-            parent_prefix, parent_raw_id = _split_prefixed_id(parent_id)
-            if parent_prefix not in {None, PAGE_SOURCE_NATIVE_DOC}:
-                raise HTTPException(status_code=400, detail="Parent page must belong to the same document.")
-            parent_id = parent_raw_id
-        _validate_native_parent(doc, parent_id)
-        sibling_count = len([
-            page
-            for page in doc.pages
-            if page.trashed_at is None and page.parent_id == parent_id
-        ])
-        page = NativeDocPage(
-            id=new_id(),
-            doc_id=doc.id,
-            parent_id=parent_id,
-            title=payload.title.strip(),
-            content_blocks=payload.content_blocks,
-            sort_order=payload.sort_order if payload.sort_order is not None else sibling_count,
-            created_by_id=current_user.id,
-        )
-        db.add(page)
-        db.flush()
-        if payload.content_blocks is not None:
-            sync_embedded_media(db, payload.content_blocks, "docs_native_page", page.id, current_user)
-            sync_collab_record_from_rest_patch(
-                db,
-                source_type=PAGE_SOURCE_NATIVE_DOC,
-                source_page_id=page.id,
-                snapshot_content_blocks=payload.content_blocks,
-            )
-        db.commit()
-        page = _load_native_page(db, page.id)
-        assert page is not None
-        doc = _load_native_doc_for_access(db, doc.id)
-        assert doc is not None
-        return _serialize_native_page(doc, page, can_edit=access.can_edit)
-
-    doc, role = _space_doc_from_item_or_404(db, item_id, current_user)
-    parent_id = payload.parent_id
-    if parent_id:
-        parent_prefix, parent_raw_id = _split_prefixed_id(parent_id)
-        if parent_prefix not in {None, PAGE_SOURCE_PMS_SPACE_DOC}:
-            raise HTTPException(status_code=400, detail="Parent page must belong to the same document.")
-        parent_id = parent_raw_id
-    _validate_space_doc_parent(doc, parent_id)
-    sibling_count = len([
-        page
-        for page in doc.pages
-        if page.trashed_at is None and page.parent_id == parent_id
-    ])
-    page = SpaceDocPage(
-        id=new_id(),
-        team_id=doc.team_id,
-        space_doc_id=doc.id,
-        parent_id=parent_id,
-        title=payload.title.strip(),
-        content_blocks=payload.content_blocks,
-        sort_order=payload.sort_order if payload.sort_order is not None else sibling_count,
-        created_by_id=current_user.id,
-    )
-    db.add(page)
-    db.flush()
-    if payload.content_blocks is not None:
-        sync_embedded_media(db, payload.content_blocks, "space_doc_page", page.id, current_user)
-        sync_collab_record_from_rest_patch(
-            db,
-            source_type=PAGE_SOURCE_PMS_SPACE_DOC,
-            source_page_id=page.id,
-            snapshot_content_blocks=payload.content_blocks,
-        )
-    db.commit()
-    page = _load_space_doc_page_with_doc(db, page.id)
-    assert page is not None and page.doc is not None
-    return _serialize_space_page(page.doc, page, can_edit=_team_role_allows(role, "member"))
-
-
-@router.patch("/pages/{page_id}", response_model=DocsPageItem)
-def update_doc_page(
-    page_id: str,
-    payload: UpdateDocPageRequest,
-    share_token: str | None = Query(default=None),
-    db: Session = Depends(get_db_session),
-    current_user: User = Depends(require_current_user),
-) -> DocsPageItem:
-    prefix, raw_id = _split_prefixed_id(page_id)
-    if share_token is None or not _share_token_allows_page_without_docs_access(db, page_id):
-        _ensure_docs_workspace_access(db, current_user)
-
-    if prefix in {PAGE_SOURCE_NATIVE_DOC, None}:
-        page = _load_native_page(db, raw_id)
-        if page is not None:
-            doc = _load_native_doc_for_access(db, page.doc_id)
-            assert doc is not None
-            access = _resolve_native_doc_access(db, doc, current_user, share_token=share_token)
-            if not access.can_edit or page.trashed_at is not None or doc.trashed_at is not None:
-                raise HTTPException(status_code=403, detail="Doc edit access required.")
-            if "parent_id" in payload.model_fields_set:
-                next_parent_id = payload.parent_id
-                if next_parent_id:
-                    parent_prefix, parent_raw_id = _split_prefixed_id(next_parent_id)
-                    if parent_prefix not in {None, PAGE_SOURCE_NATIVE_DOC}:
-                        raise HTTPException(status_code=400, detail="Parent page must belong to the same document.")
-                    next_parent_id = parent_raw_id
-                _validate_native_parent(doc, next_parent_id, page_id=page.id)
-                page.parent_id = next_parent_id
-            if payload.title is not None:
-                page.title = payload.title.strip()
-            if "content_blocks" in payload.model_fields_set:
-                page.content_blocks = payload.content_blocks
-                sync_embedded_media(db, payload.content_blocks, "docs_native_page", page.id, current_user)
-                sync_collab_record_from_rest_patch(
-                    db,
-                    source_type=PAGE_SOURCE_NATIVE_DOC,
-                    source_page_id=page.id,
-                    snapshot_content_blocks=payload.content_blocks,
-                )
-            if payload.sort_order is not None:
-                page.sort_order = payload.sort_order
-            db.add(page)
-            db.commit()
-            page = _load_native_page(db, page.id)
-            assert page is not None
-            doc = _load_native_doc_for_access(db, page.doc_id)
-            assert doc is not None
-            return _serialize_native_page(doc, page, can_edit=access.can_edit)
-
-    if prefix in {PAGE_SOURCE_PMS_SPACE_DOC, None}:
-        page = _load_space_doc_page_with_doc(db, raw_id)
-        if page is not None and page.doc is not None:
-            role = _resolve_pms_team_role(db, current_user, page.doc.team_id)
-            if role is None or not _team_role_allows(role, "member") or page.trashed_at is not None or page.doc.trashed_at is not None:
-                raise HTTPException(status_code=403, detail="Doc edit access required.")
-            if "parent_id" in payload.model_fields_set:
-                next_parent_id = payload.parent_id
-                if next_parent_id:
-                    parent_prefix, parent_raw_id = _split_prefixed_id(next_parent_id)
-                    if parent_prefix not in {None, PAGE_SOURCE_PMS_SPACE_DOC}:
-                        raise HTTPException(status_code=400, detail="Parent page must belong to the same document.")
-                    next_parent_id = parent_raw_id
-                _validate_space_doc_parent(page.doc, next_parent_id, page_id=page.id)
-                page.parent_id = next_parent_id
-            if payload.title is not None:
-                page.title = payload.title.strip()
-            if "content_blocks" in payload.model_fields_set:
-                page.content_blocks = payload.content_blocks
-                sync_embedded_media(db, payload.content_blocks, "space_doc_page", page.id, current_user)
-                sync_collab_record_from_rest_patch(
-                    db,
-                    source_type=PAGE_SOURCE_PMS_SPACE_DOC,
-                    source_page_id=page.id,
-                    snapshot_content_blocks=payload.content_blocks,
-                )
-            if payload.sort_order is not None:
-                page.sort_order = payload.sort_order
-            db.add(page)
-            db.commit()
-            page = _load_space_doc_page_with_doc(db, page.id)
-            assert page is not None and page.doc is not None
-            return _serialize_space_page(page.doc, page, can_edit=True)
-
-    raise HTTPException(status_code=404, detail="Page not found.")
-
-
-@router.delete("/pages/{page_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_doc_page(
-    page_id: str,
-    share_token: str | None = Query(default=None),
-    db: Session = Depends(get_db_session),
-    current_user: User = Depends(require_current_user),
-) -> Response:
-    prefix, raw_id = _split_prefixed_id(page_id)
-    if share_token is None or not _share_token_allows_page_without_docs_access(db, page_id):
-        _ensure_docs_workspace_access(db, current_user)
-
-    if prefix in {PAGE_SOURCE_NATIVE_DOC, None}:
-        page = _load_native_page(db, raw_id)
-        if page is not None:
-            doc = _load_native_doc_for_access(db, page.doc_id)
-            assert doc is not None
-            access = _resolve_native_doc_access(db, doc, current_user, share_token=share_token)
-            if not access.can_edit or page.trashed_at is not None or doc.trashed_at is not None:
-                raise HTTPException(status_code=403, detail="Doc edit access required.")
-            deleted_at = _utcnow()
-            for node in _collect_native_page_subtree([item for item in doc.pages if item.trashed_at is None], page.id):
-                node.trashed_at = deleted_at
-                db.add(node)
-                delete_collab_document(
-                    db,
-                    source_type=PAGE_SOURCE_NATIVE_DOC,
-                    source_page_id=node.id,
-                )
-            db.commit()
-            return Response(status_code=status.HTTP_204_NO_CONTENT)
-
-    if prefix in {PAGE_SOURCE_PMS_SPACE_DOC, None}:
-        page = _load_space_doc_page_with_doc(db, raw_id)
-        if page is not None and page.doc is not None:
-            role = _resolve_pms_team_role(db, current_user, page.doc.team_id)
-            if role is None or not _team_role_allows(role, "member") or page.trashed_at is not None or page.doc.trashed_at is not None:
-                raise HTTPException(status_code=403, detail="Doc edit access required.")
-            deleted_at = _utcnow()
-            for node in _collect_space_page_subtree([item for item in page.doc.pages if item.trashed_at is None], page.id):
-                node.trashed_at = deleted_at
-                db.add(node)
-                delete_collab_document(
-                    db,
-                    source_type=PAGE_SOURCE_PMS_SPACE_DOC,
-                    source_page_id=node.id,
-                )
-            db.commit()
-            return Response(status_code=status.HTTP_204_NO_CONTENT)
-
-    raise HTTPException(status_code=404, detail="Page not found.")
-
-
-@router.patch("/items/{item_id}/favorite", response_model=ToggleFavoriteResponse)
-def toggle_doc_favorite(
-    item_id: str,
-    db: Session = Depends(get_db_session),
-    current_user: User = Depends(require_current_user),
-) -> ToggleFavoriteResponse:
-    _ensure_docs_workspace_access(db, current_user)
-    item = _lookup_item(db, item_id, current_user)
-    pref = _get_or_create_pref(db, current_user.id, item.source_type, item.source_id)
-    pref.is_favorite = not pref.is_favorite
-    db.add(pref)
-    db.commit()
-    return ToggleFavoriteResponse(is_favorite=pref.is_favorite)
-
-
-@router.post("/items/{item_id}/view")
-def record_doc_view(
-    item_id: str,
-    payload: RecordViewRequest,
-    share_token: str | None = Query(default=None),
-    db: Session = Depends(get_db_session),
-    current_user: User = Depends(require_current_user),
-) -> dict[str, bool]:
-    if share_token is None or not _share_token_allows_item_without_docs_access(item_id):
-        _ensure_docs_workspace_access(db, current_user)
-    item = _lookup_item(db, item_id, current_user, share_token=share_token)
-    pref = _get_or_create_pref(db, current_user.id, item.source_type, item.source_id)
-    pref.last_viewed_at = _utcnow()
-    page_title = item.title
-    page_source_id = item.source_id
-    if payload.page_id:
-        page_prefix, page_raw_id = _split_prefixed_id(payload.page_id)
-        if item.source_type == SOURCE_NATIVE_DOC and page_prefix in {None, PAGE_SOURCE_NATIVE_DOC}:
-            page = next(
-                (
-                    current_page
-                    for current_page in _native_doc_from_item_or_404(db, item_id, current_user, share_token=share_token)[0].pages
-                    if current_page.id == page_raw_id and current_page.trashed_at is None
-                ),
-                None,
-            )
-            if page is not None:
-                page_title = page.title
-                page_source_id = page.id
-        elif item.source_type == SOURCE_PMS_SPACE_DOC and page_prefix in {None, PAGE_SOURCE_PMS_SPACE_DOC}:
-            page = next(
-                (
-                    current_page
-                    for current_page in _space_doc_from_item_or_404(db, item_id, current_user)[0].pages
-                    if current_page.id == page_raw_id and current_page.trashed_at is None
-                ),
-                None,
-            )
-            if page is not None:
-                page_title = page.title
-                page_source_id = page.id
-    pref.last_viewed_page_source_id = page_source_id
-    pref.last_viewed_page_title = page_title
-    db.add(pref)
-    db.commit()
-    return {"ok": True}
-
-
-@router.get("/favorites", response_model=list[FavoriteDocItem])
-def list_favorite_docs(
-    db: Session = Depends(get_db_session),
-    current_user: User = Depends(require_current_user),
-) -> list[FavoriteDocItem]:
-    _ensure_docs_workspace_access(db, current_user)
-    items: list[DocsHubItem] = []
-    for pref in db.scalars(
-        select(DocsUserItemPref).where(
-            DocsUserItemPref.user_id == current_user.id,
-            DocsUserItemPref.is_favorite.is_(True),
-        )
-    ):
-        try:
-            item = _lookup_item(
-                db,
-                _make_item_id(pref.source_type, pref.source_doc_id),
-                current_user,
-            )
-        except HTTPException:
-            continue
-        if item.trashed_at is None and item.is_favorite:
-            items.append(item)
-    items = _sort_docs(items, sort_by="updated_at", sort_dir="desc")
-    return [
-        FavoriteDocItem(id=item.id, title=item.title, source_type=item.source_type)
-        for item in items
-    ]
-
-
-@router.get("/recent-pages", response_model=list[RecentPageItem])
-def list_recent_pages(
-    limit: int = Query(default=10, ge=1, le=20),
-    db: Session = Depends(get_db_session),
-    current_user: User = Depends(require_current_user),
-) -> list[RecentPageItem]:
-    _ensure_docs_workspace_access(db, current_user)
-    prefs = list(
-        db.scalars(
-            select(DocsUserItemPref)
-            .where(
-                DocsUserItemPref.user_id == current_user.id,
-                DocsUserItemPref.last_viewed_at.is_not(None),
-            )
-            .order_by(DocsUserItemPref.last_viewed_at.desc())
-        )
-    )
-    items: list[RecentPageItem] = []
-    for pref in prefs:
-        try:
-            doc = _lookup_item(
-                db,
-                _make_item_id(pref.source_type, pref.source_doc_id),
-                current_user,
-            )
-        except HTTPException:
-            continue
-        if doc.trashed_at is not None:
-            continue
-        page_source_id = pref.last_viewed_page_source_id or pref.source_doc_id
-        if pref.source_type == SOURCE_NATIVE_DOC:
-            page_id = _make_page_id(PAGE_SOURCE_NATIVE_DOC, page_source_id)
-        elif pref.source_type == SOURCE_PMS_SPACE_DOC:
-            page_id = _make_page_id(PAGE_SOURCE_PMS_SPACE_DOC, page_source_id)
-        else:
-            continue
-        items.append(
-            RecentPageItem(
-                page_id=page_id,
-                page_title=pref.last_viewed_page_title or doc.title,
-                doc_id=doc.id,
-                doc_title=doc.title,
-                source_type=doc.source_type,
-                location_label=doc.location_label,
-                last_viewed_at=pref.last_viewed_at or doc.updated_at,
-            )
-        )
-        if len(items) >= limit:
-            break
-    return items
-
-
-@router.get("/shareable-users", response_model=list[ShareableUserItem])
-def list_shareable_users(
-    q: str = Query(default=""),
-    db: Session = Depends(get_db_session),
-    current_user: User = Depends(require_current_user),
-) -> list[ShareableUserItem]:
-    current_workspace = _ensure_docs_workspace_access(db, current_user)
-    query = select(User).where(User.status == "active").order_by(User.full_name.asc(), User.email.asc())
-    search = q.strip()
-    if search:
-        query = query.where(
-            (User.full_name.ilike(f"%{search}%")) | (User.email.ilike(f"%{search}%"))
-        )
-    users = list(db.scalars(query.limit(30)))
-    return [
-        ShareableUserItem(id=user.id, email=user.email, full_name=user.full_name)
-        for user in users
-        if user.id != current_user.id
-        and resolve_workspace_role(db, user, current_workspace.id) is not None
-    ]
-
-
-def _serialize_sharing_response(doc: NativeDoc) -> NativeDocSharingResponse:
-    link_share = next((item for item in doc.link_shares if item.active), None)
-    return NativeDocSharingResponse(
-        doc_id=_make_item_id(SOURCE_NATIVE_DOC, doc.id),
-        owner_id=doc.owner_id,
-        users=[
-            NativeUserShareItem(
-                user_id=item.user_id,
-                email=item.user.email,
-                full_name=item.user.full_name,
-                access_level=item.access_level,
-            )
-            for item in sorted(doc.user_shares, key=lambda row: (row.user.full_name.lower(), row.user.email.lower()))
-        ],
-        link_share=(
-            NativeLinkShareItem(
-                token=link_share.token,
-                access_level=link_share.access_level,
-                active=link_share.active,
-                share_path=f"/docs/shared/{link_share.token}",
-            )
-            if link_share is not None
-            else None
-        ),
-    )
-
-
-def _load_native_doc_for_owner_or_403(
-    db: Session,
-    item_id: str,
-    current_user: User,
-) -> NativeDoc:
-    doc, access = _native_doc_from_item_or_404(db, item_id, current_user, share_token=None)
-    if not access.can_share:
-        raise HTTPException(status_code=403, detail="Doc share access required.")
-    return doc
-
-
-@router.get("/items/{item_id}/sharing", response_model=NativeDocSharingResponse)
-def get_native_doc_sharing(
-    item_id: str,
-    db: Session = Depends(get_db_session),
-    current_user: User = Depends(require_current_user),
-) -> NativeDocSharingResponse:
-    _ensure_docs_workspace_access(db, current_user)
-    doc = _load_native_doc_for_owner_or_403(db, item_id, current_user)
-    return _serialize_sharing_response(doc)
-
-
-@router.put("/items/{item_id}/sharing/users/{user_id}", response_model=NativeDocSharingResponse)
-def upsert_native_doc_user_share(
-    item_id: str,
-    user_id: str,
-    payload: UpsertUserShareRequest,
-    db: Session = Depends(get_db_session),
-    current_user: User = Depends(require_current_user),
-) -> NativeDocSharingResponse:
-    _ensure_docs_workspace_access(db, current_user)
-    doc = _load_native_doc_for_owner_or_403(db, item_id, current_user)
-    if user_id == current_user.id:
-        raise HTTPException(status_code=409, detail="Owner already has full access.")
-    target_user = db.scalar(select(User).where(User.id == user_id, User.status == "active"))
-    if target_user is None:
-        raise HTTPException(status_code=404, detail="User not found.")
-    if resolve_workspace_role(db, target_user, doc.workspace_id) is None:
-        raise HTTPException(
-            status_code=409,
-            detail="Shared users must be members of the same workspace.",
-        )
-    share = next((item for item in doc.user_shares if item.user_id == user_id), None)
-    if share is None:
-        share = NativeDocUserShare(
-            id=new_id(),
-            doc_id=doc.id,
-            user_id=user_id,
-            access_level=payload.access_level,
-            created_by_id=current_user.id,
-        )
-        db.add(share)
-    else:
-        share.access_level = payload.access_level
-        db.add(share)
-    db.commit()
-    doc = _load_native_doc_for_access(db, doc.id)
-    assert doc is not None
-    return _serialize_sharing_response(doc)
-
-
-@router.delete("/items/{item_id}/sharing/users/{user_id}", response_model=NativeDocSharingResponse)
-def delete_native_doc_user_share(
-    item_id: str,
-    user_id: str,
-    db: Session = Depends(get_db_session),
-    current_user: User = Depends(require_current_user),
-) -> NativeDocSharingResponse:
-    _ensure_docs_workspace_access(db, current_user)
-    doc = _load_native_doc_for_owner_or_403(db, item_id, current_user)
-    share = next((item for item in doc.user_shares if item.user_id == user_id), None)
-    if share is not None:
-        db.delete(share)
-        db.commit()
-    doc = _load_native_doc_for_access(db, doc.id)
-    assert doc is not None
-    return _serialize_sharing_response(doc)
-
-
-@router.put("/items/{item_id}/sharing/link", response_model=NativeDocSharingResponse)
-def upsert_native_doc_link_share(
-    item_id: str,
-    payload: UpsertLinkShareRequest,
-    db: Session = Depends(get_db_session),
-    current_user: User = Depends(require_current_user),
-) -> NativeDocSharingResponse:
-    _ensure_docs_workspace_access(db, current_user)
-    doc = _load_native_doc_for_owner_or_403(db, item_id, current_user)
-    link_share = next(iter(doc.link_shares), None)
-    if link_share is None:
-        link_share = NativeDocLinkShare(
-            id=new_id(),
-            doc_id=doc.id,
-            token=secrets.token_urlsafe(24),
-            access_level=payload.access_level,
-            active=payload.active,
-            created_by_id=current_user.id,
-        )
-        db.add(link_share)
-    else:
-        if payload.regenerate_token or not link_share.token:
-            link_share.token = secrets.token_urlsafe(24)
-        link_share.access_level = payload.access_level
-        link_share.active = payload.active
-        db.add(link_share)
-    db.commit()
-    doc = _load_native_doc_for_access(db, doc.id)
-    assert doc is not None
-    return _serialize_sharing_response(doc)
-
-
-@router.delete("/items/{item_id}/sharing/link", response_model=NativeDocSharingResponse)
-def disable_native_doc_link_share(
-    item_id: str,
-    db: Session = Depends(get_db_session),
-    current_user: User = Depends(require_current_user),
-) -> NativeDocSharingResponse:
-    _ensure_docs_workspace_access(db, current_user)
-    doc = _load_native_doc_for_owner_or_403(db, item_id, current_user)
-    link_share = next(iter(doc.link_shares), None)
-    if link_share is not None:
-        link_share.active = False
-        db.add(link_share)
-        db.commit()
-    doc = _load_native_doc_for_access(db, doc.id)
-    assert doc is not None
-    return _serialize_sharing_response(doc)
-
-
-@router.get("/shared-links/{share_token}", response_model=ResolveSharedLinkResponse)
-def resolve_shared_link(
-    share_token: str,
-    db: Session = Depends(get_db_session),
-    current_user: User = Depends(require_current_user),
-) -> ResolveSharedLinkResponse:
-    doc = db.scalar(
-        select(NativeDoc)
-        .join(NativeDocLinkShare, NativeDocLinkShare.doc_id == NativeDoc.id)
-        .options(
-            selectinload(NativeDoc.owner),
-            selectinload(NativeDoc.pages).selectinload(NativeDocPage.created_by),
-            selectinload(NativeDoc.user_shares).selectinload(NativeDocUserShare.user),
-            selectinload(NativeDoc.link_shares),
-        )
-        .where(
-            NativeDocLinkShare.token == share_token,
-            NativeDocLinkShare.active.is_(True),
-            NativeDoc.trashed_at.is_(None),
-        )
-    )
-    if doc is None:
-        raise HTTPException(status_code=404, detail="Shared document not found.")
-    access = _resolve_native_doc_access(db, doc, current_user, share_token=share_token)
-    if not access.can_view:
-        raise HTTPException(status_code=403, detail="Shared document access required.")
-    pref = _get_pref_map(db, current_user.id).get((SOURCE_NATIVE_DOC, doc.id))
-    return ResolveSharedLinkResponse(
-        item=_serialize_native_item(doc, access, pref)
-    )

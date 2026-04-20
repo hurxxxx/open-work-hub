@@ -71,7 +71,7 @@ def test_docs_read_page_service_returns_page_content(client: TestClient) -> None
     token = session["token"]
 
     doc_response = client.post(
-        "/api/v1/docs/native-docs",
+        "/api/v1/docs/items",
         headers=_auth_headers(token),
         json={"title": "Service Doc"},
     )
@@ -97,12 +97,6 @@ def test_docs_read_page_service_returns_page_content(client: TestClient) -> None
 
         result = docs_service.read_page(
             db,
-            workspace=workspace,
-            principal=user_principal(
-                workspace_id=workspace.id,
-                user_id=user.id,
-                source="test.docs.read_page",
-            ),
             user=user,
             page_id=page["id"],
         )

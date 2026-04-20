@@ -30,6 +30,15 @@ class NativeDoc(Base):
     workspace_id: Mapped[str] = mapped_column(ForeignKey("workspaces.id"), index=True)
     owner_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
     title: Mapped[str] = mapped_column(String(200))
+    source_app: Mapped[str] = mapped_column(String(64), default="docs", nullable=False, index=True)
+    source_kind: Mapped[str] = mapped_column(String(64), default="manual", nullable=False, index=True)
+    source_ref: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
+    generation_kind: Mapped[str] = mapped_column(
+        String(32),
+        default="human",
+        nullable=False,
+        index=True,
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime,
         default=utcnow_naive,
@@ -48,6 +57,10 @@ class NativeDoc(Base):
         back_populates="doc",
         cascade="all, delete-orphan",
     )
+    containers: Mapped[list["NativeDocContainer"]] = relationship(
+        back_populates="doc",
+        cascade="all, delete-orphan",
+    )
     user_shares: Mapped[list["NativeDocUserShare"]] = relationship(
         back_populates="doc",
         cascade="all, delete-orphan",
@@ -60,6 +73,48 @@ class NativeDoc(Base):
         back_populates="doc",
         cascade="all, delete-orphan",
     )
+
+
+class NativeDocContainer(Base):
+    __tablename__ = "docs_doc_containers"
+    __table_args__ = (
+        Index(
+            "ix_docs_doc_containers_lookup",
+            "container_app",
+            "container_type",
+            "container_id",
+        ),
+        Index(
+            "uq_docs_doc_containers_primary",
+            "doc_id",
+            unique=True,
+            postgresql_where=text("is_primary IS TRUE"),
+        ),
+        UniqueConstraint(
+            "doc_id",
+            "container_app",
+            "container_type",
+            "container_id",
+            name="uq_docs_doc_containers_doc_container",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    doc_id: Mapped[str] = mapped_column(ForeignKey("docs_native_docs.id"), index=True)
+    container_app: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    container_type: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    container_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
+    is_primary: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False, index=True)
+    sort_order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow_naive, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        default=utcnow_naive,
+        onupdate=utcnow_naive,
+        nullable=False,
+    )
+
+    doc: Mapped[NativeDoc] = relationship(back_populates="containers")
 
 
 class NativeDocPage(Base):

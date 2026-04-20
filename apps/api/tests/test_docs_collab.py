@@ -13,7 +13,13 @@ from aidoo_api.domains.docs.collab_codec import blocks_to_yjs_state, yjs_state_t
 from aidoo_api.domains.auth.security import new_id
 from aidoo_api.domains.media.models import MediaFile
 from aidoo_api.core.db import get_session_factory
-from test_docs_hub import _add_task_list_member, _auth_headers, _create_task_list
+from test_docs_hub import (
+    _add_task_list_member,
+    _auth_headers,
+    _create_doc_page,
+    _create_space_doc,
+    _create_task_list,
+)
 from test_meeting import (
     _bootstrap_admin_session,
     _create_meeting,
@@ -66,7 +72,7 @@ def _create_unlinked_media(uploaded_by_id: str) -> dict[str, str]:
 
 def _create_native_doc_page(client: TestClient, token: str, workspace_slug: str) -> tuple[dict, dict]:
     create_doc_response = client.post(
-        "/api/v1/docs/native-docs",
+        "/api/v1/docs/items",
         headers=_auth_headers(token),
         json={"title": "Realtime Notes"},
     )
@@ -356,28 +362,15 @@ def test_meeting_notes_collab_session_is_revoked_when_attendee_is_removed(client
     assert revoked_session_response.status_code == 404, revoked_session_response.text
 
 
-def test_pms_space_doc_collab_session_uses_workspace_acl_and_page_ref(client: TestClient) -> None:
+def test_pms_container_doc_collab_session_uses_workspace_acl_and_page_ref(client: TestClient) -> None:
     admin = _bootstrap_admin_session(client)
     admin_token = admin["token"]
     workspace_slug = _first_workspace_slug(client, admin_token)
 
     task_list = _create_task_list(client, admin_token, key="CLAB", name="Collab List")
 
-    create_space_doc_response = client.post(
-        f"/api/v1/pms/spaces/{task_list['team_id']}/docs",
-        headers=_auth_headers(admin_token),
-        json={"title": "Space Handbook"},
-    )
-    assert create_space_doc_response.status_code == 201, create_space_doc_response.text
-    space_doc = create_space_doc_response.json()
-
-    create_page_response = client.post(
-        f"/api/v1/pms/spaces/{task_list['team_id']}/docs/pages",
-        headers=_auth_headers(admin_token),
-        json={"title": "Overview", "space_doc_id": space_doc["id"]},
-    )
-    assert create_page_response.status_code == 201, create_page_response.text
-    page = create_page_response.json()
+    space_doc = _create_space_doc(client, admin_token, task_list["team_id"], title="Space Handbook")
+    page = _create_doc_page(client, admin_token, space_doc["id"], title="Overview")
     assert page["realtime_collab"] is True
 
     member = _create_user_with_workspaces(
@@ -394,7 +387,7 @@ def test_pms_space_doc_collab_session_uses_workspace_acl_and_page_ref(client: Te
         member["temporary_password"],
     )
 
-    page_ref = _page_ref("pms_space_doc_page", page["id"])
+    page_ref = _page_ref("native_doc_page", page["id"])
     session_response = client.get(
         f"/api/v1/workspaces/{workspace_slug}/docs/collab/pages/{page_ref}/session",
         headers=_auth_headers(member_token),
@@ -402,7 +395,7 @@ def test_pms_space_doc_collab_session_uses_workspace_acl_and_page_ref(client: Te
     assert session_response.status_code == 200, session_response.text
     payload = session_response.json()
     assert payload["page_ref"] == page_ref
-    assert payload["source_type"] == "pms_space_doc_page"
+    assert payload["source_type"] == "native_doc_page"
     assert payload["source_page_id"] == page["id"]
-    assert payload["room_key"] == f"pms_space_doc_page:{page['id']}"
+    assert payload["room_key"] == f"native_doc_page:{page['id']}"
     assert payload["can_edit"] is True

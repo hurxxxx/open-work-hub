@@ -116,7 +116,7 @@
   - Alembic 마이그레이션 `6b21fc0a74c8_drop_pms_project_members` 로 테이블 DROP, 원격 dev DB 적용 완료
   - 관련 commit: `98a4700`, `742672c`, `06bd0a1`, `8d2f297`
 - [x] PMS 사이드바 List + Space Doc DnD (sibling reorder + cross-folder move)
-  - 2026-04-15 `pms_task_lists.sort_order` + `pms_space_docs.sort_order` 추가 (migration `7a3c2b9f11e8`, `updated_at DESC` 기반 backfill)
+  - 2026-04-15 `pms_task_lists.sort_order` 추가, 이후 2026-04-20 canonical docs reset로 space docs 정렬은 `docs_doc_containers.sort_order` 로 이관 (migration `e1f2a3b4c5d6`)
   - Serializer + `PATCH /api/v1/pms/lists/{id}` 가 `sort_order` 와 `folder_id` 동시 업데이트, `sort_by=sort_order` 쿼리 파라미터로 사이드바 stable 정렬
   - 프론트 공용 유틸 [apps/web/src/domains/pms/pms-sidebar-reorder.ts](apps/web/src/domains/pms/pms-sidebar-reorder.ts) — flat list 버전 (sibling + cross-parent move) + 9 vitest 단위
   - `SubSidebar.tsx`: `SortableListLink` 컴포넌트 + space 단위 `DndContext` + optimistic 업데이트 + WIP 권한 게이팅 (canCreateSpaceContent / canManageSpace) 그대로 보존

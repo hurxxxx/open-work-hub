@@ -53,5 +53,9 @@ def create_meeting_minutes_doc(
         title=f"회의록: {meeting.title} ({meeting.start_at:%Y-%m-%d})",
         first_page_title="회의록",
         content_blocks=build_minutes_blocks(summary_text, transcript_text),
+        source_app="meeting",
+        source_kind="app_generated",
+        source_ref=meeting.id,
+        generation_kind="system_ai",
     )
     return doc
