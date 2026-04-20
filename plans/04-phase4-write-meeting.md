@@ -88,9 +88,6 @@ ai_agent_run_snapshots
   conversation_id   FK conversations NOT NULL INDEX
   workspace_id      FK workspaces NOT NULL INDEX
   requested_by_user_id FK users NOT NULL
-  parent_run_id     FK ai_agent_run_snapshots NULL INDEX
-                                               -- 직전 halt 체인. 첫 halt는 NULL.
-                                               -- 재halt 시 부모 = 방금 completed된 snapshot.
   status            STRING(16) NOT NULL DEFAULT 'awaiting_approval'
                     -- awaiting_approval | resumed | completed | abandoned
   messages_json     JSONB NOT NULL             -- OpenAI canonical message list
@@ -103,7 +100,7 @@ ai_agent_run_snapshots
   INDEX (workspace_id, status, created_at)
 ```
 
-`parent_run_id`는 audit lineage 용도다. "이 최종 이슈가 어떤 halt 체인을 거쳤는지"를 한 쿼리로 복원할 수 있다. 첫 halt는 NULL이고 재halt는 직전 completed snapshot을 가리킨다.
+halt 이력은 별도 FK 없이 `conversation_id + created_at` 정렬로 복원한다 (명시적 parent 체인을 둘 만큼 lineage 쿼리가 hot path가 아님).
 
 `messages_json`은 agent가 그 halt까지 실제로 LLM에 전송한 (또는 전송할 예정이었던) 메시지 목록이다. halt 이전의 블록된 call 자체는 아직 `tool_call` assistant 메시지로는 기록되지 않는다 — 재개 턴에서 실행 결과와 짝지어 한 번에 append한다. 즉 snapshot은 **"재개 시 LLM에 먹일 canonical prefix"**를 정본으로 관리한다.
 
@@ -112,8 +109,8 @@ ai_agent_run_snapshots
 - 한 halt에 approval 여러 건을 지원할 경우(future) `blocked_call_id` → `blocked_call_ids[]` + approval N:1로 전환. 지금 스키마는 칼럼 추가 + 이름 바꾸기만 하면 되게 둔다.
 
 **Halt 체인 / Conversation 내 여러 snapshot**:
-- 한 conversation은 재halt마다 **서로 다른 `agent_run_id`를 가진 snapshot row들의 chain**을 생성한다. lineage는 `parent_run_id` 컬럼(§B.2)으로 연결.
-- "이 대화의 모든 halt 이력"은 `WHERE conversation_id=? ORDER BY created_at`으로 조회. 첫 halt의 snapshot만 `parent_run_id IS NULL`.
+- 한 conversation은 재halt마다 **서로 다른 `agent_run_id`를 가진 snapshot row들을 순차 생성**한다.
+- "이 대화의 모든 halt 이력"은 `WHERE conversation_id=? ORDER BY created_at ASC`. 별도 parent FK는 두지 않는다 (lineage 복원이 필요할 때 쿼리로 충분).
 
 **`ConversationTurn`과의 관계**:
 - **매 halt마다 `ConversationTurn.assistant` 1 row append**. meta에 그 halt의 `agent_run_id`, `pending_approvals=[{approval_id, call_id, tool, ...}]` 포함. 재halt면 그 halt의 approval 정보만 기록 (이전 halt 정보는 이전 ConversationTurn row에 이미 있음).
@@ -160,8 +157,8 @@ resolve API(REST)
 
 - 한 `agent_run_id` (= 한 snapshot)는 동시에 resume 1회만 허용. `SELECT ... FOR UPDATE` on `ai_agent_run_snapshots`로 serialize. 두 번째 시도는 409 (진행 중) 또는 410 (이미 completed).
 - snapshot.status=`completed|abandoned|resumed`로 resume 요청 → 410 gone. `resumed`는 "다른 프로세스가 현재 resume 중"이라 하여 409를 반환하고 끝나면 410으로 바뀌도록 FOR UPDATE로 연쇄 대기시킨다.
-- **conversation 단위 mutual-exclusion**: 같은 `conversation_id`에 `awaiting_approval` 상태 snapshot이 존재하는 동안 `POST /ai/chat/stream`(새 사용자 turn)은 409로 차단한다. 프론트는 §G.3에서 이미 입력을 disable하므로 normal case에는 걸리지 않고, 레이스/악성 클라이언트 방어용.
-- 반대로 stream이 먼저 새 turn을 시작해 halt 없이 끝나면 직전에 남은 `awaiting_approval` snapshot은 없어야 한다 — 만약 남아 있었다면 그 snapshot을 `abandoned`로 전이시키고 (관련 approval도 `expired`) 새 stream을 진행할지, 아니면 400으로 거절할지 결정이 필요 (§5.2 open).
+- **conversation 단위 mutual-exclusion**: 같은 `conversation_id`에 `awaiting_approval` 상태 snapshot이 살아있는 동안 `POST /ai/chat/stream`(새 사용자 turn)은 409로 차단한다. 프론트는 §G.3에서 이미 입력을 disable하므로 normal case에는 걸리지 않고, 레이스/외부 API key 클라이언트(Phase 7) 방어용.
+- **Stale lazy-abandon (확정 정책)**: `expires_at < now`인 `awaiting_approval` snapshot에 새 stream/resume이 진입하면 서버가 **먼저 그 snapshot을 `abandoned`로 전이** + 연관 approval `expired` 처리 → mutex 해제 후 새 요청을 정상 진행한다. 별도 cron이 없어도 다음 트래픽으로 자연 정리된다. cron(§B.4 `abandon_stale_snapshot`)은 mutex가 오래 풀리지 않은 conversation을 주기적으로 스위핑하는 보조 수단일 뿐 주경로는 lazy.
 - resume 중에 SSE 클라이언트가 끊어져도 서버는 루프를 계속 돈다 — 다음 halt 도달 시 직전 snapshot을 `completed`로 마감하고 새 `awaiting_approval` snapshot + approval을 생성하며 `ConversationTurn.assistant` row도 append한다. 클라이언트가 재접속하면 conversation reload에서 최신 pending approval 상태를 복원한다.
 
 ### 2.3 회의 지능화 데이터 모델
@@ -288,7 +285,7 @@ TS 쪽 `PendingApproval` 인터페이스에도 `call_id`, `expires_at_ms`, `reas
 - `resolve_approval(db, *, approval_id, decision, reason, resolver_user) -> AiToolApproval` — 상태 전이 검증 (pending → approved/rejected). 이미 resolved면 409. 만료됐으면 lazy-expire 후 410.
 - `expire_stale_approvals(db, older_than)` — cron hook (Phase 6 UI 전까지 기본 24h). 실행 시 관련 snapshot도 `abandoned`로 전이.
 - `load_snapshot(db, *, agent_run_id, for_update: bool) -> AgentRunSnapshot` — `SELECT … FOR UPDATE` 옵션.
-- `persist_snapshot_on_halt(db, *, ctx, messages_json, blocked_call_id, model_meta, parent_run_id=None) -> AgentRunSnapshot` — 첫 halt는 `parent_run_id=None`, 재halt는 직전 snapshot.id.
+- `persist_snapshot_on_halt(db, *, ctx, messages_json, blocked_call_id, model_meta) -> AgentRunSnapshot` — 첫 halt든 재halt든 동일. conversation_id + created_at 순서로 체인 파악.
 - `mark_snapshot_completed(db, snapshot) -> None` — 재halt 혹은 정상 종료 시 status 전이.
 - `mark_snapshot_resumed(db, snapshot) -> None` — resume 진입 시 `awaiting_approval` → `resumed` 전이 (중복 resume 차단용).
 - `abandon_stale_snapshot(db, snapshot, *, cause) -> None` — `awaiting_approval` → `abandoned` 전이 + 연관 approval `expired`.
@@ -340,7 +337,7 @@ TS 쪽 `PendingApproval` 인터페이스에도 `call_id`, `expires_at_ms`, `reas
   5. snapshot status=`resumed`로 전이.
   6. agent 루프 main loop 계속 → 또 blocked가 나오면:
      - 현재 snapshot.status = `completed` 로 마감 + updated_at 갱신.
-     - 새 `AgentRunSnapshot` 생성: 새 `agent_run_id`, `parent_run_id` = 방금 마감한 snapshot.id, `messages_json` = 현재 halt까지의 canonical prefix (rejected/approved tool pair 포함), status=`awaiting_approval`.
+     - 새 `AgentRunSnapshot` 생성: 새 `agent_run_id`, `messages_json` = 현재 halt까지의 canonical prefix (rejected/approved tool pair 포함), status=`awaiting_approval`.
      - 새 `AiToolApproval` 생성.
      - 새 `approval_required` envelope + `done{awaiting_approval, meta:{pending_approval_id, pending_call_id, agent_run_id}}` emit 후 return.
      - 새 `ConversationTurn.assistant` row append (meta에 새 pending_approvals).
@@ -543,12 +540,15 @@ scope를 건드리는 write 툴(예: `pms.update_issue` with 다른 issue_id)은
     - `approval_resolved(reason=...)` envelope에도 reason 포함.
   - **순차 다건 시나리오**:
     - 모델이 턴 1에서 action 3개를 요구 → 첫 번째만 blocked persist, 나머지 2개는 버림.
-    - 승인 후 resume 중 agent가 또 blocked를 냄 → 직전 snapshot.status=`completed`, 새 snapshot이 `parent_run_id`=직전 id로 생성.
+    - 승인 후 resume 중 agent가 또 blocked를 냄 → 직전 snapshot.status=`completed`, 새 snapshot(새 `agent_run_id`) + 새 approval 생성.
     - 반복. 최종적으로 3 issue가 모두 생성되고 각 생성마다 독립 `AiToolApproval` + `AgentRunSnapshot` row가 남는다.
-    - Lineage 쿼리: 같은 `conversation_id`의 snapshot을 `parent_run_id` 체인으로 타고 올라가면 halt 3건이 순서대로 연결.
+    - Lineage 복원: `WHERE conversation_id=? ORDER BY created_at ASC`로 halt 3건이 시간 순서대로 나열됨을 검증.
   - **Conversation 상호배제**:
     - `awaiting_approval` 스냅샷이 있는 conversation에 `POST /ai/chat/stream` → 409.
     - 해당 approval을 resolve + resume 정상 종료 후 동일 conversation에 stream → 200.
+  - **Stale lazy-abandon**:
+    - `expires_at`을 과거로 직접 갱신한 `awaiting_approval` snapshot이 존재하는 conversation에 새 stream → 서버가 먼저 snapshot `abandoned` + approval `expired` 전이 후 stream이 200으로 진행.
+    - 동일 snapshot에 대해 resume → 410 (이미 abandoned).
   - 동시성:
     - 같은 agent_run_id로 resume 동시 호출 2건 → 하나만 성공, 다른 하나 409.
 - `test_ai_canonical_messages.py` (신규):
@@ -625,9 +625,9 @@ DB migration은 전진만. `AiToolApproval` / `MeetingInsight` 테이블과 `Con
 | **Reject reason 계약** | modal → resolve API(`reason?`) → DB `AiToolApproval.reject_reason` → envelope `approval_resolved.reason` → LLM 재개 턴 tool message `{status:"rejected",reason:"..."}`까지 한 계약으로 흐름. |
 | **승인 상태 영속화** | `AiToolApproval` 테이블. `(agent_run_id, tool_call_id)` UNIQUE. Conversation에 embed 안 함. approval row 생성은 **agent halt 확정 시점**에 1회만 (tool_service 내부에서 선행 생성 금지). |
 | **Agent pause/resume 모델** | 제안 턴 halt + snapshot persist → resolve REST → 별도 `/ai/chat/resume` SSE 턴. 단일 SSE hold 안 함. 같은 agent_run_id 동시 resume 금지(FOR UPDATE). |
-| **Snapshot 수명주기** | 재halt마다 **새 `AgentRunSnapshot` row + 새 `agent_run_id`**를 만든다. 직전 snapshot은 `completed`로 마감하고 재사용하지 않는다. |
-| **Snapshot lineage** | 새 snapshot의 `parent_run_id`가 직전 completed snapshot을 가리킨다 (첫 halt는 NULL). "이 이슈가 어떤 halt 체인으로 만들어졌나"를 단일 쿼리로 복원 가능. |
-| **Conversation 단위 상호배제** | `awaiting_approval` snapshot이 살아있는 동안 같은 conversation에 새 stream turn을 열 수 없다(409). 프론트는 §G.3에서 입력 차단, 서버는 레이스 방어. |
+| **Snapshot 수명주기** | 재halt마다 **새 `AgentRunSnapshot` row + 새 `agent_run_id`**를 만든다. 직전 snapshot은 `completed`로 마감하고 재사용하지 않는다. halt 이력은 `conversation_id + created_at`으로 복원 (별도 parent FK 두지 않음). |
+| **Conversation 단위 상호배제** | `awaiting_approval` snapshot이 살아있는 동안 같은 conversation에 새 stream turn을 열 수 없다(409). 프론트는 §G.3에서 입력 차단, 서버는 레이스/외부 클라이언트 방어. |
+| **Stale snapshot 처리** | `expires_at` 경과한 `awaiting_approval`은 **다음 stream/resume 시 lazy-abandon**: 서버가 먼저 `abandoned` + approval `expired` 전이 후 새 요청 진행. cron은 보조. |
 | **MeetingInsight 스키마** | 별도 테이블 + `payload_json` 하이브리드. (로드맵 open 결정 해소) |
 | **scope_ref 표현** | `scope_ref` + `scope_resource_id` **두 컬럼 쌍**. 문서 전체에서 `"meeting:<id>"` 단일 문자열 표현 금지. |
 | **Idempotency** | handler는 `approval_id`를 idempotency key로 사용. 이중 실행 방지. |
@@ -646,7 +646,6 @@ DB migration은 전진만. `AiToolApproval` / `MeetingInsight` 테이블과 `Con
 | `scope_ref=pms_issue` / `scope_ref=docs_page` 지원 범위 (Phase 4에 meeting만 우선?) | Step F 킥오프 |
 | write 툴 시스템 프롬프트 문구 (LLM이 쉽게 남용 않도록 "신중하게 제안" 유도) | Step D 리뷰 단계 |
 | 만료 24h 값 조정 (정책 UI 없는 동안 상수) | Step B 구현 전 |
-| 만료된 `awaiting_approval` snapshot을 새 stream 시작 시 `abandoned`로 강제 전이할지, 409로 거절할지 | Step C 구현 시 (§2.2.3 마지막 bullet) |
 
 ### 5.3 Phase 4 이후로 미룸
 
