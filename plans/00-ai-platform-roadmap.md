@@ -374,6 +374,64 @@ Phase별 신규 영역:
 | 비용/성능 모니터링 UI | Phase 6 확장 후보 |
 | 외부 풀 프로바이더 확장 순서 (Anthropic/OpenAI) | 도입 필요 시점 |
 | 로컬 whisper 전환 시점 | ASR 품질 측정 후 |
+| Artifact Canvas 고도화 범위/우선순위 | Phase 4 이후 제품 하드닝 시 |
+
+---
+
+## Deferred Product Backlog — Artifact Canvas 고도화
+
+현재 artifact 구현은 **type-aware renderer + live preview** 중심의 viewer 단계다. 향후 Claude Artifacts/Canvas 급의 작업 표면으로 고도화하려면 아래 태스크를 별도 트랙으로 잡는다.
+
+### 킥오프 조건
+- Phase 3의 read tool/service layer가 안정화되어 대화-도구-산출물의 책임 경계가 고정될 것.
+- 가능하면 Phase 4의 write/approval 플로우 이후에 착수할 것. artifact 수정 제안과 승인 경계를 같은 UX 축에서 다뤄야 하기 때문.
+- Docs 저장/공유와의 연결을 고려하므로 workspace-level 저장 전략이 먼저 정리되어야 함.
+
+### P0 — 캔버스 최소 요건
+1. **Artifact identity + version chain**
+   - assistant turn 부속 payload가 아니라 “같은 artifact의 여러 revision”을 추적하는 모델로 승격.
+   - version selector와 revision metadata(생성 시각, source turn, title 변경 이력) 제공.
+   - follow-up prompt가 “새 artifact 추가”가 아니라 “선택 artifact의 새 버전 생성”으로 연결되게 조정.
+2. **Active artifact targeting**
+   - 다중 artifact가 있는 대화에서 “지금 어떤 artifact를 수정하는지” 명시적으로 선택.
+   - 모델 전송 payload에도 selected artifact id / target revision 정보를 포함.
+   - 여러 artifact가 공존할 때 후속 요청이 엉뚱한 artifact를 수정하지 않도록 방지.
+3. **Canvas action bar**
+   - 공통 액션: source 보기, 복사, 다운로드, 새 대화로 fork, Docs로 저장/승격.
+   - 타입별 액션: HTML export, SVG download, Markdown/Code raw export.
+   - 현재 단순 side panel을 “작업 표면”으로 바꾸는 최소 UI.
+4. **Runtime error surface + fix loop**
+   - HTML/interactive artifact의 iframe runtime error/console capture.
+   - 캔버스 내부 오류 배너 + “이 오류로 다시 고쳐줘” 액션 제공.
+   - 대화창에 오류 컨텍스트를 자동 주입하는 repair prompt 경로 마련.
+
+### P1 — 재사용성과 워크스페이스 통합
+1. **Artifact inventory**
+   - conversation 종속 리스트가 아니라 workspace 차원의 “내 artifact / 최근 artifact” 진입점 제공.
+   - 검색, 정렬, reopen, origin conversation 역추적 지원.
+2. **Artifact → Docs 승격**
+   - document/html/code artifact를 Docs 아이템 또는 페이지로 저장.
+   - 저장 후 artifact와 docs 리소스 간 backlink 유지 여부 결정.
+3. **Multi-artifact control surface**
+   - 현재 URL query param 기반 단일 open 상태를 넘어, artifact switcher / overview 제공.
+   - 선택된 artifact만 다음 수정 대상으로 쓰인다는 UI affordance 강화.
+
+### P2 — 플랫폼화 후보
+1. **Share / Customize**
+   - 내부 공유 링크, 읽기 전용 보기, fork/customize 흐름.
+   - 원본 artifact와 fork artifact의 lineage 추적.
+2. **Publish / Embed**
+   - 외부 공개가 필요할 때만 착수.
+   - 허용 도메인, revoke/unpublish, 임베드 코드 정책 포함.
+3. **AI-powered artifacts / MCP / persistent storage**
+   - artifact 내부 AI 호출, 외부 툴 연동, 상태 저장은 별도 제품 결정 후 도입.
+   - 보안/비용/감사 모델을 먼저 확정하지 않으면 금지.
+
+### 검증 기준
+- 다중 artifact 대화에서 사용자가 선택한 artifact만 후속 수정 대상으로 반영된다.
+- 같은 artifact의 과거 버전과 최신 버전을 전환해도 내용과 메타데이터가 일관된다.
+- HTML artifact 오류를 사용자가 캔버스 안에서 확인하고, repair prompt를 한 번에 재실행할 수 있다.
+- 문서형 artifact를 Docs로 저장한 뒤 workspace 권한 체계 안에서 재사용할 수 있다.
 
 ---
 
