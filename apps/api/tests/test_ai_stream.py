@@ -19,7 +19,10 @@ import uvicorn
 
 from aidoo_api.core import llm as llm_core
 from aidoo_api.core.db import get_engine
+from aidoo_api.core.llm_adapters import StreamChunk
 from aidoo_api.core.settings import get_settings
+from aidoo_api.domains.ai import agent as ai_agent
+from aidoo_api.domains.ai import approvals as ai_approvals
 from aidoo_api.domains.ai.models import LlmPolicy
 from aidoo_api.domains.ai import router as ai_router
 from aidoo_api.domains.auth.models import AuditLog, Workspace, WorkspaceAppEntitlement
@@ -710,6 +713,94 @@ def test_chat_stream_agent_loop_executes_tool_and_keeps_shared_agent_run_id(
     tool_row = _tool_audit_rows()[-1]
     assert len({row.payload["agent_run_id"] for row in llm_rows}) == 1
     assert tool_row.payload["agent_run_id"] == llm_rows[-1].payload["agent_run_id"]
+
+
+def test_chat_stream_agent_loop_halts_for_approval_required_tool(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    auth = _seeded_dev_login(client, "delivery-hub-admin")
+    slug = "delivery-hub"
+    _set_policy("chatbot", "local_only")
+
+    async def fake_complete_chat_stream(*args: Any, **kwargs: Any):
+        yield (
+            StreamChunk(
+                kind="tool_call_start",
+                tool_call_id="call-1",
+                tool_name="pms.create_issue",
+            ),
+            None,
+            None,
+        )
+        yield (
+            StreamChunk(
+                kind="tool_call_args",
+                tool_call_id="call-1",
+                tool_name="pms.create_issue",
+                args_delta='{"title":"Approval issue"}',
+            ),
+            None,
+            None,
+        )
+        yield (
+            StreamChunk(kind="done", finish_reason="tool_calls"),
+            None,
+            None,
+        )
+
+    monkeypatch.setattr(ai_agent, "complete_chat_stream", fake_complete_chat_stream)
+
+    def blocked_tool_call(*args: Any, **kwargs: Any):
+        return ai_router.ToolCallExecution(
+            call_id="call-1",
+            tool_name="pms.create_issue",
+            arguments_json='{"title":"Approval issue"}',
+            status="blocked",
+            resource_preview="Create PMS issue Approval issue",
+        )
+
+    monkeypatch.setattr(ai_agent, "execute_tool_call", blocked_tool_call)
+
+    status_code, events = _stream_post(
+        client,
+        _workspace_ai_path(slug, "/chat/stream"),
+        headers=_auth_headers(auth["token"]),
+        json_body={
+            "messages": [{"role": "user", "content": "이슈 만들어줘"}],
+            "persist": True,
+        },
+    )
+
+    assert status_code == 200
+    chat = _chat_events(events)
+    assert [event["type"] for event in chat] == [
+        "tool_call_started",
+        "tool_call_args_delta",
+        "approval_required",
+        "done",
+    ]
+    assert chat[2]["data"]["tool"] == "pms.create_issue"
+    assert chat[3]["data"]["finish_reason"] == "awaiting_approval"
+    approval_id = chat[2]["data"]["approval_id"]
+    agent_run_id = chat[3]["data"]["meta"]["agent_run_id"]
+    assert approval_id
+    assert agent_run_id
+
+    with Session(get_engine()) as session:
+        approval = session.scalar(
+            select(ai_approvals.AiToolApproval).where(
+                ai_approvals.AiToolApproval.id == approval_id
+            )
+        )
+        snapshot = session.scalar(
+            select(ai_approvals.AgentRunSnapshot).where(
+                ai_approvals.AgentRunSnapshot.id == agent_run_id
+            )
+        )
+        assert approval is not None
+        assert snapshot is not None
+        assert approval.status == "pending"
+        assert snapshot.status == "awaiting_approval"
 
 
 def test_chat_stream_agent_loop_uses_filtered_tool_specs_from_mcp_manifest(

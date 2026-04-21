@@ -25,7 +25,7 @@ from aidoo_api.domains.auth.models import Team, TeamMember, User, Workspace
 from aidoo_api.domains.auth.security import new_id
 from aidoo_api.core.settings import get_settings
 from aidoo_api.core.storage import get_minio_client
-from aidoo_api.domains.media.router import sync_embedded_media, cleanup_media_for_resource
+from aidoo_api.domains.media.router import cleanup_media_for_resource
 from aidoo_api.domains.pms.models import (
     Attachment,
     ChecklistItem,
@@ -1209,17 +1209,15 @@ def _log_issue_activity(
     from_value: str | None = None,
     to_value: str | None = None,
 ) -> None:
-    db.add(
-        IssueActivityLog(
-            id=new_id(),
-            issue_id=issue_id,
-            actor_id=actor_id,
-            action=action,
-            field_name=field_name,
-            from_value=from_value,
-            to_value=to_value,
-            message=message,
-        )
+    pms_service._log_issue_activity(
+        db,
+        issue_id,
+        actor_id,
+        action,
+        message,
+        field_name=field_name,
+        from_value=from_value,
+        to_value=to_value,
     )
 
 
@@ -1232,39 +1230,19 @@ def _create_notification(
     reference_type: str = "issue",
     reference_id: str | None = None,
 ) -> None:
-    db.add(
-        Notification(
-            id=new_id(),
-            user_id=user_id,
-            type=ntype,
-            title=title,
-            body=body,
-            reference_type=reference_type,
-            reference_id=reference_id,
-        )
+    pms_service._create_notification(
+        db,
+        user_id,
+        ntype,
+        title,
+        body,
+        reference_type=reference_type,
+        reference_id=reference_id,
     )
 
 
 def _extract_mentions_from_blocks(blocks: list[dict], out: set[str]) -> None:
-    """Recursively extract @mention user IDs from BlockNote-style content blocks."""
-    import re
-
-    for block in blocks:
-        if isinstance(block, dict):
-            # Check inline content for mention-type nodes
-            for content_item in block.get("content", []):
-                if isinstance(content_item, dict):
-                    if content_item.get("type") == "mention":
-                        uid = content_item.get("props", {}).get("user_id") or content_item.get("attrs", {}).get("id")
-                        if uid:
-                            out.add(uid)
-                    text = content_item.get("text", "")
-                    if text:
-                        out.update(re.findall(r"@([0-9a-f-]{36})", text))
-            # Recurse into children
-            for child in block.get("children", []):
-                if isinstance(child, dict):
-                    _extract_mentions_from_blocks([child], out)
+    pms_service._extract_mentions_from_blocks(blocks, out)
 
 
 def _build_attachment_download_url(storage_key: str) -> str:
@@ -1278,18 +1256,11 @@ def _build_attachment_download_url(storage_key: str) -> str:
 
 
 def _next_issue_number(db: Session, list_id: str) -> int:
-    current = db.scalar(select(func.max(Issue.issue_number)).where(Issue.list_id == list_id))
-    return int(current or 0) + 1
+    return pms_service._next_issue_number(db, list_id)
 
 
 def _next_issue_board_position(db: Session, list_id: str, status_value: str) -> int:
-    current = db.scalar(
-        select(func.max(Issue.board_position)).where(
-            Issue.list_id == list_id,
-            Issue.status == status_value,
-        )
-    )
-    return int(current or 0) + 1
+    return pms_service._next_issue_board_position(db, list_id, status_value)
 
 
 def _validate_member_user(db: Session, task_list: TaskList, user_id: str) -> User:
@@ -1304,17 +1275,11 @@ def _validate_member_user(db: Session, task_list: TaskList, user_id: str) -> Use
 
 
 def _validate_issue_assignee(db: Session, task_list: TaskList, assignee_id: str | None) -> None:
-    if assignee_id is None:
-        return
-    if task_list.team_id is None or assignee_id not in _space_member_ids(db, task_list.team_id):
-        raise HTTPException(status_code=400, detail="Assignee must be a task list member.")
+    pms_service._validate_issue_assignee(db, task_list, assignee_id)
 
 
 def _validate_milestone(task_list: TaskList, milestone_id: str | None) -> None:
-    if milestone_id is None:
-        return
-    if milestone_id not in {milestone.id for milestone in task_list.milestones}:
-        raise HTTPException(status_code=400, detail="Milestone does not belong to this list.")
+    pms_service._validate_milestone(task_list, milestone_id)
 
 
 def _validate_parent_issue(
@@ -1324,42 +1289,11 @@ def _validate_parent_issue(
     *,
     issue_id: str | None = None,
 ) -> None:
-    if parent_id is None:
-        return
-
-    parent = db.scalar(select(Issue).where(Issue.id == parent_id))
-    if parent is None:
-        raise HTTPException(status_code=404, detail="Parent issue not found.")
-    if parent.list_id != task_list.id:
-        raise HTTPException(status_code=400, detail="Parent issue must belong to the same list.")
-    if issue_id is not None and parent.id == issue_id:
-        raise HTTPException(status_code=409, detail="Issue cannot be its own parent.")
-
-    visited: set[str] = set()
-    ancestor: Issue | None = parent
-    while ancestor is not None:
-        if ancestor.id in visited:
-            raise HTTPException(status_code=409, detail="Issue parent relationship cannot contain a cycle.")
-        visited.add(ancestor.id)
-        if issue_id is not None and ancestor.parent_id == issue_id:
-            raise HTTPException(status_code=409, detail="Issue parent relationship cannot contain a cycle.")
-        if ancestor.parent_id is None:
-            break
-        ancestor = db.scalar(select(Issue).where(Issue.id == ancestor.parent_id))
+    pms_service._validate_parent_issue(db, task_list, parent_id, issue_id=issue_id)
 
 
 def _set_issue_labels(db: Session, issue: Issue, label_ids: list[str], task_list: TaskList) -> None:
-    if not label_ids:
-        issue.label_links.clear()
-        return
-
-    allowed_labels = {label.id: label for label in task_list.labels}
-    if any(label_id not in allowed_labels for label_id in label_ids):
-        raise HTTPException(status_code=400, detail="One or more labels are invalid for this list.")
-
-    issue.label_links.clear()
-    for label_id in label_ids:
-        issue.label_links.append(IssueLabel(id=new_id(), label_id=label_id))
+    pms_service._set_issue_labels(db, issue, label_ids, task_list)
 
 
 def _get_issue_for_user(
@@ -1369,40 +1303,12 @@ def _get_issue_for_user(
     *,
     require_editor: bool = False,
 ) -> tuple[Issue, TaskList]:
-    issue = db.scalar(
-        select(Issue)
-        .options(
-            selectinload(Issue.task_list).selectinload(TaskList.labels),
-            selectinload(Issue.milestone),
-            selectinload(Issue.assignee),
-            selectinload(Issue.reporter),
-            selectinload(Issue.comments).selectinload(IssueComment.author),
-            selectinload(Issue.activity_logs).selectinload(IssueActivityLog.actor),
-            selectinload(Issue.label_links).selectinload(IssueLabel.label),
-            selectinload(Issue.subtasks).selectinload(Issue.assignee),
-            selectinload(Issue.subtasks).selectinload(Issue.reporter),
-            selectinload(Issue.subtasks).selectinload(Issue.milestone),
-            selectinload(Issue.subtasks).selectinload(Issue.comments),
-            selectinload(Issue.subtasks).selectinload(Issue.label_links).selectinload(IssueLabel.label),
-            selectinload(Issue.subtasks).selectinload(Issue.subtasks),
-            selectinload(Issue.subtasks).selectinload(Issue.checklist_items),
-            selectinload(Issue.subtasks).selectinload(Issue.time_entries),
-            selectinload(Issue.attachments).selectinload(Attachment.uploaded_by),
-            selectinload(Issue.checklist_items),
-            selectinload(Issue.time_entries).selectinload(TimeEntry.user),
-            selectinload(Issue.assignee_links).selectinload(IssueAssignee.user),
-        )
-        .where(Issue.id == issue_id)
+    return pms_service._get_issue_for_user(
+        db,
+        user,
+        issue_id,
+        require_editor=require_editor,
     )
-    if issue is None:
-        raise HTTPException(status_code=404, detail="Issue not found.")
-
-    if require_editor:
-        task_list, _ = _ensure_list_editor(db, user, issue.list_id)
-    else:
-        _ensure_issue_readable(db, user, issue)
-        task_list = issue.task_list
-    return issue, task_list
 
 
 @router.get("/spaces", response_model=list[SpaceItem])
@@ -2120,60 +2026,32 @@ def create_issue(
     payload: IssueCreateRequest,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
+    workspace: Workspace = Depends(require_current_workspace),
 ) -> IssueListItem:
-    task_list, _ = _ensure_list_editor(db, current_user, list_id)
-    _validate_issue_assignee(db, task_list, payload.assignee_id)
-    _validate_milestone(task_list, payload.milestone_id)
-    _validate_parent_issue(db, task_list, payload.parent_id)
-    next_position = _next_issue_board_position(db, list_id, payload.status)
-    issue = Issue(
-        id=new_id(),
-        list_id=task_list.id,
-        issue_number=_next_issue_number(db, task_list.id),
-        title=payload.title.strip(),
-        description=payload.description.strip(),
+    return pms_service.create_issue(
+        db,
+        workspace=workspace,
+        principal=user_principal(
+            workspace_id=workspace.id,
+            user_id=current_user.id,
+            source="api.pms.create_issue",
+        ),
+        user=current_user,
+        list_id=list_id,
+        title=payload.title,
+        description=payload.description,
         description_blocks=payload.description_blocks,
-        parent_id=payload.parent_id,
         status=payload.status,
         priority=payload.priority,
         assignee_id=payload.assignee_id,
-        reporter_id=current_user.id,
         milestone_id=payload.milestone_id,
+        parent_id=payload.parent_id,
         start_date=payload.start_date,
         due_date=payload.due_date,
         estimate_hours=payload.estimate_hours,
         recurrence_rule=payload.recurrence_rule,
-        board_position=next_position,
+        label_ids=payload.label_ids,
     )
-    db.add(issue)
-    db.flush()
-    _set_issue_labels(db, issue, payload.label_ids, task_list)
-    if payload.description_blocks:
-        sync_embedded_media(db, payload.description_blocks, "issue", issue.id, current_user)
-    _log_issue_activity(
-        db,
-        issue.id,
-        current_user.id,
-        "created",
-        f"{current_user.full_name} created {_issue_reference(issue)}.",
-    )
-    db.commit()
-    issue = db.scalar(
-        select(Issue)
-        .options(
-            selectinload(Issue.task_list),
-            selectinload(Issue.milestone),
-            selectinload(Issue.assignee),
-            selectinload(Issue.reporter),
-            selectinload(Issue.comments),
-            selectinload(Issue.label_links).selectinload(IssueLabel.label),
-            selectinload(Issue.subtasks),
-            selectinload(Issue.checklist_items),
-            selectinload(Issue.time_entries),
-        )
-        .where(Issue.id == issue.id)
-    )
-    return _serialize_issue(issue)
 
 
 @router.get("/issues/assigned", response_model=IssueListResponse)
@@ -2222,134 +2100,35 @@ def update_issue(
     payload: IssueUpdateRequest,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
+    workspace: Workspace = Depends(require_current_workspace),
 ) -> IssueListItem:
-    issue, task_list = _get_issue_for_user(db, current_user, issue_id, require_editor=True)
-    if "assignee_id" in payload.model_fields_set:
-        _validate_issue_assignee(db, task_list, payload.assignee_id)
-    if "milestone_id" in payload.model_fields_set:
-        _validate_milestone(task_list, payload.milestone_id)
-    if "parent_id" in payload.model_fields_set:
-        _validate_parent_issue(db, task_list, payload.parent_id, issue_id=issue.id)
-
-    old_status = issue.status
-    nullable_fields = {
-        "assignee_id",
-        "milestone_id",
-        "start_date",
-        "due_date",
-        "recurrence_rule",
-    }
-    field_specs = [
-        ("title", "updated title"),
-        ("description", "updated description"),
-        ("status", "changed status"),
-        ("priority", "changed priority"),
-        ("assignee_id", "changed assignee"),
-        ("milestone_id", "changed milestone"),
-        ("start_date", "updated start date"),
-        ("due_date", "updated due date"),
-        ("board_position", "reordered board position"),
-        ("archived", "changed archive state"),
-        ("estimate_hours", "updated estimate"),
-        ("recurrence_rule", "updated recurrence"),
-    ]
-    for field_name, message in field_specs:
-        if field_name not in payload.model_fields_set:
-            continue
-        value = getattr(payload, field_name)
-        if value is None and field_name not in nullable_fields:
-            continue
-        previous = getattr(issue, field_name)
-        normalized_value = value.strip() if isinstance(value, str) else value
-        if previous == normalized_value:
-            continue
-        setattr(issue, field_name, normalized_value)
-        _log_issue_activity(
-            db,
-            issue.id,
-            current_user.id,
-            "updated",
-            f"{current_user.full_name} {message} for {_issue_reference(issue)}.",
-            field_name=field_name,
-            from_value=str(previous) if previous is not None else None,
-            to_value=str(normalized_value) if normalized_value is not None else None,
-        )
-
-    if "parent_id" in payload.model_fields_set:
-        previous = issue.parent_id
-        issue.parent_id = payload.parent_id
-        if previous != payload.parent_id:
-            _log_issue_activity(
-                db,
-                issue.id,
-                current_user.id,
-                "updated",
-                f"{current_user.full_name} {'removed parent' if payload.parent_id is None else 'changed parent'} for {_issue_reference(issue)}.",
-                field_name="parent_id",
-                from_value=previous,
-                to_value=payload.parent_id,
-            )
-
-    if "description_blocks" in payload.model_fields_set:
-        issue.description_blocks = payload.description_blocks
-        sync_embedded_media(db, payload.description_blocks, "issue", issue.id, current_user)
-        _log_issue_activity(
-            db,
-            issue.id,
-            current_user.id,
-            "updated",
-            f"{current_user.full_name} updated description for {_issue_reference(issue)}.",
-            field_name="description_blocks",
-        )
-
-    if payload.label_ids is not None:
-        _set_issue_labels(db, issue, payload.label_ids, task_list)
-        _log_issue_activity(
-            db,
-            issue.id,
-            current_user.id,
-            "updated",
-            f"{current_user.full_name} updated labels for {_issue_reference(issue)}.",
-            field_name="label_ids",
-        )
-
-    if payload.status is not None and payload.status != old_status and payload.board_position is None:
-        issue.board_position = _next_issue_board_position(db, issue.list_id, payload.status)
-
-    # Notification triggers
-    ref = _issue_reference(issue)
-    if payload.assignee_id is not None and payload.assignee_id != current_user.id:
-        _create_notification(
-            db, payload.assignee_id, "assigned",
-            f"{ref} assigned to you",
-            f"{current_user.full_name} assigned {ref} ({issue.title}) to you.",
-            reference_id=issue.id,
-        )
-    if payload.status is not None and payload.status != old_status and issue.assignee_id and issue.assignee_id != current_user.id:
-        _create_notification(
-            db, issue.assignee_id, "status_changed",
-            f"{ref} status → {ISSUE_STATUS_LABELS.get(payload.status, payload.status)}",
-            f"{current_user.full_name} changed status of {ref} to {ISSUE_STATUS_LABELS.get(payload.status, payload.status)}.",
-            reference_id=issue.id,
-        )
-
-    db.commit()
-    issue = db.scalar(
-        select(Issue)
-        .options(
-            selectinload(Issue.task_list),
-            selectinload(Issue.milestone),
-            selectinload(Issue.assignee),
-            selectinload(Issue.reporter),
-            selectinload(Issue.comments),
-            selectinload(Issue.label_links).selectinload(IssueLabel.label),
-            selectinload(Issue.subtasks),
-            selectinload(Issue.checklist_items),
-            selectinload(Issue.time_entries),
-        )
-        .where(Issue.id == issue.id)
+    return pms_service.update_issue(
+        db,
+        workspace=workspace,
+        principal=user_principal(
+            workspace_id=workspace.id,
+            user_id=current_user.id,
+            source="api.pms.update_issue",
+        ),
+        user=current_user,
+        issue_id=issue_id,
+        provided_fields=set(payload.model_fields_set),
+        title=payload.title,
+        description=payload.description,
+        description_blocks=payload.description_blocks,
+        parent_id=payload.parent_id,
+        status=payload.status,
+        priority=payload.priority,
+        assignee_id=payload.assignee_id,
+        milestone_id=payload.milestone_id,
+        start_date=payload.start_date,
+        due_date=payload.due_date,
+        board_position=payload.board_position,
+        archived=payload.archived,
+        estimate_hours=payload.estimate_hours,
+        recurrence_rule=payload.recurrence_rule,
+        label_ids=payload.label_ids,
     )
-    return _serialize_issue(issue)
 
 
 @router.patch("/lists/{list_id}/issues/bulk", response_model=BulkUpdateResponse)
@@ -2472,59 +2251,21 @@ def create_issue_comment(
     payload: IssueCommentCreateRequest,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
+    workspace: Workspace = Depends(require_current_workspace),
 ) -> IssueCommentItem:
-    issue, _ = _get_issue_for_user(db, current_user, issue_id, require_editor=True)
-    comment = IssueComment(
-        id=new_id(),
-        issue_id=issue.id,
-        author_id=current_user.id,
-        body=payload.body.strip(),
+    return pms_service.add_issue_comment(
+        db,
+        workspace=workspace,
+        principal=user_principal(
+            workspace_id=workspace.id,
+            user_id=current_user.id,
+            source="api.pms.create_issue_comment",
+        ),
+        user=current_user,
+        issue_id=issue_id,
+        body=payload.body,
         body_blocks=payload.body_blocks,
     )
-    db.add(comment)
-    _log_issue_activity(
-        db,
-        issue.id,
-        current_user.id,
-        "commented",
-        f"{current_user.full_name} added a comment to {_issue_reference(issue)}.",
-    )
-    # Notify assignee and reporter (excluding comment author)
-    ref = _issue_reference(issue)
-    notify_ids = {uid for uid in [issue.assignee_id, issue.reporter_id] if uid and uid != current_user.id}
-    for uid in notify_ids:
-        _create_notification(
-            db, uid, "commented",
-            f"New comment on {ref}",
-            f"{current_user.full_name} commented on {ref} ({issue.title}).",
-            reference_id=issue.id,
-        )
-
-    # Parse @mentions from comment body and body_blocks
-    import re
-
-    mentioned_ids: set[str] = set()
-    if payload.body:
-        mentioned_ids.update(re.findall(r"@([0-9a-f-]{36})", payload.body))
-    if payload.body_blocks:
-        _extract_mentions_from_blocks(payload.body_blocks, mentioned_ids)
-    mentioned_ids -= notify_ids
-    mentioned_ids.discard(current_user.id)
-    for uid in mentioned_ids:
-        user = db.scalar(select(User).where(User.id == uid))
-        if user is not None:
-            _create_notification(
-                db, uid, "mentioned",
-                f"Mentioned in {ref}",
-                f"{current_user.full_name} mentioned you in a comment on {ref}.",
-                reference_id=issue.id,
-            )
-
-    db.commit()
-    comment = db.scalar(
-        select(IssueComment).options(selectinload(IssueComment.author)).where(IssueComment.id == comment.id)
-    )
-    return _serialize_comment(comment)
 
 
 @router.get("/issues/{issue_id}/activity-logs", response_model=ActivityLogListResponse)
@@ -3807,5 +3548,3 @@ def delete_folder(
     db.delete(folder)
     db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
-
-

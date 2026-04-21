@@ -6,6 +6,8 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from aidoo_api.core.settings import get_settings
+from aidoo_api.domains.ai.registry import reset_ai_capability_registry
 from aidoo_api.core.db import get_engine
 from aidoo_api.core.db import get_session_factory
 from aidoo_api.domains.auth.access import ensure_dev_login_seed_data
@@ -53,6 +55,13 @@ def _tool_audit_rows() -> list[AuditLog]:
                 .order_by(AuditLog.created_at.asc())
             ).all()
         )
+
+
+def _reset_settings_and_registry() -> None:
+    cache_clear = getattr(get_settings, "cache_clear", None)
+    if cache_clear is not None:
+        cache_clear()
+    reset_ai_capability_registry()
 
 
 def test_ai_tool_invoke_search_issues_returns_workspace_results(client: TestClient) -> None:
@@ -249,3 +258,99 @@ def test_ai_tool_invoke_blocks_hidden_tool_and_audits_blocked(client: TestClient
     audit_payload = _tool_audit_rows()[-1].payload
     assert audit_payload["tool_name"] == "planner.list_events"
     assert audit_payload["status"] == "blocked"
+
+
+def test_ai_tool_invoke_pms_write_tool_requires_approval_when_enabled(
+    client: TestClient,
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv("AIDOO_AI_WRITE_TOOLS_ENABLED", "1")
+    _reset_settings_and_registry()
+    try:
+        session = _dev_login(client, "delivery-hub-admin")
+        token = session["token"]
+
+        task_list_response = client.post(
+            "/api/v1/pms/lists",
+            headers=_auth_headers(token),
+            json={"key": "AITOOLW", "name": "AI Tool Write List", "description": "write source"},
+        )
+        assert task_list_response.status_code == 201, task_list_response.text
+        task_list = task_list_response.json()
+
+        response = client.post(
+            _workspace_tool_path("delivery-hub", "pms.create_issue"),
+            headers=_auth_headers(token),
+            json={"arguments": {"list_id": task_list["id"], "title": "AI gated issue"}},
+        )
+
+        assert response.status_code == 409, response.text
+        assert "requires approval before execution" in response.json()["detail"]
+        audit_payload = _tool_audit_rows()[-1].payload
+        assert audit_payload["tool_name"] == "pms.create_issue"
+        assert audit_payload["status"] == "blocked"
+    finally:
+        monkeypatch.delenv("AIDOO_AI_WRITE_TOOLS_ENABLED", raising=False)
+        _reset_settings_and_registry()
+
+
+def test_ai_tool_invoke_meeting_planner_and_docs_write_tools_require_approval_when_enabled(
+    client: TestClient,
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv("AIDOO_AI_WRITE_TOOLS_ENABLED", "1")
+    _reset_settings_and_registry()
+    try:
+        session = _dev_login(client, "delivery-hub-admin")
+        token = session["token"]
+
+        docs_response = client.post(
+            "/api/v1/workspaces/delivery-hub/docs/items",
+            headers=_auth_headers(token),
+            json={"title": "AI Docs Hub"},
+        )
+        assert docs_response.status_code == 201, docs_response.text
+        doc = docs_response.json()
+
+        meeting_response = client.post(
+            _workspace_tool_path("delivery-hub", "meeting.create_meeting"),
+            headers=_auth_headers(token),
+            json={
+                "arguments": {
+                    "title": "AI gated meeting",
+                    "start_at": "2026-05-10T01:00:00+00:00",
+                    "end_at": "2026-05-10T02:00:00+00:00",
+                }
+            },
+        )
+        assert meeting_response.status_code == 409, meeting_response.text
+
+        planner_response = client.post(
+            _workspace_tool_path("delivery-hub", "planner.create_event"),
+            headers=_auth_headers(token),
+            json={
+                "arguments": {
+                    "title": "AI gated event",
+                    "start_at": "2026-05-11T01:00:00+00:00",
+                    "end_at": "2026-05-11T02:00:00+00:00",
+                    "scope": "personal",
+                }
+            },
+        )
+        assert planner_response.status_code == 409, planner_response.text
+
+        docs_page_response = client.post(
+            _workspace_tool_path("delivery-hub", "docs.create_page"),
+            headers=_auth_headers(token),
+            json={
+                "arguments": {
+                    "hub_id": doc["id"],
+                    "title": "AI gated page",
+                    "content_markdown": "# 제목\n\n본문",
+                }
+            },
+        )
+        assert docs_page_response.status_code == 409, docs_page_response.text
+    finally:
+        monkeypatch.delenv("AIDOO_AI_WRITE_TOOLS_ENABLED", raising=False)
+        _reset_settings_and_registry()

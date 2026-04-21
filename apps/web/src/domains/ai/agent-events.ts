@@ -25,6 +25,9 @@ export interface DoneMeta {
   chosen_model: string | null;
   canonical_model: string | null;
   provider: string | null;
+  pending_approval_id?: string | null;
+  pending_call_id?: string | null;
+  agent_run_id?: string | null;
 }
 
 export interface UsageCounts {
@@ -59,7 +62,7 @@ export interface DoneEvent {
   seq: number;
   timestamp_ms: number;
   data: {
-    finish_reason: 'stop' | 'length' | 'cancelled' | 'error';
+    finish_reason: 'stop' | 'length' | 'cancelled' | 'error' | 'awaiting_approval';
     audit_id: string | null;
     meta: DoneMeta | null;
   };
@@ -140,7 +143,7 @@ export interface ToolResultEvent {
   timestamp_ms: number;
   data: {
     call_id: string;
-    status: 'ok' | 'error';
+    status: 'ok' | 'error' | 'rejected';
     result_preview?: string | null;
     error?: string | null;
   };
@@ -151,14 +154,25 @@ export interface ApprovalRequiredEvent {
   type: 'approval_required';
   seq: number;
   timestamp_ms: number;
-  data: { approval_id: string; tool: string; resource_preview?: string | null };
+  data: {
+    approval_id: string;
+    call_id: string;
+    tool: string;
+    resource_preview?: string | null;
+    expires_at_ms: number;
+  };
 }
 
 export interface ApprovalResolvedEvent {
   type: 'approval_resolved';
   seq: number;
   timestamp_ms: number;
-  data: { approval_id: string; decision: 'approved' | 'rejected' };
+  data: {
+    approval_id: string;
+    call_id: string;
+    decision: 'approved' | 'rejected' | 'cancelled';
+    reason?: string | null;
+  };
 }
 
 export type AgentEventEnvelope =
@@ -196,15 +210,18 @@ export interface ToolCallBuffer {
   argsBuffer: string;
   startedAtMs: number;
   completedAtMs: number | null;
-  status: 'running' | 'ok' | 'error';
-  result: { status: 'ok' | 'error'; preview: string | null; error: string | null } | null;
+  status: 'running' | 'ok' | 'error' | 'rejected';
+  result: { status: 'ok' | 'error' | 'rejected'; preview: string | null; error: string | null } | null;
 }
 
 export interface PendingApproval {
   approval_id: string;
+  call_id: string;
   tool: string;
   resource_preview: string | null;
-  decision: 'approved' | 'rejected' | null;
+  expires_at_ms: number | null;
+  decision: 'approved' | 'rejected' | 'cancelled' | null;
+  reason?: string | null;
 }
 
 /**

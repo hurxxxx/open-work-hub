@@ -549,6 +549,7 @@ def complete_chat(
     pool_hint: LlmPoolHint | None = None,
     tools: list[dict[str, Any]] | None = None,
     tool_choice: str | dict[str, Any] | None = None,
+    parallel_tool_calls: bool | None = None,
     resolved_execution: ResolvedLlmExecution | None = None,
     agent_run_id: str | None = None,
 ) -> tuple[Any, PolicyDecision, LlmPoolConfig]:
@@ -612,6 +613,7 @@ def complete_chat(
         extra_body=extra_body,
         tools=tools,
         tool_choice=tool_choice,
+        parallel_tool_calls=parallel_tool_calls,
     )
 
     started = time.monotonic()
@@ -744,6 +746,7 @@ def _build_chat_payload(
     extra_body: Mapping[str, Any] | None,
     tools: list[dict[str, Any]] | None = None,
     tool_choice: str | dict[str, Any] | None = None,
+    parallel_tool_calls: bool | None = None,
     stream_reasoning: bool = True,
 ) -> dict[str, Any]:
     payload: dict[str, Any] = {
@@ -769,6 +772,8 @@ def _build_chat_payload(
         payload["tools"] = tools
     if tool_choice is not None:
         payload["tool_choice"] = tool_choice
+    if parallel_tool_calls is not None:
+        payload["parallel_tool_calls"] = parallel_tool_calls
     return payload
 
 
@@ -788,6 +793,7 @@ async def complete_chat_stream(
     stream_reasoning: bool = True,
     tools: list[dict[str, Any]] | None = None,
     tool_choice: str | dict[str, Any] | None = None,
+    parallel_tool_calls: bool | None = None,
     resolved_execution: ResolvedLlmExecution | None = None,
     agent_run_id: str | None = None,
 ):
@@ -855,6 +861,7 @@ async def complete_chat_stream(
         extra_body=extra_body,
         tools=tools,
         tool_choice=tool_choice,
+        parallel_tool_calls=parallel_tool_calls,
         stream_reasoning=stream_reasoning,
     )
 

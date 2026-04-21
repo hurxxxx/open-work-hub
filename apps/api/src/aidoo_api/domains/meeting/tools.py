@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from datetime import timedelta
+from datetime import datetime, timedelta
 from typing import Any, Literal
 
 from fastapi import HTTPException, status
@@ -9,7 +9,13 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 
 from aidoo_api.core.principal import CallerPrincipal
-from aidoo_api.domains.ai.registry import AiCapabilityRegistry
+from aidoo_api.core.settings import get_settings
+from aidoo_api.domains.ai.registry import (
+    AiCapabilityRegistry,
+    ApprovalPreview,
+    PreviewField,
+    WorkspaceContext,
+)
 from aidoo_api.domains.auth.models import User, Workspace
 from aidoo_api.domains.meeting import service as meeting_service
 from aidoo_api.domains.planner.service import parse_iso_or_date
@@ -33,6 +39,15 @@ class FindAvailabilityArgs(_ToolArgsModel):
     user_ids: list[str] = Field(..., min_length=1)
     from_at: str = Field(..., alias="from", min_length=1)
     to_at: str = Field(..., alias="to", min_length=1)
+
+
+class CreateMeetingArgs(_ToolArgsModel):
+    title: str = Field(..., min_length=1, max_length=200)
+    start_at: datetime
+    end_at: datetime
+    attendee_user_ids: list[str] | None = Field(default=None, max_length=50)
+    description: str | None = Field(default=None, max_length=4000)
+    location: str | None = Field(default=None, max_length=240)
 
 
 def _parse_range_arg(arguments: Mapping[str, Any], key: str):
@@ -127,11 +142,62 @@ def _find_availability(
     return result.model_dump(mode="json", by_alias=True)
 
 
+def _create_meeting(
+    db: Session,
+    workspace: Workspace,
+    principal: CallerPrincipal,
+    user: User,
+    arguments: Mapping[str, Any],
+    *,
+    approved_call_id: str | None = None,
+) -> dict[str, Any]:
+    return meeting_service.create_meeting_for_ai(
+        db,
+        workspace=workspace,
+        principal=principal,
+        user=user,
+        title=str(arguments["title"]),
+        start_at=arguments["start_at"],
+        end_at=arguments["end_at"],
+        attendee_user_ids=[str(item) for item in arguments.get("attendee_user_ids") or []],
+        description=str(arguments.get("description") or ""),
+        location=arguments.get("location"),
+        approved_call_id=approved_call_id,
+    )
+
+
+def _build_create_meeting_preview(
+    principal: CallerPrincipal,
+    workspace: WorkspaceContext,
+    parsed_args: BaseModel | Mapping[str, Any],
+) -> ApprovalPreview:
+    values = (
+        parsed_args.model_dump(mode="python", by_alias=True, exclude_none=True)
+        if isinstance(parsed_args, BaseModel)
+        else dict(parsed_args)
+    )
+    attendee_count = len(values.get("attendee_user_ids") or [])
+    return ApprovalPreview(
+        title=f"[{workspace.display_name}] Create meeting",
+        summary=str(values.get("description") or "Create a meeting from AI.").strip()
+        or "Create a meeting from AI.",
+        fields=(
+            PreviewField(label="Title", value=str(values.get("title", "-"))),
+            PreviewField(label="Start", value=str(values.get("start_at", "-"))),
+            PreviewField(label="Attendees", value=str(attendee_count)),
+        ),
+    )
+
+
 def register_ai_capabilities(registry: AiCapabilityRegistry) -> None:
     registry.register_llm_task(
         task_kind="meeting_summary",
         default_policy="local_only",
         description="Meeting transcript summarization (worker)",
+    )
+    registry.register_preview_builder(
+        preview_builder_id="meeting.create_meeting_preview",
+        builder=_build_create_meeting_preview,
     )
     registry.register_tool(
         name="meeting.list_meetings",
@@ -153,4 +219,17 @@ def register_ai_capabilities(registry: AiCapabilityRegistry) -> None:
         owner_domain="meeting",
         handler=_find_availability,
         args_model=FindAvailabilityArgs,
+    )
+    if not get_settings().ai_write_tools_enabled:
+        return
+    registry.register_tool(
+        name="meeting.create_meeting",
+        description="Create a meeting in the current workspace.",
+        owner_domain="meeting",
+        handler=_create_meeting,
+        args_model=CreateMeetingArgs,
+        mode="write",
+        approval_required=True,
+        preview_builder_id="meeting.create_meeting_preview",
+        output_projection="resource_ids",
     )

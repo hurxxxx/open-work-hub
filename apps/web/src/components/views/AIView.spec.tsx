@@ -216,8 +216,10 @@ describe('AIView', () => {
           }),
           frame('approval_required', 2, {
             approval_id: 'approval-1',
+            call_id: 'call-approval-1',
             tool: 'docs.create_page',
             resource_preview: null,
+            expires_at_ms: 123,
           }),
           frame('content_delta', 3, { text: 'partial answer' }),
           frame('error', 4, {

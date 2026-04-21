@@ -48,9 +48,12 @@ class DoneMeta(BaseModel):
     chosen_model: str | None = None
     canonical_model: str | None = None
     provider: str | None = None
+    pending_approval_id: str | None = None
+    pending_call_id: str | None = None
+    agent_run_id: str | None = None
 
 
-DoneFinishReason = Literal["stop", "length", "cancelled", "error"]
+DoneFinishReason = Literal["stop", "length", "cancelled", "error", "awaiting_approval"]
 
 
 class DoneData(BaseModel):
@@ -137,7 +140,7 @@ class ToolCallArgsDeltaData(BaseModel):
 class ToolResultData(BaseModel):
     model_config = ConfigDict(frozen=True)
     call_id: str
-    status: Literal["ok", "error"]
+    status: Literal["ok", "error", "rejected"]
     result_preview: str | None = None
     error: str | None = None
 
@@ -146,14 +149,18 @@ class ToolResultData(BaseModel):
 class ApprovalRequiredData(BaseModel):
     model_config = ConfigDict(frozen=True)
     approval_id: str
+    call_id: str
     tool: str
     resource_preview: str | None = None
+    expires_at_ms: int
 
 
 class ApprovalResolvedData(BaseModel):
     model_config = ConfigDict(frozen=True)
     approval_id: str
-    decision: Literal["approved", "rejected"]
+    call_id: str
+    decision: Literal["approved", "rejected", "cancelled"]
+    reason: str | None = None
 
 
 # ---------------------------------------------------------------------------

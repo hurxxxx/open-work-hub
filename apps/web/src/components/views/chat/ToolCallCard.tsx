@@ -81,12 +81,20 @@ export function ToolCallCard({ call }: ToolCallCardProps) {
 
 function StatusPill({ status }: { status: ToolCallBuffer['status'] }) {
   const label =
-    status === 'running' ? 'running' : status === 'ok' ? 'ok' : 'error';
+    status === 'running'
+      ? 'running'
+      : status === 'ok'
+        ? 'ok'
+        : status === 'rejected'
+          ? 'rejected'
+          : 'error';
   const className =
     status === 'running'
       ? 'border-amber-200 bg-amber-50 text-amber-700'
       : status === 'ok'
         ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+        : status === 'rejected'
+          ? 'border-slate-200 bg-slate-100 text-slate-700'
         : 'border-red-200 bg-red-50 text-red-700';
 
   return (

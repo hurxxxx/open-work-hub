@@ -15,7 +15,7 @@ export interface ChatTurn {
   content: string;
   reasoning?: string;
   reasoningStatus?: ChatStreamStatus;
-  finishReason?: 'stop' | 'length' | 'cancelled' | 'error' | null;
+  finishReason?: 'stop' | 'length' | 'cancelled' | 'error' | 'awaiting_approval' | null;
   provider?: string;
   policy?: string | null;
   chosenPool?: 'local' | 'external' | null;

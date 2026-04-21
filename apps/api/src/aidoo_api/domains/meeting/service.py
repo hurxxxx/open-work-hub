@@ -131,6 +131,14 @@ def _validate_time_range(start_at: datetime, end_at: datetime) -> None:
         )
 
 
+def _require_user_write_principal(principal: CallerPrincipal) -> None:
+    if principal.kind != "user":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Meeting write operations require a user principal.",
+        )
+
+
 def _meeting_grant_expires_at(meeting: Meeting) -> datetime:
     return meeting.end_at + timedelta(days=7)
 
@@ -768,8 +776,20 @@ def create_meeting(
     workspace: Workspace,
     organizer: User,
     payload: MeetingCreateRequest,
+    meeting_id: str | None = None,
 ) -> MeetingDetail:
     _validate_time_range(payload.start_at, payload.end_at)
+
+    if meeting_id is not None:
+        existing = db.scalar(
+            select(Meeting).where(
+                Meeting.id == meeting_id,
+                Meeting.workspace_id == workspace.id,
+            )
+        )
+        if existing is not None:
+            fresh = _load_meeting(db, workspace, existing.id)
+            return _serialize_meeting(db, fresh)
 
     attendees_input = list(payload.attendees)
     if not any(item.user_id == organizer.id for item in attendees_input):
@@ -783,7 +803,7 @@ def create_meeting(
     )
 
     meeting = Meeting(
-        id=new_id(),
+        id=meeting_id or new_id(),
         workspace_id=workspace.id,
         organizer_id=organizer.id,
         title=payload.title.strip(),
@@ -823,6 +843,49 @@ def create_meeting(
 
     fresh = _load_meeting(db, workspace, meeting.id)
     return _serialize_meeting(db, fresh)
+
+
+def create_meeting_for_ai(
+    db: Session,
+    *,
+    workspace: Workspace,
+    principal: CallerPrincipal,
+    user: User,
+    title: str,
+    start_at: datetime,
+    end_at: datetime,
+    attendee_user_ids: list[str] | None = None,
+    description: str = "",
+    location: str | None = None,
+    approved_call_id: str | None = None,
+) -> dict[str, object]:
+    _require_user_write_principal(principal)
+    _bind_workspace_context(db, workspace=workspace, principal=principal, user=user)
+    if location is not None and location.strip():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Meeting location is not supported yet.",
+        )
+    payload = MeetingCreateRequest(
+        title=title,
+        agenda=description,
+        start_at=start_at,
+        end_at=end_at,
+        attendees=[
+            MeetingAttendeeInput(user_id=attendee_user_id, role="required")
+            for attendee_user_id in attendee_user_ids or []
+        ],
+        task_ids=[],
+        doc_ids=[],
+    )
+    result = create_meeting(
+        db,
+        workspace=workspace,
+        organizer=user,
+        payload=payload,
+        meeting_id=approved_call_id,
+    )
+    return result.model_dump(mode="json", by_alias=True)
 
 
 def update_meeting(

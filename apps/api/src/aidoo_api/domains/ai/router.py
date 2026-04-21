@@ -1,6 +1,7 @@
 import json
 from dataclasses import dataclass, field
 import asyncio
+from datetime import datetime
 from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -24,7 +25,8 @@ from aidoo_api.core.llm import (
 )
 from aidoo_api.core.llm_adapters import StreamChunk, supports_tool_calling
 from aidoo_api.core.settings import get_settings
-from aidoo_api.domains.ai.agent import run_agent_turn_stream
+from aidoo_api.domains.ai.agent import resume_agent_run, run_agent_turn_stream
+from aidoo_api.domains.ai import approvals as ai_approvals
 from aidoo_api.domains.ai.artifact_parser import (
     ArtifactStreamParser,
     ParsedArtifactBody,
@@ -45,6 +47,8 @@ from aidoo_api.domains.ai.tool_runtime import (
     iter_tool_call_events,
 )
 from aidoo_api.domains.ai.tool_service import (
+    ToolRequiresApproval,
+    approval_required_http_exception,
     execute_tool as execute_ai_tool,
     render_tool_result_message,
 )
@@ -166,6 +170,7 @@ def capability_manifest(
     current_workspace: Workspace = Depends(require_current_workspace),
 ) -> dict[str, Any]:
     _ensure_mcp_bridge_enabled()
+    settings = get_settings()
     principal = _build_request_principal(
         current_user,
         request,
@@ -177,6 +182,7 @@ def capability_manifest(
         workspace=_require_request_workspace(request),
         principal=principal,
         include_meta=True,
+        include_approval_required=settings.ai_write_tools_enabled,
     )
 
 
@@ -190,6 +196,7 @@ def app_capability_manifest(
 ) -> dict[str, Any]:
     _ensure_mcp_bridge_enabled()
     _ensure_known_workspace_app(app_id)
+    settings = get_settings()
     principal = _build_request_principal(
         current_user,
         request,
@@ -202,6 +209,7 @@ def app_capability_manifest(
         principal=principal,
         app_id=app_id,
         include_meta=True,
+        include_approval_required=settings.ai_write_tools_enabled,
     )
 
 
@@ -213,6 +221,7 @@ def capability_openapi_export(
     current_workspace: Workspace = Depends(require_current_workspace),
 ) -> dict[str, Any]:
     _ensure_mcp_bridge_enabled()
+    settings = get_settings()
     principal = _build_request_principal(
         current_user,
         request,
@@ -223,6 +232,7 @@ def capability_openapi_export(
         db,
         workspace=_require_request_workspace(request),
         principal=principal,
+        include_approval_required=settings.ai_write_tools_enabled,
     )
 
 
@@ -236,6 +246,7 @@ def app_capability_openapi_export(
 ) -> dict[str, Any]:
     _ensure_mcp_bridge_enabled()
     _ensure_known_workspace_app(app_id)
+    settings = get_settings()
     principal = _build_request_principal(
         current_user,
         request,
@@ -247,6 +258,7 @@ def app_capability_openapi_export(
         workspace=_require_request_workspace(request),
         principal=principal,
         app_id=app_id,
+        include_approval_required=settings.ai_write_tools_enabled,
     )
 
 
@@ -363,6 +375,41 @@ class ChatStreamRequest(ConversationBoundChatRequest):
     stream_reasoning: bool = True
 
 
+class ApprovalResolveRequest(BaseModel):
+    decision: Literal["approved", "rejected"]
+    reason: str | None = None
+
+
+class ApprovalAbandonRequest(BaseModel):
+    reason: str | None = None
+
+
+class ApprovalStatusResponse(BaseModel):
+    id: str
+    workspace_id: str
+    conversation_id: str
+    agent_run_id: str
+    tool_call_id: str
+    tool_name: str
+    arguments_json: str
+    resource_preview: str | None = None
+    status: str
+    requested_by_user_id: str
+    resolved_by_user_id: str | None = None
+    reject_reason: str | None = None
+    resolved_at: datetime | None = None
+    expires_at: datetime
+    execution_result_json: Any | None = None
+    error_message: str | None = None
+    created_at: datetime
+    snapshot_status: str | None = None
+
+
+class ChatResumeRequest(BaseModel):
+    conversation_id: str
+    approval_id: str
+
+
 @router.post("/chat/stream")
 async def chat_stream(
     payload: ChatStreamRequest,
@@ -398,6 +445,112 @@ async def chat_stream(
     )
 
 
+@router.get("/approvals/{approval_id}", response_model=ApprovalStatusResponse)
+def get_approval_status(
+    approval_id: str,
+    request: Request,
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+) -> ApprovalStatusResponse:
+    workspace = _require_request_workspace(request)
+    approval = ai_approvals.get_approval(
+        db,
+        workspace=workspace,
+        user=current_user,
+        approval_id=approval_id,
+    )
+    snapshot = ai_approvals.load_snapshot(db, agent_run_id=approval.agent_run_id)
+    return ApprovalStatusResponse.model_validate(
+        ai_approvals.approval_to_payload(approval, snapshot=snapshot)
+    )
+
+
+@router.post("/approvals/{approval_id}/resolve", response_model=ApprovalStatusResponse)
+def resolve_approval(
+    approval_id: str,
+    payload: ApprovalResolveRequest,
+    request: Request,
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+) -> ApprovalStatusResponse:
+    workspace = _require_request_workspace(request)
+    approval = ai_approvals.resolve_approval(
+        db,
+        workspace=workspace,
+        approval_id=approval_id,
+        decision=payload.decision,
+        reason=payload.reason,
+        resolver_user=current_user,
+    )
+    db.commit()
+    snapshot = ai_approvals.load_snapshot(db, agent_run_id=approval.agent_run_id)
+    return ApprovalStatusResponse.model_validate(
+        ai_approvals.approval_to_payload(approval, snapshot=snapshot)
+    )
+
+
+@router.post("/approvals/{approval_id}/abandon", response_model=ApprovalStatusResponse)
+def abandon_approval(
+    approval_id: str,
+    payload: ApprovalAbandonRequest,
+    request: Request,
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+) -> ApprovalStatusResponse:
+    workspace = _require_request_workspace(request)
+    approval = ai_approvals.abandon_approval(
+        db,
+        workspace=workspace,
+        approval_id=approval_id,
+        reason=payload.reason,
+        resolver_user=current_user,
+    )
+    db.commit()
+    snapshot = ai_approvals.load_snapshot(db, agent_run_id=approval.agent_run_id)
+    return ApprovalStatusResponse.model_validate(
+        ai_approvals.approval_to_payload(approval, snapshot=snapshot)
+    )
+
+
+@router.post("/chat/resume")
+async def chat_resume(
+    payload: ChatResumeRequest,
+    request: Request,
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+) -> EventSourceResponse:
+    workspace = _require_request_workspace(request)
+    principal = _build_request_principal(
+        current_user,
+        request,
+        source="api.ai.chat.resume",
+    )
+    ai_approvals.get_resume_context(
+        db,
+        workspace=workspace,
+        user=current_user,
+        conversation_id=payload.conversation_id,
+        approval_id=payload.approval_id,
+    )
+    conversation = conversations_service.get_conversation(
+        db,
+        workspace=workspace,
+        user=current_user,
+        conversation_id=payload.conversation_id,
+    )
+    return EventSourceResponse(
+        _chat_resume_publisher(
+            db=db,
+            workspace=workspace,
+            principal=principal,
+            current_user=current_user,
+            conversation=conversation,
+            approval_id=payload.approval_id,
+        ),
+        ping=25,
+    )
+
+
 @router.post("/tools/{tool_name}/invoke", response_model=ToolInvokeResponse)
 def invoke_tool(
     tool_name: str,
@@ -415,26 +568,29 @@ def invoke_tool(
         session_id=getattr(getattr(auth_context, "session", None), "id", None),
     )
     settings = get_settings()
-    if settings.ai_mcp_bridge_enabled:
-        response = AiMcpClient().call_tool(
-            db,
-            workspace=current_workspace,
-            principal=principal,
-            user=current_user,
-            tool_name=tool_name,
-            arguments=payload.arguments,
-            source="api.tool_invoke",
-        )
-    else:
-        response = execute_ai_tool(
-            db,
-            workspace=current_workspace,
-            principal=principal,
-            user=current_user,
-            tool_name=tool_name,
-            arguments=payload.arguments,
-            source="api.tool_invoke",
-        )
+    try:
+        if settings.ai_mcp_bridge_enabled:
+            response = AiMcpClient().call_tool(
+                db,
+                workspace=current_workspace,
+                principal=principal,
+                user=current_user,
+                tool_name=tool_name,
+                arguments=payload.arguments,
+                source="api.tool_invoke",
+            )
+        else:
+            response = execute_ai_tool(
+                db,
+                workspace=current_workspace,
+                principal=principal,
+                user=current_user,
+                tool_name=tool_name,
+                arguments=payload.arguments,
+                source="api.tool_invoke",
+            )
+    except ToolRequiresApproval as error:
+        raise approval_required_http_exception(error) from error
     return ToolInvokeResponse.model_validate(response)
 
 
@@ -491,6 +647,93 @@ def _build_request_principal(
     )
 
 
+async def _chat_resume_publisher(
+    *,
+    db: Session,
+    workspace: Workspace,
+    principal: CallerPrincipal,
+    current_user: User,
+    conversation: Conversation,
+    approval_id: str,
+):
+    encoder = EnvelopeEncoder()
+    artifact_parser = ArtifactStreamParser()
+    buffer = _AssistantTurnBuffer()
+
+    try:
+        settings = get_settings()
+        filtered_tool_specs, _has_approval_required_tools = _resolve_agent_tool_specs(
+            db,
+            workspace=workspace,
+            principal=principal,
+        )
+        async for event in resume_agent_run(
+            context=_task_context_from_principal(principal),
+            db=db,
+            workspace=workspace,
+            principal=principal,
+            user=current_user,
+            conversation=conversation,
+            approval_id=approval_id,
+            encoder=encoder,
+            max_turns=settings.ai_agent_max_turns,
+            max_tool_calls=settings.ai_agent_max_tool_calls,
+            max_consecutive_tool_errors=settings.ai_agent_max_consecutive_tool_errors,
+            tool_specs=filtered_tool_specs,
+        ):
+            for serialized in _serialize_agent_event_through_artifacts(
+                event=event,
+                artifact_parser=artifact_parser,
+                buffer=buffer,
+                encoder=encoder,
+            ):
+                yield serialized
+    except (asyncio.CancelledError, GeneratorExit):
+        buffer.cancelled = True
+        for flushed in _flush_parser(artifact_parser, encoder=encoder):
+            buffer.observe(flushed)
+        return
+    except Exception as error:  # noqa: BLE001 - converted to SSE contract
+        for flushed in _flush_parser(artifact_parser, encoder=encoder):
+            buffer.observe(flushed)
+            yield flushed
+        error_event = serialize_sse(
+            make_envelope(
+                "error",
+                encoder.next_seq(),
+                {
+                    "code": _error_code(error),
+                    "message": _error_message(error),
+                    "retryable": False,
+                },
+            )
+        )
+        done_event = serialize_sse(
+            make_envelope(
+                "done",
+                encoder.next_seq(),
+                {
+                    "finish_reason": "error",
+                    "audit_id": None,
+                    "meta": None,
+                },
+            )
+        )
+        buffer.observe(error_event)
+        buffer.observe(done_event)
+        yield error_event
+        yield done_event
+    finally:
+        _persist_assistant_turn(
+            db,
+            conversation=conversation,
+            buffer=buffer,
+            last_decision=None,
+            last_config=None,
+            chosen_model=None,
+        )
+
+
 def _task_context_from_principal(principal: CallerPrincipal) -> LlmTaskContext:
     return LlmTaskContext(
         source=principal.source,
@@ -500,6 +743,86 @@ def _task_context_from_principal(principal: CallerPrincipal) -> LlmTaskContext:
         workspace_id=principal.workspace_id,
         task_kind="chatbot",
     )
+
+
+def _resolve_agent_tool_specs(
+    db: Session,
+    *,
+    workspace: Workspace,
+    principal: CallerPrincipal,
+) -> tuple[list[dict[str, Any]], bool]:
+    settings = get_settings()
+    if settings.ai_mcp_bridge_enabled:
+        filtered_tools = AiMcpClient().list_tools(
+            db,
+            workspace=workspace,
+            principal=principal,
+            include_meta=False,
+            include_approval_required=settings.ai_write_tools_enabled,
+        )
+        return (
+            [dict(item.openai_tool) for item in filtered_tools],
+            any(item.descriptor.approval_policy == "required" for item in filtered_tools),
+        )
+
+    registry = get_ai_capability_registry()
+    return (
+        registry.openai_tool_specs(include_approval_required=settings.ai_write_tools_enabled),
+        any(definition.approval_required for definition in registry.tools.values()),
+    )
+
+
+def _serialize_agent_event_through_artifacts(
+    *,
+    event: Any,
+    artifact_parser: ArtifactStreamParser,
+    buffer: "_AssistantTurnBuffer",
+    encoder: EnvelopeEncoder,
+) -> list[dict[str, str]]:
+    if event.type == "done":
+        flushed_envelopes = _flush_parser(artifact_parser, encoder=encoder)
+        out: list[dict[str, str]] = []
+        for flushed in flushed_envelopes:
+            buffer.observe(flushed)
+            out.append(flushed)
+        if flushed_envelopes:
+            reissued = serialize_sse(
+                make_envelope(
+                    "done",
+                    encoder.next_seq(),
+                    event.data.model_dump(),
+                    timestamp_ms=event.timestamp_ms,
+                )
+            )
+            buffer.observe(reissued)
+            out.append(reissued)
+            return out
+        serialized = serialize_sse(event)
+        buffer.observe(serialized)
+        out.append(serialized)
+        return out
+
+    if event.type == "content_delta":
+        text = event.data.text
+        parsed_events = artifact_parser.feed(text)
+        if (
+            len(parsed_events) == 1
+            and isinstance(parsed_events[0], ParsedText)
+            and parsed_events[0].text == text
+        ):
+            serialized = serialize_sse(event)
+            buffer.observe(serialized)
+            return [serialized]
+
+        out: list[dict[str, str]] = []
+        for parsed_out in _parser_events_to_envelopes(parsed_events, encoder=encoder):
+            buffer.observe(parsed_out)
+            out.append(parsed_out)
+        return out
+
+    serialized = serialize_sse(event)
+    buffer.observe(serialized)
+    return [serialized]
 
 
 def _parse_tool_chat_command(messages: list[ChatMessage]) -> ToolChatCommand | None:
@@ -840,16 +1163,10 @@ async def _chat_stream_publisher(
         last_config = execution.config
         chosen_model = execution.chosen_model
 
-        mcp_client = AiMcpClient()
-        filtered_tool_specs = (
-            mcp_client.list_openai_function_specs(
-                db,
-                workspace=workspace,
-                principal=principal,
-                include_approval_required=False,
-            )
-            if settings.ai_mcp_bridge_enabled
-            else get_ai_capability_registry().openai_tool_specs()
+        filtered_tool_specs, has_approval_required_tools = _resolve_agent_tool_specs(
+            db,
+            workspace=workspace,
+            principal=principal,
         )
         if (
             settings.ai_tool_calling_enabled
@@ -873,67 +1190,15 @@ async def _chat_stream_publisher(
                 max_consecutive_tool_errors=settings.ai_agent_max_consecutive_tool_errors,
                 agent_run_id=agent_run_id,
                 tool_specs=filtered_tool_specs,
+                bound_conversation=conversation,
+                parallel_tool_calls=False if has_approval_required_tools else None,
             ):
-                # Route content_delta through the artifact parser so embedded
-                # `<artifact>` blocks become their own envelope stream. All
-                # other event types pass through as-is. Before the agent's
-                # terminal `done` event, flush the parser so any artifacts
-                # still open (malformed close, model cut off) get synthetic
-                # artifact_completed envelopes — the client's buffers must
-                # terminate before it reads `done`.
-                if event.type == "done":
-                    # Flush any dangling artifact first. When flush emits
-                    # synthesized ``artifact_completed`` envelopes they
-                    # consume fresh seqs from the shared encoder, which has
-                    # already moved past the agent's pre-allocated ``done``
-                    # seq — in that case re-allocate ``done`` so the wire
-                    # stays monotone (events_schema.md guarantee). When
-                    # flush is a no-op, keep the original seq to avoid a
-                    # gap in the common case.
-                    flushed_envelopes = _flush_parser(artifact_parser, encoder=encoder)
-                    for flushed in flushed_envelopes:
-                        buffer.observe(flushed)
-                        yield flushed
-                    if flushed_envelopes:
-                        reissued = serialize_sse(
-                            make_envelope(
-                                "done",
-                                encoder.next_seq(),
-                                event.data.model_dump(),
-                                timestamp_ms=event.timestamp_ms,
-                            )
-                        )
-                        buffer.observe(reissued)
-                        yield reissued
-                    else:
-                        serialized = serialize_sse(event)
-                        buffer.observe(serialized)
-                        yield serialized
-                elif event.type == "content_delta":
-                    text = event.data.text
-                    parsed_events = artifact_parser.feed(text)
-                    # Fast path: the parser saw only plain text (no markup,
-                    # no buffered partial tag). Reuse the agent's pre-
-                    # allocated seq so seqs stay contiguous for the common
-                    # case; the slow path accepts a rare gap when markup
-                    # produces multiple envelopes from one input chunk.
-                    if (
-                        len(parsed_events) == 1
-                        and isinstance(parsed_events[0], ParsedText)
-                        and parsed_events[0].text == text
-                    ):
-                        serialized = serialize_sse(event)
-                        buffer.observe(serialized)
-                        yield serialized
-                    else:
-                        for parsed_out in _parser_events_to_envelopes(
-                            parsed_events, encoder=encoder
-                        ):
-                            buffer.observe(parsed_out)
-                            yield parsed_out
-                else:
-                    serialized = serialize_sse(event)
-                    buffer.observe(serialized)
+                for serialized in _serialize_agent_event_through_artifacts(
+                    event=event,
+                    artifact_parser=artifact_parser,
+                    buffer=buffer,
+                    encoder=encoder,
+                ):
                     yield serialized
             return
 
@@ -1060,10 +1325,28 @@ def _tool_command_events(
         arguments=command.arguments,
         source="api.stream",
     )
-    for event in iter_tool_call_events(encoder=encoder, execution=execution):
-        yield serialize_sse(event)
-
     if execution.status == "blocked":
+        yield serialize_sse(
+            make_envelope(
+                "tool_call_started",
+                encoder.next_seq(),
+                {
+                    "call_id": execution.call_id,
+                    "name": execution.tool_name,
+                    "args_preview": execution.arguments_json,
+                },
+            )
+        )
+        yield serialize_sse(
+            make_envelope(
+                "tool_call_args_delta",
+                encoder.next_seq(),
+                {
+                    "call_id": execution.call_id,
+                    "delta": execution.arguments_json,
+                },
+            )
+        )
         message = (
             execution.error_message or f"도구 {command.tool_name} 실행에는 승인 절차가 필요합니다."
         )
@@ -1086,6 +1369,9 @@ def _tool_command_events(
             )
         )
         return
+
+    for event in iter_tool_call_events(encoder=encoder, execution=execution):
+        yield serialize_sse(event)
 
     if execution.status == "error":
         message = execution.error_message or "AI tool execution failed."

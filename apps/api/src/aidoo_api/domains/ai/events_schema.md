@@ -39,7 +39,8 @@ Provider-reported token counts. Any field may be missing.
 ```
 
 ### `done`
-Terminal frame. `finish_reason` values: `stop`, `length`, `cancelled`, `error`.
+Terminal frame. `finish_reason` values: `stop`, `length`, `cancelled`, `error`,
+`awaiting_approval`.
 `meta` carries the same policy/pool badges the sync `/ai/chat` response does.
 `audit_id` is reserved (always `null` in Phase 2).
 ```json
@@ -70,9 +71,9 @@ not in the status code.
 
 - `tool_call_started` — `{call_id, name, args_preview}` (P3)
 - `tool_call_args_delta` — `{call_id, delta}` (P3)
-- `tool_result` — `{call_id, status, result_preview?, error?}` (P3)
-- `approval_required` — `{approval_id, tool, resource_preview?}` (P4)
-- `approval_resolved` — `{approval_id, decision}` (P4)
+- `tool_result` — `{call_id, status, result_preview?, error?}` where `status ∈ {ok, error, rejected}` (P3)
+- `approval_required` — `{approval_id, call_id, tool, resource_preview?, expires_at_ms}` (P4)
+- `approval_resolved` — `{approval_id, call_id, decision, reason?}` (P4)
 
 ## Stream lifecycle
 

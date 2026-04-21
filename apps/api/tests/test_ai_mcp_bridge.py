@@ -4,6 +4,8 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from aidoo_api.core.settings import get_settings
+from aidoo_api.domains.ai.registry import reset_ai_capability_registry
 from aidoo_api.core.db import get_engine, get_session_factory
 from aidoo_api.domains.auth.access import ensure_dev_login_seed_data
 from aidoo_api.domains.auth.models import Workspace, WorkspaceAppEntitlement
@@ -39,6 +41,13 @@ def _disable_workspace_app(workspace_slug: str, app_id: str) -> None:
         entitlement.enabled = False
         session.add(entitlement)
         session.commit()
+
+
+def _reset_settings_and_registry() -> None:
+    cache_clear = getattr(get_settings, "cache_clear", None)
+    if cache_clear is not None:
+        cache_clear()
+    reset_ai_capability_registry()
 
 
 def test_capability_manifest_returns_filtered_tool_inventory(client: TestClient) -> None:
@@ -112,3 +121,80 @@ def test_manifest_and_openapi_reflect_entitlement_changes_on_next_request(
     assert openapi_response.status_code == 200, openapi_response.text
     openapi_payload = openapi_response.json()
     assert "/mcp/tools/planner.list_events" not in openapi_payload["paths"]
+
+
+def test_manifest_and_openapi_include_pms_write_tools_when_enabled(
+    client: TestClient,
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv("AIDOO_AI_WRITE_TOOLS_ENABLED", "1")
+    _reset_settings_and_registry()
+    try:
+        auth = _dev_login(client, "delivery-hub-admin")
+
+        manifest_response = client.get(
+            _workspace_ai_path("delivery-hub", "/capabilities/manifest"),
+            headers=_auth_headers(auth["token"]),
+        )
+        assert manifest_response.status_code == 200, manifest_response.text
+        manifest_payload = manifest_response.json()
+        tool_names = {item["name"] for item in manifest_payload["tools"]}
+        assert {
+            "pms.create_issue",
+            "pms.update_issue",
+            "pms.add_comment",
+            "meeting.create_meeting",
+            "planner.create_event",
+            "docs.create_page",
+        } <= tool_names
+
+        openapi_response = client.get(
+            _workspace_ai_path("delivery-hub", "/capabilities/openapi.json"),
+            headers=_auth_headers(auth["token"]),
+        )
+        assert openapi_response.status_code == 200, openapi_response.text
+        openapi_payload = openapi_response.json()
+        assert "/mcp/tools/pms.create_issue" in openapi_payload["paths"]
+        assert "/mcp/tools/pms.update_issue" in openapi_payload["paths"]
+        assert "/mcp/tools/pms.add_comment" in openapi_payload["paths"]
+        assert "/mcp/tools/meeting.create_meeting" in openapi_payload["paths"]
+        assert "/mcp/tools/planner.create_event" in openapi_payload["paths"]
+        assert "/mcp/tools/docs.create_page" in openapi_payload["paths"]
+    finally:
+        monkeypatch.delenv("AIDOO_AI_WRITE_TOOLS_ENABLED", raising=False)
+        _reset_settings_and_registry()
+
+
+def test_planner_app_manifest_and_openapi_include_write_tool_when_enabled(
+    client: TestClient,
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv("AIDOO_AI_WRITE_TOOLS_ENABLED", "1")
+    _reset_settings_and_registry()
+    try:
+        auth = _dev_login(client, "delivery-hub-admin")
+
+        manifest_response = client.get(
+            _workspace_ai_path("delivery-hub", "/apps/planner/manifest"),
+            headers=_auth_headers(auth["token"]),
+        )
+        assert manifest_response.status_code == 200, manifest_response.text
+        manifest_payload = manifest_response.json()
+        assert {item["name"] for item in manifest_payload["tools"]} == {
+            "planner.list_events",
+            "planner.create_event",
+        }
+
+        openapi_response = client.get(
+            _workspace_ai_path("delivery-hub", "/apps/planner/openapi.json"),
+            headers=_auth_headers(auth["token"]),
+        )
+        assert openapi_response.status_code == 200, openapi_response.text
+        openapi_payload = openapi_response.json()
+        assert set(openapi_payload["paths"].keys()) == {
+            "/mcp/tools/planner.list_events",
+            "/mcp/tools/planner.create_event",
+        }
+    finally:
+        monkeypatch.delenv("AIDOO_AI_WRITE_TOOLS_ENABLED", raising=False)
+        _reset_settings_and_registry()

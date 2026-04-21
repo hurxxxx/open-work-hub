@@ -593,12 +593,16 @@ describe('useChatStream', () => {
     const body = sseBytes([
       frame('approval_required', 0, {
         approval_id: 'a1',
+        call_id: 'call-1',
         tool: 'docs.create_page',
         resource_preview: null,
+        expires_at_ms: 123,
       }),
       frame('approval_resolved', 1, {
         approval_id: 'a1',
+        call_id: 'call-1',
         decision: 'approved',
+        reason: null,
       }),
       frame('done', 2, { finish_reason: 'stop', audit_id: null, meta: null }),
     ]);

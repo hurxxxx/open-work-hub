@@ -31,6 +31,18 @@
 - `docs/planning/`, `docs/product/`, `docs/meetings/` 는 사용자가 특정 문서를 보라고 지시할 때만 읽는다.
 - 사용자가 명시하지 않으면 문서보다 현재 코드와 테스트를 우선한다.
 
+## Review Method
+
+- 사용자가 리뷰를 요청하면 구현 성격에 따라 **가장 유효한 검토 방법을 먼저 선택**하고, 그 방법론에 맞춰 findings 를 정리한다.
+- 기본 우선순위는 다음과 같다.
+  - 상태 전이, 승인 게이트, 스트리밍, 워크플로, 재시도, 비동기 orchestration 은 **상태기계 / 불변식 기반 리뷰**를 우선한다.
+  - API, 이벤트, 스키마, 직렬화, DB 모델, 외부 연동 계약 변경은 **계약 기반 리뷰**를 우선한다.
+  - 트랜잭션, 락, 경쟁 조건, idempotency, 중복 실행 가능성이 있으면 **동시성 / 원자성 리뷰**를 우선한다.
+  - 파서, 변환기, 정규화 로직, diff/merge 류는 **property / edge-case 리뷰**를 우선한다.
+  - UI, 상호작용, 네비게이션, 권한 차단 화면은 **사용자 흐름 / E2E 리뷰**를 우선한다.
+- 리뷰 응답에는 가능하면 선택한 방법을 짧게 밝히고, 그 방법의 핵심 불변식이나 실패 조건을 기준으로 findings 를 제시한다.
+- 테스트를 볼 때는 happy path 개수보다 **선택한 방법론의 핵심 불변식을 실제로 검증하는지**를 우선 판단한다.
+
 ## AI Capability Platform
 
 - AI capability / MCP bridge 규칙의 상세 정본은 [`adr/0002-mcp-capability-platform.md`](./adr/0002-mcp-capability-platform.md) 로 관리한다.

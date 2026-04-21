@@ -6,6 +6,14 @@
           "title": "Approval Id",
           "type": "string"
         },
+        "call_id": {
+          "title": "Call Id",
+          "type": "string"
+        },
+        "expires_at_ms": {
+          "title": "Expires At Ms",
+          "type": "integer"
+        },
         "resource_preview": {
           "anyOf": [
             {
@@ -25,7 +33,9 @@
       },
       "required": [
         "approval_id",
-        "tool"
+        "call_id",
+        "tool",
+        "expires_at_ms"
       ],
       "title": "ApprovalRequiredData",
       "type": "object"
@@ -66,17 +76,35 @@
           "title": "Approval Id",
           "type": "string"
         },
+        "call_id": {
+          "title": "Call Id",
+          "type": "string"
+        },
         "decision": {
           "enum": [
             "approved",
-            "rejected"
+            "rejected",
+            "cancelled"
           ],
           "title": "Decision",
           "type": "string"
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reason"
         }
       },
       "required": [
         "approval_id",
+        "call_id",
         "decision"
       ],
       "title": "ApprovalResolvedData",
@@ -384,7 +412,8 @@
             "stop",
             "length",
             "cancelled",
-            "error"
+            "error",
+            "awaiting_approval"
           ],
           "title": "Finish Reason",
           "type": "string"
@@ -439,6 +468,18 @@
     },
     "DoneMeta": {
       "properties": {
+        "agent_run_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Agent Run Id"
+        },
         "canonical_model": {
           "anyOf": [
             {
@@ -507,6 +548,30 @@
           ],
           "default": null,
           "title": "Model"
+        },
+        "pending_approval_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Pending Approval Id"
+        },
+        "pending_call_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Pending Call Id"
         },
         "pii_hits": {
           "items": {
@@ -780,7 +845,8 @@
         "status": {
           "enum": [
             "ok",
-            "error"
+            "error",
+            "rejected"
           ],
           "title": "Status",
           "type": "string"

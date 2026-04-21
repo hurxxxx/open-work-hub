@@ -15,7 +15,11 @@ from aidoo_api.domains.ai.registry import (
     get_ai_capability_registry,
     resolve_workspace_entitlement_view,
 )
-from aidoo_api.domains.ai.tool_service import execute_tool
+from aidoo_api.domains.ai.tool_service import (
+    ToolRequiresApproval,
+    approval_required_http_exception,
+    execute_tool,
+)
 from aidoo_api.domains.auth.models import User, Workspace
 
 
@@ -40,17 +44,20 @@ class InProcTransport:
         call_id: str | None = None,
         agent_run_id: str | None = None,
     ) -> dict[str, Any]:
-        return execute_tool(
-            db,
-            workspace=workspace,
-            principal=principal,
-            user=user,
-            tool_name=tool_name,
-            arguments=arguments,
-            source=source,
-            call_id=call_id,
-            agent_run_id=agent_run_id,
-        )
+        try:
+            return execute_tool(
+                db,
+                workspace=workspace,
+                principal=principal,
+                user=user,
+                tool_name=tool_name,
+                arguments=arguments,
+                source=source,
+                call_id=call_id,
+                agent_run_id=agent_run_id,
+            )
+        except ToolRequiresApproval as error:
+            raise approval_required_http_exception(error) from error
 
 
 class AiMcpClient:
@@ -134,6 +141,7 @@ class AiMcpClient:
         principal: CallerPrincipal,
         app_id: str | None = None,
         include_meta: bool = True,
+        include_approval_required: bool = False,
     ) -> dict[str, Any]:
         workspace_context = build_workspace_context(workspace)
         tools = self.list_tools(
@@ -142,7 +150,7 @@ class AiMcpClient:
             principal=principal,
             app_id=app_id,
             include_meta=include_meta,
-            include_approval_required=True,
+            include_approval_required=include_approval_required,
         )
         return {
             "server": {
@@ -166,6 +174,7 @@ class AiMcpClient:
         workspace: Workspace,
         principal: CallerPrincipal,
         app_id: str | None = None,
+        include_approval_required: bool = False,
     ) -> dict[str, Any]:
         workspace_context = build_workspace_context(workspace)
         tools = self.list_tools(
@@ -174,7 +183,7 @@ class AiMcpClient:
             principal=principal,
             app_id=app_id,
             include_meta=False,
-            include_approval_required=True,
+            include_approval_required=include_approval_required,
         )
         paths: dict[str, Any] = {}
         for item in tools:

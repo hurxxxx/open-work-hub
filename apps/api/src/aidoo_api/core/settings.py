@@ -234,6 +234,14 @@ class Settings(BaseSettings):
             "DOOWON_API_AIDOO_AI_MCP_BRIDGE_ENABLED",
         ),
     )
+    ai_write_tools_enabled: bool = Field(
+        default=False,
+        validation_alias=AliasChoices(
+            "AIDOO_AI_WRITE_TOOLS_ENABLED",
+            "DOOWON_AIDOO_AI_WRITE_TOOLS_ENABLED",
+            "DOOWON_API_AIDOO_AI_WRITE_TOOLS_ENABLED",
+        ),
+    )
     ai_agent_max_turns: int = Field(
         default=8,
         ge=1,

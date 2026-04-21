@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+from datetime import date
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 from sqlalchemy.orm import Session
 
 from aidoo_api.core.principal import CallerPrincipal
+from aidoo_api.core.settings import get_settings
 from aidoo_api.domains.ai.registry import (
     AiCapabilityRegistry,
     ApprovalPreview,
@@ -18,7 +20,7 @@ from aidoo_api.domains.pms import service as pms_service
 
 
 class _ToolArgsModel(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
 
 class SearchIssuesArgs(_ToolArgsModel):
@@ -51,10 +53,30 @@ class ListTaskListsArgs(_ToolArgsModel):
 class PmsCreateIssueAiInput(_ToolArgsModel):
     list_id: str = Field(..., min_length=1)
     title: str = Field(..., min_length=1)
-    description: str | None = None
-    priority: Literal["low", "medium", "high", "urgent"] | None = None
-    assignee_id: str | None = None
-    due_at: str | None = None
+    body: str | None = None
+    assignee_ids: list[str] | None = Field(default=None, max_length=20)
+    labels: list[str] | None = Field(default=None, max_length=20)
+    due_date: date | None = None
+
+
+class PmsUpdateIssueAiInput(_ToolArgsModel):
+    issue_id: str = Field(..., min_length=1)
+    title: str | None = None
+    body: str | None = None
+    status: str | None = None
+    assignee_ids: list[str] | None = Field(default=None, max_length=20)
+    due_date: date | None = None
+
+    @model_validator(mode="after")
+    def _validate_has_mutation(self) -> "PmsUpdateIssueAiInput":
+        if self.model_fields_set.intersection({"title", "body", "status", "assignee_ids", "due_date"}):
+            return self
+        raise ValueError("At least one mutable field must be provided.")
+
+
+class PmsAddCommentAiInput(_ToolArgsModel):
+    issue_id: str = Field(..., min_length=1)
+    body: str = Field(..., min_length=1)
 
 
 def _search_issues(
@@ -134,41 +156,191 @@ def _list_task_lists(
     )
 
 
+def _create_issue(
+    db: Session,
+    workspace: Workspace,
+    principal: CallerPrincipal,
+    user: User,
+    arguments: Mapping[str, Any],
+    *,
+    approved_call_id: str | None = None,
+) -> dict[str, Any]:
+    return pms_service.create_issue(
+        db,
+        workspace=workspace,
+        principal=principal,
+        user=user,
+        list_id=str(arguments["list_id"]),
+        title=str(arguments["title"]),
+        description=str(arguments.get("body") or ""),
+        assignee_ids=_string_list_or_none(arguments.get("assignee_ids")),
+        due_date=arguments.get("due_date"),
+        label_ids=_string_list_or_none(arguments.get("labels")),
+        approved_call_id=approved_call_id,
+    )
+
+
+def _update_issue(
+    db: Session,
+    workspace: Workspace,
+    principal: CallerPrincipal,
+    user: User,
+    arguments: Mapping[str, Any],
+    *,
+    approved_call_id: str | None = None,
+) -> dict[str, Any]:
+    provided_fields: set[str] = set()
+    for field_name, service_field_name in (
+        ("title", "title"),
+        ("body", "description"),
+        ("status", "status"),
+        ("assignee_ids", "assignee_ids"),
+        ("due_date", "due_date"),
+    ):
+        if field_name in arguments:
+            provided_fields.add(service_field_name)
+    return pms_service.update_issue(
+        db,
+        workspace=workspace,
+        principal=principal,
+        user=user,
+        issue_id=str(arguments["issue_id"]),
+        provided_fields=provided_fields,
+        title=arguments.get("title"),
+        description=arguments.get("body"),
+        status=arguments.get("status"),
+        assignee_ids=_string_list_or_none(arguments.get("assignee_ids")),
+        due_date=arguments.get("due_date"),
+        approved_call_id=approved_call_id,
+    )
+
+
+def _add_comment(
+    db: Session,
+    workspace: Workspace,
+    principal: CallerPrincipal,
+    user: User,
+    arguments: Mapping[str, Any],
+    *,
+    approved_call_id: str | None = None,
+) -> dict[str, Any]:
+    return pms_service.add_issue_comment(
+        db,
+        workspace=workspace,
+        principal=principal,
+        user=user,
+        issue_id=str(arguments["issue_id"]),
+        body=str(arguments["body"]),
+        approved_call_id=approved_call_id,
+    )
+
+
+def _string_list_or_none(value: Any) -> list[str] | None:
+    if value is None:
+        return None
+    return [str(item) for item in value]
+
+
+def _preview_values(parsed_args: BaseModel | Mapping[str, Any]) -> dict[str, Any]:
+    if isinstance(parsed_args, BaseModel):
+        return parsed_args.model_dump(mode="python", by_alias=True, exclude_none=True)
+    return dict(parsed_args)
+
+
+def _preview_summary(value: Any, *, fallback: str, limit: int = 180) -> str:
+    text = str(value or "").strip()
+    if not text:
+        return fallback
+    if len(text) <= limit:
+        return text
+    return f"{text[: limit - 1]}…"
+
+
+def _preview_field_list(values: list[str] | None, *, empty_value: str = "-") -> str:
+    if not values:
+        return empty_value
+    if len(values) <= 3:
+        return ", ".join(values)
+    return f"{', '.join(values[:3])} (+{len(values) - 3})"
+
+
 def _build_create_issue_preview(
     principal: CallerPrincipal,
     workspace: WorkspaceContext,
     parsed_args: BaseModel | Mapping[str, Any],
 ) -> ApprovalPreview:
-    if isinstance(parsed_args, BaseModel):
-        values = parsed_args.model_dump(mode="python", by_alias=True, exclude_none=True)
-    else:
-        values = dict(parsed_args)
+    values = _preview_values(parsed_args)
     fields: list[PreviewField] = [
         PreviewField(label="List", value=str(values.get("list_id", "-"))),
         PreviewField(label="Title", value=str(values.get("title", "-"))),
     ]
-    if values.get("priority") is not None:
-        fields.append(PreviewField(label="Priority", value=str(values["priority"])))
-    if values.get("assignee_id") is not None:
-        fields.append(PreviewField(label="Assignee", value=str(values["assignee_id"])))
-    if values.get("due_at") is not None:
-        fields.append(PreviewField(label="Due", value=str(values["due_at"])))
-    description = str(values.get("description") or "").strip()
-    summary = description or "Create a PMS issue from AI."
+    assignee_ids = _string_list_or_none(values.get("assignee_ids"))
+    if assignee_ids is not None:
+        fields.append(PreviewField(label="Assignees", value=_preview_field_list(assignee_ids)))
+    labels = _string_list_or_none(values.get("labels"))
+    if labels is not None:
+        fields.append(PreviewField(label="Labels", value=_preview_field_list(labels)))
+    if values.get("due_date") is not None:
+        fields.append(PreviewField(label="Due", value=str(values["due_date"])))
     return ApprovalPreview(
         title=f"[{workspace.display_name}] Create PMS issue",
-        summary=summary,
+        summary=_preview_summary(values.get("body"), fallback="Create a PMS issue from AI."),
         fields=tuple(fields),
     )
 
 
+def _build_update_issue_preview(
+    principal: CallerPrincipal,
+    workspace: WorkspaceContext,
+    parsed_args: BaseModel | Mapping[str, Any],
+) -> ApprovalPreview:
+    values = _preview_values(parsed_args)
+    fields: list[PreviewField] = [
+        PreviewField(label="Issue", value=str(values.get("issue_id", "-"))),
+    ]
+    if values.get("title") is not None:
+        fields.append(PreviewField(label="Title", value=str(values["title"])))
+    if values.get("status") is not None:
+        fields.append(PreviewField(label="Status", value=str(values["status"])))
+    assignee_ids = _string_list_or_none(values.get("assignee_ids"))
+    if assignee_ids is not None:
+        fields.append(PreviewField(label="Assignees", value=_preview_field_list(assignee_ids)))
+    if values.get("due_date") is not None:
+        fields.append(PreviewField(label="Due", value=str(values["due_date"])))
+    return ApprovalPreview(
+        title=f"[{workspace.display_name}] Update PMS issue",
+        summary=_preview_summary(values.get("body"), fallback="Update a PMS issue from AI."),
+        fields=tuple(fields),
+    )
+
+
+def _build_add_comment_preview(
+    principal: CallerPrincipal,
+    workspace: WorkspaceContext,
+    parsed_args: BaseModel | Mapping[str, Any],
+) -> ApprovalPreview:
+    values = _preview_values(parsed_args)
+    return ApprovalPreview(
+        title=f"[{workspace.display_name}] Add PMS comment",
+        summary=_preview_summary(values.get("body"), fallback="Add a comment to a PMS issue."),
+        fields=(
+            PreviewField(label="Issue", value=str(values.get("issue_id", "-"))),
+        ),
+    )
+
+
 def register_ai_capabilities(registry: AiCapabilityRegistry) -> None:
-    # Phase 3.5 only lays down the DTO + preview anchor for the future
-    # approval-gated write tool. The executable `pms.create_issue` capability
-    # is intentionally deferred to Phase 4.
     registry.register_preview_builder(
         preview_builder_id="pms.issue_create_preview",
         builder=_build_create_issue_preview,
+    )
+    registry.register_preview_builder(
+        preview_builder_id="pms.issue_update_preview",
+        builder=_build_update_issue_preview,
+    )
+    registry.register_preview_builder(
+        preview_builder_id="pms.issue_comment_preview",
+        builder=_build_add_comment_preview,
     )
     registry.register_tool(
         name="pms.search_issues",
@@ -197,4 +369,44 @@ def register_ai_capabilities(registry: AiCapabilityRegistry) -> None:
         owner_domain="pms",
         handler=_list_task_lists,
         args_model=ListTaskListsArgs,
+    )
+
+    if not get_settings().ai_write_tools_enabled:
+        return
+
+    registry.register_tool(
+        name="pms.create_issue",
+        description="Create a PMS issue in the current workspace.",
+        owner_domain="pms",
+        handler=_create_issue,
+        args_model=PmsCreateIssueAiInput,
+        mode="write",
+        approval_required=True,
+        discoverability_predicate_id="pms.issue_write",
+        preview_builder_id="pms.issue_create_preview",
+        output_projection="resource_ids",
+    )
+    registry.register_tool(
+        name="pms.update_issue",
+        description="Update one PMS issue in the current workspace.",
+        owner_domain="pms",
+        handler=_update_issue,
+        args_model=PmsUpdateIssueAiInput,
+        mode="write",
+        approval_required=True,
+        discoverability_predicate_id="pms.issue_write",
+        preview_builder_id="pms.issue_update_preview",
+        output_projection="resource_ids",
+    )
+    registry.register_tool(
+        name="pms.add_comment",
+        description="Add a comment to one PMS issue in the current workspace.",
+        owner_domain="pms",
+        handler=_add_comment,
+        args_model=PmsAddCommentAiInput,
+        mode="write",
+        approval_required=True,
+        discoverability_predicate_id="pms.issue_write",
+        preview_builder_id="pms.issue_comment_preview",
+        output_projection="resource_ids",
     )

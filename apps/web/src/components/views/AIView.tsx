@@ -53,7 +53,7 @@ function resolveAssistantTurnContent(
   options: {
     status: 'done' | 'cancelled' | 'error';
     errorMessage: string | null;
-    finishReason: 'stop' | 'length' | 'cancelled' | 'error' | null;
+    finishReason: 'stop' | 'length' | 'cancelled' | 'error' | 'awaiting_approval' | null;
     hasArtifacts: boolean;
   },
 ): string {

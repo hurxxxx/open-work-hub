@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime
 from types import SimpleNamespace
 from typing import Any
 
@@ -67,7 +68,7 @@ async def _collect_events(monkeypatch: pytest.MonkeyPatch, streams: list[list[St
         async for event in agent_module.run_agent_turn_stream(
             context=_ctx(),
             execution=_execution(),
-            db=SimpleNamespace(),
+            db=SimpleNamespace(commit=lambda: None),
             workspace=SimpleNamespace(id="ws-1"),
             principal=user_principal(
                 workspace_id="ws-1",
@@ -97,6 +98,7 @@ async def _collect_events(monkeypatch: pytest.MonkeyPatch, streams: list[list[St
                     },
                 }
             ],
+            bound_conversation=SimpleNamespace(id="conversation-1"),
         )
     ]
 
@@ -274,3 +276,77 @@ async def test_run_agent_turn_stream_allows_model_recovery_after_tool_error(
 
     assert any(event.type == "tool_result" and event.data.status == "error" for event in events)
     assert events[-1].data.finish_reason == "stop"
+
+
+async def test_run_agent_turn_stream_halts_on_approval_required_tool(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, Any] = {}
+
+    def fake_execute_tool_call(*args: Any, **kwargs: Any) -> ToolCallExecution:
+        return ToolCallExecution(
+            call_id="call-1",
+            tool_name="pms.create_issue",
+            arguments_json='{"title":"Approval issue"}',
+            status="blocked",
+            resource_preview="Create PMS issue Approval issue",
+        )
+
+    def fake_persist_snapshot_on_halt(*args: Any, **kwargs: Any) -> SimpleNamespace:
+        captured["messages_json"] = kwargs["messages_json"]
+        return SimpleNamespace(id=kwargs["snapshot_id"])
+
+    def fake_create_pending_approval(*args: Any, **kwargs: Any) -> SimpleNamespace:
+        captured["resource_preview"] = kwargs["resource_preview"]
+        return SimpleNamespace(
+            id="approval-1",
+            expires_at=datetime(2026, 5, 1, 10, 0, 0),
+            resource_preview=kwargs["resource_preview"],
+        )
+
+    monkeypatch.setattr(agent_module, "execute_tool_call", fake_execute_tool_call)
+    monkeypatch.setattr(
+        agent_module.ai_approvals,
+        "persist_snapshot_on_halt",
+        fake_persist_snapshot_on_halt,
+    )
+    monkeypatch.setattr(
+        agent_module.ai_approvals,
+        "create_pending_approval",
+        fake_create_pending_approval,
+    )
+
+    events = await _collect_events(
+        monkeypatch,
+        [
+            [
+                StreamChunk(
+                    kind="tool_call_start",
+                    tool_call_id="call-1",
+                    tool_name="pms.create_issue",
+                ),
+                StreamChunk(
+                    kind="tool_call_args",
+                    tool_call_id="call-1",
+                    tool_name="pms.create_issue",
+                    args_delta='{"title":"Approval issue"}',
+                ),
+                StreamChunk(kind="done", finish_reason="tool_calls"),
+            ]
+        ],
+    )
+
+    assert [event.type for event in events] == [
+        "tool_call_started",
+        "tool_call_args_delta",
+        "approval_required",
+        "done",
+    ]
+    assert events[2].data.approval_id == "approval-1"
+    assert events[2].data.call_id == "call-1"
+    assert events[3].data.finish_reason == "awaiting_approval"
+    assert events[3].data.meta.pending_approval_id == "approval-1"
+    assert events[3].data.meta.pending_call_id == "call-1"
+    assert events[3].data.meta.agent_run_id == "agent-run-1"
+    assert captured["resource_preview"] == "Create PMS issue Approval issue"
+    assert not any("tool_calls" in message for message in captured["messages_json"])

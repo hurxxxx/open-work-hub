@@ -45,6 +45,14 @@ def _bind_workspace_context(
         )
 
 
+def _require_user_write_principal(principal: CallerPrincipal) -> None:
+    if principal.kind != "user":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Planner write operations require a user principal.",
+        )
+
+
 def parse_iso_or_date(value: str) -> datetime:
     try:
         parsed = datetime.fromisoformat(value)
@@ -166,14 +174,25 @@ def create_event(
     workspace: Workspace,
     user: User,
     payload: PlannerEventCreateRequest,
+    event_id: str | None = None,
 ) -> PlannerEventOut:
+    if event_id is not None:
+        existing = db.scalar(
+            select(PlannerEvent).where(
+                PlannerEvent.id == event_id,
+                PlannerEvent.workspace_id == workspace.id,
+            )
+        )
+        if existing is not None:
+            fresh = _load_event(db, workspace=workspace, event_id=existing.id)
+            return _serialize_event(fresh)
     start_at, end_at = _parse_event_bounds(
         all_day=payload.all_day,
         start=payload.start,
         end=payload.end,
     )
     event = PlannerEvent(
-        id=new_id(),
+        id=event_id or new_id(),
         workspace_id=workspace.id,
         owner_id=user.id,
         title=payload.title.strip(),
@@ -188,6 +207,52 @@ def create_event(
     db.commit()
     fresh = _load_event(db, workspace=workspace, event_id=event.id)
     return _serialize_event(fresh)
+
+
+def create_event_for_ai(
+    db: Session,
+    *,
+    workspace: Workspace,
+    principal: CallerPrincipal,
+    user: User,
+    title: str,
+    start_at: datetime,
+    end_at: datetime,
+    scope: str = "personal",
+    team_id: str | None = None,
+    description: str = "",
+    approved_call_id: str | None = None,
+) -> dict[str, object]:
+    _require_user_write_principal(principal)
+    _bind_workspace_context(db, workspace=workspace, principal=principal, user=user)
+    normalized_scope = scope.strip().lower()
+    if normalized_scope != "personal":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Team-scoped planner events are not supported yet.",
+        )
+    if team_id is not None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Planner team_id is not supported yet.",
+        )
+    payload = PlannerEventCreateRequest(
+        title=title,
+        description=description,
+        location="",
+        visibility="private",
+        all_day=False,
+        start=_utc_iso(start_at),
+        end=_utc_iso(end_at),
+    )
+    result = create_event(
+        db,
+        workspace=workspace,
+        user=user,
+        payload=payload,
+        event_id=approved_call_id,
+    )
+    return result.model_dump(mode="json", by_alias=True)
 
 
 def get_event(

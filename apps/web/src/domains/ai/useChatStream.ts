@@ -38,7 +38,7 @@ export interface ChatStreamState {
   reasoningBuffer: string;
   usage: AiChatUsage | null;
   doneMeta: DoneMeta | null;
-  finishReason: 'stop' | 'length' | 'cancelled' | 'error' | null;
+  finishReason: 'stop' | 'length' | 'cancelled' | 'error' | 'awaiting_approval' | null;
   status: ChatStreamStatus;
   errorMessage: string | null;
   toolCalls: ToolCallBuffer[];
@@ -330,7 +330,8 @@ function syncResponseToState(response: AiChatResponse): ChatStreamState {
       response.finish_reason === 'stop' ||
       response.finish_reason === 'length' ||
       response.finish_reason === 'cancelled' ||
-      response.finish_reason === 'error'
+      response.finish_reason === 'error' ||
+      response.finish_reason === 'awaiting_approval'
         ? response.finish_reason
         : null,
     status: 'done',
@@ -461,7 +462,11 @@ function applyEnvelope(
     case 'tool_result': {
       const data = (event as ToolResultEvent).data;
       const nextStatus: ToolCallBuffer['status'] =
-        data.status === 'ok' ? 'ok' : 'error';
+        data.status === 'ok'
+          ? 'ok'
+          : data.status === 'rejected'
+            ? 'rejected'
+            : 'error';
       const next = prev.toolCalls.map((call) =>
         call.call_id === data.call_id
           ? {
@@ -482,9 +487,12 @@ function applyEnvelope(
       const data = (event as ApprovalRequiredEvent).data;
       const entry: PendingApproval = {
         approval_id: data.approval_id,
+        call_id: data.call_id,
         tool: data.tool,
         resource_preview: data.resource_preview ?? null,
+        expires_at_ms: data.expires_at_ms ?? null,
         decision: null,
+        reason: null,
       };
       return {
         next: {
@@ -498,7 +506,7 @@ function applyEnvelope(
       const data = (event as ApprovalResolvedEvent).data;
       const next = prev.pendingApprovals.map((item) =>
         item.approval_id === data.approval_id
-          ? { ...item, decision: data.decision }
+          ? { ...item, decision: data.decision, reason: data.reason ?? null }
           : item,
       );
       return { next: { ...prev, pendingApprovals: next }, terminal: false };
