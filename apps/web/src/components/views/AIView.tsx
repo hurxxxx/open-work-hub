@@ -210,6 +210,7 @@ export const AIView = () => {
   const [turns, setTurns] = useState<ChatTurn[]>([]);
   const [input, setInput] = useState('');
   const [chatError, setChatError] = useState<string | null>(null);
+  const [approvalError, setApprovalError] = useState<string | null>(null);
   const [pendingUserTurnId, setPendingUserTurnId] = useState<string | null>(
     null,
   );
@@ -295,11 +296,28 @@ export const AIView = () => {
   }, [workspaceBootstrap.data]);
 
   const currentConversationId = activeConversationId ?? routeConversationId;
+  const abortHydrateRef = useRef<AbortController | null>(null);
+  const skipHydrationConversationIdRef = useRef<string | null>(null);
+  const autoResumeAttemptedApprovalsRef = useRef<Set<string>>(new Set());
+  // Tracks the draft source key only after the draft text has actually
+  // landed in component state. Deferring the write avoids a StrictMode
+  // double-effect bug where the first mount run mutates the ref, the
+  // second mount run skips consumption, and the queued `setInput(...)`
+  // never makes it to the committed render.
+  const consumedDraftRef = useRef<string | null>(null);
+  // The consume path clears the `draft` URL param via setSearchParams,
+  // which changes `routeDraft` and triggers another run of the
+  // hydration effect. Without this guard, that run would execute the
+  // unconditional `setInput('')` reset and wipe the draft we just
+  // injected. Setting the flag immediately before `setSearchParams`
+  // means the very next run skips its reset, then clears the flag.
+  const skipNextHydrationResetRef = useRef(false);
 
   const syncLivePendingApproval = useCallback((
     livePendingApproval: ConversationLivePendingApproval | null | undefined,
   ) => {
     if (!livePendingApproval) {
+      setApprovalError(null);
       replacePendingApprovals([]);
       return;
     }
@@ -321,11 +339,11 @@ export const AIView = () => {
 
   const resumePendingApproval = useCallback(async (approval: PendingApproval) => {
     if (!token || !currentConversationId) {
-      setChatError('대화 컨텍스트를 확인하지 못했습니다.');
+      setApprovalError('대화 컨텍스트를 확인하지 못했습니다.');
       return;
     }
     setApprovalAction({ approvalId: approval.approval_id, kind: 'resume' });
-    setChatError(null);
+    setApprovalError(null);
     try {
       await resumeChat(
         {
@@ -343,7 +361,7 @@ export const AIView = () => {
       ) {
         replacePendingApprovals([]);
       }
-      setChatError(
+      setApprovalError(
         error instanceof Error
           ? error.message
           : '승인된 작업 재개에 실패했습니다.',
@@ -361,14 +379,14 @@ export const AIView = () => {
     reason?: string,
   ) => {
     if (!token) {
-      setChatError('로그인이 필요합니다.');
+      setApprovalError('로그인이 필요합니다.');
       return;
     }
     setApprovalAction({
       approvalId: approval.approval_id,
       kind: decision === 'approved' ? 'approve' : 'reject',
     });
-    setChatError(null);
+    setApprovalError(null);
     try {
       await resolveAiApproval(token, approval.approval_id, {
         decision,
@@ -380,6 +398,7 @@ export const AIView = () => {
         reason: reason?.trim() ? reason.trim() : null,
       };
       upsertPendingApproval(resolvedApproval);
+      autoResumeAttemptedApprovalsRef.current.add(resolvedApproval.approval_id);
       await resumePendingApproval(resolvedApproval);
     } catch (error) {
       if (
@@ -388,7 +407,7 @@ export const AIView = () => {
       ) {
         replacePendingApprovals([]);
       }
-      setChatError(
+      setApprovalError(
         error instanceof Error
           ? error.message
           : '승인 상태를 반영하지 못했습니다.',
@@ -402,11 +421,11 @@ export const AIView = () => {
 
   const handleAbandonApproval = useCallback(async (approval: PendingApproval) => {
     if (!token) {
-      setChatError('로그인이 필요합니다.');
+      setApprovalError('로그인이 필요합니다.');
       return;
     }
     setApprovalAction({ approvalId: approval.approval_id, kind: 'abandon' });
-    setChatError(null);
+    setApprovalError(null);
     try {
       await abandonAiApproval(token, approval.approval_id, {});
       upsertPendingApproval({
@@ -421,7 +440,7 @@ export const AIView = () => {
       ) {
         replacePendingApprovals([]);
       }
-      setChatError(
+      setApprovalError(
         error instanceof Error
           ? error.message
           : '요청 취소에 실패했습니다.',
@@ -499,22 +518,6 @@ export const AIView = () => {
   // setting it to a new id fetches the persisted turns so the thread renders
   // identically to what the user saw live. Guarded by token so we don't fire
   // a fetch before auth bootstrap completes.
-  const abortHydrateRef = useRef<AbortController | null>(null);
-  const skipHydrationConversationIdRef = useRef<string | null>(null);
-  const autoResumeAttemptedApprovalsRef = useRef<Set<string>>(new Set());
-  // Tracks the draft source key only after the draft text has actually
-  // landed in component state. Deferring the write avoids a StrictMode
-  // double-effect bug where the first mount run mutates the ref, the
-  // second mount run skips consumption, and the queued `setInput(...)`
-  // never makes it to the committed render.
-  const consumedDraftRef = useRef<string | null>(null);
-  // The consume path clears the `draft` URL param via setSearchParams,
-  // which changes `routeDraft` and triggers another run of the
-  // hydration effect. Without this guard, that run would execute the
-  // unconditional `setInput('')` reset and wipe the draft we just
-  // injected. Setting the flag immediately before `setSearchParams`
-  // means the very next run skips its reset, then clears the flag.
-  const skipNextHydrationResetRef = useRef(false);
   const [showInsightHint, setShowInsightHint] = useState(false);
   const [pendingDraftSearchCleanup, setPendingDraftSearchCleanup] = useState(false);
   // Clear the "회의 AI 제안에서 시작됨" hint once the composer is empty —
@@ -566,6 +569,7 @@ export const AIView = () => {
     setPendingUserTurnId(null);
     setPendingUserInput('');
     setApprovalAction(null);
+    setApprovalError(null);
     setInput('');
     resetChat();
 
@@ -732,6 +736,12 @@ export const AIView = () => {
     resumableApproval,
     routeConversationId,
   ]);
+
+  useEffect(() => {
+    if (!blockingApproval) {
+      setApprovalError(null);
+    }
+  }, [blockingApproval]);
 
   useEffect(() => {
     if (!pendingDraftSearchCleanup || !routeDraft) {
@@ -980,6 +990,7 @@ export const AIView = () => {
     setTurns(nextTurns);
     setInput('');
     setChatError(null);
+    setApprovalError(null);
     setPendingUserTurnId(userTurn.id);
     setPendingUserInput(trimmed);
     resetChat();
@@ -1035,6 +1046,14 @@ export const AIView = () => {
             ? ` · ${blockingApproval.resource_preview}`
             : ''}
         </p>
+        {approvalError && !pendingApproval ? (
+          <p
+            role="alert"
+            className="app-text-caption mt-1 text-[var(--ui-color-danger)]"
+          >
+            {approvalError}
+          </p>
+        ) : null}
       </div>
       {pendingApproval ? (
         <button
@@ -1173,7 +1192,7 @@ export const AIView = () => {
           key={pendingApproval.approval_id}
           approval={pendingApproval}
           isSubmitting={approvalAction?.approvalId === pendingApproval.approval_id}
-          errorMessage={chatError}
+          errorMessage={approvalError}
           onResolve={(decision, reason) =>
             handleResolveApproval(pendingApproval, decision, reason)
           }

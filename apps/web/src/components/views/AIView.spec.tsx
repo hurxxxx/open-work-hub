@@ -90,11 +90,50 @@ vi.mock('@/src/components/views/chat/ToolCallCard', () => ({
 vi.mock('@/src/components/views/chat/ApprovalModal', () => ({
   ApprovalModal: ({
     approval,
+    errorMessage,
+    isSubmitting,
+    onClose,
+    onResolve,
   }: {
     approval: { approval_id: string; tool: string; decision: string | null };
+    errorMessage?: string | null;
+    isSubmitting?: boolean;
+    onClose: () => void | Promise<void>;
+    onResolve: (
+      decision: 'approved' | 'rejected',
+      reason?: string,
+    ) => void | Promise<void>;
   }) => (
     <div data-testid={`approval-${approval.approval_id}`}>
       {approval.tool}:{approval.decision ?? 'pending'}
+      {errorMessage ? <div data-testid="approval-error">{errorMessage}</div> : null}
+      <button
+        type="button"
+        onClick={() => {
+          void onResolve('approved');
+        }}
+        disabled={isSubmitting}
+      >
+        mock-approve
+      </button>
+      <button
+        type="button"
+        onClick={() => {
+          void onResolve('rejected', '거절 사유');
+        }}
+        disabled={isSubmitting}
+      >
+        mock-reject
+      </button>
+      <button
+        type="button"
+        onClick={() => {
+          void onClose();
+        }}
+        disabled={isSubmitting}
+      >
+        mock-close
+      </button>
     </div>
   ),
 }));
@@ -342,7 +381,7 @@ describe('AIView', () => {
     expect(screen.getByTestId('tool-call-call-1').textContent).toBe(
       'pms.search_issues:{"q":"bug"}',
     );
-    expect(screen.getByTestId('approval-approval-1').textContent).toBe(
+    expect(screen.getByTestId('approval-approval-1').textContent).toContain(
       'docs.create_page:pending',
     );
     expect(document.body.textContent).toContain(
@@ -474,6 +513,95 @@ describe('AIView', () => {
     expect(document.body.textContent).toContain(
       '현재 승인을 해결해야 다음 요청이 가능합니다.',
     );
+  });
+
+  it('resolves a pending approval and resumes exactly once through the resume SSE path', async () => {
+    aiHarness.resolveAiApproval.mockResolvedValue({
+      id: 'approval-1',
+      workspace_id: 'workspace-1',
+      conversation_id: 'c-approval',
+      agent_run_id: 'agent-run-1',
+      tool_call_id: 'call-approval-1',
+      tool_name: 'docs.create_page',
+      arguments_json: '{}',
+      resource_preview: '문서 초안',
+      status: 'approved',
+      requested_by_user_id: 'user-1',
+      resolved_by_user_id: 'user-1',
+      reject_reason: null,
+      resolved_at: '2026-04-21T12:00:00Z',
+      expires_at: '2026-04-21T12:05:00Z',
+      execution_result_json: null,
+      error_message: null,
+      created_at: '2026-04-21T11:59:00Z',
+      snapshot_status: 'resumed',
+    });
+    aiHarness.streamAiChat.mockResolvedValue(
+      mockStreamResponse([
+        sseBytes([
+          frame('conversation_attached', 0, {
+            conversation_id: 'c-approval',
+          }),
+          frame('approval_required', 1, {
+            approval_id: 'approval-1',
+            call_id: 'call-approval-1',
+            tool: 'docs.create_page',
+            resource_preview: '문서 초안',
+            expires_at_ms: 123,
+          }),
+          frame('done', 2, {
+            finish_reason: 'awaiting_approval',
+            audit_id: null,
+            meta: null,
+          }),
+        ]),
+      ]),
+    );
+    aiHarness.streamAiChatResume.mockResolvedValue(
+      mockStreamResponse([
+        sseBytes([
+          frame('approval_resolved', 0, {
+            approval_id: 'approval-1',
+            call_id: 'call-approval-1',
+            decision: 'approved',
+            reason: null,
+          }),
+          frame('content_delta', 1, { text: '재개 완료' }),
+          frame('done', 2, {
+            finish_reason: 'stop',
+            audit_id: null,
+            meta: null,
+          }),
+        ]),
+      ]),
+    );
+
+    renderAIView();
+
+    const input = screen.getByPlaceholderText('메시지를 입력하세요');
+    fireEvent.change(input, { target: { value: '문서를 만들어줘' } });
+    fireEvent.click(screen.getByRole('button', { name: /전송/i }));
+
+    await screen.findByTestId('approval-approval-1');
+    fireEvent.click(screen.getByRole('button', { name: 'mock-approve' }));
+
+    await waitFor(() => {
+      expect(aiHarness.resolveAiApproval).toHaveBeenCalledWith(
+        'test-token',
+        'approval-1',
+        {
+          decision: 'approved',
+          reason: undefined,
+        },
+      );
+    });
+    await waitFor(() => {
+      expect(aiHarness.streamAiChatResume).toHaveBeenCalledTimes(1);
+    });
+    await screen.findByText('재개 완료');
+
+    expect(aiHarness.streamAiChatResume).toHaveBeenCalledTimes(1);
+    expect(screen.queryByTestId('approval-approval-1')).toBeNull();
   });
 
   it('clears stale turns when navigating from a valid conversation to an invalid one', async () => {
