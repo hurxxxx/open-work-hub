@@ -26,6 +26,7 @@ vitest.config.*.timestamp*
 .gstack/
 .playwright-mcp/
 .prod-like/
+data/
 *.png
 
 # Playwright E2E run artifacts
