@@ -203,6 +203,47 @@ export interface StreamAiChatArgs {
   signal: AbortSignal;
 }
 
+export interface AiApprovalStatusResponse {
+  id: string;
+  workspace_id: string;
+  conversation_id: string;
+  agent_run_id: string;
+  tool_call_id: string;
+  tool_name: string;
+  arguments_json: string;
+  resource_preview?: string | null;
+  status: string;
+  requested_by_user_id: string;
+  resolved_by_user_id?: string | null;
+  reject_reason?: string | null;
+  resolved_at?: string | null;
+  expires_at: string;
+  execution_result_json?: unknown;
+  error_message?: string | null;
+  created_at: string;
+  snapshot_status?: string | null;
+}
+
+export interface ResolveAiApprovalRequest {
+  decision: 'approved' | 'rejected';
+  reason?: string | null;
+}
+
+export interface AbandonAiApprovalRequest {
+  reason?: string | null;
+}
+
+export interface ResumeAiChatRequest {
+  conversation_id: string;
+  approval_id: string;
+}
+
+export interface StreamAiResumeArgs {
+  payload: ResumeAiChatRequest;
+  token: string;
+  signal: AbortSignal;
+}
+
 /**
  * Open an SSE stream to ``/api/v1/ai/chat/stream``. Returns the raw
  * ``Response`` — the caller consumes ``response.body`` via ``iterSseEvents``
@@ -213,7 +254,64 @@ export async function streamAiChat({
   token,
   signal,
 }: StreamAiChatArgs): Promise<Response> {
-  const url = rewriteWorkspaceApiPath('/api/v1/ai/chat/stream');
+  return streamAiRequest('/api/v1/ai/chat/stream', payload, token, signal);
+}
+
+export function getAiApprovalStatus(
+  token: string,
+  approvalId: string,
+): Promise<AiApprovalStatusResponse> {
+  return aiRequest<AiApprovalStatusResponse>(
+    `/api/v1/ai/approvals/${encodeURIComponent(approvalId)}`,
+    token,
+  );
+}
+
+export function resolveAiApproval(
+  token: string,
+  approvalId: string,
+  payload: ResolveAiApprovalRequest,
+): Promise<AiApprovalStatusResponse> {
+  return aiRequest<AiApprovalStatusResponse>(
+    `/api/v1/ai/approvals/${encodeURIComponent(approvalId)}/resolve`,
+    token,
+    {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    },
+  );
+}
+
+export function abandonAiApproval(
+  token: string,
+  approvalId: string,
+  payload: AbandonAiApprovalRequest = {},
+): Promise<AiApprovalStatusResponse> {
+  return aiRequest<AiApprovalStatusResponse>(
+    `/api/v1/ai/approvals/${encodeURIComponent(approvalId)}/abandon`,
+    token,
+    {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    },
+  );
+}
+
+export async function streamAiChatResume({
+  payload,
+  token,
+  signal,
+}: StreamAiResumeArgs): Promise<Response> {
+  return streamAiRequest('/api/v1/ai/chat/resume', payload, token, signal);
+}
+
+async function streamAiRequest(
+  path: string,
+  payload: unknown,
+  token: string,
+  signal: AbortSignal,
+): Promise<Response> {
+  const url = rewriteWorkspaceApiPath(path);
   let response: Response;
   try {
     response = await fetch(url, {

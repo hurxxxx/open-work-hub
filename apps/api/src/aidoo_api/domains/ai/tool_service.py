@@ -272,6 +272,7 @@ def execute_tool(
                 status="ok",
                 latency_ms=_elapsed_ms(started),
                 call_id=call_id,
+                approval_id=approval.id,
                 agent_run_id=agent_run_id,
             )
             return payload
@@ -317,6 +318,7 @@ def execute_tool(
             status="error",
             latency_ms=_elapsed_ms(started),
             call_id=call_id,
+            approval_id=approval.id if approval is not None else None,
             error=_error_message(error),
             agent_run_id=agent_run_id,
         )
@@ -342,6 +344,7 @@ def execute_tool(
             status="error",
             latency_ms=_elapsed_ms(started),
             call_id=call_id,
+            approval_id=approval.id if approval is not None else None,
             error=str(error),
             agent_run_id=agent_run_id,
         )
@@ -370,6 +373,7 @@ def execute_tool(
         status="ok",
         latency_ms=_elapsed_ms(started),
         call_id=call_id,
+        approval_id=approval.id if approval is not None else None,
         resource_ids=_extract_resource_ids(encoded_result),
         agent_run_id=agent_run_id,
     )
@@ -575,6 +579,7 @@ def _log_tool_call(
     status: str,
     latency_ms: int,
     call_id: str | None = None,
+    approval_id: str | None = None,
     resource_ids: list[str] | None = None,
     error: str | None = None,
     agent_run_id: str | None = None,
@@ -592,6 +597,7 @@ def _log_tool_call(
         error=error,
         latency_ms=latency_ms,
         call_id=call_id,
+        approval_id=approval_id,
         agent_run_id=agent_run_id,
     )
 

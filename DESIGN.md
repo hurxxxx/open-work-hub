@@ -39,6 +39,26 @@ Phase 4 approval flows can land without changing the stream state model.
 - Phase 3 and 4 should only need component-body work; no hook or envelope
   reshaping should be required.
 
+## Approval Modal
+
+- Placement: modal overlay, one approval at a time.
+- Source of truth: current live pending approval state seeded from SSE
+  `approval_required` envelopes or `conversation.live_pending_approval` on
+  reload.
+- Content:
+  - tool name and short Korean label
+  - `resource_preview` summary
+  - expandable full arguments JSON block from `GET /ai/approvals/{id}`
+  - optional reject reason textarea with 140-character cap
+- Actions:
+  - 승인: resolve API then resume SSE immediately
+  - 거절: resolve API with optional reason then resume SSE immediately
+  - 요청 취소: abandon API, no resume
+- Composer policy:
+  - pending approval blocks new user input
+  - approved/rejected but not yet resumed keeps the composer blocked and shows
+    an inline "이어가기" recovery action
+
 ## Error And Cancel States
 
 - Pre-stream failure: rollback the optimistic user turn, restore the draft

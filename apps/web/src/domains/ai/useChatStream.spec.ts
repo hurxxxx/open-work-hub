@@ -618,6 +618,87 @@ describe('useChatStream', () => {
     expect(result.current.state.pendingApprovals[0].decision).toBe('approved');
   });
 
+  it('lets the view seed and patch pending approvals outside a stream', () => {
+    const { result } = renderHook(() => useChatStream('token-abc'));
+
+    act(() => {
+      result.current.replacePendingApprovals([
+        {
+          approval_id: 'a1',
+          call_id: 'call-1',
+          tool: 'docs.create_page',
+          resource_preview: 'draft',
+          expires_at_ms: 123,
+          decision: null,
+          reason: null,
+        },
+      ]);
+    });
+    expect(result.current.state.pendingApprovals).toHaveLength(1);
+
+    act(() => {
+      result.current.upsertPendingApproval({
+        approval_id: 'a1',
+        call_id: 'call-1',
+        tool: 'docs.create_page',
+        resource_preview: 'draft',
+        expires_at_ms: 123,
+        decision: 'approved',
+        reason: null,
+      });
+    });
+    expect(result.current.state.pendingApprovals[0].decision).toBe('approved');
+  });
+
+  it('resume() seeds a resolved approval and consumes the resume SSE stream', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      mockStreamResponse([
+        sseBytes([
+          frame('approval_resolved', 0, {
+            approval_id: 'a1',
+            call_id: 'call-1',
+            decision: 'approved',
+            reason: null,
+          }),
+          frame('content_delta', 1, { text: '재개 완료' }),
+          frame('done', 2, {
+            finish_reason: 'stop',
+            audit_id: null,
+            meta: null,
+          }),
+        ]),
+      ]),
+    );
+    globalThis.fetch = fetchMock as typeof globalThis.fetch;
+
+    const { result } = renderHook(() => useChatStream('token-abc'));
+    await act(async () => {
+      await result.current.resume(
+        {
+          conversation_id: 'conversation-1',
+          approval_id: 'a1',
+        },
+        {
+          seedApproval: {
+            approval_id: 'a1',
+            call_id: 'call-1',
+            tool: 'docs.create_page',
+            resource_preview: 'draft',
+            expires_at_ms: 123,
+            decision: 'approved',
+            reason: null,
+          },
+        },
+      );
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock.mock.calls[0][0]).toContain('/api/v1/ai/chat/resume');
+    expect(result.current.state.contentBuffer).toBe('재개 완료');
+    expect(result.current.state.pendingApprovals[0].decision).toBe('approved');
+    expect(result.current.state.status).toBe('done');
+  });
+
   it('accumulates artifact deltas into a per-id buffer and marks closed on completed', async () => {
     const body = sseBytes([
       frame('artifact_started', 0, {

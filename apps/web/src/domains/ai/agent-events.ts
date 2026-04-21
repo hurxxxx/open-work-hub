@@ -219,7 +219,7 @@ export interface PendingApproval {
   call_id: string;
   tool: string;
   resource_preview: string | null;
-  expires_at_ms: number | null;
+  expires_at_ms: number;
   decision: 'approved' | 'rejected' | 'cancelled' | null;
   reason?: string | null;
 }

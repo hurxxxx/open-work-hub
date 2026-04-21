@@ -27,6 +27,7 @@ from aidoo_api.core.llm_adapters import StreamChunk, supports_tool_calling
 from aidoo_api.core.settings import get_settings
 from aidoo_api.domains.ai.agent import resume_agent_run, run_agent_turn_stream
 from aidoo_api.domains.ai import approvals as ai_approvals
+from aidoo_api.domains.ai.audit import log_llm_tool_approval_resolved
 from aidoo_api.domains.ai.artifact_parser import (
     ArtifactStreamParser,
     ParsedArtifactBody,
@@ -623,6 +624,20 @@ def resolve_approval(
         resolver_user=current_user,
     )
     db.commit()
+    if approval.resolved_at is not None:
+        elapsed_since_request_ms = max(
+            0,
+            int((approval.resolved_at - approval.created_at).total_seconds() * 1000),
+        )
+        log_llm_tool_approval_resolved(
+            actor_user_id=current_user.id,
+            workspace_id=workspace.id,
+            approval_id=approval.id,
+            tool_name=approval.tool_name,
+            decision=approval.status,
+            resolver_user_id=current_user.id,
+            elapsed_since_request_ms=elapsed_since_request_ms,
+        )
     snapshot = ai_approvals.load_snapshot(db, agent_run_id=approval.agent_run_id)
     return ApprovalStatusResponse.model_validate(
         ai_approvals.approval_to_payload(approval, snapshot=snapshot)
@@ -646,6 +661,20 @@ def abandon_approval(
         resolver_user=current_user,
     )
     db.commit()
+    if approval.resolved_at is not None:
+        elapsed_since_request_ms = max(
+            0,
+            int((approval.resolved_at - approval.created_at).total_seconds() * 1000),
+        )
+        log_llm_tool_approval_resolved(
+            actor_user_id=current_user.id,
+            workspace_id=workspace.id,
+            approval_id=approval.id,
+            tool_name=approval.tool_name,
+            decision=approval.status,
+            resolver_user_id=current_user.id,
+            elapsed_since_request_ms=elapsed_since_request_ms,
+        )
     snapshot = ai_approvals.load_snapshot(db, agent_run_id=approval.agent_run_id)
     return ApprovalStatusResponse.model_validate(
         ai_approvals.approval_to_payload(approval, snapshot=snapshot)

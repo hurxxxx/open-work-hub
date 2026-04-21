@@ -15,9 +15,12 @@ import { AIView } from './AIView';
 import { WorkspaceBootstrapProvider } from '@/src/domains/workspaces/workspace-bootstrap-context';
 
 const aiHarness = vi.hoisted(() => ({
+  abandonAiApproval: vi.fn(),
   getLlmHealth: vi.fn(),
+  resolveAiApproval: vi.fn(),
   sendAiChat: vi.fn(),
   streamAiChat: vi.fn(),
+  streamAiChatResume: vi.fn(),
 }));
 const conversationsHarness = vi.hoisted(() => ({
   getConversation: vi.fn(),
@@ -43,9 +46,12 @@ vi.mock('@/src/domains/ai/ai-api', async () => {
   );
   return {
     ...actual,
+    abandonAiApproval: aiHarness.abandonAiApproval,
     getLlmHealth: aiHarness.getLlmHealth,
+    resolveAiApproval: aiHarness.resolveAiApproval,
     sendAiChat: aiHarness.sendAiChat,
     streamAiChat: aiHarness.streamAiChat,
+    streamAiChatResume: aiHarness.streamAiChatResume,
   };
 });
 
@@ -149,6 +155,37 @@ function healthPayload() {
   };
 }
 
+function conversationDetail(
+  overrides: Partial<{
+    id: string;
+    title: string;
+    scopeRef: 'meeting' | null;
+    scopeResourceId: string | null;
+    livePendingApproval: {
+      approvalId: string;
+      agentRunId: string;
+      callId: string;
+      tool: string;
+      resourcePreview?: string | null;
+      expiresAtMs: number;
+      status: 'pending' | 'approved' | 'rejected';
+      reason?: string | null;
+    } | null;
+    turns: Array<Record<string, unknown>>;
+  }> = {},
+) {
+  return {
+    id: overrides.id ?? 'conversation-1',
+    title: overrides.title ?? '',
+    scopeRef: overrides.scopeRef ?? null,
+    scopeResourceId: overrides.scopeResourceId ?? null,
+    createdAt: '2026-04-21T00:00:00Z',
+    updatedAt: '2026-04-21T00:00:00Z',
+    livePendingApproval: overrides.livePendingApproval ?? null,
+    turns: overrides.turns ?? [],
+  };
+}
+
 function RouteProbe() {
   const location = useLocation();
   const navigate = useNavigate();
@@ -214,9 +251,12 @@ function renderAIView(
 
 describe('AIView', () => {
   beforeEach(() => {
+    aiHarness.abandonAiApproval.mockReset();
     aiHarness.getLlmHealth.mockReset();
+    aiHarness.resolveAiApproval.mockReset();
     aiHarness.sendAiChat.mockReset();
     aiHarness.streamAiChat.mockReset();
+    aiHarness.streamAiChatResume.mockReset();
     conversationsHarness.getConversation.mockReset();
     meetingHarness.getMeeting.mockReset();
     aiHarness.getLlmHealth.mockResolvedValue(healthPayload());
@@ -245,7 +285,7 @@ describe('AIView', () => {
     expect((input as HTMLTextAreaElement).value).toBe('미복구 테스트');
   });
 
-  it('finalizes partial assistant output and preserves tool and approval placeholders after in-stream error', async () => {
+  it('finalizes partial assistant output and preserves approval state after in-stream error', async () => {
     aiHarness.streamAiChat.mockResolvedValue(
       mockStreamResponse([
         sseBytes([
@@ -305,11 +345,17 @@ describe('AIView', () => {
     expect(screen.getByTestId('approval-approval-1').textContent).toBe(
       'docs.create_page:pending',
     );
+    expect(document.body.textContent).toContain(
+      '현재 승인을 해결해야 다음 요청이 가능합니다.',
+    );
     expect(screen.queryByText('backend down')).toBeNull();
     // After a successful submit the view transitions empty → active, which
     // remounts the composer; re-query the currently mounted textarea.
-    const currentInput = screen.getByPlaceholderText('메시지를 입력하세요');
+    const currentInput = screen.getByPlaceholderText(
+      '현재 승인을 해결해야 다음 요청이 가능합니다.',
+    );
     expect((currentInput as HTMLTextAreaElement).value).toBe('');
+    expect((currentInput as HTMLTextAreaElement).disabled).toBe(true);
     expect(aiHarness.sendAiChat).not.toHaveBeenCalled();
   });
 
@@ -399,6 +445,35 @@ describe('AIView', () => {
       ).disabled,
     ).toBe(true);
     expect(aiHarness.streamAiChat).not.toHaveBeenCalled();
+  });
+
+  it('seeds a live pending approval from conversation detail and blocks the composer', async () => {
+    conversationsHarness.getConversation.mockResolvedValue(
+      conversationDetail({
+        id: 'c-pending',
+        livePendingApproval: {
+          approvalId: 'approval-live-1',
+          agentRunId: 'agent-run-1',
+          callId: 'call-live-1',
+          tool: 'docs.create_page',
+          resourcePreview: '분기 계획 문서 초안',
+          expiresAtMs: 123,
+          status: 'pending',
+          reason: null,
+        },
+      }),
+    );
+
+    renderAIView({ initialEntries: ['/w/hq/ai?c=c-pending'] });
+
+    await screen.findByTestId('approval-approval-live-1');
+    const input = screen.getByPlaceholderText(
+      '현재 승인을 해결해야 다음 요청이 가능합니다.',
+    );
+    expect((input as HTMLTextAreaElement).disabled).toBe(true);
+    expect(document.body.textContent).toContain(
+      '현재 승인을 해결해야 다음 요청이 가능합니다.',
+    );
   });
 
   it('clears stale turns when navigating from a valid conversation to an invalid one', async () => {

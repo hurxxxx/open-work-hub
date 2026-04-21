@@ -15,8 +15,10 @@ from aidoo_api.domains.auth.access import record_audit_log
 
 ACTION_LLM_CALL = "llm_call"
 ACTION_LLM_TOOL_CALL = "llm_tool_call"
+ACTION_LLM_TOOL_APPROVAL_RESOLVED = "llm_tool_approval_resolved"
 ENTITY_KIND_LLM_TASK = "llm_task"
 ENTITY_KIND_TOOL_CALL = "ai_tool"
+ENTITY_KIND_TOOL_APPROVAL = "ai_tool_approval"
 logger = logging.getLogger(__name__)
 
 
@@ -99,6 +101,7 @@ def log_llm_tool_call(
     resource_ids: list[str] | None,
     latency_ms: int,
     call_id: str | None = None,
+    approval_id: str | None = None,
     error: str | None = None,
     agent_run_id: str | None = None,
 ) -> None:
@@ -114,6 +117,7 @@ def log_llm_tool_call(
         "resource_ids": list(resource_ids or []),
         "latency_ms": latency_ms,
         "call_id": call_id,
+        "approval_id": approval_id,
     }
     if error:
         payload["error"] = error
@@ -128,6 +132,38 @@ def log_llm_tool_call(
         action=ACTION_LLM_TOOL_CALL,
         entity_kind=ENTITY_KIND_TOOL_CALL,
         entity_id=call_id,
+        summary=summary,
+        actor_user_id=actor_user_id,
+        payload=payload,
+    )
+
+
+def log_llm_tool_approval_resolved(
+    *,
+    actor_user_id: str | None,
+    workspace_id: str,
+    approval_id: str,
+    tool_name: str,
+    decision: str,
+    resolver_user_id: str | None,
+    elapsed_since_request_ms: int,
+) -> None:
+    payload: dict[str, Any] = {
+        "workspace_id": workspace_id,
+        "approval_id": approval_id,
+        "tool_name": tool_name,
+        "decision": decision,
+        "resolver_user_id": resolver_user_id,
+        "elapsed_since_request_ms": elapsed_since_request_ms,
+    }
+    summary = (
+        "llm_tool_approval_resolved "
+        f"tool={tool_name} decision={decision} approval_id={approval_id}"
+    )
+    _persist_audit_event(
+        action=ACTION_LLM_TOOL_APPROVAL_RESOLVED,
+        entity_kind=ENTITY_KIND_TOOL_APPROVAL,
+        entity_id=approval_id,
         summary=summary,
         actor_user_id=actor_user_id,
         payload=payload,

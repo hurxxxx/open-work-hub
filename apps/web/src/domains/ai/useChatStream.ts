@@ -3,9 +3,11 @@ import {
   AiApiError,
   sendAiChat,
   streamAiChat,
+  streamAiChatResume,
   type AiChatResponse,
   type AiChatStreamRequest,
   type AiChatUsage,
+  type ResumeAiChatRequest,
 } from '@/src/domains/ai/ai-api';
 import type {
   ApprovalRequiredEvent,
@@ -56,8 +58,14 @@ export interface ChatStreamState {
 export interface UseChatStreamApi {
   state: ChatStreamState;
   send: (payload: AiChatStreamRequest) => Promise<void>;
+  resume: (
+    payload: ResumeAiChatRequest,
+    options?: { seedApproval?: PendingApproval | null },
+  ) => Promise<void>;
   abort: () => void;
-  reset: () => void;
+  reset: (options?: { keepPendingApprovals?: boolean }) => void;
+  replacePendingApprovals: (approvals: PendingApproval[]) => void;
+  upsertPendingApproval: (approval: PendingApproval) => void;
 }
 
 const AI_STREAM_ENABLED_STORAGE_KEY = 'aidoo.ai.streamEnabled';
@@ -106,11 +114,26 @@ export function useChatStream(token: string | null): UseChatStreamApi {
     [],
   );
 
-  const reset = useCallback(() => {
+  const reset = useCallback((options?: { keepPendingApprovals?: boolean }) => {
     runIdRef.current += 1;
     abortRef.current?.abort();
     abortRef.current = null;
-    setState(INITIAL_STATE);
+    setState((prev) =>
+      options?.keepPendingApprovals
+        ? { ...INITIAL_STATE, pendingApprovals: prev.pendingApprovals }
+        : INITIAL_STATE,
+    );
+  }, []);
+
+  const replacePendingApprovals = useCallback((approvals: PendingApproval[]) => {
+    setState((prev) => ({ ...prev, pendingApprovals: approvals }));
+  }, []);
+
+  const upsertPendingApproval = useCallback((approval: PendingApproval) => {
+    setState((prev) => ({
+      ...prev,
+      pendingApprovals: mergePendingApprovals(prev.pendingApprovals, [approval]),
+    }));
   }, []);
 
   const send = useCallback(
@@ -237,13 +260,115 @@ export function useChatStream(token: string | null): UseChatStreamApi {
     [setStateForRun, token],
   );
 
+  const resume = useCallback(
+    async (
+      payload: ResumeAiChatRequest,
+      options?: { seedApproval?: PendingApproval | null },
+    ) => {
+      if (!token) {
+        throw new AiApiError(401, '로그인이 필요합니다.');
+      }
+
+      abortRef.current?.abort();
+      const runId = runIdRef.current + 1;
+      runIdRef.current = runId;
+      const controller = new AbortController();
+      abortRef.current = controller;
+      const seededApproval = options?.seedApproval ?? null;
+
+      setStateForRun(runId, {
+        ...INITIAL_STATE,
+        status: 'streaming',
+        transport: 'stream',
+        pendingApprovals: seededApproval ? [seededApproval] : [],
+      });
+
+      try {
+        const response = await streamAiChatResume({
+          payload,
+          token,
+          signal: controller.signal,
+        });
+        if (!response.body) {
+          throw new AiApiError(0, 'SSE 응답 본문이 비어 있습니다.');
+        }
+
+        setStateForRun(runId, (prev) => ({
+          ...prev,
+          streamOpened: true,
+        }));
+
+        for await (const message of iterSseEvents(
+          response.body,
+          controller.signal,
+        )) {
+          const parsed = parseMessage(message.data);
+          if (!parsed) {
+            continue;
+          }
+          let shouldBreak = false;
+          setStateForRun(runId, (prev) => {
+            const { next, terminal } = applyEnvelope(prev, parsed);
+            if (terminal) {
+              shouldBreak = true;
+            }
+            return next;
+          });
+          if (shouldBreak) {
+            break;
+          }
+        }
+      } catch (error) {
+        if ((error as Error).name === 'AbortError') {
+          setStateForRun(runId, (prev) => ({
+            ...prev,
+            status: 'cancelled',
+            artifacts: prev.artifacts.map((artifact) =>
+              artifact.status === 'open'
+                ? { ...artifact, status: 'closed' as const }
+                : artifact,
+            ),
+          }));
+          return;
+        }
+
+        setStateForRun(runId, (prev) => ({
+          ...prev,
+          status: 'error',
+          errorMessage:
+            error instanceof Error
+              ? error.message
+              : prev.errorMessage ?? 'AI 재개 스트리밍에 실패했습니다.',
+          artifacts: prev.artifacts.map((artifact) =>
+            artifact.status === 'open'
+              ? { ...artifact, status: 'closed' as const }
+              : artifact,
+          ),
+        }));
+      } finally {
+        if (abortRef.current === controller) {
+          abortRef.current = null;
+        }
+      }
+    },
+    [setStateForRun, token],
+  );
+
   useEffect(() => {
     return () => {
       abortRef.current?.abort();
     };
   }, []);
 
-  return { state, send, abort, reset };
+  return {
+    state,
+    send,
+    resume,
+    abort,
+    reset,
+    replacePendingApprovals,
+    upsertPendingApproval,
+  };
 }
 
 async function sendViaSyncFallback({
@@ -490,14 +615,14 @@ function applyEnvelope(
         call_id: data.call_id,
         tool: data.tool,
         resource_preview: data.resource_preview ?? null,
-        expires_at_ms: data.expires_at_ms ?? null,
+        expires_at_ms: data.expires_at_ms,
         decision: null,
         reason: null,
       };
       return {
         next: {
           ...prev,
-          pendingApprovals: [...prev.pendingApprovals, entry],
+          pendingApprovals: mergePendingApprovals(prev.pendingApprovals, [entry]),
         },
         terminal: false,
       };
@@ -557,4 +682,15 @@ function applyEnvelope(
       console.debug('[useChatStream] unknown envelope type', event.type);
       return { next: prev, terminal: false };
   }
+}
+
+function mergePendingApprovals(
+  current: PendingApproval[],
+  incoming: PendingApproval[],
+): PendingApproval[] {
+  const merged = new Map<string, PendingApproval>();
+  for (const approval of [...current, ...incoming]) {
+    merged.set(approval.approval_id, approval);
+  }
+  return Array.from(merged.values());
 }
