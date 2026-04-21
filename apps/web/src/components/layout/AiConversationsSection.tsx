@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { MessageSquare, Plus, Trash2 } from 'lucide-react';
+import { MessageSquare, Plus, Sparkles, Trash2 } from 'lucide-react';
 
 import type { ConversationSummary } from '@/src/domains/ai/conversations-api';
 import { cn } from '@/src/lib/utils';
@@ -55,11 +55,14 @@ export function AiConversationsSection({
           <ul className="space-y-0.5">
             {visible.map((conversation) => {
               const isActive = conversation.id === activeConversationId;
+              const isScoped = conversation.scopeRef === 'meeting';
+              const Icon = isScoped ? Sparkles : MessageSquare;
               return (
                 <li key={conversation.id} className="group/conversation relative">
                   <button
                     type="button"
                     onClick={() => onSelect(conversation.id)}
+                    title={isScoped ? '회의 컨텍스트에 바인딩된 대화' : undefined}
                     className={cn(
                       'flex w-full items-center gap-2 rounded-md px-3 py-1.5 pr-8 text-left transition-colors',
                       isActive
@@ -67,11 +70,12 @@ export function AiConversationsSection({
                         : 'text-app-ink hover:bg-app-surface-hover',
                     )}
                   >
-                    <MessageSquare
+                    <Icon
                       size={13}
+                      aria-label={isScoped ? '회의 컨텍스트' : undefined}
                       className={cn(
                         'shrink-0',
-                        isActive
+                        isActive || isScoped
                           ? 'text-app-accent'
                           : 'text-gray-500 dark:text-gray-400',
                       )}

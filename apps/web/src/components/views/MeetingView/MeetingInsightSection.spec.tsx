@@ -295,7 +295,53 @@ describe('MeetingInsightSection', () => {
 
     await screen.findByText('Click me');
     fireEvent.click(screen.getByRole('button', { name: '챗에서 진행' }));
-    expect(onOpenInChat).toHaveBeenCalledWith(actionItem);
+    await waitFor(() => {
+      expect(onOpenInChat).toHaveBeenCalledWith(actionItem);
+    });
+  });
+
+  it('shows the inline openError and keeps other cards enabled when onOpenInChat rejects', async () => {
+    const actionItem = insightItem({
+      id: 'a-1',
+      insight_type: 'action',
+      payload: { title: '첫째' },
+    });
+    const secondAction = insightItem({
+      id: 'a-2',
+      insight_type: 'action',
+      payload: { title: '둘째' },
+    });
+    insightsHarness.extractActions.mockResolvedValue({
+      items: [actionItem, secondAction],
+    });
+    insightsHarness.extractDecisions.mockResolvedValue({ items: [] });
+    insightsHarness.draftFollowupSchedule.mockResolvedValue({
+      items: [],
+      attendee_user_ids: [],
+      availability: null,
+    });
+
+    const onOpenInChat = vi.fn().mockRejectedValue(new Error('conversation down'));
+    render(
+      <MeetingInsightSection
+        meeting={baseMeeting()}
+        workspaceSlug="hq"
+        token="test-token"
+        onOpenInChat={onOpenInChat}
+      />,
+    );
+
+    await screen.findByText('첫째');
+    const buttons = screen.getAllByRole('button', { name: '챗에서 진행' });
+    fireEvent.click(buttons[0]!);
+    await screen.findByText('conversation down');
+    // After rejection settles, openingInsightId clears and the other
+    // button becomes clickable again.
+    await waitFor(() => {
+      for (const button of screen.getAllByRole('button', { name: '챗에서 진행' })) {
+        expect((button as HTMLButtonElement).disabled).toBe(false);
+      }
+    });
   });
 
   it('preserves previously rendered items when an auto-refetch rejects', async () => {

@@ -59,6 +59,20 @@ vi.mock('@/src/domains/ai/conversations-api', async () => {
   };
 });
 
+const meetingHarness = vi.hoisted(() => ({
+  getMeeting: vi.fn(),
+}));
+
+vi.mock('@/src/domains/meeting/meeting-api', async () => {
+  const actual = await vi.importActual<
+    typeof import('@/src/domains/meeting/meeting-api')
+  >('@/src/domains/meeting/meeting-api');
+  return {
+    ...actual,
+    getMeeting: meetingHarness.getMeeting,
+  };
+});
+
 vi.mock('@/src/components/views/chat/ToolCallCard', () => ({
   ToolCallCard: ({ call }: { call: { call_id: string; name: string; argsBuffer: string } }) => (
     <div data-testid={`tool-call-${call.call_id}`}>
@@ -204,6 +218,7 @@ describe('AIView', () => {
     aiHarness.sendAiChat.mockReset();
     aiHarness.streamAiChat.mockReset();
     conversationsHarness.getConversation.mockReset();
+    meetingHarness.getMeeting.mockReset();
     aiHarness.getLlmHealth.mockResolvedValue(healthPayload());
     Object.defineProperty(HTMLElement.prototype, 'scrollTo', {
       configurable: true,
@@ -594,7 +609,7 @@ describe('AIView', () => {
     });
   });
 
-  it('seeds router-state draft into an empty meeting-scoped conversation', async () => {
+  it('seeds router-state draft into an empty meeting-scoped conversation and renders the scope chip', async () => {
     conversationsHarness.getConversation.mockResolvedValue({
       id: 'c-scoped',
       title: '',
@@ -604,6 +619,10 @@ describe('AIView', () => {
       createdAt: '2026-04-21T00:00:00Z',
       updatedAt: '2026-04-21T00:00:00Z',
       livePendingApproval: null,
+    });
+    meetingHarness.getMeeting.mockResolvedValue({
+      id: 'meeting-1',
+      title: '주간 동기화',
     });
 
     renderAIView({
@@ -632,7 +651,15 @@ describe('AIView', () => {
     await waitFor(() => {
       expect(input.value).toBe('회의 액션을 이슈로 정리해줘');
     });
-    expect(screen.getByText('회의 AI 제안에서 시작됨')).toBeTruthy();
+    // Scope chip replaces the old "회의 AI 제안에서 시작됨" hint for
+    // scoped conversations — it persists beyond the first turn and
+    // carries the meeting title + a link back to the meeting view.
+    const chip = await screen.findByTestId('ai-scope-chip');
+    expect(chip.getAttribute('href')).toBe('/w/hq/meeting/meeting-1');
+    await waitFor(() => {
+      expect(chip.textContent).toContain('주간 동기화');
+    });
+    expect(screen.queryByText('회의 AI 제안에서 시작됨')).toBeNull();
     expect(screen.getByTestId('location-search').textContent).toBe('?c=c-scoped');
   });
 

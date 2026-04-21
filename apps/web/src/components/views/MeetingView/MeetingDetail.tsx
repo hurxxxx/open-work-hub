@@ -781,23 +781,16 @@ export function MeetingDetail({
             meeting={meeting}
             workspaceSlug={workspaceSlug}
             token={token}
-            onOpenInChat={(insight) => {
+            onOpenInChat={async (insight) => {
               if (!token) {
-                setError('AI 대화 컨텍스트를 시작하려면 다시 로그인해주세요.');
-                return;
+                throw new Error('AI 대화 컨텍스트를 시작하려면 다시 로그인해주세요.');
               }
-              void openMeetingInsightInChat({
+              await openMeetingInsightInChat({
                 navigate,
                 token,
                 workspaceSlug,
                 meeting,
                 insight,
-              }).catch((err: unknown) => {
-                setError(
-                  err instanceof Error
-                    ? err.message
-                    : 'AI 대화를 시작할 수 없습니다.',
-                );
               });
             }}
           />

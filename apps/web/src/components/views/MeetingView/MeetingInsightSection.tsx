@@ -34,7 +34,7 @@ interface MeetingInsightSectionProps {
   meeting: MeetingDetail;
   workspaceSlug: string;
   token: string | null;
-  onOpenInChat: (insight: MeetingInsightItem) => void;
+  onOpenInChat: (insight: MeetingInsightItem) => void | Promise<void>;
 }
 
 function errorMessage(error: unknown): string {
@@ -79,14 +79,45 @@ function renderSlotList(slots: unknown): string[] {
   return out;
 }
 
+interface OpenInChatState {
+  openingInsightId: string | null;
+  onOpen: (insight: MeetingInsightItem) => void;
+}
+
+function OpenInChatButton({
+  insight,
+  state,
+}: {
+  insight: MeetingInsightItem;
+  state: OpenInChatState;
+}) {
+  const isOpening = state.openingInsightId === insight.id;
+  const isOtherOpening =
+    state.openingInsightId !== null && state.openingInsightId !== insight.id;
+  return (
+    <button
+      type="button"
+      onClick={() => state.onOpen(insight)}
+      disabled={isOpening || isOtherOpening}
+      aria-busy={isOpening}
+      className="app-text-caption inline-flex items-center gap-1 text-app-accent hover:underline disabled:text-app-ink/40 disabled:hover:no-underline"
+    >
+      {isOpening ? (
+        <Loader2 size={12} className="animate-spin" aria-hidden="true" />
+      ) : null}
+      챗에서 진행
+    </button>
+  );
+}
+
 function ActionCard({
   insight,
   assigneeName,
-  onOpenInChat,
+  openState,
 }: {
   insight: MeetingInsightItem;
   assigneeName: string | null;
-  onOpenInChat: (insight: MeetingInsightItem) => void;
+  openState: OpenInChatState;
 }) {
   const payload = insight.payload;
   const title = typeof payload.title === 'string' ? payload.title : '';
@@ -107,13 +138,7 @@ function ActionCard({
             .filter(Boolean)
             .join(' · ') || '추가 정보 없음'}
         </p>
-        <button
-          type="button"
-          onClick={() => onOpenInChat(insight)}
-          className="app-text-caption text-app-accent hover:underline"
-        >
-          챗에서 진행
-        </button>
+        <OpenInChatButton insight={insight} state={openState} />
       </div>
     </li>
   );
@@ -121,10 +146,10 @@ function ActionCard({
 
 function DecisionCard({
   insight,
-  onOpenInChat,
+  openState,
 }: {
   insight: MeetingInsightItem;
-  onOpenInChat: (insight: MeetingInsightItem) => void;
+  openState: OpenInChatState;
 }) {
   const payload = insight.payload;
   const statement = typeof payload.statement === 'string' ? payload.statement : '';
@@ -138,13 +163,7 @@ function DecisionCard({
         </p>
       ) : null}
       <div className="mt-2 flex justify-end">
-        <button
-          type="button"
-          onClick={() => onOpenInChat(insight)}
-          className="app-text-caption text-app-accent hover:underline"
-        >
-          챗에서 진행
-        </button>
+        <OpenInChatButton insight={insight} state={openState} />
       </div>
     </li>
   );
@@ -153,11 +172,11 @@ function DecisionCard({
 function FollowupCard({
   insight,
   followupContext,
-  onOpenInChat,
+  openState,
 }: {
   insight: MeetingInsightItem;
   followupContext: MeetingFollowupResult | null;
-  onOpenInChat: (insight: MeetingInsightItem) => void;
+  openState: OpenInChatState;
 }) {
   const payload = insight.payload;
   const title =
@@ -194,13 +213,7 @@ function FollowupCard({
         <p className="app-text-caption text-app-ink/50">
           {summaryParts.join(' · ') || '요약 정보 없음'}
         </p>
-        <button
-          type="button"
-          onClick={() => onOpenInChat(insight)}
-          className="app-text-caption text-app-accent hover:underline"
-        >
-          챗에서 진행
-        </button>
+        <OpenInChatButton insight={insight} state={openState} />
       </div>
     </li>
   );
@@ -222,7 +235,34 @@ export function MeetingInsightSection({
     GroupState<MeetingInsightItem> & { context: MeetingFollowupResult | null }
   >({ items: [], loading: false, error: null, context: null });
   const [refreshing, setRefreshing] = useState(false);
+  const [openingInsightId, setOpeningInsightId] = useState<string | null>(null);
+  const [openError, setOpenError] = useState<string | null>(null);
   const latestRequestTokenRef = useRef(0);
+
+  const handleOpenInChat = useCallback(
+    (insight: MeetingInsightItem) => {
+      if (openingInsightId !== null) return;
+      setOpeningInsightId(insight.id);
+      setOpenError(null);
+      // Wrap with Promise.resolve so callers returning void (e.g. test mocks)
+      // still go through the same loading-state teardown path.
+      void Promise.resolve(onOpenInChat(insight))
+        .catch((err: unknown) => {
+          setOpenError(
+            err instanceof Error ? err.message : 'AI 대화를 시작할 수 없습니다.',
+          );
+        })
+        .finally(() => {
+          setOpeningInsightId(null);
+        });
+    },
+    [onOpenInChat, openingInsightId],
+  );
+
+  const openState: OpenInChatState = useMemo(
+    () => ({ openingInsightId, onOpen: handleOpenInChat }),
+    [openingInsightId, handleOpenInChat],
+  );
 
   // Re-fetch when the meeting changes or any recording transitions
   // (e.g. extraction finishes) so new drafts surface without forcing
@@ -398,6 +438,15 @@ export function MeetingInsightSection({
         </p>
       ) : null}
 
+      {openError ? (
+        <p
+          role="alert"
+          className="app-text-caption mb-2 text-[var(--ui-color-danger)]"
+        >
+          {openError}
+        </p>
+      ) : null}
+
       {allEmpty ? (
         isExtracting ? null : (
           <EmptyRow text="이 회의에서 발견된 AI 제안이 없습니다." />
@@ -426,7 +475,7 @@ export function MeetingInsightSection({
                       key={insight.id}
                       insight={insight}
                       assigneeName={assigneeName}
-                      onOpenInChat={onOpenInChat}
+                      openState={openState}
                     />
                   );
                 })}
@@ -447,7 +496,7 @@ export function MeetingInsightSection({
                   <DecisionCard
                     key={insight.id}
                     insight={insight}
-                    onOpenInChat={onOpenInChat}
+                    openState={openState}
                   />
                 ))}
               </ul>
@@ -468,7 +517,7 @@ export function MeetingInsightSection({
                     key={insight.id}
                     insight={insight}
                     followupContext={followupState.context}
-                    onOpenInChat={onOpenInChat}
+                    openState={openState}
                   />
                 ))}
               </ul>

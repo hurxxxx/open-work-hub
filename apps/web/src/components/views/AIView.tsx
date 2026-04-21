@@ -1,6 +1,7 @@
 import { motion } from 'motion/react';
+import { Sparkles } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
   getLlmHealth,
   type AiBackendMode,
@@ -15,7 +16,11 @@ import {
 } from '@/src/domains/ai/conversations-api';
 import { useChatStream } from '@/src/domains/ai/useChatStream';
 import { useAuth } from '@/src/domains/auth/auth-provider';
-import { resolveToolInvocationHref } from '@/src/domains/workspaces/workspace-utils';
+import { getMeeting } from '@/src/domains/meeting/meeting-api';
+import {
+  buildWorkspaceAppPath,
+  resolveToolInvocationHref,
+} from '@/src/domains/workspaces/workspace-utils';
 import { useWorkspaceBootstrapContext } from '@/src/domains/workspaces/workspace-bootstrap-context';
 import { NAV_ITEMS } from '@/src/constants';
 import { ChatThread } from '@/src/components/views/chat/ChatThread';
@@ -108,6 +113,46 @@ function resolveAssistantTurnContent(
   return '응답을 생성하지 못했습니다.';
 }
 
+interface ScopeInfo {
+  ref: 'meeting';
+  resourceId: string;
+  meetingTitle: string | null;
+}
+
+function ScopeChip({
+  scope,
+  workspaceSlug,
+}: {
+  scope: ScopeInfo;
+  workspaceSlug: string | undefined;
+}) {
+  const label = scope.meetingTitle
+    ? `회의 "${scope.meetingTitle}" 컨텍스트`
+    : '회의 컨텍스트';
+  const commonClass =
+    'app-text-caption inline-flex items-center gap-1 rounded-full border border-app-border bg-app-surface-sidebar px-2 py-1 text-app-ink transition-colors hover:border-app-accent';
+  if (!workspaceSlug) {
+    return (
+      <span role="status" className={commonClass} data-testid="ai-scope-chip">
+        <Sparkles size={12} className="text-app-accent" aria-hidden="true" />
+        {label}
+      </span>
+    );
+  }
+  return (
+    <Link
+      to={buildWorkspaceAppPath(workspaceSlug, 'meeting', `/${scope.resourceId}`)}
+      role="status"
+      aria-label={`${label} — 회의로 돌아가기`}
+      className={`${commonClass} no-underline`}
+      data-testid="ai-scope-chip"
+    >
+      <Sparkles size={12} className="text-app-accent" aria-hidden="true" />
+      {label}
+    </Link>
+  );
+}
+
 export const AIView = () => {
   const { status: authStatus, token, user } = useAuth();
   const location = useLocation();
@@ -171,6 +216,11 @@ export const AIView = () => {
     string | null
   >(null);
   const [isLoadingConversation, setIsLoadingConversation] = useState(false);
+  // Tracks the resolved scope binding for the current conversation. `null`
+  // means free chat (no scope). When a meeting-scoped conversation is
+  // loaded, meetingTitle is filled asynchronously via a separate fetch so
+  // the chip can display the meeting name instead of a generic label.
+  const [scopeInfo, setScopeInfo] = useState<ScopeInfo | null>(null);
   const chat = useChatStream(token);
   const isSending = chat.state.status === 'streaming';
   const isConversationReady =
@@ -355,6 +405,7 @@ export const AIView = () => {
       setTurns([]);
       setChatError(null);
       setIsLoadingConversation(false);
+      setScopeInfo(null);
 
       // Consume the meeting-insight deep-link draft exactly once per
       // distinct value. Scheduled AFTER the setInput('') above in the
@@ -377,6 +428,7 @@ export const AIView = () => {
     setTurns([]);
     setActiveConversationId(null);
     setChatError(null);
+    setScopeInfo(null);
 
     if (!token) {
       setIsLoadingConversation(false);
@@ -394,6 +446,15 @@ export const AIView = () => {
         setTurns(detailToTurns(detail));
         setActiveConversationId(detail.id);
         setChatError(null);
+        if (detail.scopeRef === 'meeting' && detail.scopeResourceId) {
+          setScopeInfo({
+            ref: 'meeting',
+            resourceId: detail.scopeResourceId,
+            meetingTitle: null,
+          });
+        } else {
+          setScopeInfo(null);
+        }
         if (
           locationDraft &&
           locationDraftSourceKey &&
@@ -449,6 +510,40 @@ export const AIView = () => {
     token,
     workspaceSlug,
   ]);
+
+  // Resolve the meeting title for the scope chip. Runs after hydration
+  // sets scopeInfo; degrades silently so a transient fetch failure still
+  // leaves the chip visible (just without the specific meeting name).
+  useEffect(() => {
+    if (!token || !workspaceSlug) return;
+    if (
+      !scopeInfo ||
+      scopeInfo.ref !== 'meeting' ||
+      scopeInfo.meetingTitle !== null
+    ) {
+      return;
+    }
+    let cancelled = false;
+    const resourceId = scopeInfo.resourceId;
+    getMeeting(token, workspaceSlug, resourceId)
+      .then((meeting) => {
+        if (cancelled) return;
+        setScopeInfo((prev) =>
+          prev &&
+          prev.ref === 'meeting' &&
+          prev.resourceId === resourceId &&
+          prev.meetingTitle === null
+            ? { ...prev, meetingTitle: meeting.title }
+            : prev,
+        );
+      })
+      .catch(() => {
+        // Silent fallback: the chip still renders with the generic label.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [token, workspaceSlug, scopeInfo]);
 
   useEffect(() => {
     if (!pendingDraftSearchCleanup || !routeDraft) {
@@ -731,8 +826,15 @@ export const AIView = () => {
           <EmptyState
             composer={
               <div className="space-y-2">
-                {showInsightHint ? (
-                  <p className="app-text-caption text-app-ink/60">
+                {scopeInfo ? (
+                  <div className="flex justify-center">
+                    <ScopeChip scope={scopeInfo} workspaceSlug={workspaceSlug} />
+                  </div>
+                ) : showInsightHint ? (
+                  <p
+                    role="status"
+                    className="app-text-caption text-center text-app-ink/60"
+                  >
                     회의 AI 제안에서 시작됨
                   </p>
                 ) : null}
@@ -792,7 +894,12 @@ export const AIView = () => {
             {visibleApprovals.map((approval) => (
               <ApprovalModal key={approval.approval_id} approval={approval} />
             ))}
-            <div className="border-t border-app-border bg-app-surface p-4">
+            <div className="border-t border-app-border bg-app-surface p-4 space-y-2">
+              {scopeInfo ? (
+                <div className="flex">
+                  <ScopeChip scope={scopeInfo} workspaceSlug={workspaceSlug} />
+                </div>
+              ) : null}
               <ChatComposer
                 input={input}
                 onInputChange={setInput}
