@@ -2,7 +2,13 @@ from __future__ import annotations
 
 from fastapi.testclient import TestClient
 
-from test_meeting import _auth_headers, _bootstrap_admin_session
+from test_meeting import (
+    _auth_headers,
+    _bootstrap_admin_session,
+    _create_meeting,
+    _create_user_with_workspaces,
+    _login,
+)
 
 
 def _workspace_slug(client: TestClient, token: str) -> str:
@@ -123,6 +129,55 @@ def test_patch_empty_title_rejected(client: TestClient) -> None:
         json={"title": "   "},
     )
     assert response.status_code == 400
+
+
+def test_legacy_create_rejects_unsupported_scope(client: TestClient) -> None:
+    session = _bootstrap_admin_session(client)
+    token = session["token"]
+    slug = _workspace_slug(client, token)
+
+    response = client.post(
+        f"/api/v1/workspaces/{slug}/conversations",
+        headers=_auth_headers(token),
+        json={
+            "title": "",
+            "scopeRef": "docs_page",
+            "scopeResourceId": "doc-1",
+        },
+    )
+
+    assert response.status_code == 422
+
+
+def test_legacy_create_rejects_meeting_scope_for_non_participant(client: TestClient) -> None:
+    session = _bootstrap_admin_session(client)
+    admin_token = session["token"]
+    slug = _workspace_slug(client, admin_token)
+    meeting = _create_meeting(client, admin_token, title="Private scope meeting")
+    outsider = _create_user_with_workspaces(
+        client,
+        admin_token,
+        email="conversation-outsider@aidoo.local",
+        full_name="Conversation Outsider",
+        workspace_keys=[slug],
+    )
+    outsider_token = _login(
+        client,
+        outsider["user"]["email"],
+        outsider["temporary_password"],
+    )
+
+    response = client.post(
+        f"/api/v1/workspaces/{slug}/conversations",
+        headers=_auth_headers(outsider_token),
+        json={
+            "title": "",
+            "scopeRef": "meeting",
+            "scopeResourceId": meeting["id"],
+        },
+    )
+
+    assert response.status_code == 403
 
 
 def test_delete_soft_hides_from_list_but_direct_get_also_404s(

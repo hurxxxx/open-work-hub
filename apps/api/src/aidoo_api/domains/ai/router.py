@@ -4,7 +4,7 @@ import asyncio
 from datetime import datetime
 from typing import Any, Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from openai import OpenAIError
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
@@ -58,6 +58,15 @@ from aidoo_api.domains.auth.workspace_apps import WORKSPACE_APP_IDS
 from aidoo_api.domains.auth.security import new_id
 from aidoo_api.domains.conversations import service as conversations_service
 from aidoo_api.domains.conversations.models import Conversation
+from aidoo_api.domains.conversations.schemas import (
+    ConversationCreateRequest,
+    ConversationDetail,
+    ConversationListResponse,
+    ConversationUpdateRequest,
+    conversation_detail_from_row,
+    conversation_summary_from_row,
+)
+from aidoo_api.domains.meeting import service as meeting_service
 
 
 LlmRequestBackendMode = Literal["auto", "local", "openrouter"]
@@ -301,11 +310,23 @@ def chat(
             command=command,
         )
     else:
+        scope_system_prompt = _conversation_scope_system_prompt(
+            db,
+            workspace=workspace,
+            principal=principal,
+            user=current_user,
+            conversation=conversation,
+        )
         context = _task_context_from_principal(principal)
+        llm_messages = _messages_with_scope_prompt(
+            [message.model_dump() for message in payload.messages],
+            scope_system_prompt=scope_system_prompt,
+        )
         response = _complete_via_policy(
             context,
             payload,
             db,
+            messages=llm_messages,
             pool_hint="local" if payload.backend_mode == "local" else None,
         )
 
@@ -408,6 +429,125 @@ class ApprovalStatusResponse(BaseModel):
 class ChatResumeRequest(BaseModel):
     conversation_id: str
     approval_id: str
+
+
+@router.get("/conversations", response_model=ConversationListResponse)
+def list_ai_conversations(
+    request: Request,
+    limit: int = Query(default=20, ge=1, le=100),
+    cursor: str | None = Query(default=None),
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+) -> ConversationListResponse:
+    workspace = _require_request_workspace(request)
+    rows, next_cursor = conversations_service.list_conversations(
+        db,
+        workspace=workspace,
+        user=current_user,
+        limit=limit,
+        cursor=cursor,
+    )
+    return ConversationListResponse(
+        items=[conversation_summary_from_row(row) for row in rows],
+        next_cursor=next_cursor,
+    )
+
+
+@router.post(
+    "/conversations",
+    response_model=ConversationDetail,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_ai_conversation(
+    payload: ConversationCreateRequest,
+    request: Request,
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+) -> ConversationDetail:
+    workspace = _require_request_workspace(request)
+    principal = _build_request_principal(
+        current_user,
+        request,
+        source="api.ai.conversations.create",
+    )
+    _validate_requested_conversation_scope(
+        db,
+        workspace=workspace,
+        principal=principal,
+        user=current_user,
+        scope_ref=payload.scope_ref,
+        scope_resource_id=payload.scope_resource_id,
+    )
+    conversation = conversations_service.create_conversation(
+        db,
+        workspace=workspace,
+        user=current_user,
+        title=payload.title,
+        scope_ref=payload.scope_ref,
+        scope_resource_id=payload.scope_resource_id,
+    )
+    return conversation_detail_from_row(conversation)
+
+
+@router.get("/conversations/{conversation_id}", response_model=ConversationDetail)
+def get_ai_conversation(
+    conversation_id: str,
+    request: Request,
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+) -> ConversationDetail:
+    workspace = _require_request_workspace(request)
+    conversation = conversations_service.get_conversation(
+        db,
+        workspace=workspace,
+        user=current_user,
+        conversation_id=conversation_id,
+    )
+    live_pending_approval = ai_approvals.get_live_pending_approval(
+        db,
+        workspace=workspace,
+        user=current_user,
+        conversation_id=conversation_id,
+    )
+    return conversation_detail_from_row(
+        conversation,
+        live_pending_approval=live_pending_approval,
+    )
+
+
+@router.patch("/conversations/{conversation_id}", response_model=ConversationDetail)
+def rename_ai_conversation(
+    conversation_id: str,
+    payload: ConversationUpdateRequest,
+    request: Request,
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+) -> ConversationDetail:
+    workspace = _require_request_workspace(request)
+    conversation = conversations_service.rename_conversation(
+        db,
+        workspace=workspace,
+        user=current_user,
+        conversation_id=conversation_id,
+        title=payload.title,
+    )
+    return conversation_detail_from_row(conversation)
+
+
+@router.delete("/conversations/{conversation_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_ai_conversation(
+    conversation_id: str,
+    request: Request,
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+) -> None:
+    workspace = _require_request_workspace(request)
+    conversations_service.soft_delete_conversation(
+        db,
+        workspace=workspace,
+        user=current_user,
+        conversation_id=conversation_id,
+    )
 
 
 @router.post("/chat/stream")
@@ -922,13 +1062,14 @@ def _complete_via_policy(
     payload: ChatRequest,
     db: Session,
     *,
+    messages: list[dict[str, Any]],
     pool_hint: LlmPoolHint | None,
 ) -> ChatResponse:
     try:
         response, decision, config = complete_chat(
             context,
             db,
-            messages=[message.model_dump() for message in payload.messages],
+            messages=messages,
             temperature=payload.temperature,
             max_tokens=payload.max_tokens,
             reasoning_effort=payload.reasoning_effort,
@@ -1075,7 +1216,6 @@ async def _chat_stream_publisher(
         for envelope in terminal_envelopes:
             yield envelope
         return
-
     if conversation is not None:
         yield serialize_sse(
             make_envelope(
@@ -1150,10 +1290,21 @@ async def _chat_stream_publisher(
                 yield event
             return
 
+        scope_system_prompt = _conversation_scope_system_prompt(
+            db,
+            workspace=workspace,
+            principal=principal,
+            user=current_user,
+            conversation=conversation,
+        )
+        scoped_messages_dict = _messages_with_scope_prompt(
+            messages_dict,
+            scope_system_prompt=scope_system_prompt,
+        )
         execution = resolve_chat_execution(
             context,
             db,
-            messages=messages_dict,
+            messages=scoped_messages_dict,
             max_tokens=payload.max_tokens,
             reasoning_effort=payload.reasoning_effort,
             model=payload.model,
@@ -1191,6 +1342,7 @@ async def _chat_stream_publisher(
                 agent_run_id=agent_run_id,
                 tool_specs=filtered_tool_specs,
                 bound_conversation=conversation,
+                scope_system_prompt=scope_system_prompt,
                 parallel_tool_calls=False if has_approval_required_tools else None,
             ):
                 for serialized in _serialize_agent_event_through_artifacts(
@@ -1205,7 +1357,7 @@ async def _chat_stream_publisher(
         async for chunk, decision, config in complete_chat_stream(
             context,
             db,
-            messages=messages_dict,
+            messages=scoped_messages_dict,
             temperature=payload.temperature,
             max_tokens=payload.max_tokens,
             reasoning_effort=payload.reasoning_effort,
@@ -1647,6 +1799,80 @@ def _resolve_requested_conversation(
         user=user,
         conversation_id=conversation_id,
     )
+
+
+def _validate_requested_conversation_scope(
+    db: Session,
+    *,
+    workspace: Workspace,
+    principal: CallerPrincipal,
+    user: User,
+    scope_ref: str | None,
+    scope_resource_id: str | None,
+) -> None:
+    if scope_ref is None or scope_resource_id is None:
+        return
+    if scope_ref == "meeting":
+        meeting_service.load_meeting_for_participant(
+            db,
+            workspace=workspace,
+            principal=principal,
+            user=user,
+            meeting_id=scope_resource_id,
+        )
+        return
+    raise HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail=f"Unsupported AI conversation scope: {scope_ref}",
+    )
+
+
+def _conversation_scope_system_prompt(
+    db: Session,
+    *,
+    workspace: Workspace,
+    principal: CallerPrincipal,
+    user: User,
+    conversation: Conversation | None,
+) -> str | None:
+    if conversation is None or conversation.scope_ref is None or conversation.scope_resource_id is None:
+        return None
+    if conversation.scope_ref == "meeting":
+        return meeting_service.build_meeting_scope_prompt(
+            db,
+            workspace=workspace,
+            principal=principal,
+            user=user,
+            meeting_id=conversation.scope_resource_id,
+        )
+    raise HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail=f"Unsupported AI conversation scope: {conversation.scope_ref}",
+    )
+
+
+def _messages_with_scope_prompt(
+    messages: list[dict[str, Any]],
+    *,
+    scope_system_prompt: str | None,
+) -> list[dict[str, Any]]:
+    cloned_messages = [dict(message) for message in messages]
+    if not scope_system_prompt:
+        return cloned_messages
+    if (
+        cloned_messages
+        and cloned_messages[0].get("role") == "system"
+        and isinstance(cloned_messages[0].get("content"), str)
+    ):
+        merged = dict(cloned_messages[0])
+        existing_content = (merged.get("content") or "").strip()
+        merged["content"] = (
+            f"{scope_system_prompt}\n\n{existing_content}"
+            if existing_content
+            else scope_system_prompt
+        )
+        return [merged, *cloned_messages[1:]]
+    return [{"role": "system", "content": scope_system_prompt}, *cloned_messages]
 
 
 def _bind_conversation_for_stream(

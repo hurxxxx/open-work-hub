@@ -10,8 +10,9 @@ from sqlalchemy.orm import Session
 from aidoo_api.core import llm as llm_core
 from aidoo_api.core.db import get_engine
 from aidoo_api.domains.ai.models import LlmPolicy
+from aidoo_api.domains.ai import router as ai_router
 from aidoo_api.domains.auth.models import AuditLog
-from test_meeting import _auth_headers, _bootstrap_admin_session, _dev_login
+from test_meeting import _auth_headers, _bootstrap_admin_session, _create_meeting, _dev_login
 
 
 class FakeModels:
@@ -321,6 +322,79 @@ def test_ai_chat_tool_command_executes_without_llm_call(
     assert payload["provider"] == "tool"
     assert payload["decision_reason"] == "direct_tool_command"
     assert "AI chat tool issue" in payload["content"]
+
+
+def test_ai_chat_tool_command_scoped_conversation_skips_scope_prompt_lookup(
+    client: TestClient,
+    monkeypatch,
+) -> None:
+    auth = _seeded_dev_login(client, "hq-admin")
+    workspace_slug = auth["user"]["workspaces"][0]["slug"]
+    meeting = _create_meeting(client, auth["token"], title="Scoped AI chat meeting")
+
+    conversation_response = client.post(
+        _workspace_ai_path(workspace_slug, "/conversations"),
+        headers=_auth_headers(auth["token"]),
+        json={
+            "title": "",
+            "scopeRef": "meeting",
+            "scopeResourceId": meeting["id"],
+        },
+    )
+    assert conversation_response.status_code == 201, conversation_response.text
+    conversation_id = conversation_response.json()["id"]
+
+    task_list_response = client.post(
+        "/api/v1/pms/lists",
+        headers=_auth_headers(auth["token"]),
+        json={
+            "key": "AISCOPED",
+            "name": "AI Scoped Tool List",
+            "description": "tool command source",
+        },
+    )
+    assert task_list_response.status_code == 201, task_list_response.text
+    task_list = task_list_response.json()
+
+    issue_response = client.post(
+        f"/api/v1/pms/lists/{task_list['id']}/issues",
+        headers=_auth_headers(auth["token"]),
+        json={"title": "Scoped AI chat tool issue", "description": "search target"},
+    )
+    assert issue_response.status_code == 201, issue_response.text
+
+    def _unexpected_scope_prompt(*args, **kwargs):  # type: ignore[no-untyped-def]
+        raise AssertionError("scope prompt lookup should not run for /tool commands")
+
+    def _unexpected_pool_call(pool):  # type: ignore[no-untyped-def]
+        raise AssertionError(f"LLM pool should not be called for /tool commands: {pool}")
+
+    monkeypatch.setattr(
+        ai_router.meeting_service,
+        "build_meeting_scope_prompt",
+        _unexpected_scope_prompt,
+    )
+    monkeypatch.setattr(llm_core, "get_pool_client", _unexpected_pool_call)
+
+    response = client.post(
+        _workspace_ai_path(workspace_slug, "/chat"),
+        headers=_auth_headers(auth["token"]),
+        json={
+            "conversationId": conversation_id,
+            "messages": [
+                {
+                    "role": "user",
+                    "content": '/tool pms.search_issues {"q":"Scoped AI chat tool issue","limit":5}',
+                }
+            ],
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["provider"] == "tool"
+    assert payload["decision_reason"] == "direct_tool_command"
+    assert "Scoped AI chat tool issue" in payload["content"]
 
 
 def test_ai_chat_external_policy_forces_local_on_pii(

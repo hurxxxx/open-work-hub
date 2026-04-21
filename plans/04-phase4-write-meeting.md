@@ -932,3 +932,18 @@ prod roll-forward는 다음 사다리로 고정한다:
     - 첫 번째 `챗에서 진행` 클릭 후 최종 URL `/w/hq/ai`
     - composer 값 `회의 \`새로운 미팅\`의 액션 아이템 ...` 채워짐 확인
   - 브라우저 콘솔은 Vite dev 연결 로그 외 신규 오류 없음, page error 없음.
+
+### 8.2 Step F Scope Smoke (2026-04-21)
+
+- Step F 구현 후 targeted 검증:
+  - `uv run --directory apps/api python -m ruff check src/aidoo_api/domains/ai/router.py src/aidoo_api/domains/conversations/models.py src/aidoo_api/domains/conversations/service.py src/aidoo_api/domains/conversations/schemas.py src/aidoo_api/domains/meeting/service.py tests/test_ai_conversations.py tests/test_ai_stream.py` → clean
+  - `uv run --directory apps/api python -m pytest tests/test_ai_conversations.py tests/test_ai_stream.py tests/test_conversations.py tests/test_ai_approvals.py -q` → `54 passed, 2 warnings`
+  - `uv run --directory apps/api alembic heads` → `b7e3c1d2f4a5 (head)`
+  - `pnpm vitest run -c apps/web/vite.config.mts apps/web/src/components/views/AIView.spec.tsx apps/web/src/components/views/MeetingView/openMeetingInsightInChat.spec.ts` → `19 passed`
+  - `pnpm nx typecheck web` → 성공
+- 브라우저 스모크:
+  - 새 Vite 인스턴스 `http://127.0.0.1:4201` 로 `agent-browser --session doowon-step-f-4201` 검증.
+  - seed quick-login으로 `/w/hq/meeting/c735388a-5a75-4d76-9d82-dd68acccdcab` 진입, `AI 제안 (3)` 과 `챗에서 진행` 버튼 렌더 확인.
+  - 다만 automation click 시 실제 navigation / network request 가 관측되지 않아, Step F browser smoke는 **inconclusive** 로 남김.
+  - 현재 판단은 component/unit test(`MeetingInsightSection`, `openMeetingInsightInChat`, `AIView`)와 API/stream test는 모두 green 이고, browser discrepancy 는 `agent-browser` interaction 쪽 추가 확인 항목으로 분리.
+  - 최종 머지 전에는 사람이 직접 `MeetingDetail -> 챗에서 진행 -> scoped conversation attach`를 최소 1회 수동 확인하는 것을 권장.

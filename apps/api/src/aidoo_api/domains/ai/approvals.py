@@ -37,6 +37,7 @@ TERMINAL_APPROVAL_STATUSES = {
     "failed",
 }
 LIVE_SNAPSHOT_STATUSES = {"awaiting_approval", "resumed"}
+LIVE_PENDING_APPROVAL_STATUSES = {"pending", "approved", "rejected"}
 
 
 class AgentRunSnapshot(Base):
@@ -252,6 +253,47 @@ def get_approval(
     approval = _load_approval_row(db, approval_id=approval_id, for_update=for_update)
     _require_user_scope(workspace, user, approval.workspace_id, approval.requested_by_user_id)
     return approval
+
+
+def get_live_pending_approval(
+    db: Session,
+    *,
+    workspace: Workspace,
+    user: User,
+    conversation_id: str,
+) -> dict[str, Any] | None:
+    snapshot = db.scalar(
+        select(AgentRunSnapshot)
+        .where(
+            AgentRunSnapshot.conversation_id == conversation_id,
+            AgentRunSnapshot.workspace_id == workspace.id,
+            AgentRunSnapshot.requested_by_user_id == user.id,
+            AgentRunSnapshot.status == "awaiting_approval",
+        )
+        .order_by(AgentRunSnapshot.created_at.desc())
+    )
+    if snapshot is None:
+        return None
+    approval = db.scalar(
+        select(AiToolApproval)
+        .where(
+            AiToolApproval.agent_run_id == snapshot.id,
+            AiToolApproval.status.in_(LIVE_PENDING_APPROVAL_STATUSES),
+        )
+        .order_by(AiToolApproval.created_at.desc())
+    )
+    if approval is None:
+        return None
+    return {
+        "approval_id": approval.id,
+        "agent_run_id": approval.agent_run_id,
+        "call_id": approval.tool_call_id,
+        "tool": approval.tool_name,
+        "resource_preview": approval.resource_preview,
+        "expires_at_ms": int(approval.expires_at.timestamp() * 1000),
+        "status": approval.status,
+        "reason": approval.reject_reason,
+    }
 
 
 def create_pending_approval(

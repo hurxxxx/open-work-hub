@@ -1,11 +1,16 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import type { MeetingInsightItem } from '@/src/domains/meeting/meeting-insights-api';
+import { createConversation } from '@/src/domains/ai/conversations-api';
 
 import {
   __test,
   openMeetingInsightInChat,
 } from './openMeetingInsightInChat';
+
+vi.mock('@/src/domains/ai/conversations-api', () => ({
+  createConversation: vi.fn(),
+}));
 
 function makeInsight(overrides: Partial<MeetingInsightItem>): MeetingInsightItem {
   return {
@@ -27,33 +32,43 @@ function makeInsight(overrides: Partial<MeetingInsightItem>): MeetingInsightItem
 }
 
 describe('openMeetingInsightInChat', () => {
-  it('builds an action draft from payload.title', () => {
+  it('builds an action draft from payload.title', async () => {
     const navigate = vi.fn();
+    vi.mocked(createConversation).mockResolvedValue({
+      id: 'conversation-1',
+      title: '',
+      scopeRef: 'meeting',
+      scopeResourceId: 'meeting-1',
+      turns: [],
+      createdAt: '2026-04-21T00:00:00Z',
+      updatedAt: '2026-04-21T00:00:00Z',
+      livePendingApproval: null,
+    });
     const insight = makeInsight({
       insight_type: 'action',
       payload: { title: '로그인 플로우 정리' },
     });
 
-    openMeetingInsightInChat({
+    await openMeetingInsightInChat({
       navigate,
+      token: 'test-token',
       workspaceSlug: 'hq',
       meeting: { id: 'meeting-1', title: 'Weekly Sync' },
       insight,
     });
 
+    expect(createConversation).toHaveBeenCalledWith('test-token', {
+      scopeRef: 'meeting',
+      scopeResourceId: 'meeting-1',
+    });
     expect(navigate).toHaveBeenCalledTimes(1);
     const url = navigate.mock.calls[0]?.[0] as string;
     const options = navigate.mock.calls[0]?.[1] as
       | { state?: { aiDraft?: string; aiDraftSourceKey?: string; aiDraftOrigin?: string } }
       | undefined;
-    expect(url.startsWith('/w/hq/ai?')).toBe(true);
+    expect(url).toBe('/w/hq/ai?c=conversation-1');
     const params = new URLSearchParams(url.split('?')[1]);
-    expect(params.get('context')).toBe('meeting');
-    expect(params.get('context_id')).toBe('meeting-1');
-    expect(params.get('insight_id')).toBe('insight-1');
-    expect(params.get('insight_kind')).toBe('action');
-    expect(params.get('draft')).toContain('Weekly Sync');
-    expect(params.get('draft')).toContain('로그인 플로우 정리');
+    expect(params.get('c')).toBe('conversation-1');
     expect(options?.state?.aiDraftOrigin).toBe('meeting_insight');
     expect(options?.state?.aiDraftSourceKey).toBe(
       'meeting-insight:meeting-1:insight-1',
@@ -93,10 +108,21 @@ describe('openMeetingInsightInChat', () => {
     expect(__test.extractInsightTitle(insight)).toBe('payload-sourced');
   });
 
-  it('encodes special characters in workspaceSlug', () => {
+  it('encodes special characters in workspaceSlug', async () => {
     const navigate = vi.fn();
-    openMeetingInsightInChat({
+    vi.mocked(createConversation).mockResolvedValue({
+      id: 'conversation-1',
+      title: '',
+      scopeRef: 'meeting',
+      scopeResourceId: 'meeting-1',
+      turns: [],
+      createdAt: '2026-04-21T00:00:00Z',
+      updatedAt: '2026-04-21T00:00:00Z',
+      livePendingApproval: null,
+    });
+    await openMeetingInsightInChat({
       navigate,
+      token: 'test-token',
       workspaceSlug: 'team space',
       meeting: { id: 'meeting-1', title: 'Sync' },
       insight: makeInsight({
@@ -105,6 +131,6 @@ describe('openMeetingInsightInChat', () => {
       }),
     });
     const url = navigate.mock.calls[0]?.[0] as string;
-    expect(url.startsWith('/w/team%20space/ai?')).toBe(true);
+    expect(url.startsWith('/w/team%20space/ai?c=')).toBe(true);
   });
 });

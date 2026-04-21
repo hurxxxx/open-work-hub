@@ -25,6 +25,9 @@ from .models import Conversation, ConversationTurn
 
 TITLE_MAX_LEN = 200
 TITLE_AUTO_PREVIEW_LEN = 30
+SCOPE_REF_MAX_LEN = 24
+SCOPE_RESOURCE_ID_MAX_LEN = 36
+SUPPORTED_SCOPE_REFS = {"meeting"}
 
 
 def _generate_id() -> str:
@@ -37,15 +40,56 @@ def create_conversation(
     workspace: Workspace,
     user: User,
     title: str = "",
+    scope_ref: str | None = None,
+    scope_resource_id: str | None = None,
 ) -> Conversation:
     """Insert a new empty conversation. Title may be filled in later by the
     first user turn via ``autotitle_from_turn``."""
+    normalized_title = (title or "").strip()[:TITLE_MAX_LEN]
+    normalized_scope_ref = (scope_ref or "").strip() or None
+    normalized_scope_resource_id = (scope_resource_id or "").strip() or None
+    if (normalized_scope_ref is None) != (normalized_scope_resource_id is None):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="scope_ref and scope_resource_id must be provided together.",
+        )
+    if (
+        normalized_scope_ref is not None
+        and normalized_scope_ref not in SUPPORTED_SCOPE_REFS
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Unsupported conversation scope: {normalized_scope_ref}",
+        )
+    if normalized_scope_ref is not None and not normalized_title:
+        reusable = db.scalar(
+            select(Conversation)
+            .where(
+                Conversation.workspace_id == workspace.id,
+                Conversation.user_id == user.id,
+                Conversation.deleted_at.is_(None),
+                Conversation.scope_ref == normalized_scope_ref,
+                Conversation.scope_resource_id == normalized_scope_resource_id,
+                Conversation.title == "",
+                ~Conversation.turns.any(),
+            )
+            .order_by(Conversation.updated_at.desc(), Conversation.id.desc())
+            .limit(1)
+        )
+        if reusable is not None:
+            return reusable
     now = utcnow_naive()
     conversation = Conversation(
         id=_generate_id(),
         workspace_id=workspace.id,
         user_id=user.id,
-        title=(title or "").strip()[:TITLE_MAX_LEN],
+        title=normalized_title,
+        scope_ref=normalized_scope_ref[:SCOPE_REF_MAX_LEN] if normalized_scope_ref else None,
+        scope_resource_id=(
+            normalized_scope_resource_id[:SCOPE_RESOURCE_ID_MAX_LEN]
+            if normalized_scope_resource_id
+            else None
+        ),
         created_at=now,
         updated_at=now,
     )

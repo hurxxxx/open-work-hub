@@ -97,9 +97,13 @@ async def run_agent_turn_stream(
     agent_run_id: str,
     tool_specs: list[dict[str, Any]],
     bound_conversation: Conversation | None,
+    scope_system_prompt: str | None = None,
     parallel_tool_calls: bool | None = None,
 ) -> AsyncIterator[Any]:
-    conversation = _prepend_agent_system_message(messages)
+    conversation = _prepend_agent_system_message(
+        messages,
+        scope_system_prompt=scope_system_prompt,
+    )
     model_meta = _build_snapshot_model_meta(
         execution,
         temperature=temperature,
@@ -158,6 +162,9 @@ async def resume_agent_run(
     )
     replay_config = ai_approvals.rehydrate_model_meta(snapshot)
     execution = _execution_from_snapshot(snapshot)
+    # Resume replays the frozen snapshot verbatim. We intentionally do not
+    # rebuild any scope-bound prompt here because canonical replay must match
+    # the exact context the halted run saw when it requested approval.
     conversation_messages = _copy_messages(snapshot.messages_json or [])
     async for event in _run_agent_loop_stream(
         context=context,
@@ -586,9 +593,16 @@ async def _run_agent_loop_stream(
         raise
 
 
-def _prepend_agent_system_message(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def _prepend_agent_system_message(
+    messages: list[dict[str, Any]],
+    *,
+    scope_system_prompt: str | None = None,
+) -> list[dict[str, Any]]:
+    system_prompt = AGENT_SYSTEM_PROMPT
+    if scope_system_prompt:
+        system_prompt = f"{system_prompt}\n\n{scope_system_prompt}"
     return [
-        {"role": "system", "content": AGENT_SYSTEM_PROMPT},
+        {"role": "system", "content": system_prompt},
         *[dict(message) for message in messages],
     ]
 

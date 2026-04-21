@@ -38,6 +38,7 @@ from aidoo_api.domains.meeting.models import (
     MeetingAttendee,
     MeetingDocLink,
     MeetingFileAttachment,
+    MeetingRecording,
     MeetingTaskLink,
 )
 from aidoo_api.domains.meeting.permissions import (
@@ -983,6 +984,65 @@ def get_meeting(
     meeting = _load_meeting(db, workspace, meeting_id)
     _ensure_user_can_view(user, meeting)
     return _serialize_meeting(db, meeting)
+
+
+def build_meeting_scope_prompt(
+    db: Session,
+    *,
+    workspace: Workspace,
+    principal: CallerPrincipal,
+    user: User,
+    meeting_id: str,
+) -> str:
+    meeting = load_meeting_for_participant(
+        db,
+        workspace=workspace,
+        principal=principal,
+        user=user,
+        meeting_id=meeting_id,
+    )
+    latest_recording = db.scalar(
+        select(MeetingRecording)
+        .where(
+            MeetingRecording.meeting_id == meeting.id,
+            MeetingRecording.summary_text.is_not(None),
+            MeetingRecording.transcript_text.is_not(None),
+        )
+        .order_by(MeetingRecording.created_at.desc())
+    )
+    summary = ""
+    transcript_excerpt = ""
+    if latest_recording is not None:
+        summary = (latest_recording.summary_text or "").strip()[:4000]
+        transcript_excerpt = (latest_recording.transcript_text or "").strip()[:8000]
+    agenda = (meeting.agenda or "").strip()[:2000]
+    lines = [
+        "[회의 컨텍스트]",
+        "이 대화는 특정 회의에 바인딩되어 있다. 회의 사실은 아래 범위 안에서만 사용하고, 부족한 정보는 추정하지 말고 도구나 사용자에게 확인한다.",
+        f"회의 ID: {meeting.id}",
+        f"회의 제목: {meeting.title}",
+        f"시작 시각: {meeting.start_at.isoformat()}",
+        f"종료 시각: {meeting.end_at.isoformat()}",
+        f"상태: {meeting.status}",
+    ]
+    if agenda:
+        lines.extend(["", "[안건]", agenda])
+    if summary:
+        lines.extend(["", "[요약]", summary])
+    if transcript_excerpt:
+        lines.extend(["", "[전사 발췌]", transcript_excerpt])
+    return "\n".join(lines)
+
+
+def ensure_meeting_scope_access(
+    db: Session,
+    *,
+    workspace: Workspace,
+    user: User,
+    meeting_id: str,
+) -> None:
+    meeting = _load_meeting(db, workspace, meeting_id)
+    ensure_meeting_participant(db, user, meeting)
 
 
 def load_meeting_for_participant(

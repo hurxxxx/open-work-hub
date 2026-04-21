@@ -29,6 +29,7 @@ from aidoo_api.domains.auth.models import AuditLog, Workspace, WorkspaceAppEntit
 from test_meeting import (
     _auth_headers,
     _bootstrap_admin_session,
+    _create_meeting,
     _create_user_with_workspaces,
     _dev_login,
     _login,
@@ -493,6 +494,63 @@ def test_chat_stream_requires_workspace_membership(client: TestClient) -> None:
     assert response.status_code == 403
 
 
+def test_chat_stream_includes_meeting_scope_prompt_for_scoped_conversation(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    auth = _seeded_dev_login(client, "hq-admin")
+    slug = auth["user"]["workspaces"][0]["slug"]
+    _set_policy("chatbot", "local_only")
+    monkeypatch.setattr(ai_router, "supports_tool_calling", lambda pool: False)
+
+    meeting = _create_meeting(client, auth["token"], title="Scoped meeting")
+
+    from aidoo_api.domains.auth.models import User
+    from aidoo_api.domains.conversations import service as conversations_service
+
+    with Session(get_engine()) as db:
+        workspace = db.scalar(select(Workspace).where(Workspace.key == slug))
+        user = db.get(User, auth["user"]["id"])
+        assert workspace is not None
+        assert user is not None
+        conversation = conversations_service.create_conversation(
+            db,
+            workspace=workspace,
+            user=user,
+            title="",
+            scope_ref="meeting",
+            scope_resource_id=meeting["id"],
+        )
+        conversation_id = conversation.id
+
+    pool_client = _FakeAsyncPoolClient(
+        [
+            _delta(content="회의 범위를 반영했습니다."),
+            _delta(finish_reason="stop"),
+            _usage_tail(1, 2, 3),
+        ]
+    )
+    monkeypatch.setattr(llm_core, "get_async_pool_client", lambda pool: pool_client)
+
+    status_code, events = _stream_post(
+        client,
+        _workspace_ai_path(slug, "/chat/stream"),
+        headers=_auth_headers(auth["token"]),
+        json_body={
+            "conversation_id": conversation_id,
+            "persist": True,
+            "messages": [{"role": "user", "content": "회의 기준으로 정리해줘"}],
+        },
+    )
+
+    assert status_code == 200
+    assert _chat_events(events)[-1]["type"] == "done"
+    sent_messages = pool_client.chat.completions.calls[0]["messages"]
+    assert sent_messages[0]["role"] == "system"
+    assert "[회의 컨텍스트]" in sent_messages[0]["content"]
+    assert "Scoped meeting" in sent_messages[0]["content"]
+
+
 def test_chat_stream_emits_content_and_reasoning_in_order(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -637,6 +695,87 @@ def test_chat_stream_tool_command_emits_tool_events_without_llm_call(
     assert "AI stream tool issue" in chat[3]["data"]["text"]
     assert chat[4]["data"]["finish_reason"] == "stop"
     assert chat[4]["data"]["meta"]["provider"] == "tool"
+
+
+def test_chat_stream_tool_command_scoped_conversation_skips_scope_prompt_lookup(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    auth = _seeded_dev_login(client, "hq-admin")
+    slug = auth["user"]["workspaces"][0]["slug"]
+    meeting = _create_meeting(client, auth["token"], title="Scoped AI stream meeting")
+
+    conversation_response = client.post(
+        _workspace_ai_path(slug, "/conversations"),
+        headers=_auth_headers(auth["token"]),
+        json={
+            "title": "",
+            "scopeRef": "meeting",
+            "scopeResourceId": meeting["id"],
+        },
+    )
+    assert conversation_response.status_code == 201, conversation_response.text
+    conversation_id = conversation_response.json()["id"]
+
+    task_list_response = client.post(
+        "/api/v1/pms/lists",
+        headers=_auth_headers(auth["token"]),
+        json={
+            "key": "AISTRMSC",
+            "name": "AI Scoped Stream List",
+            "description": "tool command source",
+        },
+    )
+    assert task_list_response.status_code == 201, task_list_response.text
+    task_list = task_list_response.json()
+
+    issue_response = client.post(
+        f"/api/v1/pms/lists/{task_list['id']}/issues",
+        headers=_auth_headers(auth["token"]),
+        json={"title": "Scoped AI stream tool issue", "description": "stream search target"},
+    )
+    assert issue_response.status_code == 201, issue_response.text
+
+    def _unexpected_scope_prompt(*args, **kwargs):  # type: ignore[no-untyped-def]
+        raise AssertionError("scope prompt lookup should not run for /tool commands")
+
+    def _unexpected_pool_call(pool):  # type: ignore[no-untyped-def]
+        raise AssertionError(f"LLM pool should not be called for /tool commands: {pool}")
+
+    monkeypatch.setattr(
+        ai_router.meeting_service,
+        "build_meeting_scope_prompt",
+        _unexpected_scope_prompt,
+    )
+    monkeypatch.setattr(llm_core, "get_async_pool_client", _unexpected_pool_call)
+
+    status_code, events = _stream_post(
+        client,
+        _workspace_ai_path(slug, "/chat/stream"),
+        headers=_auth_headers(auth["token"]),
+        json_body={
+            "conversationId": conversation_id,
+            "messages": [
+                {
+                    "role": "user",
+                    "content": '/tool pms.search_issues {"q":"Scoped AI stream tool issue","limit":5}',
+                }
+            ],
+        },
+    )
+
+    assert status_code == 200
+    chat = _chat_events(events)
+    assert [event["type"] for event in chat] == [
+        "tool_call_started",
+        "tool_call_args_delta",
+        "tool_result",
+        "content_delta",
+        "done",
+    ]
+    assert chat[0]["data"]["name"] == "pms.search_issues"
+    assert chat[2]["data"]["status"] == "ok"
+    assert "Scoped AI stream tool issue" in chat[3]["data"]["text"]
+    assert chat[4]["data"]["finish_reason"] == "stop"
 
 
 def test_chat_stream_agent_loop_executes_tool_and_keeps_shared_agent_run_id(

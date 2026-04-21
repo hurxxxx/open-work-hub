@@ -594,6 +594,48 @@ describe('AIView', () => {
     });
   });
 
+  it('seeds router-state draft into an empty meeting-scoped conversation', async () => {
+    conversationsHarness.getConversation.mockResolvedValue({
+      id: 'c-scoped',
+      title: '',
+      scopeRef: 'meeting',
+      scopeResourceId: 'meeting-1',
+      turns: [],
+      createdAt: '2026-04-21T00:00:00Z',
+      updatedAt: '2026-04-21T00:00:00Z',
+      livePendingApproval: null,
+    });
+
+    renderAIView({
+      initialEntries: [
+        {
+          pathname: '/w/hq/ai',
+          search: '?c=c-scoped',
+          state: {
+            aiDraft: '회의 액션을 이슈로 정리해줘',
+            aiDraftSourceKey: 'meeting-insight:meeting-1:insight-1',
+            aiDraftOrigin: 'meeting_insight',
+          },
+        },
+      ],
+    });
+
+    await waitFor(() => {
+      expect(conversationsHarness.getConversation).toHaveBeenCalledWith(
+        'test-token',
+        'c-scoped',
+      );
+    });
+    const input = (await screen.findByPlaceholderText(
+      '메시지를 입력하세요',
+    )) as HTMLTextAreaElement;
+    await waitFor(() => {
+      expect(input.value).toBe('회의 액션을 이슈로 정리해줘');
+    });
+    expect(screen.getByText('회의 AI 제안에서 시작됨')).toBeTruthy();
+    expect(screen.getByTestId('location-search').textContent).toBe('?c=c-scoped');
+  });
+
   it('ignores ?draft= when ?c= points to an existing conversation', async () => {
     conversationsHarness.getConversation.mockResolvedValue({
       id: 'c-existing',

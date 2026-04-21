@@ -1,5 +1,6 @@
 import type { NavigateFunction } from 'react-router-dom';
 
+import { createConversation } from '@/src/domains/ai/conversations-api';
 import type { MeetingDetail } from '@/src/domains/meeting/meeting-api';
 import type { MeetingInsightItem } from '@/src/domains/meeting/meeting-insights-api';
 import { buildWorkspaceAppPath } from '@/src/domains/workspaces/workspace-utils';
@@ -47,6 +48,7 @@ function buildPromptDraft(
 
 export interface OpenMeetingInsightInChatArgs {
   navigate: NavigateFunction;
+  token: string;
   workspaceSlug: string;
   meeting: Pick<MeetingDetail, 'id' | 'title'>;
   insight: MeetingInsightItem;
@@ -60,34 +62,36 @@ interface MeetingInsightDraftLocationState {
 
 /**
  * Navigate to the AI view with a pre-filled draft sourced from a
- * meeting insight. Step E.4 semantics: the AIView composer is
- * populated but not auto-sent — the user confirms before the first
- * turn leaves the browser. Step F will replace this helper with a
- * ``POST /ai/conversations { scope_ref, scope_resource_id }`` call so
- * the chat is scope-bound from the very first request.
+ * meeting insight. Step F semantics: create an empty meeting-scoped
+ * conversation first, then hand the draft to AIView through router
+ * state so the first submitted turn already runs inside that scope.
  */
-export function openMeetingInsightInChat({
+export async function openMeetingInsightInChat({
   navigate,
+  token,
   workspaceSlug,
   meeting,
   insight,
-}: OpenMeetingInsightInChatArgs): void {
+}: OpenMeetingInsightInChatArgs): Promise<void> {
   const draft = buildPromptDraft(meeting.title, insight);
-  const params = new URLSearchParams();
-  params.set('draft', draft);
-  params.set('context', 'meeting');
-  params.set('context_id', meeting.id);
-  params.set('insight_id', insight.id);
-  params.set('insight_kind', insight.insight_type);
-  // Defer to the shared workspace path builder so slugs with spaces or
-  // reserved characters encode consistently with the rest of the app.
-  navigate(buildWorkspaceAppPath(workspaceSlug, 'ai', `?${params.toString()}`), {
-    state: {
-      aiDraft: draft,
-      aiDraftSourceKey: `meeting-insight:${meeting.id}:${insight.id}`,
-      aiDraftOrigin: 'meeting_insight',
-    } satisfies MeetingInsightDraftLocationState,
+  const conversation = await createConversation(token, {
+    scopeRef: 'meeting',
+    scopeResourceId: meeting.id,
   });
+  navigate(
+    buildWorkspaceAppPath(
+      workspaceSlug,
+      'ai',
+      `?c=${encodeURIComponent(conversation.id)}`,
+    ),
+    {
+      state: {
+        aiDraft: draft,
+        aiDraftSourceKey: `meeting-insight:${meeting.id}:${insight.id}`,
+        aiDraftOrigin: 'meeting_insight',
+      } satisfies MeetingInsightDraftLocationState,
+    },
+  );
 }
 
 // Exported for unit tests that want to verify the generated URL shape

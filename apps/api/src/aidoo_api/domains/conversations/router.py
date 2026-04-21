@@ -13,20 +13,21 @@ from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.orm import Session
 
 from aidoo_api.core.db import get_db_session
+from aidoo_api.domains.ai import approvals as ai_approvals
 from aidoo_api.domains.auth.dependencies import (
     require_current_user,
     require_current_workspace,
 )
 from aidoo_api.domains.auth.models import User, Workspace
+from aidoo_api.domains.meeting import service as meeting_service
 
 from .schemas import (
-    ArtifactOut,
     ConversationCreateRequest,
     ConversationDetail,
     ConversationListResponse,
-    ConversationSummary,
-    ConversationTurnOut,
     ConversationUpdateRequest,
+    conversation_detail_from_row,
+    conversation_summary_from_row,
 )
 from .service import (
     create_conversation,
@@ -37,72 +38,9 @@ from .service import (
 )
 
 
+# TODO(phase4): remove this legacy router once all callers have migrated to
+# `/ai/conversations`; it remains mounted for backward compatibility only.
 router = APIRouter(prefix="/conversations", tags=["conversations"])
-
-
-def _to_summary(row) -> ConversationSummary:
-    return ConversationSummary(
-        id=row.id,
-        title=row.title,
-        created_at=row.created_at,
-        updated_at=row.updated_at,
-    )
-
-
-def _turn_out(turn) -> ConversationTurnOut:
-    # The stored meta dict is a loose bag of fields the streaming agent emits.
-    # Keys are lifted into explicit typed properties so the frontend renders a
-    # reloaded conversation identically to a live one; unknown extra keys are
-    # dropped silently rather than leaking into the API contract.
-    meta = turn.meta or {}
-    raw_artifacts = meta.get("artifacts") or []
-    artifacts: list[ArtifactOut] = []
-    for record in raw_artifacts:
-        if not isinstance(record, dict):
-            continue
-        artifact_id = record.get("id")
-        if not artifact_id:
-            continue
-        artifacts.append(
-            ArtifactOut(
-                id=artifact_id,
-                type=record.get("type") or "document",
-                title=record.get("title"),
-                language=record.get("language"),
-                content=record.get("content") or "",
-                status=record.get("status"),
-            )
-        )
-    return ConversationTurnOut(
-        id=turn.id,
-        seq=turn.seq,
-        role=turn.role,
-        content=turn.content,
-        reasoning=meta.get("reasoning"),
-        reasoning_status=meta.get("reasoning_status"),
-        finish_reason=meta.get("finish_reason"),
-        response_status=meta.get("response_status"),
-        provider=meta.get("provider"),
-        policy=meta.get("policy"),
-        chosen_pool=meta.get("chosen_pool"),
-        decision_reason=meta.get("decision_reason"),
-        forced_local=meta.get("forced_local"),
-        pii_hits=list(meta.get("pii_hits") or []),
-        tool_calls=list(meta.get("tool_calls") or []),
-        pending_approvals=list(meta.get("pending_approvals") or []),
-        artifacts=artifacts,
-        created_at=turn.created_at,
-    )
-
-
-def _to_detail(row) -> ConversationDetail:
-    return ConversationDetail(
-        id=row.id,
-        title=row.title,
-        created_at=row.created_at,
-        updated_at=row.updated_at,
-        turns=[_turn_out(t) for t in row.turns],
-    )
 
 
 @router.get("", response_model=ConversationListResponse)
@@ -121,7 +59,7 @@ def list_conversations_endpoint(
         cursor=cursor,
     )
     return ConversationListResponse(
-        items=[_to_summary(row) for row in rows],
+        items=[conversation_summary_from_row(row) for row in rows],
         next_cursor=next_cursor,
     )
 
@@ -137,13 +75,22 @@ def create_conversation_endpoint(
     current_user: User = Depends(require_current_user),
     workspace: Workspace = Depends(require_current_workspace),
 ) -> ConversationDetail:
+    if payload.scope_ref == "meeting" and payload.scope_resource_id is not None:
+        meeting_service.ensure_meeting_scope_access(
+            db,
+            workspace=workspace,
+            user=current_user,
+            meeting_id=payload.scope_resource_id,
+        )
     conversation = create_conversation(
         db,
         workspace=workspace,
         user=current_user,
         title=payload.title,
+        scope_ref=payload.scope_ref,
+        scope_resource_id=payload.scope_resource_id,
     )
-    return _to_detail(conversation)
+    return conversation_detail_from_row(conversation)
 
 
 @router.get("/{conversation_id}", response_model=ConversationDetail)
@@ -159,7 +106,16 @@ def get_conversation_endpoint(
         user=current_user,
         conversation_id=conversation_id,
     )
-    return _to_detail(conversation)
+    live_pending_approval = ai_approvals.get_live_pending_approval(
+        db,
+        workspace=workspace,
+        user=current_user,
+        conversation_id=conversation_id,
+    )
+    return conversation_detail_from_row(
+        conversation,
+        live_pending_approval=live_pending_approval,
+    )
 
 
 @router.patch("/{conversation_id}", response_model=ConversationDetail)
@@ -177,7 +133,7 @@ def rename_conversation_endpoint(
         conversation_id=conversation_id,
         title=payload.title,
     )
-    return _to_detail(conversation)
+    return conversation_detail_from_row(conversation)
 
 
 @router.delete("/{conversation_id}", status_code=status.HTTP_204_NO_CONTENT)

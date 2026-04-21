@@ -133,6 +133,8 @@ export const AIView = () => {
   // for the Step F scope-bound conversation flow.
   const routeDraft = searchParams.get('draft');
   const locationDraftState = readAiDraftLocationState(location.state);
+  const locationDraft = locationDraftState?.aiDraft ?? null;
+  const locationDraftSourceKey = locationDraftState?.aiDraftSourceKey ?? null;
   const pendingDraft = locationDraftState?.aiDraft ?? routeDraft;
   const pendingDraftSourceKey =
     locationDraftState?.aiDraftSourceKey ??
@@ -392,6 +394,16 @@ export const AIView = () => {
         setTurns(detailToTurns(detail));
         setActiveConversationId(detail.id);
         setChatError(null);
+        if (
+          locationDraft &&
+          locationDraftSourceKey &&
+          detail.scopeRef === 'meeting' &&
+          detail.turns.length === 0 &&
+          consumedDraftRef.current !== locationDraftSourceKey
+        ) {
+          setInput(locationDraft);
+          setShowInsightHint(true);
+        }
       })
       .catch((error: unknown) => {
         if (controller.signal.aborted) {
@@ -428,6 +440,8 @@ export const AIView = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     authStatus,
+    locationDraft,
+    locationDraftSourceKey,
     pendingDraft,
     pendingDraftSourceKey,
     routeConversationId,

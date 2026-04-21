@@ -37,11 +37,25 @@ export interface ConversationTurn {
 export interface ConversationSummary {
   id: string;
   title: string;
+  scopeRef?: 'meeting' | null;
+  scopeResourceId?: string | null;
   createdAt: string;
   updatedAt: string;
 }
 
+export interface ConversationLivePendingApproval {
+  approvalId: string;
+  agentRunId: string;
+  callId: string;
+  tool: string;
+  resourcePreview?: string | null;
+  expiresAtMs: number;
+  status: 'pending' | 'approved' | 'rejected';
+  reason?: string | null;
+}
+
 export interface ConversationDetail extends ConversationSummary {
+  livePendingApproval?: ConversationLivePendingApproval | null;
   turns: ConversationTurn[];
 }
 
@@ -124,7 +138,7 @@ export function listConversations(
   const qs = searchParams.toString();
   const suffix = qs ? `?${qs}` : '';
   return request<ConversationListResponse>(
-    `/api/v1/conversations${suffix}`,
+    `/api/v1/ai/conversations${suffix}`,
     token,
   );
 }
@@ -134,18 +148,26 @@ export function getConversation(
   conversationId: string,
 ): Promise<ConversationDetail> {
   return request<ConversationDetail>(
-    `/api/v1/conversations/${encodeURIComponent(conversationId)}`,
+    `/api/v1/ai/conversations/${encodeURIComponent(conversationId)}`,
     token,
   );
 }
 
 export function createConversation(
   token: string,
-  init: { title?: string } = {},
+  init: {
+    title?: string;
+    scopeRef?: 'meeting';
+    scopeResourceId?: string;
+  } = {},
 ): Promise<ConversationDetail> {
-  return request<ConversationDetail>(`/api/v1/conversations`, token, {
+  return request<ConversationDetail>(`/api/v1/ai/conversations`, token, {
     method: 'POST',
-    body: JSON.stringify({ title: init.title ?? '' }),
+    body: JSON.stringify({
+      title: init.title ?? '',
+      scopeRef: init.scopeRef,
+      scopeResourceId: init.scopeResourceId,
+    }),
   });
 }
 
@@ -155,7 +177,7 @@ export function renameConversation(
   title: string,
 ): Promise<ConversationDetail> {
   return request<ConversationDetail>(
-    `/api/v1/conversations/${encodeURIComponent(conversationId)}`,
+    `/api/v1/ai/conversations/${encodeURIComponent(conversationId)}`,
     token,
     { method: 'PATCH', body: JSON.stringify({ title }) },
   );
@@ -166,7 +188,7 @@ export function deleteConversation(
   conversationId: string,
 ): Promise<void> {
   return request<void>(
-    `/api/v1/conversations/${encodeURIComponent(conversationId)}`,
+    `/api/v1/ai/conversations/${encodeURIComponent(conversationId)}`,
     token,
     { method: 'DELETE' },
   );

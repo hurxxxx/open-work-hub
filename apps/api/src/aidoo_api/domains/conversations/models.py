@@ -39,6 +39,12 @@ class Conversation(Base):
             "user_id",
             "updated_at",
         ),
+        Index(
+            "ix_conversations_workspace_scope_resource",
+            "workspace_id",
+            "scope_ref",
+            "scope_resource_id",
+        ),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
@@ -49,6 +55,8 @@ class Conversation(Base):
         ForeignKey("users.id"), index=True, nullable=False
     )
     title: Mapped[str] = mapped_column(String(200), default="", nullable=False)
+    scope_ref: Mapped[str | None] = mapped_column(String(24), nullable=True)
+    scope_resource_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime, default=utcnow_naive, nullable=False
     )
