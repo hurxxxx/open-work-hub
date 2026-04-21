@@ -297,6 +297,21 @@ WORKSPACE_APP_CATALOG: tuple[WorkspaceAppCatalogItem, ...] = (
             ),
         ),
     ),
+    WorkspaceAppCatalogItem(
+        app_id="learning",
+        title="학습",
+        route_base="/learning",
+        icon_key="graduation-cap",
+        nav_items=(
+            WorkspaceNavCatalogItem(
+                id="learning-all",
+                app_id="learning",
+                title="전체 코스",
+                category="Courses",
+                icon_key="graduation-cap",
+            ),
+        ),
+    ),
 )
 
 WORKSPACE_APP_IDS = tuple(item.app_id for item in WORKSPACE_APP_CATALOG)

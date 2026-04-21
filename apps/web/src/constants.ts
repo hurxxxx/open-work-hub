@@ -35,6 +35,7 @@ import {
   Users,
   List as ListIcon,
   Video,
+  GraduationCap,
 } from 'lucide-react';
 
 export interface NavItem {
@@ -44,12 +45,12 @@ export interface NavItem {
   description?: string;
   category: string;
   /** SubSidebar 필터링 기준 — 어느 AppBar 의 sub 항목인지 */
-  appId: 'home' | 'ai' | 'pms' | 'docs' | 'planner' | 'meeting' | 'settings';
+  appId: 'home' | 'ai' | 'pms' | 'docs' | 'planner' | 'meeting' | 'learning' | 'settings';
   /**
    * URL 빌드 시 실제 타겟 workspace app. 미지정 시 appId 사용.
    * `meeting-minutes` 처럼 AI sidebar 에 있지만 meeting 앱으로 딥링크하는 케이스에 사용.
    */
-  linkAppId?: 'ai' | 'pms' | 'docs' | 'planner' | 'meeting';
+  linkAppId?: 'ai' | 'pms' | 'docs' | 'planner' | 'meeting' | 'learning';
   /** workspace app path 뒤에 붙는 query/hash suffix (예: `?tab=recordings`) */
   pathSuffix?: string;
   /** workspace-aware 가 아닌 절대 경로 (admin/settings 등) */
@@ -57,7 +58,7 @@ export interface NavItem {
 }
 
 export interface AppBarItem {
-  id: 'home' | 'ai' | 'pms' | 'docs' | 'planner' | 'meeting' | 'settings';
+  id: 'home' | 'ai' | 'pms' | 'docs' | 'planner' | 'meeting' | 'learning' | 'settings';
   title: string;
   icon: any;
 }
@@ -69,6 +70,7 @@ export const APP_BAR_ITEMS: AppBarItem[] = [
   { id: 'docs', title: 'DOCS', icon: Files },
   { id: 'planner', title: 'Planner', icon: Calendar },
   { id: 'meeting', title: 'MEETING', icon: Users },
+  { id: 'learning', title: '학습', icon: GraduationCap },
   { id: 'settings', title: 'Settings', icon: Settings },
 ];
 
@@ -117,6 +119,9 @@ export const NAV_ITEMS: NavItem[] = [
   { id: 'meeting-upcoming', title: 'Upcoming', icon: Calendar, category: 'Meetings', appId: 'meeting' },
   { id: 'meeting-mine', title: 'My Meetings', icon: User, category: 'Meetings', appId: 'meeting', pathSuffix: '?scope=mine' },
   { id: 'meeting-recordings', title: 'Recordings', icon: Video, category: 'Meetings', appId: 'meeting', pathSuffix: '?tab=recordings' },
+
+  // Learning
+  { id: 'learning-all', title: '전체 코스', icon: GraduationCap, category: 'Courses', appId: 'learning', description: '모든 구성원이 열람할 수 있는 교육 콘텐츠 모음' },
 
   // Settings
   { id: 'settings-general', title: 'General', icon: Settings, category: 'Admin', appId: 'settings', absolutePath: '/admin/general' },

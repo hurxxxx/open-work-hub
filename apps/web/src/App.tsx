@@ -28,6 +28,8 @@ import { PMSView } from './components/views/PMSView/PMSView';
 import { AssignedToMeView } from './components/views/PMSView/AssignedToMeView';
 import { TodayOverdueView } from './components/views/PMSView/TodayOverdueView';
 import { PersonalListView } from './components/views/PMSView/PersonalListView';
+import { LearningView } from './components/views/LearningView';
+import { LearningCourseView } from './components/views/LearningCourseView';
 import { ToolView } from './components/views/ToolView';
 import { NAV_ITEMS } from './constants';
 import { AdminConsoleView } from './domains/admin/admin-console';
@@ -469,6 +471,45 @@ const AppContent = () => {
                   bootstrapLoading={workspaceBootstrap.loading}
                 >
                   <MeetingWorkspaceView />
+                </WorkspaceGate>
+              )}
+            />
+            <Route
+              path="/w/:workspaceSlug/learning"
+              element={(
+                <WorkspaceGate
+                  appId="learning"
+                  bootstrapAppIds={enabledWorkspaceAppIds}
+                  bootstrapError={workspaceBootstrap.error}
+                  bootstrapLoading={workspaceBootstrap.loading}
+                >
+                  <LearningView />
+                </WorkspaceGate>
+              )}
+            />
+            <Route
+              path="/w/:workspaceSlug/learning/:courseSlug"
+              element={(
+                <WorkspaceGate
+                  appId="learning"
+                  bootstrapAppIds={enabledWorkspaceAppIds}
+                  bootstrapError={workspaceBootstrap.error}
+                  bootstrapLoading={workspaceBootstrap.loading}
+                >
+                  <LearningCourseView />
+                </WorkspaceGate>
+              )}
+            />
+            <Route
+              path="/w/:workspaceSlug/learning/:courseSlug/:lessonSlug"
+              element={(
+                <WorkspaceGate
+                  appId="learning"
+                  bootstrapAppIds={enabledWorkspaceAppIds}
+                  bootstrapError={workspaceBootstrap.error}
+                  bootstrapLoading={workspaceBootstrap.loading}
+                >
+                  <LearningCourseView />
                 </WorkspaceGate>
               )}
             />
