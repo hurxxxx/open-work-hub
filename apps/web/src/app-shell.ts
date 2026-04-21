@@ -6,7 +6,16 @@ import {
 } from './domains/auth/auth-api';
 import { getWorkspaceSlugFromPath } from './domains/workspaces/workspace-utils';
 
-export type ShellAppId = 'home' | 'ai' | 'pms' | 'docs' | 'planner' | 'meeting' | 'settings' | 'profile';
+export type ShellAppId =
+  | 'home'
+  | 'ai'
+  | 'pms'
+  | 'docs'
+  | 'planner'
+  | 'meeting'
+  | 'learning'
+  | 'settings'
+  | 'profile';
 
 export type ShellState = {
   activeAppId: ShellAppId;
@@ -20,7 +29,7 @@ const HOME_SHELL_STATE: ShellState = {
 
 function canShowAppChrome(
   user: AuthUser | null | undefined,
-  appId: 'ai' | 'pms' | 'docs' | 'planner' | 'meeting' | 'settings',
+  appId: 'ai' | 'pms' | 'docs' | 'planner' | 'meeting' | 'learning' | 'settings',
   workspaceSlug?: string | null,
   enabledWorkspaceAppIds?: readonly string[],
 ): boolean {
@@ -121,6 +130,12 @@ export function resolveShellState(
   if (/^\/w\/[^/]+\/meeting(?:\/|$)/.test(path)) {
     return canShowAppChrome(user, 'meeting', workspaceSlug, enabledWorkspaceAppIds)
       ? { activeAppId: 'meeting', activeNavItemId: 'meeting-upcoming' }
+      : HOME_SHELL_STATE;
+  }
+
+  if (/^\/w\/[^/]+\/learning(?:\/|$)/.test(path)) {
+    return canShowAppChrome(user, 'learning', workspaceSlug, enabledWorkspaceAppIds)
+      ? { activeAppId: 'learning', activeNavItemId: 'learning-all' }
       : HOME_SHELL_STATE;
   }
 

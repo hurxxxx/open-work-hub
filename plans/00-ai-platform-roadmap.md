@@ -231,25 +231,40 @@ Phase 3로 넘어가기 전에 아래 4개 계약을 먼저 고정한다. 목표
 ---
 
 ### Phase 4 — Tool Calling (Write) + Meeting Intelligence
+**상태**: 완료 (2026-04-22)
+
 **목표**: 상태 변경 툴 + 승인 게이트 + 회의 지능화.
 
 **핵심 산출물**:
 - Write 툴: `pms.create_issue/update_issue/add_comment`, `meeting.create_meeting`, `planner.create_event`, `docs.create_page`
-- ApprovalModal 플로우 (LLM proposal → 사용자 승인 → 실행)
+- ApprovalModal 플로우 (LLM proposal → 사용자 승인/거절/취소 → resume)
 - 회의 지능화:
   - `meeting.extract_actions` (전사 → 액션 아이템)
   - `meeting.extract_decisions`
   - `meeting.draft_followup_schedule`
   - `MeetingInsight` 저장 (별도 테이블 + `payload_json`)
-- 회의 컨텍스트로 chat 진입 (scope_ref)
+- 회의 컨텍스트로 chat 진입 (`scope_ref="meeting"`, `scope_resource_id=<meeting.id>`)
+- reload 시 `conversation.live_pending_approval` 로 approval modal 복원
+- approval-required write는 `approval_id` 기반 idempotency로 실행
 
 **전제**: tool discovery 정본은 MCP bridge다. write capability는 `AiCapabilityDescriptor` 로 등록하고, OpenAI function spec은 bridge 산출물로만 사용한다.
 
-**완료 조건**: "어제 회의 액션 아이템 이슈로" 플로우 완성. ACL 통과 검증. 다건 작업을 순차 승인으로 완료 가능.
+**확정 결정**:
+- approval flow는 halt당 1건 순차 승인으로 고정
+- `scope_ref`는 Phase 4 기준 meeting only
+- `MeetingInsight` 는 별도 테이블 + `payload_json`
+- approval reload 복구는 `live_pending_approval` payload를 진실원으로 사용
+- write capability discovery는 `AIDOO_AI_WRITE_TOOLS_ENABLED=true` 일 때만 노출
+
+**검증 요약**:
+- backend approval / conversation / stream / tool / meeting insight 회귀 green
+- web approval / scoped conversation / meeting insight UI 회귀 green
+- Playwright로 approval approve/reject/cancel/reload + meeting→AI scoped entry 고정
+- 상세 로그와 수동 스모크 기록은 [`04-phase4-write-meeting.md`](./04-phase4-write-meeting.md) 참조
 
 **전제**: 전사는 기존 `core/asr.py` 그대로. 로컬 whisper 전환은 별도 track.
 
-**상세 플랜 파일**: `04-phase4-write-meeting.md`
+**상세 플랜 파일**: [`04-phase4-write-meeting.md`](./04-phase4-write-meeting.md)
 
 ---
 
@@ -381,7 +396,7 @@ Phase별 신규 영역:
 | 챗 UI 디자인 | Phase 2 킥오프 전 전용 디자인 세션 (P3/P4 컴포넌트까지 커버) |
 | Tool calling 프로토콜 | Phase 3 두 번째 작업으로 mlx-lm function-calling PoC |
 | **Phase 3.5 완료 (2026-04-20)** | MCP-shaped descriptor + InProc bridge를 capability 정본으로 채택. OpenAI function spec / OpenAPI는 파생 산출물로 유지. |
-| **Phase 4 계획 결정** | `MeetingInsight` 는 별도 테이블 + `payload_json`, approval flow는 halt당 1건 순차 승인, scope conversation은 `scope_ref` + `scope_resource_id` 두 컬럼으로 간다. |
+| **Phase 4 완료 (2026-04-22)** | `MeetingInsight` 별도 테이블, halt당 1 approval, meeting-only `scope_ref`, reload restore(`live_pending_approval`), approval-gated write capability까지 구현/검증 완료. |
 | 전사 프로바이더 | 기존 `core/asr.py` 설정 유지 |
 | 챗 히스토리 | 영구 보존, soft delete |
 

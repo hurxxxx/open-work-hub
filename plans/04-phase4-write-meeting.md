@@ -947,3 +947,49 @@ prod roll-forward는 다음 사다리로 고정한다:
   - 다만 automation click 시 실제 navigation / network request 가 관측되지 않아, Step F browser smoke는 **inconclusive** 로 남김.
   - 현재 판단은 component/unit test(`MeetingInsightSection`, `openMeetingInsightInChat`, `AIView`)와 API/stream test는 모두 green 이고, browser discrepancy 는 `agent-browser` interaction 쪽 추가 확인 항목으로 분리.
   - 최종 머지 전에는 사람이 직접 `MeetingDetail -> 챗에서 진행 -> scoped conversation attach`를 최소 1회 수동 확인하는 것을 권장.
+
+### 8.3 Phase 4 Closeout Verification (2026-04-22)
+
+- 작업 경계:
+  - Phase 4 closeout diff는 approval flow, scoped conversation, meeting insight, E2E helper/spec, 문서 갱신만 포함.
+  - `learning/*` 자체 기능 확장은 이번 closeout 범위에서 제외했다. 다만 repo 기준 `pnpm nx typecheck web` 를 통과시키기 위해 이미 존재하던 learning shell app id mismatch는 최소 수정으로 정리했다.
+- 자동화 검증:
+  - backend 회귀 묶음:
+    - `uv run --directory apps/api python -m ruff check src/aidoo_api/domains/ai src/aidoo_api/domains/conversations src/aidoo_api/domains/meeting tests/test_ai_approvals.py tests/test_ai_conversations.py tests/test_ai_stream.py tests/test_ai_tools.py tests/test_domain_write_services.py tests/test_meeting_insight_extractor.py` → clean
+    - `uv run --directory apps/api python -m pytest tests/test_ai_approvals.py tests/test_ai_conversations.py tests/test_ai_stream.py tests/test_ai_tools.py tests/test_domain_write_services.py tests/test_meeting_insight_extractor.py -q` → `73 passed, 2 warnings`
+  - web/unit 회귀 묶음:
+    - `pnpm vitest run -c apps/web/vite.config.mts apps/web/src/components/views/AIView.spec.tsx apps/web/src/components/views/chat/ApprovalModal.spec.tsx apps/web/src/domains/ai/useChatStream.spec.ts apps/web/src/components/views/MeetingView/MeetingInsightSection.spec.tsx apps/web/src/components/views/MeetingView/openMeetingInsightInChat.spec.ts` → `55 passed`
+    - `pnpm nx typecheck web` → 성공
+  - Playwright closeout 묶음:
+    - `pnpm playwright test --config apps/web/playwright.config.ts apps/web/e2e/chat-approval.spec.ts apps/web/e2e/meeting-scope-entry.spec.ts` → `5 passed`
+    - coverage:
+      - approval modal 표시
+      - approve 후 resume 응답
+      - reject 후 resume 응답
+      - cancel/abandon 후 composer 복구
+      - reload 시 `live_pending_approval` 복원
+      - meeting detail → AI scoped conversation entry
+- 운영/스키마 점검:
+  - `uv run --directory apps/api alembic heads` → `b7e3c1d2f4a5 (head)`
+  - `uv run --directory apps/api alembic current` → `b7e3c1d2f4a5 (head)`
+  - 기본 로컬 쉘 환경에서는 `AIDOO_AI_MCP_BRIDGE_ENABLED=false`, `AIDOO_AI_WRITE_TOOLS_ENABLED=false` 임을 확인.
+  - 수동 스모크 구간에서는 `AIDOO_AI_MCP_BRIDGE_ENABLED=true AIDOO_AI_WRITE_TOOLS_ENABLED=true pnpm nx dev api` 로 API를 재기동해 meeting-scoped chat 진입을 다시 점검했다.
+- 실제 브라우저 수동 스모크 (`agent-browser --session doowon-phase4-closeout`):
+  - seed quick-login으로 `hq-admin@aidoo.local` 로그인.
+  - local DB에 closeout fixture meeting `11111111-2222-4333-8444-555555555555` + recording 1건 + draft insight 3종(action/decision/followup) 삽입.
+  - `/w/hq/meeting/11111111-2222-4333-8444-555555555555` 진입:
+    - `녹음 (1)` 확인
+    - `AI 제안 (3)` 확인
+    - `챗에서 진행` CTA 3개 렌더 확인
+  - `agent-browser` 기본 click은 해당 CTA에서 불안정해 DOM click으로 재검증:
+    - `/w/hq/ai?c=<conversation_id>` 로 이동 확인
+    - 새 meeting-scoped conversation row 생성 확인
+    - composer에 회의 기반 draft prompt hydrate 확인
+  - write flag를 켠 뒤 같은 meeting-scoped conversation에서 실제 submit:
+    - `meeting.get_meeting`, `meeting.extract_actions`, `pms.list_spaces` tool call 시작/완료까지는 확인
+    - 다만 local model 응답 종단과 approval modal 노출은 수동 스모크에서 안정적으로 재현되지 않아 **inconclusive** 로 남김
+    - approval approve/reject/cancel/reload 복원은 위 Playwright closeout spec을 primary evidence로 간주
+- 현재 closeout 판단:
+  - meeting insight read path, scoped conversation attach, approval UI 계약, canonical replay/approval persistence 회귀는 모두 green
+  - 수동 브라우저 증빙은 `meeting detail -> AI entry` 까지 완료
+  - 실제 로컬 LLM이 얽힌 write approval 수동 플로우는 환경/모델 응답 종단 이슈로 남아 있으며, Phase 4 closeout에서는 automated evidence로 보완

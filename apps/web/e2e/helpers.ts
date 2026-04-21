@@ -194,6 +194,31 @@ export interface ConversationStubs {
     createdAt: string;
     updatedAt: string;
   }>;
+  createResponse?: {
+    id: string;
+    title: string;
+    createdAt: string;
+    updatedAt: string;
+    scopeRef?: 'meeting' | null;
+    scopeResourceId?: string | null;
+    livePendingApproval?: {
+      approvalId: string;
+      agentRunId: string;
+      callId: string;
+      tool: string;
+      resourcePreview?: string | null;
+      expiresAtMs: number;
+      status: 'pending' | 'approved' | 'rejected';
+      reason?: string | null;
+    } | null;
+    turns: Array<{
+      id: string;
+      seq: number;
+      role: string;
+      content: string;
+      createdAt: string;
+    }>;
+  };
   detail?: Record<
     string,
     {
@@ -201,6 +226,18 @@ export interface ConversationStubs {
       title: string;
       createdAt: string;
       updatedAt: string;
+      scopeRef?: 'meeting' | null;
+      scopeResourceId?: string | null;
+      livePendingApproval?: {
+        approvalId: string;
+        agentRunId: string;
+        callId: string;
+        tool: string;
+        resourcePreview?: string | null;
+        expiresAtMs: number;
+        status: 'pending' | 'approved' | 'rejected';
+        reason?: string | null;
+      } | null;
       turns: Array<{
         id: string;
         seq: number;
@@ -223,6 +260,17 @@ export async function stubConversationsApi(
 ): Promise<void> {
   const list = stubs.list ?? [];
   const detail = stubs.detail ?? {};
+  const createResponse =
+    stubs.createResponse ?? {
+      id: 'new-conversation',
+      title: '',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      scopeRef: null,
+      scopeResourceId: null,
+      livePendingApproval: null,
+      turns: [],
+    };
 
   // Regex matches both the list/create (`/conversations` with optional query)
   // and the detail/patch/delete (`/conversations/<id>`) endpoints in one
@@ -236,13 +284,7 @@ export async function stubConversationsApi(
     if (tail === '' || tail === '/') {
       if (method === 'POST') {
         return route.fulfill({
-          json: {
-            id: 'new-conversation',
-            title: '',
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-            turns: [],
-          },
+          json: createResponse,
         });
       }
       return route.fulfill({ json: { items: list, nextCursor: null } });
@@ -256,6 +298,157 @@ export async function stubConversationsApi(
       return route.fulfill({ status: 404, json: { detail: 'not found' } });
     }
     return route.fulfill({ json: row });
+  });
+}
+
+export async function stubMeetingDetail(
+  page: Page,
+  meeting: Record<string, unknown>,
+): Promise<void> {
+  await page.route('**/meeting/meetings/**', async (route: Route) => {
+    if (route.request().method() !== 'GET') {
+      await route.fallback();
+      return;
+    }
+    const url = route.request().url();
+    if (url.includes('/recordings/staging')) {
+      await route.fulfill({ json: [] });
+      return;
+    }
+    await route.fulfill({ json: meeting });
+  });
+}
+
+export async function stubMeetingInsights(
+  page: Page,
+  options: {
+    actions?: Record<string, unknown>;
+    decisions?: Record<string, unknown>;
+    followup?: Record<string, unknown>;
+  } = {},
+): Promise<void> {
+  const actions = options.actions ?? { items: [] };
+  const decisions = options.decisions ?? { items: [] };
+  const followup =
+    options.followup ?? { items: [], attendee_user_ids: [], availability: null };
+
+  await page.route(/\/ai\/tools\/[^/]+\/invoke$/, async (route: Route) => {
+    const url = new URL(route.request().url());
+    const match = url.pathname.match(/\/ai\/tools\/([^/]+)\/invoke$/);
+    const toolName = decodeURIComponent(match?.[1] ?? '');
+    let result: Record<string, unknown>;
+    switch (toolName) {
+      case 'meeting.extract_actions':
+        result = actions;
+        break;
+      case 'meeting.extract_decisions':
+        result = decisions;
+        break;
+      case 'meeting.draft_followup_schedule':
+        result = followup;
+        break;
+      default:
+        await route.fallback();
+        return;
+    }
+    await route.fulfill({
+      json: {
+        tool: toolName,
+        owner_domain: 'meeting',
+        approval_required: false,
+        result,
+      },
+    });
+  });
+}
+
+export async function stubApprovalApi(
+  page: Page,
+  options: {
+    approvalStatus?: Record<string, unknown>;
+    resolveResponse?: Record<string, unknown>;
+    abandonResponse?: Record<string, unknown>;
+    resumeFrames?: string[];
+  } = {},
+): Promise<void> {
+  const approvalStatus =
+    options.approvalStatus ?? {
+      id: 'approval-1',
+      workspace_id: 'workspace-hq',
+      conversation_id: 'conversation-approval',
+      agent_run_id: 'agent-run-1',
+      tool_call_id: 'call-approval-1',
+      tool_name: 'docs.create_page',
+      arguments_json: '{"title":"승인 테스트"}',
+      resource_preview: '승인 테스트 문서',
+      status: 'pending',
+      requested_by_user_id: 'user-e2e',
+      resolved_by_user_id: null,
+      reject_reason: null,
+      resolved_at: null,
+      expires_at: '2026-04-22T12:00:00Z',
+      execution_result_json: null,
+      error_message: null,
+      created_at: '2026-04-22T11:00:00Z',
+      snapshot_status: 'awaiting_approval',
+    };
+  const resolveResponse =
+    options.resolveResponse ?? {
+      ...approvalStatus,
+      status: 'approved',
+      resolved_by_user_id: 'user-e2e',
+      resolved_at: '2026-04-22T11:05:00Z',
+      snapshot_status: 'resumed',
+    };
+  const abandonResponse =
+    options.abandonResponse ?? {
+      ...approvalStatus,
+      status: 'cancelled',
+      resolved_by_user_id: 'user-e2e',
+      resolved_at: '2026-04-22T11:05:00Z',
+      snapshot_status: 'abandoned',
+    };
+  const resumeFrames =
+    options.resumeFrames ??
+    [
+      frame('approval_resolved', 0, {
+        approval_id: 'approval-1',
+        call_id: 'call-approval-1',
+        decision: 'approved',
+        reason: null,
+      }),
+      frame('content_delta', 1, { text: '승인 후 재개 완료' }),
+      frame('done', 2, {
+        finish_reason: 'stop',
+        audit_id: null,
+        meta: null,
+      }),
+    ];
+
+  await page.route('**/ai/approvals/**', async (route: Route) => {
+    const method = route.request().method();
+    const url = route.request().url();
+    if (method === 'GET' && !url.endsWith('/resolve') && !url.endsWith('/abandon')) {
+      await route.fulfill({ json: approvalStatus });
+      return;
+    }
+    if (method === 'POST' && url.endsWith('/resolve')) {
+      await route.fulfill({ json: resolveResponse });
+      return;
+    }
+    if (method === 'POST' && url.endsWith('/abandon')) {
+      await route.fulfill({ json: abandonResponse });
+      return;
+    }
+    await route.fallback();
+  });
+
+  await page.route('**/ai/chat/resume', async (route: Route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'text/event-stream',
+      body: resumeFrames.join(''),
+    });
   });
 }
 

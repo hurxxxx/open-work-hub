@@ -59,6 +59,25 @@ Phase 4 approval flows can land without changing the stream state model.
   - approved/rejected but not yet resumed keeps the composer blocked and shows
     an inline "이어가기" recovery action
 
+## Meeting Insight Entry
+
+- Placement: meeting detail right rail, below recordings and above attendees.
+- Data source: stored `MeetingInsight` rows read through
+  `meeting.extract_actions`, `meeting.extract_decisions`,
+  `meeting.draft_followup_schedule`.
+- Refresh policy:
+  - initial load is stored-only
+  - explicit `재추출` uses `refresh=true`
+  - transient refetch failure keeps the last successful cards rendered
+- CTA: each insight exposes `챗에서 진행`.
+  - click creates or reuses a meeting-scoped conversation
+  - route becomes `/w/:workspaceSlug/ai?c=<conversation_id>`
+  - composer is hydrated once with a meeting-aware draft prompt
+- Scope model:
+  - Phase 4 keeps `scope_ref="meeting"` only
+  - scope context survives reload through conversation fetch
+  - free chat and scoped chat share the same thread UI
+
 ## Error And Cancel States
 
 - Pre-stream failure: rollback the optimistic user turn, restore the draft
