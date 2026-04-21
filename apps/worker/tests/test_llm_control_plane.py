@@ -67,6 +67,33 @@ def _init_worker_db(
                     ),
                     (
                         "3",
+                        "meeting_insight_actions",
+                        "local_only",
+                        "Meeting action-item extraction (worker/read refresh)",
+                        None,
+                        "2026-04-18T00:00:00",
+                        "2026-04-18T00:00:00",
+                    ),
+                    (
+                        "4",
+                        "meeting_insight_decisions",
+                        "local_only",
+                        "Meeting decision extraction (worker/read refresh)",
+                        None,
+                        "2026-04-18T00:00:00",
+                        "2026-04-18T00:00:00",
+                    ),
+                    (
+                        "5",
+                        "meeting_insight_followup",
+                        "local_only",
+                        "Meeting follow-up schedule extraction (worker/read refresh)",
+                        None,
+                        "2026-04-18T00:00:00",
+                        "2026-04-18T00:00:00",
+                    ),
+                    (
+                        "6",
                         "batch_generation",
                         "local_only",
                         "Long-form batch generation (reports etc.)",
@@ -179,3 +206,102 @@ def test_meeting_summarize_uses_complete_chat_without_local_precheck(
     assert captured["db"] is fake_session
     assert captured["context"].task_kind == "meeting_summary"
     assert captured["context"].workspace_id == "ws-1"
+
+
+def test_meeting_extract_insights_invokes_worker_service_without_stopping_pipeline(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    db_path = _worker_db_path(tmp_path)
+    _init_worker_db(
+        db_path,
+        create_policy_table=True,
+        seed_policy_rows=True,
+    )
+    monkeypatch.setenv("DOOWON_POSTGRES_DSN", _worker_dsn(db_path))
+    monkeypatch.setenv("DOOWON_WORKER_POSTGRES_DSN", _worker_dsn(db_path))
+
+    meeting_module = _reload_worker_module("aidoo_worker.tasks.meeting")
+
+    recording = SimpleNamespace(
+        id="rec-2",
+        summary_text="요약 결과",
+        transcript_text="회의 전사",
+        progress_pct=90,
+        meeting=SimpleNamespace(workspace_id="ws-1"),
+        transcription_status="extracting_insights",
+    )
+
+    class FakeSession:
+        def __init__(self) -> None:
+            self.recording = recording
+            self.committed = False
+            self.rolled_back = False
+
+        def get(self, _model, _recording_id):
+            return self.recording
+
+        def commit(self) -> None:
+            self.committed = True
+
+        def rollback(self) -> None:
+            self.rolled_back = True
+
+        def close(self) -> None:
+            return None
+
+    fake_session = FakeSession()
+    captured: dict[str, object] = {}
+    heartbeats: list[tuple[int, str | None]] = []
+
+    monkeypatch.setattr(meeting_module, "_db_session", lambda: fake_session)
+    monkeypatch.setattr(meeting_module, "_load_active_recording", lambda *_args: recording)
+    monkeypatch.setattr(
+        meeting_module,
+        "_heartbeat",
+        lambda _session, _recording, pct, status_name=None: heartbeats.append((pct, status_name)),
+    )
+
+    def fake_extract(db, **kwargs):
+        captured["db"] = db
+        captured["kwargs"] = kwargs
+        return {}
+
+    monkeypatch.setattr(
+        meeting_module,
+        "_meeting_insights_module",
+        lambda: SimpleNamespace(extract_and_persist_meeting_insights=fake_extract),
+    )
+
+    result = meeting_module.extract_meeting_insights.run("rec-2")
+
+    assert result == "rec-2"
+    assert captured["db"] is fake_session
+    assert captured["kwargs"] == {
+        "recording_id": "rec-2",
+        "source": "worker.meeting.extract_insights",
+        "actor_user_id": None,
+    }
+    assert fake_session.committed is True
+    assert fake_session.rolled_back is False
+    assert heartbeats == [(90, "extracting_insights"), (92, "generating_doc")]
+
+
+def test_meeting_insights_module_imports_under_worker_env(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    db_path = _worker_db_path(tmp_path)
+    _init_worker_db(
+        db_path,
+        create_policy_table=True,
+        seed_policy_rows=True,
+    )
+    monkeypatch.setenv("DOOWON_POSTGRES_DSN", _worker_dsn(db_path))
+    monkeypatch.setenv("DOOWON_WORKER_POSTGRES_DSN", _worker_dsn(db_path))
+
+    meeting_module = _reload_worker_module("aidoo_worker.tasks.meeting")
+
+    imported = meeting_module._meeting_insights_module()
+
+    assert imported.__name__ == "aidoo_api.domains.meeting.insights"

@@ -17,7 +17,6 @@ from aidoo_api.domains.ai.registry import (
     WorkspaceContext,
 )
 from aidoo_api.domains.auth.models import User, Workspace
-from aidoo_api.domains.meeting import service as meeting_service
 from aidoo_api.domains.planner.service import parse_iso_or_date
 
 
@@ -39,6 +38,17 @@ class FindAvailabilityArgs(_ToolArgsModel):
     user_ids: list[str] = Field(..., min_length=1)
     from_at: str = Field(..., alias="from", min_length=1)
     to_at: str = Field(..., alias="to", min_length=1)
+
+
+class RefreshMeetingInsightsArgs(_ToolArgsModel):
+    meeting_id: str = Field(..., min_length=1)
+    refresh: bool = False
+
+
+class DraftFollowupScheduleArgs(_ToolArgsModel):
+    meeting_id: str = Field(..., min_length=1)
+    attendee_user_ids: list[str] | None = Field(default=None, max_length=50)
+    refresh: bool = False
 
 
 class CreateMeetingArgs(_ToolArgsModel):
@@ -74,6 +84,18 @@ def _parse_optional_range_arg(arguments: Mapping[str, Any], key: str):
         ) from exc
 
 
+def _insights_module():
+    from aidoo_api.domains.meeting import insights as meeting_insights
+
+    return meeting_insights
+
+
+def _meeting_service():
+    from aidoo_api.domains.meeting import service as meeting_service
+
+    return meeting_service
+
+
 def _list_meetings(
     db: Session,
     workspace: Workspace,
@@ -82,7 +104,7 @@ def _list_meetings(
     arguments: Mapping[str, Any],
 ) -> dict[str, Any]:
     scope = str(arguments.get("scope", "mine"))
-    result = meeting_service.list_meetings(
+    result = _meeting_service().list_meetings(
         db,
         workspace=workspace,
         principal=principal,
@@ -101,7 +123,7 @@ def _get_meeting(
     user: User,
     arguments: Mapping[str, Any],
 ) -> dict[str, Any]:
-    result = meeting_service.get_meeting(
+    result = _meeting_service().get_meeting(
         db,
         workspace=workspace,
         principal=principal,
@@ -130,7 +152,7 @@ def _find_availability(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Availability range exceeds maximum 31 days.",
         )
-    result = meeting_service.list_meeting_availability(
+    result = _meeting_service().list_meeting_availability(
         db,
         workspace=workspace,
         principal=principal,
@@ -142,6 +164,60 @@ def _find_availability(
     return result.model_dump(mode="json", by_alias=True)
 
 
+def _extract_actions(
+    db: Session,
+    workspace: Workspace,
+    principal: CallerPrincipal,
+    user: User,
+    arguments: Mapping[str, Any],
+) -> dict[str, Any]:
+    return _insights_module().list_action_insights(
+        db,
+        workspace=workspace,
+        principal=principal,
+        user=user,
+        meeting_id=str(arguments["meeting_id"]),
+        refresh=bool(arguments.get("refresh", False)),
+    )
+
+
+def _extract_decisions(
+    db: Session,
+    workspace: Workspace,
+    principal: CallerPrincipal,
+    user: User,
+    arguments: Mapping[str, Any],
+) -> dict[str, Any]:
+    return _insights_module().list_decision_insights(
+        db,
+        workspace=workspace,
+        principal=principal,
+        user=user,
+        meeting_id=str(arguments["meeting_id"]),
+        refresh=bool(arguments.get("refresh", False)),
+    )
+
+
+def _draft_followup_schedule(
+    db: Session,
+    workspace: Workspace,
+    principal: CallerPrincipal,
+    user: User,
+    arguments: Mapping[str, Any],
+) -> dict[str, Any]:
+    return _insights_module().draft_followup_schedule(
+        db,
+        workspace=workspace,
+        principal=principal,
+        user=user,
+        meeting_id=str(arguments["meeting_id"]),
+        attendee_user_ids=(
+            [str(item) for item in arguments.get("attendee_user_ids") or []] or None
+        ),
+        refresh=bool(arguments.get("refresh", False)),
+    )
+
+
 def _create_meeting(
     db: Session,
     workspace: Workspace,
@@ -151,7 +227,7 @@ def _create_meeting(
     *,
     approved_call_id: str | None = None,
 ) -> dict[str, Any]:
-    return meeting_service.create_meeting_for_ai(
+    return _meeting_service().create_meeting_for_ai(
         db,
         workspace=workspace,
         principal=principal,
@@ -195,6 +271,21 @@ def register_ai_capabilities(registry: AiCapabilityRegistry) -> None:
         default_policy="local_only",
         description="Meeting transcript summarization (worker)",
     )
+    registry.register_llm_task(
+        task_kind="meeting_insight_actions",
+        default_policy="local_only",
+        description="Meeting action-item extraction (worker/read refresh)",
+    )
+    registry.register_llm_task(
+        task_kind="meeting_insight_decisions",
+        default_policy="local_only",
+        description="Meeting decision extraction (worker/read refresh)",
+    )
+    registry.register_llm_task(
+        task_kind="meeting_insight_followup",
+        default_policy="local_only",
+        description="Meeting follow-up schedule extraction (worker/read refresh)",
+    )
     registry.register_preview_builder(
         preview_builder_id="meeting.create_meeting_preview",
         builder=_build_create_meeting_preview,
@@ -219,6 +310,27 @@ def register_ai_capabilities(registry: AiCapabilityRegistry) -> None:
         owner_domain="meeting",
         handler=_find_availability,
         args_model=FindAvailabilityArgs,
+    )
+    registry.register_tool(
+        name="meeting.extract_actions",
+        description="Return stored AI action-item suggestions for a meeting.",
+        owner_domain="meeting",
+        handler=_extract_actions,
+        args_model=RefreshMeetingInsightsArgs,
+    )
+    registry.register_tool(
+        name="meeting.extract_decisions",
+        description="Return stored AI decision suggestions for a meeting.",
+        owner_domain="meeting",
+        handler=_extract_decisions,
+        args_model=RefreshMeetingInsightsArgs,
+    )
+    registry.register_tool(
+        name="meeting.draft_followup_schedule",
+        description="Return stored follow-up meeting suggestions and availability for a meeting.",
+        owner_domain="meeting",
+        handler=_draft_followup_schedule,
+        args_model=DraftFollowupScheduleArgs,
     )
     if not get_settings().ai_write_tools_enabled:
         return

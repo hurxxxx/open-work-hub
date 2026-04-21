@@ -47,7 +47,7 @@ def test_openai_tool_specs_export_registered_read_tools() -> None:
 
     specs = registry.openai_tool_specs()
 
-    assert len(specs) == 12
+    assert len(specs) == 15
     assert [spec["function"]["name"] for spec in specs] == sorted(registry.tools.keys())
     for spec in specs:
         function = spec["function"]

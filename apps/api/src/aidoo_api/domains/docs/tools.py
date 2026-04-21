@@ -15,7 +15,6 @@ from aidoo_api.domains.ai.registry import (
     WorkspaceContext,
 )
 from aidoo_api.domains.auth.models import User, Workspace
-from aidoo_api.domains.docs import service as docs_service
 
 
 class _ToolArgsModel(BaseModel):
@@ -53,6 +52,12 @@ class CreatePageArgs(_ToolArgsModel):
     parent_id: str | None = None
 
 
+def _docs_service():
+    from aidoo_api.domains.docs import service as docs_service
+
+    return docs_service
+
+
 def _list_hub(
     db: Session,
     workspace: Workspace,
@@ -60,7 +65,7 @@ def _list_hub(
     user: User,
     arguments: Mapping[str, Any],
 ) -> dict[str, Any]:
-    return docs_service.list_hub(
+    return _docs_service().list_hub(
         db,
         user=user,
         view=str(arguments.get("view", "all")),
@@ -79,7 +84,7 @@ def _get_item(
     user: User,
     arguments: Mapping[str, Any],
 ) -> dict[str, Any]:
-    return docs_service.get_item(
+    return _docs_service().get_item(
         db,
         user=user,
         item_id=str(arguments["item_id"]),
@@ -94,7 +99,7 @@ def _list_pages(
     user: User,
     arguments: Mapping[str, Any],
 ) -> dict[str, Any]:
-    return docs_service.list_pages(
+    return _docs_service().list_pages(
         db,
         user=user,
         item_id=str(arguments["item_id"]),
@@ -109,7 +114,7 @@ def _read_page(
     user: User,
     arguments: Mapping[str, Any],
 ) -> dict[str, Any]:
-    return docs_service.read_page(
+    return _docs_service().read_page(
         db,
         user=user,
         page_id=str(arguments["page_id"]),
@@ -126,7 +131,7 @@ def _create_page(
     *,
     approved_call_id: str | None = None,
 ) -> dict[str, Any]:
-    return docs_service.create_page(
+    return _docs_service().create_page(
         db,
         workspace=workspace,
         principal=principal,

@@ -4,7 +4,9 @@ from datetime import UTC, datetime
 
 from sqlalchemy import (
     DateTime,
+    Float,
     ForeignKey,
+    Index,
     Integer,
     JSON,
     String,
@@ -68,6 +70,10 @@ class Meeting(Base):
         cascade="all, delete-orphan",
     )
     recordings: Mapped[list["MeetingRecording"]] = relationship(
+        back_populates="meeting",
+        cascade="all, delete-orphan",
+    )
+    insights: Mapped[list["MeetingInsight"]] = relationship(
         back_populates="meeting",
         cascade="all, delete-orphan",
     )
@@ -221,7 +227,58 @@ class MeetingRecording(Base):
     )
 
     meeting: Mapped["Meeting"] = relationship(back_populates="recordings")
+    insights: Mapped[list["MeetingInsight"]] = relationship(back_populates="recording")
     uploaded_by = relationship("User")
+
+
+class MeetingInsight(Base):
+    __tablename__ = "meeting_insights"
+    __table_args__ = (
+        Index(
+            "ix_meeting_insights_meeting_type_status",
+            "meeting_id",
+            "insight_type",
+            "status",
+        ),
+        Index(
+            "ix_meeting_insights_workspace_status",
+            "workspace_id",
+            "status",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    meeting_id: Mapped[str] = mapped_column(
+        ForeignKey("meetings.id", ondelete="CASCADE"),
+        index=True,
+        nullable=False,
+    )
+    recording_id: Mapped[str | None] = mapped_column(
+        ForeignKey("meeting_recordings.id", ondelete="SET NULL"),
+        index=True,
+        nullable=True,
+    )
+    workspace_id: Mapped[str] = mapped_column(
+        ForeignKey("workspaces.id"),
+        index=True,
+        nullable=False,
+    )
+    insight_type: Mapped[str] = mapped_column(String(24), index=True, nullable=False)
+    payload_json: Mapped[dict] = mapped_column(JSON, nullable=False)
+    confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
+    source_span: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    status: Mapped[str] = mapped_column(String(16), default="draft", index=True, nullable=False)
+    accepted_as_kind: Mapped[str | None] = mapped_column(String(24), nullable=True)
+    accepted_as_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    created_by_run_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        default=utcnow_naive,
+        nullable=False,
+    )
+
+    meeting: Mapped["Meeting"] = relationship(back_populates="insights")
+    recording: Mapped["MeetingRecording | None"] = relationship(back_populates="insights")
 
 
 class MeetingRecordingStaging(Base):

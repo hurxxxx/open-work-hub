@@ -985,6 +985,20 @@ def get_meeting(
     return _serialize_meeting(db, meeting)
 
 
+def load_meeting_for_participant(
+    db: Session,
+    *,
+    workspace: Workspace,
+    principal: CallerPrincipal,
+    user: User,
+    meeting_id: str,
+) -> Meeting:
+    _bind_workspace_context(db, workspace=workspace, principal=principal, user=user)
+    meeting = _load_meeting(db, workspace, meeting_id)
+    ensure_meeting_participant(db, user, meeting)
+    return meeting
+
+
 def ensure_meeting_notes(
     db: Session,
     *,

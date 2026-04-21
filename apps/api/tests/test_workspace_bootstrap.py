@@ -123,10 +123,23 @@ def test_registry_drives_llm_task_seed_and_tool_metadata(client: TestClient) -> 
     registry = get_ai_capability_registry()
     task_kinds = {item.task_kind for item in get_supported_llm_tasks()}
 
-    assert {"chatbot", "meeting_summary", "batch_generation"} <= task_kinds
-    assert {"pms.search_issues", "docs.list_hub", "meeting.find_availability", "planner.list_events"} <= set(
-        registry.tools.keys()
-    )
+    assert {
+        "chatbot",
+        "meeting_summary",
+        "meeting_insight_actions",
+        "meeting_insight_decisions",
+        "meeting_insight_followup",
+        "batch_generation",
+    } <= task_kinds
+    assert {
+        "pms.search_issues",
+        "docs.list_hub",
+        "meeting.find_availability",
+        "meeting.extract_actions",
+        "meeting.extract_decisions",
+        "meeting.draft_followup_schedule",
+        "planner.list_events",
+    } <= set(registry.tools.keys())
     assert all(tool.handler is not None for tool in registry.tools.values())
 
     with get_session_factory()() as db:

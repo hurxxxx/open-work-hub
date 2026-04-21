@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import os
 import sys
 import tempfile
@@ -44,15 +45,21 @@ from aidoo_api.core.llm import (  # noqa: E402
 )
 from aidoo_api.domains.auth.models import Workspace  # noqa: E402
 from aidoo_api.domains.auth.security import new_id  # noqa: E402
-from aidoo_api.domains.docs.minutes import create_meeting_minutes_doc  # noqa: E402
-from aidoo_api.domains.meeting import recordings as recording_service  # noqa: E402
-from aidoo_api.domains.meeting import service as meeting_service  # noqa: E402
 from aidoo_api.domains.meeting.models import (  # noqa: E402
     Meeting,
     MeetingAttendee,
     MeetingRecording,
 )
 from aidoo_api.domains.pms.models import IssueComment  # noqa: E402
+
+
+logger = logging.getLogger(__name__)
+
+
+def _meeting_insights_module():
+    from aidoo_api.domains.meeting import insights as meeting_insights
+
+    return meeting_insights
 
 
 def _utcnow() -> datetime:
@@ -225,7 +232,7 @@ def summarize_recording(self, recording_id: str) -> str:
         if recording is None:
             raise Ignore()
         if recording.summary_text:
-            _heartbeat(session, recording, 90, "generating_doc")
+            _heartbeat(session, recording, 90, "extracting_insights")
             return recording.id
         if not recording.transcript_text:
             raise PermanentError("Transcript is missing.")
@@ -264,7 +271,7 @@ def summarize_recording(self, recording_id: str) -> str:
         recording.summary_text = summary
         session.add(recording)
         session.commit()
-        _heartbeat(session, recording, 90, "generating_doc")
+        _heartbeat(session, recording, 90, "extracting_insights")
         return recording.id
     except Ignore:
         raise
@@ -281,6 +288,49 @@ def summarize_recording(self, recording_id: str) -> str:
 
 
 @celery_app.task(
+    name="meeting.extract_insights",
+    bind=True,
+    acks_late=True,
+    task_time_limit=900,
+)
+def extract_meeting_insights(self, recording_id: str) -> str:
+    del self
+    session = _db_session()
+    try:
+        recording = _load_active_recording(session, recording_id)
+        if recording is None:
+            raise Ignore()
+        if not recording.summary_text or not recording.transcript_text:
+            _heartbeat(session, recording, max(recording.progress_pct, 90), "generating_doc")
+            return recording.id
+
+        _heartbeat(session, recording, max(recording.progress_pct, 90), "extracting_insights")
+        try:
+            _meeting_insights_module().extract_and_persist_meeting_insights(
+                session,
+                recording_id=recording.id,
+                source="worker.meeting.extract_insights",
+                actor_user_id=None,
+            )
+            session.commit()
+        except Exception:  # noqa: BLE001
+            session.rollback()
+            logger.warning(
+                "Meeting insight extraction failed for recording %s",
+                recording_id,
+                exc_info=True,
+            )
+
+        recording = session.get(MeetingRecording, recording_id)
+        if recording is None or recording.transcription_status == "cancelled":
+            raise Ignore()
+        _heartbeat(session, recording, max(recording.progress_pct, 92), "generating_doc")
+        return recording.id
+    finally:
+        session.close()
+
+
+@celery_app.task(
     name="meeting.generate_doc",
     bind=True,
     acks_late=True,
@@ -288,6 +338,9 @@ def summarize_recording(self, recording_id: str) -> str:
     task_time_limit=300,
 )
 def generate_meeting_doc(self, recording_id: str) -> str:
+    from aidoo_api.domains.docs.minutes import create_meeting_minutes_doc
+    from aidoo_api.domains.meeting import service as meeting_service
+
     session = _db_session()
     try:
         recording = _load_active_recording(session, recording_id)
@@ -301,7 +354,9 @@ def generate_meeting_doc(self, recording_id: str) -> str:
         if not recording.transcript_text:
             raise PermanentError("Transcript is missing.")
 
-        meeting = meeting_service._load_meeting(session, recording.meeting_id)
+        meeting = recording.meeting
+        if meeting is None:
+            raise PermanentError("Meeting is missing.")
         doc = create_meeting_minutes_doc(
             session,
             meeting=meeting,
@@ -353,6 +408,8 @@ def generate_meeting_doc(self, recording_id: str) -> str:
 
 @celery_app.task(name="meeting.cleanup_stale_staging")
 def cleanup_stale_staging() -> dict[str, int]:
+    from aidoo_api.domains.meeting import recordings as recording_service
+
     session = _db_session()
     try:
         return recording_service.cleanup_stale_staging_once(session)

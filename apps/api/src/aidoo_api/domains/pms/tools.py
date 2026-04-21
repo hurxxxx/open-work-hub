@@ -16,7 +16,6 @@ from aidoo_api.domains.ai.registry import (
     WorkspaceContext,
 )
 from aidoo_api.domains.auth.models import User, Workspace
-from aidoo_api.domains.pms import service as pms_service
 
 
 class _ToolArgsModel(BaseModel):
@@ -79,6 +78,12 @@ class PmsAddCommentAiInput(_ToolArgsModel):
     body: str = Field(..., min_length=1)
 
 
+def _pms_service():
+    from aidoo_api.domains.pms import service as pms_service
+
+    return pms_service
+
+
 def _search_issues(
     db: Session,
     workspace: Workspace,
@@ -86,7 +91,7 @@ def _search_issues(
     user: User,
     arguments: Mapping[str, Any],
 ) -> dict[str, Any]:
-    return pms_service.search_issues(
+    return _pms_service().search_issues(
         db,
         workspace=workspace,
         principal=principal,
@@ -107,7 +112,7 @@ def _get_issue(
     user: User,
     arguments: Mapping[str, Any],
 ) -> dict[str, Any]:
-    return pms_service.get_issue_detail(
+    return _pms_service().get_issue_detail(
         db,
         workspace=workspace,
         principal=principal,
@@ -124,7 +129,7 @@ def _list_spaces(
     arguments: Mapping[str, Any],
 ) -> dict[str, Any]:
     return {
-        "items": pms_service.list_spaces(
+        "items": _pms_service().list_spaces(
             db,
             workspace=workspace,
             principal=principal,
@@ -141,7 +146,7 @@ def _list_task_lists(
     arguments: Mapping[str, Any],
 ) -> dict[str, Any]:
     sort_dir = str(arguments.get("sort_dir", "desc"))
-    return pms_service.list_task_lists(
+    return _pms_service().list_task_lists(
         db,
         workspace=workspace,
         principal=principal,
@@ -165,7 +170,7 @@ def _create_issue(
     *,
     approved_call_id: str | None = None,
 ) -> dict[str, Any]:
-    return pms_service.create_issue(
+    return _pms_service().create_issue(
         db,
         workspace=workspace,
         principal=principal,
@@ -199,7 +204,7 @@ def _update_issue(
     ):
         if field_name in arguments:
             provided_fields.add(service_field_name)
-    return pms_service.update_issue(
+    return _pms_service().update_issue(
         db,
         workspace=workspace,
         principal=principal,
@@ -224,7 +229,7 @@ def _add_comment(
     *,
     approved_call_id: str | None = None,
 ) -> dict[str, Any]:
-    return pms_service.add_issue_comment(
+    return _pms_service().add_issue_comment(
         db,
         workspace=workspace,
         principal=principal,

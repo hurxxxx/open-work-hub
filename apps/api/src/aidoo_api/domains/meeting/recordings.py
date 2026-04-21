@@ -48,7 +48,13 @@ ALLOWED_RECORDING_MIME_TYPES = {
     "audio/ogg": ".ogg",
     "audio/flac": ".flac",
 }
-ACTIVE_RECORDING_STATUSES = {"pending", "transcribing", "summarizing", "generating_doc"}
+ACTIVE_RECORDING_STATUSES = {
+    "pending",
+    "transcribing",
+    "summarizing",
+    "extracting_insights",
+    "generating_doc",
+}
 ENQUEUE_FAILURE_REASON = "Background processing queue is unavailable. Raw audio was saved; retry later."
 
 # How long an active staging row may go without a chunk upload before we
@@ -186,6 +192,7 @@ def enqueue_recording_pipeline(recording_id: str) -> str:
     result = chain(
         celery_client.signature("meeting.transcribe", args=[recording_id], immutable=True),
         celery_client.signature("meeting.summarize"),
+        celery_client.signature("meeting.extract_insights"),
         celery_client.signature("meeting.generate_doc"),
     ).apply_async(queue="meeting_transcribe", retry=False)
     return str(result.id)

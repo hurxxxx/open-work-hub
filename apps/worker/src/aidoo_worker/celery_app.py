@@ -92,6 +92,7 @@ celery_app.conf.beat_schedule = {
 celery_app.conf.task_routes = {
     "meeting.transcribe": {"queue": "meeting_transcribe"},
     "meeting.summarize": {"queue": "meeting_transcribe"},
+    "meeting.extract_insights": {"queue": "meeting_transcribe"},
     "meeting.generate_doc": {"queue": "meeting_transcribe"},
 }
 celery_app.conf.task_reject_on_worker_lost = True

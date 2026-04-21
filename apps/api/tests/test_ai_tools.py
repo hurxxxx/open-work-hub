@@ -6,12 +6,14 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from aidoo_api.domains.auth.security import new_id
 from aidoo_api.core.settings import get_settings
 from aidoo_api.domains.ai.registry import reset_ai_capability_registry
 from aidoo_api.core.db import get_engine
 from aidoo_api.core.db import get_session_factory
 from aidoo_api.domains.auth.access import ensure_dev_login_seed_data
 from aidoo_api.domains.auth.models import AuditLog, Workspace, WorkspaceAppEntitlement
+from aidoo_api.domains.meeting.models import MeetingInsight, MeetingRecording
 
 
 def _dev_login(client: TestClient, account_key: str) -> dict:
@@ -224,6 +226,394 @@ def test_ai_tool_invoke_meeting_find_availability_returns_blocks(client: TestCli
         for item in payload["result"]["items"]
         for block in item["blocks"]
     )
+
+
+def test_ai_tool_invoke_meeting_extract_actions_returns_insights(
+    client: TestClient,
+    monkeypatch,
+) -> None:
+    from aidoo_api.domains.meeting import insights as meeting_insights
+
+    session = _dev_login(client, "delivery-hub-admin")
+    token = session["token"]
+    workspace_slug = "delivery-hub"
+
+    meeting_response = client.post(
+        f"/api/v1/workspaces/{workspace_slug}/meeting/meetings",
+        headers=_auth_headers(token),
+        json={
+            "title": "AI Tool Insight Meeting",
+            "agenda": "Extract actions",
+            "start_at": "2026-05-09T01:00:00+00:00",
+            "end_at": "2026-05-09T02:00:00+00:00",
+            "attendees": [],
+            "task_ids": [],
+            "doc_ids": [],
+        },
+    )
+    assert meeting_response.status_code == 201, meeting_response.text
+    meeting = meeting_response.json()
+
+    with get_session_factory()() as db:
+        db.add(
+            MeetingRecording(
+                id=new_id(),
+                meeting_id=meeting["id"],
+                storage_key=f"meeting-recordings/{meeting['id']}/ready.webm",
+                duration_sec=120,
+                file_size=128,
+                mime_type="audio/webm",
+                idempotency_key="tool-insight-recording",
+                uploaded_by_id=session["user"]["id"],
+                source="manual_upload",
+                transcription_status="done",
+                progress_pct=100,
+                transcript_text="할 일은 로그인 플로우를 정리하는 것입니다.",
+                summary_text="액션 아이템이 한 개 있습니다.",
+            )
+        )
+        db.commit()
+
+    def fake_complete_chat(context, _db, **_kwargs):
+        assert context.task_kind == "meeting_insight_actions"
+        return (
+            type(
+                "Response",
+                (),
+                {
+                    "choices": [
+                        type(
+                            "Choice",
+                            (),
+                            {
+                                "message": type(
+                                    "Message",
+                                    (),
+                                    {
+                                        "content": (
+                                            '{"items":[{"title":"로그인 플로우 정리",'
+                                            '"description":"OAuth 리다이렉트 경로 점검",'
+                                            '"confidence":0.91}]}'
+                                        )
+                                    },
+                                )()
+                            },
+                        )()
+                    ]
+                },
+            )(),
+            None,
+            None,
+        )
+
+    monkeypatch.setattr(meeting_insights, "complete_chat", fake_complete_chat)
+
+    response = client.post(
+        _workspace_tool_path(workspace_slug, "meeting.extract_actions"),
+        headers=_auth_headers(token),
+        json={"arguments": {"meeting_id": meeting["id"], "refresh": True}},
+    )
+    assert response.status_code == 200, response.text
+    payload = response.json()
+
+    assert payload["tool"] == "meeting.extract_actions"
+    assert payload["result"]["items"][0]["insight_type"] == "action"
+    assert payload["result"]["items"][0]["payload"]["title"] == "로그인 플로우 정리"
+
+
+def test_ai_tool_invoke_meeting_extract_actions_returns_stored_drafts_without_refresh(
+    client: TestClient,
+    monkeypatch,
+) -> None:
+    from aidoo_api.domains.meeting import insights as meeting_insights
+
+    session = _dev_login(client, "delivery-hub-admin")
+    token = session["token"]
+    workspace_slug = "delivery-hub"
+
+    meeting_response = client.post(
+        f"/api/v1/workspaces/{workspace_slug}/meeting/meetings",
+        headers=_auth_headers(token),
+        json={
+            "title": "Stored Insight Meeting",
+            "agenda": "Use stored actions",
+            "start_at": "2026-05-09T01:00:00+00:00",
+            "end_at": "2026-05-09T02:00:00+00:00",
+            "attendees": [],
+            "task_ids": [],
+            "doc_ids": [],
+        },
+    )
+    assert meeting_response.status_code == 201, meeting_response.text
+    meeting = meeting_response.json()
+
+    with get_session_factory()() as db:
+        workspace = db.scalar(select(Workspace).where(Workspace.key == workspace_slug))
+        assert workspace is not None
+        db.add(
+            MeetingInsight(
+                id=new_id(),
+                meeting_id=meeting["id"],
+                recording_id=None,
+                workspace_id=workspace.id,
+                insight_type="action",
+                payload_json={
+                    "title": "이미 저장된 액션",
+                    "description": "기존 draft 재사용",
+                },
+                confidence=0.82,
+                source_span=None,
+                status="draft",
+                accepted_as_kind=None,
+                accepted_as_id=None,
+                created_by_run_id=None,
+            )
+        )
+        db.commit()
+
+    monkeypatch.setattr(
+        meeting_insights,
+        "complete_chat",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("LLM should not run")),
+    )
+
+    response = client.post(
+        _workspace_tool_path(workspace_slug, "meeting.extract_actions"),
+        headers=_auth_headers(token),
+        json={"arguments": {"meeting_id": meeting["id"]}},
+    )
+    assert response.status_code == 200, response.text
+    payload = response.json()
+
+    assert payload["tool"] == "meeting.extract_actions"
+    assert payload["result"]["items"][0]["payload"]["title"] == "이미 저장된 액션"
+
+
+def test_ai_tool_invoke_meeting_extract_decisions_returns_insights(
+    client: TestClient,
+    monkeypatch,
+) -> None:
+    from aidoo_api.domains.meeting import insights as meeting_insights
+
+    session = _dev_login(client, "delivery-hub-admin")
+    token = session["token"]
+    workspace_slug = "delivery-hub"
+
+    meeting_response = client.post(
+        f"/api/v1/workspaces/{workspace_slug}/meeting/meetings",
+        headers=_auth_headers(token),
+        json={
+            "title": "AI Tool Decision Meeting",
+            "agenda": "Extract decisions",
+            "start_at": "2026-05-10T01:00:00+00:00",
+            "end_at": "2026-05-10T02:00:00+00:00",
+            "attendees": [],
+            "task_ids": [],
+            "doc_ids": [],
+        },
+    )
+    assert meeting_response.status_code == 201, meeting_response.text
+    meeting = meeting_response.json()
+
+    with get_session_factory()() as db:
+        db.add(
+            MeetingRecording(
+                id=new_id(),
+                meeting_id=meeting["id"],
+                storage_key=f"meeting-recordings/{meeting['id']}/decision.webm",
+                duration_sec=120,
+                file_size=128,
+                mime_type="audio/webm",
+                idempotency_key="tool-decision-recording",
+                uploaded_by_id=session["user"]["id"],
+                source="manual_upload",
+                transcription_status="done",
+                progress_pct=100,
+                transcript_text="이번 분기부터 신규 인증 흐름을 기본으로 합니다.",
+                summary_text="결정사항이 하나 있습니다.",
+            )
+        )
+        db.commit()
+
+    def fake_complete_chat(context, _db, **_kwargs):
+        assert context.task_kind == "meeting_insight_decisions"
+        return (
+            type(
+                "Response",
+                (),
+                {
+                    "choices": [
+                        type(
+                            "Choice",
+                            (),
+                            {
+                                "message": type(
+                                    "Message",
+                                    (),
+                                    {
+                                        "content": (
+                                            '{"items":[{"statement":"신규 인증 흐름 채택",'
+                                            '"rationale":"리다이렉트 오류를 줄이기 위해",'
+                                            '"confidence":0.89}]}'
+                                        )
+                                    },
+                                )()
+                            },
+                        )()
+                    ]
+                },
+            )(),
+            None,
+            None,
+        )
+
+    monkeypatch.setattr(meeting_insights, "complete_chat", fake_complete_chat)
+
+    response = client.post(
+        _workspace_tool_path(workspace_slug, "meeting.extract_decisions"),
+        headers=_auth_headers(token),
+        json={"arguments": {"meeting_id": meeting["id"], "refresh": True}},
+    )
+    assert response.status_code == 200, response.text
+    payload = response.json()
+
+    assert payload["tool"] == "meeting.extract_decisions"
+    assert payload["result"]["items"][0]["insight_type"] == "decision"
+    assert payload["result"]["items"][0]["payload"]["statement"] == "신규 인증 흐름 채택"
+
+
+def test_ai_tool_invoke_meeting_draft_followup_schedule_returns_availability(
+    client: TestClient,
+) -> None:
+    admin = _dev_login(client, "delivery-hub-admin")
+    member = _dev_login(client, "delivery-hub-member")
+    token = admin["token"]
+    workspace_slug = "delivery-hub"
+
+    meeting_response = client.post(
+        f"/api/v1/workspaces/{workspace_slug}/meeting/meetings",
+        headers=_auth_headers(token),
+        json={
+            "title": "AI Tool Follow-up Meeting",
+            "agenda": "Schedule follow-up",
+            "start_at": "2026-05-12T01:00:00+00:00",
+            "end_at": "2026-05-12T02:00:00+00:00",
+            "attendees": [{"user_id": member["user"]["id"], "role": "required"}],
+            "task_ids": [],
+            "doc_ids": [],
+        },
+    )
+    assert meeting_response.status_code == 201, meeting_response.text
+    meeting = meeting_response.json()
+
+    with get_session_factory()() as db:
+        workspace = db.scalar(select(Workspace).where(Workspace.key == workspace_slug))
+        assert workspace is not None
+        db.add(
+            MeetingInsight(
+                id=new_id(),
+                meeting_id=meeting["id"],
+                recording_id=None,
+                workspace_id=workspace.id,
+                insight_type="followup_schedule",
+                payload_json={
+                    "proposed_title": "후속 점검 회의",
+                    "duration_minutes": 30,
+                    "proposed_slots": [
+                        {
+                            "start_at": "2026-05-12T00:00:00+00:00",
+                            "end_at": "2026-05-13T00:00:00+00:00",
+                        }
+                    ],
+                    "attendee_user_ids": [admin["user"]["id"], member["user"]["id"]],
+                },
+                confidence=0.77,
+                source_span=None,
+                status="draft",
+                accepted_as_kind=None,
+                accepted_as_id=None,
+                created_by_run_id=None,
+            )
+        )
+        db.commit()
+
+    response = client.post(
+        _workspace_tool_path(workspace_slug, "meeting.draft_followup_schedule"),
+        headers=_auth_headers(token),
+        json={"arguments": {"meeting_id": meeting["id"]}},
+    )
+    assert response.status_code == 200, response.text
+    payload = response.json()
+
+    assert payload["tool"] == "meeting.draft_followup_schedule"
+    assert payload["result"]["items"][0]["payload"]["proposed_title"] == "후속 점검 회의"
+    assert payload["result"]["availability"] is not None
+    assert len(payload["result"]["availability"]["items"]) == 2
+
+
+def test_ai_tool_invoke_meeting_draft_followup_schedule_rejects_range_over_31_days(
+    client: TestClient,
+) -> None:
+    admin = _dev_login(client, "delivery-hub-admin")
+    member = _dev_login(client, "delivery-hub-member")
+    token = admin["token"]
+    workspace_slug = "delivery-hub"
+
+    meeting_response = client.post(
+        f"/api/v1/workspaces/{workspace_slug}/meeting/meetings",
+        headers=_auth_headers(token),
+        json={
+            "title": "AI Tool Follow-up Limit Meeting",
+            "agenda": "Schedule follow-up",
+            "start_at": "2026-05-12T01:00:00+00:00",
+            "end_at": "2026-05-12T02:00:00+00:00",
+            "attendees": [{"user_id": member["user"]["id"], "role": "required"}],
+            "task_ids": [],
+            "doc_ids": [],
+        },
+    )
+    assert meeting_response.status_code == 201, meeting_response.text
+    meeting = meeting_response.json()
+
+    with get_session_factory()() as db:
+        workspace = db.scalar(select(Workspace).where(Workspace.key == workspace_slug))
+        assert workspace is not None
+        db.add(
+            MeetingInsight(
+                id=new_id(),
+                meeting_id=meeting["id"],
+                recording_id=None,
+                workspace_id=workspace.id,
+                insight_type="followup_schedule",
+                payload_json={
+                    "proposed_title": "너무 먼 후속 회의",
+                    "duration_minutes": 30,
+                    "proposed_slots": [
+                        {
+                            "start_at": "2026-05-12T00:00:00+00:00",
+                            "end_at": "2026-06-20T00:00:00+00:00",
+                        }
+                    ],
+                    "attendee_user_ids": [admin["user"]["id"], member["user"]["id"]],
+                },
+                confidence=0.6,
+                source_span=None,
+                status="draft",
+                accepted_as_kind=None,
+                accepted_as_id=None,
+                created_by_run_id=None,
+            )
+        )
+        db.commit()
+
+    response = client.post(
+        _workspace_tool_path(workspace_slug, "meeting.draft_followup_schedule"),
+        headers=_auth_headers(token),
+        json={"arguments": {"meeting_id": meeting["id"]}},
+    )
+
+    assert response.status_code == 400, response.text
+    assert response.json()["detail"] == "Availability range exceeds maximum 31 days."
 
 
 def test_ai_tool_invoke_rejects_unknown_tool(client: TestClient) -> None:
