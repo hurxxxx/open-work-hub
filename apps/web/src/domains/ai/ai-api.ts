@@ -154,6 +154,35 @@ export function getLlmHealth(token: string): Promise<LlmHealthResponse> {
   return aiRequest<LlmHealthResponse>('/api/v1/ai/health', token);
 }
 
+export interface ToolInvokeEnvelope<T> {
+  tool: string;
+  owner_domain: string;
+  approval_required: boolean;
+  result: T;
+}
+
+/**
+ * Invoke an AI tool via POST /api/v1/ai/tools/{tool}/invoke and unwrap
+ * the ``ToolInvokeResponse`` envelope. Tool arguments must use the
+ * backend Pydantic field names (snake_case). Errors come back as
+ * ``AiApiError`` with ``.status`` preserved, so callers can branch on
+ * specific HTTP codes (e.g. 409 for "summary not available yet").
+ */
+export function invokeAiTool<T>(
+  toolName: string,
+  args: Record<string, unknown>,
+  token: string,
+): Promise<T> {
+  return aiRequest<ToolInvokeEnvelope<T>>(
+    `/api/v1/ai/tools/${encodeURIComponent(toolName)}/invoke`,
+    token,
+    {
+      method: 'POST',
+      body: JSON.stringify({ arguments: args }),
+    },
+  ).then((envelope) => envelope.result);
+}
+
 export function sendAiChat(
   payload: AiChatRequest,
   token: string,

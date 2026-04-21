@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { StrictMode } from 'react';
 import {
   MemoryRouter,
   Route,
@@ -143,12 +144,39 @@ function RouteProbe() {
       <button type="button" onClick={() => navigate('/w/hq/ai?c=missing')}>
         go-missing
       </button>
+      <button
+        type="button"
+        onClick={() =>
+          navigate('/w/hq/ai?draft=' + encodeURIComponent('두번째 초안'))
+        }
+      >
+        go-second-draft
+      </button>
+      <button
+        type="button"
+        onClick={() =>
+          navigate('/w/hq/ai?draft=' + encodeURIComponent('상태 기반 초안'), {
+            state: {
+              aiDraft: '상태 기반 초안',
+              aiDraftSourceKey: 'meeting-insight:m-1:i-1',
+              aiDraftOrigin: 'meeting_insight',
+            },
+          })
+        }
+      >
+        go-state-draft
+      </button>
     </>
   );
 }
 
-function renderAIView(options: { initialEntries?: string[] } = {}) {
-  return render(
+function renderAIView(
+  options: {
+    initialEntries?: ComponentProps<typeof MemoryRouter>['initialEntries'];
+    strict?: boolean;
+  } = {},
+) {
+  const tree = (
     <MemoryRouter initialEntries={options.initialEntries ?? ['/w/hq/ai']}>
       <WorkspaceBootstrapProvider
         value={{ data: null, error: null, loading: false }}
@@ -165,8 +193,9 @@ function renderAIView(options: { initialEntries?: string[] } = {}) {
           />
         </Routes>
       </WorkspaceBootstrapProvider>
-    </MemoryRouter>,
+    </MemoryRouter>
   );
+  return render(options.strict ? <StrictMode>{tree}</StrictMode> : tree);
 }
 
 describe('AIView', () => {
@@ -455,5 +484,141 @@ describe('AIView', () => {
       true,
     );
     expect(sentMessages[0].role).toBe('user');
+  });
+
+  it('pre-fills composer from ?draft= on a fresh chat mount', async () => {
+    renderAIView({
+      initialEntries: [
+        '/w/hq/ai?draft=' +
+          encodeURIComponent('회의 액션 이슈로 만들어줘') +
+          '&context=meeting&context_id=m-1&insight_id=i-1&insight_kind=action',
+      ],
+    });
+
+    const input = (await screen.findByPlaceholderText(
+      '메시지를 입력하세요',
+    )) as HTMLTextAreaElement;
+    await waitFor(() => {
+      expect(input.value).toBe('회의 액션 이슈로 만들어줘');
+    });
+    // The "회의 AI 제안에서 시작됨" hint appears above the composer.
+    expect(screen.getByText('회의 AI 제안에서 시작됨')).toBeTruthy();
+    // URL params are cleared in the same effect tick so refreshes do not
+    // re-consume the draft.
+    await waitFor(() => {
+      expect(screen.getByTestId('location-search').textContent).toBe('');
+    });
+  });
+
+  it('pre-fills composer from ?draft= under StrictMode double effects', async () => {
+    renderAIView({
+      strict: true,
+      initialEntries: [
+        '/w/hq/ai?draft=' +
+          encodeURIComponent('StrictMode 초안') +
+          '&context=meeting&context_id=m-1&insight_id=i-1&insight_kind=action',
+      ],
+    });
+
+    const input = (await screen.findByPlaceholderText(
+      '메시지를 입력하세요',
+    )) as HTMLTextAreaElement;
+    await waitFor(() => {
+      expect(input.value).toBe('StrictMode 초안');
+    });
+    await waitFor(() => {
+      expect(screen.getByTestId('location-search').textContent).toBe('');
+    });
+  });
+
+  it('preserves % in the draft without double-decoding', async () => {
+    // URLSearchParams.get() returns already-decoded strings, so a second
+    // decodeURIComponent would corrupt legitimate '%' characters. This
+    // regression guards against that (D14).
+    renderAIView({
+      initialEntries: [
+        '/w/hq/ai?draft=' + encodeURIComponent('완료율 50% 달성안 정리'),
+      ],
+    });
+
+    const input = (await screen.findByPlaceholderText(
+      '메시지를 입력하세요',
+    )) as HTMLTextAreaElement;
+    await waitFor(() => {
+      expect(input.value).toBe('완료율 50% 달성안 정리');
+    });
+  });
+
+  it('re-consumes a new ?draft= when navigating between insights on a fresh chat', async () => {
+    // D11 requires that clicking a second "챗에서 진행" while still
+    // on a bare `/w/:slug/ai` URL re-fills the composer with the new
+    // draft. The value-based ref guard skips same-value reruns but
+    // accepts a different draft.
+    renderAIView({
+      initialEntries: [
+        '/w/hq/ai?draft=' + encodeURIComponent('첫 초안'),
+      ],
+    });
+
+    const firstInput = (await screen.findByPlaceholderText(
+      '메시지를 입력하세요',
+    )) as HTMLTextAreaElement;
+    await waitFor(() => {
+      expect(firstInput.value).toBe('첫 초안');
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'go-second-draft' }));
+
+    await waitFor(() => {
+      const input = screen.getByPlaceholderText(
+        '메시지를 입력하세요',
+      ) as HTMLTextAreaElement;
+      expect(input.value).toBe('두번째 초안');
+    });
+  });
+
+  it('consumes meeting insight drafts from router state and still clears the query', async () => {
+    renderAIView();
+
+    fireEvent.click(screen.getByRole('button', { name: 'go-state-draft' }));
+
+    await waitFor(() => {
+      const input = screen.getByPlaceholderText(
+        '메시지를 입력하세요',
+      ) as HTMLTextAreaElement;
+      expect(input.value).toBe('상태 기반 초안');
+    });
+    expect(screen.getByText('회의 AI 제안에서 시작됨')).toBeTruthy();
+    await waitFor(() => {
+      expect(screen.getByTestId('location-search').textContent).toBe('');
+    });
+  });
+
+  it('ignores ?draft= when ?c= points to an existing conversation', async () => {
+    conversationsHarness.getConversation.mockResolvedValue({
+      id: 'c-existing',
+      title: '기존 대화',
+      createdAt: '2026-04-19T00:00:00',
+      updatedAt: '2026-04-19T00:01:00',
+      turns: [],
+    });
+
+    renderAIView({
+      initialEntries: [
+        '/w/hq/ai?c=c-existing&draft=' + encodeURIComponent('버려질 초안'),
+      ],
+    });
+
+    await waitFor(() => {
+      expect(conversationsHarness.getConversation).toHaveBeenCalledWith(
+        'test-token',
+        'c-existing',
+      );
+    });
+    const input = (await screen.findByPlaceholderText(
+      '메시지를 입력하세요',
+    )) as HTMLTextAreaElement;
+    expect(input.value).toBe('');
+    expect(screen.queryByText('회의 AI 제안에서 시작됨')).toBeNull();
   });
 });

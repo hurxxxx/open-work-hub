@@ -1,19 +1,28 @@
 import { AlertTriangle, CheckCircle2, Loader2 } from 'lucide-react';
 
-import type { MeetingRecording } from '@/src/domains/meeting/meeting-api';
+import type {
+  MeetingRecording,
+  MeetingRecordingStatus,
+} from '@/src/domains/meeting/meeting-api';
 
 const STAGES = [
   { key: 'pending', label: '업로드' },
   { key: 'transcribing', label: '음성인식' },
   { key: 'summarizing', label: '회의록 정리' },
+  { key: 'extracting_insights', label: 'AI 제안' },
   { key: 'generating_doc', label: '문서 생성' },
   { key: 'done', label: '완료' },
-] as const;
+] as const satisfies ReadonlyArray<{ key: MeetingRecordingStatus; label: string }>;
 
-function stageIndex(status: string): number {
+// Failure rail should freeze at the "generating_doc" marker (final
+// pipeline stage before completion). Deriving from STAGES keeps this
+// correct when stages are inserted — hard-coding the index would drift.
+const FAILED_STAGE_INDEX = STAGES.findIndex((stage) => stage.key === 'generating_doc');
+
+function stageIndex(status: MeetingRecordingStatus): number {
   const index = STAGES.findIndex((stage) => stage.key === status);
   if (index >= 0) return index;
-  if (status === 'failed') return 3;
+  if (status === 'failed') return FAILED_STAGE_INDEX;
   return 0;
 }
 

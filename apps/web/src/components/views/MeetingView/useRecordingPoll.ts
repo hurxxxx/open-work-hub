@@ -1,8 +1,10 @@
 import { useEffect } from 'react';
 
-import { getMeeting, type MeetingDetail } from '@/src/domains/meeting/meeting-api';
-
-const ACTIVE_STATUSES = new Set(['pending', 'transcribing', 'summarizing', 'generating_doc']);
+import {
+  ACTIVE_RECORDING_STATUSES,
+  getMeeting,
+  type MeetingDetail,
+} from '@/src/domains/meeting/meeting-api';
 
 export function useRecordingPoll(
   token: string | null,
@@ -18,7 +20,7 @@ export function useRecordingPoll(
       return;
     }
     const hasActiveRecording = meeting.recordings.some((recording) =>
-      ACTIVE_STATUSES.has(recording.transcription_status),
+      ACTIVE_RECORDING_STATUSES.has(recording.transcription_status),
     );
     // Also poll when a recording lock is held by a DIFFERENT user — so the
     // viewer's UI auto-clears the moment the recorder finishes (or crashes

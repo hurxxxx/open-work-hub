@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import {
   CheckSquare,
   Download,
@@ -8,7 +8,6 @@ import {
   Mic,
   Paperclip,
   Pencil,
-  Plus,
   Trash2,
   Users,
   X,
@@ -17,6 +16,7 @@ import { Button, useConfirm } from '@aidoo/ui';
 
 import { useAuth } from '@/src/domains/auth/auth-provider';
 import {
+  RAIL_VISIBLE_STATUSES,
   attachDocToMeeting,
   attachTaskToMeeting,
   deleteMeeting,
@@ -41,11 +41,14 @@ import { buildWorkspaceAppPath } from '@/src/domains/workspaces/workspace-utils'
 
 import { AddAttendeesModal } from './AddAttendeesModal';
 import { MeetingEditModal } from './MeetingEditModal';
+import { MeetingInsightSection } from './MeetingInsightSection';
+import { Section, EmptyRow } from './MeetingSection';
 import { TaskPickerModal } from './TaskPickerModal';
 import { DocPickerModal } from './DocPickerModal';
 import { RecordingControls } from './RecordingControls';
 import { RecordingProgressRail } from './RecordingProgressRail';
 import { RecordingRecoveryBanner } from './RecordingRecoveryBanner';
+import { openMeetingInsightInChat } from './openMeetingInsightInChat';
 import { useChunkedRecorder } from './useChunkedRecorder';
 import { useRecordingPoll } from './useRecordingPoll';
 import { useRecordingRecovery } from './useRecordingRecovery';
@@ -87,6 +90,7 @@ export function MeetingDetail({
   showCloseButton = true,
 }: MeetingDetailProps) {
   const { token, user } = useAuth();
+  const navigate = useNavigate();
   const { confirm, confirmDialog } = useConfirm();
   const [meeting, setMeeting] = useState<MeetingDetailType | null>(null);
   const [loading, setLoading] = useState(false);
@@ -741,9 +745,7 @@ export function MeetingDetail({
                   {playbackUrls[recording.id] ? (
                     <audio controls src={playbackUrls[recording.id]} className="mt-3 w-full" />
                   ) : null}
-                  {['pending', 'transcribing', 'summarizing', 'generating_doc', 'failed'].includes(
-                    recording.transcription_status,
-                  ) ? (
+                  {RAIL_VISIBLE_STATUSES.has(recording.transcription_status) ? (
                     <div className="mt-3">
                       <RecordingProgressRail
                         recording={recording}
@@ -773,6 +775,22 @@ export function MeetingDetail({
             <p className="app-text-caption mt-2 text-app-ink/50">복구 가능한 녹음을 확인하는 중입니다.</p>
           ) : null}
         </Section>
+
+        {meeting.recordings.length > 0 ? (
+          <MeetingInsightSection
+            meeting={meeting}
+            workspaceSlug={workspaceSlug}
+            token={token}
+            onOpenInChat={(insight) =>
+              openMeetingInsightInChat({
+                navigate,
+                workspaceSlug,
+                meeting,
+                insight,
+              })
+            }
+          />
+        ) : null}
 
         <Section
           icon={<Users size={14} />}
@@ -873,49 +891,3 @@ export function MeetingDetail({
   );
 }
 
-function Section({
-  icon,
-  title,
-  count,
-  onAdd,
-  addLabel = '추가',
-  children,
-}: {
-  icon: React.ReactNode;
-  title: string;
-  count: number;
-  onAdd?: () => void;
-  addLabel?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <section>
-      <div className="mb-2 flex items-center justify-between">
-        <h3 className="app-text-overline inline-flex items-center gap-1.5 text-app-ink/60 dark:text-app-ink/70">
-          <span className="text-app-ink/60 dark:text-app-ink/70">{icon}</span>
-          {title}
-          <span className="text-app-ink/40 dark:text-app-ink/50">({count})</span>
-        </h3>
-        {onAdd ? (
-          <button
-            type="button"
-            onClick={onAdd}
-            className="app-text-caption inline-flex items-center gap-1 text-app-accent hover:underline"
-          >
-            <Plus size={12} />
-            {addLabel}
-          </button>
-        ) : null}
-      </div>
-      {children}
-    </section>
-  );
-}
-
-function EmptyRow({ text }: { text: string }) {
-  return (
-    <p className="app-text-caption rounded-md border border-dashed border-app-border px-3 py-3 text-center text-app-ink/50 dark:text-app-ink/60">
-      {text}
-    </p>
-  );
-}

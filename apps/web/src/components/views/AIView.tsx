@@ -1,6 +1,6 @@
 import { motion } from 'motion/react';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
   getLlmHealth,
   type AiBackendMode,
@@ -34,6 +34,35 @@ import type {
 import type { NavItem } from '@/src/constants';
 
 const AI_BACKEND_MODE_STORAGE_KEY = 'aidoo.ai.backendMode';
+
+interface AiDraftLocationState {
+  aiDraft: string;
+  aiDraftSourceKey: string;
+  aiDraftOrigin: 'meeting_insight';
+}
+
+function readAiDraftLocationState(state: unknown): AiDraftLocationState | null {
+  if (!state || typeof state !== 'object') {
+    return null;
+  }
+  const candidate = state as {
+    aiDraft?: unknown;
+    aiDraftSourceKey?: unknown;
+    aiDraftOrigin?: unknown;
+  };
+  if (
+    typeof candidate.aiDraft !== 'string' ||
+    typeof candidate.aiDraftSourceKey !== 'string' ||
+    candidate.aiDraftOrigin !== 'meeting_insight'
+  ) {
+    return null;
+  }
+  return {
+    aiDraft: candidate.aiDraft,
+    aiDraftSourceKey: candidate.aiDraftSourceKey,
+    aiDraftOrigin: 'meeting_insight',
+  };
+}
 
 function readInitialBackendMode(): AiBackendMode {
   if (typeof window === 'undefined') {
@@ -80,7 +109,8 @@ function resolveAssistantTurnContent(
 }
 
 export const AIView = () => {
-  const { token, user } = useAuth();
+  const { status: authStatus, token, user } = useAuth();
+  const location = useLocation();
   const navigate = useNavigate();
   const { workspaceSlug } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -94,6 +124,25 @@ export const AIView = () => {
   // and page refreshes resume with the same panel visible; closing the
   // panel clears the param via `handleCloseArtifact`.
   const routeArtifactId = searchParams.get('a');
+  // Meeting-insight deep-link `draft` param (Step E.4). Populated when
+  // the user clicks "챗에서 진행" on a meeting AI suggestion card and
+  // becomes the composer's starting value on the next fresh-chat mount.
+  // The companion params (`context`, `context_id`, `insight_id`,
+  // `insight_kind`) are cleared alongside `draft` in the same replace
+  // call; they carry no runtime behavior in this slice and are reserved
+  // for the Step F scope-bound conversation flow.
+  const routeDraft = searchParams.get('draft');
+  const locationDraftState = readAiDraftLocationState(location.state);
+  const pendingDraft = locationDraftState?.aiDraft ?? routeDraft;
+  const pendingDraftSourceKey =
+    locationDraftState?.aiDraftSourceKey ??
+    (() => {
+      const insightId = searchParams.get('insight_id');
+      if (insightId) {
+        return `meeting-insight:${insightId}`;
+      }
+      return routeDraft ? `draft:${routeDraft}` : null;
+    })();
   // Read bootstrap state from the shell context (AppContent already fetched
   // it). Previously AIView issued its own GET /api/v1/workspaces/:slug/bootstrap
   // on every mount, which also briefly fell back to the full static NAV_ITEMS
@@ -233,7 +282,54 @@ export const AIView = () => {
   // a fetch before auth bootstrap completes.
   const abortHydrateRef = useRef<AbortController | null>(null);
   const skipHydrationConversationIdRef = useRef<string | null>(null);
+  // Tracks the draft source key only after the draft text has actually
+  // landed in component state. Deferring the write avoids a StrictMode
+  // double-effect bug where the first mount run mutates the ref, the
+  // second mount run skips consumption, and the queued `setInput(...)`
+  // never makes it to the committed render.
+  const consumedDraftRef = useRef<string | null>(null);
+  // The consume path clears the `draft` URL param via setSearchParams,
+  // which changes `routeDraft` and triggers another run of the
+  // hydration effect. Without this guard, that run would execute the
+  // unconditional `setInput('')` reset and wipe the draft we just
+  // injected. Setting the flag immediately before `setSearchParams`
+  // means the very next run skips its reset, then clears the flag.
+  const skipNextHydrationResetRef = useRef(false);
+  const [showInsightHint, setShowInsightHint] = useState(false);
+  const [pendingDraftSearchCleanup, setPendingDraftSearchCleanup] = useState(false);
+  // Clear the "회의 AI 제안에서 시작됨" hint once the composer is empty —
+  // this covers both the submit path (handleSubmit clears input) and
+  // the user manually clearing the draft. The hint is pinned to the
+  // first turn that originated from the deep-link; once that turn is
+  // dispatched, the hint is no longer useful.
   useEffect(() => {
+    if (!input && showInsightHint) {
+      setShowInsightHint(false);
+    }
+  }, [input, showInsightHint]);
+  useEffect(() => {
+    if (
+      pendingDraft &&
+      pendingDraftSourceKey &&
+      showInsightHint &&
+      input === pendingDraft
+    ) {
+      consumedDraftRef.current = pendingDraftSourceKey;
+    }
+  }, [input, pendingDraft, pendingDraftSourceKey, showInsightHint]);
+  useEffect(() => {
+    if (authStatus === 'bootstrapping') {
+      return;
+    }
+
+    // Tail-end of a just-consumed draft: the `routeDraft → null`
+    // transition triggered by our own setSearchParams. Skip the reset
+    // dance so the draft text we just pushed into the composer is
+    // preserved.
+    if (skipNextHydrationResetRef.current) {
+      skipNextHydrationResetRef.current = false;
+      return;
+    }
     abortHydrateRef.current?.abort();
 
     if (
@@ -257,6 +353,22 @@ export const AIView = () => {
       setTurns([]);
       setChatError(null);
       setIsLoadingConversation(false);
+
+      // Consume the meeting-insight deep-link draft exactly once per
+      // distinct value. Scheduled AFTER the setInput('') above in the
+      // same synchronous block so React batches the two state updates
+      // and the composer ends up holding the draft, not an empty
+      // string. URL params are cleared in the same tick via replace to
+      // avoid history bloat and to prevent a reload from re-consuming.
+      if (
+        pendingDraft &&
+        pendingDraftSourceKey &&
+        consumedDraftRef.current !== pendingDraftSourceKey
+      ) {
+        setInput(pendingDraft);
+        setShowInsightHint(true);
+        setPendingDraftSearchCleanup(Boolean(routeDraft));
+      }
       return;
     }
 
@@ -306,10 +418,63 @@ export const AIView = () => {
     // can see the workspace change via client-side routing (e.g. switching
     // `/w/<old>/ai?c=<id>` → `/w/<new>/ai?c=<id>`). Without it, the old
     // workspace's turns would linger under the new slug.
+    // `pendingDraftSourceKey` / `pendingDraft` are part of the deps so a
+    // second "챗에서 진행" click (fresh chat still open) re-runs the
+    // consume branch with the new draft source. Using a source key rather
+    // than the raw draft text keeps the router-state handoff stable even if
+    // the cleanup effect removes the query params immediately after mount.
     // chat.reset is stable (useCallback in hook); excluded from deps to avoid
     // re-firing the hydration on every chat state transition.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [routeConversationId, token, workspaceSlug]);
+  }, [
+    authStatus,
+    pendingDraft,
+    pendingDraftSourceKey,
+    routeConversationId,
+    routeDraft,
+    token,
+    workspaceSlug,
+  ]);
+
+  useEffect(() => {
+    if (!pendingDraftSearchCleanup || !routeDraft) {
+      return;
+    }
+    const next = new URLSearchParams(searchParams);
+    next.delete('draft');
+    next.delete('context');
+    next.delete('context_id');
+    next.delete('insight_id');
+    next.delete('insight_kind');
+    skipNextHydrationResetRef.current = true;
+    setPendingDraftSearchCleanup(false);
+    navigate(
+      {
+        pathname: location.pathname,
+        search: next.toString() ? `?${next.toString()}` : '',
+      },
+      {
+        replace: true,
+        state:
+          pendingDraft && pendingDraftSourceKey
+            ? {
+                aiDraft: pendingDraft,
+                aiDraftSourceKey: pendingDraftSourceKey,
+                aiDraftOrigin: 'meeting_insight' as const,
+              }
+            : location.state,
+      },
+    );
+  }, [
+    location.pathname,
+    location.state,
+    navigate,
+    pendingDraft,
+    pendingDraftSearchCleanup,
+    pendingDraftSourceKey,
+    routeDraft,
+    searchParams,
+  ]);
 
   // When a stream lands a brand-new conversation id (first persisted turn
   // on an empty URL), push it back into `?c=` so a refresh or a bookmark
@@ -551,26 +716,33 @@ export const AIView = () => {
         {turns.length === 0 && !isSending ? (
           <EmptyState
             composer={
-              <ChatComposer
-                input={input}
-                onInputChange={setInput}
-                onSubmit={handleSubmit}
-                onAbort={() => chat.abort()}
-                isSending={isSending}
-                isStreaming={chat.state.transport === 'stream'}
-                chatError={chatError}
-                isDisabled={isComposerDisabled}
-                onSelectTool={handleSelectTool}
-                toolItems={slashCommandItems}
-                placeholder={
-                  isLoadingConversation
-                    ? '대화를 불러오는 중입니다.'
-                    : !isConversationReady
-                      ? '이 대화를 열 수 없습니다. 새 대화를 시작하거나 다른 대화를 선택하세요.'
-                      : undefined
-                }
-                autoFocus
-              />
+              <div className="space-y-2">
+                {showInsightHint ? (
+                  <p className="app-text-caption text-app-ink/60">
+                    회의 AI 제안에서 시작됨
+                  </p>
+                ) : null}
+                <ChatComposer
+                  input={input}
+                  onInputChange={setInput}
+                  onSubmit={handleSubmit}
+                  onAbort={() => chat.abort()}
+                  isSending={isSending}
+                  isStreaming={chat.state.transport === 'stream'}
+                  chatError={chatError}
+                  isDisabled={isComposerDisabled}
+                  onSelectTool={handleSelectTool}
+                  toolItems={slashCommandItems}
+                  placeholder={
+                    isLoadingConversation
+                      ? '대화를 불러오는 중입니다.'
+                      : !isConversationReady
+                        ? '이 대화를 열 수 없습니다. 새 대화를 시작하거나 다른 대화를 선택하세요.'
+                        : undefined
+                  }
+                  autoFocus
+                />
+              </div>
             }
             greeting={
               isLoadingConversation

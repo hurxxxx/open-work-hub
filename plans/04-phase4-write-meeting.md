@@ -893,3 +893,42 @@ prod roll-forward는 다음 사다리로 고정한다:
 - [ ] 본 플랜을 사용자 리뷰 → 승인.
 
 승인 후 Step A부터 순차 실행.
+
+---
+
+## 8. E2E Note (2026-04-21)
+
+- `agent-browser --session doowon-e2e` 로 `http://127.0.0.1:4200` / `http://127.0.0.1:8000` 기준 실제 브라우저 검증 수행.
+- 로컬 dev DB는 Step E migration 전 상태여서 `uv run --directory apps/api alembic upgrade head` 로 `meeting_insights` 스키마를 먼저 올린 뒤 진행.
+- 실패 경로 확인:
+  - `/w/hq/meeting/714d557a-0b7f-4a60-9206-d6b6b1aeaa54`
+  - failed recording rail, `다시 시도` 액션, 빈 `AI 제안`, disabled `재추출` 확인.
+- positive fixture 확인:
+  - `/w/hq/meeting/c735388a-5a75-4d76-9d82-dd68acccdcab`
+  - local DB에 `created_by_run_id = e2e-ui-step-e4` draft insights 3종(action/decision/followup) 삽입 후, `AI 제안 (3)` 섹션과 `재추출` 버튼, 3개 `챗에서 진행` CTA 렌더 확인.
+  - `재추출` 클릭 후에도 기존 카드가 유지되는 것 확인.
+- 실제 브라우저 blocker:
+  - `챗에서 진행` 또는 직접 `/w/hq/ai?draft=...` 진입 시 URL은 곧 `/w/hq/ai` 로 consume 되지만 composer 값이 비어 있고 `회의 AI 제안에서 시작됨` 힌트도 보이지 않음.
+  - Vitest는 통과하지만 실제 app-shell 경로에서는 draft hydrate가 동작하지 않는 회귀가 있음. Step E.4 머지 전 수정 필요.
+- 브라우저 콘솔은 Vite 연결 로그만 있었고 page error는 없었음.
+
+### 8.1 E.4 Fix Verification (2026-04-21)
+
+- 원인:
+  - `AIView`의 meeting draft consume guard가 dev/browser `StrictMode` effect double-run에서 너무 일찍 `consumedDraftRef` 를 세팅해, 두 번째 mount run이 실제 `setInput(draft)` 반영 전에 consume를 건너뛰고 있었다.
+  - query cleanup 뒤 `location.state` 로 draft를 이어받는 fallback도 함께 필요했다.
+- 수정:
+  - `openMeetingInsightInChat` 는 query param과 함께 router `state`(`aiDraft`, `aiDraftSourceKey`, `aiDraftOrigin`)를 넘기도록 변경.
+  - `AIView` 는 query cleanup 시 현재 history entry에 동일 draft state를 유지하고, `consumedDraftRef` 는 **draft가 실제 input state에 반영된 뒤** 에만 확정하도록 조정.
+  - `AIView.spec.tsx` 에 `StrictMode` 회귀 테스트 추가.
+- 검증:
+  - `pnpm vitest run -c apps/web/vite.config.mts apps/web/src/components/views/AIView.spec.tsx apps/web/src/components/views/MeetingView/MeetingInsightSection.spec.tsx apps/web/src/components/views/MeetingView/openMeetingInsightInChat.spec.ts apps/web/src/components/views/MeetingView/RecordingProgressRail.spec.tsx` → `30 passed`
+  - `pnpm nx typecheck web` → 성공
+  - `agent-browser --session doowon-e4-direct-fix`:
+    - 직접 `/w/hq/ai?draft=...` 진입 시 최종 URL은 `/w/hq/ai`
+    - composer 값 `테스트 초안` 유지, `전송` enabled 확인
+  - `agent-browser --session doowon-e4-final`:
+    - fixture meeting `/w/hq/meeting/c735388a-5a75-4d76-9d82-dd68acccdcab` 에서 `AI 제안 (3)` 확인
+    - 첫 번째 `챗에서 진행` 클릭 후 최종 URL `/w/hq/ai`
+    - composer 값 `회의 \`새로운 미팅\`의 액션 아이템 ...` 채워짐 확인
+  - 브라우저 콘솔은 Vite dev 연결 로그 외 신규 오류 없음, page error 없음.

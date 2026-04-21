@@ -42,6 +42,42 @@ export interface MeetingFileAttachment {
   created_at: string;
 }
 
+export type MeetingRecordingStatus =
+  | 'pending'
+  | 'transcribing'
+  | 'summarizing'
+  | 'extracting_insights'
+  | 'generating_doc'
+  | 'done'
+  | 'failed';
+
+/**
+ * Recording states where the backend pipeline is still advancing the
+ * row (transcribe → summarize → extract insights → generate doc). UI
+ * polling keeps refetching while the recording is in one of these.
+ */
+export const ACTIVE_RECORDING_STATUSES: ReadonlySet<MeetingRecordingStatus> = new Set([
+  'pending',
+  'transcribing',
+  'summarizing',
+  'extracting_insights',
+  'generating_doc',
+]);
+
+/**
+ * States where the progress rail should be rendered. ``done`` is shown
+ * with a separate completion message; rail is hidden because the
+ * pipeline is finished.
+ */
+export const RAIL_VISIBLE_STATUSES: ReadonlySet<MeetingRecordingStatus> = new Set([
+  'pending',
+  'transcribing',
+  'summarizing',
+  'extracting_insights',
+  'generating_doc',
+  'failed',
+]);
+
 export interface MeetingRecording {
   id: string;
   meeting_id: string;
@@ -49,7 +85,7 @@ export interface MeetingRecording {
   storage_key: string;
   duration_sec: number | null;
   source: string;
-  transcription_status: string;
+  transcription_status: MeetingRecordingStatus;
   progress_pct: number;
   file_size: number;
   mime_type: string;
