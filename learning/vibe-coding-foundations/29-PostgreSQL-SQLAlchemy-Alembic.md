@@ -2,15 +2,37 @@
 
 > **한 줄 요약.** 데이터는 **PostgreSQL**에 안전하게 저장하고, 파이썬에서는 **SQLAlchemy** 라는 ORM으로 SQL을 직접 쓰지 않고 접근하며, 테이블 구조를 바꿀 때는 **Alembic**으로 이력을 남기며 마이그레이션한다.
 
+> **🔑 한 마디로.** "회사 장부(PostgreSQL) + 장부를 파이썬 객체로 다루게 해주는 번역기(SQLAlchemy) + 장부 양식을 바꿀 때 변경 이력을 남기는 개정 관리자(Alembic)"의 세트 구성. 세 개가 서로 한 팀처럼 설계돼 궁합이 좋습니다.
+
+### 일상 비유
+
+- **도서관**: PostgreSQL은 책을 담는 서가, SQLAlchemy는 사서(파이썬 코드에서 "이런 책 주세요" 하면 SQL로 번역해 찾아옴), Alembic은 서가 배치도(레이아웃)를 바꿀 때 변경 기록을 남기는 관리 대장.
+- **회계 장부**: ACID(원자성·일관성·격리·영속성)는 "입금/출금은 반드시 짝으로 기록되고, 중간에 끊겨도 장부가 깨지지 않는다"는 회계 원칙.
+- **이삿짐 사다리차 매뉴얼**: Alembic 마이그레이션은 "집(스키마)을 고칠 때 어떤 순서로 짐을 옮기고 복원하는지"를 단계별 SOP로 남겨 두는 것.
+
+### ⚠️ 흔한 오해
+
+- **오해**: "ORM을 쓰면 SQL을 아예 몰라도 된다."
+  **실제**: 성능 문제(N+1, 인덱스 미사용)를 잡으려면 ORM이 생성한 SQL을 읽을 줄 알아야 합니다. ORM은 **SQL을 가리는 게 아니라 다듬어 주는 것**.
+- **오해**: "PostgreSQL은 MySQL과 거의 똑같다."
+  **실제**: JSONB 1급 지원, 트랜잭션 격리의 일관성, `pgvector` 같은 확장 생태계에서 구조적으로 다릅니다.
+- **오해**: "Alembic `upgrade head` 만 돌리면 안전하다."
+  **실제**: `autogenerate`가 만든 파일을 **사람이 반드시 검토**해야 합니다. 컬럼 이름 변경을 "삭제 후 추가"로 잘못 추론하면 데이터 유실.
+- **오해**: "DB 스키마는 한 번 잘 설계하면 바꿀 일 없다."
+  **실제**: 제품이 살아 있는 한 계속 바뀝니다. 그래서 마이그레이션이 **핵심 인프라**입니다.
+- **오해**: "SQLAlchemy 1.x와 2.0은 사소한 차이."
+  **실제**: 2.0은 `Mapped[...]` 타입 힌트, 새 `select()` 스타일, 세션 패턴이 크게 달라졌습니다. 우리 프로젝트는 2.0 신문법을 씁니다.
+
 ---
 
 ## 1. 왜 이 세 가지가 함께 다니는가
 
 8장에서 데이터베이스를 개괄했다면, 이번 장은 **이 프로젝트가 실제로 쓰는 도구** 이야기입니다.
 
-- **PostgreSQL 18** — 저장소 엔진. 실제 데이터가 사는 집.
-- **SQLAlchemy 2.0** — 파이썬 코드에서 DB를 다루는 **ORM(Object-Relational Mapper)**.
-- **Alembic** — DB 스키마를 바꿀 때 쓰는 **마이그레이션 도구**. SQLAlchemy 팀이 함께 만든 공식 보조 도구.
+- **PostgreSQL**(일반적으로 16/17 공식 Docker 이미지) — 저장소 엔진. 실제 데이터가 사는 집.
+- **SQLAlchemy 2.0** — 파이썬 코드에서 DB를 다루는 **ORM(Object-Relational Mapper, 객체-관계 매퍼)**. 2026년 기준 2.x가 표준, 1.x는 호환 레이어로만 남음.
+- **Alembic 1.16** — DB 스키마를 바꿀 때 쓰는 **마이그레이션(스키마 변경 이력 관리) 도구**. SQLAlchemy 팀이 함께 만든 공식 보조 도구.
+- 드라이버는 **psycopg 3.2**(binary extras 포함) 사용 — 과거의 `psycopg2`가 아님. 동기/비동기 모두 한 드라이버에서 지원.
 
 세 도구는 서로 맞물려 설계됐기에 궁합이 매우 좋습니다.
 
@@ -50,7 +72,7 @@
 - Celery 결과 저장(부분적)·감사 로그.
 - 필요 시 `pgvector`로 임베딩 저장.
 
-`docker-compose.yml` 에는 `postgres:18` 이미지로 뜨며, `POSTGRES_USER`, `POSTGRES_DB` 환경변수로 초기화됩니다.
+`docker-compose.yml` 에는 공식 `postgres` 이미지(통상 16 또는 17 태그)로 뜨며, `POSTGRES_USER`, `POSTGRES_DB` 환경변수로 초기화됩니다.
 
 ### 2.5 대안
 
@@ -58,6 +80,14 @@
 - **SQLite** — 파일 한 개 DB. 로컬 개발·모바일에 훌륭. 서버 앱엔 부적합.
 - **CockroachDB / YugabyteDB** — 분산 RDBMS. PG 호환. 대규모에서 유용.
 - **MongoDB(NoSQL)** — 스키마가 자주 바뀌는 문서 저장엔 좋음. 관계·트랜잭션 약점.
+- **Supabase / Neon / Aurora Postgres** — 관리형 PostgreSQL. 우리는 사내 운영이 필요해 자체 Docker 이미지를 사용하지만, 장기적으로 이중화 옵션으로 고려 가능.
+
+### 2.6 🏢 업무 시나리오
+
+**케이스 — 관리자 콘솔 "감사 로그(audit log) 검색"**
+- 로그 행에 "누가·언제·어떤 IP로·무엇을 했는지"를 JSONB 컬럼(`details`)에 저장.
+- `SELECT * FROM audit_logs WHERE details @> '{"action":"doc.delete"}'` 한 줄로 특정 행위만 조회. JSON 안의 키-값을 **인덱스**로 빠르게 찾는 것은 PostgreSQL의 GIN 인덱스 덕분.
+- MySQL에서는 같은 기능을 억지로 흉내 내야 하며 성능도 열세.
 
 ---
 
@@ -192,6 +222,13 @@ stmt = select(User).options(selectinload(User.workspace))
 
 7장의 DDD처럼, 이 프로젝트에서는 **Router → Service → Repository → Model** 흐름으로 분리하는 패턴을 씁니다. Router는 HTTP만, Service는 비즈니스 로직, Repository는 DB 접근을 담당합니다. SQLAlchemy 세션은 Repository 안에서만 쓰고 Service 계층엔 드러내지 않는 편이 깔끔합니다.
 
+### 4.7 🏢 업무 시나리오
+
+**케이스 — PMS "이슈 목록 + 담당자 + 코멘트 수" 한 번에 조회**
+- 순진한 구현: 이슈 50건 → 각각 담당자 조회(50 쿼리) + 각각 코멘트 수 COUNT(50 쿼리) = 101회. 이것이 **N+1 문제**.
+- 개선: `selectinload(Issue.assignee)` + 집계 서브쿼리 한 방으로 3회 이내. 응답 시간이 2~3초 → 200ms.
+- 체감 효과가 큰 대표 사례. 실제 운영에서 "왜 느릴까?"의 80%는 N+1입니다.
+
 ---
 
 ## 5. Alembic — 스키마 변경 이력 관리
@@ -252,18 +289,35 @@ def downgrade():
 
 Python 생태계에서 Alembic은 사실상 표준입니다.
 
+### 5.7 🏢 업무 시나리오
+
+**케이스 — "채팅 메시지에 reaction(이모지) 기능 추가"**
+1. `chat_messages` 모델에 `reactions: Mapped[dict] = mapped_column(JSONB, default=dict)` 추가.
+2. `alembic revision --autogenerate -m "add reactions to chat_messages"` 실행.
+3. 생성된 버전 파일의 `upgrade()` 검토 — "add_column" 한 줄인지 확인.
+4. 개발 DB에서 `alembic upgrade head`, 이상 없으면 PR.
+5. 스테이징·운영 배포 파이프라인이 자동으로 동일 명령을 실행 → 모든 환경의 스키마가 동기화.
+
+실수로 revision을 만들지 않고 모델만 고치면, 운영 배포 시 "ProgrammingError: column reactions does not exist"가 터집니다. Alembic이 "모델 변경 = 스키마 변경 = 버전 파일"을 강제해 이 사고를 예방합니다.
+
+### 5.8 🛠️ 5분 실습
+
+1. `apps/api/alembic/versions/` 폴더를 열어 최근 마이그레이션 파일 하나를 읽어 봅니다.
+2. `upgrade()`와 `downgrade()` 두 함수가 대칭을 이루는지, 어떤 SQL 명령으로 번역될지 상상해 봅니다.
+3. `alembic history` 명령으로 체인을 확인. 각 revision이 앞 revision을 가리키는 **링크드 리스트** 구조임을 체감.
+
 ---
 
 ## 6. 연결·풀·환경
 
-### 6.1 연결 문자열 (DSN)
+### 6.1 연결 문자열 (DSN, Data Source Name)
 
 ```
 postgresql+psycopg://user:pass@host:5432/dbname
 ```
 
-- `psycopg`는 Python용 PostgreSQL 드라이버. v3(현재).
-- 비동기: `postgresql+asyncpg://...`
+- `psycopg`는 Python용 PostgreSQL 드라이버. 우리는 v3(psycopg 3.2, binary extras). v2(`psycopg2`)와 이름이 비슷하지만 별개 패키지.
+- 비동기: `postgresql+asyncpg://...` 또는 psycopg3의 비동기 모드.
 
 ### 6.2 커넥션 풀
 
@@ -334,3 +388,5 @@ EXPLAIN ANALYZE SELECT * FROM users WHERE email = 'x@y.com';
 3. Alembic이 없다면 팀 개발에서 어떤 문제가 생기는지 구체 시나리오를 하나 적어 보세요.
 4. `pgvector`가 이 AI 프로젝트에 왜 유용한가요?
 5. MySQL 대신 PostgreSQL을 선택한 이 프로젝트 판단의 근거 두 가지를 요약해 보세요.
+6. `psycopg2`와 `psycopg` v3의 차이를 한 줄로 설명하고, 우리가 v3를 쓰는 이유를 한 가지 들어 보세요.
+7. `autogenerate`로 만든 마이그레이션을 **사람이 반드시 검토**해야 하는 이유를 구체 위험 사례로 설명하세요.

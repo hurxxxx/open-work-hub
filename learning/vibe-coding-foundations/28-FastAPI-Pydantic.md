@@ -2,6 +2,27 @@
 
 > **한 줄 요약.** **FastAPI**는 Python으로 API를 만드는 현대적 프레임워크이고, **Pydantic**은 그 안에서 입력·출력 데이터의 **모양을 강제**하는 타입 검사기다. 이 조합이 TypeScript 같은 개발 경험을 Python에 가져온다.
 
+> **🔑 한 마디로.** "사용자가 보내는 요청서를 자동으로 검사해 주고, 우리 답변 양식도 자동으로 맞춰 주는 서류 접수 창구"를 Python으로 만드는 도구입니다. 프런트가 보낸 JSON이 틀렸는지, 우리 응답이 규격을 벗어났는지 프레임워크가 먼저 알려줍니다.
+
+### 일상 비유
+
+- **대형 은행 창구**: 창구(Router)가 서류(요청 JSON)를 받고, 양식 검사원(Pydantic)이 이름·금액·도장이 제대로 찍혔는지 확인한 뒤에야 뒷사무실(Service)로 넘깁니다. 불완전한 서류는 "양식 틀림"으로 즉시 반려(HTTP 422).
+- **공항 수하물 컨베이어**: `async/await`는 짐 하나가 X-ray 대기 중에도 다음 짐을 먼저 스캐너에 올리는 흐름. 줄이 막히지 않고 계속 움직입니다.
+- **레스토랑 오픈 키친의 주문서**: 주문서 양식(Pydantic Schema)이 정해져 있어 요리사(Service)는 "어떤 요리 몇 인분"만 보면 됩니다. 양식이 없다면 매번 "고기 몇 그램 원하세요?"를 물어야 합니다.
+
+### ⚠️ 흔한 오해
+
+- **오해**: "Python은 느려서 백엔드에 부적합하다."
+  **실제**: 대부분의 병목은 DB·네트워크 I/O이며, FastAPI의 `async`는 Node.js에 필적하는 동시성을 냅니다. Pydantic v2는 Rust 코어(Pydantic-core)로 v1 대비 10~100배 빠릅니다.
+- **오해**: "자동 문서(`/docs`)는 장식이다."
+  **실제**: 프런트 팀이 명세 PDF 없이 바로 API를 이해·테스트할 수 있는 **커뮤니케이션 비용 절감 장치**입니다. 설계 변경이 곧 문서 변경이라 어긋날 일이 없습니다.
+- **오해**: "FastAPI는 Django의 완전한 대체품."
+  **실제**: Django가 가진 Admin·Auth·CMS 기능은 대부분 직접 구성해야 합니다. 가볍지만 "조립해야 한다"는 책임이 따릅니다.
+- **오해**: "`async def`만 붙이면 전부 비동기가 된다."
+  **실제**: 내부에서 `time.sleep()`, 동기 DB 드라이버, CPU 연산을 하면 이벤트 루프가 막혀 오히려 **동기보다 느려질 수** 있습니다.
+- **오해**: "Pydantic은 타입 검사기일 뿐이다."
+  **실제**: 설정(pydantic-settings)·JSON 직렬화·OpenAPI 스키마 자동 생성까지 담당하는 **다목적 데이터 계약 엔진**입니다.
+
 ---
 
 ## 1. Python 웹 프레임워크의 지형도
@@ -15,13 +36,14 @@ Python은 오래전부터 웹 개발에 쓰였습니다. 대표 프레임워크:
 | **FastAPI** | 2018 | 비동기·타입·자동 문서화의 신예. 폭발적 성장. 2024년 이후 Django와 유사 레벨의 인기. |
 | Tornado/Bottle/Starlette 등 | 오래 전 | 특정 영역에서만 쓰임. |
 
-**우리는 FastAPI** 를 씁니다. 이유:
+**우리는 FastAPI 0.115+** 를 씁니다(Python 3.12 — 3.13 호환 전 안정 버전대로 묶어 사용). 이유:
 
 1. **비동기(async/await)** 기본 지원 — 동시 요청을 효율적으로 처리.
 2. **Pydantic 기반 타입 검증** — 입력·출력이 자동으로 검사됨.
-3. **OpenAPI 자동 생성** — `/docs` 에서 바로 테스트 가능.
-4. **FastAPI + Uvicorn 조합의 성능** — 실측 성능이 Node.js와 대등.
+3. **OpenAPI(API 명세 표준) 자동 생성** — `/docs` 에서 바로 테스트 가능.
+4. **FastAPI + Uvicorn[standard] 0.34 조합의 성능** — 실측 성능이 Node.js와 대등.
 5. **학습 곡선** — Flask처럼 단순하지만 Django처럼 안전함.
+6. **2026 에이전트/AI 앱 기본 선택지** — OpenAI·Anthropic 등 LLM SDK가 Python에서 가장 먼저 나오며, FastAPI가 그 위 API 프레임워크로 사실상 표준화됨.
 
 ---
 
@@ -104,7 +126,7 @@ async def get_user(user_id: str):
 
 ### 3.5 Pydantic Settings
 
-`pydantic-settings` 는 환경 변수를 Pydantic 모델로 읽는 도구. 우리 프로젝트의 `apps/api/src/aidoo_api/core/settings.py` 같은 곳에서 이런 식으로 쓰입니다.
+`pydantic-settings 2.8` (Pydantic과 동일한 v2 계열)은 환경 변수를 Pydantic 모델로 읽는 도구. 우리 프로젝트의 `apps/api/src/aidoo_api/core/settings.py` 같은 곳에서 이런 식으로 쓰입니다.
 
 ```python
 from pydantic_settings import BaseSettings
@@ -181,15 +203,20 @@ async def me(user: User = Depends(current_user)):
 
 ## 6. Uvicorn과 ASGI
 
-FastAPI는 **ASGI(Async Server Gateway Interface)** 표준을 따릅니다. ASGI는 이전 WSGI의 비동기 후계 표준입니다.
+FastAPI는 **ASGI(Async Server Gateway Interface, 비동기 서버 게이트웨이 인터페이스)** 표준을 따릅니다. ASGI는 이전 WSGI(Web Server Gateway Interface, 동기형)의 비동기 후계 표준입니다.
 
-FastAPI 자체는 "프레임워크"이고, 실제로 요청을 받는 "서버"는 **Uvicorn** 입니다.
+FastAPI 자체는 "프레임워크"이고, 실제로 요청을 받는 "서버"는 **Uvicorn** 입니다(현재 `uvicorn[standard] 0.34`).
 
 - **Uvicorn**: 최신·경량·빠름. 우리 선택.
 - Hypercorn: HTTP/2·QUIC 지원.
 - Daphne: Django Channels 중심.
 
 운영 배포 시에는 Uvicorn 앞에 **Gunicorn + Uvicorn worker** 또는 **Uvicorn multi-process** 로 프로세스를 여러 개 띄웁니다. `scripts/prod-like-api.sh` 가 바로 이 역할을 합니다(포트 8001, 8002 등).
+
+### 6.1 SSE(서버 전송 이벤트)·파일 업로드 관련 패키지
+
+- **sse-starlette 2.1** — AI 응답을 한 글자씩 스트림(SSE, Server-Sent Events) 하는 응답 타입. 채팅 답변이 타자기처럼 찍히는 기반.
+- **python-multipart 0.0.18** — multipart/form-data 파일 업로드 파싱기. 이미지·첨부 업로드 처리에 필요(없으면 FastAPI가 업로드 파싱을 아예 못 합니다).
 
 ---
 
@@ -277,6 +304,19 @@ async def post_issue(
 
 이 4-파일 패턴에 익숙해지면 **새 기능 추가** 가 10~30분 안에 가능해집니다.
 
+### 7.3 🏢 업무 시나리오
+
+**케이스 — 채팅 답변을 한 글자씩 보여주는 "스트리밍 응답"**
+- `POST /ai/chat` 라우터가 `sse-starlette`의 `EventSourceResponse`를 반환.
+- Service는 OpenAI 호출을 비동기 제너레이터로 받아 이벤트를 쏩니다.
+- 프런트에서는 `eventsource-parser`로 한 청크씩 받아 BlockNote 에디터에 append.
+- Pydantic 스키마는 **요청에만** 엄격 적용, 응답은 스트림 청크이므로 `response_model`을 쓰지 않고 SSE 커스텀 포맷을 씁니다(라우터마다 응답 스타일이 다를 수 있음을 보여주는 예).
+
+**케이스 — 첨부 파일 업로드 엔드포인트**
+- `@router.post("/docs/attachments")` 가 `file: UploadFile = File(...)`를 받음. `python-multipart`가 실제 파싱을 담당.
+- Service에서 MinIO로 `put_object`(31장), DB `files` 테이블에 메타 저장.
+- 응답은 `FileRead(id, url)` 같은 Pydantic 모델.
+
 ---
 
 ## 8. OpenAPI 자동 문서
@@ -336,11 +376,19 @@ def test_create_issue(client, auth_header):
 |---|---|---|
 | Django REST Framework | 성숙·풀기능 | 우리 규모엔 무겁고, 비동기 제약. |
 | Flask + Marshmallow | 가볍고 자유 | 타입 검증·문서화 수동. |
+| Litestar (구 Starlite) | FastAPI 대안, 성능·DI 개선 시도 | 생태계·AI 예제 수에서 FastAPI가 우세. |
 | Express.js (Node) | 프런트와 언어 통일 | AI 라이브러리·Python 생태계 포기해야 함. |
 | NestJS (Node) | TS + 구조적 | 언어는 좋으나 AI 통합 약점. |
 | Go (Gin, Echo) | 성능 최상 | 우리 병목이 네트워크라 실익 낮고, 학습 부담 큼. |
 
-**FastAPI가 맞는 팀**: Python 생태계 활용 + 타입 안전 + 문서화 자동화를 원함.
+**FastAPI가 맞는 팀**: Python 생태계(LLM SDK·LangChain·pgvector 등) 활용 + 타입 안전 + 문서화 자동화를 원함. 2026년 기준 AI 에이전트 백엔드의 사실상 기본값.
+
+### 11.1 🛠️ 5분 실습 — `/docs`에서 엔드포인트 한 번 호출해 보기
+
+1. 로컬에서 `pnpm api:dev`(또는 `scripts/dev-api.sh`)로 API를 띄웁니다.
+2. 브라우저에서 `http://localhost:8000/docs` 열기.
+3. 아무 `GET` 엔드포인트의 "Try it out" 누르고, 필요한 파라미터를 채운 뒤 "Execute".
+4. 응답 JSON과 curl 명령 예시가 자동 생성되는 걸 확인. 이것이 **Pydantic 스키마가 곧 문서**인 이유.
 
 ---
 
@@ -358,7 +406,9 @@ def test_create_issue(client, auth_header):
 ## 13. 이해도 체크
 
 1. FastAPI의 "자동 검증"은 무엇을 자동으로 해 주는가? 세 가지를 들어 보세요.
-2. Pydantic v2가 왜 빠른지 간단히 설명하세요.
+2. Pydantic v2가 왜 빠른지 간단히 설명하세요(키워드: Pydantic-core, Rust).
 3. `Depends()`를 "회사 업무 결재 라인"으로 비유해 보세요.
 4. `async def` 함수 안에서 `time.sleep()` 을 쓰면 안 되는 이유는?
 5. 우리 프로젝트의 4-파일 패턴(Router/Service/Model/Schema)을 **회의실 예약 기능**으로 예시해 보세요.
+6. `response_model`을 쓰면 "정보 유출 예방"이 된다는 건 구체적으로 어떤 상황을 막는 건가요?
+7. `sse-starlette`이 챗봇 UX에서 수행하는 역할을 한 문장으로 설명해 보세요.

@@ -1,13 +1,21 @@
 # 부록 A. 용어 사전
 
 > AIDOO Portal 교육 자료에서 자주 등장하는 IT·개발 용어를 **비개발자 기준**으로 짧게 풀어 둔 사전입니다. 각 항목은 문장 1~3개의 정의 + 이 프로젝트에서의 위치로 구성됩니다. 가나다 순.
+>
+> 이 사전은 2026.04 기준으로 갱신되며, 업계 용어 변화(예: 바이브 코딩 → 에이전틱 엔지니어링)도 반영합니다.
 
 ---
 
 ## ㄱ
 
+**가명화(Pseudonymization)**
+개인 식별 정보를 가짜 이름·ID 로 치환해 원본을 추정하기 어렵게 만드는 기법. 외부 AI 도구에 사내 데이터를 넣기 전 필수(15장).
+
 **객체 저장소(Object Storage)**
 파일 바이트를 "키 → 데이터" 형태로 보관하는 저장소. S3·MinIO가 대표. 이 프로젝트는 **MinIO**(31장).
+
+**골든 패스(Golden Path)**
+사용자가 정상적으로 따라가는 핵심 경로. 테스트·검증 우선순위 1번(10·13장).
 
 **객체 지향(Object-Oriented Programming, OOP)**
 데이터와 동작을 "객체"라는 단위로 묶어 다루는 프로그래밍 패러다임. 클래스·상속·다형성이 핵심.
@@ -96,7 +104,13 @@ Dockerfile에서 빌드 도구를 최종 이미지에서 제외하기 위해 단
 ## ㅂ
 
 **바이브 코딩(Vibe Coding)**
-자연어로 AI 코딩 도우미와 협업해 개발하는 방식. 이 자료 전체의 실천 목표(1·12·35장).
+자연어로 AI 코딩 도우미와 협업해 개발하는 방식. 2025.02 Karpathy가 용어를 만들었고, 2026년 초에는 **Agentic Engineering(아래)** 으로 용어가 확장·계승 중. 이 자료 전체의 실천 목표(1·12·35장).
+
+**반사·반성(Reflection, Reflexion)**
+에이전트가 자기 결과물을 스스로 검토하고 오류를 보정하는 패턴. ReAct의 5단계 확장형. 2024년 논문에서 체계화(12·13·35장).
+
+**벤치마크(Benchmark)**
+모델·도구의 능력을 표준화된 문제로 측정하는 평가. 코딩 쪽 대표: **SWE-Bench Verified**(2026.04 상위 모델 80~94%, 평균 63%). **참고일 뿐 내 프로젝트 품질의 대체제가 아니다**(12·32장).
 
 **백엔드(Backend)**
 사용자 눈에는 보이지 않는 서버 쪽 로직·DB 등. 이 프로젝트는 **FastAPI**(28장).
@@ -128,6 +142,18 @@ Git에서 코드 변경을 분리된 줄기로 만드는 것. `main`, `feat/xxx`
 
 **스트레스 테스트(Stress Test)** / **로드 테스트(Load Test)**
 시스템을 많은 트래픽으로 때려서 한계를 확인하는 테스트.
+
+**스펙 드리븐 개발(Spec-Driven Development, SDD)**
+"잘 쓴 스펙"을 영구적 프롬프트로 활용해 AI 에이전트를 지휘하는 개발 방식. 2025~2026년 부상. GitHub Spec Kit, Microsoft SpecKit가 도구 사례. 이 프로젝트에서는 **이슈 본문 + ADR** 이 스펙 역할을 담당(5·35장).
+
+**서브에이전트(Subagent)**
+메인 에이전트에서 분기된 **격리된 컨텍스트**의 보조 에이전트. 조사·리팩토링·리뷰 같은 작업에 쓰임. Claude Code의 핵심 개념(12·13·35장).
+
+**승인 단계(Approval Step)**
+민감·영향 큰 행동(쓰기·삭제·외부 호출 등)을 실행 전 사람이 승인하는 MCP capability 설계 요소. 이 프로젝트 ADR 0002의 핵심(15·32장).
+
+**시크릿(Secret)**
+API 키·DB 비밀번호·토큰처럼 노출되면 안 되는 값. `.env`·시크릿 매니저에 보관. 프롬프트·커밋·로그 유출이 가장 흔한 보안 사고(10·15·35장).
 
 ---
 
@@ -218,6 +244,9 @@ DB 연결을 재사용해 성능을 올리는 구조(29장).
 **트리 쉐이킹(Tree Shaking)**
 쓰지 않는 코드를 빌드에서 제거하는 최적화. Vite·Webpack이 자동 수행(23·27장).
 
+**타이포스쿼팅(Typosquatting)**
+유명 패키지 이름과 비슷한 **오타 패키지명** 으로 악성 라이브러리를 배포하는 공급망 공격. AI가 가상 패키지를 제안할 때도 경계(15장).
+
 ---
 
 ## ㅍ
@@ -230,6 +259,12 @@ DB 연결을 재사용해 성능을 올리는 구조(29장).
 
 **포매터(Formatter)**
 코드 스타일을 자동 정돈하는 도구. JS는 **Prettier**, 파이썬은 **Ruff format**(34장).
+
+**플랜-앤-이그제큐트(Plan-and-Execute)**
+작업을 **명시적 계획**으로 먼저 분해한 뒤 단계별로 실행하는 에이전트 패턴. ReAct의 LLM 호출 낭비를 줄임. Reflection·ReWOO와 함께 2026년 실무 기본 패턴(12·35장).
+
+**프롬프트 인젝션(Prompt Injection)**
+사용자 입력·외부 문서가 LLM 시스템 지시를 **덮어쓰는** 공격. 에이전트의 도구 권한이 클수록 피해 큼. 최소 권한 원칙과 approval 단계로 방어(15·32장).
 
 **프런트엔드(Frontend)**
 사용자 화면 쪽. 이 프로젝트는 **React 19 + Vite**(23장).
@@ -247,8 +282,11 @@ DB 연결을 재사용해 성능을 올리는 구조(29장).
 **환경 변수(Environment Variable)**
 실행 환경마다 바뀌는 값(DB 주소, 비밀번호 등). `.env` 파일에 저장(28·33장).
 
+**환각(Hallucination)**
+LLM이 **그럴듯하지만 사실이 아닌 것** 을 만들어 내는 현상. 라이브러리 API·파일 경로에서 특히 자주 발생. 검증 없이 믿지 말 것(12·13장).
+
 **훅(Hook)**
-React에서 상태·생애주기를 함수 안에서 쓰는 API. `useState`, `useEffect`(23장).
+두 의미: ① React에서 상태·생애주기를 함수 안에서 쓰는 API (`useState`, `useEffect` — 23장). ② Claude Code의 **Hooks**: 특정 이벤트(PreCompact, PostToolUse 등)에 자동 실행되는 셸 명령. 2026 Claude Code 핵심 개념의 하나(35장).
 
 ---
 
@@ -257,8 +295,17 @@ React에서 상태·생애주기를 함수 안에서 쓰는 API. `useState`, `us
 **ACID**
 Atomicity, Consistency, Isolation, Durability. 트랜잭션의 4대 보증(8·29장).
 
+**ACP (Agent Client Protocol)**
+Zed·JetBrains가 2026.01 제안한 "에이전트를 특정 에디터에 묶지 않는" 개방 프로토콜. Claude Agent·Codex·OpenCode 등을 ACP로 붙일 수 있음(35장).
+
 **ADR (Architecture Decision Record)**
 아키텍처 결정의 근거를 짧게 기록한 문서. 이 프로젝트에도 `docs/architecture/decisions/` 폴더 존재(7장).
+
+**Agentic Engineering (에이전틱 엔지니어링)**
+AI 에이전트가 구조화된 인간 감독 하에서 **계획·작성·테스트·배포** 까지 수행하는 작업 방식. 2026년 초 Karpathy가 "vibe coding의 다음 단계"로 지칭. 인간은 "자율 에이전트를 지휘하는 기술 감독관"(1·12·35장).
+
+**Agents Window (Cursor 3)**
+Cursor 3(2026.04.02 출시)의 신 기능. 여러 에이전트를 한 워크스페이스에서 동시 관리. 모바일·웹·데스크톱·Slack·GitHub·Linear에서 시작 가능(35장).
 
 **API (Application Programming Interface)**
 프로그램 간 약속된 대화 창구(9·28장).
@@ -269,8 +316,14 @@ Asynchronous Server Gateway Interface. 파이썬 비동기 웹의 표준. FastAP
 **CDN (Content Delivery Network)**
 정적 파일을 세계 여러 곳 엣지 서버에 복사해 빠르게 전달하는 서비스.
 
+**Context Engineering (컨텍스트 엔지니어링)**
+에이전트가 작동하는 **전체 정보 환경**(시스템 프롬프트·맥락 파일·도구·메모리·외부 자료)을 큐레이션하는 상위 개념. 2025~2026에 "프롬프트 엔지니어링"을 대체하는 용어로 부상(12·14·35장).
+
 **CRDT (Conflict-free Replicated Data Type)**
 여러 사용자가 동시에 편집해도 자동으로 병합되는 자료구조. **Yjs**가 구현체(26장).
+
+**CLAUDE.md**
+Claude Code에 프로젝트별 **영구 지침**을 제공하는 마크다운 파일. 2026 Claude Code의 7개 핵심 개념 중 하나(35장).
 
 **CSR / SSR**
 클라이언트 렌더링 / 서버 렌더링. 이 프로젝트는 CSR(SPA).
@@ -309,7 +362,13 @@ JavaScript 객체 문자열 포맷 / PostgreSQL의 이진 JSON 타입(29장).
 대규모 언어 모델. ChatGPT·Claude의 "두뇌"(12·32장).
 
 **MCP (Model Context Protocol)**
-LLM이 외부 도구·데이터에 표준화된 방식으로 접근하기 위한 프로토콜(12·32장).
+LLM이 외부 도구·데이터에 표준화된 방식으로 접근하기 위한 프로토콜. 2024.11 Anthropic 공개 → 16개월 만에 월 Python/TS SDK 9,700만 다운로드, 공개 서버 17,000+. Anthropic·OpenAI·Microsoft·Google·Amazon 모두 공식 지원(12·32장).
+
+**MCP Capability**
+이 프로젝트 ADR 0002가 정의한 **MCP-first capability** 단위. human-friendly REST DTO + AI-friendly Pydantic DTO 분리, discoverability·preview·approval 내장(32장).
+
+**MoE (Mixture of Experts)**
+여러 특화된 작은 모델(expert) 중 필요한 것만 활성화하는 LLM 아키텍처. DeepSeek V3.2(671B/37B 활성), Qwen 3(80B/3B 활성) 등(12장).
 
 **N+1 문제**
 ORM에서 부모 목록을 한 번 가져오고 자식 데이터를 N번 더 가져오는 비효율 패턴(29장).
@@ -323,11 +382,23 @@ ORM에서 부모 목록을 한 번 가져오고 자식 데이터를 N번 더 가
 **OWASP**
 웹 보안 모범 사례를 모은 단체·문서(10장).
 
+**PII (Personally Identifiable Information)**
+이메일·전화번호·주민번호 등 개인 식별 정보. 로그·프롬프트·외부 채널 유출 금지(15장).
+
+**Plugin (Claude Code)**
+Skills + Hooks + Subagents + MCP Servers 를 묶어 배포하는 단위. 2026 Claude Code 7대 개념의 하나(35장).
+
 **PR (Pull Request / Merge Request)**
 코드 변경을 제안하고 리뷰받아 병합하는 절차(4·35장).
 
 **RAG (Retrieval Augmented Generation)**
 검색된 문서를 LLM 프롬프트에 넣어 답변 정확도를 높이는 기법(12·32장).
+
+**RBAC (Role-Based Access Control)**
+역할 기반 접근 제어. 사용자 역할(admin, member, viewer 등)에 따라 화면·API 권한을 나누는 방식(15장).
+
+**ReAct (Reason + Act)**
+"생각 → 행동 → 관찰 → 재사고"를 반복하는 에이전트의 기본 루프. 2022년 논문에서 체계화. Reflection·Plan-and-Execute·Multi-Agent의 기반 패턴(12·32장).
 
 **REST (Representational State Transfer)**
 HTTP 자원 기반의 API 스타일. `/users/1`, `POST /posts`(9장).
@@ -335,8 +406,17 @@ HTTP 자원 기반의 API 스타일. `/users/1`, `POST /posts`(9장).
 **RPC (Remote Procedure Call)**
 원격 함수 호출 스타일. gRPC가 대표(9장).
 
+**SDD (Spec-Driven Development)**
+"스펙"을 영구적 프롬프트로 활용하는 개발 방식. GitHub Spec Kit, Microsoft SpecKit가 대표 도구. 2025~2026 실무 전환의 핵심(5·14·35장).
+
 **SDK (Software Development Kit)**
 어떤 서비스·플랫폼을 다루기 위한 라이브러리 묶음. OpenAI SDK 등(32장).
+
+**SWE-Bench**
+실제 GitHub 이슈·PR을 기반으로 LLM 코딩 능력을 측정하는 벤치마크. 2026.04 기준 SWE-Bench Verified 상위 80~94%, 평균 63%. 더 어려운 **SWE-Bench Pro**, 실시간 변형 **SWE-Bench-Live** 도 있음(12·32장).
+
+**Skills (Claude Code)**
+재사용 가능한 마크다운 지침 파일. 2026부터 slash commands와 통합. 프로젝트·전역으로 정의 가능(35장).
 
 **SOLID**
 객체 지향 설계의 5원칙(단일 책임·개방-폐쇄·리스코프·인터페이스 분리·의존 역전)(7장).
@@ -371,8 +451,14 @@ User Experience / User Interface. 경험 / 인터페이스(24장).
 **WebSocket**
 양방향 지속 연결. 실시간 협업·채팅에 사용(9·26장).
 
+**Windsurf**
+AI-native IDE. 원래 Codeium이 개발했고 2025년 **OpenAI가 인수**. 핵심은 **Cascade** 에이전트 — 코드베이스를 사전 인덱싱해 시맨틱 맵을 유지(12·35장).
+
 **Y.js / Y-WebSocket**
 JavaScript CRDT 구현과 WebSocket 동기화 서버(26장).
+
+**Zed**
+Rust + 자체 GPU UI로 120 FPS 렌더링을 목표로 한 에디터. 2026.01에 **ACP (Agent Client Protocol)** 표준을 제안, BYOK Claude 1M 컨텍스트·Agent Metrics 공개 대시보드 제공(12·35장).
 
 ---
 
