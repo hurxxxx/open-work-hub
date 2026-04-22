@@ -6,7 +6,7 @@ from collections.abc import Iterator, Mapping
 from dataclasses import dataclass
 from typing import Any, Literal
 
-from fastapi import HTTPException, status
+from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from aidoo_api.core.principal import CallerPrincipal
@@ -102,27 +102,16 @@ def execute_tool_call(
             resource_preview=approval_required.resource_preview,
         )
     except HTTPException as error:
-        message = _error_message(error)
-        if (
-            error.status_code == status.HTTP_409_CONFLICT
-            and approved_call_id is None
-            and _is_approval_required_conflict(error)
-        ):
-            return ToolCallExecution(
-                call_id=resolved_call_id,
-                tool_name=tool_name,
-                arguments_json=arguments_json,
-                status="blocked",
-                error_message=message,
-                approval_id=new_id(),
-                approval_expires_at_ms=int(time.time() * 1000) + 86_400_000,
-            )
+        # Approval-required is raised as ToolRequiresApproval and caught
+        # above. Any other HTTPException — including 409s like "approval
+        # already resolved" or "summary not ready" — is a tool-level error
+        # and must not be coerced into the approval-blocked path.
         return ToolCallExecution(
             call_id=resolved_call_id,
             tool_name=tool_name,
             arguments_json=arguments_json,
             status="error",
-            error_message=message,
+            error_message=_error_message(error),
         )
 
     return ToolCallExecution(
@@ -137,13 +126,6 @@ def execute_tool_call(
         ),
         response=response,
     )
-
-
-def _is_approval_required_conflict(error: HTTPException) -> bool:
-    detail = error.detail
-    if not isinstance(detail, str):
-        return False
-    return detail.startswith("AI tool requires approval before execution:")
 
 
 def iter_tool_call_events(

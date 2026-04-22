@@ -18,6 +18,7 @@ from aidoo_api.domains.ai import approvals as ai_approvals
 from aidoo_api.domains.ai import mcp as ai_mcp
 from aidoo_api.domains.ai import router as ai_router
 from aidoo_api.domains.ai import tool_service as ai_tool_service
+from aidoo_api.domains.ai.tool_runtime import ToolCallExecution
 from aidoo_api.core.llm_adapters import StreamChunk
 from aidoo_api.domains.ai.registry import (
     AiCapabilityRegistry,
@@ -709,6 +710,75 @@ def test_chat_resume_cancellation_rewinds_snapshot_for_retry(
         assert approval is not None
         assert approval.status == "approved"
         assert snapshot.status == "awaiting_approval"
+
+
+def test_chat_resume_cancellation_after_tool_exec_does_not_rewind(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """If cancel fires AFTER the approved tool executed, the snapshot must not
+    rewind to awaiting_approval — otherwise a second resume would re-run the
+    write and double its side effects.
+    """
+    seed = _seed_pending_approval(client)
+    headers = _auth_headers(seed["token"])
+
+    resolve_response = client.post(
+        _workspace_ai_path(seed["workspace_slug"], f"/approvals/{seed['approval_id']}/resolve"),
+        headers=headers,
+        json={"decision": "approved"},
+    )
+    assert resolve_response.status_code == 200, resolve_response.text
+
+    def fake_execute_tool_call(*args: Any, **kwargs: Any) -> ToolCallExecution:
+        del args, kwargs
+        return ToolCallExecution(
+            call_id="call-1",
+            tool_name="pms.create_issue",
+            arguments_json='{"title":"ok"}',
+            status="ok",
+            response={"tool": "pms.create_issue", "result": {"ok": True}},
+        )
+
+    def fake_iter_tool_call_events(*args: Any, **kwargs: Any):
+        del args, kwargs
+        raise asyncio.CancelledError
+
+    monkeypatch.setattr(ai_agent, "execute_tool_call", fake_execute_tool_call)
+    monkeypatch.setattr(ai_agent, "iter_tool_call_events", fake_iter_tool_call_events)
+
+    response = client.post(
+        _workspace_ai_path(seed["workspace_slug"], "/chat/resume"),
+        headers=headers,
+        json={
+            "conversation_id": seed["conversation_id"],
+            "approval_id": seed["approval_id"],
+        },
+    )
+
+    assert response.status_code == 200, response.text
+
+    with get_session_factory()() as db:
+        approval = db.scalar(
+            select(ai_approvals.AiToolApproval).where(
+                ai_approvals.AiToolApproval.id == seed["approval_id"]
+            )
+        )
+        snapshot = ai_approvals.load_snapshot(db, agent_run_id=seed["agent_run_id"])
+        assert approval is not None
+        # Tool already ran — snapshot must be completed (no re-execute path).
+        assert snapshot.status == "completed"
+
+    second_resume = client.post(
+        _workspace_ai_path(seed["workspace_slug"], "/chat/resume"),
+        headers=headers,
+        json={
+            "conversation_id": seed["conversation_id"],
+            "approval_id": seed["approval_id"],
+        },
+    )
+    assert second_resume.status_code == 410, second_resume.text
+    assert "no longer resumable" in second_resume.json()["detail"]
 
 
 def test_ai_tool_invoke_returns_409_for_approval_required_tool(

@@ -222,6 +222,7 @@ async def _run_agent_loop_stream(
     model_meta: dict[str, Any],
 ) -> AsyncIterator[Any]:
     state = _LoopState()
+    replay_tool_executed = False
     try:
         if replay_approval is not None:
             ai_approvals.mark_snapshot_resumed(db, current_snapshot)
@@ -248,6 +249,7 @@ async def _run_agent_loop_stream(
                 agent_run_id=agent_run_id,
                 approved_call_id=replay_approval.id,
             )
+            replay_tool_executed = True
             for event in iter_tool_call_events(
                 encoder=encoder,
                 execution=replay_execution,
@@ -595,7 +597,14 @@ async def _run_agent_loop_stream(
             and current_snapshot is not None
             and current_snapshot.status == "resumed"
         ):
-            if replay_approval.status in {"approved", "rejected"}:
+            # Only rewind to awaiting_approval when the cancel hit BEFORE the
+            # approved tool actually ran. If the tool already executed, any
+            # DB side effects are committed on the outer router boundary, so
+            # a rewind would let a second resume re-execute the same write.
+            if (
+                not replay_tool_executed
+                and replay_approval.status in {"approved", "rejected"}
+            ):
                 current_snapshot.status = "awaiting_approval"
                 db.add(current_snapshot)
             else:

@@ -164,11 +164,20 @@ def test_get_ai_conversation_omits_terminal_live_pending_approval(client) -> Non
     assert response.json()["livePendingApproval"] is None
 
 
-def test_get_ai_conversation_lazy_expires_stale_pending_approval(client) -> None:
+def test_get_ai_conversation_lazy_expires_stale_pending_approval(
+    client,
+    monkeypatch,
+) -> None:
     session = _bootstrap_admin_session(client)
     token = session["token"]
     slug = _workspace_slug(client, token)
     meeting = _create_meeting(client, token, title="Lazy expire meeting")
+    audit_calls: list[dict[str, object | None]] = []
+
+    def _capture_audit(**kwargs):
+        audit_calls.append(kwargs)
+
+    monkeypatch.setattr(ai_approvals, "log_llm_tool_approval_resolved", _capture_audit)
 
     with Session(get_engine()) as db:
         workspace = db.scalar(select(Workspace).where(Workspace.key == slug))
@@ -224,6 +233,9 @@ def test_get_ai_conversation_lazy_expires_stale_pending_approval(client) -> None
         assert snapshot is not None
         assert approval.status == "expired"
         assert snapshot.status == "abandoned"
+    assert len(audit_calls) == 1
+    assert audit_calls[0]["decision"] == "expired"
+    assert audit_calls[0]["approval_id"] == approval_id
 
 
 def test_create_ai_conversation_reuses_latest_empty_scoped_conversation(client) -> None:

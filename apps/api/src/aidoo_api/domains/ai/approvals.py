@@ -11,6 +11,7 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, Session, mapped_column
 
 from aidoo_api.core.db import Base
+from aidoo_api.domains.ai.audit import log_llm_tool_approval_resolved
 from aidoo_api.domains.auth.models import User, Workspace
 from aidoo_api.domains.auth.security import new_id
 from aidoo_api.domains.conversations.models import Conversation
@@ -291,7 +292,40 @@ def get_live_pending_approval(
     if approval is None:
         return None
     if approval.status == "pending" and approval.expires_at <= utcnow_naive():
-        _expire_pending_approval(db, approval, snapshot=snapshot)
+        # Re-fetch under row lock and re-check status so concurrent readers
+        # do not each attempt to expire the same approval / abandon the same
+        # snapshot.
+        locked_approval = db.scalar(
+            select(AiToolApproval)
+            .where(AiToolApproval.id == approval.id)
+            .with_for_update()
+        )
+        if locked_approval is not None and locked_approval.status == "pending":
+            locked_snapshot = db.scalar(
+                select(AgentRunSnapshot)
+                .where(AgentRunSnapshot.id == snapshot.id)
+                .with_for_update()
+            )
+            _expire_pending_approval(db, locked_approval, snapshot=locked_snapshot)
+            if locked_approval.resolved_at is not None:
+                elapsed_since_request_ms = max(
+                    0,
+                    int(
+                        (
+                            locked_approval.resolved_at - locked_approval.created_at
+                        ).total_seconds()
+                        * 1000
+                    ),
+                )
+                log_llm_tool_approval_resolved(
+                    actor_user_id=user.id,
+                    workspace_id=workspace.id,
+                    approval_id=locked_approval.id,
+                    tool_name=locked_approval.tool_name,
+                    decision=locked_approval.status,
+                    resolver_user_id=None,
+                    elapsed_since_request_ms=elapsed_since_request_ms,
+                )
         db.commit()
         return None
     return {
@@ -526,6 +560,20 @@ def expire_stale_approvals(db: Session, older_than: datetime) -> int:
             select(AgentRunSnapshot).where(AgentRunSnapshot.id == approval.agent_run_id)
         )
         _expire_pending_approval(db, approval, snapshot=snapshot)
+        if approval.resolved_at is not None:
+            elapsed_since_request_ms = max(
+                0,
+                int((approval.resolved_at - approval.created_at).total_seconds() * 1000),
+            )
+            log_llm_tool_approval_resolved(
+                actor_user_id=None,
+                workspace_id=approval.workspace_id,
+                approval_id=approval.id,
+                tool_name=approval.tool_name,
+                decision=approval.status,
+                resolver_user_id=None,
+                elapsed_since_request_ms=elapsed_since_request_ms,
+            )
         count += 1
     return count
 
