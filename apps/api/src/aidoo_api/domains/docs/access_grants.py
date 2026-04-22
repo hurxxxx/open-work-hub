@@ -6,9 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from aidoo_api.domains.auth.security import new_id
-from aidoo_api.domains.docs.rag_sync import enqueue_native_doc_rag_sync_by_id
 from aidoo_api.domains.docs.models import DocMeetingAccess
-from aidoo_api.domains.rag.contracts import RagSyncOperation
 
 
 def _utcnow() -> datetime:
@@ -57,11 +55,6 @@ def grant_doc_access(
         existing.updated_at = _utcnow()
         db.add(existing)
         db.flush()
-        enqueue_native_doc_rag_sync_by_id(
-            db,
-            doc_id=doc_id,
-            operation=RagSyncOperation.VISIBILITY_UPDATE,
-        )
         return existing
 
     access = DocMeetingAccess(
@@ -76,11 +69,6 @@ def grant_doc_access(
     )
     db.add(access)
     db.flush()
-    enqueue_native_doc_rag_sync_by_id(
-        db,
-        doc_id=doc_id,
-        operation=RagSyncOperation.VISIBILITY_UPDATE,
-    )
     return access
 
 
@@ -109,12 +97,6 @@ def revoke_doc_grants_for_meeting_attendee(
         grant.updated_at = now
         db.add(grant)
     db.flush()
-    for doc_id in {grant.doc_id for grant in grants}:
-        enqueue_native_doc_rag_sync_by_id(
-            db,
-            doc_id=doc_id,
-            operation=RagSyncOperation.VISIBILITY_UPDATE,
-        )
     return len(grants)
 
 
@@ -141,12 +123,6 @@ def revoke_doc_grants_for_meeting(
         grant.updated_at = now
         db.add(grant)
     db.flush()
-    for doc_id in {grant.doc_id for grant in grants}:
-        enqueue_native_doc_rag_sync_by_id(
-            db,
-            doc_id=doc_id,
-            operation=RagSyncOperation.VISIBILITY_UPDATE,
-        )
     return len(grants)
 
 
@@ -175,12 +151,6 @@ def revoke_doc_grants_for_attachment(
         grant.updated_at = now
         db.add(grant)
     db.flush()
-    for affected_doc_id in {grant.doc_id for grant in grants}:
-        enqueue_native_doc_rag_sync_by_id(
-            db,
-            doc_id=affected_doc_id,
-            operation=RagSyncOperation.VISIBILITY_UPDATE,
-        )
     return len(grants)
 
 
@@ -204,10 +174,4 @@ def bump_doc_grant_expiry_for_meeting(
         grant.updated_at = _utcnow()
         db.add(grant)
     db.flush()
-    for doc_id in {grant.doc_id for grant in grants}:
-        enqueue_native_doc_rag_sync_by_id(
-            db,
-            doc_id=doc_id,
-            operation=RagSyncOperation.VISIBILITY_UPDATE,
-        )
     return len(grants)

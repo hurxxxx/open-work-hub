@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 import importlib
 import sqlite3
 import sys
@@ -10,7 +11,7 @@ from pathlib import Path
 from opentelemetry.sdk.trace.export import SimpleSpanProcessor
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 import pytest
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 
 WORKSPACE_ROOT = Path(__file__).resolve().parents[3]
@@ -33,6 +34,7 @@ from aidoo_api.domains.docs.models import (  # noqa: E402
     NativeDocPage,
     NativeDocUserShare,
 )
+from aidoo_api.domains.meeting.models import Meeting, MeetingDocLink  # noqa: E402
 from aidoo_api.domains.rag.contracts import RagSyncOperation  # noqa: E402
 from aidoo_api.domains.rag.docs_projection import NATIVE_DOC_RESOURCE_TYPE  # noqa: E402
 from aidoo_api.domains.rag.models import RagSyncJob, RagVisibilityRecomputeJob  # noqa: E402
@@ -303,14 +305,14 @@ def test_recompute_visibility_worker_marks_terminal_statuses(
 
     monkeypatch.setenv("DOOWON_WORKER_AIDOO_RAG_ENABLED", "1")
     tasks_module = _reload_worker_module("aidoo_worker.tasks.rag_sync")
-    assert tasks_module.recompute_visibility.run(enabled_job_id) == "pending-implementation"
+    assert tasks_module.recompute_visibility.run(enabled_job_id) == "unsupported_scope_type"
 
     with Session(engine) as session:
         stored = session.get(RagVisibilityRecomputeJob, enabled_job_id)
         assert stored is not None
         assert stored.status == "cancelled"
         assert stored.attempts == 1
-        assert stored.last_error == "visibility recompute worker not implemented"
+        assert stored.last_error == "unsupported scope_type: workspace_membership"
 
 
 def test_sync_resource_worker_ignores_already_closed_job(
@@ -455,6 +457,220 @@ def test_recompute_visibility_worker_ignores_already_closed_job(
         assert stored is not None
         assert stored.status == "cancelled"
         assert stored.attempts == 1
+
+
+def test_recompute_visibility_worker_queues_docs_sync_jobs_for_meeting_scope(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    db_path = _worker_db_path(tmp_path)
+    _init_worker_db(
+        db_path,
+        create_policy_table=True,
+        seed_policy_rows=True,
+    )
+    monkeypatch.setenv("DOOWON_POSTGRES_DSN", _worker_dsn(db_path))
+    monkeypatch.setenv("DOOWON_WORKER_POSTGRES_DSN", _worker_dsn(db_path))
+    monkeypatch.setenv("DOOWON_WORKER_AIDOO_RAG_ENABLED", "1")
+
+    engine = create_engine(_worker_dsn(db_path))
+    Base.metadata.create_all(
+        engine,
+        tables=[
+            Workspace.__table__,
+            User.__table__,
+            NativeDoc.__table__,
+            Meeting.__table__,
+            MeetingDocLink.__table__,
+            DocMeetingAccess.__table__,
+            RagSyncJob.__table__,
+            RagVisibilityRecomputeJob.__table__,
+        ],
+    )
+
+    with Session(engine) as session:
+        with session.begin():
+            session.add(
+                Workspace(
+                    id="ws-1",
+                    key="ws-1",
+                    name="Workspace 1",
+                    description="",
+                    active=True,
+                )
+            )
+            session.add_all(
+                [
+                    User(
+                        id="user-1",
+                        email="worker-doc-owner@aidoo.local",
+                        full_name="Worker Doc Owner",
+                        password_hash="hash",
+                        status="active",
+                    ),
+                    User(
+                        id="user-2",
+                        email="worker-attendee@aidoo.local",
+                        full_name="Worker Attendee",
+                        password_hash="hash",
+                        status="active",
+                    ),
+                ]
+            )
+            session.add(
+                NativeDoc(
+                    id="doc-1",
+                    workspace_id="ws-1",
+                    owner_id="user-1",
+                    title="Meeting Linked Doc",
+                    source_app="docs",
+                    source_kind="manual",
+                    generation_kind="human",
+                )
+            )
+            session.add(
+                Meeting(
+                    id="meeting-1",
+                    workspace_id="ws-1",
+                    organizer_id="user-1",
+                    notes_doc_id=None,
+                    notes_page_id=None,
+                    title="Worker Meeting",
+                    agenda="",
+                    start_at=datetime(2026, 4, 22, 0, 0, 0),
+                    end_at=datetime(2026, 4, 22, 1, 0, 0),
+                    status="scheduled",
+                )
+            )
+            session.add(
+                MeetingDocLink(
+                    id="meeting-doc-1",
+                    meeting_id="meeting-1",
+                    doc_id="doc-1",
+                    added_by_id="user-1",
+                )
+            )
+            session.add(
+                DocMeetingAccess(
+                    id="grant-1",
+                    doc_id="doc-1",
+                    user_id="user-2",
+                    access_level="read",
+                    granted_by_meeting_id="meeting-1",
+                    granted_by_user_id="user-1",
+                    reason="meeting_attendee",
+                )
+            )
+            visibility_job = enqueue_rag_visibility_recompute_job(
+                session,
+                workspace_id="ws-1",
+                scope_type="meeting",
+                scope_id="meeting-1",
+            )
+            visibility_job_id = visibility_job.id
+
+    tasks_module = _reload_worker_module("aidoo_worker.tasks.rag_sync")
+    assert tasks_module.recompute_visibility.run(visibility_job_id) == "queued"
+
+    with Session(engine) as session:
+        stored_visibility_job = session.get(RagVisibilityRecomputeJob, visibility_job_id)
+        assert stored_visibility_job is not None
+        assert stored_visibility_job.status == "succeeded"
+        queued_jobs = list(
+            session.scalars(
+                select(RagSyncJob).where(
+                    RagSyncJob.resource_type == NATIVE_DOC_RESOURCE_TYPE,
+                    RagSyncJob.resource_id == "doc-1",
+                    RagSyncJob.operation == RagSyncOperation.VISIBILITY_UPDATE.value,
+                )
+            )
+        )
+        assert len(queued_jobs) == 1
+
+
+def test_recompute_visibility_worker_uses_cursor_doc_ids_when_meeting_is_missing(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    db_path = _worker_db_path(tmp_path)
+    _init_worker_db(
+        db_path,
+        create_policy_table=True,
+        seed_policy_rows=True,
+    )
+    monkeypatch.setenv("DOOWON_POSTGRES_DSN", _worker_dsn(db_path))
+    monkeypatch.setenv("DOOWON_WORKER_POSTGRES_DSN", _worker_dsn(db_path))
+    monkeypatch.setenv("DOOWON_WORKER_AIDOO_RAG_ENABLED", "1")
+
+    engine = create_engine(_worker_dsn(db_path))
+    Base.metadata.create_all(
+        engine,
+        tables=[
+            Workspace.__table__,
+            User.__table__,
+            NativeDoc.__table__,
+            Meeting.__table__,
+            MeetingDocLink.__table__,
+            DocMeetingAccess.__table__,
+            RagSyncJob.__table__,
+            RagVisibilityRecomputeJob.__table__,
+        ],
+    )
+
+    with Session(engine) as session:
+        with session.begin():
+            session.add(
+                Workspace(
+                    id="ws-1",
+                    key="ws-1",
+                    name="Workspace 1",
+                    description="",
+                    active=True,
+                )
+            )
+            session.add(
+                User(
+                    id="user-1",
+                    email="worker-doc-owner@aidoo.local",
+                    full_name="Worker Doc Owner",
+                    password_hash="hash",
+                    status="active",
+                )
+            )
+            session.add(
+                NativeDoc(
+                    id="doc-1",
+                    workspace_id="ws-1",
+                    owner_id="user-1",
+                    title="Deleted Meeting Doc",
+                    source_app="docs",
+                    source_kind="manual",
+                    generation_kind="human",
+                )
+            )
+            visibility_job = enqueue_rag_visibility_recompute_job(
+                session,
+                workspace_id="ws-1",
+                scope_type="meeting",
+                scope_id="meeting-deleted",
+                cursor={"doc_ids": ["doc-1"]},
+            )
+            visibility_job_id = visibility_job.id
+
+    tasks_module = _reload_worker_module("aidoo_worker.tasks.rag_sync")
+    assert tasks_module.recompute_visibility.run(visibility_job_id) == "queued"
+
+    with Session(engine) as session:
+        queued_jobs = list(
+            session.scalars(
+                select(RagSyncJob).where(
+                    RagSyncJob.resource_type == NATIVE_DOC_RESOURCE_TYPE,
+                    RagSyncJob.resource_id == "doc-1",
+                    RagSyncJob.operation == RagSyncOperation.VISIBILITY_UPDATE.value,
+                )
+            )
+        )
+        assert len(queued_jobs) == 1
 
 
 def test_sync_resource_worker_upserts_docs_projection_with_fake_provider(

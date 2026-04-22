@@ -12,7 +12,7 @@ from aidoo_api.domains.auth.models import Workspace
 from aidoo_api.domains.docs import rag_sync as docs_rag_sync
 from aidoo_api.domains.docs import service as docs_service
 from aidoo_api.domains.rag.docs_projection import NATIVE_DOC_RESOURCE_TYPE
-from aidoo_api.domains.rag.models import RagSyncJob
+from aidoo_api.domains.rag.models import RagSyncJob, RagVisibilityRecomputeJob
 
 
 def _dev_login(client: TestClient, account_key: str) -> dict:
@@ -32,6 +32,18 @@ def _job_rows() -> list[RagSyncJob]:
         return list(
             db.scalars(
                 select(RagSyncJob).order_by(RagSyncJob.created_at.asc(), RagSyncJob.id.asc())
+            )
+        )
+
+
+def _visibility_job_rows() -> list[RagVisibilityRecomputeJob]:
+    with get_session_factory()() as db:
+        return list(
+            db.scalars(
+                select(RagVisibilityRecomputeJob).order_by(
+                    RagVisibilityRecomputeJob.created_at.asc(),
+                    RagVisibilityRecomputeJob.id.asc(),
+                )
             )
         )
 
@@ -150,7 +162,7 @@ def test_docs_service_create_paths_enqueue_once_for_idempotent_replay(
     assert all(job.resource_type == NATIVE_DOC_RESOURCE_TYPE for job in jobs)
 
 
-def test_meeting_doc_acl_changes_enqueue_rag_visibility_updates(
+def test_meeting_doc_acl_changes_enqueue_rag_visibility_recompute_jobs(
     client: TestClient,
     monkeypatch,
 ) -> None:
@@ -188,11 +200,11 @@ def test_meeting_doc_acl_changes_enqueue_rag_visibility_updates(
     doc = create_doc.json()
     doc_id = doc["source_id"]
 
-    initial_visibility_updates = [
-        job for job in _job_rows()
-        if job.resource_id == doc_id and job.operation == "visibility_update"
+    initial_recompute_jobs = [
+        job for job in _visibility_job_rows()
+        if job.scope_type == "meeting"
     ]
-    assert initial_visibility_updates == []
+    assert initial_recompute_jobs == []
 
     meeting = _create_meeting(
         client,
@@ -202,10 +214,14 @@ def test_meeting_doc_acl_changes_enqueue_rag_visibility_updates(
     )
 
     grant_jobs = [
-        job for job in _job_rows()
-        if job.resource_id == doc_id and job.operation == "visibility_update"
+        job for job in _visibility_job_rows()
+        if job.scope_type == "meeting" and job.scope_id == meeting["id"]
     ]
     assert grant_jobs
+    assert [
+        job for job in _job_rows()
+        if job.resource_id == doc_id and job.operation == "visibility_update"
+    ] == []
 
     doc_lookup = client.get(
         f"/api/v1/docs/items/{doc['id']}",
@@ -220,7 +236,7 @@ def test_meeting_doc_acl_changes_enqueue_rag_visibility_updates(
     assert detach_response.status_code == 200, detach_response.text
 
     revoke_jobs = [
-        job for job in _job_rows()
-        if job.resource_id == doc_id and job.operation == "visibility_update"
+        job for job in _visibility_job_rows()
+        if job.scope_type == "meeting" and job.scope_id == meeting["id"]
     ]
     assert len(revoke_jobs) > len(grant_jobs)

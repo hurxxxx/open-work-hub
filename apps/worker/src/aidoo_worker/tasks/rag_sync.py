@@ -5,18 +5,22 @@ from functools import lru_cache
 import logging
 
 from opentelemetry.trace import SpanKind
-from sqlalchemy import Engine, create_engine, update
+from sqlalchemy import Engine, create_engine, select, update
 from sqlalchemy.orm import Session, sessionmaker
 
 from aidoo_api.core.telemetry import start_as_current_span
 from aidoo_api.domains.rag.contracts import RagJobStatus, RagSyncOperation
+from aidoo_api.domains.docs.models import DocMeetingAccess
+from aidoo_api.domains.docs.rag_sync import MEETING_VISIBILITY_SCOPE
 from aidoo_api.domains.rag.docs_projection import NATIVE_DOC_RESOURCE_TYPE, load_native_doc_projection
 from aidoo_api.domains.rag.metrics import record_sync_job_lag, record_sync_job_result
 from aidoo_api.domains.rag.models import RagSyncJob, RagVisibilityRecomputeJob
+from aidoo_api.domains.rag.outbox import enqueue_rag_sync_job
 from aidoo_api.domains.rag.providers.base import RagProviderBundle
 from aidoo_api.domains.rag.providers.fake import FakeEmbeddingClient, FakeVectorIndexClient
 from aidoo_api.domains.rag.service import RagService
 from aidoo_api.domains.rag.telemetry import rag_span_attributes
+from aidoo_api.domains.meeting.models import Meeting, MeetingDocLink
 from aidoo_worker.celery_app import celery_app
 from aidoo_worker.settings import get_settings
 
@@ -225,21 +229,21 @@ def recompute_visibility(self, job_id: str) -> str:
                 )
                 _mark_visibility_job(session, job, status=RagJobStatus.CANCELLED.value)
                 return "disabled"
-            logger.info("RAG visibility recompute scaffold invoked: %s", job_id)
+            result, last_error = _process_visibility_job(session, job)
             record_sync_job_result(
-                status="pending_implementation",
+                status=result,
                 workspace_id=job.workspace_id,
                 scope_type=job.scope_type,
                 scope_id=job.scope_id,
                 job_kind="visibility_recompute",
             )
-            _mark_visibility_job(
-                session,
-                job,
-                status=RagJobStatus.CANCELLED.value,
-                last_error="visibility recompute worker not implemented",
+            final_status = (
+                RagJobStatus.CANCELLED.value
+                if result == "unsupported_scope_type"
+                else RagJobStatus.SUCCEEDED.value
             )
-            return "pending-implementation"
+            _mark_visibility_job(session, job, status=final_status, last_error=last_error)
+            return result
     except Exception as error:
         if "job" in locals() and job is not None:
             _mark_visibility_job(
@@ -289,6 +293,61 @@ def _process_sync_job(session: Session, job: RagSyncJob) -> str:
     service.sync_projection(projection, collection=collection)
     logger.info("Synced RAG projection for %s:%s", job.resource_type, job.resource_id)
     return "succeeded"
+
+
+def _process_visibility_job(
+    session: Session,
+    job: RagVisibilityRecomputeJob,
+) -> tuple[str, str | None]:
+    if job.scope_type != MEETING_VISIBILITY_SCOPE:
+        logger.warning("Unsupported RAG visibility recompute scope: %s", job.scope_type)
+        return "unsupported_scope_type", f"unsupported scope_type: {job.scope_type}"
+
+    doc_ids = _resolve_meeting_doc_ids(session, meeting_id=job.scope_id, cursor=job.cursor)
+    if not doc_ids:
+        logger.info("No affected docs for RAG visibility recompute meeting scope: %s", job.scope_id)
+        return "noop", None
+
+    for doc_id in doc_ids:
+        enqueue_rag_sync_job(
+            session,
+            workspace_id=job.workspace_id,
+            resource_type=NATIVE_DOC_RESOURCE_TYPE,
+            resource_id=doc_id,
+            operation=RagSyncOperation.VISIBILITY_UPDATE,
+        )
+    session.commit()
+    logger.info(
+        "Queued %s RAG visibility update sync job(s) for meeting scope %s",
+        len(doc_ids),
+        job.scope_id,
+    )
+    return "queued", None
+
+
+def _resolve_meeting_doc_ids(
+    session: Session,
+    *,
+    meeting_id: str,
+    cursor: dict | None,
+) -> list[str]:
+    doc_ids = set()
+    if isinstance(cursor, dict):
+        doc_ids.update(str(doc_id) for doc_id in cursor.get("doc_ids") or [] if doc_id)
+
+    doc_ids.update(
+        session.scalars(select(MeetingDocLink.doc_id).where(MeetingDocLink.meeting_id == meeting_id))
+    )
+    doc_ids.update(
+        session.scalars(
+            select(DocMeetingAccess.doc_id).where(DocMeetingAccess.granted_by_meeting_id == meeting_id)
+        )
+    )
+    meeting = session.get(Meeting, meeting_id)
+    if meeting is not None and meeting.notes_doc_id:
+        doc_ids.add(meeting.notes_doc_id)
+
+    return sorted(doc_id for doc_id in doc_ids if doc_id)
 
 
 def _mark_sync_job(

@@ -32,6 +32,10 @@ from aidoo_api.domains.docs.access_grants import (
     revoke_doc_grants_for_meeting_attendee,
 )
 from aidoo_api.domains.docs.models import NativeDoc, NativeDocPage
+from aidoo_api.domains.docs.rag_sync import (
+    collect_meeting_visibility_doc_ids,
+    enqueue_meeting_visibility_recompute,
+)
 from aidoo_api.domains.docs.service import create_native_doc_for_user
 from aidoo_api.domains.meeting.models import (
     Meeting,
@@ -840,6 +844,12 @@ def create_meeting(
         _attach_issue_link(db, meeting=meeting, issue=issue, added_by_id=organizer.id)
     for doc in docs:
         _attach_doc_link(db, meeting=meeting, doc=doc, added_by_id=organizer.id)
+    if docs:
+        enqueue_meeting_visibility_recompute(
+            db,
+            workspace_id=workspace.id,
+            meeting_id=meeting.id,
+        )
     db.commit()
 
     fresh = _load_meeting(db, workspace, meeting.id)
@@ -942,6 +952,13 @@ def update_meeting(
             new_end_at=meeting.end_at,
         )
 
+    if payload.attendees is not None or meeting.end_at != original_end_at:
+        enqueue_meeting_visibility_recompute(
+            db,
+            workspace_id=workspace.id,
+            meeting_id=meeting.id,
+        )
+
     db.add(meeting)
     db.commit()
 
@@ -956,6 +973,7 @@ def delete_meeting(db: Session, *, workspace: Workspace, user: User, meeting_id:
     meeting = _load_meeting(db, workspace, meeting_id)
     ensure_meeting_organizer(db, user, meeting)
     cleanup_meeting_recordings(db, meeting=meeting)
+    affected_doc_ids = collect_meeting_visibility_doc_ids(db, meeting_id=meeting.id)
     revoke_grants_for_meeting(
         db,
         meeting_id=meeting.id,
@@ -968,6 +986,13 @@ def delete_meeting(db: Session, *, workspace: Workspace, user: User, meeting_id:
         revoked_by_user_id=user.id,
         reason="meeting_deleted",
     )
+    if affected_doc_ids:
+        enqueue_meeting_visibility_recompute(
+            db,
+            workspace_id=workspace.id,
+            meeting_id=meeting.id,
+            doc_ids=affected_doc_ids,
+        )
     db.delete(meeting)
     db.commit()
 
@@ -1284,6 +1309,11 @@ def add_attendees(
         merged.append(remaining)
 
     _replace_attendees(db, meeting, merged, acting_user_id=user.id)
+    enqueue_meeting_visibility_recompute(
+        db,
+        workspace_id=workspace.id,
+        meeting_id=meeting.id,
+    )
     db.commit()
 
     fresh = _load_meeting(db, workspace, meeting_id)
@@ -1337,6 +1367,11 @@ def attach_doc(
     ensure_meeting_participant(db, user, meeting)
     doc = ensure_doc_attachable(db, user, doc_id, workspace=workspace)
     _attach_doc_link(db, meeting=meeting, doc=doc, added_by_id=user.id)
+    enqueue_meeting_visibility_recompute(
+        db,
+        workspace_id=workspace.id,
+        meeting_id=meeting.id,
+    )
     db.commit()
 
     fresh = _load_meeting(db, workspace, meeting_id)
@@ -1362,6 +1397,12 @@ def detach_doc(
             doc_id=doc_id,
             revoked_by_user_id=user.id,
             reason="detach",
+        )
+        enqueue_meeting_visibility_recompute(
+            db,
+            workspace_id=workspace.id,
+            meeting_id=meeting.id,
+            doc_ids=[doc_id],
         )
         db.delete(link)
         db.commit()
