@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy import select
@@ -100,11 +99,8 @@ def _build_visibility_refs(doc: NativeDoc) -> list[str]:
         if share.active:
             refs.add(f"link_share_ref:{share.id}")
 
-    now = datetime.now(UTC).replace(tzinfo=None)
     for grant in doc.meeting_access_grants:
         if grant.revoked_at is not None:
-            continue
-        if grant.expires_at is not None and grant.expires_at <= now:
             continue
         refs.add(f"meeting_grant:{grant.user_id}")
         if grant.granted_by_meeting_id:

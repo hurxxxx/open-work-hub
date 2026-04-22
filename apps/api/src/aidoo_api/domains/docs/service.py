@@ -320,6 +320,18 @@ def _load_native_doc_for_access(
     return db.scalar(query)
 
 
+def can_read_native_doc_for_rag(
+    db: Session,
+    *,
+    user: User,
+    doc_id: str,
+) -> bool:
+    doc = _load_native_doc_for_access(db, doc_id)
+    if doc is None:
+        return False
+    return _resolve_native_doc_access(db, doc, user).can_view
+
+
 def _load_native_page(db: Session, page_id: str) -> NativeDocPage | None:
     return db.scalar(
         select(NativeDocPage)

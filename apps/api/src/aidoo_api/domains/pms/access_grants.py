@@ -7,6 +7,11 @@ from sqlalchemy.orm import Session
 
 from aidoo_api.domains.auth.security import new_id
 from aidoo_api.domains.pms.models import IssueUserAccess
+from aidoo_api.domains.pms.rag_sync import (
+    enqueue_issue_rag_sync_by_id,
+    enqueue_meeting_issue_visibility_recompute,
+)
+from aidoo_api.domains.rag.contracts import RagSyncOperation
 
 
 def _utcnow() -> datetime:
@@ -55,6 +60,18 @@ def grant_issue_access(
         existing.updated_at = _utcnow()
         db.add(existing)
         db.flush()
+        if granted_by_meeting_id is not None:
+            enqueue_meeting_issue_visibility_recompute(
+                db,
+                meeting_id=granted_by_meeting_id,
+                issue_ids=[issue_id],
+            )
+        else:
+            enqueue_issue_rag_sync_by_id(
+                db,
+                issue_id=issue_id,
+                operation=RagSyncOperation.VISIBILITY_UPDATE,
+            )
         return existing
 
     access = IssueUserAccess(
@@ -69,6 +86,18 @@ def grant_issue_access(
     )
     db.add(access)
     db.flush()
+    if granted_by_meeting_id is not None:
+        enqueue_meeting_issue_visibility_recompute(
+            db,
+            meeting_id=granted_by_meeting_id,
+            issue_ids=[issue_id],
+        )
+    else:
+        enqueue_issue_rag_sync_by_id(
+            db,
+            issue_id=issue_id,
+            operation=RagSyncOperation.VISIBILITY_UPDATE,
+        )
     return access
 
 
@@ -97,6 +126,11 @@ def revoke_grants_for_meeting_attendee(
         grant.updated_at = now
         db.add(grant)
     db.flush()
+    enqueue_meeting_issue_visibility_recompute(
+        db,
+        meeting_id=meeting_id,
+        issue_ids=[grant.issue_id for grant in grants],
+    )
     return len(grants)
 
 
@@ -123,6 +157,11 @@ def revoke_grants_for_meeting(
         grant.updated_at = now
         db.add(grant)
     db.flush()
+    enqueue_meeting_issue_visibility_recompute(
+        db,
+        meeting_id=meeting_id,
+        issue_ids=[grant.issue_id for grant in grants],
+    )
     return len(grants)
 
 
@@ -151,6 +190,11 @@ def revoke_grants_for_issue_attachment(
         grant.updated_at = now
         db.add(grant)
     db.flush()
+    enqueue_meeting_issue_visibility_recompute(
+        db,
+        meeting_id=meeting_id,
+        issue_ids=[grant.issue_id for grant in grants],
+    )
     return len(grants)
 
 
@@ -174,4 +218,9 @@ def bump_grant_expiry_for_meeting(
         grant.updated_at = _utcnow()
         db.add(grant)
     db.flush()
+    enqueue_meeting_issue_visibility_recompute(
+        db,
+        meeting_id=meeting_id,
+        issue_ids=[grant.issue_id for grant in grants],
+    )
     return len(grants)

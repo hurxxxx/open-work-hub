@@ -12,15 +12,31 @@ from aidoo_api.core.telemetry import start_as_current_span
 from aidoo_api.domains.rag.contracts import RagJobStatus, RagSyncOperation
 from aidoo_api.domains.docs.models import DocMeetingAccess
 from aidoo_api.domains.docs.rag_sync import MEETING_VISIBILITY_SCOPE
+from aidoo_api.domains.pms.models import Issue, IssueLabel, IssueUserAccess
+from aidoo_api.domains.pms.rag_sync import (
+    PMS_LABEL_RECOMPUTE_SCOPE,
+    PMS_MEETING_VISIBILITY_SCOPE,
+    PMS_MILESTONE_RECOMPUTE_SCOPE,
+    PMS_TASK_LIST_RECOMPUTE_SCOPE,
+)
 from aidoo_api.domains.rag.docs_projection import NATIVE_DOC_RESOURCE_TYPE, load_native_doc_projection
 from aidoo_api.domains.rag.metrics import record_sync_job_lag, record_sync_job_result
 from aidoo_api.domains.rag.models import RagSyncJob, RagVisibilityRecomputeJob
 from aidoo_api.domains.rag.outbox import enqueue_rag_sync_job
+from aidoo_api.domains.rag.planner_projection import (
+    PLANNER_EVENT_RESOURCE_TYPE,
+    load_planner_event_projection,
+)
+from aidoo_api.domains.rag.pms_projection import (
+    PMS_ISSUE_RESOURCE_TYPE,
+    load_issue_projection,
+)
 from aidoo_api.domains.rag.providers.base import RagProviderBundle
 from aidoo_api.domains.rag.providers.fake import FakeEmbeddingClient, FakeVectorIndexClient
+from aidoo_api.domains.rag.providers.qdrant import QdrantVectorIndexClient
 from aidoo_api.domains.rag.service import RagService
 from aidoo_api.domains.rag.telemetry import rag_span_attributes
-from aidoo_api.domains.meeting.models import Meeting, MeetingDocLink
+from aidoo_api.domains.meeting.models import Meeting, MeetingDocLink, MeetingTaskLink
 from aidoo_worker.celery_app import celery_app
 from aidoo_worker.settings import get_settings
 
@@ -46,12 +62,26 @@ def _db_session() -> Session:
 @lru_cache(maxsize=1)
 def _provider_bundle() -> RagProviderBundle:
     settings = get_settings()
+    if settings.rag_vector_index_provider == "fake":
+        vector_index = FakeVectorIndexClient()
+    elif settings.rag_vector_index_provider == "qdrant":
+        if not settings.rag_qdrant_url:
+            raise RuntimeError("AIDOO_QDRANT_URL is required when rag_vector_index_provider=qdrant")
+        vector_index = QdrantVectorIndexClient(
+            url=settings.rag_qdrant_url,
+            api_key=settings.rag_qdrant_api_key or None,
+        )
+    else:
+        raise RuntimeError(
+            "Unsupported RAG vector index provider for worker scaffold: "
+            f"{settings.rag_vector_index_provider}"
+        )
     if settings.rag_embedding_provider != "fake":
         raise RuntimeError(
             f"Unsupported RAG embedding provider for worker scaffold: {settings.rag_embedding_provider}"
         )
     return RagProviderBundle(
-        vector_index=FakeVectorIndexClient(),
+        vector_index=vector_index,
         embedding=FakeEmbeddingClient(),
     )
 
@@ -271,11 +301,10 @@ def _process_sync_job(session: Session, job: RagSyncJob) -> str:
         logger.info("Deleted RAG projection for %s:%s", job.resource_type, job.resource_id)
         return "deleted"
 
-    if job.resource_type != NATIVE_DOC_RESOURCE_TYPE:
+    projection = _load_projection_for_job(session, job)
+    if projection == "unsupported":
         logger.warning("Unsupported RAG resource type: %s", job.resource_type)
         return "unsupported_resource_type"
-
-    projection = load_native_doc_projection(session, doc_id=job.resource_id)
     if projection is None:
         service.delete_projection(
             workspace_id=job.workspace_id,
@@ -295,34 +324,130 @@ def _process_sync_job(session: Session, job: RagSyncJob) -> str:
     return "succeeded"
 
 
+def _load_projection_for_job(session: Session, job: RagSyncJob):
+    if job.resource_type == NATIVE_DOC_RESOURCE_TYPE:
+        return load_native_doc_projection(session, doc_id=job.resource_id)
+    if job.resource_type == PLANNER_EVENT_RESOURCE_TYPE:
+        return load_planner_event_projection(session, event_id=job.resource_id)
+    if job.resource_type == PMS_ISSUE_RESOURCE_TYPE:
+        return load_issue_projection(session, issue_id=job.resource_id)
+    return "unsupported"
+
+
 def _process_visibility_job(
     session: Session,
     job: RagVisibilityRecomputeJob,
 ) -> tuple[str, str | None]:
-    if job.scope_type != MEETING_VISIBILITY_SCOPE:
-        logger.warning("Unsupported RAG visibility recompute scope: %s", job.scope_type)
-        return "unsupported_scope_type", f"unsupported scope_type: {job.scope_type}"
+    if job.scope_type == MEETING_VISIBILITY_SCOPE:
+        doc_ids = _resolve_meeting_doc_ids(session, meeting_id=job.scope_id, cursor=job.cursor)
+        if not doc_ids:
+            logger.info(
+                "No affected docs for RAG visibility recompute meeting scope: %s",
+                job.scope_id,
+            )
+            return "noop", None
 
-    doc_ids = _resolve_meeting_doc_ids(session, meeting_id=job.scope_id, cursor=job.cursor)
-    if not doc_ids:
-        logger.info("No affected docs for RAG visibility recompute meeting scope: %s", job.scope_id)
-        return "noop", None
-
-    for doc_id in doc_ids:
-        enqueue_rag_sync_job(
+        _enqueue_resource_sync_jobs(
             session,
             workspace_id=job.workspace_id,
             resource_type=NATIVE_DOC_RESOURCE_TYPE,
-            resource_id=doc_id,
+            resource_ids=doc_ids,
             operation=RagSyncOperation.VISIBILITY_UPDATE,
         )
+        session.commit()
+        logger.info(
+            "Queued %s RAG visibility update sync job(s) for meeting scope %s",
+            len(doc_ids),
+            job.scope_id,
+        )
+        return "queued", None
+
+    if job.scope_type == PMS_MEETING_VISIBILITY_SCOPE:
+        issue_ids = _resolve_meeting_issue_ids(session, meeting_id=job.scope_id, cursor=job.cursor)
+        if not issue_ids:
+            logger.info(
+                "No affected issues for PMS meeting visibility recompute scope: %s",
+                job.scope_id,
+            )
+            return "noop", None
+        _enqueue_resource_sync_jobs(
+            session,
+            workspace_id=job.workspace_id,
+            resource_type=PMS_ISSUE_RESOURCE_TYPE,
+            resource_ids=issue_ids,
+            operation=RagSyncOperation.VISIBILITY_UPDATE,
+        )
+        session.commit()
+        logger.info(
+            "Queued %s PMS visibility update sync job(s) for meeting scope %s",
+            len(issue_ids),
+            job.scope_id,
+        )
+        return "queued", None
+
+    if job.scope_type == PMS_TASK_LIST_RECOMPUTE_SCOPE:
+        issue_ids = _resolve_task_list_issue_ids(session, list_id=job.scope_id)
+        return _queue_pms_issue_recompute(session, job=job, issue_ids=issue_ids, scope_label="task_list")
+
+    if job.scope_type == PMS_LABEL_RECOMPUTE_SCOPE:
+        issue_ids = _resolve_label_issue_ids(session, label_id=job.scope_id, cursor=job.cursor)
+        return _queue_pms_issue_recompute(session, job=job, issue_ids=issue_ids, scope_label="label")
+
+    if job.scope_type == PMS_MILESTONE_RECOMPUTE_SCOPE:
+        issue_ids = _resolve_milestone_issue_ids(session, milestone_id=job.scope_id)
+        return _queue_pms_issue_recompute(session, job=job, issue_ids=issue_ids, scope_label="milestone")
+
+    logger.warning("Unsupported RAG visibility recompute scope: %s", job.scope_type)
+    return "unsupported_scope_type", f"unsupported scope_type: {job.scope_type}"
+
+
+def _queue_pms_issue_recompute(
+    session: Session,
+    *,
+    job: RagVisibilityRecomputeJob,
+    issue_ids: list[str],
+    scope_label: str,
+) -> tuple[str, str | None]:
+    if not issue_ids:
+        logger.info(
+            "No affected issues for PMS %s recompute scope: %s",
+            scope_label,
+            job.scope_id,
+        )
+        return "noop", None
+    _enqueue_resource_sync_jobs(
+        session,
+        workspace_id=job.workspace_id,
+        resource_type=PMS_ISSUE_RESOURCE_TYPE,
+        resource_ids=issue_ids,
+        operation=RagSyncOperation.UPSERT,
+    )
     session.commit()
     logger.info(
-        "Queued %s RAG visibility update sync job(s) for meeting scope %s",
-        len(doc_ids),
+        "Queued %s PMS sync job(s) for %s scope %s",
+        len(issue_ids),
+        scope_label,
         job.scope_id,
     )
     return "queued", None
+
+
+def _enqueue_resource_sync_jobs(
+    session: Session,
+    *,
+    workspace_id: str,
+    resource_type: str,
+    resource_ids: list[str],
+    operation: RagSyncOperation,
+) -> None:
+    for resource_id in resource_ids:
+        enqueue_rag_sync_job(
+            session,
+            workspace_id=workspace_id,
+            resource_type=resource_type,
+            resource_id=resource_id,
+            operation=operation,
+        )
 
 
 def _resolve_meeting_doc_ids(
@@ -348,6 +473,58 @@ def _resolve_meeting_doc_ids(
         doc_ids.add(meeting.notes_doc_id)
 
     return sorted(doc_id for doc_id in doc_ids if doc_id)
+
+
+def _resolve_meeting_issue_ids(
+    session: Session,
+    *,
+    meeting_id: str,
+    cursor: dict | None,
+) -> list[str]:
+    issue_ids = set()
+    if isinstance(cursor, dict):
+        issue_ids.update(str(issue_id) for issue_id in cursor.get("issue_ids") or [] if issue_id)
+
+    issue_ids.update(
+        session.scalars(select(MeetingTaskLink.issue_id).where(MeetingTaskLink.meeting_id == meeting_id))
+    )
+    issue_ids.update(
+        session.scalars(
+            select(IssueUserAccess.issue_id).where(IssueUserAccess.granted_by_meeting_id == meeting_id)
+        )
+    )
+    return sorted(issue_id for issue_id in issue_ids if issue_id)
+
+
+def _resolve_task_list_issue_ids(session: Session, *, list_id: str) -> list[str]:
+    return sorted(
+        str(issue_id)
+        for issue_id in session.scalars(select(Issue.id).where(Issue.list_id == list_id))
+        if issue_id
+    )
+
+
+def _resolve_label_issue_ids(
+    session: Session,
+    *,
+    label_id: str,
+    cursor: dict | None,
+) -> list[str]:
+    issue_ids = set()
+    if isinstance(cursor, dict):
+        issue_ids.update(str(issue_id) for issue_id in cursor.get("issue_ids") or [] if issue_id)
+    issue_ids.update(
+        session.scalars(select(IssueLabel.issue_id).where(IssueLabel.label_id == label_id))
+    )
+    return sorted(issue_id for issue_id in issue_ids if issue_id)
+
+
+def _resolve_milestone_issue_ids(session: Session, *, milestone_id: str) -> list[str]:
+    return sorted(
+        str(issue_id)
+        for issue_id in session.scalars(select(Issue.id).where(Issue.milestone_id == milestone_id))
+        if issue_id
+    )
 
 
 def _mark_sync_job(

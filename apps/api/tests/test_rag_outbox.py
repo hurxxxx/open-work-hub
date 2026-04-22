@@ -163,3 +163,181 @@ def test_enqueue_rag_sync_job_allows_explicit_empty_trace_context() -> None:
         assert stored.trace_context == {}
     finally:
         session.close()
+
+
+def test_enqueue_rag_sync_job_dedupes_pending_rows_and_upgrades_operation() -> None:
+    session = _session()
+    try:
+        with session.begin():
+            first = enqueue_rag_sync_job(
+                session,
+                workspace_id="ws-1",
+                resource_type="doc",
+                resource_id="doc-4",
+                operation=RagSyncOperation.VISIBILITY_UPDATE,
+                visibility_checksum="vis-v1",
+            )
+            second = enqueue_rag_sync_job(
+                session,
+                workspace_id="ws-1",
+                resource_type="doc",
+                resource_id="doc-4",
+                operation=RagSyncOperation.UPSERT,
+                content_checksum="content-v2",
+            )
+
+        rows = session.scalars(
+            select(RagSyncJob).where(
+                RagSyncJob.workspace_id == "ws-1",
+                RagSyncJob.resource_type == "doc",
+                RagSyncJob.resource_id == "doc-4",
+            )
+        ).all()
+        assert len(rows) == 1
+        assert second.id == first.id
+        stored = rows[0]
+        assert stored.operation == "upsert"
+        assert stored.content_checksum == "content-v2"
+        assert stored.visibility_checksum == "vis-v1"
+    finally:
+        session.close()
+
+
+def test_enqueue_rag_sync_job_preserves_pending_delete_over_later_upsert() -> None:
+    session = _session()
+    try:
+        with session.begin():
+            first = enqueue_rag_sync_job(
+                session,
+                workspace_id="ws-1",
+                resource_type="doc",
+                resource_id="doc-5",
+                operation=RagSyncOperation.DELETE,
+            )
+            second = enqueue_rag_sync_job(
+                session,
+                workspace_id="ws-1",
+                resource_type="doc",
+                resource_id="doc-5",
+                operation=RagSyncOperation.UPSERT,
+                content_checksum="content-v3",
+            )
+
+        rows = session.scalars(
+            select(RagSyncJob).where(
+                RagSyncJob.workspace_id == "ws-1",
+                RagSyncJob.resource_type == "doc",
+                RagSyncJob.resource_id == "doc-5",
+            )
+        ).all()
+        assert len(rows) == 1
+        assert second.id == first.id
+        stored = rows[0]
+        assert stored.operation == "delete"
+        assert stored.content_checksum == "content-v3"
+    finally:
+        session.close()
+
+
+def test_enqueue_rag_visibility_recompute_job_dedupes_scope_and_merges_doc_ids() -> None:
+    session = _session()
+    try:
+        with session.begin():
+            first = enqueue_rag_visibility_recompute_job(
+                session,
+                workspace_id="ws-1",
+                scope_type="meeting",
+                scope_id="meeting-1",
+                cursor={"doc_ids": ["doc-1", "doc-2"]},
+            )
+            second = enqueue_rag_visibility_recompute_job(
+                session,
+                workspace_id="ws-1",
+                scope_type="meeting",
+                scope_id="meeting-1",
+                cursor={"doc_ids": ["doc-2", "doc-3"]},
+            )
+
+        rows = session.scalars(
+            select(RagVisibilityRecomputeJob).where(
+                RagVisibilityRecomputeJob.workspace_id == "ws-1",
+                RagVisibilityRecomputeJob.scope_type == "meeting",
+                RagVisibilityRecomputeJob.scope_id == "meeting-1",
+            )
+        ).all()
+        assert len(rows) == 1
+        assert second.id == first.id
+        stored = rows[0]
+        assert stored.cursor == {"doc_ids": ["doc-1", "doc-2", "doc-3"]}
+    finally:
+        session.close()
+
+
+def test_enqueue_rag_visibility_recompute_job_merges_issue_ids() -> None:
+    session = _session()
+    try:
+        with session.begin():
+            first = enqueue_rag_visibility_recompute_job(
+                session,
+                workspace_id="ws-1",
+                scope_type="pms_meeting",
+                scope_id="meeting-1",
+                cursor={"issue_ids": ["issue-1", "issue-2"], "operation": "visibility_update"},
+            )
+            second = enqueue_rag_visibility_recompute_job(
+                session,
+                workspace_id="ws-1",
+                scope_type="pms_meeting",
+                scope_id="meeting-1",
+                cursor={"issue_ids": ["issue-2", "issue-3"], "operation": "visibility_update"},
+            )
+
+        rows = session.scalars(
+            select(RagVisibilityRecomputeJob).where(
+                RagVisibilityRecomputeJob.workspace_id == "ws-1",
+                RagVisibilityRecomputeJob.scope_type == "pms_meeting",
+                RagVisibilityRecomputeJob.scope_id == "meeting-1",
+            )
+        ).all()
+        assert len(rows) == 1
+        assert second.id == first.id
+        stored = rows[0]
+        assert stored.cursor == {
+            "issue_ids": ["issue-1", "issue-2", "issue-3"],
+            "operation": "visibility_update",
+        }
+    finally:
+        session.close()
+
+
+def test_enqueue_rag_sync_job_dedupe_keeps_lane_in_identity() -> None:
+    session = _session()
+    try:
+        with session.begin():
+            realtime = enqueue_rag_sync_job(
+                session,
+                workspace_id="ws-1",
+                resource_type="doc",
+                resource_id="doc-6",
+                lane=RagSyncLane.REALTIME,
+            )
+            backfill = enqueue_rag_sync_job(
+                session,
+                workspace_id="ws-1",
+                resource_type="doc",
+                resource_id="doc-6",
+                lane=RagSyncLane.BACKFILL,
+            )
+
+        rows = session.scalars(
+            select(RagSyncJob).where(
+                RagSyncJob.workspace_id == "ws-1",
+                RagSyncJob.resource_type == "doc",
+                RagSyncJob.resource_id == "doc-6",
+            )
+        ).all()
+        assert len(rows) == 2
+        assert {row.id for row in rows} == {realtime.id, backfill.id}
+        assert sorted(row.lane for row in rows) == ["backfill", "realtime"]
+    finally:
+        session.close()

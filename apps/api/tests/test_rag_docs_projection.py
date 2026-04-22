@@ -13,6 +13,7 @@ from aidoo_api.domains.docs import service as docs_service
 from aidoo_api.domains.docs.access_grants import grant_doc_access
 from aidoo_api.domains.docs.models import NativeDocLinkShare, NativeDocPage, NativeDocUserShare
 from aidoo_api.domains.rag.contracts import RagAnswerMode, RagQueryRequest
+from aidoo_api.domains.rag.access_filter import build_user_rag_post_filter
 from aidoo_api.domains.rag.docs_projection import NATIVE_DOC_RESOURCE_TYPE, load_native_doc_projection
 from aidoo_api.domains.rag.providers.fake import (
     FakeEmbeddingClient,
@@ -31,7 +32,7 @@ def _dev_login(client: TestClient, account_key: str) -> dict:
     return response.json()
 
 
-def test_native_doc_projection_includes_acl_refs_without_raw_share_token(
+def test_native_doc_projection_preserves_grants_for_query_time_expiry_checks(
     client: TestClient,
 ) -> None:
     session = _dev_login(client, "delivery-hub-admin")
@@ -39,14 +40,17 @@ def test_native_doc_projection_includes_acl_refs_without_raw_share_token(
         owner = load_user_graph(db, session["user"]["id"])
         shared_user = db.scalar(select(User).where(User.email == "platform-admin@aidoo.local"))
         expired_user = db.scalar(select(User).where(User.email == "hq-admin@aidoo.local"))
+        revoked_user = db.scalar(select(User).where(User.email == "delivery-hub-member@aidoo.local"))
         workspace = db.scalar(select(Workspace).where(Workspace.key == "delivery-hub"))
         assert owner is not None
         assert shared_user is not None
         assert expired_user is not None
+        assert revoked_user is not None
         assert workspace is not None
         owner_id = owner.id
         shared_user_id = shared_user.id
         expired_user_id = expired_user.id
+        revoked_user_id = revoked_user.id
         workspace_id = workspace.id
 
         doc, _page = docs_service.create_native_doc_for_user(
@@ -104,6 +108,15 @@ def test_native_doc_projection_includes_acl_refs_without_raw_share_token(
         grant_doc_access(
             db,
             doc_id=doc.id,
+            user_id=revoked_user_id,
+            granted_by_user_id=owner_id,
+            granted_by_meeting_id=None,
+            reason="meeting_attendee",
+            expires_at=datetime.now(UTC).replace(tzinfo=None) + timedelta(days=1),
+        ).revoked_at = datetime.now(UTC).replace(tzinfo=None)
+        grant_doc_access(
+            db,
+            doc_id=doc.id,
             user_id=expired_user_id,
             granted_by_user_id=owner_id,
             granted_by_meeting_id=None,
@@ -123,7 +136,8 @@ def test_native_doc_projection_includes_acl_refs_without_raw_share_token(
     assert f"owner:{owner_id}" in projection.visibility_refs
     assert f"share_user:{shared_user_id}" in projection.visibility_refs
     assert f"meeting_grant:{shared_user_id}" in projection.visibility_refs
-    assert f"meeting_grant:{expired_user_id}" not in projection.visibility_refs
+    assert f"meeting_grant:{expired_user_id}" in projection.visibility_refs
+    assert f"meeting_grant:{revoked_user_id}" not in projection.visibility_refs
     assert "container:pms:space:space-42" in projection.visibility_refs
     assert any(ref.startswith("link_share_ref:") for ref in projection.visibility_refs)
     assert "secret-link-token" not in projection.text_content
@@ -192,6 +206,65 @@ def test_native_doc_projection_smoke_syncs_and_queries_with_fake_provider(
     assert response.grounded_answer is not None
     assert response.grounded_answer.citations
     assert response.sources_used == [projection.source_kind]
+
+
+def test_native_doc_query_post_filter_rejects_expired_grant_hits(client: TestClient) -> None:
+    session = _dev_login(client, "delivery-hub-admin")
+    vector_index = FakeVectorIndexClient()
+    embedding_client = FakeEmbeddingClient()
+    query_service = RagQueryService(
+        vector_index=vector_index,
+        embedding_client=embedding_client,
+    )
+    rag_service = RagService(
+        vector_index=vector_index,
+        embedding_client=embedding_client,
+        default_collection="docs-expired-grant-smoke",
+    )
+
+    with get_session_factory()() as db:
+        owner = load_user_graph(db, session["user"]["id"])
+        expired_user = db.scalar(select(User).where(User.email == "hq-admin@aidoo.local"))
+        workspace = db.scalar(select(Workspace).where(Workspace.key == "delivery-hub"))
+        assert owner is not None
+        assert expired_user is not None
+        assert workspace is not None
+
+        doc, _page = docs_service.create_native_doc_for_user(
+            db,
+            workspace_id=workspace.id,
+            owner_id=owner.id,
+            title="Expired Grant Doc",
+            content_blocks=[
+                {"type": "paragraph", "content": [{"type": "text", "text": "Grant expiry must be rechecked at query time."}]},
+            ],
+        )
+        grant_doc_access(
+            db,
+            doc_id=doc.id,
+            user_id=expired_user.id,
+            granted_by_user_id=owner.id,
+            granted_by_meeting_id=None,
+            reason="meeting_attendee",
+            expires_at=datetime.now(UTC).replace(tzinfo=None) - timedelta(days=1),
+        )
+        db.commit()
+        projection = load_native_doc_projection(db, doc_id=doc.id)
+        post_filter = build_user_rag_post_filter(db, user=expired_user)
+        assert projection is not None
+
+        rag_service.sync_projection(projection)
+        response = query_service.query(
+            RagQueryRequest(
+                collection="docs-expired-grant-smoke",
+                workspace_id=workspace.id,
+                query="grant expiry query time",
+                filters={"visibility_refs_contains": f"meeting_grant:{expired_user.id}"},
+            ),
+            post_filter=post_filter,
+        )
+
+        assert response.hits == []
 
 
 def test_trashed_native_doc_is_not_projected(client: TestClient) -> None:

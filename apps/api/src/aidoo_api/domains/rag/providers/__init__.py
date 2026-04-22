@@ -13,6 +13,7 @@ from aidoo_api.domains.rag.providers.fake import (
     FakeRerankClient,
     FakeVectorIndexClient,
 )
+from aidoo_api.domains.rag.providers.qdrant import QdrantVectorIndexClient
 
 __all__ = [
     "AsrClient",
@@ -23,6 +24,7 @@ __all__ = [
     "FakeRerankClient",
     "FakeVectorIndexClient",
     "OcrClient",
+    "QdrantVectorIndexClient",
     "RagProviderBundle",
     "RerankClient",
     "VectorIndexClient",

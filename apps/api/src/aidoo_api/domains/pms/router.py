@@ -52,7 +52,15 @@ from aidoo_api.domains.pms.access import (
     _ensure_list_member,
     _ensure_list_owner,
 )
+from aidoo_api.domains.pms.rag_sync import (
+    collect_label_issue_ids,
+    enqueue_issue_rag_sync,
+    enqueue_label_issue_recompute,
+    enqueue_milestone_issue_recompute,
+    enqueue_task_list_issue_recompute,
+)
 from aidoo_api.domains.pms import service as pms_service
+from aidoo_api.domains.rag.contracts import RagSyncOperation
 
 
 ISSUE_STATUS_LABELS = {
@@ -1675,6 +1683,8 @@ def update_task_list(
         if value is None:
             continue
         setattr(task_list, field_name, value.strip() if isinstance(value, str) else value)
+    if fields_set - {"folder_id", "sort_order"}:
+        enqueue_task_list_issue_recompute(db, task_list=task_list)
     db.commit()
     db.refresh(task_list)
     task_list = db.scalar(
@@ -1879,6 +1889,7 @@ def update_milestone(
         value = getattr(payload, field_name)
         if value is not None:
             setattr(milestone, field_name, value.strip() if isinstance(value, str) else value)
+    enqueue_milestone_issue_recompute(db, milestone=milestone)
     db.commit()
     db.refresh(milestone)
     milestone = db.scalar(
@@ -1947,6 +1958,7 @@ def update_label(
         label.name = normalized_name
     if payload.color is not None:
         label.color = payload.color
+    enqueue_label_issue_recompute(db, label=label)
     db.commit()
     db.refresh(label)
     return LabelItem(id=label.id, name=label.name, color=label.color)
@@ -1962,6 +1974,12 @@ def delete_label(
     if label is None:
         raise HTTPException(status_code=404, detail="Label not found.")
     _ensure_list_owner(db, current_user, label.list_id)
+    affected_issue_ids = collect_label_issue_ids(db, label_id=label.id)
+    enqueue_label_issue_recompute(
+        db,
+        label=label,
+        issue_ids=affected_issue_ids,
+    )
     db.delete(label)
     db.commit()
 
@@ -2161,6 +2179,11 @@ def bulk_update_issues(
             for child in getattr(issue, "subtasks", []):
                 child.parent_id = None
             media_keys.extend(cleanup_media_for_resource(db, "issue", issue.id))
+            enqueue_issue_rag_sync(
+                db,
+                issue=issue,
+                operation=RagSyncOperation.DELETE,
+            )
             db.delete(issue)
         db.commit()
         if media_keys:
@@ -2212,6 +2235,11 @@ def bulk_update_issues(
             issue.label_links = [link for link in issue.label_links if link.label_id not in payload.remove_label_ids]
             changed = True
         if changed:
+            enqueue_issue_rag_sync(
+                db,
+                issue=issue,
+                operation=RagSyncOperation.UPSERT,
+            )
             updated += 1
 
     db.commit()
@@ -2228,6 +2256,11 @@ def delete_issue(
     for child in issue.subtasks:
         child.parent_id = None
     media_keys = cleanup_media_for_resource(db, "issue", issue.id)
+    enqueue_issue_rag_sync(
+        db,
+        issue=issue,
+        operation=RagSyncOperation.DELETE,
+    )
     db.delete(issue)
     db.commit()
     # Post-commit MinIO cleanup — DB is authoritative, best-effort storage delete

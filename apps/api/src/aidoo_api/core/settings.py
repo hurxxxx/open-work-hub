@@ -332,6 +332,14 @@ class Settings(BaseSettings):
             "DOOWON_API_AIDOO_QDRANT_COLLECTION_PREFIX",
         ),
     )
+    rag_vector_index_provider: str = Field(
+        default="fake",
+        validation_alias=AliasChoices(
+            "AIDOO_VECTOR_INDEX_PROVIDER",
+            "DOOWON_AIDOO_VECTOR_INDEX_PROVIDER",
+            "DOOWON_API_AIDOO_VECTOR_INDEX_PROVIDER",
+        ),
+    )
     rag_embedding_provider: str = Field(
         default="fake",
         validation_alias=AliasChoices(

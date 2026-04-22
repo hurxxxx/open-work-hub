@@ -168,6 +168,24 @@ def _ensure_owner(user: User, event: PlannerEvent) -> None:
         )
 
 
+def can_read_planner_event_for_rag(
+    db: Session,
+    *,
+    user: User,
+    workspace_id: str,
+    event_id: str,
+) -> bool:
+    event = db.scalar(
+        select(PlannerEvent).where(
+            PlannerEvent.id == event_id,
+            PlannerEvent.workspace_id == workspace_id,
+        )
+    )
+    if event is None:
+        return False
+    return event.owner_id == user.id
+
+
 def create_event(
     db: Session,
     *,
@@ -204,6 +222,15 @@ def create_event(
         end_at=end_at,
     )
     db.add(event)
+    db.flush()
+    from aidoo_api.domains.planner.rag_sync import enqueue_planner_event_rag_sync
+    from aidoo_api.domains.rag.contracts import RagSyncOperation
+
+    enqueue_planner_event_rag_sync(
+        db,
+        event=event,
+        operation=RagSyncOperation.UPSERT,
+    )
     db.commit()
     fresh = _load_event(db, workspace=workspace, event_id=event.id)
     return _serialize_event(fresh)
@@ -319,6 +346,10 @@ def update_event(
 ) -> PlannerEventOut:
     event = _load_event(db, workspace=workspace, event_id=event_id)
     _ensure_owner(user, event)
+    from aidoo_api.domains.planner.rag_sync import enqueue_planner_event_rag_sync
+    from aidoo_api.domains.rag.contracts import RagSyncOperation
+
+    operation: RagSyncOperation | None = None
 
     next_all_day = payload.all_day if payload.all_day is not None else event.all_day
     next_start = payload.start
@@ -337,18 +368,32 @@ def update_event(
             start=next_start,
             end=next_end,
         )
+        operation = RagSyncOperation.UPSERT
     event.all_day = next_all_day
+    if payload.all_day is not None:
+        operation = RagSyncOperation.UPSERT
 
     if payload.title is not None:
         event.title = payload.title.strip()
+        operation = RagSyncOperation.UPSERT
     if payload.description is not None:
         event.description = payload.description.strip()
+        operation = RagSyncOperation.UPSERT
     if payload.location is not None:
         event.location = payload.location.strip()
+        operation = RagSyncOperation.UPSERT
     if payload.visibility is not None:
         event.visibility = payload.visibility
+        if operation is None:
+            operation = RagSyncOperation.VISIBILITY_UPDATE
 
     db.add(event)
+    if operation is not None:
+        enqueue_planner_event_rag_sync(
+            db,
+            event=event,
+            operation=operation,
+        )
     db.commit()
     fresh = _load_event(db, workspace=workspace, event_id=event.id)
     return _serialize_event(fresh)
@@ -363,5 +408,13 @@ def delete_event(
 ) -> None:
     event = _load_event(db, workspace=workspace, event_id=event_id)
     _ensure_owner(user, event)
+    from aidoo_api.domains.planner.rag_sync import enqueue_planner_event_rag_sync
+    from aidoo_api.domains.rag.contracts import RagSyncOperation
+
+    enqueue_planner_event_rag_sync(
+        db,
+        event=event,
+        operation=RagSyncOperation.DELETE,
+    )
     db.delete(event)
     db.commit()

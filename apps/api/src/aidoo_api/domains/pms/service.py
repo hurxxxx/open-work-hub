@@ -14,6 +14,7 @@ from aidoo_api.domains.auth.models import TeamMember, User, Workspace
 from aidoo_api.domains.auth.security import new_id
 from aidoo_api.domains.media.router import sync_embedded_media
 from aidoo_api.domains.pms.access import _ensure_issue_readable, _ensure_list_editor
+from aidoo_api.domains.pms.rag_sync import enqueue_issue_rag_sync
 from aidoo_api.domains.pms.models import (
     Attachment,
     Issue,
@@ -25,6 +26,7 @@ from aidoo_api.domains.pms.models import (
     TaskList,
     TimeEntry,
 )
+from aidoo_api.domains.rag.contracts import RagSyncOperation
 
 
 ISSUE_STATUS_LABELS = {
@@ -940,6 +942,11 @@ def create_issue(
     )
     db.add(issue)
     db.flush()
+    enqueue_issue_rag_sync(
+        db,
+        issue=issue,
+        operation=RagSyncOperation.UPSERT,
+    )
     if validated_assignees is not None:
         _set_issue_assignees(issue, validated_assignees)
     _set_issue_labels(db, issue, label_ids or [], task_list)
@@ -992,6 +999,7 @@ def update_issue(
     _bind_workspace_context(db, workspace=workspace, principal=principal, user=user)
 
     issue, task_list = _get_issue_for_user(db, user, issue_id, require_editor=True)
+    rag_operation: RagSyncOperation | None = None
     effective_provided_fields = set(provided_fields)
     validated_assignees: list[User] | None = None
     if "assignee_ids" in effective_provided_fields:
@@ -1037,6 +1045,7 @@ def update_issue(
         if previous == normalized_value:
             continue
         setattr(issue, field_name, normalized_value)
+        rag_operation = RagSyncOperation.UPSERT
         _log_issue_activity(
             db,
             issue.id,
@@ -1057,6 +1066,7 @@ def update_issue(
         previous = issue.parent_id
         issue.parent_id = parent_id
         if previous != parent_id:
+            rag_operation = RagSyncOperation.UPSERT
             _log_issue_activity(
                 db,
                 issue.id,
@@ -1076,6 +1086,7 @@ def update_issue(
     if "description_blocks" in effective_provided_fields:
         issue.description_blocks = description_blocks
         sync_embedded_media(db, description_blocks, "issue", issue.id, user)
+        rag_operation = RagSyncOperation.UPSERT
         _log_issue_activity(
             db,
             issue.id,
@@ -1092,6 +1103,7 @@ def update_issue(
 
     if "label_ids" in effective_provided_fields and label_ids is not None:
         _set_issue_labels(db, issue, label_ids, task_list)
+        rag_operation = RagSyncOperation.UPSERT
         _log_issue_activity(
             db,
             issue.id,
@@ -1110,6 +1122,7 @@ def update_issue(
         new_assignee_ids = [assignee.id for assignee in validated_assignees]
         if previous_assignee_ids != new_assignee_ids:
             _set_issue_assignees(issue, validated_assignees)
+            rag_operation = RagSyncOperation.UPSERT
             _log_issue_activity(
                 db,
                 issue.id,
@@ -1128,6 +1141,7 @@ def update_issue(
 
     if status is not None and status != old_status and board_position is None:
         issue.board_position = _next_issue_board_position(db, issue.list_id, status)
+        rag_operation = RagSyncOperation.UPSERT
 
     ref = _issue_reference(issue)
     if assignee_id is not None and assignee_id != user.id and "assignee_id" in effective_provided_fields:
@@ -1162,6 +1176,12 @@ def update_issue(
             ),
         )
 
+    if rag_operation is not None:
+        enqueue_issue_rag_sync(
+            db,
+            issue=issue,
+            operation=rag_operation,
+        )
     db.commit()
     reloaded = _reload_issue_summary(db, issue_id=issue.id)
     return _serialize_issue_summary(reloaded)
@@ -1200,6 +1220,11 @@ def add_issue_comment(
         body_blocks=body_blocks,
     )
     db.add(comment)
+    enqueue_issue_rag_sync(
+        db,
+        issue=issue,
+        operation=RagSyncOperation.UPSERT,
+    )
     _log_issue_activity(
         db,
         issue.id,

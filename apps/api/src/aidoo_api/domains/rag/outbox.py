@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from aidoo_api.core.telemetry import serialize_current_trace_context
@@ -27,6 +29,22 @@ def enqueue_rag_sync_job(
         if trace_context is None
         else _normalize_trace_context(trace_context)
     )
+    existing = _select_pending_sync_job(
+        db,
+        workspace_id=workspace_id,
+        lane=lane.value,
+        resource_type=resource_type,
+        resource_id=resource_id,
+    )
+    if existing is not None:
+        existing.operation = _merge_sync_operation(existing.operation, operation.value)
+        existing.content_checksum = content_checksum or existing.content_checksum
+        existing.visibility_checksum = visibility_checksum or existing.visibility_checksum
+        existing.trace_context = resolved_trace_context
+        db.add(existing)
+        db.flush()
+        return existing
+
     job = RagSyncJob(
         id=new_id(),
         workspace_id=workspace_id,
@@ -40,9 +58,29 @@ def enqueue_rag_sync_job(
         status=RagJobStatus.PENDING.value,
         attempts=0,
     )
-    db.add(job)
-    db.flush()
-    return job
+    try:
+        with db.begin_nested():
+            db.add(job)
+            db.flush()
+        return job
+    except IntegrityError:
+        db.expire_all()
+        existing = _select_pending_sync_job(
+            db,
+            workspace_id=workspace_id,
+            lane=lane.value,
+            resource_type=resource_type,
+            resource_id=resource_id,
+        )
+        if existing is None:
+            raise
+        existing.operation = _merge_sync_operation(existing.operation, operation.value)
+        existing.content_checksum = content_checksum or existing.content_checksum
+        existing.visibility_checksum = visibility_checksum or existing.visibility_checksum
+        existing.trace_context = resolved_trace_context
+        db.add(existing)
+        db.flush()
+        return existing
 
 
 def enqueue_rag_visibility_recompute_job(
@@ -59,19 +97,92 @@ def enqueue_rag_visibility_recompute_job(
         if trace_context is None
         else _normalize_trace_context(trace_context)
     )
+    normalized_cursor = dict(cursor or {}) or None
+    existing = _select_pending_visibility_job(
+        db,
+        workspace_id=workspace_id,
+        scope_type=scope_type,
+        scope_id=scope_id,
+    )
+    if existing is not None:
+        existing.trace_context = resolved_trace_context
+        existing.cursor = _merge_recompute_cursor(existing.cursor, normalized_cursor)
+        db.add(existing)
+        db.flush()
+        return existing
+
     job = RagVisibilityRecomputeJob(
         id=new_id(),
         workspace_id=workspace_id,
         scope_type=scope_type,
         scope_id=scope_id,
         trace_context=resolved_trace_context,
-        cursor=dict(cursor or {}) or None,
+        cursor=normalized_cursor,
         status=RagJobStatus.PENDING.value,
         attempts=0,
     )
-    db.add(job)
-    db.flush()
-    return job
+    try:
+        with db.begin_nested():
+            db.add(job)
+            db.flush()
+        return job
+    except IntegrityError:
+        db.expire_all()
+        existing = _select_pending_visibility_job(
+            db,
+            workspace_id=workspace_id,
+            scope_type=scope_type,
+            scope_id=scope_id,
+        )
+        if existing is None:
+            raise
+        existing.trace_context = resolved_trace_context
+        existing.cursor = _merge_recompute_cursor(existing.cursor, normalized_cursor)
+        db.add(existing)
+        db.flush()
+        return existing
+
+
+def _select_pending_sync_job(
+    db: Session,
+    *,
+    workspace_id: str,
+    lane: str,
+    resource_type: str,
+    resource_id: str,
+) -> RagSyncJob | None:
+    return db.scalar(
+        select(RagSyncJob)
+        .where(
+            RagSyncJob.workspace_id == workspace_id,
+            RagSyncJob.lane == lane,
+            RagSyncJob.resource_type == resource_type,
+            RagSyncJob.resource_id == resource_id,
+            RagSyncJob.status == RagJobStatus.PENDING.value,
+        )
+        .order_by(RagSyncJob.created_at.desc())
+        .limit(1)
+    )
+
+
+def _select_pending_visibility_job(
+    db: Session,
+    *,
+    workspace_id: str,
+    scope_type: str,
+    scope_id: str,
+) -> RagVisibilityRecomputeJob | None:
+    return db.scalar(
+        select(RagVisibilityRecomputeJob)
+        .where(
+            RagVisibilityRecomputeJob.workspace_id == workspace_id,
+            RagVisibilityRecomputeJob.scope_type == scope_type,
+            RagVisibilityRecomputeJob.scope_id == scope_id,
+            RagVisibilityRecomputeJob.status == RagJobStatus.PENDING.value,
+        )
+        .order_by(RagVisibilityRecomputeJob.created_at.desc())
+        .limit(1)
+    )
 
 
 def _normalize_trace_context(
@@ -82,3 +193,33 @@ def _normalize_trace_context(
     if isinstance(value, RagTraceContext):
         return value.model_dump(mode="json")
     return dict(value)
+
+
+def _merge_sync_operation(existing: str, incoming: str) -> str:
+    if existing == RagSyncOperation.DELETE.value:
+        return existing
+    if incoming == RagSyncOperation.DELETE.value:
+        return incoming
+    if incoming == RagSyncOperation.UPSERT.value:
+        return incoming
+    if existing == RagSyncOperation.UPSERT.value:
+        return existing
+    return RagSyncOperation.VISIBILITY_UPDATE.value
+
+
+def _merge_recompute_cursor(
+    existing: dict[str, Any] | None,
+    incoming: dict[str, Any] | None,
+) -> dict[str, Any] | None:
+    if existing is None:
+        return incoming
+    if incoming is None:
+        return existing
+
+    merged = dict(existing)
+    for key, value in incoming.items():
+        if key in {"doc_ids", "issue_ids"}:
+            merged[key] = sorted({*(merged.get(key) or []), *(value or [])})
+            continue
+        merged[key] = value
+    return merged

@@ -137,6 +137,18 @@ def _ensure_issue_readable(db: Session, user: User, issue_or_id: Issue | str) ->
     )
 
 
+def can_read_issue_for_rag(db: Session, *, user: User, issue_id: str) -> bool:
+    issue = db.scalar(select(Issue).options(selectinload(Issue.task_list)).where(Issue.id == issue_id))
+    if issue is None:
+        return False
+    task_list = issue.task_list
+    if task_list is not None and task_list.team_id is not None:
+        team = db.get(Team, task_list.team_id)
+        if team is not None and resolve_team_role(db, user, team) is not None:
+            return True
+    return _active_issue_grant(db, issue_id=issue.id, user_id=user.id) is not None
+
+
 def _ensure_issue_writable(db: Session, user: User, issue_or_id: Issue | str) -> Issue:
     issue = _load_issue(db, issue_or_id)
     _ensure_list_editor(db, user, issue.list_id)

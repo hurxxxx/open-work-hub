@@ -169,6 +169,9 @@ Phase 5의 목표는 Docs / Meeting / PMS / Planner 전도메인 데이터를 �
 - write/change path는 provider를 직접 호출하지 않고 sync job만 enqueue
 - sync enqueue는 도메인 write와 같은 DB 트랜잭션에서 커밋되는 transactional outbox를 전제로 한다
 - outbox는 enqueue 시점의 trace context를 함께 저장해 worker span이 원 요청 trace에 이어 붙도록 한다
+- pending outbox는 best-effort dedupe를 적용한다
+  - 같은 resource/lane의 pending sync job은 새 row를 늘리지 않고 `delete > upsert > visibility_update` 우선순위로 병합한다
+  - 같은 scope의 pending visibility recompute job은 cursor를 merge하고 새 row를 늘리지 않는다
 - enqueue 대상은 content 변경뿐 아니라 ACL-only 변경 경로도 포함한다
   - link share revoke/rotate
   - doc-meeting grant 변경
@@ -416,6 +419,19 @@ Phase 5의 목표는 Docs / Meeting / PMS / Planner 전도메인 데이터를 �
   - meeting transcript hit 노출
   - PMS private issue 비노출
   - grounded answer + citation render
+
+### 단계별 E2E 전략
+- `5A`는 브라우저 E2E보다 service/integration test를 우선한다
+  - 대상: projection builder, transactional outbox, worker queue routing, provider smoke, post-filter
+  - 이유: 이 단계의 핵심 불변식은 UI보다 `ACL projection + state transition + async fan-out` 이기 때문이다
+- `5A-4` 종료 시점에는 Docs vertical slice 기준으로 `ingest -> sync worker -> query_service -> post-filter` service-level E2E를 닫는다
+- `5A-5` 종료 시점에는 Meeting / PMS / Planner의 cross-domain integration test를 닫는다
+  - 대상: ACL-only mutation이 `rag_sync_jobs` / `rag_visibility_recompute_jobs`로 정확히 fan-out 되는지
+- `5B`에서는 workspace-scoped REST와 AI capability가 붙는 즉시 API-level E2E를 추가한다
+  - 대상: `POST /rag/query`, `GET /rag/sources`, pre-filter + post-filter, grounded-answer degrade
+- `5C`에서 `/tool/search` UI가 붙으면 browser E2E를 본격화한다
+  - 대상: 검색 입력, source filter, citation click, 접근 불가 hit 비노출, grounded-answer 실패 시 search-only degrade, workspace switch isolation
+- 브라우저 E2E는 `agent-browser` 기준으로 수행하고, 결과는 관련 작업 문서나 루트 작업 기록에 간단히 남긴다
 
 ### 수동 검증
 - 같은 질의를 REST, AI tool, `/tool/search` 세 surface에서 호출했을 때 hit set과 citation 구조가 실질적으로 일치하는지 확인

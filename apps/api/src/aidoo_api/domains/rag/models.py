@@ -41,6 +41,16 @@ class RagSyncJob(Base):
             "resource_id",
             "status",
         ),
+        Index(
+            "uq_rag_sync_jobs_pending_resource_lane",
+            "workspace_id",
+            "lane",
+            "resource_type",
+            "resource_id",
+            unique=True,
+            postgresql_where=text("status = 'pending'"),
+            sqlite_where=text("status = 'pending'"),
+        ),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
@@ -109,6 +119,15 @@ class RagVisibilityRecomputeJob(Base):
             "scope_type",
             "scope_id",
             "status",
+        ),
+        Index(
+            "uq_rag_visibility_recompute_jobs_pending_scope",
+            "workspace_id",
+            "scope_type",
+            "scope_id",
+            unique=True,
+            postgresql_where=text("status = 'pending'"),
+            sqlite_where=text("status = 'pending'"),
         ),
     )
 

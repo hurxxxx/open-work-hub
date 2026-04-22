@@ -25,7 +25,7 @@ from aidoo_api.core.telemetry import (
     get_tracer_provider,
     start_as_current_span,
 )  # noqa: E402
-from aidoo_api.domains.auth.models import User, Workspace  # noqa: E402
+from aidoo_api.domains.auth.models import Team, User, Workspace  # noqa: E402
 from aidoo_api.domains.docs.models import (  # noqa: E402
     DocMeetingAccess,
     NativeDoc,
@@ -34,13 +34,30 @@ from aidoo_api.domains.docs.models import (  # noqa: E402
     NativeDocPage,
     NativeDocUserShare,
 )
-from aidoo_api.domains.meeting.models import Meeting, MeetingDocLink  # noqa: E402
+from aidoo_api.domains.meeting.models import Meeting, MeetingDocLink, MeetingTaskLink  # noqa: E402
+from aidoo_api.domains.pms.models import (  # noqa: E402
+    Folder,
+    Issue,
+    IssueComment,
+    IssueLabel,
+    IssueUserAccess,
+    Label,
+    Milestone,
+    TaskList,
+)
+from aidoo_api.domains.planner.models import PlannerEvent  # noqa: E402
 from aidoo_api.domains.rag.contracts import RagSyncOperation  # noqa: E402
 from aidoo_api.domains.rag.docs_projection import NATIVE_DOC_RESOURCE_TYPE  # noqa: E402
+from aidoo_api.domains.rag.planner_projection import PLANNER_EVENT_RESOURCE_TYPE  # noqa: E402
+from aidoo_api.domains.rag.pms_projection import PMS_ISSUE_RESOURCE_TYPE  # noqa: E402
 from aidoo_api.domains.rag.models import RagSyncJob, RagVisibilityRecomputeJob  # noqa: E402
 from aidoo_api.domains.rag.outbox import (  # noqa: E402
     enqueue_rag_sync_job,
     enqueue_rag_visibility_recompute_job,
+)
+from aidoo_api.domains.pms.rag_sync import (  # noqa: E402
+    PMS_LABEL_RECOMPUTE_SCOPE,
+    PMS_MEETING_VISIBILITY_SCOPE,
 )
 
 
@@ -673,6 +690,389 @@ def test_recompute_visibility_worker_uses_cursor_doc_ids_when_meeting_is_missing
         assert len(queued_jobs) == 1
 
 
+def test_recompute_visibility_worker_queues_pms_visibility_updates_for_meeting_scope(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    db_path = _worker_db_path(tmp_path)
+    _init_worker_db(
+        db_path,
+        create_policy_table=True,
+        seed_policy_rows=True,
+    )
+    monkeypatch.setenv("DOOWON_POSTGRES_DSN", _worker_dsn(db_path))
+    monkeypatch.setenv("DOOWON_WORKER_POSTGRES_DSN", _worker_dsn(db_path))
+    monkeypatch.setenv("DOOWON_WORKER_AIDOO_RAG_ENABLED", "1")
+
+    engine = create_engine(_worker_dsn(db_path))
+    Base.metadata.create_all(
+        engine,
+        tables=[
+            Workspace.__table__,
+            User.__table__,
+            Team.__table__,
+            Folder.__table__,
+            TaskList.__table__,
+            Issue.__table__,
+            Meeting.__table__,
+            MeetingTaskLink.__table__,
+            RagSyncJob.__table__,
+            RagVisibilityRecomputeJob.__table__,
+            IssueUserAccess.__table__,
+        ],
+    )
+
+    with Session(engine) as session:
+        with session.begin():
+            session.add(
+                Workspace(
+                    id="ws-1",
+                    key="ws-1",
+                    name="Workspace 1",
+                    description="",
+                    active=True,
+                )
+            )
+            session.add_all(
+                [
+                    User(
+                        id="user-1",
+                        email="worker-owner@aidoo.local",
+                        full_name="Worker Owner",
+                        password_hash="hash",
+                        status="active",
+                    ),
+                    User(
+                        id="user-2",
+                        email="worker-reader@aidoo.local",
+                        full_name="Worker Reader",
+                        password_hash="hash",
+                        status="active",
+                    ),
+                ]
+            )
+            session.add(
+                Team(
+                    id="team-1",
+                    workspace_id="ws-1",
+                    key="TEAM1",
+                    name="Team 1",
+                    description="",
+                    active=True,
+                )
+            )
+            session.add(
+                TaskList(
+                    id="list-1",
+                    key="LIST1",
+                    name="List 1",
+                    description="",
+                    status="active",
+                    archived=False,
+                    team_id="team-1",
+                    folder_id=None,
+                    created_by_id="user-1",
+                )
+            )
+            session.add(
+                Issue(
+                    id="issue-1",
+                    list_id="list-1",
+                    issue_number=1,
+                    title="Meeting linked issue",
+                    description="",
+                    status="backlog",
+                    priority="medium",
+                    reporter_id="user-1",
+                    assignee_id=None,
+                    archived=False,
+                )
+            )
+            session.add(
+                Meeting(
+                    id="meeting-1",
+                    workspace_id="ws-1",
+                    organizer_id="user-1",
+                    notes_doc_id=None,
+                    notes_page_id=None,
+                    title="Worker Meeting",
+                    agenda="",
+                    start_at=datetime(2026, 4, 22, 0, 0, 0),
+                    end_at=datetime(2026, 4, 22, 1, 0, 0),
+                    status="scheduled",
+                )
+            )
+            session.add(
+                MeetingTaskLink(
+                    id="meeting-task-1",
+                    meeting_id="meeting-1",
+                    issue_id="issue-1",
+                    added_by_id="user-1",
+                )
+            )
+            session.add(
+                IssueUserAccess(
+                    id="grant-1",
+                    issue_id="issue-1",
+                    user_id="user-2",
+                    access_level="read",
+                    granted_by_meeting_id="meeting-1",
+                    granted_by_user_id="user-1",
+                    reason="meeting_attendee",
+                )
+            )
+            visibility_job = enqueue_rag_visibility_recompute_job(
+                session,
+                workspace_id="ws-1",
+                scope_type=PMS_MEETING_VISIBILITY_SCOPE,
+                scope_id="meeting-1",
+                cursor={"issue_ids": ["issue-1"], "operation": "visibility_update"},
+            )
+            visibility_job_id = visibility_job.id
+
+    tasks_module = _reload_worker_module("aidoo_worker.tasks.rag_sync")
+    assert tasks_module.recompute_visibility.run(visibility_job_id) == "queued"
+
+    with Session(engine) as session:
+        queued_jobs = list(
+            session.scalars(
+                select(RagSyncJob).where(
+                    RagSyncJob.resource_type == PMS_ISSUE_RESOURCE_TYPE,
+                    RagSyncJob.resource_id == "issue-1",
+                    RagSyncJob.operation == RagSyncOperation.VISIBILITY_UPDATE.value,
+                )
+            )
+        )
+        assert len(queued_jobs) == 1
+
+
+def test_recompute_visibility_worker_uses_cursor_issue_ids_when_pms_meeting_is_missing(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    db_path = _worker_db_path(tmp_path)
+    _init_worker_db(
+        db_path,
+        create_policy_table=True,
+        seed_policy_rows=True,
+    )
+    monkeypatch.setenv("DOOWON_POSTGRES_DSN", _worker_dsn(db_path))
+    monkeypatch.setenv("DOOWON_WORKER_POSTGRES_DSN", _worker_dsn(db_path))
+    monkeypatch.setenv("DOOWON_WORKER_AIDOO_RAG_ENABLED", "1")
+
+    engine = create_engine(_worker_dsn(db_path))
+    Base.metadata.create_all(
+        engine,
+        tables=[
+            Workspace.__table__,
+            User.__table__,
+            Team.__table__,
+            Folder.__table__,
+            TaskList.__table__,
+            Issue.__table__,
+            Meeting.__table__,
+            MeetingTaskLink.__table__,
+            RagSyncJob.__table__,
+            RagVisibilityRecomputeJob.__table__,
+            IssueUserAccess.__table__,
+        ],
+    )
+
+    with Session(engine) as session:
+        with session.begin():
+            session.add(
+                Workspace(
+                    id="ws-1",
+                    key="ws-1",
+                    name="Workspace 1",
+                    description="",
+                    active=True,
+                )
+            )
+            session.add(
+                User(
+                    id="user-1",
+                    email="worker-owner@aidoo.local",
+                    full_name="Worker Owner",
+                    password_hash="hash",
+                    status="active",
+                )
+            )
+            session.add(
+                Team(
+                    id="team-1",
+                    workspace_id="ws-1",
+                    key="TEAM1",
+                    name="Team 1",
+                    description="",
+                    active=True,
+                )
+            )
+            session.add(
+                TaskList(
+                    id="list-1",
+                    key="LIST1",
+                    name="List 1",
+                    description="",
+                    status="active",
+                    archived=False,
+                    team_id="team-1",
+                    folder_id=None,
+                    created_by_id="user-1",
+                )
+            )
+            session.add(
+                Issue(
+                    id="issue-1",
+                    list_id="list-1",
+                    issue_number=1,
+                    title="Deleted meeting issue",
+                    description="",
+                    status="backlog",
+                    priority="medium",
+                    reporter_id="user-1",
+                    assignee_id=None,
+                    archived=False,
+                )
+            )
+            visibility_job = enqueue_rag_visibility_recompute_job(
+                session,
+                workspace_id="ws-1",
+                scope_type=PMS_MEETING_VISIBILITY_SCOPE,
+                scope_id="meeting-deleted",
+                cursor={"issue_ids": ["issue-1"], "operation": "visibility_update"},
+            )
+            visibility_job_id = visibility_job.id
+
+    tasks_module = _reload_worker_module("aidoo_worker.tasks.rag_sync")
+    assert tasks_module.recompute_visibility.run(visibility_job_id) == "queued"
+
+    with Session(engine) as session:
+        queued_jobs = list(
+            session.scalars(
+                select(RagSyncJob).where(
+                    RagSyncJob.resource_type == PMS_ISSUE_RESOURCE_TYPE,
+                    RagSyncJob.resource_id == "issue-1",
+                    RagSyncJob.operation == RagSyncOperation.VISIBILITY_UPDATE.value,
+                )
+            )
+        )
+        assert len(queued_jobs) == 1
+
+
+def test_recompute_visibility_worker_uses_cursor_issue_ids_for_deleted_pms_label_scope(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    db_path = _worker_db_path(tmp_path)
+    _init_worker_db(
+        db_path,
+        create_policy_table=True,
+        seed_policy_rows=True,
+    )
+    monkeypatch.setenv("DOOWON_POSTGRES_DSN", _worker_dsn(db_path))
+    monkeypatch.setenv("DOOWON_WORKER_POSTGRES_DSN", _worker_dsn(db_path))
+    monkeypatch.setenv("DOOWON_WORKER_AIDOO_RAG_ENABLED", "1")
+
+    engine = create_engine(_worker_dsn(db_path))
+    Base.metadata.create_all(
+        engine,
+        tables=[
+            Workspace.__table__,
+            User.__table__,
+            Team.__table__,
+            Folder.__table__,
+            TaskList.__table__,
+            Issue.__table__,
+            Label.__table__,
+            IssueLabel.__table__,
+            RagSyncJob.__table__,
+            RagVisibilityRecomputeJob.__table__,
+        ],
+    )
+
+    with Session(engine) as session:
+        with session.begin():
+            session.add(
+                Workspace(
+                    id="ws-1",
+                    key="ws-1",
+                    name="Workspace 1",
+                    description="",
+                    active=True,
+                )
+            )
+            session.add(
+                User(
+                    id="user-1",
+                    email="worker-owner@aidoo.local",
+                    full_name="Worker Owner",
+                    password_hash="hash",
+                    status="active",
+                )
+            )
+            session.add(
+                Team(
+                    id="team-1",
+                    workspace_id="ws-1",
+                    key="TEAM1",
+                    name="Team 1",
+                    description="",
+                    active=True,
+                )
+            )
+            session.add(
+                TaskList(
+                    id="list-1",
+                    key="LIST1",
+                    name="List 1",
+                    description="",
+                    status="active",
+                    archived=False,
+                    team_id="team-1",
+                    folder_id=None,
+                    created_by_id="user-1",
+                )
+            )
+            session.add(
+                Issue(
+                    id="issue-1",
+                    list_id="list-1",
+                    issue_number=1,
+                    title="Deleted label issue",
+                    description="",
+                    status="backlog",
+                    priority="medium",
+                    reporter_id="user-1",
+                    assignee_id=None,
+                    archived=False,
+                )
+            )
+            visibility_job = enqueue_rag_visibility_recompute_job(
+                session,
+                workspace_id="ws-1",
+                scope_type=PMS_LABEL_RECOMPUTE_SCOPE,
+                scope_id="label-deleted",
+                cursor={"issue_ids": ["issue-1"], "operation": "upsert"},
+            )
+            visibility_job_id = visibility_job.id
+
+    tasks_module = _reload_worker_module("aidoo_worker.tasks.rag_sync")
+    assert tasks_module.recompute_visibility.run(visibility_job_id) == "queued"
+
+    with Session(engine) as session:
+        queued_jobs = list(
+            session.scalars(
+                select(RagSyncJob).where(
+                    RagSyncJob.resource_type == PMS_ISSUE_RESOURCE_TYPE,
+                    RagSyncJob.resource_id == "issue-1",
+                    RagSyncJob.operation == RagSyncOperation.UPSERT.value,
+                )
+            )
+        )
+        assert len(queued_jobs) == 1
+
+
 def test_sync_resource_worker_upserts_docs_projection_with_fake_provider(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
@@ -881,3 +1281,293 @@ def test_sync_resource_worker_deletes_docs_projection_with_fake_provider(
         assert stored is not None
         assert stored.status == "succeeded"
         assert stored.attempts == 1
+
+
+def test_sync_resource_worker_upserts_planner_projection_with_fake_provider(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    db_path = _worker_db_path(tmp_path)
+    _init_worker_db(
+        db_path,
+        create_policy_table=True,
+        seed_policy_rows=True,
+    )
+    monkeypatch.setenv("DOOWON_POSTGRES_DSN", _worker_dsn(db_path))
+    monkeypatch.setenv("DOOWON_WORKER_POSTGRES_DSN", _worker_dsn(db_path))
+    monkeypatch.setenv("DOOWON_WORKER_AIDOO_RAG_ENABLED", "1")
+    monkeypatch.setenv("DOOWON_WORKER_AIDOO_QDRANT_COLLECTION_PREFIX", "worker-rag-test")
+
+    engine = create_engine(_worker_dsn(db_path))
+    Base.metadata.create_all(
+        engine,
+        tables=[
+            Workspace.__table__,
+            User.__table__,
+            PlannerEvent.__table__,
+            RagSyncJob.__table__,
+        ],
+    )
+
+    with Session(engine) as session:
+        with session.begin():
+            session.add(
+                Workspace(
+                    id="ws-1",
+                    key="ws-1",
+                    name="Workspace 1",
+                    description="",
+                    active=True,
+                )
+            )
+            session.add(
+                User(
+                    id="user-1",
+                    email="worker-planner-owner@aidoo.local",
+                    full_name="Worker Planner Owner",
+                    password_hash="hash",
+                    status="active",
+                )
+            )
+            session.add(
+                PlannerEvent(
+                    id="event-1",
+                    workspace_id="ws-1",
+                    owner_id="user-1",
+                    title="Planner Sync Event",
+                    description="Discuss roadmap",
+                    location="Pangyo",
+                    visibility="public",
+                    all_day=False,
+                    start_at=datetime(2026, 5, 20, 1, 0, 0),
+                    end_at=datetime(2026, 5, 20, 2, 0, 0),
+                )
+            )
+            job = enqueue_rag_sync_job(
+                session,
+                workspace_id="ws-1",
+                resource_type=PLANNER_EVENT_RESOURCE_TYPE,
+                resource_id="event-1",
+            )
+            job_id = job.id
+
+    tasks_module = _reload_worker_module("aidoo_worker.tasks.rag_sync")
+    result = tasks_module.sync_resource.run(job_id)
+
+    assert result == "succeeded"
+    bundle = tasks_module._provider_bundle()
+    collection = tasks_module._collection_name(PLANNER_EVENT_RESOURCE_TYPE)
+    snapshot = bundle.vector_index.snapshot_projection(collection=collection, chunk_id="event-1:0")
+    assert snapshot is not None
+    assert snapshot.resource_id == "event-1"
+    assert snapshot.resource_type == PLANNER_EVENT_RESOURCE_TYPE
+    assert snapshot.source_kind == "planner_event"
+    assert snapshot.metadata["visibility"] == "public"
+    assert "workspace_public:ws-1" in snapshot.visibility_refs
+
+    with Session(engine) as session:
+        stored = session.get(RagSyncJob, job_id)
+        assert stored is not None
+        assert stored.status == "succeeded"
+        assert stored.attempts == 1
+
+
+def test_sync_resource_worker_upserts_pms_issue_projection_with_fake_provider(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    db_path = _worker_db_path(tmp_path)
+    _init_worker_db(
+        db_path,
+        create_policy_table=True,
+        seed_policy_rows=True,
+    )
+    monkeypatch.setenv("DOOWON_POSTGRES_DSN", _worker_dsn(db_path))
+    monkeypatch.setenv("DOOWON_WORKER_POSTGRES_DSN", _worker_dsn(db_path))
+    monkeypatch.setenv("DOOWON_WORKER_AIDOO_RAG_ENABLED", "1")
+    monkeypatch.setenv("DOOWON_WORKER_AIDOO_QDRANT_COLLECTION_PREFIX", "worker-rag-test")
+
+    engine = create_engine(_worker_dsn(db_path))
+    Base.metadata.create_all(
+        engine,
+        tables=[
+            Workspace.__table__,
+            User.__table__,
+            Team.__table__,
+            Folder.__table__,
+            TaskList.__table__,
+            Milestone.__table__,
+            Label.__table__,
+            Issue.__table__,
+            IssueLabel.__table__,
+            IssueComment.__table__,
+            IssueUserAccess.__table__,
+            RagSyncJob.__table__,
+        ],
+    )
+
+    with Session(engine) as session:
+        with session.begin():
+            session.add(
+                Workspace(
+                    id="ws-1",
+                    key="ws-1",
+                    name="Workspace 1",
+                    description="",
+                    active=True,
+                )
+            )
+            session.add_all(
+                [
+                    User(
+                        id="user-1",
+                        email="worker-pms-reporter@aidoo.local",
+                        full_name="Worker PMS Reporter",
+                        password_hash="hash",
+                        status="active",
+                    ),
+                    User(
+                        id="user-2",
+                        email="worker-pms-grantee@aidoo.local",
+                        full_name="Worker PMS Grantee",
+                        password_hash="hash",
+                        status="active",
+                    ),
+                ]
+            )
+            session.add(
+                Team(
+                    id="team-1",
+                    workspace_id="ws-1",
+                    key="TEAM1",
+                    name="Worker PMS Team",
+                    description="",
+                    active=True,
+                    trashed_at=None,
+                )
+            )
+            session.add(
+                TaskList(
+                    id="list-1",
+                    key="PMS1",
+                    name="Worker PMS List",
+                    description="",
+                    status="active",
+                    archived=False,
+                    team_id="team-1",
+                    folder_id=None,
+                    sort_order=0,
+                    created_by_id="user-1",
+                )
+            )
+            session.add(
+                Issue(
+                    id="issue-1",
+                    list_id="list-1",
+                    issue_number=1,
+                    title="Worker PMS Issue",
+                    description="Issue projection body",
+                    description_blocks=[{"type": "paragraph", "text": "Issue projection blocks"}],
+                    status="backlog",
+                    priority="high",
+                    assignee_id=None,
+                    reporter_id="user-1",
+                    parent_id=None,
+                    milestone_id=None,
+                    start_date=None,
+                    due_date=None,
+                    board_position=1,
+                    estimate_hours=None,
+                    recurrence_rule=None,
+                    archived=False,
+                )
+            )
+            session.add(
+                IssueComment(
+                    id="comment-1",
+                    issue_id="issue-1",
+                    author_id="user-1",
+                    body="Need a follow-up",
+                    body_blocks=None,
+                )
+            )
+            session.add(
+                IssueUserAccess(
+                    id="grant-1",
+                    issue_id="issue-1",
+                    user_id="user-2",
+                    access_level="read",
+                    granted_by_meeting_id="meeting-1",
+                    granted_by_user_id="user-1",
+                    reason="meeting_attendee",
+                    expires_at=None,
+                    revoked_at=None,
+                    revoked_by_user_id=None,
+                    revoke_reason=None,
+                )
+            )
+            job = enqueue_rag_sync_job(
+                session,
+                workspace_id="ws-1",
+                resource_type=PMS_ISSUE_RESOURCE_TYPE,
+                resource_id="issue-1",
+            )
+            job_id = job.id
+
+    tasks_module = _reload_worker_module("aidoo_worker.tasks.rag_sync")
+    result = tasks_module.sync_resource.run(job_id)
+
+    assert result == "succeeded"
+    bundle = tasks_module._provider_bundle()
+    collection = tasks_module._collection_name(PMS_ISSUE_RESOURCE_TYPE)
+    snapshot = bundle.vector_index.snapshot_projection(collection=collection, chunk_id="issue-1:0")
+    assert snapshot is not None
+    assert snapshot.resource_id == "issue-1"
+    assert snapshot.resource_type == PMS_ISSUE_RESOURCE_TYPE
+    assert snapshot.source_kind == "pms_issue"
+    assert snapshot.metadata["team_id"] == "team-1"
+    assert "issue_grant:user-2" in snapshot.visibility_refs
+    assert "Need a follow-up" in snapshot.text_content
+
+    with Session(engine) as session:
+        stored = session.get(RagSyncJob, job_id)
+        assert stored is not None
+        assert stored.status == "succeeded"
+        assert stored.attempts == 1
+
+
+def test_provider_bundle_uses_qdrant_vector_index_when_configured(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    db_path = _worker_db_path(tmp_path)
+    _init_worker_db(
+        db_path,
+        create_policy_table=True,
+        seed_policy_rows=True,
+    )
+    monkeypatch.setenv("DOOWON_POSTGRES_DSN", _worker_dsn(db_path))
+    monkeypatch.setenv("DOOWON_WORKER_POSTGRES_DSN", _worker_dsn(db_path))
+    monkeypatch.setenv("DOOWON_WORKER_AIDOO_VECTOR_INDEX_PROVIDER", "qdrant")
+    monkeypatch.setenv("DOOWON_WORKER_AIDOO_QDRANT_URL", "http://qdrant.test:6333")
+    monkeypatch.setenv("DOOWON_WORKER_AIDOO_QDRANT_API_KEY", "secret")
+
+    tasks_module = _reload_worker_module("aidoo_worker.tasks.rag_sync")
+    tasks_module._provider_bundle.cache_clear()
+
+    created: dict[str, str | None] = {}
+
+    class StubQdrantVectorIndexClient:
+        def __init__(self, *, url: str | None = None, api_key: str | None = None) -> None:
+            created["url"] = url
+            created["api_key"] = api_key
+
+    monkeypatch.setattr(tasks_module, "QdrantVectorIndexClient", StubQdrantVectorIndexClient)
+
+    bundle = tasks_module._provider_bundle()
+
+    assert isinstance(bundle.vector_index, StubQdrantVectorIndexClient)
+    assert created == {
+        "url": "http://qdrant.test:6333",
+        "api_key": "secret",
+    }

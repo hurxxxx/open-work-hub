@@ -36,6 +36,17 @@ def _job_rows() -> list[RagSyncJob]:
         )
 
 
+def _mark_sync_jobs_succeeded(*job_ids: str) -> None:
+    if not job_ids:
+        return
+    with get_session_factory()() as db:
+        rows = list(db.scalars(select(RagSyncJob).where(RagSyncJob.id.in_(job_ids))))
+        for row in rows:
+            row.status = "succeeded"
+            db.add(row)
+        db.commit()
+
+
 def _visibility_job_rows() -> list[RagVisibilityRecomputeJob]:
     with get_session_factory()() as db:
         return list(
@@ -69,10 +80,10 @@ def test_docs_router_mutations_enqueue_rag_jobs(client: TestClient, monkeypatch)
     assert create_response.status_code == 201, create_response.text
     doc = create_response.json()
 
-    jobs = _job_rows()
-    assert [job.operation for job in jobs] == ["upsert"]
-    assert jobs[0].resource_type == NATIVE_DOC_RESOURCE_TYPE
-    assert jobs[0].resource_id == doc["id"]
+    create_jobs = [job for job in _job_rows() if job.resource_id == doc["id"]]
+    assert [job.operation for job in create_jobs] == ["upsert"]
+    assert create_jobs[0].resource_type == NATIVE_DOC_RESOURCE_TYPE
+    _mark_sync_jobs_succeeded(create_jobs[0].id)
 
     create_page_response = client.post(
         f"/api/v1/docs/items/{doc['id']}/pages",
@@ -81,6 +92,10 @@ def test_docs_router_mutations_enqueue_rag_jobs(client: TestClient, monkeypatch)
     )
     assert create_page_response.status_code == 201, create_page_response.text
 
+    page_jobs = [job for job in _job_rows() if job.resource_id == doc["id"]]
+    assert [job.operation for job in page_jobs] == ["upsert", "upsert"]
+    _mark_sync_jobs_succeeded(page_jobs[-1].id)
+
     share_response = client.put(
         f"/api/v1/docs/items/{doc['id']}/sharing/users/{member['user']['id']}",
         headers=_auth_headers(owner["token"]),
@@ -88,21 +103,19 @@ def test_docs_router_mutations_enqueue_rag_jobs(client: TestClient, monkeypatch)
     )
     assert share_response.status_code == 200, share_response.text
 
+    share_jobs = [job for job in _job_rows() if job.resource_id == doc["id"]]
+    assert [job.operation for job in share_jobs] == ["upsert", "upsert", "visibility_update"]
+    _mark_sync_jobs_succeeded(share_jobs[-1].id)
+
     delete_response = client.delete(
         f"/api/v1/docs/items/{doc['id']}",
         headers=_auth_headers(owner["token"]),
     )
     assert delete_response.status_code == 204, delete_response.text
 
-    jobs = _job_rows()
-    assert [job.operation for job in jobs] == [
-        "upsert",
-        "upsert",
-        "visibility_update",
-        "delete",
-    ]
+    jobs = [job for job in _job_rows() if job.resource_id == doc["id"]]
+    assert [job.operation for job in jobs] == ["upsert", "upsert", "visibility_update", "delete"]
     assert all(job.resource_type == NATIVE_DOC_RESOURCE_TYPE for job in jobs)
-    assert all(job.resource_id == doc["id"] for job in jobs)
 
 
 def test_docs_service_create_paths_enqueue_once_for_idempotent_replay(
@@ -158,7 +171,7 @@ def test_docs_service_create_paths_enqueue_once_for_idempotent_replay(
     assert created["id"] == replayed["id"]
 
     jobs = [job for job in _job_rows() if job.resource_id == doc.id]
-    assert [job.operation for job in jobs] == ["upsert", "upsert"]
+    assert [job.operation for job in jobs] == ["upsert"]
     assert all(job.resource_type == NATIVE_DOC_RESOURCE_TYPE for job in jobs)
 
 
@@ -239,4 +252,6 @@ def test_meeting_doc_acl_changes_enqueue_rag_visibility_recompute_jobs(
         job for job in _visibility_job_rows()
         if job.scope_type == "meeting" and job.scope_id == meeting["id"]
     ]
-    assert len(revoke_jobs) > len(grant_jobs)
+    assert len(revoke_jobs) == 1
+    assert revoke_jobs[0].id == grant_jobs[0].id
+    assert revoke_jobs[0].cursor == {"doc_ids": [doc_id]}

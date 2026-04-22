@@ -30,6 +30,7 @@ def test_rag_settings_are_disabled_by_default(monkeypatch) -> None:
         settings = get_settings()
         assert settings.rag_enabled is False
         assert settings.rag_ui_enabled is False
+        assert settings.rag_vector_index_provider == "fake"
         assert settings.rag_embedding_provider == "fake"
         assert settings.rag_ocr_provider == "fake"
         assert settings.rag_rerank_provider == "fake"
