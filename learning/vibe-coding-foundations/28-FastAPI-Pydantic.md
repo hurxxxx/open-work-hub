@@ -2,13 +2,13 @@
 
 > **한 줄 요약.** **FastAPI**는 Python으로 API를 만드는 현대적 프레임워크이고, **Pydantic**은 그 안에서 입력·출력 데이터의 **모양을 강제**하는 타입 검사기다. 이 조합이 TypeScript 같은 개발 경험을 Python에 가져온다.
 
-> **🔑 한 마디로.** "사용자가 보내는 요청서를 자동으로 검사해 주고, 우리 답변 양식도 자동으로 맞춰 주는 서류 접수 창구"를 Python으로 만드는 도구입니다. 프런트가 보낸 JSON이 틀렸는지, 우리 응답이 규격을 벗어났는지 프레임워크가 먼저 알려줍니다.
+> **🔑 한 마디로.** FastAPI + Pydantic은 요청 JSON 검증, 응답 스키마 강제, OpenAPI 문서 생성을 자동화해 API 계약을 일관되게 유지하는 도구 조합입니다.
 
-### 은행 창구, 공항 컨베이어, 오픈 키친
+### FastAPI + Pydantic 조합의 핵심
 
-- **대형 은행 창구**: 창구(Router)가 서류(요청 JSON)를 받고, 양식 검사원(Pydantic)이 이름·금액·도장이 제대로 찍혔는지 확인한 뒤에야 뒷사무실(Service)로 넘깁니다. 불완전한 서류는 "양식 틀림"으로 즉시 반려(HTTP 422).
-- **공항 수하물 컨베이어**: `async/await`는 짐 하나가 X-ray 대기 중에도 다음 짐을 먼저 스캐너에 올리는 흐름입니다. 줄이 막히지 않고 계속 움직입니다.
-- **레스토랑 오픈 키친의 주문서**: 주문서 양식(Pydantic Schema)이 정해져 있어 요리사(Service)는 "어떤 요리 몇 인분"만 보면 됩니다. 양식이 없다면 매번 "고기 몇 그램 원하세요?"를 물어야 합니다.
+- Router는 요청을 받고, Pydantic이 입력 스키마를 검증한 뒤 Service 로직으로 전달합니다. 잘못된 입력은 HTTP 422로 즉시 반환됩니다.
+- `async/await`는 I/O 대기 중 다른 요청을 처리해 동시 처리 효율을 높입니다.
+- Pydantic 스키마가 요청/응답 계약을 명확히 하므로 서비스 계층은 비즈니스 로직에 집중할 수 있습니다.
 
 ### ⚠️ 백엔드 선택에서 자주 듣는 오해
 
@@ -210,7 +210,7 @@ FastAPI 자체는 "프레임워크"이고, 실제로 요청을 받는 "서버"�
 
 ### 6.1 SSE(서버 전송 이벤트)·파일 업로드 관련 패키지
 
-- **sse-starlette 2.1** — AI 응답을 한 글자씩 스트림(SSE, Server-Sent Events) 하는 응답 타입. 채팅 답변이 타자기처럼 찍히는 기반.
+- **sse-starlette 2.1** — AI 응답을 한 글자씩 스트림(SSE, Server-Sent Events) 하는 응답 타입. 채팅 답변을 토큰 단위로 실시간 표시하는 기반.
 - **python-multipart 0.0.18** — multipart/form-data 파일 업로드 파싱기. 이미지·첨부 업로드 처리에 필요(없으면 FastAPI가 업로드 파싱을 아예 못 합니다).
 
 ---
@@ -372,7 +372,7 @@ def test_create_issue(client, auth_header):
 | Django REST Framework | 성숙·풀기능 | 우리 규모엔 무겁고, 비동기 제약. |
 | Flask + Marshmallow | 가볍고 자유 | 타입 검증·문서화 수동. |
 | Litestar (구 Starlite) | FastAPI 대안, 성능·DI 개선 시도 | 생태계·AI 예제 수에서 FastAPI가 우세. |
-| Express.js (Node) | 프런트와 언어 통일 | AI 라이브러리·Python 생태계 포기해야 함. |
+| Express.js (Node) | 프런트와 언어 통일 | AI 라이브러리·Python 생태계를 포기해야 합니다. |
 | NestJS (Node) | TS + 구조적 | 언어는 좋으나 AI 통합 약점. |
 | Go (Gin, Echo) | 성능 최상 | 우리 병목이 네트워크라 실익 낮고, 학습 부담 큼. |
 
@@ -402,7 +402,7 @@ def test_create_issue(client, auth_header):
 
 1. FastAPI의 "자동 검증"은 무엇을 자동으로 해 주는가? 세 가지를 들어 보세요.
 2. Pydantic v2가 왜 빠른지 간단히 설명하세요(키워드: Pydantic-core, Rust).
-3. `Depends()`를 "회사 업무 결재 라인"으로 비유해 보세요.
+3. `Depends()`가 의존성 주입과 권한 검증에 어떤 이점을 주는지 설명해 보세요.
 4. `async def` 함수 안에서 `time.sleep()` 을 쓰면 안 되는 이유는?
 5. 우리 프로젝트의 4-파일 패턴(Router/Service/Model/Schema)을 **회의실 예약 기능**으로 예시해 보세요.
 6. `response_model`을 쓰면 "정보 유출 예방"이 된다는 건 구체적으로 어떤 상황을 막는 건가요?
