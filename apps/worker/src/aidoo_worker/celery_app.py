@@ -94,6 +94,9 @@ celery_app.conf.task_routes = {
     "meeting.summarize": {"queue": "meeting_transcribe"},
     "meeting.extract_insights": {"queue": "meeting_transcribe"},
     "meeting.generate_doc": {"queue": "meeting_transcribe"},
+    "rag.sync_resource": {"queue": "rag_sync_realtime"},
+    "rag.sync_backfill_resource": {"queue": "rag_sync_backfill"},
+    "rag.recompute_visibility": {"queue": "rag_visibility_recompute"},
 }
 celery_app.conf.task_reject_on_worker_lost = True
 celery_app.conf.worker_graceful_shutdown_timeout = 1200

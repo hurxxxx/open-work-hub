@@ -272,6 +272,90 @@ class Settings(BaseSettings):
             "DOOWON_API_AI_AGENT_MAX_CONSECUTIVE_TOOL_ERRORS",
         ),
     )
+    rag_enabled: bool = Field(
+        default=False,
+        validation_alias=AliasChoices(
+            "AIDOO_RAG_ENABLED",
+            "DOOWON_AIDOO_RAG_ENABLED",
+            "DOOWON_API_AIDOO_RAG_ENABLED",
+        ),
+    )
+    rag_ui_enabled: bool = Field(
+        default=False,
+        validation_alias=AliasChoices(
+            "AIDOO_RAG_UI_ENABLED",
+            "DOOWON_AIDOO_RAG_UI_ENABLED",
+            "DOOWON_API_AIDOO_RAG_UI_ENABLED",
+        ),
+    )
+    rag_query_timeout_ms: int = Field(
+        default=2500,
+        ge=100,
+        le=120000,
+        validation_alias=AliasChoices(
+            "AIDOO_RAG_QUERY_TIMEOUT_MS",
+            "DOOWON_AIDOO_RAG_QUERY_TIMEOUT_MS",
+            "DOOWON_API_AIDOO_RAG_QUERY_TIMEOUT_MS",
+        ),
+    )
+    rag_grounded_answer_timeout_ms: int = Field(
+        default=7000,
+        ge=100,
+        le=300000,
+        validation_alias=AliasChoices(
+            "AIDOO_RAG_GROUNDED_ANSWER_TIMEOUT_MS",
+            "DOOWON_AIDOO_RAG_GROUNDED_ANSWER_TIMEOUT_MS",
+            "DOOWON_API_AIDOO_RAG_GROUNDED_ANSWER_TIMEOUT_MS",
+        ),
+    )
+    rag_qdrant_url: str = Field(
+        default="",
+        validation_alias=AliasChoices(
+            "AIDOO_QDRANT_URL",
+            "DOOWON_AIDOO_QDRANT_URL",
+            "DOOWON_API_AIDOO_QDRANT_URL",
+        ),
+    )
+    rag_qdrant_api_key: str = Field(
+        default="",
+        validation_alias=AliasChoices(
+            "AIDOO_QDRANT_API_KEY",
+            "DOOWON_AIDOO_QDRANT_API_KEY",
+            "DOOWON_API_AIDOO_QDRANT_API_KEY",
+        ),
+    )
+    rag_qdrant_collection_prefix: str = Field(
+        default="doowon-rag",
+        validation_alias=AliasChoices(
+            "AIDOO_QDRANT_COLLECTION_PREFIX",
+            "DOOWON_AIDOO_QDRANT_COLLECTION_PREFIX",
+            "DOOWON_API_AIDOO_QDRANT_COLLECTION_PREFIX",
+        ),
+    )
+    rag_embedding_provider: str = Field(
+        default="fake",
+        validation_alias=AliasChoices(
+            "AIDOO_EMBEDDING_PROVIDER",
+            "DOOWON_AIDOO_EMBEDDING_PROVIDER",
+            "DOOWON_API_AIDOO_EMBEDDING_PROVIDER",
+        ),
+    )
+    rag_ocr_provider: str = Field(
+        default="fake",
+        validation_alias=AliasChoices(
+            "AIDOO_OCR_PROVIDER",
+            "DOOWON_AIDOO_OCR_PROVIDER",
+            "DOOWON_API_AIDOO_OCR_PROVIDER",
+        ),
+    )
+    rag_rerank_provider: str = Field(
+        default="fake",
+        validation_alias=AliasChoices(
+            "AIDOO_RERANK_PROVIDER",
+            "DOOWON_AIDOO_RERANK_PROVIDER",
+            "DOOWON_API_AIDOO_RERANK_PROVIDER",
+        ),
+    )
 
     model_config = SettingsConfigDict(
         env_prefix="DOOWON_API_",
