@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import timedelta
+
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -160,6 +162,68 @@ def test_get_ai_conversation_omits_terminal_live_pending_approval(client) -> Non
 
     assert response.status_code == 200, response.text
     assert response.json()["livePendingApproval"] is None
+
+
+def test_get_ai_conversation_lazy_expires_stale_pending_approval(client) -> None:
+    session = _bootstrap_admin_session(client)
+    token = session["token"]
+    slug = _workspace_slug(client, token)
+    meeting = _create_meeting(client, token, title="Lazy expire meeting")
+
+    with Session(get_engine()) as db:
+        workspace = db.scalar(select(Workspace).where(Workspace.key == slug))
+        user = db.get(User, session["user"]["id"])
+        assert workspace is not None
+        assert user is not None
+        conversation = conversations_service.create_conversation(
+            db,
+            workspace=workspace,
+            user=user,
+            title="",
+            scope_ref="meeting",
+            scope_resource_id=meeting["id"],
+        )
+        snapshot = ai_approvals.persist_snapshot_on_halt(
+            db,
+            workspace=workspace,
+            conversation=conversation,
+            requested_by_user=user,
+            messages_json=[{"role": "system", "content": "scoped"}],
+            blocked_call_id="call-expire-lazy",
+            model_meta={"model": "test-model"},
+        )
+        approval = ai_approvals.create_pending_approval(
+            db,
+            workspace=workspace,
+            conversation=conversation,
+            requested_by_user=user,
+            agent_run_id=snapshot.id,
+            tool_call_id="call-expire-lazy",
+            tool_name="pms.create_issue",
+            arguments_json='{"title":"Fix scope"}',
+            resource_preview="이슈 생성",
+            expires_at=ai_approvals.utcnow_naive() - timedelta(minutes=1),
+        )
+        db.commit()
+        conversation_id = conversation.id
+        approval_id = approval.id
+        snapshot_id = snapshot.id
+
+    response = client.get(
+        _workspace_ai_conversations_path(slug, f"/{conversation_id}"),
+        headers=_auth_headers(token),
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["livePendingApproval"] is None
+
+    with Session(get_engine()) as db:
+        approval = db.get(ai_approvals.AiToolApproval, approval_id)
+        snapshot = db.get(ai_approvals.AgentRunSnapshot, snapshot_id)
+        assert approval is not None
+        assert snapshot is not None
+        assert approval.status == "expired"
+        assert snapshot.status == "abandoned"
 
 
 def test_create_ai_conversation_reuses_latest_empty_scoped_conversation(client) -> None:

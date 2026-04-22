@@ -87,6 +87,7 @@ class AgentRunSnapshot(Base):
         String(24),
         nullable=False,
         default="awaiting_approval",
+        server_default=text("'awaiting_approval'"),
     )
     messages_json: Mapped[list[dict[str, Any]] | None] = mapped_column(JSONB, nullable=True)
     blocked_call_id: Mapped[str] = mapped_column(String(80), nullable=False)
@@ -138,7 +139,12 @@ class AiToolApproval(Base):
     tool_name: Mapped[str] = mapped_column(String(80), nullable=False)
     arguments_json: Mapped[str] = mapped_column(Text, nullable=False)
     resource_preview: Mapped[str | None] = mapped_column(Text, nullable=True)
-    status: Mapped[str] = mapped_column(String(16), nullable=False, default="pending")
+    status: Mapped[str] = mapped_column(
+        String(16),
+        nullable=False,
+        default="pending",
+        server_default=text("'pending'"),
+    )
     requested_by_user_id: Mapped[str] = mapped_column(
         ForeignKey("users.id"),
         nullable=False,
@@ -283,6 +289,10 @@ def get_live_pending_approval(
         .order_by(AiToolApproval.created_at.desc())
     )
     if approval is None:
+        return None
+    if approval.status == "pending" and approval.expires_at <= utcnow_naive():
+        _expire_pending_approval(db, approval, snapshot=snapshot)
+        db.commit()
         return None
     return {
         "approval_id": approval.id,

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from datetime import datetime, timedelta
 import json
 from typing import Any
@@ -665,6 +666,49 @@ def test_chat_resume_can_rehalt_after_replay(
         assert original_snapshot.status == "completed"
         assert followup_snapshot.status == "awaiting_approval"
         assert sum(1 for item in snapshots if item.status == "awaiting_approval") == 1
+
+
+def test_chat_resume_cancellation_rewinds_snapshot_for_retry(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    seed = _seed_pending_approval(client)
+    headers = _auth_headers(seed["token"])
+
+    resolve_response = client.post(
+        _workspace_ai_path(seed["workspace_slug"], f"/approvals/{seed['approval_id']}/resolve"),
+        headers=headers,
+        json={"decision": "approved"},
+    )
+    assert resolve_response.status_code == 200, resolve_response.text
+
+    def fake_execute_tool_call(*args: Any, **kwargs: Any):
+        del args, kwargs
+        raise asyncio.CancelledError
+
+    monkeypatch.setattr(ai_agent, "execute_tool_call", fake_execute_tool_call)
+
+    response = client.post(
+        _workspace_ai_path(seed["workspace_slug"], "/chat/resume"),
+        headers=headers,
+        json={
+            "conversation_id": seed["conversation_id"],
+            "approval_id": seed["approval_id"],
+        },
+    )
+
+    assert response.status_code == 200, response.text
+
+    with get_session_factory()() as db:
+        approval = db.scalar(
+            select(ai_approvals.AiToolApproval).where(
+                ai_approvals.AiToolApproval.id == seed["approval_id"]
+            )
+        )
+        snapshot = ai_approvals.load_snapshot(db, agent_run_id=seed["agent_run_id"])
+        assert approval is not None
+        assert approval.status == "approved"
+        assert snapshot.status == "awaiting_approval"
 
 
 def test_ai_tool_invoke_returns_409_for_approval_required_tool(

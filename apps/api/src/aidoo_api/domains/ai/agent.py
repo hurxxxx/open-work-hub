@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 from collections.abc import AsyncIterator
@@ -588,6 +589,19 @@ async def _run_agent_loop_stream(
                 "meta": _build_done_meta(execution),
             },
         )
+    except (asyncio.CancelledError, GeneratorExit):
+        if (
+            replay_approval is not None
+            and current_snapshot is not None
+            and current_snapshot.status == "resumed"
+        ):
+            if replay_approval.status in {"approved", "rejected"}:
+                current_snapshot.status = "awaiting_approval"
+                db.add(current_snapshot)
+            else:
+                ai_approvals.mark_snapshot_completed(db, current_snapshot)
+            db.commit()
+        raise
     except Exception:
         _complete_snapshot_if_needed(db, current_snapshot)
         raise

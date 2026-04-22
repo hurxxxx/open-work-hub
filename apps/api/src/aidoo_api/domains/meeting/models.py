@@ -12,7 +12,9 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    text,
 )
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from aidoo_api.core.db import Base
@@ -263,11 +265,16 @@ class MeetingInsight(Base):
         index=True,
         nullable=False,
     )
-    insight_type: Mapped[str] = mapped_column(String(24), index=True, nullable=False)
-    payload_json: Mapped[dict] = mapped_column(JSON, nullable=False)
+    insight_type: Mapped[str] = mapped_column(String(24), nullable=False)
+    payload_json: Mapped[dict] = mapped_column(JSONB, nullable=False)
     confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
-    source_span: Mapped[dict | None] = mapped_column(JSON, nullable=True)
-    status: Mapped[str] = mapped_column(String(16), default="draft", index=True, nullable=False)
+    source_span: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    status: Mapped[str] = mapped_column(
+        String(16),
+        default="draft",
+        server_default=text("'draft'"),
+        nullable=False,
+    )
     accepted_as_kind: Mapped[str | None] = mapped_column(String(24), nullable=True)
     accepted_as_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     created_by_run_id: Mapped[str | None] = mapped_column(String(36), nullable=True)

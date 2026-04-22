@@ -103,7 +103,11 @@ def execute_tool_call(
         )
     except HTTPException as error:
         message = _error_message(error)
-        if error.status_code == status.HTTP_409_CONFLICT and approved_call_id is None:
+        if (
+            error.status_code == status.HTTP_409_CONFLICT
+            and approved_call_id is None
+            and _is_approval_required_conflict(error)
+        ):
             return ToolCallExecution(
                 call_id=resolved_call_id,
                 tool_name=tool_name,
@@ -133,6 +137,13 @@ def execute_tool_call(
         ),
         response=response,
     )
+
+
+def _is_approval_required_conflict(error: HTTPException) -> bool:
+    detail = error.detail
+    if not isinstance(detail, str):
+        return False
+    return detail.startswith("AI tool requires approval before execution:")
 
 
 def iter_tool_call_events(
