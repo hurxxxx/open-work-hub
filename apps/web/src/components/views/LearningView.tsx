@@ -2,7 +2,7 @@ import { motion } from 'motion/react';
 import { GraduationCap, BookOpen } from 'lucide-react';
 import { Link, useParams } from 'react-router-dom';
 
-import { LEARNING_COURSES } from '@/src/domains/learning/manifest';
+import { LEARNING_COURSES, getAllLessons } from '@/src/domains/learning/manifest';
 
 export function LearningView() {
   const { workspaceSlug } = useParams();
@@ -33,7 +33,8 @@ export function LearningView() {
           className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3"
         >
           {LEARNING_COURSES.map((course) => {
-            const first = course.lessons[0];
+            const allLessons = getAllLessons(course);
+            const first = allLessons[0];
             const target = first ? `${basePath}/${course.slug}/${first.slug}` : `${basePath}/${course.slug}`;
             return (
               <Link
@@ -44,7 +45,7 @@ export function LearningView() {
               >
                 <div className="flex items-center gap-2 text-app-ink/60">
                   <BookOpen size={16} />
-                  <span className="app-text-overline">{course.lessons.length}개 레슨</span>
+                  <span className="app-text-overline">{allLessons.length}개 레슨</span>
                 </div>
                 <h2 className="app-text-title font-semibold text-app-ink">
                   {course.title}

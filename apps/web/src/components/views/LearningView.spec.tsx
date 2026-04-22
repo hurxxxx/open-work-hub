@@ -4,19 +4,19 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { LearningView } from './LearningView';
 
+type Lesson = { slug: string; title: string; file: string };
+type Part = { slug: string; title: string; lessons: Lesson[] };
+type Course = { slug: string; title: string; description: string; parts: Part[] };
+
 const manifestHarness = vi.hoisted(() => ({
-  courses: [] as Array<{
-    slug: string;
-    title: string;
-    description: string;
-    lessons: Array<{ slug: string; title: string; file: string }>;
-  }>,
+  courses: [] as Course[],
 }));
 
 vi.mock('@/src/domains/learning/manifest', () => ({
   get LEARNING_COURSES() {
     return manifestHarness.courses;
   },
+  getAllLessons: (course: Course) => course.parts.flatMap((part) => part.lessons),
 }));
 
 function renderView() {
@@ -47,16 +47,30 @@ describe('LearningView', () => {
         slug: 'course-a',
         title: '코스 A',
         description: '첫 번째 코스',
-        lessons: [
-          { slug: 'lesson-1', title: '레슨 1', file: 'a-1.md' },
-          { slug: 'lesson-2', title: '레슨 2', file: 'a-2.md' },
+        parts: [
+          {
+            slug: 'intro',
+            title: '시작하기',
+            lessons: [{ slug: 'lesson-1', title: '레슨 1', file: 'a-1.md' }],
+          },
+          {
+            slug: 'main',
+            title: '본편',
+            lessons: [{ slug: 'lesson-2', title: '레슨 2', file: 'a-2.md' }],
+          },
         ],
       },
       {
         slug: 'course-b',
         title: '코스 B',
         description: '두 번째 코스',
-        lessons: [{ slug: 'only', title: '유일 레슨', file: 'b-1.md' }],
+        parts: [
+          {
+            slug: 'only',
+            title: '전체',
+            lessons: [{ slug: 'only', title: '유일 레슨', file: 'b-1.md' }],
+          },
+        ],
       },
     ];
 

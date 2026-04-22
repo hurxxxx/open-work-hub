@@ -5,7 +5,12 @@ import rehypeHighlight from 'rehype-highlight';
 import remarkGfm from 'remark-gfm';
 import { ChevronLeft, ChevronRight, GraduationCap } from 'lucide-react';
 
-import { findCourse, findLesson, type LearningLesson } from '@/src/domains/learning/manifest';
+import {
+  findCourse,
+  findLesson,
+  getAllLessons,
+  type LearningLesson,
+} from '@/src/domains/learning/manifest';
 import { getLessonBody } from '@/src/domains/learning/content';
 
 const REMARK_PLUGINS = [remarkGfm];
@@ -21,10 +26,12 @@ export function LearningCourseView() {
     return <Navigate to={basePath} replace />;
   }
 
+  const allLessons = getAllLessons(course);
+
   // No lesson slug in the URL? Send the reader into the first lesson so the
   // course landing URL stays stable and the reader lands on real content.
   if (!lessonSlug) {
-    const first = course.lessons[0];
+    const first = allLessons[0];
     if (!first) {
       return <CourseWithoutLessons courseTitle={course.title} basePath={basePath} />;
     }
@@ -37,9 +44,9 @@ export function LearningCourseView() {
   }
 
   const { lesson, index } = resolved;
-  const prev: LearningLesson | null = index > 0 ? course.lessons[index - 1] : null;
+  const prev: LearningLesson | null = index > 0 ? allLessons[index - 1] : null;
   const next: LearningLesson | null =
-    index < course.lessons.length - 1 ? course.lessons[index + 1] : null;
+    index < allLessons.length - 1 ? allLessons[index + 1] : null;
 
   const body = getLessonBody(lesson.file);
 
@@ -61,37 +68,49 @@ export function LearningCourseView() {
           <span className="app-text-overline">{course.title}</span>
         </Link>
         <nav className="max-h-[70vh] overflow-y-auto pr-1">
-          <ol className="flex flex-col gap-1">
-            {course.lessons.map((item, i) => {
-              const active = item.slug === lesson.slug;
-              return (
-                <li key={item.slug}>
-                  <Link
-                    to={`${basePath}/${course.slug}/${item.slug}`}
-                    className={
-                      'flex items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors ' +
-                      (active
-                        ? 'bg-app-accent/10 font-medium text-app-accent'
-                        : 'text-app-ink/80 hover:bg-app-surface-sidebar')
-                    }
-                    data-testid={`learning-lesson-link-${item.slug}`}
-                  >
-                    <span className="shrink-0 tabular-nums text-app-ink/40">
-                      {String(i + 1).padStart(2, '0')}
-                    </span>
-                    <span className="truncate">{item.title}</span>
-                  </Link>
-                </li>
-              );
-            })}
-          </ol>
+          <div className="flex flex-col gap-4">
+            {course.parts.map((part) => (
+              <section key={part.slug} aria-labelledby={`learning-part-${part.slug}`}>
+                <h2
+                  id={`learning-part-${part.slug}`}
+                  className="app-text-overline mb-1 px-2 text-app-ink/50"
+                >
+                  {part.title}
+                </h2>
+                <ol className="flex flex-col gap-1">
+                  {part.lessons.map((item, i) => {
+                    const active = item.slug === lesson.slug;
+                    return (
+                      <li key={item.slug}>
+                        <Link
+                          to={`${basePath}/${course.slug}/${item.slug}`}
+                          className={
+                            'flex items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors ' +
+                            (active
+                              ? 'bg-app-accent/10 font-medium text-app-accent'
+                              : 'text-app-ink/80 hover:bg-app-surface-sidebar')
+                          }
+                          data-testid={`learning-lesson-link-${item.slug}`}
+                        >
+                          <span className="shrink-0 tabular-nums text-app-ink/40">
+                            {String(i + 1).padStart(2, '0')}
+                          </span>
+                          <span className="truncate">{item.title}</span>
+                        </Link>
+                      </li>
+                    );
+                  })}
+                </ol>
+              </section>
+            ))}
+          </div>
         </nav>
       </aside>
 
       <section className="min-w-0 flex-1 rounded-lg border border-app-border bg-app-surface p-6 lg:p-8">
         <header className="mb-6 border-b border-app-border pb-4">
           <p className="app-text-overline text-app-ink/60">
-            레슨 {index + 1} / {course.lessons.length}
+            레슨 {index + 1} / {allLessons.length}
           </p>
           <h1 className="app-text-display mt-1 text-app-ink">{lesson.title}</h1>
         </header>

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { LEARNING_COURSES, findCourse, findLesson } from './manifest';
+import { LEARNING_COURSES, findCourse, findLesson, getAllLessons } from './manifest';
 import { getLessonBody, listAvailableLessonFiles } from './content';
 
 describe('LEARNING_COURSES manifest', () => {
@@ -11,7 +11,7 @@ describe('LEARNING_COURSES manifest', () => {
   it('each lesson.file resolves to a non-empty markdown body', () => {
     const availableFiles = new Set(listAvailableLessonFiles());
     for (const course of LEARNING_COURSES) {
-      for (const lesson of course.lessons) {
+      for (const lesson of getAllLessons(course)) {
         expect(availableFiles, `missing file in content map: ${lesson.file}`).toContain(
           lesson.file,
         );
@@ -29,9 +29,21 @@ describe('LEARNING_COURSES manifest', () => {
       courseSlugs.add(course.slug);
 
       const lessonSlugs = new Set<string>();
-      for (const lesson of course.lessons) {
+      for (const lesson of getAllLessons(course)) {
         expect(lessonSlugs.has(lesson.slug)).toBe(false);
         lessonSlugs.add(lesson.slug);
+      }
+    }
+  });
+
+  it('has unique part slugs per course and each part holds at least one lesson', () => {
+    for (const course of LEARNING_COURSES) {
+      expect(course.parts.length).toBeGreaterThan(0);
+      const partSlugs = new Set<string>();
+      for (const part of course.parts) {
+        expect(partSlugs.has(part.slug)).toBe(false);
+        partSlugs.add(part.slug);
+        expect(part.lessons.length).toBeGreaterThan(0);
       }
     }
   });
@@ -40,10 +52,19 @@ describe('LEARNING_COURSES manifest', () => {
     const course = LEARNING_COURSES[0];
     const resolved = findCourse(course.slug);
     expect(resolved?.slug).toBe(course.slug);
-    const first = course.lessons[0];
+    const first = getAllLessons(course)[0];
     const located = findLesson(course, first.slug);
     expect(located?.lesson.slug).toBe(first.slug);
     expect(located?.index).toBe(0);
     expect(findLesson(course, 'no-such-lesson')).toBeNull();
+  });
+
+  it('findLesson returns the global flat index across part boundaries', () => {
+    const course = LEARNING_COURSES[0];
+    const all = getAllLessons(course);
+    if (all.length < 2) return;
+    const last = all[all.length - 1];
+    const located = findLesson(course, last.slug);
+    expect(located?.index).toBe(all.length - 1);
   });
 });

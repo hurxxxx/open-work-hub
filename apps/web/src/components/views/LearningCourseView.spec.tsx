@@ -4,13 +4,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { LearningCourseView } from './LearningCourseView';
 
+type Lesson = { slug: string; title: string; file: string };
+type Part = { slug: string; title: string; lessons: Lesson[] };
+type Course = { slug: string; title: string; description: string; parts: Part[] };
+
 const manifestHarness = vi.hoisted(() => ({
-  courses: [] as Array<{
-    slug: string;
-    title: string;
-    description: string;
-    lessons: Array<{ slug: string; title: string; file: string }>;
-  }>,
+  courses: [] as Course[],
 }));
 
 const contentHarness = vi.hoisted(() => ({
@@ -21,6 +20,7 @@ vi.mock('@/src/domains/learning/manifest', async () => {
   const actual = await vi.importActual<typeof import('@/src/domains/learning/manifest')>(
     '@/src/domains/learning/manifest',
   );
+  const flatten = (course: Course) => course.parts.flatMap((part) => part.lessons);
   return {
     ...actual,
     get LEARNING_COURSES() {
@@ -29,10 +29,12 @@ vi.mock('@/src/domains/learning/manifest', async () => {
     findCourse(slug: string) {
       return manifestHarness.courses.find((course) => course.slug === slug) ?? null;
     },
-    findLesson(course: (typeof manifestHarness.courses)[number], lessonSlug: string) {
-      const index = course.lessons.findIndex((lesson) => lesson.slug === lessonSlug);
+    getAllLessons: flatten,
+    findLesson(course: Course, lessonSlug: string) {
+      const all = flatten(course);
+      const index = all.findIndex((lesson) => lesson.slug === lessonSlug);
       if (index < 0) return null;
-      return { lesson: course.lessons[index], index };
+      return { lesson: all[index], index };
     },
   };
 });
@@ -76,10 +78,20 @@ describe('LearningCourseView', () => {
         slug: 'course',
         title: '테스트 코스',
         description: '',
-        lessons: [
-          { slug: 'first', title: '첫 레슨', file: 'f.md' },
-          { slug: 'second', title: '두 번째 레슨', file: 's.md' },
-          { slug: 'third', title: '세 번째 레슨', file: 't.md' },
+        parts: [
+          {
+            slug: 'intro',
+            title: '시작하기',
+            lessons: [{ slug: 'first', title: '첫 레슨', file: 'f.md' }],
+          },
+          {
+            slug: 'main',
+            title: '본편',
+            lessons: [
+              { slug: 'second', title: '두 번째 레슨', file: 's.md' },
+              { slug: 'third', title: '세 번째 레슨', file: 't.md' },
+            ],
+          },
         ],
       },
     ];
@@ -90,13 +102,13 @@ describe('LearningCourseView', () => {
     };
   });
 
-  it('renders the selected lesson body and sidebar highlights the active lesson', () => {
+  it('renders the selected lesson body and wires prev/next across part boundaries', () => {
     renderAt('/w/hq/learning/course/second');
 
     const body = screen.getByTestId('learning-lesson-body-second');
     expect(body.textContent).toContain('두 번째 레슨 본문');
 
-    // prev + next wired
+    // prev crosses a part boundary (intro → main)
     const prev = screen.getByTestId('learning-lesson-prev');
     expect(prev.getAttribute('href')).toBe('/w/hq/learning/course/first');
     const next = screen.getByTestId('learning-lesson-next');
@@ -129,5 +141,24 @@ describe('LearningCourseView', () => {
   it('redirects to the course list when the course slug is unknown', () => {
     renderAt('/w/hq/learning/missing-course');
     expect(screen.getByTestId('learning-root')).toBeTruthy();
+  });
+
+  it('renders each part as its own section with part titles and per-part numbering', () => {
+    renderAt('/w/hq/learning/course/first');
+
+    // Part headers visible
+    expect(screen.getByText('시작하기')).toBeTruthy();
+    expect(screen.getByText('본편')).toBeTruthy();
+
+    // All lessons remain linkable by slug (numbering restarts inside each part)
+    expect(screen.getByTestId('learning-lesson-link-first').getAttribute('href')).toBe(
+      '/w/hq/learning/course/first',
+    );
+    expect(screen.getByTestId('learning-lesson-link-second').getAttribute('href')).toBe(
+      '/w/hq/learning/course/second',
+    );
+    expect(screen.getByTestId('learning-lesson-link-third').getAttribute('href')).toBe(
+      '/w/hq/learning/course/third',
+    );
   });
 });
