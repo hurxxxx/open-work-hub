@@ -20,7 +20,7 @@
 - 정책 기반 풀 라우팅 + 워크스페이스 격리 기반 AI 플랫폼.
 - agent + tool calling + RAG 기반 업무 챗봇.
 - 회의·문서·일정·태스크 전체를 챗으로 조작 가능한 UX.
-- 사내문서 RAG는 별도 서비스로 분리, 툴 호출로 연동.
+- 사내문서 RAG는 Doowon 내부 orchestration + 원격 retrieval infra 조합으로 통합한다.
 - 전사는 초기 외부 API → 장기적으로 로컬.
 
 ### 업계 방향 참조
@@ -85,10 +85,13 @@ LOCAL POOL ────┐                    ┌──── EXTERNAL POOL
 - `external` 정책 task에 한해 정규식 탐지. hit 시 LOCAL_ONLY 강제.
 - 값 자체 마스킹은 현재 범위 밖 (차후 검토).
 
-### 6. RAG는 외부 서비스 + Resource-level ACL Projection
-- 별도 프로젝트, OpenAPI 계약.
-- 본 프로젝트는 client + **문서 단위 visibility set 인제스트** + **요청 단위 principal_set 투영** 담당. 팀 ID 단일 필드 필터 금지 (Docs ACL = owner + direct_share + link_share + meeting_grant 복합).
-- 단, **raw link-share token은 Doowon 경계를 벗어나지 않는다**. 외부 RAG 서비스에는 token 자체 대신 `link_share_ref`(예: 내부 share_id 또는 stable HMAC digest) 같은 파생 식별자만 전달한다.
+### 6. RAG는 내부 Control Plane + 원격 Retrieval Infrastructure
+- retrieval orchestration, ACL projection, query-time access context, grounded answer synthesis의 진실원은 Doowon 내부(API/worker)다.
+- Qdrant / embedding / OCR / optional rerank는 provider/infra로 분리하되, 상위 레이어는 provider port만 의존한다.
+- team ID 단일 필드 필터 같은 단순화는 금지한다. Docs ACL = owner + direct_share + link_share + meeting_grant 복합이며, pre-filter는 최적화이고 post-filter가 실제 enforcement다.
+- raw link-share token은 Doowon 경계를 벗어나지 않는다. 외부 infra에는 `link_share_ref` 같은 파생 식별자만 전달한다.
+- ingest/backfill/visibility update는 queue + worker, query/grounded-answer는 sync path로 유지한다.
+- observability는 audit-only가 아니라 trace-first로 설계해 request -> outbox -> worker -> provider -> grounded answer를 한 trace로 연결한다.
 
 ## P3 Entry Contracts
 
@@ -260,23 +263,24 @@ Phase 3로 넘어가기 전에 아래 4개 계약을 먼저 고정한다. 목표
 - backend approval / conversation / stream / tool / meeting insight 회귀 green
 - web approval / scoped conversation / meeting insight UI 회귀 green
 - Playwright로 approval approve/reject/cancel/reload + meeting→AI scoped entry 고정
-- 상세 로그와 수동 스모크 기록은 [`04-phase4-write-meeting.md`](./04-phase4-write-meeting.md) 참조
+- 상세 요약은 [`docs/planning-log.md`](../docs/planning-log.md) 참조
 
 **전제**: 전사는 기존 `core/asr.py` 그대로. 로컬 whisper 전환은 별도 track.
 
-**상세 플랜 파일**: [`04-phase4-write-meeting.md`](./04-phase4-write-meeting.md)
+**상세 플랜 파일**: 완료 — 요약은 [`docs/planning-log.md`](../docs/planning-log.md)
 
 ---
 
-### Phase 5 — External RAG Integration (Retrieval-Only, Cross-Domain)
-**목표**: 별도 RAG 서버와 HTTP로 연동해 Docs / Meeting / PMS / Planner 전도메인 retrieval surface를 만든다. RAG 서버는 chunking / extraction / embedding / Qdrant / rerank를 담당하고, Doowon은 ACL projection, access context, sync orchestration, grounded answer 후처리를 맡는다.
+### Phase 5 — Internal Retrieval Orchestration + Remote Retrieval Infrastructure
+**목표**: Doowon 내부(API/worker)에 retrieval orchestration을 두고, Qdrant / embedding / OCR / optional rerank 같은 원격 infra를 조합해 Docs / Meeting / PMS / Planner 전도메인 retrieval surface를 만든다. Doowon은 ACL projection, access context, sync orchestration, query planning, grounded answer 후처리의 정본이다.
 
 **핵심 산출물**:
 1. **Resource-level ACL Projection + Sync Foundation**:
-   - ingest 시 Doowon이 resource payload + visibility projection을 계산해 RAG 서버에 동기화
-   - query 시 Doowon이 requester access context를 계산해 RAG 서버에 함께 전송
+   - ingest 시 Doowon이 resource payload + visibility projection을 계산해 vector index/provider에 동기화
+   - query 시 Doowon이 requester access context를 계산해 provider query/filter에 반영
    - raw share token은 외부로 보내지 않고 내부 ref로 치환
    - 동기화는 direct call이 아니라 sync job/outbox로 수행
+   - query는 sync path, ingest/backfill/visibility update는 queue + worker로 분리
 2. **Workspace-scoped RAG API**:
    - `POST /api/v1/workspaces/{slug}/rag/query`
    - `GET /api/v1/workspaces/{slug}/rag/sources`
@@ -284,16 +288,20 @@ Phase 3로 넘어가기 전에 아래 4개 계약을 먼저 고정한다. 목표
 3. **AI capability**:
    - `rag.query`, `rag.list_sources`
    - retrieval result는 공통 hit/citation contract로 반환
-   - grounded answer는 RAG 서버가 아니라 Doowon LLM이 생성
+   - grounded answer는 Doowon LLM이 생성하며 Phase 4 policy/audit/runtime과 연결
+   - retrieval tool 노출은 turn/step/context-aware active subset으로 제한
 4. **UI**:
    - orphan `SearchWorkbench`를 `/tool/search` real surface로 연결
    - search-only / grounded answer / citations / filters 지원
 5. **서비스 장애 graceful degradation**:
-   - RAG 다운 시 REST는 explicit unavailable, AI는 tool error + fallback, UI는 graceful error state
+   - provider/Qdrant 장애 시 REST는 explicit unavailable 또는 search-only degrade, AI는 tool error + fallback, UI는 graceful error state
+6. **Trace-first observability**:
+   - OpenTelemetry 기반으로 request, sync job, provider call, grounded answer를 같은 trace로 묶음
+   - audit log는 trace correlation record로 연결
 
 **완료 조건**: 접근 권한 없는 resource hit가 결과에 한 건도 섞이지 않음. 만료된 grant는 다음 query부터 즉시 제외. 같은 질의가 REST, AI tool, `/tool/search` 세 surface에서 실질적으로 같은 hit/citation 구조를 반환.
 
-**전제**: RAG 서비스 자체 구현은 별도 프로젝트. 본 프로젝트는 client + ACL projection + sync + REST/AI/UI surface를 담당.
+**전제**: retrieval orchestration 구현은 본 프로젝트 내부에 둔다. 외부화가 필요해지면 provider port 뒤에서 분리한다.
 
 **구현 순서**: `5A foundation -> 5B REST/AI -> 5C UI`
 
@@ -374,9 +382,11 @@ Phase 3로 넘어가기 전에 아래 4개 계약을 먼저 고정한다. 목표
 - `core/asr.py::ASRBackend` Protocol
 
 Phase별 신규 영역:
-- `apps/api/src/aidoo_api/core/pii.py`, `llm_adapters.py`, `rag_client.py`
+- `apps/api/src/aidoo_api/core/pii.py`, `llm_adapters.py`
+- `apps/api/src/aidoo_api/domains/rag/`
 - `apps/api/src/aidoo_api/domains/ai/` — models, tools, agent, policy_service, audit
 - `apps/worker/src/aidoo_worker/tasks/llm_batch.py`
+- `apps/worker/src/aidoo_worker/tasks/rag_sync.py`
 - `apps/web/src/domains/ai/` — 대거 개편
 - `apps/web/src/domains/admin/` — LLM 탭 추가
 

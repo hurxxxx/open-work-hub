@@ -23,6 +23,13 @@
 
 ## 엔트리
 
+## 2026-04-22 · Phase 4 — Tool Calling (Write) + Meeting Intelligence
+
+- **요약**: MCP-first capability bridge 위에 write tool 6종, approval halt/resume runtime, `AgentRunSnapshot`/`AiToolApproval`, meeting insight extraction/action proposal, meeting-scoped AI entry와 reload-safe approval recovery를 정착시켰다.
+- **PR/커밋**: 다수 구현 커밋
+- **영향 파일**: `apps/api/src/aidoo_api/domains/ai/`, `apps/api/src/aidoo_api/domains/{meeting,pms,planner,docs}/`, `apps/api/src/aidoo_api/domains/conversations/`, `apps/worker/src/aidoo_worker/tasks/meeting.py`, `apps/web/src/domains/ai/`, `apps/web/src/components/views/AIView.tsx`
+- **남은 후속 작업**: Phase 5에서 retrieval tool과 grounded answer를 같은 approval/snapshot/runtime 위에 연결.
+
 ## 2026-04-18 · Phase 2 — Agent Event Envelope + SSE Streaming
 
 - **요약**: `AgentEventEnvelope`(P2 발행 5종 + P3/P4 예약 5종) 계약 확정, provider-agnostic `LlmStreamAdapter`(mlx-lm/OpenRouter) + `AsyncOpenAI` 기반 `complete_chat_stream`, `/api/v1/ai/chat/stream` SSE 라우트(legacy + workspace slug 이중 마운트), `useChatStream` 훅 + ChatThread/MessageBubble/ThinkingPanel 추출, P3/P4 플레이스홀더 컴포넌트, hidden `aidoo.ai.streamEnabled` 플래그로 sync fallback 유지.
