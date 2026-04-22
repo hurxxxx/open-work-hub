@@ -21,8 +21,9 @@ Phase 5는 별도 RAG 서버와의 HTTP 연동을 통해 Doowon 전도메인 데
   - resource payload 정규화
   - visibility projection 생성
   - requester access context 생성
-  - 결과 후처리
+  - 결과 후처리 및 hit 재검증(defense-in-depth)
   - grounded answer가 필요한 경우 Doowon LLM 호출
+- projection에는 "grant exists" 사실만 싣고, grant 만료/활성 판정은 query 시점 requester access context에서만 해석한다.
 - raw share token은 외부 RAG 서버로 보내지 않는다.
   - 내부에서만 검증하고, 외부에는 파생 `link_share_ref` 같은 안전한 ref만 보낸다.
 - 기존 Phase 4 AI 계약은 유지한다.
@@ -42,6 +43,10 @@ Phase 5는 별도 RAG 서버와의 HTTP 연동을 통해 Doowon 전도메인 데
 목표는 Doowon 데이터와 외부 RAG 서버를 안전하게 동기화할 기반을 만드는 것이다. 이 단계에서는 UI를 건드리지 않고 ingest/delete, ACL projection, sync queue를 먼저 닫는다.
 
 구현:
+- 5A 내부 실행 순서
+  1. 공통 projection/DTO/sync contract 먼저 고정
+  2. Docs 도메인으로 vertical slice(E2E sync + query 검증) 먼저 통과
+  3. 동일 패턴을 Meeting/PMS/Planner에 복제
 - settings 추가
   - `AIDOO_RAG_ENABLED`
   - `AIDOO_RAG_BASE_URL`
@@ -59,12 +64,17 @@ Phase 5는 별도 RAG 서버와의 HTTP 연동을 통해 Doowon 전도메인 데
   - Planner: title, description, location, time, owner/public visibility
 - sync outbox/job 추가
   - 예: `rag_sync_jobs`
-  - `resource_type`, `resource_id`, `workspace_id`, `operation`, `checksum`, `status`, `attempts`, `last_error`, `next_retry_at`
+  - `resource_type`, `resource_id`, `workspace_id`, `operation`, `content_checksum`, `visibility_checksum`, `status`, `attempts`, `last_error`, `next_retry_at`
+  - `operation`은 최소 `upsert | delete | visibility_update`를 포함한다
 - write/change path는 RAG 서버를 직접 호출하지 않고 sync job만 enqueue
+- enqueue 대상은 content 변경뿐 아니라 ACL-only 변경 경로도 포함한다
+  - 예: link share revoke/rotate, doc-meeting grant 변경, meeting participant 변경, issue grant 변경, planner private/public 토글
 - worker가 job을 소비해 ingest/delete 호출
 - binary는 Doowon이 직접 처리하지 않음
   - 텍스트는 raw text/content payload 전송
   - 바이너리는 signed URL 또는 storage ref + mime metadata 전송
+- 초기 대량 적재(backfill/reindex)는 chunked/throttled 전용 lane으로 처리하고, 일반 write sync queue와 분리한다
+- delete 동작은 인덱스에서 hard-delete를 기본으로 하고, tombstone이 필요하면 Doowon 내부 sync 상태 추적용으로만 사용한다
 - 5A 완료 시점에는 검색 호출보다 index sync correctness를 우선 검증한다
 
 주의:
@@ -82,12 +92,14 @@ Phase 5는 별도 RAG 서버와의 HTTP 연동을 통해 Doowon 전도메인 데
 - AI capability 등록
   - `rag.query`
   - `rag.list_sources`
+- `rag.list_sources`는 access-context-aware로 동작하며 요청자가 조회 가능한 source만 반환한다
 - REST와 AI tool은 같은 retrieval service를 호출
 - query flow 고정
   1. Doowon이 requester access context 구성
   2. RAG 서버에 query + access context + filters 전송
   3. RAG 서버가 hits/citations/source metadata 반환
-  4. `answer_mode=grounded-answer`이면 Doowon이 own LLM으로 grounded answer 생성
+  4. Doowon retrieval service가 반환 hit를 access helper로 재검증하고 접근 불가 hit를 제거
+  5. `answer_mode=grounded-answer`이면 Doowon이 own LLM으로 grounded answer 생성
 - retrieval result 공통 계약 정의
   - request
     - `query`
@@ -120,6 +132,8 @@ Phase 5는 별도 RAG 서버와의 HTTP 연동을 통해 Doowon 전도메인 데
   - `origin_ref`
 - grounded answer LLM 호출용 task kind 추가
   - `rag_grounded_answer`
+- `rag_grounded_answer`용 LLM policy seed를 추가하고, pool routing 및 external policy일 때 PII gate 적용 여부를 명시한다
+- retrieval/grounded-answer `trace_id`를 llm_call / llm_tool_call audit payload와 연결해 cross-system 추적 가능하게 유지한다
 - 기존 `/api/v1/search/documents`는 유지하되 새 surface와 연결하지 않음
 
 주의:
@@ -155,15 +169,23 @@ Phase 5는 별도 RAG 서버와의 HTTP 연동을 통해 Doowon 전도메인 데
 - Meeting participant/non-participant visibility tests
 - PMS issue grant visibility tests
 - Planner private/public visibility tests
+- ACL-only mutation이 `visibility_update` job enqueue되는지 검증
+- `content_checksum`/`visibility_checksum` idempotency 분리 검증
 - sync job enqueue/idempotency/retry tests
+- backfill lane chunk/throttle 및 일반 sync lane 격리 검증
+- delete hard-delete/tombstone 동작 검증
 - binary ingest request serialization tests
 
 5B:
 - fake RAG server contract tests
 - workspace ACL no-leak tests
 - expired grant exclusion tests
+- fake RAG가 접근 불가 hit를 반환해도 Doowon post-filter에서 제거되는 defense-in-depth test
+- `rag.list_sources` access-context-aware visibility tests
 - `rag.query` AI tool tests
 - grounded answer synthesis tests with mocked local LLM
+- `rag_grounded_answer` policy seed / PII gate 적용 tests
+- retrieval `trace_id`와 audit event 연계 tests
 - legacy `/search/documents` unchanged regression
 
 5C:
@@ -194,7 +216,14 @@ Phase 5는 별도 RAG 서버와의 HTTP 연동을 통해 Doowon 전도메인 데
 - RAG 서버는 external retrieval-only server
 - Qdrant / extraction / embedding / rerank는 RAG 서버가 담당
 - Doowon은 ACL, query shaping, sync orchestration, 결과 후처리 담당
+- projection에는 grant 존재 사실을 저장하고, grant 만료/활성 판정은 query 시점 access context에서 수행한다
+- Doowon은 RAG 응답 hit를 access helper로 재검증한 뒤 노출한다(defense-in-depth)
 - grounded answer는 Doowon LLM이 생성
+- 5A는 공통 contract 고정 후 Docs vertical slice를 먼저 통과시키고, 이후 Meeting/PMS/Planner로 확장한다
+- sync job은 `content_checksum` + `visibility_checksum` 이중 idempotency 축을 사용하며 ACL-only 변경에 `visibility_update` operation을 사용한다
+- 초기 backfill/reindex는 chunked/throttled 전용 lane으로 수행한다
+- link share projection 식별자는 raw token이 아닌 내부 `share_id` 기반 `link_share_ref`로 고정한다
+- delete는 외부 인덱스 hard-delete를 기본으로 한다
 - 기존 `/api/v1/search/documents`는 legacy/demo로 유지
 - 기존 Phase 4 AI approval/conversation contract는 유지
 - `scope_ref`와 approval UX는 Phase 5에서 재설계하지 않음
@@ -202,7 +231,7 @@ Phase 5는 별도 RAG 서버와의 HTTP 연동을 통해 Doowon 전도메인 데
 후속 결정:
 - RAG 서버 OpenAPI 문서의 정확한 field naming
 - binary ingest 시 signed URL 만료/재시도 전략
-- reindex 운영 정책과 admin surface 노출 수준
+- reindex admin surface의 운영 권한 세분화
 
 ## 롤백 계획
 - feature flag 기본값은 off
@@ -221,5 +250,7 @@ Phase 5는 별도 RAG 서버와의 HTTP 연동을 통해 Doowon 전도메인 데
 - Phase 5는 전도메인 범위로 진행한다
 - Docs-first가 아니라 공통 projection/contract를 먼저 만든다
 - 구현 순서는 반드시 `5A -> 5B -> 5C`
+- write -> sync -> index 사이에는 eventual consistency lag가 존재하며, 신규/변경 리소스가 즉시 검색되지 않을 수 있다
+- 단, query 시점 access context + Doowon post-filter를 통해 만료/회수된 권한은 다음 query부터 결과에서 제외되어야 한다
 - 비차단 리팩터링은 포함하지 않는다
 - 이 파일 하나만 active plan으로 두고, 완료 후 planning log로 이관한다
