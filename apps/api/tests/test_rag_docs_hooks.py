@@ -148,3 +148,79 @@ def test_docs_service_create_paths_enqueue_once_for_idempotent_replay(
     jobs = [job for job in _job_rows() if job.resource_id == doc.id]
     assert [job.operation for job in jobs] == ["upsert", "upsert"]
     assert all(job.resource_type == NATIVE_DOC_RESOURCE_TYPE for job in jobs)
+
+
+def test_meeting_doc_acl_changes_enqueue_rag_visibility_updates(
+    client: TestClient,
+    monkeypatch,
+) -> None:
+    from test_meeting import (
+        _auth_headers,
+        _bootstrap_admin_session,
+        _create_meeting,
+        _create_user_with_workspaces,
+        _login,
+    )
+
+    _enable_docs_rag(monkeypatch)
+    admin = _bootstrap_admin_session(client)
+    admin_token = admin["token"]
+
+    attendee = _create_user_with_workspaces(
+        client,
+        admin_token,
+        email="meeting-rag-reader@aidoo.local",
+        full_name="Meeting Rag Reader",
+        workspace_keys=["meeting", "docs"],
+    )
+    attendee_token = _login(
+        client,
+        attendee["user"]["email"],
+        attendee["temporary_password"],
+    )
+
+    create_doc = client.post(
+        "/api/v1/docs/items",
+        headers=_auth_headers(admin_token),
+        json={"title": "Meeting RAG Reference"},
+    )
+    assert create_doc.status_code == 201, create_doc.text
+    doc = create_doc.json()
+    doc_id = doc["source_id"]
+
+    initial_visibility_updates = [
+        job for job in _job_rows()
+        if job.resource_id == doc_id and job.operation == "visibility_update"
+    ]
+    assert initial_visibility_updates == []
+
+    meeting = _create_meeting(
+        client,
+        admin_token,
+        attendees=[{"user_id": attendee["user"]["id"], "role": "required"}],
+        doc_ids=[doc_id],
+    )
+
+    grant_jobs = [
+        job for job in _job_rows()
+        if job.resource_id == doc_id and job.operation == "visibility_update"
+    ]
+    assert grant_jobs
+
+    doc_lookup = client.get(
+        f"/api/v1/docs/items/{doc['id']}",
+        headers=_auth_headers(attendee_token),
+    )
+    assert doc_lookup.status_code == 200
+
+    detach_response = client.delete(
+        f"/api/v1/meeting/meetings/{meeting['id']}/docs/{doc_id}",
+        headers=_auth_headers(admin_token),
+    )
+    assert detach_response.status_code == 200, detach_response.text
+
+    revoke_jobs = [
+        job for job in _job_rows()
+        if job.resource_id == doc_id and job.operation == "visibility_update"
+    ]
+    assert len(revoke_jobs) > len(grant_jobs)

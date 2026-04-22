@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
 import logging
+import os
 import urllib.parse
 
 from opentelemetry import metrics, propagate, trace
@@ -23,6 +24,8 @@ logger = logging.getLogger(__name__)
 
 _CONSOLE_EXPORTER_ENABLED = False
 _OTLP_TRACE_EXPORTER_ENABLED = False
+_BOOTSTRAP_SIGNATURE: tuple[str, bool, bool, int] | None = None
+_BOOTSTRAP_MISMATCH_WARNED = False
 
 
 def bootstrap_telemetry(
@@ -35,9 +38,26 @@ def bootstrap_telemetry(
     metrics_export_interval_ms: int = 60000,
 ) -> bool:
     global _CONSOLE_EXPORTER_ENABLED, _OTLP_TRACE_EXPORTER_ENABLED
+    global _BOOTSTRAP_MISMATCH_WARNED, _BOOTSTRAP_SIGNATURE
 
     if not enabled:
         return False
+
+    requested_signature = (
+        service_name,
+        enable_console_exporter,
+        enable_otlp_exporter,
+        metrics_export_interval_ms,
+    )
+    if _BOOTSTRAP_SIGNATURE is None:
+        _BOOTSTRAP_SIGNATURE = requested_signature
+    elif _BOOTSTRAP_SIGNATURE != requested_signature and not _BOOTSTRAP_MISMATCH_WARNED:
+        logger.warning(
+            "bootstrap_telemetry is process-global; retaining initial config %s and ignoring later request %s",
+            _BOOTSTRAP_SIGNATURE,
+            requested_signature,
+        )
+        _BOOTSTRAP_MISMATCH_WARNED = True
 
     resource = Resource.create(
         {
@@ -163,6 +183,15 @@ def start_as_current_span(
     attributes: Mapping[str, object] | None = None,
 ) -> Iterator[Span]:
     tracer = get_tracer(tracer_name)
+    if parent_trace_context is None:
+        with tracer.start_as_current_span(
+            span_name,
+            kind=kind,
+            attributes=dict(attributes or {}),
+        ) as span:
+            yield span
+        return
+
     context = extract_trace_context(parent_trace_context)
     token = attach(context)
     try:
@@ -207,12 +236,38 @@ def _encode_baggage_header(value: object) -> str | None:
 
 
 def _build_otlp_span_exporter():
-    from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+    protocol = _resolve_otlp_protocol("traces")
+    if protocol in {"http", "http/protobuf"}:
+        from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
 
-    return OTLPSpanExporter()
+        return OTLPSpanExporter()
+    if protocol == "grpc":
+        from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
+
+        return OTLPSpanExporter()
+    raise RuntimeError(f"Unsupported OTLP traces protocol: {protocol}")
 
 
 def _build_otlp_metric_exporter():
-    from opentelemetry.exporter.otlp.proto.http.metric_exporter import OTLPMetricExporter
+    protocol = _resolve_otlp_protocol("metrics")
+    if protocol in {"http", "http/protobuf"}:
+        from opentelemetry.exporter.otlp.proto.http.metric_exporter import OTLPMetricExporter
 
-    return OTLPMetricExporter()
+        return OTLPMetricExporter()
+    if protocol == "grpc":
+        from opentelemetry.exporter.otlp.proto.grpc.metric_exporter import OTLPMetricExporter
+
+        return OTLPMetricExporter()
+    raise RuntimeError(f"Unsupported OTLP metrics protocol: {protocol}")
+
+
+def _resolve_otlp_protocol(signal: str) -> str:
+    normalized_signal = signal.strip().lower()
+    if normalized_signal not in {"traces", "metrics"}:
+        raise RuntimeError(f"Unsupported OTLP signal: {signal}")
+    signal_env = f"OTEL_EXPORTER_OTLP_{normalized_signal.upper()}_PROTOCOL"
+    return (
+        os.getenv(signal_env)
+        or os.getenv("OTEL_EXPORTER_OTLP_PROTOCOL")
+        or "http/protobuf"
+    ).strip().lower()

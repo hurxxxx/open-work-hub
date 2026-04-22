@@ -1583,7 +1583,7 @@ def update_doc_container(
     enqueue_native_doc_rag_sync(
         db,
         doc=doc,
-        operation=RagSyncOperation.VISIBILITY_UPDATE,
+        operation=RagSyncOperation.UPSERT,
     )
     db.commit()
     return _lookup_item(db, doc.id, current_user)
@@ -1603,7 +1603,7 @@ def delete_doc_container(
     enqueue_native_doc_rag_sync(
         db,
         doc=doc,
-        operation=RagSyncOperation.VISIBILITY_UPDATE,
+        operation=RagSyncOperation.UPSERT,
     )
     db.commit()
     return _lookup_item(db, doc.id, current_user)

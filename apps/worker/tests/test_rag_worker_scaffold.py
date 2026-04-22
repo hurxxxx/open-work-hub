@@ -35,8 +35,11 @@ from aidoo_api.domains.docs.models import (  # noqa: E402
 )
 from aidoo_api.domains.rag.contracts import RagSyncOperation  # noqa: E402
 from aidoo_api.domains.rag.docs_projection import NATIVE_DOC_RESOURCE_TYPE  # noqa: E402
-from aidoo_api.domains.rag.models import RagSyncJob  # noqa: E402
-from aidoo_api.domains.rag.outbox import enqueue_rag_sync_job  # noqa: E402
+from aidoo_api.domains.rag.models import RagSyncJob, RagVisibilityRecomputeJob  # noqa: E402
+from aidoo_api.domains.rag.outbox import (  # noqa: E402
+    enqueue_rag_sync_job,
+    enqueue_rag_visibility_recompute_job,
+)
 
 
 def _worker_db_path(tmp_path: Path) -> Path:
@@ -229,6 +232,229 @@ def test_sync_resource_worker_span_inherits_outbox_trace_context(
     assert child_span.parent is not None
     assert child_span.parent.span_id == parent_span_id
     assert child_span.context.trace_id == spans["tests.rag_parent"].context.trace_id
+
+    with Session(engine) as session:
+        stored = session.get(RagSyncJob, job_id)
+        assert stored is not None
+        assert stored.status == "cancelled"
+        assert stored.attempts == 1
+
+
+def test_recompute_visibility_worker_marks_terminal_statuses(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    db_path = _worker_db_path(tmp_path)
+    _init_worker_db(
+        db_path,
+        create_policy_table=True,
+        seed_policy_rows=True,
+    )
+    monkeypatch.setenv("DOOWON_POSTGRES_DSN", _worker_dsn(db_path))
+    monkeypatch.setenv("DOOWON_WORKER_POSTGRES_DSN", _worker_dsn(db_path))
+
+    engine = create_engine(_worker_dsn(db_path))
+    Base.metadata.create_all(
+        engine,
+        tables=[
+            Workspace.__table__,
+            RagVisibilityRecomputeJob.__table__,
+        ],
+    )
+
+    with Session(engine) as session:
+        with session.begin():
+            session.add(
+                Workspace(
+                    id="ws-1",
+                    key="ws-1",
+                    name="Workspace 1",
+                    description="",
+                    active=True,
+                )
+            )
+            disabled_job = enqueue_rag_visibility_recompute_job(
+                session,
+                workspace_id="ws-1",
+                scope_type="workspace_membership",
+                scope_id="binding-1",
+            )
+            disabled_job_id = disabled_job.id
+
+    tasks_module = _reload_worker_module("aidoo_worker.tasks.rag_sync")
+    assert tasks_module.recompute_visibility.run(disabled_job_id) == "disabled"
+
+    with Session(engine) as session:
+        stored = session.get(RagVisibilityRecomputeJob, disabled_job_id)
+        assert stored is not None
+        assert stored.status == "cancelled"
+        assert stored.attempts == 1
+        assert stored.last_error is None
+
+    with Session(engine) as session:
+        with session.begin():
+            enabled_job = enqueue_rag_visibility_recompute_job(
+                session,
+                workspace_id="ws-1",
+                scope_type="workspace_membership",
+                scope_id="binding-2",
+            )
+            enabled_job_id = enabled_job.id
+
+    monkeypatch.setenv("DOOWON_WORKER_AIDOO_RAG_ENABLED", "1")
+    tasks_module = _reload_worker_module("aidoo_worker.tasks.rag_sync")
+    assert tasks_module.recompute_visibility.run(enabled_job_id) == "pending-implementation"
+
+    with Session(engine) as session:
+        stored = session.get(RagVisibilityRecomputeJob, enabled_job_id)
+        assert stored is not None
+        assert stored.status == "cancelled"
+        assert stored.attempts == 1
+        assert stored.last_error == "visibility recompute worker not implemented"
+
+
+def test_sync_resource_worker_ignores_already_closed_job(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    db_path = _worker_db_path(tmp_path)
+    _init_worker_db(
+        db_path,
+        create_policy_table=True,
+        seed_policy_rows=True,
+    )
+    monkeypatch.setenv("DOOWON_POSTGRES_DSN", _worker_dsn(db_path))
+    monkeypatch.setenv("DOOWON_WORKER_POSTGRES_DSN", _worker_dsn(db_path))
+    monkeypatch.setenv("DOOWON_WORKER_AIDOO_RAG_ENABLED", "1")
+    monkeypatch.setenv("DOOWON_WORKER_AIDOO_QDRANT_COLLECTION_PREFIX", "worker-rag-test")
+
+    engine = create_engine(_worker_dsn(db_path))
+    Base.metadata.create_all(
+        engine,
+        tables=[
+            Workspace.__table__,
+            User.__table__,
+            NativeDoc.__table__,
+            NativeDocPage.__table__,
+            NativeDocContainer.__table__,
+            NativeDocUserShare.__table__,
+            NativeDocLinkShare.__table__,
+            DocMeetingAccess.__table__,
+            RagSyncJob.__table__,
+        ],
+    )
+
+    with Session(engine) as session:
+        with session.begin():
+            session.add(
+                Workspace(
+                    id="ws-1",
+                    key="ws-1",
+                    name="Workspace 1",
+                    description="",
+                    active=True,
+                )
+            )
+            session.add(
+                User(
+                    id="user-1",
+                    email="worker-doc-owner@aidoo.local",
+                    full_name="Worker Doc Owner",
+                    password_hash="hash",
+                    status="active",
+                )
+            )
+            session.add(
+                NativeDoc(
+                    id="doc-1",
+                    workspace_id="ws-1",
+                    owner_id="user-1",
+                    title="Worker Synced Doc",
+                    source_app="docs",
+                    source_kind="manual",
+                    generation_kind="human",
+                )
+            )
+            session.add(
+                NativeDocPage(
+                    id="page-1",
+                    doc_id="doc-1",
+                    parent_id=None,
+                    title="Overview",
+                    content_blocks=[{"type": "paragraph", "text": "worker sync content"}],
+                    sort_order=0,
+                    created_by_id="user-1",
+                )
+            )
+            job = enqueue_rag_sync_job(
+                session,
+                workspace_id="ws-1",
+                resource_type=NATIVE_DOC_RESOURCE_TYPE,
+                resource_id="doc-1",
+            )
+            job_id = job.id
+
+    tasks_module = _reload_worker_module("aidoo_worker.tasks.rag_sync")
+    assert tasks_module.sync_resource.run(job_id) == "succeeded"
+    assert tasks_module.sync_resource.run(job_id) == "ignored"
+
+    with Session(engine) as session:
+        stored = session.get(RagSyncJob, job_id)
+        assert stored is not None
+        assert stored.status == "succeeded"
+        assert stored.attempts == 1
+
+
+def test_recompute_visibility_worker_ignores_already_closed_job(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    db_path = _worker_db_path(tmp_path)
+    _init_worker_db(
+        db_path,
+        create_policy_table=True,
+        seed_policy_rows=True,
+    )
+    monkeypatch.setenv("DOOWON_POSTGRES_DSN", _worker_dsn(db_path))
+    monkeypatch.setenv("DOOWON_WORKER_POSTGRES_DSN", _worker_dsn(db_path))
+
+    engine = create_engine(_worker_dsn(db_path))
+    Base.metadata.create_all(
+        engine,
+        tables=[
+            Workspace.__table__,
+            RagVisibilityRecomputeJob.__table__,
+        ],
+    )
+
+    with Session(engine) as session:
+        with session.begin():
+            session.add(
+                Workspace(
+                    id="ws-1",
+                    key="ws-1",
+                    name="Workspace 1",
+                    description="",
+                    active=True,
+                )
+            )
+            job = enqueue_rag_visibility_recompute_job(
+                session,
+                workspace_id="ws-1",
+                scope_type="workspace_membership",
+                scope_id="binding-1",
+            )
+            job_id = job.id
+
+    tasks_module = _reload_worker_module("aidoo_worker.tasks.rag_sync")
+    assert tasks_module.recompute_visibility.run(job_id) == "disabled"
+    assert tasks_module.recompute_visibility.run(job_id) == "ignored"
+
+    with Session(engine) as session:
+        stored = session.get(RagVisibilityRecomputeJob, job_id)
+        assert stored is not None
+        assert stored.status == "cancelled"
+        assert stored.attempts == 1
 
 
 def test_sync_resource_worker_upserts_docs_projection_with_fake_provider(

@@ -5,7 +5,7 @@ from functools import lru_cache
 import logging
 
 from opentelemetry.trace import SpanKind
-from sqlalchemy import Engine, create_engine
+from sqlalchemy import Engine, create_engine, update
 from sqlalchemy.orm import Session, sessionmaker
 
 from aidoo_api.core.telemetry import start_as_current_span
@@ -70,7 +70,6 @@ def _job_lag_ms(created_at: datetime) -> int:
     name="rag.sync_resource",
     bind=True,
     acks_late=True,
-    max_retries=3,
     task_time_limit=1800,
     task_soft_time_limit=1500,
 )
@@ -86,7 +85,6 @@ def sync_resource(self, job_id: str) -> str:
     name="rag.sync_backfill_resource",
     bind=True,
     acks_late=True,
-    max_retries=3,
     task_time_limit=1800,
     task_soft_time_limit=1500,
 )
@@ -107,11 +105,15 @@ def _run_sync_job(
     settings = get_settings()
     session = _db_session()
     try:
-        job = session.get(RagSyncJob, job_id)
-        if job is None:
+        job, claim_outcome = _claim_sync_job(session, job_id)
+        if claim_outcome == "missing":
             logger.warning("RAG sync job not found: %s", job_id)
             record_sync_job_result(status="missing", job_kind=job_kind)
             return "missing"
+        if claim_outcome != "claimed" or job is None:
+            logger.info("Ignoring RAG sync job already claimed or closed: %s", job_id)
+            record_sync_job_result(status="ignored", job_kind=job_kind)
+            return "ignored"
         record_sync_job_lag(
             lag_ms=_job_lag_ms(job.created_at),
             workspace_id=job.workspace_id,
@@ -121,7 +123,6 @@ def _run_sync_job(
             job_lane=job.lane,
             job_kind=job_kind,
         )
-        _mark_sync_job(session, job, status=RagJobStatus.PROCESSING.value, increment_attempts=True)
         with start_as_current_span(
             tracer_name="aidoo_worker.rag",
             span_name=span_name,
@@ -147,7 +148,7 @@ def _run_sync_job(
                     job_lane=job.lane,
                     job_kind=job_kind,
                 )
-                _mark_sync_job(session, job, status=RagJobStatus.PENDING.value)
+                _mark_sync_job(session, job, status=RagJobStatus.CANCELLED.value)
                 return "disabled"
             result = _process_sync_job(session, job)
             record_sync_job_result(
@@ -178,7 +179,6 @@ def _run_sync_job(
     name="rag.recompute_visibility",
     bind=True,
     acks_late=True,
-    max_retries=3,
     task_time_limit=1800,
     task_soft_time_limit=1500,
 )
@@ -186,11 +186,15 @@ def recompute_visibility(self, job_id: str) -> str:
     settings = get_settings()
     session = _db_session()
     try:
-        job = session.get(RagVisibilityRecomputeJob, job_id)
-        if job is None:
+        job, claim_outcome = _claim_visibility_job(session, job_id)
+        if claim_outcome == "missing":
             logger.warning("RAG visibility recompute job not found: %s", job_id)
             record_sync_job_result(status="missing", job_kind="visibility_recompute")
             return "missing"
+        if claim_outcome != "claimed" or job is None:
+            logger.info("Ignoring RAG visibility job already claimed or closed: %s", job_id)
+            record_sync_job_result(status="ignored", job_kind="visibility_recompute")
+            return "ignored"
         record_sync_job_lag(
             lag_ms=_job_lag_ms(job.created_at),
             workspace_id=job.workspace_id,
@@ -219,6 +223,7 @@ def recompute_visibility(self, job_id: str) -> str:
                     scope_id=job.scope_id,
                     job_kind="visibility_recompute",
                 )
+                _mark_visibility_job(session, job, status=RagJobStatus.CANCELLED.value)
                 return "disabled"
             logger.info("RAG visibility recompute scaffold invoked: %s", job_id)
             record_sync_job_result(
@@ -228,7 +233,22 @@ def recompute_visibility(self, job_id: str) -> str:
                 scope_id=job.scope_id,
                 job_kind="visibility_recompute",
             )
+            _mark_visibility_job(
+                session,
+                job,
+                status=RagJobStatus.CANCELLED.value,
+                last_error="visibility recompute worker not implemented",
+            )
             return "pending-implementation"
+    except Exception as error:
+        if "job" in locals() and job is not None:
+            _mark_visibility_job(
+                session,
+                job,
+                status=RagJobStatus.FAILED.value,
+                last_error=str(error),
+            )
+        raise
     finally:
         session.close()
 
@@ -285,6 +305,78 @@ def _mark_sync_job(
     job.last_error = last_error
     session.add(job)
     session.commit()
+
+
+def _claim_sync_job(
+    session: Session,
+    job_id: str,
+) -> tuple[RagSyncJob | None, str]:
+    claimed = session.execute(
+        update(RagSyncJob)
+        .where(
+            RagSyncJob.id == job_id,
+            RagSyncJob.status == RagJobStatus.PENDING.value,
+        )
+        .values(
+            status=RagJobStatus.PROCESSING.value,
+            attempts=RagSyncJob.attempts + 1,
+            last_error=None,
+            updated_at=datetime.now(UTC).replace(tzinfo=None),
+        )
+    )
+    session.commit()
+    session.expire_all()
+    if claimed.rowcount == 1:
+        return session.get(RagSyncJob, job_id), "claimed"
+
+    existing = session.get(RagSyncJob, job_id)
+    if existing is None:
+        return None, "missing"
+    return existing, "ignored"
+
+
+def _mark_visibility_job(
+    session: Session,
+    job: RagVisibilityRecomputeJob,
+    *,
+    status: str,
+    increment_attempts: bool = False,
+    last_error: str | None = None,
+) -> None:
+    job.status = status
+    if increment_attempts:
+        job.attempts += 1
+    job.last_error = last_error
+    session.add(job)
+    session.commit()
+
+
+def _claim_visibility_job(
+    session: Session,
+    job_id: str,
+) -> tuple[RagVisibilityRecomputeJob | None, str]:
+    claimed = session.execute(
+        update(RagVisibilityRecomputeJob)
+        .where(
+            RagVisibilityRecomputeJob.id == job_id,
+            RagVisibilityRecomputeJob.status == RagJobStatus.PENDING.value,
+        )
+        .values(
+            status=RagJobStatus.PROCESSING.value,
+            attempts=RagVisibilityRecomputeJob.attempts + 1,
+            last_error=None,
+            updated_at=datetime.now(UTC).replace(tzinfo=None),
+        )
+    )
+    session.commit()
+    session.expire_all()
+    if claimed.rowcount == 1:
+        return session.get(RagVisibilityRecomputeJob, job_id), "claimed"
+
+    existing = session.get(RagVisibilityRecomputeJob, job_id)
+    if existing is None:
+        return None, "missing"
+    return existing, "ignored"
 
 
 def _collection_name(resource_type: str) -> str:
