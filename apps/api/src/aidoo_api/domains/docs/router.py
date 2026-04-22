@@ -14,7 +14,6 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload, selectinload
 
 from aidoo_api.core.db import get_db_session, get_session_factory
-from aidoo_api.core.principal import user_principal
 from aidoo_api.core.settings import get_settings
 from aidoo_api.core.storage import get_minio_client
 from aidoo_api.domains.auth.access import (
@@ -48,6 +47,7 @@ from aidoo_api.domains.docs.models import (
     NativeDocPage,
     NativeDocUserShare,
 )
+from aidoo_api.domains.docs.rag_sync import enqueue_native_doc_rag_sync
 from aidoo_api.domains.docs.registry import (
     ContainerRef,
     describe_source,
@@ -55,6 +55,7 @@ from aidoo_api.domains.docs.registry import (
     resolve_container_label,
 )
 from aidoo_api.domains.media.router import cleanup_media_for_resource, sync_embedded_media
+from aidoo_api.domains.rag.contracts import RagSyncOperation
 
 
 router = APIRouter(prefix="/docs", tags=["docs"])
@@ -1244,6 +1245,11 @@ def create_doc_item(
             payload=UpdateDocContainerRequest.model_validate(container_payload.model_dump()),
             current_user=current_user,
         )
+    enqueue_native_doc_rag_sync(
+        db,
+        doc=doc,
+        operation=RagSyncOperation.UPSERT,
+    )
     db.commit()
     return _lookup_item(db, doc.id, current_user)
 
@@ -1279,6 +1285,11 @@ def update_doc_item(
     if payload.title is not None:
         doc.title = payload.title.strip()
         db.add(doc)
+        enqueue_native_doc_rag_sync(
+            db,
+            doc=doc,
+            operation=RagSyncOperation.UPSERT,
+        )
         db.commit()
     return _lookup_item(db, doc.id, current_user, share_token=share_token)
 
@@ -1310,6 +1321,11 @@ def delete_doc_item(
             )
             media_keys.extend(cleanup_media_for_resource(db, "docs_native_page", page.id))
     db.add(doc)
+    enqueue_native_doc_rag_sync(
+        db,
+        doc=doc,
+        operation=RagSyncOperation.DELETE,
+    )
     db.commit()
 
     if media_keys:
@@ -1365,6 +1381,11 @@ def duplicate_doc_item(
         source_doc=source_doc,
         destination_doc_id=duplicate.id,
         actor_user_id=current_user.id,
+    )
+    enqueue_native_doc_rag_sync(
+        db,
+        doc=duplicate,
+        operation=RagSyncOperation.UPSERT,
     )
     db.commit()
     return _lookup_item(db, duplicate.id, current_user)
@@ -1425,6 +1446,11 @@ def create_doc_page(
             source_page_id=page.id,
             snapshot_content_blocks=payload.content_blocks,
         )
+    enqueue_native_doc_rag_sync(
+        db,
+        doc=doc,
+        operation=RagSyncOperation.UPSERT,
+    )
     db.commit()
     page = _load_native_page(db, page.id)
     assert page is not None
@@ -1484,6 +1510,11 @@ def update_doc_page(
     if payload.sort_order is not None:
         page.sort_order = payload.sort_order
     db.add(page)
+    enqueue_native_doc_rag_sync(
+        db,
+        doc=doc,
+        operation=RagSyncOperation.UPSERT,
+    )
     db.commit()
     page = _load_native_page(db, page.id)
     assert page is not None
@@ -1520,6 +1551,11 @@ def delete_doc_page(
             source_page_id=node.id,
         )
         media_keys.extend(cleanup_media_for_resource(db, "docs_native_page", node.id))
+    enqueue_native_doc_rag_sync(
+        db,
+        doc=doc,
+        operation=RagSyncOperation.UPSERT,
+    )
     db.commit()
     if media_keys:
         settings = get_settings()
@@ -1544,6 +1580,11 @@ def update_doc_container(
     if not access.can_edit:
         raise HTTPException(status_code=403, detail="Doc edit access required.")
     _upsert_primary_container(db, doc=doc, payload=payload, current_user=current_user)
+    enqueue_native_doc_rag_sync(
+        db,
+        doc=doc,
+        operation=RagSyncOperation.VISIBILITY_UPDATE,
+    )
     db.commit()
     return _lookup_item(db, doc.id, current_user)
 
@@ -1559,6 +1600,11 @@ def delete_doc_container(
     if not access.can_edit:
         raise HTTPException(status_code=403, detail="Doc edit access required.")
     _delete_primary_container(db, doc)
+    enqueue_native_doc_rag_sync(
+        db,
+        doc=doc,
+        operation=RagSyncOperation.VISIBILITY_UPDATE,
+    )
     db.commit()
     return _lookup_item(db, doc.id, current_user)
 
@@ -1788,6 +1834,11 @@ def upsert_native_doc_user_share(
     else:
         share.access_level = payload.access_level
         db.add(share)
+    enqueue_native_doc_rag_sync(
+        db,
+        doc=doc,
+        operation=RagSyncOperation.VISIBILITY_UPDATE,
+    )
     db.commit()
     doc = _load_native_doc_for_access(db, doc.id)
     assert doc is not None
@@ -1806,6 +1857,11 @@ def delete_native_doc_user_share(
     share = next((item for item in doc.user_shares if item.user_id == user_id), None)
     if share is not None:
         db.delete(share)
+        enqueue_native_doc_rag_sync(
+            db,
+            doc=doc,
+            operation=RagSyncOperation.VISIBILITY_UPDATE,
+        )
         db.commit()
     doc = _load_native_doc_for_access(db, doc.id)
     assert doc is not None
@@ -1838,6 +1894,11 @@ def upsert_native_doc_link_share(
         link_share.access_level = payload.access_level
         link_share.active = payload.active
         db.add(link_share)
+    enqueue_native_doc_rag_sync(
+        db,
+        doc=doc,
+        operation=RagSyncOperation.VISIBILITY_UPDATE,
+    )
     db.commit()
     doc = _load_native_doc_for_access(db, doc.id)
     assert doc is not None
@@ -1856,6 +1917,11 @@ def disable_native_doc_link_share(
     if link_share is not None:
         link_share.active = False
         db.add(link_share)
+        enqueue_native_doc_rag_sync(
+            db,
+            doc=doc,
+            operation=RagSyncOperation.VISIBILITY_UPDATE,
+        )
         db.commit()
     doc = _load_native_doc_for_access(db, doc.id)
     assert doc is not None

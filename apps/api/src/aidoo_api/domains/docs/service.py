@@ -20,8 +20,10 @@ from aidoo_api.domains.docs.models import (
     NativeDocLinkShare,
     NativeDocPage,
 )
+from aidoo_api.domains.docs.rag_sync import enqueue_native_doc_rag_sync
 from aidoo_api.domains.docs.registry import ContainerRef, project_container_access
 from aidoo_api.domains.media.router import sync_embedded_media
+from aidoo_api.domains.rag.contracts import RagSyncOperation
 
 
 TEAM_ACCESS_LEVEL_RANK = {
@@ -78,6 +80,11 @@ def create_native_doc_for_user(
                 sort_order=sort_order,
             )
         )
+    enqueue_native_doc_rag_sync(
+        db,
+        doc=doc,
+        operation=RagSyncOperation.UPSERT,
+    )
     db.flush()
     return doc, page
 
@@ -470,6 +477,11 @@ def create_page(
             source_page_id=page.id,
             snapshot_content_blocks=content_blocks,
         )
+    enqueue_native_doc_rag_sync(
+        db,
+        doc=doc,
+        operation=RagSyncOperation.UPSERT,
+    )
     db.commit()
     page = _load_native_page(db, page.id)
     assert page is not None

@@ -116,6 +116,36 @@ class Settings(BaseSettings):
             "DOOWON_WORKER_AIDOO_RERANK_PROVIDER",
         ),
     )
+    otel_enabled: bool = Field(
+        default=True,
+        validation_alias=AliasChoices(
+            "DOOWON_OTEL_ENABLED",
+            "DOOWON_WORKER_OTEL_ENABLED",
+        ),
+    )
+    otel_console_exporter: bool = Field(
+        default=False,
+        validation_alias=AliasChoices(
+            "DOOWON_OTEL_CONSOLE_EXPORTER",
+            "DOOWON_WORKER_OTEL_CONSOLE_EXPORTER",
+        ),
+    )
+    otel_otlp_exporter_enabled: bool = Field(
+        default=False,
+        validation_alias=AliasChoices(
+            "DOOWON_OTEL_OTLP_EXPORTER_ENABLED",
+            "DOOWON_WORKER_OTEL_OTLP_EXPORTER_ENABLED",
+        ),
+    )
+    otel_metrics_export_interval_ms: int = Field(
+        default=60000,
+        ge=1000,
+        le=300000,
+        validation_alias=AliasChoices(
+            "DOOWON_OTEL_METRICS_EXPORT_INTERVAL_MS",
+            "DOOWON_WORKER_OTEL_METRICS_EXPORT_INTERVAL_MS",
+        ),
+    )
 
     model_config = SettingsConfigDict(
         env_prefix="DOOWON_WORKER_",

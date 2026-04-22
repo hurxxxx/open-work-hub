@@ -5,6 +5,7 @@ from pathlib import Path
 from fastapi import Depends, FastAPI
 from fastapi import Response, status
 from fastapi.responses import Response as FastAPIResponse
+from opentelemetry.trace import SpanKind
 
 from aidoo_api.core.db import get_session_factory, init_db
 from aidoo_api.core.llm import (
@@ -13,6 +14,12 @@ from aidoo_api.core.llm import (
 )
 from aidoo_api.core.settings import get_settings
 from aidoo_api.core.storage import ensure_bucket
+from aidoo_api.core.telemetry import (
+    bootstrap_telemetry,
+    current_trace_id,
+    extract_trace_context,
+    get_tracer,
+)
 from aidoo_api.domains.ai.registry import initialize_ai_capability_registry
 from aidoo_api.domains.ai.router import router as ai_router
 from aidoo_api.domains.admin.router import router as admin_router
@@ -44,6 +51,14 @@ logger = logging.getLogger(__name__)
 
 def create_app() -> FastAPI:
     settings = get_settings()
+    telemetry_enabled = bootstrap_telemetry(
+        service_name="aidoo-api",
+        enabled=settings.otel_enabled,
+        enable_console_exporter=settings.otel_console_exporter,
+        enable_otlp_exporter=settings.otel_otlp_exporter_enabled,
+        metrics_export_interval_ms=settings.otel_metrics_export_interval_ms,
+    )
+    telemetry_tracer = get_tracer("aidoo_api.http")
     initialize_ai_capability_registry()
     init_db()
     ensure_bucket()
@@ -73,12 +88,40 @@ def create_app() -> FastAPI:
         redoc_url="/redoc",
         lifespan=lifespan,
     )
+    app.state.telemetry_enabled = telemetry_enabled
 
     @app.middleware("http")
     async def add_instance_headers(request, call_next) -> FastAPIResponse:
         response = await call_next(request)
         response.headers["X-Doowon-Instance-Id"] = settings.instance_id
+        trace_id = current_trace_id()
+        if trace_id is not None:
+            response.headers["X-Doowon-Trace-Id"] = trace_id
         return response
+
+    @app.middleware("http")
+    async def telemetry_middleware(request, call_next) -> FastAPIResponse:
+        if not app.state.telemetry_enabled:
+            return await call_next(request)
+
+        span_name = f"HTTP {request.method}"
+        with telemetry_tracer.start_as_current_span(
+            span_name,
+            context=extract_trace_context(request.headers),
+            kind=SpanKind.SERVER,
+            attributes={
+                "http.request.method": request.method,
+                "url.path": request.url.path,
+                "url.scheme": request.url.scheme,
+            },
+        ) as span:
+            response = await call_next(request)
+            route = request.scope.get("route")
+            route_path = getattr(route, "path", None)
+            if isinstance(route_path, str) and route_path:
+                span.set_attribute("http.route", route_path)
+            span.set_attribute("http.response.status_code", response.status_code)
+            return response
 
     @app.get("/healthz", tags=["system"])
     def healthz() -> dict[str, str]:

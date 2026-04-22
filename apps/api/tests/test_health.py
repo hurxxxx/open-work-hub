@@ -23,6 +23,16 @@ def test_healthz(client: TestClient) -> None:
     assert response.json()["status"] == "ok"
 
 
+def test_healthz_preserves_inbound_trace_id(client: TestClient) -> None:
+    trace_id = "abcdef1234567890abcdef1234567890"
+    response = client.get(
+        "/healthz",
+        headers={"traceparent": f"00-{trace_id}-1234567890abcdef-01"},
+    )
+    assert response.status_code == 200
+    assert response.headers["X-Doowon-Trace-Id"] == trace_id
+
+
 def test_auth_bootstrap_and_protected_search(client: TestClient) -> None:
     status_response = client.get("/api/v1/auth/bootstrap-status")
     assert status_response.status_code == 200

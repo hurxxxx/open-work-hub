@@ -27,9 +27,18 @@ def _ensure_api_src_on_path() -> None:
 _ensure_api_src_on_path()
 
 from aidoo_api.core.llm import get_llm_policy_seed_data  # noqa: E402
+from aidoo_api.core.telemetry import bootstrap_telemetry  # noqa: E402
 
 
 settings = get_settings()
+# Keep telemetry bootstrapped before task modules import RAG metric wrappers.
+bootstrap_telemetry(
+    service_name="aidoo-worker",
+    enabled=settings.otel_enabled,
+    enable_console_exporter=settings.otel_console_exporter,
+    enable_otlp_exporter=settings.otel_otlp_exporter_enabled,
+    metrics_export_interval_ms=settings.otel_metrics_export_interval_ms,
+)
 
 
 def _assert_llm_policy_control_plane_ready() -> None:

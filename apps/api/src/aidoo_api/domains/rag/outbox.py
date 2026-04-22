@@ -4,6 +4,7 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
+from aidoo_api.core.telemetry import serialize_current_trace_context
 from aidoo_api.domains.auth.security import new_id
 from aidoo_api.domains.rag.contracts import RagJobStatus, RagSyncLane, RagSyncOperation, RagTraceContext
 from aidoo_api.domains.rag.models import RagSyncJob, RagVisibilityRecomputeJob
@@ -21,6 +22,11 @@ def enqueue_rag_sync_job(
     visibility_checksum: str | None = None,
     trace_context: RagTraceContext | dict[str, Any] | None = None,
 ) -> RagSyncJob:
+    resolved_trace_context = (
+        serialize_current_trace_context()
+        if trace_context is None
+        else _normalize_trace_context(trace_context)
+    )
     job = RagSyncJob(
         id=new_id(),
         workspace_id=workspace_id,
@@ -30,7 +36,7 @@ def enqueue_rag_sync_job(
         operation=operation.value,
         content_checksum=content_checksum,
         visibility_checksum=visibility_checksum,
-        trace_context=_normalize_trace_context(trace_context),
+        trace_context=resolved_trace_context,
         status=RagJobStatus.PENDING.value,
         attempts=0,
     )
@@ -48,12 +54,17 @@ def enqueue_rag_visibility_recompute_job(
     cursor: dict[str, Any] | None = None,
     trace_context: RagTraceContext | dict[str, Any] | None = None,
 ) -> RagVisibilityRecomputeJob:
+    resolved_trace_context = (
+        serialize_current_trace_context()
+        if trace_context is None
+        else _normalize_trace_context(trace_context)
+    )
     job = RagVisibilityRecomputeJob(
         id=new_id(),
         workspace_id=workspace_id,
         scope_type=scope_type,
         scope_id=scope_id,
-        trace_context=_normalize_trace_context(trace_context),
+        trace_context=resolved_trace_context,
         cursor=dict(cursor or {}) or None,
         status=RagJobStatus.PENDING.value,
         attempts=0,

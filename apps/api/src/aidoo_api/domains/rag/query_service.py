@@ -4,6 +4,7 @@ import time
 from collections.abc import Callable, Sequence
 from typing import Protocol
 
+from aidoo_api.core.telemetry import current_trace_id
 from aidoo_api.domains.rag.contracts import (
     RagAnswerMode,
     RagGroundedAnswer,
@@ -14,6 +15,7 @@ from aidoo_api.domains.rag.contracts import (
     RagVectorSearchHit,
     RagVectorSearchRequest,
 )
+from aidoo_api.domains.rag.metrics import record_query_latency
 from aidoo_api.domains.rag.providers.base import (
     EmbeddingClient,
     RerankClient,
@@ -75,6 +77,12 @@ class RagQueryService:
             grounded_answer = self._build_grounded_answer(request.query, hits)
 
         latency_ms = int((time.perf_counter() - started) * 1000)
+        record_query_latency(
+            workspace_id=request.workspace_id,
+            answer_mode=request.answer_mode.value,
+            latency_ms=latency_ms,
+            source_kind=request.source_kinds[0] if len(request.source_kinds) == 1 else None,
+        )
         return RagQueryResponse(
             query=request.query,
             answer_mode=request.answer_mode,
@@ -86,7 +94,7 @@ class RagQueryService:
                 "rerank_applied": self._rerank_client is not None,
                 "post_filter_applied": post_filter is not None,
             },
-            trace_id=request.trace_context.traceparent if request.trace_context else None,
+            trace_id=current_trace_id(),
             latency_ms=latency_ms,
         )
 
