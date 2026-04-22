@@ -268,30 +268,36 @@ Phase 3로 넘어가기 전에 아래 4개 계약을 먼저 고정한다. 목표
 
 ---
 
-### Phase 5 — RAG Integration (Resource-level ACL Projection)
-**목표**: 내부 RAG 서비스 연동. 단, **팀 ID 전파로는 부족**하다. Docs의 실제 ACL = `owner` + `direct_share(user_id, access_level)` + `link_share(token, access_level)` + `meeting_grant(user_id, expires_at)` 복합이므로, 팀 소속만 넘기면 과차단 또는 과개방이 발생.
+### Phase 5 — External RAG Integration (Retrieval-Only, Cross-Domain)
+**목표**: 별도 RAG 서버와 HTTP로 연동해 Docs / Meeting / PMS / Planner 전도메인 retrieval surface를 만든다. RAG 서버는 chunking / extraction / embedding / Qdrant / rerank를 담당하고, Doowon은 ACL projection, access context, sync orchestration, grounded answer 후처리를 맡는다.
 
 **핵심 산출물**:
-1. **Resource-level ACL Projection 설계**:
-   - **Ingest 시** (문서 단위): doowon이 `_resolve_native_doc_access` 계열 로직으로 해당 문서의 "열람 가능 principal 집합"을 미리 계산 → RAG 서비스에 함께 전송.
-     - 예: `{document_id, chunks, visibility: {owners: [uid], direct_shares: [{uid, level}], link_share_refs: [{ref, level}], meeting_grants: [{uid, expires_at}], workspace_id}}`
-   - **Query 시** (사용자 단위): doowon이 현재 요청자의 `principal_set` 구성 → RAG 서비스에 함께 전송.
-     - 예: `{user_id, workspace_id, held_link_share_refs: [...], held_meeting_grants: [...], team_memberships: [...]}`
-   - **raw token은 RAG로 보내지 않는다.** 사용자가 제시한 `share_token`은 doowon 내부에서만 검증하고, query 직전에 파생 `link_share_ref`로 치환한다.
-   - RAG 서비스는 visibility와 principal_set의 **교집합 판정 로직**만 보유. 팀 기반 단일 필드 필터로 단순화 금지.
-2. **OpenAPI 계약 문서** (`docs/rag-service-openapi.yaml`) — 위 ACL 스키마 포함.
-3. **`core/rag_client.py`** httpx 비동기 클라이언트 + principal_set 빌더 (`domains/docs/access_grants.py` 로직 재사용).
-4. **도구**: `rag.query`, `rag.list_sources`.
-5. **Docs 훅**: 문서/페이지 생성·수정·삭제·공유 변경 이벤트 → Celery 태스크로 RAG 재인제스트. ACL 변경도 마찬가지 (visibility만 업데이트).
-6. **서비스 장애 graceful degradation**: RAG 다운 시 "지식베이스 조회 불가" 메시지 + audit 기록. LLM이 툴 없이 답변 시도.
+1. **Resource-level ACL Projection + Sync Foundation**:
+   - ingest 시 Doowon이 resource payload + visibility projection을 계산해 RAG 서버에 동기화
+   - query 시 Doowon이 requester access context를 계산해 RAG 서버에 함께 전송
+   - raw share token은 외부로 보내지 않고 내부 ref로 치환
+   - 동기화는 direct call이 아니라 sync job/outbox로 수행
+2. **Workspace-scoped RAG API**:
+   - `POST /api/v1/workspaces/{slug}/rag/query`
+   - `GET /api/v1/workspaces/{slug}/rag/sources`
+   - 기존 `/api/v1/search/documents`는 legacy/demo로 유지
+3. **AI capability**:
+   - `rag.query`, `rag.list_sources`
+   - retrieval result는 공통 hit/citation contract로 반환
+   - grounded answer는 RAG 서버가 아니라 Doowon LLM이 생성
+4. **UI**:
+   - orphan `SearchWorkbench`를 `/tool/search` real surface로 연결
+   - search-only / grounded answer / citations / filters 지원
+5. **서비스 장애 graceful degradation**:
+   - RAG 다운 시 REST는 explicit unavailable, AI는 tool error + fallback, UI는 graceful error state
 
-**완료 조건**: 사용자가 접근 권한 없는 문서의 chunk가 RAG 결과에 **한 건도** 섞이지 않음 (자동 테스트). meeting_grant 만료 후 접근 차단. 링크 공유 토큰으로 조회 시 해당 문서만 반환.
+**완료 조건**: 접근 권한 없는 resource hit가 결과에 한 건도 섞이지 않음. 만료된 grant는 다음 query부터 즉시 제외. 같은 질의가 REST, AI tool, `/tool/search` 세 surface에서 실질적으로 같은 hit/citation 구조를 반환.
 
-**전제**: RAG 서비스 자체 구현은 별도 프로젝트. 본 프로젝트는 client + 계약 + ingest 훅만.
+**전제**: RAG 서비스 자체 구현은 별도 프로젝트. 본 프로젝트는 client + ACL projection + sync + REST/AI/UI surface를 담당.
 
-**결정 의존**: ACL 체크를 RAG가 맡을지, client에서 필터링할지도 이 단계에 결정 (성능 vs 단순성).
+**구현 순서**: `5A foundation -> 5B REST/AI -> 5C UI`
 
-**상세 플랜 파일**: `05-phase5-rag-acl-projection.md`
+**상세 플랜 파일**: [`05-phase5-rag-integration.md`](./05-phase5-rag-integration.md)
 
 ---
 
