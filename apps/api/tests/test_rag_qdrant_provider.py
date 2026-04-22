@@ -2,6 +2,9 @@ from __future__ import annotations
 
 import warnings
 
+import aidoo_api.domains.rag.metrics as rag_metrics_module
+from opentelemetry.sdk.metrics import MeterProvider
+from opentelemetry.sdk.metrics.export import InMemoryMetricReader
 import pytest
 from qdrant_client import QdrantClient
 
@@ -92,6 +95,54 @@ def test_qdrant_vector_index_smoke_syncs_queries_and_deletes(qdrant_client) -> N
     assert after_delete.hits == []
 
 
+def test_qdrant_vector_index_prunes_stale_tail_chunks(qdrant_client) -> None:
+    vector_index = QdrantVectorIndexClient(client=qdrant_client)
+    embedding_client = FakeEmbeddingClient()
+    rag_service = RagService(
+        vector_index=vector_index,
+        embedding_client=embedding_client,
+    )
+
+    initial = rag_service.sync_projection(
+        RagProjection(
+            workspace_id="ws-1",
+            resource_type="doc",
+            resource_id="doc-prune",
+            source_kind="docs",
+            text_content=("A" * 900) + ("B" * 900),
+            visibility_refs=["workspace:ws-1"],
+        ),
+        collection="rag-qdrant-prune",
+    )
+    updated = rag_service.sync_projection(
+        RagProjection(
+            workspace_id="ws-1",
+            resource_type="doc",
+            resource_id="doc-prune",
+            source_kind="docs",
+            text_content="short body",
+            visibility_refs=["workspace:ws-1"],
+        ),
+        collection="rag-qdrant-prune",
+    )
+    records, _ = qdrant_client.scroll(
+        collection_name="rag-qdrant-prune",
+        limit=10,
+        with_payload=True,
+        with_vectors=False,
+    )
+    remaining = [
+        record
+        for record in records
+        if (record.payload or {}).get("resource_id") == "doc-prune"
+    ]
+
+    assert initial.chunk_count >= 3
+    assert updated.chunk_count == 1
+    assert updated.deleted_count >= 1
+    assert len(remaining) == 1
+
+
 def test_qdrant_vector_index_detects_existing_dense_dimension_mismatch(qdrant_client) -> None:
     vector_index = QdrantVectorIndexClient(client=qdrant_client)
 
@@ -136,3 +187,58 @@ def test_qdrant_vector_index_handles_missing_collection_for_delete_and_query(qdr
 
     assert deleted_count == 0
     assert response.hits == []
+
+
+def test_qdrant_query_emits_latency_metric(monkeypatch, qdrant_client) -> None:
+    reader = InMemoryMetricReader()
+    provider = MeterProvider(metric_readers=[reader])
+    monkeypatch.setattr(rag_metrics_module, "get_meter", lambda name: provider.get_meter(name))
+    rag_metrics_module._default_rag_metrics.cache_clear()
+    try:
+        vector_index = QdrantVectorIndexClient(client=qdrant_client)
+        embedding_client = FakeEmbeddingClient()
+        rag_service = RagService(
+            vector_index=vector_index,
+            embedding_client=embedding_client,
+        )
+        query_service = RagQueryService(
+            vector_index=vector_index,
+            embedding_client=embedding_client,
+        )
+
+        rag_service.sync_projection(
+            RagProjection(
+                workspace_id="ws-2",
+                resource_type="doc",
+                resource_id="doc-2",
+                source_kind="docs",
+                title="Latency Smoke",
+                summary="Qdrant latency metric smoke",
+                text_content="Budget latency smoke query content.",
+                visibility_refs=["workspace:ws-2"],
+            ),
+            collection="rag-qdrant-metrics",
+        )
+        response = query_service.query(
+            RagQueryRequest(
+                collection="rag-qdrant-metrics",
+                workspace_id="ws-2",
+                query="latency smoke",
+                source_kinds=["docs"],
+            )
+        )
+        assert response.hits
+    finally:
+        rag_metrics_module._default_rag_metrics.cache_clear()
+
+    metrics_data = reader.get_metrics_data()
+    assert metrics_data is not None
+    metric_map = {
+        metric.name: metric
+        for resource_metric in metrics_data.resource_metrics
+        for scope_metric in resource_metric.scope_metrics
+        for metric in scope_metric.metrics
+    }
+    query_points = metric_map["qdrant_query_latency_ms"].data.data_points
+    assert len(query_points) == 1
+    assert query_points[0].attributes["provider_name"] == "qdrant"

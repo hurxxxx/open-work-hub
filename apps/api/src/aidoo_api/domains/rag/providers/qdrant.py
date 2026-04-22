@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from hashlib import blake2b
+import time
 from typing import Any
 import uuid
 
@@ -14,6 +15,11 @@ from aidoo_api.domains.rag.contracts import (
     RagVectorRecord,
     RagVectorSearchHit,
     RagVectorSearchRequest,
+)
+from aidoo_api.domains.rag.metrics import (
+    record_provider_error,
+    record_provider_timeout,
+    record_vector_query_latency,
 )
 
 _DENSE_VECTOR_NAME = "dense"
@@ -156,6 +162,51 @@ class QdrantVectorIndexClient:
         )
         return deleted_count
 
+    def delete_chunks_at_or_after(
+        self,
+        *,
+        request: RagDeleteRequest,
+        chunk_index: int,
+    ) -> int:
+        if chunk_index <= 0:
+            return self.delete_resource(request=request)
+        if not self._client.collection_exists(collection_name=request.collection):
+            return 0
+
+        resource_filter = self._resource_filter(
+            workspace_id=request.workspace_id,
+            resource_type=request.resource_type,
+            resource_id=request.resource_id,
+        )
+        offset: int | str | uuid.UUID | None = None
+        point_ids: list[models.ExtendedPointId] = []
+        while True:
+            records, offset = self._client.scroll(
+                collection_name=request.collection,
+                scroll_filter=resource_filter,
+                limit=128,
+                offset=offset,
+                with_payload=["chunk_metadata"],
+                with_vectors=False,
+            )
+            for record in records:
+                payload = record.payload or {}
+                if _chunk_index_from_payload(payload) < chunk_index:
+                    continue
+                point_ids.append(record.id)
+            if offset is None:
+                break
+
+        if not point_ids:
+            return 0
+
+        self._client.delete(
+            collection_name=request.collection,
+            points_selector=point_ids,
+            wait=True,
+        )
+        return len(point_ids)
+
     def query(self, *, request: RagVectorSearchRequest) -> list[RagVectorSearchHit]:
         if not request.query_embedding:
             return []
@@ -164,37 +215,51 @@ class QdrantVectorIndexClient:
 
         query_filter = self._build_query_filter(request)
         sparse_query = self._to_sparse_query_vector(request.query)
-        if sparse_query is not None:
-            response = self._client.query_points(
-                collection_name=request.collection,
-                prefetch=[
-                    models.Prefetch(
-                        query=request.query_embedding,
-                        using=self._dense_vector_name,
-                        limit=max(request.top_k * 4, request.top_k),
-                    ),
-                    models.Prefetch(
-                        query=sparse_query,
-                        using=self._sparse_vector_name,
-                        limit=max(request.top_k * 4, request.top_k),
-                    ),
-                ],
-                query=models.FusionQuery(fusion=models.Fusion.RRF),
-                query_filter=query_filter,
-                limit=request.top_k,
-                with_payload=True,
-                with_vectors=False,
+        started = time.perf_counter()
+        try:
+            if sparse_query is not None:
+                response = self._client.query_points(
+                    collection_name=request.collection,
+                    prefetch=[
+                        models.Prefetch(
+                            query=request.query_embedding,
+                            using=self._dense_vector_name,
+                            limit=max(request.top_k * 4, request.top_k),
+                        ),
+                        models.Prefetch(
+                            query=sparse_query,
+                            using=self._sparse_vector_name,
+                            limit=max(request.top_k * 4, request.top_k),
+                        ),
+                    ],
+                    query=models.FusionQuery(fusion=models.Fusion.RRF),
+                    query_filter=query_filter,
+                    limit=request.top_k,
+                    with_payload=True,
+                    with_vectors=False,
+                )
+            else:
+                response = self._client.query_points(
+                    collection_name=request.collection,
+                    query=request.query_embedding,
+                    using=self._dense_vector_name,
+                    query_filter=query_filter,
+                    limit=request.top_k,
+                    with_payload=True,
+                    with_vectors=False,
+                )
+        except Exception as error:
+            _record_query_failure(
+                request=request,
+                error=error,
             )
-        else:
-            response = self._client.query_points(
-                collection_name=request.collection,
-                query=request.query_embedding,
-                using=self._dense_vector_name,
-                query_filter=query_filter,
-                limit=request.top_k,
-                with_payload=True,
-                with_vectors=False,
-            )
+            raise
+        record_vector_query_latency(
+            workspace_id=request.workspace_id,
+            provider_name=self.provider_name,
+            latency_ms=int((time.perf_counter() - started) * 1000),
+            source_kind=request.source_kinds[0] if len(request.source_kinds) == 1 else None,
+        )
         return [self._to_search_hit(point) for point in response.points]
 
     def _validate_collection_schema(
@@ -332,6 +397,18 @@ def _payload_from_record(record: RagVectorRecord) -> dict[str, Any]:
     }
 
 
+def _chunk_index_from_payload(payload: dict[str, Any]) -> int:
+    chunk_metadata = payload.get("chunk_metadata") or {}
+    raw_value = chunk_metadata.get("chunk_index")
+    if isinstance(raw_value, bool):
+        return 0
+    if isinstance(raw_value, int):
+        return raw_value
+    if isinstance(raw_value, str) and raw_value.isdigit():
+        return int(raw_value)
+    return 0
+
+
 
 def _build_field_condition(
     *,
@@ -422,3 +499,21 @@ def _string_or_none(value: object) -> str | None:
 
 def _string_or_empty(value: object) -> str:
     return "" if value is None else str(value)
+
+
+def _record_query_failure(
+    *,
+    request: RagVectorSearchRequest,
+    error: Exception,
+) -> None:
+    payload = {
+        "provider_name": QdrantVectorIndexClient.provider_name,
+        "operation": "vector_query",
+        "workspace_id": request.workspace_id,
+        "source_kind": request.source_kinds[0] if len(request.source_kinds) == 1 else None,
+        "error_type": error.__class__.__name__,
+    }
+    if isinstance(error, TimeoutError) or "timeout" in error.__class__.__name__.lower():
+        record_provider_timeout(**payload)
+        return
+    record_provider_error(**payload)

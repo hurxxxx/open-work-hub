@@ -191,6 +191,7 @@ Phase 5의 목표는 Docs / Meeting / PMS / Planner 전도메인 데이터를 �
   - hot filter field payload index를 ingest 전에 생성
   - strict mode / index completeness 검증을 bootstrap 단계에서 체크
 - 초기 대량 적재(backfill/reindex)는 chunked/throttled 전용 lane으로 처리하고, 일반 write sync queue와 분리한다
+  - backfill worker는 작은 batch를 순차 drain하고 job 사이에 throttle을 걸어 realtime lane과 자원 경합을 낮춘다
 - worker queue는 최소 다음 3개 lane으로 분리한다
   - `rag_sync_realtime`
   - `rag_sync_backfill`
@@ -239,14 +240,18 @@ Phase 5의 목표는 Docs / Meeting / PMS / Planner 전도메인 데이터를 �
 4. `5A-4 Docs Vertical Slice`
    - Docs projection builder와 ACL-only mutation enqueue hook을 먼저 완성한다.
    - collection bootstrap, payload index bootstrap, chunking, embedding, vector upsert/delete의 첫 vertical slice를 Docs로 닫는다.
+   - `sync_projection()`은 현재 chunk set을 upsert한 뒤 tail stale chunk를 prune해서, 본문 축소나 chunk 경계 변경 후에도 orphan vector가 남지 않게 한다.
    - 내부 `query_service.py`를 이용해 REST/UI 없이도 ingest -> query -> post-filter가 도는 smoke path를 만든다.
+   - query path는 post-filter가 켜질 때 retrieval top-k를 oversample해서, 접근 불가 hit가 상단을 점유해도 접근 가능한 hit를 복구할 수 있게 한다.
    - 완료 기준: Docs direct share / link share / meeting grant / revoke / expiry 시나리오가 fake provider와 실제 adapter smoke 양쪽에서 통과한다.
 5. `5A-5 Meeting / PMS / Planner Parity`
    - Meeting, PMS, Planner projection builder와 enqueue hook을 같은 패턴으로 확장한다.
+   - Meeting projection은 meeting row 자체만이 아니라 최신 recording의 summary/transcript를 포함하고, 참가자 변경/recording 파이프라인 갱신이 같은 sync contract로 이어져야 한다.
    - workspace/container/grant 변경이 projection payload를 바꾸는 경우 `rag_visibility_recompute_jobs` producer를 연결한다.
    - 완료 기준: 네 도메인 모두 resource sync contract를 공유하고, cascade ACL 변경이 realtime lane을 압도하지 않는다.
 6. `5A-6 Hardening + Readiness Gate`
    - retry / idempotency / dedupe / collection readiness check를 정리한다.
+   - worker failure는 `next_retry_at` + bounded Celery retry로 다시 올리고, max-attempts 초과 poison message는 terminal dead-letter 상태로 격리한다.
    - provider import-boundary test, metric/trace smoke test, worker queue routing test를 닫는다.
    - 5B로 넘어가기 전 "Docs-first vertical slice + 전도메인 projection enqueue + trace propagation" 세 조건을 exit gate로 건다.
 

@@ -145,6 +145,27 @@ class FakeVectorIndexClient:
             del collection[chunk_id]
         return len(to_delete)
 
+    def delete_chunks_at_or_after(
+        self,
+        *,
+        request: RagDeleteRequest,
+        chunk_index: int,
+    ) -> int:
+        if chunk_index <= 0:
+            return self.delete_resource(request=request)
+        collection = self._collections[request.collection]
+        to_delete = [
+            chunk_id
+            for chunk_id, record in collection.items()
+            if record.projection.workspace_id == request.workspace_id
+            and record.projection.resource_type == request.resource_type
+            and record.projection.resource_id == request.resource_id
+            and _chunk_index(record) >= chunk_index
+        ]
+        for chunk_id in to_delete:
+            del collection[chunk_id]
+        return len(to_delete)
+
     def query(self, *, request: RagVectorSearchRequest) -> list[RagVectorSearchHit]:
         query_tokens = set(_tokenize(request.query))
         hits: list[RagVectorSearchHit] = []
@@ -199,3 +220,14 @@ def _matches_metadata_filter(projection: RagProjection, metadata_filter: dict[st
         if key in projection.metadata and projection.metadata[key] != value:
             return False
     return True
+
+
+def _chunk_index(record: RagVectorRecord) -> int:
+    raw_value = record.metadata.get("chunk_index")
+    if isinstance(raw_value, bool):
+        return 0
+    if isinstance(raw_value, int):
+        return raw_value
+    if isinstance(raw_value, str) and raw_value.isdigit():
+        return int(raw_value)
+    return 0

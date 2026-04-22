@@ -124,6 +124,56 @@ class Settings(BaseSettings):
             "DOOWON_WORKER_AIDOO_RERANK_PROVIDER",
         ),
     )
+    rag_backfill_batch_size: int = Field(
+        default=25,
+        ge=1,
+        le=500,
+        validation_alias=AliasChoices(
+            "AIDOO_RAG_BACKFILL_BATCH_SIZE",
+            "DOOWON_AIDOO_RAG_BACKFILL_BATCH_SIZE",
+            "DOOWON_WORKER_AIDOO_RAG_BACKFILL_BATCH_SIZE",
+        ),
+    )
+    rag_backfill_throttle_ms: int = Field(
+        default=50,
+        ge=0,
+        le=60000,
+        validation_alias=AliasChoices(
+            "AIDOO_RAG_BACKFILL_THROTTLE_MS",
+            "DOOWON_AIDOO_RAG_BACKFILL_THROTTLE_MS",
+            "DOOWON_WORKER_AIDOO_RAG_BACKFILL_THROTTLE_MS",
+        ),
+    )
+    rag_job_max_attempts: int = Field(
+        default=3,
+        ge=1,
+        le=20,
+        validation_alias=AliasChoices(
+            "AIDOO_RAG_JOB_MAX_ATTEMPTS",
+            "DOOWON_AIDOO_RAG_JOB_MAX_ATTEMPTS",
+            "DOOWON_WORKER_AIDOO_RAG_JOB_MAX_ATTEMPTS",
+        ),
+    )
+    rag_job_retry_backoff_seconds: int = Field(
+        default=30,
+        ge=1,
+        le=3600,
+        validation_alias=AliasChoices(
+            "AIDOO_RAG_JOB_RETRY_BACKOFF_SECONDS",
+            "DOOWON_AIDOO_RAG_JOB_RETRY_BACKOFF_SECONDS",
+            "DOOWON_WORKER_AIDOO_RAG_JOB_RETRY_BACKOFF_SECONDS",
+        ),
+    )
+    rag_job_processing_lease_seconds: int = Field(
+        default=2100,
+        ge=60,
+        le=7200,
+        validation_alias=AliasChoices(
+            "AIDOO_RAG_JOB_PROCESSING_LEASE_SECONDS",
+            "DOOWON_AIDOO_RAG_JOB_PROCESSING_LEASE_SECONDS",
+            "DOOWON_WORKER_AIDOO_RAG_JOB_PROCESSING_LEASE_SECONDS",
+        ),
+    )
     otel_enabled: bool = Field(
         default=True,
         validation_alias=AliasChoices(

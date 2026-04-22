@@ -1,15 +1,16 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from functools import lru_cache
 import logging
+import time
 
 from opentelemetry.trace import SpanKind
-from sqlalchemy import Engine, create_engine, select, update
+from sqlalchemy import Engine, and_, create_engine, func, or_, select, update
 from sqlalchemy.orm import Session, sessionmaker
 
 from aidoo_api.core.telemetry import start_as_current_span
-from aidoo_api.domains.rag.contracts import RagJobStatus, RagSyncOperation
+from aidoo_api.domains.rag.contracts import RagJobStatus, RagSyncLane, RagSyncOperation
 from aidoo_api.domains.docs.models import DocMeetingAccess
 from aidoo_api.domains.docs.rag_sync import MEETING_VISIBILITY_SCOPE
 from aidoo_api.domains.pms.models import Issue, IssueLabel, IssueUserAccess
@@ -20,7 +21,12 @@ from aidoo_api.domains.pms.rag_sync import (
     PMS_TASK_LIST_RECOMPUTE_SCOPE,
 )
 from aidoo_api.domains.rag.docs_projection import NATIVE_DOC_RESOURCE_TYPE, load_native_doc_projection
-from aidoo_api.domains.rag.metrics import record_sync_job_lag, record_sync_job_result
+from aidoo_api.domains.rag.meeting_projection import MEETING_RESOURCE_TYPE, load_meeting_projection
+from aidoo_api.domains.rag.metrics import (
+    record_sync_job_lag,
+    record_sync_job_result,
+    record_sync_queue_depth,
+)
 from aidoo_api.domains.rag.models import RagSyncJob, RagVisibilityRecomputeJob
 from aidoo_api.domains.rag.outbox import enqueue_rag_sync_job
 from aidoo_api.domains.rag.planner_projection import (
@@ -109,6 +115,7 @@ def _job_lag_ms(created_at: datetime) -> int:
 )
 def sync_resource(self, job_id: str) -> str:
     return _run_sync_job(
+        task=self,
         job_id=job_id,
         span_name="rag.sync_resource",
         job_kind="resource_sync",
@@ -123,18 +130,27 @@ def sync_resource(self, job_id: str) -> str:
     task_soft_time_limit=1500,
 )
 def sync_backfill_resource(self, job_id: str) -> str:
+    settings = get_settings()
     return _run_sync_job(
+        task=self,
         job_id=job_id,
         span_name="rag.sync_backfill_resource",
         job_kind="backfill_sync",
+        batch_size=settings.rag_backfill_batch_size,
+        throttle_ms=settings.rag_backfill_throttle_ms,
+        drain_lane=RagSyncLane.BACKFILL.value,
     )
 
 
 def _run_sync_job(
     *,
+    task,
     job_id: str,
     span_name: str,
     job_kind: str,
+    batch_size: int = 1,
+    throttle_ms: int = 0,
+    drain_lane: str | None = None,
 ) -> str:
     settings = get_settings()
     session = _db_session()
@@ -148,42 +164,84 @@ def _run_sync_job(
             logger.info("Ignoring RAG sync job already claimed or closed: %s", job_id)
             record_sync_job_result(status="ignored", job_kind=job_kind)
             return "ignored"
-        record_sync_job_lag(
-            lag_ms=_job_lag_ms(job.created_at),
+        result = _execute_sync_job(
+            session,
+            task=task,
+            job=job,
+            span_name=span_name,
+            job_kind=job_kind,
+            rag_enabled=settings.rag_enabled,
+        )
+        if drain_lane is None or batch_size <= 1:
+            return result
+
+        drained = 1
+        while drained < batch_size:
+            next_job = _claim_next_sync_job(session, lane=drain_lane)
+            if next_job is None:
+                break
+            if throttle_ms > 0:
+                time.sleep(throttle_ms / 1000)
+            _execute_sync_job(
+                session,
+                task=task,
+                job=next_job,
+                span_name=span_name,
+                job_kind=job_kind,
+                rag_enabled=settings.rag_enabled,
+            )
+            drained += 1
+        return result
+    finally:
+        session.close()
+
+
+def _execute_sync_job(
+    session: Session,
+    *,
+    task,
+    job: RagSyncJob,
+    span_name: str,
+    job_kind: str,
+    rag_enabled: bool,
+) -> str:
+    record_sync_job_lag(
+        lag_ms=_job_lag_ms(job.created_at),
+        workspace_id=job.workspace_id,
+        resource_type=job.resource_type,
+        resource_id=job.resource_id,
+        operation=job.operation,
+        job_lane=job.lane,
+        job_kind=job_kind,
+    )
+    with start_as_current_span(
+        tracer_name="aidoo_worker.rag",
+        span_name=span_name,
+        kind=SpanKind.CONSUMER,
+        parent_trace_context=job.trace_context,
+        attributes=rag_span_attributes(
             workspace_id=job.workspace_id,
             resource_type=job.resource_type,
             resource_id=job.resource_id,
             operation=job.operation,
+            job_id=job.id,
             job_lane=job.lane,
-            job_kind=job_kind,
-        )
-        with start_as_current_span(
-            tracer_name="aidoo_worker.rag",
-            span_name=span_name,
-            kind=SpanKind.CONSUMER,
-            parent_trace_context=job.trace_context,
-            attributes=rag_span_attributes(
+        ),
+    ):
+        if not rag_enabled:
+            logger.info("Skipping RAG sync because RAG is disabled: %s", job.id)
+            record_sync_job_result(
                 workspace_id=job.workspace_id,
                 resource_type=job.resource_type,
                 resource_id=job.resource_id,
                 operation=job.operation,
-                job_id=job.id,
                 job_lane=job.lane,
-            ),
-        ):
-            if not settings.rag_enabled:
-                logger.info("Skipping RAG sync because RAG is disabled: %s", job_id)
-                record_sync_job_result(
-                    status="disabled",
-                    workspace_id=job.workspace_id,
-                    resource_type=job.resource_type,
-                    resource_id=job.resource_id,
-                    operation=job.operation,
-                    job_lane=job.lane,
-                    job_kind=job_kind,
-                )
-                _mark_sync_job(session, job, status=RagJobStatus.CANCELLED.value)
-                return "disabled"
+                status="disabled",
+                job_kind=job_kind,
+            )
+            _mark_sync_job(session, job, status=RagJobStatus.CANCELLED.value)
+            return "disabled"
+        try:
             result = _process_sync_job(session, job)
             record_sync_job_result(
                 status=result,
@@ -201,12 +259,14 @@ def _run_sync_job(
             )
             _mark_sync_job(session, job, status=final_status)
             return result
-    except Exception as error:
-        if "job" in locals() and job is not None:
-            _mark_sync_job(session, job, status=RagJobStatus.FAILED.value, last_error=str(error))
-        raise
-    finally:
-        session.close()
+        except Exception as error:
+            return _handle_sync_job_failure(
+                session,
+                task=task,
+                job=job,
+                error=error,
+                job_kind=job_kind,
+            )
 
 
 @celery_app.task(
@@ -229,36 +289,54 @@ def recompute_visibility(self, job_id: str) -> str:
             logger.info("Ignoring RAG visibility job already claimed or closed: %s", job_id)
             record_sync_job_result(status="ignored", job_kind="visibility_recompute")
             return "ignored"
-        record_sync_job_lag(
-            lag_ms=_job_lag_ms(job.created_at),
+        return _execute_visibility_job(
+            session,
+            task=self,
+            job=job,
+            rag_enabled=settings.rag_enabled,
+        )
+    finally:
+        session.close()
+
+
+def _execute_visibility_job(
+    session: Session,
+    *,
+    task,
+    job: RagVisibilityRecomputeJob,
+    rag_enabled: bool,
+) -> str:
+    record_sync_job_lag(
+        lag_ms=_job_lag_ms(job.created_at),
+        workspace_id=job.workspace_id,
+        scope_type=job.scope_type,
+        scope_id=job.scope_id,
+        job_kind="visibility_recompute",
+    )
+    with start_as_current_span(
+        tracer_name="aidoo_worker.rag",
+        span_name="rag.recompute_visibility",
+        kind=SpanKind.CONSUMER,
+        parent_trace_context=job.trace_context,
+        attributes=rag_span_attributes(
             workspace_id=job.workspace_id,
             scope_type=job.scope_type,
             scope_id=job.scope_id,
-            job_kind="visibility_recompute",
-        )
-        with start_as_current_span(
-            tracer_name="aidoo_worker.rag",
-            span_name="rag.recompute_visibility",
-            kind=SpanKind.CONSUMER,
-            parent_trace_context=job.trace_context,
-            attributes=rag_span_attributes(
+            job_id=job.id,
+        ),
+    ):
+        if not rag_enabled:
+            logger.info("Skipping RAG visibility recompute because RAG is disabled: %s", job.id)
+            record_sync_job_result(
+                status="disabled",
                 workspace_id=job.workspace_id,
                 scope_type=job.scope_type,
                 scope_id=job.scope_id,
-                job_id=job.id,
-            ),
-        ):
-            if not settings.rag_enabled:
-                logger.info("Skipping RAG visibility recompute because RAG is disabled: %s", job_id)
-                record_sync_job_result(
-                    status="disabled",
-                    workspace_id=job.workspace_id,
-                    scope_type=job.scope_type,
-                    scope_id=job.scope_id,
-                    job_kind="visibility_recompute",
-                )
-                _mark_visibility_job(session, job, status=RagJobStatus.CANCELLED.value)
-                return "disabled"
+                job_kind="visibility_recompute",
+            )
+            _mark_visibility_job(session, job, status=RagJobStatus.CANCELLED.value)
+            return "disabled"
+        try:
             result, last_error = _process_visibility_job(session, job)
             record_sync_job_result(
                 status=result,
@@ -274,17 +352,13 @@ def recompute_visibility(self, job_id: str) -> str:
             )
             _mark_visibility_job(session, job, status=final_status, last_error=last_error)
             return result
-    except Exception as error:
-        if "job" in locals() and job is not None:
-            _mark_visibility_job(
+        except Exception as error:
+            return _handle_visibility_job_failure(
                 session,
-                job,
-                status=RagJobStatus.FAILED.value,
-                last_error=str(error),
+                task=task,
+                job=job,
+                error=error,
             )
-        raise
-    finally:
-        session.close()
 
 
 def _process_sync_job(session: Session, job: RagSyncJob) -> str:
@@ -327,6 +401,8 @@ def _process_sync_job(session: Session, job: RagSyncJob) -> str:
 def _load_projection_for_job(session: Session, job: RagSyncJob):
     if job.resource_type == NATIVE_DOC_RESOURCE_TYPE:
         return load_native_doc_projection(session, doc_id=job.resource_id)
+    if job.resource_type == MEETING_RESOURCE_TYPE:
+        return load_meeting_projection(session, meeting_id=job.resource_id)
     if job.resource_type == PLANNER_EVENT_RESOURCE_TYPE:
         return load_planner_event_projection(session, event_id=job.resource_id)
     if job.resource_type == PMS_ISSUE_RESOURCE_TYPE:
@@ -353,6 +429,7 @@ def _process_visibility_job(
             resource_type=NATIVE_DOC_RESOURCE_TYPE,
             resource_ids=doc_ids,
             operation=RagSyncOperation.VISIBILITY_UPDATE,
+            lane=RagSyncLane.BACKFILL,
         )
         session.commit()
         logger.info(
@@ -376,6 +453,7 @@ def _process_visibility_job(
             resource_type=PMS_ISSUE_RESOURCE_TYPE,
             resource_ids=issue_ids,
             operation=RagSyncOperation.VISIBILITY_UPDATE,
+            lane=RagSyncLane.BACKFILL,
         )
         session.commit()
         logger.info(
@@ -421,6 +499,7 @@ def _queue_pms_issue_recompute(
         resource_type=PMS_ISSUE_RESOURCE_TYPE,
         resource_ids=issue_ids,
         operation=RagSyncOperation.UPSERT,
+        lane=RagSyncLane.BACKFILL,
     )
     session.commit()
     logger.info(
@@ -439,6 +518,7 @@ def _enqueue_resource_sync_jobs(
     resource_type: str,
     resource_ids: list[str],
     operation: RagSyncOperation,
+    lane: RagSyncLane = RagSyncLane.REALTIME,
 ) -> None:
     for resource_id in resource_ids:
         enqueue_rag_sync_job(
@@ -447,6 +527,7 @@ def _enqueue_resource_sync_jobs(
             resource_type=resource_type,
             resource_id=resource_id,
             operation=operation,
+            lane=lane,
         )
 
 
@@ -534,36 +615,46 @@ def _mark_sync_job(
     status: str,
     increment_attempts: bool = False,
     last_error: str | None = None,
+    next_retry_at: datetime | None = None,
 ) -> None:
     job.status = status
     if increment_attempts:
         job.attempts += 1
     job.last_error = last_error
+    job.next_retry_at = next_retry_at
     session.add(job)
     session.commit()
+    _record_sync_queue_depth_snapshot(session, workspace_id=job.workspace_id, lane=job.lane)
 
 
 def _claim_sync_job(
     session: Session,
     job_id: str,
 ) -> tuple[RagSyncJob | None, str]:
+    settings = get_settings()
+    now = datetime.now(UTC).replace(tzinfo=None)
+    lease_cutoff = now - timedelta(seconds=settings.rag_job_processing_lease_seconds)
     claimed = session.execute(
         update(RagSyncJob)
         .where(
             RagSyncJob.id == job_id,
-            RagSyncJob.status == RagJobStatus.PENDING.value,
+            _sync_claimable_clause(now=now, lease_cutoff=lease_cutoff),
         )
         .values(
             status=RagJobStatus.PROCESSING.value,
             attempts=RagSyncJob.attempts + 1,
             last_error=None,
-            updated_at=datetime.now(UTC).replace(tzinfo=None),
+            next_retry_at=None,
+            updated_at=now,
         )
     )
     session.commit()
     session.expire_all()
     if claimed.rowcount == 1:
-        return session.get(RagSyncJob, job_id), "claimed"
+        job = session.get(RagSyncJob, job_id)
+        if job is not None:
+            _record_sync_queue_depth_snapshot(session, workspace_id=job.workspace_id, lane=job.lane)
+        return job, "claimed"
 
     existing = session.get(RagSyncJob, job_id)
     if existing is None:
@@ -578,36 +669,46 @@ def _mark_visibility_job(
     status: str,
     increment_attempts: bool = False,
     last_error: str | None = None,
+    next_retry_at: datetime | None = None,
 ) -> None:
     job.status = status
     if increment_attempts:
         job.attempts += 1
     job.last_error = last_error
+    job.next_retry_at = next_retry_at
     session.add(job)
     session.commit()
+    _record_visibility_queue_depth_snapshot(session, workspace_id=job.workspace_id)
 
 
 def _claim_visibility_job(
     session: Session,
     job_id: str,
 ) -> tuple[RagVisibilityRecomputeJob | None, str]:
+    settings = get_settings()
+    now = datetime.now(UTC).replace(tzinfo=None)
+    lease_cutoff = now - timedelta(seconds=settings.rag_job_processing_lease_seconds)
     claimed = session.execute(
         update(RagVisibilityRecomputeJob)
         .where(
             RagVisibilityRecomputeJob.id == job_id,
-            RagVisibilityRecomputeJob.status == RagJobStatus.PENDING.value,
+            _visibility_claimable_clause(now=now, lease_cutoff=lease_cutoff),
         )
         .values(
             status=RagJobStatus.PROCESSING.value,
             attempts=RagVisibilityRecomputeJob.attempts + 1,
             last_error=None,
-            updated_at=datetime.now(UTC).replace(tzinfo=None),
+            next_retry_at=None,
+            updated_at=now,
         )
     )
     session.commit()
     session.expire_all()
     if claimed.rowcount == 1:
-        return session.get(RagVisibilityRecomputeJob, job_id), "claimed"
+        job = session.get(RagVisibilityRecomputeJob, job_id)
+        if job is not None:
+            _record_visibility_queue_depth_snapshot(session, workspace_id=job.workspace_id)
+        return job, "claimed"
 
     existing = session.get(RagVisibilityRecomputeJob, job_id)
     if existing is None:
@@ -619,3 +720,213 @@ def _collection_name(resource_type: str) -> str:
     settings = get_settings()
     normalized = resource_type.replace("_", "-")
     return f"{settings.rag_qdrant_collection_prefix}-{normalized}"
+
+
+def _claim_next_sync_job(
+    session: Session,
+    *,
+    lane: str,
+) -> RagSyncJob | None:
+    settings = get_settings()
+    now = datetime.now(UTC).replace(tzinfo=None)
+    lease_cutoff = now - timedelta(seconds=settings.rag_job_processing_lease_seconds)
+    candidate_ids = list(
+        session.scalars(
+            select(RagSyncJob.id)
+            .where(
+                RagSyncJob.lane == lane,
+                _sync_claimable_clause(now=now, lease_cutoff=lease_cutoff),
+            )
+            .order_by(RagSyncJob.created_at.asc(), RagSyncJob.id.asc())
+            .limit(max(settings.rag_backfill_batch_size, 1))
+        )
+    )
+    for candidate_id in candidate_ids:
+        job, outcome = _claim_sync_job(session, candidate_id)
+        if outcome == "claimed":
+            return job
+    return None
+
+
+def _sync_claimable_clause(*, now: datetime, lease_cutoff: datetime):
+    return or_(
+        and_(
+            RagSyncJob.status == RagJobStatus.PENDING.value,
+            or_(RagSyncJob.next_retry_at.is_(None), RagSyncJob.next_retry_at <= now),
+        ),
+        and_(
+            RagSyncJob.status == RagJobStatus.PROCESSING.value,
+            RagSyncJob.updated_at <= lease_cutoff,
+        ),
+    )
+
+
+def _visibility_claimable_clause(*, now: datetime, lease_cutoff: datetime):
+    return or_(
+        and_(
+            RagVisibilityRecomputeJob.status == RagJobStatus.PENDING.value,
+            or_(
+                RagVisibilityRecomputeJob.next_retry_at.is_(None),
+                RagVisibilityRecomputeJob.next_retry_at <= now,
+            ),
+        ),
+        and_(
+            RagVisibilityRecomputeJob.status == RagJobStatus.PROCESSING.value,
+            RagVisibilityRecomputeJob.updated_at <= lease_cutoff,
+        ),
+    )
+
+
+def _handle_sync_job_failure(
+    session: Session,
+    *,
+    task,
+    job: RagSyncJob,
+    error: Exception,
+    job_kind: str,
+) -> str:
+    settings = get_settings()
+    error_text = str(error)
+    if job.attempts >= settings.rag_job_max_attempts:
+        record_sync_job_result(
+            status="dead_letter",
+            workspace_id=job.workspace_id,
+            resource_type=job.resource_type,
+            resource_id=job.resource_id,
+            operation=job.operation,
+            job_lane=job.lane,
+            job_kind=job_kind,
+        )
+        _mark_sync_job(
+            session,
+            job,
+            status=RagJobStatus.CANCELLED.value,
+            last_error=f"dead_letter: {error_text}",
+        )
+        logger.error("Dead-lettered RAG sync job %s after %s attempts", job.id, job.attempts)
+        return "dead_letter"
+
+    countdown = settings.rag_job_retry_backoff_seconds * max(job.attempts, 1)
+    next_retry_at = datetime.now(UTC).replace(tzinfo=None) + timedelta(seconds=countdown)
+    record_sync_job_result(
+        status="retry_scheduled",
+        workspace_id=job.workspace_id,
+        resource_type=job.resource_type,
+        resource_id=job.resource_id,
+        operation=job.operation,
+        job_lane=job.lane,
+        job_kind=job_kind,
+    )
+    _mark_sync_job(
+        session,
+        job,
+        status=RagJobStatus.PENDING.value,
+        last_error=error_text,
+        next_retry_at=next_retry_at,
+    )
+    logger.warning(
+        "Retrying RAG sync job %s in %ss after failure: %s",
+        job.id,
+        countdown,
+        error_text,
+    )
+    raise task.retry(exc=error, countdown=countdown)
+
+
+def _handle_visibility_job_failure(
+    session: Session,
+    *,
+    task,
+    job: RagVisibilityRecomputeJob,
+    error: Exception,
+) -> str:
+    settings = get_settings()
+    error_text = str(error)
+    if job.attempts >= settings.rag_job_max_attempts:
+        record_sync_job_result(
+            status="dead_letter",
+            workspace_id=job.workspace_id,
+            scope_type=job.scope_type,
+            scope_id=job.scope_id,
+            job_kind="visibility_recompute",
+        )
+        _mark_visibility_job(
+            session,
+            job,
+            status=RagJobStatus.CANCELLED.value,
+            last_error=f"dead_letter: {error_text}",
+        )
+        logger.error(
+            "Dead-lettered RAG visibility job %s after %s attempts",
+            job.id,
+            job.attempts,
+        )
+        return "dead_letter"
+
+    countdown = settings.rag_job_retry_backoff_seconds * max(job.attempts, 1)
+    next_retry_at = datetime.now(UTC).replace(tzinfo=None) + timedelta(seconds=countdown)
+    record_sync_job_result(
+        status="retry_scheduled",
+        workspace_id=job.workspace_id,
+        scope_type=job.scope_type,
+        scope_id=job.scope_id,
+        job_kind="visibility_recompute",
+    )
+    _mark_visibility_job(
+        session,
+        job,
+        status=RagJobStatus.PENDING.value,
+        last_error=error_text,
+        next_retry_at=next_retry_at,
+    )
+    logger.warning(
+        "Retrying RAG visibility job %s in %ss after failure: %s",
+        job.id,
+        countdown,
+        error_text,
+    )
+    raise task.retry(exc=error, countdown=countdown)
+
+
+def _record_sync_queue_depth_snapshot(
+    session: Session,
+    *,
+    workspace_id: str,
+    lane: str,
+) -> None:
+    pending_count = session.scalar(
+        select(func.count())
+        .select_from(RagSyncJob)
+        .where(
+            RagSyncJob.workspace_id == workspace_id,
+            RagSyncJob.lane == lane,
+            RagSyncJob.status == RagJobStatus.PENDING.value,
+        )
+    )
+    record_sync_queue_depth(
+        depth=int(pending_count or 0),
+        workspace_id=workspace_id,
+        job_lane=lane,
+        job_kind="resource_sync" if lane == RagSyncLane.REALTIME.value else "backfill_sync",
+    )
+
+
+def _record_visibility_queue_depth_snapshot(
+    session: Session,
+    *,
+    workspace_id: str,
+) -> None:
+    pending_count = session.scalar(
+        select(func.count())
+        .select_from(RagVisibilityRecomputeJob)
+        .where(
+            RagVisibilityRecomputeJob.workspace_id == workspace_id,
+            RagVisibilityRecomputeJob.status == RagJobStatus.PENDING.value,
+        )
+    )
+    record_sync_queue_depth(
+        depth=int(pending_count or 0),
+        workspace_id=workspace_id,
+        job_lane="visibility_recompute",
+        job_kind="visibility_recompute",
+    )

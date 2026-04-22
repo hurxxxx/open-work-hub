@@ -8,8 +8,17 @@ from sqlalchemy import select
 from aidoo_api.core.db import get_session_factory
 import aidoo_api.core.settings as core_settings
 from aidoo_api.domains.auth.access import ensure_dev_login_seed_data
+from aidoo_api.domains.auth.models import User, Workspace, WorkspaceUserBinding
+from aidoo_api.domains.auth.security import new_id
+import aidoo_api.domains.planner.rag_sync as planner_rag_sync
+from aidoo_api.domains.rag.access_filter import build_user_rag_post_filter
+from aidoo_api.domains.rag.contracts import RagQueryRequest
 from aidoo_api.domains.rag.models import RagSyncJob
+from aidoo_api.domains.rag.planner_projection import load_planner_event_projection
 from aidoo_api.domains.rag.planner_projection import PLANNER_EVENT_RESOURCE_TYPE
+from aidoo_api.domains.rag.providers.fake import FakeEmbeddingClient, FakeVectorIndexClient
+from aidoo_api.domains.rag.query_service import RagQueryService
+from aidoo_api.domains.rag.service import RagService
 
 
 def _dev_login(client: TestClient, account_key: str) -> dict:
@@ -45,11 +54,13 @@ def _mark_sync_jobs_succeeded(*job_ids: str) -> None:
 
 
 def _enable_planner_rag(monkeypatch) -> None:
+    settings = SimpleNamespace(rag_enabled=True)
     monkeypatch.setattr(
         core_settings,
         "get_settings",
-        lambda: SimpleNamespace(rag_enabled=True),
+        lambda: settings,
     )
+    monkeypatch.setattr(planner_rag_sync, "get_settings", lambda: settings)
 
 
 def test_planner_router_mutations_enqueue_rag_jobs(
@@ -110,3 +121,78 @@ def test_planner_router_mutations_enqueue_rag_jobs(
     jobs = [job for job in _job_rows() if job.resource_id == event["id"]]
     assert [job.operation for job in jobs] == ["upsert", "visibility_update", "upsert", "delete"]
     assert all(job.resource_type == PLANNER_EVENT_RESOURCE_TYPE for job in jobs)
+
+
+def test_public_planner_event_survives_rag_post_filter_for_workspace_member(
+    client: TestClient,
+    monkeypatch,
+) -> None:
+    _enable_planner_rag(monkeypatch)
+    owner = _dev_login(client, "delivery-hub-admin")
+
+    with get_session_factory()() as db:
+        workspace = db.scalar(select(Workspace).where(Workspace.key == "delivery-hub"))
+        assert workspace is not None
+        workspace_id = workspace.id
+        viewer = User(
+            id=new_id(),
+            email="planner-rag-viewer@aidoo.local",
+            full_name="Planner Rag Viewer",
+            password_hash="hash",
+            status="active",
+        )
+        db.add(viewer)
+        db.flush()
+        db.add(
+            WorkspaceUserBinding(
+                id=new_id(),
+                workspace_id=workspace.id,
+                user_id=viewer.id,
+                role="member",
+            )
+        )
+        db.commit()
+        viewer_id = viewer.id
+
+    create_response = client.post(
+        "/api/v1/planner/events",
+        headers=_auth_headers(owner["token"]),
+        json={
+            "title": "Public Planner RAG Event",
+            "description": "Shared rollout checkpoint",
+            "location": "Seoul",
+            "visibility": "public",
+            "all_day": False,
+            "start": "2026-05-19T01:00:00+00:00",
+            "end": "2026-05-19T02:00:00+00:00",
+        },
+    )
+    assert create_response.status_code == 201, create_response.text
+    event = create_response.json()
+
+    with get_session_factory()() as db:
+        viewer = db.get(User, viewer_id)
+        assert viewer is not None
+        projection = load_planner_event_projection(db, event_id=event["id"])
+        assert projection is not None
+        vector_index = FakeVectorIndexClient()
+        service = RagService(
+            vector_index=vector_index,
+            embedding_client=FakeEmbeddingClient(),
+        )
+        query = RagQueryService(
+            vector_index=vector_index,
+            embedding_client=FakeEmbeddingClient(),
+        )
+        service.sync_projection(projection, collection="planner-rag-public")
+        response = query.query(
+            RagQueryRequest(
+                collection="planner-rag-public",
+                workspace_id=workspace_id,
+                query="rollout checkpoint",
+                top_k=3,
+            ),
+            post_filter=build_user_rag_post_filter(db, user=viewer),
+        )
+
+    assert [hit.resource_id for hit in response.hits] == [event["id"]]

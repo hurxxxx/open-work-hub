@@ -2,13 +2,14 @@ from __future__ import annotations
 
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from aidoo_api.core.telemetry import serialize_current_trace_context
 from aidoo_api.domains.auth.security import new_id
 from aidoo_api.domains.rag.contracts import RagJobStatus, RagSyncLane, RagSyncOperation, RagTraceContext
+from aidoo_api.domains.rag.metrics import record_sync_queue_depth
 from aidoo_api.domains.rag.models import RagSyncJob, RagVisibilityRecomputeJob
 
 
@@ -43,6 +44,7 @@ def enqueue_rag_sync_job(
         existing.trace_context = resolved_trace_context
         db.add(existing)
         db.flush()
+        _record_sync_queue_depth(db, workspace_id=workspace_id, lane=lane.value)
         return existing
 
     job = RagSyncJob(
@@ -62,6 +64,7 @@ def enqueue_rag_sync_job(
         with db.begin_nested():
             db.add(job)
             db.flush()
+        _record_sync_queue_depth(db, workspace_id=workspace_id, lane=lane.value)
         return job
     except IntegrityError:
         db.expire_all()
@@ -80,6 +83,7 @@ def enqueue_rag_sync_job(
         existing.trace_context = resolved_trace_context
         db.add(existing)
         db.flush()
+        _record_sync_queue_depth(db, workspace_id=workspace_id, lane=lane.value)
         return existing
 
 
@@ -109,6 +113,7 @@ def enqueue_rag_visibility_recompute_job(
         existing.cursor = _merge_recompute_cursor(existing.cursor, normalized_cursor)
         db.add(existing)
         db.flush()
+        _record_visibility_queue_depth(db, workspace_id=workspace_id)
         return existing
 
     job = RagVisibilityRecomputeJob(
@@ -125,6 +130,7 @@ def enqueue_rag_visibility_recompute_job(
         with db.begin_nested():
             db.add(job)
             db.flush()
+        _record_visibility_queue_depth(db, workspace_id=workspace_id)
         return job
     except IntegrityError:
         db.expire_all()
@@ -140,6 +146,7 @@ def enqueue_rag_visibility_recompute_job(
         existing.cursor = _merge_recompute_cursor(existing.cursor, normalized_cursor)
         db.add(existing)
         db.flush()
+        _record_visibility_queue_depth(db, workspace_id=workspace_id)
         return existing
 
 
@@ -223,3 +230,47 @@ def _merge_recompute_cursor(
             continue
         merged[key] = value
     return merged
+
+
+def _record_sync_queue_depth(
+    db: Session,
+    *,
+    workspace_id: str,
+    lane: str,
+) -> None:
+    pending_count = db.scalar(
+        select(func.count())
+        .select_from(RagSyncJob)
+        .where(
+            RagSyncJob.workspace_id == workspace_id,
+            RagSyncJob.lane == lane,
+            RagSyncJob.status == RagJobStatus.PENDING.value,
+        )
+    )
+    record_sync_queue_depth(
+        depth=int(pending_count or 0),
+        workspace_id=workspace_id,
+        job_lane=lane,
+        job_kind="resource_sync",
+    )
+
+
+def _record_visibility_queue_depth(
+    db: Session,
+    *,
+    workspace_id: str,
+) -> None:
+    pending_count = db.scalar(
+        select(func.count())
+        .select_from(RagVisibilityRecomputeJob)
+        .where(
+            RagVisibilityRecomputeJob.workspace_id == workspace_id,
+            RagVisibilityRecomputeJob.status == RagJobStatus.PENDING.value,
+        )
+    )
+    record_sync_queue_depth(
+        depth=int(pending_count or 0),
+        workspace_id=workspace_id,
+        job_lane="visibility_recompute",
+        job_kind="visibility_recompute",
+    )

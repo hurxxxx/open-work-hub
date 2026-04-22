@@ -33,6 +33,13 @@ class VectorIndexClient(Protocol):
 
     def delete_resource(self, *, request: RagDeleteRequest) -> int: ...
 
+    def delete_chunks_at_or_after(
+        self,
+        *,
+        request: RagDeleteRequest,
+        chunk_index: int,
+    ) -> int: ...
+
     def query(self, *, request: RagVectorSearchRequest) -> list[RagVectorSearchHit]: ...
 
 

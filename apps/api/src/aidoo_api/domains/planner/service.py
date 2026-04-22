@@ -8,7 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
 from aidoo_api.core.principal import CallerPrincipal
-from aidoo_api.domains.auth.access import bind_current_workspace
+from aidoo_api.domains.auth.access import bind_current_workspace, resolve_workspace_role
 from aidoo_api.domains.auth.models import User, Workspace
 from aidoo_api.domains.auth.security import new_id
 
@@ -183,7 +183,11 @@ def can_read_planner_event_for_rag(
     )
     if event is None:
         return False
-    return event.owner_id == user.id
+    if event.owner_id == user.id:
+        return True
+    if event.visibility != "public":
+        return False
+    return resolve_workspace_role(db, user, workspace_id) is not None
 
 
 def create_event(

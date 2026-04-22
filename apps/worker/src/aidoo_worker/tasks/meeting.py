@@ -137,6 +137,17 @@ def _download_recording_to_tmp(recording: MeetingRecording) -> str:
     return handle.name
 
 
+def _recording_meeting_id(recording: object) -> str | None:
+    meeting_id = getattr(recording, "meeting_id", None)
+    if isinstance(meeting_id, str) and meeting_id:
+        return meeting_id
+    meeting = getattr(recording, "meeting", None)
+    derived_id = getattr(meeting, "id", None)
+    if isinstance(derived_id, str) and derived_id:
+        return derived_id
+    return None
+
+
 def _summary_prompt(transcript_text: str) -> list[dict[str, str]]:
     return [
         {
@@ -160,6 +171,9 @@ def _summary_prompt(transcript_text: str) -> list[dict[str, str]]:
     task_soft_time_limit=3300,
 )
 def transcribe_recording(self, recording_id: str) -> str:
+    from aidoo_api.domains.meeting.rag_sync import enqueue_meeting_rag_sync_by_id
+    from aidoo_api.domains.rag.contracts import RagSyncOperation
+
     session = _db_session()
     tmp_path: str | None = None
     try:
@@ -198,6 +212,13 @@ def transcribe_recording(self, recording_id: str) -> str:
         recording.transcript_text = result.text.strip()
         if recording.duration_sec is None and result.duration_sec:
             recording.duration_sec = int(result.duration_sec)
+        meeting_id = _recording_meeting_id(recording)
+        if meeting_id is not None:
+            enqueue_meeting_rag_sync_by_id(
+                session,
+                meeting_id=meeting_id,
+                operation=RagSyncOperation.UPSERT,
+            )
         session.add(recording)
         session.commit()
         _heartbeat(session, recording, 60, "summarizing")
@@ -226,6 +247,9 @@ def transcribe_recording(self, recording_id: str) -> str:
     task_time_limit=900,
 )
 def summarize_recording(self, recording_id: str) -> str:
+    from aidoo_api.domains.meeting.rag_sync import enqueue_meeting_rag_sync_by_id
+    from aidoo_api.domains.rag.contracts import RagSyncOperation
+
     session = _db_session()
     try:
         recording = _load_active_recording(session, recording_id)
@@ -269,6 +293,13 @@ def summarize_recording(self, recording_id: str) -> str:
         if recording is None or recording.transcription_status == "cancelled":
             raise Ignore()
         recording.summary_text = summary
+        meeting_id = _recording_meeting_id(recording)
+        if meeting_id is not None:
+            enqueue_meeting_rag_sync_by_id(
+                session,
+                meeting_id=meeting_id,
+                operation=RagSyncOperation.UPSERT,
+            )
         session.add(recording)
         session.commit()
         _heartbeat(session, recording, 90, "extracting_insights")
@@ -339,7 +370,9 @@ def extract_meeting_insights(self, recording_id: str) -> str:
 )
 def generate_meeting_doc(self, recording_id: str) -> str:
     from aidoo_api.domains.docs.minutes import create_meeting_minutes_doc
+    from aidoo_api.domains.meeting.rag_sync import enqueue_meeting_rag_sync_by_id
     from aidoo_api.domains.meeting import service as meeting_service
+    from aidoo_api.domains.rag.contracts import RagSyncOperation
 
     session = _db_session()
     try:
@@ -389,6 +422,11 @@ def generate_meeting_doc(self, recording_id: str) -> str:
         recording.transcription_status = "done"
         recording.progress_pct = 100
         recording.transcribe_completed_at = _utcnow()
+        enqueue_meeting_rag_sync_by_id(
+            session,
+            meeting_id=meeting.id,
+            operation=RagSyncOperation.UPSERT,
+        )
         session.add(recording)
         session.commit()
         return recording.id

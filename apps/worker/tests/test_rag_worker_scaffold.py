@@ -34,7 +34,13 @@ from aidoo_api.domains.docs.models import (  # noqa: E402
     NativeDocPage,
     NativeDocUserShare,
 )
-from aidoo_api.domains.meeting.models import Meeting, MeetingDocLink, MeetingTaskLink  # noqa: E402
+from aidoo_api.domains.meeting.models import (  # noqa: E402
+    Meeting,
+    MeetingAttendee,
+    MeetingDocLink,
+    MeetingRecording,
+    MeetingTaskLink,
+)
 from aidoo_api.domains.pms.models import (  # noqa: E402
     Folder,
     Issue,
@@ -46,8 +52,9 @@ from aidoo_api.domains.pms.models import (  # noqa: E402
     TaskList,
 )
 from aidoo_api.domains.planner.models import PlannerEvent  # noqa: E402
-from aidoo_api.domains.rag.contracts import RagSyncOperation  # noqa: E402
+from aidoo_api.domains.rag.contracts import RagSyncLane, RagSyncOperation  # noqa: E402
 from aidoo_api.domains.rag.docs_projection import NATIVE_DOC_RESOURCE_TYPE  # noqa: E402
+from aidoo_api.domains.rag.meeting_projection import MEETING_RESOURCE_TYPE  # noqa: E402
 from aidoo_api.domains.rag.planner_projection import PLANNER_EVENT_RESOURCE_TYPE  # noqa: E402
 from aidoo_api.domains.rag.pms_projection import PMS_ISSUE_RESOURCE_TYPE  # noqa: E402
 from aidoo_api.domains.rag.models import RagSyncJob, RagVisibilityRecomputeJob  # noqa: E402
@@ -603,6 +610,7 @@ def test_recompute_visibility_worker_queues_docs_sync_jobs_for_meeting_scope(
             )
         )
         assert len(queued_jobs) == 1
+        assert queued_jobs[0].lane == "backfill"
 
 
 def test_recompute_visibility_worker_uses_cursor_doc_ids_when_meeting_is_missing(
@@ -844,6 +852,7 @@ def test_recompute_visibility_worker_queues_pms_visibility_updates_for_meeting_s
             )
         )
         assert len(queued_jobs) == 1
+        assert queued_jobs[0].lane == "backfill"
 
 
 def test_recompute_visibility_worker_uses_cursor_issue_ids_when_pms_meeting_is_missing(
@@ -1372,6 +1381,132 @@ def test_sync_resource_worker_upserts_planner_projection_with_fake_provider(
         assert stored.attempts == 1
 
 
+def test_sync_resource_worker_upserts_meeting_projection_with_fake_provider(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    db_path = _worker_db_path(tmp_path)
+    _init_worker_db(
+        db_path,
+        create_policy_table=True,
+        seed_policy_rows=True,
+    )
+    monkeypatch.setenv("DOOWON_POSTGRES_DSN", _worker_dsn(db_path))
+    monkeypatch.setenv("DOOWON_WORKER_POSTGRES_DSN", _worker_dsn(db_path))
+    monkeypatch.setenv("DOOWON_WORKER_AIDOO_RAG_ENABLED", "1")
+    monkeypatch.setenv("DOOWON_WORKER_AIDOO_QDRANT_COLLECTION_PREFIX", "worker-rag-test")
+
+    engine = create_engine(_worker_dsn(db_path))
+    Base.metadata.create_all(
+        engine,
+        tables=[
+            Workspace.__table__,
+            User.__table__,
+            Meeting.__table__,
+            MeetingAttendee.__table__,
+            MeetingTaskLink.__table__,
+            MeetingDocLink.__table__,
+            MeetingRecording.__table__,
+            RagSyncJob.__table__,
+        ],
+    )
+
+    with Session(engine) as session:
+        with session.begin():
+            session.add(
+                Workspace(
+                    id="ws-1",
+                    key="ws-1",
+                    name="Workspace 1",
+                    description="",
+                    active=True,
+                )
+            )
+            session.add_all(
+                [
+                    User(
+                        id="user-1",
+                        email="worker-meeting-organizer@aidoo.local",
+                        full_name="Worker Meeting Organizer",
+                        password_hash="hash",
+                        status="active",
+                    ),
+                    User(
+                        id="user-2",
+                        email="worker-meeting-attendee@aidoo.local",
+                        full_name="Worker Meeting Attendee",
+                        password_hash="hash",
+                        status="active",
+                    ),
+                ]
+            )
+            session.add(
+                Meeting(
+                    id="meeting-1",
+                    workspace_id="ws-1",
+                    organizer_id="user-1",
+                    title="Worker Meeting Sync",
+                    agenda="Discuss launch blockers",
+                    start_at=datetime(2026, 5, 20, 1, 0, 0),
+                    end_at=datetime(2026, 5, 20, 2, 0, 0),
+                    status="scheduled",
+                )
+            )
+            session.add(
+                MeetingAttendee(
+                    id="attendee-1",
+                    meeting_id="meeting-1",
+                    user_id="user-2",
+                    role="required",
+                    response="accepted",
+                )
+            )
+            session.add(
+                MeetingRecording(
+                    id="recording-1",
+                    meeting_id="meeting-1",
+                    storage_key="meeting/meeting-1/recording-1.webm",
+                    file_size=100,
+                    mime_type="audio/webm",
+                    idempotency_key="meeting-rag-recording",
+                    uploaded_by_id="user-1",
+                    source="manual_upload",
+                    transcription_status="done",
+                    progress_pct=100,
+                    transcript_text="Budget risk was reviewed and owners were assigned.",
+                    summary_text="Owners assigned and budget risk reviewed.",
+                )
+            )
+            job = enqueue_rag_sync_job(
+                session,
+                workspace_id="ws-1",
+                resource_type=MEETING_RESOURCE_TYPE,
+                resource_id="meeting-1",
+            )
+            job_id = job.id
+
+    tasks_module = _reload_worker_module("aidoo_worker.tasks.rag_sync")
+    result = tasks_module.sync_resource.run(job_id)
+
+    assert result == "succeeded"
+    bundle = tasks_module._provider_bundle()
+    collection = tasks_module._collection_name(MEETING_RESOURCE_TYPE)
+    snapshot = bundle.vector_index.snapshot_projection(collection=collection, chunk_id="meeting-1:0")
+    assert snapshot is not None
+    assert snapshot.resource_id == "meeting-1"
+    assert snapshot.resource_type == MEETING_RESOURCE_TYPE
+    assert snapshot.source_kind == "meeting"
+    assert "meeting_organizer:user-1" in snapshot.visibility_refs
+    assert "meeting_attendee:user-2" in snapshot.visibility_refs
+    assert "budget risk reviewed" in snapshot.text_content.lower()
+
+    with Session(engine) as session:
+        stored = session.get(RagSyncJob, job_id)
+        assert stored is not None
+        assert stored.status == "succeeded"
+        assert stored.attempts == 1
+
+
 def test_sync_resource_worker_upserts_pms_issue_projection_with_fake_provider(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
@@ -1571,3 +1706,223 @@ def test_provider_bundle_uses_qdrant_vector_index_when_configured(
         "url": "http://qdrant.test:6333",
         "api_key": "secret",
     }
+
+
+def test_sync_resource_worker_schedules_retry_with_backoff(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    class RetryScheduled(Exception):
+        pass
+
+    db_path = _worker_db_path(tmp_path)
+    _init_worker_db(
+        db_path,
+        create_policy_table=True,
+        seed_policy_rows=True,
+    )
+    monkeypatch.setenv("DOOWON_POSTGRES_DSN", _worker_dsn(db_path))
+    monkeypatch.setenv("DOOWON_WORKER_POSTGRES_DSN", _worker_dsn(db_path))
+    monkeypatch.setenv("DOOWON_WORKER_AIDOO_RAG_ENABLED", "1")
+    monkeypatch.setenv("DOOWON_WORKER_AIDOO_RAG_JOB_MAX_ATTEMPTS", "3")
+    monkeypatch.setenv("DOOWON_WORKER_AIDOO_RAG_JOB_RETRY_BACKOFF_SECONDS", "7")
+
+    engine = create_engine(_worker_dsn(db_path))
+    Base.metadata.create_all(
+        engine,
+        tables=[
+            Workspace.__table__,
+            RagSyncJob.__table__,
+        ],
+    )
+
+    with Session(engine) as session:
+        with session.begin():
+            session.add(
+                Workspace(
+                    id="ws-1",
+                    key="ws-1",
+                    name="Workspace 1",
+                    description="",
+                    active=True,
+                )
+            )
+            job = enqueue_rag_sync_job(
+                session,
+                workspace_id="ws-1",
+                resource_type="doc",
+                resource_id="doc-retry",
+            )
+            job_id = job.id
+
+    tasks_module = _reload_worker_module("aidoo_worker.tasks.rag_sync")
+    monkeypatch.setattr(
+        tasks_module,
+        "_process_sync_job",
+        lambda _session, _job: (_ for _ in ()).throw(RuntimeError("boom")),
+    )
+
+    retry_calls: list[int] = []
+
+    def fake_retry(*, exc, countdown, **_kwargs):
+        assert isinstance(exc, RuntimeError)
+        retry_calls.append(countdown)
+        raise RetryScheduled()
+
+    monkeypatch.setattr(tasks_module.sync_resource, "retry", fake_retry)
+
+    with pytest.raises(RetryScheduled):
+        tasks_module.sync_resource.run(job_id)
+
+    assert retry_calls == [7]
+    with Session(engine) as session:
+        stored = session.get(RagSyncJob, job_id)
+        assert stored is not None
+        assert stored.status == "pending"
+        assert stored.attempts == 1
+        assert stored.next_retry_at is not None
+        assert stored.last_error == "boom"
+
+
+def test_sync_resource_worker_dead_letters_poison_message_after_max_attempts(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    db_path = _worker_db_path(tmp_path)
+    _init_worker_db(
+        db_path,
+        create_policy_table=True,
+        seed_policy_rows=True,
+    )
+    monkeypatch.setenv("DOOWON_POSTGRES_DSN", _worker_dsn(db_path))
+    monkeypatch.setenv("DOOWON_WORKER_POSTGRES_DSN", _worker_dsn(db_path))
+    monkeypatch.setenv("DOOWON_WORKER_AIDOO_RAG_ENABLED", "1")
+    monkeypatch.setenv("DOOWON_WORKER_AIDOO_RAG_JOB_MAX_ATTEMPTS", "1")
+
+    engine = create_engine(_worker_dsn(db_path))
+    Base.metadata.create_all(
+        engine,
+        tables=[
+            Workspace.__table__,
+            RagSyncJob.__table__,
+        ],
+    )
+
+    with Session(engine) as session:
+        with session.begin():
+            session.add(
+                Workspace(
+                    id="ws-1",
+                    key="ws-1",
+                    name="Workspace 1",
+                    description="",
+                    active=True,
+                )
+            )
+            job = enqueue_rag_sync_job(
+                session,
+                workspace_id="ws-1",
+                resource_type="doc",
+                resource_id="doc-dead",
+            )
+            job_id = job.id
+
+    tasks_module = _reload_worker_module("aidoo_worker.tasks.rag_sync")
+    monkeypatch.setattr(
+        tasks_module,
+        "_process_sync_job",
+        lambda _session, _job: (_ for _ in ()).throw(RuntimeError("poison")),
+    )
+    monkeypatch.setattr(
+        tasks_module.sync_resource,
+        "retry",
+        lambda **_kwargs: pytest.fail("dead-letter path must not schedule retry"),
+    )
+
+    result = tasks_module.sync_resource.run(job_id)
+
+    assert result == "dead_letter"
+    with Session(engine) as session:
+        stored = session.get(RagSyncJob, job_id)
+        assert stored is not None
+        assert stored.status == "cancelled"
+        assert stored.attempts == 1
+        assert stored.next_retry_at is None
+        assert stored.last_error == "dead_letter: poison"
+
+
+def test_sync_backfill_worker_drains_chunked_batch_with_throttle(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    db_path = _worker_db_path(tmp_path)
+    _init_worker_db(
+        db_path,
+        create_policy_table=True,
+        seed_policy_rows=True,
+    )
+    monkeypatch.setenv("DOOWON_POSTGRES_DSN", _worker_dsn(db_path))
+    monkeypatch.setenv("DOOWON_WORKER_POSTGRES_DSN", _worker_dsn(db_path))
+    monkeypatch.setenv("DOOWON_WORKER_AIDOO_RAG_ENABLED", "1")
+    monkeypatch.setenv("DOOWON_WORKER_AIDOO_RAG_BACKFILL_BATCH_SIZE", "2")
+    monkeypatch.setenv("DOOWON_WORKER_AIDOO_RAG_BACKFILL_THROTTLE_MS", "50")
+
+    engine = create_engine(_worker_dsn(db_path))
+    Base.metadata.create_all(
+        engine,
+        tables=[
+            Workspace.__table__,
+            RagSyncJob.__table__,
+        ],
+    )
+
+    with Session(engine) as session:
+        with session.begin():
+            session.add(
+                Workspace(
+                    id="ws-1",
+                    key="ws-1",
+                    name="Workspace 1",
+                    description="",
+                    active=True,
+                )
+            )
+            backfill_ids = [
+                enqueue_rag_sync_job(
+                    session,
+                    workspace_id="ws-1",
+                    resource_type="doc",
+                    resource_id=f"doc-backfill-{index}",
+                    lane=RagSyncLane.BACKFILL,
+                ).id
+                for index in range(1, 4)
+            ]
+            realtime_id = enqueue_rag_sync_job(
+                session,
+                workspace_id="ws-1",
+                resource_type="doc",
+                resource_id="doc-realtime",
+                lane=RagSyncLane.REALTIME,
+            ).id
+
+    tasks_module = _reload_worker_module("aidoo_worker.tasks.rag_sync")
+    processed: list[str] = []
+    sleeps: list[float] = []
+    monkeypatch.setattr(tasks_module, "_process_sync_job", lambda _session, job: processed.append(job.id) or "succeeded")
+    monkeypatch.setattr(tasks_module.time, "sleep", lambda seconds: sleeps.append(seconds))
+
+    result = tasks_module.sync_backfill_resource.run(backfill_ids[0])
+
+    assert result == "succeeded"
+    assert processed == backfill_ids[:2]
+    assert sleeps == [0.05]
+
+    with Session(engine) as session:
+        first = session.get(RagSyncJob, backfill_ids[0])
+        second = session.get(RagSyncJob, backfill_ids[1])
+        third = session.get(RagSyncJob, backfill_ids[2])
+        realtime = session.get(RagSyncJob, realtime_id)
+        assert first is not None and first.status == "succeeded"
+        assert second is not None and second.status == "succeeded"
+        assert third is not None and third.status == "pending"
+        assert realtime is not None and realtime.status == "pending"

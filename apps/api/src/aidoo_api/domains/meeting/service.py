@@ -50,6 +50,7 @@ from aidoo_api.domains.meeting.permissions import (
     ensure_link_remover,
     ensure_meeting_participant,
 )
+from aidoo_api.domains.meeting.rag_sync import enqueue_meeting_rag_sync
 from aidoo_api.domains.meeting.schemas import (
     MeetingAvailabilityBlock,
     MeetingAvailabilityItem,
@@ -76,6 +77,7 @@ from aidoo_api.domains.pms.access_grants import (
 )
 from aidoo_api.domains.pms.models import Issue
 from aidoo_api.domains.planner.models import PlannerEvent
+from aidoo_api.domains.rag.contracts import RagSyncOperation
 
 
 MAX_FILE_UPLOAD_SIZE = 100 * 1024 * 1024  # 100 MB
@@ -660,6 +662,26 @@ def _ensure_user_can_view(user: User, meeting: Meeting) -> None:
     )
 
 
+def can_read_meeting_for_rag(
+    db: Session,
+    *,
+    user: User,
+    workspace_id: str,
+    meeting_id: str,
+) -> bool:
+    meeting = db.scalar(
+        select(Meeting)
+        .options(selectinload(Meeting.attendees))
+        .where(
+            Meeting.id == meeting_id,
+            Meeting.workspace_id == workspace_id,
+        )
+    )
+    if meeting is None:
+        return False
+    return meeting.organizer_id == user.id or any(att.user_id == user.id for att in meeting.attendees)
+
+
 def _replace_attendees(
     db: Session,
     meeting: Meeting,
@@ -844,6 +866,11 @@ def create_meeting(
         _attach_issue_link(db, meeting=meeting, issue=issue, added_by_id=organizer.id)
     for doc in docs:
         _attach_doc_link(db, meeting=meeting, doc=doc, added_by_id=organizer.id)
+    enqueue_meeting_rag_sync(
+        db,
+        meeting=meeting,
+        operation=RagSyncOperation.UPSERT,
+    )
     if docs:
         enqueue_meeting_visibility_recompute(
             db,
@@ -958,6 +985,11 @@ def update_meeting(
             workspace_id=workspace.id,
             meeting_id=meeting.id,
         )
+    enqueue_meeting_rag_sync(
+        db,
+        meeting=meeting,
+        operation=RagSyncOperation.UPSERT,
+    )
 
     db.add(meeting)
     db.commit()
@@ -993,6 +1025,11 @@ def delete_meeting(db: Session, *, workspace: Workspace, user: User, meeting_id:
             meeting_id=meeting.id,
             doc_ids=affected_doc_ids,
         )
+    enqueue_meeting_rag_sync(
+        db,
+        meeting=meeting,
+        operation=RagSyncOperation.DELETE,
+    )
     db.delete(meeting)
     db.commit()
 
@@ -1314,6 +1351,11 @@ def add_attendees(
         workspace_id=workspace.id,
         meeting_id=meeting.id,
     )
+    enqueue_meeting_rag_sync(
+        db,
+        meeting=meeting,
+        operation=RagSyncOperation.UPSERT,
+    )
     db.commit()
 
     fresh = _load_meeting(db, workspace, meeting_id)
@@ -1327,6 +1369,11 @@ def attach_task(
     ensure_meeting_participant(db, user, meeting)
     issue = ensure_issue_attachable(db, user, issue_id)
     _attach_issue_link(db, meeting=meeting, issue=issue, added_by_id=user.id)
+    enqueue_meeting_rag_sync(
+        db,
+        meeting=meeting,
+        operation=RagSyncOperation.UPSERT,
+    )
     db.commit()
 
     fresh = _load_meeting(db, workspace, meeting_id)
@@ -1353,6 +1400,11 @@ def detach_task(
             revoked_by_user_id=user.id,
             reason="detach",
         )
+        enqueue_meeting_rag_sync(
+            db,
+            meeting=meeting,
+            operation=RagSyncOperation.UPSERT,
+        )
         db.delete(link)
         db.commit()
 
@@ -1371,6 +1423,11 @@ def attach_doc(
         db,
         workspace_id=workspace.id,
         meeting_id=meeting.id,
+    )
+    enqueue_meeting_rag_sync(
+        db,
+        meeting=meeting,
+        operation=RagSyncOperation.UPSERT,
     )
     db.commit()
 
@@ -1403,6 +1460,11 @@ def detach_doc(
             workspace_id=workspace.id,
             meeting_id=meeting.id,
             doc_ids=[doc_id],
+        )
+        enqueue_meeting_rag_sync(
+            db,
+            meeting=meeting,
+            operation=RagSyncOperation.UPSERT,
         )
         db.delete(link)
         db.commit()
