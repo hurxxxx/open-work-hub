@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { motion } from 'motion/react';
 import { Link, Navigate, useParams } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
@@ -106,6 +106,20 @@ function LessonLayout({
   next: LearningLesson | null;
 }) {
   const [wide, setWide] = useWideMode();
+  const rootRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    let el: HTMLElement | null = rootRef.current;
+    while (el) {
+      const { overflowY } = getComputedStyle(el);
+      if (overflowY === 'auto' || overflowY === 'scroll') {
+        el.scrollTo({ top: 0, behavior: 'auto' });
+        return;
+      }
+      el = el.parentElement;
+    }
+    window.scrollTo({ top: 0, behavior: 'auto' });
+  }, [lesson.slug]);
 
   // Narrow mode: 3-col grid with a right balance column so the article sits in
   // viewport center. Wide mode: TOC hides entirely, article spans full width.
@@ -117,6 +131,7 @@ function LessonLayout({
 
   return (
     <motion.div
+      ref={rootRef}
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       className={
