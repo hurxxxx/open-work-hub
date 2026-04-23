@@ -86,7 +86,7 @@ class AiMcpClient:
         for tool_name, descriptor in sorted(self._registry.descriptors.items()):
             if descriptor.kind != "tool":
                 continue
-            if app_id is not None and descriptor.app_id != app_id:
+            if app_id is not None and not _descriptor_matches_app(descriptor, app_id=app_id):
                 continue
             if not include_approval_required and descriptor.approval_policy == "required":
                 continue
@@ -231,6 +231,12 @@ class AiMcpClient:
             call_id=call_id,
             agent_run_id=agent_run_id,
         )
+
+
+def _descriptor_matches_app(descriptor: AiCapabilityDescriptor, *, app_id: str) -> bool:
+    if descriptor.app_id == app_id:
+        return True
+    return app_id == "ai" and descriptor.app_id == "rag"
 
 
 def _tool_to_openapi_operation(

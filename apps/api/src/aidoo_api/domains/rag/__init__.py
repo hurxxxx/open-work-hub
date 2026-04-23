@@ -1,39 +1,16 @@
-"""RAG domain scaffolding for Phase 5."""
+"""RAG domain package."""
 
-from aidoo_api.domains.rag.contracts import (
-    RagAnswerMode,
-    RagGroundedAnswer,
-    RagJobStatus,
-    RagProjection,
-    RagQueryHit,
-    RagQueryRequest,
-    RagQueryResponse,
-    RagSyncLane,
-    RagSyncOperation,
-)
-from aidoo_api.domains.rag.models import RagSyncJob, RagVisibilityRecomputeJob
-from aidoo_api.domains.rag.outbox import (
-    enqueue_rag_sync_job,
-    enqueue_rag_visibility_recompute_job,
-)
-from aidoo_api.domains.rag.query_service import RagGroundedAnswerSynthesizer, RagQueryService
-from aidoo_api.domains.rag.service import RagService
+from __future__ import annotations
 
-__all__ = [
-    "RagAnswerMode",
-    "RagGroundedAnswer",
-    "RagGroundedAnswerSynthesizer",
-    "RagJobStatus",
-    "RagProjection",
-    "RagQueryHit",
-    "RagQueryRequest",
-    "RagQueryResponse",
-    "RagService",
-    "RagSyncJob",
-    "RagSyncLane",
-    "RagSyncOperation",
-    "RagVisibilityRecomputeJob",
-    "RagQueryService",
-    "enqueue_rag_sync_job",
-    "enqueue_rag_visibility_recompute_job",
-]
+from aidoo_api.core.settings import get_settings
+
+
+def register_ai_capabilities(registry) -> None:
+    if not get_settings().rag_enabled:
+        return
+    from aidoo_api.domains.rag.tools import register_ai_capabilities as _register_ai_capabilities
+
+    _register_ai_capabilities(registry)
+
+
+__all__ = ["register_ai_capabilities"]

@@ -9,8 +9,12 @@ import pytest
 from qdrant_client import QdrantClient
 
 from aidoo_api.domains.rag.contracts import RagDeleteRequest, RagProjection, RagQueryRequest
+from aidoo_api.domains.rag.providers import RagProviderConfigurationError
 from aidoo_api.domains.rag.providers.fake import FakeEmbeddingClient
-from aidoo_api.domains.rag.providers.qdrant import QdrantVectorIndexClient
+from aidoo_api.domains.rag.providers.qdrant import (
+    QdrantVectorIndexClient,
+    _sparse_vector_from_terms,
+)
 from aidoo_api.domains.rag.query_service import RagQueryService
 from aidoo_api.domains.rag.service import RagService
 
@@ -152,7 +156,7 @@ def test_qdrant_vector_index_detects_existing_dense_dimension_mismatch(qdrant_cl
         sparse_enabled=True,
     )
 
-    with pytest.raises(RuntimeError, match="dense vector size mismatch"):
+    with pytest.raises(RagProviderConfigurationError, match="dense vector size mismatch"):
         vector_index.ensure_collection(
             collection="rag-qdrant-mismatch",
             dense_dimensions=16,
@@ -242,3 +246,17 @@ def test_qdrant_query_emits_latency_metric(monkeypatch, qdrant_client) -> None:
     query_points = metric_map["qdrant_query_latency_ms"].data.data_points
     assert len(query_points) == 1
     assert query_points[0].attributes["provider_name"] == "qdrant"
+
+
+def test_qdrant_sparse_indices_fit_server_compatible_range() -> None:
+    sparse = _sparse_vector_from_terms(
+        {
+            "deepinfra": 1.0,
+            "qdrant": 2.0,
+            "phase5": 1.0,
+        }
+    )
+
+    assert sparse is not None
+    assert sparse.indices
+    assert max(sparse.indices) <= 0xFFFFFFFF

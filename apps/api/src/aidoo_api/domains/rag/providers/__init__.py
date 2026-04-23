@@ -6,6 +6,7 @@ from aidoo_api.domains.rag.providers.base import (
     AsrClient,
     EmbeddingClient,
     OcrClient,
+    RagProviderConfigurationError,
     RagProviderBundle,
     RerankClient,
     VectorIndexClient,
@@ -17,21 +18,38 @@ from aidoo_api.domains.rag.providers.fake import (
     FakeRerankClient,
     FakeVectorIndexClient,
 )
+from aidoo_api.domains.rag.providers.openai_compatible import (
+    DeepInfraEmbeddingClient,
+    DeepInfraRerankClient,
+    OpenAICompatibleEmbeddingClient,
+    OpenAICompatibleRerankClient,
+    RagProviderError,
+    RagProviderTimeoutError,
+    RagProviderTransientError,
+)
 
 if TYPE_CHECKING:
     from aidoo_api.domains.rag.providers.qdrant import QdrantVectorIndexClient
 
 __all__ = [
     "AsrClient",
+    "DeepInfraEmbeddingClient",
+    "DeepInfraRerankClient",
     "EmbeddingClient",
     "FakeAsrClient",
     "FakeEmbeddingClient",
     "FakeOcrClient",
     "FakeRerankClient",
     "FakeVectorIndexClient",
+    "OpenAICompatibleEmbeddingClient",
+    "OpenAICompatibleRerankClient",
     "OcrClient",
     "QdrantVectorIndexClient",
+    "RagProviderConfigurationError",
     "RagProviderBundle",
+    "RagProviderError",
+    "RagProviderTimeoutError",
+    "RagProviderTransientError",
     "RerankClient",
     "VectorIndexClient",
 ]

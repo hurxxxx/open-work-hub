@@ -33,23 +33,39 @@ def can_user_access_hit(
     user: User,
     hit: RagVectorSearchHit,
 ) -> bool:
-    projection = hit.projection
-    if projection.resource_type == NATIVE_DOC_RESOURCE_TYPE:
-        return can_read_native_doc_for_rag(db, user=user, doc_id=projection.resource_id)
-    if projection.resource_type == PMS_ISSUE_RESOURCE_TYPE:
-        return can_read_issue_for_rag(db, user=user, issue_id=projection.resource_id)
-    if projection.resource_type == MEETING_RESOURCE_TYPE:
+    return can_user_access_resource(
+        db,
+        user=user,
+        workspace_id=hit.projection.workspace_id,
+        resource_type=hit.projection.resource_type,
+        resource_id=hit.projection.resource_id,
+    )
+
+
+def can_user_access_resource(
+    db: Session,
+    *,
+    user: User,
+    workspace_id: str,
+    resource_type: str,
+    resource_id: str,
+) -> bool:
+    if resource_type == NATIVE_DOC_RESOURCE_TYPE:
+        return can_read_native_doc_for_rag(db, user=user, doc_id=resource_id)
+    if resource_type == PMS_ISSUE_RESOURCE_TYPE:
+        return can_read_issue_for_rag(db, user=user, issue_id=resource_id)
+    if resource_type == MEETING_RESOURCE_TYPE:
         return can_read_meeting_for_rag(
             db,
             user=user,
-            workspace_id=projection.workspace_id,
-            meeting_id=projection.resource_id,
+            workspace_id=workspace_id,
+            meeting_id=resource_id,
         )
-    if projection.resource_type == PLANNER_EVENT_RESOURCE_TYPE:
+    if resource_type == PLANNER_EVENT_RESOURCE_TYPE:
         return can_read_planner_event_for_rag(
             db,
             user=user,
-            workspace_id=projection.workspace_id,
-            event_id=projection.resource_id,
+            workspace_id=workspace_id,
+            event_id=resource_id,
         )
     return False

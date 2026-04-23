@@ -57,6 +57,10 @@ from aidoo_api.domains.rag.docs_projection import NATIVE_DOC_RESOURCE_TYPE  # no
 from aidoo_api.domains.rag.meeting_projection import MEETING_RESOURCE_TYPE  # noqa: E402
 from aidoo_api.domains.rag.planner_projection import PLANNER_EVENT_RESOURCE_TYPE  # noqa: E402
 from aidoo_api.domains.rag.pms_projection import PMS_ISSUE_RESOURCE_TYPE  # noqa: E402
+from aidoo_api.domains.rag.providers import (  # noqa: E402
+    RagProviderConfigurationError,
+    RagProviderTransientError,
+)
 from aidoo_api.domains.rag.models import RagSyncJob, RagVisibilityRecomputeJob  # noqa: E402
 from aidoo_api.domains.rag.outbox import (  # noqa: E402
     enqueue_rag_sync_job,
@@ -156,6 +160,15 @@ def _init_worker_db(
                         "batch_generation",
                         "local_only",
                         "Long-form batch generation (reports etc.)",
+                        None,
+                        "2026-04-18T00:00:00",
+                        "2026-04-18T00:00:00",
+                    ),
+                    (
+                        "7",
+                        "rag_grounded_answer",
+                        "local_only",
+                        "Grounded answer synthesis for workspace RAG queries.",
                         None,
                         "2026-04-18T00:00:00",
                         "2026-04-18T00:00:00",
@@ -1168,7 +1181,7 @@ def test_sync_resource_worker_upserts_docs_projection_with_fake_provider(
 
     assert result == "succeeded"
     bundle = tasks_module._provider_bundle()
-    collection = tasks_module._collection_name(NATIVE_DOC_RESOURCE_TYPE)
+    collection = tasks_module._collection_name()
     snapshot = bundle.vector_index.snapshot_projection(collection=collection, chunk_id="doc-1:0")
     assert snapshot is not None
     assert snapshot.resource_id == "doc-1"
@@ -1281,7 +1294,7 @@ def test_sync_resource_worker_deletes_docs_projection_with_fake_provider(
 
     assert result == "deleted"
     bundle = tasks_module._provider_bundle()
-    collection = tasks_module._collection_name(NATIVE_DOC_RESOURCE_TYPE)
+    collection = tasks_module._collection_name()
     snapshot = bundle.vector_index.snapshot_projection(collection=collection, chunk_id="doc-1:0")
     assert snapshot is None
 
@@ -1365,7 +1378,7 @@ def test_sync_resource_worker_upserts_planner_projection_with_fake_provider(
 
     assert result == "succeeded"
     bundle = tasks_module._provider_bundle()
-    collection = tasks_module._collection_name(PLANNER_EVENT_RESOURCE_TYPE)
+    collection = tasks_module._collection_name()
     snapshot = bundle.vector_index.snapshot_projection(collection=collection, chunk_id="event-1:0")
     assert snapshot is not None
     assert snapshot.resource_id == "event-1"
@@ -1490,7 +1503,7 @@ def test_sync_resource_worker_upserts_meeting_projection_with_fake_provider(
 
     assert result == "succeeded"
     bundle = tasks_module._provider_bundle()
-    collection = tasks_module._collection_name(MEETING_RESOURCE_TYPE)
+    collection = tasks_module._collection_name()
     snapshot = bundle.vector_index.snapshot_projection(collection=collection, chunk_id="meeting-1:0")
     assert snapshot is not None
     assert snapshot.resource_id == "meeting-1"
@@ -1654,7 +1667,7 @@ def test_sync_resource_worker_upserts_pms_issue_projection_with_fake_provider(
 
     assert result == "succeeded"
     bundle = tasks_module._provider_bundle()
-    collection = tasks_module._collection_name(PMS_ISSUE_RESOURCE_TYPE)
+    collection = tasks_module._collection_name()
     snapshot = bundle.vector_index.snapshot_projection(collection=collection, chunk_id="issue-1:0")
     assert snapshot is not None
     assert snapshot.resource_id == "issue-1"
@@ -1683,12 +1696,13 @@ def test_provider_bundle_uses_qdrant_vector_index_when_configured(
     )
     monkeypatch.setenv("DOOWON_POSTGRES_DSN", _worker_dsn(db_path))
     monkeypatch.setenv("DOOWON_WORKER_POSTGRES_DSN", _worker_dsn(db_path))
-    monkeypatch.setenv("DOOWON_WORKER_AIDOO_VECTOR_INDEX_PROVIDER", "qdrant")
-    monkeypatch.setenv("DOOWON_WORKER_AIDOO_QDRANT_URL", "http://qdrant.test:6333")
-    monkeypatch.setenv("DOOWON_WORKER_AIDOO_QDRANT_API_KEY", "secret")
+    monkeypatch.setenv("AIDOO_VECTOR_INDEX_PROVIDER", "qdrant")
+    monkeypatch.setenv("AIDOO_QDRANT_URL", "http://qdrant.test:6333")
+    monkeypatch.setenv("AIDOO_QDRANT_API_KEY", "secret")
 
     tasks_module = _reload_worker_module("aidoo_worker.tasks.rag_sync")
     tasks_module._provider_bundle.cache_clear()
+    rag_runtime = importlib.import_module("aidoo_api.domains.rag.runtime")
 
     created: dict[str, str | None] = {}
 
@@ -1697,7 +1711,7 @@ def test_provider_bundle_uses_qdrant_vector_index_when_configured(
             created["url"] = url
             created["api_key"] = api_key
 
-    monkeypatch.setattr(tasks_module, "QdrantVectorIndexClient", StubQdrantVectorIndexClient)
+    monkeypatch.setattr(rag_runtime, "QdrantVectorIndexClient", StubQdrantVectorIndexClient)
 
     bundle = tasks_module._provider_bundle()
 
@@ -1706,6 +1720,53 @@ def test_provider_bundle_uses_qdrant_vector_index_when_configured(
         "url": "http://qdrant.test:6333",
         "api_key": "secret",
     }
+
+
+def test_collection_name_matches_model_scoped_runtime_resolution(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    db_path = _worker_db_path(tmp_path)
+    _init_worker_db(
+        db_path,
+        create_policy_table=True,
+        seed_policy_rows=True,
+    )
+    monkeypatch.setenv("DOOWON_POSTGRES_DSN", _worker_dsn(db_path))
+    monkeypatch.setenv("DOOWON_WORKER_POSTGRES_DSN", _worker_dsn(db_path))
+    monkeypatch.setenv("AIDOO_EMBEDDING_PROVIDER", "deepinfra")
+    monkeypatch.setenv("DEEPINFRA_EMBEDDING_MODEL", "Qwen/Qwen3-Embedding-8B")
+
+    tasks_module = _reload_worker_module("aidoo_worker.tasks.rag_sync")
+
+    collection = tasks_module._collection_name()
+
+    assert collection == "doowon-rag-qwen-qwen3-embedding-8b"
+
+
+def test_worker_settings_ignore_deepinfra_alias_validation_when_provider_not_selected(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    db_path = _worker_db_path(tmp_path)
+    _init_worker_db(
+        db_path,
+        create_policy_table=True,
+        seed_policy_rows=True,
+    )
+    settings_module = _reload_worker_module("aidoo_worker.settings")
+    settings = settings_module.Settings(
+        _env_file=None,
+        DOOWON_POSTGRES_DSN=_worker_dsn(db_path),
+        DOOWON_WORKER_POSTGRES_DSN=_worker_dsn(db_path),
+        AIDOO_RAG_ENABLED="0",
+        AIDOO_EMBEDDING_PROVIDER="fake",
+        AIDOO_RERANK_PROVIDER="fake",
+        DEEPINFRA_BASE_URL="http://127.0.0.1:8080/openai",
+    )
+
+    assert settings.rag_enabled is False
+    assert settings.rag_deepinfra_base_url == "http://127.0.0.1:8080/openai"
 
 
 def test_sync_resource_worker_schedules_retry_with_backoff(
@@ -1782,6 +1843,145 @@ def test_sync_resource_worker_schedules_retry_with_backoff(
         assert stored.attempts == 1
         assert stored.next_retry_at is not None
         assert stored.last_error == "boom"
+
+
+def test_sync_resource_worker_uses_retry_after_for_transient_provider_errors(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    class RetryScheduled(Exception):
+        pass
+
+    db_path = _worker_db_path(tmp_path)
+    _init_worker_db(
+        db_path,
+        create_policy_table=True,
+        seed_policy_rows=True,
+    )
+    monkeypatch.setenv("DOOWON_POSTGRES_DSN", _worker_dsn(db_path))
+    monkeypatch.setenv("DOOWON_WORKER_POSTGRES_DSN", _worker_dsn(db_path))
+    monkeypatch.setenv("DOOWON_WORKER_AIDOO_RAG_ENABLED", "1")
+    monkeypatch.setenv("DOOWON_WORKER_AIDOO_RAG_JOB_MAX_ATTEMPTS", "3")
+    monkeypatch.setenv("DOOWON_WORKER_AIDOO_RAG_JOB_RETRY_BACKOFF_SECONDS", "7")
+
+    engine = create_engine(_worker_dsn(db_path))
+    Base.metadata.create_all(
+        engine,
+        tables=[
+            Workspace.__table__,
+            RagSyncJob.__table__,
+        ],
+    )
+
+    with Session(engine) as session:
+        with session.begin():
+            session.add(
+                Workspace(
+                    id="ws-1",
+                    key="ws-1",
+                    name="Workspace 1",
+                    description="",
+                    active=True,
+                )
+            )
+            job = enqueue_rag_sync_job(
+                session,
+                workspace_id="ws-1",
+                resource_type="doc",
+                resource_id="doc-rate-limit",
+            )
+            job_id = job.id
+
+    tasks_module = _reload_worker_module("aidoo_worker.tasks.rag_sync")
+    monkeypatch.setattr(
+        tasks_module,
+        "_process_sync_job",
+        lambda _session, _job: (_ for _ in ()).throw(
+            RagProviderTransientError("slow down", retry_after_seconds=19)
+        ),
+    )
+
+    retry_calls: list[int] = []
+
+    def fake_retry(*, exc, countdown, **_kwargs):
+        assert isinstance(exc, RagProviderTransientError)
+        retry_calls.append(countdown)
+        raise RetryScheduled()
+
+    monkeypatch.setattr(tasks_module.sync_resource, "retry", fake_retry)
+
+    with pytest.raises(RetryScheduled):
+        tasks_module.sync_resource.run(job_id)
+
+    assert retry_calls == [19]
+
+
+def test_sync_resource_worker_cancels_non_retryable_provider_configuration_errors(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    db_path = _worker_db_path(tmp_path)
+    _init_worker_db(
+        db_path,
+        create_policy_table=True,
+        seed_policy_rows=True,
+    )
+    monkeypatch.setenv("DOOWON_POSTGRES_DSN", _worker_dsn(db_path))
+    monkeypatch.setenv("DOOWON_WORKER_POSTGRES_DSN", _worker_dsn(db_path))
+    monkeypatch.setenv("DOOWON_WORKER_AIDOO_RAG_ENABLED", "1")
+    monkeypatch.setenv("DOOWON_WORKER_AIDOO_RAG_JOB_MAX_ATTEMPTS", "3")
+
+    engine = create_engine(_worker_dsn(db_path))
+    Base.metadata.create_all(
+        engine,
+        tables=[
+            Workspace.__table__,
+            RagSyncJob.__table__,
+        ],
+    )
+
+    with Session(engine) as session:
+        with session.begin():
+            session.add(
+                Workspace(
+                    id="ws-1",
+                    key="ws-1",
+                    name="Workspace 1",
+                    description="",
+                    active=True,
+                )
+            )
+            job = enqueue_rag_sync_job(
+                session,
+                workspace_id="ws-1",
+                resource_type="doc",
+                resource_id="doc-bad-config",
+            )
+            job_id = job.id
+
+    tasks_module = _reload_worker_module("aidoo_worker.tasks.rag_sync")
+    monkeypatch.setattr(
+        tasks_module,
+        "_process_sync_job",
+        lambda _session, _job: (_ for _ in ()).throw(
+            RagProviderConfigurationError("bad qdrant schema")
+        ),
+    )
+    monkeypatch.setattr(
+        tasks_module.sync_resource,
+        "retry",
+        lambda **_kwargs: pytest.fail("non-retryable provider errors must not schedule retry"),
+    )
+
+    result = tasks_module.sync_resource.run(job_id)
+
+    assert result == "non_retryable_error"
+    with Session(engine) as session:
+        stored = session.get(RagSyncJob, job_id)
+        assert stored is not None
+        assert stored.status == "cancelled"
+        assert stored.attempts == 1
+        assert stored.last_error == "non_retryable: bad qdrant schema"
 
 
 def test_sync_resource_worker_dead_letters_poison_message_after_max_attempts(

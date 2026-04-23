@@ -213,11 +213,22 @@ def _matches_metadata_filter(projection: RagProjection, metadata_filter: dict[st
             return False
         if key == "resource_type" and projection.resource_type != value:
             return False
+        if key == "resource_id" and projection.resource_id != value:
+            return False
         if key == "source_kind" and projection.source_kind != value:
             return False
         if key == "visibility_refs_contains" and value not in projection.visibility_refs:
             return False
-        if key in projection.metadata and projection.metadata[key] != value:
+        if key in projection.metadata:
+            projection_value = projection.metadata[key]
+            if isinstance(value, list):
+                if projection_value not in value:
+                    return False
+                continue
+            if projection_value != value:
+                return False
+            continue
+        if key not in {"workspace_id", "resource_type", "resource_id", "source_kind", "visibility_refs_contains"}:
             return False
     return True
 

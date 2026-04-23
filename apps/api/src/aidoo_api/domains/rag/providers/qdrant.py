@@ -21,6 +21,7 @@ from aidoo_api.domains.rag.metrics import (
     record_provider_timeout,
     record_vector_query_latency,
 )
+from aidoo_api.domains.rag.providers.base import RagProviderConfigurationError
 
 _DENSE_VECTOR_NAME = "dense"
 _SPARSE_VECTOR_NAME = "sparse"
@@ -273,18 +274,18 @@ class QdrantVectorIndexClient:
         vectors = info.config.params.vectors
         dense_config = vectors.get(self._dense_vector_name) if isinstance(vectors, dict) else None
         if dense_config is None:
-            raise RuntimeError(
+            raise RagProviderConfigurationError(
                 f"Qdrant collection {collection} is missing dense vector '{self._dense_vector_name}'"
             )
         if dense_config.size != dense_dimensions:
-            raise RuntimeError(
+            raise RagProviderConfigurationError(
                 f"Qdrant collection {collection} dense vector size mismatch: "
                 f"expected {dense_dimensions}, got {dense_config.size}"
             )
         sparse_vectors = info.config.params.sparse_vectors or {}
         has_sparse = self._sparse_vector_name in sparse_vectors
         if sparse_enabled and not has_sparse:
-            raise RuntimeError(
+            raise RagProviderConfigurationError(
                 f"Qdrant collection {collection} is missing sparse vector '{self._sparse_vector_name}'"
             )
 
@@ -475,7 +476,10 @@ def _sparse_vector_from_terms(terms: dict[str, float]) -> models.SparseVector | 
 
 
 def _stable_sparse_index(token: str) -> int:
-    digest = blake2b(token.encode("utf-8"), digest_size=8).digest()
+    # Qdrant server accepts sparse indices that fit in 32-bit integer space.
+    # Local mode is more permissive, so keep the hash bounded to avoid
+    # HTTP upsert failures against real Qdrant instances.
+    digest = blake2b(token.encode("utf-8"), digest_size=4).digest()
     return int.from_bytes(digest, byteorder="big", signed=False)
 
 

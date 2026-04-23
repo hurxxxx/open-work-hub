@@ -52,3 +52,17 @@ services:
       interval: 10s
       timeout: 5s
       retries: 10
+
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: doowon-qdrant
+    restart: unless-stopped
+    ports:
+      - "${DOOWON_QDRANT_PORT:-6333}:6333"
+    volumes:
+      - ./data/qdrant:/qdrant/storage
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:6333/collections || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10

@@ -37,9 +37,14 @@ from aidoo_api.domains.rag.pms_projection import (
     PMS_ISSUE_RESOURCE_TYPE,
     load_issue_projection,
 )
+from aidoo_api.domains.rag.providers import (
+    RagProviderConfigurationError,
+    RagProviderError,
+    RagProviderTimeoutError,
+    RagProviderTransientError,
+)
 from aidoo_api.domains.rag.providers.base import RagProviderBundle
-from aidoo_api.domains.rag.providers.fake import FakeEmbeddingClient, FakeVectorIndexClient
-from aidoo_api.domains.rag.providers.qdrant import QdrantVectorIndexClient
+from aidoo_api.domains.rag.runtime import build_provider_bundle, resolve_default_collection_name
 from aidoo_api.domains.rag.service import RagService
 from aidoo_api.domains.rag.telemetry import rag_span_attributes
 from aidoo_api.domains.meeting.models import Meeting, MeetingDocLink, MeetingTaskLink
@@ -67,37 +72,19 @@ def _db_session() -> Session:
 
 @lru_cache(maxsize=1)
 def _provider_bundle() -> RagProviderBundle:
-    settings = get_settings()
-    if settings.rag_vector_index_provider == "fake":
-        vector_index = FakeVectorIndexClient()
-    elif settings.rag_vector_index_provider == "qdrant":
-        if not settings.rag_qdrant_url:
-            raise RuntimeError("AIDOO_QDRANT_URL is required when rag_vector_index_provider=qdrant")
-        vector_index = QdrantVectorIndexClient(
-            url=settings.rag_qdrant_url,
-            api_key=settings.rag_qdrant_api_key or None,
-        )
-    else:
-        raise RuntimeError(
-            "Unsupported RAG vector index provider for worker scaffold: "
-            f"{settings.rag_vector_index_provider}"
-        )
-    if settings.rag_embedding_provider != "fake":
-        raise RuntimeError(
-            f"Unsupported RAG embedding provider for worker scaffold: {settings.rag_embedding_provider}"
-        )
-    return RagProviderBundle(
-        vector_index=vector_index,
-        embedding=FakeEmbeddingClient(),
-    )
+    return build_provider_bundle(get_settings())
 
 
 @lru_cache(maxsize=1)
 def _rag_service() -> RagService:
+    settings = get_settings()
     providers = _provider_bundle()
     return RagService(
         vector_index=providers.vector_index,
         embedding_client=providers.embedding,
+        ocr_client=providers.ocr,
+        rerank_client=providers.rerank,
+        default_collection=resolve_default_collection_name(settings),
     )
 
 
@@ -362,7 +349,7 @@ def _execute_visibility_job(
 
 
 def _process_sync_job(session: Session, job: RagSyncJob) -> str:
-    collection = _collection_name(job.resource_type)
+    collection = _collection_name()
     service = _rag_service()
 
     if job.operation == RagSyncOperation.DELETE.value:
@@ -716,10 +703,8 @@ def _claim_visibility_job(
     return existing, "ignored"
 
 
-def _collection_name(resource_type: str) -> str:
-    settings = get_settings()
-    normalized = resource_type.replace("_", "-")
-    return f"{settings.rag_qdrant_collection_prefix}-{normalized}"
+def _collection_name() -> str:
+    return resolve_default_collection_name(get_settings())
 
 
 def _claim_next_sync_job(
@@ -787,6 +772,24 @@ def _handle_sync_job_failure(
 ) -> str:
     settings = get_settings()
     error_text = str(error)
+    if _is_non_retryable_rag_error(error):
+        record_sync_job_result(
+            status="non_retryable_error",
+            workspace_id=job.workspace_id,
+            resource_type=job.resource_type,
+            resource_id=job.resource_id,
+            operation=job.operation,
+            job_lane=job.lane,
+            job_kind=job_kind,
+        )
+        _mark_sync_job(
+            session,
+            job,
+            status=RagJobStatus.CANCELLED.value,
+            last_error=f"non_retryable: {error_text}",
+        )
+        logger.error("Cancelling non-retryable RAG sync job %s after failure: %s", job.id, error_text)
+        return "non_retryable_error"
     if job.attempts >= settings.rag_job_max_attempts:
         record_sync_job_result(
             status="dead_letter",
@@ -806,7 +809,11 @@ def _handle_sync_job_failure(
         logger.error("Dead-lettered RAG sync job %s after %s attempts", job.id, job.attempts)
         return "dead_letter"
 
-    countdown = settings.rag_job_retry_backoff_seconds * max(job.attempts, 1)
+    countdown = _resolve_retry_countdown_seconds(
+        error,
+        default_backoff_seconds=settings.rag_job_retry_backoff_seconds,
+        attempts=job.attempts,
+    )
     next_retry_at = datetime.now(UTC).replace(tzinfo=None) + timedelta(seconds=countdown)
     record_sync_job_result(
         status="retry_scheduled",
@@ -863,7 +870,11 @@ def _handle_visibility_job_failure(
         )
         return "dead_letter"
 
-    countdown = settings.rag_job_retry_backoff_seconds * max(job.attempts, 1)
+    countdown = _resolve_retry_countdown_seconds(
+        error,
+        default_backoff_seconds=settings.rag_job_retry_backoff_seconds,
+        attempts=job.attempts,
+    )
     next_retry_at = datetime.now(UTC).replace(tzinfo=None) + timedelta(seconds=countdown)
     record_sync_job_result(
         status="retry_scheduled",
@@ -930,3 +941,23 @@ def _record_visibility_queue_depth_snapshot(
         job_lane="visibility_recompute",
         job_kind="visibility_recompute",
     )
+
+
+def _is_non_retryable_rag_error(error: Exception) -> bool:
+    if isinstance(error, RagProviderConfigurationError):
+        return True
+    if isinstance(error, (RagProviderTransientError, RagProviderTimeoutError)):
+        return False
+    return isinstance(error, RagProviderError)
+
+
+def _resolve_retry_countdown_seconds(
+    error: Exception,
+    *,
+    default_backoff_seconds: int,
+    attempts: int,
+) -> int:
+    retry_after_seconds = getattr(error, "retry_after_seconds", None)
+    if isinstance(retry_after_seconds, int) and retry_after_seconds > 0:
+        return retry_after_seconds
+    return default_backoff_seconds * max(attempts, 1)

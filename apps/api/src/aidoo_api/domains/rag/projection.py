@@ -16,6 +16,8 @@ def build_projection(
     visibility_refs: list[str] | None = None,
     metadata: dict[str, object] | None = None,
 ) -> RagProjection:
+    resolved_metadata = dict(metadata or {})
+    resolved_metadata.setdefault("content_modality", "text")
     return RagProjection(
         workspace_id=workspace_id,
         resource_type=resource_type,
@@ -26,7 +28,7 @@ def build_projection(
         text_content=text_content,
         owner_label=owner_label,
         visibility_refs=list(visibility_refs or []),
-        metadata=dict(metadata or {}),
+        metadata=resolved_metadata,
     )
 
 

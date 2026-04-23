@@ -1,7 +1,9 @@
+import ipaddress
 from functools import lru_cache
 from pathlib import Path
+from urllib.parse import urlparse
 
-from pydantic import AliasChoices, Field
+from pydantic import AliasChoices, Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -74,6 +76,7 @@ class Settings(BaseSettings):
             "AIDOO_QDRANT_URL",
             "DOOWON_AIDOO_QDRANT_URL",
             "DOOWON_WORKER_AIDOO_QDRANT_URL",
+            "DOOWON_QDRANT_URL",
         ),
     )
     rag_qdrant_api_key: str = Field(
@@ -82,6 +85,7 @@ class Settings(BaseSettings):
             "AIDOO_QDRANT_API_KEY",
             "DOOWON_AIDOO_QDRANT_API_KEY",
             "DOOWON_WORKER_AIDOO_QDRANT_API_KEY",
+            "DOOWON_QDRANT_API_KEY",
         ),
     )
     rag_qdrant_collection_prefix: str = Field(
@@ -122,6 +126,53 @@ class Settings(BaseSettings):
             "AIDOO_RERANK_PROVIDER",
             "DOOWON_AIDOO_RERANK_PROVIDER",
             "DOOWON_WORKER_AIDOO_RERANK_PROVIDER",
+        ),
+    )
+    rag_deepinfra_api_key: str = Field(
+        default="",
+        validation_alias=AliasChoices(
+            "AIDOO_DEEPINFRA_API_KEY",
+            "DOOWON_AIDOO_DEEPINFRA_API_KEY",
+            "DOOWON_WORKER_AIDOO_DEEPINFRA_API_KEY",
+            "DEEPINFRA_API_KEY",
+        ),
+    )
+    rag_deepinfra_base_url: str = Field(
+        default="https://api.deepinfra.com/v1/openai",
+        validation_alias=AliasChoices(
+            "AIDOO_DEEPINFRA_BASE_URL",
+            "DOOWON_AIDOO_DEEPINFRA_BASE_URL",
+            "DOOWON_WORKER_AIDOO_DEEPINFRA_BASE_URL",
+            "DEEPINFRA_BASE_URL",
+        ),
+    )
+    rag_deepinfra_embedding_model: str = Field(
+        default="Qwen/Qwen3-Embedding-8B",
+        validation_alias=AliasChoices(
+            "AIDOO_DEEPINFRA_EMBEDDING_MODEL",
+            "DOOWON_AIDOO_DEEPINFRA_EMBEDDING_MODEL",
+            "DOOWON_WORKER_AIDOO_DEEPINFRA_EMBEDDING_MODEL",
+            "DEEPINFRA_EMBEDDING_MODEL",
+        ),
+    )
+    rag_deepinfra_reranker_model: str = Field(
+        default="Qwen/Qwen3-Reranker-8B",
+        validation_alias=AliasChoices(
+            "AIDOO_DEEPINFRA_RERANKER_MODEL",
+            "DOOWON_AIDOO_DEEPINFRA_RERANKER_MODEL",
+            "DOOWON_WORKER_AIDOO_DEEPINFRA_RERANKER_MODEL",
+            "DEEPINFRA_RERANKER_MODEL",
+        ),
+    )
+    rag_deepinfra_timeout: float = Field(
+        default=60.0,
+        gt=0,
+        le=3600,
+        validation_alias=AliasChoices(
+            "AIDOO_DEEPINFRA_TIMEOUT",
+            "DOOWON_AIDOO_DEEPINFRA_TIMEOUT",
+            "DOOWON_WORKER_AIDOO_DEEPINFRA_TIMEOUT",
+            "DEEPINFRA_TIMEOUT",
         ),
     )
     rag_backfill_batch_size: int = Field(
@@ -212,7 +263,47 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
+    @model_validator(mode="after")
+    def _validate_rag_runtime_config(self) -> "Settings":
+        uses_deepinfra = self.rag_enabled and (
+            self.rag_embedding_provider == "deepinfra"
+            or self.rag_rerank_provider == "deepinfra"
+        )
+        if not uses_deepinfra:
+            return self
+
+        self.rag_deepinfra_base_url = _normalize_rag_deepinfra_base_url(
+            self.rag_deepinfra_base_url
+        )
+        return self
+
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
     return Settings()
+
+
+def _normalize_rag_deepinfra_base_url(value: str) -> str:
+    normalized = value.strip().rstrip("/")
+    parsed = urlparse(normalized)
+    if parsed.scheme != "https":
+        raise ValueError("RAG DeepInfra base URL must use HTTPS.")
+    hostname = parsed.hostname
+    if hostname is None:
+        raise ValueError("RAG DeepInfra base URL must include a hostname.")
+    if hostname.lower() == "localhost":
+        raise ValueError("RAG DeepInfra base URL must not target localhost.")
+    try:
+        ip = ipaddress.ip_address(hostname)
+    except ValueError:
+        return normalized
+    if (
+        ip.is_private
+        or ip.is_loopback
+        or ip.is_link_local
+        or ip.is_multicast
+        or ip.is_reserved
+        or ip.is_unspecified
+    ):
+        raise ValueError("RAG DeepInfra base URL must not target a private-network host.")
+    return normalized

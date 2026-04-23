@@ -13,6 +13,10 @@ from aidoo_api.domains.rag.contracts import (
 )
 
 
+class RagProviderConfigurationError(RuntimeError):
+    pass
+
+
 class VectorIndexClient(Protocol):
     def healthcheck(self) -> RagProviderHealth: ...
 

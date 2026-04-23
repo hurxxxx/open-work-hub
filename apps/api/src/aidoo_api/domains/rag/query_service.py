@@ -51,11 +51,17 @@ class RagQueryService:
         embedding_client: EmbeddingClient,
         rerank_client: RerankClient | None = None,
         grounded_answer_synthesizer: RagGroundedAnswerSynthesizer | None = None,
+        query_timeout_ms: int = 2500,
+        grounded_answer_timeout_ms: int = 7000,
+        legacy_collection_resolver: Callable[[RagQueryRequest], Sequence[str]] | None = None,
     ) -> None:
         self._vector_index = vector_index
         self._embedding_client = embedding_client
         self._rerank_client = rerank_client
         self._grounded_answer_synthesizer = grounded_answer_synthesizer
+        self._query_timeout_ms = query_timeout_ms
+        self._grounded_answer_timeout_ms = grounded_answer_timeout_ms
+        self._legacy_collection_resolver = legacy_collection_resolver
 
     def query(
         self,
@@ -85,49 +91,91 @@ class RagQueryService:
             source_kind=source_kind,
         )
         vector_top_k = _resolve_vector_top_k(request.top_k, post_filter=post_filter)
-        vector_hits = self._vector_index.query(
-            request=RagVectorSearchRequest(
-                collection=request.collection,
-                query=request.query,
-                workspace_id=request.workspace_id,
-                query_embedding=query_embedding,
-                source_kinds=list(request.source_kinds),
-                metadata_filter=dict(request.filters),
-                top_k=vector_top_k,
-                trace_context=request.trace_context,
-            )
+        vector_hit_count = 0
+        filtered_hit_count = 0
+        rerank_applied = False
+        rerank_degraded = False
+        vector_hits: list[RagVectorSearchHit] = []
+        rerank_client = self._rerank_client
+        query_collections = _resolve_query_collections(
+            request=request,
+            legacy_collection_resolver=self._legacy_collection_resolver,
         )
-        vector_hit_count = len(vector_hits)
-        if self._rerank_client is not None:
+        while True:
+            raw_hits = self._query_collections(
+                collections=query_collections,
+                request=request,
+                query_embedding=query_embedding,
+                top_k=vector_top_k,
+            )
+            vector_hit_count = len(raw_hits)
+            filtered_hits = (
+                [hit for hit in raw_hits if post_filter(hit)]
+                if post_filter is not None
+                else list(raw_hits)
+            )
+            filtered_hit_count = len(filtered_hits)
+            vector_hits = filtered_hits
+            if post_filter is None:
+                break
+            if len(filtered_hits) >= request.top_k:
+                break
+            max_possible_hits = vector_top_k * len(query_collections)
+            if vector_top_k >= _MAX_VECTOR_TOP_K or vector_hit_count < max_possible_hits:
+                break
+            if _remaining_budget_ms(started, self._query_timeout_ms) <= 0:
+                break
+            next_top_k = min(max(vector_top_k * 2, vector_top_k + _POST_FILTER_OVERSAMPLE_BUFFER), _MAX_VECTOR_TOP_K)
+            if next_top_k <= vector_top_k:
+                break
+            vector_top_k = next_top_k
+
+        if rerank_client is not None and vector_hits and _remaining_budget_ms(started, self._query_timeout_ms) > 0:
             rerank_started = time.perf_counter()
             try:
-                vector_hits = self._rerank_client.rerank(query=request.query, hits=vector_hits)
+                vector_hits = rerank_client.rerank(query=request.query, hits=vector_hits)
             except Exception as error:
                 _record_provider_failure(
-                    provider_name=_provider_name(self._rerank_client),
+                    provider_name=_provider_name(rerank_client),
                     operation="rerank",
                     workspace_id=request.workspace_id,
                     source_kind=source_kind,
                     error=error,
                 )
-                raise
-            record_rerank_latency(
-                provider_name=_provider_name(self._rerank_client),
-                latency_ms=_elapsed_ms(rerank_started),
-                workspace_id=request.workspace_id,
-                source_kind=source_kind,
-            )
-        if post_filter is not None:
-            vector_hits = [hit for hit in vector_hits if post_filter(hit)]
-        filtered_hit_count = len(vector_hits)
+                rerank_degraded = True
+            else:
+                rerank_applied = True
+                record_rerank_latency(
+                    provider_name=_provider_name(rerank_client),
+                    latency_ms=_elapsed_ms(rerank_started),
+                    workspace_id=request.workspace_id,
+                    source_kind=source_kind,
+                )
+        elif rerank_client is not None and vector_hits:
+            rerank_degraded = True
+
         vector_hits = vector_hits[: request.top_k]
 
         hits = [_to_query_hit(hit) for hit in vector_hits]
         grounded_answer = None
-        if request.answer_mode == RagAnswerMode.GROUNDED_ANSWER:
+        grounded_answer_degraded = False
+        if (
+            request.answer_mode == RagAnswerMode.GROUNDED_ANSWER
+            and _remaining_budget_ms(started, self._query_timeout_ms) > 0
+            and self._grounded_answer_timeout_ms > 0
+        ):
             grounded_started = time.perf_counter()
             try:
                 grounded_answer = self._build_grounded_answer(request.query, hits)
+            except Exception as error:
+                _record_provider_failure(
+                    provider_name=_grounded_answer_provider_name(self._grounded_answer_synthesizer),
+                    operation="grounded_answer",
+                    workspace_id=request.workspace_id,
+                    source_kind=source_kind,
+                    error=error,
+                )
+                grounded_answer_degraded = True
             finally:
                 record_grounded_answer_latency(
                     provider_name=_grounded_answer_provider_name(self._grounded_answer_synthesizer),
@@ -135,6 +183,11 @@ class RagQueryService:
                     workspace_id=request.workspace_id,
                     source_kind=source_kind,
                 )
+                if _elapsed_ms(grounded_started) > self._grounded_answer_timeout_ms:
+                    grounded_answer = None
+                    grounded_answer_degraded = True
+        elif request.answer_mode == RagAnswerMode.GROUNDED_ANSWER:
+            grounded_answer_degraded = True
 
         latency_ms = int((time.perf_counter() - started) * 1000)
         record_query_latency(
@@ -154,8 +207,12 @@ class RagQueryService:
                 "vector_hit_count": vector_hit_count,
                 "post_filtered_hit_count": filtered_hit_count,
                 "returned_hit_count": len(hits),
-                "rerank_applied": self._rerank_client is not None,
+                "rerank_applied": rerank_applied,
+                "rerank_degraded": rerank_degraded,
                 "post_filter_applied": post_filter is not None,
+                "grounded_answer_degraded": grounded_answer_degraded,
+                "collections_consulted": list(query_collections),
+                "legacy_collection_fallback_applied": len(query_collections) > 1,
             },
             trace_id=current_trace_id(),
             latency_ms=latency_ms,
@@ -172,7 +229,7 @@ class RagQueryService:
             return self._grounded_answer_synthesizer.synthesize(query=query, hits=hits)
         lead_hits = list(hits[:3])
         text = " ".join(
-            hit.summary or hit.title or hit.resource_id
+            _safe_result_text(hit.summary or hit.title or hit.resource_id, max_chars=280)
             for hit in lead_hits
             if hit.summary or hit.title
         )
@@ -184,13 +241,39 @@ class RagQueryService:
                 RagGroundedCitation(
                     resource_id=hit.resource_id,
                     source_kind=hit.source_kind,
-                    quote=hit.summary or hit.title or hit.resource_id,
+                    quote=_safe_result_text(hit.summary or hit.title or hit.resource_id, max_chars=280),
                     locator=hit.citation,
                 )
                 for hit in lead_hits
             ],
             sources_used=sorted({hit.source_kind for hit in hits}),
         )
+
+    def _query_collections(
+        self,
+        *,
+        collections: Sequence[str],
+        request: RagQueryRequest,
+        query_embedding: list[float],
+        top_k: int,
+    ) -> list[RagVectorSearchHit]:
+        hits: list[RagVectorSearchHit] = []
+        for collection in collections:
+            hits.extend(
+                self._vector_index.query(
+                    request=RagVectorSearchRequest(
+                        collection=collection,
+                        query=request.query,
+                        workspace_id=request.workspace_id,
+                        query_embedding=query_embedding,
+                        source_kinds=list(request.source_kinds),
+                        metadata_filter=dict(request.filters),
+                        top_k=top_k,
+                        trace_context=request.trace_context,
+                    )
+                )
+            )
+        return _dedupe_hits(hits)
 
 
 def _to_query_hit(hit: RagVectorSearchHit) -> RagQueryHit:
@@ -205,10 +288,75 @@ def _to_query_hit(hit: RagVectorSearchHit) -> RagQueryHit:
         score=hit.score,
         citation=hit.citation,
         owner_label=projection.owner_label,
-        acl_summary=list(projection.visibility_refs),
+        acl_summary=_summarize_acl_refs(projection.visibility_refs),
         origin_ref=projection.metadata.get("origin_ref") if projection.metadata else None,
         metadata=dict(hit.metadata),
     )
+
+
+def _resolve_query_collections(
+    *,
+    request: RagQueryRequest,
+    legacy_collection_resolver: Callable[[RagQueryRequest], Sequence[str]] | None,
+) -> tuple[str, ...]:
+    collections = [request.collection]
+    if legacy_collection_resolver is not None:
+        collections.extend(legacy_collection_resolver(request))
+    return tuple(dict.fromkeys(collections))
+
+
+def _remaining_budget_ms(started: float, timeout_ms: int) -> int:
+    return timeout_ms - _elapsed_ms(started)
+
+
+def _query_hit_identity(hit: RagVectorSearchHit) -> tuple[str, str, str, str]:
+    projection = hit.projection
+    return (
+        projection.workspace_id,
+        projection.resource_type,
+        projection.resource_id,
+        hit.chunk_id,
+    )
+
+
+def _dedupe_hits(hits: Sequence[RagVectorSearchHit]) -> list[RagVectorSearchHit]:
+    deduped: dict[tuple[str, str, str, str], RagVectorSearchHit] = {}
+    for hit in hits:
+        identity = _query_hit_identity(hit)
+        existing = deduped.get(identity)
+        if existing is None or hit.score > existing.score:
+            deduped[identity] = hit
+    return sorted(deduped.values(), key=lambda item: item.score, reverse=True)
+
+
+def _summarize_acl_refs(visibility_refs: Sequence[str]) -> list[str]:
+    labels: list[str] = []
+    seen: set[str] = set()
+    for raw_ref in visibility_refs:
+        prefix = raw_ref.split(":", 1)[0]
+        label = _ACL_SUMMARY_LABELS.get(prefix, prefix.replace("_", " "))
+        if label in seen:
+            continue
+        seen.add(label)
+        labels.append(label)
+    return labels
+
+
+_ACL_SUMMARY_LABELS = {
+    "workspace": "workspace",
+    "workspace_public": "workspace public",
+    "owner": "owner",
+    "container": "container access",
+    "share_user": "direct share",
+    "link_share_ref": "link share",
+    "meeting_grant": "meeting grant",
+    "meeting_source": "meeting source",
+    "meeting_organizer": "meeting organizer",
+    "meeting_attendee": "meeting attendee",
+    "team": "team access",
+    "list": "list access",
+    "issue_grant": "issue grant",
+}
 
 
 def _provider_name(provider: object) -> str | None:
@@ -269,3 +417,10 @@ def _is_timeout_error(error: Exception) -> bool:
     if isinstance(error, TimeoutError):
         return True
     return "timeout" in error.__class__.__name__.lower()
+
+
+def _safe_result_text(value: str, *, max_chars: int) -> str:
+    normalized = " ".join(value.split()).strip()
+    if len(normalized) <= max_chars:
+        return normalized
+    return normalized[: max_chars - 3].rstrip() + "..."

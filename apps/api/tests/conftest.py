@@ -26,6 +26,18 @@ def _find_free_port() -> int:
         return int(sock.getsockname()[1])
 
 
+def _ensure_docker_image(image: str) -> None:
+    inspected = subprocess.run(
+        ["docker", "image", "inspect", image],
+        check=False,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    if inspected.returncode == 0:
+        return
+    subprocess.run(["docker", "pull", image], check=True)
+
+
 def _wait_for_postgres(dsn: str, timeout_seconds: int = 45) -> None:
     deadline = time.time() + timeout_seconds
     plain_dsn = dsn.replace("postgresql+psycopg://", "postgresql://", 1)
@@ -60,7 +72,7 @@ def _wait_for_tcp(host: str, port: int, timeout_seconds: int = 30) -> None:
 
 @pytest.fixture(scope="session")
 def postgres_dsn() -> str:
-    subprocess.run(["docker", "pull", POSTGRES_IMAGE], check=True)
+    _ensure_docker_image(POSTGRES_IMAGE)
     port = _find_free_port()
     container_name = f"aidoo-api-test-{uuid.uuid4().hex[:10]}"
     dsn = f"postgresql+psycopg://aidoo_test:aidoo_test@127.0.0.1:{port}/aidoo_test"
@@ -95,7 +107,7 @@ def postgres_dsn() -> str:
 
 @pytest.fixture(scope="session")
 def redis_url() -> str:
-    subprocess.run(["docker", "pull", REDIS_IMAGE], check=True)
+    _ensure_docker_image(REDIS_IMAGE)
     port = _find_free_port()
     container_name = f"aidoo-api-redis-test-{uuid.uuid4().hex[:10]}"
     url = f"redis://127.0.0.1:{port}/0"

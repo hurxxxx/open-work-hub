@@ -43,6 +43,8 @@ from aidoo_api.domains.ocr.router import router as ocr_router
 from aidoo_api.domains.pms.router import router as pms_router
 from aidoo_api.domains.planner.router import router as planner_router
 from aidoo_api.domains.plm.router import router as plm_router
+from aidoo_api.domains.rag.router import router as rag_router
+from aidoo_api.domains.rag.runtime import close_rag_runtime_resources, get_rag_runtime_health
 from aidoo_api.domains.wiki_pms.router import router as wiki_pms_router
 
 
@@ -80,6 +82,7 @@ def create_app() -> FastAPI:
                 )
         yield
         await app.state.docs_collab.shutdown()
+        close_rag_runtime_resources()
 
     app = FastAPI(
         title=settings.app_name,
@@ -137,6 +140,9 @@ def create_app() -> FastAPI:
         with get_session_factory()() as session:
             effective = check_effective_llm_readiness(session, settings)
         ready = effective.ready or not settings.llm_required
+        rag = get_rag_runtime_health()
+        if rag.get("enabled") and not rag.get("ready", False):
+            ready = False
         if not ready:
             response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
 
@@ -146,6 +152,7 @@ def create_app() -> FastAPI:
             "instance_id": settings.instance_id,
             "llm": dual.public_dict(),
             "llm_effective": effective.public_dict(),
+            "rag": rag,
         }
 
     app.include_router(auth_router, prefix=settings.api_prefix)
@@ -334,6 +341,14 @@ def create_app() -> FastAPI:
     )
     app.include_router(
         planner_router,
+        prefix=f"{settings.api_prefix}/workspaces/{{workspace_slug}}",
+        dependencies=[
+            *protected_dependencies,
+            Depends(require_workspace_membership()),
+        ],
+    )
+    app.include_router(
+        rag_router,
         prefix=f"{settings.api_prefix}/workspaces/{{workspace_slug}}",
         dependencies=[
             *protected_dependencies,

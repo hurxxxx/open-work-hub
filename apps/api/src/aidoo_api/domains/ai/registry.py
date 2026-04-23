@@ -426,6 +426,7 @@ def get_ai_capability_registry() -> AiCapabilityRegistry:
         "aidoo_api.domains.meeting",
         "aidoo_api.domains.planner",
         "aidoo_api.domains.pms",
+        "aidoo_api.domains.rag",
     ):
         _register_domain(registry, module_name)
     registry.compile_capabilities()
