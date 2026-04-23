@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from hashlib import blake2b
+import inspect
+import math
 import time
 from typing import Any
 import uuid
@@ -22,6 +24,11 @@ from aidoo_api.domains.rag.metrics import (
     record_vector_query_latency,
 )
 from aidoo_api.domains.rag.providers.base import RagProviderConfigurationError
+from aidoo_api.domains.rag.providers.openai_compatible import (
+    RagProviderError,
+    RagProviderTimeoutError,
+    RagProviderTransientError,
+)
 
 _DENSE_VECTOR_NAME = "dense"
 _SPARSE_VECTOR_NAME = "sparse"
@@ -43,6 +50,8 @@ _RESERVED_PAYLOAD_FIELDS = {
 
 class QdrantVectorIndexClient:
     provider_name = "qdrant"
+    _circuit_breaker_failure_threshold = 3
+    _circuit_breaker_cooldown_seconds = 15
 
     def __init__(
         self,
@@ -59,8 +68,16 @@ class QdrantVectorIndexClient:
         self._dense_vector_name = dense_vector_name
         self._sparse_vector_name = sparse_vector_name
         self._indexed_collections: set[str] = set()
+        self._consecutive_query_failures = 0
+        self._blocked_until_monotonic = 0.0
 
     def healthcheck(self) -> RagProviderHealth:
+        if self._blocked_until_monotonic > time.monotonic():
+            return RagProviderHealth(
+                provider_name=self.provider_name,
+                ready=False,
+                detail="Provider temporarily unavailable after repeated query failures.",
+            )
         try:
             self._client.get_collections()
         except Exception as error:
@@ -208,10 +225,21 @@ class QdrantVectorIndexClient:
         )
         return len(point_ids)
 
-    def query(self, *, request: RagVectorSearchRequest) -> list[RagVectorSearchHit]:
+    def query(
+        self,
+        *,
+        request: RagVectorSearchRequest,
+        timeout_seconds: float | None = None,
+    ) -> list[RagVectorSearchHit]:
         if not request.query_embedding:
             return []
-        if not self._client.collection_exists(collection_name=request.collection):
+        self._raise_if_circuit_open()
+        timeout = _qdrant_timeout(timeout_seconds)
+        if not _call_client_with_optional_timeout(
+            self._client.collection_exists,
+            timeout=timeout,
+            collection_name=request.collection,
+        ):
             return []
 
         query_filter = self._build_query_filter(request)
@@ -219,7 +247,9 @@ class QdrantVectorIndexClient:
         started = time.perf_counter()
         try:
             if sparse_query is not None:
-                response = self._client.query_points(
+                response = _call_client_with_optional_timeout(
+                    self._client.query_points,
+                    timeout=timeout,
                     collection_name=request.collection,
                     prefetch=[
                         models.Prefetch(
@@ -240,7 +270,9 @@ class QdrantVectorIndexClient:
                     with_vectors=False,
                 )
             else:
-                response = self._client.query_points(
+                response = _call_client_with_optional_timeout(
+                    self._client.query_points,
+                    timeout=timeout,
                     collection_name=request.collection,
                     query=request.query_embedding,
                     using=self._dense_vector_name,
@@ -254,7 +286,10 @@ class QdrantVectorIndexClient:
                 request=request,
                 error=error,
             )
-            raise
+            normalized = _normalize_query_error(error)
+            self._record_query_failure(normalized)
+            raise normalized from error
+        self._reset_query_failures()
         record_vector_query_latency(
             workspace_id=request.workspace_id,
             provider_name=self.provider_name,
@@ -377,6 +412,29 @@ class QdrantVectorIndexClient:
             terms[token] = terms.get(token, 0.0) + 1.0
         return _sparse_vector_from_terms(terms)
 
+    def _record_query_failure(self, error: Exception) -> None:
+        self._consecutive_query_failures += 1
+        if self._consecutive_query_failures < self._circuit_breaker_failure_threshold:
+            return
+        self._blocked_until_monotonic = max(
+            self._blocked_until_monotonic,
+            time.monotonic() + self._circuit_breaker_cooldown_seconds,
+        )
+        self._consecutive_query_failures = 0
+
+    def _reset_query_failures(self) -> None:
+        self._consecutive_query_failures = 0
+
+    def _raise_if_circuit_open(self) -> None:
+        remaining = self._blocked_until_monotonic - time.monotonic()
+        if remaining <= 0:
+            self._blocked_until_monotonic = 0.0
+            return
+        raise RagProviderTransientError(
+            "Provider temporarily unavailable after repeated query failures.",
+            retry_after_seconds=max(int(math.ceil(remaining)), 1),
+        )
+
 
 
 def _payload_from_record(record: RagVectorRecord) -> dict[str, Any]:
@@ -408,6 +466,56 @@ def _chunk_index_from_payload(payload: dict[str, Any]) -> int:
     if isinstance(raw_value, str) and raw_value.isdigit():
         return int(raw_value)
     return 0
+
+
+def _normalize_query_error(error: Exception) -> Exception:
+    if isinstance(error, RagProviderError):
+        return error
+    if isinstance(error, TimeoutError):
+        return RagProviderTimeoutError(str(error))
+    return RagProviderError(str(error))
+
+
+def _qdrant_timeout(timeout_seconds: float | None) -> int | None:
+    if timeout_seconds is None or timeout_seconds <= 0:
+        return None
+    return max(int(math.ceil(timeout_seconds)), 1)
+
+
+def _call_client_with_optional_timeout(
+    method: Any,
+    *,
+    timeout: int | None,
+    **kwargs: Any,
+) -> Any:
+    if timeout is None or not _method_accepts_timeout(method):
+        return method(**kwargs)
+    try:
+        return method(**kwargs, timeout=timeout)
+    except (AssertionError, TypeError) as error:
+        if not _is_timeout_keyword_rejection(error):
+            raise
+        return method(**kwargs)
+
+
+def _method_accepts_timeout(method: Any) -> bool:
+    try:
+        signature = inspect.signature(method)
+    except (TypeError, ValueError):
+        return True
+    if "timeout" in signature.parameters:
+        return True
+    return any(
+        parameter.kind == inspect.Parameter.VAR_KEYWORD
+        for parameter in signature.parameters.values()
+    )
+
+
+def _is_timeout_keyword_rejection(error: Exception) -> bool:
+    message = str(error)
+    return "timeout" in message and (
+        "Unknown arguments" in message or "unexpected keyword argument" in message
+    )
 
 
 

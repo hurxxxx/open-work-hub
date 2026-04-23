@@ -10,10 +10,17 @@ from sqlalchemy.orm import Session
 from aidoo_api.core.settings import Settings, get_settings
 from aidoo_api.domains.auth.access import resolve_workspace_enabled_app_ids, resolve_workspace_role
 from aidoo_api.domains.auth.models import Team, TeamMember, User, Workspace
+from aidoo_api.domains.rag.grounded_answer import LlmGroundedAnswerSynthesizer
 from aidoo_api.domains.docs.models import DocMeetingAccess, NativeDoc, NativeDocContainer, NativeDocUserShare
 from aidoo_api.domains.meeting.models import Meeting, MeetingAttendee
 from aidoo_api.domains.planner.models import PlannerEvent
 from aidoo_api.domains.pms.models import Issue, IssueUserAccess, TaskList
+from aidoo_api.domains.rag.providers import (
+    RagProviderConfigurationError,
+    RagProviderError,
+    RagProviderTimeoutError,
+    RagProviderTransientError,
+)
 from aidoo_api.domains.rag.access_filter import (
     build_user_rag_post_filter,
 )
@@ -106,6 +113,11 @@ def query_workspace_rag(
     include_binary_hits: bool,
     settings: Settings | None = None,
     query_service: RagQueryService | None = None,
+    source: str = "api.rag.query",
+    principal_kind: str = "user",
+    principal_id: str | None = None,
+    agent_run_id: str | None = None,
+    conversation_id: str | None = None,
 ) -> RagQueryResponse:
     resolved_settings = ensure_rag_enabled(settings)
     _resolve_workspace_rag_enabled_app_ids(db, workspace.id)
@@ -158,7 +170,32 @@ def query_workspace_rag(
         include_binary_hits=include_binary_hits,
     )
     post_filter = build_user_rag_post_filter(db, user=user)
-    return service.query(request, post_filter=post_filter)
+    grounded_answer_synthesizer = None
+    if answer_mode == RagAnswerMode.GROUNDED_ANSWER:
+        grounded_answer_synthesizer = LlmGroundedAnswerSynthesizer(
+            db=db,
+            workspace_id=workspace.id,
+            actor_user_id=user.id,
+            principal_kind=principal_kind,
+            principal_id=principal_id or user.id,
+            source=source,
+            agent_run_id=agent_run_id,
+            conversation_id=conversation_id,
+        )
+    try:
+        return service.query(
+            request,
+            post_filter=post_filter,
+            grounded_answer_synthesizer=grounded_answer_synthesizer,
+        )
+    except (
+        RagProviderConfigurationError,
+        RagProviderError,
+        RagProviderTransientError,
+        RagProviderTimeoutError,
+        TimeoutError,
+    ) as error:
+        raise RagUnavailableError(f"RAG query is unavailable: {error}") from error
 
 
 def list_workspace_rag_sources(

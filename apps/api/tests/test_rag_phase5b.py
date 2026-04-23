@@ -1,18 +1,23 @@
 from __future__ import annotations
 
 from fastapi.testclient import TestClient
+import pytest
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from aidoo_api.core.db import get_engine, get_session_factory
+from aidoo_api.core.principal import user_principal
 from aidoo_api.core.settings import get_settings
 from aidoo_api.domains.ai.registry import reset_ai_capability_registry
+from aidoo_api.domains.ai.router import _resolve_agent_tool_specs
 from aidoo_api.domains.auth.access import ensure_dev_login_seed_data, load_user_graph
 from aidoo_api.domains.auth.models import Workspace, WorkspaceAppEntitlement
 from aidoo_api.domains.docs import service as docs_service
 from aidoo_api.domains.rag import application as rag_application
+from aidoo_api.domains.rag.contracts import RagGroundedAnswer, RagGroundedCitation
 from aidoo_api.domains.rag.docs_projection import load_native_doc_projection
 from aidoo_api.domains.rag.models import RagSyncJob
+import aidoo_api.domains.rag.outbox as rag_outbox
 from aidoo_api.domains.rag.providers.fake import (
     FakeEmbeddingClient,
     FakeRerankClient,
@@ -24,6 +29,47 @@ from aidoo_api.domains.rag.runtime import (
     resolve_default_collection_name,
 )
 from aidoo_api.domains.rag.service import RagService
+
+
+@pytest.fixture(autouse=True)
+def _stub_rag_job_publish(monkeypatch) -> None:
+    class _FakeSignature:
+        def apply_async(self, *, queue: str, retry: bool) -> None:
+            del queue, retry
+
+    class _FakeCeleryClient:
+        def signature(self, task_name: str, args: list[str], immutable: bool):
+            del task_name, args, immutable
+            return _FakeSignature()
+
+    monkeypatch.setattr(rag_outbox, "_get_celery_client", lambda: _FakeCeleryClient())
+
+
+@pytest.fixture(autouse=True)
+def _stub_grounded_answer(monkeypatch) -> None:
+    def _fake_synthesize(self, *, query: str, hits, timeout_ms: int | None = None):
+        del self, query, timeout_ms
+        if not hits:
+            return None
+        lead_hit = hits[0]
+        return RagGroundedAnswer(
+            text=lead_hit.summary or lead_hit.title or lead_hit.resource_id,
+            citations=[
+                RagGroundedCitation(
+                    resource_id=lead_hit.resource_id,
+                    source_kind=lead_hit.source_kind,
+                    quote=lead_hit.summary or lead_hit.title or lead_hit.resource_id,
+                    locator=lead_hit.citation,
+                )
+            ],
+            unsupported_claims=[],
+            sources_used=[lead_hit.source_kind],
+        )
+
+    monkeypatch.setattr(
+        "aidoo_api.domains.rag.grounded_answer.LlmGroundedAnswerSynthesizer.synthesize",
+        _fake_synthesize,
+    )
 
 
 def _dev_login(client: TestClient, account_key: str) -> dict:
@@ -140,6 +186,86 @@ def test_workspace_rag_query_route_returns_indexed_hits(
     assert payload["grounded_answer"] is not None
 
 
+def test_workspace_rag_query_route_filters_out_foreign_workspace_hits(
+    client: TestClient,
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv("AIDOO_RAG_ENABLED", "1")
+    _reset_settings_and_registry()
+    delivery_session = _dev_login(client, "delivery-hub-admin")
+    hq_session = _dev_login(client, "hq-admin")
+    vector_index = FakeVectorIndexClient()
+    embedding_client = FakeEmbeddingClient()
+    rerank_client = FakeRerankClient()
+
+    with get_session_factory()() as db:
+        delivery_owner = load_user_graph(db, delivery_session["user"]["id"])
+        hq_owner = load_user_graph(db, hq_session["user"]["id"])
+        delivery_workspace = db.scalar(select(Workspace).where(Workspace.key == "delivery-hub"))
+        hq_workspace = db.scalar(select(Workspace).where(Workspace.key == "hq"))
+        assert delivery_owner is not None
+        assert hq_owner is not None
+        assert delivery_workspace is not None
+        assert hq_workspace is not None
+
+        delivery_doc, _ = docs_service.create_native_doc_for_user(
+            db,
+            workspace_id=delivery_workspace.id,
+            owner_id=delivery_owner.id,
+            title="Delivery Hub Phase 5 Note",
+            content_blocks=[
+                {
+                    "type": "paragraph",
+                    "content": [{"type": "text", "text": "Phase 5 rollout note for delivery hub."}],
+                }
+            ],
+        )
+        hq_doc, _ = docs_service.create_native_doc_for_user(
+            db,
+            workspace_id=hq_workspace.id,
+            owner_id=hq_owner.id,
+            title="HQ Phase 5 Note",
+            content_blocks=[
+                {
+                    "type": "paragraph",
+                    "content": [{"type": "text", "text": "Phase 5 rollout note for HQ only."}],
+                }
+            ],
+        )
+        db.commit()
+
+        rag_service = RagService(
+            vector_index=vector_index,
+            embedding_client=embedding_client,
+            rerank_client=rerank_client,
+            default_collection=resolve_default_collection_name(get_settings()),
+        )
+        for doc_id in (delivery_doc.id, hq_doc.id):
+            projection = load_native_doc_projection(db, doc_id=doc_id)
+            assert projection is not None
+            rag_service.sync_projection(projection)
+
+        delivery_workspace_id = delivery_workspace.id
+
+    query_service = RagQueryService(
+        vector_index=vector_index,
+        embedding_client=embedding_client,
+        rerank_client=rerank_client,
+    )
+    monkeypatch.setattr(rag_application, "get_rag_query_service", lambda: query_service)
+
+    response = client.post(
+        "/api/v1/workspaces/delivery-hub/rag/query",
+        headers=_auth_headers(delivery_session["token"]),
+        json={"query": "phase 5 rollout", "answer_mode": "search-only"},
+    )
+
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert {hit["title"] for hit in payload["hits"]} == {"Delivery Hub Phase 5 Note"}
+    assert {hit["workspace_id"] for hit in payload["hits"]} == {delivery_workspace_id}
+
+
 def test_workspace_rag_sources_and_reindex_routes_work(
     client: TestClient,
     monkeypatch,
@@ -246,6 +372,50 @@ def test_workspace_rag_reindex_requires_admin(
     )
 
     assert response.status_code == 403, response.text
+
+
+def test_agent_tool_specs_hide_rag_tools_without_search_intent(
+    client: TestClient,
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv("AIDOO_RAG_ENABLED", "1")
+    _reset_settings_and_registry()
+    session = _dev_login(client, "delivery-hub-admin")
+
+    with get_session_factory()() as db:
+        workspace = db.scalar(select(Workspace).where(Workspace.key == "delivery-hub"))
+        user = load_user_graph(db, session["user"]["id"])
+        assert workspace is not None
+        assert user is not None
+        principal = user_principal(
+            workspace_id=workspace.id,
+            user_id=user.id,
+            source="api.stream",
+        )
+
+        generic_specs, _ = _resolve_agent_tool_specs(
+            db,
+            workspace=workspace,
+            principal=principal,
+            messages=[{"role": "user", "content": "안녕, 오늘 해야 할 일을 짧게 정리해줘"}],
+        )
+        retrieval_specs, _ = _resolve_agent_tool_specs(
+            db,
+            workspace=workspace,
+            principal=principal,
+            messages=[
+                {
+                    "role": "user",
+                    "content": "최근 회의와 PMS 이슈를 기준으로 출시 리스크를 근거와 함께 정리해줘",
+                }
+            ],
+        )
+
+    generic_names = {item["function"]["name"] for item in generic_specs}
+    retrieval_names = {item["function"]["name"] for item in retrieval_specs}
+    assert "rag.query" not in generic_names
+    assert "rag.list_sources" not in generic_names
+    assert {"rag.query", "rag.list_sources"} <= retrieval_names
 
 
 def test_workspace_rag_reindex_enforces_cooldown(

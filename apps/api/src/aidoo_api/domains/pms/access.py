@@ -143,7 +143,7 @@ def can_read_issue_for_rag(db: Session, *, user: User, issue_id: str) -> bool:
         return False
     task_list = issue.task_list
     if task_list is not None and task_list.team_id is not None:
-        team = db.get(Team, task_list.team_id)
+        team = _load_active_team(db, task_list.team_id)
         if team is not None and resolve_team_role(db, user, team) is not None:
             return True
     return _active_issue_grant(db, issue_id=issue.id, user_id=user.id) is not None

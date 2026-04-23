@@ -43,6 +43,7 @@ class InProcTransport:
         source: str,
         call_id: str | None = None,
         agent_run_id: str | None = None,
+        conversation_id: str | None = None,
     ) -> dict[str, Any]:
         try:
             return execute_tool(
@@ -55,6 +56,7 @@ class InProcTransport:
                 source=source,
                 call_id=call_id,
                 agent_run_id=agent_run_id,
+                conversation_id=conversation_id,
             )
         except ToolRequiresApproval as error:
             raise approval_required_http_exception(error) from error
@@ -219,6 +221,7 @@ class AiMcpClient:
         source: str,
         call_id: str | None = None,
         agent_run_id: str | None = None,
+        conversation_id: str | None = None,
     ) -> dict[str, Any]:
         return self._transport.call_tool(
             db,
@@ -230,6 +233,7 @@ class AiMcpClient:
             source=source,
             call_id=call_id,
             agent_run_id=agent_run_id,
+            conversation_id=conversation_id,
         )
 
 

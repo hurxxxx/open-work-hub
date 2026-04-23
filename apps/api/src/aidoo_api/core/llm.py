@@ -552,6 +552,7 @@ def complete_chat(
     parallel_tool_calls: bool | None = None,
     resolved_execution: ResolvedLlmExecution | None = None,
     agent_run_id: str | None = None,
+    conversation_id: str | None = None,
 ) -> tuple[Any, PolicyDecision, LlmPoolConfig]:
     """Run a chat completion against the pool selected by policy + PII.
 
@@ -600,6 +601,7 @@ def complete_chat(
             error=f"{execution.pool} pool is not configured",
             entity_id=audit_entity_id,
             agent_run_id=agent_run_id,
+            conversation_id=conversation_id,
         )
         raise OpenAIError(f"{execution.pool} pool is not configured")
 
@@ -639,6 +641,7 @@ def complete_chat(
             error=str(error),
             entity_id=audit_entity_id,
             agent_run_id=agent_run_id,
+            conversation_id=conversation_id,
         )
         raise
     elapsed_ms = int((time.monotonic() - started) * 1000)
@@ -662,6 +665,7 @@ def complete_chat(
         usage=usage,
         entity_id=audit_entity_id,
         agent_run_id=agent_run_id,
+        conversation_id=conversation_id,
     )
     return response, decision, config
 
@@ -796,6 +800,7 @@ async def complete_chat_stream(
     parallel_tool_calls: bool | None = None,
     resolved_execution: ResolvedLlmExecution | None = None,
     agent_run_id: str | None = None,
+    conversation_id: str | None = None,
 ):
     """Streaming twin of :func:`complete_chat`.
 
@@ -848,6 +853,7 @@ async def complete_chat_stream(
             error=f"{execution.pool} pool is not configured",
             entity_id=audit_entity_id,
             agent_run_id=agent_run_id,
+            conversation_id=conversation_id,
         )
         raise OpenAIError(f"{execution.pool} pool is not configured")
 
@@ -909,4 +915,5 @@ async def complete_chat_stream(
             error=error_message,
             entity_id=audit_entity_id,
             agent_run_id=agent_run_id,
+            conversation_id=conversation_id,
         )

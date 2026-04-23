@@ -227,6 +227,7 @@ describe('resolveBootstrapWorkspaceSlug', () => {
 describe('rewriteWorkspaceApiPath', () => {
   beforeEach(() => {
     window.localStorage.clear();
+    window.history.replaceState({}, '', '/');
   });
 
   it('rewrites workspace-scoped rag endpoints with the active workspace slug', () => {
@@ -234,6 +235,15 @@ describe('rewriteWorkspaceApiPath', () => {
 
     expect(rewriteWorkspaceApiPath('/api/v1/rag/query')).toBe(
       '/api/v1/workspaces/hq/rag/query',
+    );
+  });
+
+  it('prefers the explicit tool workspace query over the last workspace slug', () => {
+    window.localStorage.setItem('aidoo:last-workspace-slug', 'hq');
+    window.history.replaceState({}, '', '/tool/pms-list-list-1?workspace=lab&issue=issue-1');
+
+    expect(rewriteWorkspaceApiPath('/api/v1/pms/issues/issue-1')).toBe(
+      '/api/v1/workspaces/lab/pms/issues/issue-1',
     );
   });
 });

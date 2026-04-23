@@ -39,10 +39,16 @@ class FakeEmbeddingClient:
     def healthcheck(self) -> RagProviderHealth:
         return RagProviderHealth(provider_name=self.provider_name, ready=True)
 
-    def embed_texts(self, texts: list[str]) -> list[list[float]]:
+    def embed_texts(
+        self,
+        texts: list[str],
+        timeout_seconds: float | None = None,
+    ) -> list[list[float]]:
+        del timeout_seconds
         return [self._embed(text) for text in texts]
 
-    def embed_query(self, text: str) -> list[float]:
+    def embed_query(self, text: str, timeout_seconds: float | None = None) -> list[float]:
+        del timeout_seconds
         return self._embed(text)
 
     def _embed(self, text: str) -> list[float]:
@@ -90,7 +96,9 @@ class FakeRerankClient:
         *,
         query: str,
         hits: list[RagVectorSearchHit],
+        timeout_seconds: float | None = None,
     ) -> list[RagVectorSearchHit]:
+        del timeout_seconds
         query_tokens = set(_tokenize(query))
         reranked = []
         for hit in hits:
@@ -166,7 +174,13 @@ class FakeVectorIndexClient:
             del collection[chunk_id]
         return len(to_delete)
 
-    def query(self, *, request: RagVectorSearchRequest) -> list[RagVectorSearchHit]:
+    def query(
+        self,
+        *,
+        request: RagVectorSearchRequest,
+        timeout_seconds: float | None = None,
+    ) -> list[RagVectorSearchHit]:
+        del timeout_seconds
         query_tokens = set(_tokenize(request.query))
         hits: list[RagVectorSearchHit] = []
         for record in self._collections[request.collection].values():

@@ -405,8 +405,11 @@ export function listPmsTaskLists(
   return request<PmsTaskListsResponse>(`/api/v1/pms/lists?${params}`, token, {}, workspaceSlug);
 }
 
-export function listSpaces(token: string): Promise<PmsSpace[]> {
-  return request<PmsSpace[]>('/api/v1/pms/spaces', token);
+export function listSpaces(
+  token: string,
+  workspaceSlug?: string | null,
+): Promise<PmsSpace[]> {
+  return request<PmsSpace[]>('/api/v1/pms/spaces', token, {}, workspaceSlug);
 }
 
 export function listPmsUsers(token: string): Promise<PmsUserSummary[]> {
@@ -684,8 +687,12 @@ export function createTaskListIssue(
   });
 }
 
-export function getIssueDetail(token: string, issueId: string): Promise<PmsIssueDetail> {
-  return request<PmsIssueDetail>(`/api/v1/pms/issues/${issueId}`, token);
+export function getIssueDetail(
+  token: string,
+  issueId: string,
+  workspaceSlug?: string | null,
+): Promise<PmsIssueDetail> {
+  return request<PmsIssueDetail>(`/api/v1/pms/issues/${issueId}`, token, {}, workspaceSlug);
 }
 
 export function updateIssue(

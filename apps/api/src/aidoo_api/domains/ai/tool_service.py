@@ -11,9 +11,11 @@ from fastapi.encoders import jsonable_encoder
 from pydantic import BaseModel, ValidationError
 from sqlalchemy.orm import Session
 
+from aidoo_api.core.telemetry import get_tracer
 from aidoo_api.core.principal import CallerPrincipal
 from aidoo_api.domains.ai import approvals as ai_approvals
 from aidoo_api.domains.ai.audit import log_llm_tool_call
+from aidoo_api.domains.ai.tool_context import ToolExecutionContext, bind_tool_execution_context
 from aidoo_api.domains.ai.registry import (
     ApprovalPreview,
     build_workspace_context,
@@ -57,6 +59,7 @@ def execute_tool(
     source: str,
     call_id: str | None = None,
     agent_run_id: str | None = None,
+    conversation_id: str | None = None,
     approved_call_id: str | None = None,
 ) -> dict[str, Any]:
     started = perf_counter()
@@ -80,6 +83,7 @@ def execute_tool(
             call_id=call_id,
             error=f"Unknown AI tool: {tool_name}",
             agent_run_id=agent_run_id,
+            conversation_id=conversation_id,
         )
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -108,6 +112,7 @@ def execute_tool(
                     f"{descriptor.discoverability_predicate_id}"
                 ),
                 agent_run_id=agent_run_id,
+                conversation_id=conversation_id,
             )
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -127,6 +132,7 @@ def execute_tool(
                 call_id=call_id,
                 error=f"AI tool is not available in this workspace: {tool_name}",
                 agent_run_id=agent_run_id,
+                conversation_id=conversation_id,
             )
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
@@ -145,6 +151,7 @@ def execute_tool(
             call_id=call_id,
             error=f"AI tool is registered but not executable yet: {tool_name}",
             agent_run_id=agent_run_id,
+            conversation_id=conversation_id,
         )
         raise HTTPException(
             status_code=status.HTTP_501_NOT_IMPLEMENTED,
@@ -169,6 +176,7 @@ def execute_tool(
                 call_id=call_id,
                 error=message,
                 agent_run_id=agent_run_id,
+                conversation_id=conversation_id,
             )
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -199,6 +207,7 @@ def execute_tool(
                 call_id=call_id,
                 error="Only user principals can resolve approval-gated AI tools.",
                 agent_run_id=agent_run_id,
+                conversation_id=conversation_id,
             )
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
@@ -216,6 +225,7 @@ def execute_tool(
                 call_id=call_id,
                 error=f"AI tool requires approval before execution: {tool_name}",
                 agent_run_id=agent_run_id,
+                conversation_id=conversation_id,
             )
             raise ToolRequiresApproval(
                 tool_call_id=call_id or "",
@@ -274,6 +284,7 @@ def execute_tool(
                 call_id=call_id,
                 approval_id=approval.id,
                 agent_run_id=agent_run_id,
+                conversation_id=conversation_id,
             )
             return payload
         elif approval.status in {"cancelled", "expired"}:
@@ -287,68 +298,91 @@ def execute_tool(
                 detail=f"AI tool approval is already {approval.status}.",
             )
 
-    try:
-        result = _invoke_tool_handler(
-            handler,
-            db,
-            workspace,
-            principal,
-            user,
-            validated_arguments,
-            approved_call_id=approved_call_id,
-        )
-    except HTTPException as error:
-        if approval_required and approval is not None:
-            ai_approvals.record_approval_execution_result(
-                db,
-                approval=approval,
-                execution_result={
-                    "status": "error",
-                    "error": _error_message(error),
-                },
-                status="failed",
-                error_message=_error_message(error),
-            )
-        _log_tool_call(
+    tracer = get_tracer("aidoo_api.ai.tools")
+    with bind_tool_execution_context(
+        ToolExecutionContext(
             source=source,
-            principal=principal,
-            workspace=workspace,
+            workspace_id=workspace.id,
             tool_name=tool_name,
-            args_summary=args_summary,
-            status="error",
-            latency_ms=_elapsed_ms(started),
             call_id=call_id,
-            approval_id=approval.id if approval is not None else None,
-            error=_error_message(error),
             agent_run_id=agent_run_id,
+            conversation_id=conversation_id,
         )
-        raise
-    except Exception as error:
-        if approval_required and approval is not None:
-            ai_approvals.record_approval_execution_result(
-                db,
-                approval=approval,
-                execution_result={
-                    "status": "error",
-                    "error": str(error),
+    ):
+        try:
+            with tracer.start_as_current_span(
+                "ai.tool.execute",
+                attributes={
+                    "tool_name": tool_name,
+                    "workspace_id": workspace.id,
+                    "call_id": call_id or "",
+                    "agent_run_id": agent_run_id or "",
+                    "conversation_id": conversation_id or "",
                 },
-                status="failed",
-                error_message=str(error),
+            ):
+                result = _invoke_tool_handler(
+                    handler,
+                    db,
+                    workspace,
+                    principal,
+                    user,
+                    validated_arguments,
+                    approved_call_id=approved_call_id,
+                )
+        except HTTPException as error:
+            if approval_required and approval is not None:
+                ai_approvals.record_approval_execution_result(
+                    db,
+                    approval=approval,
+                    execution_result={
+                        "status": "error",
+                        "error": _error_message(error),
+                    },
+                    status="failed",
+                    error_message=_error_message(error),
+                )
+            _log_tool_call(
+                source=source,
+                principal=principal,
+                workspace=workspace,
+                tool_name=tool_name,
+                args_summary=args_summary,
+                status="error",
+                latency_ms=_elapsed_ms(started),
+                call_id=call_id,
+                approval_id=approval.id if approval is not None else None,
+                error=_error_message(error),
+                agent_run_id=agent_run_id,
+                conversation_id=conversation_id,
             )
-        _log_tool_call(
-            source=source,
-            principal=principal,
-            workspace=workspace,
-            tool_name=tool_name,
-            args_summary=args_summary,
-            status="error",
-            latency_ms=_elapsed_ms(started),
-            call_id=call_id,
-            approval_id=approval.id if approval is not None else None,
-            error=str(error),
-            agent_run_id=agent_run_id,
-        )
-        raise
+            raise
+        except Exception as error:
+            if approval_required and approval is not None:
+                ai_approvals.record_approval_execution_result(
+                    db,
+                    approval=approval,
+                    execution_result={
+                        "status": "error",
+                        "error": str(error),
+                    },
+                    status="failed",
+                    error_message=str(error),
+                )
+            _log_tool_call(
+                source=source,
+                principal=principal,
+                workspace=workspace,
+                tool_name=tool_name,
+                args_summary=args_summary,
+                status="error",
+                latency_ms=_elapsed_ms(started),
+                call_id=call_id,
+                approval_id=approval.id if approval is not None else None,
+                error=str(error),
+                agent_run_id=agent_run_id,
+                conversation_id=conversation_id,
+            )
+            raise
 
     encoded_result = jsonable_encoder(result)
     payload = {
@@ -376,6 +410,7 @@ def execute_tool(
         approval_id=approval.id if approval is not None else None,
         resource_ids=_extract_resource_ids(encoded_result),
         agent_run_id=agent_run_id,
+        conversation_id=conversation_id,
     )
     return payload
 
@@ -583,6 +618,7 @@ def _log_tool_call(
     resource_ids: list[str] | None = None,
     error: str | None = None,
     agent_run_id: str | None = None,
+    conversation_id: str | None = None,
 ) -> None:
     log_llm_tool_call(
         source=source,
@@ -599,6 +635,7 @@ def _log_tool_call(
         call_id=call_id,
         approval_id=approval_id,
         agent_run_id=agent_run_id,
+        conversation_id=conversation_id,
     )
 
 

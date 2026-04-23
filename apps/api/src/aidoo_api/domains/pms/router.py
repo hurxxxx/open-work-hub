@@ -1417,6 +1417,8 @@ def delete_space(
     team, _role = _ensure_space_manager(db, current_user, space_id)
     team.trashed_at = _utcnow()
     db.add(team)
+    for task_list in db.scalars(select(TaskList).where(TaskList.team_id == team.id)):
+        enqueue_task_list_issue_recompute(db, task_list=task_list)
     db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 

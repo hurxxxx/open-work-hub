@@ -327,7 +327,15 @@ export function rewriteWorkspaceApiPath(
     return rawPath;
   }
 
-  const resolvedWorkspaceSlug = workspaceSlug ?? getCurrentOrLastWorkspaceSlug();
+  const resolvedWorkspaceSlug = (
+    workspaceSlug
+    ?? (
+      typeof window !== 'undefined'
+        ? getToolWorkspaceSlugFromSearch(null, window.location.pathname, window.location.search)
+        : null
+    )
+    ?? getCurrentOrLastWorkspaceSlug()
+  );
   if (!resolvedWorkspaceSlug) {
     return rawPath;
   }

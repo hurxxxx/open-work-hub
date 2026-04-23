@@ -8,12 +8,21 @@ from opentelemetry.sdk.metrics.export import InMemoryMetricReader
 import pytest
 from qdrant_client import QdrantClient
 
-from aidoo_api.domains.rag.contracts import RagDeleteRequest, RagProjection, RagQueryRequest
+from aidoo_api.domains.rag.contracts import (
+    RagDeleteRequest,
+    RagProjection,
+    RagQueryRequest,
+    RagVectorSearchRequest,
+)
 from aidoo_api.domains.rag.providers import RagProviderConfigurationError
 from aidoo_api.domains.rag.providers.fake import FakeEmbeddingClient
 from aidoo_api.domains.rag.providers.qdrant import (
     QdrantVectorIndexClient,
     _sparse_vector_from_terms,
+)
+from aidoo_api.domains.rag.providers.openai_compatible import (
+    RagProviderTimeoutError,
+    RagProviderTransientError,
 )
 from aidoo_api.domains.rag.query_service import RagQueryService
 from aidoo_api.domains.rag.service import RagService
@@ -246,6 +255,45 @@ def test_qdrant_query_emits_latency_metric(monkeypatch, qdrant_client) -> None:
     query_points = metric_map["qdrant_query_latency_ms"].data.data_points
     assert len(query_points) == 1
     assert query_points[0].attributes["provider_name"] == "qdrant"
+
+
+def test_qdrant_query_opens_circuit_breaker_after_repeated_failures() -> None:
+    class _FailingClient:
+        def __init__(self) -> None:
+            self.query_calls = 0
+
+        def collection_exists(self, collection_name: str) -> bool:
+            del collection_name
+            return True
+
+        def query_points(self, **kwargs):
+            del kwargs
+            self.query_calls += 1
+            raise TimeoutError("qdrant timed out")
+
+    failing_client = _FailingClient()
+    vector_index = QdrantVectorIndexClient(client=failing_client)
+    request = RagVectorSearchRequest(
+        collection="rag-qdrant-breaker",
+        workspace_id="ws-1",
+        query="budget risk",
+        query_embedding=[0.1, 0.2, 0.3],
+        source_kinds=["docs"],
+        top_k=5,
+    )
+
+    for _ in range(3):
+        with pytest.raises(RagProviderTimeoutError):
+            vector_index.query(request=request)
+
+    with pytest.raises(RagProviderTransientError, match="temporarily unavailable"):
+        vector_index.query(request=request)
+
+    assert failing_client.query_calls == 3
+    health = vector_index.healthcheck()
+    assert health.ready is False
+    assert health.detail is not None
+    assert "temporarily unavailable" in health.detail
 
 
 def test_qdrant_sparse_indices_fit_server_compatible_range() -> None:

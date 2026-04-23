@@ -71,10 +71,11 @@ class _OpenAICompatibleHttpClient:
         *,
         url: str,
         payload: dict[str, Any],
+        timeout_seconds: float | None = None,
     ) -> httpx.Response:
         self._raise_if_circuit_open()
         try:
-            return self._http.post(url, json=payload)
+            return self._http.post(url, json=payload, timeout=timeout_seconds or self._timeout)
         except httpx.TimeoutException as exc:
             error = RagProviderTimeoutError(str(exc))
             self._record_transient_failure(error)
@@ -91,10 +92,12 @@ class _OpenAICompatibleHttpClient:
         self,
         path: str,
         payload: dict[str, Any],
+        timeout_seconds: float | None = None,
     ) -> dict[str, Any]:
         response = self._post_response(
             url=f"{self._base_url}{path}",
             payload=payload,
+            timeout_seconds=timeout_seconds,
         )
         return self._parse_json_payload(response)
 
@@ -177,7 +180,11 @@ class OpenAICompatibleEmbeddingClient(_OpenAICompatibleHttpClient):
             )
         return RagProviderHealth(provider_name=self.provider_name, ready=True)
 
-    def embed_texts(self, texts: list[str]) -> list[list[float]]:
+    def embed_texts(
+        self,
+        texts: list[str],
+        timeout_seconds: float | None = None,
+    ) -> list[list[float]]:
         if not texts:
             return []
         payload = self._post_json(
@@ -187,6 +194,7 @@ class OpenAICompatibleEmbeddingClient(_OpenAICompatibleHttpClient):
                 "input": texts,
                 "encoding_format": "float",
             },
+            timeout_seconds=timeout_seconds,
         )
         data = payload.get("data")
         if not isinstance(data, list):
@@ -199,8 +207,8 @@ class OpenAICompatibleEmbeddingClient(_OpenAICompatibleHttpClient):
             embeddings.append([float(value) for value in embedding])
         return embeddings
 
-    def embed_query(self, text: str) -> list[float]:
-        embeddings = self.embed_texts([text])
+    def embed_query(self, text: str, timeout_seconds: float | None = None) -> list[float]:
+        embeddings = self.embed_texts([text], timeout_seconds=timeout_seconds)
         return embeddings[0] if embeddings else []
 
 
@@ -248,19 +256,25 @@ class OpenAICompatibleRerankClient(_OpenAICompatibleHttpClient):
         *,
         query: str,
         hits: list[RagVectorSearchHit],
+        timeout_seconds: float | None = None,
     ) -> list[RagVectorSearchHit]:
         if not hits:
             return []
         try:
-            return self._rerank_via_endpoint(query=query, hits=hits)
+            return self._rerank_via_endpoint(query=query, hits=hits, timeout_seconds=timeout_seconds)
         except _RerankEndpointUnavailable:
-            return self._rerank_via_chat_completion(query=query, hits=hits)
+            return self._rerank_via_chat_completion(
+                query=query,
+                hits=hits,
+                timeout_seconds=timeout_seconds,
+            )
 
     def _rerank_via_endpoint(
         self,
         *,
         query: str,
         hits: list[RagVectorSearchHit],
+        timeout_seconds: float | None = None,
     ) -> list[RagVectorSearchHit]:
         base_without_openai = _strip_openai_suffix(self._base_url)
         payload = {
@@ -273,6 +287,7 @@ class OpenAICompatibleRerankClient(_OpenAICompatibleHttpClient):
         response = self._post_response(
             url=f"{base_without_openai}/rerank",
             payload=payload,
+            timeout_seconds=timeout_seconds,
         )
         if response.status_code in {404, 422, 405}:
             self._reset_transient_failures()
@@ -301,6 +316,7 @@ class OpenAICompatibleRerankClient(_OpenAICompatibleHttpClient):
         *,
         query: str,
         hits: list[RagVectorSearchHit],
+        timeout_seconds: float | None = None,
     ) -> list[RagVectorSearchHit]:
         payload = {
             "model": self._model,
@@ -323,7 +339,7 @@ class OpenAICompatibleRerankClient(_OpenAICompatibleHttpClient):
                 },
             ],
         }
-        response = self._post_json("/chat/completions", payload)
+        response = self._post_json("/chat/completions", payload, timeout_seconds=timeout_seconds)
         choices = response.get("choices")
         if not isinstance(choices, list) or not choices:
             raise RagProviderError("Rerank chat completion returned no choices.")
@@ -367,6 +383,7 @@ class DeepInfraRerankClient(OpenAICompatibleRerankClient):
         *,
         query: str,
         hits: list[RagVectorSearchHit],
+        timeout_seconds: float | None = None,
     ) -> list[RagVectorSearchHit]:
         encoded_model = quote(self._model, safe="")
         payload = {
@@ -380,6 +397,7 @@ class DeepInfraRerankClient(OpenAICompatibleRerankClient):
         response = self._post_response(
             url=f"{_strip_openai_suffix(self._base_url)}/inference/{encoded_model}",
             payload=payload,
+            timeout_seconds=timeout_seconds,
         )
         if response.status_code in {404, 405, 422}:
             self._reset_transient_failures()

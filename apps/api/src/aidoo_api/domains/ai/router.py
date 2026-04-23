@@ -68,6 +68,7 @@ from aidoo_api.domains.conversations.schemas import (
     conversation_summary_from_row,
 )
 from aidoo_api.domains.meeting import service as meeting_service
+from aidoo_api.domains.rag.tools import should_expose_rag_tools_for_messages
 
 
 LlmRequestBackendMode = Literal["auto", "local", "openrouter"]
@@ -919,8 +920,10 @@ def _resolve_agent_tool_specs(
     *,
     workspace: Workspace,
     principal: CallerPrincipal,
+    messages: list[dict[str, Any]] | None = None,
 ) -> tuple[list[dict[str, Any]], bool]:
     settings = get_settings()
+    expose_rag_tools = True if messages is None else should_expose_rag_tools_for_messages(messages)
     if settings.ai_mcp_bridge_enabled:
         filtered_tools = AiMcpClient().list_tools(
             db,
@@ -929,14 +932,25 @@ def _resolve_agent_tool_specs(
             include_meta=False,
             include_approval_required=settings.ai_write_tools_enabled,
         )
+        if not expose_rag_tools:
+            filtered_tools = [
+                item for item in filtered_tools if item.descriptor.name not in {"rag.query", "rag.list_sources"}
+            ]
         return (
             [dict(item.openai_tool) for item in filtered_tools],
             any(item.descriptor.approval_policy == "required" for item in filtered_tools),
         )
 
     registry = get_ai_capability_registry()
+    specs = registry.openai_tool_specs(include_approval_required=settings.ai_write_tools_enabled)
+    if not expose_rag_tools:
+        specs = [
+            spec
+            for spec in specs
+            if spec.get("function", {}).get("name") not in {"rag.query", "rag.list_sources"}
+        ]
     return (
-        registry.openai_tool_specs(include_approval_required=settings.ai_write_tools_enabled),
+        specs,
         any(definition.approval_required for definition in registry.tools.values()),
     )
 
@@ -1052,6 +1066,7 @@ def _execute_tool_chat_command(
         tool_name=command.tool_name,
         arguments=command.arguments,
         source="api.chat",
+        conversation_id=getattr(payload, "conversation_id", None),
     )
     if execution.status == "ok":
         assert execution.response is not None
@@ -1104,6 +1119,7 @@ def _complete_via_policy(
             reasoning_effort=payload.reasoning_effort,
             model=payload.model,
             pool_hint=pool_hint,
+            conversation_id=getattr(payload, "conversation_id", None),
         )
     except OpenAIError as error:
         raise HTTPException(
@@ -1347,6 +1363,7 @@ async def _chat_stream_publisher(
             db,
             workspace=workspace,
             principal=principal,
+            messages=messages_dict,
         )
         if (
             settings.ai_tool_calling_enabled
@@ -1394,6 +1411,7 @@ async def _chat_stream_publisher(
             pool_hint=pool_hint,
             stream_reasoning=payload.stream_reasoning,
             resolved_execution=execution,
+            conversation_id=conversation.id if conversation is not None else payload.conversation_id,
         ):
             last_decision, last_config = decision, config
             chosen_model = execution.chosen_model
@@ -1505,6 +1523,7 @@ def _tool_command_events(
         tool_name=command.tool_name,
         arguments=command.arguments,
         source="api.stream",
+        conversation_id=None,
     )
     if execution.status == "blocked":
         yield serialize_sse(

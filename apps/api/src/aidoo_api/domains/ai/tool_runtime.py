@@ -74,6 +74,7 @@ def execute_tool_call(
     source: str,
     call_id: str | None = None,
     agent_run_id: str | None = None,
+    conversation_id: str | None = None,
     approved_call_id: str | None = None,
 ) -> ToolCallExecution:
     resolved_call_id = call_id or new_id()
@@ -89,6 +90,7 @@ def execute_tool_call(
             source=source,
             call_id=resolved_call_id,
             agent_run_id=agent_run_id,
+            conversation_id=conversation_id,
             approved_call_id=approved_call_id,
         )
     except ToolRequiresApproval as approval_required:

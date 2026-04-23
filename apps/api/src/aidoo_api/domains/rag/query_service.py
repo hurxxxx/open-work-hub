@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import inspect
 import time
 from collections.abc import Callable, Sequence
 from typing import Protocol
@@ -68,12 +69,19 @@ class RagQueryService:
         request: RagQueryRequest,
         *,
         post_filter: Callable[[RagVectorSearchHit], bool] | None = None,
+        grounded_answer_synthesizer: RagGroundedAnswerSynthesizer | None = None,
     ) -> RagQueryResponse:
         started = time.perf_counter()
         source_kind = request.source_kinds[0] if len(request.source_kinds) == 1 else None
         embedding_started = time.perf_counter()
         try:
-            query_embedding = self._embedding_client.embed_query(request.query)
+            embed_timeout_ms = _remaining_budget_ms(started, self._query_timeout_ms)
+            _ensure_budget_remaining(embed_timeout_ms, operation="embed_query")
+            query_embedding = _call_with_optional_timeout(
+                self._embedding_client.embed_query,
+                timeout_seconds=_timeout_seconds_from_ms(embed_timeout_ms),
+                text=request.query,
+            )
         except Exception as error:
             _record_provider_failure(
                 provider_name=_provider_name(self._embedding_client),
@@ -107,6 +115,7 @@ class RagQueryService:
                 request=request,
                 query_embedding=query_embedding,
                 top_k=vector_top_k,
+                timeout_ms=_remaining_budget_ms(started, self._query_timeout_ms),
             )
             vector_hit_count = len(raw_hits)
             filtered_hits = (
@@ -133,7 +142,14 @@ class RagQueryService:
         if rerank_client is not None and vector_hits and _remaining_budget_ms(started, self._query_timeout_ms) > 0:
             rerank_started = time.perf_counter()
             try:
-                vector_hits = rerank_client.rerank(query=request.query, hits=vector_hits)
+                rerank_timeout_ms = _remaining_budget_ms(started, self._query_timeout_ms)
+                _ensure_budget_remaining(rerank_timeout_ms, operation="rerank")
+                vector_hits = _call_with_optional_timeout(
+                    rerank_client.rerank,
+                    timeout_seconds=_timeout_seconds_from_ms(rerank_timeout_ms),
+                    query=request.query,
+                    hits=vector_hits,
+                )
             except Exception as error:
                 _record_provider_failure(
                     provider_name=_provider_name(rerank_client),
@@ -165,11 +181,22 @@ class RagQueryService:
             and self._grounded_answer_timeout_ms > 0
         ):
             grounded_started = time.perf_counter()
+            grounded_timeout_ms = min(
+                self._grounded_answer_timeout_ms,
+                _remaining_budget_ms(started, self._query_timeout_ms),
+            )
             try:
-                grounded_answer = self._build_grounded_answer(request.query, hits)
+                grounded_answer = self._build_grounded_answer(
+                    request.query,
+                    hits,
+                    grounded_answer_synthesizer=grounded_answer_synthesizer,
+                    timeout_ms=grounded_timeout_ms,
+                )
             except Exception as error:
                 _record_provider_failure(
-                    provider_name=_grounded_answer_provider_name(self._grounded_answer_synthesizer),
+                    provider_name=_grounded_answer_provider_name(
+                        grounded_answer_synthesizer or self._grounded_answer_synthesizer
+                    ),
                     operation="grounded_answer",
                     workspace_id=request.workspace_id,
                     source_kind=source_kind,
@@ -178,7 +205,9 @@ class RagQueryService:
                 grounded_answer_degraded = True
             finally:
                 record_grounded_answer_latency(
-                    provider_name=_grounded_answer_provider_name(self._grounded_answer_synthesizer),
+                    provider_name=_grounded_answer_provider_name(
+                        grounded_answer_synthesizer or self._grounded_answer_synthesizer
+                    ),
                     latency_ms=_elapsed_ms(grounded_started),
                     workspace_id=request.workspace_id,
                     source_kind=source_kind,
@@ -186,6 +215,8 @@ class RagQueryService:
                 if _elapsed_ms(grounded_started) > self._grounded_answer_timeout_ms:
                     grounded_answer = None
                     grounded_answer_degraded = True
+            if grounded_answer is None and hits:
+                grounded_answer_degraded = True
         elif request.answer_mode == RagAnswerMode.GROUNDED_ANSWER:
             grounded_answer_degraded = True
 
@@ -222,11 +253,20 @@ class RagQueryService:
         self,
         query: str,
         hits: Sequence[RagQueryHit],
+        *,
+        grounded_answer_synthesizer: RagGroundedAnswerSynthesizer | None = None,
+        timeout_ms: int | None = None,
     ) -> RagGroundedAnswer | None:
         if not hits:
             return None
-        if self._grounded_answer_synthesizer is not None:
-            return self._grounded_answer_synthesizer.synthesize(query=query, hits=hits)
+        synthesizer = grounded_answer_synthesizer or self._grounded_answer_synthesizer
+        if synthesizer is not None:
+            return _call_with_optional_timeout(
+                synthesizer.synthesize,
+                timeout_ms=timeout_ms,
+                query=query,
+                hits=hits,
+            )
         lead_hits = list(hits[:3])
         text = " ".join(
             _safe_result_text(hit.summary or hit.title or hit.resource_id, max_chars=280)
@@ -256,11 +296,16 @@ class RagQueryService:
         request: RagQueryRequest,
         query_embedding: list[float],
         top_k: int,
+        timeout_ms: int,
     ) -> list[RagVectorSearchHit]:
         hits: list[RagVectorSearchHit] = []
         for collection in collections:
+            collection_timeout_ms = timeout_ms
+            _ensure_budget_remaining(collection_timeout_ms, operation="vector_query")
             hits.extend(
-                self._vector_index.query(
+                _call_with_optional_timeout(
+                    self._vector_index.query,
+                    timeout_seconds=_timeout_seconds_from_ms(collection_timeout_ms),
                     request=RagVectorSearchRequest(
                         collection=collection,
                         query=request.query,
@@ -270,7 +315,7 @@ class RagQueryService:
                         metadata_filter=dict(request.filters),
                         top_k=top_k,
                         trace_context=request.trace_context,
-                    )
+                    ),
                 )
             )
         return _dedupe_hits(hits)
@@ -307,6 +352,40 @@ def _resolve_query_collections(
 
 def _remaining_budget_ms(started: float, timeout_ms: int) -> int:
     return timeout_ms - _elapsed_ms(started)
+
+
+def _timeout_seconds_from_ms(timeout_ms: int | None) -> float | None:
+    if timeout_ms is None or timeout_ms <= 0:
+        return None
+    return max(timeout_ms / 1000, 0.001)
+
+
+def _ensure_budget_remaining(timeout_ms: int, *, operation: str) -> None:
+    if timeout_ms > 0:
+        return
+    raise TimeoutError(f"RAG query budget exhausted before {operation}.")
+
+
+def _call_with_optional_timeout(
+    method,
+    *,
+    timeout_seconds: float | None = None,
+    timeout_ms: int | None = None,
+    **kwargs,
+):
+    if timeout_seconds is not None and _accepts_keyword(method, "timeout_seconds"):
+        kwargs["timeout_seconds"] = timeout_seconds
+    if timeout_ms is not None and _accepts_keyword(method, "timeout_ms"):
+        kwargs["timeout_ms"] = timeout_ms
+    return method(**kwargs)
+
+
+def _accepts_keyword(method, keyword: str) -> bool:
+    try:
+        signature = inspect.signature(method)
+    except (TypeError, ValueError):
+        return False
+    return keyword in signature.parameters
 
 
 def _query_hit_identity(hit: RagVectorSearchHit) -> tuple[str, str, str, str]:

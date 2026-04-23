@@ -95,6 +95,11 @@ export function RagSearchView() {
     () => new Map((response?.hits ?? []).map((hit) => [hit.resource_id, hit] as const)),
     [response?.hits],
   );
+  const groundedAnswerDegraded = response
+    ? response.answer_mode === 'grounded-answer'
+      && !response.grounded_answer
+      && response.query_profile.grounded_answer_degraded === true
+    : false;
   const resolvedUrlSourceKinds = useMemo(
     () => resolveSelectedSourceKinds(urlSearch.sourceKinds, sources),
     [sources, urlSearch.sourceKinds],
@@ -423,6 +428,12 @@ export function RagSearchView() {
             <InlineError message={searchError} />
           ) : null}
 
+          {groundedAnswerDegraded ? (
+            <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-[0.9rem] text-amber-800">
+              근거 답변 생성에 실패해 검색 결과만 표시합니다. 인용과 원문 링크를 확인해주세요.
+            </div>
+          ) : null}
+
           {response?.grounded_answer ? (
             <article className="mb-5 rounded-2xl border border-app-border bg-app-surface p-5">
               <div className="mb-3 flex items-center gap-2 text-[0.74rem] font-semibold uppercase tracking-[0.08em] text-app-ink/50">
@@ -662,6 +673,7 @@ function SearchHitCard({
       <div className="mt-4 flex flex-wrap items-center gap-3 text-[0.8rem] text-app-ink/55">
         {hit.owner_label ? <span>담당 {hit.owner_label}</span> : null}
         {hit.citation ? <span>인용 {hit.citation}</span> : null}
+        {hit.origin_ref ? <span>원본 {hit.origin_ref}</span> : null}
         {href ? (
           <Link
             to={href}

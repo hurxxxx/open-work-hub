@@ -1845,6 +1845,105 @@ def test_sync_resource_worker_schedules_retry_with_backoff(
         assert stored.last_error == "boom"
 
 
+def test_sync_resource_worker_merges_retry_when_duplicate_pending_job_exists(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    db_path = _worker_db_path(tmp_path)
+    _init_worker_db(
+        db_path,
+        create_policy_table=True,
+        seed_policy_rows=True,
+    )
+    monkeypatch.setenv("DOOWON_POSTGRES_DSN", _worker_dsn(db_path))
+    monkeypatch.setenv("DOOWON_WORKER_POSTGRES_DSN", _worker_dsn(db_path))
+    monkeypatch.setenv("DOOWON_WORKER_AIDOO_RAG_ENABLED", "1")
+    monkeypatch.setenv("DOOWON_WORKER_AIDOO_RAG_JOB_MAX_ATTEMPTS", "3")
+    monkeypatch.setenv("DOOWON_WORKER_AIDOO_RAG_JOB_RETRY_BACKOFF_SECONDS", "7")
+
+    class _FakeSignature:
+        def apply_async(self, *, queue: str, retry: bool) -> None:
+            del queue, retry
+
+    class _FakeCeleryClient:
+        def signature(self, task_name: str, args: list[str], immutable: bool):
+            del task_name, args, immutable
+            return _FakeSignature()
+
+    monkeypatch.setattr(
+        "aidoo_api.domains.rag.outbox._get_celery_client",
+        lambda: _FakeCeleryClient(),
+    )
+
+    engine = create_engine(_worker_dsn(db_path))
+    Base.metadata.create_all(
+        engine,
+        tables=[
+            Workspace.__table__,
+            RagSyncJob.__table__,
+        ],
+    )
+
+    with Session(engine) as session:
+        with session.begin():
+            session.add(
+                Workspace(
+                    id="ws-1",
+                    key="ws-1",
+                    name="Workspace 1",
+                    description="",
+                    active=True,
+                )
+            )
+            original_job_id = enqueue_rag_sync_job(
+                session,
+                workspace_id="ws-1",
+                resource_type="doc",
+                resource_id="doc-retry-merge",
+            ).id
+
+    tasks_module = _reload_worker_module("aidoo_worker.tasks.rag_sync")
+    merged_pending_id: str | None = None
+
+    def _inject_duplicate_pending(_session, job):
+        nonlocal merged_pending_id
+        with Session(engine) as competing_session:
+            with competing_session.begin():
+                merged_pending_id = enqueue_rag_sync_job(
+                    competing_session,
+                    workspace_id=job.workspace_id,
+                    resource_type=job.resource_type,
+                    resource_id=job.resource_id,
+                    operation=RagSyncOperation(job.operation),
+                    lane=RagSyncLane(job.lane),
+                    content_checksum=job.content_checksum,
+                    visibility_checksum=job.visibility_checksum,
+                    trace_context=job.trace_context,
+                ).id
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(tasks_module, "_process_sync_job", _inject_duplicate_pending)
+    monkeypatch.setattr(
+        tasks_module.sync_resource,
+        "retry",
+        lambda **_kwargs: pytest.fail("merged retry must not schedule a Celery retry"),
+    )
+
+    result = tasks_module.sync_resource.run(original_job_id)
+
+    assert result == "retry_merged"
+    assert merged_pending_id is not None
+    with Session(engine) as session:
+        original = session.get(RagSyncJob, original_job_id)
+        merged = session.get(RagSyncJob, merged_pending_id)
+        assert original is not None
+        assert merged is not None
+        assert original.status == "cancelled"
+        assert original.next_retry_at is None
+        assert original.last_error == f"merged_retry_into:{merged_pending_id}: boom"
+        assert merged.status == "pending"
+
+
 def test_sync_resource_worker_uses_retry_after_for_transient_provider_errors(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,

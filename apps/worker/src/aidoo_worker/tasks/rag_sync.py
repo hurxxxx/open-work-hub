@@ -7,6 +7,7 @@ import time
 
 from opentelemetry.trace import SpanKind
 from sqlalchemy import Engine, and_, create_engine, func, or_, select, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, sessionmaker
 
 from aidoo_api.core.telemetry import start_as_current_span
@@ -824,13 +825,46 @@ def _handle_sync_job_failure(
         job_lane=job.lane,
         job_kind=job_kind,
     )
-    _mark_sync_job(
-        session,
-        job,
-        status=RagJobStatus.PENDING.value,
-        last_error=error_text,
-        next_retry_at=next_retry_at,
-    )
+    try:
+        _mark_sync_job(
+            session,
+            job,
+            status=RagJobStatus.PENDING.value,
+            last_error=error_text,
+            next_retry_at=next_retry_at,
+        )
+    except IntegrityError:
+        session.rollback()
+        merged_job = enqueue_rag_sync_job(
+            session,
+            workspace_id=job.workspace_id,
+            resource_type=job.resource_type,
+            resource_id=job.resource_id,
+            operation=RagSyncOperation(job.operation),
+            lane=RagSyncLane(job.lane),
+            content_checksum=job.content_checksum,
+            visibility_checksum=job.visibility_checksum,
+            trace_context=job.trace_context,
+        )
+        current_job = session.get(RagSyncJob, job.id)
+        if current_job is not None:
+            current_job.status = RagJobStatus.CANCELLED.value
+            current_job.last_error = f"merged_retry_into:{merged_job.id}: {error_text}"
+            current_job.next_retry_at = None
+            session.add(current_job)
+            session.commit()
+            _record_sync_queue_depth_snapshot(
+                session,
+                workspace_id=current_job.workspace_id,
+                lane=current_job.lane,
+            )
+        logger.warning(
+            "Merged retry for RAG sync job %s into pending job %s after failure: %s",
+            job.id,
+            merged_job.id,
+            error_text,
+        )
+        return "retry_merged"
     logger.warning(
         "Retrying RAG sync job %s in %ss after failure: %s",
         job.id,

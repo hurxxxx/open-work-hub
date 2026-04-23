@@ -473,6 +473,48 @@ describe('RagSearchView', () => {
     expect(links[1]?.getAttribute('href')).toBe('/w/hq/planner?event=event-1');
   });
 
+  it('shows a degraded grounded-answer banner and origin refs when synthesis falls back to search-only', async () => {
+    ragHarness.queryWorkspaceRag.mockResolvedValueOnce({
+      query: 'follow ups',
+      answer_mode: 'grounded-answer',
+      hits: [
+        {
+          source_kind: 'manual',
+          resource_type: 'docs_native_doc',
+          resource_id: 'doc-1',
+          workspace_id: 'hq',
+          title: 'Budget Review',
+          summary: 'Supplier repricing increased the budget risk.',
+          score: 0.91,
+          citation: 'doc-1:0',
+          owner_label: 'Kim',
+          acl_summary: [],
+          origin_ref: 'docs:doc-1',
+          metadata: {},
+        },
+      ],
+      grounded_answer: null,
+      sources_used: ['manual'],
+      query_profile: { grounded_answer_degraded: true },
+      trace_id: 'trace-degraded',
+      latency_ms: 101,
+    });
+
+    renderView();
+    await screen.findByText('Docs / Manual');
+
+    fireEvent.change(
+      screen.getByLabelText('질문 또는 검색어'),
+      { target: { value: 'follow ups' } },
+    );
+    fireEvent.click(screen.getByRole('button', { name: '검색 실행' }));
+
+    expect(
+      await screen.findByText('근거 답변 생성에 실패해 검색 결과만 표시합니다. 인용과 원문 링크를 확인해주세요.'),
+    ).toBeTruthy();
+    expect(await screen.findByText('원본 docs:doc-1')).toBeTruthy();
+  });
+
   it('renders a workspace guidance state when no workspace context is available', () => {
     authHarness.state.user.workspaces = [];
 

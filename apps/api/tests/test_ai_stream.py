@@ -832,7 +832,10 @@ def test_chat_stream_agent_loop_executes_tool_and_keeps_shared_agent_run_id(
         client,
         _workspace_ai_path(slug, "/chat/stream"),
         headers=_auth_headers(auth["token"]),
-        json_body={"messages": [{"role": "user", "content": "오늘 내 이슈 보여줘"}]},
+        json_body={
+            "messages": [{"role": "user", "content": "오늘 내 이슈 보여줘"}],
+            "persist": True,
+        },
     )
 
     assert status_code == 200
@@ -850,8 +853,13 @@ def test_chat_stream_agent_loop_executes_tool_and_keeps_shared_agent_run_id(
 
     llm_rows = _llm_audit_rows()[-2:]
     tool_row = _tool_audit_rows()[-1]
+    attached = next(event for event in events if event["type"] == "conversation_attached")
     assert len({row.payload["agent_run_id"] for row in llm_rows}) == 1
     assert tool_row.payload["agent_run_id"] == llm_rows[-1].payload["agent_run_id"]
+    assert {row.payload["conversation_id"] for row in llm_rows} == {attached["data"]["conversation_id"]}
+    assert all(isinstance(row.payload["trace_id"], str) and row.payload["trace_id"] for row in llm_rows)
+    assert tool_row.payload["conversation_id"] == attached["data"]["conversation_id"]
+    assert isinstance(tool_row.payload["trace_id"], str) and tool_row.payload["trace_id"]
 
 
 def test_chat_stream_agent_loop_halts_for_approval_required_tool(

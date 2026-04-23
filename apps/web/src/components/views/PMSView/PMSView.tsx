@@ -199,8 +199,8 @@ export const PMSView = () => {
 
       try {
         const [response, spaceItems] = await Promise.all([
-          listPmsTaskLists(activeToken),
-          listSpaces(activeToken),
+          listPmsTaskLists(activeToken, undefined, currentWorkspaceSlug),
+          listSpaces(activeToken, currentWorkspaceSlug),
         ]);
         if (cancelled) {
           return;
@@ -363,7 +363,7 @@ export const PMSView = () => {
     setActiveTab('List');
     setSelectedIssueIds(new Set());
 
-    getIssueDetail(token, requestedIssueId)
+    getIssueDetail(token, requestedIssueId, currentWorkspaceSlug)
       .then((detail) => {
         if (cancelled) {
           return;

@@ -9,6 +9,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+from aidoo_api.core.telemetry import current_trace_id
 from aidoo_api.core.db import get_session_factory
 from aidoo_api.domains.auth.access import record_audit_log
 
@@ -42,6 +43,7 @@ def log_llm_call(
     error: str | None = None,
     entity_id: str | None = None,
     agent_run_id: str | None = None,
+    conversation_id: str | None = None,
 ) -> None:
     """Record a single LLM request to the audit log.
 
@@ -67,11 +69,14 @@ def log_llm_call(
         "status": status,
         "latency_ms": latency_ms,
         "usage": dict(usage) if usage else None,
+        "trace_id": current_trace_id(),
     }
     if error:
         payload["error"] = error
     if agent_run_id:
         payload["agent_run_id"] = agent_run_id
+    if conversation_id:
+        payload["conversation_id"] = conversation_id
 
     summary = (
         f"llm_call source={source} pool={chosen_pool} task_kind={task_kind} "
@@ -104,6 +109,7 @@ def log_llm_tool_call(
     approval_id: str | None = None,
     error: str | None = None,
     agent_run_id: str | None = None,
+    conversation_id: str | None = None,
 ) -> None:
     payload: dict[str, Any] = {
         "source": source,
@@ -118,11 +124,14 @@ def log_llm_tool_call(
         "latency_ms": latency_ms,
         "call_id": call_id,
         "approval_id": approval_id,
+        "trace_id": current_trace_id(),
     }
     if error:
         payload["error"] = error
     if agent_run_id:
         payload["agent_run_id"] = agent_run_id
+    if conversation_id:
+        payload["conversation_id"] = conversation_id
 
     summary = (
         f"llm_tool_call source={source} tool={tool_name} status={status}"

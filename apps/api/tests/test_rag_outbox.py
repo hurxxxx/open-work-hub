@@ -15,6 +15,7 @@ from aidoo_api.core.telemetry import (
 from aidoo_api.domains.auth.models import Workspace
 from aidoo_api.domains.rag.contracts import RagSyncLane, RagSyncOperation, RagTraceContext
 from aidoo_api.domains.rag.models import RagSyncJob, RagVisibilityRecomputeJob
+import aidoo_api.domains.rag.outbox as rag_outbox
 from aidoo_api.domains.rag.outbox import (
     enqueue_rag_sync_job,
     enqueue_rag_visibility_recompute_job,
@@ -199,6 +200,75 @@ def test_enqueue_rag_sync_job_dedupes_pending_rows_and_upgrades_operation() -> N
         assert stored.operation == "upsert"
         assert stored.content_checksum == "content-v2"
         assert stored.visibility_checksum == "vis-v1"
+    finally:
+        session.close()
+
+
+def test_enqueue_rag_sync_job_publishes_only_after_commit(monkeypatch) -> None:
+    published: list[tuple[str, list[str], str]] = []
+
+    class _FakeSignature:
+        def __init__(self, task_name: str, args: list[str]) -> None:
+            self.task_name = task_name
+            self.args = args
+
+        def apply_async(self, *, queue: str, retry: bool) -> None:
+            assert retry is False
+            published.append((self.task_name, self.args, queue))
+
+    class _FakeCeleryClient:
+        def signature(self, task_name: str, args: list[str], immutable: bool):
+            assert immutable is True
+            return _FakeSignature(task_name, args)
+
+    monkeypatch.setattr(rag_outbox, "_get_celery_client", lambda: _FakeCeleryClient())
+
+    session = _session()
+    try:
+        with session.begin():
+            job = enqueue_rag_sync_job(
+                session,
+                workspace_id="ws-1",
+                resource_type="doc",
+                resource_id="doc-publish",
+            )
+            assert published == []
+
+        assert published == [("rag.sync_resource", [job.id], "rag_sync_realtime")]
+    finally:
+        session.close()
+
+
+def test_enqueue_rag_visibility_job_publishes_after_commit(monkeypatch) -> None:
+    published: list[tuple[str, list[str], str]] = []
+
+    class _FakeSignature:
+        def __init__(self, task_name: str, args: list[str]) -> None:
+            self.task_name = task_name
+            self.args = args
+
+        def apply_async(self, *, queue: str, retry: bool) -> None:
+            assert retry is False
+            published.append((self.task_name, self.args, queue))
+
+    class _FakeCeleryClient:
+        def signature(self, task_name: str, args: list[str], immutable: bool):
+            assert immutable is True
+            return _FakeSignature(task_name, args)
+
+    monkeypatch.setattr(rag_outbox, "_get_celery_client", lambda: _FakeCeleryClient())
+
+    session = _session()
+    try:
+        with session.begin():
+            job = enqueue_rag_visibility_recompute_job(
+                session,
+                workspace_id="ws-1",
+                scope_type="workspace_membership",
+                scope_id="binding-publish",
+            )
+
+        assert published == [("rag.recompute_visibility", [job.id], "rag_visibility_recompute")]
     finally:
         session.close()
 

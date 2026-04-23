@@ -247,6 +247,7 @@ async def _run_agent_loop_stream(
                 source="api.resume",
                 call_id=replay_approval.tool_call_id,
                 agent_run_id=agent_run_id,
+                conversation_id=bound_conversation.id if bound_conversation is not None else None,
                 approved_call_id=replay_approval.id,
             )
             replay_tool_executed = True
@@ -303,6 +304,7 @@ async def _run_agent_loop_stream(
                 parallel_tool_calls=parallel_tool_calls,
                 resolved_execution=execution,
                 agent_run_id=agent_run_id,
+                conversation_id=bound_conversation.id if bound_conversation is not None else None,
             ):
                 if chunk.kind == "content" and chunk.text:
                     yield make_envelope(
@@ -467,6 +469,7 @@ async def _run_agent_loop_stream(
                     source="api.resume" if current_snapshot is not None else "api.stream",
                     call_id=pending.call_id,
                     agent_run_id=agent_run_id,
+                    conversation_id=bound_conversation.id if bound_conversation is not None else None,
                 )
 
                 if tool_execution.status == "blocked":

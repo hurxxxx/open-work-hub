@@ -5,7 +5,7 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
-from aidoo_api.domains.auth.models import Team
+from aidoo_api.domains.auth.models import Team, Workspace
 from aidoo_api.domains.pms.models import Issue, IssueComment, IssueLabel, IssueUserAccess
 from aidoo_api.domains.rag.contracts import RagProjection
 from aidoo_api.domains.rag.projection import build_projection
@@ -38,7 +38,14 @@ def load_issue_projection(
     task_list = issue.task_list
     if task_list is None or task_list.team_id is None:
         return None
-    team = db.get(Team, task_list.team_id)
+    team = db.scalar(
+        select(Team).where(
+            Team.id == task_list.team_id,
+            Team.active.is_(True),
+            Team.trashed_at.is_(None),
+            Team.workspace.has(Workspace.active.is_(True)),
+        )
+    )
     if team is None:
         return None
     return build_issue_projection(issue, team=team)
