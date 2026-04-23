@@ -305,7 +305,7 @@ Phase 3로 넘어가기 전에 아래 4개 계약을 먼저 고정한다. 목표
 
 **구현 순서**: `5A foundation -> 5B REST/AI -> 5C UI`
 
-**상세 플랜 파일**: [`05-phase5-rag-integration.md`](./05-phase5-rag-integration.md)
+**상세 플랜 파일**: 완료 — 요약은 [`docs/planning-log.md`](../docs/planning-log.md)
 
 ---
 
@@ -413,6 +413,7 @@ Phase별 신규 영역:
 | Tool calling 프로토콜 | Phase 3 두 번째 작업으로 mlx-lm function-calling PoC |
 | **Phase 3.5 완료 (2026-04-20)** | MCP-shaped descriptor + InProc bridge를 capability 정본으로 채택. OpenAI function spec / OpenAPI는 파생 산출물로 유지. |
 | **Phase 4 완료 (2026-04-22)** | `MeetingInsight` 별도 테이블, halt당 1 approval, meeting-only `scope_ref`, reload restore(`live_pending_approval`), approval-gated write capability까지 구현/검증 완료. |
+| **Phase 5 완료 (2026-04-23)** | internal `domains/rag/` orchestration, provider/Qdrant adapter, workspace RAG REST/AI surface, `/tool/search`, trace-first observability까지 구현/검증 완료. |
 | 전사 프로바이더 | 기존 `core/asr.py` 설정 유지 |
 | 챗 히스토리 | 영구 보존, soft delete |
 
@@ -504,16 +505,14 @@ Phase별 신규 영역:
 
 ## 다음 단계
 
-현재 다음 작업은 **Phase 3 (Tool Service Layer + Tool Calling Read) 세부 플랜**을 별도 파일(`plans/03-phase3-services-tools-read.md`)로 작성하는 것이다.
+현재 AI platform 트랙의 다음 작업은 **Phase 6 (Batch LlmJob + Admin UI) 세부 플랜**을 별도 파일로 작성하는 것이다.
 
-Phase 3 세부 플랜은 본 문서의 Phase 3 섹션을 확장해서:
-- `domains/pms|meeting|planner|docs/services/` 추출 범위와 router slimming diff 확정
-- mlx-lm `tools` 파라미터 수용 여부를 검증하는 function-calling PoC 절차와 성공/실패 분기 정의
-- `TOOL_REGISTRY`/permission precheck/audit 파이프라인의 책임 경계 고정
-- read-only 툴 스키마(`pms.search_issues`, `meeting.find_availability`, `docs.list_hub` 등)와 ACL 검증 포인트 명시
-- Phase 2에서 고정한 `tool_call_*` envelope를 실제 발행으로 연결하는 서버/프론트 작업 순서 정리
-- tool 실행 audit payload와 실패 코드 표준화
-- 테스트 케이스 — 특히 read-only ACL 403, unknown tool/invalid args 방어, tool call envelope 순서 보존, function-calling PoC fallback 분기 검증
+Phase 6 세부 플랜은 본 문서의 Phase 6 섹션을 확장해서:
+- `LlmJob` 상태 모델, progress/heartbeat/cancel 계약, batch vs sync 경계 확정
+- worker batch 실행, timeout/retry, dead-letter/운영 복구 절차 정의
+- admin UI에서 정책/작업 현황/실패 진단을 어디까지 노출할지 범위 확정
+- grounded-answer background escalation과의 연결 여부 정리
+- 테스트 케이스
 - 롤백 계획
 - 예상 작업 기간
 

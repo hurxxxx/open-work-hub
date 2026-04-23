@@ -23,6 +23,13 @@
 
 ## 엔트리
 
+## 2026-04-23 · Phase 5 — Internal Retrieval Orchestration + Remote Retrieval Infrastructure
+
+- **요약**: `domains/rag/` 정본 위에 ACL projection + sync outbox/worker + Qdrant/provider adapter + workspace RAG REST/AI capability + `/tool/search` 실표면을 연결했다. Docs/Meeting/PMS/Planner 전도메인 hit/citation 계약, post-filter ACL 재검증, trace-first observability를 함께 정착시켰다.
+- **PR/커밋**: 98663a5, 7be37e3, 6f6685e, e876cc7, 2bd82c0, 367b955, 8d8e29f, 3d4163d
+- **영향 파일**: `apps/api/src/aidoo_api/domains/rag/`, `apps/api/src/aidoo_api/domains/{docs,meeting,pms,planner}/`, `apps/api/src/aidoo_api/core/{settings,telemetry}.py`, `apps/api/alembic/versions/{fa12bc34de56_add_rag_sync_jobs.py,c1d2e3f4a5b6_add_rag_pending_unique_indexes.py}`, `apps/worker/src/aidoo_worker/tasks/rag_sync.py`, `apps/web/src/domains/rag/`, `apps/web/src/components/views/RagSearchView.tsx`, `apps/web/src/App.tsx`
+- **남은 후속 작업**: AI platform 트랙의 다음 단계는 Phase 6(`LlmJob` + Admin UI) 세부 플랜 작성이다. 운영 threshold/SLO와 provider 기본 선택은 운영 데이터가 쌓인 뒤 확정한다.
+
 ## 2026-04-22 · Phase 4 — Tool Calling (Write) + Meeting Intelligence
 
 - **요약**: MCP-first capability bridge 위에 write tool 6종, approval halt/resume runtime, `AgentRunSnapshot`/`AiToolApproval`, meeting insight extraction/action proposal, meeting-scoped AI entry와 reload-safe approval recovery를 정착시켰다.
