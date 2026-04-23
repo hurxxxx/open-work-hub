@@ -19,6 +19,7 @@ import {
 import { cn } from '@/src/lib/utils';
 import { useAuth } from '@/src/domains/auth/auth-provider';
 import {
+  getWorkspaceBySlug,
   getCurrentOrLastWorkspaceSlug,
   resolveDefaultWorkspaceAppPath,
 } from '@/src/domains/workspaces/workspace-utils';
@@ -89,7 +90,8 @@ export const PMSView = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const { token, user } = useAuth();
   const pmsRoot = resolveDefaultWorkspaceAppPath(user, 'pms');
-  const currentWorkspaceSlug = getCurrentOrLastWorkspaceSlug();
+  const currentWorkspaceSlug = getWorkspaceBySlug(user, searchParams.get('workspace'))?.slug
+    ?? getCurrentOrLastWorkspaceSlug();
   const [activeTab, setActiveTab] = useState<'List' | 'Board' | 'Calendar' | 'Gantt' | 'Table'>('List');
   const [selectedIssue, setSelectedIssue] = useState<PmsIssue | null>(null);
   const [isNewTaskModalOpen, setIsNewTaskModalOpen] = useState(false);

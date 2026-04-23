@@ -52,6 +52,11 @@ def _query(
             top_k=int(arguments.get("top_k", 10)),
             include_binary_hits=bool(arguments.get("include_binary_hits", False)),
         )
+    except rag_application.RagAccessDeniedError as error:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(error),
+        ) from error
     except rag_application.RagUnavailableError as error:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -76,6 +81,11 @@ def _list_sources(
             workspace=workspace,
             user=user,
         )
+    except rag_application.RagAccessDeniedError as error:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(error),
+        ) from error
     except rag_application.RagUnavailableError as error:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,

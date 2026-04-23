@@ -304,6 +304,12 @@ describe('PlannerView', () => {
     });
 
     await waitFor(() => {
+      expect(screen.getByRole('dialog', { name: 'Create event or meeting' })).toBeTruthy();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: '이벤트' }));
+
+    await waitFor(() => {
       expect(screen.getByTestId('mock-planner-event-modal')).toBeTruthy();
     });
   });

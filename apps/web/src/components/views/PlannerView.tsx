@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { motion } from 'motion/react';
 import { ChevronLeft, ChevronRight, Plus } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
@@ -263,6 +263,7 @@ export const PlannerView = () => {
   const navigate = useNavigate();
   const { token } = useAuth();
   const { workspaceSlug } = useParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [viewMode, setViewMode] = useState<PlannerViewMode>('Month');
   const [calendarState, setCalendarState] = useState(() =>
     buildInitialPlannerRange(today, 'Month'),
@@ -370,6 +371,17 @@ export const PlannerView = () => {
     setPlannerEventRange(null);
     setPlannerEventModalOpen(true);
   }, []);
+  const closePlannerEventModal = useCallback(() => {
+    setPlannerEventModalOpen(false);
+    setPlannerEventId(null);
+    setPlannerEventRange(null);
+    if (!searchParams.get('event')) {
+      return;
+    }
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.delete('event');
+    setSearchParams(nextParams, { replace: true });
+  }, [searchParams, setSearchParams]);
 
   const [actionError, setActionError] = useState<string | null>(null);
   const [previewMeetingId, setPreviewMeetingId] = useState<string | null>(null);
@@ -395,6 +407,14 @@ export const PlannerView = () => {
       window.removeEventListener('planner:create-meeting', handlePlannerCreateMeeting);
     };
   }, [openPlannerEventCreate]);
+
+  useEffect(() => {
+    const requestedEventId = searchParams.get('event');
+    if (!workspaceSlug || !requestedEventId) {
+      return;
+    }
+    openPlannerEventEdit(requestedEventId);
+  }, [openPlannerEventEdit, searchParams, workspaceSlug]);
 
   const handleDatesSet = useCallback(
     (nextState: {
@@ -608,17 +628,13 @@ export const PlannerView = () => {
     setCreationChoice(null);
   }, []);
   const handlePlannerEventSaved = useCallback(() => {
-    setPlannerEventModalOpen(false);
-    setPlannerEventId(null);
-    setPlannerEventRange(null);
+    closePlannerEventModal();
     refresh();
-  }, [refresh]);
+  }, [closePlannerEventModal, refresh]);
   const handlePlannerEventDeleted = useCallback(() => {
-    setPlannerEventModalOpen(false);
-    setPlannerEventId(null);
-    setPlannerEventRange(null);
+    closePlannerEventModal();
     refresh();
-  }, [refresh]);
+  }, [closePlannerEventModal, refresh]);
   const handleMeetingCreated = useCallback((meetingId: string) => {
     setMeetingCreateOpen(false);
     setMeetingCreateRange(null);
@@ -820,11 +836,7 @@ export const PlannerView = () => {
       ) : null}
       <PlannerEventModal
         isOpen={plannerEventModalOpen}
-        onClose={() => {
-          setPlannerEventModalOpen(false);
-          setPlannerEventId(null);
-          setPlannerEventRange(null);
-        }}
+        onClose={closePlannerEventModal}
         workspaceSlug={workspaceSlug}
         eventId={plannerEventId}
         initialRange={plannerEventRange}

@@ -68,8 +68,14 @@ SOURCE_KIND_DEFINITIONS = (
     },
 )
 
+SEARCHABLE_RAG_APP_IDS = frozenset({"docs", "meeting", "pms", "planner"})
+
 
 class RagUnavailableError(RuntimeError):
+    pass
+
+
+class RagAccessDeniedError(RuntimeError):
     pass
 
 
@@ -102,6 +108,7 @@ def query_workspace_rag(
     query_service: RagQueryService | None = None,
 ) -> RagQueryResponse:
     resolved_settings = ensure_rag_enabled(settings)
+    _resolve_workspace_rag_enabled_app_ids(db, workspace.id)
     visible_sources = list_workspace_rag_sources(
         db,
         workspace=workspace,
@@ -162,7 +169,7 @@ def list_workspace_rag_sources(
     settings: Settings | None = None,
 ) -> list[dict[str, str]]:
     ensure_rag_enabled(settings)
-    enabled_app_ids = set(resolve_workspace_enabled_app_ids(db, workspace.id))
+    enabled_app_ids = _resolve_workspace_rag_enabled_app_ids(db, workspace.id)
     sources: list[dict[str, str]] = []
     if "docs" in enabled_app_ids:
         for source_kind in _visible_doc_source_kinds(db, workspace=workspace, user=user):
@@ -199,6 +206,7 @@ def enqueue_workspace_rag_reindex(
     settings: Settings | None = None,
 ) -> dict[str, Any]:
     resolved_settings = ensure_rag_enabled(settings)
+    enabled_app_ids = _resolve_workspace_rag_enabled_app_ids(db, workspace.id)
     _ensure_workspace_reindex_available(db, workspace=workspace)
     try:
         ensure_default_collection_ready(
@@ -208,7 +216,6 @@ def enqueue_workspace_rag_reindex(
         )
     except Exception as error:
         raise RagUnavailableError(f"RAG runtime is unavailable: {error}") from error
-    enabled_app_ids = set(resolve_workspace_enabled_app_ids(db, workspace.id))
     resource_counts = {
         NATIVE_DOC_RESOURCE_TYPE: 0,
         MEETING_RESOURCE_TYPE: 0,
@@ -260,6 +267,15 @@ def enqueue_workspace_rag_reindex(
         "queued_count": sum(resource_counts.values()),
         "resource_counts": resource_counts,
     }
+
+
+def _resolve_workspace_rag_enabled_app_ids(db: Session, workspace_id: str) -> set[str]:
+    enabled_app_ids = set(resolve_workspace_enabled_app_ids(db, workspace_id))
+    if "ai" not in enabled_app_ids:
+        raise RagAccessDeniedError("Workspace RAG is not enabled for this workspace.")
+    if not SEARCHABLE_RAG_APP_IDS.intersection(enabled_app_ids):
+        raise RagAccessDeniedError("Workspace RAG is not enabled for this workspace.")
+    return enabled_app_ids
 
 
 def _visible_doc_source_kinds(

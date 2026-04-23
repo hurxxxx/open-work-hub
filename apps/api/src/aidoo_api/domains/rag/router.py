@@ -22,10 +22,10 @@ class RagQueryRestRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     query: str = Field(..., min_length=1, max_length=2000)
-    answer_mode: Literal["search-only", "grounded-answer"] = "search-only"
+    answer_mode: Literal["search-only", "grounded-answer"] = "grounded-answer"
     source_kinds: list[str] = Field(default_factory=list)
     filters: RagQueryFilters = Field(default_factory=RagQueryFilters)
-    top_k: int = Field(default=10, ge=1, le=100)
+    top_k: int = Field(default=8, ge=1, le=100)
     include_binary_hits: bool = False
 
 
@@ -61,7 +61,7 @@ def query_workspace_rag(
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
     current_workspace: Workspace = Depends(require_current_workspace),
-) -> RagQueryResponse:
+    ) -> RagQueryResponse:
     try:
         return rag_application.query_workspace_rag(
             db,
@@ -74,6 +74,11 @@ def query_workspace_rag(
             top_k=payload.top_k,
             include_binary_hits=payload.include_binary_hits,
         )
+    except rag_application.RagAccessDeniedError as error:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(error),
+        ) from error
     except rag_application.RagUnavailableError as error:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -95,6 +100,11 @@ def list_workspace_rag_sources(
                 user=current_user,
             )
         )
+    except rag_application.RagAccessDeniedError as error:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(error),
+        ) from error
     except rag_application.RagUnavailableError as error:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -113,6 +123,11 @@ def reindex_workspace_rag(
             db,
             workspace=current_workspace,
         )
+    except rag_application.RagAccessDeniedError as error:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(error),
+        ) from error
     except rag_application.RagReindexCooldownError as error:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,

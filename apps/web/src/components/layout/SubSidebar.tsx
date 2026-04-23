@@ -80,7 +80,7 @@ import {
   buildWorkspaceAppPath,
   resolveDefaultWorkspaceAppPath,
   resolveNavItemHref,
-  type WorkspaceAppId,
+  resolveToolInvocationHref,
 } from '@/src/domains/workspaces/workspace-utils';
 import type {
   WorkspaceBootstrapApp,
@@ -2166,7 +2166,12 @@ export const SubSidebar = ({
                       type="button"
                         onClick={() => {
                           setCreateMenuOpen(false);
-                          navigate('/tool/search');
+                          const searchItem = NAV_ITEMS.find((item) => item.id === 'search');
+                          navigate(
+                            searchItem
+                              ? resolveToolInvocationHref(searchItem, currentWorkspaceSlug, user)
+                              : '/tool/search',
+                          );
                         }}
                       className="app-text-control-sm flex w-full items-center gap-2 px-3 py-2 text-left text-app-ink hover:bg-app-surface-hover"
                     >

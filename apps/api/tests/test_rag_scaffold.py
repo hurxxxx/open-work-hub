@@ -74,6 +74,59 @@ def test_ensure_rag_enabled_raises_domain_error(monkeypatch) -> None:
         rag_application.ensure_rag_enabled(settings=settings)
 
 
+def test_workspace_rag_sources_require_ai_app_enablement(monkeypatch) -> None:
+    monkeypatch.setattr(
+        rag_application,
+        "resolve_workspace_enabled_app_ids",
+        lambda db, workspace_id: {"docs"},
+    )
+
+    with pytest.raises(rag_application.RagAccessDeniedError, match="Workspace RAG is not enabled"):
+        rag_application.list_workspace_rag_sources(
+            db=object(),
+            workspace=SimpleNamespace(id="ws-1"),
+            user=SimpleNamespace(id="user-1"),
+            settings=SimpleNamespace(rag_enabled=True),
+        )
+
+
+def test_workspace_rag_query_requires_searchable_app_enablement(monkeypatch) -> None:
+    monkeypatch.setattr(
+        rag_application,
+        "resolve_workspace_enabled_app_ids",
+        lambda db, workspace_id: {"ai"},
+    )
+
+    with pytest.raises(rag_application.RagAccessDeniedError, match="Workspace RAG is not enabled"):
+        rag_application.query_workspace_rag(
+            db=object(),
+            workspace=SimpleNamespace(id="ws-1"),
+            user=SimpleNamespace(id="user-1"),
+            query="budget risk",
+            answer_mode=RagAnswerMode.SEARCH_ONLY,
+            source_kinds=[],
+            filters={},
+            top_k=5,
+            include_binary_hits=False,
+            settings=SimpleNamespace(rag_enabled=True),
+        )
+
+
+def test_workspace_rag_reindex_requires_ai_enablement(monkeypatch) -> None:
+    monkeypatch.setattr(
+        rag_application,
+        "resolve_workspace_enabled_app_ids",
+        lambda db, workspace_id: {"planner"},
+    )
+
+    with pytest.raises(rag_application.RagAccessDeniedError, match="Workspace RAG is not enabled"):
+        rag_application.enqueue_workspace_rag_reindex(
+            db=object(),
+            workspace=SimpleNamespace(id="ws-1"),
+            settings=SimpleNamespace(rag_enabled=True),
+        )
+
+
 def test_workspace_rag_query_defaults_to_text_hits_when_binary_hits_not_requested(monkeypatch) -> None:
     captured_filters: dict[str, object] = {}
 
@@ -101,6 +154,11 @@ def test_workspace_rag_query_defaults_to_text_hits_when_binary_hits_not_requeste
                 "app_id": "docs",
             }
         ],
+    )
+    monkeypatch.setattr(
+        rag_application,
+        "resolve_workspace_enabled_app_ids",
+        lambda db, workspace_id: {"ai", "docs"},
     )
     monkeypatch.setattr(rag_application, "ensure_default_collection_ready", lambda *args, **kwargs: "rag-test")
     monkeypatch.setattr(rag_application, "resolve_default_collection_name", lambda settings: "rag-test")
@@ -151,6 +209,11 @@ def test_workspace_rag_query_respects_explicit_content_modality_filter(monkeypat
                 "app_id": "docs",
             }
         ],
+    )
+    monkeypatch.setattr(
+        rag_application,
+        "resolve_workspace_enabled_app_ids",
+        lambda db, workspace_id: {"ai", "docs"},
     )
     monkeypatch.setattr(rag_application, "ensure_default_collection_ready", lambda *args, **kwargs: "rag-test")
     monkeypatch.setattr(rag_application, "resolve_default_collection_name", lambda settings: "rag-test")

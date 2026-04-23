@@ -21,6 +21,7 @@ const WORKSPACE_API_PREFIXES = [
   '/api/v1/pms',
   '/api/v1/docs',
   '/api/v1/meeting',
+  '/api/v1/rag',
   '/api/v1/search',
   '/api/v1/connectors/ocr',
   '/api/v1/conversations',
@@ -112,8 +113,9 @@ export function getWorkspaceBySlug(
 
 export function getFirstWorkspaceForApp(
   user: Pick<AuthUser, 'workspaces'> | null | undefined,
-  _appId: WorkspaceAppId,
+  appId: WorkspaceAppId,
 ) {
+  void appId;
   return user?.workspaces?.[0] ?? null;
 }
 
@@ -151,8 +153,9 @@ export function resolveShellWorkspaceSlug(
 export function hasWorkspaceApp(
   user: Pick<AuthUser, 'workspaces'> | null | undefined,
   workspaceSlug: string | null | undefined,
-  _appId: WorkspaceAppId,
+  appId: WorkspaceAppId,
 ): boolean {
+  void appId;
   return getWorkspaceBySlug(user, workspaceSlug) != null;
 }
 
@@ -214,6 +217,33 @@ export function resolveWorkspaceSwitchPath(
   return '/';
 }
 
+export function getToolWorkspaceSlugFromSearch(
+  user: Pick<AuthUser, 'workspaces'> | null | undefined,
+  pathname: string,
+  search: string,
+): string | null {
+  void user;
+  if (!pathname.startsWith('/tool/')) {
+    return null;
+  }
+  const requestedWorkspaceSlug = new URLSearchParams(search).get('workspace')?.trim();
+  return requestedWorkspaceSlug || null;
+}
+
+export function resolveBootstrapWorkspaceSlug(
+  user: Pick<AuthUser, 'workspaces'> | null | undefined,
+  pathname: string,
+  search: string,
+  shellWorkspaceSlug: string | null | undefined,
+): string | null {
+  return (
+    getWorkspaceSlugFromPath(pathname)
+    ?? getToolWorkspaceSlugFromSearch(user, pathname, search)
+    ?? shellWorkspaceSlug
+    ?? (pathname.startsWith('/tool/') ? resolveShellWorkspaceSlug(user, null) : null)
+  );
+}
+
 export function requireWorkspaceSlug(workspaceSlug?: string | null): string {
   const resolved = workspaceSlug ?? getCurrentOrLastWorkspaceSlug();
   if (!resolved) {
@@ -246,6 +276,13 @@ export function resolveToolInvocationHref(
   }
   if (item.linkAppId && item.linkAppId !== item.appId) {
     return resolveNavItemHref(item, currentWorkspaceSlug, user);
+  }
+  if (item.id === 'search') {
+    const workspaceSlug = currentWorkspaceSlug ?? resolveShellWorkspaceSlug(user, null);
+    if (!workspaceSlug) {
+      return '/tool/search';
+    }
+    return `/tool/search?workspace=${encodeURIComponent(workspaceSlug)}`;
   }
   return `/tool/${item.id}`;
 }

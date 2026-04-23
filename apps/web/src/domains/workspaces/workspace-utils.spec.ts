@@ -4,6 +4,8 @@ import { AlertTriangle, FileText, Mic, Search, Settings } from 'lucide-react';
 import type { AuthUser } from '../auth/auth-api';
 import type { NavItem } from '@/src/constants';
 import {
+  resolveBootstrapWorkspaceSlug,
+  rewriteWorkspaceApiPath,
   resolveNavItemHref,
   resolveRootEntryPath,
   resolveToolInvocationHref,
@@ -150,7 +152,7 @@ describe('resolveToolInvocationHref', () => {
     // page) for these, making slash-selection a no-op. Tool invocation must
     // land on the actual tool UI.
     expect(resolveToolInvocationHref(aiItem(), 'hq', buildUser())).toBe(
-      '/tool/search',
+      '/tool/search?workspace=hq',
     );
     const fmea = aiItem({
       id: 'fmea-compare',
@@ -193,7 +195,45 @@ describe('resolveToolInvocationHref', () => {
     // to /tool/:id rather than the app's landing page.
     const item = aiItem({ linkAppId: 'ai' });
     expect(resolveToolInvocationHref(item, 'hq', buildUser())).toBe(
-      '/tool/search',
+      '/tool/search?workspace=hq',
+    );
+  });
+});
+
+describe('resolveBootstrapWorkspaceSlug', () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+  });
+
+  it('prefers the query workspace for global tool routes', () => {
+    expect(
+      resolveBootstrapWorkspaceSlug(buildUser(), '/tool/search', '?workspace=hq', null),
+    ).toBe('hq');
+  });
+
+  it('falls back to the current shell workspace when no query workspace is provided', () => {
+    expect(
+      resolveBootstrapWorkspaceSlug(buildUser(), '/tool/search', '', 'hq'),
+    ).toBe('hq');
+  });
+
+  it('preserves an explicit tool workspace query even when the user is not a member', () => {
+    expect(
+      resolveBootstrapWorkspaceSlug(buildUser(), '/tool/search', '?workspace=innovation-lab', 'hq'),
+    ).toBe('innovation-lab');
+  });
+});
+
+describe('rewriteWorkspaceApiPath', () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+  });
+
+  it('rewrites workspace-scoped rag endpoints with the active workspace slug', () => {
+    window.localStorage.setItem('aidoo:last-workspace-slug', 'hq');
+
+    expect(rewriteWorkspaceApiPath('/api/v1/rag/query')).toBe(
+      '/api/v1/workspaces/hq/rag/query',
     );
   });
 });

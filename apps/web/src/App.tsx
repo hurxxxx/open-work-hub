@@ -30,9 +30,11 @@ import { TodayOverdueView } from './components/views/PMSView/TodayOverdueView';
 import { PersonalListView } from './components/views/PMSView/PersonalListView';
 import { LearningView } from './components/views/LearningView';
 import { LearningCourseView } from './components/views/LearningCourseView';
+import { RagSearchView } from './components/views/RagSearchView';
 import { ToolView } from './components/views/ToolView';
 import { NAV_ITEMS } from './constants';
 import { AdminConsoleView } from './domains/admin/admin-console';
+import { canUseWorkspaceSearchTool, isWorkspaceAppEnabled } from './domains/rag/rag-ui-access';
 import {
   getDefaultAdminPath,
   hasAdminSectionAccess,
@@ -53,15 +55,19 @@ import {
   getWorkspaceAppIdFromPath,
   getWorkspaceBySlug,
   getWorkspaceSlugFromPath,
+  getToolWorkspaceSlugFromSearch,
   persistLastWorkspaceAppId,
   persistLastWorkspaceSlug,
+  resolveBootstrapWorkspaceSlug,
   resolveRootEntryPath,
   resolveShellWorkspaceSlug,
   resolveDefaultWorkspaceAppPath,
-  type WorkspaceAppId,
 } from './domains/workspaces/workspace-utils';
 import { useWorkspaceBootstrap } from './domains/workspaces/workspaces-api';
-import { WorkspaceBootstrapProvider } from './domains/workspaces/workspace-bootstrap-context';
+import {
+  useWorkspaceBootstrapContext,
+  WorkspaceBootstrapProvider,
+} from './domains/workspaces/workspace-bootstrap-context';
 import { WorkspaceSettingsView } from './domains/workspaces/WorkspaceSettingsView';
 import {
   AccessDeniedView,
@@ -180,7 +186,12 @@ const ToolViewWrapper = () => {
   const auth = useAuth();
   const location = useLocation();
   const { toolId } = useParams();
+  const workspaceBootstrap = useWorkspaceBootstrapContext();
   const pmsRoot = resolveDefaultWorkspaceAppPath(auth.user, 'pms');
+  const toolWorkspaceSlug = workspaceBootstrap.data?.workspace.slug
+    ?? getToolWorkspaceSlugFromSearch(auth.user, location.pathname, location.search)
+    ?? resolveShellWorkspaceSlug(auth.user, null);
+  const enabledBootstrapApps = workspaceBootstrap.data?.apps ?? null;
 
   if (toolId === 'pms-space-team') {
     return <Navigate replace to={{ pathname: pmsRoot, search: location.search }} />;
@@ -206,12 +217,40 @@ const ToolViewWrapper = () => {
     );
   }
 
+  if (item.appId === 'ai') {
+    if (!hasWorkspaceMembership(auth.user, toolWorkspaceSlug)) {
+      return (
+        <AccessDeniedView description="현재 계정에는 이 도구가 속한 워크스페이스 접근 권한이 없습니다." />
+      );
+    }
+    if (workspaceBootstrap.loading || enabledBootstrapApps === null) {
+      return <div className="p-8 text-gray-500">워크스페이스 구성을 불러오는 중입니다.</div>;
+    }
+    if (workspaceBootstrap.error) {
+      return <AccessDeniedView description={workspaceBootstrap.error} />;
+    }
+    if (!isWorkspaceAppEnabled(enabledBootstrapApps, 'ai')) {
+      return (
+        <AccessDeniedView description="현재 workspace에서는 AI 앱이 활성화되어 있지 않습니다." />
+      );
+    }
+  }
+
   if (item.appId === 'pms') {
     return <PMSView />;
   }
 
   if (item.appId === 'docs') {
     return <DocsView />;
+  }
+
+  if (toolId === 'search') {
+    if (!canUseWorkspaceSearchTool(enabledBootstrapApps)) {
+      return (
+        <AccessDeniedView description="현재 workspace에서는 통합검색을 사용할 수 없습니다." />
+      );
+    }
+    return <RagSearchView />;
   }
 
   return <ToolView item={item} />;
@@ -230,7 +269,12 @@ const AppContent = () => {
   const [shellWorkspaceSlug, setShellWorkspaceSlug] = useState<string | null>(null);
   const themePreference = currentUser?.theme_preference ?? 'system';
   const resolvedTheme = resolveThemePreference(themePreference, systemDarkMode);
-  const bootstrapWorkspaceSlug = routeWorkspaceSlug ?? shellWorkspaceSlug;
+  const bootstrapWorkspaceSlug = resolveBootstrapWorkspaceSlug(
+    currentUser,
+    location.pathname,
+    location.search,
+    shellWorkspaceSlug,
+  );
   const workspaceBootstrap = useWorkspaceBootstrap(auth.token, bootstrapWorkspaceSlug);
   const enabledWorkspaceAppIds = useMemo(
     () => workspaceBootstrap.data

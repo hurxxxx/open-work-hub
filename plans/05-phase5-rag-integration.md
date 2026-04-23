@@ -438,6 +438,19 @@ Phase 5의 목표는 Docs / Meeting / PMS / Planner 전도메인 데이터를 �
   - 대상: 검색 입력, source filter, citation click, 접근 불가 hit 비노출, grounded-answer 실패 시 search-only degrade, workspace switch isolation
 - 브라우저 E2E는 `agent-browser` 기준으로 수행하고, 결과는 관련 작업 문서나 루트 작업 기록에 간단히 남긴다
 
+### UI E2E Log (2026-04-23 14:12 KST)
+- 환경: `agent-browser --session doowon-e2e`, web `127.0.0.1:4200`, api `127.0.0.1:8000`
+- 계정: `delivery-hub-admin@aidoo.local` / shared dev password
+- 확인:
+  - `/tool/search?workspace=delivery-hub` 진입 성공
+  - bare `/tool/search` 도 shell workspace(`delivery-hub`) 기준으로 정상 bootstrap
+  - source 목록은 현재 시드 데이터 기준 `PMS Issues` 1개 노출
+  - query `task`, `search-only`, `source=pms_issue` 는 브라우저에서 완료되며 빈 결과/trace/latency UI가 표시됨
+  - 같은 query를 REST로 직접 호출했을 때 `200 OK`, `latency_ms ~= 21s~24s`, `hits=[]`
+- 발견 후 즉시 수정:
+  - 비멤버가 `/tool/search?workspace=hq` 처럼 다른 workspace slug를 직접 넣으면 조용히 shell workspace로 fallback 되던 문제 확인
+  - 수정 후 현재는 `접근 권한 없음` 화면으로 차단됨
+
 ### 수동 검증
 - 같은 질의를 REST, AI tool, `/tool/search` 세 surface에서 호출했을 때 hit set과 citation 구조가 실질적으로 일치하는지 확인
 - 만료된 grant 이후 다음 query부터 결과에서 즉시 빠지는지 확인
