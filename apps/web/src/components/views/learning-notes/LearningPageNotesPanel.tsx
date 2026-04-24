@@ -476,7 +476,7 @@ function EditForm({
           type="button"
           onClick={onCancel}
           disabled={saving}
-          className="inline-flex items-center gap-1.5 rounded-full border border-app-border px-3 py-1 text-xs font-medium text-app-ink/70 transition-colors hover:text-app-ink disabled:cursor-not-allowed disabled:opacity-50"
+          className="inline-flex items-center gap-1.5 rounded-full border border-app-border bg-app-surface px-3 py-1 text-xs font-medium text-app-ink transition-colors hover:border-app-ink/40 disabled:cursor-not-allowed disabled:opacity-50"
           data-testid="learning-page-notes-my-cancel"
         >
           <X size={12} /> 취소
@@ -485,7 +485,7 @@ function EditForm({
           type="button"
           onClick={onSave}
           disabled={saving}
-          className="inline-flex items-center gap-1.5 rounded-full bg-app-accent px-4 py-1 text-xs font-medium text-white shadow-sm transition-colors hover:bg-app-accent/90 disabled:cursor-not-allowed disabled:opacity-60"
+          className="inline-flex items-center gap-1.5 rounded-full bg-app-accent px-4 py-1 text-xs font-semibold text-app-accent-fg shadow-sm transition-colors hover:bg-app-accent/90 disabled:cursor-not-allowed disabled:opacity-60"
           data-testid="learning-page-notes-my-save"
         >
           <Check size={12} /> {saving ? '저장 중…' : '저장'}
@@ -549,7 +549,7 @@ function VisibilityOption({
       className={
         'inline-flex items-center gap-1 rounded-full px-2.5 py-1 transition-colors ' +
         (active
-          ? 'bg-app-accent text-white shadow-sm'
+          ? 'bg-app-accent text-app-accent-fg shadow-sm'
           : 'text-app-ink/60 hover:text-app-ink')
       }
     >

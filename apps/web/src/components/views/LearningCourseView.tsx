@@ -22,7 +22,6 @@ import {
 import { getLessonBody } from '@/src/domains/learning/content';
 import { useAuth } from '@/src/domains/auth/auth-provider';
 import { LearningPageNotesPanel } from './learning-notes/LearningPageNotesPanel';
-import { LearningTocPopover } from './learning-toc/LearningTocPopover';
 
 const REMARK_PLUGINS = [remarkGfm];
 const REHYPE_PLUGINS = [rehypeHighlight];
@@ -151,12 +150,11 @@ function LessonLayout({
       <article className="min-w-0">
         <div className={`mx-auto ${contentMaxW}`}>
           <div className="mb-6 flex items-center justify-between gap-3">
-            <LearningTocPopover
-              courseSlug={course.slug}
-              lessonSlug={lesson.slug}
-              basePath={basePath}
-              progressLabel={`레슨 ${index + 1} / ${total}`}
-            />
+            <div className="inline-flex items-center gap-2 rounded-full border border-app-border bg-app-surface px-3 py-1">
+              <span className="app-text-overline text-app-ink/60">
+                레슨 {index + 1} / {total}
+              </span>
+            </div>
             <button
               type="button"
               onClick={() => setWide((v) => !v)}

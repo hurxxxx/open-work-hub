@@ -18,18 +18,6 @@ vi.mock('./learning-notes/LearningPageNotesPanel', () => ({
   ),
 }));
 
-vi.mock('./learning-toc/LearningTocPopover', () => ({
-  LearningTocPopover: ({
-    lessonSlug,
-    progressLabel,
-  }: {
-    lessonSlug: string;
-    progressLabel?: string;
-  }) => (
-    <div data-testid={`learning-toc-trigger-${lessonSlug}`}>{progressLabel}</div>
-  ),
-}));
-
 const manifestHarness = vi.hoisted(() => ({
   courses: [] as Course[],
 }));
