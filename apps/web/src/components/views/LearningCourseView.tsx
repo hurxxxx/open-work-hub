@@ -129,7 +129,7 @@ function LessonLayout({
   // dedicated right column; below xl they fall to the bottom of the article.
   const gridClass = wide
     ? 'xl:grid-cols-1'
-    : 'xl:grid-cols-[minmax(0,1fr)_24rem]';
+    : 'xl:grid-cols-[minmax(0,1fr)_30rem]';
 
   const contentMaxW = wide ? 'max-w-none' : 'max-w-3xl';
 

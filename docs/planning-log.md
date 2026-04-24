@@ -23,6 +23,13 @@
 
 ## 엔트리
 
+## 2026-04-25 · OpenSearch 통합검색 UI E2E 검증
+
+- **요약**: `agent-browser`로 실제 `/tool/search?workspace=hq` 화면을 검증했다. `hq-admin`은 `복슬` 검색에서 private 문서 1건과 `<mark>` 하이라이트를 확인했고 결과 클릭이 `/w/hq/docs/4d9c30e3-bacd-4607-811a-ab0a31d90142` deep link로 이동했다. 별도 세션의 `hq-member`는 같은 검색에서 0건으로 ACL 필터링됨을 확인했다.
+- **PR/커밋**: 9db6436, 59f59d6
+- **영향 파일**: `apps/api/src/aidoo_api/domains/search/`, `apps/web/src/components/views/RagSearchView.tsx`
+- **남은 후속 작업**: 검색 요청 시 workspace 전체 rebuild를 CRUD/outbox 기반 증분 색인으로 전환.
+
 ## 2026-04-24 · 러닝 개인 학습 노트 + 통합 sub-sidebar
 
 - **요약**: 러닝 레슨에 per-user public/private 학습 노트를 추가했다. 본문은 Markdown + git 기반을 유지하고, 노트만 DB(`NativeDoc`/`NativeDocPage` 재사용, `source_kind`에 visibility 인코딩)로 저장한다. 관리자도 타인 private 노트는 조회 불가. 기존 좌측 TOC는 앱 sub-sidebar로 이관해 `SubSidebar.tsx`에 Learning 전용 렌더러를 추가(Docs Favorites 패턴 재사용), 콘텐츠 영역은 `[article][notes]`로 단순화.

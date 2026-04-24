@@ -139,6 +139,35 @@
     @apply text-app-ink/50 dark:text-app-ink/60;
   }
 
+  /*
+   * Compact, high-contrast body used for learning page notes in the right
+   * column. The column is narrow and the reader wants density + maximum
+   * legibility, so we override BlockNote's default body color (muted gray)
+   * with the app's full-contrast ink token and shrink the base size.
+   */
+  .learning-note-dense {
+    font-size: 13px;
+    line-height: 1.55;
+  }
+  .learning-note-dense .bn-container,
+  .learning-note-dense .bn-editor,
+  .learning-note-dense .bn-block-content,
+  .learning-note-dense .bn-inline-content,
+  .learning-note-dense .bn-editor p,
+  .learning-note-dense .bn-editor li,
+  .learning-note-dense .bn-editor span {
+    color: #000 !important;
+  }
+  .dark .learning-note-dense .bn-container,
+  .dark .learning-note-dense .bn-editor,
+  .dark .learning-note-dense .bn-block-content,
+  .dark .learning-note-dense .bn-inline-content,
+  .dark .learning-note-dense .bn-editor p,
+  .dark .learning-note-dense .bn-editor li,
+  .dark .learning-note-dense .bn-editor span {
+    color: #fff !important;
+  }
+
   .app-text-title-lg {
     font-size: var(--ui-text-h2);
     line-height: 1.25;

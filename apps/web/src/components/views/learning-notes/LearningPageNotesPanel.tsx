@@ -324,7 +324,7 @@ function MyNoteViewer({
         className="group relative rounded-lg px-1 py-1 transition-colors hover:bg-app-surface/40 focus-within:bg-app-surface/40"
         data-testid="learning-page-notes-my-viewer"
       >
-        <div className="app-markdown prose prose-base max-w-none dark:prose-invert">
+        <div className="learning-note-dense app-markdown prose prose-sm max-w-none dark:prose-invert">
           <BlockViewer content={savedContent} />
         </div>
 
@@ -617,7 +617,7 @@ function OthersNoteCard({
               ) : detail.status === 'error' ? (
                 <InlineError message={detail.error ?? '불러오지 못했습니다.'} />
               ) : detail.note ? (
-                <div className="app-markdown prose prose-sm max-w-none dark:prose-invert">
+                <div className="learning-note-dense app-markdown prose prose-sm max-w-none dark:prose-invert">
                   <BlockViewer content={detail.note.content_blocks as BlockContent} />
                 </div>
               ) : (
