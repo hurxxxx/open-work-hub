@@ -73,8 +73,8 @@ describe('resolveNavItemHref', () => {
     };
   }
 
-  it('routes plain AI items into the current workspace /ai path', () => {
-    expect(resolveNavItemHref(aiItem(), 'hq', buildUser())).toBe('/w/hq/ai');
+  it('routes the AI sidebar search item to the workspace-scoped search tool', () => {
+    expect(resolveNavItemHref(aiItem(), 'hq', buildUser())).toBe('/tool/search?workspace=hq');
   });
 
   it('honors linkAppId to deep-link from AI sidebar into another app', () => {
@@ -93,7 +93,12 @@ describe('resolveNavItemHref', () => {
   });
 
   it('applies pathSuffix as-is when it already starts with a query or hash', () => {
-    const item = aiItem({ pathSuffix: '?scope=mine' });
+    const item = aiItem({
+      id: 'fmea-compare',
+      title: 'FMEA 비교',
+      icon: AlertTriangle,
+      pathSuffix: '?scope=mine',
+    });
     expect(resolveNavItemHref(item, 'hq', buildUser())).toBe(
       '/w/hq/ai?scope=mine',
     );
@@ -128,7 +133,7 @@ describe('resolveNavItemHref', () => {
   });
 
   it('returns "/" when no current slug and user has no workspaces', () => {
-    const item = aiItem();
+    const item = aiItem({ id: 'fmea-compare', title: 'FMEA 비교', icon: AlertTriangle });
     expect(
       resolveNavItemHref(item, null, buildUser({ workspaces: [] })),
     ).toBe('/');

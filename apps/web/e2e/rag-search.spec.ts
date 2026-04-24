@@ -37,6 +37,15 @@ async function stubRagQuery(page: Page, payload: unknown) {
   );
 }
 
+async function stubRagQueryError(page: Page) {
+  await page.route('**/api/v1/workspaces/*/rag/query', (route: Route) =>
+    route.fulfill({
+      status: 503,
+      json: { detail: 'RAG query is unavailable: The read operation timed out' },
+    }),
+  );
+}
+
 test.describe('RAG search tool', () => {
   test.beforeEach(async ({ page }) => {
     await stubShellBackend(page);
@@ -92,6 +101,28 @@ test.describe('RAG search tool', () => {
     ).toBeVisible();
     await expect(page.getByText('“Supplier repricing increased the budget risk.”')).toBeVisible();
     await expect(page.getByRole('link', { name: '근거 문서 열기' })).toHaveAttribute('href', '/w/hq/docs/doc-1');
+  });
+
+  test('opens search from AI quick action and global AppBar search', async ({ page }) => {
+    await page.goto('/w/hq/ai');
+
+    await page.getByRole('link', { name: '아이두 통합검색', exact: true }).click();
+    await expect(page).toHaveURL(/\/tool\/search\?workspace=hq/);
+
+    await page.goto('/w/hq/docs');
+    await page.getByRole('button', { name: '통합검색' }).click();
+    await expect(page).toHaveURL(/\/tool\/search\?workspace=hq/);
+  });
+
+  test('shows pre-search recommendations and keeps source filters near the input on mobile', async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto('/tool/search?workspace=hq');
+
+    await expect(page.getByText('추천 질문')).toBeVisible();
+    await expect(page.getByRole('button', { name: '문서', exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: '상세 검색 대상 전체 검색 대상' })).toBeVisible();
   });
 
   test('shows the empty state when no accessible hits remain after filtering', async ({ page }) => {
@@ -215,5 +246,17 @@ test.describe('RAG search tool', () => {
       page.getByText('근거 답변 생성에 실패해 검색 결과만 표시합니다. 인용과 원문 링크를 확인해주세요.'),
     ).toBeVisible();
     await expect(page.getByText('원본 docs:doc-1')).toBeVisible();
+  });
+
+  test('shows recovery actions when RAG query times out', async ({ page }) => {
+    await stubRagQueryError(page);
+
+    await page.goto('/tool/search?workspace=hq');
+    await page.getByLabel('질문 또는 검색어').fill('budget risk');
+    await page.getByRole('button', { name: '검색', exact: true }).click();
+
+    await expect(page.getByText('검색 서비스 응답 지연')).toBeVisible();
+    await expect(page.getByRole('button', { name: '다시 시도' })).toBeVisible();
+    await expect(page.getByRole('button', { name: '검색 결과만 보기' })).toBeVisible();
   });
 });

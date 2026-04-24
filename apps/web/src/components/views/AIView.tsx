@@ -969,6 +969,13 @@ export const AIView = () => {
     navigate(resolveToolInvocationHref(item, workspaceSlug, user));
   }
 
+  function resolveSuggestionHref(suggestion: { id: string }) {
+    const item = NAV_ITEMS.find((candidate) => candidate.id === suggestion.id);
+    return item
+      ? resolveToolInvocationHref(item, workspaceSlug, user)
+      : `/tool/${suggestion.id}`;
+  }
+
   function handleSubmit() {
     const trimmed = input.trim();
     if (
@@ -1101,6 +1108,7 @@ export const AIView = () => {
 
         {turns.length === 0 && !isSending ? (
           <EmptyState
+            getSuggestionHref={resolveSuggestionHref}
             composer={
               <div className="space-y-2">
                 {scopeInfo ? (

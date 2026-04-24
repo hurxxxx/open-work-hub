@@ -2176,7 +2176,7 @@ export const SubSidebar = ({
                       className="app-text-control-sm flex w-full items-center gap-2 px-3 py-2 text-left text-app-ink hover:bg-app-surface-hover"
                     >
                       <Sparkles size={14} className="text-gray-500" />
-                      <span>Ask AI</span>
+                      <span>아이두 통합검색</span>
                     </button>
                   ) : null}
                   {activeAppId === 'meeting' ? (

@@ -27,6 +27,7 @@ import {
   resolveWorkspaceSwitchPath,
   type WorkspaceAppId,
 } from '@/src/domains/workspaces/workspace-utils';
+import { canUseWorkspaceSearchTool } from '@/src/domains/rag/rag-ui-access';
 import type { WorkspaceBootstrapApp } from '@/src/domains/workspaces/workspaces-api';
 import { useAuth } from '@/src/domains/auth/auth-provider';
 import { getUnreadNotificationCount } from '@/src/domains/pms/pms-api';
@@ -182,6 +183,10 @@ export function AppBar({
     || hasAnyAdminReadPermission(currentUser.system_roles)
   );
   const settingsItem = appBarItemById.get('settings');
+  const canOpenWorkspaceSearch = canUseWorkspaceSearchTool(workspaceApps);
+  const workspaceSearchHref = shellWorkspaceSlug
+    ? `/tool/search?workspace=${encodeURIComponent(shellWorkspaceSlug)}`
+    : '/tool/search';
 
   return (
     <div className="w-16 h-full bg-app-bg-strong border-r border-app-border flex flex-col items-center py-4 gap-4 z-20">
@@ -284,6 +289,21 @@ export function AppBar({
           </div>
         ) : null}
       </div>
+
+      {canOpenWorkspaceSearch ? (
+        <button
+          aria-label="통합검색"
+          className="group relative rounded-xl p-3 text-gray-500 transition-all hover:bg-app-surface-hover hover:text-gray-300"
+          onClick={() => navigate(workspaceSearchHref)}
+          title="통합검색"
+          type="button"
+        >
+          <Search size={22} />
+          <div className="app-text-micro pointer-events-none absolute left-full z-50 ml-2 whitespace-nowrap rounded bg-black px-2 py-1 text-white opacity-0 group-hover:opacity-100">
+            통합검색
+          </div>
+        </button>
+      ) : null}
 
       {visibleItems.map((item) => (
         <Link

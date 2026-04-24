@@ -37,6 +37,25 @@ describe('EmptyState', () => {
     }
   });
 
+  it('allows callers to provide workspace-aware suggestion links', () => {
+    render(
+      <MemoryRouter>
+        <EmptyState
+          composer={<div />}
+          getSuggestionHref={(suggestion) => (
+            suggestion.id === 'search'
+              ? '/tool/search?workspace=hq'
+              : `/tool/${suggestion.id}`
+          )}
+        />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByRole('link', { name: /아이두 통합검색/ }).getAttribute('href')).toBe(
+      '/tool/search?workspace=hq',
+    );
+  });
+
   it('allows overriding greeting and subline copy', () => {
     render(
       <MemoryRouter>

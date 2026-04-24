@@ -199,6 +199,20 @@ describe('AppBar', () => {
     });
   });
 
+  it('opens workspace-scoped integrated search from the global AppBar button', async () => {
+    renderAppBar({
+      activeAppId: 'docs',
+      currentPathname: '/w/hq/docs',
+      shellWorkspaceSlug: 'hq',
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: '통합검색' }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('location').textContent).toBe('/tool/search?workspace=hq');
+    });
+  });
+
   it('renders the switcher on global routes using the persisted shell workspace and filters app icons by that workspace', () => {
     window.localStorage.setItem('aidoo:last-workspace-slug', 'innovation-lab');
     const currentUser = buildUser();

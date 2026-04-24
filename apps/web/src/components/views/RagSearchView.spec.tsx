@@ -111,6 +111,7 @@ function deferred<T>() {
 
 describe('RagSearchView', () => {
   beforeEach(() => {
+    window.localStorage.clear();
     ragHarness.listWorkspaceRagSources.mockReset();
     ragHarness.queryWorkspaceRag.mockReset();
     authHarness.logout.mockReset();
@@ -249,9 +250,7 @@ describe('RagSearchView', () => {
     });
 
     expect(screen.getByDisplayValue('budget risk')).toBeTruthy();
-    expect(
-      screen.getByRole('button', { name: '검색 결과만' }).className.includes('bg-app-accent'),
-    ).toBe(true);
+    expect((screen.getByRole('checkbox', { name: '답변 포함' }) as HTMLInputElement).checked).toBe(false);
     expect(screen.queryByText(/Budget risk is currently elevated/i)).toBeNull();
   });
 
@@ -267,7 +266,7 @@ describe('RagSearchView', () => {
     const meetingCheckbox = screen.getByText('Meetings').closest('label')?.querySelector('input');
     expect(meetingCheckbox).toBeTruthy();
     fireEvent.click(meetingCheckbox as HTMLInputElement);
-    fireEvent.click(screen.getByRole('button', { name: '검색 실행' }));
+    fireEvent.click(screen.getByRole('button', { name: '검색' }));
 
     await waitFor(() => {
       expect(ragHarness.queryWorkspaceRag).toHaveBeenCalledWith(
@@ -289,6 +288,23 @@ describe('RagSearchView', () => {
     expect(
       screen.getByRole('link', { name: '원문 열기' }).getAttribute('href'),
     ).toBe('/w/hq/docs/doc-1');
+    expect(screen.queryByText('docs_native_doc')).toBeNull();
+    expect(screen.queryByText('trace-1')).toBeNull();
+  });
+
+  it('shows search-start recommendations, recent searches, and source chips before the first query', async () => {
+    window.localStorage.setItem(
+      'aidoo:rag-search:recent',
+      JSON.stringify(['지난 회의 리스크']),
+    );
+
+    renderView();
+
+    expect(await screen.findByText('추천 질문')).toBeTruthy();
+    expect(screen.getByText('최근 검색')).toBeTruthy();
+    expect(screen.getByText('지난 회의 리스크')).toBeTruthy();
+    expect(screen.getAllByRole('button', { name: '문서' }).length).toBeGreaterThan(0);
+    expect(screen.getByText('검색을 실행하면 결과 수와 사용된 검색 대상을 확인할 수 있습니다.')).toBeTruthy();
   });
 
   it('surfaces API validation errors inline', async () => {
@@ -303,9 +319,30 @@ describe('RagSearchView', () => {
       screen.getByLabelText('질문 또는 검색어'),
       { target: { value: '   budget risk   ' } },
     );
-    fireEvent.click(screen.getByRole('button', { name: '검색 실행' }));
+    fireEvent.click(screen.getByRole('button', { name: '검색' }));
 
     expect(await screen.findByText('body > query: Field required')).toBeTruthy();
+    expect(screen.getByRole('alert')).toBeTruthy();
+  });
+
+  it('translates RAG 503 timeouts into recovery actions', async () => {
+    ragHarness.queryWorkspaceRag.mockRejectedValueOnce(
+      new RagApiError(503, 'RAG query is unavailable: The read operation timed out'),
+    );
+
+    renderView();
+    await screen.findByText('Docs / Manual');
+
+    fireEvent.change(
+      screen.getByLabelText('질문 또는 검색어'),
+      { target: { value: 'budget risk' } },
+    );
+    fireEvent.click(screen.getByRole('button', { name: '검색' }));
+
+    expect(await screen.findByText('검색 서비스 응답 지연')).toBeTruthy();
+    expect(screen.getByRole('button', { name: '다시 시도' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: '검색 결과만 보기' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: '검색 대상 줄이기' })).toBeTruthy();
   });
 
   it('logs out when the session is expired', async () => {
@@ -320,7 +357,7 @@ describe('RagSearchView', () => {
       screen.getByLabelText('질문 또는 검색어'),
       { target: { value: 'budget risk' } },
     );
-    fireEvent.click(screen.getByRole('button', { name: '검색 실행' }));
+    fireEvent.click(screen.getByRole('button', { name: '검색' }));
 
     await waitFor(() => {
       expect(authHarness.logout).toHaveBeenCalledTimes(1);
@@ -464,7 +501,7 @@ describe('RagSearchView', () => {
       screen.getByLabelText('질문 또는 검색어'),
       { target: { value: 'follow ups' } },
     );
-    fireEvent.click(screen.getByRole('button', { name: '검색 실행' }));
+    fireEvent.click(screen.getByRole('button', { name: '검색' }));
 
     await screen.findByText('Blocked task');
 
@@ -507,7 +544,7 @@ describe('RagSearchView', () => {
       screen.getByLabelText('질문 또는 검색어'),
       { target: { value: 'follow ups' } },
     );
-    fireEvent.click(screen.getByRole('button', { name: '검색 실행' }));
+    fireEvent.click(screen.getByRole('button', { name: '검색' }));
 
     expect(
       await screen.findByText('근거 답변 생성에 실패해 검색 결과만 표시합니다. 인용과 원문 링크를 확인해주세요.'),

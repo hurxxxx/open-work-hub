@@ -302,6 +302,9 @@ export function resolveNavItemHref(
   if (item.absolutePath) {
     return item.absolutePath;
   }
+  if (item.id === 'search') {
+    return resolveToolInvocationHref(item, currentWorkspaceSlug, user);
+  }
   const targetApp = (item.linkAppId ?? item.appId) as
     | WorkspaceAppId
     | 'home'

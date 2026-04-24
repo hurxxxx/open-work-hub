@@ -23,6 +23,13 @@
 
 ## 엔트리
 
+## 2026-04-24 · RAG 통합검색 IA+UI V1 개선
+
+- **요약**: `/tool/search`를 workspace 통합검색으로 인지되도록 AppBar 전역 진입, AI quick action 경로 정리, 검색 전 추천/최근 검색/source preview, 결과 유형 필터, 모바일 상세 필터, 503 복구 CTA를 반영했다. Playwright RAG 검색 E2E로 AI 진입, AppBar 진입, 모바일 source chips, timeout 복구를 검증했다.
+- **PR/커밋**: 미커밋
+- **영향 파일**: `apps/web/src/components/{layout,views}/`, `apps/web/src/domains/workspaces/workspace-utils.ts`, `apps/web/e2e/rag-search.spec.ts`
+- **남은 후속 작업**: Cmd/Ctrl+K 전역 command palette와 live search API는 V2 범위로 유지한다.
+
 ## 2026-04-23 · Phase 5 — Internal Retrieval Orchestration + Remote Retrieval Infrastructure
 
 - **요약**: `domains/rag/` 정본 위에 ACL projection + sync outbox/worker + Qdrant/provider adapter + workspace RAG REST/AI capability + `/tool/search` 실표면을 연결했다. Docs/Meeting/PMS/Planner 전도메인 hit/citation 계약, post-filter ACL 재검증, trace-first observability를 함께 정착시켰다.

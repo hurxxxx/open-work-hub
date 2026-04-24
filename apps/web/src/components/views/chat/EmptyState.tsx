@@ -46,12 +46,14 @@ interface EmptyStateProps {
   composer: ReactNode;
   greeting?: string;
   subline?: string;
+  getSuggestionHref?: (suggestion: Suggestion) => string;
 }
 
 export function EmptyState({
   composer,
   greeting = '안녕하세요, 업무를 도와드릴게요.',
   subline = '아래 도구로 바로 이동하거나 궁금한 것을 입력해 보세요.',
+  getSuggestionHref,
 }: EmptyStateProps) {
   return (
     <div className="flex flex-1 items-center justify-center px-6 py-10">
@@ -67,7 +69,7 @@ export function EmptyState({
           {SUGGESTIONS.map((item) => (
             <Link
               key={item.id}
-              to={`/tool/${item.id}`}
+              to={getSuggestionHref?.(item) ?? `/tool/${item.id}`}
               className="group flex items-start gap-2 rounded-lg border border-app-border bg-app-surface px-3 py-3 no-underline transition-colors hover:border-app-accent"
             >
               <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-app-border bg-app-bg text-app-accent">
