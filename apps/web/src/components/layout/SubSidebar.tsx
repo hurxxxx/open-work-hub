@@ -33,6 +33,7 @@ import {
   CheckSquare,
   ChevronDown,
   ChevronRight,
+  GraduationCap,
   Plus,
   Layout,
   Loader2,
@@ -50,9 +51,10 @@ import {
 import { InlineNotice, useConfirm, usePrompt } from '@aidoo/ui';
 import { cn } from '@/src/lib/utils';
 import { NAV_ITEMS, APP_BAR_ITEMS } from '@/src/constants';
+import { LEARNING_COURSES } from '@/src/domains/learning/manifest';
 import { hasAdminSectionAccess, type AdminSection } from '@/src/domains/admin/admin-permissions';
 import { useAuth } from '@/src/domains/auth/auth-provider';
-import { hasWorkspaceMembership, teamRoleAllows } from '@/src/domains/auth/auth-api';
+import { hasWorkspaceMembership, teamRoleAllows, type AuthUser } from '@/src/domains/auth/auth-api';
 import {
   CONVERSATIONS_UPDATED_EVENT,
   deleteConversation,
@@ -2392,6 +2394,19 @@ export const SubSidebar = ({
               </div>
             </>
           )}
+
+          {/*
+           * Learning sub-sidebar: bespoke course → parts → lessons tree.
+           * Replaces both the old "Courses > 전체 코스" NAV_ITEMS entry and
+           * the internal TOC column that used to live inside LearningCourseView.
+           */}
+          {activeAppId === 'learning' && (
+            <LearningSubSidebarSection
+              currentWorkspaceSlug={currentWorkspaceSlug}
+              user={user}
+              currentPathname={location.pathname}
+            />
+          )}
         </div>
 
         {/* Resize handle */}
@@ -2470,3 +2485,105 @@ export const SubSidebar = ({
     </>
   );
 };
+
+function LearningSubSidebarSection({
+  currentWorkspaceSlug,
+  user,
+  currentPathname,
+}: {
+  currentWorkspaceSlug: string | null;
+  user: AuthUser | null;
+  currentPathname: string;
+}) {
+  // Pattern: /w/<workspace>/learning/<course>/<lesson?>
+  const match = currentPathname.match(
+    /^\/w\/[^/]+\/learning(?:\/([^/]+)(?:\/([^/]+))?)?/,
+  );
+  const currentCourseSlug = match?.[1] ?? null;
+  const currentLessonSlug = match?.[2] ?? null;
+
+  const resolveLearningHref = (suffix: string) =>
+    currentWorkspaceSlug
+      ? buildWorkspaceAppPath(currentWorkspaceSlug, 'learning', suffix)
+      : resolveDefaultWorkspaceAppPath(user, 'learning', suffix);
+
+  return (
+    <nav aria-label="학습 코스" className="space-y-4 pt-1">
+      {LEARNING_COURSES.map((course) => {
+        const isActiveCourse = currentCourseSlug === course.slug;
+        const courseHref = resolveLearningHref(`/${course.slug}`);
+        return (
+          <div key={course.slug} className="space-y-2">
+            <Link
+              to={courseHref}
+              data-testid={`learning-course-link-${course.slug}`}
+              className={cn(
+                'sidebar-submenu-item font-medium',
+                isActiveCourse && 'sidebar-submenu-item-active',
+              )}
+            >
+              <GraduationCap
+                size={14}
+                className={cn(
+                  'text-gray-500 dark:text-gray-400',
+                  isActiveCourse && 'text-app-accent',
+                )}
+              />
+              <span className="sidebar-submenu-label">{course.title}</span>
+            </Link>
+            {isActiveCourse ? (
+              <div className="ml-3 space-y-3 border-l border-app-border pl-2">
+                {course.parts.map((part) => (
+                  <section
+                    key={part.slug}
+                    aria-labelledby={`learning-sub-part-${part.slug}`}
+                  >
+                    <span
+                      id={`learning-sub-part-${part.slug}`}
+                      className="sidebar-section-label block px-3 py-1 text-gray-500"
+                    >
+                      {part.title}
+                    </span>
+                    <div className="space-y-0.5">
+                      {part.lessons.map((lesson, idx) => {
+                        const lessonHref = resolveLearningHref(
+                          `/${course.slug}/${lesson.slug}`,
+                        );
+                        const isActiveLesson = currentLessonSlug === lesson.slug;
+                        return (
+                          <Link
+                            key={lesson.id}
+                            to={lessonHref}
+                            data-testid={`learning-lesson-link-${lesson.slug}`}
+                            className={cn(
+                              'sidebar-submenu-item',
+                              isActiveLesson && 'sidebar-submenu-item-active',
+                            )}
+                          >
+                            <span
+                              className={cn(
+                                'shrink-0 tabular-nums text-[11px]',
+                                isActiveLesson
+                                  ? 'text-app-accent'
+                                  : 'text-gray-400 dark:text-gray-500',
+                              )}
+                            >
+                              {String(idx + 1).padStart(2, '0')}
+                            </span>
+                            <span className="sidebar-submenu-label">
+                              {lesson.title}
+                            </span>
+                          </Link>
+                        );
+                      })}
+                    </div>
+                  </section>
+                ))}
+              </div>
+            ) : null}
+          </div>
+        );
+      })}
+    </nav>
+  );
+}

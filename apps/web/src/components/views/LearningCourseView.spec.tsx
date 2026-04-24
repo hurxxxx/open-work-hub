@@ -4,9 +4,19 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { LearningCourseView } from './LearningCourseView';
 
-type Lesson = { slug: string; title: string; file: string };
+type Lesson = { id: string; slug: string; title: string; file: string };
 type Part = { slug: string; title: string; lessons: Lesson[] };
 type Course = { slug: string; title: string; description: string; parts: Part[] };
+
+vi.mock('@/src/domains/auth/auth-provider', () => ({
+  useAuth: () => ({ token: null, user: null, status: 'authenticated' }),
+}));
+
+vi.mock('./learning-notes/LearningPageNotesPanel', () => ({
+  LearningPageNotesPanel: ({ lessonId }: { lessonId: string }) => (
+    <div data-testid={`learning-page-notes-panel-${lessonId}`} />
+  ),
+}));
 
 const manifestHarness = vi.hoisted(() => ({
   courses: [] as Course[],
@@ -82,14 +92,14 @@ describe('LearningCourseView', () => {
           {
             slug: 'intro',
             title: '시작하기',
-            lessons: [{ slug: 'first', title: '첫 레슨', file: 'f.md' }],
+            lessons: [{ id: 'tc-001', slug: 'first', title: '첫 레슨', file: 'f.md' }],
           },
           {
             slug: 'main',
             title: '본편',
             lessons: [
-              { slug: 'second', title: '두 번째 레슨', file: 's.md' },
-              { slug: 'third', title: '세 번째 레슨', file: 't.md' },
+              { id: 'tc-002', slug: 'second', title: '두 번째 레슨', file: 's.md' },
+              { id: 'tc-003', slug: 'third', title: '세 번째 레슨', file: 't.md' },
             ],
           },
         ],
@@ -143,22 +153,13 @@ describe('LearningCourseView', () => {
     expect(screen.getByTestId('learning-root')).toBeTruthy();
   });
 
-  it('renders each part as its own section with part titles and per-part numbering', () => {
-    renderAt('/w/hq/learning/course/first');
-
-    // Part headers visible
-    expect(screen.getByText('시작하기')).toBeTruthy();
-    expect(screen.getByText('본편')).toBeTruthy();
-
-    // All lessons remain linkable by slug (numbering restarts inside each part)
-    expect(screen.getByTestId('learning-lesson-link-first').getAttribute('href')).toBe(
-      '/w/hq/learning/course/first',
-    );
-    expect(screen.getByTestId('learning-lesson-link-second').getAttribute('href')).toBe(
-      '/w/hq/learning/course/second',
-    );
-    expect(screen.getByTestId('learning-lesson-link-third').getAttribute('href')).toBe(
-      '/w/hq/learning/course/third',
-    );
+  it('mounts the page notes panel with the lesson stable id', () => {
+    renderAt('/w/hq/learning/course/second');
+    expect(screen.getByTestId('learning-page-notes-panel-tc-002')).toBeTruthy();
   });
+
+  // Course/part/lesson navigation has moved to the app sub-sidebar
+  // (see SubSidebar.tsx → LearningSubSidebarSection). LearningCourseView
+  // itself no longer renders part headers or lesson links, so those
+  // assertions are covered by the sub-sidebar tests instead.
 });

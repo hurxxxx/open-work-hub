@@ -20,6 +20,8 @@ import {
   type LearningLesson,
 } from '@/src/domains/learning/manifest';
 import { getLessonBody } from '@/src/domains/learning/content';
+import { useAuth } from '@/src/domains/auth/auth-provider';
+import { LearningPageNotesPanel } from './learning-notes/LearningPageNotesPanel';
 
 const REMARK_PLUGINS = [remarkGfm];
 const REHYPE_PLUGINS = [rehypeHighlight];
@@ -107,6 +109,7 @@ function LessonLayout({
 }) {
   const [wide, setWide] = useWideMode();
   const rootRef = useRef<HTMLDivElement>(null);
+  const { token } = useAuth();
 
   useEffect(() => {
     let el: HTMLElement | null = rootRef.current;
@@ -121,13 +124,18 @@ function LessonLayout({
     window.scrollTo({ top: 0, behavior: 'auto' });
   }, [lesson.slug]);
 
-  // Narrow mode: 3-col grid with a right balance column so the article sits in
-  // viewport center. Wide mode: TOC hides entirely, article spans full width.
+  // Course/lesson navigation now lives in the app sub-sidebar, so this view
+  // renders just the article and the notes panel. At xl+ the notes get a
+  // dedicated right column; below xl they fall to the bottom of the article.
   const gridClass = wide
-    ? 'lg:grid-cols-1'
-    : 'lg:grid-cols-[16rem_minmax(0,1fr)] xl:grid-cols-[16rem_minmax(0,1fr)_16rem]';
+    ? 'xl:grid-cols-1'
+    : 'xl:grid-cols-[minmax(0,1fr)_24rem]';
 
   const contentMaxW = wide ? 'max-w-none' : 'max-w-3xl';
+
+  const notesPlacementClass = wide
+    ? ''
+    : 'xl:col-start-2 xl:row-start-1 xl:sticky xl:top-6 xl:self-start xl:max-h-[calc(100vh-3rem)] xl:overflow-y-auto';
 
   return (
     <motion.div
@@ -135,69 +143,10 @@ function LessonLayout({
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       className={
-        'grid w-full grid-cols-1 gap-8 px-4 py-6 lg:gap-12 lg:px-8 lg:py-10 ' +
+        'grid w-full grid-cols-1 gap-8 px-4 py-6 lg:gap-10 lg:px-8 lg:py-10 ' +
         gridClass
       }
     >
-      <aside
-        aria-label="레슨 목차"
-        className={
-          'lg:sticky lg:top-6 lg:max-h-[calc(100vh-3rem)] lg:self-start lg:overflow-y-auto ' +
-          (wide ? 'lg:hidden' : '')
-        }
-      >
-        <Link
-          to={basePath}
-          className="mb-4 inline-flex items-center gap-2 text-app-ink/60 transition-colors hover:text-app-accent"
-        >
-          <GraduationCap size={14} />
-          <span className="app-text-overline">{course.title}</span>
-        </Link>
-        <nav>
-          <div className="flex flex-col gap-5">
-            {course.parts.map((part) => (
-              <section key={part.slug} aria-labelledby={`learning-part-${part.slug}`}>
-                <h2
-                  id={`learning-part-${part.slug}`}
-                  className="app-text-overline mb-2 text-app-ink/45"
-                >
-                  {part.title}
-                </h2>
-                <ol className="flex flex-col">
-                  {part.lessons.map((item, i) => {
-                    const active = item.slug === lesson.slug;
-                    return (
-                      <li key={item.slug} className="relative">
-                        <Link
-                          to={`${basePath}/${course.slug}/${item.slug}`}
-                          className={
-                            'group flex items-start gap-3 border-l-2 py-1.5 pl-3 pr-2 text-sm transition-colors ' +
-                            (active
-                              ? 'border-app-accent font-medium text-app-accent'
-                              : 'border-transparent text-app-ink/70 hover:border-app-ink/20 hover:text-app-ink')
-                          }
-                          data-testid={`learning-lesson-link-${item.slug}`}
-                        >
-                          <span
-                            className={
-                              'shrink-0 tabular-nums text-xs leading-5 ' +
-                              (active ? 'text-app-accent/70' : 'text-app-ink/35')
-                            }
-                          >
-                            {String(i + 1).padStart(2, '0')}
-                          </span>
-                          <span className="leading-5">{item.title}</span>
-                        </Link>
-                      </li>
-                    );
-                  })}
-                </ol>
-              </section>
-            ))}
-          </div>
-        </nav>
-      </aside>
-
       <article className="min-w-0">
         <div className={`mx-auto ${contentMaxW}`}>
           <div className="mb-6 flex items-center justify-between gap-3">
@@ -209,7 +158,7 @@ function LessonLayout({
             <button
               type="button"
               onClick={() => setWide((v) => !v)}
-              className="hidden items-center gap-1.5 rounded-md border border-app-border px-2.5 py-1 text-app-ink/60 transition-colors hover:border-app-accent hover:text-app-accent lg:inline-flex"
+              className="hidden items-center gap-1.5 rounded-md border border-app-border px-2.5 py-1 text-app-ink/60 transition-colors hover:border-app-accent hover:text-app-accent xl:inline-flex"
               aria-pressed={wide}
               title={wide ? '좁게 보기' : '넓게 보기'}
               data-testid="learning-width-toggle"
@@ -281,6 +230,19 @@ function LessonLayout({
           </nav>
         </div>
       </article>
+
+      <aside
+        aria-label="페이지 노트"
+        className={notesPlacementClass}
+        data-testid="learning-page-notes-slot"
+      >
+        <LearningPageNotesPanel
+          token={token}
+          courseSlug={course.slug}
+          lessonId={lesson.id}
+          lessonTitle={lesson.title}
+        />
+      </aside>
     </motion.div>
   );
 }

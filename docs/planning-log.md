@@ -23,6 +23,20 @@
 
 ## 엔트리
 
+## 2026-04-24 · 러닝 개인 학습 노트 + 통합 sub-sidebar
+
+- **요약**: 러닝 레슨에 per-user public/private 학습 노트를 추가했다. 본문은 Markdown + git 기반을 유지하고, 노트만 DB(`NativeDoc`/`NativeDocPage` 재사용, `source_kind`에 visibility 인코딩)로 저장한다. 관리자도 타인 private 노트는 조회 불가. 기존 좌측 TOC는 앱 sub-sidebar로 이관해 `SubSidebar.tsx`에 Learning 전용 렌더러를 추가(Docs Favorites 패턴 재사용), 콘텐츠 영역은 `[article][notes]`로 단순화.
+- **PR/커밋**: 미커밋
+- **영향 파일**: `apps/api/src/aidoo_api/domains/learning_notes/`, `apps/api/tests/test_learning_notes.py`, `apps/api/src/aidoo_api/app.py`, `apps/web/src/domains/learning-notes/`, `apps/web/src/components/views/learning-notes/`, `apps/web/src/components/views/LearningCourseView.tsx`, `apps/web/src/components/layout/SubSidebar.tsx`, `apps/web/src/domains/learning/manifest.ts`, `apps/web/src/domains/workspaces/workspace-utils.ts`, `apps/web/src/constants.ts`, `apps/web/src/app-shell.ts`, `learning/README.md`
+- **남은 후속 작업**: `learning_note_editor` 전용 역할 도입(현재 관리자 특권 없음으로 v1 간소화), 노트 revision/history는 docs 공통 기능으로 추후 통합, manifest orphan 노트 정리용 staff 툴.
+
+## 2026-04-24 · PostgreSQL 키워드 통합검색 실데이터 E2E 검증
+
+- **요약**: `delivery-hub`에 검색검증 샘플 138건(문서 36, 회의 24, PMS 48, 일정 30)을 seed하고 실제 API/UI 검색을 검증했다. 빈 검색 total/facet 후보 제한 버그와 타입 필터 race를 발견해 수정했고, 실제 서버 Playwright 흐름으로 한국어 검색, facet, PMS 필터, empty state, deep link 이동을 확인했다.
+- **PR/커밋**: 미커밋
+- **영향 파일**: `apps/api/src/aidoo_api/seed_keyword_search_samples.py`, `apps/api/src/aidoo_api/domains/search/service.py`, `apps/web/src/components/views/RagSearchView.tsx`
+- **남은 후속 작업**: 검색 read model refresh는 아직 요청 시 동기 rebuild 방식이므로 write hook/outbox 기반 증분 갱신으로 전환 필요.
+
 ## 2026-04-24 · RAG 통합검색 IA+UI V1 개선
 
 - **요약**: `/tool/search`를 workspace 통합검색으로 인지되도록 AppBar 전역 진입, AI quick action 경로 정리, 검색 전 추천/최근 검색/source preview, 결과 유형 필터, 모바일 상세 필터, 503 복구 CTA를 반영했다. Playwright RAG 검색 E2E로 AI 진입, AppBar 진입, 모바일 source chips, timeout 복구를 검증했다.

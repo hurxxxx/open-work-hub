@@ -120,8 +120,9 @@ export const NAV_ITEMS: NavItem[] = [
   { id: 'meeting-mine', title: 'My Meetings', icon: User, category: 'Meetings', appId: 'meeting', pathSuffix: '?scope=mine' },
   { id: 'meeting-recordings', title: 'Recordings', icon: Video, category: 'Meetings', appId: 'meeting', pathSuffix: '?tab=recordings' },
 
-  // Learning
-  { id: 'learning-all', title: '전체 코스', icon: GraduationCap, category: 'Courses', appId: 'learning', description: '모든 구성원이 열람할 수 있는 교육 콘텐츠 모음' },
+  // Learning — the Learning sub-sidebar is rendered as a bespoke course tree
+  // directly by SubSidebar.tsx (see the `activeAppId === 'learning'` block).
+  // No NAV_ITEMS entries are needed here.
 
   // Settings
   { id: 'settings-general', title: 'General', icon: Settings, category: 'Admin', appId: 'settings', absolutePath: '/admin/general' },

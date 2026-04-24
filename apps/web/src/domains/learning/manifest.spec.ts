@@ -36,6 +36,28 @@ describe('LEARNING_COURSES manifest', () => {
     }
   });
 
+  it('every lesson has a non-empty stable id', () => {
+    for (const course of LEARNING_COURSES) {
+      for (const lesson of getAllLessons(course)) {
+        expect(lesson.id, `lesson "${lesson.slug}" is missing an id`).toBeTruthy();
+        expect(typeof lesson.id).toBe('string');
+        expect(lesson.id.length).toBeGreaterThan(0);
+      }
+    }
+  });
+
+  it('lesson ids are unique within each course', () => {
+    for (const course of LEARNING_COURSES) {
+      const ids = new Set<string>();
+      for (const lesson of getAllLessons(course)) {
+        expect(ids.has(lesson.id), `duplicate lesson id "${lesson.id}" in course "${course.slug}"`).toBe(
+          false,
+        );
+        ids.add(lesson.id);
+      }
+    }
+  });
+
   it('has unique part slugs per course and each part holds at least one lesson', () => {
     for (const course of LEARNING_COURSES) {
       expect(course.parts.length).toBeGreaterThan(0);

@@ -134,8 +134,12 @@ export function resolveShellState(
   }
 
   if (/^\/w\/[^/]+\/learning(?:\/|$)/.test(path)) {
+    // Learning has no flat NAV_ITEMS entries — its sub-sidebar is a bespoke
+    // course tree rendered directly by SubSidebar.tsx, so there is no
+    // single activeNavItemId to highlight. Active lesson state is tracked
+    // by the URL and resolved inside the Learning renderer.
     return canShowAppChrome(user, 'learning', workspaceSlug, enabledWorkspaceAppIds)
-      ? { activeAppId: 'learning', activeNavItemId: 'learning-all' }
+      ? { activeAppId: 'learning', activeNavItemId: '' }
       : HOME_SHELL_STATE;
   }
 

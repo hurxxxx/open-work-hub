@@ -5,7 +5,14 @@ import {
 import { getDefaultAdminPath } from '@/src/domains/admin/admin-permissions';
 import type { NavItem } from '@/src/constants';
 
-export type WorkspaceAppId = 'home' | 'ai' | 'pms' | 'docs' | 'planner' | 'meeting';
+export type WorkspaceAppId =
+  | 'home'
+  | 'ai'
+  | 'pms'
+  | 'docs'
+  | 'planner'
+  | 'meeting'
+  | 'learning';
 
 export const WORKSPACE_APP_IDS: readonly WorkspaceAppId[] = [
   'home',
@@ -14,6 +21,7 @@ export const WORKSPACE_APP_IDS: readonly WorkspaceAppId[] = [
   'docs',
   'planner',
   'meeting',
+  'learning',
 ] as const;
 
 const WORKSPACE_API_PREFIXES = [
@@ -29,7 +37,7 @@ const WORKSPACE_API_PREFIXES = [
 
 const LAST_WORKSPACE_STORAGE_KEY = 'aidoo:last-workspace-slug';
 const LAST_WORKSPACE_APP_STORAGE_KEY = 'aidoo:last-workspace-app';
-const WORKSPACE_APP_PATH_PATTERN = /^\/w\/[^/]+\/(home|ai|pms|docs|planner|meeting)(?:\/|$)/;
+const WORKSPACE_APP_PATH_PATTERN = /^\/w\/[^/]+\/(home|ai|pms|docs|planner|meeting|learning)(?:\/|$)/;
 
 function isWorkspaceAppId(value: string | null | undefined): value is WorkspaceAppId {
   return (WORKSPACE_APP_IDS as readonly string[]).includes(value ?? '');

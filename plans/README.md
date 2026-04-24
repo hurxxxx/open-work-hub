@@ -44,6 +44,5 @@ NN-<kebab-slug>.md
 | 파일 | 유형 | 상태 |
 |---|---|---|
 | [`00-ai-platform-roadmap.md`](./00-ai-platform-roadmap.md) | 로드맵 | 승인 완료, Phase 5 완료 반영 |
-| [`06-learning-annotations.md`](./06-learning-annotations.md) | 실행 | 작성 완료, 진행 중 작업 완료 후 착수 대기 |
 
 완료된 플랜은 [`docs/planning-log.md`](../docs/planning-log.md)에서 확인.
