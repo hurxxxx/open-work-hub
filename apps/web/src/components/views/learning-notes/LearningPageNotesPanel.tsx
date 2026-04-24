@@ -349,13 +349,14 @@ function MyNoteViewer({
   onArchive: () => void;
   actionError: string | null;
 }) {
+  const [reading, setReading] = useState(false);
   return (
     <div className="flex flex-col gap-2">
       <div
         className="group relative rounded-lg py-0.5 transition-colors hover:bg-app-surface/40 focus-within:bg-app-surface/40"
         data-testid="learning-page-notes-my-viewer"
       >
-        <div className="learning-note-dense app-markdown prose prose-sm max-w-none dark:prose-invert">
+        <div className="learning-note-readable learning-note-dense app-markdown prose prose-sm max-w-none dark:prose-invert">
           <BlockViewer content={savedContent} />
         </div>
 
@@ -368,6 +369,14 @@ function MyNoteViewer({
           aria-hidden="true"
         >
           <VisibilityPill visibility={note.visibility} />
+          <IconButton
+            label="크게 보기"
+            onClick={() => setReading(true)}
+            testId="learning-page-notes-my-expand-view"
+            tone="default"
+          >
+            <Maximize2 size={12} />
+          </IconButton>
           <IconButton
             label="편집"
             onClick={onEdit}
@@ -389,6 +398,15 @@ function MyNoteViewer({
         </div>
       </div>
       {actionError ? <InlineError message={actionError} /> : null}
+      {reading ? (
+        <FullscreenReadonlyViewer
+          content={savedContent}
+          title="내 노트"
+          subtitle={`${formatRelative(note.updated_at)} 업데이트`}
+          visibility={note.visibility}
+          onClose={() => setReading(false)}
+        />
+      ) : null}
     </div>
   );
 }
@@ -524,8 +542,8 @@ function EditForm({
   const editor = (
     <div
       className={
-        'learning-note-dense rounded-lg border border-app-border/50 px-1.5 py-1 focus-within:border-app-accent ' +
-        (expanded ? 'flex-1 min-h-0 overflow-y-auto' : '')
+        'learning-note-readable rounded-lg border border-app-border/50 px-1.5 py-1 focus-within:border-app-accent ' +
+        (expanded ? 'flex-1 min-h-0 overflow-y-auto' : 'learning-note-dense')
       }
     >
       <BlockEditor
@@ -677,7 +695,9 @@ function OthersNoteCard({
   token: string | null;
 }) {
   const [open, setOpen] = useState(false);
+  const [reading, setReading] = useState(false);
   const detail = useLearningPageNoteDetail(open ? token : null, open ? item.doc_id : null);
+  const readerContent = (detail.note?.content_blocks ?? []) as BlockContent;
 
   return (
     <article
@@ -725,8 +745,21 @@ function OthersNoteCard({
               ) : detail.status === 'error' ? (
                 <InlineError message={detail.error ?? '불러오지 못했습니다.'} />
               ) : detail.note ? (
-                <div className="learning-note-dense app-markdown prose prose-sm max-w-none dark:prose-invert">
-                  <BlockViewer content={detail.note.content_blocks as BlockContent} />
+                <div className="flex flex-col gap-2">
+                  <div className="learning-note-readable learning-note-dense app-markdown prose prose-sm max-w-none dark:prose-invert">
+                    <BlockViewer content={readerContent} />
+                  </div>
+                  <div className="flex justify-end">
+                    <button
+                      type="button"
+                      onClick={() => setReading(true)}
+                      className="inline-flex items-center gap-1 rounded-full border border-app-border bg-app-surface px-2.5 py-1 text-[11px] text-app-ink/70 transition-colors hover:border-app-accent hover:text-app-accent"
+                      data-testid={`learning-page-notes-other-expand-${item.doc_id}`}
+                    >
+                      <Maximize2 size={11} />
+                      <span className="app-text-overline">크게</span>
+                    </button>
+                  </div>
                 </div>
               ) : (
                 <span className="app-text-meta text-app-ink/50">
@@ -738,6 +771,15 @@ function OthersNoteCard({
           </motion.div>
         ) : null}
       </AnimatePresence>
+      {reading && detail.note ? (
+        <FullscreenReadonlyViewer
+          content={readerContent}
+          title={item.author_name || '학습자'}
+          subtitle={`${formatRelative(item.updated_at)} 업데이트`}
+          visibility={item.visibility}
+          onClose={() => setReading(false)}
+        />
+      ) : null}
     </article>
   );
 }
@@ -766,6 +808,84 @@ function AuthorAvatar({ name }: { name: string }) {
 }
 
 // -------------------------------------------------------------------- shared
+
+function FullscreenReadonlyViewer({
+  content,
+  title,
+  subtitle,
+  visibility,
+  onClose,
+}: {
+  content: BlockContent;
+  title: string;
+  subtitle?: string;
+  visibility: LearningPageNoteVisibility;
+  onClose: () => void;
+}) {
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.stopPropagation();
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = previous;
+    };
+  }, []);
+
+  if (typeof document === 'undefined') return null;
+
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[9000] flex items-stretch justify-center bg-black/60 backdrop-blur-sm"
+      role="dialog"
+      aria-label="노트 크게 보기"
+      onClick={onClose}
+    >
+      <motion.div
+        initial={{ opacity: 0, scale: 0.98 }}
+        animate={{ opacity: 1, scale: 1 }}
+        transition={{ duration: 0.15 }}
+        className="m-4 flex w-full max-w-5xl flex-col gap-3 rounded-2xl border border-app-border bg-app-surface p-5 shadow-2xl lg:m-8 lg:p-6"
+        onClick={(event) => event.stopPropagation()}
+        data-testid="learning-page-notes-readonly-viewer"
+      >
+        <header className="flex flex-wrap items-center justify-between gap-2 border-b border-app-border/50 pb-3">
+          <div className="flex min-w-0 items-center gap-2">
+            <VisibilityPill visibility={visibility} />
+            <span className="app-text-control truncate text-app-ink">{title}</span>
+            {subtitle ? (
+              <span className="app-text-meta text-app-ink/45">· {subtitle}</span>
+            ) : null}
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="닫기"
+            title="닫기"
+            className="flex h-8 w-8 items-center justify-center rounded-md border border-app-border bg-app-surface text-app-ink/70 transition-colors hover:border-app-accent hover:text-app-accent"
+          >
+            <X size={14} />
+          </button>
+        </header>
+        <div className="learning-note-readable app-markdown prose prose-base max-w-none flex-1 overflow-y-auto pr-2 dark:prose-invert">
+          <BlockViewer content={content} />
+        </div>
+      </motion.div>
+    </div>,
+    document.body,
+  );
+}
 
 function NotesSkeleton({ rows = 3 }: { rows?: number }) {
   return (

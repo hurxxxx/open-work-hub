@@ -140,51 +140,55 @@
   }
 
   /*
-   * Compact, high-contrast body used for learning page notes in the right
-   * column. The column is narrow and the reader wants density + maximum
-   * legibility, so we override BlockNote's default body color (muted gray)
-   * with the app's full-contrast ink token, shrink the base size, and
-   * strip the library's built-in horizontal padding/indent on every block
-   * (drag handle gutter is unused in the read-only viewer).
+   * Learning page-note typography helpers. Stackable:
+   *
+   *   .learning-note-readable
+   *     High-contrast body color (#000 / #fff) + BlockNote's built-in
+   *     horizontal gutters stripped so text hugs the container edges.
+   *     Use on every learning-note viewer/editor regardless of width.
+   *
+   *   .learning-note-dense
+   *     Shrinks the base font to 13px for the narrow right column.
+   *     Skip this class inside the fullscreen overlay so long-form
+   *     reading/writing gets the library's normal sizing.
    */
-  .learning-note-dense {
-    font-size: 13px;
-    line-height: 1.55;
-  }
-  .learning-note-dense .bn-container,
-  .learning-note-dense .bn-editor,
-  .learning-note-dense .bn-block-content,
-  .learning-note-dense .bn-inline-content,
-  .learning-note-dense .bn-editor p,
-  .learning-note-dense .bn-editor li,
-  .learning-note-dense .bn-editor span {
+  .learning-note-readable .bn-container,
+  .learning-note-readable .bn-editor,
+  .learning-note-readable .bn-block-content,
+  .learning-note-readable .bn-inline-content,
+  .learning-note-readable .bn-editor p,
+  .learning-note-readable .bn-editor li,
+  .learning-note-readable .bn-editor span {
     color: #000 !important;
   }
-  .dark .learning-note-dense .bn-container,
-  .dark .learning-note-dense .bn-editor,
-  .dark .learning-note-dense .bn-block-content,
-  .dark .learning-note-dense .bn-inline-content,
-  .dark .learning-note-dense .bn-editor p,
-  .dark .learning-note-dense .bn-editor li,
-  .dark .learning-note-dense .bn-editor span {
+  .dark .learning-note-readable .bn-container,
+  .dark .learning-note-readable .bn-editor,
+  .dark .learning-note-readable .bn-block-content,
+  .dark .learning-note-readable .bn-inline-content,
+  .dark .learning-note-readable .bn-editor p,
+  .dark .learning-note-readable .bn-editor li,
+  .dark .learning-note-readable .bn-editor span {
     color: #fff !important;
   }
-  /* Collapse BlockNote's internal horizontal padding/margin so text hugs
-     the panel edges. Applied broadly to cover library-version drift. */
-  .learning-note-dense .bn-container,
-  .learning-note-dense .bn-editor {
+  .learning-note-readable .bn-container,
+  .learning-note-readable .bn-editor {
     padding-left: 0 !important;
     padding-right: 0 !important;
   }
-  .learning-note-dense .bn-block-outer,
-  .learning-note-dense .bn-block,
-  .learning-note-dense .bn-block-content,
-  .learning-note-dense [class*="blockOuter"],
-  .learning-note-dense [class*="blockContent"] {
+  .learning-note-readable .bn-block-outer,
+  .learning-note-readable .bn-block,
+  .learning-note-readable .bn-block-content,
+  .learning-note-readable [class*="blockOuter"],
+  .learning-note-readable [class*="blockContent"] {
     padding-left: 0 !important;
     padding-right: 0 !important;
     margin-left: 0 !important;
     margin-right: 0 !important;
+  }
+
+  .learning-note-dense {
+    font-size: 13px;
+    line-height: 1.55;
   }
 
   .app-text-title-lg {
