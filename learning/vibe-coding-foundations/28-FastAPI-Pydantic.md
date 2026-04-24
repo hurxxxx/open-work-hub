@@ -75,7 +75,7 @@ Python 백엔드 선택지는 크게 다섯 — 각각 철학·규모·비동기
 3. **OpenAPI(API 명세 표준) 자동 생성** — `/docs` 에서 바로 테스트 가능.
 4. **FastAPI + Uvicorn[standard] 0.34 조합의 성능** — 실측 성능이 Node.js와 대등.
 5. **학습 곡선** — Flask처럼 단순하지만 Django처럼 안전함.
-6. **2026 에이전트/AI 앱 기본 선택지** — OpenAI·Anthropic 등 LLM SDK가 Python에서 가장 먼저 나오며, FastAPI가 그 위 API 프레임워크로 사실상 표준화됨.
+6. **AI 앱과 잘 맞는 선택지** — Python 생태계에는 LLM SDK와 데이터 처리 도구가 많고, FastAPI는 그 위에 API를 얹기 좋습니다.
 
 ---
 
@@ -239,7 +239,7 @@ FastAPI는 **ASGI(Async Server Gateway Interface, 비동기 서버 게이트웨�
 
 FastAPI 자체는 "프레임워크"이고, 실제로 요청을 받는 "서버"는 **Uvicorn** 입니다(현재 `uvicorn[standard] 0.34`).
 
-- **Uvicorn**: 최신·경량·빠름. 우리 선택.
+- **Uvicorn**: 경량·빠름. 우리 선택.
 - Hypercorn: HTTP/2·QUIC 지원.
 - Daphne: Django Channels 중심.
 
@@ -422,7 +422,7 @@ def test_create_issue(client, auth_header):
 
 - **성격**: FastAPI 경험을 토대로 성능 · DI · 계층화를 개선해 2022년에 재설계된 신흥 ASGI 프레임워크.
 - **강점**: msgspec 기반으로 직렬화 성능이 FastAPI 대비 수 배 빠름. DI 시스템이 더 구조화되어 대형 앱 유지에 유리. 공식 ORM · CLI · 플러그인 스캐폴딩 제공.
-- **왜 FastAPI?**: 생태계 · 커뮤니티 · 자료 양이 FastAPI의 약 1/10 수준. 2026년 기준 AI 에이전트 · LangChain · OpenAI/Anthropic SDK 튜토리얼이 사실상 FastAPI 일색이라, 문제 해결 시 참조할 수 있는 자료가 압도적으로 부족합니다. 기술 선택은 팀 채용 · 온보딩 · 외부 인력 영입 속도에 직결되므로 "약간 빠름"의 이득이 "생태계 결핍"의 손실을 보상하지 못합니다.
+- **왜 FastAPI?**: 생태계 · 커뮤니티 · 자료 양이 FastAPI보다 작습니다. 기술 선택은 팀 채용 · 온보딩 · 외부 인력 영입 속도에 직결되므로 "약간 빠름"의 이득이 "생태계 결핍"의 손실을 보상하지 못합니다.
 
 ### 11.4 Express.js (Node.js)
 
@@ -444,7 +444,7 @@ def test_create_issue(client, auth_header):
 
 ---
 
-**FastAPI가 맞는 팀**: Python 생태계(LLM SDK · LangChain · pgvector · numpy 등) 활용 + 타입 안전 + 문서화 자동화를 원함. 2026년 기준 AI 에이전트 백엔드의 사실상 기본값.
+**FastAPI가 맞는 팀**: Python 생태계(LLM SDK · LangChain · pgvector · numpy 등) 활용 + 타입 안전 + 문서화 자동화를 원함.
 
 ### 11.7 🛠️ 5분 실습 — `/docs`에서 엔드포인트 한 번 호출해 보기
 

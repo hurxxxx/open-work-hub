@@ -126,7 +126,7 @@ B: "안녕" 뒤에 "!!" 삽입
 
 ### 4.2 Yjs
 
-**Yjs**(**Y** **j**ava**s**cript — "Y"는 이 계열 CRDT 알고리즘 이름) 는 Kevin Jahns가 만든 JavaScript용 **CRDT(Conflict-free Replicated Data Type, 충돌 없는 복제 자료구조)** 라이브러리입니다. 2020년대 CRDT 구현의 대표주자. BlockNote 외에도 TipTap, Lexical, ProseMirror 등과 광범위하게 통합됩니다. 2025~2026년 기준 **Notion, Linear, Figma FigJam** 등 주요 실시간 협업 제품의 **업계 표준 기반 기술**로 자리 잡았습니다.
+**Yjs**(**Y** **j**ava**s**cript — "Y"는 이 계열 CRDT 알고리즘 이름) 는 Kevin Jahns가 만든 JavaScript용 **CRDT(Conflict-free Replicated Data Type, 충돌 없는 복제 자료구조)** 라이브러리입니다. BlockNote 외에도 TipTap, Lexical, ProseMirror 등과 광범위하게 통합되며, 실시간 협업 기능을 구현할 때 자주 선택됩니다.
 
 핵심 자료구조:
 - `Y.Doc` — 공유 문서
