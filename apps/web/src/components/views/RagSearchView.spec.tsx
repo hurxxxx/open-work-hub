@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { RagSearchView } from './RagSearchView';
 import { WorkspaceBootstrapProvider } from '@/src/domains/workspaces/workspace-bootstrap-context';
-import { RagApiError } from '@/src/domains/rag/rag-api';
+import { SearchApiError } from '@/src/domains/search/search-api';
 
 const authHarness = vi.hoisted(() => ({
   logout: vi.fn(),
@@ -25,12 +25,6 @@ const authHarness = vi.hoisted(() => ({
           name: 'Aidoo HQ',
           role: 'admin',
         },
-        {
-          id: 'workspace-lab',
-          slug: 'lab',
-          name: 'Aidoo Lab',
-          role: 'member',
-        },
       ],
       workspace_roles: [],
       system_roles: [],
@@ -41,9 +35,8 @@ const authHarness = vi.hoisted(() => ({
   },
 }));
 
-const ragHarness = vi.hoisted(() => ({
-  listWorkspaceRagSources: vi.fn(),
-  queryWorkspaceRag: vi.fn(),
+const searchHarness = vi.hoisted(() => ({
+  queryWorkspaceKeywordSearch: vi.fn(),
 }));
 
 vi.mock('@/src/domains/auth/auth-provider', () => ({
@@ -53,25 +46,22 @@ vi.mock('@/src/domains/auth/auth-provider', () => ({
   }),
 }));
 
-vi.mock('@/src/domains/rag/rag-api', async () => {
-  const actual = await vi.importActual<typeof import('@/src/domains/rag/rag-api')>(
-    '@/src/domains/rag/rag-api',
+vi.mock('@/src/domains/search/search-api', async () => {
+  const actual = await vi.importActual<typeof import('@/src/domains/search/search-api')>(
+    '@/src/domains/search/search-api',
   );
   return {
     ...actual,
-    listWorkspaceRagSources: ragHarness.listWorkspaceRagSources,
-    queryWorkspaceRag: ragHarness.queryWorkspaceRag,
+    queryWorkspaceKeywordSearch: searchHarness.queryWorkspaceKeywordSearch,
   };
 });
 
 function renderView({
-  initialEntry = '/tool/search',
+  initialEntry = '/tool/search?workspace=hq',
   workspaceSlug = 'hq',
-  workspaceName = 'Aidoo HQ',
 }: {
   initialEntry?: string;
   workspaceSlug?: string | null;
-  workspaceName?: string;
 } = {}) {
   return render(
     <MemoryRouter initialEntries={[initialEntry]}>
@@ -82,7 +72,7 @@ function renderView({
                 workspace: {
                   id: `workspace-${workspaceSlug}`,
                   slug: workspaceSlug,
-                  name: workspaceName,
+                  name: 'Aidoo HQ',
                   role: 'admin',
                 },
                 apps: [],
@@ -99,21 +89,56 @@ function renderView({
   );
 }
 
-function deferred<T>() {
-  let resolve!: (value: T) => void;
-  let reject!: (reason?: unknown) => void;
-  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
-    resolve = resolvePromise;
-    reject = rejectPromise;
-  });
-  return { promise, resolve, reject };
+function searchResponse(overrides = {}) {
+  return {
+    query: 'budget risk',
+    hits: [
+      {
+        entity_type: 'pms_issue',
+        entity_id: 'issue-1',
+        workspace_id: 'workspace-hq',
+        title: 'Budget blocker',
+        summary: 'Supplier repricing increased the budget risk.',
+        snippet: {
+          text: 'Supplier repricing increased the budget risk.',
+          highlights: [{ start: 36, end: 40 }],
+        },
+        score: 7.4,
+        status: 'in_progress',
+        status_label: 'In Progress',
+        visibility: 'workspace',
+        updated_at: '2026-04-24T00:00:00Z',
+        created_at: '2026-04-20T00:00:00Z',
+        date_markers: { due_date: '2026-04-30' },
+        people: [{ role: 'assignee', user_id: 'user-1', label: 'Kim' }],
+        containers: [{ type: 'list', id: 'list-1', label: 'Sprint Backlog' }],
+        deep_link: '/tool/pms-list-list-1?workspace=hq&issue=issue-1',
+        preview_url: null,
+        metadata: {},
+      },
+    ],
+    facets: {
+      entity_types: [
+        { value: 'pms_issue', label: 'PMS', count: 1 },
+      ],
+      status: [
+        { entity_type: 'pms_issue', value: 'in_progress', label: 'In Progress', count: 1 },
+      ],
+      containers: [
+        { type: 'list', id: 'list-1', label: 'Sprint Backlog', count: 1 },
+      ],
+    },
+    total: 1,
+    has_more: false,
+    next_offset: null,
+    trace_id: 'trace-1',
+    ...overrides,
+  };
 }
 
-describe('RagSearchView', () => {
+describe('RagSearchView keyword search', () => {
   beforeEach(() => {
-    window.localStorage.clear();
-    ragHarness.listWorkspaceRagSources.mockReset();
-    ragHarness.queryWorkspaceRag.mockReset();
+    searchHarness.queryWorkspaceKeywordSearch.mockReset();
     authHarness.logout.mockReset();
     authHarness.state.token = 'test-token';
     authHarness.state.user.workspaces = [
@@ -123,443 +148,131 @@ describe('RagSearchView', () => {
         name: 'Aidoo HQ',
         role: 'admin',
       },
-      {
-        id: 'workspace-lab',
-        slug: 'lab',
-        name: 'Aidoo Lab',
-        role: 'member',
-      },
     ];
-    ragHarness.listWorkspaceRagSources.mockResolvedValue({
-      sources: [
-        {
-          source_kind: 'manual',
-          resource_type: 'docs_native_doc',
-          label: 'Docs / Manual',
-          app_id: 'docs',
-        },
-        {
-          source_kind: 'meeting',
-          resource_type: 'meeting',
-          label: 'Meetings',
-          app_id: 'meeting',
-        },
-        {
-          source_kind: 'pms_issue',
-          resource_type: 'pms_issue',
-          label: 'PMS Issues',
-          app_id: 'pms',
-        },
-        {
-          source_kind: 'planner_event',
-          resource_type: 'planner_event',
-          label: 'Planner',
-          app_id: 'planner',
-        },
-      ],
+    searchHarness.queryWorkspaceKeywordSearch.mockResolvedValue(searchResponse());
+  });
+
+  it('hydrates from URL and calls the keyword search API with workspace scope', async () => {
+    renderView({
+      initialEntry: '/tool/search?workspace=hq&q=budget%20risk&type=pms_issue&sort=updated_at',
     });
-    ragHarness.queryWorkspaceRag.mockResolvedValue({
-      query: 'budget risk',
-      answer_mode: 'grounded-answer',
-      hits: [
-        {
-          source_kind: 'manual',
-          resource_type: 'docs_native_doc',
-          resource_id: 'doc-1',
-          workspace_id: 'hq',
-          title: 'Budget Review',
-          summary: 'Supplier repricing increased the budget risk.',
-          score: 0.91,
-          citation: 'doc-1:0',
-          owner_label: 'Kim',
-          acl_summary: [],
-          origin_ref: 'docs:doc-1',
-          metadata: {},
-        },
-      ],
-      grounded_answer: {
-        text: 'Budget risk is currently elevated because supplier repricing changed the expected cost baseline.',
-        citations: [
+
+    await waitFor(() => {
+      expect(searchHarness.queryWorkspaceKeywordSearch).toHaveBeenCalledWith(
+        expect.objectContaining({
+          workspace_id: 'workspace-hq',
+          query: 'budget risk',
+          entity_types: ['pms_issue'],
+          sort: { field: 'updated_at', direction: 'desc' },
+        }),
+        'test-token',
+        'hq',
+        expect.any(Object),
+      );
+    });
+    expect(screen.getByDisplayValue('budget risk')).toBeTruthy();
+    expect(await screen.findByText('Budget blocker')).toBeTruthy();
+  });
+
+  it('renders server facets, safe highlights, and canonical deep links', async () => {
+    renderView();
+
+    expect(await screen.findByText('Budget blocker')).toBeTruthy();
+    expect(screen.getAllByText('PMS').length).toBeGreaterThan(0);
+    expect(screen.getByText('1건 중 1건 표시')).toBeTruthy();
+    expect(document.querySelector('mark')?.textContent).toBeTruthy();
+    expect(screen.getByRole('link', { name: /Budget blocker/ }).getAttribute('href')).toBe(
+      '/tool/pms-list-list-1?workspace=hq&issue=issue-1',
+    );
+  });
+
+  it('submits entity filters and sort changes to the keyword API', async () => {
+    renderView();
+    await screen.findByText('Budget blocker');
+
+    fireEvent.click(screen.getByRole('button', { name: /문서/ }));
+    await waitFor(() => {
+      expect(searchHarness.queryWorkspaceKeywordSearch).toHaveBeenCalledWith(
+        expect.objectContaining({
+          entity_types: ['doc'],
+        }),
+        'test-token',
+        'hq',
+        expect.any(Object),
+      );
+    });
+    await waitFor(() => {
+      expect(searchHarness.queryWorkspaceKeywordSearch).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          entity_types: ['doc'],
+        }),
+        'test-token',
+        'hq',
+        expect.any(Object),
+      );
+    });
+
+    fireEvent.click(screen.getAllByRole('button', { name: '최신순' })[0]);
+    await waitFor(() => {
+      expect(searchHarness.queryWorkspaceKeywordSearch).toHaveBeenCalledWith(
+        expect.objectContaining({
+          sort: { field: 'updated_at', direction: 'desc' },
+        }),
+        'test-token',
+        'hq',
+        expect.any(Object),
+      );
+    });
+  });
+
+  it('loads more results using next_offset', async () => {
+    searchHarness.queryWorkspaceKeywordSearch
+      .mockResolvedValueOnce(searchResponse({ has_more: true, next_offset: 20 }))
+      .mockResolvedValueOnce(searchResponse({
+        hits: [
           {
-            resource_id: 'doc-1',
-            source_kind: 'manual',
-            quote: 'Supplier repricing increased the budget risk.',
-            locator: 'doc-1:0',
+            ...searchResponse().hits[0],
+            entity_id: 'issue-2',
+            title: 'Second blocker',
+            deep_link: '/tool/pms-list-list-1?workspace=hq&issue=issue-2',
           },
         ],
-        unsupported_claims: [],
-        sources_used: ['manual'],
-      },
-      sources_used: ['manual'],
-      query_profile: {},
-      trace_id: 'trace-1',
-      latency_ms: 143,
-    });
-  });
+        has_more: false,
+        next_offset: null,
+      }));
 
-  it('hydrates from URL, auto-runs a workspace-scoped search, and keeps search-only mode', async () => {
-    ragHarness.queryWorkspaceRag.mockResolvedValueOnce({
-      query: 'budget risk',
-      answer_mode: 'search-only',
-      hits: [
-        {
-          source_kind: 'meeting',
-          resource_type: 'meeting',
-          resource_id: 'meeting-1',
-          workspace_id: 'hq',
-          title: 'Budget Review Meeting',
-          summary: 'Supplier repricing increased the budget risk.',
-          score: 0.81,
-          citation: 'meeting-1:0',
-          owner_label: 'Kim',
-          acl_summary: [],
-          origin_ref: 'meeting:meeting-1',
-          metadata: {},
-        },
-      ],
-      grounded_answer: null,
-      sources_used: ['meeting'],
-      query_profile: {},
-      trace_id: 'trace-search-only',
-      latency_ms: 121,
-    });
-
-    renderView({
-      initialEntry: '/tool/search?workspace=hq&q=budget%20risk&mode=search-only&source=meeting',
-    });
-
-    await waitFor(() => {
-      expect(ragHarness.listWorkspaceRagSources).toHaveBeenCalledWith(
-        'test-token',
-        'hq',
-        expect.any(Object),
-      );
-    });
-    await waitFor(() => {
-      expect(ragHarness.queryWorkspaceRag).toHaveBeenCalledWith(
-        expect.objectContaining({
-          query: 'budget risk',
-          answer_mode: 'search-only',
-          source_kinds: ['meeting'],
-          top_k: 8,
-        }),
-        'test-token',
-        'hq',
-        expect.any(Object),
-      );
-    });
-
-    expect(screen.getByDisplayValue('budget risk')).toBeTruthy();
-    expect((screen.getByRole('checkbox', { name: '답변 포함' }) as HTMLInputElement).checked).toBe(false);
-    expect(screen.queryByText(/Budget risk is currently elevated/i)).toBeNull();
-  });
-
-  it('submits selected source filters and renders grounded results', async () => {
     renderView();
+    await screen.findByText('Budget blocker');
+    fireEvent.click(screen.getByRole('button', { name: '더 보기' }));
 
-    await screen.findByText('Docs / Manual');
-
-    fireEvent.change(
-      screen.getByLabelText('질문 또는 검색어'),
-      { target: { value: 'budget risk' } },
+    await screen.findByText('Second blocker');
+    expect(screen.getByText('Budget blocker')).toBeTruthy();
+    expect(searchHarness.queryWorkspaceKeywordSearch).toHaveBeenLastCalledWith(
+      expect.objectContaining({ offset: 20 }),
+      'test-token',
+      'hq',
+      expect.any(Object),
     );
-    const meetingCheckbox = screen.getByText('Meetings').closest('label')?.querySelector('input');
-    expect(meetingCheckbox).toBeTruthy();
-    fireEvent.click(meetingCheckbox as HTMLInputElement);
-    fireEvent.click(screen.getByRole('button', { name: '검색' }));
-
-    await waitFor(() => {
-      expect(ragHarness.queryWorkspaceRag).toHaveBeenCalledWith(
-        expect.objectContaining({
-          query: 'budget risk',
-          answer_mode: 'grounded-answer',
-          source_kinds: ['manual', 'pms_issue', 'planner_event'],
-          top_k: 8,
-        }),
-        'test-token',
-        'hq',
-        expect.any(Object),
-      );
-    });
-
-    expect(
-      await screen.findByText(/supplier repricing changed the expected cost baseline/i),
-    ).toBeTruthy();
-    expect(
-      screen.getByRole('link', { name: '원문 열기' }).getAttribute('href'),
-    ).toBe('/w/hq/docs/doc-1');
-    expect(screen.queryByText('docs_native_doc')).toBeNull();
-    expect(screen.queryByText('trace-1')).toBeNull();
   });
 
-  it('shows search-start recommendations, recent searches, and source chips before the first query', async () => {
-    window.localStorage.setItem(
-      'aidoo:rag-search:recent',
-      JSON.stringify(['지난 회의 리스크']),
+  it('logs out on expired sessions', async () => {
+    searchHarness.queryWorkspaceKeywordSearch.mockRejectedValueOnce(
+      new SearchApiError(401, '세션이 만료되었습니다. 다시 로그인해주세요.'),
     );
 
     renderView();
 
-    expect(await screen.findByText('추천 질문')).toBeTruthy();
-    expect(screen.getByText('최근 검색')).toBeTruthy();
-    expect(screen.getByText('지난 회의 리스크')).toBeTruthy();
-    expect(screen.getAllByRole('button', { name: '문서' }).length).toBeGreaterThan(0);
-    expect(screen.getByText('검색을 실행하면 결과 수와 사용된 검색 대상을 확인할 수 있습니다.')).toBeTruthy();
-  });
-
-  it('surfaces API validation errors inline', async () => {
-    ragHarness.queryWorkspaceRag.mockRejectedValueOnce(
-      new RagApiError(422, 'body > query: Field required'),
-    );
-
-    renderView();
-    await screen.findByText('Docs / Manual');
-
-    fireEvent.change(
-      screen.getByLabelText('질문 또는 검색어'),
-      { target: { value: '   budget risk   ' } },
-    );
-    fireEvent.click(screen.getByRole('button', { name: '검색' }));
-
-    expect(await screen.findByText('body > query: Field required')).toBeTruthy();
-    expect(screen.getByRole('alert')).toBeTruthy();
-  });
-
-  it('translates RAG 503 timeouts into recovery actions', async () => {
-    ragHarness.queryWorkspaceRag.mockRejectedValueOnce(
-      new RagApiError(503, 'RAG query is unavailable: The read operation timed out'),
-    );
-
-    renderView();
-    await screen.findByText('Docs / Manual');
-
-    fireEvent.change(
-      screen.getByLabelText('질문 또는 검색어'),
-      { target: { value: 'budget risk' } },
-    );
-    fireEvent.click(screen.getByRole('button', { name: '검색' }));
-
-    expect(await screen.findByText('검색 서비스 응답 지연')).toBeTruthy();
-    expect(screen.getByRole('button', { name: '다시 시도' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: '검색 결과만 보기' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: '검색 대상 줄이기' })).toBeTruthy();
-  });
-
-  it('logs out when the session is expired', async () => {
-    ragHarness.queryWorkspaceRag.mockRejectedValueOnce(
-      new RagApiError(401, '세션이 만료되었습니다. 다시 로그인해주세요.'),
-    );
-
-    renderView();
-    await screen.findByText('Docs / Manual');
-
-    fireEvent.change(
-      screen.getByLabelText('질문 또는 검색어'),
-      { target: { value: 'budget risk' } },
-    );
-    fireEvent.click(screen.getByRole('button', { name: '검색' }));
-
     await waitFor(() => {
-      expect(authHarness.logout).toHaveBeenCalledTimes(1);
+      expect(authHarness.logout).toHaveBeenCalled();
     });
-  });
-
-  it('ignores stale in-flight responses after workspace changes', async () => {
-    const pending = deferred<Awaited<ReturnType<typeof ragHarness.queryWorkspaceRag>>>();
-    ragHarness.queryWorkspaceRag.mockReturnValueOnce(pending.promise);
-
-    const view = renderView({
-      initialEntry: '/tool/search?workspace=hq&q=budget%20risk&source=manual',
-      workspaceSlug: 'hq',
-      workspaceName: 'Aidoo HQ',
-    });
-
-    await waitFor(() => {
-      expect(ragHarness.queryWorkspaceRag).toHaveBeenCalledWith(
-        expect.any(Object),
-        'test-token',
-        'hq',
-        expect.any(Object),
-      );
-    });
-
-    view.rerender(
-      <MemoryRouter
-        key="lab"
-        initialEntries={['/tool/search?workspace=lab&q=budget%20risk&source=manual']}
-      >
-        <WorkspaceBootstrapProvider
-          value={{
-            data: {
-              workspace: {
-                id: 'workspace-lab',
-                slug: 'lab',
-                name: 'Aidoo Lab',
-                role: 'member',
-              },
-              apps: [],
-              nav: [],
-            },
-            error: null,
-            loading: false,
-          }}
-        >
-          <RagSearchView />
-        </WorkspaceBootstrapProvider>
-      </MemoryRouter>,
-    );
-
-    await waitFor(() => {
-      expect(ragHarness.listWorkspaceRagSources).toHaveBeenLastCalledWith(
-        'test-token',
-        'lab',
-        expect.any(Object),
-      );
-    });
-
-    pending.resolve({
-      query: 'budget risk',
-      answer_mode: 'grounded-answer',
-      hits: [
-        {
-          source_kind: 'manual',
-          resource_type: 'docs_native_doc',
-          resource_id: 'doc-old',
-          workspace_id: 'hq',
-          title: 'Old Workspace Result',
-          summary: 'Should not be shown.',
-          score: 0.9,
-          citation: null,
-          owner_label: null,
-          acl_summary: [],
-          origin_ref: null,
-          metadata: {},
-        },
-      ],
-      grounded_answer: {
-        text: 'Should not be shown.',
-        citations: [],
-        unsupported_claims: [],
-        sources_used: ['manual'],
-      },
-      sources_used: ['manual'],
-      query_profile: {},
-      trace_id: 'trace-old',
-      latency_ms: 99,
-    });
-
-    await waitFor(() => {
-      expect(screen.queryByText('Old Workspace Result')).toBeNull();
-    });
-  });
-
-  it('builds workspace-aware PMS and planner links', async () => {
-    ragHarness.queryWorkspaceRag.mockResolvedValueOnce({
-      query: 'follow ups',
-      answer_mode: 'grounded-answer',
-      hits: [
-        {
-          source_kind: 'pms_issue',
-          resource_type: 'pms_issue',
-          resource_id: 'issue-1',
-          workspace_id: 'hq',
-          title: 'Blocked task',
-          summary: null,
-          score: 0.77,
-          citation: null,
-          owner_label: null,
-          acl_summary: [],
-          origin_ref: null,
-          metadata: { list_id: 'list-1' },
-        },
-        {
-          source_kind: 'planner_event',
-          resource_type: 'planner_event',
-          resource_id: 'event-1',
-          workspace_id: 'hq',
-          title: 'Review meeting',
-          summary: null,
-          score: 0.72,
-          citation: null,
-          owner_label: null,
-          acl_summary: [],
-          origin_ref: null,
-          metadata: {},
-        },
-      ],
-      grounded_answer: null,
-      sources_used: ['pms_issue', 'planner_event'],
-      query_profile: {},
-      trace_id: 'trace-links',
-      latency_ms: 120,
-    });
-
-    renderView();
-    await screen.findByText('Docs / Manual');
-
-    fireEvent.change(
-      screen.getByLabelText('질문 또는 검색어'),
-      { target: { value: 'follow ups' } },
-    );
-    fireEvent.click(screen.getByRole('button', { name: '검색' }));
-
-    await screen.findByText('Blocked task');
-
-    const links = screen.getAllByRole('link', { name: '원문 열기' });
-    expect(links[0]?.getAttribute('href')).toBe('/tool/pms-list-list-1?workspace=hq&issue=issue-1');
-    expect(links[1]?.getAttribute('href')).toBe('/w/hq/planner?event=event-1');
-  });
-
-  it('shows a degraded grounded-answer banner and origin refs when synthesis falls back to search-only', async () => {
-    ragHarness.queryWorkspaceRag.mockResolvedValueOnce({
-      query: 'follow ups',
-      answer_mode: 'grounded-answer',
-      hits: [
-        {
-          source_kind: 'manual',
-          resource_type: 'docs_native_doc',
-          resource_id: 'doc-1',
-          workspace_id: 'hq',
-          title: 'Budget Review',
-          summary: 'Supplier repricing increased the budget risk.',
-          score: 0.91,
-          citation: 'doc-1:0',
-          owner_label: 'Kim',
-          acl_summary: [],
-          origin_ref: 'docs:doc-1',
-          metadata: {},
-        },
-      ],
-      grounded_answer: null,
-      sources_used: ['manual'],
-      query_profile: { grounded_answer_degraded: true },
-      trace_id: 'trace-degraded',
-      latency_ms: 101,
-    });
-
-    renderView();
-    await screen.findByText('Docs / Manual');
-
-    fireEvent.change(
-      screen.getByLabelText('질문 또는 검색어'),
-      { target: { value: 'follow ups' } },
-    );
-    fireEvent.click(screen.getByRole('button', { name: '검색' }));
-
-    expect(
-      await screen.findByText('근거 답변 생성에 실패해 검색 결과만 표시합니다. 인용과 원문 링크를 확인해주세요.'),
-    ).toBeTruthy();
-    expect(await screen.findByText('원본 docs:doc-1')).toBeTruthy();
+    expect(await screen.findByText('세션이 만료되었습니다. 다시 로그인해주세요.')).toBeTruthy();
   });
 
   it('renders a workspace guidance state when no workspace context is available', () => {
     authHarness.state.user.workspaces = [];
+    renderView({ initialEntry: '/tool/search', workspaceSlug: null });
 
-    renderView({ workspaceSlug: null });
-
-    expect(
-      screen.getByText('검색할 workspace를 찾을 수 없습니다. workspace를 먼저 선택한 뒤 다시 시도해주세요.'),
-    ).toBeTruthy();
-    expect(ragHarness.listWorkspaceRagSources).not.toHaveBeenCalled();
+    expect(screen.getByText('검색할 workspace를 찾을 수 없습니다.')).toBeTruthy();
+    expect(searchHarness.queryWorkspaceKeywordSearch).not.toHaveBeenCalled();
   });
 });

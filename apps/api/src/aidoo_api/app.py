@@ -45,6 +45,7 @@ from aidoo_api.domains.planner.router import router as planner_router
 from aidoo_api.domains.plm.router import router as plm_router
 from aidoo_api.domains.rag.router import router as rag_router
 from aidoo_api.domains.rag.runtime import close_rag_runtime_resources, get_rag_runtime_health
+from aidoo_api.domains.search.router import router as search_router
 from aidoo_api.domains.wiki_pms.router import router as wiki_pms_router
 
 
@@ -349,6 +350,14 @@ def create_app() -> FastAPI:
     )
     app.include_router(
         rag_router,
+        prefix=f"{settings.api_prefix}/workspaces/{{workspace_slug}}",
+        dependencies=[
+            *protected_dependencies,
+            Depends(require_workspace_membership()),
+        ],
+    )
+    app.include_router(
+        search_router,
         prefix=f"{settings.api_prefix}/workspaces/{{workspace_slug}}",
         dependencies=[
             *protected_dependencies,

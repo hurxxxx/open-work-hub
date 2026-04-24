@@ -34,6 +34,25 @@ services:
       timeout: 5s
       retries: 10
 
+  opensearch:
+    image: opensearchproject/opensearch:3.3.2
+    container_name: doowon-opensearch
+    restart: unless-stopped
+    environment:
+      discovery.type: single-node
+      DISABLE_SECURITY_PLUGIN: "true"
+      OPENSEARCH_JAVA_OPTS: "-Xms512m -Xmx512m"
+    ports:
+      - "${DOOWON_OPENSEARCH_PORT:-59200}:9200"
+      - "${DOOWON_OPENSEARCH_PERF_PORT:-59600}:9600"
+    volumes:
+      - ./data/opensearch:/usr/share/opensearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:9200 >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
   minio:
     image: minio/minio:latest
     container_name: doowon-minio

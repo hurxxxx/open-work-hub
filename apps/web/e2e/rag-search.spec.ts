@@ -2,110 +2,188 @@ import { expect, test, type Page, type Route } from '@playwright/test';
 
 import { stubShellBackend } from './helpers';
 
-async function stubRagSources(page: Page) {
-  await page.route('**/api/v1/workspaces/*/rag/sources', (route: Route) =>
-    route.fulfill({
+type KeywordSearchPayload = {
+  query?: string;
+  hits?: unknown[];
+  facets?: {
+    entity_types?: unknown[];
+    status?: unknown[];
+    containers?: unknown[];
+  };
+  total?: number;
+  has_more?: boolean;
+  next_offset?: number | null;
+};
+
+const baseHit = {
+  entity_type: 'pms_issue',
+  entity_id: 'issue-1',
+  workspace_id: 'workspace-hq',
+  title: 'Budget blocker',
+  summary: 'Supplier repricing increased the budget risk.',
+  snippet: {
+    text: 'Supplier repricing increased the budget risk.',
+    highlights: [{ start: 40, end: 44 }],
+  },
+  score: 7.4,
+  status: 'in_progress',
+  status_label: 'In Progress',
+  visibility: 'workspace',
+  updated_at: '2026-04-24T00:00:00Z',
+  created_at: '2026-04-20T00:00:00Z',
+  date_markers: {
+    start_date: null,
+    due_date: '2026-04-30',
+    event_start_at: null,
+  },
+  people: [{ role: 'assignee', user_id: 'user-e2e', label: 'Kim' }],
+  containers: [{ type: 'list', id: 'list-1', label: 'Sprint Backlog' }],
+  deep_link: '/tool/pms-list-list-1?workspace=hq&issue=issue-1',
+  preview_url: null,
+  metadata: {},
+};
+
+function keywordResponse(overrides: KeywordSearchPayload = {}) {
+  return {
+    query: 'budget risk',
+    hits: [baseHit],
+    facets: {
+      entity_types: [
+        { value: 'doc', label: '문서', count: 12 },
+        { value: 'meeting', label: '회의', count: 4 },
+        { value: 'pms_issue', label: 'PMS', count: 7 },
+        { value: 'planner_event', label: '일정', count: 2 },
+      ],
+      status: [
+        { entity_type: 'pms_issue', value: 'in_progress', label: 'In Progress', count: 3 },
+      ],
+      containers: [{ type: 'list', id: 'list-1', label: 'Sprint Backlog', count: 5 }],
+    },
+    total: 25,
+    has_more: false,
+    next_offset: null,
+    trace_id: 'trace-keyword',
+    ...overrides,
+  };
+}
+
+async function stubKeywordSearch(page: Page, payload: KeywordSearchPayload = {}) {
+  await page.route('**/api/v1/workspaces/*/search/query', async (route: Route) => {
+    const requestBody = route.request().postDataJSON();
+    await route.fulfill({
       json: {
-        sources: [
+        ...keywordResponse(payload),
+        query: requestBody?.query ?? payload.query ?? 'budget risk',
+      },
+    });
+  });
+}
+
+async function stubKeywordSearchSequence(page: Page) {
+  await page.route('**/api/v1/workspaces/*/search/query', async (route: Route) => {
+    const requestBody = route.request().postDataJSON();
+    if ((requestBody?.offset ?? 0) === 0) {
+      await route.fulfill({
+        json: keywordResponse({
+          has_more: true,
+          next_offset: 20,
+        }),
+      });
+      return;
+    }
+    await route.fulfill({
+      json: keywordResponse({
+        query: requestBody?.query ?? 'budget risk',
+        hits: [
           {
-            source_kind: 'manual',
-            resource_type: 'docs_native_doc',
-            label: 'Docs / Manual',
-            app_id: 'docs',
-          },
-          {
-            source_kind: 'meeting',
-            resource_type: 'meeting',
-            label: 'Meetings',
-            app_id: 'meeting',
-          },
-          {
-            source_kind: 'pms_issue',
-            resource_type: 'pms_issue',
-            label: 'PMS Issues',
-            app_id: 'pms',
+            ...baseHit,
+            entity_id: 'issue-2',
+            title: 'Second blocker',
+            deep_link: '/tool/pms-list-list-1?workspace=hq&issue=issue-2',
           },
         ],
-      },
-    }),
-  );
+        has_more: false,
+        next_offset: null,
+      }),
+    });
+  });
 }
 
-async function stubRagQuery(page: Page, payload: unknown) {
-  await page.route('**/api/v1/workspaces/*/rag/query', (route: Route) =>
-    route.fulfill({ json: payload }),
-  );
-}
-
-async function stubRagQueryError(page: Page) {
-  await page.route('**/api/v1/workspaces/*/rag/query', (route: Route) =>
+async function stubKeywordSearchError(page: Page) {
+  await page.route('**/api/v1/workspaces/*/search/query', (route: Route) =>
     route.fulfill({
       status: 503,
-      json: { detail: 'RAG query is unavailable: The read operation timed out' },
+      json: { detail: 'keyword search is unavailable' },
     }),
   );
 }
 
-test.describe('RAG search tool', () => {
+async function failLegacyRagRoutes(page: Page) {
+  await page.route('**/api/v1/workspaces/*/rag/**', (route: Route) =>
+    route.fulfill({
+      status: 500,
+      json: { detail: 'legacy RAG API must not be used by /tool/search' },
+    }),
+  );
+}
+
+test.describe('keyword search tool', () => {
   test.beforeEach(async ({ page }) => {
     await stubShellBackend(page);
-    await stubRagSources(page);
+    await failLegacyRagRoutes(page);
   });
 
-  test('renders grounded answers with citation cards for docs hits', async ({ page }) => {
-    await stubRagQuery(page, {
-      query: 'budget risk',
-      answer_mode: 'grounded-answer',
-      hits: [
-        {
-          source_kind: 'manual',
-          resource_type: 'docs_native_doc',
-          resource_id: 'doc-1',
-          workspace_id: 'hq',
-          title: 'Budget Review',
-          summary: 'Supplier repricing increased the budget risk.',
-          score: 0.91,
-          citation: 'doc-1:0',
-          owner_label: 'Kim',
-          acl_summary: [],
-          origin_ref: 'docs:doc-1',
-          metadata: {},
-        },
-      ],
-      grounded_answer: {
-        text: 'Budget risk is elevated because supplier repricing changed the cost baseline.',
-        citations: [
-          {
-            resource_id: 'doc-1',
-            source_kind: 'manual',
-            quote: 'Supplier repricing increased the budget risk.',
-            locator: 'doc-1:0',
-          },
-        ],
-        unsupported_claims: [],
-        sources_used: ['manual'],
-      },
-      sources_used: ['manual'],
-      query_profile: {},
-      trace_id: 'trace-docs',
-      latency_ms: 142,
+  test('renders keyword results with server facets, highlights, and canonical links', async ({
+    page,
+  }) => {
+    await stubKeywordSearch(page);
+
+    await page.goto('/tool/search?workspace=hq&q=budget%20risk&type=pms_issue');
+
+    await expect(page.getByRole('heading', { name: '아이두 통합검색' })).toBeVisible();
+    await expect(page.getByText('25건 중 1건 표시')).toBeVisible();
+    await expect(page.getByRole('button', { name: /문서 12/ })).toBeVisible();
+    await expect(page.getByRole('button', { name: /회의 4/ })).toBeVisible();
+    await expect(page.getByRole('button', { name: /PMS 7/ })).toBeVisible();
+    await expect(page.getByRole('button', { name: /일정 2/ })).toBeVisible();
+    await expect(page.getByText('Budget blocker')).toBeVisible();
+    await expect(page.locator('mark')).toHaveText('risk');
+    await expect(page.getByRole('link', { name: /Budget blocker/ })).toHaveAttribute(
+      'href',
+      '/tool/pms-list-list-1?workspace=hq&issue=issue-1',
+    );
+    await expect(page.getByText('근거 답변')).toHaveCount(0);
+  });
+
+  test('submits workspace-scoped keyword requests from filters and sort controls', async ({
+    page,
+  }) => {
+    const requests: unknown[] = [];
+    await page.route('**/api/v1/workspaces/*/search/query', async (route: Route) => {
+      requests.push(route.request().postDataJSON());
+      await route.fulfill({ json: keywordResponse() });
     });
 
-    await page.goto('/tool/search?workspace=hq&q=budget%20risk&source=manual');
+    await page.goto('/tool/search?workspace=hq&q=budget%20risk');
+    await expect(page.getByText('Budget blocker')).toBeVisible();
 
-    await expect(page.getByText('근거 답변')).toBeVisible();
-    await expect(
-      page.getByText(
-        'Budget risk is elevated because supplier repricing changed the cost baseline.',
-      ),
-    ).toBeVisible();
-    await expect(page.getByText('“Supplier repricing increased the budget risk.”')).toBeVisible();
-    await expect(page.getByRole('link', { name: '근거 문서 열기' })).toHaveAttribute('href', '/w/hq/docs/doc-1');
+    await page.getByRole('button', { name: /문서/ }).click();
+    await expect
+      .poll(() => requests.some((request) => hasRequestShape(request, ['doc'], 'relevance')))
+      .toBe(true);
+
+    await page.getByRole('button', { name: '최신순' }).first().click();
+    await expect
+      .poll(() => requests.some((request) => hasRequestShape(request, ['doc'], 'updated_at')))
+      .toBe(true);
   });
 
-  test('opens search from AI quick action and global AppBar search', async ({ page }) => {
-    await page.goto('/w/hq/ai');
+  test('opens from AI quick action and global AppBar search with workspace scope', async ({
+    page,
+  }) => {
+    await stubKeywordSearch(page, { total: 0, hits: [] });
 
+    await page.goto('/w/hq/ai');
     await page.getByRole('link', { name: '아이두 통합검색', exact: true }).click();
     await expect(page).toHaveURL(/\/tool\/search\?workspace=hq/);
 
@@ -114,149 +192,64 @@ test.describe('RAG search tool', () => {
     await expect(page).toHaveURL(/\/tool\/search\?workspace=hq/);
   });
 
-  test('shows pre-search recommendations and keeps source filters near the input on mobile', async ({
-    page,
-  }) => {
+  test('shows compact mobile filters without answer-mode controls', async ({ page }) => {
+    await stubKeywordSearch(page, { total: 0, hits: [] });
     await page.setViewportSize({ width: 390, height: 844 });
-    await page.goto('/tool/search?workspace=hq');
-
-    await expect(page.getByText('추천 질문')).toBeVisible();
-    await expect(page.getByRole('button', { name: '문서', exact: true })).toBeVisible();
-    await expect(page.getByRole('button', { name: '상세 검색 대상 전체 검색 대상' })).toBeVisible();
-  });
-
-  test('shows the empty state when no accessible hits remain after filtering', async ({ page }) => {
-    await stubRagQuery(page, {
-      query: 'budget risk',
-      answer_mode: 'grounded-answer',
-      hits: [],
-      grounded_answer: null,
-      sources_used: [],
-      query_profile: {},
-      trace_id: 'trace-empty',
-      latency_ms: 87,
-    });
-
-    await page.goto('/tool/search?workspace=hq&q=budget%20risk&source=manual');
-
-    await expect(page.getByText('현재 조건에서 접근 가능한 결과를 찾지 못했습니다.')).toBeVisible();
-  });
-
-  test('renders meeting transcript hits with workspace-scoped links', async ({ page }) => {
-    await stubRagQuery(page, {
-      query: 'launch follow up',
-      answer_mode: 'search-only',
-      hits: [
-        {
-          source_kind: 'meeting',
-          resource_type: 'meeting',
-          resource_id: 'meeting-1',
-          workspace_id: 'hq',
-          title: 'Launch Follow-up',
-          summary: 'Transcript highlights the unresolved launch blocker.',
-          score: 0.84,
-          citation: 'meeting-1:0',
-          owner_label: null,
-          acl_summary: [],
-          origin_ref: null,
-          metadata: {},
-        },
-      ],
-      grounded_answer: null,
-      sources_used: ['meeting'],
-      query_profile: {},
-      trace_id: 'trace-meeting',
-      latency_ms: 96,
-    });
-
-    await page.goto('/tool/search?workspace=hq&q=launch%20follow%20up&mode=search-only&source=meeting');
-
-    await expect(page.getByText('Launch Follow-up')).toBeVisible();
-    await expect(page.getByRole('link', { name: '원문 열기' })).toHaveAttribute('href', '/w/hq/meeting/meeting-1');
-  });
-
-  test('renders PMS issue hits with workspace-scoped tool links', async ({ page }) => {
-    await stubRagQuery(page, {
-      query: 'private blocker',
-      answer_mode: 'search-only',
-      hits: [
-        {
-          source_kind: 'pms_issue',
-          resource_type: 'pms_issue',
-          resource_id: 'issue-1',
-          workspace_id: 'hq',
-          title: 'Blocked task',
-          summary: 'Private issue visible only to the current workspace members.',
-          score: 0.8,
-          citation: 'issue-1:0',
-          owner_label: null,
-          acl_summary: ['team access'],
-          origin_ref: null,
-          metadata: { list_id: 'list-1' },
-        },
-      ],
-      grounded_answer: null,
-      sources_used: ['pms_issue'],
-      query_profile: {},
-      trace_id: 'trace-pms',
-      latency_ms: 91,
-    });
-
-    await page.goto('/tool/search?workspace=hq&q=private%20blocker&mode=search-only&source=pms_issue');
-
-    await expect(page.getByText('Blocked task')).toBeVisible();
-    await expect(page.getByRole('link', { name: '원문 열기' })).toHaveAttribute(
-      'href',
-      '/tool/pms-list-list-1?workspace=hq&issue=issue-1',
-    );
-  });
-
-  test('shows a degraded banner when grounded-answer synthesis falls back to search-only', async ({
-    page,
-  }) => {
-    await stubRagQuery(page, {
-      query: 'budget risk',
-      answer_mode: 'grounded-answer',
-      hits: [
-        {
-          source_kind: 'manual',
-          resource_type: 'docs_native_doc',
-          resource_id: 'doc-1',
-          workspace_id: 'hq',
-          title: 'Budget Review',
-          summary: 'Supplier repricing increased the budget risk.',
-          score: 0.91,
-          citation: 'doc-1:0',
-          owner_label: 'Kim',
-          acl_summary: [],
-          origin_ref: 'docs:doc-1',
-          metadata: {},
-        },
-      ],
-      grounded_answer: null,
-      sources_used: ['manual'],
-      query_profile: { grounded_answer_degraded: true },
-      trace_id: 'trace-degraded',
-      latency_ms: 118,
-    });
-
-    await page.goto('/tool/search?workspace=hq&q=budget%20risk&source=manual');
-
-    await expect(
-      page.getByText('근거 답변 생성에 실패해 검색 결과만 표시합니다. 인용과 원문 링크를 확인해주세요.'),
-    ).toBeVisible();
-    await expect(page.getByText('원본 docs:doc-1')).toBeVisible();
-  });
-
-  test('shows recovery actions when RAG query times out', async ({ page }) => {
-    await stubRagQueryError(page);
 
     await page.goto('/tool/search?workspace=hq');
-    await page.getByLabel('질문 또는 검색어').fill('budget risk');
+
+    await expect(page.getByLabel('통합검색어')).toBeVisible();
+    await expect(page.getByRole('button', { name: /전체/ })).toBeVisible();
+    await expect(page.getByRole('button', { name: /문서/ })).toBeVisible();
+    await expect(page.getByRole('button', { name: /회의/ })).toBeVisible();
+    await expect(page.getByRole('button', { name: /PMS/ })).toBeVisible();
+    await expect(page.getByRole('button', { name: /일정/ })).toBeVisible();
+    await expect(page.getByText('답변 포함')).toHaveCount(0);
+  });
+
+  test('uses pagination metadata for loading more results', async ({ page }) => {
+    await stubKeywordSearchSequence(page);
+
+    await page.goto('/tool/search?workspace=hq&q=budget%20risk');
+    await expect(page.getByText('Budget blocker')).toBeVisible();
+
+    await page.getByRole('button', { name: '더 보기' }).click();
+
+    await expect(page.getByText('Second blocker')).toBeVisible();
+    await expect(page.getByText('Budget blocker')).toBeVisible();
+  });
+
+  test('renders an empty state and keyword API error state', async ({ page }) => {
+    await stubKeywordSearch(page, { total: 0, hits: [] });
+
+    await page.goto('/tool/search?workspace=hq&q=missing');
+
+    await expect(page.getByText('검색 결과가 없습니다.')).toBeVisible();
+
+    await page.unroute('**/api/v1/workspaces/*/search/query');
+    await stubKeywordSearchError(page);
+    await page.getByLabel('통합검색어').fill('budget risk');
     await page.getByRole('button', { name: '검색', exact: true }).click();
 
-    await expect(page.getByText('검색 서비스 응답 지연')).toBeVisible();
-    await expect(page.getByRole('button', { name: '다시 시도' })).toBeVisible();
-    await expect(page.getByRole('button', { name: '검색 결과만 보기' })).toBeVisible();
+    await expect(page.getByText('keyword search is unavailable')).toBeVisible();
   });
 });
+
+function hasRequestShape(
+  request: unknown,
+  entityTypes: string[],
+  sortField: 'relevance' | 'updated_at',
+) {
+  if (!request || typeof request !== 'object') {
+    return false;
+  }
+  const payload = request as {
+    workspace_id?: string | null;
+    entity_types?: string[];
+    sort?: { field?: string; direction?: string };
+  };
+  return payload.workspace_id === 'workspace-hq'
+    && JSON.stringify(payload.entity_types ?? []) === JSON.stringify(entityTypes)
+    && payload.sort?.field === sortField
+    && payload.sort?.direction === 'desc';
+}

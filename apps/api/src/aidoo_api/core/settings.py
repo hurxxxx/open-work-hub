@@ -57,6 +57,17 @@ class Settings(BaseSettings):
         default="redis://127.0.0.1:6379/1",
         validation_alias=AliasChoices("DOOWON_WORKER_RESULT_BACKEND", "DOOWON_RESULT_BACKEND"),
     )
+    opensearch_url: str = Field(
+        default="http://127.0.0.1:59200",
+        validation_alias=AliasChoices("DOOWON_API_OPENSEARCH_URL", "DOOWON_OPENSEARCH_URL"),
+    )
+    opensearch_index_prefix: str = Field(
+        default="aidoo",
+        validation_alias=AliasChoices(
+            "DOOWON_API_OPENSEARCH_INDEX_PREFIX",
+            "DOOWON_OPENSEARCH_INDEX_PREFIX",
+        ),
+    )
     collab_redis_url: str = Field(
         default="redis://127.0.0.1:6379/0",
         validation_alias=AliasChoices(
