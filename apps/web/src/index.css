@@ -143,7 +143,9 @@
    * Compact, high-contrast body used for learning page notes in the right
    * column. The column is narrow and the reader wants density + maximum
    * legibility, so we override BlockNote's default body color (muted gray)
-   * with the app's full-contrast ink token and shrink the base size.
+   * with the app's full-contrast ink token, shrink the base size, and
+   * strip the library's built-in horizontal padding/indent on every block
+   * (drag handle gutter is unused in the read-only viewer).
    */
   .learning-note-dense {
     font-size: 13px;
@@ -166,6 +168,23 @@
   .dark .learning-note-dense .bn-editor li,
   .dark .learning-note-dense .bn-editor span {
     color: #fff !important;
+  }
+  /* Collapse BlockNote's internal horizontal padding/margin so text hugs
+     the panel edges. Applied broadly to cover library-version drift. */
+  .learning-note-dense .bn-container,
+  .learning-note-dense .bn-editor {
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+  }
+  .learning-note-dense .bn-block-outer,
+  .learning-note-dense .bn-block,
+  .learning-note-dense .bn-block-content,
+  .learning-note-dense [class*="blockOuter"],
+  .learning-note-dense [class*="blockContent"] {
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+    margin-left: 0 !important;
+    margin-right: 0 !important;
   }
 
   .app-text-title-lg {

@@ -321,7 +321,7 @@ function MyNoteViewer({
   return (
     <div className="flex flex-col gap-2">
       <div
-        className="group relative rounded-lg px-1 py-1 transition-colors hover:bg-app-surface/40 focus-within:bg-app-surface/40"
+        className="group relative rounded-lg py-0.5 transition-colors hover:bg-app-surface/40 focus-within:bg-app-surface/40"
         data-testid="learning-page-notes-my-viewer"
       >
         <div className="learning-note-dense app-markdown prose prose-sm max-w-none dark:prose-invert">
