@@ -120,9 +120,10 @@ export const NAV_ITEMS: NavItem[] = [
   { id: 'meeting-mine', title: 'My Meetings', icon: User, category: 'Meetings', appId: 'meeting', pathSuffix: '?scope=mine' },
   { id: 'meeting-recordings', title: 'Recordings', icon: Video, category: 'Meetings', appId: 'meeting', pathSuffix: '?tab=recordings' },
 
-  // Learning — the Learning sub-sidebar is rendered as a bespoke course tree
-  // directly by SubSidebar.tsx (see the `activeAppId === 'learning'` block).
-  // No NAV_ITEMS entries are needed here.
+  // Learning — one top-level entry. The in-course table of contents is a
+  // floating popover attached to the lesson header (see LearningCourseView),
+  // so the sub-sidebar stays minimal and the reading area is not crowded.
+  { id: 'learning-home', title: '전체 학습 홈', icon: GraduationCap, category: 'Courses', appId: 'learning', description: '모든 구성원이 열람할 수 있는 교육 콘텐츠 모음' },
 
   // Settings
   { id: 'settings-general', title: 'General', icon: Settings, category: 'Admin', appId: 'settings', absolutePath: '/admin/general' },
