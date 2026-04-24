@@ -8,8 +8,6 @@ import {
   Globe2,
   Lock,
   Pencil,
-  Sparkles,
-  StickyNote,
   X,
 } from 'lucide-react';
 import { BlockEditor, BlockViewer, type BlockContent } from '@aidoo/ui';
@@ -138,97 +136,86 @@ export function LearningPageNotesPanel({
     <section
       aria-label="페이지 노트"
       data-testid="learning-page-notes-panel"
-      className="rounded-2xl border border-app-border/70 bg-gradient-to-b from-app-surface/70 to-app-surface/30 p-4 shadow-sm backdrop-blur-[2px] lg:p-5"
+      className="flex flex-col gap-4"
     >
-      <PanelHeader
-        count={list.items.length}
+      <CompactHeader
+        totalCount={list.items.length}
         othersCount={list.othersNotes.length}
         flash={flash}
       />
 
-      <div className="mt-5 flex flex-col gap-6">
-        {busy ? (
-          <NotesSkeleton />
-        ) : list.status === 'error' ? (
-          <InlineError message={list.error ?? '불러오는 중 오류가 발생했습니다.'} />
-        ) : null}
+      {busy ? (
+        <NotesSkeleton />
+      ) : list.status === 'error' ? (
+        <InlineError message={list.error ?? '불러오는 중 오류가 발생했습니다.'} />
+      ) : null}
 
-        {/* --- My note slot -------------------------------------------------- */}
-        <MyNoteSlot
-          mode={mode}
-          saving={mine.saving}
-          myNote={mine.note}
-          draftBlocks={draftBlocks}
-          draftVisibility={draftVisibility}
-          actionError={actionError}
-          savedContent={savedContent}
-          onEdit={() => enterEditMode(true)}
-          onCreate={() => enterEditMode(false)}
-          onArchive={archiveMine}
-          onCancel={cancelEdit}
-          onSave={saveDraft}
-          onDraftChange={(content) => {
-            setDraftBlocks(content);
-            draftDirtyRef.current = true;
-          }}
-          onVisibilityChange={(v) => {
-            setDraftVisibility(v);
-            draftDirtyRef.current = true;
-          }}
-        />
+      <MyNoteSlot
+        mode={mode}
+        saving={mine.saving}
+        myNote={mine.note}
+        draftBlocks={draftBlocks}
+        draftVisibility={draftVisibility}
+        actionError={actionError}
+        savedContent={savedContent}
+        onEdit={() => enterEditMode(true)}
+        onCreate={() => enterEditMode(false)}
+        onArchive={archiveMine}
+        onCancel={cancelEdit}
+        onSave={saveDraft}
+        onDraftChange={(content) => {
+          setDraftBlocks(content);
+          draftDirtyRef.current = true;
+        }}
+        onVisibilityChange={(v) => {
+          setDraftVisibility(v);
+          draftDirtyRef.current = true;
+        }}
+      />
 
-        {/* --- Other learners' public notes --------------------------------- */}
-        {list.othersNotes.length > 0 ? (
-          <div className="flex flex-col gap-2">
-            <h3 className="app-text-overline text-app-ink/45">
-              다른 학습자의 공개 노트 · {list.othersNotes.length}
-            </h3>
-            <div className="flex flex-col gap-2">
-              {list.othersNotes.map((item) => (
-                <OthersNoteCard key={item.doc_id} item={item} token={token} />
-              ))}
-            </div>
+      {list.othersNotes.length > 0 ? (
+        <div className="flex flex-col gap-1.5">
+          <h3 className="app-text-overline text-app-ink/40">
+            다른 학습자 · {list.othersNotes.length}
+          </h3>
+          <div className="flex flex-col gap-1.5">
+            {list.othersNotes.map((item) => (
+              <OthersNoteCard key={item.doc_id} item={item} token={token} />
+            ))}
           </div>
-        ) : null}
-      </div>
+        </div>
+      ) : null}
     </section>
   );
 }
 
 // -------------------------------------------------------------------- header
 
-function PanelHeader({
-  count,
+/**
+ * Minimal top row — just a label + saved flash. No icon, no description,
+ * no fixed padding. Stays out of the way in read mode.
+ */
+function CompactHeader({
+  totalCount,
   othersCount,
   flash,
 }: {
-  count: number;
+  totalCount: number;
   othersCount: number;
   flash: 'saved' | null;
 }) {
+  // If there are notes, the label is redundant context (the cards speak for
+  // themselves). If the slot is empty we keep the hint to seed curiosity.
+  const showHint = totalCount === 0;
   return (
-    <header className="flex flex-wrap items-start justify-between gap-3">
-      <div className="flex items-start gap-2.5">
-        <span
-          className="mt-0.5 flex h-8 w-8 items-center justify-center rounded-xl bg-app-accent/10 text-app-accent"
-          aria-hidden="true"
-        >
-          <StickyNote size={16} />
-        </span>
-        <div className="flex flex-col">
-          <h2 className="app-text-title text-app-ink">
-            페이지 노트
-            {count > 0 ? (
-              <span className="ml-2 text-app-ink/40 font-normal">· {count}</span>
-            ) : null}
-          </h2>
-          <p className="app-text-meta text-app-ink/55">
-            이 레슨에 대한 개인 학습 노트를 남기세요.{' '}
-            {othersCount > 0 ? `${othersCount}개의 공개 노트가 있습니다.` : '원하면 공개로 공유할 수도 있어요.'}
-          </p>
-        </div>
-      </div>
-
+    <header className="flex min-h-[1rem] items-center justify-between gap-2">
+      <span className="app-text-overline text-app-ink/40">
+        {showHint
+          ? '페이지 노트'
+          : othersCount > 0
+          ? `페이지 노트 · 공개 ${othersCount}`
+          : '페이지 노트'}
+      </span>
       <AnimatePresence>
         {flash === 'saved' ? (
           <motion.span
@@ -236,9 +223,9 @@ function PanelHeader({
             initial={{ opacity: 0, y: -4 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -4 }}
-            className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2.5 py-1 text-xs font-medium text-emerald-600 dark:text-emerald-400"
+            className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-[11px] font-medium text-emerald-600 dark:text-emerald-400"
           >
-            <Check size={12} /> 저장됨
+            <Check size={11} /> 저장됨
           </motion.span>
         ) : null}
       </AnimatePresence>
@@ -279,92 +266,164 @@ function MyNoteSlot({
   onDraftChange: (content: BlockContent) => void;
   onVisibilityChange: (visibility: LearningPageNoteVisibility) => void;
 }) {
-  return (
-    <div
-      className="rounded-2xl border border-app-accent/30 bg-app-surface/80 p-4 shadow-[0_0_0_3px_rgba(99,102,241,0.06)] lg:p-5"
-      data-testid="learning-page-notes-my-slot"
-    >
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-        <h3 className="app-text-overline text-app-accent">내 노트</h3>
-        {myNote && mode === 'view' ? (
-          <VisibilityBadge visibility={myNote.visibility} />
-        ) : null}
-      </div>
+  if (mode === 'edit') {
+    return (
+      <EditForm
+        initialContent={draftBlocks}
+        initialVisibility={draftVisibility}
+        saving={saving}
+        actionError={actionError}
+        onDraftChange={onDraftChange}
+        onVisibilityChange={onVisibilityChange}
+        onCancel={onCancel}
+        onSave={onSave}
+        hasExisting={myNote !== null}
+      />
+    );
+  }
 
-      {mode === 'edit' ? (
-        <EditForm
-          initialContent={draftBlocks}
-          initialVisibility={draftVisibility}
-          saving={saving}
-          actionError={actionError}
-          onDraftChange={onDraftChange}
-          onVisibilityChange={onVisibilityChange}
-          onCancel={onCancel}
-          onSave={onSave}
-          hasExisting={myNote !== null}
-        />
-      ) : myNote ? (
-        <div className="flex flex-col gap-3" data-testid="learning-page-notes-my-viewer">
-          <div className="rounded-xl border border-app-border/50 bg-app-surface/60 px-2 py-1 lg:px-3 lg:py-2">
-            <div className="app-markdown prose prose-base max-w-none dark:prose-invert">
-              <BlockViewer content={savedContent} />
-            </div>
-          </div>
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <span className="app-text-meta text-app-ink/50">
-              {formatRelative(myNote.updated_at)} 업데이트
-            </span>
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={onArchive}
-                disabled={saving}
-                className="inline-flex items-center gap-1.5 rounded-full border border-app-border px-3 py-1 text-xs font-medium text-app-ink/70 transition-colors hover:border-rose-400 hover:text-rose-600 disabled:cursor-not-allowed disabled:opacity-50"
-                data-testid="learning-page-notes-my-archive"
-              >
-                <Archive size={12} /> 보관
-              </button>
-              <button
-                type="button"
-                onClick={onEdit}
-                disabled={saving}
-                className="inline-flex items-center gap-1.5 rounded-full bg-app-ink/90 px-3 py-1 text-xs font-medium text-app-surface shadow-sm transition-colors hover:bg-app-ink disabled:cursor-not-allowed disabled:opacity-50 dark:bg-white/95 dark:text-app-ink"
-                data-testid="learning-page-notes-my-edit"
-              >
-                <Pencil size={12} /> 편집
-              </button>
-            </div>
-          </div>
-          {actionError ? <InlineError message={actionError} /> : null}
+  if (myNote) {
+    return (
+      <MyNoteViewer
+        note={myNote}
+        savedContent={savedContent}
+        saving={saving}
+        onEdit={onEdit}
+        onArchive={onArchive}
+        actionError={actionError}
+      />
+    );
+  }
+
+  return <EmptyMyNotePill onCreate={onCreate} />;
+}
+
+/**
+ * Read mode: strip everything that isn't the text. A subtle outline on
+ * hover + a floating action toolbar appears at the top-right only while
+ * the card is focused or hovered, keeping the reading surface clean.
+ */
+function MyNoteViewer({
+  note,
+  savedContent,
+  saving,
+  onEdit,
+  onArchive,
+  actionError,
+}: {
+  note: LearningPageNoteDetail;
+  savedContent: BlockContent;
+  saving: boolean;
+  onEdit: () => void;
+  onArchive: () => void;
+  actionError: string | null;
+}) {
+  return (
+    <div className="flex flex-col gap-2">
+      <div
+        className="group relative rounded-lg px-1 py-1 transition-colors hover:bg-app-surface/40 focus-within:bg-app-surface/40"
+        data-testid="learning-page-notes-my-viewer"
+      >
+        <div className="app-markdown prose prose-base max-w-none dark:prose-invert">
+          <BlockViewer content={savedContent} />
         </div>
-      ) : (
-        <EmptyMyNoteCTA onCreate={onCreate} />
-      )}
+
+        <div
+          className={
+            'pointer-events-none absolute right-1 top-1 flex items-center gap-1 ' +
+            'opacity-0 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100 ' +
+            'group-focus-within:pointer-events-auto group-focus-within:opacity-100'
+          }
+          aria-hidden="true"
+        >
+          <VisibilityPill visibility={note.visibility} />
+          <IconButton
+            label="편집"
+            onClick={onEdit}
+            disabled={saving}
+            testId="learning-page-notes-my-edit"
+            tone="default"
+          >
+            <Pencil size={12} />
+          </IconButton>
+          <IconButton
+            label="보관"
+            onClick={onArchive}
+            disabled={saving}
+            testId="learning-page-notes-my-archive"
+            tone="danger"
+          >
+            <Archive size={12} />
+          </IconButton>
+        </div>
+      </div>
+      {actionError ? <InlineError message={actionError} /> : null}
     </div>
   );
 }
 
-function EmptyMyNoteCTA({ onCreate }: { onCreate: () => void }) {
+function IconButton({
+  label,
+  onClick,
+  disabled,
+  testId,
+  tone,
+  children,
+}: {
+  label: string;
+  onClick: () => void;
+  disabled?: boolean;
+  testId?: string;
+  tone?: 'default' | 'danger';
+  children: React.ReactNode;
+}) {
   return (
-    <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-app-border/70 bg-app-surface/30 px-4 py-7 text-center">
-      <div className="mb-2 flex h-10 w-10 items-center justify-center rounded-full bg-app-accent/10 text-app-accent">
-        <Sparkles size={18} />
-      </div>
-      <p className="app-text-body text-app-ink/75">
-        이 레슨을 읽으며 든 생각·질문·요약을 남겨보세요.
-      </p>
-      <p className="mt-1 app-text-meta text-app-ink/50">
-        기본은 비공개입니다. 원하면 공개로 전환해 다른 학습자와 공유할 수 있어요.
-      </p>
-      <button
-        type="button"
-        onClick={onCreate}
-        className="mt-4 inline-flex items-center gap-1.5 rounded-full bg-app-accent px-4 py-1.5 text-sm font-medium text-white shadow-sm transition-colors hover:bg-app-accent/90 focus:outline-none focus:ring-2 focus:ring-app-accent/40"
-        data-testid="learning-page-notes-my-create"
-      >
-        <Pencil size={13} /> 노트 작성
-      </button>
-    </div>
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      aria-label={label}
+      title={label}
+      data-testid={testId}
+      className={
+        'flex h-6 w-6 items-center justify-center rounded-md border border-app-border bg-app-surface text-app-ink/70 shadow-sm transition-colors hover:text-app-ink disabled:cursor-not-allowed disabled:opacity-50 ' +
+        (tone === 'danger' ? 'hover:border-rose-400 hover:text-rose-600' : 'hover:border-app-accent hover:text-app-accent')
+      }
+    >
+      {children}
+    </button>
+  );
+}
+
+function VisibilityPill({ visibility }: { visibility: LearningPageNoteVisibility }) {
+  const isPublic = visibility === 'public';
+  return (
+    <span
+      aria-label={isPublic ? '공개 노트' : '비공개 노트'}
+      title={isPublic ? '공개' : '비공개'}
+      className={
+        'flex h-6 w-6 items-center justify-center rounded-md border shadow-sm ' +
+        (isPublic
+          ? 'border-emerald-400/60 bg-emerald-500/10 text-emerald-600 dark:text-emerald-300'
+          : 'border-app-border bg-app-surface text-app-ink/60')
+      }
+    >
+      {isPublic ? <Globe2 size={11} /> : <Lock size={11} />}
+    </span>
+  );
+}
+
+function EmptyMyNotePill({ onCreate }: { onCreate: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onCreate}
+      data-testid="learning-page-notes-my-create"
+      className="group inline-flex items-center gap-1.5 self-start rounded-full border border-dashed border-app-border px-3 py-1 text-xs text-app-ink/55 transition-colors hover:border-app-accent hover:text-app-accent"
+    >
+      <Pencil size={11} />
+      <span>내 노트 작성</span>
+    </button>
   );
 }
 
@@ -395,11 +454,16 @@ function EditForm({
     <motion.div
       initial={{ opacity: 0, y: 6 }}
       animate={{ opacity: 1, y: 0 }}
-      className="flex flex-col gap-3"
+      className="flex flex-col gap-3 rounded-xl border border-app-accent/40 bg-app-surface p-3 shadow-[0_0_0_3px_rgba(99,102,241,0.08)] lg:p-4"
       data-testid="learning-page-notes-my-editor"
     >
-      <VisibilityToggle value={initialVisibility} onChange={onVisibilityChange} />
-      <div className="rounded-xl border border-app-accent/50 bg-app-surface px-2 py-1 shadow-[0_0_0_3px_rgba(99,102,241,0.08)] focus-within:shadow-[0_0_0_4px_rgba(99,102,241,0.15)] lg:px-3 lg:py-2">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <VisibilityToggle value={initialVisibility} onChange={onVisibilityChange} />
+        <span className="app-text-meta text-app-ink/50">
+          {hasExisting ? '기존 노트를 덮어씁니다.' : '첫 저장 시 내 노트로 기록됩니다.'}
+        </span>
+      </div>
+      <div className="rounded-lg border border-app-border/50 px-1.5 py-1 focus-within:border-app-accent">
         <BlockEditor
           initialContent={initialContent}
           onChange={onDraftChange}
@@ -407,30 +471,25 @@ function EditForm({
         />
       </div>
       {actionError ? <InlineError message={actionError} /> : null}
-      <div className="flex items-center justify-between gap-2">
-        <span className="app-text-meta text-app-ink/50">
-          {hasExisting ? '기존 노트를 덮어씁니다.' : '첫 저장 시 내 노트로 기록됩니다.'}
-        </span>
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={onCancel}
-            disabled={saving}
-            className="inline-flex items-center gap-1.5 rounded-full border border-app-border px-3 py-1 text-xs font-medium text-app-ink/70 transition-colors hover:text-app-ink disabled:cursor-not-allowed disabled:opacity-50"
-            data-testid="learning-page-notes-my-cancel"
-          >
-            <X size={12} /> 취소
-          </button>
-          <button
-            type="button"
-            onClick={onSave}
-            disabled={saving}
-            className="inline-flex items-center gap-1.5 rounded-full bg-app-accent px-4 py-1 text-xs font-medium text-white shadow-sm transition-colors hover:bg-app-accent/90 disabled:cursor-not-allowed disabled:opacity-60"
-            data-testid="learning-page-notes-my-save"
-          >
-            <Check size={12} /> {saving ? '저장 중…' : '저장'}
-          </button>
-        </div>
+      <div className="flex items-center justify-end gap-2">
+        <button
+          type="button"
+          onClick={onCancel}
+          disabled={saving}
+          className="inline-flex items-center gap-1.5 rounded-full border border-app-border px-3 py-1 text-xs font-medium text-app-ink/70 transition-colors hover:text-app-ink disabled:cursor-not-allowed disabled:opacity-50"
+          data-testid="learning-page-notes-my-cancel"
+        >
+          <X size={12} /> 취소
+        </button>
+        <button
+          type="button"
+          onClick={onSave}
+          disabled={saving}
+          className="inline-flex items-center gap-1.5 rounded-full bg-app-accent px-4 py-1 text-xs font-medium text-white shadow-sm transition-colors hover:bg-app-accent/90 disabled:cursor-not-allowed disabled:opacity-60"
+          data-testid="learning-page-notes-my-save"
+        >
+          <Check size={12} /> {saving ? '저장 중…' : '저장'}
+        </button>
       </div>
     </motion.div>
   );
@@ -514,37 +573,32 @@ function OthersNoteCard({
 
   return (
     <article
-      className="overflow-hidden rounded-xl border border-app-border/60 bg-app-surface/50 transition-colors hover:border-app-accent/40"
+      className="overflow-hidden rounded-lg border border-app-border/50 bg-app-surface/40 transition-colors hover:border-app-accent/40"
       data-testid={`learning-page-notes-other-card-${item.doc_id}`}
     >
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left"
+        className="flex w-full items-center justify-between gap-2 px-2.5 py-2 text-left"
         aria-expanded={open}
       >
-        <div className="flex min-w-0 items-center gap-3">
+        <div className="flex min-w-0 items-center gap-2">
           <AuthorAvatar name={item.author_name} />
-          <div className="flex min-w-0 flex-col">
-            <span className="app-text-control truncate text-app-ink">
-              {item.author_name || '학습자'}
-            </span>
-            <span className="app-text-meta text-app-ink/50">
-              {formatRelative(item.updated_at)} 업데이트
-            </span>
-          </div>
-        </div>
-        <div className="flex shrink-0 items-center gap-2">
-          <VisibilityBadge visibility={item.visibility} subtle />
-          <span
-            className={
-              'text-app-ink/40 transition-transform ' + (open ? 'rotate-90' : '')
-            }
-            aria-hidden="true"
-          >
-            <ChevronRight size={14} />
+          <span className="app-text-control truncate text-app-ink">
+            {item.author_name || '학습자'}
+          </span>
+          <span className="app-text-meta shrink-0 text-app-ink/45">
+            · {formatRelative(item.updated_at)}
           </span>
         </div>
+        <span
+          className={
+            'text-app-ink/40 transition-transform ' + (open ? 'rotate-90' : '')
+          }
+          aria-hidden="true"
+        >
+          <ChevronRight size={13} />
+        </span>
       </button>
 
       <AnimatePresence initial={false}>
@@ -554,16 +608,16 @@ function OthersNoteCard({
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: 'auto', opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.18 }}
+            transition={{ duration: 0.16 }}
             className="overflow-hidden"
           >
-            <div className="border-t border-app-border/50 bg-app-surface/30 px-4 py-3">
+            <div className="border-t border-app-border/40 px-3 py-2">
               {detail.status === 'loading' ? (
                 <NotesSkeleton rows={2} />
               ) : detail.status === 'error' ? (
                 <InlineError message={detail.error ?? '불러오지 못했습니다.'} />
               ) : detail.note ? (
-                <div className="app-markdown prose prose-base max-w-none dark:prose-invert">
+                <div className="app-markdown prose prose-sm max-w-none dark:prose-invert">
                   <BlockViewer content={detail.note.content_blocks as BlockContent} />
                 </div>
               ) : (
@@ -596,7 +650,7 @@ function AuthorAvatar({ name }: { name: string }) {
   return (
     <span
       aria-hidden="true"
-      className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-app-accent/10 text-xs font-semibold uppercase text-app-accent"
+      className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-app-accent/10 text-[10px] font-semibold uppercase text-app-accent"
     >
       {initials}
     </span>
@@ -604,27 +658,6 @@ function AuthorAvatar({ name }: { name: string }) {
 }
 
 // -------------------------------------------------------------------- shared
-
-function VisibilityBadge({
-  visibility,
-  subtle,
-}: {
-  visibility: LearningPageNoteVisibility;
-  subtle?: boolean;
-}) {
-  const isPublic = visibility === 'public';
-  const className = subtle
-    ? 'inline-flex items-center gap-1 rounded-full border border-app-border/60 px-2 py-0.5 text-[11px] text-app-ink/55'
-    : isPublic
-    ? 'inline-flex items-center gap-1 rounded-full border border-emerald-400/50 bg-emerald-500/10 px-2 py-0.5 text-xs font-medium text-emerald-700 dark:text-emerald-300'
-    : 'inline-flex items-center gap-1 rounded-full border border-app-border/70 bg-app-surface px-2 py-0.5 text-xs font-medium text-app-ink/60';
-  return (
-    <span className={className}>
-      {isPublic ? <Globe2 size={11} /> : <Lock size={11} />}
-      {isPublic ? '공개' : '비공개'}
-    </span>
-  );
-}
 
 function NotesSkeleton({ rows = 3 }: { rows?: number }) {
   return (
@@ -646,7 +679,7 @@ function NotesSkeleton({ rows = 3 }: { rows?: number }) {
 
 function InlineError({ message }: { message: string }) {
   return (
-    <div className="rounded-xl border border-rose-300/60 bg-rose-50/50 p-3 text-sm text-rose-700 dark:border-rose-400/40 dark:bg-rose-500/10 dark:text-rose-200">
+    <div className="rounded-lg border border-rose-300/60 bg-rose-50/50 p-2 text-xs text-rose-700 dark:border-rose-400/40 dark:bg-rose-500/10 dark:text-rose-200">
       {message}
     </div>
   );
@@ -665,4 +698,3 @@ function formatRelative(iso: string): string {
   if (diffDays < 7) return `${diffDays}일 전`;
   return new Date(iso).toLocaleDateString();
 }
-
