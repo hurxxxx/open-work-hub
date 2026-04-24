@@ -182,3 +182,56 @@ def test_keyword_search_matches_korean_substring_in_doc_body(search_client: Test
     target = next(hit for hit in payload["hits"] if hit["title"] == "강아지 기록")
     assert "복슬강아지" in target["snippet"]["text"]
     assert target["snippet"]["highlights"]
+
+
+def test_keyword_search_filters_private_docs_by_acl(search_client: TestClient) -> None:
+    owner_session = _dev_login(search_client, "hq-admin")
+    viewer_session = _dev_login(search_client, "hq-member")
+    owner_token = owner_session["token"]
+    viewer_token = viewer_session["token"]
+    owner_id = owner_session["user"]["id"]
+    with get_session_factory()() as db:
+        workspace = db.scalar(select(Workspace).where(Workspace.key == "hq"))
+        assert workspace is not None
+        workspace_id = workspace.id
+        docs_service.create_native_doc_for_user(
+            db,
+            workspace_id=workspace.id,
+            owner_id=owner_id,
+            title="비공개 강아지 메모",
+            content_blocks=[
+                {
+                    "type": "paragraph",
+                    "content": [{"type": "text", "text": "우리집 강아지는 복슬강아지"}],
+                }
+            ],
+        )
+        db.commit()
+
+    payload = {
+        "workspace_id": workspace_id,
+        "query": "복슬",
+        "entity_types": ["doc"],
+        "sort": {"field": "relevance", "direction": "desc"},
+        "limit": 20,
+        "offset": 0,
+    }
+    owner_response = search_client.post(
+        "/api/v1/workspaces/hq/search/query",
+        headers=_headers(owner_token),
+        json=payload,
+    )
+    viewer_response = search_client.post(
+        "/api/v1/workspaces/hq/search/query",
+        headers=_headers(viewer_token),
+        json=payload,
+    )
+
+    assert owner_response.status_code == 200, owner_response.text
+    assert viewer_response.status_code == 200, viewer_response.text
+    owner_payload = owner_response.json()
+    viewer_payload = viewer_response.json()
+    assert any(hit["title"] == "비공개 강아지 메모" for hit in owner_payload["hits"])
+    assert all(hit["title"] != "비공개 강아지 메모" for hit in viewer_payload["hits"])
+    assert viewer_payload["total"] == 0
+    assert viewer_payload["facets"] == {"entity_types": [], "status": [], "containers": []}

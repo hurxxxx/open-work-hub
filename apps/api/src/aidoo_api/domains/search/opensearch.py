@@ -16,6 +16,7 @@ class OpenSearchKeywordClient:
 
     def ensure_index(self) -> None:
         if self._request("HEAD", f"/{self.index_name}", allow_404=True).status_code == 200:
+            self._request("PUT", f"/{self.index_name}/_mapping", json={"properties": _acl_properties()})
             return
         self._request("PUT", f"/{self.index_name}", json=_index_definition())
 
@@ -96,6 +97,7 @@ def _index_definition() -> dict[str, Any]:
                 "workspace_id": {"type": "keyword"},
                 "entity_type": {"type": "keyword"},
                 "entity_id": {"type": "keyword"},
+                **_acl_properties(),
                 "title": {
                     "type": "text",
                     "analyzer": "korean_ngram",
@@ -132,6 +134,16 @@ def _index_definition() -> dict[str, Any]:
                 "created_at": {"type": "date"},
             },
         },
+    }
+
+
+def _acl_properties() -> dict[str, Any]:
+    return {
+        "owner_user_id": {"type": "keyword"},
+        "team_ids": {"type": "keyword"},
+        "participant_user_ids": {"type": "keyword"},
+        "shared_user_ids": {"type": "keyword"},
+        "granted_user_ids": {"type": "keyword"},
     }
 
 

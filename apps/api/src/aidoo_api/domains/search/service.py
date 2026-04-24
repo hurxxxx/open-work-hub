@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections import Counter
-from datetime import datetime, time
+from datetime import UTC, datetime, time
 from typing import Any
 import uuid
 
@@ -11,10 +11,10 @@ from sqlalchemy.orm import Session, selectinload
 
 from aidoo_api.core.settings import get_settings
 from aidoo_api.core.telemetry import current_trace_id
-from aidoo_api.domains.auth.models import Team, User, Workspace
-from aidoo_api.domains.docs.models import NativeDoc
+from aidoo_api.domains.auth.models import Team, TeamMember, User, Workspace
+from aidoo_api.domains.docs.models import DocMeetingAccess, NativeDoc
 from aidoo_api.domains.meeting.models import Meeting, MeetingAttendee, MeetingRecording
-from aidoo_api.domains.pms.models import Issue, IssueComment, IssueLabel, TaskList, TaskListStatus
+from aidoo_api.domains.pms.models import Issue, IssueComment, IssueLabel, IssueUserAccess, TaskList, TaskListStatus
 from aidoo_api.domains.planner.models import PlannerEvent
 from aidoo_api.domains.rag.access_filter import can_user_access_resource
 from aidoo_api.domains.search.opensearch import OpenSearchError, OpenSearchKeywordClient
@@ -69,7 +69,11 @@ def query_workspace_keyword_search(
         request.workspace_id = workspace.id
     try:
         refresh_workspace_keyword_index(db, workspace=workspace)
-        candidate_rows = _load_ranked_candidates(workspace_id=workspace.id, request=request)
+        candidate_rows = _load_ranked_candidates(
+            workspace_id=workspace.id,
+            user_acl=_build_user_acl_scope(db, user=user, workspace_id=workspace.id),
+            request=request,
+        )
     except OpenSearchError as error:
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(error)) from error
     accessible_rows = [
@@ -111,12 +115,14 @@ def refresh_workspace_keyword_index(db: Session, *, workspace: Workspace) -> Non
 def _load_ranked_candidates(
     *,
     workspace_id: str,
+    user_acl: dict[str, Any],
     request: KeywordSearchRequest,
 ) -> list[dict[str, Any]]:
     query_text = request.query.strip()
     filters: list[dict[str, Any]] = [{"term": {"workspace_id": workspace_id}}]
     if request.entity_types:
         filters.append({"terms": {"entity_type": [item.value for item in request.entity_types]}})
+    filters.append(_acl_filter(user_acl))
 
     if query_text:
         query: dict[str, Any] = {
@@ -169,6 +175,68 @@ def _load_ranked_candidates(
 
 def _date_marker_value(value: datetime) -> str:
     return value.date().isoformat() if value.time() == time.min else value.isoformat()
+
+
+def _build_user_acl_scope(db: Session, *, user: User, workspace_id: str) -> dict[str, Any]:
+    team_ids = db.scalars(
+        select(TeamMember.team_id)
+        .join(Team, TeamMember.team_id == Team.id)
+        .where(
+            TeamMember.user_id == user.id,
+            Team.workspace_id == workspace_id,
+            Team.active.is_(True),
+            Team.trashed_at.is_(None),
+        )
+    ).all()
+    return {"user_id": user.id, "team_ids": [team_id for team_id in team_ids if team_id]}
+
+
+def _acl_filter(user_acl: dict[str, Any]) -> dict[str, Any]:
+    user_id = str(user_acl["user_id"])
+    team_ids = [str(team_id) for team_id in user_acl.get("team_ids", []) if team_id]
+    branches = [
+        _entity_acl_branch(
+            SearchEntityType.DOC,
+            [
+                {"term": {"owner_user_id": user_id}},
+                {"term": {"shared_user_ids": user_id}},
+                {"term": {"granted_user_ids": user_id}},
+                *([{"terms": {"team_ids": team_ids}}] if team_ids else []),
+            ],
+        ),
+        _entity_acl_branch(
+            SearchEntityType.MEETING,
+            [
+                {"term": {"owner_user_id": user_id}},
+                {"term": {"participant_user_ids": user_id}},
+            ],
+        ),
+        _entity_acl_branch(
+            SearchEntityType.PMS_ISSUE,
+            [
+                {"term": {"granted_user_ids": user_id}},
+                *([{"terms": {"team_ids": team_ids}}] if team_ids else []),
+            ],
+        ),
+        _entity_acl_branch(
+            SearchEntityType.PLANNER_EVENT,
+            [
+                {"term": {"owner_user_id": user_id}},
+                {"term": {"visibility": "public"}},
+            ],
+        ),
+    ]
+    return {"bool": {"should": branches, "minimum_should_match": 1}}
+
+
+def _entity_acl_branch(entity_type: SearchEntityType, clauses: list[dict[str, Any]]) -> dict[str, Any]:
+    return {
+        "bool": {
+            "filter": [{"term": {"entity_type": entity_type.value}}],
+            "should": clauses,
+            "minimum_should_match": 1,
+        }
+    }
 
 
 def _matches_request_filters(row: dict[str, Any], request: KeywordSearchRequest) -> bool:
@@ -309,9 +377,17 @@ def _build_snippet(row: dict[str, Any], *, query: str) -> SearchSnippet:
 
 
 def _doc_rows(db: Session, workspace: Workspace) -> list[dict[str, Any]]:
+    task_list_team_ids = _task_list_team_lookup(db, workspace)
     docs = db.scalars(
         select(NativeDoc)
-        .options(selectinload(NativeDoc.owner), selectinload(NativeDoc.pages), selectinload(NativeDoc.containers))
+        .options(
+            selectinload(NativeDoc.owner),
+            selectinload(NativeDoc.pages),
+            selectinload(NativeDoc.containers),
+            selectinload(NativeDoc.user_shares),
+            selectinload(NativeDoc.link_shares),
+            selectinload(NativeDoc.meeting_access_grants),
+        )
         .where(NativeDoc.workspace_id == workspace.id, NativeDoc.trashed_at.is_(None))
     ).all()
     rows: list[dict[str, Any]] = []
@@ -344,6 +420,11 @@ def _doc_rows(db: Session, workspace: Workspace) -> list[dict[str, Any]]:
                 visibility="shared" if doc.user_shares or doc.link_shares else "private",
                 people=[_person("owner", doc.owner_id, getattr(doc.owner, "full_name", None))],
                 containers=containers,
+                owner_user_id=doc.owner_id,
+                team_ids=_container_team_ids(containers, task_list_team_ids),
+                participant_user_ids=[],
+                shared_user_ids=[share.user_id for share in doc.user_shares],
+                granted_user_ids=_active_doc_grant_user_ids(doc.meeting_access_grants),
                 date_markers={},
                 deep_link=f"/w/{workspace.key}/docs/{doc.id}",
                 metadata={"source_kind": doc.source_kind, "source_ref": doc.source_ref},
@@ -393,6 +474,11 @@ def _meeting_rows(db: Session, workspace: Workspace) -> list[dict[str, Any]]:
                 visibility="workspace",
                 people=[_person("owner", meeting.organizer_id, getattr(meeting.organizer, "full_name", None)), *attendees],
                 containers=[],
+                owner_user_id=meeting.organizer_id,
+                team_ids=[],
+                participant_user_ids=[attendee.user_id for attendee in meeting.attendees],
+                shared_user_ids=[],
+                granted_user_ids=[],
                 date_markers={"event_start_at": meeting.start_at.isoformat(), "start_date": meeting.start_at.date().isoformat()},
                 deep_link=f"/w/{workspace.key}/meeting/{meeting.id}",
                 metadata={"attendee_count": len(meeting.attendees)},
@@ -411,6 +497,7 @@ def _pms_issue_rows(db: Session, workspace: Workspace) -> list[dict[str, Any]]:
             selectinload(Issue.reporter),
             selectinload(Issue.comments).selectinload(IssueComment.author),
             selectinload(Issue.label_links).selectinload(IssueLabel.label),
+            selectinload(Issue.user_access_grants),
         )
         .join(TaskList, Issue.list_id == TaskList.id)
         .join(Team, TaskList.team_id == Team.id)
@@ -451,6 +538,11 @@ def _pms_issue_rows(db: Session, workspace: Workspace) -> list[dict[str, Any]]:
                 visibility="workspace",
                 people=people,
                 containers=containers,
+                owner_user_id=issue.reporter_id,
+                team_ids=[task_list.team_id] if task_list and task_list.team_id else [],
+                participant_user_ids=[],
+                shared_user_ids=[],
+                granted_user_ids=_active_issue_grant_user_ids(issue.user_access_grants),
                 date_markers={
                     "start_date": issue.start_date.isoformat() if issue.start_date else None,
                     "due_date": issue.due_date.isoformat() if issue.due_date else None,
@@ -485,6 +577,11 @@ def _planner_event_rows(db: Session, workspace: Workspace) -> list[dict[str, Any
                 visibility=event.visibility,
                 people=[_person("owner", event.owner_id, getattr(event.owner, "full_name", None))],
                 containers=[],
+                owner_user_id=event.owner_id,
+                team_ids=[],
+                participant_user_ids=[],
+                shared_user_ids=[],
+                granted_user_ids=[],
                 date_markers={
                     "event_start_at": event.start_at.isoformat(),
                     "start_date": event.start_at.date().isoformat(),
@@ -511,6 +608,11 @@ def _row(
     visibility: str | None,
     people: list[dict[str, str]],
     containers: list[dict[str, str]],
+    owner_user_id: str | None,
+    team_ids: list[str],
+    participant_user_ids: list[str],
+    shared_user_ids: list[str],
+    granted_user_ids: list[str],
     date_markers: dict[str, Any],
     deep_link: str,
     metadata: dict[str, Any],
@@ -530,6 +632,11 @@ def _row(
         "status": status,
         "status_label": status_label,
         "visibility": visibility,
+        "owner_user_id": owner_user_id,
+        "team_ids": _unique_nonempty(team_ids),
+        "participant_user_ids": _unique_nonempty(participant_user_ids),
+        "shared_user_ids": _unique_nonempty(shared_user_ids),
+        "granted_user_ids": _unique_nonempty(granted_user_ids),
         "people": [person for person in people if person["user_id"]],
         "containers": containers,
         "container_keys": [f"{item['type']}:{item['id']}" for item in containers],
@@ -545,6 +652,49 @@ def _row(
 
 def _person(role: str, user_id: str | None, label: str | None) -> dict[str, str]:
     return {"role": role, "user_id": user_id or "", "label": label or "Unknown"}
+
+
+def _task_list_team_lookup(db: Session, workspace: Workspace) -> dict[str, str]:
+    rows = db.execute(
+        select(TaskList.id, TaskList.team_id)
+        .join(Team, TaskList.team_id == Team.id)
+        .where(Team.workspace_id == workspace.id, TaskList.team_id.is_not(None))
+    ).all()
+    return {list_id: team_id for list_id, team_id in rows if team_id}
+
+
+def _container_team_ids(containers: list[dict[str, str]], task_list_team_ids: dict[str, str]) -> list[str]:
+    return [
+        task_list_team_ids[container["id"]]
+        for container in containers
+        if container.get("type") == "list" and container.get("id") in task_list_team_ids
+    ]
+
+
+def _active_doc_grant_user_ids(grants: list[DocMeetingAccess]) -> list[str]:
+    now = _utcnow()
+    return [
+        grant.user_id
+        for grant in grants
+        if grant.revoked_at is None and (grant.expires_at is None or grant.expires_at > now)
+    ]
+
+
+def _active_issue_grant_user_ids(grants: list[IssueUserAccess]) -> list[str]:
+    now = _utcnow()
+    return [
+        grant.user_id
+        for grant in grants
+        if grant.revoked_at is None and (grant.expires_at is None or grant.expires_at > now)
+    ]
+
+
+def _unique_nonempty(values: list[str]) -> list[str]:
+    return list(dict.fromkeys(value for value in values if value))
+
+
+def _utcnow() -> datetime:
+    return datetime.now(UTC).replace(tzinfo=None)
 
 
 def _pms_status_label(slug: str, statuses: list[TaskListStatus]) -> str:
