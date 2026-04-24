@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from 'motion/react';
 import {
   Archive,
@@ -7,6 +8,8 @@ import {
   Eye,
   Globe2,
   Lock,
+  Maximize2,
+  Minimize2,
   Pencil,
   X,
 } from 'lucide-react';
@@ -49,6 +52,7 @@ export function LearningPageNotesPanel({
   const [draftVisibility, setDraftVisibility] = useState<LearningPageNoteVisibility>('private');
   const [flash, setFlash] = useState<'saved' | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [expanded, setExpanded] = useState(false);
   const draftDirtyRef = useRef(false);
 
   // When the lesson changes, reset the editor state to avoid draft bleed.
@@ -57,8 +61,27 @@ export function LearningPageNotesPanel({
     setDraftBlocks(EMPTY_BLOCKS);
     setDraftVisibility('private');
     setActionError(null);
+    setExpanded(false);
     draftDirtyRef.current = false;
   }, [lessonId]);
+
+  // Always return to the inline editor when we leave edit mode, so the
+  // next "편집" click starts from a clean small size.
+  useEffect(() => {
+    if (mode === 'view' && expanded) {
+      setExpanded(false);
+    }
+  }, [mode, expanded]);
+
+  // Scroll-lock the page while the editor is in fullscreen.
+  useEffect(() => {
+    if (!expanded || typeof document === 'undefined') return;
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = previous;
+    };
+  }, [expanded]);
 
   const savedContent = useMemo<BlockContent>(
     () => (mine.note?.content_blocks ?? []) as BlockContent,
@@ -158,11 +181,13 @@ export function LearningPageNotesPanel({
         draftVisibility={draftVisibility}
         actionError={actionError}
         savedContent={savedContent}
+        expanded={expanded}
         onEdit={() => enterEditMode(true)}
         onCreate={() => enterEditMode(false)}
         onArchive={archiveMine}
         onCancel={cancelEdit}
         onSave={saveDraft}
+        onToggleExpanded={() => setExpanded((v) => !v)}
         onDraftChange={(content) => {
           setDraftBlocks(content);
           draftDirtyRef.current = true;
@@ -243,11 +268,13 @@ function MyNoteSlot({
   draftVisibility,
   actionError,
   savedContent,
+  expanded,
   onEdit,
   onCreate,
   onArchive,
   onCancel,
   onSave,
+  onToggleExpanded,
   onDraftChange,
   onVisibilityChange,
 }: {
@@ -258,11 +285,13 @@ function MyNoteSlot({
   draftVisibility: LearningPageNoteVisibility;
   actionError: string | null;
   savedContent: BlockContent;
+  expanded: boolean;
   onEdit: () => void;
   onCreate: () => void;
   onArchive: () => void;
   onCancel: () => void;
   onSave: () => void;
+  onToggleExpanded: () => void;
   onDraftChange: (content: BlockContent) => void;
   onVisibilityChange: (visibility: LearningPageNoteVisibility) => void;
 }) {
@@ -273,10 +302,12 @@ function MyNoteSlot({
         initialVisibility={draftVisibility}
         saving={saving}
         actionError={actionError}
+        expanded={expanded}
         onDraftChange={onDraftChange}
         onVisibilityChange={onVisibilityChange}
         onCancel={onCancel}
         onSave={onSave}
+        onToggleExpanded={onToggleExpanded}
         hasExisting={myNote !== null}
       />
     );
@@ -434,42 +465,83 @@ function EditForm({
   initialVisibility,
   saving,
   actionError,
+  expanded,
   onDraftChange,
   onVisibilityChange,
   onCancel,
   onSave,
+  onToggleExpanded,
   hasExisting,
 }: {
   initialContent: BlockContent;
   initialVisibility: LearningPageNoteVisibility;
   saving: boolean;
   actionError: string | null;
+  expanded: boolean;
   onDraftChange: (content: BlockContent) => void;
   onVisibilityChange: (visibility: LearningPageNoteVisibility) => void;
   onCancel: () => void;
   onSave: () => void;
+  onToggleExpanded: () => void;
   hasExisting: boolean;
 }) {
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 6 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="flex flex-col gap-3 rounded-xl border border-app-accent/40 bg-app-surface p-3 shadow-[0_0_0_3px_rgba(99,102,241,0.08)] lg:p-4"
-      data-testid="learning-page-notes-my-editor"
-    >
-      <div className="flex flex-wrap items-center justify-between gap-2">
+  // ESC collapses the fullscreen overlay back to inline edit. Cancel is a
+  // distinct action (discards the draft).
+  useEffect(() => {
+    if (!expanded || typeof window === 'undefined') return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.stopPropagation();
+        onToggleExpanded();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [expanded, onToggleExpanded]);
+
+  const toolbar = (
+    <div className="flex flex-wrap items-center justify-between gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         <VisibilityToggle value={initialVisibility} onChange={onVisibilityChange} />
-        <span className="app-text-meta text-app-ink/50">
-          {hasExisting ? '기존 노트를 덮어씁니다.' : '첫 저장 시 내 노트로 기록됩니다.'}
-        </span>
+        <button
+          type="button"
+          onClick={onToggleExpanded}
+          title={expanded ? '축소' : '크게 보기'}
+          aria-label={expanded ? '축소' : '크게 보기'}
+          data-testid="learning-page-notes-my-expand"
+          className="inline-flex items-center gap-1 rounded-full border border-app-border bg-app-surface px-2.5 py-1 text-xs text-app-ink/70 transition-colors hover:border-app-accent hover:text-app-accent"
+        >
+          {expanded ? <Minimize2 size={12} /> : <Maximize2 size={12} />}
+          <span className="app-text-overline">{expanded ? '축소' : '크게'}</span>
+        </button>
       </div>
-      <div className="rounded-lg border border-app-border/50 px-1.5 py-1 focus-within:border-app-accent">
-        <BlockEditor
-          initialContent={initialContent}
-          onChange={onDraftChange}
-          placeholder="이 레슨에 대한 내 생각, 질문, 요약…"
-        />
-      </div>
+      <span className="app-text-meta text-app-ink/50">
+        {hasExisting ? '기존 노트를 덮어씁니다.' : '첫 저장 시 내 노트로 기록됩니다.'}
+      </span>
+    </div>
+  );
+
+  const editor = (
+    <div
+      className={
+        'learning-note-dense rounded-lg border border-app-border/50 px-1.5 py-1 focus-within:border-app-accent ' +
+        (expanded ? 'flex-1 min-h-0 overflow-y-auto' : '')
+      }
+    >
+      <BlockEditor
+        // Remount when switching between inline and fullscreen so the
+        // editor picks up the parent's live draftBlocks as its initial
+        // content and re-lays-out for the new container width.
+        key={expanded ? 'expanded' : 'inline'}
+        initialContent={initialContent}
+        onChange={onDraftChange}
+        placeholder="이 레슨에 대한 내 생각, 질문, 요약…"
+      />
+    </div>
+  );
+
+  const footer = (
+    <>
       {actionError ? <InlineError message={actionError} /> : null}
       <div className="flex items-center justify-end gap-2">
         <button
@@ -491,6 +563,42 @@ function EditForm({
           <Check size={12} /> {saving ? '저장 중…' : '저장'}
         </button>
       </div>
+    </>
+  );
+
+  if (expanded && typeof document !== 'undefined') {
+    return createPortal(
+      <div
+        className="fixed inset-0 z-[9000] flex items-stretch justify-center bg-black/60 backdrop-blur-sm"
+        role="dialog"
+        aria-label="노트 전체 편집"
+      >
+        <motion.div
+          initial={{ opacity: 0, scale: 0.98 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 0.15 }}
+          className="m-4 flex w-full max-w-5xl flex-col gap-3 rounded-2xl border border-app-border bg-app-surface p-5 shadow-2xl lg:m-8 lg:p-6"
+          data-testid="learning-page-notes-my-editor"
+        >
+          {toolbar}
+          {editor}
+          {footer}
+        </motion.div>
+      </div>,
+      document.body,
+    );
+  }
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 6 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="flex flex-col gap-3 rounded-xl border border-app-accent/40 bg-app-surface p-3 shadow-[0_0_0_3px_rgba(99,102,241,0.08)] lg:p-4"
+      data-testid="learning-page-notes-my-editor"
+    >
+      {toolbar}
+      {editor}
+      {footer}
     </motion.div>
   );
 }

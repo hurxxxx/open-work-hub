@@ -23,9 +23,16 @@
 
 ## 엔트리
 
+## 2026-04-25 · OpenSearch 통합검색 ACL grant/revoke 검증
+
+- **요약**: `delivery-hub-admin`/`delivery-hub-member` 계정으로 실제 검색 API를 호출해 임시 문서/회의/PMS/일정 ACL을 검증했다. 문서 user share, 회의 attendee, PMS issue direct grant, 일정 public/private 전환 모두 권한 부여 후 검색 노출, revoke 후 미노출로 확인했고 cleanup 후 잔여 검색 결과도 0건임을 확인했다.
+- **PR/커밋**: 9db6436, 59f59d6
+- **영향 파일**: `apps/api/src/aidoo_api/domains/search/`
+- **남은 후속 작업**: 요청 시 workspace 전체 rebuild를 CRUD/outbox 기반 증분 색인으로 전환하면서 권한 변경 이벤트가 색인 ACL 필드 갱신을 트리거하도록 보강.
+
 ## 2026-04-25 · OpenSearch 통합검색 UI E2E 검증
 
-- **요약**: `agent-browser`로 실제 `/tool/search?workspace=hq` 화면을 검증했다. `hq-admin`은 `복슬` 검색에서 private 문서 1건과 `<mark>` 하이라이트를 확인했고 결과 클릭이 `/w/hq/docs/4d9c30e3-bacd-4607-811a-ab0a31d90142` deep link로 이동했다. 별도 세션의 `hq-member`는 같은 검색에서 0건으로 ACL 필터링됨을 확인했다.
+- **요약**: `agent-browser`로 실제 `/tool/search?workspace=hq` 화면을 검증했다. `hq-admin`은 `복슬` 검색에서 private 문서 1건과 `<mark>` 하이라이트를 확인했고 결과 클릭이 `/w/hq/docs/4d9c30e3-bacd-4607-811a-ab0a31d90142` deep link로 이동했다. 별도 세션의 `hq-member`는 같은 검색에서 0건으로 ACL 필터링됨을 확인했다. 추가로 `delivery-hub-member`로 샘플 데이터 검색을 수행해 `예산 리스크`, `품질 감사`, `온보딩`, `재고 부족`, `계약 갱신` 쿼리가 문서/회의/PMS/일정 결과와 facet count를 실제 UI에 렌더링하는 것을 확인했다.
 - **PR/커밋**: 9db6436, 59f59d6
 - **영향 파일**: `apps/api/src/aidoo_api/domains/search/`, `apps/web/src/components/views/RagSearchView.tsx`
 - **남은 후속 작업**: 검색 요청 시 workspace 전체 rebuild를 CRUD/outbox 기반 증분 색인으로 전환.
