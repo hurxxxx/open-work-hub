@@ -7,6 +7,7 @@ from aidoo_api.domains.planner.models import PlannerEvent
 from aidoo_api.domains.rag.contracts import RagSyncOperation
 from aidoo_api.domains.rag.outbox import enqueue_rag_sync_job
 from aidoo_api.domains.rag.planner_projection import PLANNER_EVENT_RESOURCE_TYPE
+from aidoo_api.domains.search.hooks import enqueue_planner_event_search_index
 
 
 def enqueue_planner_event_rag_sync(
@@ -15,6 +16,11 @@ def enqueue_planner_event_rag_sync(
     event: PlannerEvent,
     operation: RagSyncOperation,
 ) -> None:
+    enqueue_planner_event_search_index(
+        db,
+        event=event,
+        operation="delete" if operation == RagSyncOperation.DELETE else "upsert",
+    )
     if not get_settings().rag_enabled:
         return
 

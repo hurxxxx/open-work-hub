@@ -225,6 +225,22 @@ class Settings(BaseSettings):
             "DOOWON_WORKER_AIDOO_RAG_JOB_PROCESSING_LEASE_SECONDS",
         ),
     )
+    opensearch_url: str = Field(
+        default="http://127.0.0.1:59200",
+        validation_alias=AliasChoices(
+            "DOOWON_WORKER_OPENSEARCH_URL",
+            "DOOWON_API_OPENSEARCH_URL",
+            "DOOWON_OPENSEARCH_URL",
+        ),
+    )
+    opensearch_index_prefix: str = Field(
+        default="aidoo",
+        validation_alias=AliasChoices(
+            "DOOWON_WORKER_OPENSEARCH_INDEX_PREFIX",
+            "DOOWON_API_OPENSEARCH_INDEX_PREFIX",
+            "DOOWON_OPENSEARCH_INDEX_PREFIX",
+        ),
+    )
     otel_enabled: bool = Field(
         default=True,
         validation_alias=AliasChoices(

@@ -61,6 +61,7 @@ from aidoo_api.domains.pms.rag_sync import (
 )
 from aidoo_api.domains.pms import service as pms_service
 from aidoo_api.domains.rag.contracts import RagSyncOperation
+from aidoo_api.domains.search.hooks import enqueue_task_list_status_issue_search_recompute
 
 
 ISSUE_STATUS_LABELS = {
@@ -94,6 +95,10 @@ PRIORITY_LABELS = {
     "high": "High",
     "critical": "Critical",
 }
+
+
+def _priority_label(priority: str) -> str:
+    return PRIORITY_LABELS.get(priority, priority.replace("_", " ").title())
 
 
 def _utcnow() -> datetime:
@@ -1026,7 +1031,7 @@ def _serialize_issue(issue: Issue) -> IssueListItem:
         status=issue.status,
         status_label=ISSUE_STATUS_LABELS.get(issue.status, issue.status.replace("_", " ").title()),
         priority=issue.priority,
-        priority_label=PRIORITY_LABELS[issue.priority],
+        priority_label=_priority_label(issue.priority),
         assignee_id=issue.assignee_id,
         assignee_name=getattr(issue.assignee, "full_name", None),
         assignee_ids=[link.user_id for link in getattr(issue, "assignee_links", [])],
@@ -3003,6 +3008,7 @@ def create_task_list_status(
         sort_order=payload.sort_order,
     )
     db.add(ps)
+    enqueue_task_list_status_issue_search_recompute(db, task_status=ps)
     db.commit()
     db.refresh(ps)
     return _serialize_status(ps)
@@ -3039,6 +3045,7 @@ def update_task_list_status(
     if payload.sort_order is not None:
         ps.sort_order = payload.sort_order
 
+    enqueue_task_list_status_issue_search_recompute(db, task_status=ps)
     db.commit()
     db.refresh(ps)
     return _serialize_status(ps)
@@ -3419,6 +3426,11 @@ def set_issue_assignees(
 
     # Update primary assignee_id to the first validated user (or clear)
     issue.assignee_id = validated_user_ids[0] if validated_user_ids else None
+    enqueue_issue_rag_sync(
+        db,
+        issue=issue,
+        operation=RagSyncOperation.UPSERT,
+    )
 
     db.commit()
     return result

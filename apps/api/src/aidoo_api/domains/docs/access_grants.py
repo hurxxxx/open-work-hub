@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from aidoo_api.domains.auth.security import new_id
 from aidoo_api.domains.docs.models import DocMeetingAccess
+from aidoo_api.domains.search.hooks import enqueue_doc_search_index_by_id
 
 
 def _utcnow() -> datetime:
@@ -55,6 +56,7 @@ def grant_doc_access(
         existing.updated_at = _utcnow()
         db.add(existing)
         db.flush()
+        enqueue_doc_search_index_by_id(db, doc_id=doc_id, operation="upsert")
         return existing
 
     access = DocMeetingAccess(
@@ -69,6 +71,7 @@ def grant_doc_access(
     )
     db.add(access)
     db.flush()
+    enqueue_doc_search_index_by_id(db, doc_id=doc_id, operation="upsert")
     return access
 
 
@@ -97,6 +100,8 @@ def revoke_doc_grants_for_meeting_attendee(
         grant.updated_at = now
         db.add(grant)
     db.flush()
+    for grant in grants:
+        enqueue_doc_search_index_by_id(db, doc_id=grant.doc_id, operation="upsert")
     return len(grants)
 
 
@@ -123,6 +128,8 @@ def revoke_doc_grants_for_meeting(
         grant.updated_at = now
         db.add(grant)
     db.flush()
+    for grant in grants:
+        enqueue_doc_search_index_by_id(db, doc_id=grant.doc_id, operation="upsert")
     return len(grants)
 
 
@@ -151,6 +158,8 @@ def revoke_doc_grants_for_attachment(
         grant.updated_at = now
         db.add(grant)
     db.flush()
+    for grant in grants:
+        enqueue_doc_search_index_by_id(db, doc_id=grant.doc_id, operation="upsert")
     return len(grants)
 
 
@@ -174,4 +183,6 @@ def bump_doc_grant_expiry_for_meeting(
         grant.updated_at = _utcnow()
         db.add(grant)
     db.flush()
+    for grant in grants:
+        enqueue_doc_search_index_by_id(db, doc_id=grant.doc_id, operation="upsert")
     return len(grants)

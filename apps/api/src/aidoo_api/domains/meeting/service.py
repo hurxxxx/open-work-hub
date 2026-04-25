@@ -31,7 +31,7 @@ from aidoo_api.domains.docs.access_grants import (
     revoke_doc_grants_for_meeting,
     revoke_doc_grants_for_meeting_attendee,
 )
-from aidoo_api.domains.docs.models import NativeDoc, NativeDocPage
+from aidoo_api.domains.docs.models import DocMeetingAccess, NativeDoc, NativeDocPage
 from aidoo_api.domains.docs.rag_sync import (
     collect_meeting_visibility_doc_ids,
     enqueue_meeting_visibility_recompute,
@@ -75,7 +75,7 @@ from aidoo_api.domains.pms.access_grants import (
     revoke_grants_for_meeting,
     revoke_grants_for_meeting_attendee,
 )
-from aidoo_api.domains.pms.models import Issue
+from aidoo_api.domains.pms.models import Issue, IssueUserAccess
 from aidoo_api.domains.planner.models import PlannerEvent
 from aidoo_api.domains.rag.contracts import RagSyncOperation
 
@@ -1018,6 +1018,7 @@ def delete_meeting(db: Session, *, workspace: Workspace, user: User, meeting_id:
         revoked_by_user_id=user.id,
         reason="meeting_deleted",
     )
+    _detach_meeting_access_grants(db, meeting_id=meeting.id)
     if affected_doc_ids:
         enqueue_meeting_visibility_recompute(
             db,
@@ -1032,6 +1033,19 @@ def delete_meeting(db: Session, *, workspace: Workspace, user: User, meeting_id:
     )
     db.delete(meeting)
     db.commit()
+
+
+def _detach_meeting_access_grants(db: Session, *, meeting_id: str) -> None:
+    for grant in db.scalars(
+        select(IssueUserAccess).where(IssueUserAccess.granted_by_meeting_id == meeting_id)
+    ):
+        grant.granted_by_meeting_id = None
+        db.add(grant)
+    for grant in db.scalars(
+        select(DocMeetingAccess).where(DocMeetingAccess.granted_by_meeting_id == meeting_id)
+    ):
+        grant.granted_by_meeting_id = None
+        db.add(grant)
 
 
 def get_meeting(

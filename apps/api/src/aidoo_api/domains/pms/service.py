@@ -57,6 +57,10 @@ CATEGORY_PROGRESS = {
 }
 
 
+def _priority_label(priority: str) -> str:
+    return PRIORITY_LABELS.get(priority, priority.replace("_", " ").title())
+
+
 def _router():
     from aidoo_api.domains.pms import router as pms_router
 
@@ -138,7 +142,7 @@ def _serialize_issue_summary(issue: Issue) -> dict[str, Any]:
         "status": issue.status,
         "status_label": ISSUE_STATUS_LABELS.get(issue.status, issue.status.replace("_", " ").title()),
         "priority": issue.priority,
-        "priority_label": PRIORITY_LABELS[issue.priority],
+        "priority_label": _priority_label(issue.priority),
         "assignee_id": issue.assignee_id,
         "assignee_name": getattr(issue.assignee, "full_name", None),
         "assignee_ids": [link.user_id for link in getattr(issue, "assignee_links", [])],

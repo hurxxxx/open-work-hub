@@ -51,7 +51,7 @@ class Settings(BaseSettings):
     )
     worker_broker_url: str = Field(
         default="redis://127.0.0.1:6379/0",
-        validation_alias=AliasChoices("DOOWON_WORKER_BROKER_URL", "DOOWON_BROKER_URL"),
+        validation_alias=AliasChoices("DOOWON_WORKER_BROKER_URL", "DOOWON_BROKER_URL", "DOOWON_REDIS_URL"),
     )
     worker_result_backend: str = Field(
         default="redis://127.0.0.1:6379/1",

@@ -23,6 +23,20 @@
 
 ## 엔트리
 
+## 2026-04-25 · OpenSearch 증분 색인 확장 ACL/CRUD E2E 검증
+
+- **요약**: `agent-browser`로 admin/member/same-workspace outsider/hq-member 세션을 분리해 Docs, Meeting, PMS, Planner 검색 ACL/CRUD 전이 52건을 검증했다. user share, link share 비노출, teamspace membership add/remove, meeting attendee add/remove 및 attached doc/issue grant, PMS direct grant/revoke/comment/list rename/archive/delete, planner public/private/update/delete, workspace boundary를 확인했고 실패 0건이다. 검증 중 발견한 Docs teamspace projection 누락과 meeting delete FK 500도 수정했다.
+- **PR/커밋**: 미커밋
+- **영향 파일**: `apps/api/src/aidoo_api/domains/search/projections.py`, `apps/api/src/aidoo_api/domains/meeting/service.py`, `apps/api/tests/test_search_index_hooks.py`
+- **남은 후속 작업**: 운영과 동일한 worker 상시 구동 구성에서 동일 시나리오를 재실행.
+
+## 2026-04-25 · OpenSearch 증분 색인 agent-browser E2E 검증
+
+- **요약**: `agent-browser`로 `delivery-hub-admin`/`delivery-hub-member` 실제 세션을 열어 문서 ACL 및 CRUD 증분 색인을 검증했다. member는 share grant 전 0건, grant 후 1건, revoke 후 0건으로 확인했고, admin은 title update 후 새 제목 1건/기존 제목 0건, delete 후 0건을 확인했다. 백엔드 로그를 함께 확인해 Redis 기동 후 E2E 구간의 `ERROR`/`Traceback`/500 로그가 없음을 확인했다.
+- **PR/커밋**: 미커밋
+- **영향 파일**: `apps/api/src/aidoo_api/domains/search/`, `apps/api/src/aidoo_api/domains/pms/`
+- **남은 후속 작업**: 실제 worker 상시 구동 환경에서 동일 grant/revoke smoke를 반복 확인.
+
 ## 2026-04-25 · OpenSearch 통합검색 ACL grant/revoke 검증
 
 - **요약**: `delivery-hub-admin`/`delivery-hub-member` 계정으로 실제 검색 API를 호출해 임시 문서/회의/PMS/일정 ACL을 검증했다. 문서 user share, 회의 attendee, PMS issue direct grant, 일정 public/private 전환 모두 권한 부여 후 검색 노출, revoke 후 미노출로 확인했고 cleanup 후 잔여 검색 결과도 0건임을 확인했다.

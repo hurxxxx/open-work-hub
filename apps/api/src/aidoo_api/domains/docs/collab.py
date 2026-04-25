@@ -41,6 +41,7 @@ from aidoo_api.domains.docs.models import (
 )
 from aidoo_api.domains.docs.registry import ContainerRef, project_container_access
 from aidoo_api.domains.media.router import sync_embedded_media
+from aidoo_api.domains.search.hooks import enqueue_doc_search_index
 
 
 logger = logging.getLogger(__name__)
@@ -448,6 +449,7 @@ def persist_collab_snapshot_to_page(
         sync_embedded_media(db, content_blocks, "docs_native_page", page.id, current_user)
         db.add(page)
         db.flush()
+        enqueue_doc_search_index(db, doc=page.doc, operation="upsert")
         return
 
     raise HTTPException(status_code=404, detail="Page not found.")

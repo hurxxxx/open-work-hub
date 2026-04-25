@@ -7,6 +7,7 @@ from aidoo_api.domains.meeting.models import Meeting
 from aidoo_api.domains.rag.contracts import RagSyncOperation
 from aidoo_api.domains.rag.meeting_projection import MEETING_RESOURCE_TYPE
 from aidoo_api.domains.rag.outbox import enqueue_rag_sync_job
+from aidoo_api.domains.search.hooks import enqueue_meeting_search_index
 
 
 def enqueue_meeting_rag_sync(
@@ -15,6 +16,11 @@ def enqueue_meeting_rag_sync(
     meeting: Meeting,
     operation: RagSyncOperation,
 ) -> None:
+    enqueue_meeting_search_index(
+        db,
+        meeting=meeting,
+        operation="delete" if operation == RagSyncOperation.DELETE else "upsert",
+    )
     if not get_settings().rag_enabled:
         return
     enqueue_rag_sync_job(

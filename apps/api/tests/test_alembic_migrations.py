@@ -69,6 +69,7 @@ def test_alembic_upgrade_head_creates_expected_tables(alembic_config, postgres_d
         "planner_events",
         "rag_sync_jobs",
         "rag_visibility_recompute_jobs",
+        "search_index_jobs",
         "workspace_app_entitlements",
         "alembic_version",
     }

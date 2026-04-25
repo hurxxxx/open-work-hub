@@ -20,6 +20,9 @@ class OpenSearchKeywordClient:
             return
         self._request("PUT", f"/{self.index_name}", json=_index_definition())
 
+    def index_exists(self) -> bool:
+        return self._request("HEAD", f"/{self.index_name}", allow_404=True).status_code == 200
+
     def rebuild_workspace(self, *, workspace_id: str, documents: list[dict[str, Any]]) -> None:
         self.ensure_index()
         self._request(
@@ -46,6 +49,34 @@ class OpenSearchKeywordClient:
         payload = response.json()
         if payload.get("errors"):
             raise OpenSearchError(f"OpenSearch bulk indexing failed: {str(payload)[:500]}")
+
+    def upsert_document(self, document: dict[str, Any]) -> None:
+        self.ensure_index()
+        document_id = _document_id(document)
+        self._request(
+            "PUT",
+            f"/{self.index_name}/_doc/{document_id}",
+            json=document,
+            params={"refresh": "true"},
+        )
+
+    def delete_document(self, *, workspace_id: str, entity_type: str, entity_id: str) -> None:
+        self.ensure_index()
+        document_id = f"{workspace_id}:{entity_type}:{entity_id}"
+        self._request(
+            "DELETE",
+            f"/{self.index_name}/_doc/{document_id}",
+            allow_404=True,
+            params={"refresh": "true"},
+        )
+
+    def count_workspace_documents(self, *, workspace_id: str) -> int:
+        response = self._request(
+            "POST",
+            f"/{self.index_name}/_count",
+            json={"query": {"term": {"workspace_id": workspace_id}}},
+        )
+        return int(response.json().get("count") or 0)
 
     def search(self, body: dict[str, Any]) -> dict[str, Any]:
         response = self._request("POST", f"/{self.index_name}/_search", json=body)
@@ -151,3 +182,7 @@ def _json_dumps(value: Any) -> str:
     import json
 
     return json.dumps(value, ensure_ascii=False, separators=(",", ":"))
+
+
+def _document_id(document: dict[str, Any]) -> str:
+    return f"{document['workspace_id']}:{document['entity_type']}:{document['entity_id']}"

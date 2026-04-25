@@ -12,6 +12,7 @@ from aidoo_api.domains.rag.outbox import (
     enqueue_rag_sync_job,
     enqueue_rag_visibility_recompute_job,
 )
+from aidoo_api.domains.search.hooks import enqueue_doc_search_index, enqueue_doc_search_index_by_id
 
 
 MEETING_VISIBILITY_SCOPE = "meeting"
@@ -23,6 +24,11 @@ def enqueue_native_doc_rag_sync(
     doc: NativeDoc,
     operation: RagSyncOperation,
 ) -> None:
+    enqueue_doc_search_index(
+        db,
+        doc=doc,
+        operation=_search_operation(operation),
+    )
     if not get_settings().rag_enabled:
         return
 
@@ -81,6 +87,13 @@ def enqueue_meeting_visibility_recompute(
     meeting_id: str,
     doc_ids: list[str] | None = None,
 ) -> None:
+    affected_doc_ids = collect_meeting_visibility_doc_ids(db, meeting_id=meeting_id) if doc_ids is None else doc_ids
+    for doc_id in affected_doc_ids:
+        enqueue_doc_search_index_by_id(
+            db,
+            doc_id=doc_id,
+            operation="upsert",
+        )
     if not get_settings().rag_enabled:
         return
 
@@ -93,3 +106,7 @@ def enqueue_meeting_visibility_recompute(
         scope_id=meeting_id,
         cursor=cursor,
     )
+
+
+def _search_operation(operation: RagSyncOperation) -> str:
+    return "delete" if operation == RagSyncOperation.DELETE else "upsert"

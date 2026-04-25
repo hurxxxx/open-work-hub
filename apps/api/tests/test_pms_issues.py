@@ -1140,6 +1140,36 @@ def test_assigned_issues_honors_workspace_scoped_route(client: TestClient) -> No
     assert denied_response.status_code == 403
 
 
+def test_assigned_issues_handles_unknown_priority_from_existing_data(client: TestClient) -> None:
+    admin = _bootstrap_admin_session(client)
+    task_list = _create_task_list(client, admin["token"], key="UNKPR", name="Unknown Priority List")
+    issue = _create_issue(
+        client,
+        admin["token"],
+        task_list["id"],
+        title="Existing urgent issue",
+        assignee_id=admin["user"]["id"],
+    )
+
+    from aidoo_api.core.db import get_session_factory
+    from aidoo_api.domains.pms.models import Issue
+
+    with get_session_factory()() as db:
+        existing_issue = db.get(Issue, issue["id"])
+        assert existing_issue is not None
+        existing_issue.priority = "urgent"
+        db.commit()
+
+    response = client.get(
+        "/api/v1/pms/issues/assigned",
+        headers=_auth_headers(admin["token"]),
+    )
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["items"][0]["priority"] == "urgent"
+    assert payload["items"][0]["priority_label"] == "Urgent"
+
+
 def _bootstrap_admin_session(client: TestClient) -> dict:
     response = client.post(
         "/api/v1/auth/setup",

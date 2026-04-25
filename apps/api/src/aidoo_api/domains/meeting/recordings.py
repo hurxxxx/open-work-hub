@@ -720,6 +720,14 @@ def delete_recording(
     db.flush()
 
     db.delete(recording)
+    from aidoo_api.domains.meeting.rag_sync import enqueue_meeting_rag_sync
+    from aidoo_api.domains.rag.contracts import RagSyncOperation
+
+    enqueue_meeting_rag_sync(
+        db,
+        meeting=meeting,
+        operation=RagSyncOperation.UPSERT,
+    )
     db.commit()
 
     fresh = meeting_service._load_meeting(db, workspace, meeting.id)

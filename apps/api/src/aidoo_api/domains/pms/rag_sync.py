@@ -7,10 +7,17 @@ from sqlalchemy.orm import Session
 
 from aidoo_api.core.settings import get_settings
 from aidoo_api.domains.auth.models import Team
-from aidoo_api.domains.pms.models import Issue, IssueLabel, Label, Milestone, TaskList
+from aidoo_api.domains.meeting.models import MeetingTaskLink
+from aidoo_api.domains.pms.models import Issue, IssueLabel, IssueUserAccess, Label, Milestone, TaskList
 from aidoo_api.domains.rag.contracts import RagSyncOperation
 from aidoo_api.domains.rag.outbox import enqueue_rag_sync_job, enqueue_rag_visibility_recompute_job
 from aidoo_api.domains.rag.pms_projection import PMS_ISSUE_RESOURCE_TYPE
+from aidoo_api.domains.search.hooks import (
+    enqueue_issue_search_index,
+    enqueue_issue_search_index_by_id,
+    enqueue_label_issue_search_recompute,
+    enqueue_task_list_issue_search_recompute,
+)
 
 
 PMS_MEETING_VISIBILITY_SCOPE = "pms_meeting"
@@ -25,6 +32,11 @@ def enqueue_issue_rag_sync(
     issue: Issue,
     operation: RagSyncOperation,
 ) -> None:
+    enqueue_issue_search_index(
+        db,
+        issue=issue,
+        operation="delete" if operation == RagSyncOperation.DELETE else "upsert",
+    )
     if not get_settings().rag_enabled:
         return
     workspace_id = _load_issue_workspace_id(db, issue_id=issue.id)
@@ -61,6 +73,12 @@ def enqueue_meeting_issue_visibility_recompute(
     meeting_id: str,
     issue_ids: list[str] | None = None,
 ) -> None:
+    for issue_id in _collect_meeting_issue_ids(db, meeting_id=meeting_id, issue_ids=issue_ids):
+        enqueue_issue_search_index_by_id(
+            db,
+            issue_id=issue_id,
+            operation="upsert",
+        )
     if not get_settings().rag_enabled:
         return
     grouped_issue_ids = _group_issue_ids_by_workspace(db, issue_ids or [])
@@ -79,6 +97,7 @@ def enqueue_task_list_issue_recompute(
     *,
     task_list: TaskList,
 ) -> None:
+    enqueue_task_list_issue_search_recompute(db, task_list=task_list)
     if not get_settings().rag_enabled or task_list.team_id is None:
         return
     team = db.get(Team, task_list.team_id)
@@ -99,6 +118,7 @@ def enqueue_label_issue_recompute(
     label: Label,
     issue_ids: list[str] | None = None,
 ) -> None:
+    enqueue_label_issue_search_recompute(db, label=label, issue_ids=issue_ids)
     if not get_settings().rag_enabled:
         return
     workspace_id = _load_list_workspace_id(db, list_id=label.list_id)
@@ -191,3 +211,29 @@ def collect_label_issue_ids(
         for issue_id in db.scalars(select(IssueLabel.issue_id).where(IssueLabel.label_id == label_id))
         if issue_id
     )
+
+
+def _collect_meeting_issue_ids(
+    db: Session,
+    *,
+    meeting_id: str,
+    issue_ids: list[str] | None,
+) -> list[str]:
+    resolved = {str(issue_id) for issue_id in issue_ids or [] if issue_id}
+    if not resolved:
+        resolved.update(
+            str(issue_id)
+            for issue_id in db.scalars(select(MeetingTaskLink.issue_id).where(MeetingTaskLink.meeting_id == meeting_id))
+            if issue_id
+        )
+        resolved.update(
+            str(issue_id)
+            for issue_id in db.scalars(
+                select(IssueUserAccess.issue_id).where(
+                    IssueUserAccess.granted_by_meeting_id == meeting_id,
+                    IssueUserAccess.revoked_at.is_(None),
+                )
+            )
+            if issue_id
+        )
+    return sorted(resolved)

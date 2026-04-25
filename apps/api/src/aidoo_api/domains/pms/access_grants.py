@@ -101,6 +101,50 @@ def grant_issue_access(
     return access
 
 
+def revoke_issue_access(
+    db: Session,
+    *,
+    issue_id: str,
+    user_id: str,
+    revoked_by_user_id: str,
+    reason: str,
+    granted_by_meeting_id: str | None = None,
+) -> int:
+    now = _utcnow()
+    grants = list(
+        db.scalars(
+            select(IssueUserAccess).where(
+                IssueUserAccess.issue_id == issue_id,
+                IssueUserAccess.user_id == user_id,
+                IssueUserAccess.granted_by_meeting_id == granted_by_meeting_id,
+                IssueUserAccess.revoked_at.is_(None),
+            )
+        )
+    )
+    for grant in grants:
+        grant.revoked_at = now
+        grant.revoked_by_user_id = revoked_by_user_id
+        grant.revoke_reason = reason
+        grant.updated_at = now
+        db.add(grant)
+    db.flush()
+    if not grants:
+        return 0
+    if granted_by_meeting_id is not None:
+        enqueue_meeting_issue_visibility_recompute(
+            db,
+            meeting_id=granted_by_meeting_id,
+            issue_ids=[issue_id],
+        )
+    else:
+        enqueue_issue_rag_sync_by_id(
+            db,
+            issue_id=issue_id,
+            operation=RagSyncOperation.VISIBILITY_UPDATE,
+        )
+    return len(grants)
+
+
 def revoke_grants_for_meeting_attendee(
     db: Session,
     *,

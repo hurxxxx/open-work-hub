@@ -87,6 +87,7 @@ def init_db() -> None:
     from aidoo_api.domains.pms import models as pms_models  # noqa: F401
     from aidoo_api.domains.planner import models as planner_models  # noqa: F401
     from aidoo_api.domains.rag import models as rag_models  # noqa: F401
+    from aidoo_api.domains.search import models as search_models  # noqa: F401
 
     if os.environ.get("DOOWON_API_AUTO_MIGRATE", "").lower() in {"1", "true", "yes"}:
         run_migrations()
