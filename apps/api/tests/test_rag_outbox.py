@@ -46,6 +46,24 @@ def _session() -> Session:
     return session
 
 
+def _stub_celery(monkeypatch, published: list[tuple[str, list[str], str]]) -> None:
+    class _FakeSignature:
+        def __init__(self, task_name: str, args: list[str]) -> None:
+            self.task_name = task_name
+            self.args = args
+
+        def apply_async(self, *, queue: str, retry: bool) -> None:
+            assert retry is False
+            published.append((self.task_name, self.args, queue))
+
+    class _FakeCeleryClient:
+        def signature(self, task_name: str, args: list[str], immutable: bool):
+            assert immutable is True
+            return _FakeSignature(task_name, args)
+
+    monkeypatch.setattr(rag_outbox, "_get_celery_client", lambda: _FakeCeleryClient())
+
+
 def test_enqueue_rag_sync_job_persists_resource_job() -> None:
     session = _session()
     try:
@@ -232,6 +250,51 @@ def test_enqueue_rag_sync_job_publishes_only_after_commit(monkeypatch) -> None:
                 resource_type="doc",
                 resource_id="doc-publish",
             )
+            assert published == []
+
+        assert published == [("rag.sync_resource", [job.id], "rag_sync_realtime")]
+    finally:
+        session.close()
+
+
+def test_enqueue_rag_sync_job_ignores_nested_commit_before_outer_commit(monkeypatch) -> None:
+    published: list[tuple[str, list[str], str]] = []
+    _stub_celery(monkeypatch, published)
+    session = _session()
+    try:
+        with session.begin():
+            job = enqueue_rag_sync_job(
+                session,
+                workspace_id="ws-1",
+                resource_type="doc",
+                resource_id="doc-nested-commit",
+            )
+            with session.begin_nested():
+                pass
+            assert published == []
+
+        assert published == [("rag.sync_resource", [job.id], "rag_sync_realtime")]
+    finally:
+        session.close()
+
+
+def test_enqueue_rag_sync_job_keeps_publish_after_nested_rollback(monkeypatch) -> None:
+    published: list[tuple[str, list[str], str]] = []
+    _stub_celery(monkeypatch, published)
+    session = _session()
+    try:
+        with session.begin():
+            job = enqueue_rag_sync_job(
+                session,
+                workspace_id="ws-1",
+                resource_type="doc",
+                resource_id="doc-nested-rollback",
+            )
+            try:
+                with session.begin_nested():
+                    raise RuntimeError("rollback savepoint")
+            except RuntimeError:
+                pass
             assert published == []
 
         assert published == [("rag.sync_resource", [job.id], "rag_sync_realtime")]

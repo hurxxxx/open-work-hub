@@ -134,6 +134,53 @@ def test_enqueue_search_index_job_does_not_publish_on_rollback(monkeypatch) -> N
         session.close()
 
 
+def test_enqueue_search_index_job_ignores_nested_commit_before_outer_commit(monkeypatch) -> None:
+    published: list[tuple[str, list[str], str]] = []
+    _stub_celery(monkeypatch, published)
+    session = _session()
+    try:
+        with session.begin():
+            job = enqueue_search_index_job(
+                session,
+                workspace_id="ws-1",
+                entity_type="doc",
+                entity_id="doc-nested-commit",
+                operation="upsert",
+            )
+            with session.begin_nested():
+                pass
+            assert published == []
+
+        assert published == [("search.index_resource", [job.id], "search_index_realtime")]
+    finally:
+        session.close()
+
+
+def test_enqueue_search_index_job_keeps_publish_after_nested_rollback(monkeypatch) -> None:
+    published: list[tuple[str, list[str], str]] = []
+    _stub_celery(monkeypatch, published)
+    session = _session()
+    try:
+        with session.begin():
+            job = enqueue_search_index_job(
+                session,
+                workspace_id="ws-1",
+                entity_type="doc",
+                entity_id="doc-nested-rollback",
+                operation="upsert",
+            )
+            try:
+                with session.begin_nested():
+                    raise RuntimeError("rollback savepoint")
+            except RuntimeError:
+                pass
+            assert published == []
+
+        assert published == [("search.index_resource", [job.id], "search_index_realtime")]
+    finally:
+        session.close()
+
+
 def test_process_search_index_job_upserts_loaded_projection(monkeypatch) -> None:
     session = _session()
     calls: list[tuple[str, object]] = []

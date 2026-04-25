@@ -331,6 +331,10 @@ def _schedule_publish_after_commit(
 
 @event.listens_for(Session, "after_commit")
 def _publish_pending_rag_jobs(session: Session) -> None:
+    # SQLAlchemy emits after_commit for savepoint releases too. Publishing there
+    # can let a worker observe the job before the outer transaction is committed.
+    if session.in_nested_transaction():
+        return
     pending = session.info.pop(_PENDING_RAG_PUBLISHES_KEY, None)
     if not pending:
         return
@@ -343,6 +347,8 @@ def _publish_pending_rag_jobs(session: Session) -> None:
 
 @event.listens_for(Session, "after_rollback")
 def _clear_pending_rag_job_publications(session: Session) -> None:
+    if session.in_nested_transaction():
+        return
     session.info.pop(_PENDING_RAG_PUBLISHES_KEY, None)
 
 
