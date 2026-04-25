@@ -32,6 +32,7 @@ export interface LearningCourse {
 }
 
 const VCF = 'vibe-coding-foundations';
+const SLJ = 'service-launch-journey';
 
 export const LEARNING_COURSES: LearningCourse[] = [
   {
@@ -99,6 +100,85 @@ export const LEARNING_COURSES: LearningCourse[] = [
         title: '부록',
         lessons: [
           { id: 'vcf-appendix-a-glossary', slug: 'appendix-a-glossary', title: '부록 A — 용어 사전', file: `${VCF}/A-용어사전.md` },
+        ],
+      },
+    ],
+  },
+  {
+    slug: SLJ,
+    title: '아이디어에서 출시까지 — 서비스 개발 여정',
+    description:
+      '한 사람이 서비스 하나를 처음 떠올린 순간부터 출시·운영·수익화까지 따라가는 실전 여정. ' +
+      '각 단계의 결정이 다음 단계에 어떻게 이어지는지를 28편의 레슨에 담았습니다.',
+    parts: [
+      {
+        slug: 'intro',
+        title: '시작하기',
+        lessons: [
+          { id: 'slj-001-orientation', slug: '01-orientation', title: '코스 안내 — 왜 "여정"인가', file: `${SLJ}/01-코스안내.md` },
+          { id: 'slj-002-overview', slug: '02-overview', title: '서비스 개발 한눈에 보기', file: `${SLJ}/02-서비스개발-한눈에보기.md` },
+        ],
+      },
+      {
+        slug: 'planning',
+        title: '만들 것을 정한다 — 기획',
+        lessons: [
+          { id: 'slj-003-idea', slug: '03-idea', title: '아이디어를 잡는 법', file: `${SLJ}/03-아이디어를-잡는-법.md` },
+          { id: 'slj-004-market-research', slug: '04-market-research', title: '시장 관찰과 경쟁 분석', file: `${SLJ}/04-시장관찰과-경쟁분석.md` },
+          { id: 'slj-005-mvp', slug: '05-mvp', title: 'MVP의 진짜 의미', file: `${SLJ}/05-MVP의-진짜의미.md` },
+          { id: 'slj-006-persona', slug: '06-persona', title: '페르소나와 타겟 — 좁힐수록 강해진다', file: `${SLJ}/06-페르소나와-타겟.md` },
+          { id: 'slj-007-core-features', slug: '07-core-features', title: '핵심 기능 도출 & 차별화 전략', file: `${SLJ}/07-핵심기능-차별화전략.md` },
+        ],
+      },
+      {
+        slug: 'design',
+        title: '그림을 그린다 — 설계',
+        lessons: [
+          { id: 'slj-008-wireframe', slug: '08-wireframe', title: '화면 설계와 와이어프레임', file: `${SLJ}/08-화면설계와-와이어프레임.md` },
+          { id: 'slj-009-ux-scenario', slug: '09-ux-scenario', title: 'UX·사용자 시나리오', file: `${SLJ}/09-UX-사용자시나리오.md` },
+          { id: 'slj-010-data-design', slug: '10-data-design', title: '데이터 설계 (테이블·ERD)', file: `${SLJ}/10-데이터설계-ERD.md` },
+          { id: 'slj-011-api-design', slug: '11-api-design', title: 'API 설계 — 프론트와 백을 잇는 계약', file: `${SLJ}/11-API설계.md` },
+          { id: 'slj-012-design-system', slug: '12-design-system', title: '디자인 시스템과 비주얼 설계', file: `${SLJ}/12-디자인시스템.md` },
+        ],
+      },
+      {
+        slug: 'development',
+        title: '코드를 짠다 — 개발 & 연동',
+        lessons: [
+          { id: 'slj-013-frontend', slug: '13-frontend', title: '프론트엔드 개발 한 바닥', file: `${SLJ}/13-프론트엔드-개발.md` },
+          { id: 'slj-014-backend', slug: '14-backend', title: '백엔드 API 개발 — CRUD부터 로직까지', file: `${SLJ}/14-백엔드-API개발.md` },
+          { id: 'slj-015-database', slug: '15-database', title: '데이터베이스 구축과 운영', file: `${SLJ}/15-데이터베이스-구축.md` },
+          { id: 'slj-016-integration', slug: '16-integration', title: '프론트-백 연동의 실제', file: `${SLJ}/16-프론트백-연동.md` },
+          { id: 'slj-017-auth', slug: '17-auth', title: '회원가입·로그인·소셜 인증', file: `${SLJ}/17-인증.md` },
+          { id: 'slj-018-mobile', slug: '18-mobile', title: '모바일 대응 (반응형·네이티브)', file: `${SLJ}/18-모바일-대응.md` },
+        ],
+      },
+      {
+        slug: 'testing',
+        title: '검증한다 — 테스트',
+        lessons: [
+          { id: 'slj-019-unit-integration', slug: '19-unit-integration', title: '단위·통합 테스트', file: `${SLJ}/19-단위-통합테스트.md` },
+          { id: 'slj-020-perf-security', slug: '20-perf-security', title: '성능·보안·시나리오 테스트', file: `${SLJ}/20-성능-보안테스트.md` },
+        ],
+      },
+      {
+        slug: 'deploy',
+        title: '세상에 내보낸다 — 빌드·배포·출시',
+        lessons: [
+          { id: 'slj-021-build', slug: '21-build', title: '빌드와 산출물 관리', file: `${SLJ}/21-빌드와-산출물.md` },
+          { id: 'slj-022-git-branch', slug: '22-git-branch', title: 'Git 브랜치 전략 — 개발/운영 분리', file: `${SLJ}/22-Git-브랜치전략.md` },
+          { id: 'slj-023-deploy-infra', slug: '23-deploy-infra', title: '배포 인프라 — 클라우드 vs Vercel/CF', file: `${SLJ}/23-배포-인프라.md` },
+          { id: 'slj-024-domain-https', slug: '24-domain-https', title: '도메인·HTTPS·SSL 설정', file: `${SLJ}/24-도메인-HTTPS.md` },
+          { id: 'slj-025-app-store', slug: '25-app-store', title: '앱스토어·구글플레이 등록과 심사', file: `${SLJ}/25-앱스토어-등록.md` },
+        ],
+      },
+      {
+        slug: 'operate',
+        title: '살아 움직이게 한다 — 운영·수익화',
+        lessons: [
+          { id: 'slj-026-operate', slug: '26-operate', title: '운영·유지보수 — 출시는 시작', file: `${SLJ}/26-운영-유지보수.md` },
+          { id: 'slj-027-monitoring', slug: '27-monitoring', title: '장애 대응과 모니터링', file: `${SLJ}/27-장애대응-모니터링.md` },
+          { id: 'slj-028-monetization', slug: '28-monetization', title: '수익화는 기획부터', file: `${SLJ}/28-수익화.md` },
         ],
       },
     ],

@@ -23,6 +23,13 @@
 
 ## 엔트리
 
+## 2026-04-26 · Learning Course — 아이디어에서 출시까지(서비스 개발 여정)
+
+- **요약**: 신규 학습 코스 `service-launch-journey` 7파트 28레슨을 신설. 한 사람이 서비스 하나를 처음 떠올린 순간부터 출시·운영·수익화까지 따라가는 여정 컨셉으로, 기존 `vibe-coding-foundations`(개념·기술 카탈로그형)과 상호 보완 관계로 분리. manifest.spec.ts 8/8 통과.
+- **PR/커밋**: 미커밋
+- **영향 파일**: `learning/service-launch-journey/`(28편), `apps/web/src/domains/learning/manifest.ts`
+- **남은 후속 작업**: 출시 후 사용자 피드백 기반으로 톤·분량 미세 조정. 각 레슨 "한 셜 더" 섹션의 외부 자료 링크 보강.
+
 ## 2026-04-25 · OpenSearch 증분 색인 확장 ACL/CRUD E2E 검증
 
 - **요약**: `agent-browser`로 admin/member/same-workspace outsider/hq-member 세션을 분리해 Docs, Meeting, PMS, Planner 검색 ACL/CRUD 전이 52건을 검증했다. user share, link share 비노출, teamspace membership add/remove, meeting attendee add/remove 및 attached doc/issue grant, PMS direct grant/revoke/comment/list rename/archive/delete, planner public/private/update/delete, workspace boundary를 확인했고 실패 0건이다. 검증 중 발견한 Docs teamspace projection 누락과 meeting delete FK 500도 수정했다.
