@@ -192,7 +192,7 @@ Ambient agent는 완전 자율 실행이 아니라 "notify/question/review"를 �
 
 ## Local Qwen3.6-35B-A3B Implications
 
-본 프로젝트는 Apple Silicon에서 `mlx-lm` provider로 `mlx-community/Qwen3.6-35B-A3B-4bit`를 운영한다. 이는 dense 모델이 아니라 MoE다 — 총 35B 파라미터 중 token당 활성은 약 3B(256 experts 중 8 routed + 1 shared)다. 운영 함의는 dense 모델과 다른 지점이 있어 별도로 정리한다.
+본 프로젝트는 NVIDIA DGX Spark (GB10) 위 vLLM provider로 `Qwen/Qwen3.6-35B-A3B-FP8`를 운영한다. 이는 dense 모델이 아니라 MoE다 — 총 35B 파라미터 중 token당 활성은 약 3B(256 experts 중 8 routed + 1 shared)다. 운영 함의는 dense 모델과 다른 지점이 있어 별도로 정리한다.
 
 ### 1. 긴 context는 필요조건이지 충분조건이 아니다
 
@@ -262,7 +262,7 @@ Specialist agent 분리는 prompt cache hit rate를 높이는 데 유리하다.
 
 ## Deployment Notes — DGX Spark (GB10)
 
-> 본 프로젝트의 메인 운영 장비는 **NVIDIA DGX Spark (GB10)**가 될 예정이다. 기본 운영 모델은 **Qwen3.6-35B-A3B**로 고정한다. 개발/검증은 Apple Silicon `mlx-lm`으로 진행하지만, production agent 운영은 DGX Spark + vLLM + Qwen3.6-35B-A3B 스택을 가정한다. 이 섹션은 NVIDIA 공식 문서/블로그와 NVIDIA Developer Forum, 커뮤니티 실측을 근거 등급을 나눠 정리한다.
+> 본 프로젝트의 메인 운영 장비는 **NVIDIA DGX Spark (GB10)**다. 기본 운영 모델은 **Qwen3.6-35B-A3B**로 고정한다. 개발·검증·운영 모두 DGX Spark + vLLM + Qwen3.6-35B-A3B 단일 스택을 가정하며, 다른 hardware/runtime 가정은 본 보고서 범위 밖이다. 이 섹션은 NVIDIA 공식 문서/블로그와 NVIDIA Developer Forum, 커뮤니티 실측을 근거 등급을 나눠 정리한다.
 
 ### 1. 하드웨어 현실과 한도
 
@@ -282,7 +282,7 @@ Specialist agent 분리는 prompt cache hit rate를 높이는 데 유리하다.
 |---|---|---|---|---|---|
 | Qwen3.6 단일 Spark | vLLM (NVIDIA forum, "serapis") | FP8 | 5,689–8,351 (pp2048 variants) | 75–76 (tg128) | `llama-benchy`, latency mode API |
 | Qwen3.6 단일 Spark | vLLM (NVIDIA forum, "cosinus") | FP8 | 4,037–6,212 | 52+ (tg32) | ToolCall-15 success 97% |
-| Qwen3.6 단일 Spark | LM Studio (Substack 사례) | Q4_K_M GGUF (~22GB) | — | ~68 | Mac M5 4-bit 대비 8.6x |
+| Qwen3.6 단일 Spark | LM Studio (Substack 사례) | Q4_K_M GGUF (~22GB) | — | ~68 | LMStudio + Claude Code 환경, 실측 |
 | Qwen3.5 analogue / 2-node | 2x DGX Spark, TP=2 | Marlin FP8 | — | 495 @ concurrency 32 | Qwen3.5-35B-A3B-FP8, 확장 경로 참고용 |
 
 NVIDIA 공식 agent workload 측정에서는 Qwen3.6-35B-A3B가 아니라 Qwen3 Coder Next FP8/vLLM 기준으로, 32K input / 1K output 작업 4개를 동시에 처리할 때 단일 작업 대비 2.6x 시간만 필요하다고 보고한다. 이는 "여러 specialist가 동시에 움직이는 local multi-agent workload가 Spark에서 sub-linear하게 확장될 수 있다"는 구조적 근거로만 사용한다. [NVIDIA Forum: Qwen3.6-35B-A3B (and FP8) has landed](https://forums.developer.nvidia.com/t/qwen-qwen3-6-35b-a3b-and-fp8-has-landed/366822), [NVIDIA Blog: Scaling Autonomous AI Agents and Workloads with NVIDIA DGX Spark](https://developer.nvidia.com/blog/scaling-autonomous-ai-agents-and-workloads-with-nvidia-dgx-spark/)
@@ -348,7 +348,7 @@ DGX Spark 단일 노드 운영은 본 보고서의 권고 방향을 거의 모�
 
 - **2-노드 클러스터**: Qwen3.5-35B-A3B-FP8 analogue에서 Marlin FP8 기준 495 tok/s aggregate (c=32) 사례가 있다. Qwen3.6-35B-A3B 기본 운영에서는 같은 수치를 보장하지 말고, manager 노드 ↔ specialist 노드 분리 또는 dense 모델 + MoE 모델 hetero 운영의 헤드룸으로만 본다.
 - **모델 escalation**: Qwen3.5-122B-A10B NVFP4 양자화가 단일 Spark에 적재된 community 사례가 있다 (234GB → 75.6GB). 이는 "큰 critic/synthesis 모델을 단일 Spark에 올릴 가능성"을 보여주는 analogue일 뿐이며, Qwen3.6-35B-A3B 기본 운영과 별도 검증 대상이다.
-- **개발-운영 일관성**: 개발 단계의 mlx-lm과 운영의 vLLM은 OpenAI-compatible 표면이 같지만 parser/finish_reason/tool delta 동작이 다르다. **adapter layer에서 두 backend를 동일 contract로 유지**하는 회귀 테스트가 필수다 (이미 본 프로젝트 `apps/api/src/aidoo_api/core/llm_adapters.py`에 `MlxLmStreamAdapter`가 존재 — vLLM adapter 쌍을 함께 유지).
+- **vLLM build/parser drift**: Spark 운영 자체가 단일 스택이지만, vLLM nightly 이미지·CUDA build·`qwen3` reasoning parser·`qwen3_coder` tool parser 조합이 빠르게 바뀐다. parser/finish_reason/tool delta 회귀 테스트를 별도 contract로 고정해, image/parser 업그레이드가 silently agent loop를 깨뜨리지 않게 한다 ([`apps/api/src/aidoo_api/core/llm_adapters.py`](apps/api/src/aidoo_api/core/llm_adapters.py)에 vLLM adapter contract를 유지).
 
 ## Small Domain Agent Design Method
 
@@ -797,7 +797,6 @@ MCP는 tool/context boundary의 표준화 수단으로 즉시 유용하다. A2A�
 - adadrag, [qwen3.5-dgx-spark: Complete vLLM guide](https://github.com/adadrag/qwen3.5-dgx-spark)
 - LMSYS, [NVIDIA DGX Spark In-Depth Review](https://www.lmsys.org/blog/2025-10-13-nvidia-dgx-spark/)
 - Substack, [Running Claude Code on a DGX Spark with Qwen 3.6 via LMStudio](https://internate.substack.com/p/running-claude-code-on-a-dgx-spark)
-- Hugging Face, [mlx-community/Qwen3.6-35B-A3B-4bit](https://huggingface.co/mlx-community/Qwen3.6-35B-A3B-4bit)
 - Hugging Face, [unsloth/Qwen3.6-35B-A3B-GGUF](https://huggingface.co/unsloth/Qwen3.6-35B-A3B-GGUF)
 
 ### Anecdotal / Community
