@@ -15,6 +15,8 @@ type KeywordSearchPayload = {
   next_offset?: number | null;
 };
 
+const KEYWORD_SEARCH_ROUTE = '**/api/v1/workspaces/*/search/query**';
+
 const baseHit = {
   entity_type: 'pms_issue',
   entity_id: 'issue-1',
@@ -68,8 +70,8 @@ function keywordResponse(overrides: KeywordSearchPayload = {}) {
 }
 
 async function stubKeywordSearch(page: Page, payload: KeywordSearchPayload = {}) {
-  await page.route('**/api/v1/workspaces/*/search/query', async (route: Route) => {
-    const requestBody = route.request().postDataJSON();
+  await page.route(KEYWORD_SEARCH_ROUTE, async (route: Route) => {
+    const requestBody = readJsonRequest(route);
     await route.fulfill({
       json: {
         ...keywordResponse(payload),
@@ -80,8 +82,8 @@ async function stubKeywordSearch(page: Page, payload: KeywordSearchPayload = {})
 }
 
 async function stubKeywordSearchSequence(page: Page) {
-  await page.route('**/api/v1/workspaces/*/search/query', async (route: Route) => {
-    const requestBody = route.request().postDataJSON();
+  await page.route(KEYWORD_SEARCH_ROUTE, async (route: Route) => {
+    const requestBody = readJsonRequest(route);
     if ((requestBody?.offset ?? 0) === 0) {
       await route.fulfill({
         json: keywordResponse({
@@ -110,12 +112,24 @@ async function stubKeywordSearchSequence(page: Page) {
 }
 
 async function stubKeywordSearchError(page: Page) {
-  await page.route('**/api/v1/workspaces/*/search/query', (route: Route) =>
+  await page.route(KEYWORD_SEARCH_ROUTE, (route: Route) =>
     route.fulfill({
       status: 503,
       json: { detail: 'keyword search is unavailable' },
     }),
   );
+}
+
+function readJsonRequest(route: Route): Record<string, unknown> {
+  const body = route.request().postData();
+  if (!body) {
+    return {};
+  }
+  try {
+    return JSON.parse(body) as Record<string, unknown>;
+  } catch {
+    return {};
+  }
 }
 
 async function failLegacyRagRoutes(page: Page) {
@@ -133,7 +147,7 @@ test.describe('keyword search tool', () => {
     await failLegacyRagRoutes(page);
   });
 
-  test('renders keyword results with server facets, highlights, and canonical links', async ({
+  test('renders keyword results with server facets, highlights, preview, and explicit open links', async ({
     page,
   }) => {
     await stubKeywordSearch(page);
@@ -146,26 +160,50 @@ test.describe('keyword search tool', () => {
     await expect(page.getByRole('button', { name: /회의 4/ })).toBeVisible();
     await expect(page.getByRole('button', { name: /PMS 7/ })).toBeVisible();
     await expect(page.getByRole('button', { name: /일정 2/ })).toBeVisible();
-    await expect(page.getByText('Budget blocker')).toBeVisible();
-    await expect(page.locator('mark')).toHaveText('risk');
-    await expect(page.getByRole('link', { name: /Budget blocker/ })).toHaveAttribute(
+    await expect(page.getByRole('button', { name: /검색 결과 선택: Budget blocker/ })).toBeVisible();
+    await expect(page.locator('mark').first()).toHaveText('risk');
+    await expect(
+      page
+        .getByRole('complementary', { name: '선택한 검색 결과 미리보기' })
+        .getByRole('link', { name: /선택한 결과 열기: Budget blocker/ }),
+    ).toHaveAttribute(
       'href',
       '/tool/pms-list-list-1?workspace=hq&issue=issue-1',
     );
     await expect(page.getByText('근거 답변')).toHaveCount(0);
   });
 
+  test('selects a result without leaving search and opens only from explicit action', async ({
+    page,
+  }) => {
+    await stubKeywordSearch(page);
+
+    await page.goto('/tool/search?workspace=hq&q=budget%20risk');
+    await page.getByRole('button', { name: /검색 결과 선택: Budget blocker/ }).click();
+
+    await expect(page).toHaveURL(/\/tool\/search\?/);
+    await expect(page).toHaveURL(/selected_type=pms_issue/);
+    await expect(page).toHaveURL(/selected_id=issue-1/);
+
+    await page
+      .getByRole('complementary', { name: '선택한 검색 결과 미리보기' })
+      .getByRole('link', { name: /선택한 결과 열기: Budget blocker/ })
+      .click();
+
+    await expect(page).toHaveURL(/\/tool\/pms-list-list-1\?workspace=hq&issue=issue-1/);
+  });
+
   test('submits workspace-scoped keyword requests from filters and sort controls', async ({
     page,
   }) => {
     const requests: unknown[] = [];
-    await page.route('**/api/v1/workspaces/*/search/query', async (route: Route) => {
-      requests.push(route.request().postDataJSON());
+    await page.route(KEYWORD_SEARCH_ROUTE, async (route: Route) => {
+      requests.push(readJsonRequest(route));
       await route.fulfill({ json: keywordResponse() });
     });
 
     await page.goto('/tool/search?workspace=hq&q=budget%20risk');
-    await expect(page.getByText('Budget blocker')).toBeVisible();
+    await expect(page.getByRole('button', { name: /검색 결과 선택: Budget blocker/ })).toBeVisible();
 
     await page.getByRole('button', { name: /문서/ }).click();
     await expect
@@ -207,16 +245,27 @@ test.describe('keyword search tool', () => {
     await expect(page.getByText('답변 포함')).toHaveCount(0);
   });
 
+  test('shows inline preview on mobile after selecting a result', async ({ page }) => {
+    await stubKeywordSearch(page);
+    await page.setViewportSize({ width: 390, height: 844 });
+
+    await page.goto('/tool/search?workspace=hq&q=budget%20risk');
+    await page.getByRole('button', { name: /검색 결과 선택: Budget blocker/ }).click();
+
+    await expect(page.getByRole('region', { name: /Budget blocker 미리보기/ })).toBeVisible();
+    await expect(page.getByRole('link', { name: /선택한 결과 열기: Budget blocker/ })).toBeVisible();
+  });
+
   test('uses pagination metadata for loading more results', async ({ page }) => {
     await stubKeywordSearchSequence(page);
 
     await page.goto('/tool/search?workspace=hq&q=budget%20risk');
-    await expect(page.getByText('Budget blocker')).toBeVisible();
+    await expect(page.getByRole('button', { name: /검색 결과 선택: Budget blocker/ })).toBeVisible();
 
     await page.getByRole('button', { name: '더 보기' }).click();
 
-    await expect(page.getByText('Second blocker')).toBeVisible();
-    await expect(page.getByText('Budget blocker')).toBeVisible();
+    await expect(page.getByRole('button', { name: /검색 결과 선택: Second blocker/ })).toBeVisible();
+    await expect(page.getByRole('button', { name: /검색 결과 선택: Budget blocker/ })).toBeVisible();
   });
 
   test('renders an empty state and keyword API error state', async ({ page }) => {
@@ -226,7 +275,7 @@ test.describe('keyword search tool', () => {
 
     await expect(page.getByText('검색 결과가 없습니다.')).toBeVisible();
 
-    await page.unroute('**/api/v1/workspaces/*/search/query');
+    await page.unroute(KEYWORD_SEARCH_ROUTE);
     await stubKeywordSearchError(page);
     await page.getByLabel('통합검색어').fill('budget risk');
     await page.getByRole('button', { name: '검색', exact: true }).click();

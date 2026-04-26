@@ -23,6 +23,13 @@
 
 ## 엔트리
 
+## 2026-04-26 · 통합검색 결과 미리보기 UX 적용
+
+- **요약**: `/tool/search` 결과 클릭을 즉시 라우팅에서 선택/미리보기로 전환하고, 명시적 `열기` 액션과 `selected_type`/`selected_id` URL 상태를 추가했다. Vitest, typecheck, Playwright 검색 E2E 8건 통과.
+- **PR/커밋**: 미커밋
+- **영향 파일**: `apps/web/src/components/views/RagSearchView.tsx`, `apps/web/e2e/rag-search.spec.ts`, `apps/web/src/components/views/RagSearchView.spec.tsx`
+- **남은 후속 작업**: 없음.
+
 ## 2026-04-26 · Learning Course — 아이디어에서 출시까지(서비스 개발 여정)
 
 - **요약**: 신규 학습 코스 `service-launch-journey` 7파트 28레슨을 신설. 한 사람이 서비스 하나를 처음 떠올린 순간부터 출시·운영·수익화까지 따라가는 여정 컨셉으로, 기존 `vibe-coding-foundations`(개념·기술 카탈로그형)과 상호 보완 관계로 분리. manifest.spec.ts 8/8 통과.

@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, useLocation } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { RagSearchView } from './RagSearchView';
@@ -84,39 +84,48 @@ function renderView({
         }}
       >
         <RagSearchView />
+        <LocationProbe />
       </WorkspaceBootstrapProvider>
     </MemoryRouter>,
   );
 }
 
+function LocationProbe() {
+  const location = useLocation();
+  return <div data-testid="location">{`${location.pathname}${location.search}`}</div>;
+}
+
+function searchHit(overrides = {}) {
+  return {
+    entity_type: 'pms_issue',
+    entity_id: 'issue-1',
+    workspace_id: 'workspace-hq',
+    title: 'Budget blocker',
+    summary: 'Supplier repricing increased the budget risk.',
+    snippet: {
+      text: 'Supplier repricing increased the budget risk.',
+      highlights: [{ start: 36, end: 40 }],
+    },
+    score: 7.4,
+    status: 'in_progress',
+    status_label: 'In Progress',
+    visibility: 'workspace',
+    updated_at: '2026-04-24T00:00:00Z',
+    created_at: '2026-04-20T00:00:00Z',
+    date_markers: { due_date: '2026-04-30' },
+    people: [{ role: 'assignee', user_id: 'user-1', label: 'Kim' }],
+    containers: [{ type: 'list', id: 'list-1', label: 'Sprint Backlog' }],
+    deep_link: '/tool/pms-list-list-1?workspace=hq&issue=issue-1',
+    preview_url: null,
+    metadata: { issue_number: 12, priority: 'high' },
+    ...overrides,
+  };
+}
+
 function searchResponse(overrides = {}) {
   return {
     query: 'budget risk',
-    hits: [
-      {
-        entity_type: 'pms_issue',
-        entity_id: 'issue-1',
-        workspace_id: 'workspace-hq',
-        title: 'Budget blocker',
-        summary: 'Supplier repricing increased the budget risk.',
-        snippet: {
-          text: 'Supplier repricing increased the budget risk.',
-          highlights: [{ start: 36, end: 40 }],
-        },
-        score: 7.4,
-        status: 'in_progress',
-        status_label: 'In Progress',
-        visibility: 'workspace',
-        updated_at: '2026-04-24T00:00:00Z',
-        created_at: '2026-04-20T00:00:00Z',
-        date_markers: { due_date: '2026-04-30' },
-        people: [{ role: 'assignee', user_id: 'user-1', label: 'Kim' }],
-        containers: [{ type: 'list', id: 'list-1', label: 'Sprint Backlog' }],
-        deep_link: '/tool/pms-list-list-1?workspace=hq&issue=issue-1',
-        preview_url: null,
-        metadata: {},
-      },
-    ],
+    hits: [searchHit()],
     facets: {
       entity_types: [
         { value: 'pms_issue', label: 'PMS', count: 1 },
@@ -171,24 +180,142 @@ describe('RagSearchView keyword search', () => {
       );
     });
     expect(screen.getByDisplayValue('budget risk')).toBeTruthy();
-    expect(await screen.findByText('Budget blocker')).toBeTruthy();
+    expect(await screen.findByRole('button', { name: /검색 결과 선택: Budget blocker/ })).toBeTruthy();
   });
 
-  it('renders server facets, safe highlights, and canonical deep links', async () => {
+  it('renders server facets, safe highlights, preview metadata, and explicit deep links', async () => {
     renderView();
 
-    expect(await screen.findByText('Budget blocker')).toBeTruthy();
+    expect(await screen.findByRole('button', { name: /검색 결과 선택: Budget blocker/ })).toBeTruthy();
     expect(screen.getAllByText('PMS').length).toBeGreaterThan(0);
     expect(screen.getByText('1건 중 1건 표시')).toBeTruthy();
     expect(document.querySelector('mark')?.textContent).toBeTruthy();
-    expect(screen.getByRole('link', { name: /Budget blocker/ }).getAttribute('href')).toBe(
+    expect((await screen.findAllByText('우선순위')).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole('link', { name: /열기: Budget blocker/ })[0].getAttribute('href')).toBe(
       '/tool/pms-list-list-1?workspace=hq&issue=issue-1',
     );
   });
 
+  it('selects a result in place and stores selection in the URL', async () => {
+    searchHarness.queryWorkspaceKeywordSearch.mockResolvedValueOnce(searchResponse({
+      total: 2,
+      hits: [
+        searchHit(),
+        searchHit({
+          entity_type: 'doc',
+          entity_id: 'doc-1',
+          title: 'Launch notes',
+          status: null,
+          status_label: null,
+          visibility: 'shared',
+          containers: [{ type: 'teamspace', id: 'team-1', label: 'Launch' }],
+          deep_link: '/w/hq/docs/doc-1',
+          metadata: { source_kind: 'manual' },
+        }),
+      ],
+      facets: {
+        entity_types: [
+          { value: 'pms_issue', label: 'PMS', count: 1 },
+          { value: 'doc', label: '문서', count: 1 },
+        ],
+        status: [],
+        containers: [],
+      },
+    }));
+
+    renderView({ initialEntry: '/tool/search?workspace=hq&q=budget%20risk' });
+
+    const docButton = await screen.findByRole('button', { name: /검색 결과 선택: Launch notes/ });
+    fireEvent.click(docButton);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('location').textContent).toBe(
+        '/tool/search?workspace=hq&q=budget+risk&selected_type=doc&selected_id=doc-1',
+      );
+    });
+    expect(docButton.getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getAllByRole('link', { name: /열기: Launch notes/ })[0].getAttribute('href')).toBe('/w/hq/docs/doc-1');
+  });
+
+  it('hydrates selected_type and selected_id from the URL', async () => {
+    searchHarness.queryWorkspaceKeywordSearch.mockResolvedValueOnce(searchResponse({
+      total: 2,
+      hits: [
+        searchHit(),
+        searchHit({
+          entity_type: 'doc',
+          entity_id: 'doc-1',
+          title: 'Launch notes',
+          status: null,
+          status_label: null,
+          visibility: 'shared',
+          deep_link: '/w/hq/docs/doc-1',
+          metadata: { source_kind: 'manual' },
+        }),
+      ],
+    }));
+
+    renderView({
+      initialEntry: '/tool/search?workspace=hq&q=budget%20risk&selected_type=doc&selected_id=doc-1',
+    });
+
+    const docButton = await screen.findByRole('button', { name: /검색 결과 선택: Launch notes/ });
+    await waitFor(() => {
+      expect(docButton.getAttribute('aria-pressed')).toBe('true');
+    });
+    expect(screen.getAllByRole('link', { name: /열기: Launch notes/ })[0].getAttribute('href')).toBe('/w/hq/docs/doc-1');
+  });
+
+  it('resets selected URL state when filters trigger a new search', async () => {
+    searchHarness.queryWorkspaceKeywordSearch
+      .mockResolvedValueOnce(searchResponse({
+        total: 2,
+        hits: [
+          searchHit(),
+          searchHit({
+            entity_type: 'doc',
+            entity_id: 'doc-1',
+            title: 'Launch notes',
+            status: null,
+            status_label: null,
+            visibility: 'shared',
+            deep_link: '/w/hq/docs/doc-1',
+          }),
+        ],
+      }))
+      .mockResolvedValueOnce(searchResponse());
+
+    renderView({
+      initialEntry: '/tool/search?workspace=hq&q=budget%20risk&selected_type=doc&selected_id=doc-1',
+    });
+
+    await screen.findByRole('button', { name: /검색 결과 선택: Launch notes/ });
+    fireEvent.click(screen.getByRole('button', { name: /PMS/ }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('location').textContent).toBe('/tool/search?workspace=hq&q=budget+risk&type=pms_issue');
+    });
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /검색 결과 선택: Budget blocker/ }).getAttribute('aria-pressed')).toBe('true');
+    });
+  });
+
+  it('opens selected rows in a new tab with command or control modifiers', async () => {
+    const openSpy = vi.spyOn(window, 'open').mockImplementation(() => null);
+    renderView();
+
+    const resultButton = await screen.findByRole('button', { name: /검색 결과 선택: Budget blocker/ });
+    fireEvent.click(resultButton, { metaKey: true });
+    fireEvent.keyDown(resultButton, { key: 'Enter', ctrlKey: true });
+
+    expect(openSpy).toHaveBeenCalledTimes(2);
+    expect(openSpy).toHaveBeenCalledWith('/tool/pms-list-list-1?workspace=hq&issue=issue-1', '_blank', 'noopener,noreferrer');
+    openSpy.mockRestore();
+  });
+
   it('submits entity filters and sort changes to the keyword API', async () => {
     renderView();
-    await screen.findByText('Budget blocker');
+    await screen.findByRole('button', { name: /검색 결과 선택: Budget blocker/ });
 
     fireEvent.click(screen.getByRole('button', { name: /문서/ }));
     await waitFor(() => {
@@ -242,11 +369,11 @@ describe('RagSearchView keyword search', () => {
       }));
 
     renderView();
-    await screen.findByText('Budget blocker');
+    await screen.findByRole('button', { name: /검색 결과 선택: Budget blocker/ });
     fireEvent.click(screen.getByRole('button', { name: '더 보기' }));
 
-    await screen.findByText('Second blocker');
-    expect(screen.getByText('Budget blocker')).toBeTruthy();
+    await screen.findByRole('button', { name: /검색 결과 선택: Second blocker/ });
+    expect(screen.getByRole('button', { name: /검색 결과 선택: Budget blocker/ })).toBeTruthy();
     expect(searchHarness.queryWorkspaceKeywordSearch).toHaveBeenLastCalledWith(
       expect.objectContaining({ offset: 20 }),
       'test-token',
