@@ -973,7 +973,6 @@ export const AIView = () => {
     // intentionally excluding chat/pendingUserTurnId/pendingUserInput from deps:
     // the hook's state transitions drive the effect; adding unstable refs to
     // deps would retrigger the commit block.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chat.state.pendingApprovals.length, chat.state.status, resetChat]);
 
   // Gather every artifact the thread knows about — both persisted (on
@@ -1090,10 +1089,7 @@ export const AIView = () => {
     // (apps/api/src/aidoo_api/domains/ai/agent.py) on every turn. Sending one
     // here produced two consecutive system messages, which providers like
     // mlx-lm reject with "System message must be at the beginning" (HTTP 404).
-    const messages: AiChatMessage[] = nextTurns.map((turn) => ({
-      role: turn.role,
-      content: serializeTurnForModel(turn),
-    }));
+    const messages = serializeTurnsForModel(nextTurns);
 
     void chat.send({
       messages,
@@ -1354,6 +1350,16 @@ function detailToTurns(detail: ConversationDetail): ChatTurn[] {
  * using the exact ``<artifact>`` grammar the server parses so the model sees
  * the same canonical form it produced.
  */
+function serializeTurnsForModel(turns: ChatTurn[]): AiChatMessage[] {
+  return turns.flatMap((turn) => {
+    const content = serializeTurnForModel(turn);
+    if (!content.trim()) {
+      return [];
+    }
+    return [{ role: turn.role, content }];
+  });
+}
+
 function serializeTurnForModel(turn: ChatTurn): string {
   const artifacts = turn.artifacts ?? [];
   if (artifacts.length === 0) {

@@ -207,7 +207,7 @@ def test_ai_chat_external_policy_uses_external_reasoning_shape(
     }
 
 
-def test_ai_chat_local_defaults_disable_reasoning_and_use_30k_budget(
+def test_ai_chat_local_defaults_disable_reasoning_and_use_chat_budget(
     client: TestClient,
     monkeypatch,
 ) -> None:
@@ -232,11 +232,11 @@ def test_ai_chat_local_defaults_disable_reasoning_and_use_30k_budget(
 
     assert response.status_code == 200, response.text
     call = local_client.chat.completions.calls[0]
-    assert call["max_tokens"] == llm_core.LOCAL_DEFAULT_MAX_TOKENS
+    assert call["max_tokens"] == llm_core.LOCAL_TASK_MAX_TOKENS["chatbot"]
     assert call["extra_body"] == {"think": False}
 
 
-def test_ai_chat_external_defaults_use_medium_reasoning_and_256k_budget(
+def test_ai_chat_external_defaults_use_medium_reasoning_and_chat_budget(
     client: TestClient,
     monkeypatch,
 ) -> None:
@@ -269,7 +269,7 @@ def test_ai_chat_external_defaults_use_medium_reasoning_and_256k_budget(
 
     assert response.status_code == 200, response.text
     call = external_client.chat.completions.calls[0]
-    assert call["max_tokens"] == llm_core.EXTERNAL_DEFAULT_MAX_TOKENS
+    assert call["max_tokens"] == llm_core.EXTERNAL_TASK_MAX_TOKENS["chatbot"]
     assert call["extra_body"] == {"reasoning": {"effort": "medium"}}
 
 

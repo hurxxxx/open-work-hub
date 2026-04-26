@@ -25,9 +25,23 @@ class _ToolArgsModel(BaseModel):
 
 
 class ListMeetingsArgs(_ToolArgsModel):
-    scope: Literal["mine", "upcoming", "all"] = "mine"
-    from_at: str | None = Field(default=None, alias="from")
-    to_at: str | None = Field(default=None, alias="to")
+    scope: Literal["mine", "upcoming", "all"] = Field(
+        default="mine",
+        description=(
+            "Meeting range. Use 'upcoming' only for future meetings. "
+            "Use 'all' when the user asks for the latest, last, previous, or past meeting."
+        ),
+    )
+    from_at: str | None = Field(
+        default=None,
+        alias="from",
+        description="Optional inclusive lower bound as ISO date/datetime.",
+    )
+    to_at: str | None = Field(
+        default=None,
+        alias="to",
+        description="Optional inclusive upper bound as ISO date/datetime.",
+    )
 
 
 class GetMeetingArgs(_ToolArgsModel):
@@ -113,7 +127,20 @@ def _list_meetings(
         from_at=_parse_optional_range_arg(arguments, "from"),
         to_at=_parse_optional_range_arg(arguments, "to"),
     )
-    return result.model_dump(mode="json", by_alias=True)
+    payload = result.model_dump(mode="json", by_alias=True)
+    items = payload.get("items") if isinstance(payload.get("items"), list) else []
+    if items:
+        payload = {
+            "total": payload.get("total", len(items)),
+            "sort": "start_at_asc",
+            "scope": scope,
+            "items": items,
+        }
+        if scope == "upcoming":
+            payload["nextMeeting"] = items[0]
+        if scope == "all":
+            payload["latestMeeting"] = items[-1]
+    return payload
 
 
 def _get_meeting(
@@ -292,7 +319,11 @@ def register_ai_capabilities(registry: AiCapabilityRegistry) -> None:
     )
     registry.register_tool(
         name="meeting.list_meetings",
-        description="List meetings in the current workspace.",
+        description=(
+            "List meetings in the current workspace. For questions about the latest, "
+            "last, previous, or past meeting, call this with scope='all'. "
+            "For future schedule questions, call this with scope='upcoming'."
+        ),
         owner_domain="meeting",
         handler=_list_meetings,
         args_model=ListMeetingsArgs,

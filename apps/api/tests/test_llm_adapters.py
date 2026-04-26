@@ -351,6 +351,8 @@ async def test_complete_chat_stream_commits_ok_audit_on_normal_finish(
         "completion_tokens": 2,
         "total_tokens": 3,
     }
+    assert payload["max_tokens"] == llm_core.LOCAL_TASK_MAX_TOKENS["chatbot"]
+    assert payload["finish_reason"] == "stop"
     assert payload["source"] == "test.stream"
     assert payload["chosen_pool"] == "local"
 
@@ -426,6 +428,7 @@ async def test_complete_chat_stream_treats_tool_calls_finish_as_ok_for_audit(
     rows = _audit_rows()
     assert len(rows) == before + 1
     assert rows[-1].payload["status"] == "ok"
+    assert rows[-1].payload["finish_reason"] == "tool_calls"
 
 
 async def test_complete_chat_stream_unconfigured_pool_audits_error_and_raises(
@@ -513,7 +516,7 @@ async def test_complete_chat_stream_uses_local_defaults_when_unset(
     )
     await _drain(messages=[{"role": "user", "content": "hi"}])
     call = completions.calls[0]
-    assert call["max_tokens"] == llm_core.LOCAL_DEFAULT_MAX_TOKENS
+    assert call["max_tokens"] == llm_core.LOCAL_TASK_MAX_TOKENS["chatbot"]
     assert call["extra_body"] == {"think": False}
 
 
@@ -527,8 +530,37 @@ async def test_complete_chat_stream_uses_external_defaults_when_unset(
     )
     await _drain(messages=[{"role": "user", "content": "hi"}])
     call = completions.calls[0]
-    assert call["max_tokens"] == llm_core.EXTERNAL_DEFAULT_MAX_TOKENS
+    assert call["max_tokens"] == llm_core.EXTERNAL_TASK_MAX_TOKENS["chatbot"]
     assert call["extra_body"] == {"reasoning": {"effort": "medium"}}
+
+
+async def test_complete_chat_stream_keeps_long_budget_for_batch_generation(
+    monkeypatch: pytest.MonkeyPatch, client_seed_workspace: None
+) -> None:
+    _set_policy("batch_generation", "local_only")
+    completions = _install_fake_pool(
+        monkeypatch,
+        [_delta_chunk(content="x", finish_reason="stop")],
+    )
+    context = LlmTaskContext(
+        source="test.stream",
+        actor_user_id=None,
+        workspace_id="ws-stream-test",
+        task_kind="batch_generation",
+    )
+    db = _make_db_session()
+    try:
+        await _collect_chunks(
+            complete_chat_stream(
+                context,
+                db,
+                messages=[{"role": "user", "content": "write report"}],
+            )
+        )
+    finally:
+        db.close()
+    call = completions.calls[0]
+    assert call["max_tokens"] == llm_core.LOCAL_DEFAULT_MAX_TOKENS
 
 
 @pytest.fixture(name="client_seed_workspace")

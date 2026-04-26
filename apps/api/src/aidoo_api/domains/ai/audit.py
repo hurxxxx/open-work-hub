@@ -40,6 +40,8 @@ def log_llm_call(
     status: str,
     latency_ms: int,
     usage: dict[str, int] | None = None,
+    max_tokens: int | None = None,
+    finish_reason: str | None = None,
     error: str | None = None,
     entity_id: str | None = None,
     agent_run_id: str | None = None,
@@ -69,6 +71,8 @@ def log_llm_call(
         "status": status,
         "latency_ms": latency_ms,
         "usage": dict(usage) if usage else None,
+        "max_tokens": max_tokens,
+        "finish_reason": finish_reason,
         "trace_id": current_trace_id(),
     }
     if error:

@@ -466,7 +466,11 @@ describe('AIView', () => {
   });
 
   it('disables submit until an existing conversation finishes hydrating', async () => {
-    conversationsHarness.getConversation.mockReturnValue(new Promise(() => {}));
+    conversationsHarness.getConversation.mockReturnValue(
+      new Promise(() => {
+        // Keep hydration pending for this test.
+      }),
+    );
 
     renderAIView({ initialEntries: ['/w/hq/ai?c=c-existing'] });
 
@@ -702,6 +706,55 @@ describe('AIView', () => {
       true,
     );
     expect(sentMessages[0].role).toBe('user');
+  });
+
+  it('omits empty persisted assistant turns from the next model payload', async () => {
+    conversationsHarness.getConversation.mockResolvedValue(
+      conversationDetail({
+        id: 'c-length',
+        turns: [
+          {
+            id: 'u-1',
+            seq: 0,
+            role: 'user',
+            content: '이전 질문',
+            createdAt: '2026-04-21T00:00:00Z',
+          },
+          {
+            id: 'a-1',
+            seq: 1,
+            role: 'assistant',
+            content: '',
+            finishReason: 'length',
+            responseStatus: 'done',
+            createdAt: '2026-04-21T00:00:01Z',
+          },
+        ],
+      }),
+    );
+    aiHarness.streamAiChat.mockResolvedValue(
+      mockStreamResponse([
+        sseBytes([
+          frame('content_delta', 0, { text: '다음 응답' }),
+          frame('done', 1, { finish_reason: 'stop', audit_id: null, meta: null }),
+        ]),
+      ]),
+    );
+
+    renderAIView({ initialEntries: ['/w/hq/ai?c=c-length'] });
+
+    await screen.findByText('이전 질문');
+    const input = screen.getByPlaceholderText('메시지를 입력하세요');
+    fireEvent.change(input, { target: { value: '다음 질문' } });
+    fireEvent.click(screen.getByRole('button', { name: /전송/i }));
+
+    await waitFor(() => {
+      expect(aiHarness.streamAiChat).toHaveBeenCalledTimes(1);
+    });
+    expect(aiHarness.streamAiChat.mock.calls[0][0].payload.messages).toEqual([
+      { role: 'user', content: '이전 질문' },
+      { role: 'user', content: '다음 질문' },
+    ]);
   });
 
   it('pre-fills composer from ?draft= on a fresh chat mount', async () => {

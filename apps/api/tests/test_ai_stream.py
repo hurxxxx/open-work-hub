@@ -1573,6 +1573,43 @@ def test_chat_stream_persists_failure_with_empty_body(
     assert assistant_turn["finishReason"] == "error"
 
 
+def test_chat_stream_persists_length_finish_with_empty_body(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    auth = _seeded_dev_login(client, "hq-admin")
+    slug = auth["user"]["workspaces"][0]["slug"]
+    _set_policy("chatbot", "local_only")
+
+    pool_client = _FakeAsyncPoolClient(
+        [_delta(finish_reason="length"), _usage_tail(1, 4096, 4097)]
+    )
+    monkeypatch.setattr(llm_core, "get_async_pool_client", lambda pool: pool_client)
+
+    status_code, events = _stream_post(
+        client,
+        _workspace_ai_path(slug, "/chat/stream"),
+        headers=_auth_headers(auth["token"]),
+        json_body={
+            "backend_mode": "local",
+            "persist": True,
+            "messages": [{"role": "user", "content": "loop"}],
+        },
+    )
+    assert status_code == 200
+    conversation_id = next(e for e in events if e["type"] == "conversation_attached")["data"][
+        "conversation_id"
+    ]
+
+    detail = client.get(
+        f"/api/v1/workspaces/{slug}/conversations/{conversation_id}",
+        headers=_auth_headers(auth["token"]),
+    ).json()
+    assistant_turn = detail["turns"][1]
+    assert "토큰 한도" in assistant_turn["content"]
+    assert assistant_turn["finishReason"] == "length"
+    assert assistant_turn["responseStatus"] == "done"
+
+
 def test_chat_stream_extracts_artifact_markup_into_dedicated_envelopes(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:

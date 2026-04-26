@@ -53,6 +53,27 @@ LlmHealthStatus = Literal[
 
 LOCAL_DEFAULT_MAX_TOKENS = 30_000
 EXTERNAL_DEFAULT_MAX_TOKENS = 262_144
+LOCAL_TASK_MAX_TOKENS: Mapping[str, int] = {
+    # Interactive turns should fail fast when the model loops instead of
+    # consuming a long-form generation budget.
+    "chatbot": 4_096,
+    "rag_grounded_answer": 6_144,
+    "meeting_insight_actions": 4_096,
+    "meeting_insight_decisions": 4_096,
+    "meeting_insight_followup": 4_096,
+    # Summaries and batch outputs are expected to be longer.
+    "meeting_summary": 12_000,
+    "batch_generation": LOCAL_DEFAULT_MAX_TOKENS,
+}
+EXTERNAL_TASK_MAX_TOKENS: Mapping[str, int] = {
+    "chatbot": 8_192,
+    "rag_grounded_answer": 12_288,
+    "meeting_insight_actions": 6_144,
+    "meeting_insight_decisions": 6_144,
+    "meeting_insight_followup": 6_144,
+    "meeting_summary": 24_000,
+    "batch_generation": EXTERNAL_DEFAULT_MAX_TOKENS,
+}
 LOCAL_DEFAULT_REASONING_EFFORT = "none"
 EXTERNAL_DEFAULT_REASONING_EFFORT = "medium"
 
@@ -521,6 +542,7 @@ def resolve_chat_execution(
     chosen_model = model or config.default_model
     resolved_max_tokens, resolved_reasoning_effort = _resolve_generation_defaults(
         pool,
+        task_kind=context.task_kind,
         max_tokens=max_tokens,
         reasoning_effort=reasoning_effort,
     )
@@ -598,6 +620,7 @@ def complete_chat(
             model=execution.chosen_model,
             status="error",
             latency_ms=0,
+            max_tokens=execution.resolved_max_tokens,
             error=f"{execution.pool} pool is not configured",
             entity_id=audit_entity_id,
             agent_run_id=agent_run_id,
@@ -638,6 +661,7 @@ def complete_chat(
             model=execution.chosen_model,
             status="error",
             latency_ms=elapsed_ms,
+            max_tokens=execution.resolved_max_tokens,
             error=str(error),
             entity_id=audit_entity_id,
             agent_run_id=agent_run_id,
@@ -647,6 +671,7 @@ def complete_chat(
     elapsed_ms = int((time.monotonic() - started) * 1000)
 
     usage = _extract_usage(response)
+    finish_reason = _first_choice_finish_reason(response)
     log_llm_call(
         source=context.source,
         actor_user_id=context.actor_user_id,
@@ -663,6 +688,8 @@ def complete_chat(
         status="ok",
         latency_ms=elapsed_ms,
         usage=usage,
+        max_tokens=execution.resolved_max_tokens,
+        finish_reason=finish_reason,
         entity_id=audit_entity_id,
         agent_run_id=agent_run_id,
         conversation_id=conversation_id,
@@ -685,6 +712,14 @@ def _extract_usage(response: Any) -> dict[str, int] | None:
         if isinstance(value, int):
             out[field_name] = value
     return out or None
+
+
+def _first_choice_finish_reason(response: Any) -> str | None:
+    choices = getattr(response, "choices", None) or []
+    if not choices:
+        return None
+    value = getattr(choices[0], "finish_reason", None)
+    return value if isinstance(value, str) and value else None
 
 
 def _collect_text_inputs(messages: list[dict[str, Any]]) -> list[str]:
@@ -717,18 +752,25 @@ def _build_extra_body_for_pool(
 def _resolve_generation_defaults(
     pool: LlmPoolName,
     *,
+    task_kind: str,
     max_tokens: int | None,
     reasoning_effort: str | None,
 ) -> tuple[int, str]:
     if pool == "external":
         return (
-            max_tokens or EXTERNAL_DEFAULT_MAX_TOKENS,
+            max_tokens or _default_max_tokens_for_task(pool, task_kind),
             reasoning_effort or EXTERNAL_DEFAULT_REASONING_EFFORT,
         )
     return (
-        max_tokens or LOCAL_DEFAULT_MAX_TOKENS,
+        max_tokens or _default_max_tokens_for_task(pool, task_kind),
         reasoning_effort or LOCAL_DEFAULT_REASONING_EFFORT,
     )
+
+
+def _default_max_tokens_for_task(pool: LlmPoolName, task_kind: str) -> int:
+    if pool == "external":
+        return EXTERNAL_TASK_MAX_TOKENS.get(task_kind, EXTERNAL_DEFAULT_MAX_TOKENS)
+    return LOCAL_TASK_MAX_TOKENS.get(task_kind, LOCAL_DEFAULT_MAX_TOKENS)
 
 
 def _merge_extra_body(
@@ -850,6 +892,7 @@ async def complete_chat_stream(
             model=execution.chosen_model,
             status="error",
             latency_ms=0,
+            max_tokens=execution.resolved_max_tokens,
             error=f"{execution.pool} pool is not configured",
             entity_id=audit_entity_id,
             agent_run_id=agent_run_id,
@@ -874,6 +917,7 @@ async def complete_chat_stream(
     adapter = get_stream_adapter(execution.pool)
     started = time.monotonic()
     status_final: str = "error"
+    finish_reason_final: str | None = None
     error_message: str | None = None
     accumulated_usage: dict[str, int] | None = None
     try:
@@ -886,6 +930,7 @@ async def complete_chat_stream(
                     if chunk.finish_reason in ("stop", "length", "tool_calls")
                     else "error"
                 )
+                finish_reason_final = chunk.finish_reason
             yield chunk, decision, config
     except (asyncio.CancelledError, GeneratorExit):
         status_final = "cancelled"
@@ -912,6 +957,8 @@ async def complete_chat_stream(
             status=status_final,
             latency_ms=elapsed_ms,
             usage=accumulated_usage,
+            max_tokens=execution.resolved_max_tokens,
+            finish_reason=finish_reason_final,
             error=error_message,
             entity_id=audit_entity_id,
             agent_run_id=agent_run_id,

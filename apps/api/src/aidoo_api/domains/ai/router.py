@@ -72,6 +72,12 @@ from aidoo_api.domains.rag.tools import should_expose_rag_tools_for_messages
 
 
 LlmRequestBackendMode = Literal["auto", "local", "openrouter"]
+EMPTY_LENGTH_RESPONSE_MESSAGE = (
+    "응답이 토큰 한도에 도달해 중간에서 잘렸습니다. "
+    "질문 범위를 줄이거나 이어서 요청하세요."
+)
+EMPTY_CANCELLED_RESPONSE_MESSAGE = "응답이 중단되었습니다."
+EMPTY_ERROR_RESPONSE_MESSAGE = "응답 중 오류가 발생했습니다."
 
 
 class LlmPoolHealthResponse(BaseModel):
@@ -2400,6 +2406,13 @@ def _persist_assistant_turn(
     persisted_content = buffer.content
     if not persisted_content and buffer.error_message:
         persisted_content = buffer.error_message
+    if not persisted_content and not has_body:
+        if buffer.finish_reason == "length":
+            persisted_content = EMPTY_LENGTH_RESPONSE_MESSAGE
+        elif response_status == "cancelled":
+            persisted_content = EMPTY_CANCELLED_RESPONSE_MESSAGE
+        elif response_status == "error":
+            persisted_content = EMPTY_ERROR_RESPONSE_MESSAGE
 
     fallback_meta = _build_done_meta(last_decision, last_config, model=chosen_model)
     done_meta = buffer.done_meta or fallback_meta or {}
