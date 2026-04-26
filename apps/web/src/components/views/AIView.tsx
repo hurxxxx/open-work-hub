@@ -250,10 +250,23 @@ export const AIView = () => {
   const [allowedAppIds, setAllowedAppIds] = useState<string[] | null>(
     () => readPersistedScope(workspaceSlug),
   );
-  const chatbotCapableAppIds = useMemo(
-    () => workspaceBootstrap.data?.chatbot_app_ids ?? [],
-    [workspaceBootstrap.data?.chatbot_app_ids],
-  );
+  // Apps that the chatbot has registered tools for. The backend ships an
+  // explicit ``chatbot_app_ids`` so adding a new MCP-bridged domain shows up
+  // automatically; until that field is available (older API server, or first
+  // bootstrap fetch hasn't completed) we fall back to the static union of
+  // domains that own tools today so the picker always renders something the
+  // user can interact with.
+  const FALLBACK_CHATBOT_APP_IDS = ['pms', 'meeting', 'planner', 'docs', 'ai'];
+  const chatbotCapableAppIds = useMemo(() => {
+    const fromBootstrap = workspaceBootstrap.data?.chatbot_app_ids;
+    if (fromBootstrap && fromBootstrap.length > 0) return fromBootstrap;
+    const enabled = new Set(
+      (workspaceBootstrap.data?.apps ?? [])
+        .filter((app) => app.enabled)
+        .map((app) => app.app_id),
+    );
+    return FALLBACK_CHATBOT_APP_IDS.filter((id) => enabled.has(id));
+  }, [workspaceBootstrap.data?.apps, workspaceBootstrap.data?.chatbot_app_ids]);
   const scopeOptions = useMemo(() => {
     const apps = workspaceBootstrap.data?.apps ?? [];
     const titlesById = new Map(apps.map((app) => [app.app_id, app.title]));
