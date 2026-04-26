@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from typing import Any
 
@@ -79,9 +79,18 @@ class AiMcpClient:
         workspace: Workspace,
         principal: CallerPrincipal,
         app_id: str | None = None,
+        app_ids: Iterable[str] | None = None,
         include_meta: bool = False,
         include_approval_required: bool = True,
     ) -> list[FilteredCapabilityTool]:
+        # ``app_id`` (single) and ``app_ids`` (multi-select) compose: when both
+        # are given the descriptor must match the single id AND be part of the
+        # multi-select set. The multi-select is the user-driven scope picker
+        # narrowing — it can never expand the surface, only intersect with the
+        # workspace-entitlement check that runs below.
+        scope_set: frozenset[str] | None = (
+            frozenset(app_ids) if app_ids is not None else None
+        )
         workspace_context = build_workspace_context(workspace)
         entitlements = resolve_workspace_entitlement_view(db, workspace=workspace)
         filtered: list[FilteredCapabilityTool] = []
@@ -89,6 +98,8 @@ class AiMcpClient:
             if descriptor.kind != "tool":
                 continue
             if app_id is not None and not _descriptor_matches_app(descriptor, app_id=app_id):
+                continue
+            if scope_set is not None and descriptor.workspace_app_id not in scope_set:
                 continue
             if not include_approval_required and descriptor.approval_policy == "required":
                 continue
@@ -238,9 +249,7 @@ class AiMcpClient:
 
 
 def _descriptor_matches_app(descriptor: AiCapabilityDescriptor, *, app_id: str) -> bool:
-    if descriptor.app_id == app_id:
-        return True
-    return app_id == "ai" and descriptor.app_id == "rag"
+    return descriptor.workspace_app_id == app_id
 
 
 def _tool_to_openapi_operation(

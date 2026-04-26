@@ -43,6 +43,43 @@ import type {
 import type { NavItem } from '@/src/constants';
 
 const AI_BACKEND_MODE_STORAGE_KEY = 'aidoo.ai.backendMode';
+const AI_SCOPE_STORAGE_PREFIX = 'aidoo.ai.scope.';
+
+function chatScopeStorageKey(workspaceSlug: string | undefined): string | null {
+  if (!workspaceSlug) return null;
+  return `${AI_SCOPE_STORAGE_PREFIX}${workspaceSlug}`;
+}
+
+function readPersistedScope(workspaceSlug: string | undefined): string[] | null {
+  const key = chatScopeStorageKey(workspaceSlug);
+  if (!key || typeof window === 'undefined') return null;
+  try {
+    const raw = window.localStorage.getItem(key);
+    if (raw === null) return null;
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return null;
+    return parsed.filter((item): item is string => typeof item === 'string');
+  } catch {
+    return null;
+  }
+}
+
+function writePersistedScope(
+  workspaceSlug: string | undefined,
+  selection: string[] | null,
+): void {
+  const key = chatScopeStorageKey(workspaceSlug);
+  if (!key || typeof window === 'undefined') return;
+  try {
+    if (selection === null) {
+      window.localStorage.removeItem(key);
+    } else {
+      window.localStorage.setItem(key, JSON.stringify(selection));
+    }
+  } catch {
+    // Quota or disabled storage — picker still works in-memory for the session.
+  }
+}
 
 interface AiDraftLocationState {
   aiDraft: string;
@@ -207,6 +244,32 @@ export const AIView = () => {
   const [backendMode, setBackendMode] = useState<AiBackendMode>(
     readInitialBackendMode,
   );
+  // ``null`` = let the server expose every entitled tool (legacy default).
+  // Persisted per-workspace in localStorage; reset to ``null`` automatically
+  // when the workspace's chatbot_app_ids drop the previously selected ids.
+  const [allowedAppIds, setAllowedAppIds] = useState<string[] | null>(
+    () => readPersistedScope(workspaceSlug),
+  );
+  const chatbotCapableAppIds = useMemo(
+    () => workspaceBootstrap.data?.chatbot_app_ids ?? [],
+    [workspaceBootstrap.data?.chatbot_app_ids],
+  );
+  const scopeOptions = useMemo(() => {
+    const apps = workspaceBootstrap.data?.apps ?? [];
+    const titlesById = new Map(apps.map((app) => [app.app_id, app.title]));
+    return chatbotCapableAppIds.map((id) => ({
+      id,
+      title: titlesById.get(id) ?? id.toUpperCase(),
+    }));
+  }, [chatbotCapableAppIds, workspaceBootstrap.data?.apps]);
+  // Strip ids that are no longer chatbot-capable so a stale selection
+  // doesn't keep narrowing the surface to apps that no longer expose tools.
+  const sanitizedAllowedAppIds = useMemo(() => {
+    if (allowedAppIds === null) return null;
+    if (chatbotCapableAppIds.length === 0) return allowedAppIds;
+    const known = new Set(chatbotCapableAppIds);
+    return allowedAppIds.filter((id) => known.has(id));
+  }, [allowedAppIds, chatbotCapableAppIds]);
   const [turns, setTurns] = useState<ChatTurn[]>([]);
   const [input, setInput] = useState('');
   const [chatError, setChatError] = useState<string | null>(null);
@@ -349,6 +412,9 @@ export const AIView = () => {
         {
           conversation_id: currentConversationId,
           approval_id: approval.approval_id,
+          ...(sanitizedAllowedAppIds !== null
+            ? { allowed_app_ids: sanitizedAllowedAppIds }
+            : {}),
         },
         {
           seedApproval: approval,
@@ -371,7 +437,7 @@ export const AIView = () => {
         current?.approvalId === approval.approval_id ? null : current,
       );
     }
-  }, [currentConversationId, replacePendingApprovals, resumeChat, token]);
+  }, [currentConversationId, replacePendingApprovals, resumeChat, sanitizedAllowedAppIds, token]);
 
   const handleResolveApproval = useCallback(async (
     approval: PendingApproval,
@@ -512,6 +578,16 @@ export const AIView = () => {
       window.localStorage.setItem(AI_BACKEND_MODE_STORAGE_KEY, backendMode);
     }
   }, [backendMode]);
+
+  useEffect(() => {
+    writePersistedScope(workspaceSlug, allowedAppIds);
+  }, [allowedAppIds, workspaceSlug]);
+
+  // Re-read persisted scope when the user switches workspaces — each
+  // workspace tracks its own scope choice.
+  useEffect(() => {
+    setAllowedAppIds(readPersistedScope(workspaceSlug));
+  }, [workspaceSlug]);
 
   // Hydrate turns whenever the URL conversation changes. Clearing `c` (from
   // the sidebar "+ 새 대화" action, say) resets the thread to an empty state;
@@ -969,13 +1045,6 @@ export const AIView = () => {
     navigate(resolveToolInvocationHref(item, workspaceSlug, user));
   }
 
-  function resolveSuggestionHref(suggestion: { id: string }) {
-    const item = NAV_ITEMS.find((candidate) => candidate.id === suggestion.id);
-    return item
-      ? resolveToolInvocationHref(item, workspaceSlug, user)
-      : `/tool/${suggestion.id}`;
-  }
-
   function handleSubmit() {
     const trimmed = input.trim();
     if (
@@ -1022,6 +1091,13 @@ export const AIView = () => {
       // so the whole thread lands on one Conversation row.
       persist: true,
       conversation_id: activeConversationId ?? undefined,
+      // ``undefined`` lets the server fall through to its "all entitled
+      // tools" default; a non-null value narrows tool exposure for this turn
+      // (the server still intersects with workspace entitlements, so this
+      // can never widen access).
+      ...(sanitizedAllowedAppIds !== null
+        ? { allowed_app_ids: sanitizedAllowedAppIds }
+        : {}),
     });
   }
 
@@ -1104,11 +1180,14 @@ export const AIView = () => {
           isCheckingHealth={isCheckingHealth}
           onRefreshHealth={refreshHealth}
           canRefresh={Boolean(token)}
+          scopeOptions={scopeOptions}
+          scopeSelected={sanitizedAllowedAppIds}
+          onScopeChange={setAllowedAppIds}
+          scopeDisabled={isSending}
         />
 
         {turns.length === 0 && !isSending ? (
           <EmptyState
-            getSuggestionHref={resolveSuggestionHref}
             composer={
               <div className="space-y-2">
                 {scopeInfo ? (

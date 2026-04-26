@@ -40,6 +40,9 @@ class _RecordingTransport:
 
 
 def test_descriptor_matches_ai_app_for_rag_tools() -> None:
+    # Tool naming and workspace_app_id are now decoupled: a "rag.*" tool can
+    # legitimately live under the "ai" workspace app, and the matcher uses
+    # the explicit workspace_app_id rather than parsing the name prefix.
     descriptor = AiCapabilityDescriptor(
         name="rag.query",
         kind="tool",
@@ -51,10 +54,11 @@ def test_descriptor_matches_ai_app_for_rag_tools() -> None:
         preview_builder_id=None,
         output_projection="full",
         service_handler_id="rag.query",
+        workspace_app_id="ai",
     )
 
-    assert _descriptor_matches_app(descriptor, app_id="rag")
     assert _descriptor_matches_app(descriptor, app_id="ai")
+    assert not _descriptor_matches_app(descriptor, app_id="rag")
     assert not _descriptor_matches_app(descriptor, app_id="docs")
 
 

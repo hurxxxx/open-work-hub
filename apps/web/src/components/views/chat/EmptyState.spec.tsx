@@ -23,37 +23,13 @@ describe('EmptyState', () => {
     expect(screen.getByTestId('custom-composer')).not.toBeNull();
   });
 
-  it('renders four suggestion cards linking to tool routes', () => {
+  it('does not render any tool suggestion cards', () => {
+    // The chat empty state used to seed four legacy "tool" shortcuts
+    // (search/FMEA/draft/translate). Those have been removed because the
+    // chatbot is the entry point now — context selection happens in the
+    // ChatTopBar scope picker, not via these cards.
     renderEmptyState();
-    const suggestions = ['아이두 통합검색', 'FMEA 비교', '기안 초안', '문서 번역/요약'];
-    for (const label of suggestions) {
-      expect(screen.getByText(label)).not.toBeNull();
-    }
-    // All four suggestion anchors point to /tool/:id routes.
-    const links = screen.getAllByRole('link');
-    expect(links).toHaveLength(4);
-    for (const link of links) {
-      expect(link.getAttribute('href')).toMatch(/^\/tool\//);
-    }
-  });
-
-  it('allows callers to provide workspace-aware suggestion links', () => {
-    render(
-      <MemoryRouter>
-        <EmptyState
-          composer={<div />}
-          getSuggestionHref={(suggestion) => (
-            suggestion.id === 'search'
-              ? '/tool/search?workspace=hq'
-              : `/tool/${suggestion.id}`
-          )}
-        />
-      </MemoryRouter>,
-    );
-
-    expect(screen.getByRole('link', { name: /아이두 통합검색/ }).getAttribute('href')).toBe(
-      '/tool/search?workspace=hq',
-    );
+    expect(screen.queryAllByRole('link')).toHaveLength(0);
   });
 
   it('allows overriding greeting and subline copy', () => {

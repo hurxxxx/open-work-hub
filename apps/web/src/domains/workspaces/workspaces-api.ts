@@ -33,6 +33,13 @@ export interface WorkspaceBootstrapResponse {
   workspace: WorkspaceBootstrapWorkspace;
   apps: WorkspaceBootstrapApp[];
   nav: WorkspaceBootstrapNavItem[];
+  /**
+   * Workspace app ids the chatbot has registered tools for, intersected with
+   * this workspace's entitlements. Drives the chat scope picker — adding a
+   * new MCP-bridged domain on the backend automatically extends this list,
+   * so no frontend code change is needed to expose it.
+   */
+  chatbot_app_ids?: string[];
 }
 
 export async function getWorkspaceBootstrap(

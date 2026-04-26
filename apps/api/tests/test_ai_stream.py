@@ -1869,3 +1869,139 @@ def test_chat_stream_synthesizes_completed_for_unclosed_artifact_on_error(
     completed_idx = types.index("artifact_completed")
     error_idx = types.index("error")
     assert started_idx < completed_idx < error_idx
+
+
+# ---------------------------------------------------------------------------
+# allowed_app_ids: per-conversation tool scope picker
+# ---------------------------------------------------------------------------
+
+
+def _tools_in_first_call(pool_client: _FakeAsyncPoolClient) -> list[dict[str, Any]]:
+    calls = pool_client.chat.completions.calls
+    assert calls, "pool client never received a chat.completions.create call"
+    return list(calls[0].get("tools") or [])
+
+
+def test_chat_stream_allowed_app_ids_narrows_tool_surface_to_one_app(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    auth = _seeded_dev_login(client, "delivery-hub-admin")
+    slug = "delivery-hub"
+    _set_policy("chatbot", "local_only")
+
+    pool_client = _FakeAsyncPoolClient(
+        [_delta(content="ok"), _delta(finish_reason="stop"), _usage_tail(1, 1, 2)]
+    )
+    monkeypatch.setattr(llm_core, "get_async_pool_client", lambda pool: pool_client)
+
+    status_code, _events = _stream_post(
+        client,
+        _workspace_ai_path(slug, "/chat/stream"),
+        headers=_auth_headers(auth["token"]),
+        json_body={
+            "backend_mode": "local",
+            "messages": [{"role": "user", "content": "hi"}],
+            # Pure user-driven scope narrowing: only meeting tools are exposed
+            # to the LLM for this turn even though the workspace also has PMS,
+            # planner, and docs entitlements.
+            "allowed_app_ids": ["meeting"],
+        },
+    )
+
+    assert status_code == 200
+    tool_names = [item["function"]["name"] for item in _tools_in_first_call(pool_client)]
+    assert tool_names, "expected meeting tools to be exposed"
+    assert all(name.startswith("meeting.") for name in tool_names), (
+        f"non-meeting tool leaked into LLM context: {tool_names}"
+    )
+
+
+def test_chat_stream_allowed_app_ids_empty_list_disables_all_tools(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    auth = _seeded_dev_login(client, "delivery-hub-admin")
+    slug = "delivery-hub"
+    _set_policy("chatbot", "local_only")
+
+    pool_client = _FakeAsyncPoolClient(
+        [_delta(content="ok"), _delta(finish_reason="stop"), _usage_tail(1, 1, 2)]
+    )
+    monkeypatch.setattr(llm_core, "get_async_pool_client", lambda pool: pool_client)
+
+    status_code, _events = _stream_post(
+        client,
+        _workspace_ai_path(slug, "/chat/stream"),
+        headers=_auth_headers(auth["token"]),
+        json_body={
+            "backend_mode": "local",
+            "messages": [{"role": "user", "content": "hi"}],
+            # Explicit "no tools" — text-only conversation. The agent loop is
+            # short-circuited because filtered_tool_specs is empty, so the
+            # underlying chat.completions call is made without a tools kwarg.
+            "allowed_app_ids": [],
+        },
+    )
+
+    assert status_code == 200
+    assert _tools_in_first_call(pool_client) == []
+
+
+def test_chat_stream_allowed_app_ids_rejects_unknown_app(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    auth = _seeded_dev_login(client, "delivery-hub-admin")
+    slug = "delivery-hub"
+    _set_policy("chatbot", "local_only")
+
+    pool_client = _FakeAsyncPoolClient(
+        [_delta(content="ok"), _delta(finish_reason="stop"), _usage_tail(1, 1, 2)]
+    )
+    monkeypatch.setattr(llm_core, "get_async_pool_client", lambda pool: pool_client)
+
+    response = client.post(
+        _workspace_ai_path(slug, "/chat/stream"),
+        headers=_auth_headers(auth["token"]),
+        json={
+            "backend_mode": "local",
+            "messages": [{"role": "user", "content": "hi"}],
+            # An attacker can't smuggle a tool surface in by inventing an
+            # app_id — the validator rejects unknown values up front.
+            "allowed_app_ids": ["pms", "shadow-app"],
+        },
+    )
+    assert response.status_code == 422
+    assert "shadow-app" in response.text
+
+
+def test_chat_stream_allowed_app_ids_cannot_widen_beyond_entitlements(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    auth = _seeded_dev_login(client, "delivery-hub-admin")
+    slug = "delivery-hub"
+    _set_policy("chatbot", "local_only")
+    # The user asks for PMS tools, but the workspace entitlement for PMS has
+    # been revoked — the resulting tool surface is the *intersection*, so
+    # zero tools end up exposed even though the request looks valid.
+    _disable_workspace_app(slug, "pms")
+
+    pool_client = _FakeAsyncPoolClient(
+        [_delta(content="ok"), _delta(finish_reason="stop"), _usage_tail(1, 1, 2)]
+    )
+    monkeypatch.setattr(llm_core, "get_async_pool_client", lambda pool: pool_client)
+
+    status_code, _events = _stream_post(
+        client,
+        _workspace_ai_path(slug, "/chat/stream"),
+        headers=_auth_headers(auth["token"]),
+        json_body={
+            "backend_mode": "local",
+            "messages": [{"role": "user", "content": "hi"}],
+            "allowed_app_ids": ["pms"],
+        },
+    )
+
+    assert status_code == 200
+    tool_names = [item["function"]["name"] for item in _tools_in_first_call(pool_client)]
+    assert all(not name.startswith("pms.") for name in tool_names), (
+        f"PMS tool leaked despite revoked entitlement: {tool_names}"
+    )

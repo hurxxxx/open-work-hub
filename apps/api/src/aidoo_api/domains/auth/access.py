@@ -1104,6 +1104,18 @@ def build_workspace_bootstrap(
         )
         nav.extend(nav_items)
 
+    # Apps the chatbot has registered tools for *and* that this workspace has
+    # entitled. The frontend scope picker renders the intersection, so adding
+    # a new domain via ``register_ai_capabilities`` makes it available here
+    # without any frontend change.
+    from aidoo_api.domains.ai.registry import get_chatbot_capable_app_ids
+
+    chatbot_app_ids = [
+        app_id
+        for app_id in get_chatbot_capable_app_ids()
+        if app_id in enabled_app_ids
+    ]
+
     return {
         "workspace": {
             "id": workspace.id,
@@ -1113,6 +1125,7 @@ def build_workspace_bootstrap(
         },
         "apps": apps,
         "nav": nav,
+        "chatbot_app_ids": chatbot_app_ids,
         "principal": {
             "kind": "user",
             "workspace_id": workspace.id,

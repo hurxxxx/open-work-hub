@@ -132,6 +132,9 @@ def _build_test_approval_registry(
         mode="write",
         discoverability_predicate_id="test.enabled",
         preview_builder_id="test.preview",
+        # owner_domain is a synthetic test value; pin the workspace_app_id to
+        # a real workspace app so the registry validation passes.
+        workspace_app_id="ai",
     )
     registry.compile_capabilities()
     return registry

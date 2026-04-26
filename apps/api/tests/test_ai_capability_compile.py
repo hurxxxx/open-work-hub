@@ -37,6 +37,7 @@ def test_compile_rejects_non_nullable_union_schema() -> None:
         args_model=UnsupportedArgs,
         handler=lambda db, workspace, principal, user, arguments: {"ok": True},
         discoverability_predicate_id="custom.enabled",
+        workspace_app_id="ai",
     )
 
     with pytest.raises(ValueError, match="nullable unions"):
@@ -59,6 +60,7 @@ def test_registry_rejects_duplicate_tool_registration() -> None:
         args_model=Args,
         handler=lambda db, workspace, principal, user, arguments: {"ok": True},
         discoverability_predicate_id="custom.enabled",
+        workspace_app_id="ai",
     )
 
     with pytest.raises(ValueError, match="Duplicate AI tool registration"):
@@ -69,6 +71,7 @@ def test_registry_rejects_duplicate_tool_registration() -> None:
             args_model=Args,
             handler=lambda db, workspace, principal, user, arguments: {"ok": True},
             discoverability_predicate_id="custom.enabled",
+            workspace_app_id="ai",
         )
 
 

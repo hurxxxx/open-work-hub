@@ -6,7 +6,7 @@ from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from openai import OpenAIError
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
 from sse_starlette.sse import EventSourceResponse
 
@@ -103,6 +103,34 @@ class ChatRequest(BaseModel):
     temperature: float = Field(default=0.2, ge=0, le=2)
     max_tokens: int | None = Field(default=None, ge=1, le=262144)
     reasoning_effort: Literal["none", "low", "medium", "high"] | None = None
+    # User-selected workspace apps the chatbot may invoke tools from. The
+    # server still intersects this with the workspace's actual entitlements
+    # and per-tool discoverability predicates, so this field can only narrow
+    # the available tool surface — it cannot grant access the caller would
+    # not otherwise have.
+    #   - ``None``: expose every entitled tool (legacy behavior).
+    #   - ``[]``  : explicit "no tools" — text-only conversation.
+    #   - ``[...]``: only tools owned by the listed app ids are exposed.
+    allowed_app_ids: list[str] | None = None
+
+    @field_validator("allowed_app_ids")
+    @classmethod
+    def _validate_allowed_app_ids(cls, value: list[str] | None) -> list[str] | None:
+        if value is None:
+            return None
+        unknown = [item for item in value if item not in WORKSPACE_APP_IDS]
+        if unknown:
+            raise ValueError(
+                f"unknown app id(s): {sorted(set(unknown))}; allowed: {sorted(WORKSPACE_APP_IDS)}"
+            )
+        # Preserve order while deduping so downstream filters see a stable set.
+        seen: set[str] = set()
+        out: list[str] = []
+        for item in value:
+            if item not in seen:
+                out.append(item)
+                seen.add(item)
+        return out
 
 
 class ConversationBoundChatRequest(ChatRequest):
@@ -431,6 +459,29 @@ class ApprovalStatusResponse(BaseModel):
 class ChatResumeRequest(BaseModel):
     conversation_id: str
     approval_id: str
+    # Mirrors ``ChatRequest.allowed_app_ids``. Resume continues an in-flight
+    # agent run that already passed an approval gate; the caller re-sends the
+    # same scope it used for the originating ``/chat/stream`` so the resumed
+    # turn doesn't accidentally widen the available tool surface.
+    allowed_app_ids: list[str] | None = None
+
+    @field_validator("allowed_app_ids")
+    @classmethod
+    def _validate_allowed_app_ids(cls, value: list[str] | None) -> list[str] | None:
+        if value is None:
+            return None
+        unknown = [item for item in value if item not in WORKSPACE_APP_IDS]
+        if unknown:
+            raise ValueError(
+                f"unknown app id(s): {sorted(set(unknown))}; allowed: {sorted(WORKSPACE_APP_IDS)}"
+            )
+        seen: set[str] = set()
+        out: list[str] = []
+        for item in value:
+            if item not in seen:
+                out.append(item)
+                seen.add(item)
+        return out
 
 
 @router.get("/conversations", response_model=ConversationListResponse)
@@ -716,6 +767,7 @@ async def chat_resume(
             current_user=current_user,
             conversation=conversation,
             approval_id=payload.approval_id,
+            allowed_app_ids=payload.allowed_app_ids,
         ),
         ping=25,
     )
@@ -825,6 +877,7 @@ async def _chat_resume_publisher(
     current_user: User,
     conversation: Conversation,
     approval_id: str,
+    allowed_app_ids: list[str] | None = None,
 ):
     encoder = EnvelopeEncoder()
     artifact_parser = ArtifactStreamParser()
@@ -836,6 +889,7 @@ async def _chat_resume_publisher(
             db,
             workspace=workspace,
             principal=principal,
+            allowed_app_ids=allowed_app_ids,
         )
         async for event in resume_agent_run(
             context=_task_context_from_principal(principal),
@@ -921,14 +975,24 @@ def _resolve_agent_tool_specs(
     workspace: Workspace,
     principal: CallerPrincipal,
     messages: list[dict[str, Any]] | None = None,
+    allowed_app_ids: list[str] | None = None,
 ) -> tuple[list[dict[str, Any]], bool]:
     settings = get_settings()
     expose_rag_tools = True if messages is None else should_expose_rag_tools_for_messages(messages)
+    # ``allowed_app_ids`` is a user-driven scope narrowing knob. When it's an
+    # empty list the caller asked for a text-only conversation (no tools at
+    # all); when it's None the legacy "all entitled tools" behavior applies.
+    # Either way the underlying entitlement and per-tool predicate checks run
+    # below — this field can never widen access.
+    if allowed_app_ids is not None and not allowed_app_ids:
+        return ([], False)
+    scope_filter = list(allowed_app_ids) if allowed_app_ids else None
     if settings.ai_mcp_bridge_enabled:
         filtered_tools = AiMcpClient().list_tools(
             db,
             workspace=workspace,
             principal=principal,
+            app_ids=scope_filter,
             include_meta=False,
             include_approval_required=settings.ai_write_tools_enabled,
         )
@@ -943,6 +1007,19 @@ def _resolve_agent_tool_specs(
 
     registry = get_ai_capability_registry()
     specs = registry.openai_tool_specs(include_approval_required=settings.ai_write_tools_enabled)
+    if scope_filter is not None:
+        scope_set = frozenset(scope_filter)
+        specs = [
+            spec
+            for spec in specs
+            if (
+                (descriptor := registry.descriptors.get(
+                    spec.get("function", {}).get("name", ""),
+                ))
+                is not None
+                and descriptor.workspace_app_id in scope_set
+            )
+        ]
     if not expose_rag_tools:
         specs = [
             spec
@@ -1364,6 +1441,7 @@ async def _chat_stream_publisher(
             workspace=workspace,
             principal=principal,
             messages=messages_dict,
+            allowed_app_ids=payload.allowed_app_ids,
         )
         if (
             settings.ai_tool_calling_enabled

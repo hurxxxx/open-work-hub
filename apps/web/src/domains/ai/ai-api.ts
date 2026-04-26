@@ -16,6 +16,14 @@ export interface AiChatRequest {
   reasoning_effort?: 'none' | 'low' | 'medium' | 'high';
   conversation_id?: string | null;
   persist?: boolean;
+  /**
+   * Subset of workspace app ids whose tools the chatbot may invoke this turn.
+   * - ``undefined`` → server exposes every entitled tool (legacy default).
+   * - ``[]`` → text-only conversation; no tools at all.
+   * - ``["pms", "meeting"]`` → tools are intersected with workspace
+   *   entitlements; this field can never widen access.
+   */
+  allowed_app_ids?: string[];
 }
 
 export interface AiChatUsage {
@@ -236,6 +244,8 @@ export interface AbandonAiApprovalRequest {
 export interface ResumeAiChatRequest {
   conversation_id: string;
   approval_id: string;
+  /** Mirror of ``AiChatRequest.allowed_app_ids`` for resume continuity. */
+  allowed_app_ids?: string[];
 }
 
 export interface StreamAiResumeArgs {

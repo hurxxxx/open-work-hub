@@ -86,10 +86,17 @@ class AiCapabilityDescriptor:
     preview_builder_id: str | None
     output_projection: OutputProjection
     service_handler_id: str
+    # Workspace AppBar app_id this capability belongs to (e.g. "pms",
+    # "meeting", "ai"). Tool name prefix is *not* authoritative — RAG tools
+    # are named ``rag.*`` but live under the ``ai`` app, and future bridges
+    # may register tools whose name namespace differs from their app id.
+    workspace_app_id: str
 
     @property
     def app_id(self) -> str:
-        return self.name.split(".", 1)[0]
+        # Backwards-compatible alias for callers that historically read the
+        # name-prefix-derived id. Prefer ``workspace_app_id`` for new code.
+        return self.workspace_app_id
 
 
 @dataclass(frozen=True)
@@ -264,6 +271,7 @@ class AiCapabilityRegistry:
         preview_builder_id: str | None = None,
         output_projection: OutputProjection = "full",
         service_handler_id: str | None = None,
+        workspace_app_id: str | None = None,
     ) -> None:
         if name in self.tools or name in self.descriptors:
             raise ValueError(f"Duplicate AI tool registration: {name}")
@@ -280,6 +288,16 @@ class AiCapabilityRegistry:
         approval_policy: ApprovalPolicy = "required" if approval_required else "none"
         if approval_policy == "required" and not preview_builder_id:
             raise ValueError(f"Approval-required tool {name} must declare preview_builder_id")
+        # Default to owner_domain so existing domains keep working without
+        # touching their registration call. New tools that live under a
+        # workspace app whose id differs from their owner domain can pass an
+        # explicit value.
+        resolved_workspace_app_id = workspace_app_id or owner_domain
+        if resolved_workspace_app_id not in WORKSPACE_APP_IDS:
+            raise ValueError(
+                f"Tool {name} declares workspace_app_id={resolved_workspace_app_id!r} which is "
+                f"not a registered workspace app. Known: {sorted(WORKSPACE_APP_IDS)}"
+            )
         descriptor = AiCapabilityDescriptor(
             name=name,
             kind="tool",
@@ -291,6 +309,7 @@ class AiCapabilityRegistry:
             preview_builder_id=preview_builder_id,
             output_projection=output_projection,
             service_handler_id=resolved_service_handler_id,
+            workspace_app_id=resolved_workspace_app_id,
         )
         self.descriptors[name] = descriptor
         self.tools[name] = RegisteredToolDefinition(
@@ -442,6 +461,22 @@ def reset_ai_capability_registry() -> None:
     cache_clear = getattr(get_ai_capability_registry, "cache_clear", None)
     if cache_clear is not None:
         cache_clear()
+
+
+def get_chatbot_capable_app_ids() -> tuple[str, ...]:
+    """Workspace app ids that currently expose at least one chatbot tool.
+
+    Used by the workspace bootstrap response so the chat scope picker stays
+    data-driven: registering a new domain via ``register_ai_capabilities``
+    automatically surfaces it in the picker without any frontend change.
+    """
+    registry = get_ai_capability_registry()
+    seen: dict[str, None] = {}
+    for descriptor in registry.descriptors.values():
+        if descriptor.kind != "tool":
+            continue
+        seen.setdefault(descriptor.workspace_app_id, None)
+    return tuple(seen.keys())
 
 
 def _compile_tool_descriptor(descriptor: AiCapabilityDescriptor) -> CompiledToolSchemas:
