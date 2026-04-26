@@ -698,6 +698,7 @@ Doowon 같은 업무 AI platform에서 최신 harness 흐름을 반영했는지 
 
 이 문서는 코드 구현 상세를 다루지 않는다. 다만 현재 방향과 연결되는 high-level 시사점은 다음이다.
 
+- 실제 Doowon 적용 설계는 [`02-evidence-first-agent-runtime.md`](./02-evidence-first-agent-runtime.md)에서 별도 실행 계획으로 관리한다.
 - 내부 v1은 외부 A2A network가 아니라 manager-specialist runtime으로 충분하다.
 - 기존 capability/tool gateway 성격의 계약은 specialist agent의 tool boundary로 재사용하는 편이 좋다.
 - `AGENTS.md`/project instruction, skill/capability package, subagent descriptor는 서로 다른 계층으로 분리해 관리하는 편이 좋다.
