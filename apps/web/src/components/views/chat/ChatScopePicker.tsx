@@ -92,19 +92,22 @@ export function ChatScopePicker({
         disabled={disabled}
         onClick={() => setOpen((prev) => !prev)}
         className={cn(
-          'flex h-7 items-center gap-1.5 rounded-md border border-app-border bg-app-surface px-2 app-text-control-sm text-app-ink hover:bg-app-surface-hover',
+          'app-text-control-sm flex h-8 items-center gap-1.5 rounded-full border border-app-border bg-app-surface px-3 text-app-ink transition-colors hover:border-app-accent',
           disabled && 'cursor-not-allowed opacity-60',
         )}
         aria-label="챗봇이 사용할 앱 컨텍스트 선택"
         title="챗봇이 사용할 앱 컨텍스트"
       >
-        <Sparkles size={12} className="text-app-accent" />
-        <span>컨텍스트: {summary}</span>
-        <ChevronDown size={12} className="text-gray-500" />
+        <Sparkles size={14} className="text-app-accent" />
+        <span className="truncate">{summary}</span>
+        <ChevronDown
+          size={14}
+          className={cn('shrink-0 text-gray-500 transition-transform', open && 'rotate-180')}
+        />
       </button>
 
       {open ? (
-        <div className="absolute right-0 top-full z-30 mt-1 w-64 rounded-md border border-app-border bg-app-surface p-2 shadow-lg">
+        <div className="absolute bottom-full left-0 z-30 mb-2 w-64 rounded-xl border border-app-border bg-app-surface p-2 shadow-lg">
           <div className="mb-2 flex items-center justify-between border-b border-app-border pb-2">
             <span className="app-text-caption text-gray-500">앱 컨텍스트</span>
             <div className="flex gap-1">

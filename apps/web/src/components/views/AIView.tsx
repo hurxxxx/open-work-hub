@@ -32,6 +32,8 @@ import { ApprovalModal } from '@/src/components/views/chat/ApprovalModal';
 import { ArtifactPanel } from '@/src/components/views/chat/ArtifactPanel';
 import { ToolCallCard } from '@/src/components/views/chat/ToolCallCard';
 import { ChatTopBar } from '@/src/components/views/chat/ChatTopBar';
+import { ModelPill } from '@/src/components/views/chat/ModelPill';
+import { ChatScopePicker } from '@/src/components/views/chat/ChatScopePicker';
 import { ChatComposer } from '@/src/components/views/chat/ChatComposer';
 import { EmptyState } from '@/src/components/views/chat/EmptyState';
 import type { ChatTurn } from '@/src/components/views/chat/MessageBubble';
@@ -1114,6 +1116,31 @@ export const AIView = () => {
     });
   }
 
+  // Shared bottom-row controls for both composer instances (EmptyState and
+  // active chat). Same pills, same wiring — only difference is which composer
+  // is currently mounted.
+  const composerLeadingControls = (
+    <>
+      {scopeOptions.length > 0 ? (
+        <ChatScopePicker
+          options={scopeOptions}
+          selected={sanitizedAllowedAppIds}
+          onChange={setAllowedAppIds}
+          disabled={isSending}
+        />
+      ) : null}
+      <ModelPill
+        backendMode={backendMode}
+        onBackendModeChange={setBackendMode}
+        health={health}
+        healthError={healthError}
+        isCheckingHealth={isCheckingHealth}
+        onRefreshHealth={refreshHealth}
+        canRefresh={Boolean(token)}
+      />
+    </>
+  );
+
   const composerPlaceholder =
     isLoadingConversation
       ? '대화를 불러오는 중입니다.'
@@ -1187,16 +1214,8 @@ export const AIView = () => {
         <ChatTopBar
           title="업무 챗봇"
           backendMode={backendMode}
-          onBackendModeChange={setBackendMode}
           health={health}
           healthError={healthError}
-          isCheckingHealth={isCheckingHealth}
-          onRefreshHealth={refreshHealth}
-          canRefresh={Boolean(token)}
-          scopeOptions={scopeOptions}
-          scopeSelected={sanitizedAllowedAppIds}
-          onScopeChange={setAllowedAppIds}
-          scopeDisabled={isSending}
         />
 
         {turns.length === 0 && !isSending ? (
@@ -1229,6 +1248,7 @@ export const AIView = () => {
                   toolItems={slashCommandItems}
                   placeholder={composerPlaceholder}
                   autoFocus
+                  leadingControls={composerLeadingControls}
                 />
               </div>
             }
@@ -1282,6 +1302,7 @@ export const AIView = () => {
                 onSelectTool={handleSelectTool}
                 toolItems={slashCommandItems}
                 placeholder={composerPlaceholder}
+                leadingControls={composerLeadingControls}
               />
             </div>
           </>

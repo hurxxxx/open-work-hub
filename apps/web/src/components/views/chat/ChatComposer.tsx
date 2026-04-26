@@ -1,5 +1,5 @@
-import { FormEvent, useCallback, useEffect, useState } from 'react';
-import { Loader2, Send, Square } from 'lucide-react';
+import { FormEvent, ReactNode, useCallback, useEffect, useState } from 'react';
+import { ArrowUp, Loader2, Square } from 'lucide-react';
 
 import { NAV_ITEMS, type NavItem } from '@/src/constants';
 import {
@@ -27,6 +27,12 @@ export interface ChatComposerProps {
   rows?: number;
   autoFocus?: boolean;
   isDisabled?: boolean;
+  /**
+   * Pills/buttons rendered in the bottom-left of the composer card
+   * (Claude.ai-style). Use this slot for the model picker, scope picker,
+   * attachment buttons, etc. Send button stays bottom-right.
+   */
+  leadingControls?: ReactNode;
 }
 
 const DEFAULT_TOOL_ITEMS = NAV_ITEMS.filter((item) => item.appId === 'ai');
@@ -72,6 +78,9 @@ export function ChatComposer(props: ChatComposerProps) {
     [props],
   );
 
+  const sendDisabled
+    = !props.input.trim() || isSlashOpen || props.isDisabled;
+
   return (
     <form className="relative w-full" onSubmit={handleSubmit}>
       {props.chatError && (
@@ -79,7 +88,7 @@ export function ChatComposer(props: ChatComposerProps) {
           {props.chatError}
         </div>
       )}
-      <div className="relative flex min-h-12 gap-3">
+      <div className="relative">
         {isSlashOpen && slashItems ? (
           <SlashCommandMenu
             items={slashItems}
@@ -92,88 +101,98 @@ export function ChatComposer(props: ChatComposerProps) {
             onHighlight={setSlashIndex}
           />
         ) : null}
-        <textarea
-          autoFocus={props.autoFocus}
-          className="app-text-body-sm min-h-12 flex-1 resize-none rounded-lg border border-app-border bg-app-bg px-4 py-3 text-app-ink outline-none transition-colors placeholder:text-gray-400 focus:border-app-accent"
-          disabled={props.isSending || props.isDisabled}
-          onChange={(event) => props.onInputChange(event.target.value)}
-          onKeyDown={(event) => {
-            if (isSlashOpen && slashItems) {
-              if (event.key === 'ArrowDown' && slashItems.length > 0) {
-                event.preventDefault();
-                setSlashIndex(
-                  (current) => (current + 1) % slashItems.length,
-                );
-                return;
-              }
-              if (event.key === 'ArrowUp' && slashItems.length > 0) {
-                event.preventDefault();
-                setSlashIndex((current) =>
-                  current <= 0 ? slashItems.length - 1 : current - 1,
-                );
-                return;
-              }
-              if (event.key === 'Escape') {
-                event.preventDefault();
-                props.onInputChange('');
-                return;
-              }
-              if (event.key === 'Enter' && !event.shiftKey) {
-                event.preventDefault();
-                if (slashItems.length === 0) {
-                  // No match → silently swallow Enter so the slash buffer
-                  // never submits as a chat message.
+        {/* Claude.ai-style composer card: textarea on top, controls row at
+            the bottom. The whole thing reads as one input — controls and
+            send button live inside the same rounded border. */}
+        <div className="flex flex-col rounded-2xl border border-app-border bg-app-bg transition-colors focus-within:border-app-accent">
+          <textarea
+            autoFocus={props.autoFocus}
+            className="app-text-body-sm w-full resize-none bg-transparent px-4 pb-2 pt-3 text-app-ink outline-none placeholder:text-gray-400"
+            disabled={props.isSending || props.isDisabled}
+            onChange={(event) => props.onInputChange(event.target.value)}
+            onKeyDown={(event) => {
+              if (isSlashOpen && slashItems) {
+                if (event.key === 'ArrowDown' && slashItems.length > 0) {
+                  event.preventDefault();
+                  setSlashIndex(
+                    (current) => (current + 1) % slashItems.length,
+                  );
                   return;
                 }
-                const clamped = Math.min(slashIndex, slashItems.length - 1);
-                handleToolSelect(slashItems[clamped]);
+                if (event.key === 'ArrowUp' && slashItems.length > 0) {
+                  event.preventDefault();
+                  setSlashIndex((current) =>
+                    current <= 0 ? slashItems.length - 1 : current - 1,
+                  );
+                  return;
+                }
+                if (event.key === 'Escape') {
+                  event.preventDefault();
+                  props.onInputChange('');
+                  return;
+                }
+                if (event.key === 'Enter' && !event.shiftKey) {
+                  event.preventDefault();
+                  if (slashItems.length === 0) {
+                    // No match → silently swallow Enter so the slash buffer
+                    // never submits as a chat message.
+                    return;
+                  }
+                  const clamped = Math.min(slashIndex, slashItems.length - 1);
+                  handleToolSelect(slashItems[clamped]);
+                  return;
+                }
+              }
+              if (event.key !== 'Enter' || event.shiftKey) {
                 return;
               }
-            }
-            if (event.key !== 'Enter' || event.shiftKey) {
-              return;
-            }
-            event.preventDefault();
-            // Mirror the send-button disabled rule so keyboard submit cannot
-            // diverge from the visible button state if the component is
-            // reused outside AIView's handleSubmit guard.
-            if (!props.input.trim() || props.isSending || props.isDisabled) {
-              return;
-            }
-            event.currentTarget.form?.requestSubmit();
-          }}
-          placeholder={props.placeholder ?? '메시지를 입력하세요'}
-          rows={props.rows ?? 2}
-          value={props.input}
-        />
-        {props.isSending && props.isStreaming ? (
-          <button
-            className="app-text-control flex h-12 shrink-0 items-center gap-2 rounded-lg border border-app-border bg-app-surface px-4 text-app-ink transition-colors hover:border-app-accent"
-            onClick={props.onAbort}
-            type="button"
-          >
-            <Square size={16} />
-            <span className="hidden sm:inline">중단</span>
-          </button>
-        ) : props.isSending ? (
-          <button
-            className="app-text-control flex h-12 shrink-0 items-center gap-2 rounded-lg border border-app-border bg-app-surface px-4 text-app-ink/70"
-            disabled
-            type="button"
-          >
-            <Loader2 size={16} className="animate-spin" />
-            <span className="hidden sm:inline">처리 중</span>
-          </button>
-        ) : (
-          <button
-            className="app-text-control flex h-12 shrink-0 items-center gap-2 rounded-lg bg-app-accent px-4 text-app-accent-fg transition-colors hover:bg-app-accent-hover disabled:cursor-not-allowed disabled:opacity-60"
-          disabled={!props.input.trim() || isSlashOpen || props.isDisabled}
-          type="submit"
-        >
-            <Send size={16} />
-            <span className="hidden sm:inline">전송</span>
-          </button>
-        )}
+              event.preventDefault();
+              // Mirror the send-button disabled rule so keyboard submit cannot
+              // diverge from the visible button state if the component is
+              // reused outside AIView's handleSubmit guard.
+              if (!props.input.trim() || props.isSending || props.isDisabled) {
+                return;
+              }
+              event.currentTarget.form?.requestSubmit();
+            }}
+            placeholder={props.placeholder ?? '메시지를 입력하세요'}
+            rows={props.rows ?? 2}
+            value={props.input}
+          />
+          <div className="flex items-center gap-2 px-2 pb-2">
+            <div className="flex flex-1 flex-wrap items-center gap-2 min-w-0">
+              {props.leadingControls}
+            </div>
+            {props.isSending && props.isStreaming ? (
+              <button
+                aria-label="중단"
+                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-app-border bg-app-surface text-app-ink transition-colors hover:border-app-accent"
+                onClick={props.onAbort}
+                type="button"
+              >
+                <Square size={14} />
+              </button>
+            ) : props.isSending ? (
+              <button
+                aria-label="처리 중"
+                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-app-border bg-app-surface text-app-ink/70"
+                disabled
+                type="button"
+              >
+                <Loader2 size={14} className="animate-spin" />
+              </button>
+            ) : (
+              <button
+                aria-label="전송"
+                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-app-accent text-app-accent-fg transition-colors hover:bg-app-accent-hover disabled:cursor-not-allowed disabled:opacity-40"
+                disabled={sendDisabled}
+                type="submit"
+              >
+                <ArrowUp size={16} />
+              </button>
+            )}
+          </div>
+        </div>
       </div>
     </form>
   );
