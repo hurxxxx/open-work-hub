@@ -30,6 +30,13 @@
 - **영향 파일**: `learning/service-launch-journey/`(28편), `apps/web/src/domains/learning/manifest.ts`
 - **남은 후속 작업**: 출시 후 사용자 피드백 기반으로 톤·분량 미세 조정. 각 레슨 "한 셜 더" 섹션의 외부 자료 링크 보강.
 
+## 2026-04-25 · OpenSearch 증분 색인 worker 상시 구동 재검증
+
+- **요약**: API + Celery worker + Redis + OpenSearch를 실제로 띄운 상태에서 Docs/Meeting/PMS/Planner 증분 색인 ACL/CRUD/delete 시나리오를 재실행했다. 검증 중 PMS issue create job이 `pending attempts=0`으로 남는 savepoint 조기 publish 버그를 발견해 search/RAG outbox listener를 최상위 transaction commit/rollback에만 반응하도록 수정했고, 재검증 및 UI smoke까지 통과했다.
+- **PR/커밋**: 미커밋
+- **영향 파일**: `apps/api/src/aidoo_api/domains/search/outbox.py`, `apps/api/src/aidoo_api/domains/rag/outbox.py`, `apps/api/tests/test_search_index_outbox.py`, `apps/api/tests/test_rag_outbox.py`, 로컬 `.env`
+- **남은 후속 작업**: `.env.example`과 compose/local port 정책을 정리할지 결정.
+
 ## 2026-04-25 · OpenSearch 증분 색인 확장 ACL/CRUD E2E 검증
 
 - **요약**: `agent-browser`로 admin/member/same-workspace outsider/hq-member 세션을 분리해 Docs, Meeting, PMS, Planner 검색 ACL/CRUD 전이 52건을 검증했다. user share, link share 비노출, teamspace membership add/remove, meeting attendee add/remove 및 attached doc/issue grant, PMS direct grant/revoke/comment/list rename/archive/delete, planner public/private/update/delete, workspace boundary를 확인했고 실패 0건이다. 검증 중 발견한 Docs teamspace projection 누락과 meeting delete FK 500도 수정했다.
