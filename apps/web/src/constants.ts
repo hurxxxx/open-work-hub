@@ -55,6 +55,11 @@ export interface NavItem {
   pathSuffix?: string;
   /** workspace-aware 가 아닌 절대 경로 (admin/settings 등) */
   absolutePath?: string;
+  /**
+   * legacy_ai_portal_prototype에서 포팅 대기 중인 도구는 true.
+   * 사이드바에서 (준비중) 배지로 표시되고 클릭 시 ComingSoonView로 라우팅된다.
+   */
+  comingSoon?: boolean;
 }
 
 export interface AppBarItem {
@@ -76,24 +81,25 @@ export const APP_BAR_ITEMS: AppBarItem[] = [
 
 export const NAV_ITEMS: NavItem[] = [
   // AI - Core Tools
+  { id: 'chatbot', title: 'AI 챗봇', icon: MessageSquare, category: 'Core Tools', appId: 'ai', description: '사내 데이터와 도구를 활용하는 대화형 어시스턴트' },
   { id: 'search', title: '아이두 통합검색', icon: Search, category: 'Core Tools', appId: 'ai', description: '사내 문서를 근거 기반으로 찾는 메인 검색 허브' },
-  { id: 'drafting', title: '기안작성 도우미', icon: FileText, category: 'Core Tools', appId: 'ai', description: '공문, 협조전, 구매 요청 같은 업무 기안 초안 작성' },
-  { id: 'translate', title: '문서 번역/요약', icon: Languages, category: 'Core Tools', appId: 'ai', description: '업로드 문서의 OCR, 번역, 요약 작업' },
-  { id: 'spec-compare', title: '규격서 비교', icon: FileSearch, category: 'Core Tools', appId: 'ai', description: '규격 문서 두 버전의 변경점 비교' },
-  { id: 'fmea-compare', title: 'FMEA 비교', icon: AlertTriangle, category: 'Core Tools', appId: 'ai', description: 'FMEA 리스크 항목과 조치안 비교' },
+  { id: 'drafting', title: '기안작성 도우미', icon: FileText, category: 'Core Tools', appId: 'ai', description: '공문, 협조전, 구매 요청 같은 업무 기안 초안 작성', comingSoon: true },
+  { id: 'translate', title: '문서 번역/요약', icon: Languages, category: 'Core Tools', appId: 'ai', description: '업로드 문서의 OCR, 번역, 요약 작업', comingSoon: true },
+  { id: 'spec-compare', title: '규격서 비교', icon: FileSearch, category: 'Core Tools', appId: 'ai', description: '규격 문서 두 버전의 변경점 비교', comingSoon: true },
+  { id: 'fmea-compare', title: 'FMEA 비교', icon: AlertTriangle, category: 'Core Tools', appId: 'ai', description: 'FMEA 리스크 항목과 조치안 비교', comingSoon: true },
 
   // AI - Assistants
   { id: 'meeting-minutes', title: '회의록', icon: Mic, category: 'Assistants', appId: 'ai', linkAppId: 'meeting', pathSuffix: '?tab=recordings', description: '음성 파일 STT, 화자 분리, 회의록 요약' },
-  { id: 'email-assistant', title: '메일 작성 도우미', icon: Mail, category: 'Assistants', appId: 'ai', description: '업무 메일 초안 생성' },
-  { id: 'ppt-assistant', title: 'PPT 발표 도우미', icon: Presentation, category: 'Assistants', appId: 'ai', description: '발표 스크립트와 예상 질문 정리' },
-  { id: 'qa-assistant', title: '사내 관리팀 Q&A', icon: HelpCircle, category: 'Assistants', appId: 'ai', description: '내부 운영 문서와 FAQ 검색' },
-  { id: 'news', title: '뉴스', icon: Newspaper, category: 'Assistants', appId: 'ai', description: '산업/공조 관련 외부 뉴스 모니터링' },
-  { id: 'industry-report', title: '산업 리포트', icon: BarChart3, category: 'Assistants', appId: 'ai', description: '외부 산업 리포트와 동향 요약' },
+  { id: 'email-assistant', title: '메일 작성 도우미', icon: Mail, category: 'Assistants', appId: 'ai', description: '업무 메일 초안 생성', comingSoon: true },
+  { id: 'ppt-assistant', title: 'PPT 발표 도우미', icon: Presentation, category: 'Assistants', appId: 'ai', description: '발표 스크립트와 예상 질문 정리', comingSoon: true },
+  { id: 'qa-assistant', title: '사내 관리팀 Q&A', icon: HelpCircle, category: 'Assistants', appId: 'ai', description: '내부 운영 문서와 FAQ 검색', comingSoon: true },
+  { id: 'news', title: '뉴스', icon: Newspaper, category: 'Assistants', appId: 'ai', description: '산업/공조 관련 외부 뉴스 모니터링', comingSoon: true },
+  { id: 'industry-report', title: '산업 리포트', icon: BarChart3, category: 'Assistants', appId: 'ai', description: '외부 산업 리포트와 동향 요약', comingSoon: true },
 
   // AI - Patent
-  { id: 'patent-interpret', title: '특허 해석 도우미', icon: Gavel, category: 'Patent', appId: 'ai', description: '특허 문헌 해석 지원' },
-  { id: 'patent-apply', title: '특허 출원 도우미', icon: FilePlus, category: 'Patent', appId: 'ai', description: '특허 출원 초안 보조' },
-  { id: 'patent-report', title: 'AI 특허 보고서', icon: FileBarChart, category: 'Patent', appId: 'ai', description: '특허 분석 결과를 보고서 형태로 정리' },
+  { id: 'patent-interpret', title: '특허 해석 도우미', icon: Gavel, category: 'Patent', appId: 'ai', description: '특허 문헌 해석 지원', comingSoon: true },
+  { id: 'patent-apply', title: '특허 출원 도우미', icon: FilePlus, category: 'Patent', appId: 'ai', description: '특허 출원 초안 보조', comingSoon: true },
+  { id: 'patent-report', title: 'AI 특허 보고서', icon: FileBarChart, category: 'Patent', appId: 'ai', description: '특허 분석 결과를 보고서 형태로 정리', comingSoon: true },
 
   // PMS
   { id: 'pms-inbox', title: 'Inbox', icon: Inbox, category: 'Personal', appId: 'pms' },

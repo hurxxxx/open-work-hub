@@ -1295,6 +1295,9 @@ export const SubSidebar = ({
             if (item.link_app_id !== undefined && item.link_app_id !== null) {
               nextItem.linkAppId = item.link_app_id as NavItem['linkAppId'];
             }
+            if (item.coming_soon) {
+              nextItem.comingSoon = true;
+            }
             return nextItem;
           })
           .filter(isDefined);
@@ -2322,10 +2325,19 @@ export const SubSidebar = ({
                           <Link
                             key={item.id}
                             to={resolveNavItemHref(item, currentWorkspaceSlug, user)}
-                            className={cn('sidebar-submenu-item ml-1', activeNavItemId === item.id && 'sidebar-submenu-item-active')}
+                            className={cn(
+                              'sidebar-submenu-item ml-1',
+                              activeNavItemId === item.id && 'sidebar-submenu-item-active',
+                              item.comingSoon && 'opacity-60',
+                            )}
                           >
                             <item.icon size={16} className="text-gray-500 dark:text-gray-400" />
                             <span className="sidebar-submenu-label">{item.title}</span>
+                            {item.comingSoon ? (
+                              <span className="ml-auto rounded border border-app-border bg-app-bg px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-gray-500">
+                                준비중
+                              </span>
+                            ) : null}
                           </Link>
                         );
                       })}

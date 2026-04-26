@@ -32,6 +32,7 @@ import { LearningView } from './components/views/LearningView';
 import { LearningCourseView } from './components/views/LearningCourseView';
 import { RagSearchView } from './components/views/RagSearchView';
 import { ToolView } from './components/views/ToolView';
+import { ComingSoonView } from './components/views/ComingSoonView';
 import { NAV_ITEMS } from './constants';
 import { AdminConsoleView } from './domains/admin/admin-console';
 import { canUseWorkspaceSearchTool, isWorkspaceAppEnabled } from './domains/rag/rag-ui-access';
@@ -251,6 +252,10 @@ const ToolViewWrapper = () => {
       );
     }
     return <RagSearchView />;
+  }
+
+  if (item.comingSoon) {
+    return <ComingSoonView item={item} />;
   }
 
   return <ToolView item={item} />;

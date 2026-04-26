@@ -310,6 +310,9 @@ export function resolveNavItemHref(
   if (item.absolutePath) {
     return item.absolutePath;
   }
+  if (item.comingSoon) {
+    return `/tool/${item.id}`;
+  }
   if (item.id === 'search') {
     return resolveToolInvocationHref(item, currentWorkspaceSlug, user);
   }

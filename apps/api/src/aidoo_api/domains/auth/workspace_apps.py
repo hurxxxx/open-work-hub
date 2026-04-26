@@ -13,6 +13,7 @@ class WorkspaceNavCatalogItem:
     link_app_id: str | None = None
     path_suffix: str | None = None
     absolute_path: str | None = None
+    coming_soon: bool = False
 
 
 @dataclass(frozen=True)
@@ -39,6 +40,13 @@ WORKSPACE_APP_CATALOG: tuple[WorkspaceAppCatalogItem, ...] = (
         icon_key="brain",
         nav_items=(
             WorkspaceNavCatalogItem(
+                id="chatbot",
+                app_id="ai",
+                title="AI 챗봇",
+                category="Core Tools",
+                icon_key="message-square",
+            ),
+            WorkspaceNavCatalogItem(
                 id="search",
                 app_id="ai",
                 title="아이두 통합검색",
@@ -51,6 +59,7 @@ WORKSPACE_APP_CATALOG: tuple[WorkspaceAppCatalogItem, ...] = (
                 title="기안작성 도우미",
                 category="Core Tools",
                 icon_key="file-text",
+                coming_soon=True,
             ),
             WorkspaceNavCatalogItem(
                 id="translate",
@@ -58,6 +67,7 @@ WORKSPACE_APP_CATALOG: tuple[WorkspaceAppCatalogItem, ...] = (
                 title="문서 번역/요약",
                 category="Core Tools",
                 icon_key="languages",
+                coming_soon=True,
             ),
             WorkspaceNavCatalogItem(
                 id="spec-compare",
@@ -65,6 +75,7 @@ WORKSPACE_APP_CATALOG: tuple[WorkspaceAppCatalogItem, ...] = (
                 title="규격서 비교",
                 category="Core Tools",
                 icon_key="file-search",
+                coming_soon=True,
             ),
             WorkspaceNavCatalogItem(
                 id="fmea-compare",
@@ -72,6 +83,7 @@ WORKSPACE_APP_CATALOG: tuple[WorkspaceAppCatalogItem, ...] = (
                 title="FMEA 비교",
                 category="Core Tools",
                 icon_key="alert-triangle",
+                coming_soon=True,
             ),
             WorkspaceNavCatalogItem(
                 id="meeting-minutes",
@@ -88,6 +100,7 @@ WORKSPACE_APP_CATALOG: tuple[WorkspaceAppCatalogItem, ...] = (
                 title="메일 작성 도우미",
                 category="Assistants",
                 icon_key="mail",
+                coming_soon=True,
             ),
             WorkspaceNavCatalogItem(
                 id="ppt-assistant",
@@ -95,6 +108,7 @@ WORKSPACE_APP_CATALOG: tuple[WorkspaceAppCatalogItem, ...] = (
                 title="PPT 발표 도우미",
                 category="Assistants",
                 icon_key="presentation",
+                coming_soon=True,
             ),
             WorkspaceNavCatalogItem(
                 id="qa-assistant",
@@ -102,6 +116,7 @@ WORKSPACE_APP_CATALOG: tuple[WorkspaceAppCatalogItem, ...] = (
                 title="사내 관리팀 Q&A",
                 category="Assistants",
                 icon_key="help-circle",
+                coming_soon=True,
             ),
             WorkspaceNavCatalogItem(
                 id="news",
@@ -109,6 +124,7 @@ WORKSPACE_APP_CATALOG: tuple[WorkspaceAppCatalogItem, ...] = (
                 title="뉴스",
                 category="Assistants",
                 icon_key="newspaper",
+                coming_soon=True,
             ),
             WorkspaceNavCatalogItem(
                 id="industry-report",
@@ -116,6 +132,7 @@ WORKSPACE_APP_CATALOG: tuple[WorkspaceAppCatalogItem, ...] = (
                 title="산업 리포트",
                 category="Assistants",
                 icon_key="bar-chart-3",
+                coming_soon=True,
             ),
             WorkspaceNavCatalogItem(
                 id="patent-interpret",
@@ -123,6 +140,7 @@ WORKSPACE_APP_CATALOG: tuple[WorkspaceAppCatalogItem, ...] = (
                 title="특허 해석 도우미",
                 category="Patent",
                 icon_key="gavel",
+                coming_soon=True,
             ),
             WorkspaceNavCatalogItem(
                 id="patent-apply",
@@ -130,6 +148,7 @@ WORKSPACE_APP_CATALOG: tuple[WorkspaceAppCatalogItem, ...] = (
                 title="특허 출원 도우미",
                 category="Patent",
                 icon_key="file-plus",
+                coming_soon=True,
             ),
             WorkspaceNavCatalogItem(
                 id="patent-report",
@@ -137,6 +156,7 @@ WORKSPACE_APP_CATALOG: tuple[WorkspaceAppCatalogItem, ...] = (
                 title="AI 특허 보고서",
                 category="Patent",
                 icon_key="file-bar-chart",
+                coming_soon=True,
             ),
         ),
     ),

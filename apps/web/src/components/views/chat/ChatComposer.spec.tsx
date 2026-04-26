@@ -213,8 +213,8 @@ describe('ChatComposer', () => {
       // Move from index 0 to 1.
       fireEvent.keyDown(textarea, { key: 'ArrowDown' });
       fireEvent.keyDown(textarea, { key: 'Enter' });
-      // NAV_ITEMS AI section starts with 'search' then 'drafting'.
-      expect(onSelectTool.mock.calls[0][0].id).toBe('drafting');
+      // NAV_ITEMS AI section starts with 'chatbot' then 'search'.
+      expect(onSelectTool.mock.calls[0][0].id).toBe('search');
     });
 
     it('wraps highlight upward with ArrowUp from index 0', () => {

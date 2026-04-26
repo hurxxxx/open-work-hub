@@ -1088,6 +1088,7 @@ def build_workspace_bootstrap(
                 "link_app_id": item.link_app_id,
                 "path_suffix": item.path_suffix,
                 "absolute_path": item.absolute_path,
+                "coming_soon": item.coming_soon,
             }
             for item in app.nav_items
         ]

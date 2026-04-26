@@ -81,7 +81,7 @@ export function resolveShellState(
 
   if (/^\/w\/[^/]+\/ai(?:\/|$)/.test(path)) {
     return canShowAppChrome(user, 'ai', workspaceSlug, enabledWorkspaceAppIds)
-      ? { activeAppId: 'ai', activeNavItemId: '' }
+      ? { activeAppId: 'ai', activeNavItemId: 'chatbot' }
       : HOME_SHELL_STATE;
   }
 

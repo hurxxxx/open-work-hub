@@ -17,6 +17,7 @@ export interface WorkspaceBootstrapNavItem {
   link_app_id?: string | null;
   path_suffix?: string | null;
   absolute_path?: string | null;
+  coming_soon?: boolean | null;
 }
 
 export interface WorkspaceBootstrapApp {
