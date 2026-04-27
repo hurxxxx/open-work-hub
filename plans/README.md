@@ -44,7 +44,8 @@ NN-<kebab-slug>.md
 | 파일 | 유형 | 상태 |
 |---|---|---|
 | [`00-ai-platform-roadmap.md`](./00-ai-platform-roadmap.md) | 로드맵 | 승인 완료, Phase 5 완료 반영 |
-| [`01-agentic-harness-engineering-report.md`](./01-agentic-harness-engineering-report.md) | 연구 리포트 | 적용 설계 근거 문서 |
-| [`02-evidence-first-agent-runtime.md`](./02-evidence-first-agent-runtime.md) | 실행 설계 | 작성 완료, 구현 전 검토 대상 |
+| [`02-evidence-first-agent-runtime.md`](./02-evidence-first-agent-runtime.md) | 실행 설계 | 정본 실행 계획, 구현 전 검토 대상 |
 
 완료된 플랜은 [`docs/planning-log.md`](../docs/planning-log.md)에서 확인.
+
+참고 연구 문서는 [`docs/planning/01-agentic-harness-engineering-report.md`](../docs/planning/01-agentic-harness-engineering-report.md)에 보관한다.
