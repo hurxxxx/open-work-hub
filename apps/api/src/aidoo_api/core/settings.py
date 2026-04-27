@@ -194,7 +194,7 @@ class Settings(BaseSettings):
         validation_alias=AliasChoices("DOOWON_LLM_EXTERNAL_API_KEY"),
     )
     llm_external_default_model: str = Field(
-        default="qwen/qwen3.5-35b-a3b",
+        default="qwen/qwen3.6-35b-a3b",
         validation_alias=AliasChoices("DOOWON_LLM_EXTERNAL_DEFAULT_MODEL"),
     )
     llm_external_canonical_model: str = Field(

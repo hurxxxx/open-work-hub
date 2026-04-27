@@ -126,7 +126,7 @@ def test_ai_chat_local_mode_uses_policy_path_and_persists_audit(
         content="local response",
     )
     external_client = FakePoolClient(
-        ["qwen/qwen3.5-35b-a3b"],
+        ["qwen/qwen3.6-35b-a3b"],
         content="external response",
     )
     monkeypatch.setattr(
@@ -176,7 +176,7 @@ def test_ai_chat_external_policy_uses_external_reasoning_shape(
         content="local response",
     )
     external_client = FakePoolClient(
-        ["qwen/qwen3.5-35b-a3b"],
+        ["qwen/qwen3.6-35b-a3b"],
         content="external response",
     )
     monkeypatch.setattr(
@@ -249,7 +249,7 @@ def test_ai_chat_external_defaults_use_medium_reasoning_and_chat_budget(
         content="local response",
     )
     external_client = FakePoolClient(
-        ["qwen/qwen3.5-35b-a3b"],
+        ["qwen/qwen3.6-35b-a3b"],
         content="external response",
     )
     monkeypatch.setattr(
@@ -410,7 +410,7 @@ def test_ai_chat_external_policy_forces_local_on_pii(
         content="safe local response",
     )
     external_client = FakePoolClient(
-        ["qwen/qwen3.5-35b-a3b"],
+        ["qwen/qwen3.6-35b-a3b"],
         content="external response",
     )
     monkeypatch.setattr(
@@ -462,7 +462,7 @@ def test_ai_chat_provider_error_still_persists_audit(
         content="local response",
     )
     external_client = FakePoolClient(
-        ["qwen/qwen3.5-35b-a3b"],
+        ["qwen/qwen3.6-35b-a3b"],
         error=OpenAIError("provider boom"),
     )
     monkeypatch.setattr(
@@ -497,7 +497,7 @@ def test_readyz_uses_effective_readiness_while_ai_health_stays_raw(
 
     def fake_pool_client(pool: llm_core.LlmPoolName) -> FakePoolClient:
         if pool == "external":
-            return FakePoolClient(["qwen/qwen3.5-35b-a3b"])
+            return FakePoolClient(["qwen/qwen3.6-35b-a3b"])
         return FakePoolClient(["gemma4:31b"])
 
     monkeypatch.setattr(llm_core, "get_pool_client", fake_pool_client)

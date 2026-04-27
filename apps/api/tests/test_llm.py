@@ -69,7 +69,7 @@ def test_llm_settings_default_to_local_mlx() -> None:
     assert settings.llm_local_default_model == "mlx-community/Qwen3.6-35B-A3B-4bit"
     assert settings.llm_local_canonical_model == "qwen/qwen3.6-35b-a3b"
     assert settings.llm_external_enabled is True
-    assert settings.llm_external_default_model == "qwen/qwen3.5-35b-a3b"
+    assert settings.llm_external_default_model == "qwen/qwen3.6-35b-a3b"
     assert settings.llm_request_timeout_seconds == 60.0
     assert settings.llm_local_long_generation_timeout_seconds == 1200.0
 
