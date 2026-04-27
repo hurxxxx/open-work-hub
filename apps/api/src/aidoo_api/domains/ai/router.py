@@ -73,8 +73,7 @@ from aidoo_api.domains.rag.tools import should_expose_rag_tools_for_messages
 
 LlmRequestBackendMode = Literal["auto", "local", "openrouter"]
 EMPTY_LENGTH_RESPONSE_MESSAGE = (
-    "응답이 토큰 한도에 도달해 중간에서 잘렸습니다. "
-    "질문 범위를 줄이거나 이어서 요청하세요."
+    "응답이 토큰 한도에 도달해 중간에서 잘렸습니다. 질문 범위를 줄이거나 이어서 요청하세요."
 )
 EMPTY_CANCELLED_RESPONSE_MESSAGE = "응답이 중단되었습니다."
 EMPTY_ERROR_RESPONSE_MESSAGE = "응답 중 오류가 발생했습니다."
@@ -465,10 +464,9 @@ class ApprovalStatusResponse(BaseModel):
 class ChatResumeRequest(BaseModel):
     conversation_id: str
     approval_id: str
-    # Mirrors ``ChatRequest.allowed_app_ids``. Resume continues an in-flight
-    # agent run that already passed an approval gate; the caller re-sends the
-    # same scope it used for the originating ``/chat/stream`` so the resumed
-    # turn doesn't accidentally widen the available tool surface.
+    # Mirrors ``ChatRequest.allowed_app_ids``. If omitted, resume uses the
+    # scope frozen when the approval was requested. If provided, it must be
+    # equal to or narrower than that frozen scope.
     allowed_app_ids: list[str] | None = None
 
     @field_validator("allowed_app_ids")
@@ -752,12 +750,16 @@ async def chat_resume(
         request,
         source="api.ai.chat.resume",
     )
-    ai_approvals.get_resume_context(
+    _approval, snapshot = ai_approvals.get_resume_context(
         db,
         workspace=workspace,
         user=current_user,
         conversation_id=payload.conversation_id,
         approval_id=payload.approval_id,
+    )
+    effective_allowed_app_ids = ai_approvals.resolve_resume_allowed_app_ids(
+        snapshot,
+        payload.allowed_app_ids,
     )
     conversation = conversations_service.get_conversation(
         db,
@@ -773,7 +775,7 @@ async def chat_resume(
             current_user=current_user,
             conversation=conversation,
             approval_id=payload.approval_id,
-            allowed_app_ids=payload.allowed_app_ids,
+            allowed_app_ids=effective_allowed_app_ids,
         ),
         ping=25,
     )
@@ -891,11 +893,22 @@ async def _chat_resume_publisher(
 
     try:
         settings = get_settings()
+        _approval, snapshot = ai_approvals.get_resume_context(
+            db,
+            workspace=workspace,
+            user=current_user,
+            conversation_id=conversation.id,
+            approval_id=approval_id,
+        )
+        effective_allowed_app_ids = ai_approvals.resolve_resume_allowed_app_ids(
+            snapshot,
+            allowed_app_ids,
+        )
         filtered_tool_specs, _has_approval_required_tools = _resolve_agent_tool_specs(
             db,
             workspace=workspace,
             principal=principal,
-            allowed_app_ids=allowed_app_ids,
+            allowed_app_ids=effective_allowed_app_ids,
         )
         async for event in resume_agent_run(
             context=_task_context_from_principal(principal),
@@ -1004,7 +1017,9 @@ def _resolve_agent_tool_specs(
         )
         if not expose_rag_tools:
             filtered_tools = [
-                item for item in filtered_tools if item.descriptor.name not in {"rag.query", "rag.list_sources"}
+                item
+                for item in filtered_tools
+                if item.descriptor.name not in {"rag.query", "rag.list_sources"}
             ]
         return (
             [dict(item.openai_tool) for item in filtered_tools],
@@ -1019,9 +1034,11 @@ def _resolve_agent_tool_specs(
             spec
             for spec in specs
             if (
-                (descriptor := registry.descriptors.get(
-                    spec.get("function", {}).get("name", ""),
-                ))
+                (
+                    descriptor := registry.descriptors.get(
+                        spec.get("function", {}).get("name", ""),
+                    )
+                )
                 is not None
                 and descriptor.workspace_app_id in scope_set
             )
@@ -1473,6 +1490,7 @@ async def _chat_stream_publisher(
                 tool_specs=filtered_tool_specs,
                 bound_conversation=conversation,
                 scope_system_prompt=scope_system_prompt,
+                allowed_app_ids=payload.allowed_app_ids,
                 parallel_tool_calls=False if has_approval_required_tools else None,
             ):
                 for serialized in _serialize_agent_event_through_artifacts(
@@ -1495,7 +1513,9 @@ async def _chat_stream_publisher(
             pool_hint=pool_hint,
             stream_reasoning=payload.stream_reasoning,
             resolved_execution=execution,
-            conversation_id=conversation.id if conversation is not None else payload.conversation_id,
+            conversation_id=conversation.id
+            if conversation is not None
+            else payload.conversation_id,
         ):
             last_decision, last_config = decision, config
             chosen_model = execution.chosen_model
@@ -1967,7 +1987,11 @@ def _conversation_scope_system_prompt(
     user: User,
     conversation: Conversation | None,
 ) -> str | None:
-    if conversation is None or conversation.scope_ref is None or conversation.scope_resource_id is None:
+    if (
+        conversation is None
+        or conversation.scope_ref is None
+        or conversation.scope_resource_id is None
+    ):
         return None
     if conversation.scope_ref == "meeting":
         return meeting_service.build_meeting_scope_prompt(

@@ -17,6 +17,7 @@ from aidoo_api.domains.ai import agent as ai_agent
 from aidoo_api.domains.ai import approvals as ai_approvals
 from aidoo_api.domains.ai import mcp as ai_mcp
 from aidoo_api.domains.ai import router as ai_router
+from aidoo_api.domains.ai.runtime.models import AgentInvocation, AgentRun
 from aidoo_api.domains.ai import tool_service as ai_tool_service
 from aidoo_api.domains.ai.tool_runtime import ToolCallExecution
 from aidoo_api.core.llm_adapters import StreamChunk
@@ -211,6 +212,96 @@ def _seed_pending_approval(
             "approval_id": approval.id,
             "agent_run_id": snapshot.id,
         }
+
+
+def test_pending_approval_shadow_writes_runtime_run(client: TestClient) -> None:
+    seed = _seed_pending_approval(client)
+
+    with get_session_factory()() as db:
+        runtime_run = db.get(AgentRun, seed["agent_run_id"])
+        assert runtime_run is not None
+        assert runtime_run.status == "awaiting_approval"
+        assert runtime_run.legacy_snapshot_id == seed["agent_run_id"]
+        assert runtime_run.graph_enabled is False
+
+        invocation = db.scalar(
+            select(AgentInvocation).where(AgentInvocation.agent_run_id == seed["agent_run_id"])
+        )
+        assert invocation is not None
+        assert invocation.status == "awaiting_approval"
+        assert invocation.agent_id == "approval.proposal_preview"
+
+
+def test_snapshot_scope_meta_freezes_allowed_apps_and_tool_names() -> None:
+    scope_meta = ai_agent._build_snapshot_scope_meta(
+        allowed_app_ids=["pms"],
+        tool_specs=[
+            {"type": "function", "function": {"name": "pms.create_issue"}},
+            {"type": "function", "function": {"name": "pms.create_issue"}},
+            {"type": "function", "function": {"name": "docs.search"}},
+        ],
+    )
+
+    assert scope_meta == {
+        "allowed_app_ids": ["pms"],
+        "resolved_agent_ids": ["single_loop"],
+        "resolved_tool_names": ["pms.create_issue", "docs.search"],
+    }
+
+
+def test_resume_allowed_app_ids_omission_reuses_frozen_scope() -> None:
+    snapshot = ai_approvals.AgentRunSnapshot(
+        id="snapshot-1",
+        conversation_id="conversation-1",
+        workspace_id="workspace-1",
+        requested_by_user_id="user-1",
+        blocked_call_id="call-1",
+        model_meta={"scope": {"allowed_app_ids": ["pms", "docs"]}},
+    )
+
+    assert ai_approvals.resolve_resume_allowed_app_ids(snapshot, None) == ["pms", "docs"]
+
+
+def test_resume_allowed_app_ids_accepts_narrower_scope() -> None:
+    snapshot = ai_approvals.AgentRunSnapshot(
+        id="snapshot-1",
+        conversation_id="conversation-1",
+        workspace_id="workspace-1",
+        requested_by_user_id="user-1",
+        blocked_call_id="call-1",
+        model_meta={"scope": {"allowed_app_ids": ["pms", "docs"]}},
+    )
+
+    assert ai_approvals.resolve_resume_allowed_app_ids(snapshot, ["pms"]) == ["pms"]
+
+
+def test_resume_allowed_app_ids_rejects_wider_scope() -> None:
+    snapshot = ai_approvals.AgentRunSnapshot(
+        id="snapshot-1",
+        conversation_id="conversation-1",
+        workspace_id="workspace-1",
+        requested_by_user_id="user-1",
+        blocked_call_id="call-1",
+        model_meta={"scope": {"allowed_app_ids": ["pms"]}},
+    )
+
+    with pytest.raises(HTTPException, match="wider"):
+        ai_approvals.resolve_resume_allowed_app_ids(snapshot, ["pms", "docs"])
+
+
+def test_resume_allowed_app_ids_keeps_text_only_scope() -> None:
+    snapshot = ai_approvals.AgentRunSnapshot(
+        id="snapshot-1",
+        conversation_id="conversation-1",
+        workspace_id="workspace-1",
+        requested_by_user_id="user-1",
+        blocked_call_id="call-1",
+        model_meta={"scope": {"allowed_app_ids": []}},
+    )
+
+    assert ai_approvals.resolve_resume_allowed_app_ids(snapshot, None) == []
+    with pytest.raises(HTTPException, match="wider"):
+        ai_approvals.resolve_resume_allowed_app_ids(snapshot, ["pms"])
 
 
 def test_get_and_resolve_approval_routes_work_on_workspace_and_legacy_mounts(
@@ -437,13 +528,16 @@ def test_chat_resume_replays_approved_tool_and_completes_snapshot(
     assert events[1]["data"]["status"] == "ok"
     assert events[2]["data"]["text"] == "이슈를 생성했습니다."
     assert events[3]["data"]["finish_reason"] == "stop"
-    assert len(
-        [
-            message
-            for message in captured["messages"]
-            if message.get("role") == "assistant" and message.get("tool_calls")
-        ]
-    ) == 1
+    assert (
+        len(
+            [
+                message
+                for message in captured["messages"]
+                if message.get("role") == "assistant" and message.get("tool_calls")
+            ]
+        )
+        == 1
+    )
 
     with get_session_factory()() as db:
         approval = db.scalar(

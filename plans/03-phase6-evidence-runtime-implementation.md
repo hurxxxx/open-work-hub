@@ -23,13 +23,13 @@ Phase 6 전체 목표는 기존 single-loop agent를 deterministic fast path, ma
 
 이 섹션은 세션 handoff용이다. 구현 세션이 끝날 때마다 짧게 갱신한다.
 
-- Current PR/stage: PR 3 complete, ready for PR 4.
-- Last completed: Added runtime SQLAlchemy models, Alembic migration, metadata imports, and persistence/invariant tests.
+- Current PR/stage: PR 4 complete, ready for PR 5.
+- Last completed: Added approval snapshot shadow-write into runtime tables and resume scope narrowing guard.
 - In progress: None.
-- Next exact task: PR 4 — shadow-write runtime records from the approval halt/resume path and add resume scope widening guards.
-- Files touched in PR 3: `apps/api/src/aidoo_api/domains/ai/runtime/models.py`, `apps/api/alembic/versions/e7f8a9b0c1d2_add_ai_runtime_tables.py`, `apps/api/alembic/env.py`, `apps/api/src/aidoo_api/core/db.py`, `apps/api/src/aidoo_api/domains/ai/approvals.py`, `apps/api/tests/test_ai_runtime_persistence.py`, `plans/03-phase6-evidence-runtime-implementation.md`.
-- Tests/checks run: `cd apps/api && uv run --python 3.12 pytest tests/test_ai_runtime_persistence.py tests/test_ai_runtime_contracts.py tests/test_ai_runtime_eval_fixtures.py`; `cd apps/api && uv run --python 3.12 pytest tests/test_alembic_migrations.py`; targeted ruff check for touched Python files.
-- Known blockers: PR 4 must inspect the existing `/chat/resume` request model and approval replay path before changing scope behavior.
+- Next exact task: PR 5 — add runtime trace write helper and workspace-scoped read-only inspection endpoint.
+- Files touched in PR 4: `apps/api/src/aidoo_api/domains/ai/agent.py`, `apps/api/src/aidoo_api/domains/ai/approvals.py`, `apps/api/src/aidoo_api/domains/ai/router.py`, `apps/api/tests/test_ai_approvals.py`, `plans/03-phase6-evidence-runtime-implementation.md`.
+- Tests/checks run: `cd apps/api && uv run --python 3.12 pytest tests/test_ai_approvals.py`; `cd apps/api && uv run --python 3.12 pytest tests/test_ai_stream.py tests/test_ai_events.py tests/test_ai_conversations.py tests/test_ai_runtime_persistence.py tests/test_ai_runtime_contracts.py`; `cd apps/api && uv run --python 3.12 pytest tests/test_alembic_migrations.py`; targeted ruff check for touched Python files; `git diff --check`.
+- Known blockers: PR 5 must define a scrubbed response schema so inspection never returns raw reasoning/tool secrets.
 - Do not touch: unrelated local `compose.prod-like.yml` modification unless explicitly requested.
 
 ## Architecture / Principles

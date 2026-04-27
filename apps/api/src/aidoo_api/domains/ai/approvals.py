@@ -6,12 +6,24 @@ from datetime import datetime, timedelta
 from typing import Any, Literal
 
 from fastapi import HTTPException, status
-from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Index, String, Text, select, text
+from sqlalchemy import (
+    CheckConstraint,
+    DateTime,
+    ForeignKey,
+    Index,
+    String,
+    Text,
+    func,
+    select,
+    text,
+    update,
+)
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, Session, mapped_column
 
 from aidoo_api.core.db import Base
 from aidoo_api.domains.ai.audit import log_llm_tool_approval_resolved
+from aidoo_api.domains.ai.runtime.models import AgentInvocation, AgentRun
 from aidoo_api.domains.auth.models import User, Workspace
 from aidoo_api.domains.auth.security import new_id
 from aidoo_api.domains.conversations.models import Conversation
@@ -39,6 +51,7 @@ TERMINAL_APPROVAL_STATUSES = {
 }
 LIVE_SNAPSHOT_STATUSES = {"awaiting_approval", "resumed"}
 LIVE_PENDING_APPROVAL_STATUSES = {"pending", "approved", "rejected"}
+SNAPSHOT_SCOPE_META_KEY = "scope"
 
 
 class AgentRunSnapshot(Base):
@@ -194,7 +207,9 @@ def _normalize_resolution_reason(reason: str | None) -> str | None:
     return normalized or None
 
 
-def _require_user_scope(workspace: Workspace, user: User, row_workspace_id: str, row_user_id: str) -> None:
+def _require_user_scope(
+    workspace: Workspace, user: User, row_workspace_id: str, row_user_id: str
+) -> None:
     if row_workspace_id != workspace.id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Approval not found.")
     if row_user_id != user.id:
@@ -302,24 +317,18 @@ def get_live_pending_approval(
         # do not each attempt to expire the same approval / abandon the same
         # snapshot.
         locked_approval = db.scalar(
-            select(AiToolApproval)
-            .where(AiToolApproval.id == approval.id)
-            .with_for_update()
+            select(AiToolApproval).where(AiToolApproval.id == approval.id).with_for_update()
         )
         if locked_approval is not None and locked_approval.status == "pending":
             locked_snapshot = db.scalar(
-                select(AgentRunSnapshot)
-                .where(AgentRunSnapshot.id == snapshot.id)
-                .with_for_update()
+                select(AgentRunSnapshot).where(AgentRunSnapshot.id == snapshot.id).with_for_update()
             )
             _expire_pending_approval(db, locked_approval, snapshot=locked_snapshot)
             if locked_approval.resolved_at is not None:
                 elapsed_since_request_ms = max(
                     0,
                     int(
-                        (
-                            locked_approval.resolved_at - locked_approval.created_at
-                        ).total_seconds()
+                        (locked_approval.resolved_at - locked_approval.created_at).total_seconds()
                         * 1000
                     ),
                 )
@@ -405,7 +414,9 @@ def load_snapshot(
         stmt = stmt.with_for_update()
     snapshot = db.scalar(stmt)
     if snapshot is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Agent run snapshot not found.")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Agent run snapshot not found."
+        )
     return snapshot
 
 
@@ -432,12 +443,14 @@ def persist_snapshot_on_halt(
     )
     db.add(snapshot)
     db.flush()
+    _persist_runtime_shadow_on_halt(db, snapshot=snapshot)
     return snapshot
 
 
 def mark_snapshot_completed(db: Session, snapshot: AgentRunSnapshot) -> None:
     snapshot.status = "completed"
     db.add(snapshot)
+    _mark_runtime_shadow_completed(db, snapshot=snapshot)
 
 
 def mark_snapshot_resumed(db: Session, snapshot: AgentRunSnapshot) -> None:
@@ -445,9 +458,10 @@ def mark_snapshot_resumed(db: Session, snapshot: AgentRunSnapshot) -> None:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Agent run snapshot is not awaiting approval.",
-    )
+        )
     snapshot.status = "resumed"
     db.add(snapshot)
+    _mark_runtime_shadow_resumed(db, snapshot=snapshot)
 
 
 def abandon_stale_snapshot(
@@ -618,6 +632,28 @@ def rehydrate_model_meta(snapshot: AgentRunSnapshot) -> ReplayInvocationConfig:
     )
 
 
+def resolve_resume_allowed_app_ids(
+    snapshot: AgentRunSnapshot,
+    requested_allowed_app_ids: list[str] | None,
+) -> list[str] | None:
+    scope_meta = _snapshot_scope_meta(snapshot)
+    stored_allowed_app_ids = scope_meta.get("allowed_app_ids")
+    if stored_allowed_app_ids is None:
+        return requested_allowed_app_ids
+
+    stored_scope = _normalize_scope_list(stored_allowed_app_ids)
+    if requested_allowed_app_ids is None:
+        return stored_scope
+
+    requested_scope = _normalize_scope_list(requested_allowed_app_ids)
+    if not set(requested_scope).issubset(set(stored_scope)):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Resume scope cannot be wider than the approved agent run scope.",
+        )
+    return requested_scope
+
+
 def get_resume_context(
     db: Session,
     *,
@@ -645,14 +681,18 @@ def get_resume_context(
         for_update=for_update,
     )
     if snapshot.workspace_id != workspace.id or snapshot.requested_by_user_id != user.id:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Agent run snapshot not found.")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Agent run snapshot not found."
+        )
     if approval.status == "pending":
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Approval must be resolved before resume.",
         )
     if approval.status in {"cancelled", "expired"}:
-        raise HTTPException(status_code=status.HTTP_410_GONE, detail="Approval can no longer be resumed.")
+        raise HTTPException(
+            status_code=status.HTTP_410_GONE, detail="Approval can no longer be resumed."
+        )
     if snapshot.status == "resumed":
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -664,3 +704,129 @@ def get_resume_context(
             detail="Agent run snapshot is no longer resumable.",
         )
     return approval, snapshot
+
+
+def _snapshot_scope_meta(snapshot: AgentRunSnapshot) -> dict[str, Any]:
+    raw = dict(snapshot.model_meta or {})
+    scope_meta = raw.get(SNAPSHOT_SCOPE_META_KEY)
+    if isinstance(scope_meta, dict):
+        return scope_meta
+    return {}
+
+
+def _normalize_scope_list(value: Any) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    seen: set[str] = set()
+    normalized: list[str] = []
+    for item in value:
+        if not isinstance(item, str) or item in seen:
+            continue
+        normalized.append(item)
+        seen.add(item)
+    return normalized
+
+
+def _next_runtime_invocation_seq(db: Session, agent_run_id: str) -> int:
+    current = db.scalar(
+        select(func.max(AgentInvocation.invocation_seq)).where(
+            AgentInvocation.agent_run_id == agent_run_id
+        )
+    )
+    return int(current if current is not None else -1) + 1
+
+
+def _persist_runtime_shadow_on_halt(
+    db: Session,
+    *,
+    snapshot: AgentRunSnapshot,
+) -> None:
+    model_meta = dict(snapshot.model_meta or {})
+    runtime_run = AgentRun(
+        id=snapshot.id,
+        workspace_id=snapshot.workspace_id,
+        conversation_id=snapshot.conversation_id,
+        requested_by_user_id=snapshot.requested_by_user_id,
+        legacy_snapshot_id=snapshot.id,
+        status="awaiting_approval",
+        runtime_profile="interactive_read",
+        graph_enabled=False,
+        model_profile_id=str(model_meta.get("model") or model_meta.get("chosen_model") or "")
+        or None,
+        metadata_json={
+            "source": "approval_snapshot_shadow",
+            "blocked_call_id": snapshot.blocked_call_id,
+            SNAPSHOT_SCOPE_META_KEY: model_meta.get(SNAPSHOT_SCOPE_META_KEY),
+        },
+    )
+    db.add(runtime_run)
+    db.flush()
+    db.add(
+        AgentInvocation(
+            id=new_id(),
+            agent_run_id=runtime_run.id,
+            workspace_id=snapshot.workspace_id,
+            conversation_id=snapshot.conversation_id,
+            invocation_seq=0,
+            agent_id="approval.proposal_preview",
+            status="awaiting_approval",
+            purpose="approval required",
+            input_ref=snapshot.blocked_call_id,
+        )
+    )
+    db.flush()
+
+
+def _mark_runtime_shadow_completed(
+    db: Session,
+    *,
+    snapshot: AgentRunSnapshot,
+) -> None:
+    now = utcnow_naive()
+    runtime_run = db.get(AgentRun, snapshot.id)
+    if runtime_run is not None:
+        runtime_run.status = "completed"
+        runtime_run.updated_at = now
+        db.add(runtime_run)
+    db.execute(
+        update(AgentInvocation)
+        .where(
+            AgentInvocation.agent_run_id == snapshot.id,
+            AgentInvocation.status.in_(("pending", "running", "awaiting_approval", "resumed")),
+        )
+        .values(status="completed", updated_at=now)
+    )
+
+
+def _mark_runtime_shadow_resumed(
+    db: Session,
+    *,
+    snapshot: AgentRunSnapshot,
+) -> None:
+    now = utcnow_naive()
+    runtime_run = db.get(AgentRun, snapshot.id)
+    if runtime_run is not None:
+        runtime_run.status = "running"
+        runtime_run.updated_at = now
+        db.add(runtime_run)
+    db.execute(
+        update(AgentInvocation)
+        .where(
+            AgentInvocation.agent_run_id == snapshot.id,
+            AgentInvocation.status == "awaiting_approval",
+        )
+        .values(status="resumed", updated_at=now)
+    )
+    db.add(
+        AgentInvocation(
+            id=new_id(),
+            agent_run_id=snapshot.id,
+            workspace_id=snapshot.workspace_id,
+            conversation_id=snapshot.conversation_id,
+            invocation_seq=_next_runtime_invocation_seq(db, snapshot.id),
+            agent_id="approval.proposal_preview",
+            status="resumed",
+            purpose="approval resumed",
+            input_ref=snapshot.blocked_call_id,
+        )
+    )

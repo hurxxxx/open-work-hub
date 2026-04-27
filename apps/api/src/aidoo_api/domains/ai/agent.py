@@ -99,6 +99,7 @@ async def run_agent_turn_stream(
     tool_specs: list[dict[str, Any]],
     bound_conversation: Conversation | None,
     scope_system_prompt: str | None = None,
+    allowed_app_ids: list[str] | None = None,
     parallel_tool_calls: bool | None = None,
 ) -> AsyncIterator[Any]:
     conversation = _prepend_agent_system_message(
@@ -111,6 +112,8 @@ async def run_agent_turn_stream(
         stream_reasoning=stream_reasoning,
         parallel_tool_calls=parallel_tool_calls,
         tool_choice_state="auto",
+        allowed_app_ids=allowed_app_ids,
+        tool_specs=tool_specs,
     )
     async for event in _run_agent_loop_stream(
         context=context,
@@ -469,7 +472,9 @@ async def _run_agent_loop_stream(
                     source="api.resume" if current_snapshot is not None else "api.stream",
                     call_id=pending.call_id,
                     agent_run_id=agent_run_id,
-                    conversation_id=bound_conversation.id if bound_conversation is not None else None,
+                    conversation_id=bound_conversation.id
+                    if bound_conversation is not None
+                    else None,
                 )
 
                 if tool_execution.status == "blocked":
@@ -604,10 +609,7 @@ async def _run_agent_loop_stream(
             # approved tool actually ran. If the tool already executed, any
             # DB side effects are committed on the outer router boundary, so
             # a rewind would let a second resume re-execute the same write.
-            if (
-                not replay_tool_executed
-                and replay_approval.status in {"approved", "rejected"}
-            ):
+            if not replay_tool_executed and replay_approval.status in {"approved", "rejected"}:
                 current_snapshot.status = "awaiting_approval"
                 db.add(current_snapshot)
             else:
@@ -754,6 +756,8 @@ def _build_snapshot_model_meta(
     stream_reasoning: bool,
     parallel_tool_calls: bool | None,
     tool_choice_state: str | dict[str, Any] | None,
+    allowed_app_ids: list[str] | None,
+    tool_specs: list[dict[str, Any]],
 ) -> dict[str, Any]:
     return {
         "model": execution.chosen_model,
@@ -771,7 +775,35 @@ def _build_snapshot_model_meta(
         "temperature": temperature,
         "max_output_tokens": execution.resolved_max_tokens,
         "reasoning_effort": execution.resolved_reasoning_effort,
+        "scope": _build_snapshot_scope_meta(
+            allowed_app_ids=allowed_app_ids,
+            tool_specs=tool_specs,
+        ),
     }
+
+
+def _build_snapshot_scope_meta(
+    *,
+    allowed_app_ids: list[str] | None,
+    tool_specs: list[dict[str, Any]],
+) -> dict[str, Any]:
+    return {
+        "allowed_app_ids": list(allowed_app_ids) if allowed_app_ids is not None else None,
+        "resolved_agent_ids": ["single_loop"],
+        "resolved_tool_names": _tool_names_from_specs(tool_specs),
+    }
+
+
+def _tool_names_from_specs(tool_specs: list[dict[str, Any]]) -> list[str]:
+    names: list[str] = []
+    for spec in tool_specs:
+        function_spec = spec.get("function")
+        if not isinstance(function_spec, dict):
+            continue
+        name = function_spec.get("name")
+        if isinstance(name, str) and name not in names:
+            names.append(name)
+    return names
 
 
 def _execution_from_snapshot(
@@ -780,8 +812,10 @@ def _execution_from_snapshot(
     replay = ai_approvals.rehydrate_model_meta(snapshot)
     chosen_pool = replay.chosen_pool if replay.chosen_pool in {"local", "external"} else "local"
     config = get_pool_config(chosen_pool)
-    policy = replay.policy if replay.policy in {"local_only", "external"} else (
-        "external" if chosen_pool == "external" else "local_only"
+    policy = (
+        replay.policy
+        if replay.policy in {"local_only", "external"}
+        else ("external" if chosen_pool == "external" else "local_only")
     )
     decision = PolicyDecision(
         policy=policy,
