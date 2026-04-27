@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "suite": "sanitizer_leakage",
+  "description": "Synthetic external-search sanitizer cases for Korean enterprise identifier leakage gates.",
+  "cases": [
+    {
+      "id": "sanitizer-customer-product-order",
+      "locale": "ko-KR",
+      "synthetic": true,
+      "tags": ["external_search", "deny_by_default"],
+      "input": {
+        "user_message": "가상고객A의 TEST-DX-2400 주문서 ORD-TEST-001 기준으로 EU CE 인증 리스크를 검색해줘.",
+        "detected_entities": ["customer", "product_code", "order_id"]
+      },
+      "expected": {
+        "allow_external": true,
+        "removed_entity_types": ["customer", "product_code", "order_id"],
+        "sanitized_query": "industrial electronic component EU CE certification regulatory requirements"
+      }
+    },
+    {
+      "id": "sanitizer-bom-cost-contract",
+      "locale": "ko-KR",
+      "synthetic": true,
+      "tags": ["external_search", "blocked"],
+      "input": {
+        "user_message": "BOM 원가 12345원과 계약 조건을 넣어서 공개 공급사 가격을 검색해줘.",
+        "detected_entities": ["bom", "cost", "contract_term"]
+      },
+      "expected": {
+        "allow_external": false,
+        "removed_entity_types": ["bom", "cost", "contract_term"],
+        "sanitized_query": ""
+      }
+    }
+  ]
+}
