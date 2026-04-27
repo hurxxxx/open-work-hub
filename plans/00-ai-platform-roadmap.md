@@ -1,6 +1,6 @@
 # Doowon AI Platform — 마스터 로드맵
 
-> **이 문서의 성격**: 7개 Phase로 구성된 AI 플랫폼 구축의 **최상위 로드맵**이다.
+> **이 문서의 성격**: 8개 Phase로 구성된 AI 플랫폼 구축의 **최상위 로드맵**이다.
 > 각 Phase의 상세 실행 계획은 **해당 Phase 킥오프 시점에 개별 플랜 파일**로 작성한다.
 > 본 문서는 방향·원칙·Phase 경계·공통 제약만 담는다.
 
@@ -11,17 +11,20 @@
 프로젝트(aidoo-portal)의 AI 레이어를 인프라부터 제품 UX까지 새로 설계한다.
 
 ### 현재 상태
-- 로컬 LLM: Ollama → **mlx-lm (Qwen3.6-35B-A3B-4bit)** 전환 완료. 프리필 3.1×, 생성 1.6× 개선.
-- LLM 호출 계층: `primary(local) → fallback(external)` 자동 크로스풀 폴백 — **보안 정책 위반**.
-- 업무 도메인 4개(PMS, Meeting, Planner, Docs) 이미 풍부한 엔드포인트(합계 90+). AI 기능은 회의록 자동 요약 1개뿐.
-- 챗봇 UI: 동기식·비스트리밍·도구 호출 없음.
+- Phase 1~5 완료로 LLM request context, streaming envelope, tool calling, MCP-shaped capability bridge, write approval, meeting intelligence, internal RAG orchestration이 들어왔다.
+- 로컬 LLM: Ollama → **mlx-lm (Qwen3.6-35B-A3B-4bit)** 전환 완료. v1 canonical 모델은 `Qwen/Qwen3.6-35B-A3B` 기준으로 유지한다.
+- 과거 `primary(local) → fallback(external)` 자동 크로스풀 폴백은 제거 대상/금지 원칙으로 고정되었다. 이후 external provider는 fallback이 아니라 policy-controlled provider adapter로만 사용한다.
+- 업무 도메인 4개(PMS, Meeting, Planner, Docs)와 RAG surface는 갖춰졌지만 agent 실행 모델은 아직 단일 loop 중심이다.
+- 다음 병목은 큰 tool catalog, 긴 대화 이력, cross-domain synthesis, evidence 검증, external egress governance를 안정적으로 다루는 runtime contract다.
 
 ### 목표
 - 정책 기반 풀 라우팅 + 워크스페이스 격리 기반 AI 플랫폼.
 - agent + tool calling + RAG 기반 업무 챗봇.
 - 회의·문서·일정·태스크 전체를 챗으로 조작 가능한 UX.
 - 사내문서 RAG는 Doowon 내부 orchestration + 원격 retrieval infra 조합으로 통합한다.
-- 전사는 초기 외부 API → 장기적으로 로컬.
+- agent runtime은 **deterministic shortcut + manager-controlled graph + evidence-first specialist runtime**으로 재설계한다.
+- 내부 데이터 원문 처리는 local model + workspace-scoped tool gateway에서 수행하고, external LLM/search는 request/payload sensitivity classifier, `ExternalEgressPolicy`, sanitizer, verifier, approval, trace를 통과한 경우에만 사용한다.
+- 전사는 초기 외부 API → 장기적으로 로컬을 유지하되, 공개 웹/표준/법규 검색과 redacted quality review는 policy-controlled external provider adapter로 허용할 수 있다.
 
 ### 업계 방향 참조
 - **Atlassian Rovo**: Transcript Insights Reporter, Jira/Confluence agent
@@ -82,8 +85,11 @@ LOCAL POOL ────┐                    ┌──── EXTERNAL POOL
 - 현재 워커는 `primary.ready`면 local, 아니면 fallback — **자동 크로스풀 폴백**. P1에서 제거.
 
 ### 5. PII 기본 탐지
-- `external` 정책 task에 한해 정규식 탐지. hit 시 LOCAL_ONLY 강제.
-- 값 자체 마스킹은 현재 범위 밖 (차후 검토).
+- Phase 1의 정규식 기반 PII 탐지는 초기 routing guard로 유지한다.
+- Phase 6부터 external egress 판단은 pre-routing request classifier, pre-egress payload classifier, `ExternalEgressPolicy`가 담당한다.
+- classifier는 local/pre-egress 단계에서 deterministic rules, local NER, local model, workspace metadata dictionary를 사용한다.
+- confidence 부족, unknown sensitive entity, unsupported attachment type, policy mismatch가 있으면 sensitivity를 낮추지 않고 conservative escalation을 적용한다.
+- raw prompt, raw evidence, raw tool result는 classification/sanitization을 위해 external provider에 보내지 않는다.
 
 ### 6. RAG는 내부 Control Plane + 원격 Retrieval Infrastructure
 - retrieval orchestration, ACL projection, query-time access context, grounded answer synthesis의 진실원은 Doowon 내부(API/worker)다.
@@ -92,6 +98,15 @@ LOCAL POOL ────┐                    ┌──── EXTERNAL POOL
 - raw link-share token은 Doowon 경계를 벗어나지 않는다. 외부 infra에는 `link_share_ref` 같은 파생 식별자만 전달한다.
 - ingest/backfill/visibility update는 queue + worker, query/grounded-answer는 sync path로 유지한다.
 - observability는 audit-only가 아니라 trace-first로 설계해 request -> outbox -> worker -> provider -> grounded answer를 한 trace로 연결한다.
+
+### 7. Evidence-first hybrid runtime
+- 단순 요청은 deterministic fast path로 처리하고, 복잡한 요청만 manager-controlled graph path로 보낸다.
+- 자유로운 agent handoff는 금지한다. Manager가 domain/search/verifier/writer invocation을 통제한다.
+- `EvidencePacket`은 search/domain/verifier/writer가 공유하는 내부 정본 DTO다. External provider에는 직접 전달하지 않는다.
+- External reasoning에는 `ExternalSafeEvidenceSummary`, external search에는 `SanitizedExternalSearchQuery`만 사용한다.
+- External search는 manager direct invocation이 아니라 `search.executor` 내부 provider adapter로만 호출한다.
+- Internal/external evidence conflict는 단순 source 위치가 아니라 `authority_class`, freshness, trust level, workspace policy, verifier confidence로 판단한다.
+- Internal trace table은 source of truth다. Provider tracing은 secondary observability일 뿐 내부 감사 로그를 대체하지 않는다.
 
 ## P3 Entry Contracts
 
@@ -134,7 +149,8 @@ Phase 3로 넘어가기 전에 아래 4개 계약을 먼저 고정한다. 목표
 > - **P2의 AgentEventEnvelope → P3·P4의 전제** (이벤트 계약 없이 tool/approval 렌더 불가).
 > - **P3의 service layer → P4의 전제** (write 툴도 같은 service 쓰기).
 > - **P5의 ACL Projection 설계 → P1 LlmTaskContext와 연결** (principal_set 주입점 공유).
-> - **P6만 P2 이후 비교적 독립적** (UI 확장, 기존 감사 로그 활용).
+> - **P6 Evidence-first runtime → P7/P8의 전제** (`AgentRun`, `AgentInvocation`, `EvidencePacket`, verifier, external egress policy가 이후 batch/admin/external integration의 실행·감사 경계가 됨).
+> - **P7 Batch/Admin은 P6 이후 착수** (review queue, long_doc profile, policy UI가 P6 contract를 재사용해야 함).
 >
 > Phase 킥오프 시점에 `NN-phaseX-<slug>.md` 형식의 **상세 플랜 파일**을 [`plans/`](./) 디렉터리에 작성한다 (명명 규칙은 [`plans/README.md`](./README.md) 참조).
 
@@ -309,7 +325,49 @@ Phase 3로 넘어가기 전에 아래 4개 계약을 먼저 고정한다. 목표
 
 ---
 
-### Phase 6 — Batch LlmJob + Admin UI
+### Phase 6 — Evidence-First Hybrid Agent Runtime
+**목표**: 기존 single-loop agent를 **deterministic shortcut + manager-controlled graph + evidence-first specialist runtime**으로 재설계한다. Local-first 원칙은 유지하되 external LLM/search는 policy-controlled provider adapter로만 붙인다.
+
+**핵심 산출물**:
+1. **Runtime contract foundation**
+   - 첫 구현은 full hybrid surface가 아니라 minimal kernel 우선
+   - `AgentDefinition`, `AgentDefinitionResolver`, `AgentRun`, `AgentInvocation`, `AgentTraceEvent`
+   - `ExecutionGraph`, `EvidencePacket`, `SearchProfile`, `VerifierResult`, `ModelProfile`
+   - `RequestSensitivityClassifier`, `PayloadSensitivityClassifier`, `DataSensitivityDecision`, `ExternalEgressPolicy`, `ModelRouter`
+   - `ExternalSafeEvidenceSummary`, `SanitizedExternalSearchQuery`, `ExternalSearchResult`, `ExternalCallProposal`
+   - 기존 `AgentRunSnapshot`과 새 runtime table은 Phase 6 초기에 shadow-write/compat projection 전략을 먼저 잡음
+2. **Fast path + manager graph**
+   - single-domain/read/no-tool 요청은 deterministic shortcut
+   - 복잡한 요청만 manager graph path
+   - external planning은 candidate graph만 생성하며 runtime validator 통과 전 실행 불가
+3. **Search/evidence 경계**
+   - `search.planner` + `search.executor`
+   - internal RAG/domain service thin adapter
+   - external search는 `search.executor` provider adapter로만 실행
+   - `EvidencePacket.items[].authority_class`, trust level, citation metadata, cache/reproducibility 지원
+4. **Verifier/recovery**
+   - unsupported/contradicted claim, missing evidence, policy risk 판단
+   - recovery는 verifier가 아니라 manager policy가 결정
+   - internal/external conflict는 `authority_class`, freshness, trust level, workspace policy, verifier confidence 기준
+5. **Approval/external governance**
+   - external provider 호출 전 local/pre-egress sensitivity classification + sanitizer
+   - provider retention/training/region/logging policy 검증
+   - external call decision은 `auto_allowed`, `trace_only`, `approval_required`, `review_queue_required`, `denied`
+   - Phase 6 v1에서 review queue backend가 없으면 `review_queue_required`는 emit하지 않고 `approval_required` 또는 `denied`로 수렴
+6. **Template writer/eval**
+   - graph path artifact emission은 `writer.template`이 소유
+   - external quality review output은 final artifact가 아니라 suggestion으로만 사용
+   - routing/evidence/verifier/recovery/external leakage eval fixture
+
+**완료 조건**: 단순 read 요청은 manager 없이 처리되고, cross-domain/report/high-risk 요청은 traceable `ExecutionGraph`와 `EvidencePacket`을 남긴다. Raw internal evidence는 external provider로 나가지 않는다. `external.search` direct invocation은 validator가 차단한다. External result는 normalized evidence로만 사용되며 verifier/approval policy를 우회하지 못한다.
+
+**전제**: Phase 1~5에서 구축한 LLM context, streaming envelope, MCP bridge, approval flow, RAG orchestration을 재사용한다. 기존 single-loop path는 feature flag rollout 동안 canonical fallback으로 유지한다.
+
+**상세 플랜 파일**: [`02-evidence-first-agent-runtime.md`](./02-evidence-first-agent-runtime.md)
+
+---
+
+### Phase 7 — Batch LlmJob + Admin UI
 **목표**: 장시간 배치 작업 + 관리자 정책 편집.
 
 **핵심 산출물**:
@@ -318,16 +376,17 @@ Phase 3로 넘어가기 전에 아래 4개 계약을 먼저 고정한다. 목표
 - API: `POST/GET /ai/jobs`, `POST /ai/jobs/{id}/cancel`
 - Admin UI 탭:
   - LLM Policy 관리 (task_kind × policy 편집)
+  - Runtime/external provider policy 관리 (`ExternalEgressPolicy`, provider allowlist, review queue default)
   - Pool 상태 대시보드 (성공률, latency, 최근 에러)
   - Audit Log 필터 프리셋 (LLM 전용)
 
-**완료 조건**: 30K 보고서 비동기 생성. 관리자가 DB 통해 정책 변경. 변경 즉시 라우팅 반영.
+**완료 조건**: 30K 보고서 비동기 생성. 관리자가 DB 통해 정책 변경. 변경 즉시 라우팅과 external egress policy에 반영. Batch/review queue는 Phase 6 `AgentRun`/`AgentInvocation`/trace contract를 재사용.
 
-**상세 플랜 파일**: `06-phase6-batch-admin.md`
+**상세 플랜 파일**: `07-phase7-batch-admin.md`
 
 ---
 
-### Phase 7 — External Integration
+### Phase 8 — External Integration
 **목표**: Doowon 백엔드를 first-party 프론트 전용이 아니라 **workspace-scoped AI hub**로 공개 가능한 상태까지 확장한다.
 
 **핵심 산출물**:
@@ -341,7 +400,9 @@ Phase 3로 넘어가기 전에 아래 4개 계약을 먼저 고정한다. 목표
 
 **완료 조건**: first-party web 클라이언트와 동일 서비스 계층을 사용하면서도, 외부 시스템이 workspace-bound principal과 scope만으로 안전하게 AI/API를 호출할 수 있다.
 
-**상세 플랜 파일**: `07-phase7-external-integration.md`
+**전제**: Phase 6 external egress governance와 Phase 7 admin/provider policy surface가 안정화된 뒤 착수한다.
+
+**상세 플랜 파일**: `08-phase8-external-integration.md`
 
 ---
 
@@ -356,6 +417,8 @@ Phase 3로 넘어가기 전에 아래 4개 계약을 먼저 고정한다. 목표
 | LLM 요청 | AuthContext 주입, 시스템 프롬프트에 workspace_name |
 | Tool 호출 | 기존 `access.py` 함수 호출로 ACL 검사 |
 | RAG 쿼리 | workspace_id + user_id + principal_set (held_link_share_refs, held_meeting_grants, team_memberships) |
+| EvidencePacket | source provenance + access scope + trust level + authority_class |
+| External provider | request/payload sensitivity classifier + ExternalEgressPolicy + sanitizer + provider data policy |
 | Batch Job | `LlmJob.workspace_id`, 조회 시 필터 |
 | Audit | workspace_id를 payload에 포함 |
 
@@ -363,6 +426,9 @@ Phase 3로 넘어가기 전에 아래 4개 계약을 먼저 고정한다. 목표
 기존 `AuditLog` 테이블 재사용. 신규 action:
 - `llm_call` — LLM 요청 단위. payload: {pool, model, policy, task_kind, status, pii_hits, tokens, latency_ms, workspace_id}
 - `llm_tool_call` — 도구 호출 단위. payload: {tool_name, args_summary, status, resource_ids, error}
+- `agent_run` / `agent_invocation` — Phase 6 runtime 실행 단위. payload: {runtime_profile, model_profile, graph_enabled, fallback_reason, verifier_status}
+- `external_egress_decision` — external provider 호출 전 정책 결정. payload: {sensitivity, policy_id, decision, provider, payload_kind, redaction_summary}
+- `external_search_result` — normalized external search result metadata. payload: {provider, sanitized_query_hash, cache_key, cache_hit, authority_class, trust_level, citation_url}
 
 ### 챗 히스토리 보존
 **영구 보존** (TTL 없음). 사용자 명시 삭제 시 soft delete (`deleted_at`).
@@ -385,6 +451,7 @@ Phase별 신규 영역:
 - `apps/api/src/aidoo_api/core/pii.py`, `llm_adapters.py`
 - `apps/api/src/aidoo_api/domains/rag/`
 - `apps/api/src/aidoo_api/domains/ai/` — models, tools, agent, policy_service, audit
+- `apps/api/src/aidoo_api/domains/ai/runtime/` — Phase 6 AgentRun/Invocation/Trace, graph, evidence, verifier, model routing, egress policy
 - `apps/worker/src/aidoo_worker/tasks/llm_batch.py`
 - `apps/worker/src/aidoo_worker/tasks/rag_sync.py`
 - `apps/web/src/domains/ai/` — 대거 개편
@@ -414,6 +481,12 @@ Phase별 신규 영역:
 | **Phase 3.5 완료 (2026-04-20)** | MCP-shaped descriptor + InProc bridge를 capability 정본으로 채택. OpenAI function spec / OpenAPI는 파생 산출물로 유지. |
 | **Phase 4 완료 (2026-04-22)** | `MeetingInsight` 별도 테이블, halt당 1 approval, meeting-only `scope_ref`, reload restore(`live_pending_approval`), approval-gated write capability까지 구현/검증 완료. |
 | **Phase 5 완료 (2026-04-23)** | internal `domains/rag/` orchestration, provider/Qdrant adapter, workspace RAG REST/AI surface, `/tool/search`, trace-first observability까지 구현/검증 완료. |
+| **Phase 6 방향** | Evidence-First Hybrid Agent Runtime. deterministic shortcut + manager-controlled graph + evidence-first specialist runtime으로 재설계. |
+| Phase 6 external provider 원칙 | external LLM/search는 fallback이 아니라 policy-controlled provider adapter. Raw internal evidence 전송 금지. |
+| Phase 6 RuntimeProfile | workload 성격(`interactive_read`, `grounded_report`, `long_doc`, `high_risk_action`)만 표현. external 여부는 `ModelRouter`/provider decision/feature flag로 분리. |
+| Phase 6 external search | manager direct invocation 금지. `search.executor` provider adapter로만 호출. |
+| Phase 6 evidence conflict | 내부 업무 사실은 `internal_system_of_record` 우선, 법규/표준/인증은 `authority_class`와 freshness/trust/workspace policy/verifier confidence 기준. |
+| Phase 6 external quality review | final artifact가 아니라 suggestion으로만 사용. 최종 산출물은 `writer.template`이 내부 evidence/verifier 기준으로 생성. |
 | 전사 프로바이더 | 기존 `core/asr.py` 설정 유지 |
 | 챗 히스토리 | 영구 보존, soft delete |
 
@@ -422,7 +495,12 @@ Phase별 신규 영역:
 |---|---|
 | PII 값 자체 마스킹 | 법무 검토 후 (외부 풀 사용 업무 한정) |
 | 장애 알람 채널 (Slack/이메일/Jira) | 인프라 구축 단계 |
-| 비용/성능 모니터링 UI | Phase 6 확장 후보 |
+| Phase 6 구현 PR 분할 | Phase 6 implementation plan 작성 시 |
+| Phase 6 `AgentRun` DB schema 세부 컬럼 | Phase 6 implementation plan 작성 시 |
+| Phase 6 기존 `AgentRunSnapshot` 이관 방식 | Phase 6 implementation plan 작성 시 |
+| 기본 external LLM/search provider | Phase 6 provider bakeoff 이후 |
+| provider별 data retention 설정 | security review 이후 |
+| 비용/성능 모니터링 UI | Phase 7 확장 후보 |
 | 외부 풀 프로바이더 확장 순서 (Anthropic/OpenAI) | 도입 필요 시점 |
 | 로컬 whisper 전환 시점 | ASR 품질 측정 후 |
 | Artifact Canvas 고도화 범위/우선순위 | Phase 4 이후 제품 하드닝 시 |
@@ -505,15 +583,28 @@ Phase별 신규 영역:
 
 ## 다음 단계
 
-현재 AI platform 트랙의 다음 작업은 **Phase 6 (Batch LlmJob + Admin UI) 세부 플랜**을 별도 파일로 작성하는 것이다.
+현재 AI platform 트랙의 다음 작업은 **Phase 6 Evidence-First Hybrid Agent Runtime 구현 플랜**을 별도 파일로 작성하는 것이다.
 
-Phase 6 세부 플랜은 본 문서의 Phase 6 섹션을 확장해서:
-- `LlmJob` 상태 모델, progress/heartbeat/cancel 계약, batch vs sync 경계 확정
-- worker batch 실행, timeout/retry, dead-letter/운영 복구 절차 정의
-- admin UI에서 정책/작업 현황/실패 진단을 어디까지 노출할지 범위 확정
-- grounded-answer background escalation과의 연결 여부 정리
-- 테스트 케이스
-- 롤백 계획
-- 예상 작업 기간
+Phase 6 구현 플랜은 [`02-evidence-first-agent-runtime.md`](./02-evidence-first-agent-runtime.md)를 출발점으로 삼되, 실제 PR 단위로 쪼개야 한다.
 
-등을 포함한다.
+권장 분할:
+- PR 1: Phase 0 gates, Korean eval seed corpus, launch SLO, structured output hard gate.
+- PR 2: minimal runtime kernel (`AgentRun`, `AgentInvocation`, `AgentTraceEvent`, minimal `ExecutionGraph`, minimal `EvidencePacket`)과 feature flag skeleton.
+- PR 3: `AgentRunSnapshot` shadow-write/compat projection, live run/pending approval DB invariant, resume scope widening 방지.
+- PR 4: eval fixture harness와 read-only inspection endpoint.
+- PR 5: fast path router + registry-validated `ExecutionGraph` schema/validator + single-loop fallback.
+- PR 6: `RequestSensitivityClassifier`, `PayloadSensitivityClassifier`, `ExternalEgressPolicy`, `ModelRouter` deterministic baseline.
+- PR 7: search/evidence normalization + `EvidencePacket` + `authority_class`.
+- PR 8: verifier/recovery policy.
+- PR 9: approval/external call decision integration. review queue backend이 없으면 `review_queue_required`는 비활성.
+- PR 10: template writer/eval/external quality review suggestion path.
+
+구현 플랜에는 다음을 포함한다.
+- DB migration과 기존 `AgentRunSnapshot` compatibility/cutover 전략.
+- eval fixture seed와 rollout kill criteria.
+- external provider 비활성화/rollback 절차.
+- provider data policy/security review checklist.
+- 테스트 케이스와 수동 검증.
+- 예상 작업 기간.
+
+Phase 7 Batch/Admin UI와 Phase 8 External Integration은 Phase 6 runtime contract가 안정화된 뒤 재킥오프한다.

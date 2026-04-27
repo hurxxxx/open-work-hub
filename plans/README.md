@@ -43,8 +43,8 @@ NN-<kebab-slug>.md
 
 | 파일 | 유형 | 상태 |
 |---|---|---|
-| [`00-ai-platform-roadmap.md`](./00-ai-platform-roadmap.md) | 로드맵 | 승인 완료, Phase 5 완료 반영 |
-| [`02-evidence-first-agent-runtime.md`](./02-evidence-first-agent-runtime.md) | 실행 설계 | 정본 실행 계획, 구현 전 검토 대상 |
+| [`00-ai-platform-roadmap.md`](./00-ai-platform-roadmap.md) | 로드맵 | Phase 6 Evidence-First Hybrid Agent Runtime 반영 |
+| [`02-evidence-first-agent-runtime.md`](./02-evidence-first-agent-runtime.md) | 실행 설계 | Phase 6 정본 설계, 구현 플랜 작성 대상 |
 
 완료된 플랜은 [`docs/planning-log.md`](../docs/planning-log.md)에서 확인.
 
