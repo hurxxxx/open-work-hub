@@ -119,6 +119,12 @@ class AiToolApproval(Base):
             "tool_call_id",
             unique=True,
         ),
+        Index(
+            "uq_ai_tool_approvals_pending_agent_run",
+            "agent_run_id",
+            unique=True,
+            postgresql_where=text("status = 'pending'"),
+        ),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)

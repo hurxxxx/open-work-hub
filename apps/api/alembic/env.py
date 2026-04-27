@@ -11,6 +11,7 @@ from aidoo_api.core.db import Base
 from aidoo_api.core.settings import get_settings
 from aidoo_api.domains.ai import approvals as ai_approvals  # noqa: F401
 from aidoo_api.domains.ai import models as ai_models  # noqa: F401
+from aidoo_api.domains.ai.runtime import models as ai_runtime_models  # noqa: F401
 from aidoo_api.domains.auth import models as auth_models  # noqa: F401
 from aidoo_api.domains.conversations import models as conversations_models  # noqa: F401
 from aidoo_api.domains.docs import models as docs_models  # noqa: F401

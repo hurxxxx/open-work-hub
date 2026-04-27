@@ -76,6 +76,7 @@ def init_db() -> None:
     release script and leave this flag unset.
     """
     from aidoo_api.domains.ai import approvals as ai_approvals  # noqa: F401
+    from aidoo_api.domains.ai.runtime import models as ai_runtime_models  # noqa: F401
     from aidoo_api.domains.auth import models  # noqa: F401
     from aidoo_api.domains.auth.access import ensure_seed_data
     from aidoo_api.domains.conversations import (  # noqa: F401

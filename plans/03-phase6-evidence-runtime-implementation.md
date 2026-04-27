@@ -23,13 +23,13 @@ Phase 6 전체 목표는 기존 single-loop agent를 deterministic fast path, ma
 
 이 섹션은 세션 handoff용이다. 구현 세션이 끝날 때마다 짧게 갱신한다.
 
-- Current PR/stage: PR 2 complete, ready for PR 3.
-- Last completed: Added minimal runtime contracts, registry validation helper, trace sequence helper, and contract tests.
+- Current PR/stage: PR 3 complete, ready for PR 4.
+- Last completed: Added runtime SQLAlchemy models, Alembic migration, metadata imports, and persistence/invariant tests.
 - In progress: None.
-- Next exact task: PR 3 — add runtime SQLAlchemy models, Alembic migration, metadata import path, and persistence/invariant tests.
-- Files touched in PR 2: `apps/api/src/aidoo_api/domains/ai/runtime/`, `apps/api/tests/test_ai_runtime_contracts.py`, `plans/03-phase6-evidence-runtime-implementation.md`.
-- Tests/checks run: `cd apps/api && uv run --python 3.12 pytest tests/test_ai_runtime_contracts.py tests/test_ai_runtime_eval_fixtures.py`; `git diff --check -- apps/api/src/aidoo_api/domains/ai/runtime apps/api/tests/test_ai_runtime_contracts.py`.
-- Known blockers: PR 3 must confirm Alembic head and runtime model import path before migration.
+- Next exact task: PR 4 — shadow-write runtime records from the approval halt/resume path and add resume scope widening guards.
+- Files touched in PR 3: `apps/api/src/aidoo_api/domains/ai/runtime/models.py`, `apps/api/alembic/versions/e7f8a9b0c1d2_add_ai_runtime_tables.py`, `apps/api/alembic/env.py`, `apps/api/src/aidoo_api/core/db.py`, `apps/api/src/aidoo_api/domains/ai/approvals.py`, `apps/api/tests/test_ai_runtime_persistence.py`, `plans/03-phase6-evidence-runtime-implementation.md`.
+- Tests/checks run: `cd apps/api && uv run --python 3.12 pytest tests/test_ai_runtime_persistence.py tests/test_ai_runtime_contracts.py tests/test_ai_runtime_eval_fixtures.py`; `cd apps/api && uv run --python 3.12 pytest tests/test_alembic_migrations.py`; targeted ruff check for touched Python files.
+- Known blockers: PR 4 must inspect the existing `/chat/resume` request model and approval replay path before changing scope behavior.
 - Do not touch: unrelated local `compose.prod-like.yml` modification unless explicitly requested.
 
 ## Architecture / Principles
