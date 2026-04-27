@@ -583,28 +583,18 @@ Phase별 신규 영역:
 
 ## 다음 단계
 
-현재 AI platform 트랙의 다음 작업은 **Phase 6 Evidence-First Hybrid Agent Runtime 구현 플랜**을 별도 파일로 작성하는 것이다.
+현재 AI platform 트랙의 다음 작업은 [`03-phase6-evidence-runtime-implementation.md`](./03-phase6-evidence-runtime-implementation.md)에 따라 **Phase 6 Phase 0-A minimal runtime kernel**을 구현하는 것이다.
 
-Phase 6 구현 플랜은 [`02-evidence-first-agent-runtime.md`](./02-evidence-first-agent-runtime.md)를 출발점으로 삼되, 실제 PR 단위로 쪼개야 한다.
+Phase 6 구현은 [`02-evidence-first-agent-runtime.md`](./02-evidence-first-agent-runtime.md)를 정본 설계로 삼되, 첫 구현은 Phase 0-A에 한정한다.
 
-권장 분할:
-- PR 1: Phase 0 gates, Korean eval seed corpus, launch SLO, structured output hard gate.
-- PR 2: minimal runtime kernel (`AgentRun`, `AgentInvocation`, `AgentTraceEvent`, minimal `ExecutionGraph`, minimal `EvidencePacket`)과 feature flag skeleton.
-- PR 3: `AgentRunSnapshot` shadow-write/compat projection, live run/pending approval DB invariant, resume scope widening 방지.
-- PR 4: eval fixture harness와 read-only inspection endpoint.
-- PR 5: fast path router + registry-validated `ExecutionGraph` schema/validator + single-loop fallback.
-- PR 6: `RequestSensitivityClassifier`, `PayloadSensitivityClassifier`, `ExternalEgressPolicy`, `ModelRouter` deterministic baseline.
-- PR 7: search/evidence normalization + `EvidencePacket` + `authority_class`.
-- PR 8: verifier/recovery policy.
-- PR 9: approval/external call decision integration. review queue backend이 없으면 `review_queue_required`는 비활성.
-- PR 10: template writer/eval/external quality review suggestion path.
+첫 구현 분할은 `03-phase6-evidence-runtime-implementation.md`에 고정한다.
 
-구현 플랜에는 다음을 포함한다.
-- DB migration과 기존 `AgentRunSnapshot` compatibility/cutover 전략.
-- eval fixture seed와 rollout kill criteria.
-- external provider 비활성화/rollback 절차.
-- provider data policy/security review checklist.
-- 테스트 케이스와 수동 검증.
-- 예상 작업 기간.
+- PR 1: Phase 0 eval/gate skeleton.
+- PR 2: minimal runtime contract.
+- PR 3: runtime persistence/migration.
+- PR 4: `AgentRunSnapshot` shadow-write와 resume scope guard.
+- PR 5: trace helper와 read-only inspection endpoint.
+
+Fast path manager graph, request/payload sensitivity classifier, search/evidence normalization, verifier/recovery, external call decision, template writer는 Phase 0-A kernel이 안정화된 뒤 별도 구현 플랜으로 재작성한다.
 
 Phase 7 Batch/Admin UI와 Phase 8 External Integration은 Phase 6 runtime contract가 안정화된 뒤 재킥오프한다.
