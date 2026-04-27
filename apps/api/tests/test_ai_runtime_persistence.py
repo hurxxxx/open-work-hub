@@ -224,6 +224,31 @@ def test_legacy_approval_allows_only_one_pending_approval_per_snapshot(
             db.commit()
 
 
+def test_legacy_snapshot_status_update_tolerates_missing_runtime_shadow(
+    runtime_session_factory: sessionmaker[Session],
+) -> None:
+    with runtime_session_factory() as db:
+        workspace, user, conversation = _seed_scope(db)
+        snapshot = ai_approvals.AgentRunSnapshot(
+            id=new_id(),
+            conversation_id=conversation.id,
+            workspace_id=workspace.id,
+            requested_by_user_id=user.id,
+            status="awaiting_approval",
+            messages_json=[{"role": "user", "content": "legacy pending approval"}],
+            blocked_call_id="call-legacy",
+        )
+        db.add(snapshot)
+        db.commit()
+
+        ai_approvals.mark_snapshot_resumed(db, snapshot)
+        db.commit()
+        ai_approvals.mark_snapshot_completed(db, snapshot)
+        db.commit()
+
+        assert db.get(AgentRun, snapshot.id) is None
+
+
 def test_trace_events_are_uniquely_ordered_per_run(
     runtime_session_factory: sessionmaker[Session],
 ) -> None:

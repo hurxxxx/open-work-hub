@@ -16,6 +16,7 @@ from aidoo_api.domains.ai.runtime.registry_validation import (
     RuntimeRegistryValidationError,
     validate_execution_graph,
 )
+from aidoo_api.domains.ai.runtime.persistence import append_trace_event, scrub_trace_payload
 from aidoo_api.domains.ai.runtime.trace import RuntimeTraceSequencer
 
 __all__ = [
@@ -31,5 +32,7 @@ __all__ = [
     "RuntimeRegistry",
     "RuntimeRegistryValidationError",
     "RuntimeTraceSequencer",
+    "append_trace_event",
+    "scrub_trace_payload",
     "validate_execution_graph",
 ]

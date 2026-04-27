@@ -18,6 +18,7 @@ from aidoo_api.domains.ai import approvals as ai_approvals
 from aidoo_api.domains.ai import mcp as ai_mcp
 from aidoo_api.domains.ai import router as ai_router
 from aidoo_api.domains.ai.runtime.models import AgentInvocation, AgentRun
+from aidoo_api.domains.ai.runtime.persistence import append_trace_event
 from aidoo_api.domains.ai import tool_service as ai_tool_service
 from aidoo_api.domains.ai.tool_runtime import ToolCallExecution
 from aidoo_api.core.llm_adapters import StreamChunk
@@ -247,6 +248,65 @@ def test_snapshot_scope_meta_freezes_allowed_apps_and_tool_names() -> None:
         "resolved_agent_ids": ["single_loop"],
         "resolved_tool_names": ["pms.create_issue", "docs.search"],
     }
+
+
+def test_runtime_inspection_endpoint_returns_scrubbed_trace(client: TestClient) -> None:
+    seed = _seed_pending_approval(client)
+    headers = _auth_headers(seed["token"])
+
+    with get_session_factory()() as db:
+        runtime_run = db.get(AgentRun, seed["agent_run_id"])
+        assert runtime_run is not None
+        append_trace_event(
+            db,
+            agent_run_id=runtime_run.id,
+            workspace_id=runtime_run.workspace_id,
+            conversation_id=runtime_run.conversation_id,
+            event_type="unsafe_payload_fixture",
+            payload={
+                "safe": "visible",
+                "api_key": "must-not-leak",
+                "nested": {"token": "must-not-leak"},
+                "raw_reasoning": "must-not-leak",
+            },
+        )
+        db.commit()
+
+    response = client.get(
+        _workspace_ai_path(seed["workspace_slug"], f"/runtime/runs/{seed['agent_run_id']}"),
+        headers=headers,
+    )
+
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["id"] == seed["agent_run_id"]
+    assert payload["status"] == "awaiting_approval"
+    assert payload["invocations"][0]["agent_id"] == "approval.proposal_preview"
+    event_types = [event["event_type"] for event in payload["trace_events"]]
+    assert event_types[:3] == ["run_created", "invocation_started", "approval_required"]
+    unsafe_event = next(
+        event
+        for event in payload["trace_events"]
+        if event["event_type"] == "unsafe_payload_fixture"
+    )
+    assert unsafe_event["payload"] == {
+        "safe": "visible",
+        "api_key": "[redacted]",
+        "nested": {"token": "[redacted]"},
+        "raw_reasoning": "[redacted]",
+    }
+
+
+def test_runtime_inspection_endpoint_enforces_workspace_isolation(client: TestClient) -> None:
+    seed = _seed_pending_approval(client)
+    other_session = _dev_login(client, "hq-admin")
+
+    response = client.get(
+        _workspace_ai_path("hq", f"/runtime/runs/{seed['agent_run_id']}"),
+        headers=_auth_headers(other_session["token"]),
+    )
+
+    assert response.status_code == 404
 
 
 def test_resume_allowed_app_ids_omission_reuses_frozen_scope() -> None:

@@ -51,7 +51,9 @@ class Settings(BaseSettings):
     )
     worker_broker_url: str = Field(
         default="redis://127.0.0.1:6379/0",
-        validation_alias=AliasChoices("DOOWON_WORKER_BROKER_URL", "DOOWON_BROKER_URL", "DOOWON_REDIS_URL"),
+        validation_alias=AliasChoices(
+            "DOOWON_WORKER_BROKER_URL", "DOOWON_BROKER_URL", "DOOWON_REDIS_URL"
+        ),
     )
     worker_result_backend: str = Field(
         default="redis://127.0.0.1:6379/1",
@@ -254,6 +256,38 @@ class Settings(BaseSettings):
             "DOOWON_AIDOO_AI_WRITE_TOOLS_ENABLED",
             "DOOWON_API_AIDOO_AI_WRITE_TOOLS_ENABLED",
         ),
+    )
+    ai_runtime_graph_enabled: bool = Field(
+        default=False,
+        validation_alias=AliasChoices("AIDOO_AI_RUNTIME_GRAPH_ENABLED"),
+    )
+    ai_external_llm_enabled: bool = Field(
+        default=False,
+        validation_alias=AliasChoices("AIDOO_AI_EXTERNAL_LLM_ENABLED"),
+    )
+    ai_external_planning_enabled: bool = Field(
+        default=False,
+        validation_alias=AliasChoices("AIDOO_AI_EXTERNAL_PLANNING_ENABLED"),
+    )
+    ai_external_reasoning_enabled: bool = Field(
+        default=False,
+        validation_alias=AliasChoices("AIDOO_AI_EXTERNAL_REASONING_ENABLED"),
+    )
+    ai_external_quality_review_enabled: bool = Field(
+        default=False,
+        validation_alias=AliasChoices("AIDOO_AI_EXTERNAL_QUALITY_REVIEW_ENABLED"),
+    )
+    ai_external_search_enabled: bool = Field(
+        default=False,
+        validation_alias=AliasChoices("AIDOO_AI_EXTERNAL_SEARCH_ENABLED"),
+    )
+    ai_default_external_search_provider: str = Field(
+        default="openai",
+        validation_alias=AliasChoices("AIDOO_AI_DEFAULT_EXTERNAL_SEARCH_PROVIDER"),
+    )
+    ai_allowed_external_providers: str = Field(
+        default="openai,claude",
+        validation_alias=AliasChoices("AIDOO_AI_ALLOWED_EXTERNAL_PROVIDERS"),
     )
     ai_agent_max_turns: int = Field(
         default=8,
@@ -467,15 +501,12 @@ class Settings(BaseSettings):
     @model_validator(mode="after")
     def _validate_rag_runtime_config(self) -> "Settings":
         uses_deepinfra = self.rag_enabled and (
-            self.rag_embedding_provider == "deepinfra"
-            or self.rag_rerank_provider == "deepinfra"
+            self.rag_embedding_provider == "deepinfra" or self.rag_rerank_provider == "deepinfra"
         )
         if not uses_deepinfra:
             return self
 
-        self.rag_deepinfra_base_url = _normalize_rag_deepinfra_base_url(
-            self.rag_deepinfra_base_url
-        )
+        self.rag_deepinfra_base_url = _normalize_rag_deepinfra_base_url(self.rag_deepinfra_base_url)
         return self
 
 

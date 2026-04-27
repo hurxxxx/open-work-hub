@@ -7,6 +7,7 @@ from typing import Any, Literal
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from openai import OpenAIError
 from pydantic import BaseModel, Field, field_validator
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 from sse_starlette.sse import EventSourceResponse
 
@@ -42,6 +43,8 @@ from aidoo_api.domains.ai.events import (
 )
 from aidoo_api.domains.ai.mcp import AiMcpClient
 from aidoo_api.domains.ai.registry import get_ai_capability_registry
+from aidoo_api.domains.ai.runtime.models import AgentInvocation, AgentRun, AgentTraceEvent
+from aidoo_api.domains.ai.runtime.persistence import scrub_trace_payload
 from aidoo_api.domains.ai.tool_runtime import (
     ToolCallExecution,
     execute_tool_call,
@@ -461,6 +464,47 @@ class ApprovalStatusResponse(BaseModel):
     snapshot_status: str | None = None
 
 
+class RuntimeInvocationResponse(BaseModel):
+    id: str
+    invocation_seq: int
+    agent_id: str
+    status: str
+    purpose: str
+    input_ref: str | None = None
+    output_ref: str | None = None
+    error: str | None = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class RuntimeTraceEventResponse(BaseModel):
+    id: str
+    invocation_id: str | None = None
+    run_seq: int
+    invocation_seq: int
+    event_seq: int
+    event_type: str
+    payload: dict[str, Any]
+    created_at: datetime
+
+
+class RuntimeRunInspectionResponse(BaseModel):
+    id: str
+    workspace_id: str
+    conversation_id: str
+    requested_by_user_id: str
+    legacy_snapshot_id: str | None = None
+    status: str
+    runtime_profile: str
+    graph_enabled: bool
+    model_profile_id: str | None = None
+    fallback_reason: str | None = None
+    created_at: datetime
+    updated_at: datetime
+    invocations: list[RuntimeInvocationResponse]
+    trace_events: list[RuntimeTraceEventResponse]
+
+
 class ChatResumeRequest(BaseModel):
     conversation_id: str
     approval_id: str
@@ -734,6 +778,81 @@ def abandon_approval(
     snapshot = ai_approvals.load_snapshot(db, agent_run_id=approval.agent_run_id)
     return ApprovalStatusResponse.model_validate(
         ai_approvals.approval_to_payload(approval, snapshot=snapshot)
+    )
+
+
+@router.get("/runtime/runs/{run_id}", response_model=RuntimeRunInspectionResponse)
+def inspect_runtime_run(
+    run_id: str,
+    request: Request,
+    db: Session = Depends(get_db_session),
+) -> RuntimeRunInspectionResponse:
+    workspace = _require_request_workspace(request)
+    runtime_run = db.scalar(
+        select(AgentRun).where(
+            AgentRun.id == run_id,
+            AgentRun.workspace_id == workspace.id,
+        )
+    )
+    if runtime_run is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Runtime run not found.")
+
+    invocations = db.scalars(
+        select(AgentInvocation)
+        .where(AgentInvocation.agent_run_id == runtime_run.id)
+        .order_by(AgentInvocation.invocation_seq.asc(), AgentInvocation.created_at.asc())
+    ).all()
+    trace_events = db.scalars(
+        select(AgentTraceEvent)
+        .where(AgentTraceEvent.agent_run_id == runtime_run.id)
+        .order_by(
+            AgentTraceEvent.run_seq.asc(),
+            AgentTraceEvent.invocation_seq.asc(),
+            AgentTraceEvent.event_seq.asc(),
+        )
+    ).all()
+
+    return RuntimeRunInspectionResponse(
+        id=runtime_run.id,
+        workspace_id=runtime_run.workspace_id,
+        conversation_id=runtime_run.conversation_id,
+        requested_by_user_id=runtime_run.requested_by_user_id,
+        legacy_snapshot_id=runtime_run.legacy_snapshot_id,
+        status=runtime_run.status,
+        runtime_profile=runtime_run.runtime_profile,
+        graph_enabled=runtime_run.graph_enabled,
+        model_profile_id=runtime_run.model_profile_id,
+        fallback_reason=runtime_run.fallback_reason,
+        created_at=runtime_run.created_at,
+        updated_at=runtime_run.updated_at,
+        invocations=[
+            RuntimeInvocationResponse(
+                id=invocation.id,
+                invocation_seq=invocation.invocation_seq,
+                agent_id=invocation.agent_id,
+                status=invocation.status,
+                purpose=invocation.purpose,
+                input_ref=invocation.input_ref,
+                output_ref=invocation.output_ref,
+                error=invocation.error,
+                created_at=invocation.created_at,
+                updated_at=invocation.updated_at,
+            )
+            for invocation in invocations
+        ],
+        trace_events=[
+            RuntimeTraceEventResponse(
+                id=event.id,
+                invocation_id=event.agent_invocation_id,
+                run_seq=event.run_seq,
+                invocation_seq=event.invocation_seq,
+                event_seq=event.event_seq,
+                event_type=event.event_type,
+                payload=scrub_trace_payload(event.payload_json or {}),
+                created_at=event.created_at,
+            )
+            for event in trace_events
+        ],
     )
 
 

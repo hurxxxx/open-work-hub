@@ -24,6 +24,7 @@ from sqlalchemy.orm import Mapped, Session, mapped_column
 from aidoo_api.core.db import Base
 from aidoo_api.domains.ai.audit import log_llm_tool_approval_resolved
 from aidoo_api.domains.ai.runtime.models import AgentInvocation, AgentRun
+from aidoo_api.domains.ai.runtime.persistence import append_trace_event
 from aidoo_api.domains.auth.models import User, Workspace
 from aidoo_api.domains.auth.security import new_id
 from aidoo_api.domains.conversations.models import Conversation
@@ -761,20 +762,53 @@ def _persist_runtime_shadow_on_halt(
     )
     db.add(runtime_run)
     db.flush()
-    db.add(
-        AgentInvocation(
-            id=new_id(),
-            agent_run_id=runtime_run.id,
-            workspace_id=snapshot.workspace_id,
-            conversation_id=snapshot.conversation_id,
-            invocation_seq=0,
-            agent_id="approval.proposal_preview",
-            status="awaiting_approval",
-            purpose="approval required",
-            input_ref=snapshot.blocked_call_id,
-        )
+    invocation = AgentInvocation(
+        id=new_id(),
+        agent_run_id=runtime_run.id,
+        workspace_id=snapshot.workspace_id,
+        conversation_id=snapshot.conversation_id,
+        invocation_seq=0,
+        agent_id="approval.proposal_preview",
+        status="awaiting_approval",
+        purpose="approval required",
+        input_ref=snapshot.blocked_call_id,
     )
+    db.add(invocation)
     db.flush()
+    append_trace_event(
+        db,
+        agent_run_id=runtime_run.id,
+        workspace_id=snapshot.workspace_id,
+        conversation_id=snapshot.conversation_id,
+        event_type="run_created",
+        payload={
+            "source": "approval_snapshot_shadow",
+            "legacy_snapshot_id": snapshot.id,
+        },
+    )
+    append_trace_event(
+        db,
+        agent_run_id=runtime_run.id,
+        agent_invocation_id=invocation.id,
+        workspace_id=snapshot.workspace_id,
+        conversation_id=snapshot.conversation_id,
+        invocation_seq=invocation.invocation_seq,
+        event_type="invocation_started",
+        payload={"agent_id": invocation.agent_id},
+    )
+    append_trace_event(
+        db,
+        agent_run_id=runtime_run.id,
+        agent_invocation_id=invocation.id,
+        workspace_id=snapshot.workspace_id,
+        conversation_id=snapshot.conversation_id,
+        invocation_seq=invocation.invocation_seq,
+        event_type="approval_required",
+        payload={
+            "blocked_call_id": snapshot.blocked_call_id,
+            "scope": model_meta.get(SNAPSHOT_SCOPE_META_KEY),
+        },
+    )
 
 
 def _mark_runtime_shadow_completed(
@@ -784,10 +818,11 @@ def _mark_runtime_shadow_completed(
 ) -> None:
     now = utcnow_naive()
     runtime_run = db.get(AgentRun, snapshot.id)
-    if runtime_run is not None:
-        runtime_run.status = "completed"
-        runtime_run.updated_at = now
-        db.add(runtime_run)
+    if runtime_run is None:
+        return
+    runtime_run.status = "completed"
+    runtime_run.updated_at = now
+    db.add(runtime_run)
     db.execute(
         update(AgentInvocation)
         .where(
@@ -795,6 +830,14 @@ def _mark_runtime_shadow_completed(
             AgentInvocation.status.in_(("pending", "running", "awaiting_approval", "resumed")),
         )
         .values(status="completed", updated_at=now)
+    )
+    append_trace_event(
+        db,
+        agent_run_id=snapshot.id,
+        workspace_id=snapshot.workspace_id,
+        conversation_id=snapshot.conversation_id,
+        event_type="run_completed",
+        payload={"legacy_snapshot_id": snapshot.id},
     )
 
 
@@ -805,10 +848,11 @@ def _mark_runtime_shadow_resumed(
 ) -> None:
     now = utcnow_naive()
     runtime_run = db.get(AgentRun, snapshot.id)
-    if runtime_run is not None:
-        runtime_run.status = "running"
-        runtime_run.updated_at = now
-        db.add(runtime_run)
+    if runtime_run is None:
+        return
+    runtime_run.status = "running"
+    runtime_run.updated_at = now
+    db.add(runtime_run)
     db.execute(
         update(AgentInvocation)
         .where(
@@ -817,16 +861,29 @@ def _mark_runtime_shadow_resumed(
         )
         .values(status="resumed", updated_at=now)
     )
-    db.add(
-        AgentInvocation(
-            id=new_id(),
-            agent_run_id=snapshot.id,
-            workspace_id=snapshot.workspace_id,
-            conversation_id=snapshot.conversation_id,
-            invocation_seq=_next_runtime_invocation_seq(db, snapshot.id),
-            agent_id="approval.proposal_preview",
-            status="resumed",
-            purpose="approval resumed",
-            input_ref=snapshot.blocked_call_id,
-        )
+    invocation = AgentInvocation(
+        id=new_id(),
+        agent_run_id=snapshot.id,
+        workspace_id=snapshot.workspace_id,
+        conversation_id=snapshot.conversation_id,
+        invocation_seq=_next_runtime_invocation_seq(db, snapshot.id),
+        agent_id="approval.proposal_preview",
+        status="resumed",
+        purpose="approval resumed",
+        input_ref=snapshot.blocked_call_id,
+    )
+    db.add(invocation)
+    db.flush()
+    append_trace_event(
+        db,
+        agent_run_id=snapshot.id,
+        agent_invocation_id=invocation.id,
+        workspace_id=snapshot.workspace_id,
+        conversation_id=snapshot.conversation_id,
+        invocation_seq=invocation.invocation_seq,
+        event_type="approval_resumed",
+        payload={
+            "blocked_call_id": snapshot.blocked_call_id,
+            "legacy_snapshot_id": snapshot.id,
+        },
     )
