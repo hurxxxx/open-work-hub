@@ -23,13 +23,13 @@ Phase 6 전체 목표는 기존 single-loop agent를 deterministic fast path, ma
 
 이 섹션은 세션 handoff용이다. 구현 세션이 끝날 때마다 짧게 갱신한다.
 
-- Current PR/stage: PR 1 complete, ready for PR 2.
-- Last completed: Added Phase 0 eval/gate fixtures and fixture schema validation tests.
+- Current PR/stage: PR 2 complete, ready for PR 3.
+- Last completed: Added minimal runtime contracts, registry validation helper, trace sequence helper, and contract tests.
 - In progress: None.
-- Next exact task: PR 2 — add `apps/api/src/aidoo_api/domains/ai/runtime/` minimal contracts, registry validation helper, and trace sequence helper.
-- Files touched in PR 1: `apps/api/tests/fixtures/ai_runtime/`, `apps/api/tests/test_ai_runtime_eval_fixtures.py`, `plans/03-phase6-evidence-runtime-implementation.md`.
-- Tests/checks run: `cd apps/api && uv run --python 3.12 pytest tests/test_ai_runtime_eval_fixtures.py`; `git diff --check -- apps/api/tests/fixtures/ai_runtime apps/api/tests/test_ai_runtime_eval_fixtures.py`.
-- Known blockers: None for PR 2. Later PR 3 must confirm Alembic head and runtime model import path before migration.
+- Next exact task: PR 3 — add runtime SQLAlchemy models, Alembic migration, metadata import path, and persistence/invariant tests.
+- Files touched in PR 2: `apps/api/src/aidoo_api/domains/ai/runtime/`, `apps/api/tests/test_ai_runtime_contracts.py`, `plans/03-phase6-evidence-runtime-implementation.md`.
+- Tests/checks run: `cd apps/api && uv run --python 3.12 pytest tests/test_ai_runtime_contracts.py tests/test_ai_runtime_eval_fixtures.py`; `git diff --check -- apps/api/src/aidoo_api/domains/ai/runtime apps/api/tests/test_ai_runtime_contracts.py`.
+- Known blockers: PR 3 must confirm Alembic head and runtime model import path before migration.
 - Do not touch: unrelated local `compose.prod-like.yml` modification unless explicitly requested.
 
 ## Architecture / Principles
