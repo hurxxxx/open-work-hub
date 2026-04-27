@@ -14,7 +14,7 @@ services:
 
   redis:
     image: redis:7
-    container_name: doowon-prodlike-redis
+    container_name: redis
     restart: unless-stopped
     ports:
       - "${DOOWON_PRODLIKE_REDIS_PORT:-56379}:6379"
