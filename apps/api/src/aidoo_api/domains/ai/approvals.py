@@ -25,6 +25,7 @@ from aidoo_api.core.db import Base
 from aidoo_api.domains.ai.audit import log_llm_tool_approval_resolved
 from aidoo_api.domains.ai.runtime.models import AgentInvocation, AgentRun
 from aidoo_api.domains.ai.runtime.persistence import append_trace_event
+from aidoo_api.domains.ai.runtime.contracts import RUNTIME_PROFILE_VALUES
 from aidoo_api.domains.auth.models import User, Workspace
 from aidoo_api.domains.auth.security import new_id
 from aidoo_api.domains.conversations.models import Conversation
@@ -750,13 +751,14 @@ def _persist_runtime_shadow_on_halt(
         requested_by_user_id=snapshot.requested_by_user_id,
         legacy_snapshot_id=snapshot.id,
         status="awaiting_approval",
-        runtime_profile="interactive_read",
+        runtime_profile=_runtime_profile_from_model_meta(model_meta),
         graph_enabled=False,
         model_profile_id=str(model_meta.get("model") or model_meta.get("chosen_model") or "")
         or None,
         metadata_json={
             "source": "approval_snapshot_shadow",
             "blocked_call_id": snapshot.blocked_call_id,
+            "runtime_routing_reason_codes": model_meta.get("runtime_routing_reason_codes"),
             SNAPSHOT_SCOPE_META_KEY: model_meta.get(SNAPSHOT_SCOPE_META_KEY),
         },
     )
@@ -807,6 +809,8 @@ def _persist_runtime_shadow_on_halt(
         payload={
             "blocked_call_id": snapshot.blocked_call_id,
             "scope": model_meta.get(SNAPSHOT_SCOPE_META_KEY),
+            "runtime_profile": runtime_run.runtime_profile,
+            "runtime_routing_reason_codes": model_meta.get("runtime_routing_reason_codes"),
         },
     )
 
@@ -839,6 +843,13 @@ def _mark_runtime_shadow_completed(
         event_type="run_completed",
         payload={"legacy_snapshot_id": snapshot.id},
     )
+
+
+def _runtime_profile_from_model_meta(model_meta: dict[str, Any]) -> str:
+    runtime_profile = model_meta.get("runtime_profile")
+    if isinstance(runtime_profile, str) and runtime_profile in RUNTIME_PROFILE_VALUES:
+        return runtime_profile
+    return "interactive_read"
 
 
 def _mark_runtime_shadow_resumed(

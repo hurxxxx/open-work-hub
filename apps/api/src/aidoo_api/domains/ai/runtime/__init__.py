@@ -10,6 +10,7 @@ from aidoo_api.domains.ai.runtime.contracts import (
     EvidencePacket,
     ExecutionGraph,
     QueryPlan,
+    RUNTIME_PROFILE_VALUES,
 )
 from aidoo_api.domains.ai.runtime.registry_validation import (
     RuntimeRegistry,
@@ -17,6 +18,7 @@ from aidoo_api.domains.ai.runtime.registry_validation import (
     validate_execution_graph,
 )
 from aidoo_api.domains.ai.runtime.persistence import append_trace_event, scrub_trace_payload
+from aidoo_api.domains.ai.runtime.routing import RuntimeRoutingDecision, select_runtime_profile
 from aidoo_api.domains.ai.runtime.trace import RuntimeTraceSequencer
 
 __all__ = [
@@ -29,10 +31,13 @@ __all__ = [
     "EvidencePacket",
     "ExecutionGraph",
     "QueryPlan",
+    "RUNTIME_PROFILE_VALUES",
     "RuntimeRegistry",
     "RuntimeRegistryValidationError",
+    "RuntimeRoutingDecision",
     "RuntimeTraceSequencer",
     "append_trace_event",
     "scrub_trace_payload",
+    "select_runtime_profile",
     "validate_execution_graph",
 ]

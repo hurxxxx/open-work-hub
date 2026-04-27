@@ -1,0 +1,124 @@
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import Literal
+
+from aidoo_api.domains.ai.runtime.contracts import RuntimeProfile
+
+
+GraphGateDecision = Literal["disabled", "eligible", "ineligible"]
+
+LONG_DOC_CHAR_THRESHOLD = 12_000
+LONG_DOC_MAX_TOKENS_THRESHOLD = 32_768
+REPORT_KEYWORDS = (
+    "보고서",
+    "리포트",
+    "비교",
+    "분석",
+    "종합",
+    "근거",
+    "출처",
+    "citation",
+    "evidence",
+    "template",
+    "템플릿",
+)
+LONG_DOC_KEYWORDS = (
+    "장문",
+    "전체 문서",
+    "전문",
+    "긴 문서",
+    "batch",
+    "일괄",
+)
+HIGH_RISK_KEYWORDS = (
+    "등록",
+    "수정",
+    "삭제",
+    "승인",
+    "예약",
+    "전송",
+    "생성해줘",
+    "만들어줘",
+    "create",
+    "update",
+    "delete",
+    "send",
+    "approve",
+)
+
+
+@dataclass(frozen=True)
+class RuntimeRoutingDecision:
+    runtime_profile: RuntimeProfile
+    reason_codes: tuple[str, ...]
+    graph_gate: GraphGateDecision
+
+
+def select_runtime_profile(
+    *,
+    messages: list[dict[str, str]],
+    allowed_app_ids: list[str] | None,
+    max_tokens: int | None,
+    graph_enabled: bool,
+) -> RuntimeRoutingDecision:
+    text = _message_text(messages)
+    lowered = text.lower()
+    reason_codes: list[str] = []
+
+    if allowed_app_ids == []:
+        reason_codes.append("text_only_scope")
+
+    if max_tokens is not None and max_tokens >= LONG_DOC_MAX_TOKENS_THRESHOLD:
+        reason_codes.append("large_output_budget")
+        return _decision("long_doc", reason_codes, graph_enabled=graph_enabled)
+
+    if len(text) >= LONG_DOC_CHAR_THRESHOLD or _contains_any(lowered, LONG_DOC_KEYWORDS):
+        reason_codes.append("long_doc_signal")
+        return _decision("long_doc", reason_codes, graph_enabled=graph_enabled)
+
+    if _contains_any(lowered, HIGH_RISK_KEYWORDS) and allowed_app_ids != []:
+        reason_codes.append("write_or_external_action_signal")
+        return _decision("high_risk_action", reason_codes, graph_enabled=graph_enabled)
+
+    if _contains_any(lowered, REPORT_KEYWORDS) or _has_multiple_app_scope(allowed_app_ids):
+        reason_codes.append("grounded_report_signal")
+        return _decision("grounded_report", reason_codes, graph_enabled=graph_enabled)
+
+    reason_codes.append("default_interactive_read")
+    return _decision("interactive_read", reason_codes, graph_enabled=graph_enabled)
+
+
+def _decision(
+    runtime_profile: RuntimeProfile,
+    reason_codes: list[str],
+    *,
+    graph_enabled: bool,
+) -> RuntimeRoutingDecision:
+    graph_gate: GraphGateDecision = "disabled"
+    if graph_enabled:
+        graph_gate = (
+            "eligible"
+            if runtime_profile in {"grounded_report", "high_risk_action"}
+            else "ineligible"
+        )
+    return RuntimeRoutingDecision(
+        runtime_profile=runtime_profile,
+        reason_codes=tuple(reason_codes),
+        graph_gate=graph_gate,
+    )
+
+
+def _message_text(messages: list[dict[str, str]]) -> str:
+    return "\n".join(str(message.get("content") or "") for message in messages)
+
+
+def _contains_any(text: str, keywords: tuple[str, ...]) -> bool:
+    return any(keyword in text for keyword in keywords)
+
+
+def _has_multiple_app_scope(allowed_app_ids: list[str] | None) -> bool:
+    return allowed_app_ids is not None and len(set(allowed_app_ids)) > 1
+
+
+__all__ = ["RuntimeRoutingDecision", "select_runtime_profile"]

@@ -23,13 +23,13 @@ Phase 6 전체 목표는 기존 single-loop agent를 deterministic fast path, ma
 
 이 섹션은 세션 handoff용이다. 구현 세션이 끝날 때마다 짧게 갱신한다.
 
-- Current PR/stage: PR 5 complete. Phase 0-A minimal kernel is implemented.
-- Last completed: Added runtime trace helper, workspace-scoped inspection endpoint, and Phase 6 feature flag settings skeleton.
+- Current PR/stage: PR 6 complete. Phase 0-A minimal kernel plus deterministic runtime profile selector is implemented.
+- Last completed: Added runtime profile routing helper and propagated selected profile into approval runtime shadow state.
 - In progress: None.
-- Next exact task: Plan the next Phase 6 slice after Phase 0-A: fast path/runtime profile selector, manager graph gate, or broader trace UI depending on rollout priority.
-- Files touched in PR 5: `apps/api/src/aidoo_api/core/settings.py`, `apps/api/src/aidoo_api/domains/ai/runtime/persistence.py`, `apps/api/src/aidoo_api/domains/ai/runtime/__init__.py`, `apps/api/src/aidoo_api/domains/ai/approvals.py`, `apps/api/src/aidoo_api/domains/ai/router.py`, `apps/api/tests/test_ai_approvals.py`, `apps/api/tests/test_ai_runtime_settings.py`, `plans/03-phase6-evidence-runtime-implementation.md`.
-- Tests/checks run: `cd apps/api && uv run --python 3.12 pytest tests/test_ai_approvals.py`; `cd apps/api && uv run --python 3.12 pytest tests/test_ai_stream.py tests/test_ai_events.py tests/test_ai_conversations.py tests/test_ai_runtime_persistence.py tests/test_ai_runtime_contracts.py tests/test_alembic_migrations.py`; targeted ruff check for touched Python files; `git diff --check`.
-- Known blockers: none for Phase 0-A; the next slice should not enable graph runtime by default.
+- Next exact task: Plan/implement the manager graph gate skeleton behind `AIDOO_AI_RUNTIME_GRAPH_ENABLED=false`; no graph execution should be enabled by default.
+- Files touched in PR 6: `apps/api/src/aidoo_api/domains/ai/runtime/routing.py`, `apps/api/src/aidoo_api/domains/ai/runtime/contracts.py`, `apps/api/src/aidoo_api/domains/ai/runtime/__init__.py`, `apps/api/src/aidoo_api/domains/ai/agent.py`, `apps/api/src/aidoo_api/domains/ai/approvals.py`, `apps/api/src/aidoo_api/domains/ai/router.py`, `apps/api/tests/test_ai_runtime_routing.py`, `apps/api/tests/test_ai_runtime_persistence.py`, `plans/03-phase6-evidence-runtime-implementation.md`.
+- Tests/checks run: `cd apps/api && uv run --python 3.12 pytest tests/test_ai_runtime_routing.py tests/test_ai_runtime_persistence.py tests/test_ai_approvals.py`; `cd apps/api && uv run --python 3.12 pytest tests/test_ai_agent.py tests/test_ai_stream.py tests/test_ai_events.py tests/test_ai_conversations.py tests/test_ai_runtime_contracts.py tests/test_ai_runtime_settings.py tests/test_alembic_migrations.py`; targeted ruff check for touched Python files.
+- Known blockers: graph manager implementation still needs schema generation path and fallback taxonomy; keep single-loop fallback canonical.
 - Do not touch: unrelated local `compose.prod-like.yml` modification unless explicitly requested.
 
 ## Architecture / Principles

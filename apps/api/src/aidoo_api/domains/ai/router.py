@@ -45,6 +45,7 @@ from aidoo_api.domains.ai.mcp import AiMcpClient
 from aidoo_api.domains.ai.registry import get_ai_capability_registry
 from aidoo_api.domains.ai.runtime.models import AgentInvocation, AgentRun, AgentTraceEvent
 from aidoo_api.domains.ai.runtime.persistence import scrub_trace_payload
+from aidoo_api.domains.ai.runtime.routing import select_runtime_profile
 from aidoo_api.domains.ai.tool_runtime import (
     ToolCallExecution,
     execute_tool_call,
@@ -1461,6 +1462,12 @@ async def _chat_stream_publisher(
     reasoning_gate = payload.stream_reasoning and payload.reasoning_effort != "none"
     messages_dict = [message.model_dump() for message in payload.messages]
     settings = get_settings()
+    runtime_routing = select_runtime_profile(
+        messages=messages_dict,
+        allowed_app_ids=payload.allowed_app_ids,
+        max_tokens=payload.max_tokens,
+        graph_enabled=settings.ai_runtime_graph_enabled,
+    )
 
     last_decision: PolicyDecision | None = None
     last_config: LlmPoolConfig | None = None
@@ -1610,6 +1617,8 @@ async def _chat_stream_publisher(
                 bound_conversation=conversation,
                 scope_system_prompt=scope_system_prompt,
                 allowed_app_ids=payload.allowed_app_ids,
+                runtime_profile=runtime_routing.runtime_profile,
+                runtime_routing_reason_codes=runtime_routing.reason_codes,
                 parallel_tool_calls=False if has_approval_required_tools else None,
             ):
                 for serialized in _serialize_agent_event_through_artifacts(

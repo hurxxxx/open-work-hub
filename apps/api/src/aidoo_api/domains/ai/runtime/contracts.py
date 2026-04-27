@@ -11,6 +11,14 @@ RuntimeProfile = Literal[
     "long_doc",
     "high_risk_action",
 ]
+RUNTIME_PROFILE_VALUES = frozenset(
+    {
+        "interactive_read",
+        "grounded_report",
+        "long_doc",
+        "high_risk_action",
+    }
+)
 RiskLevel = Literal["low", "medium", "high"]
 RunStatus = Literal[
     "pending",

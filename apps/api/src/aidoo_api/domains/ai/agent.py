@@ -20,6 +20,7 @@ from aidoo_api.core.llm import (
 from aidoo_api.core.principal import CallerPrincipal
 from aidoo_api.domains.ai import approvals as ai_approvals
 from aidoo_api.domains.ai.events import EnvelopeEncoder, make_envelope
+from aidoo_api.domains.ai.runtime.contracts import RuntimeProfile
 from aidoo_api.domains.ai.tool_runtime import execute_tool_call, iter_tool_call_events
 from aidoo_api.domains.auth.models import User, Workspace
 from aidoo_api.domains.auth.security import new_id
@@ -100,6 +101,8 @@ async def run_agent_turn_stream(
     bound_conversation: Conversation | None,
     scope_system_prompt: str | None = None,
     allowed_app_ids: list[str] | None = None,
+    runtime_profile: RuntimeProfile = "interactive_read",
+    runtime_routing_reason_codes: tuple[str, ...] = (),
     parallel_tool_calls: bool | None = None,
 ) -> AsyncIterator[Any]:
     conversation = _prepend_agent_system_message(
@@ -114,6 +117,8 @@ async def run_agent_turn_stream(
         tool_choice_state="auto",
         allowed_app_ids=allowed_app_ids,
         tool_specs=tool_specs,
+        runtime_profile=runtime_profile,
+        runtime_routing_reason_codes=runtime_routing_reason_codes,
     )
     async for event in _run_agent_loop_stream(
         context=context,
@@ -758,6 +763,8 @@ def _build_snapshot_model_meta(
     tool_choice_state: str | dict[str, Any] | None,
     allowed_app_ids: list[str] | None,
     tool_specs: list[dict[str, Any]],
+    runtime_profile: RuntimeProfile,
+    runtime_routing_reason_codes: tuple[str, ...],
 ) -> dict[str, Any]:
     return {
         "model": execution.chosen_model,
@@ -775,6 +782,8 @@ def _build_snapshot_model_meta(
         "temperature": temperature,
         "max_output_tokens": execution.resolved_max_tokens,
         "reasoning_effort": execution.resolved_reasoning_effort,
+        "runtime_profile": runtime_profile,
+        "runtime_routing_reason_codes": list(runtime_routing_reason_codes),
         "scope": _build_snapshot_scope_meta(
             allowed_app_ids=allowed_app_ids,
             tool_specs=tool_specs,

@@ -249,6 +249,32 @@ def test_legacy_snapshot_status_update_tolerates_missing_runtime_shadow(
         assert db.get(AgentRun, snapshot.id) is None
 
 
+def test_snapshot_shadow_uses_runtime_profile_from_model_meta(
+    runtime_session_factory: sessionmaker[Session],
+) -> None:
+    with runtime_session_factory() as db:
+        workspace, user, conversation = _seed_scope(db)
+
+        snapshot = ai_approvals.persist_snapshot_on_halt(
+            db,
+            workspace=workspace,
+            conversation=conversation,
+            requested_by_user=user,
+            messages_json=[{"role": "user", "content": "보고서 작성"}],
+            blocked_call_id="call-profile",
+            model_meta={
+                "model": "qwen/qwen3.6-35b-a3b",
+                "runtime_profile": "grounded_report",
+                "runtime_routing_reason_codes": ["grounded_report_signal"],
+            },
+        )
+        db.commit()
+
+        runtime_run = db.get(AgentRun, snapshot.id)
+        assert runtime_run is not None
+        assert runtime_run.runtime_profile == "grounded_report"
+
+
 def test_trace_events_are_uniquely_ordered_per_run(
     runtime_session_factory: sessionmaker[Session],
 ) -> None:
