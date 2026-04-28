@@ -21,6 +21,7 @@ from aidoo_api.domains.ai.runtime.contracts import (
 )
 from aidoo_api.domains.ai.runtime.manager_candidate import (
     build_deterministic_manager_candidate,
+    summarize_execution_graph,
 )
 from aidoo_api.domains.ai.runtime.manager_validation import (
     EXECUTION_GRAPH_SCHEMA_NAME,
@@ -80,6 +81,7 @@ __all__ = [
     "scrub_completed_runtime_records",
     "scrub_trace_payload",
     "select_runtime_profile",
+    "summarize_execution_graph",
     "validate_execution_graph",
     "validate_manager_graph_candidate",
 ]

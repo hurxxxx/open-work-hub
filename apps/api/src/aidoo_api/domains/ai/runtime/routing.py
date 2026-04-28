@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
-from typing import Literal
+from typing import Any, Literal
 
 from aidoo_api.domains.ai.runtime.contracts import RuntimeProfile
 from aidoo_api.domains.ai.runtime.manager_validation import ManagerGraphValidationResult
@@ -71,6 +71,7 @@ class RuntimeRoutingDecision:
     graph_validation_fallback_reason: str | None = None
     graph_registry_agent_count: int = 0
     graph_write_agent_count: int = 0
+    graph_candidate_summary: dict[str, Any] | None = None
 
 
 def attach_trace_only_graph_validation(
@@ -96,6 +97,7 @@ def attach_manager_graph_validation_result(
     validation: ManagerGraphValidationResult,
     registry_agent_count: int,
     write_agent_count: int,
+    graph_candidate_summary: dict[str, Any] | None = None,
 ) -> RuntimeRoutingDecision:
     if decision.graph_gate != "eligible":
         return decision
@@ -105,6 +107,7 @@ def attach_manager_graph_validation_result(
         graph_validation_fallback_reason=validation.fallback_reason,
         graph_registry_agent_count=max(registry_agent_count, 0),
         graph_write_agent_count=max(write_agent_count, 0),
+        graph_candidate_summary=graph_candidate_summary if validation.accepted else None,
     )
 
 

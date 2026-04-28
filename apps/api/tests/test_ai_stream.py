@@ -1206,6 +1206,23 @@ def test_chat_stream_graph_gate_falls_back_without_graph_execution(
     assert done_meta.get("graph_validation_fallback_reason") is None
     assert done_meta["graph_registry_agent_count"] > 0
     assert done_meta["graph_write_agent_count"] == 1
+    graph_summary = done_meta["graph_candidate_summary"]
+    assert graph_summary["intent"] == "report"
+    assert set(graph_summary["domains"]) >= {"meeting", "pms", "rag"}
+    assert graph_summary["risk"] == "medium"
+    assert graph_summary["output_kind"] == "artifact"
+    assert "writer.template" in graph_summary["invocation_agent_ids"]
+    assert graph_summary["requires_verifier"] is True
+    assert graph_summary["requires_approval_preview"] is False
+    assert set(graph_summary) == {
+        "intent",
+        "domains",
+        "risk",
+        "output_kind",
+        "invocation_agent_ids",
+        "requires_verifier",
+        "requires_approval_preview",
+    }
 
 
 def test_chat_stream_mounts_on_legacy_and_slug_paths(

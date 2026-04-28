@@ -85,6 +85,7 @@ def test_manager_graph_validation_result_marks_accepted() -> None:
         validation=ManagerGraphValidationResult(accepted=True, graph=None),
         registry_agent_count=10,
         write_agent_count=1,
+        graph_candidate_summary={"intent": "report", "invocation_agent_ids": []},
     )
 
     assert traced.graph_gate == "eligible"
@@ -93,6 +94,7 @@ def test_manager_graph_validation_result_marks_accepted() -> None:
     assert traced.graph_validation_fallback_reason is None
     assert traced.graph_registry_agent_count == 10
     assert traced.graph_write_agent_count == 1
+    assert traced.graph_candidate_summary == {"intent": "report", "invocation_agent_ids": []}
 
 
 def test_runtime_profile_selects_long_doc_for_large_budget() -> None:

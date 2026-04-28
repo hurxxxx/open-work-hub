@@ -47,7 +47,10 @@ from aidoo_api.domains.ai.runtime.metrics import record_inspection_request
 from aidoo_api.domains.ai.runtime.models import AgentInvocation, AgentRun, AgentTraceEvent
 from aidoo_api.domains.ai.runtime.persistence import scrub_trace_payload
 from aidoo_api.domains.ai.runtime.agent_definitions import resolve_agent_definitions
-from aidoo_api.domains.ai.runtime.manager_candidate import build_deterministic_manager_candidate
+from aidoo_api.domains.ai.runtime.manager_candidate import (
+    build_deterministic_manager_candidate,
+    summarize_execution_graph,
+)
 from aidoo_api.domains.ai.runtime.manager_validation import validate_manager_graph_candidate
 from aidoo_api.domains.ai.runtime.routing import (
     RuntimeRoutingDecision,
@@ -1693,6 +1696,7 @@ async def _chat_stream_publisher(
                 ),
                 runtime_graph_registry_agent_count=runtime_routing.graph_registry_agent_count,
                 runtime_graph_write_agent_count=runtime_routing.graph_write_agent_count,
+                runtime_graph_candidate_summary=runtime_routing.graph_candidate_summary,
                 parallel_tool_calls=False if has_approval_required_tools else None,
             ):
                 for serialized in _serialize_agent_event_through_artifacts(
@@ -1843,6 +1847,9 @@ def _attach_graph_gate_trace_metadata(
             validation=validation,
             registry_agent_count=len(resolved_agents.agent_ids),
             write_agent_count=len(resolved_agents.write_agent_ids),
+            graph_candidate_summary=summarize_execution_graph(validation.graph)
+            if validation.graph is not None
+            else None,
         )
     return attach_trace_only_graph_validation(
         runtime_routing,
@@ -2081,6 +2088,7 @@ def _runtime_done_meta(runtime_routing: RuntimeRoutingDecision) -> dict[str, Any
         "graph_validation_fallback_reason": runtime_routing.graph_validation_fallback_reason,
         "graph_registry_agent_count": runtime_routing.graph_registry_agent_count,
         "graph_write_agent_count": runtime_routing.graph_write_agent_count,
+        "graph_candidate_summary": runtime_routing.graph_candidate_summary,
     }
 
 
@@ -2736,6 +2744,7 @@ def _persist_assistant_turn(
         "graph_validation_fallback_reason": done_meta.get("graph_validation_fallback_reason"),
         "graph_registry_agent_count": done_meta.get("graph_registry_agent_count"),
         "graph_write_agent_count": done_meta.get("graph_write_agent_count"),
+        "graph_candidate_summary": done_meta.get("graph_candidate_summary"),
         "finish_reason": buffer.finish_reason,
         "response_status": response_status,
         "tool_calls": buffer.tool_calls,

@@ -110,6 +110,7 @@ async def run_agent_turn_stream(
     runtime_graph_validation_fallback_reason: str | None = None,
     runtime_graph_registry_agent_count: int = 0,
     runtime_graph_write_agent_count: int = 0,
+    runtime_graph_candidate_summary: dict[str, Any] | None = None,
     parallel_tool_calls: bool | None = None,
 ) -> AsyncIterator[Any]:
     conversation = _prepend_agent_system_message(
@@ -133,6 +134,7 @@ async def run_agent_turn_stream(
         runtime_graph_validation_fallback_reason=runtime_graph_validation_fallback_reason,
         runtime_graph_registry_agent_count=runtime_graph_registry_agent_count,
         runtime_graph_write_agent_count=runtime_graph_write_agent_count,
+        runtime_graph_candidate_summary=runtime_graph_candidate_summary,
     )
     async for event in _run_agent_loop_stream(
         context=context,
@@ -783,6 +785,7 @@ def _runtime_done_meta(model_meta: dict[str, Any]) -> dict[str, Any]:
         "graph_validation_fallback_reason": model_meta.get("graph_validation_fallback_reason"),
         "graph_registry_agent_count": int(model_meta.get("graph_registry_agent_count") or 0),
         "graph_write_agent_count": int(model_meta.get("graph_write_agent_count") or 0),
+        "graph_candidate_summary": model_meta.get("graph_candidate_summary"),
     }
 
 
@@ -804,6 +807,7 @@ def _build_snapshot_model_meta(
     runtime_graph_validation_fallback_reason: str | None,
     runtime_graph_registry_agent_count: int,
     runtime_graph_write_agent_count: int,
+    runtime_graph_candidate_summary: dict[str, Any] | None,
 ) -> dict[str, Any]:
     return {
         "model": execution.chosen_model,
@@ -830,6 +834,7 @@ def _build_snapshot_model_meta(
         "graph_validation_fallback_reason": runtime_graph_validation_fallback_reason,
         "graph_registry_agent_count": runtime_graph_registry_agent_count,
         "graph_write_agent_count": runtime_graph_write_agent_count,
+        "graph_candidate_summary": runtime_graph_candidate_summary,
         "scope": _build_snapshot_scope_meta(
             allowed_app_ids=allowed_app_ids,
             tool_specs=tool_specs,

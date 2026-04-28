@@ -23,12 +23,12 @@ Phase 6 전체 목표는 기존 single-loop agent를 deterministic fast path, ma
 
 이 섹션은 세션 handoff용이다. 구현 세션이 끝날 때마다 짧게 갱신한다.
 
-- Current PR/stage: Phase 0-G deterministic manager candidate graph builder stub implemented. Graph execution still falls back to the existing single-loop path.
-- Last completed: Added deterministic `grounded_report` and `high_risk_action` candidate graph construction, validates candidates with the resolver-backed manager validator, and records accepted/rejected validation metadata without executing graph nodes.
+- Current PR/stage: Phase 0-H safe candidate graph summary metadata implemented. Graph execution still falls back to the existing single-loop path.
+- Last completed: Added safe accepted-candidate graph summaries to SSE done envelopes, persisted assistant-turn metadata, and agent-loop snapshot metadata without raw prompt, evidence, purpose text, dependencies, or tool arguments.
 - In progress: None.
-- Next exact task: Persist the accepted candidate graph summary into runtime trace/shadow metadata, still without graph node execution.
-- Files touched in Phase 0-G: `apps/api/src/aidoo_api/domains/ai/router.py`, `apps/api/src/aidoo_api/domains/ai/runtime/__init__.py`, `apps/api/src/aidoo_api/domains/ai/runtime/manager_candidate.py`, `apps/api/src/aidoo_api/domains/ai/runtime/routing.py`, `apps/api/tests/test_ai_runtime_contracts.py`, `apps/api/tests/test_ai_runtime_routing.py`, `apps/api/tests/test_ai_stream.py`, `plans/03-phase6-evidence-runtime-implementation.md`.
-- Tests/checks run: `cd apps/api && uv run python -m pytest tests/test_ai_runtime_contracts.py tests/test_ai_runtime_routing.py tests/test_ai_stream.py::test_chat_stream_graph_gate_falls_back_without_graph_execution`; `cd apps/api && uv run python -m pytest tests/test_ai_runtime_contracts.py tests/test_ai_runtime_routing.py tests/test_ai_stream.py tests/test_ai_approvals.py tests/test_ai_events.py tests/test_ai_conversations.py`; targeted `uv run ruff check` for touched Python files.
+- Next exact task: Emit trace/shadow events for candidate graph generation and validation summaries, still without graph node execution.
+- Files touched in Phase 0-H: `apps/api/src/aidoo_api/domains/ai/agent.py`, `apps/api/src/aidoo_api/domains/ai/events.py`, `apps/api/src/aidoo_api/domains/ai/router.py`, `apps/api/src/aidoo_api/domains/ai/runtime/__init__.py`, `apps/api/src/aidoo_api/domains/ai/runtime/manager_candidate.py`, `apps/api/src/aidoo_api/domains/ai/runtime/routing.py`, `apps/api/tests/fixtures/envelope_schema.json`, `apps/api/tests/test_ai_runtime_contracts.py`, `apps/api/tests/test_ai_runtime_routing.py`, `apps/api/tests/test_ai_stream.py`, `plans/03-phase6-evidence-runtime-implementation.md`.
+- Tests/checks run: `cd apps/api && uv run python -m pytest tests/test_ai_runtime_contracts.py tests/test_ai_runtime_routing.py tests/test_ai_stream.py::test_chat_stream_graph_gate_falls_back_without_graph_execution tests/test_ai_events.py::test_envelope_schema_snapshot_matches`; `cd apps/api && uv run python -m pytest tests/test_ai_runtime_contracts.py tests/test_ai_runtime_routing.py tests/test_ai_stream.py tests/test_ai_approvals.py tests/test_ai_events.py tests/test_ai_conversations.py`; targeted `uv run ruff check` for touched Python files.
 - Known blockers: graph node execution is still intentionally not implemented; single-loop fallback remains canonical.
 
 ## Architecture / Principles
@@ -293,6 +293,7 @@ cd apps/api && pytest tests/test_ai_runtime_contracts.py tests/test_ai_runtime_p
 
 - Manager candidate graph generation/validation is wired to router metadata only; `graph_gate=eligible`이어도 `graph_fallback_reason=graph_runtime_not_implemented`로 single-loop fallback을 유지한다.
 - Accepted graph validation must not be treated as execution authority until graph execution is explicitly implemented and separately gated.
+- Candidate graph summary is intentionally allowlisted to high-level fields only: intent, domains, risk, output kind, invocation agent ids, verifier flag, and approval-preview flag.
 - Long-running graph trace scheduler를 붙이기 전에 runtime retention helper를 실제 운영 job/admin trigger로 연결한다.
 - Runtime metric은 counter skeleton만 있다. Operator-facing rollout 전 dashboard/alert threshold를 별도 정의한다.
 - Phase 0-A에서 기존 table에 추가하는 `ai_tool_approvals` partial index는 의도된 tooling index 1건으로 기록한다. 이후 hot-table index 변경은 별도 concurrent migration으로 분리한다.
@@ -320,7 +321,7 @@ cd apps/api && pytest tests/test_ai_runtime_contracts.py tests/test_ai_runtime_p
 
 ## Assumptions
 
-- `compose.prod-like.yml`의 현재 local modification은 unrelated이며 이 플랜 구현에서 건드리지 않는다.
+- `compose.dev.yml`의 현재 local modification은 unrelated이며 이 플랜 구현에서 건드리지 않는다.
 - Phase 0-A는 code foundation이며 사용자-facing graph behavior를 켜지 않는다.
 - `review_queue_required`는 이후 Phase 7/admin policy 또는 durable workflow backend가 생긴 뒤 활성화한다.
 - External LLM/search DTO와 provider adapter는 Phase B/C 이후 별도 구현 플랜에서 다룬다.

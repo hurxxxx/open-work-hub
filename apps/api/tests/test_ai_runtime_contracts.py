@@ -24,6 +24,7 @@ from aidoo_api.domains.ai.runtime import (
     build_deterministic_manager_candidate,
     build_execution_graph_response_schema,
     resolve_agent_definitions,
+    summarize_execution_graph,
     validate_execution_graph,
     validate_manager_graph_candidate,
 )
@@ -394,6 +395,21 @@ def test_deterministic_manager_candidate_builds_valid_grounded_report_graph() ->
         write_agent_ids=resolved.write_agent_ids,
     )
     assert result.accepted is True
+    summary = summarize_execution_graph(candidate)
+    assert summary == {
+        "intent": "report",
+        "domains": candidate.domains,
+        "risk": "medium",
+        "output_kind": "artifact",
+        "invocation_agent_ids": [
+            invocation.agent_id for invocation in candidate.invocations
+        ],
+        "requires_verifier": True,
+        "requires_approval_preview": False,
+    }
+    assert "purpose" not in summary
+    assert "must_run_after" not in summary
+    assert "inputs_ref" not in summary
 
 
 def test_deterministic_manager_candidate_builds_valid_high_risk_preview_graph() -> None:

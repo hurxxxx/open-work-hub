@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Any
+
 from aidoo_api.domains.ai.runtime.agent_definitions import (
     AgentDefinition,
     ResolvedAgentDefinitions,
@@ -22,6 +24,18 @@ def build_deterministic_manager_candidate(
     if runtime_profile == "high_risk_action":
         return _high_risk_action_graph(definitions)
     return None
+
+
+def summarize_execution_graph(graph: ExecutionGraph) -> dict[str, Any]:
+    return {
+        "intent": graph.intent,
+        "domains": list(graph.domains),
+        "risk": graph.risk,
+        "output_kind": graph.output_kind,
+        "invocation_agent_ids": [invocation.agent_id for invocation in graph.invocations],
+        "requires_verifier": graph.requires_verifier,
+        "requires_approval_preview": graph.requires_approval_preview,
+    }
 
 
 def _grounded_report_graph(definitions: dict[str, AgentDefinition]) -> ExecutionGraph | None:

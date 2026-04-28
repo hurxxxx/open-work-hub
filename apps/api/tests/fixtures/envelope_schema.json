@@ -537,6 +537,19 @@
           "title": "Forced Local",
           "type": "boolean"
         },
+        "graph_candidate_summary": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Graph Candidate Summary"
+        },
         "graph_fallback_reason": {
           "anyOf": [
             {
