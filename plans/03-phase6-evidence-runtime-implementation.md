@@ -23,13 +23,13 @@ Phase 6 전체 목표는 기존 single-loop agent를 deterministic fast path, ma
 
 이 섹션은 세션 handoff용이다. 구현 세션이 끝날 때마다 짧게 갱신한다.
 
-- Current PR/stage: Phase 0-C graph gate skeleton implemented. Graph execution still falls back to the existing single-loop path.
-- Last completed: Added runtime routing metadata to SSE `done` envelopes, persisted assistant-turn model metadata, agent-loop snapshot metadata, and explicit graph fallback reasons.
+- Current PR/stage: Phase 0-D manager graph schema/validator skeleton implemented. Graph execution still falls back to the existing single-loop path.
+- Last completed: Added an `ExecutionGraph` schema export path and manager candidate validator for Pydantic schema validation, runtime registry validation, candidate source tracking, and write-agent risk floor fallback.
 - In progress: None.
-- Next exact task: After Phase 0-C verification, start manager graph schema/validator skeleton without executing graph nodes.
-- Files touched in Phase 0-C: `apps/api/src/aidoo_api/domains/ai/agent.py`, `apps/api/src/aidoo_api/domains/ai/events.py`, `apps/api/src/aidoo_api/domains/ai/router.py`, `apps/api/src/aidoo_api/domains/ai/runtime/routing.py`, `apps/api/tests/fixtures/envelope_schema.json`, `apps/api/tests/test_ai_runtime_routing.py`, `apps/api/tests/test_ai_stream.py`, `plans/03-phase6-evidence-runtime-implementation.md`.
-- Tests/checks run: `cd apps/api && uv run pytest tests/test_ai_runtime_routing.py tests/test_ai_stream.py::test_chat_stream_done_meta_uses_requested_model tests/test_ai_stream.py::test_chat_stream_graph_gate_falls_back_without_graph_execution tests/test_ai_approvals.py::test_pending_approval_shadow_writes_runtime_run`; `cd apps/api && uv run pytest tests/test_ai_runtime_routing.py tests/test_ai_stream.py tests/test_ai_approvals.py tests/test_ai_events.py tests/test_ai_conversations.py`; `cd apps/api && uv run pytest tests/test_ai_runtime_contracts.py tests/test_ai_runtime_persistence.py tests/test_ai_runtime_settings.py tests/test_ai_runtime_eval_fixtures.py`; targeted `uv run ruff check` for touched Python files.
-- Known blockers: graph manager implementation still needs schema generation path and fallback taxonomy; keep single-loop fallback canonical.
+- Next exact task: Add an `AgentDefinition` / resolver skeleton so manager validation can use workspace-scoped agent/domain/output allowlists instead of test-local registries.
+- Files touched in Phase 0-D: `apps/api/src/aidoo_api/domains/ai/runtime/manager_validation.py`, `apps/api/src/aidoo_api/domains/ai/runtime/__init__.py`, `apps/api/tests/test_ai_runtime_contracts.py`, `plans/03-phase6-evidence-runtime-implementation.md`.
+- Tests/checks run: `git diff --check`; `cd apps/api && uv run python -m pytest tests/test_ai_runtime_contracts.py`; `cd apps/api && uv run python -m pytest tests/test_ai_runtime_contracts.py tests/test_ai_runtime_routing.py tests/test_ai_runtime_persistence.py tests/test_ai_runtime_settings.py tests/test_ai_runtime_eval_fixtures.py`; targeted `uv run ruff check` for touched Python files.
+- Known blockers: manager validation is not wired into router execution; graph nodes are still intentionally not executed and single-loop fallback remains canonical.
 
 ## Architecture / Principles
 
@@ -291,7 +291,8 @@ cd apps/api && pytest tests/test_ai_runtime_contracts.py tests/test_ai_runtime_p
 
 ## Known Follow-Ups Before Graph Manager Execution
 
-- Graph manager schema/validator를 추가하더라도 Phase 0-C에서는 graph node를 실행하지 않는다. `graph_gate=eligible`이어도 `graph_fallback_reason=graph_runtime_not_implemented`로 single-loop fallback을 유지한다.
+- Manager schema/validator skeleton exists, but it is not wired into router execution. `graph_gate=eligible`이어도 `graph_fallback_reason=graph_runtime_not_implemented`로 single-loop fallback을 유지한다.
+- Runtime registry values still need an `AgentDefinition` / resolver source instead of test-local fixtures before graph manager execution.
 - Long-running graph trace scheduler를 붙이기 전에 runtime retention helper를 실제 운영 job/admin trigger로 연결한다.
 - Runtime metric은 counter skeleton만 있다. Operator-facing rollout 전 dashboard/alert threshold를 별도 정의한다.
 - Phase 0-A에서 기존 table에 추가하는 `ai_tool_approvals` partial index는 의도된 tooling index 1건으로 기록한다. 이후 hot-table index 변경은 별도 concurrent migration으로 분리한다.

@@ -19,7 +19,9 @@ from aidoo_api.domains.ai.runtime import (
     RuntimeRegistry,
     RuntimeRegistryValidationError,
     RuntimeTraceSequencer,
+    build_execution_graph_response_schema,
     validate_execution_graph,
+    validate_manager_graph_candidate,
 )
 from aidoo_api.domains.ai.runtime.metrics import (
     record_inspection_request,
@@ -130,6 +132,116 @@ def test_execution_graph_rejects_duplicate_domains() -> None:
             output_kind="answer",
             invocations=[],
         )
+
+
+def test_manager_graph_response_schema_keeps_registry_values_open() -> None:
+    response_schema = build_execution_graph_response_schema()
+
+    assert response_schema["name"] == "ExecutionGraph"
+    assert response_schema["strict"] is True
+    graph_schema = response_schema["schema"]
+    graph_properties = graph_schema["properties"]
+    invocation_properties = graph_schema["$defs"]["AgentInvocationSpec"]["properties"]
+
+    assert graph_schema["additionalProperties"] is False
+    assert graph_properties["intent"]["type"] == "string"
+    assert "enum" not in graph_properties["intent"]
+    assert graph_properties["output_kind"]["type"] == "string"
+    assert "enum" not in graph_properties["output_kind"]
+    assert graph_properties["domains"]["items"]["type"] == "string"
+    assert invocation_properties["agent_id"]["type"] == "string"
+    assert "enum" not in invocation_properties["agent_id"]
+    assert graph_properties["risk"]["enum"] == ["low", "medium", "high"]
+
+
+def test_manager_graph_validator_accepts_schema_and_registry_valid_candidate() -> None:
+    result = validate_manager_graph_candidate(
+        {
+            "intent": "report",
+            "domains": ["meeting", "docs"],
+            "risk": "medium",
+            "output_kind": "artifact",
+            "invocations": [
+                {
+                    "agent_id": "domain.meeting",
+                    "purpose": "collect meeting evidence",
+                },
+                {
+                    "agent_id": "writer.template",
+                    "must_run_after": ["domain.meeting"],
+                    "purpose": "write draft",
+                },
+            ],
+            "requires_verifier": True,
+        },
+        registry=_registry(),
+        source="external_planning",
+    )
+
+    assert result.accepted is True
+    assert result.graph is not None
+    assert result.source == "external_planning"
+    assert result.graph.intent == "report"
+    assert result.fallback_reason is None
+    assert result.error is None
+
+
+def test_manager_graph_validator_returns_schema_failure_without_execution() -> None:
+    result = validate_manager_graph_candidate(
+        {
+            "intent": "report",
+            "domains": ["meeting"],
+            "risk": "critical",
+            "output_kind": "artifact",
+        },
+        registry=_registry(),
+    )
+
+    assert result.accepted is False
+    assert result.graph is None
+    assert result.fallback_reason == "schema_validation_failed"
+    assert "risk" in (result.error or "")
+
+
+def test_manager_graph_validator_returns_registry_failure_without_execution() -> None:
+    result = validate_manager_graph_candidate(
+        {
+            "intent": "report",
+            "domains": ["finance"],
+            "risk": "medium",
+            "output_kind": "artifact",
+        },
+        registry=_registry(),
+    )
+
+    assert result.accepted is False
+    assert result.graph is None
+    assert result.fallback_reason == "runtime_registry_validation_failed"
+    assert result.error == "unknown domain(s): ['finance']"
+
+
+def test_manager_graph_validator_enforces_write_agent_risk_floor() -> None:
+    result = validate_manager_graph_candidate(
+        {
+            "intent": "report",
+            "domains": ["docs"],
+            "risk": "medium",
+            "output_kind": "artifact",
+            "invocations": [
+                {
+                    "agent_id": "writer.template",
+                    "purpose": "write draft",
+                }
+            ],
+        },
+        registry=_registry(),
+        write_agent_ids=frozenset({"writer.template"}),
+    )
+
+    assert result.accepted is False
+    assert result.graph is None
+    assert result.fallback_reason == "risk_floor_violation"
+    assert "writer.template" in (result.error or "")
 
 
 def test_evidence_packet_minimal_contract() -> None:

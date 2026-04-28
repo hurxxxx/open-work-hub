@@ -12,6 +12,13 @@ from aidoo_api.domains.ai.runtime.contracts import (
     QueryPlan,
     RUNTIME_PROFILE_VALUES,
 )
+from aidoo_api.domains.ai.runtime.manager_validation import (
+    EXECUTION_GRAPH_SCHEMA_NAME,
+    ManagerGraphValidationResult,
+    build_execution_graph_json_schema,
+    build_execution_graph_response_schema,
+    validate_manager_graph_candidate,
+)
 from aidoo_api.domains.ai.runtime.registry_validation import (
     RuntimeRegistry,
     RuntimeRegistryValidationError,
@@ -31,10 +38,12 @@ __all__ = [
     "AgentInvocationSpec",
     "AgentRunContract",
     "AgentTraceEventContract",
+    "EXECUTION_GRAPH_SCHEMA_NAME",
     "EvidenceCoverage",
     "EvidenceItem",
     "EvidencePacket",
     "ExecutionGraph",
+    "ManagerGraphValidationResult",
     "QueryPlan",
     "RUNTIME_PROFILE_VALUES",
     "RuntimeRegistry",
@@ -42,9 +51,12 @@ __all__ = [
     "RuntimeRoutingDecision",
     "RuntimeTraceSequencer",
     "append_trace_event",
+    "build_execution_graph_json_schema",
+    "build_execution_graph_response_schema",
     "prepare_trace_payload",
     "scrub_completed_runtime_records",
     "scrub_trace_payload",
     "select_runtime_profile",
     "validate_execution_graph",
+    "validate_manager_graph_candidate",
 ]
