@@ -47,8 +47,11 @@ from aidoo_api.domains.ai.runtime.metrics import record_inspection_request
 from aidoo_api.domains.ai.runtime.models import AgentInvocation, AgentRun, AgentTraceEvent
 from aidoo_api.domains.ai.runtime.persistence import scrub_trace_payload
 from aidoo_api.domains.ai.runtime.agent_definitions import resolve_agent_definitions
+from aidoo_api.domains.ai.runtime.manager_candidate import build_deterministic_manager_candidate
+from aidoo_api.domains.ai.runtime.manager_validation import validate_manager_graph_candidate
 from aidoo_api.domains.ai.runtime.routing import (
     RuntimeRoutingDecision,
+    attach_manager_graph_validation_result,
     attach_trace_only_graph_validation,
     select_runtime_profile,
 )
@@ -1825,6 +1828,22 @@ def _attach_graph_gate_trace_metadata(
         enabled_app_ids=resolve_workspace_enabled_app_ids(db, workspace.id),
         allowed_app_ids=allowed_app_ids,
     )
+    candidate = build_deterministic_manager_candidate(
+        runtime_profile=runtime_routing.runtime_profile,
+        resolved_agents=resolved_agents,
+    )
+    if candidate is not None:
+        validation = validate_manager_graph_candidate(
+            candidate,
+            registry=resolved_agents.runtime_registry,
+            write_agent_ids=resolved_agents.write_agent_ids,
+        )
+        return attach_manager_graph_validation_result(
+            runtime_routing,
+            validation=validation,
+            registry_agent_count=len(resolved_agents.agent_ids),
+            write_agent_count=len(resolved_agents.write_agent_ids),
+        )
     return attach_trace_only_graph_validation(
         runtime_routing,
         registry_agent_count=len(resolved_agents.agent_ids),

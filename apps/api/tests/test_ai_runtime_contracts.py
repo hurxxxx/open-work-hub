@@ -21,6 +21,7 @@ from aidoo_api.domains.ai.runtime import (
     RuntimeRegistry,
     RuntimeRegistryValidationError,
     RuntimeTraceSequencer,
+    build_deterministic_manager_candidate,
     build_execution_graph_response_schema,
     resolve_agent_definitions,
     validate_execution_graph,
@@ -367,6 +368,72 @@ def test_manager_validator_uses_resolved_write_agent_risk_floor() -> None:
     assert result.accepted is False
     assert result.fallback_reason == "risk_floor_violation"
     assert "approval.proposal_preview" in (result.error or "")
+
+
+def test_deterministic_manager_candidate_builds_valid_grounded_report_graph() -> None:
+    resolved = resolve_agent_definitions(
+        enabled_app_ids=["ai", "meeting", "docs", "pms"],
+        allowed_app_ids=["meeting", "pms"],
+    )
+
+    candidate = build_deterministic_manager_candidate(
+        runtime_profile="grounded_report",
+        resolved_agents=resolved,
+    )
+    assert candidate is not None
+    assert candidate.intent == "report"
+    assert candidate.risk == "medium"
+    assert candidate.output_kind == "artifact"
+    assert candidate.requires_verifier is True
+    assert set(candidate.domains) >= {"meeting", "pms", "rag"}
+    assert "domain.docs" not in {invocation.agent_id for invocation in candidate.invocations}
+
+    result = validate_manager_graph_candidate(
+        candidate,
+        registry=resolved.runtime_registry,
+        write_agent_ids=resolved.write_agent_ids,
+    )
+    assert result.accepted is True
+
+
+def test_deterministic_manager_candidate_builds_valid_high_risk_preview_graph() -> None:
+    resolved = resolve_agent_definitions(
+        enabled_app_ids=["ai", "pms"],
+        allowed_app_ids=["pms"],
+    )
+
+    candidate = build_deterministic_manager_candidate(
+        runtime_profile="high_risk_action",
+        resolved_agents=resolved,
+    )
+    assert candidate is not None
+    assert candidate.intent == "write"
+    assert candidate.risk == "high"
+    assert candidate.output_kind == "approval_preview"
+    assert candidate.requires_approval_preview is True
+    assert candidate.domains == ["pms"]
+
+    result = validate_manager_graph_candidate(
+        candidate,
+        registry=resolved.runtime_registry,
+        write_agent_ids=resolved.write_agent_ids,
+    )
+    assert result.accepted is True
+
+
+def test_deterministic_manager_candidate_is_unavailable_without_scoped_domain() -> None:
+    resolved = resolve_agent_definitions(
+        enabled_app_ids=["ai"],
+        allowed_app_ids=["ai"],
+    )
+
+    assert (
+        build_deterministic_manager_candidate(
+            runtime_profile="high_risk_action",
+            resolved_agents=resolved,
+        )
+        is None
+    )
 
 
 def test_evidence_packet_minimal_contract() -> None:

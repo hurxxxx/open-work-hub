@@ -3,7 +3,9 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from aidoo_api.domains.ai.runtime.manager_validation import ManagerGraphValidationResult
 from aidoo_api.domains.ai.runtime.routing import (
+    attach_manager_graph_validation_result,
     attach_trace_only_graph_validation,
     select_runtime_profile,
 )
@@ -67,6 +69,29 @@ def test_trace_only_graph_validation_marks_candidate_unavailable() -> None:
     assert traced.graph_validation_status == "candidate_unavailable"
     assert traced.graph_validation_fallback_reason == "graph_runtime_not_implemented"
     assert traced.graph_registry_agent_count == 9
+    assert traced.graph_write_agent_count == 1
+
+
+def test_manager_graph_validation_result_marks_accepted() -> None:
+    decision = select_runtime_profile(
+        messages=_messages("회의록과 PMS 이슈를 비교해서 근거 있는 보고서로 정리해줘"),
+        allowed_app_ids=["meeting", "pms"],
+        max_tokens=None,
+        graph_enabled=True,
+    )
+
+    traced = attach_manager_graph_validation_result(
+        decision,
+        validation=ManagerGraphValidationResult(accepted=True, graph=None),
+        registry_agent_count=10,
+        write_agent_count=1,
+    )
+
+    assert traced.graph_gate == "eligible"
+    assert traced.graph_used is False
+    assert traced.graph_validation_status == "accepted"
+    assert traced.graph_validation_fallback_reason is None
+    assert traced.graph_registry_agent_count == 10
     assert traced.graph_write_agent_count == 1
 
 

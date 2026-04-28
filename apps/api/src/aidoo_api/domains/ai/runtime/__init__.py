@@ -19,6 +19,9 @@ from aidoo_api.domains.ai.runtime.contracts import (
     QueryPlan,
     RUNTIME_PROFILE_VALUES,
 )
+from aidoo_api.domains.ai.runtime.manager_candidate import (
+    build_deterministic_manager_candidate,
+)
 from aidoo_api.domains.ai.runtime.manager_validation import (
     EXECUTION_GRAPH_SCHEMA_NAME,
     ManagerGraphValidationResult,
@@ -39,6 +42,7 @@ from aidoo_api.domains.ai.runtime.persistence import (
 )
 from aidoo_api.domains.ai.runtime.routing import (
     RuntimeRoutingDecision,
+    attach_manager_graph_validation_result,
     attach_trace_only_graph_validation,
     select_runtime_profile,
 )
@@ -66,7 +70,9 @@ __all__ = [
     "RuntimeTraceSequencer",
     "ResolvedAgentDefinitions",
     "append_trace_event",
+    "attach_manager_graph_validation_result",
     "attach_trace_only_graph_validation",
+    "build_deterministic_manager_candidate",
     "build_execution_graph_json_schema",
     "build_execution_graph_response_schema",
     "prepare_trace_payload",

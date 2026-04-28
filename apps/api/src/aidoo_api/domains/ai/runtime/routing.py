@@ -4,6 +4,7 @@ from dataclasses import dataclass, replace
 from typing import Literal
 
 from aidoo_api.domains.ai.runtime.contracts import RuntimeProfile
+from aidoo_api.domains.ai.runtime.manager_validation import ManagerGraphValidationResult
 
 
 GraphGateDecision = Literal["disabled", "eligible", "ineligible"]
@@ -89,6 +90,24 @@ def attach_trace_only_graph_validation(
     )
 
 
+def attach_manager_graph_validation_result(
+    decision: RuntimeRoutingDecision,
+    *,
+    validation: ManagerGraphValidationResult,
+    registry_agent_count: int,
+    write_agent_count: int,
+) -> RuntimeRoutingDecision:
+    if decision.graph_gate != "eligible":
+        return decision
+    return replace(
+        decision,
+        graph_validation_status="accepted" if validation.accepted else "rejected",
+        graph_validation_fallback_reason=validation.fallback_reason,
+        graph_registry_agent_count=max(registry_agent_count, 0),
+        graph_write_agent_count=max(write_agent_count, 0),
+    )
+
+
 def select_runtime_profile(
     *,
     messages: list[dict[str, str]],
@@ -165,6 +184,7 @@ def _has_multiple_app_scope(allowed_app_ids: list[str] | None) -> bool:
 
 __all__ = [
     "RuntimeRoutingDecision",
+    "attach_manager_graph_validation_result",
     "attach_trace_only_graph_validation",
     "select_runtime_profile",
 ]

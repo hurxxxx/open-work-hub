@@ -1202,8 +1202,8 @@ def test_chat_stream_graph_gate_falls_back_without_graph_execution(
     assert done_meta["graph_gate"] == "eligible"
     assert done_meta["graph_fallback_reason"] == "graph_runtime_not_implemented"
     assert done_meta["graph_used"] is False
-    assert done_meta["graph_validation_status"] == "candidate_unavailable"
-    assert done_meta["graph_validation_fallback_reason"] == "graph_runtime_not_implemented"
+    assert done_meta["graph_validation_status"] == "accepted"
+    assert done_meta.get("graph_validation_fallback_reason") is None
     assert done_meta["graph_registry_agent_count"] > 0
     assert done_meta["graph_write_agent_count"] == 1
 
