@@ -3,7 +3,10 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from aidoo_api.domains.ai.runtime.routing import select_runtime_profile
+from aidoo_api.domains.ai.runtime.routing import (
+    attach_trace_only_graph_validation,
+    select_runtime_profile,
+)
 
 
 FIXTURE_DIR = Path(__file__).parent / "fixtures" / "ai_runtime"
@@ -25,6 +28,7 @@ def test_runtime_profile_defaults_to_interactive_read() -> None:
     assert decision.graph_gate == "disabled"
     assert decision.graph_fallback_reason == "feature_disabled"
     assert decision.graph_used is False
+    assert decision.graph_validation_status == "not_applicable"
     assert "default_interactive_read" in decision.reason_codes
 
 
@@ -40,7 +44,30 @@ def test_runtime_profile_selects_grounded_report_for_report_signal() -> None:
     assert decision.graph_gate == "eligible"
     assert decision.graph_fallback_reason == "graph_runtime_not_implemented"
     assert decision.graph_used is False
+    assert decision.graph_validation_status == "not_applicable"
     assert "grounded_report_signal" in decision.reason_codes
+
+
+def test_trace_only_graph_validation_marks_candidate_unavailable() -> None:
+    decision = select_runtime_profile(
+        messages=_messages("회의록과 PMS 이슈를 비교해서 근거 있는 보고서로 정리해줘"),
+        allowed_app_ids=["meeting", "pms"],
+        max_tokens=None,
+        graph_enabled=True,
+    )
+
+    traced = attach_trace_only_graph_validation(
+        decision,
+        registry_agent_count=9,
+        write_agent_count=1,
+    )
+
+    assert traced.graph_gate == "eligible"
+    assert traced.graph_used is False
+    assert traced.graph_validation_status == "candidate_unavailable"
+    assert traced.graph_validation_fallback_reason == "graph_runtime_not_implemented"
+    assert traced.graph_registry_agent_count == 9
+    assert traced.graph_write_agent_count == 1
 
 
 def test_runtime_profile_selects_long_doc_for_large_budget() -> None:

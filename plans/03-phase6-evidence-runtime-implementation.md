@@ -23,13 +23,13 @@ Phase 6 전체 목표는 기존 single-loop agent를 deterministic fast path, ma
 
 이 섹션은 세션 handoff용이다. 구현 세션이 끝날 때마다 짧게 갱신한다.
 
-- Current PR/stage: Phase 0-E agent definition resolver skeleton implemented. Graph execution still falls back to the existing single-loop path.
-- Last completed: Added the v1 `AgentDefinition` catalog and resolver that derives workspace-scoped `RuntimeRegistry` and write-capable agent ids from enabled apps plus `allowed_app_ids`.
+- Current PR/stage: Phase 0-F graph gate trace-only manager validation boundary implemented. Graph execution still falls back to the existing single-loop path.
+- Last completed: Wired eligible graph gates to resolver-backed trace-only metadata so SSE done envelopes, persisted assistant-turn metadata, and agent-loop snapshot metadata record candidate-unavailable validation state without executing graph nodes.
 - In progress: None.
-- Next exact task: Wire manager validation to the graph gate as trace-only/fallback metadata, without executing graph nodes or changing the single-loop response path.
-- Files touched in Phase 0-E: `apps/api/src/aidoo_api/domains/ai/runtime/agent_definitions.py`, `apps/api/src/aidoo_api/domains/ai/runtime/__init__.py`, `apps/api/tests/test_ai_runtime_contracts.py`, `plans/03-phase6-evidence-runtime-implementation.md`.
-- Tests/checks run: `git diff --check`; `cd apps/api && uv run python -m pytest tests/test_ai_runtime_contracts.py`; `cd apps/api && uv run python -m pytest tests/test_ai_runtime_contracts.py tests/test_ai_runtime_routing.py tests/test_ai_runtime_persistence.py tests/test_ai_runtime_settings.py tests/test_ai_runtime_eval_fixtures.py`; targeted `uv run ruff check` for touched Python files.
-- Known blockers: manager validation is not wired into router execution; graph nodes are still intentionally not executed and single-loop fallback remains canonical.
+- Next exact task: Add a deterministic manager candidate graph builder stub for eligible requests, validate the candidate, and keep fallback behavior unchanged until graph execution is implemented.
+- Files touched in Phase 0-F: `apps/api/src/aidoo_api/domains/ai/agent.py`, `apps/api/src/aidoo_api/domains/ai/events.py`, `apps/api/src/aidoo_api/domains/ai/router.py`, `apps/api/src/aidoo_api/domains/ai/runtime/__init__.py`, `apps/api/src/aidoo_api/domains/ai/runtime/routing.py`, `apps/api/tests/fixtures/envelope_schema.json`, `apps/api/tests/test_ai_runtime_routing.py`, `apps/api/tests/test_ai_stream.py`, `plans/03-phase6-evidence-runtime-implementation.md`.
+- Tests/checks run: `cd apps/api && uv run python -m pytest tests/test_ai_runtime_routing.py tests/test_ai_stream.py::test_chat_stream_done_meta_uses_requested_model tests/test_ai_stream.py::test_chat_stream_graph_gate_falls_back_without_graph_execution tests/test_ai_events.py::test_envelope_schema_snapshot_matches`; `cd apps/api && uv run python -m pytest tests/test_ai_runtime_routing.py tests/test_ai_stream.py tests/test_ai_approvals.py tests/test_ai_events.py tests/test_ai_conversations.py tests/test_ai_runtime_contracts.py`; targeted `uv run ruff check` for touched Python files.
+- Known blockers: manager candidate graph generation and graph node execution are still intentionally not implemented; single-loop fallback remains canonical.
 
 ## Architecture / Principles
 
@@ -291,8 +291,8 @@ cd apps/api && pytest tests/test_ai_runtime_contracts.py tests/test_ai_runtime_p
 
 ## Known Follow-Ups Before Graph Manager Execution
 
-- Manager schema/validator skeleton exists, but it is not wired into router execution. `graph_gate=eligible`이어도 `graph_fallback_reason=graph_runtime_not_implemented`로 single-loop fallback을 유지한다.
-- Runtime registry values now have an `AgentDefinition` / resolver source, but router integration must stay trace-only until graph execution is explicitly implemented.
+- Manager schema/validator and resolver are wired to router metadata only; `graph_gate=eligible`이어도 `graph_fallback_reason=graph_runtime_not_implemented`로 single-loop fallback을 유지한다.
+- Trace-only graph validation currently records `candidate_unavailable`. It must not be treated as execution authority until candidate graph generation and graph execution are explicitly implemented.
 - Long-running graph trace scheduler를 붙이기 전에 runtime retention helper를 실제 운영 job/admin trigger로 연결한다.
 - Runtime metric은 counter skeleton만 있다. Operator-facing rollout 전 dashboard/alert threshold를 별도 정의한다.
 - Phase 0-A에서 기존 table에 추가하는 `ai_tool_approvals` partial index는 의도된 tooling index 1건으로 기록한다. 이후 hot-table index 변경은 별도 concurrent migration으로 분리한다.

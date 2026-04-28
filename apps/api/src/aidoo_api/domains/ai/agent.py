@@ -106,6 +106,10 @@ async def run_agent_turn_stream(
     runtime_graph_gate: str = "disabled",
     runtime_graph_fallback_reason: str | None = None,
     runtime_graph_used: bool = False,
+    runtime_graph_validation_status: str | None = None,
+    runtime_graph_validation_fallback_reason: str | None = None,
+    runtime_graph_registry_agent_count: int = 0,
+    runtime_graph_write_agent_count: int = 0,
     parallel_tool_calls: bool | None = None,
 ) -> AsyncIterator[Any]:
     conversation = _prepend_agent_system_message(
@@ -125,6 +129,10 @@ async def run_agent_turn_stream(
         runtime_graph_gate=runtime_graph_gate,
         runtime_graph_fallback_reason=runtime_graph_fallback_reason,
         runtime_graph_used=runtime_graph_used,
+        runtime_graph_validation_status=runtime_graph_validation_status,
+        runtime_graph_validation_fallback_reason=runtime_graph_validation_fallback_reason,
+        runtime_graph_registry_agent_count=runtime_graph_registry_agent_count,
+        runtime_graph_write_agent_count=runtime_graph_write_agent_count,
     )
     async for event in _run_agent_loop_stream(
         context=context,
@@ -771,6 +779,10 @@ def _runtime_done_meta(model_meta: dict[str, Any]) -> dict[str, Any]:
         "graph_gate": model_meta.get("graph_gate"),
         "graph_fallback_reason": model_meta.get("graph_fallback_reason"),
         "graph_used": bool(model_meta.get("graph_used")),
+        "graph_validation_status": model_meta.get("graph_validation_status"),
+        "graph_validation_fallback_reason": model_meta.get("graph_validation_fallback_reason"),
+        "graph_registry_agent_count": int(model_meta.get("graph_registry_agent_count") or 0),
+        "graph_write_agent_count": int(model_meta.get("graph_write_agent_count") or 0),
     }
 
 
@@ -788,6 +800,10 @@ def _build_snapshot_model_meta(
     runtime_graph_gate: str,
     runtime_graph_fallback_reason: str | None,
     runtime_graph_used: bool,
+    runtime_graph_validation_status: str | None,
+    runtime_graph_validation_fallback_reason: str | None,
+    runtime_graph_registry_agent_count: int,
+    runtime_graph_write_agent_count: int,
 ) -> dict[str, Any]:
     return {
         "model": execution.chosen_model,
@@ -810,6 +826,10 @@ def _build_snapshot_model_meta(
         "graph_gate": runtime_graph_gate,
         "graph_fallback_reason": runtime_graph_fallback_reason,
         "graph_used": runtime_graph_used,
+        "graph_validation_status": runtime_graph_validation_status,
+        "graph_validation_fallback_reason": runtime_graph_validation_fallback_reason,
+        "graph_registry_agent_count": runtime_graph_registry_agent_count,
+        "graph_write_agent_count": runtime_graph_write_agent_count,
         "scope": _build_snapshot_scope_meta(
             allowed_app_ids=allowed_app_ids,
             tool_specs=tool_specs,

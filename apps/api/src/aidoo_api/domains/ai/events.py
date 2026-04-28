@@ -56,6 +56,10 @@ class DoneMeta(BaseModel):
     graph_gate: Literal["disabled", "ineligible", "eligible"] | None = None
     graph_fallback_reason: str | None = None
     graph_used: bool = False
+    graph_validation_status: str | None = None
+    graph_validation_fallback_reason: str | None = None
+    graph_registry_agent_count: int = 0
+    graph_write_agent_count: int = 0
 
 
 DoneFinishReason = Literal["stop", "length", "cancelled", "error", "awaiting_approval"]

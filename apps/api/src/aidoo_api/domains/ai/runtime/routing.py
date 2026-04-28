@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Literal
 
 from aidoo_api.domains.ai.runtime.contracts import RuntimeProfile
@@ -11,6 +11,12 @@ GraphFallbackReason = Literal[
     "feature_disabled",
     "runtime_profile_ineligible",
     "graph_runtime_not_implemented",
+]
+GraphValidationStatus = Literal[
+    "not_applicable",
+    "candidate_unavailable",
+    "accepted",
+    "rejected",
 ]
 
 LONG_DOC_CHAR_THRESHOLD = 12_000
@@ -60,6 +66,27 @@ class RuntimeRoutingDecision:
     graph_gate: GraphGateDecision
     graph_fallback_reason: GraphFallbackReason
     graph_used: bool = False
+    graph_validation_status: GraphValidationStatus = "not_applicable"
+    graph_validation_fallback_reason: str | None = None
+    graph_registry_agent_count: int = 0
+    graph_write_agent_count: int = 0
+
+
+def attach_trace_only_graph_validation(
+    decision: RuntimeRoutingDecision,
+    *,
+    registry_agent_count: int,
+    write_agent_count: int,
+) -> RuntimeRoutingDecision:
+    if decision.graph_gate != "eligible":
+        return decision
+    return replace(
+        decision,
+        graph_validation_status="candidate_unavailable",
+        graph_validation_fallback_reason=decision.graph_fallback_reason,
+        graph_registry_agent_count=max(registry_agent_count, 0),
+        graph_write_agent_count=max(write_agent_count, 0),
+    )
 
 
 def select_runtime_profile(
@@ -136,4 +163,8 @@ def _has_multiple_app_scope(allowed_app_ids: list[str] | None) -> bool:
     return allowed_app_ids is not None and len(set(allowed_app_ids)) > 1
 
 
-__all__ = ["RuntimeRoutingDecision", "select_runtime_profile"]
+__all__ = [
+    "RuntimeRoutingDecision",
+    "attach_trace_only_graph_validation",
+    "select_runtime_profile",
+]

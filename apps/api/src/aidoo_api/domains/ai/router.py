@@ -46,7 +46,12 @@ from aidoo_api.domains.ai.registry import get_ai_capability_registry
 from aidoo_api.domains.ai.runtime.metrics import record_inspection_request
 from aidoo_api.domains.ai.runtime.models import AgentInvocation, AgentRun, AgentTraceEvent
 from aidoo_api.domains.ai.runtime.persistence import scrub_trace_payload
-from aidoo_api.domains.ai.runtime.routing import RuntimeRoutingDecision, select_runtime_profile
+from aidoo_api.domains.ai.runtime.agent_definitions import resolve_agent_definitions
+from aidoo_api.domains.ai.runtime.routing import (
+    RuntimeRoutingDecision,
+    attach_trace_only_graph_validation,
+    select_runtime_profile,
+)
 from aidoo_api.domains.ai.tool_runtime import (
     ToolCallExecution,
     execute_tool_call,
@@ -60,6 +65,7 @@ from aidoo_api.domains.ai.tool_service import (
 )
 from aidoo_api.domains.auth.dependencies import require_current_user, require_current_workspace
 from aidoo_api.domains.auth.models import User, Workspace
+from aidoo_api.domains.auth.access import resolve_workspace_enabled_app_ids
 from aidoo_api.domains.auth.workspace_apps import WORKSPACE_APP_IDS
 from aidoo_api.domains.auth.security import new_id
 from aidoo_api.domains.conversations import service as conversations_service
@@ -1518,6 +1524,12 @@ async def _chat_stream_publisher(
         max_tokens=payload.max_tokens,
         graph_enabled=settings.ai_runtime_graph_enabled,
     )
+    runtime_routing = _attach_graph_gate_trace_metadata(
+        runtime_routing,
+        db=db,
+        workspace=workspace,
+        allowed_app_ids=payload.allowed_app_ids,
+    )
 
     last_decision: PolicyDecision | None = None
     last_config: LlmPoolConfig | None = None
@@ -1672,6 +1684,12 @@ async def _chat_stream_publisher(
                 runtime_graph_gate=runtime_routing.graph_gate,
                 runtime_graph_fallback_reason=runtime_routing.graph_fallback_reason,
                 runtime_graph_used=runtime_routing.graph_used,
+                runtime_graph_validation_status=runtime_routing.graph_validation_status,
+                runtime_graph_validation_fallback_reason=(
+                    runtime_routing.graph_validation_fallback_reason
+                ),
+                runtime_graph_registry_agent_count=runtime_routing.graph_registry_agent_count,
+                runtime_graph_write_agent_count=runtime_routing.graph_write_agent_count,
                 parallel_tool_calls=False if has_approval_required_tools else None,
             ):
                 for serialized in _serialize_agent_event_through_artifacts(
@@ -1792,6 +1810,26 @@ async def _chat_stream_publisher(
                 chosen_model=chosen_model,
                 runtime_routing=runtime_routing,
             )
+
+
+def _attach_graph_gate_trace_metadata(
+    runtime_routing: RuntimeRoutingDecision,
+    *,
+    db: Session,
+    workspace: Workspace,
+    allowed_app_ids: list[str] | None,
+) -> RuntimeRoutingDecision:
+    if runtime_routing.graph_gate != "eligible":
+        return runtime_routing
+    resolved_agents = resolve_agent_definitions(
+        enabled_app_ids=resolve_workspace_enabled_app_ids(db, workspace.id),
+        allowed_app_ids=allowed_app_ids,
+    )
+    return attach_trace_only_graph_validation(
+        runtime_routing,
+        registry_agent_count=len(resolved_agents.agent_ids),
+        write_agent_count=len(resolved_agents.write_agent_ids),
+    )
 
 
 def _tool_command_events(
@@ -2020,6 +2058,10 @@ def _runtime_done_meta(runtime_routing: RuntimeRoutingDecision) -> dict[str, Any
         "graph_gate": runtime_routing.graph_gate,
         "graph_fallback_reason": runtime_routing.graph_fallback_reason,
         "graph_used": runtime_routing.graph_used,
+        "graph_validation_status": runtime_routing.graph_validation_status,
+        "graph_validation_fallback_reason": runtime_routing.graph_validation_fallback_reason,
+        "graph_registry_agent_count": runtime_routing.graph_registry_agent_count,
+        "graph_write_agent_count": runtime_routing.graph_write_agent_count,
     }
 
 
@@ -2671,6 +2713,10 @@ def _persist_assistant_turn(
         "graph_gate": done_meta.get("graph_gate"),
         "graph_fallback_reason": done_meta.get("graph_fallback_reason"),
         "graph_used": done_meta.get("graph_used"),
+        "graph_validation_status": done_meta.get("graph_validation_status"),
+        "graph_validation_fallback_reason": done_meta.get("graph_validation_fallback_reason"),
+        "graph_registry_agent_count": done_meta.get("graph_registry_agent_count"),
+        "graph_write_agent_count": done_meta.get("graph_write_agent_count"),
         "finish_reason": buffer.finish_reason,
         "response_status": response_status,
         "tool_calls": buffer.tool_calls,

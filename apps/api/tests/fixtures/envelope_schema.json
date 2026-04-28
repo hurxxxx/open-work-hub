@@ -566,10 +566,44 @@
           "default": null,
           "title": "Graph Gate"
         },
+        "graph_registry_agent_count": {
+          "default": 0,
+          "title": "Graph Registry Agent Count",
+          "type": "integer"
+        },
         "graph_used": {
           "default": false,
           "title": "Graph Used",
           "type": "boolean"
+        },
+        "graph_validation_fallback_reason": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Graph Validation Fallback Reason"
+        },
+        "graph_validation_status": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Graph Validation Status"
+        },
+        "graph_write_agent_count": {
+          "default": 0,
+          "title": "Graph Write Agent Count",
+          "type": "integer"
         },
         "model": {
           "anyOf": [

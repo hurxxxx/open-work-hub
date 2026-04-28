@@ -37,7 +37,11 @@ from aidoo_api.domains.ai.runtime.persistence import (
     scrub_completed_runtime_records,
     scrub_trace_payload,
 )
-from aidoo_api.domains.ai.runtime.routing import RuntimeRoutingDecision, select_runtime_profile
+from aidoo_api.domains.ai.runtime.routing import (
+    RuntimeRoutingDecision,
+    attach_trace_only_graph_validation,
+    select_runtime_profile,
+)
 from aidoo_api.domains.ai.runtime.trace import RuntimeTraceSequencer
 
 __all__ = [
@@ -62,6 +66,7 @@ __all__ = [
     "RuntimeTraceSequencer",
     "ResolvedAgentDefinitions",
     "append_trace_event",
+    "attach_trace_only_graph_validation",
     "build_execution_graph_json_schema",
     "build_execution_graph_response_schema",
     "prepare_trace_payload",
