@@ -28,6 +28,7 @@ from aidoo_api.domains.ai.audit import log_llm_tool_approval_resolved
 from aidoo_api.domains.ai.runtime.models import AgentInvocation, AgentRun
 from aidoo_api.domains.ai.runtime.persistence import append_trace_event
 from aidoo_api.domains.ai.runtime.contracts import RUNTIME_PROFILE_VALUES
+from aidoo_api.domains.ai.runtime.metrics import record_shadow_write_failure
 from aidoo_api.domains.auth.models import User, Workspace
 from aidoo_api.domains.auth.security import new_id
 from aidoo_api.domains.conversations.models import Conversation
@@ -823,13 +824,15 @@ def _safe_runtime_shadow_write(
         with db.begin_nested():
             operation(db, snapshot=snapshot)
     except Exception:
+        operation_name = getattr(operation, "__name__", "anonymous")
+        record_shadow_write_failure(operation=operation_name)
         logger.exception(
             "ai_runtime.shadow_write_failed",
             extra={
                 "agent_run_id": snapshot.id,
                 "conversation_id": snapshot.conversation_id,
                 "workspace_id": snapshot.workspace_id,
-                "operation": getattr(operation, "__name__", "anonymous"),
+                "operation": operation_name,
             },
         )
 

@@ -2,9 +2,9 @@ import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import Depends, FastAPI
+from fastapi import Depends, FastAPI, Request
 from fastapi import Response, status
-from fastapi.responses import Response as FastAPIResponse
+from fastapi.responses import JSONResponse, Response as FastAPIResponse
 from opentelemetry.trace import SpanKind
 
 from aidoo_api.core.db import get_session_factory, init_db
@@ -21,6 +21,7 @@ from aidoo_api.core.telemetry import (
     get_tracer,
 )
 from aidoo_api.domains.ai.registry import initialize_ai_capability_registry
+from aidoo_api.domains.ai.runtime.registry_validation import RuntimeRegistryValidationError
 from aidoo_api.domains.ai.router import router as ai_router
 from aidoo_api.domains.admin.router import router as admin_router
 from aidoo_api.domains.calendar.router import router as calendar_router
@@ -51,6 +52,14 @@ from aidoo_api.domains.wiki_pms.router import router as wiki_pms_router
 
 
 logger = logging.getLogger(__name__)
+
+
+async def runtime_registry_validation_exception_handler(
+    request: Request,
+    exc: RuntimeRegistryValidationError,
+) -> JSONResponse:
+    del request
+    return JSONResponse(status_code=422, content={"detail": str(exc)})
 
 
 def create_app() -> FastAPI:
@@ -94,6 +103,10 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
     app.state.telemetry_enabled = telemetry_enabled
+    app.add_exception_handler(
+        RuntimeRegistryValidationError,
+        runtime_registry_validation_exception_handler,
+    )
 
     @app.middleware("http")
     async def add_instance_headers(request, call_next) -> FastAPIResponse:

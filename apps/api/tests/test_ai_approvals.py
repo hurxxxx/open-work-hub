@@ -254,11 +254,17 @@ def test_runtime_shadow_write_failure_does_not_abort_pending_approval(
     client: TestClient,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    recorded_operations: list[str] = []
+
     def fail_shadow_write(*args: Any, **kwargs: Any) -> None:
         del args, kwargs
         raise SQLAlchemyError("shadow write failed")
 
+    def record_shadow_write_failure(*, operation: str) -> None:
+        recorded_operations.append(operation)
+
     monkeypatch.setattr(ai_approvals, "_persist_runtime_shadow_on_halt", fail_shadow_write)
+    monkeypatch.setattr(ai_approvals, "record_shadow_write_failure", record_shadow_write_failure)
 
     seed = _seed_pending_approval(client)
 
@@ -273,6 +279,7 @@ def test_runtime_shadow_write_failure_does_not_abort_pending_approval(
         assert approval is not None
         assert approval.status == "pending"
         assert db.get(AgentRun, seed["agent_run_id"]) is None
+    assert recorded_operations == ["fail_shadow_write"]
 
 
 def test_snapshot_scope_meta_freezes_allowed_apps_and_tool_names() -> None:
@@ -316,9 +323,18 @@ def test_filter_resume_tool_specs_uses_frozen_tool_names() -> None:
     assert filtered == [{"type": "function", "function": {"name": _APPROVAL_TOOL_NAME}}]
 
 
-def test_runtime_inspection_endpoint_returns_scrubbed_trace(client: TestClient) -> None:
+def test_runtime_inspection_endpoint_returns_scrubbed_trace(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     seed = _seed_pending_approval(client)
     headers = _auth_headers(seed["token"])
+    recorded_results: list[str] = []
+
+    def record_inspection_request(*, result: str) -> None:
+        recorded_results.append(result)
+
+    monkeypatch.setattr(ai_router, "record_inspection_request", record_inspection_request)
 
     with get_session_factory()() as db:
         runtime_run = db.get(AgentRun, seed["agent_run_id"])
@@ -370,6 +386,7 @@ def test_runtime_inspection_endpoint_returns_scrubbed_trace(client: TestClient) 
         "nested": {"token": "[redacted]"},
         "raw_reasoning": "[redacted]",
     }
+    assert recorded_results == ["ok"]
 
 
 def test_runtime_inspection_endpoint_enforces_workspace_isolation(client: TestClient) -> None:
@@ -382,6 +399,27 @@ def test_runtime_inspection_endpoint_enforces_workspace_isolation(client: TestCl
     )
 
     assert response.status_code == 404
+
+
+def test_runtime_inspection_endpoint_records_not_found_metric(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    seed = _seed_pending_approval(client)
+    recorded_results: list[str] = []
+
+    def record_inspection_request(*, result: str) -> None:
+        recorded_results.append(result)
+
+    monkeypatch.setattr(ai_router, "record_inspection_request", record_inspection_request)
+
+    response = client.get(
+        _workspace_ai_path("hq", f"/runtime/runs/{seed['agent_run_id']}"),
+        headers=_auth_headers(_dev_login(client, "hq-admin")["token"]),
+    )
+
+    assert response.status_code == 404
+    assert recorded_results == ["not_found"]
 
 
 def test_runtime_inspection_endpoint_enforces_requesting_user(client: TestClient) -> None:

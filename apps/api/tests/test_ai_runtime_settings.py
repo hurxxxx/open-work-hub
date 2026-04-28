@@ -10,6 +10,8 @@ def test_phase6_runtime_feature_flags_default_off() -> None:
 
     assert settings.ai_runtime_graph_enabled is False
     assert settings.ai_runtime_shadow_write_enabled is True
+    assert settings.ai_runtime_trace_payload_max_bytes == 32768
+    assert settings.ai_runtime_retention_days == 90
     assert settings.ai_external_llm_enabled is False
     assert settings.ai_external_planning_enabled is False
     assert settings.ai_external_reasoning_enabled is False
@@ -26,3 +28,12 @@ def test_phase6_runtime_shadow_write_flag_accepts_doowon_api_alias() -> None:
     )
 
     assert settings.ai_runtime_shadow_write_enabled is False
+
+
+def test_phase6_runtime_trace_payload_cap_accepts_doowon_api_alias() -> None:
+    settings = Settings(
+        postgres_dsn="postgresql+psycopg://aidoo_test:aidoo_test@127.0.0.1:5432/aidoo_test",
+        DOOWON_API_AIDOO_AI_RUNTIME_TRACE_PAYLOAD_MAX_BYTES="65536",
+    )
+
+    assert settings.ai_runtime_trace_payload_max_bytes == 65536

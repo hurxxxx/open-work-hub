@@ -18,7 +18,12 @@ from aidoo_api.domains.ai.runtime.models import (
     AgentRun,
     AgentTraceEvent,
 )
-from aidoo_api.domains.ai.runtime.persistence import append_trace_event
+from aidoo_api.domains.ai.runtime.persistence import (
+    append_trace_event,
+    prepare_trace_payload,
+    scrub_completed_runtime_records,
+    scrub_trace_payload,
+)
 from aidoo_api.domains.auth.models import User, Workspace
 from aidoo_api.domains.auth.security import new_id
 from aidoo_api.domains.conversations.models import Conversation
@@ -364,6 +369,47 @@ def test_trace_events_are_uniquely_ordered_per_run(
             db.commit()
 
 
+def test_trace_payload_scrub_redacts_expanded_sensitive_keyset() -> None:
+    payload = scrub_trace_payload(
+        {
+            "prompt": "must-not-leak",
+            "messages": [{"role": "user", "content": "must-not-leak"}],
+            "arguments": {"summary": "must-not-leak"},
+            "args": {"nested": "must-not-leak"},
+            "result": "must-not-leak",
+            "output": "must-not-leak",
+            "content": "must-not-leak",
+            "provider_response": {"text": "must-not-leak"},
+            "safe": "Authorization: Bearer must-not-leak",
+        }
+    )
+
+    assert payload == {
+        "prompt": "[redacted]",
+        "messages": "[redacted]",
+        "arguments": "[redacted]",
+        "args": "[redacted]",
+        "result": "[redacted]",
+        "output": "[redacted]",
+        "content": "[redacted]",
+        "provider_response": "[redacted]",
+        "safe": "[redacted]",
+    }
+
+
+def test_prepare_trace_payload_replaces_oversized_payload_with_summary() -> None:
+    payload, truncated = prepare_trace_payload(
+        {"prompt": "must-not-leak", "safe": "x" * 128},
+        max_bytes=32,
+    )
+
+    assert truncated is True
+    assert payload["truncated"] is True
+    assert payload["reason"] == "payload_too_large"
+    assert payload["original_size_bytes"] > 32
+    assert "must-not-leak" not in str(payload)
+
+
 def test_trace_event_append_serializes_concurrent_writers(
     runtime_session_factory: sessionmaker[Session],
 ) -> None:
@@ -417,3 +463,98 @@ def test_trace_event_append_serializes_concurrent_writers(
         event_seqs = [first.result(timeout=5), second.result(timeout=5)]
 
     assert sorted(event_seqs) == [0, 1]
+
+
+def test_scrub_completed_runtime_records_removes_payloads_from_old_terminal_runs(
+    runtime_session_factory: sessionmaker[Session],
+) -> None:
+    with runtime_session_factory() as db:
+        workspace, user, conversation = _seed_scope(db)
+        run = _runtime_run(
+            workspace=workspace,
+            user=user,
+            conversation=conversation,
+            status="completed",
+        )
+        old_timestamp = utcnow_naive() - timedelta(days=120)
+        run.metadata_json = {"prompt": "must-not-leak"}
+        run.updated_at = old_timestamp
+        db.add(run)
+        db.flush()
+
+        invocation = AgentInvocation(
+            id=new_id(),
+            agent_run_id=run.id,
+            workspace_id=workspace.id,
+            conversation_id=conversation.id,
+            invocation_seq=0,
+            agent_id="domain.rag",
+            status="completed",
+            purpose="collect evidence",
+            usage_json={"tokens": 12},
+            error="Authorization: Bearer must-not-leak",
+        )
+        event = AgentTraceEvent(
+            id=new_id(),
+            agent_run_id=run.id,
+            agent_invocation_id=invocation.id,
+            workspace_id=workspace.id,
+            conversation_id=conversation.id,
+            run_seq=0,
+            invocation_seq=0,
+            event_seq=0,
+            event_type="completed",
+            payload_json={"prompt": "must-not-leak"},
+        )
+        db.add_all([invocation, event])
+        db.commit()
+
+        assert scrub_completed_runtime_records(db, older_than_days=90) == 1
+        db.commit()
+
+        assert db.get(AgentRun, run.id).metadata_json is None
+        stored_invocation = db.get(AgentInvocation, invocation.id)
+        assert stored_invocation.usage_json is None
+        assert stored_invocation.error is None
+        assert db.get(AgentTraceEvent, event.id).payload_json is None
+
+
+def test_scrub_completed_runtime_records_keeps_active_and_recent_runs(
+    runtime_session_factory: sessionmaker[Session],
+) -> None:
+    with runtime_session_factory() as db:
+        workspace, user, conversation = _seed_scope(db)
+        active_run = _runtime_run(
+            workspace=workspace,
+            user=user,
+            conversation=conversation,
+            status="running",
+        )
+        old_timestamp = utcnow_naive() - timedelta(days=120)
+        active_run.metadata_json = {"keep": True}
+        active_run.updated_at = old_timestamp
+        db.add(active_run)
+
+        recent_conversation = Conversation(
+            id=new_id(),
+            workspace_id=workspace.id,
+            user_id=user.id,
+            title="Recent runtime persistence",
+        )
+        db.add(recent_conversation)
+        db.flush()
+        recent_run = _runtime_run(
+            workspace=workspace,
+            user=user,
+            conversation=recent_conversation,
+            status="completed",
+        )
+        recent_run.metadata_json = {"keep": True}
+        db.add(recent_run)
+        db.commit()
+
+        assert scrub_completed_runtime_records(db, older_than_days=90) == 0
+        db.commit()
+
+        assert db.get(AgentRun, active_run.id).metadata_json == {"keep": True}
+        assert db.get(AgentRun, recent_run.id).metadata_json == {"keep": True}

@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import pytest
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
 from pydantic import ValidationError
 
+from aidoo_api.app import runtime_registry_validation_exception_handler
 from aidoo_api.domains.ai.runtime import (
     AgentInvocationContract,
     AgentInvocationSpec,
@@ -17,6 +20,12 @@ from aidoo_api.domains.ai.runtime import (
     RuntimeRegistryValidationError,
     RuntimeTraceSequencer,
     validate_execution_graph,
+)
+from aidoo_api.domains.ai.runtime.metrics import (
+    record_inspection_request,
+    record_shadow_write_failure,
+    record_trace_event,
+    record_trace_payload_truncated,
 )
 
 
@@ -196,3 +205,27 @@ def test_trace_sequence_is_monotonic_within_run() -> None:
 def test_trace_sequence_rejects_negative_values() -> None:
     with pytest.raises(ValueError, match="invocation_seq"):
         RuntimeTraceSequencer().next_event(invocation_seq=-1)
+
+
+def test_runtime_registry_validation_error_maps_to_http_422() -> None:
+    app = FastAPI()
+    app.add_exception_handler(
+        RuntimeRegistryValidationError,
+        runtime_registry_validation_exception_handler,
+    )
+
+    @app.get("/boom")
+    def boom() -> None:
+        raise RuntimeRegistryValidationError("unknown agent id(s): ['x']")
+
+    response = TestClient(app).get("/boom")
+
+    assert response.status_code == 422
+    assert response.json() == {"detail": "unknown agent id(s): ['x']"}
+
+
+def test_runtime_metric_wrappers_are_safe_without_exporter() -> None:
+    record_trace_event(event_type="run_created", result="ok")
+    record_trace_payload_truncated(event_type="large_payload")
+    record_shadow_write_failure(operation="shadow_fixture")
+    record_inspection_request(result="ok")

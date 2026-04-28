@@ -269,6 +269,26 @@ class Settings(BaseSettings):
             "DOOWON_API_AIDOO_AI_RUNTIME_SHADOW_WRITE_ENABLED",
         ),
     )
+    ai_runtime_trace_payload_max_bytes: int = Field(
+        default=32768,
+        ge=1024,
+        le=1048576,
+        validation_alias=AliasChoices(
+            "AIDOO_AI_RUNTIME_TRACE_PAYLOAD_MAX_BYTES",
+            "DOOWON_AIDOO_AI_RUNTIME_TRACE_PAYLOAD_MAX_BYTES",
+            "DOOWON_API_AIDOO_AI_RUNTIME_TRACE_PAYLOAD_MAX_BYTES",
+        ),
+    )
+    ai_runtime_retention_days: int = Field(
+        default=90,
+        ge=1,
+        le=3650,
+        validation_alias=AliasChoices(
+            "AIDOO_AI_RUNTIME_RETENTION_DAYS",
+            "DOOWON_AIDOO_AI_RUNTIME_RETENTION_DAYS",
+            "DOOWON_API_AIDOO_AI_RUNTIME_RETENTION_DAYS",
+        ),
+    )
     ai_external_llm_enabled: bool = Field(
         default=False,
         validation_alias=AliasChoices("AIDOO_AI_EXTERNAL_LLM_ENABLED"),

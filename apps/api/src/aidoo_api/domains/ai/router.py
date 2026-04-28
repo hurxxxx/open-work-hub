@@ -43,6 +43,7 @@ from aidoo_api.domains.ai.events import (
 )
 from aidoo_api.domains.ai.mcp import AiMcpClient
 from aidoo_api.domains.ai.registry import get_ai_capability_registry
+from aidoo_api.domains.ai.runtime.metrics import record_inspection_request
 from aidoo_api.domains.ai.runtime.models import AgentInvocation, AgentRun, AgentTraceEvent
 from aidoo_api.domains.ai.runtime.persistence import scrub_trace_payload
 from aidoo_api.domains.ai.runtime.routing import select_runtime_profile
@@ -807,6 +808,7 @@ def inspect_runtime_run(
         )
     )
     if runtime_run is None:
+        record_inspection_request(result="not_found")
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Runtime run not found.")
 
     invocations = db.scalars(
@@ -828,6 +830,7 @@ def inspect_runtime_run(
         .limit(limit)
     ).all()
 
+    record_inspection_request(result="ok")
     return RuntimeRunInspectionResponse(
         id=runtime_run.id,
         workspace_id=runtime_run.workspace_id,

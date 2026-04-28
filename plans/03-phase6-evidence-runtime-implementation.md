@@ -15,7 +15,7 @@ Phase 6 전체 목표는 기존 single-loop agent를 deterministic fast path, ma
 - 기존 interactive chat 실행은 `domains/ai/agent.py` single-loop path가 담당한다.
 - 기존 approval checkpoint는 `domains/ai/approvals.py::AgentRunSnapshot`과 `AiToolApproval`이 담당한다.
 - 기존 AI route, SSE envelope, tool registry, MCP bridge, RAG tools는 유지한다.
-- 새 runtime 패키지와 DB table은 아직 없다.
+- 새 runtime 패키지와 additive DB table은 Phase 0-A에서 추가되었고, 현재는 shadow-write/inspection 용도로만 사용한다.
 
 이 플랜은 기존 single-loop behavior를 canonical fallback으로 유지한다. `AIDOO_AI_RUNTIME_GRAPH_ENABLED=false`가 기본값이며, Phase 0-A에서는 graph manager를 실제 실행하지 않는다.
 
@@ -23,14 +23,13 @@ Phase 6 전체 목표는 기존 single-loop agent를 deterministic fast path, ma
 
 이 섹션은 세션 handoff용이다. 구현 세션이 끝날 때마다 짧게 갱신한다.
 
-- Current PR/stage: PR 7 review hardening complete. Phase 0-A runtime kernel now includes shadow-write isolation, trace sequence locking, inspection user isolation, frozen resume tool scope filtering, and routing fixture verification.
-- Last completed: Closed review findings for runtime shadow-write best-effort behavior, per-run trace event race, runtime inspection cross-user leakage, resume tool surface widening, and report-vs-write routing fixture drift.
+- Current PR/stage: Phase 0-B runtime observability and data hygiene hardening implemented. Graph execution remains disabled by default.
+- Last completed: Added expanded trace redaction, trace payload size cap, terminal runtime retention helper, runtime metrics wrapper, shadow-write/inspection metric hooks, and HTTP 422 mapping for `RuntimeRegistryValidationError`.
 - In progress: None.
-- Next exact task: Decide whether to implement remaining 0-B follow-ups before graph gate skeleton: trace payload allowlist/retention, OTel counters, migration index rollout note, and registry validation exception mapping.
-- Files touched in PR 7: `apps/api/src/aidoo_api/core/settings.py`, `apps/api/src/aidoo_api/domains/ai/agent.py`, `apps/api/src/aidoo_api/domains/ai/approvals.py`, `apps/api/src/aidoo_api/domains/ai/router.py`, `apps/api/src/aidoo_api/domains/ai/runtime/persistence.py`, `apps/api/src/aidoo_api/domains/ai/runtime/routing.py`, `apps/api/tests/test_ai_approvals.py`, `apps/api/tests/test_ai_runtime_persistence.py`, `apps/api/tests/test_ai_runtime_routing.py`, `apps/api/tests/test_ai_runtime_settings.py`, `plans/03-phase6-evidence-runtime-implementation.md`.
-- Tests/checks run: `cd apps/api && uv run pytest tests/test_ai_approvals.py tests/test_ai_runtime_persistence.py tests/test_ai_runtime_settings.py tests/test_ai_runtime_routing.py tests/test_ai_runtime_eval_fixtures.py`; `cd apps/api && uv run pytest tests/test_ai_stream.py tests/test_ai_events.py tests/test_ai_conversations.py`; targeted `uv run ruff check` for touched Python files; `git diff --check`.
-- Known blockers: graph manager implementation still needs schema generation path and fallback taxonomy; keep single-loop fallback canonical. No known Phase 0-A code blocker remains after PR 7 hardening.
-- Do not touch: unrelated local `compose.prod-like.yml` modification unless explicitly requested.
+- Next exact task: Start graph gate skeleton only after 0-B regression checks pass and this change is committed.
+- Files touched in Phase 0-B: `apps/api/src/aidoo_api/app.py`, `apps/api/src/aidoo_api/core/settings.py`, `apps/api/src/aidoo_api/domains/ai/approvals.py`, `apps/api/src/aidoo_api/domains/ai/router.py`, `apps/api/src/aidoo_api/domains/ai/runtime/`, `apps/api/tests/test_ai_approvals.py`, `apps/api/tests/test_ai_runtime_contracts.py`, `apps/api/tests/test_ai_runtime_persistence.py`, `apps/api/tests/test_ai_runtime_settings.py`, `plans/03-phase6-evidence-runtime-implementation.md`.
+- Tests/checks run: `cd apps/api && uv run pytest tests/test_ai_approvals.py tests/test_ai_runtime_persistence.py tests/test_ai_runtime_settings.py tests/test_ai_runtime_contracts.py tests/test_ai_stream.py tests/test_ai_events.py tests/test_ai_conversations.py`; targeted `uv run ruff check` for touched Python files; `git diff --check`.
+- Known blockers: graph manager implementation still needs schema generation path and fallback taxonomy; keep single-loop fallback canonical. No known Phase 0-B code blocker remains.
 
 ## Architecture / Principles
 
@@ -298,6 +297,18 @@ cd apps/api && pytest tests/test_ai_runtime_contracts.py tests/test_ai_runtime_p
 - Production path가 untrusted `ExecutionGraph` input을 받기 전에 `RuntimeRegistryValidationError`를 HTTP 422로 매핑한다.
 - Phase 0-A에서 기존 table에 추가하는 `ai_tool_approvals` partial index는 의도된 tooling index 1건으로 기록한다. 이후 hot-table index 변경은 별도 concurrent migration으로 분리한다.
 - 새 runtime status를 추가할 때 migration SQL, ORM partial index, runtime status constant의 live-status literal drift를 함께 점검한다.
+
+## E2E Smoke Log
+
+### 2026-04-28 Phase 0-A Hardening Smoke
+
+- Reused local web/API servers on `127.0.0.1:4200` and `127.0.0.1:8000`.
+- Started the local MLX server with `bash scripts/mlx-serve.sh` on `127.0.0.1:8080`; the reusable local session is `tmux attach -t doowon-mlx`.
+- `agent-browser --session doowon-e2e` login through the form as `delivery-hub-admin@aidoo.local` succeeded; seed quick-login card click did not trigger login in automation.
+- `/w/delivery-hub/home` and `/w/delivery-hub/ai` rendered without browser page errors or console errors.
+- Authenticated AI health returned `ready=true` for the local `mlx-lm` pool after the MLX server was started.
+- AI composer enabled send after text entry, created a conversation, streamed a local model response, and saved user plus assistant turns.
+- The rendered UI contained the assistant response and local routing metadata: `local` pool, `local_only`, `policy_local_only`.
 
 ## Rollback Plan
 
