@@ -1,5 +1,12 @@
 from __future__ import annotations
 
+from aidoo_api.domains.ai.runtime.agent_definitions import (
+    DEFAULT_AGENT_DEFINITIONS,
+    AgentDefinition,
+    AgentDefinitionResolver,
+    ResolvedAgentDefinitions,
+    resolve_agent_definitions,
+)
 from aidoo_api.domains.ai.runtime.contracts import (
     AgentInvocationContract,
     AgentInvocationSpec,
@@ -34,6 +41,9 @@ from aidoo_api.domains.ai.runtime.routing import RuntimeRoutingDecision, select_
 from aidoo_api.domains.ai.runtime.trace import RuntimeTraceSequencer
 
 __all__ = [
+    "DEFAULT_AGENT_DEFINITIONS",
+    "AgentDefinition",
+    "AgentDefinitionResolver",
     "AgentInvocationContract",
     "AgentInvocationSpec",
     "AgentRunContract",
@@ -50,10 +60,12 @@ __all__ = [
     "RuntimeRegistryValidationError",
     "RuntimeRoutingDecision",
     "RuntimeTraceSequencer",
+    "ResolvedAgentDefinitions",
     "append_trace_event",
     "build_execution_graph_json_schema",
     "build_execution_graph_response_schema",
     "prepare_trace_payload",
+    "resolve_agent_definitions",
     "scrub_completed_runtime_records",
     "scrub_trace_payload",
     "select_runtime_profile",

@@ -7,6 +7,8 @@ from pydantic import ValidationError
 
 from aidoo_api.app import runtime_registry_validation_exception_handler
 from aidoo_api.domains.ai.runtime import (
+    DEFAULT_AGENT_DEFINITIONS,
+    AgentDefinitionResolver,
     AgentInvocationContract,
     AgentInvocationSpec,
     AgentRunContract,
@@ -20,6 +22,7 @@ from aidoo_api.domains.ai.runtime import (
     RuntimeRegistryValidationError,
     RuntimeTraceSequencer,
     build_execution_graph_response_schema,
+    resolve_agent_definitions,
     validate_execution_graph,
     validate_manager_graph_candidate,
 )
@@ -242,6 +245,128 @@ def test_manager_graph_validator_enforces_write_agent_risk_floor() -> None:
     assert result.graph is None
     assert result.fallback_reason == "risk_floor_violation"
     assert "writer.template" in (result.error or "")
+
+
+def test_agent_definition_resolver_exposes_v1_agent_set() -> None:
+    agent_ids = {definition.agent_id for definition in DEFAULT_AGENT_DEFINITIONS}
+
+    assert {
+        "manager.orchestrator",
+        "domain.pms",
+        "domain.meeting",
+        "domain.docs",
+        "domain.planner",
+        "domain.rag",
+        "search.planner",
+        "search.executor",
+        "verifier.grounding",
+        "writer.template",
+        "approval.proposal_preview",
+    } <= agent_ids
+
+
+def test_agent_definition_resolver_builds_runtime_registry_from_scope() -> None:
+    resolved = resolve_agent_definitions(
+        enabled_app_ids=["ai", "meeting", "docs", "pms"],
+        allowed_app_ids=["meeting", "docs"],
+    )
+    registry = resolved.runtime_registry
+
+    assert "manager.orchestrator" in registry.agent_ids
+    assert "writer.template" in registry.agent_ids
+    assert "domain.meeting" in registry.agent_ids
+    assert "domain.docs" in registry.agent_ids
+    assert "domain.pms" not in registry.agent_ids
+    assert registry.domains >= {"meeting", "docs", "rag"}
+    assert "pms" not in registry.domains
+    assert registry.output_kinds >= {"answer", "artifact", "approval_preview"}
+    assert resolved.write_agent_ids == frozenset({"approval.proposal_preview"})
+
+
+def test_agent_definition_resolver_never_widens_beyond_workspace_entitlements() -> None:
+    resolved = AgentDefinitionResolver().resolve(
+        enabled_app_ids=["ai", "meeting"],
+        allowed_app_ids=["meeting", "pms"],
+    )
+
+    assert "domain.meeting" in resolved.agent_ids
+    assert "domain.pms" not in resolved.agent_ids
+    assert "pms" not in resolved.runtime_registry.domains
+
+
+def test_agent_definition_resolver_empty_scope_hides_domain_agents() -> None:
+    resolved = resolve_agent_definitions(
+        enabled_app_ids=["ai", "meeting", "docs"],
+        allowed_app_ids=[],
+    )
+
+    assert "manager.orchestrator" in resolved.agent_ids
+    assert "domain.meeting" not in resolved.agent_ids
+    assert "domain.docs" not in resolved.agent_ids
+    assert "search.executor" not in resolved.agent_ids
+    assert resolved.runtime_registry.domains == frozenset()
+
+
+def test_agent_definition_resolver_requires_ai_app_entitlement() -> None:
+    resolved = AgentDefinitionResolver().resolve(
+        enabled_app_ids=["meeting", "docs"],
+    )
+
+    assert resolved.definitions == ()
+    assert resolved.agent_ids == frozenset()
+    assert resolved.runtime_registry.domains == frozenset()
+
+
+def test_manager_validator_uses_resolved_registry_to_block_hidden_agent() -> None:
+    resolved = resolve_agent_definitions(
+        enabled_app_ids=["ai", "meeting"],
+    )
+
+    result = validate_manager_graph_candidate(
+        {
+            "intent": "report",
+            "domains": ["meeting"],
+            "risk": "medium",
+            "output_kind": "artifact",
+            "invocations": [
+                {
+                    "agent_id": "domain.pms",
+                    "purpose": "collect hidden PMS evidence",
+                }
+            ],
+        },
+        registry=resolved.runtime_registry,
+        write_agent_ids=resolved.write_agent_ids,
+    )
+
+    assert result.accepted is False
+    assert result.fallback_reason == "runtime_registry_validation_failed"
+    assert result.error == "unknown agent id(s): ['domain.pms']"
+
+
+def test_manager_validator_uses_resolved_write_agent_risk_floor() -> None:
+    resolved = resolve_agent_definitions(enabled_app_ids=["ai", "pms"])
+
+    result = validate_manager_graph_candidate(
+        {
+            "intent": "write",
+            "domains": [],
+            "risk": "medium",
+            "output_kind": "approval_preview",
+            "invocations": [
+                {
+                    "agent_id": "approval.proposal_preview",
+                    "purpose": "preview PMS write before approval",
+                }
+            ],
+        },
+        registry=resolved.runtime_registry,
+        write_agent_ids=resolved.write_agent_ids,
+    )
+
+    assert result.accepted is False
+    assert result.fallback_reason == "risk_floor_violation"
+    assert "approval.proposal_preview" in (result.error or "")
 
 
 def test_evidence_packet_minimal_contract() -> None:
