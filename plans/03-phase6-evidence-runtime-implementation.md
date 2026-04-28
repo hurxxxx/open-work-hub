@@ -23,13 +23,13 @@ Phase 6 전체 목표는 기존 single-loop agent를 deterministic fast path, ma
 
 이 섹션은 세션 handoff용이다. 구현 세션이 끝날 때마다 짧게 갱신한다.
 
-- Current PR/stage: PR 6 complete. Phase 0-A minimal kernel plus deterministic runtime profile selector is implemented.
-- Last completed: Added runtime profile routing helper and propagated selected profile into approval runtime shadow state.
+- Current PR/stage: PR 7 review hardening complete. Phase 0-A runtime kernel now includes shadow-write isolation, trace sequence locking, inspection user isolation, frozen resume tool scope filtering, and routing fixture verification.
+- Last completed: Closed review findings for runtime shadow-write best-effort behavior, per-run trace event race, runtime inspection cross-user leakage, resume tool surface widening, and report-vs-write routing fixture drift.
 - In progress: None.
-- Next exact task: Plan/implement the manager graph gate skeleton behind `AIDOO_AI_RUNTIME_GRAPH_ENABLED=false`; no graph execution should be enabled by default.
-- Files touched in PR 6: `apps/api/src/aidoo_api/domains/ai/runtime/routing.py`, `apps/api/src/aidoo_api/domains/ai/runtime/contracts.py`, `apps/api/src/aidoo_api/domains/ai/runtime/__init__.py`, `apps/api/src/aidoo_api/domains/ai/agent.py`, `apps/api/src/aidoo_api/domains/ai/approvals.py`, `apps/api/src/aidoo_api/domains/ai/router.py`, `apps/api/tests/test_ai_runtime_routing.py`, `apps/api/tests/test_ai_runtime_persistence.py`, `plans/03-phase6-evidence-runtime-implementation.md`.
-- Tests/checks run: `cd apps/api && uv run --python 3.12 pytest tests/test_ai_runtime_routing.py tests/test_ai_runtime_persistence.py tests/test_ai_approvals.py`; `cd apps/api && uv run --python 3.12 pytest tests/test_ai_agent.py tests/test_ai_stream.py tests/test_ai_events.py tests/test_ai_conversations.py tests/test_ai_runtime_contracts.py tests/test_ai_runtime_settings.py tests/test_alembic_migrations.py`; targeted ruff check for touched Python files.
-- Known blockers: graph manager implementation still needs schema generation path and fallback taxonomy; keep single-loop fallback canonical.
+- Next exact task: Decide whether to implement remaining 0-B follow-ups before graph gate skeleton: trace payload allowlist/retention, OTel counters, migration index rollout note, and registry validation exception mapping.
+- Files touched in PR 7: `apps/api/src/aidoo_api/core/settings.py`, `apps/api/src/aidoo_api/domains/ai/agent.py`, `apps/api/src/aidoo_api/domains/ai/approvals.py`, `apps/api/src/aidoo_api/domains/ai/router.py`, `apps/api/src/aidoo_api/domains/ai/runtime/persistence.py`, `apps/api/src/aidoo_api/domains/ai/runtime/routing.py`, `apps/api/tests/test_ai_approvals.py`, `apps/api/tests/test_ai_runtime_persistence.py`, `apps/api/tests/test_ai_runtime_routing.py`, `apps/api/tests/test_ai_runtime_settings.py`, `plans/03-phase6-evidence-runtime-implementation.md`.
+- Tests/checks run: `cd apps/api && uv run pytest tests/test_ai_approvals.py tests/test_ai_runtime_persistence.py tests/test_ai_runtime_settings.py tests/test_ai_runtime_routing.py tests/test_ai_runtime_eval_fixtures.py`; `cd apps/api && uv run pytest tests/test_ai_stream.py tests/test_ai_events.py tests/test_ai_conversations.py`; targeted `uv run ruff check` for touched Python files; `git diff --check`.
+- Known blockers: graph manager implementation still needs schema generation path and fallback taxonomy; keep single-loop fallback canonical. No known Phase 0-A code blocker remains after PR 7 hardening.
 - Do not touch: unrelated local `compose.prod-like.yml` modification unless explicitly requested.
 
 ## Architecture / Principles
@@ -63,7 +63,13 @@ Phase A의 핵심 성공 기준은 graph execution이 아니라 상태 불변식
 - resume에서 tool surface가 넓어지면 안 된다.
 - trace event ordering은 UUID가 아니라 per-run monotonic sequence여야 한다.
 
-### 4. No external provider execution
+### 4. Runtime profile routing is shadow-only in Phase 0-A
+
+`select_runtime_profile()`는 Phase 0-A에서 실행 분기를 바꾸지 않고 model metadata와 runtime shadow state에 기록하는 shadow classifier다. `AIDOO_AI_RUNTIME_GRAPH_ENABLED=false`이면 graph behavior는 계속 비활성이다.
+
+초기 rule priority는 `long_doc` signal을 먼저 보고, 그 다음 report/multi-app synthesis signal을 본 뒤, 마지막으로 write/external action signal을 본다. 따라서 "보고서/리포트/비교" 의도와 "초안" 같은 draft 표현이 함께 있는 경우에는 `grounded_report`로 분류하고, 명시적 write/create/update action만 있는 경우 `high_risk_action`으로 분류한다.
+
+### 5. No external provider execution
 
 Phase 0-A에서는 external provider를 호출하지 않는다. Feature flag와 config skeleton만 추가한다.
 
@@ -183,7 +189,9 @@ Phase 0-A에서는 external provider를 호출하지 않는다. Feature flag와 
   - payload hash 또는 approval payload reference.
 - `/chat/resume`에서 `allowed_app_ids`가 생략되면 원 halt scope를 그대로 사용한다.
 - `/chat/resume`에서 `allowed_app_ids`가 전달되면 저장된 scope와 같거나 더 좁은 경우만 허용한다.
+- resume execution은 저장된 `resolved_tool_names`와 현재 entitlement/registry 결과의 교집합만 agent loop에 전달한다.
 - wider scope 요청은 400 또는 approval-specific error로 차단한다.
+- narrower scope가 승인된 tool을 제외하면 resume을 거부한다.
 - re-halt는 같은 `AgentRun` 아래 새 invocation/checkpoint로 표현할 수 있게 trace/persistence helper를 둔다.
 
 완료 조건:
@@ -192,6 +200,7 @@ Phase 0-A에서는 external provider를 호출하지 않는다. Feature flag와 
 - 기존 approval tests가 통과한다.
 - omission, equal scope, narrower scope, wider scope 네 케이스가 테스트된다.
 - resume 시 tool registry가 전체 entitlement로 넓어지지 않는다.
+- runtime shadow-write 실패는 user-facing approval flow를 abort하지 않는다.
 
 ### PR 5 — Trace And Inspection Endpoint
 
@@ -278,12 +287,22 @@ cd apps/api && pytest tests/test_ai_runtime_contracts.py tests/test_ai_runtime_p
 | `ExecutionGraph` value | closed enum이 아니라 registry-validated string |
 | trace ordering | per-run monotonic sequence |
 | resume scope | halt 시 저장한 scope와 같거나 더 좁은 경우만 허용 |
+| resume tool surface | 저장된 `resolved_tool_names`와 현재 entitlement/registry 결과의 교집합만 허용 |
 | review queue | backend 준비 전에는 구현하지 않음 |
+
+## Known Follow-Ups Before 0-B
+
+- Trace/inspection redaction은 richer emitter payload를 추가하기 전에 allowlist 또는 더 넓은 denylist로 확장한다. 특히 prompt, messages, arguments, result, output, provider content 계열 payload를 추가할 때 silent leak을 막아야 한다.
+- Long-running graph trace를 켜기 전에 trace payload size cap과 runtime table retention/cleanup policy를 정의한다.
+- Operator-facing rollout 전 shadow-write failure, trace emit, inspection access에 대한 OTel span 또는 metric counter를 추가한다.
+- Production path가 untrusted `ExecutionGraph` input을 받기 전에 `RuntimeRegistryValidationError`를 HTTP 422로 매핑한다.
+- Phase 0-A에서 기존 table에 추가하는 `ai_tool_approvals` partial index는 의도된 tooling index 1건으로 기록한다. 이후 hot-table index 변경은 별도 concurrent migration으로 분리한다.
+- 새 runtime status를 추가할 때 migration SQL, ORM partial index, runtime status constant의 live-status literal drift를 함께 점검한다.
 
 ## Rollback Plan
 
 - `AIDOO_AI_RUNTIME_GRAPH_ENABLED=false`가 기본값이므로 graph behavior는 활성화되지 않는다.
-- runtime shadow-write에 문제가 있으면 shadow-write helper를 feature flag 뒤로 비활성화하고 기존 `AgentRunSnapshot` read/write path를 유지한다.
+- runtime shadow-write에 문제가 있으면 `AIDOO_AI_RUNTIME_SHADOW_WRITE_ENABLED=false`로 shadow-write helper를 비활성화하고 기존 `AgentRunSnapshot` read/write path를 유지한다.
 - inspection endpoint에 문제가 있으면 route registration만 끄고 persistence는 유지한다.
 - migration rollback은 새 runtime table을 제거하되 기존 `AgentRunSnapshot`과 `AiToolApproval` table은 변경하지 않는 방향으로 작성한다.
 - resume scope guard에서 false reject가 발생하면 기존 approval tests와 audit trace로 원인을 확인하고, widen 허용 없이 scope comparison 로직만 수정한다.

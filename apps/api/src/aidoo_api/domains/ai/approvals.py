@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import json
+import logging
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import Any, Literal
+from typing import Any, Callable, Literal
 
 from fastapi import HTTPException, status
 from sqlalchemy import (
@@ -21,6 +22,7 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, Session, mapped_column
 
+from aidoo_api.core.settings import get_settings
 from aidoo_api.core.db import Base
 from aidoo_api.domains.ai.audit import log_llm_tool_approval_resolved
 from aidoo_api.domains.ai.runtime.models import AgentInvocation, AgentRun
@@ -54,6 +56,8 @@ TERMINAL_APPROVAL_STATUSES = {
 LIVE_SNAPSHOT_STATUSES = {"awaiting_approval", "resumed"}
 LIVE_PENDING_APPROVAL_STATUSES = {"pending", "approved", "rejected"}
 SNAPSHOT_SCOPE_META_KEY = "scope"
+
+logger = logging.getLogger(__name__)
 
 
 class AgentRunSnapshot(Base):
@@ -445,14 +449,14 @@ def persist_snapshot_on_halt(
     )
     db.add(snapshot)
     db.flush()
-    _persist_runtime_shadow_on_halt(db, snapshot=snapshot)
+    _safe_runtime_shadow_write(db, snapshot=snapshot, operation=_persist_runtime_shadow_on_halt)
     return snapshot
 
 
 def mark_snapshot_completed(db: Session, snapshot: AgentRunSnapshot) -> None:
     snapshot.status = "completed"
     db.add(snapshot)
-    _mark_runtime_shadow_completed(db, snapshot=snapshot)
+    _safe_runtime_shadow_write(db, snapshot=snapshot, operation=_mark_runtime_shadow_completed)
 
 
 def mark_snapshot_resumed(db: Session, snapshot: AgentRunSnapshot) -> None:
@@ -463,7 +467,17 @@ def mark_snapshot_resumed(db: Session, snapshot: AgentRunSnapshot) -> None:
         )
     snapshot.status = "resumed"
     db.add(snapshot)
-    _mark_runtime_shadow_resumed(db, snapshot=snapshot)
+    _safe_runtime_shadow_write(db, snapshot=snapshot, operation=_mark_runtime_shadow_resumed)
+
+
+def rewind_snapshot_to_awaiting_approval(db: Session, snapshot: AgentRunSnapshot) -> None:
+    snapshot.status = "awaiting_approval"
+    db.add(snapshot)
+    _safe_runtime_shadow_write(
+        db,
+        snapshot=snapshot,
+        operation=_mark_runtime_shadow_awaiting_approval,
+    )
 
 
 def abandon_stale_snapshot(
@@ -472,9 +486,17 @@ def abandon_stale_snapshot(
     *,
     cause: str,
 ) -> None:
-    del cause
     snapshot.status = "abandoned"
     db.add(snapshot)
+    _safe_runtime_shadow_write(
+        db,
+        snapshot=snapshot,
+        operation=lambda session, *, snapshot: _mark_runtime_shadow_abandoned(
+            session,
+            snapshot=snapshot,
+            cause=cause,
+        ),
+    )
 
 
 def _expire_pending_approval(
@@ -656,6 +678,36 @@ def resolve_resume_allowed_app_ids(
     return requested_scope
 
 
+def ensure_resume_approved_tool_scope(
+    approval: AiToolApproval,
+    *,
+    allowed_app_ids: list[str] | None,
+    approved_tool_app_id: str | None,
+) -> None:
+    if approval.status != "approved" or allowed_app_ids is None or approved_tool_app_id is None:
+        return
+    if approved_tool_app_id in set(allowed_app_ids):
+        return
+    raise HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail="Resume scope cannot exclude the approved tool.",
+    )
+
+
+def filter_resume_tool_specs(
+    snapshot: AgentRunSnapshot,
+    tool_specs: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    frozen_tool_names = _frozen_resume_tool_names(snapshot)
+    if not frozen_tool_names:
+        return tool_specs
+    return [
+        spec
+        for spec in tool_specs
+        if _tool_name_from_spec(spec) in frozen_tool_names
+    ]
+
+
 def get_resume_context(
     db: Session,
     *,
@@ -729,6 +781,27 @@ def _normalize_scope_list(value: Any) -> list[str]:
     return normalized
 
 
+def _tool_names_from_specs(tool_specs: list[dict[str, Any]]) -> set[str]:
+    names: set[str] = set()
+    for spec in tool_specs:
+        name = _tool_name_from_spec(spec)
+        if name is not None:
+            names.add(name)
+    return names
+
+
+def _frozen_resume_tool_names(snapshot: AgentRunSnapshot) -> set[str]:
+    return set(_normalize_scope_list(_snapshot_scope_meta(snapshot).get("resolved_tool_names")))
+
+
+def _tool_name_from_spec(spec: dict[str, Any]) -> str | None:
+    function_spec = spec.get("function")
+    if not isinstance(function_spec, dict):
+        return None
+    name = function_spec.get("name")
+    return name if isinstance(name, str) else None
+
+
 def _next_runtime_invocation_seq(db: Session, agent_run_id: str) -> int:
     current = db.scalar(
         select(func.max(AgentInvocation.invocation_seq)).where(
@@ -736,6 +809,29 @@ def _next_runtime_invocation_seq(db: Session, agent_run_id: str) -> int:
         )
     )
     return int(current if current is not None else -1) + 1
+
+
+def _safe_runtime_shadow_write(
+    db: Session,
+    *,
+    snapshot: AgentRunSnapshot,
+    operation: Callable[..., None],
+) -> None:
+    if not get_settings().ai_runtime_shadow_write_enabled:
+        return
+    try:
+        with db.begin_nested():
+            operation(db, snapshot=snapshot)
+    except Exception:
+        logger.exception(
+            "ai_runtime.shadow_write_failed",
+            extra={
+                "agent_run_id": snapshot.id,
+                "conversation_id": snapshot.conversation_id,
+                "workspace_id": snapshot.workspace_id,
+                "operation": getattr(operation, "__name__", "anonymous"),
+            },
+        )
 
 
 def _persist_runtime_shadow_on_halt(
@@ -842,6 +938,77 @@ def _mark_runtime_shadow_completed(
         conversation_id=snapshot.conversation_id,
         event_type="run_completed",
         payload={"legacy_snapshot_id": snapshot.id},
+    )
+
+
+def _mark_runtime_shadow_abandoned(
+    db: Session,
+    *,
+    snapshot: AgentRunSnapshot,
+    cause: str,
+) -> None:
+    now = utcnow_naive()
+    runtime_run = db.get(AgentRun, snapshot.id)
+    if runtime_run is None:
+        return
+    runtime_run.status = "abandoned"
+    runtime_run.updated_at = now
+    db.add(runtime_run)
+    db.execute(
+        update(AgentInvocation)
+        .where(
+            AgentInvocation.agent_run_id == snapshot.id,
+            AgentInvocation.status.in_(("pending", "running", "awaiting_approval", "resumed")),
+        )
+        .values(status="abandoned", updated_at=now)
+    )
+    append_trace_event(
+        db,
+        agent_run_id=snapshot.id,
+        workspace_id=snapshot.workspace_id,
+        conversation_id=snapshot.conversation_id,
+        event_type="run_abandoned",
+        payload={"legacy_snapshot_id": snapshot.id, "cause": cause},
+    )
+
+
+def _mark_runtime_shadow_awaiting_approval(
+    db: Session,
+    *,
+    snapshot: AgentRunSnapshot,
+) -> None:
+    now = utcnow_naive()
+    runtime_run = db.get(AgentRun, snapshot.id)
+    if runtime_run is None:
+        return
+    runtime_run.status = "awaiting_approval"
+    runtime_run.updated_at = now
+    db.add(runtime_run)
+    invocation = db.scalar(
+        select(AgentInvocation)
+        .where(
+            AgentInvocation.agent_run_id == snapshot.id,
+            AgentInvocation.status == "resumed",
+        )
+        .order_by(AgentInvocation.invocation_seq.desc())
+        .limit(1)
+    )
+    if invocation is not None:
+        invocation.status = "awaiting_approval"
+        invocation.updated_at = now
+        db.add(invocation)
+    append_trace_event(
+        db,
+        agent_run_id=snapshot.id,
+        agent_invocation_id=invocation.id if invocation is not None else None,
+        workspace_id=snapshot.workspace_id,
+        conversation_id=snapshot.conversation_id,
+        invocation_seq=invocation.invocation_seq if invocation is not None else 0,
+        event_type="approval_resume_rewound",
+        payload={
+            "blocked_call_id": snapshot.blocked_call_id,
+            "legacy_snapshot_id": snapshot.id,
+        },
     )
 
 

@@ -10,6 +10,7 @@ from fastapi.testclient import TestClient
 from pydantic import BaseModel
 import pytest
 from sqlalchemy import select
+from sqlalchemy.exc import SQLAlchemyError
 
 from aidoo_api.core.db import get_session_factory
 from aidoo_api.core.principal import user_principal
@@ -72,6 +73,7 @@ def _parse_sse(body: str) -> list[dict[str, Any]]:
 
 
 _APPROVAL_TOOL_NAME = "test.approval_write"
+_SECOND_APPROVAL_TOOL_NAME = "test.second_write"
 
 
 class _ApprovalToolArgs(BaseModel):
@@ -114,6 +116,7 @@ def _approval_preview_builder(
 def _build_test_approval_registry(
     *,
     handler: Any = _approval_tool_handler,
+    include_second_tool: bool = False,
 ) -> AiCapabilityRegistry:
     registry = AiCapabilityRegistry()
     registry.register_discoverability_predicate(
@@ -138,6 +141,19 @@ def _build_test_approval_registry(
         # a real workspace app so the registry validation passes.
         workspace_app_id="ai",
     )
+    if include_second_tool:
+        registry.register_tool(
+            name=_SECOND_APPROVAL_TOOL_NAME,
+            description="Second approval-gated test write tool.",
+            owner_domain="test",
+            approval_required=True,
+            handler=handler,
+            args_model=_ApprovalToolArgs,
+            mode="write",
+            discoverability_predicate_id="test.enabled",
+            preview_builder_id="test.preview",
+            workspace_app_id="ai",
+        )
     registry.compile_capabilities()
     return registry
 
@@ -157,6 +173,7 @@ def _seed_pending_approval(
     tool_name: str = "pms.create_issue",
     arguments_json: str = '{"title":"Approval issue"}',
     resource_preview: str = "Create PMS issue Approval issue",
+    model_meta: dict[str, Any] | None = None,
 ) -> dict[str, str]:
     with get_session_factory()() as db:
         ensure_dev_login_seed_data(db)
@@ -182,7 +199,7 @@ def _seed_pending_approval(
             requested_by_user=user,
             messages_json=[{"role": "user", "content": "create an issue"}],
             blocked_call_id="call-1",
-            model_meta={
+            model_meta=model_meta or {
                 "model": "qwen/qwen3.6-35b-a3b",
                 "policy": "local_only",
                 "chosen_pool": "local",
@@ -233,6 +250,31 @@ def test_pending_approval_shadow_writes_runtime_run(client: TestClient) -> None:
         assert invocation.agent_id == "approval.proposal_preview"
 
 
+def test_runtime_shadow_write_failure_does_not_abort_pending_approval(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def fail_shadow_write(*args: Any, **kwargs: Any) -> None:
+        del args, kwargs
+        raise SQLAlchemyError("shadow write failed")
+
+    monkeypatch.setattr(ai_approvals, "_persist_runtime_shadow_on_halt", fail_shadow_write)
+
+    seed = _seed_pending_approval(client)
+
+    with get_session_factory()() as db:
+        snapshot = ai_approvals.load_snapshot(db, agent_run_id=seed["agent_run_id"])
+        approval = db.scalar(
+            select(ai_approvals.AiToolApproval).where(
+                ai_approvals.AiToolApproval.id == seed["approval_id"]
+            )
+        )
+        assert snapshot.status == "awaiting_approval"
+        assert approval is not None
+        assert approval.status == "pending"
+        assert db.get(AgentRun, seed["agent_run_id"]) is None
+
+
 def test_snapshot_scope_meta_freezes_allowed_apps_and_tool_names() -> None:
     scope_meta = ai_agent._build_snapshot_scope_meta(
         allowed_app_ids=["pms"],
@@ -250,6 +292,30 @@ def test_snapshot_scope_meta_freezes_allowed_apps_and_tool_names() -> None:
     }
 
 
+def test_filter_resume_tool_specs_uses_frozen_tool_names() -> None:
+    snapshot = ai_approvals.AgentRunSnapshot(
+        id="snapshot-1",
+        conversation_id="conversation-1",
+        workspace_id="workspace-1",
+        requested_by_user_id="user-1",
+        blocked_call_id="call-1",
+        model_meta={
+            "scope": {
+                "resolved_tool_names": [_APPROVAL_TOOL_NAME],
+            }
+        },
+    )
+    filtered = ai_approvals.filter_resume_tool_specs(
+        snapshot,
+        [
+            {"type": "function", "function": {"name": _APPROVAL_TOOL_NAME}},
+            {"type": "function", "function": {"name": _SECOND_APPROVAL_TOOL_NAME}},
+        ],
+    )
+
+    assert filtered == [{"type": "function", "function": {"name": _APPROVAL_TOOL_NAME}}]
+
+
 def test_runtime_inspection_endpoint_returns_scrubbed_trace(client: TestClient) -> None:
     seed = _seed_pending_approval(client)
     headers = _auth_headers(seed["token"])
@@ -257,6 +323,14 @@ def test_runtime_inspection_endpoint_returns_scrubbed_trace(client: TestClient) 
     with get_session_factory()() as db:
         runtime_run = db.get(AgentRun, seed["agent_run_id"])
         assert runtime_run is not None
+        invocation = db.scalar(
+            select(AgentInvocation).where(
+                AgentInvocation.agent_run_id == seed["agent_run_id"]
+            )
+        )
+        assert invocation is not None
+        invocation.error = "Authorization: Bearer must-not-leak"
+        db.add(invocation)
         append_trace_event(
             db,
             agent_run_id=runtime_run.id,
@@ -282,6 +356,7 @@ def test_runtime_inspection_endpoint_returns_scrubbed_trace(client: TestClient) 
     assert payload["id"] == seed["agent_run_id"]
     assert payload["status"] == "awaiting_approval"
     assert payload["invocations"][0]["agent_id"] == "approval.proposal_preview"
+    assert payload["invocations"][0]["error"] == "[redacted]"
     event_types = [event["event_type"] for event in payload["trace_events"]]
     assert event_types[:3] == ["run_created", "invocation_started", "approval_required"]
     unsafe_event = next(
@@ -307,6 +382,49 @@ def test_runtime_inspection_endpoint_enforces_workspace_isolation(client: TestCl
     )
 
     assert response.status_code == 404
+
+
+def test_runtime_inspection_endpoint_enforces_requesting_user(client: TestClient) -> None:
+    seed = _seed_pending_approval(client)
+    other_session = _dev_login(client, "delivery-hub-member")
+
+    response = client.get(
+        _workspace_ai_path(seed["workspace_slug"], f"/runtime/runs/{seed['agent_run_id']}"),
+        headers=_auth_headers(other_session["token"]),
+    )
+
+    assert response.status_code == 404
+
+
+def test_runtime_inspection_endpoint_limits_trace_events(client: TestClient) -> None:
+    seed = _seed_pending_approval(client)
+    headers = _auth_headers(seed["token"])
+
+    with get_session_factory()() as db:
+        runtime_run = db.get(AgentRun, seed["agent_run_id"])
+        assert runtime_run is not None
+        for index in range(3):
+            append_trace_event(
+                db,
+                agent_run_id=runtime_run.id,
+                workspace_id=runtime_run.workspace_id,
+                conversation_id=runtime_run.conversation_id,
+                event_type=f"extra_{index}",
+                payload={"index": index},
+            )
+        db.commit()
+
+    response = client.get(
+        _workspace_ai_path(
+            seed["workspace_slug"],
+            f"/runtime/runs/{seed['agent_run_id']}?after_seq=2&limit=2",
+        ),
+        headers=headers,
+    )
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert [event["event_seq"] for event in body["trace_events"]] == [3, 4]
 
 
 def test_resume_allowed_app_ids_omission_reuses_frozen_scope() -> None:
@@ -412,6 +530,20 @@ def test_abandon_approval_route_marks_snapshot_abandoned(client: TestClient) -> 
     assert body["reject_reason"] == "cancelled in review"
     assert body["snapshot_status"] == "abandoned"
 
+    with get_session_factory()() as db:
+        runtime_run = db.get(AgentRun, seed["agent_run_id"])
+        assert runtime_run is not None
+        assert runtime_run.status == "abandoned"
+        invocation_statuses = list(
+            db.scalars(
+                select(AgentInvocation.status).where(
+                    AgentInvocation.agent_run_id == seed["agent_run_id"]
+                )
+            )
+        )
+        assert invocation_statuses
+        assert set(invocation_statuses) == {"abandoned"}
+
 
 def test_resolve_approval_expired_transition_persists_before_410(client: TestClient) -> None:
     seed = _seed_pending_approval(
@@ -437,6 +569,11 @@ def test_resolve_approval_expired_transition_persists_before_410(client: TestCli
     body = status_response.json()
     assert body["status"] == "expired"
     assert body["snapshot_status"] == "abandoned"
+
+    with get_session_factory()() as db:
+        runtime_run = db.get(AgentRun, seed["agent_run_id"])
+        assert runtime_run is not None
+        assert runtime_run.status == "abandoned"
 
 
 def test_resolve_approval_rejects_second_resolution(client: TestClient) -> None:
@@ -513,6 +650,93 @@ def test_chat_resume_rejects_pending_approval(client: TestClient) -> None:
 
     assert response.status_code == 400
     assert "resolved before resume" in response.json()["detail"]
+
+
+def test_chat_resume_rejects_narrower_scope_that_excludes_approved_tool(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    registry = _build_test_approval_registry()
+    _patch_test_approval_registry(monkeypatch, registry)
+    seed = _seed_pending_approval(
+        client,
+        tool_name=_APPROVAL_TOOL_NAME,
+        resource_preview="Approval Test Write\nCreates an approval-gated test resource.\nTitle: Approval issue",
+    )
+    headers = _auth_headers(seed["token"])
+
+    resolve_response = client.post(
+        _workspace_ai_path(seed["workspace_slug"], f"/approvals/{seed['approval_id']}/resolve"),
+        headers=headers,
+        json={"decision": "approved"},
+    )
+    assert resolve_response.status_code == 200, resolve_response.text
+
+    response = client.post(
+        _workspace_ai_path(seed["workspace_slug"], "/chat/resume"),
+        headers=headers,
+        json={
+            "conversation_id": seed["conversation_id"],
+            "approval_id": seed["approval_id"],
+            "allowed_app_ids": ["pms"],
+        },
+    )
+
+    assert response.status_code == 400, response.text
+    assert "approved tool" in response.json()["detail"]
+
+
+def test_chat_resume_accepts_frozen_scope_when_scope_is_omitted(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    registry = _build_test_approval_registry(include_second_tool=True)
+    _patch_test_approval_registry(monkeypatch, registry)
+    monkeypatch.setattr(ai_router.get_settings(), "ai_write_tools_enabled", True)
+    seed = _seed_pending_approval(
+        client,
+        tool_name=_APPROVAL_TOOL_NAME,
+        resource_preview="Approval Test Write\nCreates an approval-gated test resource.\nTitle: Approval issue",
+        model_meta={
+            "model": "qwen/qwen3.6-35b-a3b",
+            "policy": "local_only",
+            "chosen_pool": "local",
+            "scope": {
+                "allowed_app_ids": ["ai"],
+                "resolved_agent_ids": ["single_loop"],
+                "resolved_tool_names": [_APPROVAL_TOOL_NAME],
+            },
+        },
+    )
+    headers = _auth_headers(seed["token"])
+
+    async def fake_resume_agent_run(*args: Any, **kwargs: Any):
+        del args, kwargs
+        yield ai_router.make_envelope(
+            "done",
+            1,
+            {"finish_reason": "stop", "audit_id": None, "meta": None},
+        )
+
+    monkeypatch.setattr(ai_router, "resume_agent_run", fake_resume_agent_run)
+
+    resolve_response = client.post(
+        _workspace_ai_path(seed["workspace_slug"], f"/approvals/{seed['approval_id']}/resolve"),
+        headers=headers,
+        json={"decision": "approved"},
+    )
+    assert resolve_response.status_code == 200, resolve_response.text
+
+    response = client.post(
+        _workspace_ai_path(seed["workspace_slug"], "/chat/resume"),
+        headers=headers,
+        json={
+            "conversation_id": seed["conversation_id"],
+            "approval_id": seed["approval_id"],
+        },
+    )
+
+    assert response.status_code == 200, response.text
 
 
 def test_chat_resume_replays_approved_tool_and_completes_snapshot(
@@ -864,9 +1088,21 @@ def test_chat_resume_cancellation_rewinds_snapshot_for_retry(
             )
         )
         snapshot = ai_approvals.load_snapshot(db, agent_run_id=seed["agent_run_id"])
+        runtime_run = db.get(AgentRun, seed["agent_run_id"])
         assert approval is not None
         assert approval.status == "approved"
         assert snapshot.status == "awaiting_approval"
+        assert runtime_run is not None
+        assert runtime_run.status == "awaiting_approval"
+        awaiting_invocations = list(
+            db.scalars(
+                select(AgentInvocation).where(
+                    AgentInvocation.agent_run_id == seed["agent_run_id"],
+                    AgentInvocation.status == "awaiting_approval",
+                )
+            )
+        )
+        assert len(awaiting_invocations) == 1
 
 
 def test_chat_resume_cancellation_after_tool_exec_does_not_rewind(

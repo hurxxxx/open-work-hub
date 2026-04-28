@@ -261,6 +261,14 @@ class Settings(BaseSettings):
         default=False,
         validation_alias=AliasChoices("AIDOO_AI_RUNTIME_GRAPH_ENABLED"),
     )
+    ai_runtime_shadow_write_enabled: bool = Field(
+        default=True,
+        validation_alias=AliasChoices(
+            "AIDOO_AI_RUNTIME_SHADOW_WRITE_ENABLED",
+            "DOOWON_AIDOO_AI_RUNTIME_SHADOW_WRITE_ENABLED",
+            "DOOWON_API_AIDOO_AI_RUNTIME_SHADOW_WRITE_ENABLED",
+        ),
+    )
     ai_external_llm_enabled: bool = Field(
         default=False,
         validation_alias=AliasChoices("AIDOO_AI_EXTERNAL_LLM_ENABLED"),

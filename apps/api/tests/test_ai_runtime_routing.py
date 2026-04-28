@@ -1,6 +1,12 @@
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
 from aidoo_api.domains.ai.runtime.routing import select_runtime_profile
+
+
+FIXTURE_DIR = Path(__file__).parent / "fixtures" / "ai_runtime"
 
 
 def _messages(text: str) -> list[dict[str, str]]:
@@ -70,3 +76,18 @@ def test_runtime_profile_keeps_text_only_scope_out_of_high_risk_action() -> None
     assert decision.runtime_profile == "interactive_read"
     assert decision.graph_gate == "ineligible"
     assert "text_only_scope" in decision.reason_codes
+
+
+def test_runtime_profile_matches_routing_eval_fixture_expectations() -> None:
+    fixture = json.loads((FIXTURE_DIR / "routing_cases.json").read_text())
+
+    for case in fixture["cases"]:
+        request = case["input"]
+        decision = select_runtime_profile(
+            messages=_messages(request["user_message"]),
+            allowed_app_ids=request.get("allowed_app_ids"),
+            max_tokens=request.get("max_tokens"),
+            graph_enabled=True,
+        )
+
+        assert decision.runtime_profile == case["expected"]["runtime_profile"]

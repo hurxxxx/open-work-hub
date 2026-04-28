@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
 from collections.abc import Iterator
 from datetime import timedelta
+from threading import Event
+import time
 
 import pytest
 from alembic import command
@@ -15,6 +18,7 @@ from aidoo_api.domains.ai.runtime.models import (
     AgentRun,
     AgentTraceEvent,
 )
+from aidoo_api.domains.ai.runtime.persistence import append_trace_event
 from aidoo_api.domains.auth.models import User, Workspace
 from aidoo_api.domains.auth.security import new_id
 from aidoo_api.domains.conversations.models import Conversation
@@ -106,6 +110,21 @@ def test_runtime_migration_creates_kernel_tables(
         "ai_agent_invocations",
         "ai_agent_trace_events",
     }.issubset(table_names)
+
+
+def test_runtime_migration_downgrade_upgrade_round_trip(
+    runtime_session_factory: sessionmaker[Session],
+) -> None:
+    from aidoo_api.core.db import _alembic_config
+
+    command.downgrade(_alembic_config(), "-1")
+    command.upgrade(_alembic_config(), "head")
+
+    engine = runtime_session_factory.kw["bind"]
+    inspector = inspect(engine)
+    table_names = set(inspector.get_table_names())
+    assert "ai_agent_runs" in table_names
+    assert "ai_agent_trace_events" in table_names
 
 
 def test_agent_run_allows_only_one_live_run_per_conversation(
@@ -343,3 +362,58 @@ def test_trace_events_are_uniquely_ordered_per_run(
         )
         with pytest.raises(IntegrityError):
             db.commit()
+
+
+def test_trace_event_append_serializes_concurrent_writers(
+    runtime_session_factory: sessionmaker[Session],
+) -> None:
+    with runtime_session_factory() as db:
+        workspace, user, conversation = _seed_scope(db)
+        run = _runtime_run(workspace=workspace, user=user, conversation=conversation)
+        db.add(run)
+        db.commit()
+        run_id = run.id
+        workspace_id = workspace.id
+        conversation_id = conversation.id
+
+    first_inserted = Event()
+    release_first = Event()
+
+    def append_first() -> int:
+        with runtime_session_factory() as db:
+            with db.begin():
+                event = append_trace_event(
+                    db,
+                    agent_run_id=run_id,
+                    workspace_id=workspace_id,
+                    conversation_id=conversation_id,
+                    event_type="first",
+                    payload={},
+                )
+                event_seq = event.event_seq
+                first_inserted.set()
+                assert release_first.wait(timeout=5)
+                return event_seq
+
+    def append_second() -> int:
+        assert first_inserted.wait(timeout=5)
+        with runtime_session_factory() as db:
+            with db.begin():
+                event = append_trace_event(
+                    db,
+                    agent_run_id=run_id,
+                    workspace_id=workspace_id,
+                    conversation_id=conversation_id,
+                    event_type="second",
+                    payload={},
+                )
+                return event.event_seq
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        first = executor.submit(append_first)
+        second = executor.submit(append_second)
+        time.sleep(0.2)
+        release_first.set()
+        event_seqs = [first.result(timeout=5), second.result(timeout=5)]
+
+    assert sorted(event_seqs) == [0, 1]

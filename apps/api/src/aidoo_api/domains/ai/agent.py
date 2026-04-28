@@ -615,8 +615,7 @@ async def _run_agent_loop_stream(
             # DB side effects are committed on the outer router boundary, so
             # a rewind would let a second resume re-execute the same write.
             if not replay_tool_executed and replay_approval.status in {"approved", "rejected"}:
-                current_snapshot.status = "awaiting_approval"
-                db.add(current_snapshot)
+                ai_approvals.rewind_snapshot_to_awaiting_approval(db, current_snapshot)
             else:
                 ai_approvals.mark_snapshot_completed(db, current_snapshot)
             db.commit()

@@ -1,11 +1,12 @@
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from aidoo_api.domains.ai.runtime.models import AgentTraceEvent
+from aidoo_api.domains.ai.runtime.models import AgentRun, AgentTraceEvent
 from aidoo_api.domains.auth.security import new_id
 
 
@@ -20,6 +21,10 @@ SENSITIVE_PAYLOAD_KEYS = {
     "token",
     "tool_secret",
 }
+SENSITIVE_VALUE_PATTERNS = (
+    re.compile(r"(?i)\bbearer\s+[-._~+/=a-z0-9]+"),
+    re.compile(r"(?i)\b(api[_-]?key|x-api-key|authorization)\s*[:=]\s*[^,\s;]+"),
+)
 
 
 def scrub_trace_payload(value: Any) -> Any:
@@ -34,7 +39,16 @@ def scrub_trace_payload(value: Any) -> Any:
         return scrubbed
     if isinstance(value, list):
         return [scrub_trace_payload(item) for item in value]
+    if isinstance(value, str):
+        return _scrub_sensitive_string(value)
     return value
+
+
+def _scrub_sensitive_string(value: str) -> str:
+    scrubbed = value
+    for pattern in SENSITIVE_VALUE_PATTERNS:
+        scrubbed = pattern.sub("[redacted]", scrubbed)
+    return scrubbed
 
 
 def append_trace_event(
@@ -49,6 +63,11 @@ def append_trace_event(
     run_seq: int = 0,
     invocation_seq: int = 0,
 ) -> AgentTraceEvent:
+    db.scalar(
+        select(AgentRun.id)
+        .where(AgentRun.id == agent_run_id)
+        .with_for_update()
+    )
     current = db.scalar(
         select(func.max(AgentTraceEvent.event_seq)).where(
             AgentTraceEvent.agent_run_id == agent_run_id

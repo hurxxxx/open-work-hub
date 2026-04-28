@@ -506,6 +506,13 @@ class RuntimeRunInspectionResponse(BaseModel):
     trace_events: list[RuntimeTraceEventResponse]
 
 
+def _scrub_runtime_inspection_value(value: str | None) -> str | None:
+    if value is None:
+        return None
+    scrubbed = scrub_trace_payload({"value": value}).get("value")
+    return scrubbed if isinstance(scrubbed, str) else "[redacted]"
+
+
 class ChatResumeRequest(BaseModel):
     conversation_id: str
     approval_id: str
@@ -786,13 +793,17 @@ def abandon_approval(
 def inspect_runtime_run(
     run_id: str,
     request: Request,
+    after_seq: int | None = Query(default=None, ge=0),
+    limit: int = Query(default=200, ge=1, le=500),
     db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
 ) -> RuntimeRunInspectionResponse:
     workspace = _require_request_workspace(request)
     runtime_run = db.scalar(
         select(AgentRun).where(
             AgentRun.id == run_id,
             AgentRun.workspace_id == workspace.id,
+            AgentRun.requested_by_user_id == current_user.id,
         )
     )
     if runtime_run is None:
@@ -802,15 +813,19 @@ def inspect_runtime_run(
         select(AgentInvocation)
         .where(AgentInvocation.agent_run_id == runtime_run.id)
         .order_by(AgentInvocation.invocation_seq.asc(), AgentInvocation.created_at.asc())
+        .limit(limit)
     ).all()
+    trace_query = select(AgentTraceEvent).where(AgentTraceEvent.agent_run_id == runtime_run.id)
+    if after_seq is not None:
+        trace_query = trace_query.where(AgentTraceEvent.event_seq > after_seq)
     trace_events = db.scalars(
-        select(AgentTraceEvent)
-        .where(AgentTraceEvent.agent_run_id == runtime_run.id)
+        trace_query
         .order_by(
             AgentTraceEvent.run_seq.asc(),
             AgentTraceEvent.invocation_seq.asc(),
             AgentTraceEvent.event_seq.asc(),
         )
+        .limit(limit)
     ).all()
 
     return RuntimeRunInspectionResponse(
@@ -833,9 +848,9 @@ def inspect_runtime_run(
                 agent_id=invocation.agent_id,
                 status=invocation.status,
                 purpose=invocation.purpose,
-                input_ref=invocation.input_ref,
-                output_ref=invocation.output_ref,
-                error=invocation.error,
+                input_ref=_scrub_runtime_inspection_value(invocation.input_ref),
+                output_ref=_scrub_runtime_inspection_value(invocation.output_ref),
+                error=_scrub_runtime_inspection_value(invocation.error),
                 created_at=invocation.created_at,
                 updated_at=invocation.updated_at,
             )
@@ -870,7 +885,7 @@ async def chat_resume(
         request,
         source="api.ai.chat.resume",
     )
-    _approval, snapshot = ai_approvals.get_resume_context(
+    approval, snapshot = ai_approvals.get_resume_context(
         db,
         workspace=workspace,
         user=current_user,
@@ -880,6 +895,22 @@ async def chat_resume(
     effective_allowed_app_ids = ai_approvals.resolve_resume_allowed_app_ids(
         snapshot,
         payload.allowed_app_ids,
+    )
+    filtered_tool_specs, _has_approval_required_tools = _resolve_agent_tool_specs(
+        db,
+        workspace=workspace,
+        principal=principal,
+        allowed_app_ids=effective_allowed_app_ids,
+    )
+    del _has_approval_required_tools
+    ai_approvals.ensure_resume_approved_tool_scope(
+        approval,
+        allowed_app_ids=effective_allowed_app_ids,
+        approved_tool_app_id=_workspace_app_id_for_tool(approval.tool_name),
+    )
+    filtered_tool_specs = ai_approvals.filter_resume_tool_specs(
+        snapshot,
+        filtered_tool_specs,
     )
     conversation = conversations_service.get_conversation(
         db,
@@ -981,6 +1012,13 @@ def _ensure_known_workspace_app(app_id: str) -> None:
     )
 
 
+def _workspace_app_id_for_tool(tool_name: str) -> str | None:
+    descriptor = get_ai_capability_registry().descriptors.get(tool_name)
+    if descriptor is None:
+        return None
+    return descriptor.workspace_app_id
+
+
 def _build_request_principal(
     current_user: User,
     request: Request,
@@ -1013,7 +1051,7 @@ async def _chat_resume_publisher(
 
     try:
         settings = get_settings()
-        _approval, snapshot = ai_approvals.get_resume_context(
+        approval, snapshot = ai_approvals.get_resume_context(
             db,
             workspace=workspace,
             user=current_user,
@@ -1029,6 +1067,15 @@ async def _chat_resume_publisher(
             workspace=workspace,
             principal=principal,
             allowed_app_ids=effective_allowed_app_ids,
+        )
+        ai_approvals.ensure_resume_approved_tool_scope(
+            approval,
+            allowed_app_ids=effective_allowed_app_ids,
+            approved_tool_app_id=_workspace_app_id_for_tool(approval.tool_name),
+        )
+        filtered_tool_specs = ai_approvals.filter_resume_tool_specs(
+            snapshot,
+            filtered_tool_specs,
         )
         async for event in resume_agent_run(
             context=_task_context_from_principal(principal),

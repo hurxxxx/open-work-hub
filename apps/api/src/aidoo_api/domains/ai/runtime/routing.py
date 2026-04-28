@@ -77,13 +77,13 @@ def select_runtime_profile(
         reason_codes.append("long_doc_signal")
         return _decision("long_doc", reason_codes, graph_enabled=graph_enabled)
 
-    if _contains_any(lowered, HIGH_RISK_KEYWORDS) and allowed_app_ids != []:
-        reason_codes.append("write_or_external_action_signal")
-        return _decision("high_risk_action", reason_codes, graph_enabled=graph_enabled)
-
     if _contains_any(lowered, REPORT_KEYWORDS) or _has_multiple_app_scope(allowed_app_ids):
         reason_codes.append("grounded_report_signal")
         return _decision("grounded_report", reason_codes, graph_enabled=graph_enabled)
+
+    if _contains_any(lowered, HIGH_RISK_KEYWORDS) and allowed_app_ids != []:
+        reason_codes.append("write_or_external_action_signal")
+        return _decision("high_risk_action", reason_codes, graph_enabled=graph_enabled)
 
     reason_codes.append("default_interactive_read")
     return _decision("interactive_read", reason_codes, graph_enabled=graph_enabled)
