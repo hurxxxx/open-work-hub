@@ -45,7 +45,10 @@ from aidoo_api.domains.ai.mcp import AiMcpClient
 from aidoo_api.domains.ai.registry import get_ai_capability_registry
 from aidoo_api.domains.ai.runtime.metrics import record_inspection_request
 from aidoo_api.domains.ai.runtime.models import AgentInvocation, AgentRun, AgentTraceEvent
-from aidoo_api.domains.ai.runtime.persistence import scrub_trace_payload
+from aidoo_api.domains.ai.runtime.persistence import (
+    persist_single_loop_fallback_runtime_shadow,
+    scrub_trace_payload,
+)
 from aidoo_api.domains.ai.runtime.agent_definitions import resolve_agent_definitions
 from aidoo_api.domains.ai.runtime.manager_candidate import (
     build_deterministic_manager_candidate,
@@ -1611,6 +1614,7 @@ async def _chat_stream_publisher(
     # into artifact_started/delta/completed envelopes so the client renders
     # those bodies in a side panel instead of the chat bubble.
     artifact_parser = ArtifactStreamParser()
+    fallback_runtime_run_id: str | None = None
 
     try:
         command = _parse_tool_chat_command(payload.messages)
@@ -1708,6 +1712,13 @@ async def _chat_stream_publisher(
                     yield serialized
             return
 
+        if (
+            conversation is not None
+            and runtime_routing.graph_gate == "eligible"
+            and settings.ai_runtime_shadow_write_enabled
+        ):
+            fallback_runtime_run_id = new_id()
+
         async for chunk, decision, config in complete_chat_stream(
             context,
             db,
@@ -1751,6 +1762,7 @@ async def _chat_stream_publisher(
                 config=last_config,
                 model=chosen_model,
                 runtime_routing=runtime_routing,
+                agent_run_id=fallback_runtime_run_id,
             )
             if event is not None:
                 buffer.observe(event)
@@ -1798,6 +1810,7 @@ async def _chat_stream_publisher(
                         last_config,
                         model=chosen_model,
                         runtime_routing=runtime_routing,
+                        agent_run_id=fallback_runtime_run_id,
                     ),
                 },
             )
@@ -1816,7 +1829,28 @@ async def _chat_stream_publisher(
                 last_config=last_config,
                 chosen_model=chosen_model,
                 runtime_routing=runtime_routing,
+                agent_run_id=fallback_runtime_run_id,
             )
+            if fallback_runtime_run_id is not None:
+                done_meta = buffer.done_meta or _build_done_meta(
+                    last_decision,
+                    last_config,
+                    model=chosen_model,
+                    runtime_routing=runtime_routing,
+                    agent_run_id=fallback_runtime_run_id,
+                )
+                persist_single_loop_fallback_runtime_shadow(
+                    db,
+                    agent_run_id=fallback_runtime_run_id,
+                    workspace_id=workspace.id,
+                    conversation_id=conversation.id,
+                    requested_by_user_id=current_user.id,
+                    runtime_metadata=done_meta or {},
+                    finish_reason=buffer.finish_reason,
+                    response_status=(
+                        "cancelled" if buffer.cancelled else buffer.response_status
+                    ),
+                )
 
 
 def _attach_graph_gate_trace_metadata(
@@ -1986,6 +2020,7 @@ def _chunk_to_envelope(
     config: LlmPoolConfig | None,
     model: str | None,
     runtime_routing: RuntimeRoutingDecision | None = None,
+    agent_run_id: str | None = None,
 ) -> dict[str, str] | None:
     # `content` chunks are routed through the artifact parser in the
     # publisher loop, not this helper — see `_emit_content_through_parser`.
@@ -2030,6 +2065,7 @@ def _chunk_to_envelope(
                         config,
                         model=model,
                         runtime_routing=runtime_routing,
+                        agent_run_id=agent_run_id,
                     ),
                 },
             )
@@ -2058,6 +2094,7 @@ def _build_done_meta(
     *,
     model: str | None,
     runtime_routing: RuntimeRoutingDecision | None = None,
+    agent_run_id: str | None = None,
 ) -> dict[str, Any] | None:
     if decision is None or config is None:
         return None
@@ -2071,6 +2108,7 @@ def _build_done_meta(
         "chosen_model": model or config.default_model,
         "canonical_model": config.canonical_model,
         "provider": config.provider,
+        "agent_run_id": agent_run_id,
     }
     if runtime_routing is not None:
         meta.update(_runtime_done_meta(runtime_routing))
@@ -2668,6 +2706,7 @@ def _persist_assistant_turn(
     last_config: LlmPoolConfig | None,
     chosen_model: str | None,
     runtime_routing: RuntimeRoutingDecision | None = None,
+    agent_run_id: str | None = None,
 ) -> None:
     """Write a single assistant turn summarizing the streamed response.
 
@@ -2717,6 +2756,7 @@ def _persist_assistant_turn(
         last_config,
         model=chosen_model,
         runtime_routing=runtime_routing,
+        agent_run_id=agent_run_id,
     )
     done_meta = buffer.done_meta or fallback_meta or {}
 

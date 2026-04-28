@@ -26,7 +26,10 @@ from aidoo_api.core.settings import get_settings
 from aidoo_api.core.db import Base
 from aidoo_api.domains.ai.audit import log_llm_tool_approval_resolved
 from aidoo_api.domains.ai.runtime.models import AgentInvocation, AgentRun
-from aidoo_api.domains.ai.runtime.persistence import append_trace_event
+from aidoo_api.domains.ai.runtime.persistence import (
+    append_graph_candidate_trace_events,
+    append_trace_event,
+)
 from aidoo_api.domains.ai.runtime.contracts import RUNTIME_PROFILE_VALUES
 from aidoo_api.domains.ai.runtime.metrics import record_shadow_write_failure
 from aidoo_api.domains.auth.models import User, Workspace
@@ -887,6 +890,13 @@ def _persist_runtime_shadow_on_halt(
             "legacy_snapshot_id": snapshot.id,
         },
     )
+    append_graph_candidate_trace_events(
+        db,
+        agent_run_id=runtime_run.id,
+        workspace_id=snapshot.workspace_id,
+        conversation_id=snapshot.conversation_id,
+        runtime_metadata=model_meta,
+    )
     append_trace_event(
         db,
         agent_run_id=runtime_run.id,
@@ -912,7 +922,6 @@ def _persist_runtime_shadow_on_halt(
             "runtime_routing_reason_codes": model_meta.get("runtime_routing_reason_codes"),
         },
     )
-
 
 def _mark_runtime_shadow_completed(
     db: Session,

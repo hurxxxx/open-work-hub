@@ -23,12 +23,12 @@ Phase 6 전체 목표는 기존 single-loop agent를 deterministic fast path, ma
 
 이 섹션은 세션 handoff용이다. 구현 세션이 끝날 때마다 짧게 갱신한다.
 
-- Current PR/stage: Phase 0-H safe candidate graph summary metadata implemented. Graph execution still falls back to the existing single-loop path.
-- Last completed: Added safe accepted-candidate graph summaries to SSE done envelopes, persisted assistant-turn metadata, and agent-loop snapshot metadata without raw prompt, evidence, purpose text, dependencies, or tool arguments.
+- Current PR/stage: Phase 0-J graph-eligible fallback runtime inspection coverage implemented. Graph execution still falls back to the existing single-loop path.
+- Last completed: Graph-eligible non-approval fallback streams now emit a completed runtime shadow `AgentRun` with `single_loop.fallback` invocation and candidate graph trace events when conversation persistence is enabled. Approval shadow runtime writes share the same graph candidate trace helper. Runtime trace scrubbing preserves safe `output_kind` summary fields while continuing to redact raw output payload keys.
 - In progress: None.
-- Next exact task: Emit trace/shadow events for candidate graph generation and validation summaries, still without graph node execution.
-- Files touched in Phase 0-H: `apps/api/src/aidoo_api/domains/ai/agent.py`, `apps/api/src/aidoo_api/domains/ai/events.py`, `apps/api/src/aidoo_api/domains/ai/router.py`, `apps/api/src/aidoo_api/domains/ai/runtime/__init__.py`, `apps/api/src/aidoo_api/domains/ai/runtime/manager_candidate.py`, `apps/api/src/aidoo_api/domains/ai/runtime/routing.py`, `apps/api/tests/fixtures/envelope_schema.json`, `apps/api/tests/test_ai_runtime_contracts.py`, `apps/api/tests/test_ai_runtime_routing.py`, `apps/api/tests/test_ai_stream.py`, `plans/03-phase6-evidence-runtime-implementation.md`.
-- Tests/checks run: `cd apps/api && uv run python -m pytest tests/test_ai_runtime_contracts.py tests/test_ai_runtime_routing.py tests/test_ai_stream.py::test_chat_stream_graph_gate_falls_back_without_graph_execution tests/test_ai_events.py::test_envelope_schema_snapshot_matches`; `cd apps/api && uv run python -m pytest tests/test_ai_runtime_contracts.py tests/test_ai_runtime_routing.py tests/test_ai_stream.py tests/test_ai_approvals.py tests/test_ai_events.py tests/test_ai_conversations.py`; targeted `uv run ruff check` for touched Python files.
+- Next exact task: Add a graph execution scheduler skeleton behind `AIDOO_AI_RUNTIME_GRAPH_ENABLED` that records planned node order/state transitions without executing graph nodes yet.
+- Files touched in Phase 0-J: `apps/api/src/aidoo_api/domains/ai/router.py`, `apps/api/src/aidoo_api/domains/ai/approvals.py`, `apps/api/src/aidoo_api/domains/ai/runtime/persistence.py`, `apps/api/tests/test_ai_stream.py`, `apps/api/tests/test_ai_approvals.py`, `plans/03-phase6-evidence-runtime-implementation.md`.
+- Tests/checks run: `cd apps/api && uv run pytest tests/test_ai_stream.py::test_chat_stream_graph_gate_falls_back_without_graph_execution tests/test_ai_approvals.py::test_pending_approval_shadow_writes_graph_candidate_trace_events`; `cd apps/api && uv run pytest tests/test_ai_runtime_contracts.py tests/test_ai_runtime_routing.py tests/test_ai_stream.py::test_chat_stream_graph_gate_falls_back_without_graph_execution tests/test_ai_stream.py::test_chat_stream_persists_user_and_assistant_turns tests/test_ai_approvals.py`; targeted `uv run ruff check` for touched Python files.
 - Known blockers: graph node execution is still intentionally not implemented; single-loop fallback remains canonical.
 
 ## Architecture / Principles
@@ -294,6 +294,7 @@ cd apps/api && pytest tests/test_ai_runtime_contracts.py tests/test_ai_runtime_p
 - Manager candidate graph generation/validation is wired to router metadata only; `graph_gate=eligible`이어도 `graph_fallback_reason=graph_runtime_not_implemented`로 single-loop fallback을 유지한다.
 - Accepted graph validation must not be treated as execution authority until graph execution is explicitly implemented and separately gated.
 - Candidate graph summary is intentionally allowlisted to high-level fields only: intent, domains, risk, output kind, invocation agent ids, verifier flag, and approval-preview flag.
+- Candidate graph trace events materialize for approval shadow runs and persisted non-approval graph-eligible fallback streams. `persist=false` streams still expose the summary only in SSE metadata because they intentionally do not create conversation/runtime records.
 - Long-running graph trace scheduler를 붙이기 전에 runtime retention helper를 실제 운영 job/admin trigger로 연결한다.
 - Runtime metric은 counter skeleton만 있다. Operator-facing rollout 전 dashboard/alert threshold를 별도 정의한다.
 - Phase 0-A에서 기존 table에 추가하는 `ai_tool_approvals` partial index는 의도된 tooling index 1건으로 기록한다. 이후 hot-table index 변경은 별도 concurrent migration으로 분리한다.

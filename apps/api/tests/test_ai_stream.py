@@ -25,6 +25,7 @@ from aidoo_api.domains.ai import agent as ai_agent
 from aidoo_api.domains.ai import approvals as ai_approvals
 from aidoo_api.domains.ai.models import LlmPolicy
 from aidoo_api.domains.ai import router as ai_router
+from aidoo_api.domains.ai.runtime.models import AgentInvocation, AgentRun, AgentTraceEvent
 from aidoo_api.domains.auth.models import AuditLog, Workspace, WorkspaceAppEntitlement
 from test_meeting import (
     _auth_headers,
@@ -1184,6 +1185,7 @@ def test_chat_stream_graph_gate_falls_back_without_graph_execution(
         headers=_auth_headers(auth["token"]),
         json_body={
             "backend_mode": "local",
+            "persist": True,
             "messages": [
                 {
                     "role": "user",
@@ -1202,6 +1204,7 @@ def test_chat_stream_graph_gate_falls_back_without_graph_execution(
     assert done_meta["graph_gate"] == "eligible"
     assert done_meta["graph_fallback_reason"] == "graph_runtime_not_implemented"
     assert done_meta["graph_used"] is False
+    assert done_meta["agent_run_id"]
     assert done_meta["graph_validation_status"] == "accepted"
     assert done_meta.get("graph_validation_fallback_reason") is None
     assert done_meta["graph_registry_agent_count"] > 0
@@ -1223,6 +1226,56 @@ def test_chat_stream_graph_gate_falls_back_without_graph_execution(
         "requires_verifier",
         "requires_approval_preview",
     }
+    attached = next(event for event in events if event["type"] == "conversation_attached")
+    agent_run_id = done_meta["agent_run_id"]
+    with Session(get_engine()) as session:
+        runtime_run = session.get(AgentRun, agent_run_id)
+        assert runtime_run is not None
+        assert runtime_run.status == "completed"
+        assert runtime_run.conversation_id == attached["data"]["conversation_id"]
+        assert runtime_run.legacy_snapshot_id is None
+        assert runtime_run.runtime_profile == "grounded_report"
+        assert runtime_run.graph_enabled is True
+        assert runtime_run.fallback_reason == "graph_runtime_not_implemented"
+        invocation = session.scalar(
+            select(AgentInvocation).where(AgentInvocation.agent_run_id == agent_run_id)
+        )
+        assert invocation is not None
+        assert invocation.agent_id == "single_loop.fallback"
+        assert invocation.status == "completed"
+        trace_events = list(
+            session.scalars(
+                select(AgentTraceEvent)
+                .where(AgentTraceEvent.agent_run_id == agent_run_id)
+                .order_by(AgentTraceEvent.event_seq)
+            )
+        )
+    assert [event.event_type for event in trace_events] == [
+        "run_created",
+        "graph_candidate_generated",
+        "graph_candidate_validated",
+        "invocation_started",
+        "invocation_completed",
+        "run_completed",
+    ]
+    assert trace_events[1].payload_json["graph_candidate_summary"]["output_kind"] == "artifact"
+
+    inspection = client.get(
+        _workspace_ai_path(slug, f"/runtime/runs/{agent_run_id}"),
+        headers=_auth_headers(auth["token"]),
+    )
+    assert inspection.status_code == 200, inspection.text
+    inspected = inspection.json()
+    assert inspected["status"] == "completed"
+    inspected_trace = {
+        event["event_type"]: event["payload"] for event in inspected["trace_events"]
+    }
+    assert (
+        inspected_trace["graph_candidate_generated"]["graph_candidate_summary"][
+            "output_kind"
+        ]
+        == "artifact"
+    )
 
 
 def test_chat_stream_mounts_on_legacy_and_slug_paths(

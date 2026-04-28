@@ -18,7 +18,7 @@ from aidoo_api.domains.ai import agent as ai_agent
 from aidoo_api.domains.ai import approvals as ai_approvals
 from aidoo_api.domains.ai import mcp as ai_mcp
 from aidoo_api.domains.ai import router as ai_router
-from aidoo_api.domains.ai.runtime.models import AgentInvocation, AgentRun
+from aidoo_api.domains.ai.runtime.models import AgentInvocation, AgentRun, AgentTraceEvent
 from aidoo_api.domains.ai.runtime.persistence import append_trace_event
 from aidoo_api.domains.ai import tool_service as ai_tool_service
 from aidoo_api.domains.ai.tool_runtime import ToolCallExecution
@@ -248,6 +248,82 @@ def test_pending_approval_shadow_writes_runtime_run(client: TestClient) -> None:
         assert invocation is not None
         assert invocation.status == "awaiting_approval"
         assert invocation.agent_id == "approval.proposal_preview"
+
+
+def test_pending_approval_shadow_writes_graph_candidate_trace_events(
+    client: TestClient,
+) -> None:
+    graph_candidate_summary = {
+        "intent": "write",
+        "domains": ["pms"],
+        "risk": "high",
+        "output_kind": "approval_preview",
+        "invocation_agent_ids": ["domain.pms", "approval.proposal_preview"],
+        "requires_verifier": False,
+        "requires_approval_preview": True,
+    }
+    seed = _seed_pending_approval(
+        client,
+        model_meta={
+            "model": "qwen/qwen3.6-35b-a3b",
+            "policy": "local_only",
+            "chosen_pool": "local",
+            "runtime_profile": "high_risk_action",
+            "runtime_routing_reason_codes": ["write_or_external_action_signal"],
+            "graph_gate": "eligible",
+            "graph_fallback_reason": "graph_runtime_not_implemented",
+            "graph_used": False,
+            "graph_validation_status": "accepted",
+            "graph_validation_fallback_reason": None,
+            "graph_registry_agent_count": 10,
+            "graph_write_agent_count": 1,
+            "graph_candidate_summary": graph_candidate_summary,
+        },
+    )
+
+    with get_session_factory()() as db:
+        trace_events = list(
+            db.scalars(
+                select(AgentTraceEvent)
+                .where(AgentTraceEvent.agent_run_id == seed["agent_run_id"])
+                .order_by(AgentTraceEvent.event_seq)
+            )
+        )
+        assert [event.event_type for event in trace_events] == [
+            "run_created",
+            "graph_candidate_generated",
+            "graph_candidate_validated",
+            "invocation_started",
+            "approval_required",
+        ]
+        assert trace_events[1].payload_json["graph_candidate_summary"] == graph_candidate_summary
+
+    response = client.get(
+        _workspace_ai_path(seed["workspace_slug"], f"/runtime/runs/{seed['agent_run_id']}"),
+        headers=_auth_headers(seed["token"]),
+    )
+
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    events_by_type = {
+        event["event_type"]: event["payload"] for event in payload["trace_events"]
+    }
+    assert events_by_type["graph_candidate_generated"] == {
+        "runtime_profile": "high_risk_action",
+        "graph_gate": "eligible",
+        "graph_candidate_summary": graph_candidate_summary,
+    }
+    assert events_by_type["graph_candidate_validated"] == {
+        "runtime_profile": "high_risk_action",
+        "graph_gate": "eligible",
+        "graph_fallback_reason": "graph_runtime_not_implemented",
+        "graph_used": False,
+        "graph_validation_status": "accepted",
+        "graph_validation_fallback_reason": None,
+        "graph_registry_agent_count": 10,
+        "graph_write_agent_count": 1,
+        "graph_candidate_summary": graph_candidate_summary,
+    }
 
 
 def test_runtime_shadow_write_failure_does_not_abort_pending_approval(

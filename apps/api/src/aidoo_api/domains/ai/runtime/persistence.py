@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import timedelta
 import json
+import logging
 import re
 from typing import Any
 
@@ -10,6 +11,7 @@ from sqlalchemy.orm import Session
 
 from aidoo_api.core.settings import get_settings
 from aidoo_api.domains.ai.runtime.metrics import (
+    record_shadow_write_failure,
     record_trace_event,
     record_trace_payload_truncated,
 )
@@ -17,6 +19,8 @@ from aidoo_api.domains.ai.runtime.models import AgentInvocation, AgentRun, Agent
 from aidoo_api.domains.auth.security import new_id
 from aidoo_api.domains.meeting.models import utcnow_naive
 
+
+logger = logging.getLogger(__name__)
 
 SENSITIVE_PAYLOAD_KEYS = {
     "api_key",
@@ -41,6 +45,9 @@ SENSITIVE_PAYLOAD_KEYS = {
     "token",
     "tool_secret",
 }
+SAFE_PAYLOAD_KEYS = {
+    "output_kind",
+}
 SENSITIVE_VALUE_PATTERNS = (
     re.compile(r"(?i)\bbearer\s+[-._~+/=a-z0-9]+"),
     re.compile(r"(?i)\b(api[_-]?key|x-api-key|authorization)\s*[:=]\s*[^,\s;]+"),
@@ -48,6 +55,7 @@ SENSITIVE_VALUE_PATTERNS = (
     re.compile(r"(?i)\b(cookie|set-cookie)\s*[:=]\s*[^,\s;]+"),
 )
 TERMINAL_RUN_STATUSES = ("completed", "failed", "cancelled", "abandoned")
+SINGLE_LOOP_FALLBACK_AGENT_ID = "single_loop.fallback"
 
 
 def scrub_trace_payload(value: Any) -> Any:
@@ -55,7 +63,9 @@ def scrub_trace_payload(value: Any) -> Any:
         scrubbed: dict[str, Any] = {}
         for key, item in value.items():
             normalized_key = str(key).lower()
-            if any(marker in normalized_key for marker in SENSITIVE_PAYLOAD_KEYS):
+            if normalized_key in SAFE_PAYLOAD_KEYS:
+                scrubbed[key] = scrub_trace_payload(item)
+            elif any(marker in normalized_key for marker in SENSITIVE_PAYLOAD_KEYS):
                 scrubbed[key] = "[redacted]"
             else:
                 scrubbed[key] = scrub_trace_payload(item)
@@ -148,6 +158,250 @@ def append_trace_event(
     return event
 
 
+def append_graph_candidate_trace_events(
+    db: Session,
+    *,
+    agent_run_id: str,
+    workspace_id: str,
+    conversation_id: str,
+    runtime_metadata: dict[str, Any],
+) -> None:
+    graph_gate = runtime_metadata.get("graph_gate")
+    if graph_gate != "eligible":
+        return
+
+    candidate_summary = runtime_metadata.get("graph_candidate_summary")
+    if isinstance(candidate_summary, dict):
+        append_trace_event(
+            db,
+            agent_run_id=agent_run_id,
+            workspace_id=workspace_id,
+            conversation_id=conversation_id,
+            event_type="graph_candidate_generated",
+            payload={
+                "runtime_profile": runtime_metadata.get("runtime_profile"),
+                "graph_gate": graph_gate,
+                "graph_candidate_summary": candidate_summary,
+            },
+        )
+
+    append_trace_event(
+        db,
+        agent_run_id=agent_run_id,
+        workspace_id=workspace_id,
+        conversation_id=conversation_id,
+        event_type="graph_candidate_validated",
+        payload={
+            "runtime_profile": runtime_metadata.get("runtime_profile"),
+            "graph_gate": graph_gate,
+            "graph_fallback_reason": runtime_metadata.get("graph_fallback_reason"),
+            "graph_used": bool(runtime_metadata.get("graph_used")),
+            "graph_validation_status": runtime_metadata.get("graph_validation_status"),
+            "graph_validation_fallback_reason": runtime_metadata.get(
+                "graph_validation_fallback_reason"
+            ),
+            "graph_registry_agent_count": int(
+                runtime_metadata.get("graph_registry_agent_count") or 0
+            ),
+            "graph_write_agent_count": int(
+                runtime_metadata.get("graph_write_agent_count") or 0
+            ),
+            "graph_candidate_summary": candidate_summary
+            if isinstance(candidate_summary, dict)
+            else None,
+        },
+    )
+
+
+def persist_single_loop_fallback_runtime_shadow(
+    db: Session,
+    *,
+    agent_run_id: str,
+    workspace_id: str,
+    conversation_id: str,
+    requested_by_user_id: str,
+    runtime_metadata: dict[str, Any],
+    finish_reason: str | None,
+    response_status: str,
+) -> None:
+    if not get_settings().ai_runtime_shadow_write_enabled:
+        return
+    try:
+        _persist_single_loop_fallback_runtime_shadow(
+            db,
+            agent_run_id=agent_run_id,
+            workspace_id=workspace_id,
+            conversation_id=conversation_id,
+            requested_by_user_id=requested_by_user_id,
+            runtime_metadata=runtime_metadata,
+            finish_reason=finish_reason,
+            response_status=response_status,
+        )
+        db.commit()
+    except Exception:
+        db.rollback()
+        record_shadow_write_failure(operation="persist_single_loop_fallback_runtime_shadow")
+        logger.exception(
+            "ai_runtime.shadow_write_failed",
+            extra={
+                "agent_run_id": agent_run_id,
+                "conversation_id": conversation_id,
+                "workspace_id": workspace_id,
+                "operation": "persist_single_loop_fallback_runtime_shadow",
+            },
+        )
+
+
+def _persist_single_loop_fallback_runtime_shadow(
+    db: Session,
+    *,
+    agent_run_id: str,
+    workspace_id: str,
+    conversation_id: str,
+    requested_by_user_id: str,
+    runtime_metadata: dict[str, Any],
+    finish_reason: str | None,
+    response_status: str,
+) -> None:
+    now = utcnow_naive()
+    status = _terminal_runtime_status(
+        finish_reason=finish_reason,
+        response_status=response_status,
+    )
+    runtime_run = AgentRun(
+        id=agent_run_id,
+        workspace_id=workspace_id,
+        conversation_id=conversation_id,
+        requested_by_user_id=requested_by_user_id,
+        status=status,
+        runtime_profile=_runtime_profile_from_metadata(runtime_metadata),
+        graph_enabled=runtime_metadata.get("graph_gate") == "eligible",
+        model_profile_id=str(
+            runtime_metadata.get("model") or runtime_metadata.get("chosen_model") or ""
+        )
+        or None,
+        fallback_reason=runtime_metadata.get("graph_fallback_reason"),
+        metadata_json={
+            "source": "single_loop_fallback_shadow",
+            "runtime_routing_reason_codes": runtime_metadata.get(
+                "runtime_routing_reason_codes"
+            ),
+            "graph_gate": runtime_metadata.get("graph_gate"),
+            "graph_fallback_reason": runtime_metadata.get("graph_fallback_reason"),
+            "graph_used": bool(runtime_metadata.get("graph_used")),
+            "graph_validation_status": runtime_metadata.get("graph_validation_status"),
+            "graph_validation_fallback_reason": runtime_metadata.get(
+                "graph_validation_fallback_reason"
+            ),
+            "graph_registry_agent_count": int(
+                runtime_metadata.get("graph_registry_agent_count") or 0
+            ),
+            "graph_write_agent_count": int(
+                runtime_metadata.get("graph_write_agent_count") or 0
+            ),
+            "graph_candidate_summary": runtime_metadata.get("graph_candidate_summary"),
+        },
+        created_at=now,
+        updated_at=now,
+    )
+    db.add(runtime_run)
+    db.flush()
+
+    invocation = AgentInvocation(
+        id=new_id(),
+        agent_run_id=runtime_run.id,
+        workspace_id=workspace_id,
+        conversation_id=conversation_id,
+        invocation_seq=0,
+        agent_id=SINGLE_LOOP_FALLBACK_AGENT_ID,
+        status=status,
+        purpose="single-loop graph fallback",
+    )
+    db.add(invocation)
+    db.flush()
+
+    append_trace_event(
+        db,
+        agent_run_id=runtime_run.id,
+        workspace_id=workspace_id,
+        conversation_id=conversation_id,
+        event_type="run_created",
+        payload={
+            "source": "single_loop_fallback_shadow",
+            "runtime_profile": runtime_run.runtime_profile,
+            "graph_gate": runtime_metadata.get("graph_gate"),
+            "graph_fallback_reason": runtime_metadata.get("graph_fallback_reason"),
+        },
+    )
+    append_graph_candidate_trace_events(
+        db,
+        agent_run_id=runtime_run.id,
+        workspace_id=workspace_id,
+        conversation_id=conversation_id,
+        runtime_metadata=runtime_metadata,
+    )
+    append_trace_event(
+        db,
+        agent_run_id=runtime_run.id,
+        agent_invocation_id=invocation.id,
+        workspace_id=workspace_id,
+        conversation_id=conversation_id,
+        invocation_seq=invocation.invocation_seq,
+        event_type="invocation_started",
+        payload={"agent_id": invocation.agent_id},
+    )
+    terminal_event = _terminal_trace_event_prefix(status)
+    terminal_payload = {
+        "agent_id": invocation.agent_id,
+        "finish_reason": finish_reason,
+        "response_status": response_status,
+    }
+    append_trace_event(
+        db,
+        agent_run_id=runtime_run.id,
+        agent_invocation_id=invocation.id,
+        workspace_id=workspace_id,
+        conversation_id=conversation_id,
+        invocation_seq=invocation.invocation_seq,
+        event_type=f"invocation_{terminal_event}",
+        payload=terminal_payload,
+    )
+    append_trace_event(
+        db,
+        agent_run_id=runtime_run.id,
+        workspace_id=workspace_id,
+        conversation_id=conversation_id,
+        event_type=f"run_{terminal_event}",
+        payload={
+            "finish_reason": finish_reason,
+            "response_status": response_status,
+        },
+    )
+
+
+def _terminal_runtime_status(*, finish_reason: str | None, response_status: str) -> str:
+    if response_status == "cancelled" or finish_reason == "cancelled":
+        return "cancelled"
+    if response_status == "error" or finish_reason == "error":
+        return "failed"
+    return "completed"
+
+
+def _terminal_trace_event_prefix(status: str) -> str:
+    if status == "failed":
+        return "failed"
+    if status == "cancelled":
+        return "cancelled"
+    return "completed"
+
+
+def _runtime_profile_from_metadata(runtime_metadata: dict[str, Any]) -> str:
+    runtime_profile = runtime_metadata.get("runtime_profile")
+    if runtime_profile in {"interactive_read", "grounded_report", "long_doc", "high_risk_action"}:
+        return str(runtime_profile)
+    return "interactive_read"
+
+
 def scrub_completed_runtime_records(db: Session, *, older_than_days: int = 90) -> int:
     threshold = utcnow_naive() - timedelta(days=older_than_days)
     runs = list(
@@ -189,7 +443,9 @@ def scrub_completed_runtime_records(db: Session, *, older_than_days: int = 90) -
 
 
 __all__ = [
+    "append_graph_candidate_trace_events",
     "append_trace_event",
+    "persist_single_loop_fallback_runtime_shadow",
     "prepare_trace_payload",
     "scrub_completed_runtime_records",
     "scrub_trace_payload",
