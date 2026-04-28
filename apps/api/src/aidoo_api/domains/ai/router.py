@@ -46,7 +46,7 @@ from aidoo_api.domains.ai.registry import get_ai_capability_registry
 from aidoo_api.domains.ai.runtime.metrics import record_inspection_request
 from aidoo_api.domains.ai.runtime.models import AgentInvocation, AgentRun, AgentTraceEvent
 from aidoo_api.domains.ai.runtime.persistence import scrub_trace_payload
-from aidoo_api.domains.ai.runtime.routing import select_runtime_profile
+from aidoo_api.domains.ai.runtime.routing import RuntimeRoutingDecision, select_runtime_profile
 from aidoo_api.domains.ai.tool_runtime import (
     ToolCallExecution,
     execute_tool_call,
@@ -1669,6 +1669,9 @@ async def _chat_stream_publisher(
                 allowed_app_ids=payload.allowed_app_ids,
                 runtime_profile=runtime_routing.runtime_profile,
                 runtime_routing_reason_codes=runtime_routing.reason_codes,
+                runtime_graph_gate=runtime_routing.graph_gate,
+                runtime_graph_fallback_reason=runtime_routing.graph_fallback_reason,
+                runtime_graph_used=runtime_routing.graph_used,
                 parallel_tool_calls=False if has_approval_required_tools else None,
             ):
                 for serialized in _serialize_agent_event_through_artifacts(
@@ -1722,6 +1725,7 @@ async def _chat_stream_publisher(
                 decision=last_decision,
                 config=last_config,
                 model=chosen_model,
+                runtime_routing=runtime_routing,
             )
             if event is not None:
                 buffer.observe(event)
@@ -1768,6 +1772,7 @@ async def _chat_stream_publisher(
                         last_decision,
                         last_config,
                         model=chosen_model,
+                        runtime_routing=runtime_routing,
                     ),
                 },
             )
@@ -1785,6 +1790,7 @@ async def _chat_stream_publisher(
                 last_decision=last_decision,
                 last_config=last_config,
                 chosen_model=chosen_model,
+                runtime_routing=runtime_routing,
             )
 
 
@@ -1915,6 +1921,7 @@ def _chunk_to_envelope(
     decision: PolicyDecision | None,
     config: LlmPoolConfig | None,
     model: str | None,
+    runtime_routing: RuntimeRoutingDecision | None = None,
 ) -> dict[str, str] | None:
     # `content` chunks are routed through the artifact parser in the
     # publisher loop, not this helper — see `_emit_content_through_parser`.
@@ -1954,7 +1961,12 @@ def _chunk_to_envelope(
                 {
                     "finish_reason": chunk.finish_reason or "stop",
                     "audit_id": None,
-                    "meta": _build_done_meta(decision, config, model=model),
+                    "meta": _build_done_meta(
+                        decision,
+                        config,
+                        model=model,
+                        runtime_routing=runtime_routing,
+                    ),
                 },
             )
         )
@@ -1981,10 +1993,11 @@ def _build_done_meta(
     config: LlmPoolConfig | None,
     *,
     model: str | None,
+    runtime_routing: RuntimeRoutingDecision | None = None,
 ) -> dict[str, Any] | None:
     if decision is None or config is None:
         return None
-    return {
+    meta = {
         "policy": decision.policy,
         "chosen_pool": decision.chosen_pool,
         "decision_reason": decision.reason,
@@ -1994,6 +2007,19 @@ def _build_done_meta(
         "chosen_model": model or config.default_model,
         "canonical_model": config.canonical_model,
         "provider": config.provider,
+    }
+    if runtime_routing is not None:
+        meta.update(_runtime_done_meta(runtime_routing))
+    return meta
+
+
+def _runtime_done_meta(runtime_routing: RuntimeRoutingDecision) -> dict[str, Any]:
+    return {
+        "runtime_profile": runtime_routing.runtime_profile,
+        "runtime_routing_reason_codes": list(runtime_routing.reason_codes),
+        "graph_gate": runtime_routing.graph_gate,
+        "graph_fallback_reason": runtime_routing.graph_fallback_reason,
+        "graph_used": runtime_routing.graph_used,
     }
 
 
@@ -2572,6 +2598,7 @@ def _persist_assistant_turn(
     last_decision: PolicyDecision | None,
     last_config: LlmPoolConfig | None,
     chosen_model: str | None,
+    runtime_routing: RuntimeRoutingDecision | None = None,
 ) -> None:
     """Write a single assistant turn summarizing the streamed response.
 
@@ -2616,7 +2643,12 @@ def _persist_assistant_turn(
         elif response_status == "error":
             persisted_content = EMPTY_ERROR_RESPONSE_MESSAGE
 
-    fallback_meta = _build_done_meta(last_decision, last_config, model=chosen_model)
+    fallback_meta = _build_done_meta(
+        last_decision,
+        last_config,
+        model=chosen_model,
+        runtime_routing=runtime_routing,
+    )
     done_meta = buffer.done_meta or fallback_meta or {}
 
     # Propagate the stream's terminal state onto the reasoning panel too so
@@ -2634,6 +2666,11 @@ def _persist_assistant_turn(
         "forced_local": done_meta.get("forced_local"),
         "pii_hits": done_meta.get("pii_hits") or [],
         "provider": done_meta.get("provider"),
+        "runtime_profile": done_meta.get("runtime_profile"),
+        "runtime_routing_reason_codes": done_meta.get("runtime_routing_reason_codes") or [],
+        "graph_gate": done_meta.get("graph_gate"),
+        "graph_fallback_reason": done_meta.get("graph_fallback_reason"),
+        "graph_used": done_meta.get("graph_used"),
         "finish_reason": buffer.finish_reason,
         "response_status": response_status,
         "tool_calls": buffer.tool_calls,

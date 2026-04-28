@@ -537,6 +537,40 @@
           "title": "Forced Local",
           "type": "boolean"
         },
+        "graph_fallback_reason": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Graph Fallback Reason"
+        },
+        "graph_gate": {
+          "anyOf": [
+            {
+              "enum": [
+                "disabled",
+                "ineligible",
+                "eligible"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Graph Gate"
+        },
+        "graph_used": {
+          "default": false,
+          "title": "Graph Used",
+          "type": "boolean"
+        },
         "model": {
           "anyOf": [
             {
@@ -603,6 +637,25 @@
           ],
           "default": null,
           "title": "Provider"
+        },
+        "runtime_profile": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Runtime Profile"
+        },
+        "runtime_routing_reason_codes": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Runtime Routing Reason Codes",
+          "type": "array"
         }
       },
       "title": "DoneMeta",

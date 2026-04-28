@@ -23,13 +23,13 @@ Phase 6 전체 목표는 기존 single-loop agent를 deterministic fast path, ma
 
 이 섹션은 세션 handoff용이다. 구현 세션이 끝날 때마다 짧게 갱신한다.
 
-- Current PR/stage: Phase 0-B runtime observability and data hygiene hardening implemented. Graph execution remains disabled by default.
-- Last completed: Added expanded trace redaction, trace payload size cap, terminal runtime retention helper, runtime metrics wrapper, shadow-write/inspection metric hooks, and HTTP 422 mapping for `RuntimeRegistryValidationError`.
+- Current PR/stage: Phase 0-C graph gate skeleton implemented. Graph execution still falls back to the existing single-loop path.
+- Last completed: Added runtime routing metadata to SSE `done` envelopes, persisted assistant-turn model metadata, agent-loop snapshot metadata, and explicit graph fallback reasons.
 - In progress: None.
-- Next exact task: Start graph gate skeleton only after 0-B regression checks pass and this change is committed.
-- Files touched in Phase 0-B: `apps/api/src/aidoo_api/app.py`, `apps/api/src/aidoo_api/core/settings.py`, `apps/api/src/aidoo_api/domains/ai/approvals.py`, `apps/api/src/aidoo_api/domains/ai/router.py`, `apps/api/src/aidoo_api/domains/ai/runtime/`, `apps/api/tests/test_ai_approvals.py`, `apps/api/tests/test_ai_runtime_contracts.py`, `apps/api/tests/test_ai_runtime_persistence.py`, `apps/api/tests/test_ai_runtime_settings.py`, `plans/03-phase6-evidence-runtime-implementation.md`.
-- Tests/checks run: `cd apps/api && uv run pytest tests/test_ai_approvals.py tests/test_ai_runtime_persistence.py tests/test_ai_runtime_settings.py tests/test_ai_runtime_contracts.py tests/test_ai_stream.py tests/test_ai_events.py tests/test_ai_conversations.py`; targeted `uv run ruff check` for touched Python files; `git diff --check`.
-- Known blockers: graph manager implementation still needs schema generation path and fallback taxonomy; keep single-loop fallback canonical. No known Phase 0-B code blocker remains.
+- Next exact task: After Phase 0-C verification, start manager graph schema/validator skeleton without executing graph nodes.
+- Files touched in Phase 0-C: `apps/api/src/aidoo_api/domains/ai/agent.py`, `apps/api/src/aidoo_api/domains/ai/events.py`, `apps/api/src/aidoo_api/domains/ai/router.py`, `apps/api/src/aidoo_api/domains/ai/runtime/routing.py`, `apps/api/tests/fixtures/envelope_schema.json`, `apps/api/tests/test_ai_runtime_routing.py`, `apps/api/tests/test_ai_stream.py`, `plans/03-phase6-evidence-runtime-implementation.md`.
+- Tests/checks run: `cd apps/api && uv run pytest tests/test_ai_runtime_routing.py tests/test_ai_stream.py::test_chat_stream_done_meta_uses_requested_model tests/test_ai_stream.py::test_chat_stream_graph_gate_falls_back_without_graph_execution tests/test_ai_approvals.py::test_pending_approval_shadow_writes_runtime_run`; `cd apps/api && uv run pytest tests/test_ai_runtime_routing.py tests/test_ai_stream.py tests/test_ai_approvals.py tests/test_ai_events.py tests/test_ai_conversations.py`; `cd apps/api && uv run pytest tests/test_ai_runtime_contracts.py tests/test_ai_runtime_persistence.py tests/test_ai_runtime_settings.py tests/test_ai_runtime_eval_fixtures.py`; targeted `uv run ruff check` for touched Python files.
+- Known blockers: graph manager implementation still needs schema generation path and fallback taxonomy; keep single-loop fallback canonical.
 
 ## Architecture / Principles
 
@@ -289,12 +289,11 @@ cd apps/api && pytest tests/test_ai_runtime_contracts.py tests/test_ai_runtime_p
 | resume tool surface | 저장된 `resolved_tool_names`와 현재 entitlement/registry 결과의 교집합만 허용 |
 | review queue | backend 준비 전에는 구현하지 않음 |
 
-## Known Follow-Ups Before 0-B
+## Known Follow-Ups Before Graph Manager Execution
 
-- Trace/inspection redaction은 richer emitter payload를 추가하기 전에 allowlist 또는 더 넓은 denylist로 확장한다. 특히 prompt, messages, arguments, result, output, provider content 계열 payload를 추가할 때 silent leak을 막아야 한다.
-- Long-running graph trace를 켜기 전에 trace payload size cap과 runtime table retention/cleanup policy를 정의한다.
-- Operator-facing rollout 전 shadow-write failure, trace emit, inspection access에 대한 OTel span 또는 metric counter를 추가한다.
-- Production path가 untrusted `ExecutionGraph` input을 받기 전에 `RuntimeRegistryValidationError`를 HTTP 422로 매핑한다.
+- Graph manager schema/validator를 추가하더라도 Phase 0-C에서는 graph node를 실행하지 않는다. `graph_gate=eligible`이어도 `graph_fallback_reason=graph_runtime_not_implemented`로 single-loop fallback을 유지한다.
+- Long-running graph trace scheduler를 붙이기 전에 runtime retention helper를 실제 운영 job/admin trigger로 연결한다.
+- Runtime metric은 counter skeleton만 있다. Operator-facing rollout 전 dashboard/alert threshold를 별도 정의한다.
 - Phase 0-A에서 기존 table에 추가하는 `ai_tool_approvals` partial index는 의도된 tooling index 1건으로 기록한다. 이후 hot-table index 변경은 별도 concurrent migration으로 분리한다.
 - 새 runtime status를 추가할 때 migration SQL, ORM partial index, runtime status constant의 live-status literal drift를 함께 점검한다.
 

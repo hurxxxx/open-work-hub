@@ -1154,6 +1154,50 @@ def test_chat_stream_done_meta_uses_requested_model(
     assert done_meta["model"] == settings.llm_local_canonical_model
     assert done_meta["chosen_model"] == settings.llm_local_canonical_model
     assert done_meta["provider"]
+    assert "runtime_profile" in done_meta, done_meta
+    assert done_meta["runtime_profile"] == "interactive_read"
+    assert done_meta["graph_gate"] == "disabled"
+    assert done_meta["graph_fallback_reason"] == "feature_disabled"
+    assert done_meta["graph_used"] is False
+
+
+def test_chat_stream_graph_gate_falls_back_without_graph_execution(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    auth = _seeded_dev_login(client, "hq-admin")
+    slug = auth["user"]["workspaces"][0]["slug"]
+    _set_policy("chatbot", "local_only")
+    settings = get_settings()
+    monkeypatch.setattr(settings, "ai_runtime_graph_enabled", True)
+    monkeypatch.setattr(settings, "ai_tool_calling_enabled", False)
+
+    pool_client = _FakeAsyncPoolClient([_delta(content="ok", finish_reason="stop")])
+    monkeypatch.setattr(llm_core, "get_async_pool_client", lambda pool: pool_client)
+
+    status_code, events = _stream_post(
+        client,
+        _workspace_ai_path(slug, "/chat/stream"),
+        headers=_auth_headers(auth["token"]),
+        json_body={
+            "backend_mode": "local",
+            "messages": [
+                {
+                    "role": "user",
+                    "content": "회의록과 PMS 이슈를 비교해서 근거 있는 보고서로 정리해줘",
+                }
+            ],
+            "allowed_app_ids": ["meeting", "pms"],
+        },
+    )
+
+    assert status_code == 200
+    done_meta = events[-1]["data"]["meta"]
+    assert "runtime_profile" in done_meta, done_meta
+    assert done_meta["runtime_profile"] == "grounded_report"
+    assert done_meta["runtime_routing_reason_codes"] == ["grounded_report_signal"]
+    assert done_meta["graph_gate"] == "eligible"
+    assert done_meta["graph_fallback_reason"] == "graph_runtime_not_implemented"
+    assert done_meta["graph_used"] is False
 
 
 def test_chat_stream_mounts_on_legacy_and_slug_paths(

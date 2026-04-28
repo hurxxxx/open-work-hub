@@ -23,6 +23,8 @@ def test_runtime_profile_defaults_to_interactive_read() -> None:
 
     assert decision.runtime_profile == "interactive_read"
     assert decision.graph_gate == "disabled"
+    assert decision.graph_fallback_reason == "feature_disabled"
+    assert decision.graph_used is False
     assert "default_interactive_read" in decision.reason_codes
 
 
@@ -36,6 +38,8 @@ def test_runtime_profile_selects_grounded_report_for_report_signal() -> None:
 
     assert decision.runtime_profile == "grounded_report"
     assert decision.graph_gate == "eligible"
+    assert decision.graph_fallback_reason == "graph_runtime_not_implemented"
+    assert decision.graph_used is False
     assert "grounded_report_signal" in decision.reason_codes
 
 
@@ -49,6 +53,7 @@ def test_runtime_profile_selects_long_doc_for_large_budget() -> None:
 
     assert decision.runtime_profile == "long_doc"
     assert decision.graph_gate == "ineligible"
+    assert decision.graph_fallback_reason == "runtime_profile_ineligible"
     assert "large_output_budget" in decision.reason_codes
 
 

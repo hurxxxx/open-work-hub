@@ -103,6 +103,9 @@ async def run_agent_turn_stream(
     allowed_app_ids: list[str] | None = None,
     runtime_profile: RuntimeProfile = "interactive_read",
     runtime_routing_reason_codes: tuple[str, ...] = (),
+    runtime_graph_gate: str = "disabled",
+    runtime_graph_fallback_reason: str | None = None,
+    runtime_graph_used: bool = False,
     parallel_tool_calls: bool | None = None,
 ) -> AsyncIterator[Any]:
     conversation = _prepend_agent_system_message(
@@ -119,6 +122,9 @@ async def run_agent_turn_stream(
         tool_specs=tool_specs,
         runtime_profile=runtime_profile,
         runtime_routing_reason_codes=runtime_routing_reason_codes,
+        runtime_graph_gate=runtime_graph_gate,
+        runtime_graph_fallback_reason=runtime_graph_fallback_reason,
+        runtime_graph_used=runtime_graph_used,
     )
     async for event in _run_agent_loop_stream(
         context=context,
@@ -291,7 +297,7 @@ async def _run_agent_loop_stream(
                         {
                             "finish_reason": "error",
                             "audit_id": None,
-                            "meta": _build_done_meta(execution),
+                            "meta": _build_done_meta(execution, model_meta=model_meta),
                         },
                     )
                     return
@@ -390,7 +396,7 @@ async def _run_agent_loop_stream(
                     {
                         "finish_reason": turn_finish_reason,
                         "audit_id": None,
-                        "meta": _build_done_meta(execution),
+                        "meta": _build_done_meta(execution, model_meta=model_meta),
                     },
                 )
                 return
@@ -412,7 +418,7 @@ async def _run_agent_loop_stream(
                     {
                         "finish_reason": "error",
                         "audit_id": None,
-                        "meta": _build_done_meta(execution),
+                        "meta": _build_done_meta(execution, model_meta=model_meta),
                     },
                 )
                 return
@@ -437,7 +443,7 @@ async def _run_agent_loop_stream(
                         {
                             "finish_reason": "error",
                             "audit_id": None,
-                            "meta": _build_done_meta(execution),
+                            "meta": _build_done_meta(execution, model_meta=model_meta),
                         },
                     )
                     return
@@ -461,7 +467,7 @@ async def _run_agent_loop_stream(
                         {
                             "finish_reason": "error",
                             "audit_id": None,
-                            "meta": _build_done_meta(execution),
+                            "meta": _build_done_meta(execution, model_meta=model_meta),
                         },
                     )
                     return
@@ -537,6 +543,7 @@ async def _run_agent_loop_stream(
                             "audit_id": None,
                             "meta": _build_done_meta(
                                 execution,
+                                model_meta=model_meta,
                                 pending_approval_id=approval.id,
                                 pending_call_id=pending.call_id,
                                 agent_run_id=snapshot.id,
@@ -578,7 +585,7 @@ async def _run_agent_loop_stream(
                             {
                                 "finish_reason": "error",
                                 "audit_id": None,
-                                "meta": _build_done_meta(execution),
+                                "meta": _build_done_meta(execution, model_meta=model_meta),
                             },
                         )
                         return
@@ -601,7 +608,7 @@ async def _run_agent_loop_stream(
             {
                 "finish_reason": "error",
                 "audit_id": None,
-                "meta": _build_done_meta(execution),
+                "meta": _build_done_meta(execution, model_meta=model_meta),
             },
         )
     except (asyncio.CancelledError, GeneratorExit):
@@ -733,11 +740,12 @@ def _merge_usage(
 def _build_done_meta(
     execution: ResolvedLlmExecution,
     *,
+    model_meta: dict[str, Any] | None = None,
     pending_approval_id: str | None = None,
     pending_call_id: str | None = None,
     agent_run_id: str | None = None,
 ) -> dict[str, Any]:
-    return {
+    meta = {
         "policy": execution.decision.policy,
         "chosen_pool": execution.decision.chosen_pool,
         "decision_reason": execution.decision.reason,
@@ -750,6 +758,19 @@ def _build_done_meta(
         "pending_approval_id": pending_approval_id,
         "pending_call_id": pending_call_id,
         "agent_run_id": agent_run_id,
+    }
+    if model_meta is not None:
+        meta.update(_runtime_done_meta(model_meta))
+    return meta
+
+
+def _runtime_done_meta(model_meta: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "runtime_profile": model_meta.get("runtime_profile"),
+        "runtime_routing_reason_codes": list(model_meta.get("runtime_routing_reason_codes") or []),
+        "graph_gate": model_meta.get("graph_gate"),
+        "graph_fallback_reason": model_meta.get("graph_fallback_reason"),
+        "graph_used": bool(model_meta.get("graph_used")),
     }
 
 
@@ -764,6 +785,9 @@ def _build_snapshot_model_meta(
     tool_specs: list[dict[str, Any]],
     runtime_profile: RuntimeProfile,
     runtime_routing_reason_codes: tuple[str, ...],
+    runtime_graph_gate: str,
+    runtime_graph_fallback_reason: str | None,
+    runtime_graph_used: bool,
 ) -> dict[str, Any]:
     return {
         "model": execution.chosen_model,
@@ -783,6 +807,9 @@ def _build_snapshot_model_meta(
         "reasoning_effort": execution.resolved_reasoning_effort,
         "runtime_profile": runtime_profile,
         "runtime_routing_reason_codes": list(runtime_routing_reason_codes),
+        "graph_gate": runtime_graph_gate,
+        "graph_fallback_reason": runtime_graph_fallback_reason,
+        "graph_used": runtime_graph_used,
         "scope": _build_snapshot_scope_meta(
             allowed_app_ids=allowed_app_ids,
             tool_specs=tool_specs,

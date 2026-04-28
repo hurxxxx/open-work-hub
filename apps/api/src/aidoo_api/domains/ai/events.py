@@ -51,6 +51,11 @@ class DoneMeta(BaseModel):
     pending_approval_id: str | None = None
     pending_call_id: str | None = None
     agent_run_id: str | None = None
+    runtime_profile: str | None = None
+    runtime_routing_reason_codes: list[str] = Field(default_factory=list)
+    graph_gate: Literal["disabled", "ineligible", "eligible"] | None = None
+    graph_fallback_reason: str | None = None
+    graph_used: bool = False
 
 
 DoneFinishReason = Literal["stop", "length", "cancelled", "error", "awaiting_approval"]

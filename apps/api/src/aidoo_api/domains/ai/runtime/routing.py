@@ -7,6 +7,11 @@ from aidoo_api.domains.ai.runtime.contracts import RuntimeProfile
 
 
 GraphGateDecision = Literal["disabled", "eligible", "ineligible"]
+GraphFallbackReason = Literal[
+    "feature_disabled",
+    "runtime_profile_ineligible",
+    "graph_runtime_not_implemented",
+]
 
 LONG_DOC_CHAR_THRESHOLD = 12_000
 LONG_DOC_MAX_TOKENS_THRESHOLD = 32_768
@@ -53,6 +58,8 @@ class RuntimeRoutingDecision:
     runtime_profile: RuntimeProfile
     reason_codes: tuple[str, ...]
     graph_gate: GraphGateDecision
+    graph_fallback_reason: GraphFallbackReason
+    graph_used: bool = False
 
 
 def select_runtime_profile(
@@ -96,16 +103,24 @@ def _decision(
     graph_enabled: bool,
 ) -> RuntimeRoutingDecision:
     graph_gate: GraphGateDecision = "disabled"
+    graph_fallback_reason: GraphFallbackReason = "feature_disabled"
     if graph_enabled:
         graph_gate = (
             "eligible"
             if runtime_profile in {"grounded_report", "high_risk_action"}
             else "ineligible"
         )
+        graph_fallback_reason = (
+            "graph_runtime_not_implemented"
+            if graph_gate == "eligible"
+            else "runtime_profile_ineligible"
+        )
     return RuntimeRoutingDecision(
         runtime_profile=runtime_profile,
         reason_codes=tuple(reason_codes),
         graph_gate=graph_gate,
+        graph_fallback_reason=graph_fallback_reason,
+        graph_used=False,
     )
 
 
