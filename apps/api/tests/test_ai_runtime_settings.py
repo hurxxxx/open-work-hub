@@ -9,6 +9,7 @@ def test_phase6_runtime_feature_flags_default_off() -> None:
     )
 
     assert settings.ai_runtime_graph_enabled is False
+    assert settings.ai_runtime_graph_execution_enabled is False
     assert settings.ai_runtime_shadow_write_enabled is True
     assert settings.ai_runtime_trace_payload_max_bytes == 32768
     assert settings.ai_runtime_retention_days == 90

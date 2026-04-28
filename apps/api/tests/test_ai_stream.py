@@ -26,6 +26,7 @@ from aidoo_api.domains.ai import approvals as ai_approvals
 from aidoo_api.domains.ai.models import LlmPolicy
 from aidoo_api.domains.ai import router as ai_router
 from aidoo_api.domains.ai.runtime.models import AgentInvocation, AgentRun, AgentTraceEvent
+from aidoo_api.domains.ai.runtime.graph_scheduler import GraphSchedulerError
 from aidoo_api.domains.auth.models import AuditLog, Workspace, WorkspaceAppEntitlement
 from test_meeting import (
     _auth_headers,
@@ -951,6 +952,153 @@ def test_chat_stream_agent_loop_halts_for_approval_required_tool(
         assert snapshot.status == "awaiting_approval"
 
 
+def test_chat_stream_agent_loop_halt_preserves_graph_schedule_summary(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    auth = _seeded_dev_login(client, "delivery-hub-admin")
+    slug = "delivery-hub"
+    _set_policy("chatbot", "local_only")
+    settings = get_settings()
+    monkeypatch.setattr(settings, "ai_runtime_graph_enabled", True)
+    monkeypatch.setattr(settings, "ai_tool_calling_enabled", True)
+
+    async def fake_complete_chat_stream(*args: Any, **kwargs: Any):
+        yield (
+            StreamChunk(
+                kind="tool_call_start",
+                tool_call_id="call-1",
+                tool_name="pms.create_issue",
+            ),
+            None,
+            None,
+        )
+        yield (
+            StreamChunk(
+                kind="tool_call_args",
+                tool_call_id="call-1",
+                tool_name="pms.create_issue",
+                args_delta='{"title":"Approval issue"}',
+            ),
+            None,
+            None,
+        )
+        yield (
+            StreamChunk(kind="done", finish_reason="tool_calls"),
+            None,
+            None,
+        )
+
+    monkeypatch.setattr(ai_agent, "complete_chat_stream", fake_complete_chat_stream)
+
+    def blocked_tool_call(*args: Any, **kwargs: Any):
+        return ai_router.ToolCallExecution(
+            call_id="call-1",
+            tool_name="pms.create_issue",
+            arguments_json='{"title":"Approval issue"}',
+            status="blocked",
+            resource_preview="Create PMS issue Approval issue",
+        )
+
+    monkeypatch.setattr(ai_agent, "execute_tool_call", blocked_tool_call)
+
+    status_code, events = _stream_post(
+        client,
+        _workspace_ai_path(slug, "/chat/stream"),
+        headers=_auth_headers(auth["token"]),
+        json_body={
+            "messages": [{"role": "user", "content": "PMS 이슈를 만들어줘"}],
+            "persist": True,
+            "allowed_app_ids": ["pms"],
+        },
+    )
+
+    assert status_code == 200
+    chat = _chat_events(events)
+    assert [event["type"] for event in chat] == [
+        "tool_call_started",
+        "tool_call_args_delta",
+        "approval_required",
+        "done",
+    ]
+    done_meta = chat[-1]["data"]["meta"]
+    graph_schedule = done_meta["graph_schedule_summary"]
+    assert done_meta["runtime_profile"] == "high_risk_action"
+    assert done_meta["graph_validation_status"] == "accepted"
+    assert done_meta["graph_execution_status"] == "disabled"
+    assert done_meta["graph_execution_fallback_reason"] == "graph_execution_disabled"
+    assert graph_schedule["state"] == "planned"
+    assert graph_schedule["execution_enabled"] is False
+    assert graph_schedule["planned_agent_ids"] == [
+        "domain.pms",
+        "approval.proposal_preview",
+    ]
+    approval_id = chat[2]["data"]["approval_id"]
+    agent_run_id = done_meta["agent_run_id"]
+    assert approval_id
+    assert agent_run_id
+
+    with Session(get_engine()) as session:
+        approval = session.scalar(
+            select(ai_approvals.AiToolApproval).where(
+                ai_approvals.AiToolApproval.id == approval_id
+            )
+        )
+        snapshot = session.scalar(
+            select(ai_approvals.AgentRunSnapshot).where(
+                ai_approvals.AgentRunSnapshot.id == agent_run_id
+            )
+        )
+        runtime_run = session.get(AgentRun, agent_run_id)
+        invocations = list(
+            session.scalars(
+                select(AgentInvocation)
+                .where(AgentInvocation.agent_run_id == agent_run_id)
+                .order_by(AgentInvocation.invocation_seq)
+            )
+        )
+        trace_events = list(
+            session.scalars(
+                select(AgentTraceEvent)
+                .where(AgentTraceEvent.agent_run_id == agent_run_id)
+                .order_by(AgentTraceEvent.event_seq)
+            )
+        )
+
+    assert approval is not None
+    assert snapshot is not None
+    assert runtime_run is not None
+    assert approval.status == "pending"
+    assert snapshot.status == "awaiting_approval"
+    assert runtime_run.status == "awaiting_approval"
+    assert runtime_run.graph_enabled is True
+    assert snapshot.model_meta["graph_schedule_summary"] == graph_schedule
+    assert snapshot.model_meta["graph_execution_status"] == "disabled"
+    assert snapshot.model_meta["graph_execution_fallback_reason"] == "graph_execution_disabled"
+    assert [invocation.agent_id for invocation in invocations] == graph_schedule[
+        "planned_agent_ids"
+    ]
+    assert [invocation.status for invocation in invocations] == [
+        "pending",
+        "awaiting_approval",
+    ]
+    replay = ai_approvals.rehydrate_model_meta(snapshot)
+    assert replay.raw["graph_schedule_summary"] == graph_schedule
+    assert replay.raw["graph_execution_status"] == "disabled"
+    event_types = [event.event_type for event in trace_events]
+    assert event_types[:4] == [
+        "run_created",
+        "graph_candidate_generated",
+        "graph_candidate_validated",
+        "graph_schedule_planned",
+    ]
+    assert event_types.count("graph_node_planned") == graph_schedule["step_count"]
+    planned_events = [
+        event for event in trace_events if event.event_type == "graph_node_planned"
+    ]
+    assert all(event.agent_invocation_id for event in planned_events)
+    assert "graph_execution_gate_evaluated" in event_types
+
+
 def test_chat_stream_agent_loop_uses_filtered_tool_specs_from_mcp_manifest(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -1164,6 +1312,8 @@ def test_chat_stream_done_meta_uses_requested_model(
     assert done_meta.get("graph_validation_fallback_reason") is None
     assert done_meta["graph_registry_agent_count"] == 0
     assert done_meta["graph_write_agent_count"] == 0
+    assert done_meta["graph_execution_status"] == "not_applicable"
+    assert done_meta.get("graph_execution_fallback_reason") is None
 
 
 def test_chat_stream_graph_gate_falls_back_without_graph_execution(
@@ -1206,6 +1356,8 @@ def test_chat_stream_graph_gate_falls_back_without_graph_execution(
     assert done_meta["graph_used"] is False
     assert done_meta["agent_run_id"]
     assert done_meta["graph_validation_status"] == "accepted"
+    assert done_meta["graph_execution_status"] == "disabled"
+    assert done_meta["graph_execution_fallback_reason"] == "graph_execution_disabled"
     assert done_meta.get("graph_validation_fallback_reason") is None
     assert done_meta["graph_registry_agent_count"] > 0
     assert done_meta["graph_write_agent_count"] == 1
@@ -1226,6 +1378,11 @@ def test_chat_stream_graph_gate_falls_back_without_graph_execution(
         "requires_verifier",
         "requires_approval_preview",
     }
+    graph_schedule = done_meta["graph_schedule_summary"]
+    assert graph_schedule["state"] == "planned"
+    assert graph_schedule["execution_enabled"] is False
+    assert graph_schedule["step_count"] == len(graph_summary["invocation_agent_ids"])
+    assert graph_schedule["planned_agent_ids"] == graph_summary["invocation_agent_ids"]
     attached = next(event for event in events if event["type"] == "conversation_attached")
     agent_run_id = done_meta["agent_run_id"]
     with Session(get_engine()) as session:
@@ -1237,12 +1394,13 @@ def test_chat_stream_graph_gate_falls_back_without_graph_execution(
         assert runtime_run.runtime_profile == "grounded_report"
         assert runtime_run.graph_enabled is True
         assert runtime_run.fallback_reason == "graph_runtime_not_implemented"
-        invocation = session.scalar(
-            select(AgentInvocation).where(AgentInvocation.agent_run_id == agent_run_id)
+        invocations = list(
+            session.scalars(
+                select(AgentInvocation)
+                .where(AgentInvocation.agent_run_id == agent_run_id)
+                .order_by(AgentInvocation.invocation_seq)
+            )
         )
-        assert invocation is not None
-        assert invocation.agent_id == "single_loop.fallback"
-        assert invocation.status == "completed"
         trace_events = list(
             session.scalars(
                 select(AgentTraceEvent)
@@ -1250,15 +1408,40 @@ def test_chat_stream_graph_gate_falls_back_without_graph_execution(
                 .order_by(AgentTraceEvent.event_seq)
             )
         )
-    assert [event.event_type for event in trace_events] == [
+    planned_invocations = [
+        invocation
+        for invocation in invocations
+        if invocation.agent_id != "single_loop.fallback"
+    ]
+    assert [invocation.agent_id for invocation in planned_invocations] == graph_schedule[
+        "planned_agent_ids"
+    ]
+    assert {invocation.status for invocation in planned_invocations} == {"abandoned"}
+    fallback_invocation = next(
+        invocation for invocation in invocations if invocation.agent_id == "single_loop.fallback"
+    )
+    assert fallback_invocation.status == "completed"
+    assert fallback_invocation.invocation_seq == graph_schedule["step_count"]
+    event_types = [event.event_type for event in trace_events]
+    assert event_types[:4] == [
         "run_created",
         "graph_candidate_generated",
         "graph_candidate_validated",
-        "invocation_started",
-        "invocation_completed",
-        "run_completed",
+        "graph_schedule_planned",
     ]
+    assert event_types.count("graph_node_planned") == graph_schedule["step_count"]
+    assert all(
+        event.agent_invocation_id
+        for event in trace_events
+        if event.event_type == "graph_node_planned"
+    )
+    assert "graph_execution_gate_evaluated" in event_types
+    assert event_types[-3:] == ["invocation_started", "invocation_completed", "run_completed"]
     assert trace_events[1].payload_json["graph_candidate_summary"]["output_kind"] == "artifact"
+    schedule_event = next(
+        event for event in trace_events if event.event_type == "graph_schedule_planned"
+    )
+    assert schedule_event.payload_json["graph_schedule_summary"]["state"] == "planned"
 
     inspection = client.get(
         _workspace_ai_path(slug, f"/runtime/runs/{agent_run_id}"),
@@ -1276,6 +1459,74 @@ def test_chat_stream_graph_gate_falls_back_without_graph_execution(
         ]
         == "artifact"
     )
+    assert inspected_trace["graph_schedule_planned"]["graph_schedule_summary"][
+        "execution_enabled"
+    ] is False
+
+
+def test_chat_stream_graph_schedule_failure_remains_fallback_metadata(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    auth = _seeded_dev_login(client, "hq-admin")
+    slug = auth["user"]["workspaces"][0]["slug"]
+    _set_policy("chatbot", "local_only")
+    settings = get_settings()
+    monkeypatch.setattr(settings, "ai_runtime_graph_enabled", True)
+    monkeypatch.setattr(settings, "ai_tool_calling_enabled", False)
+
+    def fail_schedule(*args: Any, **kwargs: Any):
+        del args, kwargs
+        raise GraphSchedulerError("cyclic invocation dependency: ['writer.template']")
+
+    monkeypatch.setattr(ai_router, "build_graph_execution_schedule", fail_schedule)
+
+    pool_client = _FakeAsyncPoolClient([_delta(content="ok", finish_reason="stop")])
+    monkeypatch.setattr(llm_core, "get_async_pool_client", lambda pool: pool_client)
+
+    status_code, events = _stream_post(
+        client,
+        _workspace_ai_path(slug, "/chat/stream"),
+        headers=_auth_headers(auth["token"]),
+        json_body={
+            "backend_mode": "local",
+            "persist": True,
+            "messages": [
+                {
+                    "role": "user",
+                    "content": "회의록과 PMS 이슈를 비교해서 근거 있는 보고서로 정리해줘",
+                }
+            ],
+            "allowed_app_ids": ["meeting", "pms"],
+        },
+    )
+
+    assert status_code == 200
+    chat = _chat_events(events)
+    assert [event["type"] for event in chat] == ["content_delta", "done"]
+    done_meta = chat[-1]["data"]["meta"]
+    assert done_meta["graph_validation_status"] == "accepted"
+    assert done_meta["graph_candidate_summary"]["intent"] == "report"
+    assert done_meta["graph_execution_status"] == "not_applicable"
+    assert done_meta["graph_execution_fallback_reason"] == "graph_schedule_unavailable"
+    assert done_meta["graph_schedule_summary"] == {
+        "state": "failed",
+        "execution_enabled": False,
+        "fallback_reason": "graph_schedule_failed",
+        "error_type": "GraphSchedulerError",
+        "error": "cyclic invocation dependency: ['writer.template']",
+        "step_count": 0,
+        "planned_agent_ids": [],
+        "steps": [],
+    }
+
+    inspection = client.get(
+        _workspace_ai_path(slug, f"/runtime/runs/{done_meta['agent_run_id']}"),
+        headers=_auth_headers(auth["token"]),
+    )
+    assert inspection.status_code == 200, inspection.text
+    event_types = [event["event_type"] for event in inspection.json()["trace_events"]]
+    assert "graph_schedule_failed" in event_types
+    assert "graph_node_planned" not in event_types
 
 
 def test_chat_stream_mounts_on_legacy_and_slug_paths(

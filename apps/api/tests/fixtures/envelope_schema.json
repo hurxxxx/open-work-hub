@@ -550,6 +550,42 @@
           "default": null,
           "title": "Graph Candidate Summary"
         },
+        "graph_execution_adapter": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Graph Execution Adapter"
+        },
+        "graph_execution_fallback_reason": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Graph Execution Fallback Reason"
+        },
+        "graph_execution_status": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Graph Execution Status"
+        },
         "graph_fallback_reason": {
           "anyOf": [
             {
@@ -583,6 +619,19 @@
           "default": 0,
           "title": "Graph Registry Agent Count",
           "type": "integer"
+        },
+        "graph_schedule_summary": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Graph Schedule Summary"
         },
         "graph_used": {
           "default": false,

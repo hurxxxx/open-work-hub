@@ -111,6 +111,10 @@ async def run_agent_turn_stream(
     runtime_graph_registry_agent_count: int = 0,
     runtime_graph_write_agent_count: int = 0,
     runtime_graph_candidate_summary: dict[str, Any] | None = None,
+    runtime_graph_schedule_summary: dict[str, Any] | None = None,
+    runtime_graph_execution_status: str = "not_applicable",
+    runtime_graph_execution_fallback_reason: str | None = None,
+    runtime_graph_execution_adapter: str | None = None,
     parallel_tool_calls: bool | None = None,
 ) -> AsyncIterator[Any]:
     conversation = _prepend_agent_system_message(
@@ -135,6 +139,10 @@ async def run_agent_turn_stream(
         runtime_graph_registry_agent_count=runtime_graph_registry_agent_count,
         runtime_graph_write_agent_count=runtime_graph_write_agent_count,
         runtime_graph_candidate_summary=runtime_graph_candidate_summary,
+        runtime_graph_schedule_summary=runtime_graph_schedule_summary,
+        runtime_graph_execution_status=runtime_graph_execution_status,
+        runtime_graph_execution_fallback_reason=runtime_graph_execution_fallback_reason,
+        runtime_graph_execution_adapter=runtime_graph_execution_adapter,
     )
     async for event in _run_agent_loop_stream(
         context=context,
@@ -786,6 +794,10 @@ def _runtime_done_meta(model_meta: dict[str, Any]) -> dict[str, Any]:
         "graph_registry_agent_count": int(model_meta.get("graph_registry_agent_count") or 0),
         "graph_write_agent_count": int(model_meta.get("graph_write_agent_count") or 0),
         "graph_candidate_summary": model_meta.get("graph_candidate_summary"),
+        "graph_schedule_summary": model_meta.get("graph_schedule_summary"),
+        "graph_execution_status": model_meta.get("graph_execution_status"),
+        "graph_execution_fallback_reason": model_meta.get("graph_execution_fallback_reason"),
+        "graph_execution_adapter": model_meta.get("graph_execution_adapter"),
     }
 
 
@@ -808,6 +820,10 @@ def _build_snapshot_model_meta(
     runtime_graph_registry_agent_count: int,
     runtime_graph_write_agent_count: int,
     runtime_graph_candidate_summary: dict[str, Any] | None,
+    runtime_graph_schedule_summary: dict[str, Any] | None,
+    runtime_graph_execution_status: str,
+    runtime_graph_execution_fallback_reason: str | None,
+    runtime_graph_execution_adapter: str | None,
 ) -> dict[str, Any]:
     return {
         "model": execution.chosen_model,
@@ -835,6 +851,10 @@ def _build_snapshot_model_meta(
         "graph_registry_agent_count": runtime_graph_registry_agent_count,
         "graph_write_agent_count": runtime_graph_write_agent_count,
         "graph_candidate_summary": runtime_graph_candidate_summary,
+        "graph_schedule_summary": runtime_graph_schedule_summary,
+        "graph_execution_status": runtime_graph_execution_status,
+        "graph_execution_fallback_reason": runtime_graph_execution_fallback_reason,
+        "graph_execution_adapter": runtime_graph_execution_adapter,
         "scope": _build_snapshot_scope_meta(
             allowed_app_ids=allowed_app_ids,
             tool_specs=tool_specs,

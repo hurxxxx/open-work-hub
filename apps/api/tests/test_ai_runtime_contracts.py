@@ -23,10 +23,14 @@ from aidoo_api.domains.ai.runtime import (
     RuntimeTraceSequencer,
     build_deterministic_manager_candidate,
     build_execution_graph_response_schema,
+    build_graph_execution_schedule,
     resolve_agent_definitions,
+    summarize_graph_execution_schedule,
+    summarize_graph_schedule_failure,
     summarize_execution_graph,
     validate_execution_graph,
     validate_manager_graph_candidate,
+    GraphSchedulerError,
 )
 from aidoo_api.domains.ai.runtime.metrics import (
     record_inspection_request,
@@ -410,6 +414,78 @@ def test_deterministic_manager_candidate_builds_valid_grounded_report_graph() ->
     assert "purpose" not in summary
     assert "must_run_after" not in summary
     assert "inputs_ref" not in summary
+
+
+def test_graph_scheduler_builds_planned_topological_order() -> None:
+    resolved = resolve_agent_definitions(
+        enabled_app_ids=["ai", "meeting", "docs", "pms"],
+        allowed_app_ids=["meeting", "pms"],
+    )
+    candidate = build_deterministic_manager_candidate(
+        runtime_profile="grounded_report",
+        resolved_agents=resolved,
+    )
+    assert candidate is not None
+
+    schedule = build_graph_execution_schedule(candidate)
+    summary = summarize_graph_execution_schedule(schedule)
+
+    assert summary["state"] == "planned"
+    assert summary["execution_enabled"] is False
+    assert summary["step_count"] == len(candidate.invocations)
+    planned_agent_ids = summary["planned_agent_ids"]
+    assert planned_agent_ids.index("search.planner") > planned_agent_ids.index("domain.pms")
+    assert planned_agent_ids.index("search.executor") > planned_agent_ids.index("search.planner")
+    assert planned_agent_ids.index("writer.template") == len(planned_agent_ids) - 1
+    assert set(summary["steps"][0]) == {
+        "invocation_seq",
+        "agent_id",
+        "state",
+        "depends_on_agent_ids",
+    }
+    assert {step["state"] for step in summary["steps"]} == {"planned"}
+    assert "purpose" not in summary["steps"][0]
+
+
+def test_graph_scheduler_rejects_cyclic_dependencies() -> None:
+    graph = ExecutionGraph(
+        intent="report",
+        domains=["meeting"],
+        risk="medium",
+        output_kind="artifact",
+        invocations=[
+            AgentInvocationSpec(
+                agent_id="domain.meeting",
+                must_run_after=["writer.template"],
+                purpose="collect evidence",
+            ),
+            AgentInvocationSpec(
+                agent_id="writer.template",
+                must_run_after=["domain.meeting"],
+                purpose="write draft",
+            ),
+        ],
+    )
+
+    with pytest.raises(GraphSchedulerError, match="cyclic invocation dependency"):
+        build_graph_execution_schedule(graph)
+
+
+def test_graph_schedule_failure_summary_is_trace_safe() -> None:
+    summary = summarize_graph_schedule_failure(
+        GraphSchedulerError("cyclic invocation dependency: ['writer.template']")
+    )
+
+    assert summary == {
+        "state": "failed",
+        "execution_enabled": False,
+        "fallback_reason": "graph_schedule_failed",
+        "error_type": "GraphSchedulerError",
+        "error": "cyclic invocation dependency: ['writer.template']",
+        "step_count": 0,
+        "planned_agent_ids": [],
+        "steps": [],
+    }
 
 
 def test_deterministic_manager_candidate_builds_valid_high_risk_preview_graph() -> None:

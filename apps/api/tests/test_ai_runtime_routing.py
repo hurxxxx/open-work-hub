@@ -3,6 +3,9 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from aidoo_api.domains.ai.runtime.graph_execution import (
+    attach_graph_execution_adapter_decision,
+)
 from aidoo_api.domains.ai.runtime.manager_validation import ManagerGraphValidationResult
 from aidoo_api.domains.ai.runtime.routing import (
     attach_manager_graph_validation_result,
@@ -95,6 +98,73 @@ def test_manager_graph_validation_result_marks_accepted() -> None:
     assert traced.graph_registry_agent_count == 10
     assert traced.graph_write_agent_count == 1
     assert traced.graph_candidate_summary == {"intent": "report", "invocation_agent_ids": []}
+    assert traced.graph_execution_status == "not_applicable"
+
+
+def test_graph_execution_adapter_gate_stays_disabled_until_flag_enabled() -> None:
+    decision = select_runtime_profile(
+        messages=_messages("회의록과 PMS 이슈를 비교해서 근거 있는 보고서로 정리해줘"),
+        allowed_app_ids=["meeting", "pms"],
+        max_tokens=None,
+        graph_enabled=True,
+    )
+    traced = attach_manager_graph_validation_result(
+        decision,
+        validation=ManagerGraphValidationResult(accepted=True, graph=None),
+        registry_agent_count=10,
+        write_agent_count=1,
+        graph_candidate_summary={"intent": "report", "invocation_agent_ids": []},
+        graph_schedule_summary={
+            "state": "planned",
+            "execution_enabled": False,
+            "step_count": 1,
+            "planned_agent_ids": ["writer.template"],
+            "steps": [],
+        },
+    )
+
+    gated = attach_graph_execution_adapter_decision(
+        traced,
+        graph_execution_enabled=False,
+    )
+
+    assert gated.graph_used is False
+    assert gated.graph_execution_status == "disabled"
+    assert gated.graph_execution_fallback_reason == "graph_execution_disabled"
+    assert gated.graph_execution_adapter is None
+
+
+def test_graph_execution_adapter_gate_reports_unavailable_adapter_when_enabled() -> None:
+    decision = select_runtime_profile(
+        messages=_messages("회의록과 PMS 이슈를 비교해서 근거 있는 보고서로 정리해줘"),
+        allowed_app_ids=["meeting", "pms"],
+        max_tokens=None,
+        graph_enabled=True,
+    )
+    traced = attach_manager_graph_validation_result(
+        decision,
+        validation=ManagerGraphValidationResult(accepted=True, graph=None),
+        registry_agent_count=10,
+        write_agent_count=1,
+        graph_candidate_summary={"intent": "report", "invocation_agent_ids": []},
+        graph_schedule_summary={
+            "state": "planned",
+            "execution_enabled": False,
+            "step_count": 1,
+            "planned_agent_ids": ["writer.template"],
+            "steps": [],
+        },
+    )
+
+    gated = attach_graph_execution_adapter_decision(
+        traced,
+        graph_execution_enabled=True,
+    )
+
+    assert gated.graph_used is False
+    assert gated.graph_execution_status == "adapter_unavailable"
+    assert gated.graph_execution_fallback_reason == "graph_runtime_not_implemented"
+    assert gated.graph_execution_adapter is None
 
 
 def test_runtime_profile_selects_long_doc_for_large_budget() -> None:

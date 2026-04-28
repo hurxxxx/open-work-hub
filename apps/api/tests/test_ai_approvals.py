@@ -596,6 +596,48 @@ def test_resume_allowed_app_ids_keeps_text_only_scope() -> None:
         ai_approvals.resolve_resume_allowed_app_ids(snapshot, ["pms"])
 
 
+def test_rehydrate_model_meta_preserves_graph_schedule_summary() -> None:
+    graph_schedule = {
+        "state": "planned",
+        "execution_enabled": False,
+        "step_count": 2,
+        "planned_agent_ids": ["domain.pms", "approval.proposal_preview"],
+        "steps": [
+            {
+                "invocation_seq": 1,
+                "agent_id": "domain.pms",
+                "depends_on": [],
+                "state": "planned",
+            },
+            {
+                "invocation_seq": 2,
+                "agent_id": "approval.proposal_preview",
+                "depends_on": ["domain.pms"],
+                "state": "planned",
+            },
+        ],
+    }
+    snapshot = ai_approvals.AgentRunSnapshot(
+        id="snapshot-1",
+        conversation_id="conversation-1",
+        workspace_id="workspace-1",
+        requested_by_user_id="user-1",
+        blocked_call_id="call-1",
+        model_meta={
+            "scope": {"allowed_app_ids": ["pms"]},
+            "graph_schedule_summary": graph_schedule,
+            "graph_execution_status": "disabled",
+            "graph_execution_fallback_reason": "graph_execution_disabled",
+        },
+    )
+
+    replay = ai_approvals.rehydrate_model_meta(snapshot)
+
+    assert replay.raw["graph_schedule_summary"] == graph_schedule
+    assert replay.raw["graph_execution_status"] == "disabled"
+    assert replay.raw["graph_execution_fallback_reason"] == "graph_execution_disabled"
+
+
 def test_get_and_resolve_approval_routes_work_on_workspace_and_legacy_mounts(
     client: TestClient,
 ) -> None:

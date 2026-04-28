@@ -54,6 +54,15 @@ from aidoo_api.domains.ai.runtime.manager_candidate import (
     build_deterministic_manager_candidate,
     summarize_execution_graph,
 )
+from aidoo_api.domains.ai.runtime.graph_scheduler import (
+    GraphSchedulerError,
+    build_graph_execution_schedule,
+    summarize_graph_execution_schedule,
+    summarize_graph_schedule_failure,
+)
+from aidoo_api.domains.ai.runtime.graph_execution import (
+    attach_graph_execution_adapter_decision,
+)
 from aidoo_api.domains.ai.runtime.manager_validation import validate_manager_graph_candidate
 from aidoo_api.domains.ai.runtime.routing import (
     RuntimeRoutingDecision,
@@ -1539,6 +1548,10 @@ async def _chat_stream_publisher(
         workspace=workspace,
         allowed_app_ids=payload.allowed_app_ids,
     )
+    runtime_routing = attach_graph_execution_adapter_decision(
+        runtime_routing,
+        graph_execution_enabled=settings.ai_runtime_graph_execution_enabled,
+    )
 
     last_decision: PolicyDecision | None = None
     last_config: LlmPoolConfig | None = None
@@ -1701,6 +1714,12 @@ async def _chat_stream_publisher(
                 runtime_graph_registry_agent_count=runtime_routing.graph_registry_agent_count,
                 runtime_graph_write_agent_count=runtime_routing.graph_write_agent_count,
                 runtime_graph_candidate_summary=runtime_routing.graph_candidate_summary,
+                runtime_graph_schedule_summary=runtime_routing.graph_schedule_summary,
+                runtime_graph_execution_status=runtime_routing.graph_execution_status,
+                runtime_graph_execution_fallback_reason=(
+                    runtime_routing.graph_execution_fallback_reason
+                ),
+                runtime_graph_execution_adapter=runtime_routing.graph_execution_adapter,
                 parallel_tool_calls=False if has_approval_required_tools else None,
             ):
                 for serialized in _serialize_agent_event_through_artifacts(
@@ -1884,12 +1903,26 @@ def _attach_graph_gate_trace_metadata(
             graph_candidate_summary=summarize_execution_graph(validation.graph)
             if validation.graph is not None
             else None,
+            graph_schedule_summary=_build_graph_schedule_summary_or_failure(
+                validation.graph
+            ),
         )
     return attach_trace_only_graph_validation(
         runtime_routing,
         registry_agent_count=len(resolved_agents.agent_ids),
         write_agent_count=len(resolved_agents.write_agent_ids),
     )
+
+
+def _build_graph_schedule_summary_or_failure(validation_graph) -> dict[str, Any] | None:
+    if validation_graph is None:
+        return None
+    try:
+        return summarize_graph_execution_schedule(
+            build_graph_execution_schedule(validation_graph)
+        )
+    except GraphSchedulerError as error:
+        return summarize_graph_schedule_failure(error)
 
 
 def _tool_command_events(
@@ -2127,6 +2160,10 @@ def _runtime_done_meta(runtime_routing: RuntimeRoutingDecision) -> dict[str, Any
         "graph_registry_agent_count": runtime_routing.graph_registry_agent_count,
         "graph_write_agent_count": runtime_routing.graph_write_agent_count,
         "graph_candidate_summary": runtime_routing.graph_candidate_summary,
+        "graph_schedule_summary": runtime_routing.graph_schedule_summary,
+        "graph_execution_status": runtime_routing.graph_execution_status,
+        "graph_execution_fallback_reason": runtime_routing.graph_execution_fallback_reason,
+        "graph_execution_adapter": runtime_routing.graph_execution_adapter,
     }
 
 
@@ -2785,6 +2822,10 @@ def _persist_assistant_turn(
         "graph_registry_agent_count": done_meta.get("graph_registry_agent_count"),
         "graph_write_agent_count": done_meta.get("graph_write_agent_count"),
         "graph_candidate_summary": done_meta.get("graph_candidate_summary"),
+        "graph_schedule_summary": done_meta.get("graph_schedule_summary"),
+        "graph_execution_status": done_meta.get("graph_execution_status"),
+        "graph_execution_fallback_reason": done_meta.get("graph_execution_fallback_reason"),
+        "graph_execution_adapter": done_meta.get("graph_execution_adapter"),
         "finish_reason": buffer.finish_reason,
         "response_status": response_status,
         "tool_calls": buffer.tool_calls,

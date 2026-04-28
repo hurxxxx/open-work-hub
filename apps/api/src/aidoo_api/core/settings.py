@@ -261,6 +261,10 @@ class Settings(BaseSettings):
         default=False,
         validation_alias=AliasChoices("AIDOO_AI_RUNTIME_GRAPH_ENABLED"),
     )
+    ai_runtime_graph_execution_enabled: bool = Field(
+        default=False,
+        validation_alias=AliasChoices("AIDOO_AI_RUNTIME_GRAPH_EXECUTION_ENABLED"),
+    )
     ai_runtime_shadow_write_enabled: bool = Field(
         default=True,
         validation_alias=AliasChoices(

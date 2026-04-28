@@ -213,6 +213,148 @@ def append_graph_candidate_trace_events(
     )
 
 
+def append_graph_schedule_trace_events(
+    db: Session,
+    *,
+    agent_run_id: str,
+    workspace_id: str,
+    conversation_id: str,
+    runtime_metadata: dict[str, Any],
+    graph_invocations_by_seq: dict[int, AgentInvocation] | None = None,
+) -> None:
+    schedule_summary = runtime_metadata.get("graph_schedule_summary")
+    if not isinstance(schedule_summary, dict):
+        return
+
+    if schedule_summary.get("state") != "planned":
+        append_trace_event(
+            db,
+            agent_run_id=agent_run_id,
+            workspace_id=workspace_id,
+            conversation_id=conversation_id,
+            event_type="graph_schedule_failed",
+            payload={"graph_schedule_summary": schedule_summary},
+        )
+        return
+
+    append_trace_event(
+        db,
+        agent_run_id=agent_run_id,
+        workspace_id=workspace_id,
+        conversation_id=conversation_id,
+        event_type="graph_schedule_planned",
+        payload={"graph_schedule_summary": schedule_summary},
+    )
+    steps = schedule_summary.get("steps")
+    if not isinstance(steps, list):
+        return
+    for step in steps:
+        if not isinstance(step, dict):
+            continue
+        try:
+            invocation_seq = int(step.get("invocation_seq") or 0)
+        except (TypeError, ValueError):
+            continue
+        graph_invocation = (graph_invocations_by_seq or {}).get(invocation_seq)
+        append_trace_event(
+            db,
+            agent_run_id=agent_run_id,
+            agent_invocation_id=graph_invocation.id if graph_invocation else None,
+            workspace_id=workspace_id,
+            conversation_id=conversation_id,
+            invocation_seq=invocation_seq,
+            event_type="graph_node_planned",
+            payload={
+                "invocation_seq": step.get("invocation_seq"),
+                "agent_id": step.get("agent_id"),
+                "state": step.get("state"),
+                "depends_on_agent_ids": step.get("depends_on_agent_ids") or [],
+            },
+        )
+
+
+def append_graph_execution_trace_events(
+    db: Session,
+    *,
+    agent_run_id: str,
+    workspace_id: str,
+    conversation_id: str,
+    runtime_metadata: dict[str, Any],
+) -> None:
+    execution_status = runtime_metadata.get("graph_execution_status")
+    if not isinstance(execution_status, str) or execution_status == "not_applicable":
+        return
+    append_trace_event(
+        db,
+        agent_run_id=agent_run_id,
+        workspace_id=workspace_id,
+        conversation_id=conversation_id,
+        event_type="graph_execution_gate_evaluated",
+        payload={
+            "graph_execution_status": execution_status,
+            "graph_execution_fallback_reason": runtime_metadata.get(
+                "graph_execution_fallback_reason"
+            ),
+            "graph_execution_adapter": runtime_metadata.get("graph_execution_adapter"),
+        },
+    )
+
+
+def persist_graph_schedule_invocation_skeletons(
+    db: Session,
+    *,
+    agent_run_id: str,
+    workspace_id: str,
+    conversation_id: str,
+    runtime_metadata: dict[str, Any],
+    status: str = "pending",
+    purpose: str = "graph node planned",
+) -> dict[int, AgentInvocation]:
+    schedule_summary = runtime_metadata.get("graph_schedule_summary")
+    if not isinstance(schedule_summary, dict) or schedule_summary.get("state") != "planned":
+        return {}
+    steps = schedule_summary.get("steps")
+    if not isinstance(steps, list):
+        return {}
+
+    invocations_by_seq: dict[int, AgentInvocation] = {}
+    for step in steps:
+        if not isinstance(step, dict):
+            continue
+        agent_id = step.get("agent_id")
+        if not isinstance(agent_id, str) or not agent_id:
+            continue
+        try:
+            invocation_seq = int(step.get("invocation_seq") or 0)
+        except (TypeError, ValueError):
+            continue
+        if invocation_seq in invocations_by_seq:
+            continue
+        invocation = AgentInvocation(
+            id=new_id(),
+            agent_run_id=agent_run_id,
+            workspace_id=workspace_id,
+            conversation_id=conversation_id,
+            invocation_seq=invocation_seq,
+            agent_id=agent_id,
+            status=status,
+            purpose=purpose,
+        )
+        db.add(invocation)
+        invocations_by_seq[invocation_seq] = invocation
+    db.flush()
+    return invocations_by_seq
+
+
+def _next_invocation_seq(db: Session, agent_run_id: str) -> int:
+    current = db.scalar(
+        select(func.max(AgentInvocation.invocation_seq)).where(
+            AgentInvocation.agent_run_id == agent_run_id
+        )
+    )
+    return int(current if current is not None else -1) + 1
+
+
 def persist_single_loop_fallback_runtime_shadow(
     db: Session,
     *,
@@ -300,19 +442,34 @@ def _persist_single_loop_fallback_runtime_shadow(
                 runtime_metadata.get("graph_write_agent_count") or 0
             ),
             "graph_candidate_summary": runtime_metadata.get("graph_candidate_summary"),
+            "graph_schedule_summary": runtime_metadata.get("graph_schedule_summary"),
+            "graph_execution_status": runtime_metadata.get("graph_execution_status"),
+            "graph_execution_fallback_reason": runtime_metadata.get(
+                "graph_execution_fallback_reason"
+            ),
+            "graph_execution_adapter": runtime_metadata.get("graph_execution_adapter"),
         },
         created_at=now,
         updated_at=now,
     )
     db.add(runtime_run)
     db.flush()
+    graph_invocations_by_seq = persist_graph_schedule_invocation_skeletons(
+        db,
+        agent_run_id=runtime_run.id,
+        workspace_id=workspace_id,
+        conversation_id=conversation_id,
+        runtime_metadata=runtime_metadata,
+        status="abandoned",
+        purpose="graph node planned; graph runtime fallback",
+    )
 
     invocation = AgentInvocation(
         id=new_id(),
         agent_run_id=runtime_run.id,
         workspace_id=workspace_id,
         conversation_id=conversation_id,
-        invocation_seq=0,
+        invocation_seq=_next_invocation_seq(db, runtime_run.id),
         agent_id=SINGLE_LOOP_FALLBACK_AGENT_ID,
         status=status,
         purpose="single-loop graph fallback",
@@ -334,6 +491,21 @@ def _persist_single_loop_fallback_runtime_shadow(
         },
     )
     append_graph_candidate_trace_events(
+        db,
+        agent_run_id=runtime_run.id,
+        workspace_id=workspace_id,
+        conversation_id=conversation_id,
+        runtime_metadata=runtime_metadata,
+    )
+    append_graph_schedule_trace_events(
+        db,
+        agent_run_id=runtime_run.id,
+        workspace_id=workspace_id,
+        conversation_id=conversation_id,
+        runtime_metadata=runtime_metadata,
+        graph_invocations_by_seq=graph_invocations_by_seq,
+    )
+    append_graph_execution_trace_events(
         db,
         agent_run_id=runtime_run.id,
         workspace_id=workspace_id,
@@ -444,7 +616,10 @@ def scrub_completed_runtime_records(db: Session, *, older_than_days: int = 90) -
 
 __all__ = [
     "append_graph_candidate_trace_events",
+    "append_graph_execution_trace_events",
+    "append_graph_schedule_trace_events",
     "append_trace_event",
+    "persist_graph_schedule_invocation_skeletons",
     "persist_single_loop_fallback_runtime_shadow",
     "prepare_trace_payload",
     "scrub_completed_runtime_records",

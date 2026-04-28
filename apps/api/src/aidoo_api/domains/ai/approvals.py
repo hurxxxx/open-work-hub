@@ -28,7 +28,10 @@ from aidoo_api.domains.ai.audit import log_llm_tool_approval_resolved
 from aidoo_api.domains.ai.runtime.models import AgentInvocation, AgentRun
 from aidoo_api.domains.ai.runtime.persistence import (
     append_graph_candidate_trace_events,
+    append_graph_execution_trace_events,
+    append_graph_schedule_trace_events,
     append_trace_event,
+    persist_graph_schedule_invocation_skeletons,
 )
 from aidoo_api.domains.ai.runtime.contracts import RUNTIME_PROFILE_VALUES
 from aidoo_api.domains.ai.runtime.metrics import record_shadow_write_failure
@@ -854,7 +857,7 @@ def _persist_runtime_shadow_on_halt(
         legacy_snapshot_id=snapshot.id,
         status="awaiting_approval",
         runtime_profile=_runtime_profile_from_model_meta(model_meta),
-        graph_enabled=False,
+        graph_enabled=model_meta.get("graph_gate") == "eligible",
         model_profile_id=str(model_meta.get("model") or model_meta.get("chosen_model") or "")
         or None,
         metadata_json={
@@ -862,21 +865,55 @@ def _persist_runtime_shadow_on_halt(
             "blocked_call_id": snapshot.blocked_call_id,
             "runtime_routing_reason_codes": model_meta.get("runtime_routing_reason_codes"),
             SNAPSHOT_SCOPE_META_KEY: model_meta.get(SNAPSHOT_SCOPE_META_KEY),
+            "graph_gate": model_meta.get("graph_gate"),
+            "graph_fallback_reason": model_meta.get("graph_fallback_reason"),
+            "graph_used": bool(model_meta.get("graph_used")),
+            "graph_validation_status": model_meta.get("graph_validation_status"),
+            "graph_validation_fallback_reason": model_meta.get(
+                "graph_validation_fallback_reason"
+            ),
+            "graph_candidate_summary": model_meta.get("graph_candidate_summary"),
+            "graph_schedule_summary": model_meta.get("graph_schedule_summary"),
+            "graph_execution_status": model_meta.get("graph_execution_status"),
+            "graph_execution_fallback_reason": model_meta.get(
+                "graph_execution_fallback_reason"
+            ),
+            "graph_execution_adapter": model_meta.get("graph_execution_adapter"),
         },
     )
     db.add(runtime_run)
     db.flush()
-    invocation = AgentInvocation(
-        id=new_id(),
+    graph_invocations_by_seq = persist_graph_schedule_invocation_skeletons(
+        db,
         agent_run_id=runtime_run.id,
         workspace_id=snapshot.workspace_id,
         conversation_id=snapshot.conversation_id,
-        invocation_seq=0,
-        agent_id="approval.proposal_preview",
-        status="awaiting_approval",
-        purpose="approval required",
-        input_ref=snapshot.blocked_call_id,
+        runtime_metadata=model_meta,
     )
+    invocation = next(
+        (
+            graph_invocation
+            for graph_invocation in graph_invocations_by_seq.values()
+            if graph_invocation.agent_id == "approval.proposal_preview"
+        ),
+        None,
+    )
+    if invocation is None:
+        invocation = AgentInvocation(
+            id=new_id(),
+            agent_run_id=runtime_run.id,
+            workspace_id=snapshot.workspace_id,
+            conversation_id=snapshot.conversation_id,
+            invocation_seq=_next_runtime_invocation_seq(db, runtime_run.id),
+            agent_id="approval.proposal_preview",
+            status="awaiting_approval",
+            purpose="approval required",
+            input_ref=snapshot.blocked_call_id,
+        )
+    else:
+        invocation.status = "awaiting_approval"
+        invocation.purpose = "approval required"
+        invocation.input_ref = snapshot.blocked_call_id
     db.add(invocation)
     db.flush()
     append_trace_event(
@@ -891,6 +928,21 @@ def _persist_runtime_shadow_on_halt(
         },
     )
     append_graph_candidate_trace_events(
+        db,
+        agent_run_id=runtime_run.id,
+        workspace_id=snapshot.workspace_id,
+        conversation_id=snapshot.conversation_id,
+        runtime_metadata=model_meta,
+    )
+    append_graph_schedule_trace_events(
+        db,
+        agent_run_id=runtime_run.id,
+        workspace_id=snapshot.workspace_id,
+        conversation_id=snapshot.conversation_id,
+        runtime_metadata=model_meta,
+        graph_invocations_by_seq=graph_invocations_by_seq,
+    )
+    append_graph_execution_trace_events(
         db,
         agent_run_id=runtime_run.id,
         workspace_id=snapshot.workspace_id,

@@ -39,6 +39,7 @@ InvocationStatus = Literal[
     "cancelled",
     "abandoned",
 ]
+GraphScheduleState = Literal["planned"]
 TrustLevel = Literal["trusted", "mixed", "untrusted"]
 AuthorityClass = Literal[
     "internal_system_of_record",
@@ -77,6 +78,23 @@ class ExecutionGraph(BaseModel):
         if len(value) != len(set(value)):
             raise ValueError("domains must not contain duplicates")
         return value
+
+
+class GraphScheduleStep(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    invocation_seq: int = Field(ge=0)
+    agent_id: str = Field(min_length=1)
+    state: GraphScheduleState = "planned"
+    depends_on_agent_ids: list[str] = Field(default_factory=list)
+
+
+class GraphExecutionSchedule(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    state: GraphScheduleState = "planned"
+    execution_enabled: bool = False
+    steps: list[GraphScheduleStep] = Field(default_factory=list)
 
 
 class QueryPlan(BaseModel):

@@ -72,6 +72,10 @@ class RuntimeRoutingDecision:
     graph_registry_agent_count: int = 0
     graph_write_agent_count: int = 0
     graph_candidate_summary: dict[str, Any] | None = None
+    graph_schedule_summary: dict[str, Any] | None = None
+    graph_execution_status: str = "not_applicable"
+    graph_execution_fallback_reason: str | None = None
+    graph_execution_adapter: str | None = None
 
 
 def attach_trace_only_graph_validation(
@@ -98,6 +102,7 @@ def attach_manager_graph_validation_result(
     registry_agent_count: int,
     write_agent_count: int,
     graph_candidate_summary: dict[str, Any] | None = None,
+    graph_schedule_summary: dict[str, Any] | None = None,
 ) -> RuntimeRoutingDecision:
     if decision.graph_gate != "eligible":
         return decision
@@ -108,6 +113,7 @@ def attach_manager_graph_validation_result(
         graph_registry_agent_count=max(registry_agent_count, 0),
         graph_write_agent_count=max(write_agent_count, 0),
         graph_candidate_summary=graph_candidate_summary if validation.accepted else None,
+        graph_schedule_summary=graph_schedule_summary if validation.accepted else None,
     )
 
 
