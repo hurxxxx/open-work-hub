@@ -59,9 +59,9 @@ Docker는 컨테이너를 **쉽게 만들고 돌리는 도구** 입니다. 업�
 여러 컨테이너를 한 번에 올리는 도구. 우리 프로젝트는 이걸 씁니다.
 
 - `compose.postgres.yml` — PostgreSQL만.
-- `compose.prod-like.yml` — Postgres + Redis + MinIO + Nginx를 한 묶음으로 띄움.
+- `compose.dev.yml` — Postgres + Redis + MinIO + Nginx를 한 묶음으로 띄움.
 
-**"prod-like"** 는 "운영과 비슷한" 이라는 뜻이며, 개발자 PC에서 **운영과 최대한 같은 상태를 재현하기 위한 환경** 입니다. 운영에서만 터지는 버그를 개발에서 미리 잡기 위한 장치입니다.
+**"dev"** 는 "운영과 비슷한" 이라는 뜻이며, 개발자 PC에서 **운영과 최대한 같은 상태를 재현하기 위한 환경** 입니다. 운영에서만 터지는 버그를 개발에서 미리 잡기 위한 장치입니다.
 
 ### 2.4 컨테이너 오케스트레이션 — Kubernetes
 
@@ -84,7 +84,7 @@ Docker는 컨테이너를 **쉽게 만들고 돌리는 도구** 입니다. 업�
 ### 2.6 🛠️ 5분 실습
 
 - 프로젝트 루트에서 `docker ps` 실행 → 현재 돌고 있는 컨테이너 목록 확인.
-- `compose.prod-like.yml` 파일을 열어 정의된 서비스 이름(예: `postgres`, `redis`, `minio`, `nginx`)을 눈으로 훑어 본다.
+- `compose.dev.yml` 파일을 열어 정의된 서비스 이름(예: `postgres`, `redis`, `minio`, `nginx`)을 눈으로 훑어 본다.
 - "이 파일 한 줄 한 줄이 컨테이너 하나"라는 감각을 얻는다.
 
 ---
@@ -150,7 +150,7 @@ CI 통과 후:
 - GitLab CI / Jenkins / CircleCI — 전통적 선택.
 - ArgoCD, Flux — Kubernetes 기반 GitOps.
 
-이 프로젝트는 현재 **수동 배포 스크립트(`prod.sh`, `scripts/prod-like-*.sh`)** 로 돌아갑니다. 다음 단계는 GitHub Actions로 CI를 자동화하는 것입니다.
+이 프로젝트는 현재 **수동 배포 스크립트(`prod.sh`, `scripts/dev-*.sh`)** 로 돌아갑니다. 다음 단계는 GitHub Actions로 CI를 자동화하는 것입니다.
 
 ### 4.4 배포 전략
 
@@ -175,7 +175,7 @@ CI 통과 후:
 
 ## 5. Nginx — 이 프로젝트의 관문
 
-Nginx는 **리버스 프록시(reverse proxy)** 및 **정적 파일 서버** 로 널리 쓰이는 고성능 웹 서버입니다. 우리 `compose.prod-like.yml`에 등장합니다.
+Nginx는 **리버스 프록시(reverse proxy)** 및 **정적 파일 서버** 로 널리 쓰이는 고성능 웹 서버입니다. 우리 `compose.dev.yml`에 등장합니다.
 
 역할:
 
@@ -231,7 +231,7 @@ Nginx는 **리버스 프록시(reverse proxy)** 및 **정적 파일 서버** 로
 
 ### 7.1 현재
 
-- Docker Compose로 로컬 + prod-like 인프라 구동.
+- Docker Compose로 로컬 + dev 인프라 구동.
 - `prod.sh`, `dev.sh`로 수동 구동 스크립트.
 - CI/CD 파이프라인 미구성(수동 배포).
 

@@ -2,31 +2,31 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-source "$ROOT_DIR/scripts/prod-like-env.sh"
+source "$ROOT_DIR/scripts/dev-env.sh"
 COMMAND="${1:-up}"
 
 cd "$ROOT_DIR"
 
 case "$COMMAND" in
   up|start)
-    prodlike_render_nginx_conf
+    dev_render_nginx_conf
     services=(redis nginx)
-    if prodlike_use_local_postgres; then
+    if dev_use_local_postgres; then
       services=(postgres "${services[@]}")
     fi
-    if prodlike_use_local_minio; then
+    if dev_use_local_minio; then
       services=(minio "${services[@]}")
     fi
-    docker compose -f compose.prod-like.yml up -d "${services[@]}"
+    docker compose -f compose.dev.yml up -d "${services[@]}"
     ;;
   down|stop)
-    docker compose -f compose.prod-like.yml down
+    docker compose -f compose.dev.yml down
     ;;
   logs)
-    docker compose -f compose.prod-like.yml logs -f
+    docker compose -f compose.dev.yml logs -f
     ;;
   ps|status)
-    docker compose -f compose.prod-like.yml ps
+    docker compose -f compose.dev.yml ps
     ;;
   *)
     echo "Usage: $0 {up|down|logs|ps|start|stop|status}" >&2

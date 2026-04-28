@@ -181,7 +181,7 @@ closed socket 처리:
 
 - 이 저장소의 web 은 `Next router` 가 아니라 `BrowserRouter SPA` 다.
 - 운영 유사 검증은 `정적 빌드 + Nginx + host api x2 + Redis + Postgres` 로 맞춘다.
-- 자세한 절차는 [prod-like-collab-validation.md](./prod-like-collab-validation.md) 를 본다.
+- 자세한 절차는 [dev-collab-validation.md](./dev-collab-validation.md) 를 본다.
 
 ## 참조
 

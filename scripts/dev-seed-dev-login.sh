@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-source "$ROOT_DIR/scripts/prod-like-env.sh"
+source "$ROOT_DIR/scripts/dev-env.sh"
 
 cd "$ROOT_DIR/apps/api"
 PYTHONPATH="$ROOT_DIR/apps/api/src${PYTHONPATH:+:$PYTHONPATH}" exec "$ROOT_DIR/apps/api/.venv/bin/python" - <<'PY'

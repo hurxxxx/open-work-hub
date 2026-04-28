@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-source "$ROOT_DIR/scripts/prod-like-env.sh"
+source "$ROOT_DIR/scripts/dev-env.sh"
 
 TARGET="${1:?instance index or port is required}"
 
@@ -11,10 +11,10 @@ if [[ "$TARGET" =~ ^[0-9]+$ ]] && (( TARGET >= 8000 )); then
   INSTANCE_INDEX="$((PORT - 8000))"
 else
   INSTANCE_INDEX="$TARGET"
-  PORT="$(prodlike_api_port "$INSTANCE_INDEX")"
+  PORT="$(dev_api_port "$INSTANCE_INDEX")"
 fi
 
-INSTANCE_ID="${2:-$(prodlike_api_name "$INSTANCE_INDEX")}"
+INSTANCE_ID="${2:-$(dev_api_name "$INSTANCE_INDEX")}"
 
 export DOOWON_API_INSTANCE_ID="$INSTANCE_ID"
 

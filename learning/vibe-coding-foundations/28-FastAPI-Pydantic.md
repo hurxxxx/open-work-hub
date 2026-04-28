@@ -243,7 +243,7 @@ FastAPI 자체는 "프레임워크"이고, 실제로 요청을 받는 "서버"�
 - Hypercorn: HTTP/2·QUIC 지원.
 - Daphne: Django Channels 중심.
 
-운영 배포 시에는 Uvicorn 앞에 **Gunicorn + Uvicorn worker** 또는 **Uvicorn multi-process** 로 프로세스를 여러 개 띄웁니다. `scripts/prod-like-api.sh` 가 바로 이 역할을 합니다(포트 8001, 8002 등).
+운영 배포 시에는 Uvicorn 앞에 **Gunicorn + Uvicorn worker** 또는 **Uvicorn multi-process** 로 프로세스를 여러 개 띄웁니다. `scripts/dev-api.sh` 가 바로 이 역할을 합니다(포트 8001, 8002 등).
 
 ### 6.1 SSE(서버 전송 이벤트)·파일 업로드 관련 패키지
 

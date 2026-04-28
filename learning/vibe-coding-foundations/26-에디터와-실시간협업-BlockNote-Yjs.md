@@ -204,7 +204,7 @@ const provider = new WebsocketProvider(
 
 ### 5.4 멀티 인스턴스 문제
 
-API 서버를 여러 개 띄우면(예: `pnpm prodlike:api:1`, `:2`) 서로 다른 서버에 붙은 사용자들 사이에서 동기화가 안 될 수 있습니다. 해법: **Redis pub/sub**로 서버끼리 업데이트를 중계. `.env.example` 에 `DOOWON_COLLAB_RELAY_URL=redis://...` 같은 설정이 있을 수 있습니다.
+API 서버를 여러 개 띄우면(예: `pnpm dev:api:1`, `:2`) 서로 다른 서버에 붙은 사용자들 사이에서 동기화가 안 될 수 있습니다. 해법: **Redis pub/sub**로 서버끼리 업데이트를 중계. `.env.example` 에 `DOOWON_COLLAB_RELAY_URL=redis://...` 같은 설정이 있을 수 있습니다.
 
 ---
 

@@ -16,7 +16,7 @@ Options:
   --with-worker  Start the Celery worker in addition to web and api.
   --web-only     Start only the frontend dev server.
   --api-only     Start only the FastAPI dev server.
-  --no-infra     Skip starting the prod-like docker infra (redis, etc).
+  --no-infra     Skip starting the dev docker infra (redis, etc).
   --status       Show repo-managed dev server status for the selected projects and exit.
   --stop         Stop repo-managed dev servers for the selected projects and exit.
   --restart      Stop repo-managed dev servers for the selected projects, then start them again.
@@ -26,11 +26,11 @@ Options:
 
 Defaults:
   - Starts `web` and `api`
-  - Boots the prod-like docker infra (redis; postgres/minio when DOOWON_PRODLIKE_USE_LOCAL_* is on)
+  - Boots the dev docker infra (redis; postgres/minio when DOOWON_DEV_USE_LOCAL_* is on)
     so features like the docs collab relay can reach redis at 127.0.0.1:56379
   - Uses `dynamic-legacy` Nx output for readable local logs
   - Stops all child servers when you press Ctrl+C or close the session
-    (docker infra keeps running across sessions; stop it with `docker compose -f compose.prod-like.yml stop`)
+    (docker infra keeps running across sessions; stop it with `docker compose -f compose.dev.yml stop`)
 EOF
 }
 
@@ -158,23 +158,23 @@ kill_if_running() {
 
 start_dev_infra() {
   if ! command -v docker >/dev/null 2>&1; then
-    echo "docker CLI not found; skipping prod-like infra startup." >&2
+    echo "docker CLI not found; skipping dev infra startup." >&2
     return 0
   fi
   if ! docker info >/dev/null 2>&1; then
-    echo "Docker daemon not reachable; skipping prod-like infra startup." >&2
+    echo "Docker daemon not reachable; skipping dev infra startup." >&2
     return 0
   fi
 
-  local services=(redis)
-  case "${DOOWON_PRODLIKE_USE_LOCAL_POSTGRES:-}" in
-    1|true|yes|on) services+=(postgres) ;;
+  local desired=(redis)
+  case "${DOOWON_DEV_USE_LOCAL_POSTGRES:-}" in
+    1|true|yes|on) desired+=(postgres) ;;
   esac
-  case "${DOOWON_PRODLIKE_USE_LOCAL_MINIO:-}" in
-    1|true|yes|on) services+=(minio) ;;
+  case "${DOOWON_DEV_USE_LOCAL_MINIO:-}" in
+    1|true|yes|on) desired+=(minio) ;;
   esac
 
-  # prodlike-nginx binds to 4200 (IPv6) and collides with the web dev server (IPv4).
+  # dev-nginx binds to 4200 (IPv6) and collides with the web dev server (IPv4).
   # Since macOS resolves localhost to ::1 first, browsers would hit nginx and 502.
   # Stop it defensively and clear its restart policy so Docker Desktop doesn't
   # bring it back under us.
@@ -187,28 +187,68 @@ start_dev_infra() {
     fi
   done
   if (( web_in_projects )); then
-    if docker inspect doowon-prodlike-nginx >/dev/null 2>&1; then
-      echo "Neutralizing prodlike-nginx (conflicts with web dev server on 4200)..."
-      docker update --restart=no doowon-prodlike-nginx >/dev/null 2>&1 || true
-      docker stop doowon-prodlike-nginx >/dev/null 2>&1 || true
+    if docker inspect doowon-dev-nginx >/dev/null 2>&1; then
+      echo "Neutralizing dev-nginx (conflicts with web dev server on 4200)..."
+      docker update --restart=no doowon-dev-nginx >/dev/null 2>&1 || true
+      docker stop doowon-dev-nginx >/dev/null 2>&1 || true
     fi
   fi
 
-  echo "Starting prod-like infra: ${services[*]}"
-  if ! docker compose -f compose.prod-like.yml up -d "${services[@]}"; then
-    echo "Failed to start prod-like infra via docker compose." >&2
+  # If a service's host port is already bound (e.g., a sibling repo's compose
+  # project started redis under the same fixed container name), reuse it
+  # instead of colliding on `docker compose up`.
+  local redis_port="${DOOWON_DEV_REDIS_PORT:-56379}"
+  local postgres_port="${DOOWON_DEV_POSTGRES_PORT:-55432}"
+  local minio_port="${DOOWON_DEV_MINIO_PORT:-59000}"
+  local services=()
+  local skipped=()
+  local svc
+  for svc in "${desired[@]}"; do
+    local port=""
+    case "$svc" in
+      redis) port="$redis_port" ;;
+      postgres) port="$postgres_port" ;;
+      minio) port="$minio_port" ;;
+    esac
+    if [[ -n "$port" && -n "$(find_listener "$port")" ]]; then
+      skipped+=("${svc}(:${port})")
+    else
+      services+=("$svc")
+    fi
+  done
+
+  if (( ${#skipped[@]} > 0 )); then
+    echo "Reusing already-running infra: ${skipped[*]}"
+  fi
+
+  if (( ${#services[@]} == 0 )); then
+    return 0
+  fi
+
+  echo "Starting dev infra: ${services[*]}"
+  if ! docker compose -f compose.dev.yml up -d "${services[@]}"; then
+    echo "Failed to start dev infra via docker compose." >&2
     exit 1
   fi
 
-  local attempts=0
-  while (( attempts < 30 )); do
-    if docker compose -f compose.prod-like.yml exec -T redis redis-cli ping >/dev/null 2>&1; then
-      return 0
-    fi
-    attempts=$((attempts + 1))
-    sleep 0.3
+  # PING-verify redis only if we just started it via this compose project.
+  # If we're reusing an existing redis, the port-listener check above already
+  # confirmed it's bound; `compose exec redis` would not address it anyway.
+  local started_redis=0
+  for svc in "${services[@]}"; do
+    [[ "$svc" == "redis" ]] && started_redis=1
   done
-  echo "Warning: redis did not respond to PING within ~9s; continuing anyway." >&2
+  if (( started_redis )); then
+    local attempts=0
+    while (( attempts < 30 )); do
+      if docker compose -f compose.dev.yml exec -T redis redis-cli ping >/dev/null 2>&1; then
+        return 0
+      fi
+      attempts=$((attempts + 1))
+      sleep 0.3
+    done
+    echo "Warning: redis did not respond to PING within ~9s; continuing anyway." >&2
+  fi
 }
 
 stop_project_processes() {

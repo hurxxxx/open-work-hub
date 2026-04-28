@@ -151,7 +151,7 @@
   - MeetingView 가 `?create=1` 쿼리 파라미터로 create 모달 자동 오픈 + URL 정리 (replace)
   - SubSidebar 는 `activeAppId === 'home'` 에서 `return null` 로 접힘
   - 기존 `HomeView.tsx` 삭제, `/tool/pms-tasks-assigned` 는 그대로 유지
-  - 검증: `pnpm nx typecheck web` 0건, pytest 130 passed (신규 2건 포함), prod-like E2E (playwright, delivery-hub-admin): `/` → `/w/delivery-hub/home`, Quick Actions "새 회의" → 모달 자동 오픈 + URL 정리, AppBar HOME 왕복 시 워크스페이스 컨텍스트 유지, bare `/w/:slug` → home, `/w/hq/home` (미접근) → AccessDeniedView, 콘솔 에러 0건
+  - 검증: `pnpm nx typecheck web` 0건, pytest 130 passed (신규 2건 포함), dev E2E (playwright, delivery-hub-admin): `/` → `/w/delivery-hub/home`, Quick Actions "새 회의" → 모달 자동 오픈 + URL 정리, AppBar HOME 왕복 시 워크스페이스 컨텍스트 유지, bare `/w/:slug` → home, `/w/hq/home` (미접근) → AccessDeniedView, 콘솔 에러 0건
   - 설계 문서: [docs/planning/workspace-home-plan.md](docs/planning/workspace-home-plan.md)
 
 ## 검증
@@ -166,5 +166,5 @@
   - 에러 0건 (2026-04-14)
 - [x] `cd apps/web && pnpm exec vitest run`
   - 8 files, 35 passed (2026-04-14)
-- [x] prod-like E2E 스모크 (hq-admin 시드, playwright)
+- [x] dev E2E 스모크 (hq-admin 시드, playwright)
   - `/w/hq/pms` → CreateTaskListModal → List 생성 → NewTaskModal 태스크 생성, `/tool/pms-tasks-assigned`, `/w/hq/meeting`, `/w/hq/docs/:docId` 콘솔 에러 0건 (2026-04-14)
