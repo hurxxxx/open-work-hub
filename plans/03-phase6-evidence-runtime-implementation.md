@@ -23,12 +23,12 @@ Phase 6 전체 목표는 기존 single-loop agent를 deterministic fast path, ma
 
 이 섹션은 세션 handoff용이다. 구현 세션이 끝날 때마다 짧게 갱신한다.
 
-- Current PR/stage: Phase 0-AE mock E2E smoke entrypoint after `cece605`.
-- Last completed: Added `scripts/phase6-mock-e2e.sh` as a thin local smoke command for the mock external graph guard. It runs `uv run pytest tests/test_ai_runtime_mock_e2e.py` from `apps/api`, so the graph + mock external planner/search path can be checked without remembering the large stream test file or requiring OpenAI/Anthropic keys.
+- Current PR/stage: Phase 0-AF mock provider failure metadata after `b35d827`.
+- Last completed: Added optional forced provider-error paths to mock external planner/search execution. Mock execution can now emit `status=failed` with `error_class` while keeping raw output unpersisted; search failures retain safe query digest/cache key metadata but no result refs or provider evidence. This fixes the failure metadata shape before real external adapters are introduced.
 - In progress: None.
-- Next exact task: Add provider failure-mode mock cases for planner/search execution so graph fallback, skipped request, and provider-error metadata are covered before real adapters are introduced.
-- Files touched in Phase 0-AE: `scripts/phase6-mock-e2e.sh`, `plans/03-phase6-evidence-runtime-implementation.md`.
-- Tests/checks run: `scripts/phase6-mock-e2e.sh -q`.
+- Next exact task: Add a small runtime/provider contract fixture for external execution summaries so future OpenAI/Anthropic adapters must preserve the mock-established shape.
+- Files touched in Phase 0-AF: `apps/api/src/aidoo_api/domains/ai/runtime/external_planner.py`, `apps/api/src/aidoo_api/domains/ai/runtime/external_search.py`, `apps/api/tests/test_ai_runtime_external_planner.py`, `apps/api/tests/test_ai_runtime_external_search.py`, `plans/03-phase6-evidence-runtime-implementation.md`.
+- Tests/checks run: `cd apps/api && uv run ruff check src/aidoo_api/domains/ai/runtime/external_planner.py src/aidoo_api/domains/ai/runtime/external_search.py tests/test_ai_runtime_external_planner.py tests/test_ai_runtime_external_search.py`; `cd apps/api && uv run pytest tests/test_ai_runtime_external_planner.py tests/test_ai_runtime_external_search.py tests/test_ai_runtime_mock_e2e.py`; `scripts/phase6-mock-e2e.sh -q`.
 - Known blockers: OpenAI/Anthropic-backed manager/search execution is still not enabled. The egress/planner/search contracts only decide, sanitize, and build request envelopes; they do not call external APIs. `graph_node_runner_v0` remains an in-process runner, not a durable workflow backend. Hidden node outputs are not persisted verbatim; only status/count/error summary is persisted. High-risk / approval-preview graphs are intentionally not supported by this adapter.
 
 ## Architecture / Principles

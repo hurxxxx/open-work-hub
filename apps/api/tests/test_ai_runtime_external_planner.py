@@ -199,3 +199,42 @@ def test_mock_external_planner_skips_when_request_not_ready() -> None:
     assert result.status == "skipped"
     assert result.disabled_reason == "request_not_ready"
     assert result.planned_agent_ids == []
+
+
+def test_mock_external_planner_records_forced_provider_error() -> None:
+    egress = evaluate_external_egress(
+        capability="planning",
+        provider="openai",
+        text="공개 규격만 기준으로 초기 분석해줘",
+        settings=_settings(
+            ai_external_llm_enabled=True,
+            ai_external_planning_enabled=True,
+        ),
+    )
+    request = build_external_planner_request(
+        egress_decision=egress,
+        runtime_profile="grounded_report",
+        agent_ids=["domain.pms", "writer.template"],
+    )
+
+    result = execute_mock_external_planner(
+        request,
+        execution_enabled=True,
+        force_error_class="provider_timeout",
+    )
+
+    assert summarize_external_planner_execution(result) == {
+        "adapter_id": EXTERNAL_PLANNER_ADAPTER_ID,
+        "execution_provider": "mock",
+        "status": "failed",
+        "provider": "openai",
+        "disabled_reason": None,
+        "planned_agent_count": 0,
+        "intent_hint": None,
+        "output_kind_hint": None,
+        "latency_ms": 0,
+        "retry_count": 0,
+        "error_class": "provider_timeout",
+        "estimated_cost_microunits": 0,
+        "raw_output_persisted": False,
+    }

@@ -167,3 +167,39 @@ def test_mock_external_search_skips_when_request_not_ready() -> None:
     assert result.status == "skipped"
     assert result.disabled_reason == "request_not_ready"
     assert result.result_count == 0
+
+
+def test_mock_external_search_records_forced_provider_error() -> None:
+    egress = evaluate_external_egress(
+        capability="search",
+        provider="openai",
+        text="EU CE 인증 요건 검색",
+        settings=_settings(ai_external_search_enabled=True),
+    )
+    request = build_external_search_request(egress_decision=egress)
+
+    result = execute_mock_external_search(
+        request,
+        execution_enabled=True,
+        force_error_class="provider_timeout",
+    )
+    summary = summarize_external_search_execution(result)
+
+    assert summary["adapter_id"] == EXTERNAL_SEARCH_ADAPTER_ID
+    assert summary["execution_provider"] == "mock"
+    assert summary["status"] == "failed"
+    assert summary["provider"] == "openai"
+    assert summary["disabled_reason"] is None
+    assert summary["query_digest"]
+    assert summary["cache_key"] == (
+        f"external_search_v0:mock:openai:{summary['query_digest']}"
+    )
+    assert summary["cache_hit"] is False
+    assert summary["result_count"] == 0
+    assert summary["result_refs"] == []
+    assert summary["source_kinds"] == []
+    assert summary["latency_ms"] == 0
+    assert summary["retry_count"] == 0
+    assert summary["error_class"] == "provider_timeout"
+    assert summary["estimated_cost_microunits"] == 0
+    assert summary["raw_output_persisted"] is False

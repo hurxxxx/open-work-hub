@@ -16,7 +16,7 @@ ExternalSearchDisabledReason = Literal[
     "egress_denied",
     "sanitized_empty",
 ]
-ExternalSearchExecutionStatus = Literal["disabled", "skipped", "completed"]
+ExternalSearchExecutionStatus = Literal["disabled", "skipped", "completed", "failed"]
 ExternalSearchExecutionDisabledReason = Literal[
     "execution_flag_disabled",
     "request_not_ready",
@@ -106,6 +106,7 @@ def execute_mock_external_search(
     request: ExternalSearchRequest,
     *,
     execution_enabled: bool,
+    force_error_class: str | None = None,
 ) -> ExternalSearchExecutionResult:
     if not execution_enabled:
         return ExternalSearchExecutionResult(
@@ -120,6 +121,17 @@ def execute_mock_external_search(
             disabled_reason="request_not_ready",
         )
     query_digest = _query_digest(request.query)
+    if force_error_class:
+        return ExternalSearchExecutionResult(
+            status="failed",
+            provider=request.provider,
+            query_digest=query_digest,
+            cache_key=_cache_key(
+                provider=request.provider,
+                query_digest=query_digest,
+            ),
+            error_class=force_error_class,
+        )
     result_refs = _mock_result_refs(query_digest=query_digest, result_count=2)
     return ExternalSearchExecutionResult(
         status="completed",

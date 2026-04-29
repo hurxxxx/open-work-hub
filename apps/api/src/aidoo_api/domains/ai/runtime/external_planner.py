@@ -17,7 +17,7 @@ ExternalPlannerDisabledReason = Literal[
     "egress_denied",
     "sanitized_empty",
 ]
-ExternalPlannerExecutionStatus = Literal["disabled", "skipped", "completed"]
+ExternalPlannerExecutionStatus = Literal["disabled", "skipped", "completed", "failed"]
 ExternalPlannerExecutionDisabledReason = Literal[
     "execution_flag_disabled",
     "request_not_ready",
@@ -110,6 +110,7 @@ def execute_mock_external_planner(
     request: ExternalPlannerRequest,
     *,
     execution_enabled: bool,
+    force_error_class: str | None = None,
 ) -> ExternalPlannerExecutionResult:
     if not execution_enabled:
         return ExternalPlannerExecutionResult(
@@ -122,6 +123,12 @@ def execute_mock_external_planner(
             status="skipped",
             provider=request.provider,
             disabled_reason="request_not_ready",
+        )
+    if force_error_class:
+        return ExternalPlannerExecutionResult(
+            status="failed",
+            provider=request.provider,
+            error_class=force_error_class,
         )
     planner_input = _planner_input_from_request(request)
     runtime_profile = str(planner_input.get("runtime_profile") or "")
