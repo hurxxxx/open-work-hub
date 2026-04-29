@@ -1906,6 +1906,21 @@ async def _chat_stream_publisher(
                 },
             )
         )
+        done_meta = _build_done_meta(
+            last_decision,
+            last_config,
+            model=chosen_model,
+            runtime_routing=runtime_routing,
+            agent_run_id=graph_execution_runtime_run_id
+            or fallback_runtime_run_id,
+        )
+        if graph_execution_runtime_run_id is not None and done_meta is not None:
+            done_meta = _attach_graph_execution_adapter_error_summary(
+                done_meta,
+                runtime_routing=runtime_routing,
+                messages=messages_dict,
+                error=error,
+            )
         done_event = serialize_sse(
             make_envelope(
                 "done",
@@ -1913,14 +1928,7 @@ async def _chat_stream_publisher(
                 {
                     "finish_reason": "error",
                     "audit_id": None,
-                    "meta": _build_done_meta(
-                        last_decision,
-                        last_config,
-                        model=chosen_model,
-                        runtime_routing=runtime_routing,
-                        agent_run_id=graph_execution_runtime_run_id
-                        or fallback_runtime_run_id,
-                    ),
+                    "meta": done_meta,
                 },
             )
         )
@@ -2781,6 +2789,78 @@ def _graph_node_execution_summary(
             requires_verifier=bool(
                 isinstance(candidate_summary, dict)
                 and candidate_summary.get("requires_verifier") is True
+            ),
+        ),
+        "evidence_packet_summary": summarize_graph_evidence_packet(evidence_packet),
+        "nodes": nodes,
+    }
+
+
+def _attach_graph_execution_adapter_error_summary(
+    meta: dict[str, Any],
+    *,
+    runtime_routing: RuntimeRoutingDecision,
+    messages: list[dict[str, Any]],
+    error: Exception,
+) -> dict[str, Any]:
+    if runtime_routing.graph_execution_adapter != GRAPH_NODE_RUNNER_ADAPTER_ID:
+        return meta
+    if meta.get("graph_node_execution_summary") is not None:
+        return meta
+    updated = dict(meta)
+    updated["graph_node_execution_summary"] = _graph_execution_adapter_error_summary(
+        runtime_routing=runtime_routing,
+        messages=messages,
+        error=error,
+    )
+    return updated
+
+
+def _graph_execution_adapter_error_summary(
+    *,
+    runtime_routing: RuntimeRoutingDecision,
+    messages: list[dict[str, Any]],
+    error: Exception,
+) -> dict[str, Any]:
+    steps = _graph_schedule_steps(runtime_routing)
+    planned_agent_ids = [
+        step["agent_id"]
+        for step in steps
+        if isinstance(step.get("agent_id"), str)
+    ]
+    error_class = _error_code(error)
+    nodes = [
+        {
+            "agent_id": agent_id,
+            "status": "failed",
+            "has_text": False,
+            "tool_result_count": 0,
+            "error": error_class,
+        }
+        for agent_id in planned_agent_ids
+    ]
+    evidence_packet = materialize_graph_evidence_packet(
+        messages=messages,
+        node_outputs=[],
+        candidate_summary=runtime_routing.graph_candidate_summary,
+        external_planner_execution_summary=(
+            runtime_routing.external_planner_execution_summary
+        ),
+        external_search_execution_summary=(
+            runtime_routing.external_search_execution_summary
+        ),
+    )
+    return {
+        "adapter": GRAPH_NODE_RUNNER_ADAPTER_ID,
+        "adapter_error_class": error_class,
+        "planned_node_count": len(planned_agent_ids),
+        "covered_node_count": len(planned_agent_ids),
+        "failed_node_count": len(planned_agent_ids),
+        "verifier_failure_policy": graph_verifier_failure_policy(
+            [],
+            requires_verifier=bool(
+                isinstance(runtime_routing.graph_candidate_summary, dict)
+                and runtime_routing.graph_candidate_summary.get("requires_verifier") is True
             ),
         ),
         "evidence_packet_summary": summarize_graph_evidence_packet(evidence_packet),

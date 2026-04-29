@@ -1984,9 +1984,20 @@ def test_chat_stream_graph_execution_adapter_error_persists_failed_runtime(
     assert done_meta["graph_used"] is True
     assert done_meta["graph_execution_status"] == "adapter_selected"
     assert done_meta["agent_run_id"]
+    node_summary = done_meta["graph_node_execution_summary"]
+    assert node_summary["adapter"] == "graph_node_runner_v0"
+    assert node_summary["failed_node_count"] >= 1
+    assert any(node["status"] == "failed" for node in node_summary["nodes"])
 
     with Session(get_engine()) as session:
         runtime_run = session.get(AgentRun, done_meta["agent_run_id"])
+        invocations = list(
+            session.scalars(
+                select(AgentInvocation)
+                .where(AgentInvocation.agent_run_id == done_meta["agent_run_id"])
+                .order_by(AgentInvocation.invocation_seq)
+            )
+        )
         trace_events = list(
             session.scalars(
                 select(AgentTraceEvent)
@@ -1998,7 +2009,46 @@ def test_chat_stream_graph_execution_adapter_error_persists_failed_runtime(
     assert runtime_run is not None
     assert runtime_run.status == "failed"
     assert runtime_run.metadata_json["source"] == "graph_execution_shadow"
+    assert (
+        runtime_run.metadata_json["graph_node_execution_summary"]["failed_node_count"]
+        == node_summary["failed_node_count"]
+    )
+    adapter_invocation = next(
+        invocation
+        for invocation in invocations
+        if invocation.agent_id == "graph.adapter.node_runner"
+    )
+    assert adapter_invocation.status == "failed"
+    gate_event = next(
+        event
+        for event in trace_events
+        if event.event_type == "graph_execution_gate_evaluated"
+    )
+    assert gate_event.payload_json["graph_execution_status"] == "adapter_selected"
+    assert (
+        gate_event.payload_json["graph_node_execution_summary"]["failed_node_count"]
+        == node_summary["failed_node_count"]
+    )
     assert [event.event_type for event in trace_events][-1] == "run_failed"
+
+    inspection = client.get(
+        _workspace_ai_path(slug, f"/runtime/runs/{done_meta['agent_run_id']}"),
+        headers=_auth_headers(auth["token"]),
+    )
+    assert inspection.status_code == 200, inspection.text
+    inspected_events = {
+        event["event_type"]: event["payload"]
+        for event in inspection.json()["trace_events"]
+    }
+    assert (
+        inspected_events["graph_execution_gate_evaluated"][
+            "graph_node_execution_summary"
+        ]["failed_node_count"]
+        == node_summary["failed_node_count"]
+    )
+    assert "run_failed" in [
+        event["event_type"] for event in inspection.json()["trace_events"]
+    ]
 
 
 def test_chat_stream_graph_schedule_failure_remains_fallback_metadata(
