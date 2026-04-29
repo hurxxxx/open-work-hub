@@ -23,12 +23,12 @@ Phase 6 전체 목표는 기존 single-loop agent를 deterministic fast path, ma
 
 이 섹션은 세션 handoff용이다. 구현 세션이 끝날 때마다 짧게 갱신한다.
 
-- Current PR/stage: Phase 0-AW graph adapter error trace invariants after `8193324`.
-- Last completed: Graph node runner adapter exceptions now attach a safe `graph_node_execution_summary` to error done metadata and persisted runtime trace metadata. The summary records planned nodes as failed with an error class only, keeps raw provider errors out of the payload, and is verified through DB trace plus the runtime inspection endpoint.
+- Current PR/stage: Phase 0-AX backend startup smoke after `96c5331`.
+- Last completed: Existing local `uvicorn --reload` backend on `127.0.0.1:8000` passed `/healthz` and `/readyz`; `readyz` reported the MLX local pool ready. A short authenticated local `/chat/stream` smoke with `allowed_app_ids=[]` returned HTTP 200, content deltas, usage, and `finish_reason=stop`.
 - In progress: None.
-- Next exact task: Commit/push the graph adapter error trace invariant, then run one backend startup smoke against the current DB/server path before deciding whether Phase 6 mock-provider implementation is ready for a separate review pass.
-- Files touched in Phase 0-AW: `apps/api/src/aidoo_api/domains/ai/router.py`, `apps/api/tests/test_ai_stream.py`, `plans/03-phase6-evidence-runtime-implementation.md`.
-- Tests/checks run: `cd apps/api && uv run ruff check src/aidoo_api/domains/ai/router.py tests/test_ai_stream.py`; `cd apps/api && uv run pytest tests/test_ai_stream.py::test_chat_stream_graph_execution_adapter_error_persists_failed_runtime -q`; `scripts/phase6-runtime-regression.sh -q`; `git diff --check -- apps/api/src/aidoo_api/domains/ai/router.py apps/api/tests/test_ai_stream.py`.
+- Next exact task: Phase 6 mock-provider implementation is at a reasonable checkpoint for a separate review pass; remaining work should be reviewed against the known blockers before adding real OpenAI/Anthropic adapters or a durable workflow backend.
+- Files touched in Phase 0-AX: `plans/03-phase6-evidence-runtime-implementation.md`.
+- Tests/checks run: `curl -sS -i http://127.0.0.1:8000/healthz`; `curl -sS -i http://127.0.0.1:8000/readyz`; authenticated local `POST /api/v1/workspaces/hq/ai/chat/stream` with `backend_mode=local`, `persist=false`, `allowed_app_ids=[]` returned HTTP 200, content deltas, usage, and `finish_reason=stop`.
 - Known blockers: OpenAI/Anthropic-backed manager/search execution is still not enabled. The egress/planner/search contracts only decide, sanitize, and build request envelopes; they do not call external APIs. `graph_node_runner_v0` remains an in-process runner, not a durable workflow backend. Hidden node outputs are not persisted verbatim; only status/count/error summary is persisted. High-risk / approval-preview graphs are intentionally not supported by this adapter.
 
 ## Architecture / Principles
