@@ -558,6 +558,19 @@
           "default": null,
           "title": "External Planner Summary"
         },
+        "external_search_summary": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "External Search Summary"
+        },
         "forced_local": {
           "default": false,
           "title": "Forced Local",

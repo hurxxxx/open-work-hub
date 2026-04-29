@@ -1383,6 +1383,15 @@ def test_chat_stream_graph_gate_falls_back_without_graph_execution(
         "egress_reason": "external_llm_disabled",
         "message_count": 0,
     }
+    external_search = done_meta["external_search_summary"]
+    assert external_search == {
+        "adapter_id": "external_search_v0",
+        "status": "disabled",
+        "provider": "openai",
+        "disabled_reason": "egress_denied",
+        "egress_reason": "capability_disabled",
+        "query_present": False,
+    }
     graph_summary = done_meta["graph_candidate_summary"]
     assert graph_summary["intent"] == "report"
     assert set(graph_summary["domains"]) >= {"meeting", "pms", "rag"}
@@ -1418,6 +1427,7 @@ def test_chat_stream_graph_gate_falls_back_without_graph_execution(
         assert runtime_run.fallback_reason == "graph_runtime_not_implemented"
         assert runtime_run.metadata_json["external_egress_summary"] == external_egress
         assert runtime_run.metadata_json["external_planner_summary"] == external_planner
+        assert runtime_run.metadata_json["external_search_summary"] == external_search
         invocations = list(
             session.scalars(
                 select(AgentInvocation)
@@ -1470,6 +1480,7 @@ def test_chat_stream_graph_gate_falls_back_without_graph_execution(
         for decision in traced_egress["decisions"]
     } == egress_reasons
     assert trace_events[1].payload_json["external_planner_summary"] == external_planner
+    assert trace_events[1].payload_json["external_search_summary"] == external_search
     schedule_event = next(
         event for event in trace_events if event.event_type == "graph_schedule_planned"
     )

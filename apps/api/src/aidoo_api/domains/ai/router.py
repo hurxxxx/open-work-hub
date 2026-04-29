@@ -71,6 +71,10 @@ from aidoo_api.domains.ai.runtime.external_planner import (
     build_external_planner_request,
     summarize_external_planner_request,
 )
+from aidoo_api.domains.ai.runtime.external_search import (
+    build_external_search_request,
+    summarize_external_search_request,
+)
 from aidoo_api.domains.ai.runtime.graph_execution import (
     GRAPH_INSTRUCTED_SINGLE_LOOP_ADAPTER_ID,
     GRAPH_NODE_RUNNER_ADAPTER_ID,
@@ -1780,6 +1784,9 @@ async def _chat_stream_publisher(
                 runtime_external_planner_summary=(
                     runtime_routing.external_planner_summary
                 ),
+                runtime_external_search_summary=(
+                    runtime_routing.external_search_summary
+                ),
                 runtime_graph_execution_status=runtime_routing.graph_execution_status,
                 runtime_graph_execution_fallback_reason=(
                     runtime_routing.graph_execution_fallback_reason
@@ -2031,6 +2038,7 @@ def _attach_external_egress_trace_metadata(
         runtime_routing,
         decisions=decisions,
     )
+    search_summary = _external_search_summary_from_egress(decisions=decisions)
     return replace(
         runtime_routing,
         external_egress_summary={
@@ -2044,6 +2052,7 @@ def _attach_external_egress_trace_metadata(
             "decisions": decisions,
         },
         external_planner_summary=planner_summary,
+        external_search_summary=search_summary,
     )
 
 
@@ -2073,6 +2082,22 @@ def _graph_candidate_agent_ids(candidate_summary: dict[str, Any] | None) -> list
     if not isinstance(agent_ids, list):
         return []
     return [agent_id for agent_id in agent_ids if isinstance(agent_id, str) and agent_id]
+
+
+def _external_search_summary_from_egress(
+    *,
+    decisions: list[dict[str, Any]],
+) -> dict[str, Any] | None:
+    search_decision = next(
+        (decision for decision in decisions if decision.get("capability") == "search"),
+        None,
+    )
+    if search_decision is None:
+        return None
+    request = build_external_search_request(
+        egress_decision=ExternalEgressDecision.model_validate(search_decision),
+    )
+    return summarize_external_search_request(request)
 
 
 def _latest_message_text(messages: list[dict[str, Any]]) -> str:
@@ -2236,6 +2261,7 @@ async def _run_graph_instructed_single_loop_stream(
         runtime_graph_schedule_summary=runtime_routing.graph_schedule_summary,
         runtime_external_egress_summary=runtime_routing.external_egress_summary,
         runtime_external_planner_summary=runtime_routing.external_planner_summary,
+        runtime_external_search_summary=runtime_routing.external_search_summary,
         runtime_graph_execution_status=runtime_routing.graph_execution_status,
         runtime_graph_execution_fallback_reason=(
             runtime_routing.graph_execution_fallback_reason
@@ -2353,6 +2379,7 @@ async def _run_graph_node_runner_stream(
         runtime_graph_schedule_summary=runtime_routing.graph_schedule_summary,
         runtime_external_egress_summary=runtime_routing.external_egress_summary,
         runtime_external_planner_summary=runtime_routing.external_planner_summary,
+        runtime_external_search_summary=runtime_routing.external_search_summary,
         runtime_graph_execution_status=runtime_routing.graph_execution_status,
         runtime_graph_execution_fallback_reason=(
             runtime_routing.graph_execution_fallback_reason
@@ -2457,6 +2484,7 @@ async def _run_hidden_graph_node(
         runtime_graph_schedule_summary=runtime_routing.graph_schedule_summary,
         runtime_external_egress_summary=runtime_routing.external_egress_summary,
         runtime_external_planner_summary=runtime_routing.external_planner_summary,
+        runtime_external_search_summary=runtime_routing.external_search_summary,
         runtime_graph_execution_status=runtime_routing.graph_execution_status,
         runtime_graph_execution_fallback_reason=(
             runtime_routing.graph_execution_fallback_reason
@@ -2877,6 +2905,7 @@ def _runtime_done_meta(runtime_routing: RuntimeRoutingDecision) -> dict[str, Any
         "graph_schedule_summary": runtime_routing.graph_schedule_summary,
         "external_egress_summary": runtime_routing.external_egress_summary,
         "external_planner_summary": runtime_routing.external_planner_summary,
+        "external_search_summary": runtime_routing.external_search_summary,
         "graph_execution_status": runtime_routing.graph_execution_status,
         "graph_execution_fallback_reason": runtime_routing.graph_execution_fallback_reason,
         "graph_execution_fallback_policy": runtime_routing.graph_execution_fallback_policy,
@@ -3543,6 +3572,7 @@ def _persist_assistant_turn(
         "graph_schedule_summary": done_meta.get("graph_schedule_summary"),
         "external_egress_summary": done_meta.get("external_egress_summary"),
         "external_planner_summary": done_meta.get("external_planner_summary"),
+        "external_search_summary": done_meta.get("external_search_summary"),
         "graph_execution_status": done_meta.get("graph_execution_status"),
         "graph_execution_fallback_reason": done_meta.get("graph_execution_fallback_reason"),
         "graph_execution_fallback_policy": done_meta.get("graph_execution_fallback_policy"),
