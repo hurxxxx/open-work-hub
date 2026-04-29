@@ -249,8 +249,8 @@ def materialize_graph_evidence_packet(
     )
     source_agent_ids = [output.agent_id for output in node_outputs]
     source_agent_ids.extend(provider_source_agent_ids)
-    tool_result_count = sum(len(output.tool_results) for output in node_outputs)
-    node_items = _evidence_items_from_node_outputs(node_outputs)
+    tool_result_count = sum(len(output.tool_results) for output in completed_outputs)
+    node_items = _evidence_items_from_node_outputs(completed_outputs)
     provider_items = _external_provider_evidence_items(
         external_search_execution_summary=external_search_execution_summary,
     )

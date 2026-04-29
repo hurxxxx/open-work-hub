@@ -646,6 +646,37 @@ def test_graph_evidence_packet_materializes_node_outputs_and_verifier_policy() -
     assert summary["ready_for_grounded_write"] is False
 
 
+def test_graph_evidence_packet_does_not_promote_failed_node_outputs() -> None:
+    packet = materialize_graph_evidence_packet(
+        messages=[{"role": "user", "content": "회의록 기준으로 보고서를 작성해줘"}],
+        node_outputs=[
+            GraphNodeOutput(
+                agent_id="domain.meeting",
+                status="failed",
+                text="부분 출력은 근거가 되면 안 된다.",
+                tool_results=("부분 tool result도 근거가 되면 안 된다.",),
+                error="provider length",
+            )
+        ],
+        candidate_summary={
+            "intent": "report",
+            "output_kind": "artifact",
+            "requires_verifier": False,
+        },
+    )
+
+    assert packet.items == []
+    assert packet.coverage.intents_covered == []
+    assert packet.coverage.intents_missed == ["domain.meeting"]
+    assert packet.quality.evidence_item_count == 0
+    assert packet.quality.tool_result_count == 0
+    assert packet.quality.ready_for_grounded_write is False
+    assert packet.gaps == ["domain.meeting: provider length"]
+    rendered = render_evidence_packet(packet)
+    assert "부분 출력은 근거가 되면 안 된다" not in rendered
+    assert "부분 tool result도 근거가 되면 안 된다" not in rendered
+
+
 def test_graph_evidence_packet_includes_external_mock_search_metadata() -> None:
     packet = materialize_graph_evidence_packet(
         messages=[{"role": "user", "content": "EU CE 인증 기준을 보고서로 정리해줘"}],

@@ -23,12 +23,12 @@ Phase 6 전체 목표는 기존 single-loop agent를 deterministic fast path, ma
 
 이 섹션은 세션 handoff용이다. 구현 세션이 끝날 때마다 짧게 갱신한다.
 
-- Current PR/stage: Phase 0-BA inspection trace ordering after `04c6fc3`.
-- Last completed: Fixed runtime inspection trace replay to order by persisted `event_seq`, preserving append order across run-level and invocation-level events. Added regression coverage where a later invocation event must still appear before a subsequently appended run-level marker when `after_seq` and `limit` are used.
+- Current PR/stage: Phase 0-BB failed node evidence packet hardening after `5c7ff62`.
+- Last completed: Hardened EvidencePacket materialization so failed graph node text/tool outputs are not promoted into evidence items or tool-result counts. Failed nodes now contribute to missed coverage and gaps only, preventing partial failed outputs from making a graph ready for grounded writing.
 - In progress: None.
 - Next exact task: Continue the Phase 6 review pass against graph execution persistence and inspection invariants; keep fixes mock-provider/local unless a real external adapter is explicitly requested.
-- Files touched in Phase 0-BA: `apps/api/src/aidoo_api/domains/ai/router.py`, `apps/api/tests/test_ai_approvals.py`, `plans/03-phase6-evidence-runtime-implementation.md`.
-- Tests/checks run: `cd apps/api && uv run ruff check src/aidoo_api/domains/ai/router.py tests/test_ai_approvals.py`; `cd apps/api && uv run pytest tests/test_ai_approvals.py::test_runtime_inspection_endpoint_limits_trace_events tests/test_ai_stream.py::test_chat_stream_graph_execution_adapter_error_persists_failed_runtime -q`; `cd apps/api && uv run pytest tests/test_ai_approvals.py -q`; `scripts/phase6-runtime-regression.sh -q`.
+- Files touched in Phase 0-BB: `apps/api/src/aidoo_api/domains/ai/runtime/graph_execution.py`, `apps/api/tests/test_ai_runtime_contracts.py`, `plans/03-phase6-evidence-runtime-implementation.md`.
+- Tests/checks run: `cd apps/api && uv run ruff check src/aidoo_api/domains/ai/runtime/graph_execution.py tests/test_ai_runtime_contracts.py`; `cd apps/api && uv run pytest tests/test_ai_runtime_contracts.py::test_graph_evidence_packet_does_not_promote_failed_node_outputs tests/test_ai_runtime_contracts.py::test_graph_evidence_packet_materializes_node_outputs_and_verifier_policy tests/test_ai_stream.py::test_chat_stream_graph_execution_verifier_failure_degrades_writer_prompt -q`; `cd apps/api && uv run pytest tests/test_ai_runtime_contracts.py -q`; `scripts/phase6-runtime-regression.sh -q`.
 - Known blockers: OpenAI/Anthropic-backed manager/search execution is still not enabled. The egress/planner/search contracts only decide, sanitize, and build request envelopes; they do not call external APIs. `graph_node_runner_v0` remains an in-process runner, not a durable workflow backend. Hidden node outputs are not persisted verbatim; only status/count/error summary is persisted. High-risk / approval-preview graphs are intentionally not supported by this adapter.
 
 ## Architecture / Principles
