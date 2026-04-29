@@ -23,12 +23,12 @@ Phase 6 전체 목표는 기존 single-loop agent를 deterministic fast path, ma
 
 이 섹션은 세션 handoff용이다. 구현 세션이 끝날 때마다 짧게 갱신한다.
 
-- Current PR/stage: Phase 0-AT no-external-search egress guard after `6c2cd84`.
-- Last completed: Added deterministic user directive handling for external search egress. When the prompt explicitly says not to use external/web/internet search, the runtime now denies only the external search capability before request/execution, clears the sanitized query, preserves external planning, and keeps mock graph evidence/writer prompts free of external search refs.
+- Current PR/stage: Phase 0-AU no-external-search inspection coverage after `33456bc`.
+- Last completed: Extended the no-external-search mock graph E2E guard to assert the runtime inspection endpoint exposes the same external egress decision and skipped external search execution summary on both `graph_candidate_generated` and `graph_candidate_validated` trace events.
 - In progress: None.
-- Next exact task: Commit/push the no-external-search guard, then continue with the next Phase 6 mock-provider slice: route-level inspection coverage for external egress decisions and skipped external execution summaries.
-- Files touched in Phase 0-AT: `apps/api/src/aidoo_api/domains/ai/runtime/external_egress.py`, `apps/api/tests/test_ai_runtime_external_egress.py`, `apps/api/tests/test_ai_runtime_mock_e2e.py`, `scripts/phase6-runtime-regression.sh`, `plans/03-phase6-evidence-runtime-implementation.md`.
-- Tests/checks run: `cd apps/api && uv run ruff check src/aidoo_api/domains/ai/runtime/external_egress.py tests/test_ai_runtime_external_egress.py tests/test_ai_runtime_mock_e2e.py`; `cd apps/api && uv run pytest tests/test_ai_runtime_external_egress.py tests/test_ai_runtime_mock_e2e.py -q`; `scripts/phase6-runtime-regression.sh -q`; `git diff --check -- apps/api/src/aidoo_api/domains/ai/runtime/external_egress.py apps/api/tests/test_ai_runtime_external_egress.py apps/api/tests/test_ai_runtime_mock_e2e.py scripts/phase6-runtime-regression.sh`.
+- Next exact task: Commit/push the inspection trace coverage, then continue with the next Phase 6 mock-provider slice: operator-visible retention cleanup hook or graph execution failure trace invariants, depending on the smallest remaining code path gap.
+- Files touched in Phase 0-AU: `apps/api/tests/test_ai_runtime_mock_e2e.py`, `plans/03-phase6-evidence-runtime-implementation.md`.
+- Tests/checks run: `cd apps/api && uv run ruff check tests/test_ai_runtime_mock_e2e.py`; `cd apps/api && uv run pytest tests/test_ai_runtime_mock_e2e.py -q`; `scripts/phase6-runtime-regression.sh -q`; `git diff --check -- apps/api/tests/test_ai_runtime_mock_e2e.py`.
 - Known blockers: OpenAI/Anthropic-backed manager/search execution is still not enabled. The egress/planner/search contracts only decide, sanitize, and build request envelopes; they do not call external APIs. `graph_node_runner_v0` remains an in-process runner, not a durable workflow backend. Hidden node outputs are not persisted verbatim; only status/count/error summary is persisted. High-risk / approval-preview graphs are intentionally not supported by this adapter.
 
 ## Architecture / Principles

@@ -322,6 +322,26 @@ def test_no_external_search_directive_blocks_external_search_evidence(
     assert "public_web_mock" not in final_system_prompt
     assert "mock://external-search/" not in final_system_prompt
 
+    assert result.inspection_status_code == 200
+    inspected_trace = {
+        event["event_type"]: event["payload"]
+        for event in result.inspection_json["trace_events"]
+    }
+    for payload in (
+        inspected_trace["graph_candidate_generated"],
+        inspected_trace["graph_candidate_validated"],
+    ):
+        traced_decisions = {
+            decision["capability"]: decision
+            for decision in payload["external_egress_summary"]["decisions"]
+        }
+        assert traced_decisions["planning"]["reason"] == "allowed"
+        assert traced_decisions["search"]["allow_external"] is False
+        assert traced_decisions["search"]["reason"] == "user_no_external_search"
+        assert traced_decisions["search"]["sanitized_query"] == ""
+        assert payload["external_search_summary"] == search_request
+        assert payload["external_search_execution_summary"] == search_execution
+
     assert metric_calls[-1] == {
         "capability": "search",
         "adapter_id": "external_search_v0",
