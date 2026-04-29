@@ -23,12 +23,12 @@ Phase 6 전체 목표는 기존 single-loop agent를 deterministic fast path, ma
 
 이 섹션은 세션 handoff용이다. 구현 세션이 끝날 때마다 짧게 갱신한다.
 
-- Current PR/stage: Phase 0-AD mock external graph E2E guard after `bf48726`.
-- Last completed: Added a test-only local fake adapter harness for graph execution with mock external planner/search enabled. The guard drives the workspace `/chat/stream` route, deterministic graph node runner, mock external execution summaries, provider evidence in the writer `EvidencePacket`, and `/runtime/runs/{run_id}` inspection trace without OpenAI/Anthropic keys. The fake chat client adapts to hidden graph node calls and the final writer call, so the guard is not tied to a fixed node count.
+- Current PR/stage: Phase 0-AE mock E2E smoke entrypoint after `cece605`.
+- Last completed: Added `scripts/phase6-mock-e2e.sh` as a thin local smoke command for the mock external graph guard. It runs `uv run pytest tests/test_ai_runtime_mock_e2e.py` from `apps/api`, so the graph + mock external planner/search path can be checked without remembering the large stream test file or requiring OpenAI/Anthropic keys.
 - In progress: None.
-- Next exact task: Build the same mock-provider E2E guard for sync `/chat` or a thin smoke CLI so local/server validation can run the graph+mock path without manually reading the large stream test file.
-- Files touched in Phase 0-AD: `apps/api/tests/ai_runtime_mock_harness.py`, `apps/api/tests/test_ai_runtime_mock_e2e.py`, `plans/03-phase6-evidence-runtime-implementation.md`.
-- Tests/checks run: `cd apps/api && uv run ruff check tests/ai_runtime_mock_harness.py tests/test_ai_runtime_mock_e2e.py tests/test_ai_stream.py`; `cd apps/api && uv run pytest tests/test_ai_runtime_mock_e2e.py`; `cd apps/api && uv run pytest tests/test_ai_runtime_mock_e2e.py tests/test_ai_stream.py`.
+- Next exact task: Add provider failure-mode mock cases for planner/search execution so graph fallback, skipped request, and provider-error metadata are covered before real adapters are introduced.
+- Files touched in Phase 0-AE: `scripts/phase6-mock-e2e.sh`, `plans/03-phase6-evidence-runtime-implementation.md`.
+- Tests/checks run: `scripts/phase6-mock-e2e.sh -q`.
 - Known blockers: OpenAI/Anthropic-backed manager/search execution is still not enabled. The egress/planner/search contracts only decide, sanitize, and build request envelopes; they do not call external APIs. `graph_node_runner_v0` remains an in-process runner, not a durable workflow backend. Hidden node outputs are not persisted verbatim; only status/count/error summary is persisted. High-risk / approval-preview graphs are intentionally not supported by this adapter.
 
 ## Architecture / Principles
