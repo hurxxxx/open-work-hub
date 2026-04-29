@@ -175,3 +175,51 @@ def test_external_search_respects_natural_user_no_external_search_directives() -
         assert decision.allow_external is False
         assert decision.reason == "user_no_external_search"
         assert decision.sanitized_query == ""
+
+
+def test_denied_external_egress_decisions_do_not_retain_prompt_or_query() -> None:
+    cases = (
+        (
+            "planning",
+            "external_llm_disabled",
+            "contact@example.com 포함해서 공개 규격 분석해줘.",
+            _settings(),
+        ),
+        (
+            "planning",
+            "pii_detected",
+            "contact@example.com 포함해서 공개 규격 분석해줘.",
+            _settings(
+                ai_external_llm_enabled=True,
+                ai_external_planning_enabled=True,
+            ),
+        ),
+        (
+            "search",
+            "user_no_external_search",
+            "인터넷 검색하지 말고 contact@example.com 회의록 기준으로 요약해줘.",
+            _settings(ai_external_search_enabled=True),
+        ),
+        (
+            "search",
+            "sensitive_entity_blocked",
+            "BOM 원가 12345원과 계약 조건을 넣어서 공개 공급사 가격을 검색해줘.",
+            _settings(ai_external_search_enabled=True),
+        ),
+    )
+
+    for capability, reason, prompt, settings in cases:
+        decision = evaluate_external_egress(
+            capability=capability,
+            provider="openai",
+            text=prompt,
+            settings=settings,
+        )
+
+        serialized = json.dumps(decision.model_dump(mode="json"), ensure_ascii=False)
+        assert decision.allow_external is False
+        assert decision.reason == reason
+        assert decision.sanitized_prompt == ""
+        assert decision.sanitized_query == ""
+        assert "contact@example.com" not in serialized
+        assert "12345" not in serialized

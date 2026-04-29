@@ -23,12 +23,12 @@ Phase 6 전체 목표는 기존 single-loop agent를 deterministic fast path, ma
 
 이 섹션은 세션 handoff용이다. 구현 세션이 끝날 때마다 짧게 갱신한다.
 
-- Current PR/stage: Phase 0-AY no-external-search directive review hardening after `cccad45`.
-- Last completed: Broadened deterministic no-external-search detection beyond exact "외부 검색 없이" phrasing to cover natural Korean/English variants such as "인터넷 검색하지 말고", "웹 검색하지 말고", "do not search online", and "without internet search". The route-level mock graph E2E now exercises a natural Korean phrasing and still proves search egress denial, skipped search execution, no public web evidence, and inspection trace propagation.
+- Current PR/stage: Phase 0-AZ denied egress payload scrub after `a8de1e4`.
+- Last completed: Hardened denied external egress decisions so trace/SSE metadata never retains sanitized prompt or query payloads for denied decisions, including denial paths that return before PII/sensitive checks. Added regression coverage for disabled external LLM, PII denial, no-external-search denial, and sensitive entity denial.
 - In progress: None.
-- Next exact task: Continue the Phase 6 review pass against external egress and graph execution invariants; keep fixes mock-provider/local unless a real external adapter is explicitly requested.
-- Files touched in Phase 0-AY: `apps/api/src/aidoo_api/domains/ai/runtime/external_egress.py`, `apps/api/tests/test_ai_runtime_external_egress.py`, `apps/api/tests/test_ai_runtime_mock_e2e.py`, `plans/03-phase6-evidence-runtime-implementation.md`.
-- Tests/checks run: `cd apps/api && uv run ruff check src/aidoo_api/domains/ai/runtime/external_egress.py tests/test_ai_runtime_external_egress.py tests/test_ai_runtime_mock_e2e.py`; `cd apps/api && uv run pytest tests/test_ai_runtime_external_egress.py tests/test_ai_runtime_mock_e2e.py::test_no_external_search_directive_blocks_external_search_evidence -q`; `scripts/phase6-runtime-regression.sh -q`; `git diff --check -- apps/api/src/aidoo_api/domains/ai/runtime/external_egress.py apps/api/tests/test_ai_runtime_external_egress.py apps/api/tests/test_ai_runtime_mock_e2e.py`.
+- Next exact task: Continue the Phase 6 review pass against graph execution/persistence invariants; keep fixes mock-provider/local unless a real external adapter is explicitly requested.
+- Files touched in Phase 0-AZ: `apps/api/src/aidoo_api/domains/ai/runtime/external_egress.py`, `apps/api/tests/test_ai_runtime_external_egress.py`, `plans/03-phase6-evidence-runtime-implementation.md`.
+- Tests/checks run: `cd apps/api && uv run ruff check src/aidoo_api/domains/ai/runtime/external_egress.py tests/test_ai_runtime_external_egress.py`; `cd apps/api && uv run pytest tests/test_ai_runtime_external_egress.py -q`; `cd apps/api && uv run pytest tests/test_ai_runtime_external_planner.py tests/test_ai_runtime_mock_e2e.py tests/test_ai_stream.py::test_chat_stream_graph_gate_falls_back_without_graph_execution tests/test_ai_stream.py::test_chat_stream_external_mock_execution_runs_when_enabled -q`; `scripts/phase6-runtime-regression.sh -q`.
 - Known blockers: OpenAI/Anthropic-backed manager/search execution is still not enabled. The egress/planner/search contracts only decide, sanitize, and build request envelopes; they do not call external APIs. `graph_node_runner_v0` remains an in-process runner, not a durable workflow backend. Hidden node outputs are not persisted verbatim; only status/count/error summary is persisted. High-risk / approval-preview graphs are intentionally not supported by this adapter.
 
 ## Architecture / Principles

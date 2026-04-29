@@ -216,10 +216,8 @@ def _deny(
         removed_entity_types=removed_entity_types,
         blocked_entity_types=blocked_entity_types,
         pii_hits=pii_hits,
-        sanitized_prompt=sanitized_prompt,
-        sanitized_query=""
-        if reason in {"sensitive_entity_blocked", "user_no_external_search"}
-        else sanitized_query,
+        sanitized_prompt="",
+        sanitized_query="",
     )
 
 
