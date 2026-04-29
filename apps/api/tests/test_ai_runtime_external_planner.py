@@ -4,8 +4,10 @@ import json
 
 from aidoo_api.core.settings import Settings
 from aidoo_api.domains.ai.runtime.external_egress import evaluate_external_egress
+from aidoo_api.domains.ai.runtime.external_adapters import ExternalPlannerExecutionAdapter
 from aidoo_api.domains.ai.runtime.external_planner import (
     EXTERNAL_PLANNER_ADAPTER_ID,
+    MockExternalPlannerAdapter,
     build_external_planner_request,
     execute_mock_external_planner,
     summarize_external_planner_execution,
@@ -238,3 +240,30 @@ def test_mock_external_planner_records_forced_provider_error() -> None:
         "estimated_cost_microunits": 0,
         "raw_output_persisted": False,
     }
+
+
+def test_mock_external_planner_adapter_matches_execution_protocol() -> None:
+    egress = evaluate_external_egress(
+        capability="planning",
+        provider="openai",
+        text="공개 규격만 기준으로 초기 분석해줘",
+        settings=_settings(
+            ai_external_llm_enabled=True,
+            ai_external_planning_enabled=True,
+        ),
+    )
+    request = build_external_planner_request(
+        egress_decision=egress,
+        runtime_profile="grounded_report",
+        agent_ids=["domain.pms", "writer.template"],
+    )
+    adapter: ExternalPlannerExecutionAdapter = MockExternalPlannerAdapter(
+        execution_enabled=True
+    )
+
+    summary = summarize_external_planner_execution(adapter.execute(request))
+
+    assert adapter.adapter_id == EXTERNAL_PLANNER_ADAPTER_ID
+    assert adapter.execution_provider == "mock"
+    assert summary["status"] == "completed"
+    assert summary["planned_agent_count"] == 2

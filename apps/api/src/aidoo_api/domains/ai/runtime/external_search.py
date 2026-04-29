@@ -55,6 +55,27 @@ class ExternalSearchExecutionResult(BaseModel):
     raw_output_persisted: bool = False
 
 
+class MockExternalSearchAdapter:
+    adapter_id = EXTERNAL_SEARCH_ADAPTER_ID
+    execution_provider = "mock"
+
+    def __init__(
+        self,
+        *,
+        execution_enabled: bool,
+        force_error_class: str | None = None,
+    ) -> None:
+        self._execution_enabled = execution_enabled
+        self._force_error_class = force_error_class
+
+    def execute(self, request: ExternalSearchRequest) -> ExternalSearchExecutionResult:
+        return execute_mock_external_search(
+            request,
+            execution_enabled=self._execution_enabled,
+            force_error_class=self._force_error_class,
+        )
+
+
 def build_external_search_request(
     *,
     egress_decision: ExternalEgressDecision,
@@ -196,6 +217,7 @@ __all__ = [
     "ExternalSearchExecutionStatus",
     "ExternalSearchRequest",
     "ExternalSearchStatus",
+    "MockExternalSearchAdapter",
     "build_external_search_request",
     "execute_mock_external_search",
     "summarize_external_search_execution",

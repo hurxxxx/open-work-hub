@@ -68,14 +68,14 @@ from aidoo_api.domains.ai.runtime.external_egress import (
     evaluate_external_egress,
 )
 from aidoo_api.domains.ai.runtime.external_planner import (
+    MockExternalPlannerAdapter,
     build_external_planner_request,
-    execute_mock_external_planner,
     summarize_external_planner_execution,
     summarize_external_planner_request,
 )
 from aidoo_api.domains.ai.runtime.external_search import (
+    MockExternalSearchAdapter,
     build_external_search_request,
-    execute_mock_external_search,
     summarize_external_search_execution,
     summarize_external_search_request,
 )
@@ -2093,10 +2093,9 @@ def _external_planner_summaries_from_egress(
         runtime_profile=runtime_routing.runtime_profile,
         agent_ids=_graph_candidate_agent_ids(runtime_routing.graph_candidate_summary),
     )
-    execution = execute_mock_external_planner(
-        request,
+    execution = MockExternalPlannerAdapter(
         execution_enabled=execution_enabled,
-    )
+    ).execute(request)
     return (
         summarize_external_planner_request(request),
         summarize_external_planner_execution(execution),
@@ -2126,10 +2125,9 @@ def _external_search_summaries_from_egress(
     request = build_external_search_request(
         egress_decision=ExternalEgressDecision.model_validate(search_decision),
     )
-    execution = execute_mock_external_search(
-        request,
+    execution = MockExternalSearchAdapter(
         execution_enabled=execution_enabled,
-    )
+    ).execute(request)
     return (
         summarize_external_search_request(request),
         summarize_external_search_execution(execution),

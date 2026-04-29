@@ -53,6 +53,27 @@ class ExternalPlannerExecutionResult(BaseModel):
     raw_output_persisted: bool = False
 
 
+class MockExternalPlannerAdapter:
+    adapter_id = EXTERNAL_PLANNER_ADAPTER_ID
+    execution_provider = "mock"
+
+    def __init__(
+        self,
+        *,
+        execution_enabled: bool,
+        force_error_class: str | None = None,
+    ) -> None:
+        self._execution_enabled = execution_enabled
+        self._force_error_class = force_error_class
+
+    def execute(self, request: ExternalPlannerRequest) -> ExternalPlannerExecutionResult:
+        return execute_mock_external_planner(
+            request,
+            execution_enabled=self._execution_enabled,
+            force_error_class=self._force_error_class,
+        )
+
+
 def build_external_planner_request(
     *,
     egress_decision: ExternalEgressDecision,
@@ -233,6 +254,7 @@ __all__ = [
     "ExternalPlannerExecutionStatus",
     "ExternalPlannerRequest",
     "ExternalPlannerStatus",
+    "MockExternalPlannerAdapter",
     "build_external_planner_request",
     "execute_mock_external_planner",
     "summarize_external_planner_execution",

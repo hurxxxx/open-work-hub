@@ -3,9 +3,11 @@ from __future__ import annotations
 import json
 
 from aidoo_api.core.settings import Settings
+from aidoo_api.domains.ai.runtime.external_adapters import ExternalSearchExecutionAdapter
 from aidoo_api.domains.ai.runtime.external_egress import evaluate_external_egress
 from aidoo_api.domains.ai.runtime.external_search import (
     EXTERNAL_SEARCH_ADAPTER_ID,
+    MockExternalSearchAdapter,
     build_external_search_request,
     execute_mock_external_search,
     summarize_external_search_execution,
@@ -203,3 +205,23 @@ def test_mock_external_search_records_forced_provider_error() -> None:
     assert summary["error_class"] == "provider_timeout"
     assert summary["estimated_cost_microunits"] == 0
     assert summary["raw_output_persisted"] is False
+
+
+def test_mock_external_search_adapter_matches_execution_protocol() -> None:
+    egress = evaluate_external_egress(
+        capability="search",
+        provider="openai",
+        text="EU CE 인증 요건 검색",
+        settings=_settings(ai_external_search_enabled=True),
+    )
+    request = build_external_search_request(egress_decision=egress)
+    adapter: ExternalSearchExecutionAdapter = MockExternalSearchAdapter(
+        execution_enabled=True
+    )
+
+    summary = summarize_external_search_execution(adapter.execute(request))
+
+    assert adapter.adapter_id == EXTERNAL_SEARCH_ADAPTER_ID
+    assert adapter.execution_provider == "mock"
+    assert summary["status"] == "completed"
+    assert summary["result_count"] == 2
