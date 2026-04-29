@@ -194,6 +194,8 @@ def test_disabled_external_execution_flags_are_trace_safe(
     result = run_mock_external_graph_stream(
         client,
         monkeypatch,
+        planner_execution_adapter="openai",
+        search_execution_adapter="anthropic",
         planner_execution_enabled=False,
         search_execution_enabled=False,
     )
@@ -209,14 +211,14 @@ def test_disabled_external_execution_flags_are_trace_safe(
     assert egress_reasons == {"planning": "allowed", "search": "allowed"}
 
     planner_execution = done_meta["external_planner_execution_summary"]
-    assert planner_execution["execution_provider"] == "mock"
+    assert planner_execution["execution_provider"] == "openai"
     assert planner_execution["status"] == "disabled"
     assert planner_execution["disabled_reason"] == "execution_flag_disabled"
     assert planner_execution["planned_agent_count"] == 0
     assert planner_execution["raw_output_persisted"] is False
 
     search_execution = done_meta["external_search_execution_summary"]
-    assert search_execution["execution_provider"] == "mock"
+    assert search_execution["execution_provider"] == "anthropic"
     assert search_execution["status"] == "disabled"
     assert search_execution["disabled_reason"] == "execution_flag_disabled"
     assert search_execution["query_digest"] is None
@@ -248,14 +250,14 @@ def test_disabled_external_execution_flags_are_trace_safe(
         {
             "capability": "planning",
             "adapter_id": "external_planner_v0",
-            "execution_provider": "mock",
+            "execution_provider": "openai",
             "status": "disabled",
             "error_class": None,
         },
         {
             "capability": "search",
             "adapter_id": "external_search_v0",
-            "execution_provider": "mock",
+            "execution_provider": "anthropic",
             "status": "disabled",
             "error_class": None,
         },

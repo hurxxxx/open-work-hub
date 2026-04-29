@@ -36,6 +36,20 @@ class ExternalSearchExecutionAdapter(Protocol):
 
 
 @dataclass(frozen=True)
+class DisabledExternalPlannerAdapter:
+    execution_provider: str
+    adapter_id: str = EXTERNAL_PLANNER_ADAPTER_ID
+
+    def execute(self, request: ExternalPlannerRequest) -> ExternalPlannerExecutionResult:
+        return ExternalPlannerExecutionResult(
+            status="disabled",
+            execution_provider=self.execution_provider,
+            provider=request.provider,
+            disabled_reason="execution_flag_disabled",
+        )
+
+
+@dataclass(frozen=True)
 class UnavailableExternalPlannerAdapter:
     execution_provider: str
     adapter_id: str = EXTERNAL_PLANNER_ADAPTER_ID
@@ -46,6 +60,20 @@ class UnavailableExternalPlannerAdapter:
             execution_provider=self.execution_provider,
             provider=request.provider,
             error_class="adapter_not_implemented",
+        )
+
+
+@dataclass(frozen=True)
+class DisabledExternalSearchAdapter:
+    execution_provider: str
+    adapter_id: str = EXTERNAL_SEARCH_ADAPTER_ID
+
+    def execute(self, request: ExternalSearchRequest) -> ExternalSearchExecutionResult:
+        return ExternalSearchExecutionResult(
+            status="disabled",
+            execution_provider=self.execution_provider,
+            provider=request.provider,
+            disabled_reason="execution_flag_disabled",
         )
 
 
@@ -80,8 +108,10 @@ def select_external_planner_execution_adapter(
     adapter_name = _adapter_name(
         getattr(settings, "ai_external_planner_execution_adapter", "mock")
     )
+    if not execution_enabled:
+        return DisabledExternalPlannerAdapter(execution_provider=adapter_name)
     if adapter_name == "mock":
-        return MockExternalPlannerAdapter(execution_enabled=execution_enabled)
+        return MockExternalPlannerAdapter(execution_enabled=True)
     return UnavailableExternalPlannerAdapter(execution_provider=adapter_name)
 
 
@@ -93,8 +123,10 @@ def select_external_search_execution_adapter(
     adapter_name = _adapter_name(
         getattr(settings, "ai_external_search_execution_adapter", "mock")
     )
+    if not execution_enabled:
+        return DisabledExternalSearchAdapter(execution_provider=adapter_name)
     if adapter_name == "mock":
-        return MockExternalSearchAdapter(execution_enabled=execution_enabled)
+        return MockExternalSearchAdapter(execution_enabled=True)
     return UnavailableExternalSearchAdapter(execution_provider=adapter_name)
 
 
@@ -118,6 +150,8 @@ def _cache_key(
 
 
 __all__ = [
+    "DisabledExternalPlannerAdapter",
+    "DisabledExternalSearchAdapter",
     "ExternalPlannerExecutionAdapter",
     "ExternalSearchExecutionAdapter",
     "UnavailableExternalPlannerAdapter",

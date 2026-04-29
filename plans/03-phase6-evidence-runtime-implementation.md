@@ -23,12 +23,12 @@ Phase 6 전체 목표는 기존 single-loop agent를 deterministic fast path, ma
 
 이 섹션은 세션 handoff용이다. 구현 세션이 끝날 때마다 짧게 갱신한다.
 
-- Current PR/stage: Phase 0-AN focused regression gate after `b8c3c70`.
-- Last completed: Added `scripts/phase6-runtime-regression.sh`, a one-command focused gate that runs ruff for the Phase 6 runtime/router/mock harness files and pytest for runtime contracts, mock E2E, and stream regressions. The script passed with 82 tests and only the existing `websockets` deprecation warnings.
+- Current PR/stage: Phase 0-AO external execution flag priority after `03d2d9f`.
+- Last completed: Fixed the external adapter selection contract so execution flags have priority over selected provider adapters. If `AIDOO_AI_EXTERNAL_*_EXECUTION_ENABLED=false`, selected `openai`/`anthropic` adapters now produce trace-safe `disabled` summaries with `execution_flag_disabled` instead of `adapter_not_implemented` failures. The focused regression gate now includes external adapter selector tests.
 - In progress: None.
-- Next exact task: Run a short state/contract self-review of the Phase 6 mock-provider runtime path, then patch any concrete gap found before moving toward broader UI/E2E validation.
-- Files touched in Phase 0-AN: `scripts/phase6-runtime-regression.sh`, `plans/03-phase6-evidence-runtime-implementation.md`.
-- Tests/checks run: `scripts/phase6-runtime-regression.sh -q`; local API smoke from Phase 0-AM remained green (`bootstrap-status`, `dev-login`, `auth/me`, `ai/health`, local `chat/stream`).
+- Next exact task: Run browser/UI E2E around `/w/hq/ai` with the current local API/MLX stack, focusing on workspace AI route rendering and local stream behavior.
+- Files touched in Phase 0-AO: `apps/api/src/aidoo_api/domains/ai/runtime/external_adapters.py`, `apps/api/tests/test_ai_runtime_external_adapters.py`, `apps/api/tests/test_ai_runtime_mock_e2e.py`, `scripts/phase6-runtime-regression.sh`, `plans/03-phase6-evidence-runtime-implementation.md`.
+- Tests/checks run: `cd apps/api && uv run ruff check src/aidoo_api/domains/ai/runtime/external_adapters.py tests/test_ai_runtime_external_adapters.py tests/test_ai_runtime_mock_e2e.py`; `cd apps/api && uv run pytest tests/test_ai_runtime_external_adapters.py tests/test_ai_runtime_mock_e2e.py -q`; `scripts/phase6-runtime-regression.sh -q`.
 - Known blockers: OpenAI/Anthropic-backed manager/search execution is still not enabled. The egress/planner/search contracts only decide, sanitize, and build request envelopes; they do not call external APIs. `graph_node_runner_v0` remains an in-process runner, not a durable workflow backend. Hidden node outputs are not persisted verbatim; only status/count/error summary is persisted. High-risk / approval-preview graphs are intentionally not supported by this adapter.
 
 ## Architecture / Principles
