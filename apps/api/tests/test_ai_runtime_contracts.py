@@ -631,6 +631,86 @@ def test_graph_evidence_packet_materializes_node_outputs_and_verifier_policy() -
     assert summary["ready_for_grounded_write"] is False
 
 
+def test_graph_evidence_packet_includes_external_mock_search_metadata() -> None:
+    packet = materialize_graph_evidence_packet(
+        messages=[{"role": "user", "content": "EU CE 인증 기준을 보고서로 정리해줘"}],
+        node_outputs=[
+            GraphNodeOutput(
+                agent_id="domain.meeting",
+                status="completed",
+                text="회의에서 인증 리스크 검토 필요성을 확인했다.",
+            )
+        ],
+        candidate_summary={
+            "intent": "report",
+            "output_kind": "artifact",
+            "requires_verifier": False,
+        },
+        external_planner_execution_summary={
+            "adapter_id": "external_planner_v0",
+            "execution_provider": "mock",
+            "status": "completed",
+            "provider": "openai",
+            "planned_agent_count": 3,
+            "intent_hint": "report",
+            "output_kind_hint": "artifact",
+            "raw_output_persisted": False,
+        },
+        external_search_execution_summary={
+            "adapter_id": "external_search_v0",
+            "execution_provider": "mock",
+            "status": "completed",
+            "provider": "openai",
+            "query_digest": "abc123digest",
+            "result_count": 2,
+            "source_kinds": ["public_web_mock"],
+            "raw_output_persisted": False,
+        },
+    )
+
+    assert packet.source_agent_ids == [
+        "domain.meeting",
+        "external_planner_v0",
+        "external_search_v0",
+    ]
+    assert packet.query_plan.external_search_used is True
+    assert packet.query_plan.external_search_provider == "openai"
+    assert packet.query_plan.sanitized_query_ref == "sha256:abc123digest"
+    assert packet.query_plan.source_kinds == ["meeting", "public_web_mock"]
+    external_item = packet.items[-1]
+    assert external_item.source_kind == "public_web_mock"
+    assert external_item.trust_level == "untrusted"
+    assert external_item.authority_class == "public_web"
+    assert "sha256:abc123digest" in external_item.excerpt
+    assert "EU CE" not in render_evidence_packet(packet)
+
+
+def test_external_mock_search_metadata_does_not_make_packet_ready_alone() -> None:
+    packet = materialize_graph_evidence_packet(
+        messages=[{"role": "user", "content": "EU CE 인증 기준을 보고서로 정리해줘"}],
+        node_outputs=[],
+        candidate_summary={
+            "intent": "report",
+            "output_kind": "artifact",
+            "requires_verifier": False,
+        },
+        external_search_execution_summary={
+            "adapter_id": "external_search_v0",
+            "execution_provider": "mock",
+            "status": "completed",
+            "provider": "openai",
+            "query_digest": "abc123digest",
+            "result_count": 2,
+            "source_kinds": ["public_web_mock"],
+            "raw_output_persisted": False,
+        },
+    )
+
+    assert packet.items
+    assert packet.query_plan.external_search_used is True
+    assert packet.quality.ready_for_grounded_write is False
+
+
 def test_graph_node_input_builder_is_deterministic_and_scoped() -> None:
     messages = [{"role": "user", "content": "회의록과 PMS를 비교한 보고서를 작성해줘"}]
     prior_outputs = [

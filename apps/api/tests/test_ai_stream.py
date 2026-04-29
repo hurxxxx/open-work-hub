@@ -1735,6 +1735,72 @@ def test_chat_stream_graph_execution_adapter_runs_when_enabled(
     assert event_types[-3:] == ["invocation_started", "invocation_completed", "run_completed"]
 
 
+def test_chat_stream_graph_execution_uses_external_mock_evidence_when_enabled(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    auth = _seeded_dev_login(client, "hq-admin")
+    slug = auth["user"]["workspaces"][0]["slug"]
+    _set_policy("chatbot", "local_only")
+    settings = get_settings()
+    monkeypatch.setattr(settings, "ai_runtime_graph_enabled", True)
+    monkeypatch.setattr(settings, "ai_runtime_graph_execution_enabled", True)
+    monkeypatch.setattr(settings, "ai_tool_calling_enabled", False)
+    monkeypatch.setattr(settings, "ai_external_llm_enabled", True)
+    monkeypatch.setattr(settings, "ai_external_planning_enabled", True)
+    monkeypatch.setattr(settings, "ai_external_search_enabled", True)
+    monkeypatch.setattr(settings, "ai_external_planner_execution_enabled", True)
+    monkeypatch.setattr(settings, "ai_external_search_execution_enabled", True)
+
+    pool_client = _SequencedAsyncPoolClient(
+        [
+            [_delta(content=f"node {index}", finish_reason="stop")]
+            for index in range(1, 7)
+        ]
+        + [[_delta(content="graph ok", finish_reason="stop")]]
+    )
+    monkeypatch.setattr(llm_core, "get_async_pool_client", lambda pool: pool_client)
+
+    status_code, events = _stream_post(
+        client,
+        _workspace_ai_path(slug, "/chat/stream"),
+        headers=_auth_headers(auth["token"]),
+        json_body={
+            "backend_mode": "local",
+            "persist": True,
+            "messages": [
+                {
+                    "role": "user",
+                    "content": "EU CE 인증 리스크를 회의록과 PMS 이슈 기준으로 근거 있는 보고서로 정리해줘",
+                }
+            ],
+            "allowed_app_ids": ["meeting", "pms"],
+        },
+    )
+
+    assert status_code == 200
+    done_meta = _chat_events(events)[-1]["data"]["meta"]
+    planner_execution = done_meta["external_planner_execution_summary"]
+    search_execution = done_meta["external_search_execution_summary"]
+    assert planner_execution["status"] == "completed"
+    assert search_execution["status"] == "completed"
+    assert search_execution["query_digest"]
+
+    node_summary = done_meta["graph_node_execution_summary"]
+    packet_summary = node_summary["evidence_packet_summary"]
+    assert "public_web_mock" in packet_summary["source_kinds"]
+    assert packet_summary["evidence_item_count"] >= done_meta[
+        "graph_schedule_summary"
+    ]["step_count"]
+
+    final_prompt = pool_client.chat.completions.calls[-1]["messages"][0]["content"]
+    assert '"external_search_used": true' in final_prompt
+    assert (
+        f'"sanitized_query_ref": "sha256:{search_execution["query_digest"]}"'
+        in final_prompt
+    )
+    assert "public_web_mock" in final_prompt
+
+
 def test_chat_stream_graph_execution_verifier_failure_degrades_writer_prompt(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:

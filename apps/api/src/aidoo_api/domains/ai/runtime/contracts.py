@@ -107,6 +107,9 @@ class QueryPlan(BaseModel):
     candidate_top_k: int = Field(default=0, ge=0)
     rerank_top_k: int = Field(default=0, ge=0)
     final_evidence_token_budget: int = Field(default=0, ge=0)
+    external_search_used: bool = False
+    external_search_provider: str | None = None
+    sanitized_query_ref: str | None = None
 
 
 class EvidenceItem(BaseModel):

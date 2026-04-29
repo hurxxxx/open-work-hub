@@ -174,6 +174,8 @@ def build_graph_node_messages(
     step: dict[str, Any],
     prior_outputs: list[GraphNodeOutput],
     candidate_summary: dict[str, Any] | None,
+    external_planner_execution_summary: dict[str, Any] | None = None,
+    external_search_execution_summary: dict[str, Any] | None = None,
 ) -> list[dict[str, Any]]:
     node_input = _graph_node_input_text(
         messages=messages,
@@ -181,6 +183,8 @@ def build_graph_node_messages(
         step=step,
         prior_outputs=prior_outputs,
         candidate_summary=candidate_summary,
+        external_planner_execution_summary=external_planner_execution_summary,
+        external_search_execution_summary=external_search_execution_summary,
     )
     return [
         *[dict(message) for message in messages],
@@ -196,11 +200,15 @@ def build_graph_writer_system_prompt(
     messages: list[dict[str, Any]],
     node_outputs: list[GraphNodeOutput],
     candidate_summary: dict[str, Any] | None,
+    external_planner_execution_summary: dict[str, Any] | None = None,
+    external_search_execution_summary: dict[str, Any] | None = None,
 ) -> str:
     evidence_packet = materialize_graph_evidence_packet(
         messages=messages,
         node_outputs=node_outputs,
         candidate_summary=candidate_summary,
+        external_planner_execution_summary=external_planner_execution_summary,
+        external_search_execution_summary=external_search_execution_summary,
     )
     verifier_policy = graph_verifier_failure_policy(
         node_outputs,
@@ -226,6 +234,8 @@ def materialize_graph_evidence_packet(
     messages: list[dict[str, Any]],
     node_outputs: list[GraphNodeOutput],
     candidate_summary: dict[str, Any] | None,
+    external_planner_execution_summary: dict[str, Any] | None = None,
+    external_search_execution_summary: dict[str, Any] | None = None,
 ) -> EvidencePacket:
     failed_outputs = [output for output in node_outputs if output.status == "failed"]
     completed_outputs = [
@@ -233,15 +243,24 @@ def materialize_graph_evidence_packet(
         for output in node_outputs
         if output.status == "completed" and (output.text or output.tool_results)
     ]
+    provider_source_agent_ids = _external_provider_source_agent_ids(
+        external_planner_execution_summary=external_planner_execution_summary,
+        external_search_execution_summary=external_search_execution_summary,
+    )
     source_agent_ids = [output.agent_id for output in node_outputs]
+    source_agent_ids.extend(provider_source_agent_ids)
     tool_result_count = sum(len(output.tool_results) for output in node_outputs)
-    items = _evidence_items_from_node_outputs(node_outputs)
+    node_items = _evidence_items_from_node_outputs(node_outputs)
+    provider_items = _external_provider_evidence_items(
+        external_search_execution_summary=external_search_execution_summary,
+    )
+    items = [*node_items, *provider_items]
     verifier_status = _verifier_status(node_outputs)
     requires_verifier = bool(
         isinstance(candidate_summary, dict)
         and candidate_summary.get("requires_verifier") is True
     )
-    ready_for_grounded_write = bool(items) and (
+    ready_for_grounded_write = bool(node_items) and (
         verifier_status == "completed" if requires_verifier else verifier_status != "failed"
     )
     source_kinds = sorted({item.source_kind for item in items})
@@ -260,6 +279,15 @@ def materialize_graph_evidence_packet(
             candidate_top_k=len(items),
             rerank_top_k=min(len(items), 8),
             final_evidence_token_budget=2048,
+            external_search_used=_external_search_used(
+                external_search_execution_summary
+            ),
+            external_search_provider=_external_search_provider(
+                external_search_execution_summary
+            ),
+            sanitized_query_ref=_external_search_query_ref(
+                external_search_execution_summary
+            ),
         ),
         items=items,
         coverage=EvidenceCoverage(
@@ -410,6 +438,8 @@ def _graph_node_input_text(
     step: dict[str, Any],
     prior_outputs: list[GraphNodeOutput],
     candidate_summary: dict[str, Any] | None,
+    external_planner_execution_summary: dict[str, Any] | None,
+    external_search_execution_summary: dict[str, Any] | None,
 ) -> str:
     depends_on = _string_list(step.get("depends_on_agent_ids"))
     node_kind = _node_kind(agent_id)
@@ -417,6 +447,8 @@ def _graph_node_input_text(
         messages=messages,
         node_outputs=prior_outputs,
         candidate_summary=candidate_summary,
+        external_planner_execution_summary=external_planner_execution_summary,
+        external_search_execution_summary=external_search_execution_summary,
     )
     return (
         "Deterministic graph node input\n"
@@ -468,6 +500,66 @@ def _evidence_items_from_node_outputs(
     return items
 
 
+def _external_provider_source_agent_ids(
+    *,
+    external_planner_execution_summary: dict[str, Any] | None,
+    external_search_execution_summary: dict[str, Any] | None,
+) -> list[str]:
+    agent_ids: list[str] = []
+    if _execution_status(external_planner_execution_summary) == "completed":
+        adapter_id = _summary_string(external_planner_execution_summary, "adapter_id")
+        if adapter_id:
+            agent_ids.append(adapter_id)
+    if _external_search_used(external_search_execution_summary):
+        adapter_id = _summary_string(external_search_execution_summary, "adapter_id")
+        if adapter_id:
+            agent_ids.append(adapter_id)
+    return agent_ids
+
+
+def _external_provider_evidence_items(
+    *,
+    external_search_execution_summary: dict[str, Any] | None,
+) -> list[EvidenceItem]:
+    if not _external_search_used(external_search_execution_summary):
+        return []
+    query_ref = _external_search_query_ref(external_search_execution_summary)
+    if not query_ref:
+        return []
+    provider = _external_search_provider(external_search_execution_summary) or "unknown"
+    adapter_id = _summary_string(
+        external_search_execution_summary,
+        "adapter_id",
+    ) or "external_search"
+    execution_provider = _summary_string(
+        external_search_execution_summary,
+        "execution_provider",
+    ) or "unknown"
+    source_kinds = _string_list(
+        external_search_execution_summary.get("source_kinds")
+        if isinstance(external_search_execution_summary, dict)
+        else None
+    )
+    source_kind = source_kinds[0] if source_kinds else "external_web"
+    result_count = _summary_int(external_search_execution_summary, "result_count")
+    excerpt = (
+        "Mock external search completed with metadata only; "
+        f"sanitized_query_ref={query_ref}; "
+        f"normalized_result_count={result_count}; "
+        f"source_kinds={source_kinds or [source_kind]}."
+    )
+    return [
+        EvidenceItem(
+            ref=f"external-search:{adapter_id}:{query_ref}",
+            source_kind=source_kind,
+            excerpt=excerpt,
+            provenance=f"{adapter_id}:{execution_provider}:{provider}",
+            trust_level="untrusted",
+            authority_class="public_web",
+        )
+    ]
+
+
 def _evidence_gaps(
     node_outputs: list[GraphNodeOutput],
     *,
@@ -505,6 +597,8 @@ def _source_kind_for_agent(agent_id: str) -> str:
 def _authority_class_for_source_kind(source_kind: str) -> str:
     if source_kind in {"pms", "meeting", "docs", "planner", "rag"}:
         return "internal_system_of_record"
+    if source_kind in {"external_web", "public_web_mock"}:
+        return "public_web"
     return "unknown"
 
 
@@ -552,6 +646,46 @@ def _candidate_string(candidate_summary: dict[str, Any] | None, key: str) -> str
         return None
     value = candidate_summary.get(key)
     return value if isinstance(value, str) and value else None
+
+
+def _external_search_used(summary: dict[str, Any] | None) -> bool:
+    return _execution_status(summary) == "completed" and _summary_int(
+        summary,
+        "result_count",
+    ) > 0
+
+
+def _external_search_provider(summary: dict[str, Any] | None) -> str | None:
+    if not _external_search_used(summary):
+        return None
+    return _summary_string(summary, "provider")
+
+
+def _external_search_query_ref(summary: dict[str, Any] | None) -> str | None:
+    if not _external_search_used(summary):
+        return None
+    query_digest = _summary_string(summary, "query_digest")
+    return f"sha256:{query_digest}" if query_digest else None
+
+
+def _execution_status(summary: dict[str, Any] | None) -> str | None:
+    return _summary_string(summary, "status")
+
+
+def _summary_string(summary: dict[str, Any] | None, key: str) -> str | None:
+    if not isinstance(summary, dict):
+        return None
+    value = summary.get(key)
+    return value if isinstance(value, str) and value else None
+
+
+def _summary_int(summary: dict[str, Any] | None, key: str) -> int:
+    if not isinstance(summary, dict):
+        return 0
+    try:
+        return int(summary.get(key) or 0)
+    except (TypeError, ValueError):
+        return 0
 
 
 def _trim_graph_text(value: str, *, limit: int) -> str:

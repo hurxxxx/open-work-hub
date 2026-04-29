@@ -2385,6 +2385,12 @@ async def _run_graph_node_runner_stream(
             messages=messages,
             node_outputs=node_outputs,
             candidate_summary=runtime_routing.graph_candidate_summary,
+            external_planner_execution_summary=(
+                runtime_routing.external_planner_execution_summary
+            ),
+            external_search_execution_summary=(
+                runtime_routing.external_search_execution_summary
+            ),
         ),
     )
     async for event in run_agent_turn_stream(
@@ -2448,6 +2454,12 @@ async def _run_graph_node_runner_stream(
                 writer_status=writer_status,
                 messages=messages,
                 candidate_summary=runtime_routing.graph_candidate_summary,
+                external_planner_execution_summary=(
+                    runtime_routing.external_planner_execution_summary
+                ),
+                external_search_execution_summary=(
+                    runtime_routing.external_search_execution_summary
+                ),
             )
             meta = dict(event.data.meta.model_dump(mode="json") if event.data.meta else {})
             meta["graph_node_execution_summary"] = node_summary
@@ -2492,6 +2504,10 @@ async def _run_hidden_graph_node(
         step=step,
         prior_outputs=prior_outputs,
         candidate_summary=runtime_routing.graph_candidate_summary,
+        external_planner_execution_summary=(
+            runtime_routing.external_planner_execution_summary
+        ),
+        external_search_execution_summary=runtime_routing.external_search_execution_summary,
     )
     hidden_encoder = EnvelopeEncoder()
     content_parts: list[str] = []
@@ -2664,11 +2680,15 @@ def _graph_node_execution_summary(
     writer_status: str,
     messages: list[dict[str, Any]],
     candidate_summary: dict[str, Any] | None,
+    external_planner_execution_summary: dict[str, Any] | None = None,
+    external_search_execution_summary: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     evidence_packet = materialize_graph_evidence_packet(
         messages=messages,
         node_outputs=node_outputs,
         candidate_summary=candidate_summary,
+        external_planner_execution_summary=external_planner_execution_summary,
+        external_search_execution_summary=external_search_execution_summary,
     )
     nodes = [
         {
