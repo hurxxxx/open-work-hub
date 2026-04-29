@@ -1,0 +1,156 @@
+{
+  "schema_version": 1,
+  "suite": "external_execution_summary",
+  "description": "Synthetic contract cases for Phase 6 mock external planner/search execution summaries.",
+  "cases": [
+    {
+      "id": "external-planner-completed",
+      "locale": "ko-KR",
+      "synthetic": true,
+      "tags": ["external", "planner", "mock", "completed"],
+      "input": {
+        "adapter": "planner",
+        "capability": "planning",
+        "provider": "openai",
+        "text": "공개 규격만 기준으로 초기 분석해줘",
+        "settings": {
+          "ai_external_llm_enabled": true,
+          "ai_external_planning_enabled": true
+        },
+        "runtime_profile": "grounded_report",
+        "agent_ids": ["domain.pms", "search.executor", "writer.template"],
+        "execution_enabled": true
+      },
+      "expected": {
+        "summary": {
+          "adapter_id": "external_planner_v0",
+          "execution_provider": "mock",
+          "status": "completed",
+          "provider": "openai",
+          "disabled_reason": null,
+          "planned_agent_count": 3,
+          "intent_hint": "report",
+          "output_kind_hint": "artifact",
+          "latency_ms": 0,
+          "retry_count": 0,
+          "error_class": null,
+          "estimated_cost_microunits": 0,
+          "raw_output_persisted": false
+        }
+      }
+    },
+    {
+      "id": "external-planner-failed",
+      "locale": "ko-KR",
+      "synthetic": true,
+      "tags": ["external", "planner", "mock", "failed"],
+      "input": {
+        "adapter": "planner",
+        "capability": "planning",
+        "provider": "openai",
+        "text": "공개 규격만 기준으로 초기 분석해줘",
+        "settings": {
+          "ai_external_llm_enabled": true,
+          "ai_external_planning_enabled": true
+        },
+        "runtime_profile": "grounded_report",
+        "agent_ids": ["domain.pms", "writer.template"],
+        "execution_enabled": true,
+        "force_error_class": "provider_timeout"
+      },
+      "expected": {
+        "summary": {
+          "adapter_id": "external_planner_v0",
+          "execution_provider": "mock",
+          "status": "failed",
+          "provider": "openai",
+          "disabled_reason": null,
+          "planned_agent_count": 0,
+          "intent_hint": null,
+          "output_kind_hint": null,
+          "latency_ms": 0,
+          "retry_count": 0,
+          "error_class": "provider_timeout",
+          "estimated_cost_microunits": 0,
+          "raw_output_persisted": false
+        }
+      }
+    },
+    {
+      "id": "external-search-completed",
+      "locale": "ko-KR",
+      "synthetic": true,
+      "tags": ["external", "search", "mock", "completed"],
+      "input": {
+        "adapter": "search",
+        "capability": "search",
+        "provider": "openai",
+        "text": "EU CE 인증 요건 검색",
+        "settings": {
+          "ai_external_search_enabled": true
+        },
+        "execution_enabled": true
+      },
+      "expected": {
+        "summary": {
+          "adapter_id": "external_search_v0",
+          "execution_provider": "mock",
+          "status": "completed",
+          "provider": "openai",
+          "disabled_reason": null,
+          "query_digest": "4a02ba5d13fa0cd7",
+          "cache_key": "external_search_v0:mock:openai:4a02ba5d13fa0cd7",
+          "cache_hit": false,
+          "result_count": 2,
+          "result_refs": [
+            "mock://external-search/4a02ba5d13fa0cd7/result-1",
+            "mock://external-search/4a02ba5d13fa0cd7/result-2"
+          ],
+          "source_kinds": ["public_web_mock"],
+          "latency_ms": 0,
+          "retry_count": 0,
+          "error_class": null,
+          "estimated_cost_microunits": 0,
+          "raw_output_persisted": false
+        }
+      }
+    },
+    {
+      "id": "external-search-failed",
+      "locale": "ko-KR",
+      "synthetic": true,
+      "tags": ["external", "search", "mock", "failed"],
+      "input": {
+        "adapter": "search",
+        "capability": "search",
+        "provider": "openai",
+        "text": "EU CE 인증 요건 검색",
+        "settings": {
+          "ai_external_search_enabled": true
+        },
+        "execution_enabled": true,
+        "force_error_class": "provider_timeout"
+      },
+      "expected": {
+        "summary": {
+          "adapter_id": "external_search_v0",
+          "execution_provider": "mock",
+          "status": "failed",
+          "provider": "openai",
+          "disabled_reason": null,
+          "query_digest": "4a02ba5d13fa0cd7",
+          "cache_key": "external_search_v0:mock:openai:4a02ba5d13fa0cd7",
+          "cache_hit": false,
+          "result_count": 0,
+          "result_refs": [],
+          "source_kinds": [],
+          "latency_ms": 0,
+          "retry_count": 0,
+          "error_class": "provider_timeout",
+          "estimated_cost_microunits": 0,
+          "raw_output_persisted": false
+        }
+      }
+    }
+  ]
+}

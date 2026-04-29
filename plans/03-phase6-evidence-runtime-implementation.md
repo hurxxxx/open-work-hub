@@ -23,12 +23,12 @@ Phase 6 전체 목표는 기존 single-loop agent를 deterministic fast path, ma
 
 이 섹션은 세션 handoff용이다. 구현 세션이 끝날 때마다 짧게 갱신한다.
 
-- Current PR/stage: Phase 0-AF mock provider failure metadata after `b35d827`.
-- Last completed: Added optional forced provider-error paths to mock external planner/search execution. Mock execution can now emit `status=failed` with `error_class` while keeping raw output unpersisted; search failures retain safe query digest/cache key metadata but no result refs or provider evidence. This fixes the failure metadata shape before real external adapters are introduced.
+- Current PR/stage: Phase 0-AG external execution summary contract fixture after `2bffd37`.
+- Last completed: Added `external_execution_summary_cases.json` under the Phase 6 runtime fixtures and wired the eval fixture test to materialize mock planner/search summaries from fixture inputs. The fixture now locks completed and failed planner/search summary shapes, including audit fields, search digest/cache metadata, result refs, and the no-raw-output persistence invariant. This gives future OpenAI/Anthropic adapters a concrete summary contract to preserve.
 - In progress: None.
-- Next exact task: Add a small runtime/provider contract fixture for external execution summaries so future OpenAI/Anthropic adapters must preserve the mock-established shape.
-- Files touched in Phase 0-AF: `apps/api/src/aidoo_api/domains/ai/runtime/external_planner.py`, `apps/api/src/aidoo_api/domains/ai/runtime/external_search.py`, `apps/api/tests/test_ai_runtime_external_planner.py`, `apps/api/tests/test_ai_runtime_external_search.py`, `plans/03-phase6-evidence-runtime-implementation.md`.
-- Tests/checks run: `cd apps/api && uv run ruff check src/aidoo_api/domains/ai/runtime/external_planner.py src/aidoo_api/domains/ai/runtime/external_search.py tests/test_ai_runtime_external_planner.py tests/test_ai_runtime_external_search.py`; `cd apps/api && uv run pytest tests/test_ai_runtime_external_planner.py tests/test_ai_runtime_external_search.py tests/test_ai_runtime_mock_e2e.py`; `scripts/phase6-mock-e2e.sh -q`.
+- Next exact task: Add a first-class provider adapter protocol/interface for external planner/search execution, implemented by the current mock adapters, so real provider adapters can plug into the same contract without changing routing metadata paths.
+- Files touched in Phase 0-AG: `apps/api/tests/fixtures/ai_runtime/external_execution_summary_cases.json`, `apps/api/tests/fixtures/ai_runtime/README.md`, `apps/api/tests/test_ai_runtime_eval_fixtures.py`, `plans/03-phase6-evidence-runtime-implementation.md`.
+- Tests/checks run: `cd apps/api && uv run ruff check tests/test_ai_runtime_eval_fixtures.py`; `cd apps/api && uv run pytest tests/test_ai_runtime_eval_fixtures.py`; `cd apps/api && uv run pytest tests/test_ai_runtime_eval_fixtures.py tests/test_ai_runtime_external_planner.py tests/test_ai_runtime_external_search.py tests/test_ai_runtime_mock_e2e.py`; `scripts/phase6-mock-e2e.sh -q`.
 - Known blockers: OpenAI/Anthropic-backed manager/search execution is still not enabled. The egress/planner/search contracts only decide, sanitize, and build request envelopes; they do not call external APIs. `graph_node_runner_v0` remains an in-process runner, not a durable workflow backend. Hidden node outputs are not persisted verbatim; only status/count/error summary is persisted. High-risk / approval-preview graphs are intentionally not supported by this adapter.
 
 ## Architecture / Principles
