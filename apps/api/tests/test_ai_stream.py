@@ -1412,7 +1412,10 @@ def test_chat_stream_graph_gate_falls_back_without_graph_execution(
         "provider": "openai",
         "disabled_reason": "execution_flag_disabled",
         "query_digest": None,
+        "cache_key": None,
+        "cache_hit": False,
         "result_count": 0,
+        "result_refs": [],
         "source_kinds": [],
         "raw_output_persisted": False,
     }
@@ -1602,7 +1605,15 @@ def test_chat_stream_external_mock_execution_runs_when_enabled(
     assert search_execution["execution_provider"] == "mock"
     assert search_execution["status"] == "completed"
     assert search_execution["query_digest"]
+    assert search_execution["cache_key"] == (
+        f"external_search_v0:mock:openai:{search_execution['query_digest']}"
+    )
+    assert search_execution["cache_hit"] is False
     assert search_execution["result_count"] == 2
+    assert search_execution["result_refs"] == [
+        f"mock://external-search/{search_execution['query_digest']}/result-1",
+        f"mock://external-search/{search_execution['query_digest']}/result-2",
+    ]
     assert search_execution["source_kinds"] == ["public_web_mock"]
     assert search_execution["raw_output_persisted"] is False
 

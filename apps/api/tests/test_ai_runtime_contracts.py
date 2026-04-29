@@ -662,7 +662,13 @@ def test_graph_evidence_packet_includes_external_mock_search_metadata() -> None:
             "status": "completed",
             "provider": "openai",
             "query_digest": "abc123digest",
+            "cache_key": "external_search_v0:mock:openai:abc123digest",
+            "cache_hit": False,
             "result_count": 2,
+            "result_refs": [
+                "mock://external-search/abc123digest/result-1",
+                "mock://external-search/abc123digest/result-2",
+            ],
             "source_kinds": ["public_web_mock"],
             "raw_output_persisted": False,
         },
@@ -677,11 +683,16 @@ def test_graph_evidence_packet_includes_external_mock_search_metadata() -> None:
     assert packet.query_plan.external_search_provider == "openai"
     assert packet.query_plan.sanitized_query_ref == "sha256:abc123digest"
     assert packet.query_plan.source_kinds == ["meeting", "public_web_mock"]
-    external_item = packet.items[-1]
-    assert external_item.source_kind == "public_web_mock"
-    assert external_item.trust_level == "untrusted"
-    assert external_item.authority_class == "public_web"
-    assert "sha256:abc123digest" in external_item.excerpt
+    external_items = [
+        item for item in packet.items if item.source_kind == "public_web_mock"
+    ]
+    assert [item.ref for item in external_items] == [
+        "mock://external-search/abc123digest/result-1",
+        "mock://external-search/abc123digest/result-2",
+    ]
+    assert {item.trust_level for item in external_items} == {"untrusted"}
+    assert {item.authority_class for item in external_items} == {"public_web"}
+    assert all("sha256:abc123digest" in item.excerpt for item in external_items)
     assert "EU CE" not in render_evidence_packet(packet)
 
 
@@ -700,7 +711,13 @@ def test_external_mock_search_metadata_does_not_make_packet_ready_alone() -> Non
             "status": "completed",
             "provider": "openai",
             "query_digest": "abc123digest",
+            "cache_key": "external_search_v0:mock:openai:abc123digest",
+            "cache_hit": False,
             "result_count": 2,
+            "result_refs": [
+                "mock://external-search/abc123digest/result-1",
+                "mock://external-search/abc123digest/result-2",
+            ],
             "source_kinds": ["public_web_mock"],
             "raw_output_persisted": False,
         },

@@ -117,7 +117,10 @@ def test_mock_external_search_execution_requires_explicit_flag() -> None:
         "provider": "openai",
         "disabled_reason": "execution_flag_disabled",
         "query_digest": None,
+        "cache_key": None,
+        "cache_hit": False,
         "result_count": 0,
+        "result_refs": [],
         "source_kinds": [],
         "raw_output_persisted": False,
     }
@@ -128,7 +131,15 @@ def test_mock_external_search_execution_requires_explicit_flag() -> None:
     assert completed_summary["provider"] == "openai"
     assert completed_summary["disabled_reason"] is None
     assert completed_summary["query_digest"]
+    assert completed_summary["cache_key"] == (
+        f"external_search_v0:mock:openai:{completed_summary['query_digest']}"
+    )
+    assert completed_summary["cache_hit"] is False
     assert completed_summary["result_count"] == 2
+    assert completed_summary["result_refs"] == [
+        f"mock://external-search/{completed_summary['query_digest']}/result-1",
+        f"mock://external-search/{completed_summary['query_digest']}/result-2",
+    ]
     assert completed_summary["source_kinds"] == ["public_web_mock"]
     assert completed_summary["raw_output_persisted"] is False
     assert "EU CE" not in json.dumps(completed_summary, ensure_ascii=False)

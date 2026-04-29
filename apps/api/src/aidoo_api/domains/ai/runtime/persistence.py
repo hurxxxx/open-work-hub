@@ -50,6 +50,7 @@ SAFE_PAYLOAD_KEYS = {
     "output_kind_hint",
     "raw_output_persisted",
     "result_count",
+    "result_refs",
 }
 SENSITIVE_VALUE_PATTERNS = (
     re.compile(r"(?i)\bbearer\s+[-._~+/=a-z0-9]+"),

@@ -43,7 +43,10 @@ class ExternalSearchExecutionResult(BaseModel):
     provider: str | None = None
     disabled_reason: ExternalSearchExecutionDisabledReason | None = None
     query_digest: str | None = None
+    cache_key: str | None = None
+    cache_hit: bool = False
     result_count: int = 0
+    result_refs: list[str] = Field(default_factory=list)
     source_kinds: list[str] = Field(default_factory=list)
     raw_output_persisted: bool = False
 
@@ -112,11 +115,19 @@ def execute_mock_external_search(
             provider=request.provider,
             disabled_reason="request_not_ready",
         )
+    query_digest = _query_digest(request.query)
+    result_refs = _mock_result_refs(query_digest=query_digest, result_count=2)
     return ExternalSearchExecutionResult(
         status="completed",
         provider=request.provider,
-        query_digest=_query_digest(request.query),
-        result_count=2,
+        query_digest=query_digest,
+        cache_key=_cache_key(
+            provider=request.provider,
+            query_digest=query_digest,
+        ),
+        cache_hit=False,
+        result_count=len(result_refs),
+        result_refs=result_refs,
         source_kinds=["public_web_mock"],
         raw_output_persisted=False,
     )
@@ -132,7 +143,10 @@ def summarize_external_search_execution(
         "provider": result.provider,
         "disabled_reason": result.disabled_reason,
         "query_digest": result.query_digest,
+        "cache_key": result.cache_key,
+        "cache_hit": result.cache_hit,
         "result_count": result.result_count,
+        "result_refs": list(result.result_refs),
         "source_kinds": list(result.source_kinds),
         "raw_output_persisted": result.raw_output_persisted,
     }
@@ -140,6 +154,18 @@ def summarize_external_search_execution(
 
 def _query_digest(query: str) -> str:
     return hashlib.sha256(query.encode("utf-8")).hexdigest()[:16]
+
+
+def _cache_key(*, provider: str | None, query_digest: str) -> str:
+    provider_key = provider or "unknown"
+    return f"{EXTERNAL_SEARCH_ADAPTER_ID}:mock:{provider_key}:{query_digest}"
+
+
+def _mock_result_refs(*, query_digest: str, result_count: int) -> list[str]:
+    return [
+        f"mock://external-search/{query_digest}/result-{index}"
+        for index in range(1, result_count + 1)
+    ]
 
 
 __all__ = [

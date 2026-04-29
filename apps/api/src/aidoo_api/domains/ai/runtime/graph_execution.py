@@ -542,21 +542,48 @@ def _external_provider_evidence_items(
     )
     source_kind = source_kinds[0] if source_kinds else "external_web"
     result_count = _summary_int(external_search_execution_summary, "result_count")
-    excerpt = (
-        "Mock external search completed with metadata only; "
-        f"sanitized_query_ref={query_ref}; "
-        f"normalized_result_count={result_count}; "
-        f"source_kinds={source_kinds or [source_kind]}."
+    result_refs = _external_search_result_refs(
+        external_search_execution_summary,
+        query_ref=query_ref,
+        result_count=result_count,
     )
-    return [
-        EvidenceItem(
-            ref=f"external-search:{adapter_id}:{query_ref}",
-            source_kind=source_kind,
-            excerpt=excerpt,
-            provenance=f"{adapter_id}:{execution_provider}:{provider}",
-            trust_level="untrusted",
-            authority_class="public_web",
+    items: list[EvidenceItem] = []
+    for index, result_ref in enumerate(result_refs, start=1):
+        excerpt = (
+            "Mock external search normalized result metadata only; "
+            f"sanitized_query_ref={query_ref}; "
+            f"result_index={index}; "
+            f"normalized_result_count={result_count}; "
+            f"source_kinds={source_kinds or [source_kind]}."
         )
+        items.append(
+            EvidenceItem(
+                ref=result_ref,
+                source_kind=source_kind,
+                excerpt=excerpt,
+                provenance=f"{adapter_id}:{execution_provider}:{provider}",
+                trust_level="untrusted",
+                authority_class="public_web",
+            )
+        )
+    return items
+
+
+def _external_search_result_refs(
+    summary: dict[str, Any] | None,
+    *,
+    query_ref: str,
+    result_count: int,
+) -> list[str]:
+    result_refs = _string_list(
+        summary.get("result_refs") if isinstance(summary, dict) else None
+    )
+    if result_refs:
+        return result_refs
+    fallback_count = max(result_count, 1)
+    return [
+        f"external-search:{query_ref}:result-{index}"
+        for index in range(1, fallback_count + 1)
     ]
 
 
