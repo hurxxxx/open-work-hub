@@ -14,6 +14,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload, selectinload
 
 from aidoo_api.core.db import get_db_session
+from aidoo_api.core.settings import get_settings
 from aidoo_api.domains.auth.access import (
     SYSTEM_PLATFORM_ADMIN,
     SYSTEM_ROLE_ORDER,
@@ -54,6 +55,7 @@ from aidoo_api.domains.auth.models import (
     WorkspaceUserBinding,
 )
 from aidoo_api.domains.auth.security import hash_password, new_id, normalize_email
+from aidoo_api.domains.ai.runtime.persistence import scrub_completed_runtime_records
 
 
 class OrgUnitItemResponse(BaseModel):
@@ -120,6 +122,11 @@ class WorkspaceMemberItemResponse(BaseModel):
 class WorkspaceMemberRoleCounts(BaseModel):
     admin: int = 0
     member: int = 0
+
+
+class AiRuntimeRetentionScrubResponse(BaseModel):
+    scrubbed_run_count: int
+    older_than_days: int
 
 
 class WorkspaceMembersResponse(BaseModel):
@@ -2391,3 +2398,33 @@ def list_audit_logs(
         )
         for item in items
     ]
+
+
+@router.post(
+    "/ai/runtime/retention/scrub",
+    response_model=AiRuntimeRetentionScrubResponse,
+)
+def scrub_ai_runtime_retention_payloads(
+    older_than_days: int | None = Query(default=None, ge=1, le=3650),
+    context: AuthContext = Depends(require_auth_context),
+    db: Session = Depends(get_db_session),
+) -> AiRuntimeRetentionScrubResponse:
+    if not is_platform_admin_user(context.user, db):
+        raise HTTPException(status_code=403, detail="Platform admin access required.")
+
+    retention_days = older_than_days or get_settings().ai_runtime_retention_days
+    scrubbed_count = scrub_completed_runtime_records(db, older_than_days=retention_days)
+    record_audit_log(
+        db,
+        actor_user_id=context.user.id,
+        action="admin.ai_runtime.retention.scrub",
+        entity_kind="ai_runtime",
+        entity_id="retention",
+        summary=f"Scrubbed {scrubbed_count} AI runtime run(s)",
+        payload={"older_than_days": retention_days, "scrubbed_run_count": scrubbed_count},
+    )
+    db.commit()
+    return AiRuntimeRetentionScrubResponse(
+        scrubbed_run_count=scrubbed_count,
+        older_than_days=retention_days,
+    )

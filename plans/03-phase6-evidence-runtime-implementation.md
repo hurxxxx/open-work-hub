@@ -23,12 +23,12 @@ Phase 6 전체 목표는 기존 single-loop agent를 deterministic fast path, ma
 
 이 섹션은 세션 handoff용이다. 구현 세션이 끝날 때마다 짧게 갱신한다.
 
-- Current PR/stage: Phase 0-AU no-external-search inspection coverage after `33456bc`.
-- Last completed: Extended the no-external-search mock graph E2E guard to assert the runtime inspection endpoint exposes the same external egress decision and skipped external search execution summary on both `graph_candidate_generated` and `graph_candidate_validated` trace events.
+- Current PR/stage: Phase 0-AV runtime retention admin hook after `9a161c9`.
+- Last completed: Added a platform-admin-only `POST /api/v1/admin/ai/runtime/retention/scrub` hook that applies the existing runtime retention scrubber, uses `AIDOO_AI_RUNTIME_RETENTION_DAYS` when no override is supplied, records an audit log, and verifies old terminal runtime metadata/invocation usage/trace payloads are scrubbed through the API path.
 - In progress: None.
-- Next exact task: Commit/push the inspection trace coverage, then continue with the next Phase 6 mock-provider slice: operator-visible retention cleanup hook or graph execution failure trace invariants, depending on the smallest remaining code path gap.
-- Files touched in Phase 0-AU: `apps/api/tests/test_ai_runtime_mock_e2e.py`, `plans/03-phase6-evidence-runtime-implementation.md`.
-- Tests/checks run: `cd apps/api && uv run ruff check tests/test_ai_runtime_mock_e2e.py`; `cd apps/api && uv run pytest tests/test_ai_runtime_mock_e2e.py -q`; `scripts/phase6-runtime-regression.sh -q`; `git diff --check -- apps/api/tests/test_ai_runtime_mock_e2e.py`.
+- Next exact task: Commit/push the retention admin hook, then continue with graph execution failure trace invariants for the mock graph adapter path.
+- Files touched in Phase 0-AV: `apps/api/src/aidoo_api/domains/admin/router.py`, `apps/api/tests/test_ai_runtime_admin.py`, `scripts/phase6-runtime-regression.sh`, `plans/03-phase6-evidence-runtime-implementation.md`.
+- Tests/checks run: `cd apps/api && uv run ruff check src/aidoo_api/domains/admin/router.py tests/test_ai_runtime_admin.py`; `cd apps/api && uv run pytest tests/test_ai_runtime_admin.py -q`; `scripts/phase6-runtime-regression.sh -q`; `git diff --check -- apps/api/src/aidoo_api/domains/admin/router.py apps/api/tests/test_ai_runtime_admin.py scripts/phase6-runtime-regression.sh`.
 - Known blockers: OpenAI/Anthropic-backed manager/search execution is still not enabled. The egress/planner/search contracts only decide, sanitize, and build request envelopes; they do not call external APIs. `graph_node_runner_v0` remains an in-process runner, not a durable workflow backend. Hidden node outputs are not persisted verbatim; only status/count/error summary is persisted. High-risk / approval-preview graphs are intentionally not supported by this adapter.
 
 ## Architecture / Principles
