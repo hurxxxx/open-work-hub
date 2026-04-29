@@ -16,6 +16,7 @@ ExternalEgressReason = Literal[
     "external_llm_disabled",
     "capability_disabled",
     "provider_not_allowed",
+    "user_no_external_search",
     "pii_detected",
     "sensitive_entity_blocked",
     "sanitized_empty",
@@ -113,6 +114,18 @@ def evaluate_external_egress(
             sanitized_prompt=sanitized_prompt,
             sanitized_query=sanitized_query,
         )
+    if capability == "search" and _explicitly_disallows_external_search(text):
+        return _deny(
+            capability=capability,
+            requested_provider=requested_provider,
+            provider=normalized_provider,
+            reason="user_no_external_search",
+            removed_entity_types=removed_entity_types,
+            blocked_entity_types=blocked_entity_types,
+            pii_hits=pii_hits,
+            sanitized_prompt=sanitized_prompt,
+            sanitized_query=sanitized_query,
+        )
     if pii_hits:
         return _deny(
             capability=capability,
@@ -204,7 +217,9 @@ def _deny(
         blocked_entity_types=blocked_entity_types,
         pii_hits=pii_hits,
         sanitized_prompt=sanitized_prompt,
-        sanitized_query="" if reason == "sensitive_entity_blocked" else sanitized_query,
+        sanitized_query=""
+        if reason in {"sensitive_entity_blocked", "user_no_external_search"}
+        else sanitized_query,
     )
 
 
@@ -237,6 +252,29 @@ def _detected_enterprise_entity_types(text: str) -> list[str]:
         if pattern.search(text):
             entity_types.append(entity_type)
     return _dedupe(entity_types)
+
+
+def _explicitly_disallows_external_search(text: str) -> bool:
+    lowered = text.lower()
+    compact = re.sub(r"\s+", "", lowered)
+    return any(
+        marker in lowered or marker in compact
+        for marker in (
+            "no external search",
+            "no-external-search",
+            "no web search",
+            "without web search",
+            "do not search the web",
+            "외부 검색 없이",
+            "외부검색없이",
+            "외부 검색 금지",
+            "외부검색금지",
+            "인터넷 검색 없이",
+            "인터넷검색없이",
+            "웹 검색 없이",
+            "웹검색없이",
+        )
+    )
 
 
 def _sanitize_external_prompt(text: str) -> str:

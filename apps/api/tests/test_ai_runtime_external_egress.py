@@ -141,3 +141,16 @@ def test_external_search_blocks_sensitive_cost_contract_context() -> None:
     assert decision.reason == "sensitive_entity_blocked"
     assert decision.blocked_entity_types == ["bom", "contract_term", "cost"]
     assert decision.sanitized_query == ""
+
+
+def test_external_search_respects_user_no_external_search_directive() -> None:
+    decision = evaluate_external_egress(
+        capability="search",
+        provider="openai",
+        text="외부 검색 없이 EU CE 인증 기준을 회의록 근거로 정리해줘.",
+        settings=_settings(ai_external_search_enabled=True),
+    )
+
+    assert decision.allow_external is False
+    assert decision.reason == "user_no_external_search"
+    assert decision.sanitized_query == ""

@@ -262,3 +262,70 @@ def test_disabled_external_execution_flags_are_trace_safe(
             "error_class": None,
         },
     ]
+
+
+def test_no_external_search_directive_blocks_external_search_evidence(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    metric_calls: list[dict[str, object]] = []
+    monkeypatch.setattr(
+        ai_router,
+        "record_external_execution",
+        lambda **payload: metric_calls.append(payload),
+    )
+
+    result = run_mock_external_graph_stream(
+        client,
+        monkeypatch,
+        prompt=(
+            "외부 검색 없이 EU CE 인증 리스크를 회의록과 PMS 이슈 기준으로 "
+            "근거 있는 보고서로 정리해줘"
+        ),
+    )
+
+    assert result.status_code == 200
+    assert result.chat_events[0]["data"]["text"] == "mock graph final"
+
+    done_meta = result.done_meta
+    decisions = {
+        decision["capability"]: decision
+        for decision in done_meta["external_egress_summary"]["decisions"]
+    }
+    assert decisions["planning"]["reason"] == "allowed"
+    assert decisions["search"]["allow_external"] is False
+    assert decisions["search"]["reason"] == "user_no_external_search"
+    assert decisions["search"]["sanitized_query"] == ""
+
+    search_request = done_meta["external_search_summary"]
+    assert search_request["status"] == "disabled"
+    assert search_request["disabled_reason"] == "egress_denied"
+    assert search_request["query_present"] is False
+
+    search_execution = done_meta["external_search_execution_summary"]
+    assert search_execution["execution_provider"] == "mock"
+    assert search_execution["status"] == "skipped"
+    assert search_execution["disabled_reason"] == "request_not_ready"
+    assert search_execution["query_digest"] is None
+    assert search_execution["cache_key"] is None
+    assert search_execution["result_refs"] == []
+    assert search_execution["source_kinds"] == []
+    assert search_execution["raw_output_persisted"] is False
+
+    packet_summary = done_meta["graph_node_execution_summary"]["evidence_packet_summary"]
+    assert "public_web_mock" not in packet_summary["source_kinds"]
+
+    final_system_prompt = result.pool_client.chat.completions.calls[-1]["messages"][0][
+        "content"
+    ]
+    assert '"external_search_used": false' in final_system_prompt
+    assert "public_web_mock" not in final_system_prompt
+    assert "mock://external-search/" not in final_system_prompt
+
+    assert metric_calls[-1] == {
+        "capability": "search",
+        "adapter_id": "external_search_v0",
+        "execution_provider": "mock",
+        "status": "skipped",
+        "error_class": None,
+    }
