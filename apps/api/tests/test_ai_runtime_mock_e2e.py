@@ -279,7 +279,7 @@ def test_no_external_search_directive_blocks_external_search_evidence(
         client,
         monkeypatch,
         prompt=(
-            "외부 검색 없이 EU CE 인증 리스크를 회의록과 PMS 이슈 기준으로 "
+            "인터넷 검색하지 말고 EU CE 인증 리스크를 회의록과 PMS 이슈 기준으로 "
             "근거 있는 보고서로 정리해줘"
         ),
     )

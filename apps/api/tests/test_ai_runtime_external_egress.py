@@ -154,3 +154,24 @@ def test_external_search_respects_user_no_external_search_directive() -> None:
     assert decision.allow_external is False
     assert decision.reason == "user_no_external_search"
     assert decision.sanitized_query == ""
+
+
+def test_external_search_respects_natural_user_no_external_search_directives() -> None:
+    settings = _settings(ai_external_search_enabled=True)
+
+    for prompt in (
+        "인터넷 검색하지 말고 EU CE 인증 기준을 회의록 근거로 정리해줘.",
+        "웹 검색하지 말고 공개 규제 변경을 내부 자료 기준으로 요약해줘.",
+        "Do not search online; summarize CE certification risks from internal notes.",
+        "Without internet search, summarize CE certification risks from internal notes.",
+    ):
+        decision = evaluate_external_egress(
+            capability="search",
+            provider="openai",
+            text=prompt,
+            settings=settings,
+        )
+
+        assert decision.allow_external is False
+        assert decision.reason == "user_no_external_search"
+        assert decision.sanitized_query == ""
