@@ -173,44 +173,52 @@ def append_graph_candidate_trace_events(
 
     candidate_summary = runtime_metadata.get("graph_candidate_summary")
     if isinstance(candidate_summary, dict):
+        generated_payload = {
+            "runtime_profile": runtime_metadata.get("runtime_profile"),
+            "graph_gate": graph_gate,
+            "graph_candidate_summary": candidate_summary,
+        }
+        external_egress_summary = runtime_metadata.get("external_egress_summary")
+        if external_egress_summary is not None:
+            generated_payload["external_egress_summary"] = external_egress_summary
         append_trace_event(
             db,
             agent_run_id=agent_run_id,
             workspace_id=workspace_id,
             conversation_id=conversation_id,
             event_type="graph_candidate_generated",
-            payload={
-                "runtime_profile": runtime_metadata.get("runtime_profile"),
-                "graph_gate": graph_gate,
-                "graph_candidate_summary": candidate_summary,
-            },
+            payload=generated_payload,
         )
 
+    validated_payload = {
+        "runtime_profile": runtime_metadata.get("runtime_profile"),
+        "graph_gate": graph_gate,
+        "graph_fallback_reason": runtime_metadata.get("graph_fallback_reason"),
+        "graph_used": bool(runtime_metadata.get("graph_used")),
+        "graph_validation_status": runtime_metadata.get("graph_validation_status"),
+        "graph_validation_fallback_reason": runtime_metadata.get(
+            "graph_validation_fallback_reason"
+        ),
+        "graph_registry_agent_count": int(
+            runtime_metadata.get("graph_registry_agent_count") or 0
+        ),
+        "graph_write_agent_count": int(
+            runtime_metadata.get("graph_write_agent_count") or 0
+        ),
+        "graph_candidate_summary": candidate_summary
+        if isinstance(candidate_summary, dict)
+        else None,
+    }
+    external_egress_summary = runtime_metadata.get("external_egress_summary")
+    if external_egress_summary is not None:
+        validated_payload["external_egress_summary"] = external_egress_summary
     append_trace_event(
         db,
         agent_run_id=agent_run_id,
         workspace_id=workspace_id,
         conversation_id=conversation_id,
         event_type="graph_candidate_validated",
-        payload={
-            "runtime_profile": runtime_metadata.get("runtime_profile"),
-            "graph_gate": graph_gate,
-            "graph_fallback_reason": runtime_metadata.get("graph_fallback_reason"),
-            "graph_used": bool(runtime_metadata.get("graph_used")),
-            "graph_validation_status": runtime_metadata.get("graph_validation_status"),
-            "graph_validation_fallback_reason": runtime_metadata.get(
-                "graph_validation_fallback_reason"
-            ),
-            "graph_registry_agent_count": int(
-                runtime_metadata.get("graph_registry_agent_count") or 0
-            ),
-            "graph_write_agent_count": int(
-                runtime_metadata.get("graph_write_agent_count") or 0
-            ),
-            "graph_candidate_summary": candidate_summary
-            if isinstance(candidate_summary, dict)
-            else None,
-        },
+        payload=validated_payload,
     )
 
 
@@ -489,6 +497,7 @@ def _persist_single_loop_fallback_runtime_shadow(
             ),
             "graph_candidate_summary": runtime_metadata.get("graph_candidate_summary"),
             "graph_schedule_summary": runtime_metadata.get("graph_schedule_summary"),
+            "external_egress_summary": runtime_metadata.get("external_egress_summary"),
             "graph_execution_status": runtime_metadata.get("graph_execution_status"),
             "graph_execution_fallback_reason": runtime_metadata.get(
                 "graph_execution_fallback_reason"
@@ -652,6 +661,7 @@ def _persist_graph_execution_runtime_shadow(
             ),
             "graph_candidate_summary": runtime_metadata.get("graph_candidate_summary"),
             "graph_schedule_summary": runtime_metadata.get("graph_schedule_summary"),
+            "external_egress_summary": runtime_metadata.get("external_egress_summary"),
             "graph_execution_status": runtime_metadata.get("graph_execution_status"),
             "graph_execution_fallback_reason": runtime_metadata.get(
                 "graph_execution_fallback_reason"

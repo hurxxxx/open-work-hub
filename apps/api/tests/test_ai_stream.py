@@ -1361,6 +1361,19 @@ def test_chat_stream_graph_gate_falls_back_without_graph_execution(
     assert done_meta.get("graph_validation_fallback_reason") is None
     assert done_meta["graph_registry_agent_count"] > 0
     assert done_meta["graph_write_agent_count"] == 1
+    external_egress = done_meta["external_egress_summary"]
+    assert external_egress["policy_version"] == "external_egress.v1"
+    assert external_egress["decision_count"] == 2
+    assert external_egress["allow_external"] is False
+    assert external_egress["capabilities"] == ["planning", "search"]
+    egress_reasons = {
+        decision["capability"]: decision["reason"]
+        for decision in external_egress["decisions"]
+    }
+    assert egress_reasons == {
+        "planning": "external_llm_disabled",
+        "search": "capability_disabled",
+    }
     graph_summary = done_meta["graph_candidate_summary"]
     assert graph_summary["intent"] == "report"
     assert set(graph_summary["domains"]) >= {"meeting", "pms", "rag"}
@@ -1394,6 +1407,7 @@ def test_chat_stream_graph_gate_falls_back_without_graph_execution(
         assert runtime_run.runtime_profile == "grounded_report"
         assert runtime_run.graph_enabled is True
         assert runtime_run.fallback_reason == "graph_runtime_not_implemented"
+        assert runtime_run.metadata_json["external_egress_summary"] == external_egress
         invocations = list(
             session.scalars(
                 select(AgentInvocation)
@@ -1438,6 +1452,13 @@ def test_chat_stream_graph_gate_falls_back_without_graph_execution(
     assert "graph_execution_gate_evaluated" in event_types
     assert event_types[-3:] == ["invocation_started", "invocation_completed", "run_completed"]
     assert trace_events[1].payload_json["graph_candidate_summary"]["output_kind"] == "artifact"
+    traced_egress = trace_events[1].payload_json["external_egress_summary"]
+    assert traced_egress["policy_version"] == external_egress["policy_version"]
+    assert traced_egress["capabilities"] == ["planning", "search"]
+    assert {
+        decision["capability"]: decision["reason"]
+        for decision in traced_egress["decisions"]
+    } == egress_reasons
     schedule_event = next(
         event for event in trace_events if event.event_type == "graph_schedule_planned"
     )

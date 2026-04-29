@@ -1,9 +1,9 @@
 import json
 from collections.abc import AsyncIterator
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 import asyncio
 from datetime import datetime
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from openai import OpenAIError
@@ -61,6 +61,10 @@ from aidoo_api.domains.ai.runtime.graph_scheduler import (
     build_graph_execution_schedule,
     summarize_graph_execution_schedule,
     summarize_graph_schedule_failure,
+)
+from aidoo_api.domains.ai.runtime.external_egress import (
+    ExternalCapability,
+    evaluate_external_egress,
 )
 from aidoo_api.domains.ai.runtime.graph_execution import (
     GRAPH_INSTRUCTED_SINGLE_LOOP_ADAPTER_ID,
@@ -1561,6 +1565,11 @@ async def _chat_stream_publisher(
         workspace=workspace,
         allowed_app_ids=payload.allowed_app_ids,
     )
+    runtime_routing = _attach_external_egress_trace_metadata(
+        runtime_routing,
+        messages=messages_dict,
+        settings=settings,
+    )
     runtime_routing = attach_graph_execution_adapter_decision(
         runtime_routing,
         graph_execution_enabled=settings.ai_runtime_graph_execution_enabled,
@@ -1760,6 +1769,9 @@ async def _chat_stream_publisher(
                 runtime_graph_write_agent_count=runtime_routing.graph_write_agent_count,
                 runtime_graph_candidate_summary=runtime_routing.graph_candidate_summary,
                 runtime_graph_schedule_summary=runtime_routing.graph_schedule_summary,
+                runtime_external_egress_summary=(
+                    runtime_routing.external_egress_summary
+                ),
                 runtime_graph_execution_status=runtime_routing.graph_execution_status,
                 runtime_graph_execution_fallback_reason=(
                     runtime_routing.graph_execution_fallback_reason
@@ -1986,6 +1998,52 @@ def _attach_graph_gate_trace_metadata(
     )
 
 
+def _attach_external_egress_trace_metadata(
+    runtime_routing: RuntimeRoutingDecision,
+    *,
+    messages: list[dict[str, Any]],
+    settings: Any,
+) -> RuntimeRoutingDecision:
+    if runtime_routing.graph_gate != "eligible":
+        return runtime_routing
+    user_text = _latest_message_text(messages)
+    capabilities = ["planning"]
+    if runtime_routing.runtime_profile == "grounded_report":
+        capabilities.append("search")
+    decisions = [
+        evaluate_external_egress(
+            capability=cast(ExternalCapability, capability),
+            provider=None,
+            text=user_text,
+            settings=settings,
+        ).model_dump(mode="json")
+        for capability in capabilities
+    ]
+    return replace(
+        runtime_routing,
+        external_egress_summary={
+            "policy_version": "external_egress.v1",
+            "decision_count": len(decisions),
+            "allow_external": any(bool(decision.get("allow_external")) for decision in decisions),
+            "denied_count": sum(
+                1 for decision in decisions if not decision.get("allow_external")
+            ),
+            "capabilities": [decision.get("capability") for decision in decisions],
+            "decisions": decisions,
+        },
+    )
+
+
+def _latest_message_text(messages: list[dict[str, Any]]) -> str:
+    for message in reversed(messages):
+        if message.get("role") != "user":
+            continue
+        content = message.get("content")
+        if isinstance(content, str):
+            return content
+    return ""
+
+
 def _build_graph_schedule_summary_or_failure(validation_graph) -> dict[str, Any] | None:
     if validation_graph is None:
         return None
@@ -2135,6 +2193,7 @@ async def _run_graph_instructed_single_loop_stream(
         runtime_graph_write_agent_count=runtime_routing.graph_write_agent_count,
         runtime_graph_candidate_summary=runtime_routing.graph_candidate_summary,
         runtime_graph_schedule_summary=runtime_routing.graph_schedule_summary,
+        runtime_external_egress_summary=runtime_routing.external_egress_summary,
         runtime_graph_execution_status=runtime_routing.graph_execution_status,
         runtime_graph_execution_fallback_reason=(
             runtime_routing.graph_execution_fallback_reason
@@ -2250,6 +2309,7 @@ async def _run_graph_node_runner_stream(
         runtime_graph_write_agent_count=runtime_routing.graph_write_agent_count,
         runtime_graph_candidate_summary=runtime_routing.graph_candidate_summary,
         runtime_graph_schedule_summary=runtime_routing.graph_schedule_summary,
+        runtime_external_egress_summary=runtime_routing.external_egress_summary,
         runtime_graph_execution_status=runtime_routing.graph_execution_status,
         runtime_graph_execution_fallback_reason=(
             runtime_routing.graph_execution_fallback_reason
@@ -2352,6 +2412,7 @@ async def _run_hidden_graph_node(
         runtime_graph_write_agent_count=runtime_routing.graph_write_agent_count,
         runtime_graph_candidate_summary=runtime_routing.graph_candidate_summary,
         runtime_graph_schedule_summary=runtime_routing.graph_schedule_summary,
+        runtime_external_egress_summary=runtime_routing.external_egress_summary,
         runtime_graph_execution_status=runtime_routing.graph_execution_status,
         runtime_graph_execution_fallback_reason=(
             runtime_routing.graph_execution_fallback_reason
@@ -2770,6 +2831,7 @@ def _runtime_done_meta(runtime_routing: RuntimeRoutingDecision) -> dict[str, Any
         "graph_write_agent_count": runtime_routing.graph_write_agent_count,
         "graph_candidate_summary": runtime_routing.graph_candidate_summary,
         "graph_schedule_summary": runtime_routing.graph_schedule_summary,
+        "external_egress_summary": runtime_routing.external_egress_summary,
         "graph_execution_status": runtime_routing.graph_execution_status,
         "graph_execution_fallback_reason": runtime_routing.graph_execution_fallback_reason,
         "graph_execution_fallback_policy": runtime_routing.graph_execution_fallback_policy,
@@ -3434,6 +3496,7 @@ def _persist_assistant_turn(
         "graph_write_agent_count": done_meta.get("graph_write_agent_count"),
         "graph_candidate_summary": done_meta.get("graph_candidate_summary"),
         "graph_schedule_summary": done_meta.get("graph_schedule_summary"),
+        "external_egress_summary": done_meta.get("external_egress_summary"),
         "graph_execution_status": done_meta.get("graph_execution_status"),
         "graph_execution_fallback_reason": done_meta.get("graph_execution_fallback_reason"),
         "graph_execution_fallback_policy": done_meta.get("graph_execution_fallback_policy"),

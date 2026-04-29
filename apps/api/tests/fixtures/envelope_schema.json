@@ -532,6 +532,19 @@
           "default": null,
           "title": "Decision Reason"
         },
+        "external_egress_summary": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "External Egress Summary"
+        },
         "forced_local": {
           "default": false,
           "title": "Forced Local",
