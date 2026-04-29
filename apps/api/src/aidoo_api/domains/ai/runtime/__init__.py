@@ -31,6 +31,14 @@ from aidoo_api.domains.ai.runtime.external_egress import (
     evaluate_external_egress,
     normalize_external_provider,
 )
+from aidoo_api.domains.ai.runtime.external_planner import (
+    EXTERNAL_PLANNER_ADAPTER_ID,
+    ExternalPlannerDisabledReason,
+    ExternalPlannerRequest,
+    ExternalPlannerStatus,
+    build_external_planner_request,
+    summarize_external_planner_request,
+)
 from aidoo_api.domains.ai.runtime.graph_scheduler import (
     GraphSchedulerError,
     build_graph_execution_schedule,
@@ -103,10 +111,14 @@ __all__ = [
     "EvidencePacket",
     "EvidenceQuality",
     "ExecutionGraph",
+    "EXTERNAL_PLANNER_ADAPTER_ID",
     "ExternalCapability",
     "ExternalEgressDecision",
     "ExternalEgressReason",
     "ExternalProvider",
+    "ExternalPlannerDisabledReason",
+    "ExternalPlannerRequest",
+    "ExternalPlannerStatus",
     "GRAPH_INSTRUCTED_SINGLE_LOOP_ADAPTER_ID",
     "GRAPH_NODE_RUNNER_ADAPTER_ID",
     "GRAPH_VERIFIER_AGENT_ID",
@@ -140,6 +152,7 @@ __all__ = [
     "build_graph_node_system_prompt",
     "build_graph_writer_system_prompt",
     "build_graph_execution_schedule",
+    "build_external_planner_request",
     "evaluate_external_egress",
     "graph_verifier_failure_policy",
     "materialize_graph_evidence_packet",
@@ -156,6 +169,7 @@ __all__ = [
     "summarize_graph_execution_schedule",
     "summarize_graph_schedule_failure",
     "summarize_execution_graph",
+    "summarize_external_planner_request",
     "validate_execution_graph",
     "validate_manager_graph_candidate",
 ]
