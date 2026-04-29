@@ -46,6 +46,10 @@ class ExternalPlannerExecutionResult(BaseModel):
     planned_agent_ids: list[str] = Field(default_factory=list)
     intent_hint: str | None = None
     output_kind_hint: str | None = None
+    latency_ms: int = 0
+    retry_count: int = 0
+    error_class: str | None = None
+    estimated_cost_microunits: int = 0
     raw_output_persisted: bool = False
 
 
@@ -143,6 +147,10 @@ def summarize_external_planner_execution(
         "planned_agent_count": len(result.planned_agent_ids),
         "intent_hint": result.intent_hint,
         "output_kind_hint": result.output_kind_hint,
+        "latency_ms": result.latency_ms,
+        "retry_count": result.retry_count,
+        "error_class": result.error_class,
+        "estimated_cost_microunits": result.estimated_cost_microunits,
         "raw_output_persisted": result.raw_output_persisted,
     }
 

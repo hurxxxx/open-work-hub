@@ -122,6 +122,10 @@ def test_mock_external_search_execution_requires_explicit_flag() -> None:
         "result_count": 0,
         "result_refs": [],
         "source_kinds": [],
+        "latency_ms": 0,
+        "retry_count": 0,
+        "error_class": None,
+        "estimated_cost_microunits": 0,
         "raw_output_persisted": False,
     }
     completed_summary = summarize_external_search_execution(completed)
@@ -141,6 +145,10 @@ def test_mock_external_search_execution_requires_explicit_flag() -> None:
         f"mock://external-search/{completed_summary['query_digest']}/result-2",
     ]
     assert completed_summary["source_kinds"] == ["public_web_mock"]
+    assert completed_summary["latency_ms"] == 0
+    assert completed_summary["retry_count"] == 0
+    assert completed_summary["error_class"] is None
+    assert completed_summary["estimated_cost_microunits"] == 0
     assert completed_summary["raw_output_persisted"] is False
     assert "EU CE" not in json.dumps(completed_summary, ensure_ascii=False)
 

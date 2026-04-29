@@ -48,6 +48,10 @@ class ExternalSearchExecutionResult(BaseModel):
     result_count: int = 0
     result_refs: list[str] = Field(default_factory=list)
     source_kinds: list[str] = Field(default_factory=list)
+    latency_ms: int = 0
+    retry_count: int = 0
+    error_class: str | None = None
+    estimated_cost_microunits: int = 0
     raw_output_persisted: bool = False
 
 
@@ -148,6 +152,10 @@ def summarize_external_search_execution(
         "result_count": result.result_count,
         "result_refs": list(result.result_refs),
         "source_kinds": list(result.source_kinds),
+        "latency_ms": result.latency_ms,
+        "retry_count": result.retry_count,
+        "error_class": result.error_class,
+        "estimated_cost_microunits": result.estimated_cost_microunits,
         "raw_output_persisted": result.raw_output_persisted,
     }
 

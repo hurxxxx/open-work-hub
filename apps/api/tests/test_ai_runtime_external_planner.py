@@ -158,6 +158,10 @@ def test_mock_external_planner_execution_requires_explicit_flag() -> None:
         "planned_agent_count": 0,
         "intent_hint": None,
         "output_kind_hint": None,
+        "latency_ms": 0,
+        "retry_count": 0,
+        "error_class": None,
+        "estimated_cost_microunits": 0,
         "raw_output_persisted": False,
     }
     assert summarize_external_planner_execution(completed) == {
@@ -169,6 +173,10 @@ def test_mock_external_planner_execution_requires_explicit_flag() -> None:
         "planned_agent_count": 3,
         "intent_hint": "report",
         "output_kind_hint": "artifact",
+        "latency_ms": 0,
+        "retry_count": 0,
+        "error_class": None,
+        "estimated_cost_microunits": 0,
         "raw_output_persisted": False,
     }
 

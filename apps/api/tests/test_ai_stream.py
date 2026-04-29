@@ -1393,6 +1393,10 @@ def test_chat_stream_graph_gate_falls_back_without_graph_execution(
         "planned_agent_count": 0,
         "intent_hint": None,
         "output_kind_hint": None,
+        "latency_ms": 0,
+        "retry_count": 0,
+        "error_class": None,
+        "estimated_cost_microunits": 0,
         "raw_output_persisted": False,
     }
     external_search = done_meta["external_search_summary"]
@@ -1417,6 +1421,10 @@ def test_chat_stream_graph_gate_falls_back_without_graph_execution(
         "result_count": 0,
         "result_refs": [],
         "source_kinds": [],
+        "latency_ms": 0,
+        "retry_count": 0,
+        "error_class": None,
+        "estimated_cost_microunits": 0,
         "raw_output_persisted": False,
     }
     graph_summary = done_meta["graph_candidate_summary"]
@@ -1600,6 +1608,10 @@ def test_chat_stream_external_mock_execution_runs_when_enabled(
     ]["step_count"]
     assert planner_execution["intent_hint"] == "report"
     assert planner_execution["output_kind_hint"] == "artifact"
+    assert planner_execution["latency_ms"] == 0
+    assert planner_execution["retry_count"] == 0
+    assert planner_execution["error_class"] is None
+    assert planner_execution["estimated_cost_microunits"] == 0
     assert planner_execution["raw_output_persisted"] is False
     search_execution = done_meta["external_search_execution_summary"]
     assert search_execution["execution_provider"] == "mock"
@@ -1615,6 +1627,10 @@ def test_chat_stream_external_mock_execution_runs_when_enabled(
         f"mock://external-search/{search_execution['query_digest']}/result-2",
     ]
     assert search_execution["source_kinds"] == ["public_web_mock"]
+    assert search_execution["latency_ms"] == 0
+    assert search_execution["retry_count"] == 0
+    assert search_execution["error_class"] is None
+    assert search_execution["estimated_cost_microunits"] == 0
     assert search_execution["raw_output_persisted"] is False
 
     with Session(get_engine()) as session:
