@@ -241,6 +241,14 @@ class Settings(BaseSettings):
             "DOOWON_API_AI_TOOL_CALLING_ENABLED",
         ),
     )
+    ai_local_tool_calling_enabled: bool = Field(
+        default=False,
+        validation_alias=AliasChoices(
+            "AIDOO_AI_LOCAL_TOOL_CALLING_ENABLED",
+            "DOOWON_AIDOO_AI_LOCAL_TOOL_CALLING_ENABLED",
+            "DOOWON_API_AIDOO_AI_LOCAL_TOOL_CALLING_ENABLED",
+        ),
+    )
     ai_mcp_bridge_enabled: bool = Field(
         default=False,
         validation_alias=AliasChoices(

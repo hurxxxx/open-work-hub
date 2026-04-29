@@ -1750,8 +1750,7 @@ async def _chat_stream_publisher(
             return
 
         if (
-            settings.ai_tool_calling_enabled
-            and supports_tool_calling(execution.pool)
+            _stream_tool_calling_enabled(settings, execution.pool)
             and bool(filtered_tool_specs)
         ):
             agent_run_id = new_id()
@@ -2183,6 +2182,16 @@ def _metric_optional_summary_string(value: Any) -> str | None:
     return normalized or None
 
 
+def _stream_tool_calling_enabled(settings: Any, pool: str) -> bool:
+    if not bool(getattr(settings, "ai_tool_calling_enabled", False)):
+        return False
+    if pool == "local" and not bool(
+        getattr(settings, "ai_local_tool_calling_enabled", False)
+    ):
+        return False
+    return supports_tool_calling(pool)
+
+
 def _latest_message_text(messages: list[dict[str, Any]]) -> str:
     for message in reversed(messages):
         if message.get("role") != "user":
@@ -2303,7 +2312,7 @@ async def _run_graph_instructed_single_loop_stream(
 ) -> AsyncIterator[Any]:
     graph_tool_specs = (
         _read_only_tool_specs(filtered_tool_specs)
-        if settings.ai_tool_calling_enabled and supports_tool_calling(execution.pool)
+        if _stream_tool_calling_enabled(settings, execution.pool)
         else []
     )
     graph_scope_system_prompt = _merge_system_prompts(
@@ -2387,9 +2396,7 @@ async def _run_graph_node_runner_stream(
 ) -> AsyncIterator[Any]:
     steps = _graph_schedule_steps(runtime_routing)
     node_outputs: list[GraphNodeOutput] = []
-    graph_tools_enabled = settings.ai_tool_calling_enabled and supports_tool_calling(
-        execution.pool
-    )
+    graph_tools_enabled = _stream_tool_calling_enabled(settings, execution.pool)
 
     for step in steps:
         agent_id = step.get("agent_id")

@@ -48,6 +48,12 @@ def _reset_sse_starlette_app_status() -> None:
     AppStatus.should_exit_event = None
 
 
+def _enable_local_tool_calling(monkeypatch: pytest.MonkeyPatch) -> None:
+    settings = get_settings()
+    monkeypatch.setattr(settings, "ai_tool_calling_enabled", True)
+    monkeypatch.setattr(settings, "ai_local_tool_calling_enabled", True)
+
+
 def _delta(
     *,
     content: str | None = None,
@@ -786,6 +792,7 @@ def test_chat_stream_agent_loop_executes_tool_and_keeps_shared_agent_run_id(
     auth = _seeded_dev_login(client, "delivery-hub-admin")
     slug = "delivery-hub"
     _set_policy("chatbot", "local_only")
+    _enable_local_tool_calling(monkeypatch)
 
     task_list_response = client.post(
         "/api/v1/pms/lists",
@@ -870,6 +877,7 @@ def test_chat_stream_agent_loop_halts_for_approval_required_tool(
     auth = _seeded_dev_login(client, "delivery-hub-admin")
     slug = "delivery-hub"
     _set_policy("chatbot", "local_only")
+    _enable_local_tool_calling(monkeypatch)
 
     async def fake_complete_chat_stream(*args: Any, **kwargs: Any):
         yield (
@@ -960,7 +968,7 @@ def test_chat_stream_agent_loop_halt_preserves_graph_schedule_summary(
     _set_policy("chatbot", "local_only")
     settings = get_settings()
     monkeypatch.setattr(settings, "ai_runtime_graph_enabled", True)
-    monkeypatch.setattr(settings, "ai_tool_calling_enabled", True)
+    _enable_local_tool_calling(monkeypatch)
 
     async def fake_complete_chat_stream(*args: Any, **kwargs: Any):
         yield (
@@ -1105,6 +1113,7 @@ def test_chat_stream_agent_loop_uses_filtered_tool_specs_from_mcp_manifest(
     auth = _seeded_dev_login(client, "delivery-hub-admin")
     slug = "delivery-hub"
     _set_policy("chatbot", "local_only")
+    _enable_local_tool_calling(monkeypatch)
     _disable_workspace_app(slug, "planner")
 
     task_list_response = client.post(
@@ -1189,6 +1198,40 @@ def test_chat_stream_falls_back_to_plain_chat_when_tools_are_not_supported(
         _workspace_ai_path(slug, "/chat/stream"),
         headers=_auth_headers(auth["token"]),
         json_body={"messages": [{"role": "user", "content": "hi"}]},
+    )
+
+    assert status_code == 200
+    assert [event["type"] for event in _chat_events(events)] == [
+        "content_delta",
+        "done",
+    ]
+    assert pool_client.chat.completions.calls[0].get("tools") is None
+
+
+def test_chat_stream_local_pool_skips_tools_without_local_opt_in(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    auth = _seeded_dev_login(client, "hq-admin")
+    slug = auth["user"]["workspaces"][0]["slug"]
+    _set_policy("chatbot", "local_only")
+    settings = get_settings()
+    monkeypatch.setattr(settings, "ai_tool_calling_enabled", True)
+    monkeypatch.setattr(settings, "ai_local_tool_calling_enabled", False)
+    monkeypatch.setattr(ai_router, "supports_tool_calling", lambda pool: True)
+
+    pool_client = _FakeAsyncPoolClient(
+        [_delta(content="plain local response", finish_reason="stop")]
+    )
+    monkeypatch.setattr(llm_core, "get_async_pool_client", lambda pool: pool_client)
+
+    status_code, events = _stream_post(
+        client,
+        _workspace_ai_path(slug, "/chat/stream"),
+        headers=_auth_headers(auth["token"]),
+        json_body={
+            "messages": [{"role": "user", "content": "PMS 이슈와 회의록을 요약해줘"}],
+            "allowed_app_ids": ["meeting", "pms"],
+        },
     )
 
     assert status_code == 200
@@ -2792,6 +2835,7 @@ def test_chat_stream_allowed_app_ids_narrows_tool_surface_to_one_app(
     auth = _seeded_dev_login(client, "delivery-hub-admin")
     slug = "delivery-hub"
     _set_policy("chatbot", "local_only")
+    _enable_local_tool_calling(monkeypatch)
 
     pool_client = _FakeAsyncPoolClient(
         [_delta(content="ok"), _delta(finish_reason="stop"), _usage_tail(1, 1, 2)]

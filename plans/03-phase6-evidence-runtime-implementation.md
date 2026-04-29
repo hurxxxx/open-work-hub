@@ -23,12 +23,12 @@ Phase 6 전체 목표는 기존 single-loop agent를 deterministic fast path, ma
 
 이 섹션은 세션 handoff용이다. 구현 세션이 끝날 때마다 짧게 갱신한다.
 
-- Current PR/stage: Phase 0-AQ local MLX length fallback investigation after `2ae303e`.
-- Last completed: Narrowed the UI E2E length fallback to the local MLX tool-enabled grounded-report path. A direct API text-only request with `allowed_app_ids=[]` returned `finish=stop` and content `UI smoke OK`; the same local stream shape with `allowed_app_ids=["meeting","pms"]` and the Korean UI prompt reproduced `usage,done` only with `finish=length`.
+- Current PR/stage: Phase 0-AS post-gate UI E2E after `cb8778e`.
+- Last completed: Added `AIDOO_AI_LOCAL_TOOL_CALLING_ENABLED` as a local-pool-specific opt-in gate and re-ran browser E2E. Global tool-calling remains enabled, but local MLX no longer enters the agent/tool loop unless this flag is true. The `/w/hq/ai` composer path with full app context now returns normal local assistant content instead of the token-length fallback.
 - In progress: None.
-- Next exact task: Decide whether to add a local-tool-calling capability gate/default for MLX or keep the current behavior documented as a local model/tool limitation.
-- Files touched in Phase 0-AQ: `plans/03-phase6-evidence-runtime-implementation.md`.
-- Tests/checks run: `agent-browser --session phase6-ui-e2e` open/login/navigate/fill/send/snapshot; final URL `http://127.0.0.1:4200/w/hq/ai?c=ffcc5a71-f42f-4153-b475-6f9e544eee93`; console contained only Vite debug and React DevTools info; page errors were empty. Direct API comparison: text-only `POST /chat/stream` with `allowed_app_ids=[]` returned `finish=stop`; tool-scoped `POST /chat/stream` with `allowed_app_ids=["meeting","pms"]` reproduced `finish=length`.
+- Next exact task: Commit/push the local tool-calling gate, then proceed to the next Phase 6 mock-provider slice.
+- Files touched in Phase 0-AS: `apps/api/src/aidoo_api/core/settings.py`, `apps/api/src/aidoo_api/domains/ai/router.py`, `apps/api/tests/test_ai_runtime_settings.py`, `apps/api/tests/test_ai_stream.py`, `scripts/phase6-runtime-regression.sh`, `plans/03-phase6-evidence-runtime-implementation.md`.
+- Tests/checks run: `cd apps/api && uv run ruff check src/aidoo_api/core/settings.py src/aidoo_api/domains/ai/router.py tests/test_ai_stream.py tests/test_ai_runtime_settings.py`; targeted local tool-calling pytest cases; `scripts/phase6-runtime-regression.sh -q`; `cd apps/api && uv run pytest tests/test_ai_stream.py -q`; local API `POST /api/v1/workspaces/hq/ai/chat/stream` with `backend_mode=local`, `allowed_app_ids=["meeting","pms"]` returned `finish=stop` and content `UI E2E smoke 테스트가 성공적으로 완료되었습니다.`; `agent-browser --session phase6-ui-e2e-2` verified `/w/hq/ai` login/navigation/composer/send/final URL/snapshot/console/errors with assistant content `UI E2E smoke 테스트가 정상적으로 완료되었습니다.`
 - Known blockers: OpenAI/Anthropic-backed manager/search execution is still not enabled. The egress/planner/search contracts only decide, sanitize, and build request envelopes; they do not call external APIs. `graph_node_runner_v0` remains an in-process runner, not a durable workflow backend. Hidden node outputs are not persisted verbatim; only status/count/error summary is persisted. High-risk / approval-preview graphs are intentionally not supported by this adapter.
 
 ## Architecture / Principles
@@ -355,6 +355,15 @@ cd apps/api && pytest tests/test_ai_runtime_contracts.py tests/test_ai_runtime_p
 - `/w/hq/ai` rendered workspace navigation, AI side menu, conversation list, routing status, scope picker, routing selector, and composer controls.
 - Submitted `UI E2E smoke입니다. 한 문장으로 응답해줘.` through the composer. The final URL was `http://127.0.0.1:4200/w/hq/ai?c=ffcc5a71-f42f-4153-b475-6f9e544eee93`, and the conversation appeared in the recent list.
 - The stream terminated and re-enabled the composer, but the assistant bubble showed the length fallback text `응답이 토큰 한도에 도달해 중간에서 잘렸습니다...` with routing metadata `local 풀 · local_only · policy_local_only`.
+- Console contained only Vite debug and React DevTools info; `agent-browser errors` returned no page errors.
+
+### 2026-04-29 Phase 0-AS UI E2E After Local Tool Gate
+
+- Reused local web/API/MLX servers on `127.0.0.1:4200`, `127.0.0.1:8000`, and `127.0.0.1:8080`.
+- `agent-browser --session phase6-ui-e2e-2` quick-login as `Aidoo HQ Admin` succeeded and reached `/w/hq/ai`.
+- Submitted `UI E2E smoke입니다. 한 문장으로 응답해줘.` through the composer with the default full app context.
+- Final URL was `http://127.0.0.1:4200/w/hq/ai?c=99515149-61a5-4a87-835c-b8fd5f7a9dfc`.
+- The assistant bubble rendered `UI E2E smoke 테스트가 정상적으로 완료되었습니다.` with routing metadata `local 풀 · local_only · policy_local_only`; the token-length fallback no longer appeared.
 - Console contained only Vite debug and React DevTools info; `agent-browser errors` returned no page errors.
 
 ### 2026-04-28 Phase 0-A Hardening Smoke

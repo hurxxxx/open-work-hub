@@ -11,11 +11,13 @@ uv run ruff check \
   tests/ai_runtime_mock_harness.py \
   tests/test_ai_runtime_contracts.py \
   tests/test_ai_runtime_external_adapters.py \
-  tests/test_ai_runtime_mock_e2e.py
+  tests/test_ai_runtime_mock_e2e.py \
+  tests/test_ai_runtime_settings.py
 
 uv run pytest \
   tests/test_ai_runtime_contracts.py \
   tests/test_ai_runtime_external_adapters.py \
+  tests/test_ai_runtime_settings.py \
   tests/test_ai_runtime_mock_e2e.py \
   tests/test_ai_stream.py \
   "$@"
