@@ -16,7 +16,9 @@ from aidoo_api.domains.ai.runtime import (
     EvidenceCoverage,
     EvidenceItem,
     EvidencePacket,
+    EvidenceQuality,
     ExecutionGraph,
+    GraphNodeOutput,
     QueryPlan,
     RuntimeRegistry,
     RuntimeRegistryValidationError,
@@ -24,6 +26,12 @@ from aidoo_api.domains.ai.runtime import (
     build_deterministic_manager_candidate,
     build_execution_graph_response_schema,
     build_graph_execution_schedule,
+    build_graph_node_messages,
+    build_graph_writer_system_prompt,
+    graph_verifier_failure_policy,
+    materialize_graph_evidence_packet,
+    render_evidence_packet,
+    summarize_graph_evidence_packet,
     resolve_agent_definitions,
     summarize_graph_execution_schedule,
     summarize_graph_schedule_failure,
@@ -551,10 +559,122 @@ def test_evidence_packet_minimal_contract() -> None:
             intents_covered=["summarize_decisions"],
             intents_missed=[],
         ),
+        quality=EvidenceQuality(
+            verifier_status="completed",
+            ready_for_grounded_write=True,
+            failed_node_count=0,
+            evidence_item_count=1,
+            tool_result_count=0,
+        ),
     )
 
+    assert packet.packet_version == "evidence_packet.v1"
     assert packet.items[0].authority_class == "internal_system_of_record"
     assert packet.coverage.intents_covered == ["summarize_decisions"]
+    assert packet.quality.ready_for_grounded_write is True
+
+
+def test_graph_evidence_packet_materializes_node_outputs_and_verifier_policy() -> None:
+    node_outputs = [
+        GraphNodeOutput(
+            agent_id="domain.meeting",
+            status="completed",
+            text="회의에서 일정 리스크와 대응 방안을 확인했다.",
+        ),
+        GraphNodeOutput(
+            agent_id="search.executor",
+            status="completed",
+            tool_results=("PMS 이슈 ABC-1 상태는 진행 중이다.",),
+        ),
+        GraphNodeOutput(
+            agent_id="verifier.grounding",
+            status="failed",
+            error="unsupported claim detected",
+        ),
+    ]
+
+    packet = materialize_graph_evidence_packet(
+        messages=[{"role": "user", "content": "회의록과 PMS를 비교한 보고서를 작성해줘"}],
+        node_outputs=node_outputs,
+        candidate_summary={
+            "intent": "report",
+            "output_kind": "artifact",
+            "requires_verifier": True,
+        },
+    )
+
+    assert packet.intent == "report"
+    assert packet.output_kind == "artifact"
+    assert packet.source_agent_ids == [
+        "domain.meeting",
+        "search.executor",
+        "verifier.grounding",
+    ]
+    assert [item.source_kind for item in packet.items] == ["meeting", "rag"]
+    assert packet.coverage.intents_missed == ["verifier.grounding"]
+    assert packet.quality.verifier_status == "failed"
+    assert packet.quality.ready_for_grounded_write is False
+    assert packet.quality.failed_node_count == 1
+    assert packet.gaps == [
+        "verifier.grounding: unsupported claim detected",
+        "verifier.grounding: grounding verification failed",
+    ]
+    assert graph_verifier_failure_policy(
+        node_outputs,
+        requires_verifier=True,
+    ) == "failed_continue_with_gap_disclaimer"
+    rendered = render_evidence_packet(packet)
+    assert '"packet_version": "evidence_packet.v1"' in rendered
+    assert "unsupported claim detected" in rendered
+    summary = summarize_graph_evidence_packet(packet)
+    assert summary["evidence_item_count"] == 2
+    assert summary["ready_for_grounded_write"] is False
+
+
+def test_graph_node_input_builder_is_deterministic_and_scoped() -> None:
+    messages = [{"role": "user", "content": "회의록과 PMS를 비교한 보고서를 작성해줘"}]
+    prior_outputs = [
+        GraphNodeOutput(
+            agent_id="domain.meeting",
+            status="completed",
+            text="회의에서 출시 일정 리스크를 확인했다.",
+        )
+    ]
+
+    built = build_graph_node_messages(
+        messages,
+        agent_id="search.executor",
+        step={
+            "agent_id": "search.executor",
+            "depends_on_agent_ids": ["search.planner"],
+        },
+        prior_outputs=prior_outputs,
+        candidate_summary={
+            "intent": "report",
+            "output_kind": "artifact",
+            "requires_verifier": True,
+        },
+    )
+
+    assert built[0] == messages[0]
+    node_input = built[-1]["content"]
+    assert "Deterministic graph node input" in node_input
+    assert "agent_id: search.executor" in node_input
+    assert "depends_on_agent_ids: ['search.planner']" in node_input
+    assert "EvidencePacket JSON" in node_input
+    assert "writer.template" not in node_input
+
+    writer_prompt = build_graph_writer_system_prompt(
+        messages=messages,
+        node_outputs=prior_outputs,
+        candidate_summary={
+            "intent": "report",
+            "output_kind": "artifact",
+            "requires_verifier": True,
+        },
+    )
+    assert "verifier_failure_policy: not_run_continue_with_gap_disclaimer" in writer_prompt
+    assert '"ready_for_grounded_write": false' in writer_prompt
 
 
 def test_agent_run_invocation_and_trace_contracts() -> None:

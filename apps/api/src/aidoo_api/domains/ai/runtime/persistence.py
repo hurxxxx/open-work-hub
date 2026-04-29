@@ -56,6 +56,7 @@ SENSITIVE_VALUE_PATTERNS = (
 )
 TERMINAL_RUN_STATUSES = ("completed", "failed", "cancelled", "abandoned")
 SINGLE_LOOP_FALLBACK_AGENT_ID = "single_loop.fallback"
+GRAPH_EXECUTION_ADAPTER_AGENT_ID = "graph.adapter.node_runner"
 
 
 def scrub_trace_payload(value: Any) -> Any:
@@ -296,6 +297,9 @@ def append_graph_execution_trace_events(
                 "graph_execution_fallback_reason"
             ),
             "graph_execution_adapter": runtime_metadata.get("graph_execution_adapter"),
+            "graph_node_execution_summary": runtime_metadata.get(
+                "graph_node_execution_summary"
+            ),
         },
     )
 
@@ -394,6 +398,45 @@ def persist_single_loop_fallback_runtime_shadow(
         )
 
 
+def persist_graph_execution_runtime_shadow(
+    db: Session,
+    *,
+    agent_run_id: str,
+    workspace_id: str,
+    conversation_id: str,
+    requested_by_user_id: str,
+    runtime_metadata: dict[str, Any],
+    finish_reason: str | None,
+    response_status: str,
+) -> None:
+    if not get_settings().ai_runtime_shadow_write_enabled:
+        return
+    try:
+        _persist_graph_execution_runtime_shadow(
+            db,
+            agent_run_id=agent_run_id,
+            workspace_id=workspace_id,
+            conversation_id=conversation_id,
+            requested_by_user_id=requested_by_user_id,
+            runtime_metadata=runtime_metadata,
+            finish_reason=finish_reason,
+            response_status=response_status,
+        )
+        db.commit()
+    except Exception:
+        db.rollback()
+        record_shadow_write_failure(operation="persist_graph_execution_runtime_shadow")
+        logger.exception(
+            "ai_runtime.shadow_write_failed",
+            extra={
+                "agent_run_id": agent_run_id,
+                "conversation_id": conversation_id,
+                "workspace_id": workspace_id,
+                "operation": "persist_graph_execution_runtime_shadow",
+            },
+        )
+
+
 def _persist_single_loop_fallback_runtime_shadow(
     db: Session,
     *,
@@ -448,6 +491,9 @@ def _persist_single_loop_fallback_runtime_shadow(
                 "graph_execution_fallback_reason"
             ),
             "graph_execution_adapter": runtime_metadata.get("graph_execution_adapter"),
+            "graph_node_execution_summary": runtime_metadata.get(
+                "graph_node_execution_summary"
+            ),
         },
         created_at=now,
         updated_at=now,
@@ -551,6 +597,203 @@ def _persist_single_loop_fallback_runtime_shadow(
     )
 
 
+def _persist_graph_execution_runtime_shadow(
+    db: Session,
+    *,
+    agent_run_id: str,
+    workspace_id: str,
+    conversation_id: str,
+    requested_by_user_id: str,
+    runtime_metadata: dict[str, Any],
+    finish_reason: str | None,
+    response_status: str,
+) -> None:
+    now = utcnow_naive()
+    status = _terminal_runtime_status(
+        finish_reason=finish_reason,
+        response_status=response_status,
+    )
+    runtime_run = AgentRun(
+        id=agent_run_id,
+        workspace_id=workspace_id,
+        conversation_id=conversation_id,
+        requested_by_user_id=requested_by_user_id,
+        status=status,
+        runtime_profile=_runtime_profile_from_metadata(runtime_metadata),
+        graph_enabled=runtime_metadata.get("graph_gate") == "eligible",
+        model_profile_id=str(
+            runtime_metadata.get("model") or runtime_metadata.get("chosen_model") or ""
+        )
+        or None,
+        fallback_reason=runtime_metadata.get("graph_fallback_reason"),
+        metadata_json={
+            "source": "graph_execution_shadow",
+            "runtime_routing_reason_codes": runtime_metadata.get(
+                "runtime_routing_reason_codes"
+            ),
+            "graph_gate": runtime_metadata.get("graph_gate"),
+            "graph_fallback_reason": runtime_metadata.get("graph_fallback_reason"),
+            "graph_used": bool(runtime_metadata.get("graph_used")),
+            "graph_validation_status": runtime_metadata.get("graph_validation_status"),
+            "graph_validation_fallback_reason": runtime_metadata.get(
+                "graph_validation_fallback_reason"
+            ),
+            "graph_registry_agent_count": int(
+                runtime_metadata.get("graph_registry_agent_count") or 0
+            ),
+            "graph_write_agent_count": int(
+                runtime_metadata.get("graph_write_agent_count") or 0
+            ),
+            "graph_candidate_summary": runtime_metadata.get("graph_candidate_summary"),
+            "graph_schedule_summary": runtime_metadata.get("graph_schedule_summary"),
+            "graph_execution_status": runtime_metadata.get("graph_execution_status"),
+            "graph_execution_fallback_reason": runtime_metadata.get(
+                "graph_execution_fallback_reason"
+            ),
+            "graph_execution_adapter": runtime_metadata.get("graph_execution_adapter"),
+            "graph_node_execution_summary": runtime_metadata.get(
+                "graph_node_execution_summary"
+            ),
+        },
+        created_at=now,
+        updated_at=now,
+    )
+    db.add(runtime_run)
+    db.flush()
+    graph_invocations_by_seq = persist_graph_schedule_invocation_skeletons(
+        db,
+        agent_run_id=runtime_run.id,
+        workspace_id=workspace_id,
+        conversation_id=conversation_id,
+        runtime_metadata=runtime_metadata,
+        status=status,
+        purpose="graph node covered by graph adapter",
+    )
+    node_status_by_agent_id = _graph_node_status_by_agent_id(runtime_metadata)
+    for invocation in graph_invocations_by_seq.values():
+        invocation.status = node_status_by_agent_id.get(invocation.agent_id, status)
+        db.add(invocation)
+    db.flush()
+
+    adapter_invocation = AgentInvocation(
+        id=new_id(),
+        agent_run_id=runtime_run.id,
+        workspace_id=workspace_id,
+        conversation_id=conversation_id,
+        invocation_seq=_next_invocation_seq(db, runtime_run.id),
+        agent_id=GRAPH_EXECUTION_ADAPTER_AGENT_ID,
+        status=status,
+        purpose="graph-instructed single-loop adapter execution",
+    )
+    db.add(adapter_invocation)
+    db.flush()
+
+    append_trace_event(
+        db,
+        agent_run_id=runtime_run.id,
+        workspace_id=workspace_id,
+        conversation_id=conversation_id,
+        event_type="run_created",
+        payload={
+            "source": "graph_execution_shadow",
+            "runtime_profile": runtime_run.runtime_profile,
+            "graph_gate": runtime_metadata.get("graph_gate"),
+            "graph_execution_adapter": runtime_metadata.get("graph_execution_adapter"),
+        },
+    )
+    append_graph_candidate_trace_events(
+        db,
+        agent_run_id=runtime_run.id,
+        workspace_id=workspace_id,
+        conversation_id=conversation_id,
+        runtime_metadata=runtime_metadata,
+    )
+    append_graph_schedule_trace_events(
+        db,
+        agent_run_id=runtime_run.id,
+        workspace_id=workspace_id,
+        conversation_id=conversation_id,
+        runtime_metadata=runtime_metadata,
+        graph_invocations_by_seq=graph_invocations_by_seq,
+    )
+    append_graph_execution_trace_events(
+        db,
+        agent_run_id=runtime_run.id,
+        workspace_id=workspace_id,
+        conversation_id=conversation_id,
+        runtime_metadata=runtime_metadata,
+    )
+    terminal_event = _terminal_trace_event_prefix(status)
+    for invocation_seq, invocation in sorted(graph_invocations_by_seq.items()):
+        node_terminal_event = _terminal_trace_event_prefix(invocation.status)
+        append_trace_event(
+            db,
+            agent_run_id=runtime_run.id,
+            agent_invocation_id=invocation.id,
+            workspace_id=workspace_id,
+            conversation_id=conversation_id,
+            invocation_seq=invocation_seq,
+            event_type="graph_node_started",
+            payload={
+                "agent_id": invocation.agent_id,
+                "adapter": runtime_metadata.get("graph_execution_adapter"),
+            },
+        )
+        append_trace_event(
+            db,
+            agent_run_id=runtime_run.id,
+            agent_invocation_id=invocation.id,
+            workspace_id=workspace_id,
+            conversation_id=conversation_id,
+            invocation_seq=invocation_seq,
+            event_type=f"graph_node_{node_terminal_event}",
+            payload={
+                "agent_id": invocation.agent_id,
+                "adapter": runtime_metadata.get("graph_execution_adapter"),
+                "finish_reason": finish_reason,
+                "response_status": response_status,
+            },
+        )
+    append_trace_event(
+        db,
+        agent_run_id=runtime_run.id,
+        agent_invocation_id=adapter_invocation.id,
+        workspace_id=workspace_id,
+        conversation_id=conversation_id,
+        invocation_seq=adapter_invocation.invocation_seq,
+        event_type="invocation_started",
+        payload={
+            "agent_id": adapter_invocation.agent_id,
+            "adapter": runtime_metadata.get("graph_execution_adapter"),
+        },
+    )
+    append_trace_event(
+        db,
+        agent_run_id=runtime_run.id,
+        agent_invocation_id=adapter_invocation.id,
+        workspace_id=workspace_id,
+        conversation_id=conversation_id,
+        invocation_seq=adapter_invocation.invocation_seq,
+        event_type=f"invocation_{terminal_event}",
+        payload={
+            "agent_id": adapter_invocation.agent_id,
+            "finish_reason": finish_reason,
+            "response_status": response_status,
+        },
+    )
+    append_trace_event(
+        db,
+        agent_run_id=runtime_run.id,
+        workspace_id=workspace_id,
+        conversation_id=conversation_id,
+        event_type=f"run_{terminal_event}",
+        payload={
+            "finish_reason": finish_reason,
+            "response_status": response_status,
+        },
+    )
+
+
 def _terminal_runtime_status(*, finish_reason: str | None, response_status: str) -> str:
     if response_status == "cancelled" or finish_reason == "cancelled":
         return "cancelled"
@@ -572,6 +815,26 @@ def _runtime_profile_from_metadata(runtime_metadata: dict[str, Any]) -> str:
     if runtime_profile in {"interactive_read", "grounded_report", "long_doc", "high_risk_action"}:
         return str(runtime_profile)
     return "interactive_read"
+
+
+def _graph_node_status_by_agent_id(runtime_metadata: dict[str, Any]) -> dict[str, str]:
+    summary = runtime_metadata.get("graph_node_execution_summary")
+    if not isinstance(summary, dict):
+        return {}
+    nodes = summary.get("nodes")
+    if not isinstance(nodes, list):
+        return {}
+    statuses: dict[str, str] = {}
+    for node in nodes:
+        if not isinstance(node, dict):
+            continue
+        agent_id = node.get("agent_id")
+        raw_status = node.get("status")
+        if not isinstance(agent_id, str) or not agent_id:
+            continue
+        if raw_status in {"completed", "failed", "cancelled"}:
+            statuses[agent_id] = raw_status
+    return statuses
 
 
 def scrub_completed_runtime_records(db: Session, *, older_than_days: int = 90) -> int:
@@ -619,6 +882,7 @@ __all__ = [
     "append_graph_execution_trace_events",
     "append_graph_schedule_trace_events",
     "append_trace_event",
+    "persist_graph_execution_runtime_shadow",
     "persist_graph_schedule_invocation_skeletons",
     "persist_single_loop_fallback_runtime_shadow",
     "prepare_trace_payload",

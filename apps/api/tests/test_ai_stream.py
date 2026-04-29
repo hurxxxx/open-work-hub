@@ -1464,6 +1464,236 @@ def test_chat_stream_graph_gate_falls_back_without_graph_execution(
     ] is False
 
 
+def test_chat_stream_graph_execution_adapter_runs_when_enabled(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    auth = _seeded_dev_login(client, "hq-admin")
+    slug = auth["user"]["workspaces"][0]["slug"]
+    _set_policy("chatbot", "local_only")
+    settings = get_settings()
+    monkeypatch.setattr(settings, "ai_runtime_graph_enabled", True)
+    monkeypatch.setattr(settings, "ai_runtime_graph_execution_enabled", True)
+    monkeypatch.setattr(settings, "ai_tool_calling_enabled", False)
+
+    pool_client = _SequencedAsyncPoolClient(
+        [
+            [_delta(content=f"node {index}", finish_reason="stop")]
+            for index in range(1, 7)
+        ]
+        + [[_delta(content="graph ok", finish_reason="stop")]]
+    )
+    monkeypatch.setattr(llm_core, "get_async_pool_client", lambda pool: pool_client)
+
+    status_code, events = _stream_post(
+        client,
+        _workspace_ai_path(slug, "/chat/stream"),
+        headers=_auth_headers(auth["token"]),
+        json_body={
+            "backend_mode": "local",
+            "persist": True,
+            "messages": [
+                {
+                    "role": "user",
+                    "content": "회의록과 PMS 이슈를 비교해서 근거 있는 보고서로 정리해줘",
+                }
+            ],
+            "allowed_app_ids": ["meeting", "pms"],
+        },
+    )
+
+    assert status_code == 200
+    chat = _chat_events(events)
+    assert [event["type"] for event in chat] == ["content_delta", "done"]
+    assert chat[0]["data"]["text"] == "graph ok"
+    done_meta = chat[-1]["data"]["meta"]
+    assert done_meta["graph_used"] is True
+    assert done_meta.get("graph_fallback_reason") is None
+    assert done_meta["graph_execution_status"] == "adapter_selected"
+    assert done_meta.get("graph_execution_fallback_reason") is None
+    assert done_meta["graph_execution_adapter"] == "graph_node_runner_v0"
+    graph_schedule = done_meta["graph_schedule_summary"]
+    assert done_meta["graph_node_execution_summary"]["adapter"] == "graph_node_runner_v0"
+    assert done_meta["graph_node_execution_summary"]["planned_node_count"] == graph_schedule[
+        "step_count"
+    ]
+    assert done_meta["agent_run_id"]
+    assert graph_schedule["execution_enabled"] is True
+
+    first_call_messages = pool_client.chat.completions.calls[0]["messages"]
+    final_call_messages = pool_client.chat.completions.calls[-1]["messages"]
+    assert "graph_node_runner_v0" in first_call_messages[0]["content"]
+    assert "Execute graph node" in first_call_messages[0]["content"]
+    assert "EvidencePacket" in final_call_messages[0]["content"]
+    assert '"packet_version": "evidence_packet.v1"' in final_call_messages[0]["content"]
+    assert '"ready_for_grounded_write": true' in final_call_messages[0]["content"]
+    assert "tools" not in pool_client.chat.completions.calls[-1]
+
+    with Session(get_engine()) as session:
+        runtime_run = session.get(AgentRun, done_meta["agent_run_id"])
+        invocations = list(
+            session.scalars(
+                select(AgentInvocation)
+                .where(AgentInvocation.agent_run_id == done_meta["agent_run_id"])
+                .order_by(AgentInvocation.invocation_seq)
+            )
+        )
+        trace_events = list(
+            session.scalars(
+                select(AgentTraceEvent)
+                .where(AgentTraceEvent.agent_run_id == done_meta["agent_run_id"])
+                .order_by(AgentTraceEvent.event_seq)
+            )
+        )
+
+    assert runtime_run is not None
+    assert runtime_run.status == "completed"
+    assert runtime_run.metadata_json["source"] == "graph_execution_shadow"
+    assert runtime_run.metadata_json["graph_used"] is True
+    assert runtime_run.metadata_json["graph_node_execution_summary"]["adapter"] == (
+        "graph_node_runner_v0"
+    )
+    assert runtime_run.fallback_reason is None
+    assert [invocation.agent_id for invocation in invocations] == [
+        *graph_schedule["planned_agent_ids"],
+        "graph.adapter.node_runner",
+    ]
+    assert {invocation.status for invocation in invocations} == {"completed"}
+    event_types = [event.event_type for event in trace_events]
+    assert "graph_execution_gate_evaluated" in event_types
+    assert event_types.count("graph_node_completed") == graph_schedule["step_count"]
+    assert event_types[-3:] == ["invocation_started", "invocation_completed", "run_completed"]
+
+
+def test_chat_stream_graph_execution_verifier_failure_degrades_writer_prompt(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    auth = _seeded_dev_login(client, "hq-admin")
+    slug = auth["user"]["workspaces"][0]["slug"]
+    _set_policy("chatbot", "local_only")
+    settings = get_settings()
+    monkeypatch.setattr(settings, "ai_runtime_graph_enabled", True)
+    monkeypatch.setattr(settings, "ai_runtime_graph_execution_enabled", True)
+    monkeypatch.setattr(settings, "ai_tool_calling_enabled", False)
+
+    pool_client = _SequencedAsyncPoolClient(
+        [
+            [_delta(content=f"node {index}", finish_reason="stop")]
+            for index in range(1, 6)
+        ]
+        + [[_delta(finish_reason="error")]]
+        + [[_delta(content="limited graph ok", finish_reason="stop")]]
+    )
+    monkeypatch.setattr(llm_core, "get_async_pool_client", lambda pool: pool_client)
+
+    status_code, events = _stream_post(
+        client,
+        _workspace_ai_path(slug, "/chat/stream"),
+        headers=_auth_headers(auth["token"]),
+        json_body={
+            "backend_mode": "local",
+            "persist": True,
+            "messages": [
+                {
+                    "role": "user",
+                    "content": "회의록과 PMS 이슈를 비교해서 근거 있는 보고서로 정리해줘",
+                }
+            ],
+            "allowed_app_ids": ["meeting", "pms"],
+        },
+    )
+
+    assert status_code == 200
+    chat = _chat_events(events)
+    assert [event["type"] for event in chat] == ["content_delta", "done"]
+    assert chat[0]["data"]["text"] == "limited graph ok"
+    done_meta = chat[-1]["data"]["meta"]
+    node_summary = done_meta["graph_node_execution_summary"]
+    assert node_summary["failed_node_count"] == 1
+    assert (
+        node_summary["verifier_failure_policy"]
+        == "failed_continue_with_gap_disclaimer"
+    )
+    assert node_summary["evidence_packet_summary"]["ready_for_grounded_write"] is False
+    assert node_summary["evidence_packet_summary"]["verifier_status"] == "failed"
+
+    final_call_messages = pool_client.chat.completions.calls[-1]["messages"]
+    assert (
+        "verifier_failure_policy: failed_continue_with_gap_disclaimer"
+        in final_call_messages[0]["content"]
+    )
+    assert '"ready_for_grounded_write": false' in final_call_messages[0]["content"]
+
+    with Session(get_engine()) as session:
+        invocations = list(
+            session.scalars(
+                select(AgentInvocation)
+                .where(AgentInvocation.agent_run_id == done_meta["agent_run_id"])
+                .order_by(AgentInvocation.invocation_seq)
+            )
+        )
+
+    verifier_invocation = next(
+        invocation for invocation in invocations if invocation.agent_id == "verifier.grounding"
+    )
+    assert verifier_invocation.status == "failed"
+
+
+def test_chat_stream_graph_execution_adapter_error_persists_failed_runtime(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    auth = _seeded_dev_login(client, "hq-admin")
+    slug = auth["user"]["workspaces"][0]["slug"]
+    _set_policy("chatbot", "local_only")
+    settings = get_settings()
+    monkeypatch.setattr(settings, "ai_runtime_graph_enabled", True)
+    monkeypatch.setattr(settings, "ai_runtime_graph_execution_enabled", True)
+    monkeypatch.setattr(settings, "ai_tool_calling_enabled", False)
+
+    pool_client = _FakeAsyncPoolClient(error=OpenAIError("provider failed"))
+    monkeypatch.setattr(llm_core, "get_async_pool_client", lambda pool: pool_client)
+
+    status_code, events = _stream_post(
+        client,
+        _workspace_ai_path(slug, "/chat/stream"),
+        headers=_auth_headers(auth["token"]),
+        json_body={
+            "backend_mode": "local",
+            "persist": True,
+            "messages": [
+                {
+                    "role": "user",
+                    "content": "회의록과 PMS 이슈를 비교해서 근거 있는 보고서로 정리해줘",
+                }
+            ],
+            "allowed_app_ids": ["meeting", "pms"],
+        },
+    )
+
+    assert status_code == 200
+    chat = _chat_events(events)
+    assert [event["type"] for event in chat] == ["error", "done"]
+    assert chat[-1]["data"]["finish_reason"] == "error"
+    done_meta = chat[-1]["data"]["meta"]
+    assert done_meta["graph_used"] is True
+    assert done_meta["graph_execution_status"] == "adapter_selected"
+    assert done_meta["agent_run_id"]
+
+    with Session(get_engine()) as session:
+        runtime_run = session.get(AgentRun, done_meta["agent_run_id"])
+        trace_events = list(
+            session.scalars(
+                select(AgentTraceEvent)
+                .where(AgentTraceEvent.agent_run_id == done_meta["agent_run_id"])
+                .order_by(AgentTraceEvent.event_seq)
+            )
+        )
+
+    assert runtime_run is not None
+    assert runtime_run.status == "failed"
+    assert runtime_run.metadata_json["source"] == "graph_execution_shadow"
+    assert [event.event_type for event in trace_events][-1] == "run_failed"
+
+
 def test_chat_stream_graph_schedule_failure_remains_fallback_metadata(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:

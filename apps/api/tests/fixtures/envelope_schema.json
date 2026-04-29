@@ -615,6 +615,19 @@
           "default": null,
           "title": "Graph Gate"
         },
+        "graph_node_execution_summary": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Graph Node Execution Summary"
+        },
         "graph_registry_agent_count": {
           "default": 0,
           "title": "Graph Registry Agent Count",

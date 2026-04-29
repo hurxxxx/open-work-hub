@@ -1,4 +1,5 @@
 import json
+from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 import asyncio
 from datetime import datetime
@@ -46,6 +47,7 @@ from aidoo_api.domains.ai.registry import get_ai_capability_registry
 from aidoo_api.domains.ai.runtime.metrics import record_inspection_request
 from aidoo_api.domains.ai.runtime.models import AgentInvocation, AgentRun, AgentTraceEvent
 from aidoo_api.domains.ai.runtime.persistence import (
+    persist_graph_execution_runtime_shadow,
     persist_single_loop_fallback_runtime_shadow,
     scrub_trace_payload,
 )
@@ -61,7 +63,18 @@ from aidoo_api.domains.ai.runtime.graph_scheduler import (
     summarize_graph_schedule_failure,
 )
 from aidoo_api.domains.ai.runtime.graph_execution import (
+    GRAPH_INSTRUCTED_SINGLE_LOOP_ADAPTER_ID,
+    GRAPH_NODE_RUNNER_ADAPTER_ID,
+    GRAPH_WRITER_AGENT_ID,
+    GraphNodeOutput,
     attach_graph_execution_adapter_decision,
+    build_graph_execution_system_prompt,
+    build_graph_node_messages,
+    build_graph_node_system_prompt,
+    build_graph_writer_system_prompt,
+    graph_verifier_failure_policy,
+    materialize_graph_evidence_packet,
+    summarize_graph_evidence_packet,
 )
 from aidoo_api.domains.ai.runtime.manager_validation import validate_manager_graph_candidate
 from aidoo_api.domains.ai.runtime.routing import (
@@ -1628,6 +1641,7 @@ async def _chat_stream_publisher(
     # those bodies in a side panel instead of the chat bubble.
     artifact_parser = ArtifactStreamParser()
     fallback_runtime_run_id: str | None = None
+    graph_execution_runtime_run_id: str | None = None
 
     try:
         command = _parse_tool_chat_command(payload.messages)
@@ -1677,6 +1691,37 @@ async def _chat_stream_publisher(
             messages=messages_dict,
             allowed_app_ids=payload.allowed_app_ids,
         )
+        if _should_use_graph_execution_adapter(runtime_routing):
+            graph_execution_runtime_run_id = new_id()
+            graph_event_stream = _run_graph_execution_adapter_stream(
+                context=context,
+                execution=execution,
+                db=db,
+                workspace=workspace,
+                principal=principal,
+                user=current_user,
+                messages=messages_dict,
+                temperature=payload.temperature,
+                stream_reasoning=payload.stream_reasoning,
+                encoder=encoder,
+                settings=settings,
+                agent_run_id=graph_execution_runtime_run_id,
+                filtered_tool_specs=filtered_tool_specs,
+                bound_conversation=conversation,
+                scope_system_prompt=scope_system_prompt,
+                allowed_app_ids=payload.allowed_app_ids,
+                runtime_routing=runtime_routing,
+            )
+            async for event in graph_event_stream:
+                for serialized in _serialize_agent_event_through_artifacts(
+                    event=event,
+                    artifact_parser=artifact_parser,
+                    buffer=buffer,
+                    encoder=encoder,
+                ):
+                    yield serialized
+            return
+
         if (
             settings.ai_tool_calling_enabled
             and supports_tool_calling(execution.pool)
@@ -1829,7 +1874,8 @@ async def _chat_stream_publisher(
                         last_config,
                         model=chosen_model,
                         runtime_routing=runtime_routing,
-                        agent_run_id=fallback_runtime_run_id,
+                        agent_run_id=graph_execution_runtime_run_id
+                        or fallback_runtime_run_id,
                     ),
                 },
             )
@@ -1848,8 +1894,31 @@ async def _chat_stream_publisher(
                 last_config=last_config,
                 chosen_model=chosen_model,
                 runtime_routing=runtime_routing,
-                agent_run_id=fallback_runtime_run_id,
+                agent_run_id=graph_execution_runtime_run_id or fallback_runtime_run_id,
             )
+            if (
+                graph_execution_runtime_run_id is not None
+                and buffer.finish_reason != "awaiting_approval"
+            ):
+                done_meta = buffer.done_meta or _build_done_meta(
+                    last_decision,
+                    last_config,
+                    model=chosen_model,
+                    runtime_routing=runtime_routing,
+                    agent_run_id=graph_execution_runtime_run_id,
+                )
+                persist_graph_execution_runtime_shadow(
+                    db,
+                    agent_run_id=graph_execution_runtime_run_id,
+                    workspace_id=workspace.id,
+                    conversation_id=conversation.id,
+                    requested_by_user_id=current_user.id,
+                    runtime_metadata=done_meta or {},
+                    finish_reason=buffer.finish_reason,
+                    response_status=(
+                        "cancelled" if buffer.cancelled else buffer.response_status
+                    ),
+                )
             if fallback_runtime_run_id is not None:
                 done_meta = buffer.done_meta or _build_done_meta(
                     last_decision,
@@ -1923,6 +1992,534 @@ def _build_graph_schedule_summary_or_failure(validation_graph) -> dict[str, Any]
         )
     except GraphSchedulerError as error:
         return summarize_graph_schedule_failure(error)
+
+
+def _should_use_graph_execution_adapter(runtime_routing: RuntimeRoutingDecision) -> bool:
+    return (
+        runtime_routing.graph_used
+        and runtime_routing.graph_execution_status == "adapter_selected"
+        and runtime_routing.graph_execution_adapter
+        in {
+            GRAPH_INSTRUCTED_SINGLE_LOOP_ADAPTER_ID,
+            GRAPH_NODE_RUNNER_ADAPTER_ID,
+        }
+    )
+
+
+async def _run_graph_execution_adapter_stream(
+    *,
+    context: LlmTaskContext,
+    execution,
+    db: Session,
+    workspace: Workspace,
+    principal: CallerPrincipal,
+    user: User,
+    messages: list[dict[str, Any]],
+    temperature: float | None,
+    stream_reasoning: bool,
+    encoder: EnvelopeEncoder,
+    settings: Any,
+    agent_run_id: str,
+    filtered_tool_specs: list[dict[str, Any]],
+    bound_conversation: Conversation | None,
+    scope_system_prompt: str | None,
+    allowed_app_ids: list[str] | None,
+    runtime_routing: RuntimeRoutingDecision,
+) -> AsyncIterator[Any]:
+    if runtime_routing.graph_execution_adapter == GRAPH_NODE_RUNNER_ADAPTER_ID:
+        async for event in _run_graph_node_runner_stream(
+            context=context,
+            execution=execution,
+            db=db,
+            workspace=workspace,
+            principal=principal,
+            user=user,
+            messages=messages,
+            temperature=temperature,
+            stream_reasoning=stream_reasoning,
+            encoder=encoder,
+            settings=settings,
+            agent_run_id=agent_run_id,
+            filtered_tool_specs=filtered_tool_specs,
+            bound_conversation=bound_conversation,
+            scope_system_prompt=scope_system_prompt,
+            allowed_app_ids=allowed_app_ids,
+            runtime_routing=runtime_routing,
+        ):
+            yield event
+        return
+
+    async for event in _run_graph_instructed_single_loop_stream(
+        context=context,
+        execution=execution,
+        db=db,
+        workspace=workspace,
+        principal=principal,
+        user=user,
+        messages=messages,
+        temperature=temperature,
+        stream_reasoning=stream_reasoning,
+        encoder=encoder,
+        settings=settings,
+        agent_run_id=agent_run_id,
+        filtered_tool_specs=filtered_tool_specs,
+        bound_conversation=bound_conversation,
+        scope_system_prompt=scope_system_prompt,
+        allowed_app_ids=allowed_app_ids,
+        runtime_routing=runtime_routing,
+    ):
+        yield event
+
+
+async def _run_graph_instructed_single_loop_stream(
+    *,
+    context: LlmTaskContext,
+    execution,
+    db: Session,
+    workspace: Workspace,
+    principal: CallerPrincipal,
+    user: User,
+    messages: list[dict[str, Any]],
+    temperature: float | None,
+    stream_reasoning: bool,
+    encoder: EnvelopeEncoder,
+    settings: Any,
+    agent_run_id: str,
+    filtered_tool_specs: list[dict[str, Any]],
+    bound_conversation: Conversation | None,
+    scope_system_prompt: str | None,
+    allowed_app_ids: list[str] | None,
+    runtime_routing: RuntimeRoutingDecision,
+) -> AsyncIterator[Any]:
+    graph_tool_specs = (
+        _read_only_tool_specs(filtered_tool_specs)
+        if settings.ai_tool_calling_enabled and supports_tool_calling(execution.pool)
+        else []
+    )
+    graph_scope_system_prompt = _merge_system_prompts(
+        scope_system_prompt,
+        build_graph_execution_system_prompt(runtime_routing),
+    )
+    async for event in run_agent_turn_stream(
+        context=context,
+        execution=execution,
+        db=db,
+        workspace=workspace,
+        principal=principal,
+        user=user,
+        messages=messages,
+        temperature=temperature,
+        stream_reasoning=stream_reasoning,
+        encoder=encoder,
+        max_turns=settings.ai_agent_max_turns,
+        max_tool_calls=settings.ai_agent_max_tool_calls,
+        max_consecutive_tool_errors=settings.ai_agent_max_consecutive_tool_errors,
+        agent_run_id=agent_run_id,
+        tool_specs=graph_tool_specs,
+        bound_conversation=bound_conversation,
+        scope_system_prompt=graph_scope_system_prompt,
+        allowed_app_ids=allowed_app_ids,
+        runtime_profile=runtime_routing.runtime_profile,
+        runtime_routing_reason_codes=runtime_routing.reason_codes,
+        runtime_graph_gate=runtime_routing.graph_gate,
+        runtime_graph_fallback_reason=runtime_routing.graph_fallback_reason,
+        runtime_graph_used=runtime_routing.graph_used,
+        runtime_graph_validation_status=runtime_routing.graph_validation_status,
+        runtime_graph_validation_fallback_reason=(
+            runtime_routing.graph_validation_fallback_reason
+        ),
+        runtime_graph_registry_agent_count=runtime_routing.graph_registry_agent_count,
+        runtime_graph_write_agent_count=runtime_routing.graph_write_agent_count,
+        runtime_graph_candidate_summary=runtime_routing.graph_candidate_summary,
+        runtime_graph_schedule_summary=runtime_routing.graph_schedule_summary,
+        runtime_graph_execution_status=runtime_routing.graph_execution_status,
+        runtime_graph_execution_fallback_reason=(
+            runtime_routing.graph_execution_fallback_reason
+        ),
+        runtime_graph_execution_adapter=runtime_routing.graph_execution_adapter,
+        parallel_tool_calls=None,
+        include_agent_run_id_in_done=True,
+    ):
+        yield event
+
+
+async def _run_graph_node_runner_stream(
+    *,
+    context: LlmTaskContext,
+    execution,
+    db: Session,
+    workspace: Workspace,
+    principal: CallerPrincipal,
+    user: User,
+    messages: list[dict[str, Any]],
+    temperature: float | None,
+    stream_reasoning: bool,
+    encoder: EnvelopeEncoder,
+    settings: Any,
+    agent_run_id: str,
+    filtered_tool_specs: list[dict[str, Any]],
+    bound_conversation: Conversation | None,
+    scope_system_prompt: str | None,
+    allowed_app_ids: list[str] | None,
+    runtime_routing: RuntimeRoutingDecision,
+) -> AsyncIterator[Any]:
+    steps = _graph_schedule_steps(runtime_routing)
+    node_outputs: list[GraphNodeOutput] = []
+    graph_tools_enabled = settings.ai_tool_calling_enabled and supports_tool_calling(
+        execution.pool
+    )
+
+    for step in steps:
+        agent_id = step.get("agent_id")
+        if not isinstance(agent_id, str) or not agent_id or agent_id == GRAPH_WRITER_AGENT_ID:
+            continue
+        node_output = await _run_hidden_graph_node(
+            context=context,
+            execution=execution,
+            db=db,
+            workspace=workspace,
+            principal=principal,
+            user=user,
+            agent_id=agent_id,
+            messages=messages,
+            temperature=temperature,
+            settings=settings,
+            agent_run_id=agent_run_id,
+            tool_specs=_graph_node_tool_specs(
+                agent_id,
+                filtered_tool_specs,
+                tools_enabled=graph_tools_enabled,
+            ),
+            bound_conversation=bound_conversation,
+            scope_system_prompt=_merge_system_prompts(
+                scope_system_prompt,
+                build_graph_execution_system_prompt(runtime_routing),
+                build_graph_node_system_prompt(agent_id),
+            ),
+            allowed_app_ids=allowed_app_ids,
+            runtime_routing=runtime_routing,
+            prior_outputs=node_outputs,
+            step=step,
+        )
+        node_outputs.append(node_output)
+
+    writer_scope_prompt = _merge_system_prompts(
+        scope_system_prompt,
+        build_graph_execution_system_prompt(runtime_routing),
+        build_graph_writer_system_prompt(
+            messages=messages,
+            node_outputs=node_outputs,
+            candidate_summary=runtime_routing.graph_candidate_summary,
+        ),
+    )
+    async for event in run_agent_turn_stream(
+        context=context,
+        execution=execution,
+        db=db,
+        workspace=workspace,
+        principal=principal,
+        user=user,
+        messages=messages,
+        temperature=temperature,
+        stream_reasoning=stream_reasoning,
+        encoder=encoder,
+        max_turns=settings.ai_agent_max_turns,
+        max_tool_calls=settings.ai_agent_max_tool_calls,
+        max_consecutive_tool_errors=settings.ai_agent_max_consecutive_tool_errors,
+        agent_run_id=agent_run_id,
+        tool_specs=[],
+        bound_conversation=bound_conversation,
+        scope_system_prompt=writer_scope_prompt,
+        allowed_app_ids=allowed_app_ids,
+        runtime_profile=runtime_routing.runtime_profile,
+        runtime_routing_reason_codes=runtime_routing.reason_codes,
+        runtime_graph_gate=runtime_routing.graph_gate,
+        runtime_graph_fallback_reason=runtime_routing.graph_fallback_reason,
+        runtime_graph_used=runtime_routing.graph_used,
+        runtime_graph_validation_status=runtime_routing.graph_validation_status,
+        runtime_graph_validation_fallback_reason=(
+            runtime_routing.graph_validation_fallback_reason
+        ),
+        runtime_graph_registry_agent_count=runtime_routing.graph_registry_agent_count,
+        runtime_graph_write_agent_count=runtime_routing.graph_write_agent_count,
+        runtime_graph_candidate_summary=runtime_routing.graph_candidate_summary,
+        runtime_graph_schedule_summary=runtime_routing.graph_schedule_summary,
+        runtime_graph_execution_status=runtime_routing.graph_execution_status,
+        runtime_graph_execution_fallback_reason=(
+            runtime_routing.graph_execution_fallback_reason
+        ),
+        runtime_graph_execution_adapter=runtime_routing.graph_execution_adapter,
+        parallel_tool_calls=None,
+        include_agent_run_id_in_done=True,
+    ):
+        if event.type == "done":
+            writer_status = "failed" if event.data.finish_reason == "error" else "completed"
+            node_summary = _graph_node_execution_summary(
+                adapter=GRAPH_NODE_RUNNER_ADAPTER_ID,
+                node_outputs=node_outputs,
+                planned_steps=steps,
+                writer_status=writer_status,
+                messages=messages,
+                candidate_summary=runtime_routing.graph_candidate_summary,
+            )
+            meta = dict(event.data.meta.model_dump(mode="json") if event.data.meta else {})
+            meta["graph_node_execution_summary"] = node_summary
+            yield make_envelope(
+                "done",
+                event.seq,
+                {
+                    "finish_reason": event.data.finish_reason,
+                    "audit_id": event.data.audit_id,
+                    "meta": meta,
+                },
+                timestamp_ms=event.timestamp_ms,
+            )
+            continue
+        yield event
+
+
+async def _run_hidden_graph_node(
+    *,
+    context: LlmTaskContext,
+    execution,
+    db: Session,
+    workspace: Workspace,
+    principal: CallerPrincipal,
+    user: User,
+    agent_id: str,
+    messages: list[dict[str, Any]],
+    temperature: float | None,
+    settings: Any,
+    agent_run_id: str,
+    tool_specs: list[dict[str, Any]],
+    bound_conversation: Conversation | None,
+    scope_system_prompt: str | None,
+    allowed_app_ids: list[str] | None,
+    runtime_routing: RuntimeRoutingDecision,
+    prior_outputs: list[GraphNodeOutput],
+    step: dict[str, Any],
+) -> GraphNodeOutput:
+    hidden_messages = build_graph_node_messages(
+        messages,
+        agent_id=agent_id,
+        step=step,
+        prior_outputs=prior_outputs,
+        candidate_summary=runtime_routing.graph_candidate_summary,
+    )
+    hidden_encoder = EnvelopeEncoder()
+    content_parts: list[str] = []
+    tool_results: list[str] = []
+    errors: list[str] = []
+    finish_reason: str | None = None
+    async for event in run_agent_turn_stream(
+        context=context,
+        execution=execution,
+        db=db,
+        workspace=workspace,
+        principal=principal,
+        user=user,
+        messages=hidden_messages,
+        temperature=temperature,
+        stream_reasoning=False,
+        encoder=hidden_encoder,
+        max_turns=settings.ai_agent_max_turns,
+        max_tool_calls=settings.ai_agent_max_tool_calls,
+        max_consecutive_tool_errors=settings.ai_agent_max_consecutive_tool_errors,
+        agent_run_id=agent_run_id,
+        tool_specs=tool_specs,
+        bound_conversation=bound_conversation,
+        scope_system_prompt=scope_system_prompt,
+        allowed_app_ids=allowed_app_ids,
+        runtime_profile=runtime_routing.runtime_profile,
+        runtime_routing_reason_codes=runtime_routing.reason_codes,
+        runtime_graph_gate=runtime_routing.graph_gate,
+        runtime_graph_fallback_reason=runtime_routing.graph_fallback_reason,
+        runtime_graph_used=runtime_routing.graph_used,
+        runtime_graph_validation_status=runtime_routing.graph_validation_status,
+        runtime_graph_validation_fallback_reason=(
+            runtime_routing.graph_validation_fallback_reason
+        ),
+        runtime_graph_registry_agent_count=runtime_routing.graph_registry_agent_count,
+        runtime_graph_write_agent_count=runtime_routing.graph_write_agent_count,
+        runtime_graph_candidate_summary=runtime_routing.graph_candidate_summary,
+        runtime_graph_schedule_summary=runtime_routing.graph_schedule_summary,
+        runtime_graph_execution_status=runtime_routing.graph_execution_status,
+        runtime_graph_execution_fallback_reason=(
+            runtime_routing.graph_execution_fallback_reason
+        ),
+        runtime_graph_execution_adapter=runtime_routing.graph_execution_adapter,
+        parallel_tool_calls=None,
+        include_agent_run_id_in_done=False,
+    ):
+        if event.type == "content_delta":
+            content_parts.append(event.data.text)
+        elif event.type == "tool_result":
+            if event.data.result_preview:
+                tool_results.append(event.data.result_preview)
+            if event.data.error:
+                errors.append(event.data.error)
+        elif event.type == "error":
+            errors.append(event.data.message)
+        elif event.type == "done":
+            finish_reason = event.data.finish_reason
+
+    status = "failed" if errors or finish_reason == "error" else "completed"
+    return GraphNodeOutput(
+        agent_id=agent_id,
+        status=status,
+        text="".join(content_parts).strip(),
+        tool_results=tuple(tool_results),
+        error="; ".join(errors) if errors else None,
+    )
+
+
+def _merge_system_prompts(*prompts: str | None) -> str | None:
+    parts = [prompt.strip() for prompt in prompts if isinstance(prompt, str) and prompt.strip()]
+    return "\n\n".join(parts) if parts else None
+
+
+def _read_only_tool_specs(tool_specs: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    registry = get_ai_capability_registry()
+    read_only_specs: list[dict[str, Any]] = []
+    for spec in tool_specs:
+        tool_name = spec.get("function", {}).get("name")
+        if not isinstance(tool_name, str):
+            continue
+        descriptor = registry.descriptors.get(tool_name)
+        if descriptor is None or descriptor.mode == "read":
+            read_only_specs.append(spec)
+    return read_only_specs
+
+
+def _graph_schedule_steps(runtime_routing: RuntimeRoutingDecision) -> list[dict[str, Any]]:
+    schedule_summary = runtime_routing.graph_schedule_summary
+    if not isinstance(schedule_summary, dict):
+        return []
+    steps = schedule_summary.get("steps")
+    if not isinstance(steps, list):
+        return []
+    normalized: list[dict[str, Any]] = []
+    for step in steps:
+        if not isinstance(step, dict):
+            continue
+        agent_id = step.get("agent_id")
+        if not isinstance(agent_id, str) or not agent_id:
+            continue
+        try:
+            invocation_seq = int(step.get("invocation_seq") or 0)
+        except (TypeError, ValueError):
+            invocation_seq = 0
+        normalized.append({**step, "agent_id": agent_id, "invocation_seq": invocation_seq})
+    return sorted(normalized, key=lambda item: int(item["invocation_seq"]))
+
+
+def _graph_node_tool_specs(
+    agent_id: str,
+    tool_specs: list[dict[str, Any]],
+    *,
+    tools_enabled: bool,
+) -> list[dict[str, Any]]:
+    if not tools_enabled:
+        return []
+    registry = get_ai_capability_registry()
+    allowed_app_id = _workspace_app_id_for_graph_agent(agent_id)
+    allowed_tool_names = _tool_names_for_graph_agent(agent_id)
+    selected: list[dict[str, Any]] = []
+    for spec in tool_specs:
+        tool_name = spec.get("function", {}).get("name")
+        if not isinstance(tool_name, str):
+            continue
+        descriptor = registry.descriptors.get(tool_name)
+        if descriptor is not None and descriptor.mode != "read":
+            continue
+        if allowed_tool_names and tool_name not in allowed_tool_names:
+            continue
+        if allowed_app_id is not None:
+            if descriptor is None or descriptor.workspace_app_id != allowed_app_id:
+                continue
+        selected.append(spec)
+    return selected
+
+
+def _workspace_app_id_for_graph_agent(agent_id: str) -> str | None:
+    if agent_id.startswith("domain."):
+        domain = agent_id.removeprefix("domain.")
+        if domain in {"pms", "meeting", "docs", "planner"}:
+            return domain
+    return None
+
+
+def _tool_names_for_graph_agent(agent_id: str) -> set[str]:
+    if agent_id == "search.planner":
+        return {"rag.list_sources"}
+    if agent_id in {"domain.rag", "search.executor"}:
+        return {"rag.query", "rag.list_sources"}
+    return set()
+
+
+def _graph_node_execution_summary(
+    *,
+    adapter: str,
+    node_outputs: list[GraphNodeOutput],
+    planned_steps: list[dict[str, Any]],
+    writer_status: str,
+    messages: list[dict[str, Any]],
+    candidate_summary: dict[str, Any] | None,
+) -> dict[str, Any]:
+    evidence_packet = materialize_graph_evidence_packet(
+        messages=messages,
+        node_outputs=node_outputs,
+        candidate_summary=candidate_summary,
+    )
+    nodes = [
+        {
+            "agent_id": output.agent_id,
+            "status": output.status,
+            "has_text": bool(output.text),
+            "tool_result_count": len(output.tool_results),
+            "error": _trim_graph_text(output.error or "", limit=240) or None,
+        }
+        for output in node_outputs
+    ]
+    planned_agent_ids = [
+        step["agent_id"]
+        for step in planned_steps
+        if isinstance(step.get("agent_id"), str)
+    ]
+    covered_agent_ids = {node["agent_id"] for node in nodes}
+    if "writer.template" in planned_agent_ids:
+        nodes.append(
+            {
+                "agent_id": "writer.template",
+                "status": writer_status,
+                "has_text": writer_status == "completed",
+                "tool_result_count": 0,
+                "error": None,
+            }
+        )
+        covered_agent_ids.add("writer.template")
+    return {
+        "adapter": adapter,
+        "planned_node_count": len(planned_agent_ids),
+        "covered_node_count": len(covered_agent_ids),
+        "failed_node_count": sum(1 for node in nodes if node["status"] == "failed"),
+        "verifier_failure_policy": graph_verifier_failure_policy(
+            node_outputs,
+            requires_verifier=bool(
+                isinstance(candidate_summary, dict)
+                and candidate_summary.get("requires_verifier") is True
+            ),
+        ),
+        "evidence_packet_summary": summarize_graph_evidence_packet(evidence_packet),
+        "nodes": nodes,
+    }
+
+
+def _trim_graph_text(value: str, *, limit: int) -> str:
+    collapsed = " ".join(value.split())
+    if len(collapsed) <= limit:
+        return collapsed
+    return f"{collapsed[: limit - 1]}…"
 
 
 def _tool_command_events(
@@ -2164,6 +2761,7 @@ def _runtime_done_meta(runtime_routing: RuntimeRoutingDecision) -> dict[str, Any
         "graph_execution_status": runtime_routing.graph_execution_status,
         "graph_execution_fallback_reason": runtime_routing.graph_execution_fallback_reason,
         "graph_execution_adapter": runtime_routing.graph_execution_adapter,
+        "graph_node_execution_summary": None,
     }
 
 
@@ -2826,6 +3424,7 @@ def _persist_assistant_turn(
         "graph_execution_status": done_meta.get("graph_execution_status"),
         "graph_execution_fallback_reason": done_meta.get("graph_execution_fallback_reason"),
         "graph_execution_adapter": done_meta.get("graph_execution_adapter"),
+        "graph_node_execution_summary": done_meta.get("graph_node_execution_summary"),
         "finish_reason": buffer.finish_reason,
         "response_status": response_status,
         "tool_calls": buffer.tool_calls,

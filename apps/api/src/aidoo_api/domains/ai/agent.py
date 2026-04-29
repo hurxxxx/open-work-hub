@@ -116,6 +116,7 @@ async def run_agent_turn_stream(
     runtime_graph_execution_fallback_reason: str | None = None,
     runtime_graph_execution_adapter: str | None = None,
     parallel_tool_calls: bool | None = None,
+    include_agent_run_id_in_done: bool = False,
 ) -> AsyncIterator[Any]:
     conversation = _prepend_agent_system_message(
         messages,
@@ -166,6 +167,7 @@ async def run_agent_turn_stream(
         current_snapshot=None,
         replay_approval=None,
         model_meta=model_meta,
+        include_agent_run_id_in_done=include_agent_run_id_in_done,
     ):
         yield event
 
@@ -225,6 +227,7 @@ async def resume_agent_run(
         current_snapshot=snapshot,
         replay_approval=approval,
         model_meta=replay_config.raw,
+        include_agent_run_id_in_done=True,
     ):
         yield event
 
@@ -252,6 +255,7 @@ async def _run_agent_loop_stream(
     current_snapshot: ai_approvals.AgentRunSnapshot | None,
     replay_approval: ai_approvals.AiToolApproval | None,
     model_meta: dict[str, Any],
+    include_agent_run_id_in_done: bool,
 ) -> AsyncIterator[Any]:
     state = _LoopState()
     replay_tool_executed = False
@@ -315,7 +319,12 @@ async def _run_agent_loop_stream(
                         {
                             "finish_reason": "error",
                             "audit_id": None,
-                            "meta": _build_done_meta(execution, model_meta=model_meta),
+                            "meta": _loop_done_meta(
+                                execution,
+                                model_meta=model_meta,
+                                agent_run_id=agent_run_id,
+                                include_agent_run_id=include_agent_run_id_in_done,
+                            ),
                         },
                     )
                     return
@@ -331,8 +340,8 @@ async def _run_agent_loop_stream(
                 messages=conversation,
                 temperature=temperature,
                 stream_reasoning=stream_reasoning,
-                tools=tool_specs,
-                tool_choice=tool_choice_state,
+                tools=tool_specs or None,
+                tool_choice=tool_choice_state if tool_specs else None,
                 parallel_tool_calls=parallel_tool_calls,
                 resolved_execution=execution,
                 agent_run_id=agent_run_id,
@@ -414,7 +423,12 @@ async def _run_agent_loop_stream(
                     {
                         "finish_reason": turn_finish_reason,
                         "audit_id": None,
-                        "meta": _build_done_meta(execution, model_meta=model_meta),
+                        "meta": _loop_done_meta(
+                            execution,
+                            model_meta=model_meta,
+                            agent_run_id=agent_run_id,
+                            include_agent_run_id=include_agent_run_id_in_done,
+                        ),
                     },
                 )
                 return
@@ -436,7 +450,12 @@ async def _run_agent_loop_stream(
                     {
                         "finish_reason": "error",
                         "audit_id": None,
-                        "meta": _build_done_meta(execution, model_meta=model_meta),
+                        "meta": _loop_done_meta(
+                            execution,
+                            model_meta=model_meta,
+                            agent_run_id=agent_run_id,
+                            include_agent_run_id=include_agent_run_id_in_done,
+                        ),
                     },
                 )
                 return
@@ -461,7 +480,12 @@ async def _run_agent_loop_stream(
                         {
                             "finish_reason": "error",
                             "audit_id": None,
-                            "meta": _build_done_meta(execution, model_meta=model_meta),
+                            "meta": _loop_done_meta(
+                                execution,
+                                model_meta=model_meta,
+                                agent_run_id=agent_run_id,
+                                include_agent_run_id=include_agent_run_id_in_done,
+                            ),
                         },
                     )
                     return
@@ -485,7 +509,12 @@ async def _run_agent_loop_stream(
                         {
                             "finish_reason": "error",
                             "audit_id": None,
-                            "meta": _build_done_meta(execution, model_meta=model_meta),
+                            "meta": _loop_done_meta(
+                                execution,
+                                model_meta=model_meta,
+                                agent_run_id=agent_run_id,
+                                include_agent_run_id=include_agent_run_id_in_done,
+                            ),
                         },
                     )
                     return
@@ -603,7 +632,12 @@ async def _run_agent_loop_stream(
                             {
                                 "finish_reason": "error",
                                 "audit_id": None,
-                                "meta": _build_done_meta(execution, model_meta=model_meta),
+                                "meta": _loop_done_meta(
+                                    execution,
+                                    model_meta=model_meta,
+                                    agent_run_id=agent_run_id,
+                                    include_agent_run_id=include_agent_run_id_in_done,
+                                ),
                             },
                         )
                         return
@@ -626,7 +660,12 @@ async def _run_agent_loop_stream(
             {
                 "finish_reason": "error",
                 "audit_id": None,
-                "meta": _build_done_meta(execution, model_meta=model_meta),
+                "meta": _loop_done_meta(
+                    execution,
+                    model_meta=model_meta,
+                    agent_run_id=agent_run_id,
+                    include_agent_run_id=include_agent_run_id_in_done,
+                ),
             },
         )
     except (asyncio.CancelledError, GeneratorExit):
@@ -755,6 +794,20 @@ def _merge_usage(
     return merged
 
 
+def _loop_done_meta(
+    execution: ResolvedLlmExecution,
+    *,
+    model_meta: dict[str, Any],
+    agent_run_id: str,
+    include_agent_run_id: bool,
+) -> dict[str, Any]:
+    return _build_done_meta(
+        execution,
+        model_meta=model_meta,
+        agent_run_id=agent_run_id if include_agent_run_id else None,
+    )
+
+
 def _build_done_meta(
     execution: ResolvedLlmExecution,
     *,
@@ -798,6 +851,7 @@ def _runtime_done_meta(model_meta: dict[str, Any]) -> dict[str, Any]:
         "graph_execution_status": model_meta.get("graph_execution_status"),
         "graph_execution_fallback_reason": model_meta.get("graph_execution_fallback_reason"),
         "graph_execution_adapter": model_meta.get("graph_execution_adapter"),
+        "graph_node_execution_summary": model_meta.get("graph_node_execution_summary"),
     }
 
 
@@ -855,6 +909,7 @@ def _build_snapshot_model_meta(
         "graph_execution_status": runtime_graph_execution_status,
         "graph_execution_fallback_reason": runtime_graph_execution_fallback_reason,
         "graph_execution_adapter": runtime_graph_execution_adapter,
+        "graph_node_execution_summary": None,
         "scope": _build_snapshot_scope_meta(
             allowed_app_ids=allowed_app_ids,
             tool_specs=tool_specs,

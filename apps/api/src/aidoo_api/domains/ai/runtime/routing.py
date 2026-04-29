@@ -65,7 +65,7 @@ class RuntimeRoutingDecision:
     runtime_profile: RuntimeProfile
     reason_codes: tuple[str, ...]
     graph_gate: GraphGateDecision
-    graph_fallback_reason: GraphFallbackReason
+    graph_fallback_reason: GraphFallbackReason | None
     graph_used: bool = False
     graph_validation_status: GraphValidationStatus = "not_applicable"
     graph_validation_fallback_reason: str | None = None

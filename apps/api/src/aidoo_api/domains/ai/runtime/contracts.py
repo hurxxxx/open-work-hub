@@ -130,12 +130,28 @@ class EvidenceCoverage(BaseModel):
     intents_missed: list[str] = Field(default_factory=list)
 
 
+class EvidenceQuality(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    verifier_status: str | None = None
+    ready_for_grounded_write: bool = False
+    failed_node_count: int = Field(default=0, ge=0)
+    evidence_item_count: int = Field(default=0, ge=0)
+    tool_result_count: int = Field(default=0, ge=0)
+
+
 class EvidencePacket(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
+    packet_version: Literal["evidence_packet.v1"] = "evidence_packet.v1"
+    intent: str | None = None
+    output_kind: str | None = None
+    source_agent_ids: list[str] = Field(default_factory=list)
     query_plan: QueryPlan
     items: list[EvidenceItem] = Field(default_factory=list)
     coverage: EvidenceCoverage = Field(default_factory=EvidenceCoverage)
+    quality: EvidenceQuality = Field(default_factory=EvidenceQuality)
+    gaps: list[str] = Field(default_factory=list)
 
 
 class AgentRunContract(BaseModel):

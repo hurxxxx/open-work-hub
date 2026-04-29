@@ -23,13 +23,13 @@ Phase 6 전체 목표는 기존 single-loop agent를 deterministic fast path, ma
 
 이 섹션은 세션 handoff용이다. 구현 세션이 끝날 때마다 짧게 갱신한다.
 
-- Current PR/stage: Phase 0-O graph execution adapter gate skeleton implemented. Graph execution still falls back to the existing single-loop path.
-- Last completed: Added a separate `AIDOO_AI_RUNTIME_GRAPH_EXECUTION_ENABLED` gate and graph execution adapter decision metadata. Accepted graph schedules now report `disabled` while the execution gate is off, and report `adapter_unavailable` if the execution gate is enabled before an adapter is implemented. The decision is carried through SSE done metadata, approval snapshots/rehydration, persisted assistant metadata, runtime shadow metadata, and `graph_execution_gate_evaluated` trace events.
+- Current PR/stage: Phase 0-R grounded-report graph node runner hardening behind `AIDOO_AI_RUNTIME_GRAPH_EXECUTION_ENABLED`.
+- Last completed: Hardened `graph_node_runner_v0` with deterministic graph-node input builders, structured EvidencePacket DTO materialization, EvidencePacket summary metadata, and verifier failure policy. Supported schedules still run hidden domain/search/verifier nodes in schedule order, pass only the structured EvidencePacket JSON plus policy to `writer.template`, stream only writer output to the user, expose `graph_node_execution_summary` in terminal metadata, and shadow-write per-node runtime invocation status plus graph node trace events. `graph_instructed_single_loop_v0` remains as a fallback adapter path but is no longer selected for supported report graphs.
 - In progress: None.
-- Next exact task: Commit/push the Phase 0-O scheduler + approval/invocation/execution-gate slice when requested, then implement the first real graph execution adapter behind `AIDOO_AI_RUNTIME_GRAPH_EXECUTION_ENABLED`.
-- Files touched in Phase 0-K: `apps/api/src/aidoo_api/domains/ai/agent.py`, `apps/api/src/aidoo_api/domains/ai/approvals.py`, `apps/api/src/aidoo_api/domains/ai/events.py`, `apps/api/src/aidoo_api/domains/ai/router.py`, `apps/api/src/aidoo_api/domains/ai/runtime/__init__.py`, `apps/api/src/aidoo_api/domains/ai/runtime/contracts.py`, `apps/api/src/aidoo_api/domains/ai/runtime/graph_scheduler.py`, `apps/api/src/aidoo_api/domains/ai/runtime/persistence.py`, `apps/api/src/aidoo_api/domains/ai/runtime/routing.py`, `apps/api/tests/fixtures/envelope_schema.json`, `apps/api/tests/test_ai_runtime_contracts.py`, `apps/api/tests/test_ai_stream.py`, `plans/03-phase6-evidence-runtime-implementation.md`.
-- Tests/checks run: `cd apps/api && uv run pytest tests/test_ai_runtime_contracts.py tests/test_ai_runtime_routing.py tests/test_ai_runtime_settings.py tests/test_ai_stream.py::test_chat_stream_done_meta_uses_requested_model tests/test_ai_stream.py::test_chat_stream_graph_gate_falls_back_without_graph_execution tests/test_ai_stream.py::test_chat_stream_graph_schedule_failure_remains_fallback_metadata tests/test_ai_stream.py::test_chat_stream_agent_loop_halt_preserves_graph_schedule_summary tests/test_ai_stream.py::test_chat_stream_agent_loop_halts_for_approval_required_tool tests/test_ai_approvals.py tests/test_ai_events.py::test_envelope_schema_snapshot_matches` (`79 passed`); targeted `uv run ruff check` for touched Python files; `git diff --check`.
-- Known blockers: graph node execution is still intentionally not implemented; single-loop fallback remains canonical. If `AIDOO_AI_RUNTIME_GRAPH_EXECUTION_ENABLED=true` before an adapter exists, metadata reports `graph_execution_status=adapter_unavailable`.
+- Next exact task: Extend support beyond grounded reports or add explicit fallback policy per unsupported graph shape. Durable workflow backend and raw hidden-node output storage remain out of scope until that decision is made.
+- Files touched in Phase 0-R: `apps/api/project.json`, `apps/api/src/aidoo_api/domains/ai/agent.py`, `apps/api/src/aidoo_api/domains/ai/events.py`, `apps/api/src/aidoo_api/domains/ai/router.py`, `apps/api/src/aidoo_api/domains/ai/runtime/__init__.py`, `apps/api/src/aidoo_api/domains/ai/runtime/contracts.py`, `apps/api/src/aidoo_api/domains/ai/runtime/graph_execution.py`, `apps/api/src/aidoo_api/domains/ai/runtime/persistence.py`, `apps/api/src/aidoo_api/domains/ai/runtime/routing.py`, `apps/api/tests/fixtures/envelope_schema.json`, `apps/api/tests/test_ai_runtime_contracts.py`, `apps/api/tests/test_ai_runtime_routing.py`, `apps/api/tests/test_ai_stream.py`, `plans/03-phase6-evidence-runtime-implementation.md`.
+- Tests/checks run: `cd apps/api && uv run ruff check src/aidoo_api/domains/ai/router.py src/aidoo_api/domains/ai/runtime/graph_execution.py src/aidoo_api/domains/ai/runtime/contracts.py src/aidoo_api/domains/ai/runtime/__init__.py tests/test_ai_runtime_contracts.py tests/test_ai_stream.py`; `cd apps/api && uv run pytest tests/test_ai_runtime_contracts.py`; `cd apps/api && uv run pytest tests/test_ai_runtime_routing.py`; `cd apps/api && uv run pytest tests/test_ai_stream.py::test_chat_stream_graph_execution_adapter_runs_when_enabled tests/test_ai_stream.py::test_chat_stream_graph_execution_verifier_failure_degrades_writer_prompt tests/test_ai_stream.py::test_chat_stream_graph_execution_adapter_error_persists_failed_runtime`; `cd apps/api && uv run pytest tests/test_ai_stream.py`; `cd apps/api && uv run pytest tests/test_ai_approvals.py tests/test_ai_runtime_contracts.py tests/test_ai_runtime_persistence.py tests/test_ai_events.py::test_envelope_schema_snapshot_matches`; `git diff --check`.
+- Known blockers: `graph_node_runner_v0` is still an in-process runner, not a durable workflow backend. Hidden node outputs are not persisted verbatim; only status/count/error summary is persisted. High-risk / approval-preview graphs are intentionally not supported by this adapter.
 
 ## Architecture / Principles
 
@@ -291,17 +291,54 @@ cd apps/api && pytest tests/test_ai_runtime_contracts.py tests/test_ai_runtime_p
 
 ## Known Follow-Ups Before Graph Manager Execution
 
-- Manager candidate graph generation/validation is wired to router metadata only; `graph_gate=eligible`이어도 `graph_fallback_reason=graph_runtime_not_implemented`로 single-loop fallback을 유지한다.
-- Accepted graph validation must not be treated as execution authority until graph execution is explicitly implemented and separately gated.
+- Manager candidate graph generation/validation is now wired to both metadata and the first graph-aware execution adapter. `AIDOO_AI_RUNTIME_GRAPH_ENABLED=true` plus `AIDOO_AI_RUNTIME_GRAPH_EXECUTION_ENABLED=true` is required before supported accepted graphs use the adapter.
+- Accepted graph validation is still not sufficient by itself. Execution requires the separate execution gate and adapter support; unsupported graphs keep fallback metadata.
 - Candidate graph summary is intentionally allowlisted to high-level fields only: intent, domains, risk, output kind, invocation agent ids, verifier flag, and approval-preview flag.
-- Graph schedule summary is intentionally non-executing: `execution_enabled=false`, `state=planned`, agent ids, invocation sequence, and dependency ids only. It must not be treated as execution authority until graph node execution is separately implemented and gated.
+- Graph schedule summary remains `state=planned`, agent ids, invocation sequence, and dependency ids. `execution_enabled=true` currently means `graph_node_runner_v0` or another execution adapter was selected; it does not yet mean a durable workflow backend owns the run.
 - Candidate graph trace events materialize for approval shadow runs and persisted non-approval graph-eligible fallback streams. `persist=false` streams still expose the summary only in SSE metadata because they intentionally do not create conversation/runtime records.
+- Graph execution adapter trace events materialize for persisted adapter streams as `graph_execution_shadow`; `graph_node_runner_v0` records per-node status events, but raw node output remains ephemeral and is summarized only in terminal metadata.
 - Long-running graph trace scheduler를 붙이기 전에 runtime retention helper를 실제 운영 job/admin trigger로 연결한다.
 - Runtime metric은 counter skeleton만 있다. Operator-facing rollout 전 dashboard/alert threshold를 별도 정의한다.
 - Phase 0-A에서 기존 table에 추가하는 `ai_tool_approvals` partial index는 의도된 tooling index 1건으로 기록한다. 이후 hot-table index 변경은 별도 concurrent migration으로 분리한다.
 - 새 runtime status를 추가할 때 migration SQL, ORM partial index, runtime status constant의 live-status literal drift를 함께 점검한다.
 
 ## E2E Smoke Log
+
+### 2026-04-29 Phase 0-R Graph Runtime Smoke
+
+- Reused existing web dev server on `127.0.0.1:4200`.
+- The previous `uvicorn --reload` process on `127.0.0.1:8000` was stale and did not respond; it was terminated and API was restarted with `DOOWON_API_AUTO_MIGRATE=1 pnpm nx dev api`.
+- Local Postgres schema was empty, so startup applied Alembic migrations through `e7f8a9b0c1d2` and seeded the baseline records.
+- Created the initial local admin with `POST /api/v1/auth/setup` as `admin@aidoo.local`; subsequent bootstrap status exposed the seeded dev-login accounts.
+- API smoke:
+  - `GET /api/v1/auth/bootstrap-status` returned 200 through both API direct and web proxy.
+  - Authenticated `GET /api/v1/auth/me` returned 200 for `admin@aidoo.local`.
+  - Authenticated `GET /api/v1/ai/health` returned 200 with `ready=false` because the local MLX server was not running and external OpenRouter credentials are not configured.
+- Browser smoke with `agent-browser --session phase6-smoke`:
+  - Opened `http://127.0.0.1:4200/`, quick-login as `Aidoo HQ Admin` succeeded, final URL `/w/hq/home`.
+  - Navigated to `/w/hq/ai`; AI workspace shell and composer rendered.
+  - Final URL: `http://127.0.0.1:4200/w/hq/ai`.
+  - Accessibility snapshot exposed workspace navigation, AI side menu, routing status button, app context selector, routing selector, and disabled send button before text entry.
+  - Console contained only Vite debug lines and the React DevTools info message; `agent-browser errors` returned no page errors.
+
+### 2026-04-29 Phase 0-R MLX Local LLM Smoke
+
+- Started MLX with `bash scripts/mlx-serve.sh`; server is listening on `127.0.0.1:8080` with `mlx-community/Qwen3.6-35B-A3B-4bit`.
+- Fixed the local API dev command so `pnpm nx dev api` runs with `DOOWON_API_AUTO_MIGRATE=1`; this prevents reload/startup from calling seed data against an unmigrated empty DB and failing on missing `org_units`.
+- `GET http://127.0.0.1:8080/v1/models` returned 200 and listed the configured MLX model.
+- Authenticated `GET /api/v1/ai/health` returned 200 with `local.ready=true` and external pool still `not_configured`.
+- Direct MLX chat completion with `max_tokens=512` returned assistant content `MLX smoke OK`. Lower `max_tokens` values can finish inside Qwen reasoning output before content is emitted.
+- API sync chat through `/api/v1/workspaces/hq/ai/chat` with `backend_mode=local`, `max_tokens=512`, and `Say exactly: MLX smoke OK` returned 200:
+  - `provider=mlx-lm`
+  - `chosen_pool=local`
+  - `policy=local_only`
+  - `finish_reason=stop`
+  - content `MLX smoke OK`
+- Browser smoke with `agent-browser --session phase6-mlx-check`:
+  - Quick-login as `Aidoo HQ Admin` succeeded and `/w/hq/ai` rendered.
+  - The AI conversation list showed `Say exactly: MLX smoke OK`.
+  - Opening the conversation rendered the persisted user turn, assistant content `MLX smoke OK`, and routing metadata `local 풀 · local_only · policy_local_only`.
+  - Console contained only Vite debug lines and the React DevTools info message; `agent-browser errors` returned no page errors.
 
 ### 2026-04-28 Phase 0-A Hardening Smoke
 

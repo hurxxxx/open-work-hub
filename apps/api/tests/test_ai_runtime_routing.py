@@ -4,7 +4,10 @@ import json
 from pathlib import Path
 
 from aidoo_api.domains.ai.runtime.graph_execution import (
+    GRAPH_INSTRUCTED_SINGLE_LOOP_ADAPTER_ID,
+    GRAPH_NODE_RUNNER_ADAPTER_ID,
     attach_graph_execution_adapter_decision,
+    build_graph_execution_system_prompt,
 )
 from aidoo_api.domains.ai.runtime.manager_validation import ManagerGraphValidationResult
 from aidoo_api.domains.ai.runtime.routing import (
@@ -88,7 +91,13 @@ def test_manager_graph_validation_result_marks_accepted() -> None:
         validation=ManagerGraphValidationResult(accepted=True, graph=None),
         registry_agent_count=10,
         write_agent_count=1,
-        graph_candidate_summary={"intent": "report", "invocation_agent_ids": []},
+        graph_candidate_summary={
+            "intent": "report",
+            "risk": "medium",
+            "output_kind": "artifact",
+            "requires_approval_preview": False,
+            "invocation_agent_ids": [],
+        },
     )
 
     assert traced.graph_gate == "eligible"
@@ -97,7 +106,13 @@ def test_manager_graph_validation_result_marks_accepted() -> None:
     assert traced.graph_validation_fallback_reason is None
     assert traced.graph_registry_agent_count == 10
     assert traced.graph_write_agent_count == 1
-    assert traced.graph_candidate_summary == {"intent": "report", "invocation_agent_ids": []}
+    assert traced.graph_candidate_summary == {
+        "intent": "report",
+        "risk": "medium",
+        "output_kind": "artifact",
+        "requires_approval_preview": False,
+        "invocation_agent_ids": [],
+    }
     assert traced.graph_execution_status == "not_applicable"
 
 
@@ -113,7 +128,13 @@ def test_graph_execution_adapter_gate_stays_disabled_until_flag_enabled() -> Non
         validation=ManagerGraphValidationResult(accepted=True, graph=None),
         registry_agent_count=10,
         write_agent_count=1,
-        graph_candidate_summary={"intent": "report", "invocation_agent_ids": []},
+        graph_candidate_summary={
+            "intent": "report",
+            "risk": "medium",
+            "output_kind": "artifact",
+            "requires_approval_preview": False,
+            "invocation_agent_ids": [],
+        },
         graph_schedule_summary={
             "state": "planned",
             "execution_enabled": False,
@@ -134,7 +155,7 @@ def test_graph_execution_adapter_gate_stays_disabled_until_flag_enabled() -> Non
     assert gated.graph_execution_adapter is None
 
 
-def test_graph_execution_adapter_gate_reports_unavailable_adapter_when_enabled() -> None:
+def test_graph_execution_adapter_gate_selects_node_runner_when_enabled() -> None:
     decision = select_runtime_profile(
         messages=_messages("회의록과 PMS 이슈를 비교해서 근거 있는 보고서로 정리해줘"),
         allowed_app_ids=["meeting", "pms"],
@@ -146,7 +167,13 @@ def test_graph_execution_adapter_gate_reports_unavailable_adapter_when_enabled()
         validation=ManagerGraphValidationResult(accepted=True, graph=None),
         registry_agent_count=10,
         write_agent_count=1,
-        graph_candidate_summary={"intent": "report", "invocation_agent_ids": []},
+        graph_candidate_summary={
+            "intent": "report",
+            "risk": "medium",
+            "output_kind": "artifact",
+            "requires_approval_preview": False,
+            "invocation_agent_ids": [],
+        },
         graph_schedule_summary={
             "state": "planned",
             "execution_enabled": False,
@@ -161,10 +188,104 @@ def test_graph_execution_adapter_gate_reports_unavailable_adapter_when_enabled()
         graph_execution_enabled=True,
     )
 
+    assert gated.graph_used is True
+    assert gated.graph_fallback_reason is None
+    assert gated.graph_execution_status == "adapter_selected"
+    assert gated.graph_execution_fallback_reason is None
+    assert gated.graph_execution_adapter == GRAPH_NODE_RUNNER_ADAPTER_ID
+    assert gated.graph_schedule_summary is not None
+    assert gated.graph_schedule_summary["execution_enabled"] is True
+
+
+def test_graph_execution_adapter_gate_keeps_high_risk_graph_unavailable() -> None:
+    decision = select_runtime_profile(
+        messages=_messages("PMS 이슈를 생성해줘"),
+        allowed_app_ids=["pms"],
+        max_tokens=None,
+        graph_enabled=True,
+    )
+    traced = attach_manager_graph_validation_result(
+        decision,
+        validation=ManagerGraphValidationResult(accepted=True, graph=None),
+        registry_agent_count=10,
+        write_agent_count=1,
+        graph_candidate_summary={
+            "intent": "write",
+            "risk": "high",
+            "output_kind": "approval_preview",
+            "requires_approval_preview": True,
+            "invocation_agent_ids": ["domain.pms", "approval.proposal_preview"],
+        },
+        graph_schedule_summary={
+            "state": "planned",
+            "execution_enabled": False,
+            "step_count": 2,
+            "planned_agent_ids": ["domain.pms", "approval.proposal_preview"],
+            "steps": [],
+        },
+    )
+
+    gated = attach_graph_execution_adapter_decision(
+        traced,
+        graph_execution_enabled=True,
+    )
+
     assert gated.graph_used is False
     assert gated.graph_execution_status == "adapter_unavailable"
-    assert gated.graph_execution_fallback_reason == "graph_runtime_not_implemented"
+    assert gated.graph_execution_fallback_reason == "graph_execution_adapter_unsupported"
     assert gated.graph_execution_adapter is None
+
+
+def test_graph_execution_system_prompt_summarizes_plan_without_user_content() -> None:
+    decision = select_runtime_profile(
+        messages=_messages("회의록과 PMS 이슈를 비교해서 근거 있는 보고서로 정리해줘"),
+        allowed_app_ids=["meeting", "pms"],
+        max_tokens=None,
+        graph_enabled=True,
+    )
+    traced = attach_manager_graph_validation_result(
+        decision,
+        validation=ManagerGraphValidationResult(accepted=True, graph=None),
+        registry_agent_count=10,
+        write_agent_count=1,
+        graph_candidate_summary={
+            "intent": "report",
+            "domains": ["meeting", "pms"],
+            "risk": "medium",
+            "output_kind": "artifact",
+            "requires_approval_preview": False,
+        },
+        graph_schedule_summary={
+            "state": "planned",
+            "execution_enabled": True,
+            "planned_agent_ids": ["domain.meeting", "writer.template"],
+            "steps": [
+                {
+                    "invocation_seq": 0,
+                    "agent_id": "domain.meeting",
+                    "depends_on_agent_ids": [],
+                },
+                {
+                    "invocation_seq": 1,
+                    "agent_id": "writer.template",
+                    "depends_on_agent_ids": ["domain.meeting"],
+                },
+            ],
+        },
+    )
+
+    gated = attach_graph_execution_adapter_decision(
+        traced,
+        graph_execution_enabled=True,
+    )
+
+    prompt = build_graph_execution_system_prompt(gated)
+
+    assert GRAPH_NODE_RUNNER_ADAPTER_ID in prompt
+    assert GRAPH_INSTRUCTED_SINGLE_LOOP_ADAPTER_ID not in prompt
+    assert "domain.meeting" in prompt
+    assert "writer.template after [domain.meeting]" in prompt
+    assert "회의록과 PMS 이슈" not in prompt
 
 
 def test_runtime_profile_selects_long_doc_for_large_budget() -> None:
