@@ -6,6 +6,7 @@ from fastapi.testclient import TestClient
 import pytest
 
 from ai_runtime_mock_harness import run_mock_external_graph_stream
+from aidoo_api.domains.ai import router as ai_router
 
 
 @pytest.fixture(autouse=True)
@@ -104,6 +105,13 @@ def test_unimplemented_external_adapter_selection_is_trace_safe(
     client: TestClient,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    metric_calls: list[dict[str, object]] = []
+    monkeypatch.setattr(
+        ai_router,
+        "record_external_execution",
+        lambda **payload: metric_calls.append(payload),
+    )
+
     result = run_mock_external_graph_stream(
         client,
         monkeypatch,
@@ -154,3 +162,19 @@ def test_unimplemented_external_adapter_selection_is_trace_safe(
     generated = inspected_trace["graph_candidate_generated"]
     assert generated["external_planner_execution_summary"] == planner_execution
     assert generated["external_search_execution_summary"] == search_execution
+    assert metric_calls == [
+        {
+            "capability": "planning",
+            "adapter_id": "external_planner_v0",
+            "execution_provider": "openai",
+            "status": "failed",
+            "error_class": "adapter_not_implemented",
+        },
+        {
+            "capability": "search",
+            "adapter_id": "external_search_v0",
+            "execution_provider": "anthropic",
+            "status": "failed",
+            "error_class": "adapter_not_implemented",
+        },
+    ]

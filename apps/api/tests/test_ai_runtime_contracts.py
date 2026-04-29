@@ -3,6 +3,8 @@ from __future__ import annotations
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from opentelemetry.sdk.metrics import MeterProvider
+from opentelemetry.sdk.metrics.export import InMemoryMetricReader
 from pydantic import ValidationError
 
 from aidoo_api.app import runtime_registry_validation_exception_handler
@@ -41,11 +43,24 @@ from aidoo_api.domains.ai.runtime import (
     GraphSchedulerError,
 )
 from aidoo_api.domains.ai.runtime.metrics import (
+    build_runtime_metrics,
+    record_external_execution,
     record_inspection_request,
     record_shadow_write_failure,
     record_trace_event,
     record_trace_payload_truncated,
 )
+
+
+def _metric_map(reader: InMemoryMetricReader) -> dict[str, object]:
+    metrics_data = reader.get_metrics_data()
+    assert metrics_data is not None
+    return {
+        metric.name: metric
+        for resource_metric in metrics_data.resource_metrics
+        for scope_metric in resource_metric.scope_metrics
+        for metric in scope_metric.metrics
+    }
 
 
 def _registry(*, include_external_search: bool = False) -> RuntimeRegistry:
@@ -842,3 +857,51 @@ def test_runtime_metric_wrappers_are_safe_without_exporter() -> None:
     record_trace_payload_truncated(event_type="large_payload")
     record_shadow_write_failure(operation="shadow_fixture")
     record_inspection_request(result="ok")
+    record_external_execution(
+        capability="planning",
+        adapter_id="external_planner_v0",
+        execution_provider="mock",
+        status="completed",
+    )
+
+
+def test_runtime_metrics_emit_external_execution_outcomes() -> None:
+    reader = InMemoryMetricReader()
+    provider = MeterProvider(metric_readers=[reader])
+    runtime_metrics = build_runtime_metrics(provider.get_meter("tests.ai_runtime"))
+
+    runtime_metrics.record_external_execution(
+        capability="planning",
+        adapter_id="external_planner_v0",
+        execution_provider="mock",
+        status="completed",
+    )
+    runtime_metrics.record_external_execution(
+        capability="search",
+        adapter_id="external_search_v0",
+        execution_provider="anthropic",
+        status="failed",
+        error_class="adapter_not_implemented",
+    )
+
+    points = _metric_map(reader)[
+        "ai_runtime_external_executions_total"
+    ].data.data_points
+    assert len(points) == 2
+    points_by_capability = {
+        point.attributes["capability"]: point
+        for point in points
+    }
+    assert points_by_capability["planning"].value == 1
+    assert points_by_capability["planning"].attributes["execution_provider"] == "mock"
+    assert points_by_capability["planning"].attributes["status"] == "completed"
+    assert points_by_capability["planning"].attributes["error_class"] == "none"
+    assert points_by_capability["search"].value == 1
+    assert (
+        points_by_capability["search"].attributes["execution_provider"] == "anthropic"
+    )
+    assert points_by_capability["search"].attributes["status"] == "failed"
+    assert (
+        points_by_capability["search"].attributes["error_class"]
+        == "adapter_not_implemented"
+    )

@@ -44,7 +44,10 @@ from aidoo_api.domains.ai.events import (
 )
 from aidoo_api.domains.ai.mcp import AiMcpClient
 from aidoo_api.domains.ai.registry import get_ai_capability_registry
-from aidoo_api.domains.ai.runtime.metrics import record_inspection_request
+from aidoo_api.domains.ai.runtime.metrics import (
+    record_external_execution,
+    record_inspection_request,
+)
 from aidoo_api.domains.ai.runtime.models import AgentInvocation, AgentRun, AgentTraceEvent
 from aidoo_api.domains.ai.runtime.persistence import (
     persist_graph_execution_runtime_shadow,
@@ -2102,9 +2105,14 @@ def _external_planner_summaries_from_egress(
         settings,
         execution_enabled=execution_enabled,
     ).execute(request)
+    execution_summary = summarize_external_planner_execution(execution)
+    _record_external_execution_summary(
+        capability="planning",
+        execution_summary=execution_summary,
+    )
     return (
         summarize_external_planner_request(request),
-        summarize_external_planner_execution(execution),
+        execution_summary,
     )
 
 
@@ -2136,10 +2144,43 @@ def _external_search_summaries_from_egress(
         settings,
         execution_enabled=execution_enabled,
     ).execute(request)
+    execution_summary = summarize_external_search_execution(execution)
+    _record_external_execution_summary(
+        capability="search",
+        execution_summary=execution_summary,
+    )
     return (
         summarize_external_search_request(request),
-        summarize_external_search_execution(execution),
+        execution_summary,
     )
+
+
+def _record_external_execution_summary(
+    *,
+    capability: Literal["planning", "search"],
+    execution_summary: dict[str, Any],
+) -> None:
+    record_external_execution(
+        capability=capability,
+        adapter_id=_metric_summary_string(execution_summary.get("adapter_id")),
+        execution_provider=_metric_summary_string(
+            execution_summary.get("execution_provider")
+        ),
+        status=_metric_summary_string(execution_summary.get("status")),
+        error_class=_metric_optional_summary_string(execution_summary.get("error_class")),
+    )
+
+
+def _metric_summary_string(value: Any) -> str:
+    normalized = str(value or "unknown").strip()
+    return normalized or "unknown"
+
+
+def _metric_optional_summary_string(value: Any) -> str | None:
+    if value is None:
+        return None
+    normalized = str(value).strip()
+    return normalized or None
 
 
 def _latest_message_text(messages: list[dict[str, Any]]) -> str:

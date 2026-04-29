@@ -23,12 +23,12 @@ Phase 6 전체 목표는 기존 single-loop agent를 deterministic fast path, ma
 
 이 섹션은 세션 handoff용이다. 구현 세션이 끝날 때마다 짧게 갱신한다.
 
-- Current PR/stage: Phase 0-AJ unimplemented adapter route guard after `a5e0061`.
-- Last completed: Added route-level mock E2E coverage for unimplemented external adapter selection. The workspace `/chat/stream` path now proves that `AIDOO_AI_EXTERNAL_PLANNER_EXECUTION_ADAPTER=openai` and `AIDOO_AI_EXTERNAL_SEARCH_EXECUTION_ADAPTER=anthropic` do not call providers; they emit trace-safe failed execution summaries with `adapter_not_implemented`, no raw output, no result refs, and no external provider evidence in the writer `EvidencePacket`, while graph execution still completes locally.
+- Current PR/stage: Phase 0-AK external execution metrics after `b42ea50`.
+- Last completed: Added `ai_runtime_external_executions_total` counter coverage for external planner/search execution outcomes. Router-level planner/search execution summaries now record low-cardinality metric attributes for capability, adapter id, execution provider, status, and error class, including mock success and unimplemented `openai`/`anthropic` adapter failures.
 - In progress: None.
-- Next exact task: Add lightweight provider invocation metrics counters for external planner/search mock/unavailable adapter outcomes so trace metadata and telemetry can be compared before real adapter rollout.
-- Files touched in Phase 0-AJ: `apps/api/tests/ai_runtime_mock_harness.py`, `apps/api/tests/test_ai_runtime_mock_e2e.py`, `plans/03-phase6-evidence-runtime-implementation.md`.
-- Tests/checks run: `cd apps/api && uv run ruff check tests/test_ai_runtime_mock_e2e.py tests/ai_runtime_mock_harness.py`; `cd apps/api && uv run pytest tests/test_ai_runtime_mock_e2e.py`; `cd apps/api && uv run pytest tests/test_ai_runtime_mock_e2e.py tests/test_ai_stream.py`; `scripts/phase6-mock-e2e.sh -q`.
+- Next exact task: Add route-level disabled-execution guard coverage for external planner/search execution flags so disabled/skipped summaries and metrics stay trace-safe before real provider rollout.
+- Files touched in Phase 0-AK: `apps/api/src/aidoo_api/domains/ai/router.py`, `apps/api/src/aidoo_api/domains/ai/runtime/metrics.py`, `apps/api/tests/test_ai_runtime_contracts.py`, `apps/api/tests/test_ai_runtime_mock_e2e.py`, `plans/03-phase6-evidence-runtime-implementation.md`.
+- Tests/checks run: `cd apps/api && uv run ruff check src/aidoo_api/domains/ai/runtime/metrics.py src/aidoo_api/domains/ai/router.py tests/test_ai_runtime_contracts.py tests/test_ai_runtime_mock_e2e.py`; `cd apps/api && uv run pytest tests/test_ai_runtime_contracts.py -q`; `cd apps/api && uv run pytest tests/test_ai_runtime_mock_e2e.py -q`; `cd apps/api && uv run pytest tests/test_ai_runtime_contracts.py tests/test_ai_runtime_mock_e2e.py tests/test_ai_stream.py -q`; `scripts/phase6-mock-e2e.sh -q`; `git diff --check`.
 - Known blockers: OpenAI/Anthropic-backed manager/search execution is still not enabled. The egress/planner/search contracts only decide, sanitize, and build request envelopes; they do not call external APIs. `graph_node_runner_v0` remains an in-process runner, not a durable workflow backend. Hidden node outputs are not persisted verbatim; only status/count/error summary is persisted. High-risk / approval-preview graphs are intentionally not supported by this adapter.
 
 ## Architecture / Principles
@@ -298,7 +298,7 @@ cd apps/api && pytest tests/test_ai_runtime_contracts.py tests/test_ai_runtime_p
 - Candidate graph trace events materialize for approval shadow runs and persisted non-approval graph-eligible fallback streams. `persist=false` streams still expose the summary only in SSE metadata because they intentionally do not create conversation/runtime records.
 - Graph execution adapter trace events materialize for persisted adapter streams as `graph_execution_shadow`; `graph_node_runner_v0` records per-node status events, but raw node output remains ephemeral and is summarized only in terminal metadata.
 - Long-running graph trace scheduler를 붙이기 전에 runtime retention helper를 실제 운영 job/admin trigger로 연결한다.
-- Runtime metric은 counter skeleton만 있다. Operator-facing rollout 전 dashboard/alert threshold를 별도 정의한다.
+- Runtime metrics now include trace, inspection, shadow-write, and external execution outcome counters. Operator-facing rollout 전 dashboard/alert threshold를 별도 정의한다.
 - Phase 0-A에서 기존 table에 추가하는 `ai_tool_approvals` partial index는 의도된 tooling index 1건으로 기록한다. 이후 hot-table index 변경은 별도 concurrent migration으로 분리한다.
 - 새 runtime status를 추가할 때 migration SQL, ORM partial index, runtime status constant의 live-status literal drift를 함께 점검한다.
 

@@ -34,6 +34,11 @@ class RuntimeMetrics:
             unit="1",
             description="Total AI runtime inspection requests.",
         )
+        self._external_executions_total = meter.create_counter(
+            "ai_runtime_external_executions_total",
+            unit="1",
+            description="Total AI runtime external planner/search execution outcomes.",
+        )
 
     def record_trace_event(self, *, event_type: str, result: str) -> None:
         self._trace_events_total.add(
@@ -60,6 +65,26 @@ class RuntimeMetrics:
         self._inspection_requests_total.add(
             1,
             attributes={"result": result},
+        )
+
+    def record_external_execution(
+        self,
+        *,
+        capability: str,
+        adapter_id: str,
+        execution_provider: str,
+        status: str,
+        error_class: str | None = None,
+    ) -> None:
+        self._external_executions_total.add(
+            1,
+            attributes={
+                "capability": capability,
+                "adapter_id": adapter_id,
+                "execution_provider": execution_provider,
+                "status": status,
+                "error_class": error_class or "none",
+            },
         )
 
 
@@ -97,6 +122,25 @@ def record_inspection_request(*, result: str) -> None:
     _safe_record(lambda: _default_runtime_metrics().record_inspection_request(result=result))
 
 
+def record_external_execution(
+    *,
+    capability: str,
+    adapter_id: str,
+    execution_provider: str,
+    status: str,
+    error_class: str | None = None,
+) -> None:
+    _safe_record(
+        lambda: _default_runtime_metrics().record_external_execution(
+            capability=capability,
+            adapter_id=adapter_id,
+            execution_provider=execution_provider,
+            status=status,
+            error_class=error_class,
+        )
+    )
+
+
 def _safe_record(callback: Callable[[], None]) -> None:
     try:
         callback()
@@ -107,6 +151,7 @@ def _safe_record(callback: Callable[[], None]) -> None:
 __all__ = [
     "RuntimeMetrics",
     "build_runtime_metrics",
+    "record_external_execution",
     "record_inspection_request",
     "record_shadow_write_failure",
     "record_trace_event",
