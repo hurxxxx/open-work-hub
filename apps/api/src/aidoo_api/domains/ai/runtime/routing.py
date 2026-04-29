@@ -74,6 +74,7 @@ class RuntimeRoutingDecision:
     graph_candidate_summary: dict[str, Any] | None = None
     graph_schedule_summary: dict[str, Any] | None = None
     external_egress_summary: dict[str, Any] | None = None
+    external_planner_summary: dict[str, Any] | None = None
     graph_execution_status: str = "not_applicable"
     graph_execution_fallback_reason: str | None = None
     graph_execution_fallback_policy: dict[str, Any] | None = None

@@ -1374,6 +1374,15 @@ def test_chat_stream_graph_gate_falls_back_without_graph_execution(
         "planning": "external_llm_disabled",
         "search": "capability_disabled",
     }
+    external_planner = done_meta["external_planner_summary"]
+    assert external_planner == {
+        "adapter_id": "external_planner_v0",
+        "status": "disabled",
+        "provider": "openai",
+        "disabled_reason": "egress_denied",
+        "egress_reason": "external_llm_disabled",
+        "message_count": 0,
+    }
     graph_summary = done_meta["graph_candidate_summary"]
     assert graph_summary["intent"] == "report"
     assert set(graph_summary["domains"]) >= {"meeting", "pms", "rag"}
@@ -1408,6 +1417,7 @@ def test_chat_stream_graph_gate_falls_back_without_graph_execution(
         assert runtime_run.graph_enabled is True
         assert runtime_run.fallback_reason == "graph_runtime_not_implemented"
         assert runtime_run.metadata_json["external_egress_summary"] == external_egress
+        assert runtime_run.metadata_json["external_planner_summary"] == external_planner
         invocations = list(
             session.scalars(
                 select(AgentInvocation)
@@ -1459,6 +1469,7 @@ def test_chat_stream_graph_gate_falls_back_without_graph_execution(
         decision["capability"]: decision["reason"]
         for decision in traced_egress["decisions"]
     } == egress_reasons
+    assert trace_events[1].payload_json["external_planner_summary"] == external_planner
     schedule_event = next(
         event for event in trace_events if event.event_type == "graph_schedule_planned"
     )

@@ -181,6 +181,9 @@ def append_graph_candidate_trace_events(
         external_egress_summary = runtime_metadata.get("external_egress_summary")
         if external_egress_summary is not None:
             generated_payload["external_egress_summary"] = external_egress_summary
+        external_planner_summary = runtime_metadata.get("external_planner_summary")
+        if external_planner_summary is not None:
+            generated_payload["external_planner_summary"] = external_planner_summary
         append_trace_event(
             db,
             agent_run_id=agent_run_id,
@@ -212,6 +215,9 @@ def append_graph_candidate_trace_events(
     external_egress_summary = runtime_metadata.get("external_egress_summary")
     if external_egress_summary is not None:
         validated_payload["external_egress_summary"] = external_egress_summary
+    external_planner_summary = runtime_metadata.get("external_planner_summary")
+    if external_planner_summary is not None:
+        validated_payload["external_planner_summary"] = external_planner_summary
     append_trace_event(
         db,
         agent_run_id=agent_run_id,
@@ -498,6 +504,9 @@ def _persist_single_loop_fallback_runtime_shadow(
             "graph_candidate_summary": runtime_metadata.get("graph_candidate_summary"),
             "graph_schedule_summary": runtime_metadata.get("graph_schedule_summary"),
             "external_egress_summary": runtime_metadata.get("external_egress_summary"),
+            "external_planner_summary": runtime_metadata.get(
+                "external_planner_summary"
+            ),
             "graph_execution_status": runtime_metadata.get("graph_execution_status"),
             "graph_execution_fallback_reason": runtime_metadata.get(
                 "graph_execution_fallback_reason"
@@ -662,6 +671,9 @@ def _persist_graph_execution_runtime_shadow(
             "graph_candidate_summary": runtime_metadata.get("graph_candidate_summary"),
             "graph_schedule_summary": runtime_metadata.get("graph_schedule_summary"),
             "external_egress_summary": runtime_metadata.get("external_egress_summary"),
+            "external_planner_summary": runtime_metadata.get(
+                "external_planner_summary"
+            ),
             "graph_execution_status": runtime_metadata.get("graph_execution_status"),
             "graph_execution_fallback_reason": runtime_metadata.get(
                 "graph_execution_fallback_reason"
