@@ -23,12 +23,12 @@ Phase 6 전체 목표는 기존 single-loop agent를 deterministic fast path, ma
 
 이 섹션은 세션 handoff용이다. 구현 세션이 끝날 때마다 짧게 갱신한다.
 
-- Current PR/stage: Phase 0-AL external execution disabled guard after `0fb8a0e`.
-- Last completed: Added route-level mock E2E coverage for disabled external planner/search execution flags. The workspace `/chat/stream` path now proves that egress can be allowed while `AIDOO_AI_EXTERNAL_PLANNER_EXECUTION_ENABLED=false` and `AIDOO_AI_EXTERNAL_SEARCH_EXECUTION_ENABLED=false` produce trace-safe `disabled` execution summaries, no external search evidence, and disabled outcome metric calls.
+- Current PR/stage: Phase 0-AN focused regression gate after `b8c3c70`.
+- Last completed: Added `scripts/phase6-runtime-regression.sh`, a one-command focused gate that runs ruff for the Phase 6 runtime/router/mock harness files and pytest for runtime contracts, mock E2E, and stream regressions. The script passed with 82 tests and only the existing `websockets` deprecation warnings.
 - In progress: None.
-- Next exact task: Run a local API server smoke against the Phase 6 mock runtime path, then document the runtime/backend status before moving to the next implementation slice.
-- Files touched in Phase 0-AL: `apps/api/tests/ai_runtime_mock_harness.py`, `apps/api/tests/test_ai_runtime_mock_e2e.py`, `plans/03-phase6-evidence-runtime-implementation.md`.
-- Tests/checks run: `cd apps/api && uv run ruff check tests/ai_runtime_mock_harness.py tests/test_ai_runtime_mock_e2e.py`; `cd apps/api && uv run pytest tests/test_ai_runtime_mock_e2e.py -q`; `cd apps/api && uv run pytest tests/test_ai_runtime_contracts.py tests/test_ai_runtime_mock_e2e.py tests/test_ai_stream.py -q`; `scripts/phase6-mock-e2e.sh -q`; `git diff --check`.
+- Next exact task: Run a short state/contract self-review of the Phase 6 mock-provider runtime path, then patch any concrete gap found before moving toward broader UI/E2E validation.
+- Files touched in Phase 0-AN: `scripts/phase6-runtime-regression.sh`, `plans/03-phase6-evidence-runtime-implementation.md`.
+- Tests/checks run: `scripts/phase6-runtime-regression.sh -q`; local API smoke from Phase 0-AM remained green (`bootstrap-status`, `dev-login`, `auth/me`, `ai/health`, local `chat/stream`).
 - Known blockers: OpenAI/Anthropic-backed manager/search execution is still not enabled. The egress/planner/search contracts only decide, sanitize, and build request envelopes; they do not call external APIs. `graph_node_runner_v0` remains an in-process runner, not a durable workflow backend. Hidden node outputs are not persisted verbatim; only status/count/error summary is persisted. High-risk / approval-preview graphs are intentionally not supported by this adapter.
 
 ## Architecture / Principles
@@ -339,6 +339,14 @@ cd apps/api && pytest tests/test_ai_runtime_contracts.py tests/test_ai_runtime_p
   - The AI conversation list showed `Say exactly: MLX smoke OK`.
   - Opening the conversation rendered the persisted user turn, assistant content `MLX smoke OK`, and routing metadata `local 풀 · local_only · policy_local_only`.
   - Console contained only Vite debug lines and the React DevTools info message; `agent-browser errors` returned no page errors.
+
+### 2026-04-29 Phase 0-AM Local API/MLX Smoke
+
+- Reused the already-running API server on `127.0.0.1:8000` (`uvicorn --reload` parent and worker were listening).
+- `GET /api/v1/auth/bootstrap-status` returned 200 and exposed the seeded dev-login accounts.
+- `POST /api/v1/auth/dev-login` for `hq-admin` returned a valid session for workspace `hq`; authenticated `GET /api/v1/auth/me` returned 200.
+- Authenticated `GET /api/v1/ai/health` returned 200 with the local MLX pool `ready=true` at `http://127.0.0.1:8080/v1`. External OpenRouter was `not_configured`, expected because this phase continues with mock/local provider work.
+- Authenticated `POST /api/v1/workspaces/hq/ai/chat/stream` with `backend_mode=local` and `persist=false` returned SSE events ending in `done`. Default server flags kept `graph_used=false`, which is expected outside the explicit graph/mock test harness.
 
 ### 2026-04-28 Phase 0-A Hardening Smoke
 
