@@ -321,6 +321,14 @@ class Settings(BaseSettings):
         default=False,
         validation_alias=AliasChoices("AIDOO_AI_EXTERNAL_SEARCH_EXECUTION_ENABLED"),
     )
+    ai_external_planner_execution_adapter: str = Field(
+        default="mock",
+        validation_alias=AliasChoices("AIDOO_AI_EXTERNAL_PLANNER_EXECUTION_ADAPTER"),
+    )
+    ai_external_search_execution_adapter: str = Field(
+        default="mock",
+        validation_alias=AliasChoices("AIDOO_AI_EXTERNAL_SEARCH_EXECUTION_ADAPTER"),
+    )
     ai_default_external_search_provider: str = Field(
         default="openai",
         validation_alias=AliasChoices("AIDOO_AI_DEFAULT_EXTERNAL_SEARCH_PROVIDER"),

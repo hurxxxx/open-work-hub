@@ -38,7 +38,7 @@ class ExternalSearchExecutionResult(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     adapter_id: Literal["external_search_v0"] = EXTERNAL_SEARCH_ADAPTER_ID
-    execution_provider: Literal["mock"] = "mock"
+    execution_provider: str = "mock"
     status: ExternalSearchExecutionStatus
     provider: str | None = None
     disabled_reason: ExternalSearchExecutionDisabledReason | None = None

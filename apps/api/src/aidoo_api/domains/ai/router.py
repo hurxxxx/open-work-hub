@@ -67,14 +67,16 @@ from aidoo_api.domains.ai.runtime.external_egress import (
     ExternalEgressDecision,
     evaluate_external_egress,
 )
+from aidoo_api.domains.ai.runtime.external_adapters import (
+    select_external_planner_execution_adapter,
+    select_external_search_execution_adapter,
+)
 from aidoo_api.domains.ai.runtime.external_planner import (
-    MockExternalPlannerAdapter,
     build_external_planner_request,
     summarize_external_planner_execution,
     summarize_external_planner_request,
 )
 from aidoo_api.domains.ai.runtime.external_search import (
-    MockExternalSearchAdapter,
     build_external_search_request,
     summarize_external_search_execution,
     summarize_external_search_request,
@@ -2050,12 +2052,14 @@ def _attach_external_egress_trace_metadata(
         execution_enabled=bool(
             getattr(settings, "ai_external_planner_execution_enabled", False)
         ),
+        settings=settings,
     )
     search_request_summary, search_execution_summary = _external_search_summaries_from_egress(
         decisions=decisions,
         execution_enabled=bool(
             getattr(settings, "ai_external_search_execution_enabled", False)
         ),
+        settings=settings,
     )
     return replace(
         runtime_routing,
@@ -2081,6 +2085,7 @@ def _external_planner_summaries_from_egress(
     *,
     decisions: list[dict[str, Any]],
     execution_enabled: bool,
+    settings: Any,
 ) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
     planning_decision = next(
         (decision for decision in decisions if decision.get("capability") == "planning"),
@@ -2093,7 +2098,8 @@ def _external_planner_summaries_from_egress(
         runtime_profile=runtime_routing.runtime_profile,
         agent_ids=_graph_candidate_agent_ids(runtime_routing.graph_candidate_summary),
     )
-    execution = MockExternalPlannerAdapter(
+    execution = select_external_planner_execution_adapter(
+        settings,
         execution_enabled=execution_enabled,
     ).execute(request)
     return (
@@ -2115,6 +2121,7 @@ def _external_search_summaries_from_egress(
     *,
     decisions: list[dict[str, Any]],
     execution_enabled: bool,
+    settings: Any,
 ) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
     search_decision = next(
         (decision for decision in decisions if decision.get("capability") == "search"),
@@ -2125,7 +2132,8 @@ def _external_search_summaries_from_egress(
     request = build_external_search_request(
         egress_decision=ExternalEgressDecision.model_validate(search_decision),
     )
-    execution = MockExternalSearchAdapter(
+    execution = select_external_search_execution_adapter(
+        settings,
         execution_enabled=execution_enabled,
     ).execute(request)
     return (

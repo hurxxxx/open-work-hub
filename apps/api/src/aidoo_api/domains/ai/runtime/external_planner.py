@@ -39,7 +39,7 @@ class ExternalPlannerExecutionResult(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     adapter_id: Literal["external_planner_v0"] = EXTERNAL_PLANNER_ADAPTER_ID
-    execution_provider: Literal["mock"] = "mock"
+    execution_provider: str = "mock"
     status: ExternalPlannerExecutionStatus
     provider: str | None = None
     disabled_reason: ExternalPlannerExecutionDisabledReason | None = None

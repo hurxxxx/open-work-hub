@@ -20,6 +20,8 @@ def test_phase6_runtime_feature_flags_default_off() -> None:
     assert settings.ai_external_search_enabled is False
     assert settings.ai_external_planner_execution_enabled is False
     assert settings.ai_external_search_execution_enabled is False
+    assert settings.ai_external_planner_execution_adapter == "mock"
+    assert settings.ai_external_search_execution_adapter == "mock"
     assert settings.ai_default_external_search_provider == "openai"
     assert settings.ai_allowed_external_providers == "openai,claude"
 

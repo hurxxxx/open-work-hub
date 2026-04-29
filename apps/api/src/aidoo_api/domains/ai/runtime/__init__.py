@@ -34,6 +34,10 @@ from aidoo_api.domains.ai.runtime.external_egress import (
 from aidoo_api.domains.ai.runtime.external_adapters import (
     ExternalPlannerExecutionAdapter,
     ExternalSearchExecutionAdapter,
+    UnavailableExternalPlannerAdapter,
+    UnavailableExternalSearchAdapter,
+    select_external_planner_execution_adapter,
+    select_external_search_execution_adapter,
 )
 from aidoo_api.domains.ai.runtime.external_planner import (
     EXTERNAL_PLANNER_ADAPTER_ID,
@@ -176,6 +180,8 @@ __all__ = [
     "RuntimeRoutingDecision",
     "RuntimeTraceSequencer",
     "ResolvedAgentDefinitions",
+    "UnavailableExternalPlannerAdapter",
+    "UnavailableExternalSearchAdapter",
     "allowed_external_providers",
     "append_graph_execution_trace_events",
     "append_trace_event",
@@ -205,6 +211,8 @@ __all__ = [
     "resolve_agent_definitions",
     "scrub_completed_runtime_records",
     "scrub_trace_payload",
+    "select_external_planner_execution_adapter",
+    "select_external_search_execution_adapter",
     "select_runtime_profile",
     "summarize_graph_evidence_packet",
     "summarize_graph_execution_schedule",
