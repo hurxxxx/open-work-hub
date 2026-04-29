@@ -2636,6 +2636,8 @@ async def _run_hidden_graph_node(
         elif event.type == "done":
             finish_reason = event.data.finish_reason
 
+    if finish_reason == "length" and not errors:
+        errors.append("finish_reason:length")
     status = "failed" if errors or finish_reason == "error" else "completed"
     return GraphNodeOutput(
         agent_id=agent_id,

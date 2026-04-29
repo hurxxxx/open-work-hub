@@ -1945,6 +1945,73 @@ def test_chat_stream_graph_execution_verifier_failure_degrades_writer_prompt(
     assert verifier_invocation.status == "failed"
 
 
+def test_chat_stream_graph_execution_marks_truncated_hidden_node_failed(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    auth = _seeded_dev_login(client, "hq-admin")
+    slug = auth["user"]["workspaces"][0]["slug"]
+    _set_policy("chatbot", "local_only")
+    settings = get_settings()
+    monkeypatch.setattr(settings, "ai_runtime_graph_enabled", True)
+    monkeypatch.setattr(settings, "ai_runtime_graph_execution_enabled", True)
+    monkeypatch.setattr(settings, "ai_tool_calling_enabled", False)
+
+    pool_client = _SequencedAsyncPoolClient(
+        [[_delta(content="partial node", finish_reason="length")]]
+        + [
+            [_delta(content=f"node {index}", finish_reason="stop")]
+            for index in range(2, 7)
+        ]
+        + [[_delta(content="limited graph ok", finish_reason="stop")]]
+    )
+    monkeypatch.setattr(llm_core, "get_async_pool_client", lambda pool: pool_client)
+
+    status_code, events = _stream_post(
+        client,
+        _workspace_ai_path(slug, "/chat/stream"),
+        headers=_auth_headers(auth["token"]),
+        json_body={
+            "backend_mode": "local",
+            "persist": True,
+            "messages": [
+                {
+                    "role": "user",
+                    "content": "회의록과 PMS 이슈를 비교해서 근거 있는 보고서로 정리해줘",
+                }
+            ],
+            "allowed_app_ids": ["meeting", "pms"],
+        },
+    )
+
+    assert status_code == 200
+    chat = _chat_events(events)
+    assert [event["type"] for event in chat] == ["content_delta", "done"]
+    done_meta = chat[-1]["data"]["meta"]
+    node_summary = done_meta["graph_node_execution_summary"]
+    failed_nodes = [
+        node for node in node_summary["nodes"] if node["status"] == "failed"
+    ]
+    assert len(failed_nodes) == 1
+    assert failed_nodes[0]["error"] == "finish_reason:length"
+    assert node_summary["failed_node_count"] == 1
+
+    with Session(get_engine()) as session:
+        invocations = list(
+            session.scalars(
+                select(AgentInvocation)
+                .where(AgentInvocation.agent_run_id == done_meta["agent_run_id"])
+                .order_by(AgentInvocation.invocation_seq)
+            )
+        )
+
+    failed_invocations = [
+        invocation for invocation in invocations if invocation.status == "failed"
+    ]
+    assert [invocation.agent_id for invocation in failed_invocations] == [
+        failed_nodes[0]["agent_id"]
+    ]
+
+
 def test_chat_stream_graph_execution_adapter_error_persists_failed_runtime(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
