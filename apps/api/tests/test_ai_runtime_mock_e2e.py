@@ -8,6 +8,16 @@ import pytest
 from ai_runtime_mock_harness import run_mock_external_graph_stream
 
 
+@pytest.fixture(autouse=True)
+def _reset_sse_starlette_app_status() -> None:
+    from sse_starlette.sse import AppStatus
+
+    AppStatus.should_exit = False
+    AppStatus.should_exit_event = None
+    yield
+    AppStatus.should_exit_event = None
+
+
 def test_mock_external_graph_e2e_guard(
     client: TestClient,
     monkeypatch: pytest.MonkeyPatch,
@@ -88,3 +98,59 @@ def test_mock_external_graph_e2e_guard(
     serialized_execution = json.dumps(search_execution, ensure_ascii=False)
     assert "EU CE 인증 리스크" not in serialized_execution
     assert "회의록과 PMS 이슈" not in serialized_execution
+
+
+def test_unimplemented_external_adapter_selection_is_trace_safe(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    result = run_mock_external_graph_stream(
+        client,
+        monkeypatch,
+        planner_execution_adapter="openai",
+        search_execution_adapter="anthropic",
+    )
+
+    assert result.status_code == 200
+    assert [event["type"] for event in result.chat_events] == ["content_delta", "done"]
+    assert result.chat_events[0]["data"]["text"] == "mock graph final"
+
+    done_meta = result.done_meta
+    assert done_meta["graph_used"] is True
+    assert done_meta["graph_execution_status"] == "adapter_selected"
+
+    planner_execution = done_meta["external_planner_execution_summary"]
+    assert planner_execution["execution_provider"] == "openai"
+    assert planner_execution["status"] == "failed"
+    assert planner_execution["error_class"] == "adapter_not_implemented"
+    assert planner_execution["raw_output_persisted"] is False
+
+    search_execution = done_meta["external_search_execution_summary"]
+    assert search_execution["execution_provider"] == "anthropic"
+    assert search_execution["status"] == "failed"
+    assert search_execution["error_class"] == "adapter_not_implemented"
+    assert search_execution["query_digest"]
+    assert search_execution["cache_key"].startswith("external_search_v0:anthropic:openai:")
+    assert search_execution["result_count"] == 0
+    assert search_execution["result_refs"] == []
+    assert search_execution["source_kinds"] == []
+    assert search_execution["raw_output_persisted"] is False
+
+    packet_summary = done_meta["graph_node_execution_summary"]["evidence_packet_summary"]
+    assert "public_web_mock" not in packet_summary["source_kinds"]
+    assert packet_summary["ready_for_grounded_write"] is True
+
+    final_system_prompt = result.pool_client.chat.completions.calls[-1]["messages"][0][
+        "content"
+    ]
+    assert '"external_search_used": false' in final_system_prompt
+    assert "public_web_mock" not in final_system_prompt
+    assert "mock://external-search/" not in final_system_prompt
+
+    inspected_trace = {
+        event["event_type"]: event["payload"]
+        for event in result.inspection_json["trace_events"]
+    }
+    generated = inspected_trace["graph_candidate_generated"]
+    assert generated["external_planner_execution_summary"] == planner_execution
+    assert generated["external_search_execution_summary"] == search_execution

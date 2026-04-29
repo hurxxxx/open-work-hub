@@ -39,11 +39,17 @@ def run_mock_external_graph_stream(
     monkeypatch: pytest.MonkeyPatch,
     *,
     prompt: str = DEFAULT_GRAPH_MOCK_PROMPT,
+    planner_execution_adapter: str = "mock",
+    search_execution_adapter: str = "mock",
 ) -> MockExternalGraphRun:
     auth = _seeded_dev_login(client, "hq-admin")
     workspace_slug = auth["user"]["workspaces"][0]["slug"]
     _set_policy("chatbot", "local_only")
-    _enable_mock_external_graph_runtime(monkeypatch)
+    _enable_mock_external_graph_runtime(
+        monkeypatch,
+        planner_execution_adapter=planner_execution_adapter,
+        search_execution_adapter=search_execution_adapter,
+    )
 
     pool_client = MockGraphAsyncPoolClient()
     monkeypatch.setattr(llm_core, "get_async_pool_client", lambda pool: pool_client)
@@ -89,7 +95,12 @@ def run_mock_external_graph_stream(
     )
 
 
-def _enable_mock_external_graph_runtime(monkeypatch: pytest.MonkeyPatch) -> None:
+def _enable_mock_external_graph_runtime(
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    planner_execution_adapter: str,
+    search_execution_adapter: str,
+) -> None:
     settings = get_settings()
     monkeypatch.setattr(settings, "ai_runtime_graph_enabled", True)
     monkeypatch.setattr(settings, "ai_runtime_graph_execution_enabled", True)
@@ -99,6 +110,16 @@ def _enable_mock_external_graph_runtime(monkeypatch: pytest.MonkeyPatch) -> None
     monkeypatch.setattr(settings, "ai_external_search_enabled", True)
     monkeypatch.setattr(settings, "ai_external_planner_execution_enabled", True)
     monkeypatch.setattr(settings, "ai_external_search_execution_enabled", True)
+    monkeypatch.setattr(
+        settings,
+        "ai_external_planner_execution_adapter",
+        planner_execution_adapter,
+    )
+    monkeypatch.setattr(
+        settings,
+        "ai_external_search_execution_adapter",
+        search_execution_adapter,
+    )
 
 
 class MockGraphAsyncPoolClient:
