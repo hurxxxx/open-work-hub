@@ -23,12 +23,12 @@ Phase 6 전체 목표는 기존 single-loop agent를 deterministic fast path, ma
 
 이 섹션은 세션 handoff용이다. 구현 세션이 끝날 때마다 짧게 갱신한다.
 
-- Current PR/stage: Phase 0-AZ denied egress payload scrub after `a8de1e4`.
-- Last completed: Hardened denied external egress decisions so trace/SSE metadata never retains sanitized prompt or query payloads for denied decisions, including denial paths that return before PII/sensitive checks. Added regression coverage for disabled external LLM, PII denial, no-external-search denial, and sensitive entity denial.
+- Current PR/stage: Phase 0-BA inspection trace ordering after `04c6fc3`.
+- Last completed: Fixed runtime inspection trace replay to order by persisted `event_seq`, preserving append order across run-level and invocation-level events. Added regression coverage where a later invocation event must still appear before a subsequently appended run-level marker when `after_seq` and `limit` are used.
 - In progress: None.
-- Next exact task: Continue the Phase 6 review pass against graph execution/persistence invariants; keep fixes mock-provider/local unless a real external adapter is explicitly requested.
-- Files touched in Phase 0-AZ: `apps/api/src/aidoo_api/domains/ai/runtime/external_egress.py`, `apps/api/tests/test_ai_runtime_external_egress.py`, `plans/03-phase6-evidence-runtime-implementation.md`.
-- Tests/checks run: `cd apps/api && uv run ruff check src/aidoo_api/domains/ai/runtime/external_egress.py tests/test_ai_runtime_external_egress.py`; `cd apps/api && uv run pytest tests/test_ai_runtime_external_egress.py -q`; `cd apps/api && uv run pytest tests/test_ai_runtime_external_planner.py tests/test_ai_runtime_mock_e2e.py tests/test_ai_stream.py::test_chat_stream_graph_gate_falls_back_without_graph_execution tests/test_ai_stream.py::test_chat_stream_external_mock_execution_runs_when_enabled -q`; `scripts/phase6-runtime-regression.sh -q`.
+- Next exact task: Continue the Phase 6 review pass against graph execution persistence and inspection invariants; keep fixes mock-provider/local unless a real external adapter is explicitly requested.
+- Files touched in Phase 0-BA: `apps/api/src/aidoo_api/domains/ai/router.py`, `apps/api/tests/test_ai_approvals.py`, `plans/03-phase6-evidence-runtime-implementation.md`.
+- Tests/checks run: `cd apps/api && uv run ruff check src/aidoo_api/domains/ai/router.py tests/test_ai_approvals.py`; `cd apps/api && uv run pytest tests/test_ai_approvals.py::test_runtime_inspection_endpoint_limits_trace_events tests/test_ai_stream.py::test_chat_stream_graph_execution_adapter_error_persists_failed_runtime -q`; `cd apps/api && uv run pytest tests/test_ai_approvals.py -q`; `scripts/phase6-runtime-regression.sh -q`.
 - Known blockers: OpenAI/Anthropic-backed manager/search execution is still not enabled. The egress/planner/search contracts only decide, sanitize, and build request envelopes; they do not call external APIs. `graph_node_runner_v0` remains an in-process runner, not a durable workflow backend. Hidden node outputs are not persisted verbatim; only status/count/error summary is persisted. High-risk / approval-preview graphs are intentionally not supported by this adapter.
 
 ## Architecture / Principles

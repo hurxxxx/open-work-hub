@@ -881,11 +881,7 @@ def inspect_runtime_run(
         trace_query = trace_query.where(AgentTraceEvent.event_seq > after_seq)
     trace_events = db.scalars(
         trace_query
-        .order_by(
-            AgentTraceEvent.run_seq.asc(),
-            AgentTraceEvent.invocation_seq.asc(),
-            AgentTraceEvent.event_seq.asc(),
-        )
+        .order_by(AgentTraceEvent.event_seq.asc())
         .limit(limit)
     ).all()
 

@@ -517,15 +517,24 @@ def test_runtime_inspection_endpoint_limits_trace_events(client: TestClient) -> 
     with get_session_factory()() as db:
         runtime_run = db.get(AgentRun, seed["agent_run_id"])
         assert runtime_run is not None
-        for index in range(3):
-            append_trace_event(
-                db,
-                agent_run_id=runtime_run.id,
-                workspace_id=runtime_run.workspace_id,
-                conversation_id=runtime_run.conversation_id,
-                event_type=f"extra_{index}",
-                payload={"index": index},
-            )
+        append_trace_event(
+            db,
+            agent_run_id=runtime_run.id,
+            workspace_id=runtime_run.workspace_id,
+            conversation_id=runtime_run.conversation_id,
+            invocation_seq=9,
+            event_type="later_invocation_event",
+            payload={"index": 0},
+        )
+        append_trace_event(
+            db,
+            agent_run_id=runtime_run.id,
+            workspace_id=runtime_run.workspace_id,
+            conversation_id=runtime_run.conversation_id,
+            invocation_seq=0,
+            event_type="run_terminal_marker",
+            payload={"index": 1},
+        )
         db.commit()
 
     response = client.get(
@@ -539,6 +548,10 @@ def test_runtime_inspection_endpoint_limits_trace_events(client: TestClient) -> 
     assert response.status_code == 200, response.text
     body = response.json()
     assert [event["event_seq"] for event in body["trace_events"]] == [3, 4]
+    assert [event["event_type"] for event in body["trace_events"]] == [
+        "later_invocation_event",
+        "run_terminal_marker",
+    ]
 
 
 def test_resume_allowed_app_ids_omission_reuses_frozen_scope() -> None:
