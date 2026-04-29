@@ -7,6 +7,8 @@ from aidoo_api.domains.ai.runtime.external_egress import evaluate_external_egres
 from aidoo_api.domains.ai.runtime.external_planner import (
     EXTERNAL_PLANNER_ADAPTER_ID,
     build_external_planner_request,
+    execute_mock_external_planner,
+    summarize_external_planner_execution,
     summarize_external_planner_request,
 )
 
@@ -126,3 +128,66 @@ def test_external_planner_summary_excludes_prompt_payload() -> None:
         "message_count": 2,
     }
     assert "공개 규격" not in json.dumps(summary, ensure_ascii=False)
+
+
+def test_mock_external_planner_execution_requires_explicit_flag() -> None:
+    egress = evaluate_external_egress(
+        capability="planning",
+        provider="openai",
+        text="공개 규격만 기준으로 초기 분석해줘",
+        settings=_settings(
+            ai_external_llm_enabled=True,
+            ai_external_planning_enabled=True,
+        ),
+    )
+    request = build_external_planner_request(
+        egress_decision=egress,
+        runtime_profile="grounded_report",
+        agent_ids=["domain.pms", "search.executor", "writer.template"],
+    )
+
+    disabled = execute_mock_external_planner(request, execution_enabled=False)
+    completed = execute_mock_external_planner(request, execution_enabled=True)
+
+    assert summarize_external_planner_execution(disabled) == {
+        "adapter_id": EXTERNAL_PLANNER_ADAPTER_ID,
+        "execution_provider": "mock",
+        "status": "disabled",
+        "provider": "openai",
+        "disabled_reason": "execution_flag_disabled",
+        "planned_agent_count": 0,
+        "intent_hint": None,
+        "output_kind_hint": None,
+        "raw_output_persisted": False,
+    }
+    assert summarize_external_planner_execution(completed) == {
+        "adapter_id": EXTERNAL_PLANNER_ADAPTER_ID,
+        "execution_provider": "mock",
+        "status": "completed",
+        "provider": "openai",
+        "disabled_reason": None,
+        "planned_agent_count": 3,
+        "intent_hint": "report",
+        "output_kind_hint": "artifact",
+        "raw_output_persisted": False,
+    }
+
+
+def test_mock_external_planner_skips_when_request_not_ready() -> None:
+    egress = evaluate_external_egress(
+        capability="planning",
+        provider="openai",
+        text="공개 규격만 기준으로 초기 분석해줘",
+        settings=_settings(),
+    )
+    request = build_external_planner_request(
+        egress_decision=egress,
+        runtime_profile="grounded_report",
+        agent_ids=["writer.template"],
+    )
+
+    result = execute_mock_external_planner(request, execution_enabled=True)
+
+    assert result.status == "skipped"
+    assert result.disabled_reason == "request_not_ready"
+    assert result.planned_agent_ids == []

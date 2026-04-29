@@ -1383,6 +1383,18 @@ def test_chat_stream_graph_gate_falls_back_without_graph_execution(
         "egress_reason": "external_llm_disabled",
         "message_count": 0,
     }
+    external_planner_execution = done_meta["external_planner_execution_summary"]
+    assert external_planner_execution == {
+        "adapter_id": "external_planner_v0",
+        "execution_provider": "mock",
+        "status": "disabled",
+        "provider": "openai",
+        "disabled_reason": "execution_flag_disabled",
+        "planned_agent_count": 0,
+        "intent_hint": None,
+        "output_kind_hint": None,
+        "raw_output_persisted": False,
+    }
     external_search = done_meta["external_search_summary"]
     assert external_search == {
         "adapter_id": "external_search_v0",
@@ -1391,6 +1403,18 @@ def test_chat_stream_graph_gate_falls_back_without_graph_execution(
         "disabled_reason": "egress_denied",
         "egress_reason": "capability_disabled",
         "query_present": False,
+    }
+    external_search_execution = done_meta["external_search_execution_summary"]
+    assert external_search_execution == {
+        "adapter_id": "external_search_v0",
+        "execution_provider": "mock",
+        "status": "disabled",
+        "provider": "openai",
+        "disabled_reason": "execution_flag_disabled",
+        "query_digest": None,
+        "result_count": 0,
+        "source_kinds": [],
+        "raw_output_persisted": False,
     }
     graph_summary = done_meta["graph_candidate_summary"]
     assert graph_summary["intent"] == "report"
@@ -1428,6 +1452,14 @@ def test_chat_stream_graph_gate_falls_back_without_graph_execution(
         assert runtime_run.metadata_json["external_egress_summary"] == external_egress
         assert runtime_run.metadata_json["external_planner_summary"] == external_planner
         assert runtime_run.metadata_json["external_search_summary"] == external_search
+        assert (
+            runtime_run.metadata_json["external_planner_execution_summary"]
+            == external_planner_execution
+        )
+        assert (
+            runtime_run.metadata_json["external_search_execution_summary"]
+            == external_search_execution
+        )
         invocations = list(
             session.scalars(
                 select(AgentInvocation)
@@ -1481,6 +1513,14 @@ def test_chat_stream_graph_gate_falls_back_without_graph_execution(
     } == egress_reasons
     assert trace_events[1].payload_json["external_planner_summary"] == external_planner
     assert trace_events[1].payload_json["external_search_summary"] == external_search
+    assert (
+        trace_events[1].payload_json["external_planner_execution_summary"]
+        == external_planner_execution
+    )
+    assert (
+        trace_events[1].payload_json["external_search_execution_summary"]
+        == external_search_execution
+    )
     schedule_event = next(
         event for event in trace_events if event.event_type == "graph_schedule_planned"
     )
@@ -1505,6 +1545,94 @@ def test_chat_stream_graph_gate_falls_back_without_graph_execution(
     assert inspected_trace["graph_schedule_planned"]["graph_schedule_summary"][
         "execution_enabled"
     ] is False
+
+
+def test_chat_stream_external_mock_execution_runs_when_enabled(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    auth = _seeded_dev_login(client, "hq-admin")
+    slug = auth["user"]["workspaces"][0]["slug"]
+    _set_policy("chatbot", "local_only")
+    settings = get_settings()
+    monkeypatch.setattr(settings, "ai_runtime_graph_enabled", True)
+    monkeypatch.setattr(settings, "ai_tool_calling_enabled", False)
+    monkeypatch.setattr(settings, "ai_external_llm_enabled", True)
+    monkeypatch.setattr(settings, "ai_external_planning_enabled", True)
+    monkeypatch.setattr(settings, "ai_external_search_enabled", True)
+    monkeypatch.setattr(settings, "ai_external_planner_execution_enabled", True)
+    monkeypatch.setattr(settings, "ai_external_search_execution_enabled", True)
+
+    pool_client = _FakeAsyncPoolClient([_delta(content="ok", finish_reason="stop")])
+    monkeypatch.setattr(llm_core, "get_async_pool_client", lambda pool: pool_client)
+
+    status_code, events = _stream_post(
+        client,
+        _workspace_ai_path(slug, "/chat/stream"),
+        headers=_auth_headers(auth["token"]),
+        json_body={
+            "backend_mode": "local",
+            "persist": True,
+            "messages": [
+                {
+                    "role": "user",
+                    "content": "EU CE 인증 리스크를 회의록과 PMS 이슈 기준으로 근거 있는 보고서로 정리해줘",
+                }
+            ],
+            "allowed_app_ids": ["meeting", "pms"],
+        },
+    )
+
+    assert status_code == 200
+    done_meta = events[-1]["data"]["meta"]
+    egress_reasons = {
+        decision["capability"]: decision["reason"]
+        for decision in done_meta["external_egress_summary"]["decisions"]
+    }
+    assert egress_reasons == {"planning": "allowed", "search": "allowed"}
+    planner_execution = done_meta["external_planner_execution_summary"]
+    assert planner_execution["execution_provider"] == "mock"
+    assert planner_execution["status"] == "completed"
+    assert planner_execution["planned_agent_count"] == done_meta[
+        "graph_schedule_summary"
+    ]["step_count"]
+    assert planner_execution["intent_hint"] == "report"
+    assert planner_execution["output_kind_hint"] == "artifact"
+    assert planner_execution["raw_output_persisted"] is False
+    search_execution = done_meta["external_search_execution_summary"]
+    assert search_execution["execution_provider"] == "mock"
+    assert search_execution["status"] == "completed"
+    assert search_execution["query_digest"]
+    assert search_execution["result_count"] == 2
+    assert search_execution["source_kinds"] == ["public_web_mock"]
+    assert search_execution["raw_output_persisted"] is False
+
+    with Session(get_engine()) as session:
+        runtime_run = session.get(AgentRun, done_meta["agent_run_id"])
+        trace_events = list(
+            session.scalars(
+                select(AgentTraceEvent)
+                .where(AgentTraceEvent.agent_run_id == done_meta["agent_run_id"])
+                .order_by(AgentTraceEvent.event_seq)
+            )
+        )
+
+    assert runtime_run is not None
+    assert (
+        runtime_run.metadata_json["external_planner_execution_summary"]
+        == planner_execution
+    )
+    assert runtime_run.metadata_json["external_search_execution_summary"] == search_execution
+    candidate_event = next(
+        event for event in trace_events if event.event_type == "graph_candidate_generated"
+    )
+    assert (
+        candidate_event.payload_json["external_planner_execution_summary"]
+        == planner_execution
+    )
+    assert (
+        candidate_event.payload_json["external_search_execution_summary"]
+        == search_execution
+    )
 
 
 def test_chat_stream_graph_execution_adapter_runs_when_enabled(

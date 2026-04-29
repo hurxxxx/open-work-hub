@@ -47,6 +47,9 @@ SENSITIVE_PAYLOAD_KEYS = {
 }
 SAFE_PAYLOAD_KEYS = {
     "output_kind",
+    "output_kind_hint",
+    "raw_output_persisted",
+    "result_count",
 }
 SENSITIVE_VALUE_PATTERNS = (
     re.compile(r"(?i)\bbearer\s+[-._~+/=a-z0-9]+"),
@@ -187,6 +190,20 @@ def append_graph_candidate_trace_events(
         external_search_summary = runtime_metadata.get("external_search_summary")
         if external_search_summary is not None:
             generated_payload["external_search_summary"] = external_search_summary
+        planner_execution_summary = runtime_metadata.get(
+            "external_planner_execution_summary"
+        )
+        if planner_execution_summary is not None:
+            generated_payload["external_planner_execution_summary"] = (
+                planner_execution_summary
+            )
+        search_execution_summary = runtime_metadata.get(
+            "external_search_execution_summary"
+        )
+        if search_execution_summary is not None:
+            generated_payload["external_search_execution_summary"] = (
+                search_execution_summary
+            )
         append_trace_event(
             db,
             agent_run_id=agent_run_id,
@@ -224,6 +241,18 @@ def append_graph_candidate_trace_events(
     external_search_summary = runtime_metadata.get("external_search_summary")
     if external_search_summary is not None:
         validated_payload["external_search_summary"] = external_search_summary
+    planner_execution_summary = runtime_metadata.get(
+        "external_planner_execution_summary"
+    )
+    if planner_execution_summary is not None:
+        validated_payload["external_planner_execution_summary"] = (
+            planner_execution_summary
+        )
+    search_execution_summary = runtime_metadata.get("external_search_execution_summary")
+    if search_execution_summary is not None:
+        validated_payload["external_search_execution_summary"] = (
+            search_execution_summary
+        )
     append_trace_event(
         db,
         agent_run_id=agent_run_id,
@@ -514,6 +543,12 @@ def _persist_single_loop_fallback_runtime_shadow(
                 "external_planner_summary"
             ),
             "external_search_summary": runtime_metadata.get("external_search_summary"),
+            "external_planner_execution_summary": runtime_metadata.get(
+                "external_planner_execution_summary"
+            ),
+            "external_search_execution_summary": runtime_metadata.get(
+                "external_search_execution_summary"
+            ),
             "graph_execution_status": runtime_metadata.get("graph_execution_status"),
             "graph_execution_fallback_reason": runtime_metadata.get(
                 "graph_execution_fallback_reason"
@@ -682,6 +717,12 @@ def _persist_graph_execution_runtime_shadow(
                 "external_planner_summary"
             ),
             "external_search_summary": runtime_metadata.get("external_search_summary"),
+            "external_planner_execution_summary": runtime_metadata.get(
+                "external_planner_execution_summary"
+            ),
+            "external_search_execution_summary": runtime_metadata.get(
+                "external_search_execution_summary"
+            ),
             "graph_execution_status": runtime_metadata.get("graph_execution_status"),
             "graph_execution_fallback_reason": runtime_metadata.get(
                 "graph_execution_fallback_reason"

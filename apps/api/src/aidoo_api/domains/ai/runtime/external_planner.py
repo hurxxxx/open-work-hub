@@ -17,6 +17,11 @@ ExternalPlannerDisabledReason = Literal[
     "egress_denied",
     "sanitized_empty",
 ]
+ExternalPlannerExecutionStatus = Literal["disabled", "skipped", "completed"]
+ExternalPlannerExecutionDisabledReason = Literal[
+    "execution_flag_disabled",
+    "request_not_ready",
+]
 
 
 class ExternalPlannerRequest(BaseModel):
@@ -28,6 +33,20 @@ class ExternalPlannerRequest(BaseModel):
     disabled_reason: ExternalPlannerDisabledReason | None = None
     egress_reason: str | None = None
     messages: list[dict[str, str]] = Field(default_factory=list)
+
+
+class ExternalPlannerExecutionResult(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    adapter_id: Literal["external_planner_v0"] = EXTERNAL_PLANNER_ADAPTER_ID
+    execution_provider: Literal["mock"] = "mock"
+    status: ExternalPlannerExecutionStatus
+    provider: str | None = None
+    disabled_reason: ExternalPlannerExecutionDisabledReason | None = None
+    planned_agent_ids: list[str] = Field(default_factory=list)
+    intent_hint: str | None = None
+    output_kind_hint: str | None = None
+    raw_output_persisted: bool = False
 
 
 def build_external_planner_request(
@@ -83,6 +102,51 @@ def summarize_external_planner_request(
     }
 
 
+def execute_mock_external_planner(
+    request: ExternalPlannerRequest,
+    *,
+    execution_enabled: bool,
+) -> ExternalPlannerExecutionResult:
+    if not execution_enabled:
+        return ExternalPlannerExecutionResult(
+            status="disabled",
+            provider=request.provider,
+            disabled_reason="execution_flag_disabled",
+        )
+    if request.status != "ready":
+        return ExternalPlannerExecutionResult(
+            status="skipped",
+            provider=request.provider,
+            disabled_reason="request_not_ready",
+        )
+    planner_input = _planner_input_from_request(request)
+    runtime_profile = str(planner_input.get("runtime_profile") or "")
+    return ExternalPlannerExecutionResult(
+        status="completed",
+        provider=request.provider,
+        planned_agent_ids=_string_list(planner_input.get("available_agent_ids")),
+        intent_hint=_intent_hint(runtime_profile),
+        output_kind_hint=_output_kind_hint(runtime_profile),
+        raw_output_persisted=False,
+    )
+
+
+def summarize_external_planner_execution(
+    result: ExternalPlannerExecutionResult,
+) -> dict[str, Any]:
+    return {
+        "adapter_id": result.adapter_id,
+        "execution_provider": result.execution_provider,
+        "status": result.status,
+        "provider": result.provider,
+        "disabled_reason": result.disabled_reason,
+        "planned_agent_count": len(result.planned_agent_ids),
+        "intent_hint": result.intent_hint,
+        "output_kind_hint": result.output_kind_hint,
+        "raw_output_persisted": result.raw_output_persisted,
+    }
+
+
 def _planner_messages(
     *,
     sanitized_prompt: str,
@@ -114,11 +178,48 @@ def _planner_messages(
     ]
 
 
+def _planner_input_from_request(request: ExternalPlannerRequest) -> dict[str, Any]:
+    if len(request.messages) < 2:
+        return {}
+    try:
+        parsed = json.loads(request.messages[1].get("content") or "{}")
+    except json.JSONDecodeError:
+        return {}
+    return parsed if isinstance(parsed, dict) else {}
+
+
+def _string_list(value: Any) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return [item for item in value if isinstance(item, str) and item]
+
+
+def _intent_hint(runtime_profile: str) -> str:
+    if runtime_profile == "grounded_report":
+        return "report"
+    if runtime_profile == "high_risk_action":
+        return "write"
+    return "read"
+
+
+def _output_kind_hint(runtime_profile: str) -> str:
+    if runtime_profile == "grounded_report":
+        return "artifact"
+    if runtime_profile == "high_risk_action":
+        return "approval_preview"
+    return "answer"
+
+
 __all__ = [
     "EXTERNAL_PLANNER_ADAPTER_ID",
     "ExternalPlannerDisabledReason",
+    "ExternalPlannerExecutionDisabledReason",
+    "ExternalPlannerExecutionResult",
+    "ExternalPlannerExecutionStatus",
     "ExternalPlannerRequest",
     "ExternalPlannerStatus",
     "build_external_planner_request",
+    "execute_mock_external_planner",
+    "summarize_external_planner_execution",
     "summarize_external_planner_request",
 ]

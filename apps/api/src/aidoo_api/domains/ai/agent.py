@@ -115,6 +115,8 @@ async def run_agent_turn_stream(
     runtime_external_egress_summary: dict[str, Any] | None = None,
     runtime_external_planner_summary: dict[str, Any] | None = None,
     runtime_external_search_summary: dict[str, Any] | None = None,
+    runtime_external_planner_execution_summary: dict[str, Any] | None = None,
+    runtime_external_search_execution_summary: dict[str, Any] | None = None,
     runtime_graph_execution_status: str = "not_applicable",
     runtime_graph_execution_fallback_reason: str | None = None,
     runtime_graph_execution_fallback_policy: dict[str, Any] | None = None,
@@ -148,6 +150,12 @@ async def run_agent_turn_stream(
         runtime_external_egress_summary=runtime_external_egress_summary,
         runtime_external_planner_summary=runtime_external_planner_summary,
         runtime_external_search_summary=runtime_external_search_summary,
+        runtime_external_planner_execution_summary=(
+            runtime_external_planner_execution_summary
+        ),
+        runtime_external_search_execution_summary=(
+            runtime_external_search_execution_summary
+        ),
         runtime_graph_execution_status=runtime_graph_execution_status,
         runtime_graph_execution_fallback_reason=runtime_graph_execution_fallback_reason,
         runtime_graph_execution_fallback_policy=runtime_graph_execution_fallback_policy,
@@ -859,6 +867,12 @@ def _runtime_done_meta(model_meta: dict[str, Any]) -> dict[str, Any]:
         "external_egress_summary": model_meta.get("external_egress_summary"),
         "external_planner_summary": model_meta.get("external_planner_summary"),
         "external_search_summary": model_meta.get("external_search_summary"),
+        "external_planner_execution_summary": model_meta.get(
+            "external_planner_execution_summary"
+        ),
+        "external_search_execution_summary": model_meta.get(
+            "external_search_execution_summary"
+        ),
         "graph_execution_status": model_meta.get("graph_execution_status"),
         "graph_execution_fallback_reason": model_meta.get("graph_execution_fallback_reason"),
         "graph_execution_fallback_policy": model_meta.get("graph_execution_fallback_policy"),
@@ -890,6 +904,8 @@ def _build_snapshot_model_meta(
     runtime_external_egress_summary: dict[str, Any] | None,
     runtime_external_planner_summary: dict[str, Any] | None,
     runtime_external_search_summary: dict[str, Any] | None,
+    runtime_external_planner_execution_summary: dict[str, Any] | None,
+    runtime_external_search_execution_summary: dict[str, Any] | None,
     runtime_graph_execution_status: str,
     runtime_graph_execution_fallback_reason: str | None,
     runtime_graph_execution_fallback_policy: dict[str, Any] | None,
@@ -925,6 +941,8 @@ def _build_snapshot_model_meta(
         "external_egress_summary": runtime_external_egress_summary,
         "external_planner_summary": runtime_external_planner_summary,
         "external_search_summary": runtime_external_search_summary,
+        "external_planner_execution_summary": runtime_external_planner_execution_summary,
+        "external_search_execution_summary": runtime_external_search_execution_summary,
         "graph_execution_status": runtime_graph_execution_status,
         "graph_execution_fallback_reason": runtime_graph_execution_fallback_reason,
         "graph_execution_fallback_policy": runtime_graph_execution_fallback_policy,

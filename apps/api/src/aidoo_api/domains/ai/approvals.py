@@ -877,6 +877,12 @@ def _persist_runtime_shadow_on_halt(
             "external_egress_summary": model_meta.get("external_egress_summary"),
             "external_planner_summary": model_meta.get("external_planner_summary"),
             "external_search_summary": model_meta.get("external_search_summary"),
+            "external_planner_execution_summary": model_meta.get(
+                "external_planner_execution_summary"
+            ),
+            "external_search_execution_summary": model_meta.get(
+                "external_search_execution_summary"
+            ),
             "graph_execution_status": model_meta.get("graph_execution_status"),
             "graph_execution_fallback_reason": model_meta.get(
                 "graph_execution_fallback_reason"

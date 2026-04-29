@@ -7,6 +7,8 @@ from aidoo_api.domains.ai.runtime.external_egress import evaluate_external_egres
 from aidoo_api.domains.ai.runtime.external_search import (
     EXTERNAL_SEARCH_ADAPTER_ID,
     build_external_search_request,
+    execute_mock_external_search,
+    summarize_external_search_execution,
     summarize_external_search_request,
 )
 
@@ -94,3 +96,55 @@ def test_external_search_summary_excludes_query_payload() -> None:
         "query_present": True,
     }
     assert "EU CE" not in json.dumps(summary, ensure_ascii=False)
+
+
+def test_mock_external_search_execution_requires_explicit_flag() -> None:
+    egress = evaluate_external_egress(
+        capability="search",
+        provider="openai",
+        text="EU CE 인증 요건 검색",
+        settings=_settings(ai_external_search_enabled=True),
+    )
+    request = build_external_search_request(egress_decision=egress)
+
+    disabled = execute_mock_external_search(request, execution_enabled=False)
+    completed = execute_mock_external_search(request, execution_enabled=True)
+
+    assert summarize_external_search_execution(disabled) == {
+        "adapter_id": EXTERNAL_SEARCH_ADAPTER_ID,
+        "execution_provider": "mock",
+        "status": "disabled",
+        "provider": "openai",
+        "disabled_reason": "execution_flag_disabled",
+        "query_digest": None,
+        "result_count": 0,
+        "source_kinds": [],
+        "raw_output_persisted": False,
+    }
+    completed_summary = summarize_external_search_execution(completed)
+    assert completed_summary["adapter_id"] == EXTERNAL_SEARCH_ADAPTER_ID
+    assert completed_summary["execution_provider"] == "mock"
+    assert completed_summary["status"] == "completed"
+    assert completed_summary["provider"] == "openai"
+    assert completed_summary["disabled_reason"] is None
+    assert completed_summary["query_digest"]
+    assert completed_summary["result_count"] == 2
+    assert completed_summary["source_kinds"] == ["public_web_mock"]
+    assert completed_summary["raw_output_persisted"] is False
+    assert "EU CE" not in json.dumps(completed_summary, ensure_ascii=False)
+
+
+def test_mock_external_search_skips_when_request_not_ready() -> None:
+    egress = evaluate_external_egress(
+        capability="search",
+        provider="openai",
+        text="BOM 원가 12345원과 계약 조건을 넣어서 공개 공급사 가격을 검색해줘.",
+        settings=_settings(ai_external_search_enabled=True),
+    )
+    request = build_external_search_request(egress_decision=egress)
+
+    result = execute_mock_external_search(request, execution_enabled=True)
+
+    assert result.status == "skipped"
+    assert result.disabled_reason == "request_not_ready"
+    assert result.result_count == 0

@@ -545,6 +545,19 @@
           "default": null,
           "title": "External Egress Summary"
         },
+        "external_planner_execution_summary": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "External Planner Execution Summary"
+        },
         "external_planner_summary": {
           "anyOf": [
             {
@@ -557,6 +570,19 @@
           ],
           "default": null,
           "title": "External Planner Summary"
+        },
+        "external_search_execution_summary": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "External Search Execution Summary"
         },
         "external_search_summary": {
           "anyOf": [
