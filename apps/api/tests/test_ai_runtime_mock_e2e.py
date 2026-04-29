@@ -178,3 +178,85 @@ def test_unimplemented_external_adapter_selection_is_trace_safe(
             "error_class": "adapter_not_implemented",
         },
     ]
+
+
+def test_disabled_external_execution_flags_are_trace_safe(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    metric_calls: list[dict[str, object]] = []
+    monkeypatch.setattr(
+        ai_router,
+        "record_external_execution",
+        lambda **payload: metric_calls.append(payload),
+    )
+
+    result = run_mock_external_graph_stream(
+        client,
+        monkeypatch,
+        planner_execution_enabled=False,
+        search_execution_enabled=False,
+    )
+
+    assert result.status_code == 200
+    assert result.chat_events[0]["data"]["text"] == "mock graph final"
+
+    done_meta = result.done_meta
+    egress_reasons = {
+        decision["capability"]: decision["reason"]
+        for decision in done_meta["external_egress_summary"]["decisions"]
+    }
+    assert egress_reasons == {"planning": "allowed", "search": "allowed"}
+
+    planner_execution = done_meta["external_planner_execution_summary"]
+    assert planner_execution["execution_provider"] == "mock"
+    assert planner_execution["status"] == "disabled"
+    assert planner_execution["disabled_reason"] == "execution_flag_disabled"
+    assert planner_execution["planned_agent_count"] == 0
+    assert planner_execution["raw_output_persisted"] is False
+
+    search_execution = done_meta["external_search_execution_summary"]
+    assert search_execution["execution_provider"] == "mock"
+    assert search_execution["status"] == "disabled"
+    assert search_execution["disabled_reason"] == "execution_flag_disabled"
+    assert search_execution["query_digest"] is None
+    assert search_execution["cache_key"] is None
+    assert search_execution["result_count"] == 0
+    assert search_execution["result_refs"] == []
+    assert search_execution["source_kinds"] == []
+    assert search_execution["raw_output_persisted"] is False
+
+    packet_summary = done_meta["graph_node_execution_summary"]["evidence_packet_summary"]
+    assert "public_web_mock" not in packet_summary["source_kinds"]
+    assert packet_summary["ready_for_grounded_write"] is True
+
+    final_system_prompt = result.pool_client.chat.completions.calls[-1]["messages"][0][
+        "content"
+    ]
+    assert '"external_search_used": false' in final_system_prompt
+    assert "public_web_mock" not in final_system_prompt
+    assert "mock://external-search/" not in final_system_prompt
+
+    inspected_trace = {
+        event["event_type"]: event["payload"]
+        for event in result.inspection_json["trace_events"]
+    }
+    generated = inspected_trace["graph_candidate_generated"]
+    assert generated["external_planner_execution_summary"] == planner_execution
+    assert generated["external_search_execution_summary"] == search_execution
+    assert metric_calls == [
+        {
+            "capability": "planning",
+            "adapter_id": "external_planner_v0",
+            "execution_provider": "mock",
+            "status": "disabled",
+            "error_class": None,
+        },
+        {
+            "capability": "search",
+            "adapter_id": "external_search_v0",
+            "execution_provider": "mock",
+            "status": "disabled",
+            "error_class": None,
+        },
+    ]
