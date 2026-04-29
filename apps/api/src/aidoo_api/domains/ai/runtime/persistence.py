@@ -296,6 +296,9 @@ def append_graph_execution_trace_events(
             "graph_execution_fallback_reason": runtime_metadata.get(
                 "graph_execution_fallback_reason"
             ),
+            "graph_execution_fallback_policy": runtime_metadata.get(
+                "graph_execution_fallback_policy"
+            ),
             "graph_execution_adapter": runtime_metadata.get("graph_execution_adapter"),
             "graph_node_execution_summary": runtime_metadata.get(
                 "graph_node_execution_summary"
@@ -490,6 +493,9 @@ def _persist_single_loop_fallback_runtime_shadow(
             "graph_execution_fallback_reason": runtime_metadata.get(
                 "graph_execution_fallback_reason"
             ),
+            "graph_execution_fallback_policy": runtime_metadata.get(
+                "graph_execution_fallback_policy"
+            ),
             "graph_execution_adapter": runtime_metadata.get("graph_execution_adapter"),
             "graph_node_execution_summary": runtime_metadata.get(
                 "graph_node_execution_summary"
@@ -649,6 +655,9 @@ def _persist_graph_execution_runtime_shadow(
             "graph_execution_status": runtime_metadata.get("graph_execution_status"),
             "graph_execution_fallback_reason": runtime_metadata.get(
                 "graph_execution_fallback_reason"
+            ),
+            "graph_execution_fallback_policy": runtime_metadata.get(
+                "graph_execution_fallback_policy"
             ),
             "graph_execution_adapter": runtime_metadata.get("graph_execution_adapter"),
             "graph_node_execution_summary": runtime_metadata.get(

@@ -11,6 +11,7 @@ from aidoo_api.domains.ai.runtime.graph_execution import (
 )
 from aidoo_api.domains.ai.runtime.manager_validation import ManagerGraphValidationResult
 from aidoo_api.domains.ai.runtime.routing import (
+    RuntimeRoutingDecision,
     attach_manager_graph_validation_result,
     attach_trace_only_graph_validation,
     select_runtime_profile,
@@ -22,6 +23,34 @@ FIXTURE_DIR = Path(__file__).parent / "fixtures" / "ai_runtime"
 
 def _messages(text: str) -> list[dict[str, str]]:
     return [{"role": "user", "content": text}]
+
+
+def _accepted_graph_decision(
+    candidate_summary: dict[str, object],
+    *,
+    schedule_summary: dict[str, object] | None = None,
+) -> RuntimeRoutingDecision:
+    decision = select_runtime_profile(
+        messages=_messages("회의록과 PMS 이슈를 비교해서 근거 있는 보고서로 정리해줘"),
+        allowed_app_ids=["meeting", "pms"],
+        max_tokens=None,
+        graph_enabled=True,
+    )
+    return attach_manager_graph_validation_result(
+        decision,
+        validation=ManagerGraphValidationResult(accepted=True, graph=None),
+        registry_agent_count=10,
+        write_agent_count=1,
+        graph_candidate_summary=candidate_summary,
+        graph_schedule_summary=schedule_summary
+        or {
+            "state": "planned",
+            "execution_enabled": False,
+            "step_count": 1,
+            "planned_agent_ids": ["writer.template"],
+            "steps": [],
+        },
+    )
 
 
 def test_runtime_profile_defaults_to_interactive_read() -> None:
@@ -198,30 +227,13 @@ def test_graph_execution_adapter_gate_selects_node_runner_when_enabled() -> None
 
 
 def test_graph_execution_adapter_gate_keeps_high_risk_graph_unavailable() -> None:
-    decision = select_runtime_profile(
-        messages=_messages("PMS 이슈를 생성해줘"),
-        allowed_app_ids=["pms"],
-        max_tokens=None,
-        graph_enabled=True,
-    )
-    traced = attach_manager_graph_validation_result(
-        decision,
-        validation=ManagerGraphValidationResult(accepted=True, graph=None),
-        registry_agent_count=10,
-        write_agent_count=1,
-        graph_candidate_summary={
-            "intent": "write",
+    traced = _accepted_graph_decision(
+        {
+            "intent": "report",
             "risk": "high",
-            "output_kind": "approval_preview",
-            "requires_approval_preview": True,
-            "invocation_agent_ids": ["domain.pms", "approval.proposal_preview"],
-        },
-        graph_schedule_summary={
-            "state": "planned",
-            "execution_enabled": False,
-            "step_count": 2,
-            "planned_agent_ids": ["domain.pms", "approval.proposal_preview"],
-            "steps": [],
+            "output_kind": "artifact",
+            "requires_approval_preview": False,
+            "invocation_agent_ids": ["domain.pms", "writer.template"],
         },
     )
 
@@ -232,7 +244,165 @@ def test_graph_execution_adapter_gate_keeps_high_risk_graph_unavailable() -> Non
 
     assert gated.graph_used is False
     assert gated.graph_execution_status == "adapter_unavailable"
-    assert gated.graph_execution_fallback_reason == "graph_execution_adapter_unsupported"
+    assert gated.graph_execution_fallback_reason == "graph_risk_high_unsupported"
+    assert gated.graph_execution_fallback_policy is not None
+    assert (
+        gated.graph_execution_fallback_policy["reason"]
+        == "graph_risk_high_unsupported"
+    )
+    assert (
+        gated.graph_execution_fallback_policy["blocked_adapter"]
+        == GRAPH_NODE_RUNNER_ADAPTER_ID
+    )
+    assert gated.graph_execution_fallback_policy["fallback_adapter"] == (
+        GRAPH_INSTRUCTED_SINGLE_LOOP_ADAPTER_ID
+    )
+    assert gated.graph_execution_fallback_policy["candidate_shape"] == {
+        "intent": "report",
+        "risk": "high",
+        "output_kind": "artifact",
+        "requires_approval_preview": False,
+    }
+    assert gated.graph_execution_adapter is None
+
+
+def test_graph_execution_adapter_gate_explains_approval_preview_fallback() -> None:
+    traced = _accepted_graph_decision(
+        {
+            "intent": "write",
+            "risk": "high",
+            "output_kind": "approval_preview",
+            "requires_approval_preview": True,
+            "invocation_agent_ids": ["domain.pms", "approval.proposal_preview"],
+        },
+    )
+
+    gated = attach_graph_execution_adapter_decision(
+        traced,
+        graph_execution_enabled=True,
+    )
+
+    assert gated.graph_used is False
+    assert gated.graph_execution_status == "adapter_unavailable"
+    assert gated.graph_execution_fallback_reason == "graph_approval_preview_required"
+    assert gated.graph_execution_fallback_policy is not None
+    assert (
+        gated.graph_execution_fallback_policy["reason"]
+        == "graph_approval_preview_required"
+    )
+    assert gated.graph_execution_fallback_policy["candidate_shape"] == {
+        "intent": "write",
+        "risk": "high",
+        "output_kind": "approval_preview",
+        "requires_approval_preview": True,
+    }
+    assert gated.graph_execution_adapter is None
+
+
+def test_graph_execution_adapter_gate_explains_output_kind_fallback() -> None:
+    traced = _accepted_graph_decision(
+        {
+            "intent": "report",
+            "risk": "medium",
+            "output_kind": "approval_preview",
+            "requires_approval_preview": False,
+            "invocation_agent_ids": ["writer.template"],
+        },
+    )
+
+    gated = attach_graph_execution_adapter_decision(
+        traced,
+        graph_execution_enabled=True,
+    )
+
+    assert gated.graph_used is False
+    assert gated.graph_execution_status == "adapter_unavailable"
+    assert gated.graph_execution_fallback_reason == "graph_output_kind_unsupported"
+    assert gated.graph_execution_fallback_policy is not None
+    assert gated.graph_execution_fallback_policy["supported_output_kinds"] == [
+        "answer",
+        "artifact",
+    ]
+    assert gated.graph_execution_adapter is None
+
+
+def test_graph_execution_adapter_gate_explains_intent_fallback() -> None:
+    traced = _accepted_graph_decision(
+        {
+            "intent": "read",
+            "risk": "medium",
+            "output_kind": "answer",
+            "requires_approval_preview": False,
+            "invocation_agent_ids": ["writer.template"],
+        },
+    )
+
+    gated = attach_graph_execution_adapter_decision(
+        traced,
+        graph_execution_enabled=True,
+    )
+
+    assert gated.graph_used is False
+    assert gated.graph_execution_status == "adapter_unavailable"
+    assert gated.graph_execution_fallback_reason == "graph_intent_unsupported"
+    assert gated.graph_execution_fallback_policy is not None
+    assert gated.graph_execution_fallback_policy["supported_intents"] == ["report"]
+    assert gated.graph_execution_adapter is None
+
+
+def test_graph_execution_adapter_gate_explains_candidate_unavailable() -> None:
+    traced = _accepted_graph_decision(
+        {},
+    )
+
+    gated = attach_graph_execution_adapter_decision(
+        traced,
+        graph_execution_enabled=True,
+    )
+
+    assert gated.graph_used is False
+    assert gated.graph_execution_status == "adapter_unavailable"
+    assert gated.graph_execution_fallback_reason == "graph_candidate_unavailable"
+    assert gated.graph_execution_fallback_policy is not None
+    assert gated.graph_execution_fallback_policy["reason"] == "graph_candidate_unavailable"
+    assert "candidate_shape" not in gated.graph_execution_fallback_policy
+    assert gated.graph_execution_adapter is None
+
+
+def test_graph_execution_adapter_gate_explains_schedule_unavailable() -> None:
+    traced = _accepted_graph_decision(
+        {
+            "intent": "report",
+            "risk": "medium",
+            "output_kind": "artifact",
+            "requires_approval_preview": False,
+            "invocation_agent_ids": ["writer.template"],
+        },
+        schedule_summary={
+            "state": "failed",
+            "execution_enabled": False,
+            "fallback_reason": "graph_schedule_failed",
+            "step_count": 0,
+            "planned_agent_ids": [],
+            "steps": [],
+        },
+    )
+
+    gated = attach_graph_execution_adapter_decision(
+        traced,
+        graph_execution_enabled=True,
+    )
+
+    assert gated.graph_used is False
+    assert gated.graph_execution_status == "not_applicable"
+    assert gated.graph_execution_fallback_reason == "graph_schedule_unavailable"
+    assert gated.graph_execution_fallback_policy is not None
+    assert gated.graph_execution_fallback_policy["reason"] == "graph_schedule_unavailable"
+    assert gated.graph_execution_fallback_policy["schedule_state"] == {
+        "state": "failed",
+        "execution_enabled": False,
+        "step_count": 0,
+    }
     assert gated.graph_execution_adapter is None
 
 

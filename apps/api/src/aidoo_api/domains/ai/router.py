@@ -1764,6 +1764,9 @@ async def _chat_stream_publisher(
                 runtime_graph_execution_fallback_reason=(
                     runtime_routing.graph_execution_fallback_reason
                 ),
+                runtime_graph_execution_fallback_policy=(
+                    runtime_routing.graph_execution_fallback_policy
+                ),
                 runtime_graph_execution_adapter=runtime_routing.graph_execution_adapter,
                 parallel_tool_calls=False if has_approval_required_tools else None,
             ):
@@ -2136,6 +2139,9 @@ async def _run_graph_instructed_single_loop_stream(
         runtime_graph_execution_fallback_reason=(
             runtime_routing.graph_execution_fallback_reason
         ),
+        runtime_graph_execution_fallback_policy=(
+            runtime_routing.graph_execution_fallback_policy
+        ),
         runtime_graph_execution_adapter=runtime_routing.graph_execution_adapter,
         parallel_tool_calls=None,
         include_agent_run_id_in_done=True,
@@ -2248,6 +2254,9 @@ async def _run_graph_node_runner_stream(
         runtime_graph_execution_fallback_reason=(
             runtime_routing.graph_execution_fallback_reason
         ),
+        runtime_graph_execution_fallback_policy=(
+            runtime_routing.graph_execution_fallback_policy
+        ),
         runtime_graph_execution_adapter=runtime_routing.graph_execution_adapter,
         parallel_tool_calls=None,
         include_agent_run_id_in_done=True,
@@ -2346,6 +2355,9 @@ async def _run_hidden_graph_node(
         runtime_graph_execution_status=runtime_routing.graph_execution_status,
         runtime_graph_execution_fallback_reason=(
             runtime_routing.graph_execution_fallback_reason
+        ),
+        runtime_graph_execution_fallback_policy=(
+            runtime_routing.graph_execution_fallback_policy
         ),
         runtime_graph_execution_adapter=runtime_routing.graph_execution_adapter,
         parallel_tool_calls=None,
@@ -2760,6 +2772,7 @@ def _runtime_done_meta(runtime_routing: RuntimeRoutingDecision) -> dict[str, Any
         "graph_schedule_summary": runtime_routing.graph_schedule_summary,
         "graph_execution_status": runtime_routing.graph_execution_status,
         "graph_execution_fallback_reason": runtime_routing.graph_execution_fallback_reason,
+        "graph_execution_fallback_policy": runtime_routing.graph_execution_fallback_policy,
         "graph_execution_adapter": runtime_routing.graph_execution_adapter,
         "graph_node_execution_summary": None,
     }
@@ -3423,6 +3436,7 @@ def _persist_assistant_turn(
         "graph_schedule_summary": done_meta.get("graph_schedule_summary"),
         "graph_execution_status": done_meta.get("graph_execution_status"),
         "graph_execution_fallback_reason": done_meta.get("graph_execution_fallback_reason"),
+        "graph_execution_fallback_policy": done_meta.get("graph_execution_fallback_policy"),
         "graph_execution_adapter": done_meta.get("graph_execution_adapter"),
         "graph_node_execution_summary": done_meta.get("graph_node_execution_summary"),
         "finish_reason": buffer.finish_reason,

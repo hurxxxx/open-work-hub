@@ -562,6 +562,19 @@
           "default": null,
           "title": "Graph Execution Adapter"
         },
+        "graph_execution_fallback_policy": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Graph Execution Fallback Policy"
+        },
         "graph_execution_fallback_reason": {
           "anyOf": [
             {

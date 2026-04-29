@@ -878,6 +878,9 @@ def _persist_runtime_shadow_on_halt(
             "graph_execution_fallback_reason": model_meta.get(
                 "graph_execution_fallback_reason"
             ),
+            "graph_execution_fallback_policy": model_meta.get(
+                "graph_execution_fallback_policy"
+            ),
             "graph_execution_adapter": model_meta.get("graph_execution_adapter"),
         },
     )

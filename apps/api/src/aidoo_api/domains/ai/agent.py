@@ -114,6 +114,7 @@ async def run_agent_turn_stream(
     runtime_graph_schedule_summary: dict[str, Any] | None = None,
     runtime_graph_execution_status: str = "not_applicable",
     runtime_graph_execution_fallback_reason: str | None = None,
+    runtime_graph_execution_fallback_policy: dict[str, Any] | None = None,
     runtime_graph_execution_adapter: str | None = None,
     parallel_tool_calls: bool | None = None,
     include_agent_run_id_in_done: bool = False,
@@ -143,6 +144,7 @@ async def run_agent_turn_stream(
         runtime_graph_schedule_summary=runtime_graph_schedule_summary,
         runtime_graph_execution_status=runtime_graph_execution_status,
         runtime_graph_execution_fallback_reason=runtime_graph_execution_fallback_reason,
+        runtime_graph_execution_fallback_policy=runtime_graph_execution_fallback_policy,
         runtime_graph_execution_adapter=runtime_graph_execution_adapter,
     )
     async for event in _run_agent_loop_stream(
@@ -850,6 +852,7 @@ def _runtime_done_meta(model_meta: dict[str, Any]) -> dict[str, Any]:
         "graph_schedule_summary": model_meta.get("graph_schedule_summary"),
         "graph_execution_status": model_meta.get("graph_execution_status"),
         "graph_execution_fallback_reason": model_meta.get("graph_execution_fallback_reason"),
+        "graph_execution_fallback_policy": model_meta.get("graph_execution_fallback_policy"),
         "graph_execution_adapter": model_meta.get("graph_execution_adapter"),
         "graph_node_execution_summary": model_meta.get("graph_node_execution_summary"),
     }
@@ -877,6 +880,7 @@ def _build_snapshot_model_meta(
     runtime_graph_schedule_summary: dict[str, Any] | None,
     runtime_graph_execution_status: str,
     runtime_graph_execution_fallback_reason: str | None,
+    runtime_graph_execution_fallback_policy: dict[str, Any] | None,
     runtime_graph_execution_adapter: str | None,
 ) -> dict[str, Any]:
     return {
@@ -908,6 +912,7 @@ def _build_snapshot_model_meta(
         "graph_schedule_summary": runtime_graph_schedule_summary,
         "graph_execution_status": runtime_graph_execution_status,
         "graph_execution_fallback_reason": runtime_graph_execution_fallback_reason,
+        "graph_execution_fallback_policy": runtime_graph_execution_fallback_policy,
         "graph_execution_adapter": runtime_graph_execution_adapter,
         "graph_node_execution_summary": None,
         "scope": _build_snapshot_scope_meta(
