@@ -23,12 +23,12 @@ Phase 6 전체 목표는 기존 single-loop agent를 deterministic fast path, ma
 
 이 섹션은 세션 handoff용이다. 구현 세션이 끝날 때마다 짧게 갱신한다.
 
-- Current PR/stage: Phase 0-AO external execution flag priority after `03d2d9f`.
-- Last completed: Fixed the external adapter selection contract so execution flags have priority over selected provider adapters. If `AIDOO_AI_EXTERNAL_*_EXECUTION_ENABLED=false`, selected `openai`/`anthropic` adapters now produce trace-safe `disabled` summaries with `execution_flag_disabled` instead of `adapter_not_implemented` failures. The focused regression gate now includes external adapter selector tests.
+- Current PR/stage: Phase 0-AQ local MLX length fallback investigation after `2ae303e`.
+- Last completed: Narrowed the UI E2E length fallback to the local MLX tool-enabled grounded-report path. A direct API text-only request with `allowed_app_ids=[]` returned `finish=stop` and content `UI smoke OK`; the same local stream shape with `allowed_app_ids=["meeting","pms"]` and the Korean UI prompt reproduced `usage,done` only with `finish=length`.
 - In progress: None.
-- Next exact task: Run browser/UI E2E around `/w/hq/ai` with the current local API/MLX stack, focusing on workspace AI route rendering and local stream behavior.
-- Files touched in Phase 0-AO: `apps/api/src/aidoo_api/domains/ai/runtime/external_adapters.py`, `apps/api/tests/test_ai_runtime_external_adapters.py`, `apps/api/tests/test_ai_runtime_mock_e2e.py`, `scripts/phase6-runtime-regression.sh`, `plans/03-phase6-evidence-runtime-implementation.md`.
-- Tests/checks run: `cd apps/api && uv run ruff check src/aidoo_api/domains/ai/runtime/external_adapters.py tests/test_ai_runtime_external_adapters.py tests/test_ai_runtime_mock_e2e.py`; `cd apps/api && uv run pytest tests/test_ai_runtime_external_adapters.py tests/test_ai_runtime_mock_e2e.py -q`; `scripts/phase6-runtime-regression.sh -q`.
+- Next exact task: Decide whether to add a local-tool-calling capability gate/default for MLX or keep the current behavior documented as a local model/tool limitation.
+- Files touched in Phase 0-AQ: `plans/03-phase6-evidence-runtime-implementation.md`.
+- Tests/checks run: `agent-browser --session phase6-ui-e2e` open/login/navigate/fill/send/snapshot; final URL `http://127.0.0.1:4200/w/hq/ai?c=ffcc5a71-f42f-4153-b475-6f9e544eee93`; console contained only Vite debug and React DevTools info; page errors were empty. Direct API comparison: text-only `POST /chat/stream` with `allowed_app_ids=[]` returned `finish=stop`; tool-scoped `POST /chat/stream` with `allowed_app_ids=["meeting","pms"]` reproduced `finish=length`.
 - Known blockers: OpenAI/Anthropic-backed manager/search execution is still not enabled. The egress/planner/search contracts only decide, sanitize, and build request envelopes; they do not call external APIs. `graph_node_runner_v0` remains an in-process runner, not a durable workflow backend. Hidden node outputs are not persisted verbatim; only status/count/error summary is persisted. High-risk / approval-preview graphs are intentionally not supported by this adapter.
 
 ## Architecture / Principles
@@ -347,6 +347,15 @@ cd apps/api && pytest tests/test_ai_runtime_contracts.py tests/test_ai_runtime_p
 - `POST /api/v1/auth/dev-login` for `hq-admin` returned a valid session for workspace `hq`; authenticated `GET /api/v1/auth/me` returned 200.
 - Authenticated `GET /api/v1/ai/health` returned 200 with the local MLX pool `ready=true` at `http://127.0.0.1:8080/v1`. External OpenRouter was `not_configured`, expected because this phase continues with mock/local provider work.
 - Authenticated `POST /api/v1/workspaces/hq/ai/chat/stream` with `backend_mode=local` and `persist=false` returned SSE events ending in `done`. Default server flags kept `graph_used=false`, which is expected outside the explicit graph/mock test harness.
+
+### 2026-04-29 Phase 0-AP UI E2E Smoke
+
+- Reused local web/API/MLX servers on `127.0.0.1:4200`, `127.0.0.1:8000`, and `127.0.0.1:8080`.
+- `agent-browser --session phase6-ui-e2e` opened `/login`, quick-login as `Aidoo HQ Admin` succeeded, and navigation reached `/w/hq/ai`.
+- `/w/hq/ai` rendered workspace navigation, AI side menu, conversation list, routing status, scope picker, routing selector, and composer controls.
+- Submitted `UI E2E smoke입니다. 한 문장으로 응답해줘.` through the composer. The final URL was `http://127.0.0.1:4200/w/hq/ai?c=ffcc5a71-f42f-4153-b475-6f9e544eee93`, and the conversation appeared in the recent list.
+- The stream terminated and re-enabled the composer, but the assistant bubble showed the length fallback text `응답이 토큰 한도에 도달해 중간에서 잘렸습니다...` with routing metadata `local 풀 · local_only · policy_local_only`.
+- Console contained only Vite debug and React DevTools info; `agent-browser errors` returned no page errors.
 
 ### 2026-04-28 Phase 0-A Hardening Smoke
 
