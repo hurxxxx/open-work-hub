@@ -3,7 +3,7 @@ import { AlertTriangle, CheckCircle2, Loader2 } from 'lucide-react';
 import type {
   MeetingRecording,
   MeetingRecordingStatus,
-} from '@/src/domains/meeting/meeting-api';
+} from '../../api/meeting-api';
 
 const STAGES = [
   { key: 'pending', label: '업로드' },

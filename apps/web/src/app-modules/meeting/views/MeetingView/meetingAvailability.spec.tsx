@@ -7,14 +7,14 @@ const availabilityHarness = vi.hoisted(() => ({
   getMeetingAvailability: vi.fn(),
 }));
 
-vi.mock('@/src/domains/auth/auth-provider', () => ({
+vi.mock('@/src/platform/auth/auth-provider', () => ({
   useAuth: () => ({
     token: 'test-token',
   }),
 }));
 
-vi.mock('@/src/domains/meeting/meeting-api', async () => {
-  const actual = await vi.importActual<typeof import('@/src/domains/meeting/meeting-api')>('@/src/domains/meeting/meeting-api');
+vi.mock('../../api/meeting-api', async () => {
+  const actual = await vi.importActual<typeof import('../../api/meeting-api')>('../../api/meeting-api');
   return {
     ...actual,
     getMeetingAvailability: availabilityHarness.getMeetingAvailability,

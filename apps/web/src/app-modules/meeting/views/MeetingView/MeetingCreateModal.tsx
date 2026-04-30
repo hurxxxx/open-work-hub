@@ -2,14 +2,14 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Button, Dialog } from '@aidoo/ui';
 import { CheckSquare, FileText, Paperclip, Plus, X } from 'lucide-react';
 
-import { useAuth } from '@/src/domains/auth/auth-provider';
+import { useAuth } from '@/src/platform/auth/auth-provider';
 import {
   createMeeting,
   listMeetingUsers,
   uploadMeetingFile,
   type MeetingAttendeeInput,
   type MeetingUser,
-} from '@/src/domains/meeting/meeting-api';
+} from '../../api/meeting-api';
 
 import { MeetingAvailabilityPanel } from './MeetingAvailabilityPanel';
 import { TaskPickerModal } from './TaskPickerModal';

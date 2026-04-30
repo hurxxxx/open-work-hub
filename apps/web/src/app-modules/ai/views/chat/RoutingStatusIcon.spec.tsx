@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 import type {
   LlmHealthResponse,
   LlmPoolHealthResponse,
-} from '@/src/domains/ai/ai-api';
+} from '../../api/ai-api';
 
 import { RoutingStatusIcon } from './RoutingStatusIcon';
 

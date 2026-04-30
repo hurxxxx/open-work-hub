@@ -1,14 +1,14 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import type { MeetingInsightItem } from '@/src/domains/meeting/meeting-insights-api';
-import { createConversation } from '@/src/domains/ai/conversations-api';
+import type { MeetingInsightItem } from '../../api/meeting-insights-api';
+import { createConversation } from '@/src/app-modules/ai/public-api';
 
 import {
   __test,
   openMeetingInsightInChat,
 } from './openMeetingInsightInChat';
 
-vi.mock('@/src/domains/ai/conversations-api', () => ({
+vi.mock('@/src/app-modules/ai/public-api', () => ({
   createConversation: vi.fn(),
 }));
 

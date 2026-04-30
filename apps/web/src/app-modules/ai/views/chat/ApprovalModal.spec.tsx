@@ -7,15 +7,15 @@ const aiHarness = vi.hoisted(() => ({
   getAiApprovalStatus: vi.fn(),
 }));
 
-vi.mock('@/src/domains/auth/auth-provider', () => ({
+vi.mock('@/src/platform/auth/auth-provider', () => ({
   useAuth: () => ({
     token: 'test-token',
   }),
 }));
 
-vi.mock('@/src/domains/ai/ai-api', async () => {
-  const actual = await vi.importActual<typeof import('@/src/domains/ai/ai-api')>(
-    '@/src/domains/ai/ai-api',
+vi.mock('../../api/ai-api', async () => {
+  const actual = await vi.importActual<typeof import('../../api/ai-api')>(
+    '../../api/ai-api',
   );
   return {
     ...actual,

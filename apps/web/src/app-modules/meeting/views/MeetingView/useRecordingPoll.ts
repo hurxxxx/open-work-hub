@@ -4,7 +4,7 @@ import {
   ACTIVE_RECORDING_STATUSES,
   getMeeting,
   type MeetingDetail,
-} from '@/src/domains/meeting/meeting-api';
+} from '../../api/meeting-api';
 
 export function useRecordingPoll(
   token: string | null,

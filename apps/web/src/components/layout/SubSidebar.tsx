@@ -21,14 +21,14 @@ import { getAppSidebarConfig } from '@/src/app/shell/app-sidebar-registry';
 import {
   hasAdminSectionAccess,
   type AdminSection,
-} from '@/src/domains/admin/admin-permissions';
-import { useAuth } from '@/src/domains/auth/auth-provider';
-import { hasWorkspaceMembership } from '@/src/domains/auth/auth-api';
-import { resolveNavItemHref } from '@/src/domains/workspaces/workspace-utils';
+} from '@/src/platform/admin/admin-permissions';
+import { useAuth } from '@/src/platform/auth/auth-provider';
+import { hasWorkspaceMembership } from '@/src/platform/auth/auth-api';
+import { resolveNavItemHref } from '@/src/platform/workspaces/workspace-utils';
 import type {
   WorkspaceBootstrapApp,
   WorkspaceBootstrapNavItem,
-} from '@/src/domains/workspaces/workspaces-api';
+} from '@/src/platform/workspaces/workspaces-api';
 import type { AppModuleId, NavItem } from '@/src/app/shell/navigation-types';
 import type {
   AppSidebarActionContext,

@@ -7,12 +7,12 @@ import {
   LoginRoute,
   RequireAuth,
   useAuth,
-} from '@/src/domains/auth/auth-provider';
-import type { ThemePreference } from '@/src/domains/auth/auth-api';
+} from '@/src/platform/auth/auth-provider';
+import type { ThemePreference } from '@/src/platform/auth/auth-api';
 import {
   NotFoundView,
   ProfilePage,
-} from '@/src/domains/auth/settings-pages';
+} from '@/src/platform/auth/settings-pages';
 import {
   getWorkspaceAppIdFromPath,
   getWorkspaceSlugFromPath,
@@ -20,11 +20,11 @@ import {
   persistLastWorkspaceSlug,
   resolveBootstrapWorkspaceSlug,
   resolveShellWorkspaceSlug,
-} from '@/src/domains/workspaces/workspace-utils';
-import { useWorkspaceBootstrap } from '@/src/domains/workspaces/workspaces-api';
+} from '@/src/platform/workspaces/workspace-utils';
+import { useWorkspaceBootstrap } from '@/src/platform/workspaces/workspaces-api';
 import {
   WorkspaceBootstrapProvider,
-} from '@/src/domains/workspaces/workspace-bootstrap-context';
+} from '@/src/platform/workspaces/workspace-bootstrap-context';
 import { resolveShellState, type ShellAppId } from '@/src/app-shell';
 import {
   AdminLandingRedirect,

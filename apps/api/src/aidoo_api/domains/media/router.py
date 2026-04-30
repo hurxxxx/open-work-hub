@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import json
-import re
 from datetime import UTC, datetime, timedelta
 from io import BytesIO
 
@@ -22,10 +20,10 @@ from aidoo_api.domains.auth.security import new_id
 from aidoo_api.domains.docs.models import DocMeetingAccess, NativeDocPage, NativeDocUserShare
 from aidoo_api.domains.docs.registry import ContainerRef, project_container_access
 from aidoo_api.domains.media.models import MediaFile
+from aidoo_api.domains.media.service import MEDIA_ID_PATTERN, can_link_unlinked_media
 
 MAX_MEDIA_UPLOAD_SIZE = 10 * 1024 * 1024  # 10 MB
 ALLOWED_IMAGE_TYPES = {"image/png", "image/jpeg", "image/gif", "image/webp", "image/svg+xml"}
-MEDIA_ID_PATTERN = re.compile(r"media:([0-9a-f-]{36})")
 
 router = APIRouter(prefix="/media", tags=["media"])
 
@@ -167,10 +165,6 @@ def _can_resolve(db: Session, user: User, media: MediaFile) -> bool:
     return media.uploaded_by_id == user.id
 
 
-def _can_link_unlinked_media(db: Session, user: User, media: MediaFile) -> bool:
-    return media.uploaded_by_id == user.id
-
-
 def _has_space_access(db: Session, user: User, team_id: str | None) -> bool:
     if team_id is None:
         return False
@@ -223,7 +217,7 @@ def link_media(
     ).all()
 
     for media in media_files:
-        if not _can_link_unlinked_media(db, current_user, media):
+        if not can_link_unlinked_media(current_user, media):
             continue
         media.resource_type = payload.resource_type
         media.resource_id = payload.resource_id
@@ -358,63 +352,3 @@ def cleanup_orphan_media(
 
     db.commit()
     return CleanupResponse(deleted_count=deleted, failed_count=failed)
-
-
-# ── Server-side media sync (link + unlink) ────────────────────────────
-
-
-def sync_embedded_media(
-    db: Session,
-    blocks: object,
-    resource_type: str,
-    resource_id: str,
-    current_user: User,
-) -> None:
-    """Full re-scan: link new media, unlink removed media for a resource."""
-    raw = json.dumps(blocks) if not isinstance(blocks, str) else blocks
-    current_ids = set(MEDIA_ID_PATTERN.findall(raw))
-
-    # Link newly referenced media
-    if current_ids:
-        media_files = db.scalars(
-            select(MediaFile).where(
-                MediaFile.id.in_(current_ids),
-                MediaFile.resource_type.is_(None),
-            )
-        ).all()
-        for media in media_files:
-            if not _can_link_unlinked_media(db, current_user, media):
-                continue
-            media.resource_type = resource_type
-            media.resource_id = resource_id
-
-    # Unlink media no longer referenced by this resource
-    previously_linked = db.scalars(
-        select(MediaFile).where(
-            MediaFile.resource_type == resource_type,
-            MediaFile.resource_id == resource_id,
-        )
-    ).all()
-
-    for media in previously_linked:
-        if media.id not in current_ids:
-            media.resource_type = None
-            media.resource_id = None
-
-
-def cleanup_media_for_resource(db: Session, resource_type: str, resource_id: str) -> list[str]:
-    """Mark media for deletion and return storage keys for post-commit MinIO cleanup."""
-    media_files = db.scalars(
-        select(MediaFile).where(
-            MediaFile.resource_type == resource_type,
-            MediaFile.resource_id == resource_id,
-        )
-    ).all()
-
-    if not media_files:
-        return []
-
-    keys = [media.storage_key for media in media_files]
-    for media in media_files:
-        db.delete(media)
-    return keys

@@ -5,9 +5,9 @@ import { useEffect, useMemo, useState } from 'react';
 import {
   getAiApprovalStatus,
   type AiApprovalStatusResponse,
-} from '@/src/domains/ai/ai-api';
-import type { PendingApproval } from '@/src/domains/ai/agent-events';
-import { useAuth } from '@/src/domains/auth/auth-provider';
+} from '../../api/ai-api';
+import type { PendingApproval } from '../../api/agent-events';
+import { useAuth } from '@/src/platform/auth/auth-provider';
 
 export interface ApprovalModalProps {
   approval: PendingApproval;

@@ -1,15 +1,15 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Layout, UserPlus, X } from 'lucide-react';
 import { Dialog, Button } from '@aidoo/ui';
-import { useAuth } from '@/src/domains/auth/auth-provider';
-import { hasWorkspaceMembership } from '@/src/domains/auth/auth-api';
+import { useAuth } from '@/src/platform/auth/auth-provider';
+import { hasWorkspaceMembership } from '@/src/platform/auth/auth-api';
 import {
   addSpaceMember,
   createSpace,
   listPmsUsers,
   type PmsSpace,
   type PmsUserSummary,
-} from '@/src/domains/pms/pms-api';
+} from '../api/pms-api';
 import { initials } from './pms-constants';
 
 const AVATAR_COLORS = [

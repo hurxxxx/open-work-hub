@@ -1,7 +1,7 @@
 import { Navigate } from 'react-router-dom';
 
-import { AdminConsoleView } from '@/src/domains/admin/admin-console';
-import { WorkspaceSettingsView } from '@/src/domains/workspaces/WorkspaceSettingsView';
+import { AdminConsoleView } from '@/src/platform/admin/admin-console';
+import { WorkspaceSettingsView } from '@/src/platform/workspaces/WorkspaceSettingsView';
 
 export const workspaceSettingsRoute = {
   path: '/w/:workspaceSlug/settings',

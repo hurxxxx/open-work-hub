@@ -4,13 +4,13 @@ import { useParams } from 'react-router-dom';
 import {
   hasAdminSectionAccess,
   type AdminSection,
-} from '@/src/domains/admin/admin-permissions';
+} from '@/src/platform/admin/admin-permissions';
 import {
   hasAdminConsoleAccess,
   hasWorkspaceMembership,
-} from '@/src/domains/auth/auth-api';
-import { useAuth } from '@/src/domains/auth/auth-provider';
-import { AccessDeniedView } from '@/src/domains/auth/settings-pages';
+} from '@/src/platform/auth/auth-api';
+import { useAuth } from '@/src/platform/auth/auth-provider';
+import { AccessDeniedView } from '@/src/platform/auth/settings-pages';
 
 export function WorkspaceGate({
   children,

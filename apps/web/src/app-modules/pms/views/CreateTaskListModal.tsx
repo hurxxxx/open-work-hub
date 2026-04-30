@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Dialog, Button } from '@aidoo/ui';
-import { useAuth } from '@/src/domains/auth/auth-provider';
-import { createPmsTaskList, type PmsTaskList } from '@/src/domains/pms/pms-api';
+import { useAuth } from '@/src/platform/auth/auth-provider';
+import { createPmsTaskList, type PmsTaskList } from '../api/pms-api';
 
 export const CreateTaskListModal = ({
   isOpen,

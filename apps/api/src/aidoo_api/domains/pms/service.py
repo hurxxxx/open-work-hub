@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, timedelta
 from typing import Any, Literal
 from uuid import NAMESPACE_URL, uuid5
 
@@ -11,11 +11,11 @@ from sqlalchemy.orm import Session, joinedload, selectinload
 from aidoo_api.core.principal import CallerPrincipal
 from aidoo_api.core.settings import get_settings
 from aidoo_api.core.storage import get_minio_client
-from aidoo_api.domains.auth.access import bind_current_workspace
-from aidoo_api.domains.auth.models import TeamMember, User, Workspace
+from aidoo_api.domains.auth.access import bind_current_workspace, get_current_workspace, resolve_team_role
+from aidoo_api.domains.auth.models import Team, TeamMember, User, Workspace
 from aidoo_api.domains.auth.security import new_id
-from aidoo_api.domains.media.router import cleanup_media_for_resource, sync_embedded_media
-from aidoo_api.domains.pms.access import _ensure_issue_readable, _ensure_list_editor
+from aidoo_api.domains.media.service import cleanup_media_for_resource, sync_embedded_media
+from aidoo_api.domains.pms.access import _ensure_issue_readable, _ensure_list_editor, _ensure_list_member
 from aidoo_api.domains.pms.rag_sync import enqueue_issue_rag_sync
 from aidoo_api.domains.pms.models import (
     Attachment,
@@ -25,6 +25,7 @@ from aidoo_api.domains.pms.models import (
     IssueComment,
     IssueLabel,
     Notification,
+    ScheduleDependency,
     TaskList,
     TimeEntry,
 )
@@ -63,12 +64,6 @@ def _priority_label(priority: str) -> str:
     return PRIORITY_LABELS.get(priority, priority.replace("_", " ").title())
 
 
-def _router():
-    from aidoo_api.domains.pms import router as pms_router
-
-    return pms_router
-
-
 def _bind_workspace_context(
     db: Session,
     *,
@@ -99,6 +94,99 @@ def _require_user_write_principal(principal: CallerPrincipal) -> None:
 
 def _stable_replay_id(approved_call_id: str, suffix: str) -> str:
     return str(uuid5(NAMESPACE_URL, f"pms:{approved_call_id}:{suffix}"))
+
+
+def _paginate[T](items: list[T], page: int, page_size: int) -> tuple[list[T], int]:
+    total = len(items)
+    start = (page - 1) * page_size
+    end = start + page_size
+    return items[start:end], total
+
+
+def _get_pms_workspace(db: Session) -> Workspace:
+    workspace = get_current_workspace(db)
+    if workspace is None:
+        raise HTTPException(status_code=500, detail="PMS workspace context is not available.")
+    return workspace
+
+
+def _load_active_space(db: Session, space_id: str, *, include_members: bool = False) -> Team | None:
+    workspace = _get_pms_workspace(db)
+    query = select(Team).options(joinedload(Team.workspace)).where(
+        Team.id == space_id,
+        Team.active.is_(True),
+        Team.trashed_at.is_(None),
+        Team.workspace.has(Workspace.active.is_(True)),
+        Team.workspace_id == workspace.id,
+    )
+    if include_members:
+        query = query.options(selectinload(Team.members))
+    return db.scalar(query)
+
+
+def _serialize_space(team: Team, current_user_role: str | None) -> dict[str, Any]:
+    return {
+        "id": team.id,
+        "workspace_id": team.workspace_id,
+        "workspace_key": team.workspace.key,
+        "key": team.key,
+        "name": team.name,
+        "description": team.description,
+        "member_count": len(team.members),
+        "current_user_role": current_user_role,
+        "created_at": team.created_at,
+        "updated_at": team.updated_at,
+    }
+
+
+def _ensure_space_access(db: Session, user: User, space_id: str) -> tuple[Team, str]:
+    team = _load_active_space(db, space_id, include_members=True)
+    if team is None:
+        raise HTTPException(status_code=404, detail="Space not found.")
+    role = resolve_team_role(db, user, team)
+    if role is None:
+        raise HTTPException(status_code=403, detail="Space access required.")
+    return team, role
+
+
+def _accessible_space_ids(db: Session, user: User) -> set[str]:
+    workspace = _get_pms_workspace(db)
+    return set(
+        db.scalars(
+            select(TeamMember.team_id)
+            .join(Team, Team.id == TeamMember.team_id)
+            .where(
+                TeamMember.user_id == user.id,
+                Team.active.is_(True),
+                Team.trashed_at.is_(None),
+                Team.workspace.has(Workspace.active.is_(True)),
+                Team.workspace_id == workspace.id,
+            )
+        )
+    )
+
+
+def _space_query_for_user(db: Session, user: User):
+    workspace = _get_pms_workspace(db)
+    return (
+        select(Team)
+        .options(joinedload(Team.workspace), selectinload(Team.members))
+        .join(TeamMember, TeamMember.team_id == Team.id)
+        .where(
+            TeamMember.user_id == user.id,
+            Team.active.is_(True),
+            Team.trashed_at.is_(None),
+            Team.workspace.has(Workspace.active.is_(True)),
+            Team.workspace_id == workspace.id,
+        )
+    )
+
+
+def _accessible_task_lists_query(db: Session, user: User):
+    accessible_space_ids = _accessible_space_ids(db, user)
+    if not accessible_space_ids:
+        return select(TaskList).where(TaskList.id == "__none__")
+    return select(TaskList).where(TaskList.team_id.in_(accessible_space_ids))
 
 
 def _space_member_ids(db: Session, space_id: str) -> set[str]:
@@ -169,6 +257,81 @@ def _serialize_issue_summary(issue: Issue) -> dict[str, Any]:
     }
 
 
+def _serialize_issue(issue: Issue) -> dict[str, Any]:
+    return _serialize_issue_summary(issue)
+
+
+def _is_closed_status(status_value: str, task_list: TaskList | None = None) -> bool:
+    if status_value in {"done", "canceled"}:
+        return True
+    if task_list is not None:
+        for list_status in getattr(task_list, "statuses", []):
+            if list_status.slug == status_value:
+                return list_status.category in {"done", "canceled"}
+    return False
+
+
+def _calculate_progress(issues: list[Issue], task_list: TaskList | None = None) -> float:
+    progress_values = [
+        progress
+        for issue in issues
+        if not issue.archived
+        for progress in [_issue_progress(issue.status, task_list)]
+        if progress is not None
+    ]
+    if not progress_values:
+        return 0.0
+    return round(sum(progress_values) / len(progress_values), 2)
+
+
+def _task_list_role(db: Session, task_list: TaskList, user: User, team_lookup: dict[str, Team]) -> str:
+    if task_list.team_id is None:
+        return "viewer"
+    team = team_lookup.get(task_list.team_id)
+    if team is None:
+        return "viewer"
+    return resolve_team_role(db, user, team) or "viewer"
+
+
+def _serialize_task_list(
+    task_list: TaskList,
+    role: str,
+    team_name: str | None = None,
+    member_count: int | None = None,
+) -> dict[str, Any]:
+    overdue_issue_count = sum(
+        1
+        for issue in task_list.issues
+        if (
+            not issue.archived
+            and not _is_closed_status(issue.status, task_list)
+            and issue.due_date is not None
+            and issue.due_date < date.today()
+        )
+    )
+    return {
+        "id": task_list.id,
+        "key": task_list.key,
+        "name": task_list.name,
+        "description": task_list.description,
+        "status": task_list.status,
+        "archived": task_list.archived,
+        "team_id": task_list.team_id,
+        "team_name": team_name,
+        "folder_id": task_list.folder_id,
+        "folder_name": getattr(task_list.folder, "name", None) if task_list.folder_id else None,
+        "sort_order": task_list.sort_order,
+        "role": role,
+        "progress": _calculate_progress(task_list.issues, task_list),
+        "member_count": member_count if member_count is not None else 0,
+        "milestone_count": len(task_list.milestones),
+        "issue_count": len(task_list.issues),
+        "overdue_issue_count": overdue_issue_count,
+        "created_at": task_list.created_at,
+        "updated_at": task_list.updated_at,
+    }
+
+
 def _serialize_comment_item(comment: IssueComment) -> dict[str, Any]:
     return {
         "id": comment.id,
@@ -179,6 +342,20 @@ def _serialize_comment_item(comment: IssueComment) -> dict[str, Any]:
         "body_blocks": comment.body_blocks,
         "created_at": comment.created_at,
     }
+
+
+def _serialize_comment(comment: IssueComment) -> dict[str, Any]:
+    return _serialize_comment_item(comment)
+
+
+def _build_attachment_download_url(storage_key: str) -> str:
+    settings = get_settings()
+    client = get_minio_client()
+    return client.presigned_get_object(
+        settings.minio_bucket,
+        storage_key,
+        expires=timedelta(hours=1),
+    )
 
 
 def _log_issue_activity(
@@ -435,10 +612,9 @@ def list_spaces(
     user: User,
 ) -> list[dict[str, Any]]:
     _bind_workspace_context(db, workspace=workspace, principal=principal, user=user)
-    helpers = _router()
-    spaces = list(db.scalars(helpers._space_query_for_user(db, user).order_by(helpers.Team.name.asc())))
+    spaces = list(db.scalars(_space_query_for_user(db, user).order_by(Team.name.asc())))
     return [
-        helpers._serialize_space(space, helpers.resolve_team_role(db, user, space)).model_dump()
+        _serialize_space(space, resolve_team_role(db, user, space))
         for space in spaces
     ]
 
@@ -458,18 +634,17 @@ def list_task_lists(
     team_id: str | None = None,
 ) -> dict[str, Any]:
     _bind_workspace_context(db, workspace=workspace, principal=principal, user=user)
-    helpers = _router()
 
     if team_id is not None:
-        helpers._ensure_space_access(db, user, team_id)
+        _ensure_space_access(db, user, team_id)
 
     task_lists = list(
         db.scalars(
-            helpers._accessible_task_lists_query(db, user).options(
-                selectinload(helpers.TaskList.milestones),
-                selectinload(helpers.TaskList.issues).selectinload(helpers.Issue.comments),
-                selectinload(helpers.TaskList.issues).selectinload(helpers.Issue.subtasks),
-                joinedload(helpers.TaskList.folder),
+            _accessible_task_lists_query(db, user).options(
+                selectinload(TaskList.milestones),
+                selectinload(TaskList.issues).selectinload(Issue.comments),
+                selectinload(TaskList.issues).selectinload(Issue.subtasks),
+                joinedload(TaskList.folder),
             )
         )
     )
@@ -495,7 +670,7 @@ def list_task_lists(
         task_lists.sort(key=lambda task_list: task_list.key.lower(), reverse=reverse)
     elif sort_by == "progress":
         task_lists.sort(
-            key=lambda task_list: helpers._calculate_progress(task_list.issues),
+            key=lambda task_list: _calculate_progress(task_list.issues),
             reverse=reverse,
         )
     elif sort_by == "sort_order":
@@ -516,12 +691,12 @@ def list_task_lists(
     if team_ids:
         teams = list(
             db.scalars(
-                select(helpers.Team)
+                select(Team)
                 .where(
-                    helpers.Team.id.in_(team_ids),
-                    helpers.Team.trashed_at.is_(None),
+                    Team.id.in_(team_ids),
+                    Team.trashed_at.is_(None),
                 )
-                .options(joinedload(helpers.Team.workspace), selectinload(helpers.Team.members))
+                .options(joinedload(Team.workspace), selectinload(Team.members))
             )
         )
         team_names = {team.id: team.name for team in teams}
@@ -529,15 +704,15 @@ def list_task_lists(
         team_member_counts = {team.id: len(team.members) for team in teams}
 
     serialized = [
-        helpers._serialize_task_list(
+        _serialize_task_list(
             task_list,
-            helpers._task_list_role(db, task_list, user, team_lookup),
+            _task_list_role(db, task_list, user, team_lookup),
             team_names.get(task_list.team_id, None) if task_list.team_id else None,
             team_member_counts.get(task_list.team_id or "", 0),
-        ).model_dump()
+        )
         for task_list in task_lists
     ]
-    page_items, total = helpers._paginate(serialized, page, page_size)
+    page_items, total = _paginate(serialized, page, page_size)
     return {
         "items": page_items,
         "total": total,
@@ -570,25 +745,24 @@ def list_issues(
     start_date_to: date | None = None,
 ) -> dict[str, Any]:
     _bind_workspace_context(db, workspace=workspace, principal=principal, user=user)
-    helpers = _router()
 
-    helpers._ensure_list_member(db, user, list_id)
+    _ensure_list_member(db, user, list_id)
     issues = list(
         db.scalars(
-            select(helpers.Issue)
+            select(Issue)
             .options(
-                selectinload(helpers.Issue.task_list),
-                selectinload(helpers.Issue.milestone),
-                selectinload(helpers.Issue.assignee),
-                selectinload(helpers.Issue.reporter),
-                selectinload(helpers.Issue.comments),
-                selectinload(helpers.Issue.label_links).selectinload(helpers.IssueLabel.label),
-                selectinload(helpers.Issue.subtasks),
-                selectinload(helpers.Issue.checklist_items),
-                selectinload(helpers.Issue.time_entries),
-                selectinload(helpers.Issue.assignee_links).selectinload(helpers.IssueAssignee.user),
+                selectinload(Issue.task_list),
+                selectinload(Issue.milestone),
+                selectinload(Issue.assignee),
+                selectinload(Issue.reporter),
+                selectinload(Issue.comments),
+                selectinload(Issue.label_links).selectinload(IssueLabel.label),
+                selectinload(Issue.subtasks),
+                selectinload(Issue.checklist_items),
+                selectinload(Issue.time_entries),
+                selectinload(Issue.assignee_links).selectinload(IssueAssignee.user),
             )
-            .where(helpers.Issue.list_id == list_id)
+            .where(Issue.list_id == list_id)
         )
     )
     q_lower = q.strip().lower()
@@ -618,7 +792,7 @@ def list_issues(
             for issue in issues
             if q_lower in issue.title.lower()
             or q_lower in issue.description.lower()
-            or q_lower in helpers._issue_reference(issue).lower()
+            or q_lower in _issue_reference(issue).lower()
         ]
 
     reverse = sort_dir == "desc"
@@ -632,8 +806,8 @@ def list_issues(
     else:
         issues.sort(key=lambda issue: (issue.status, issue.board_position), reverse=reverse)
 
-    serialized = [helpers._serialize_issue(issue).model_dump() for issue in issues]
-    page_items, total = helpers._paginate(serialized, page, page_size)
+    serialized = [_serialize_issue(issue) for issue in issues]
+    page_items, total = _paginate(serialized, page, page_size)
     return {
         "items": page_items,
         "total": total,
@@ -656,30 +830,29 @@ def search_issues(
     limit: int = 20,
 ) -> dict[str, Any]:
     _bind_workspace_context(db, workspace=workspace, principal=principal, user=user)
-    helpers = _router()
 
     if list_id is not None:
-        helpers._ensure_list_member(db, user, list_id)
+        _ensure_list_member(db, user, list_id)
 
-    accessible_list_ids_subquery = helpers._accessible_task_lists_query(db, user).with_only_columns(
-        helpers.TaskList.id
+    accessible_list_ids_subquery = _accessible_task_lists_query(db, user).with_only_columns(
+        TaskList.id
     )
     issues = list(
         db.scalars(
-            select(helpers.Issue)
+            select(Issue)
             .options(
-                selectinload(helpers.Issue.task_list),
-                selectinload(helpers.Issue.milestone),
-                selectinload(helpers.Issue.assignee),
-                selectinload(helpers.Issue.reporter),
-                selectinload(helpers.Issue.comments),
-                selectinload(helpers.Issue.label_links).selectinload(helpers.IssueLabel.label),
-                selectinload(helpers.Issue.subtasks),
-                selectinload(helpers.Issue.checklist_items),
-                selectinload(helpers.Issue.time_entries),
-                selectinload(helpers.Issue.assignee_links).selectinload(helpers.IssueAssignee.user),
+                selectinload(Issue.task_list),
+                selectinload(Issue.milestone),
+                selectinload(Issue.assignee),
+                selectinload(Issue.reporter),
+                selectinload(Issue.comments),
+                selectinload(Issue.label_links).selectinload(IssueLabel.label),
+                selectinload(Issue.subtasks),
+                selectinload(Issue.checklist_items),
+                selectinload(Issue.time_entries),
+                selectinload(Issue.assignee_links).selectinload(IssueAssignee.user),
             )
-            .where(helpers.Issue.list_id.in_(accessible_list_ids_subquery))
+            .where(Issue.list_id.in_(accessible_list_ids_subquery))
         )
     )
 
@@ -698,11 +871,11 @@ def search_issues(
             for issue in issues
             if q_lower in issue.title.lower()
             or q_lower in issue.description.lower()
-            or q_lower in helpers._issue_reference(issue).lower()
+            or q_lower in _issue_reference(issue).lower()
         ]
 
     issues.sort(key=lambda issue: issue.updated_at, reverse=True)
-    serialized = [helpers._serialize_issue(issue).model_dump() for issue in issues[:limit]]
+    serialized = [_serialize_issue(issue) for issue in issues[:limit]]
     return {
         "items": serialized,
         "total": len(serialized),
@@ -720,42 +893,41 @@ def list_assigned_issues(
     limit: int = 10,
 ) -> dict[str, Any]:
     _bind_workspace_context(db, workspace=workspace, principal=principal, user=user)
-    helpers = _router()
 
-    accessible_list_ids_subquery = helpers._accessible_task_lists_query(db, user).with_only_columns(
-        helpers.TaskList.id
+    accessible_list_ids_subquery = _accessible_task_lists_query(db, user).with_only_columns(
+        TaskList.id
     )
     issues = list(
         db.scalars(
-            select(helpers.Issue)
+            select(Issue)
             .options(
-                selectinload(helpers.Issue.task_list),
-                selectinload(helpers.Issue.milestone),
-                selectinload(helpers.Issue.assignee),
-                selectinload(helpers.Issue.reporter),
-                selectinload(helpers.Issue.comments),
-                selectinload(helpers.Issue.label_links).selectinload(helpers.IssueLabel.label),
-                selectinload(helpers.Issue.subtasks),
-                selectinload(helpers.Issue.checklist_items),
-                selectinload(helpers.Issue.time_entries),
-                selectinload(helpers.Issue.assignee_links).selectinload(helpers.IssueAssignee.user),
+                selectinload(Issue.task_list),
+                selectinload(Issue.milestone),
+                selectinload(Issue.assignee),
+                selectinload(Issue.reporter),
+                selectinload(Issue.comments),
+                selectinload(Issue.label_links).selectinload(IssueLabel.label),
+                selectinload(Issue.subtasks),
+                selectinload(Issue.checklist_items),
+                selectinload(Issue.time_entries),
+                selectinload(Issue.assignee_links).selectinload(IssueAssignee.user),
             )
             .where(
-                helpers.Issue.assignee_id == user.id,
-                helpers.Issue.archived.is_(False),
-                helpers.Issue.list_id.in_(accessible_list_ids_subquery),
+                Issue.assignee_id == user.id,
+                Issue.archived.is_(False),
+                Issue.list_id.in_(accessible_list_ids_subquery),
             )
         )
     )
 
-    issues = [issue for issue in issues if not helpers._is_closed_status(issue.status, issue.task_list)]
+    issues = [issue for issue in issues if not _is_closed_status(issue.status, issue.task_list)]
     issues.sort(
         key=lambda issue: (
             issue.due_date or date.max,
             -issue.updated_at.timestamp(),
         )
     )
-    serialized = [helpers._serialize_issue(issue).model_dump() for issue in issues[:limit]]
+    serialized = [_serialize_issue(issue) for issue in issues[:limit]]
     return {
         "items": serialized,
         "total": len(serialized),
@@ -773,24 +945,23 @@ def get_issue_detail(
     issue_id: str,
 ) -> dict[str, Any]:
     _bind_workspace_context(db, workspace=workspace, principal=principal, user=user)
-    helpers = _router()
 
-    issue, task_list = helpers._get_issue_for_user(db, user, issue_id)
+    issue, task_list = _get_issue_for_user(db, user, issue_id)
     dependencies = list(
         db.scalars(
-            select(helpers.ScheduleDependency).where(
-                helpers.ScheduleDependency.list_id == task_list.id,
+            select(ScheduleDependency).where(
+                ScheduleDependency.list_id == task_list.id,
                 or_(
-                    helpers.ScheduleDependency.predecessor_id == issue.id,
-                    helpers.ScheduleDependency.successor_id == issue.id,
+                    ScheduleDependency.predecessor_id == issue.id,
+                    ScheduleDependency.successor_id == issue.id,
                 ),
             )
         )
     )
     return {
-        "issue": helpers._serialize_issue(issue).model_dump(),
+        "issue": _serialize_issue(issue),
         "comments": [
-            helpers._serialize_comment(comment).model_dump()
+            _serialize_comment(comment)
             for comment in sorted(issue.comments, key=lambda item: item.created_at)
         ],
         "dependencies": [
@@ -805,7 +976,7 @@ def get_issue_detail(
             for dependency in dependencies
         ],
         "subtasks": [
-            helpers._serialize_issue(subtask).model_dump()
+            _serialize_issue(subtask)
             for subtask in sorted(issue.subtasks, key=lambda item: item.created_at)
             if not subtask.archived
         ],
@@ -816,7 +987,7 @@ def get_issue_detail(
                 "filename": attachment.filename,
                 "content_type": attachment.content_type,
                 "size_bytes": attachment.size_bytes,
-                "download_url": helpers._build_attachment_download_url(attachment.storage_key),
+                "download_url": _build_attachment_download_url(attachment.storage_key),
                 "uploaded_by_id": attachment.uploaded_by_id,
                 "uploaded_by_name": attachment.uploaded_by.full_name,
                 "created_at": attachment.created_at,

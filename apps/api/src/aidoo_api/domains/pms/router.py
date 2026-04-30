@@ -25,7 +25,7 @@ from aidoo_api.domains.auth.models import Team, TeamMember, User, Workspace
 from aidoo_api.domains.auth.security import new_id
 from aidoo_api.core.settings import get_settings
 from aidoo_api.core.storage import get_minio_client
-from aidoo_api.domains.media.router import cleanup_media_for_resource
+from aidoo_api.domains.media.service import cleanup_media_for_resource
 from aidoo_api.domains.pms.models import (
     Attachment,
     ChecklistItem,

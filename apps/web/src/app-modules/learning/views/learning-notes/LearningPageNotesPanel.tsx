@@ -19,13 +19,13 @@ import {
   useLearningPageNoteDetail,
   useLearningPageNotesList,
   useMyLearningPageNote,
-} from '@/src/domains/learning-notes/learning-notes-hooks';
-import { LearningNotesApiError } from '@/src/domains/learning-notes/learning-notes-api';
+} from '../../api/learning-notes-hooks';
+import { LearningNotesApiError } from '../../api/learning-notes-api';
 import type {
   LearningPageNoteDetail,
   LearningPageNoteListItem,
   LearningPageNoteVisibility,
-} from '@/src/domains/learning-notes/types';
+} from '../../api/types';
 
 export interface LearningPageNotesPanelProps {
   token: string | null;

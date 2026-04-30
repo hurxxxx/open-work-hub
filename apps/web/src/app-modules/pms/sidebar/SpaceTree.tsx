@@ -41,13 +41,13 @@ import { cn } from '@/src/lib/utils';
 import {
   resolveFlatDropZone,
   type FlatDropZone,
-} from '@/src/domains/pms/pms-sidebar-reorder';
+} from '../api/pms-sidebar-reorder';
 import {
   getDocsItemPrimaryContainerId,
   getDocsItemPrimaryContainerSortOrder,
   type DocsHubItem,
-} from '@/src/domains/docs/docs-api';
-import type { PmsFolder, PmsTaskList } from '@/src/domains/pms/pms-api';
+} from '@/src/app-modules/docs/public-api';
+import type { PmsFolder, PmsTaskList } from '../api/pms-api';
 
 export const SPACE_COLORS = [
   'bg-emerald-500',

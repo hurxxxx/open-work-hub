@@ -21,9 +21,9 @@ import {
 } from 'lucide-react';
 import { Badge, Button, BlockEditor, BlockViewer } from '@aidoo/ui';
 import type { BlockContent } from '@aidoo/ui';
-import { useAuth } from '@/src/domains/auth/auth-provider';
-import { useMediaUpload } from '@/src/domains/media/use-media-upload';
-import { linkMedia, extractMediaIds } from '@/src/domains/media/media-api';
+import { useAuth } from '@/src/platform/auth/auth-provider';
+import { useMediaUpload } from '@/src/platform/media/use-media-upload';
+import { linkMedia, extractMediaIds } from '@/src/platform/media/media-api';
 import {
   getIssueDetail,
   updateIssue,
@@ -52,8 +52,8 @@ import {
   type PmsMilestone,
   type PmsLabel,
   type PmsTaskListStatus,
-} from '@/src/domains/pms/pms-api';
-import { toLocalDateInputValue } from '@/src/domains/pms/pms-filters';
+} from '../api/pms-api';
+import { toLocalDateInputValue } from '../api/pms-filters';
 import { getStatusSlugs, getStatusTone, getStatusLabel, initials, formatDate } from './pms-constants';
 
 const PRIORITIES = ['low', 'medium', 'high', 'critical'] as const;

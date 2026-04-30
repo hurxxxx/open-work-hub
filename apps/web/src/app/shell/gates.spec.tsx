@@ -2,12 +2,12 @@ import { render, screen } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { describe, expect, it, vi } from 'vitest';
 
-import type { AuthUser } from '@/src/domains/auth/auth-api';
+import type { AuthUser } from '@/src/platform/auth/auth-api';
 import { WorkspaceGate } from './gates';
 
 let currentUser: AuthUser | null = null;
 
-vi.mock('@/src/domains/auth/auth-provider', () => ({
+vi.mock('@/src/platform/auth/auth-provider', () => ({
   useAuth: () => ({
     user: currentUser,
   }),

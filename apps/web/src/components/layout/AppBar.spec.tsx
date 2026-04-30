@@ -3,22 +3,22 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, useLocation } from 'react-router-dom';
 import { vi } from 'vitest';
 
-import type { AuthUser } from '@/src/domains/auth/auth-api';
-import { resolveShellWorkspaceSlug } from '@/src/domains/workspaces/workspace-utils';
-import type { WorkspaceBootstrapApp } from '@/src/domains/workspaces/workspaces-api';
+import type { AuthUser } from '@/src/platform/auth/auth-api';
+import { resolveShellWorkspaceSlug } from '@/src/platform/workspaces/workspace-utils';
+import type { WorkspaceBootstrapApp } from '@/src/platform/workspaces/workspaces-api';
 import { AppBar } from './AppBar';
 
 const mockGetUnreadNotificationCount = vi.fn();
 const mockHasPermission = vi.fn();
 
-vi.mock('@/src/domains/auth/auth-provider', () => ({
+vi.mock('@/src/platform/auth/auth-provider', () => ({
   useAuth: () => ({
     hasPermission: (permission: string) => mockHasPermission(permission),
     token: 'test-token',
   }),
 }));
 
-vi.mock('@/src/domains/pms/pms-api', () => ({
+vi.mock('@/src/platform/notifications/notifications-api', () => ({
   getUnreadNotificationCount: (...args: unknown[]) => mockGetUnreadNotificationCount(...args),
 }));
 

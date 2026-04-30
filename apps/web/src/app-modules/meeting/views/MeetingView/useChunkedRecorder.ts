@@ -7,7 +7,7 @@ import {
   initRecordingStaging,
   uploadRecordingChunk,
   type MeetingDetail,
-} from '@/src/domains/meeting/meeting-api';
+} from '../../api/meeting-api';
 import {
   appendChunk,
   buildSessionBlob,
@@ -20,7 +20,7 @@ import {
   updateSessionProgress,
   upsertSession,
   type RecordingSessionState,
-} from '@/src/domains/meeting/recording-db';
+} from '../../api/recording-db';
 
 interface ContinueSessionInput {
   stagingId: string;

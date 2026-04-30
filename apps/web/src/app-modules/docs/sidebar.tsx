@@ -3,17 +3,17 @@ import { Link, useLocation } from 'react-router-dom';
 import { FileText } from 'lucide-react';
 
 import type { AppSidebarConfig } from '@/src/app/shell/sidebar-types';
-import { useAuth } from '@/src/domains/auth/auth-provider';
+import { useAuth } from '@/src/platform/auth/auth-provider';
 import {
   listFavoriteDocs,
   listRecentPages,
   type FavoriteDocItem,
   type RecentPageItem,
-} from '@/src/domains/docs/docs-api';
+} from './api/docs-api';
 import {
   buildWorkspaceAppPath,
   resolveDefaultWorkspaceAppPath,
-} from '@/src/domains/workspaces/workspace-utils';
+} from '@/src/platform/workspaces/workspace-utils';
 import { cn } from '@/src/lib/utils';
 
 interface DocsSidebarExtrasProps {

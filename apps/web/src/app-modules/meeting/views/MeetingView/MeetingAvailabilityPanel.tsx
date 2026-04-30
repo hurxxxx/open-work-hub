@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { CalendarDays, Loader2 } from 'lucide-react';
 
-import type { MeetingUser } from '@/src/domains/meeting/meeting-api';
+import type { MeetingUser } from '../../api/meeting-api';
 
 import { MeetingAvailabilityModal } from './MeetingAvailabilityModal';
 import {

@@ -17,12 +17,12 @@ import {
   ChevronDown,
 } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
-import { useAuth } from '@/src/domains/auth/auth-provider';
+import { useAuth } from '@/src/platform/auth/auth-provider';
 import {
   getWorkspaceBySlug,
   getCurrentOrLastWorkspaceSlug,
   resolveDefaultWorkspaceAppPath,
-} from '@/src/domains/workspaces/workspace-utils';
+} from '@/src/platform/workspaces/workspace-utils';
 import {
   getPmsTaskList,
   listPmsTaskLists,
@@ -43,11 +43,11 @@ import {
   type PmsMilestone,
   type PmsLabel,
   type PmsTaskListStatus,
-} from '@/src/domains/pms/pms-api';
+} from '../api/pms-api';
 import {
   createDefaultIssueFilterParams,
   reconcileSelectedIssueIds,
-} from '@/src/domains/pms/pms-filters';
+} from '../api/pms-filters';
 
 import { OverviewView } from './OverviewView';
 import { ListView } from './ListView';
@@ -66,7 +66,7 @@ import { FilterBar } from './FilterBar';
 import { BulkActionBar } from './BulkActionBar';
 import { SpaceDocsView } from './SpaceDocsView';
 import { SpaceOverviewView } from './SpaceOverviewView';
-import { taskListRoleAllows } from '@/src/domains/pms/pms-permissions';
+import { taskListRoleAllows } from '../api/pms-permissions';
 
 function isSameListCollection(left: PmsTaskList[], right: PmsTaskList[]): boolean {
   if (left.length !== right.length) {

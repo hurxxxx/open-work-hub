@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import type { AuthUser, WorkspaceSummary } from './domains/auth/auth-api';
+import type { AuthUser, WorkspaceSummary } from './platform/auth/auth-api';
 import { resolveShellState } from './app-shell';
 
 function buildWorkspace(overrides: Partial<WorkspaceSummary> = {}): WorkspaceSummary {

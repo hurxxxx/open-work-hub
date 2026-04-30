@@ -2,7 +2,7 @@ import { motion } from 'motion/react';
 import { GraduationCap, BookOpen } from 'lucide-react';
 import { Link, useParams } from 'react-router-dom';
 
-import { LEARNING_COURSES, getAllLessons } from '@/src/domains/learning/manifest';
+import { LEARNING_COURSES, getAllLessons } from '../model/manifest';
 
 export function LearningView() {
   const { workspaceSlug } = useParams();

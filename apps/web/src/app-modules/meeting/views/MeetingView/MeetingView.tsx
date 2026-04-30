@@ -3,13 +3,13 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { Plus, Loader2, Users, Video, FileText } from 'lucide-react';
 import { Button } from '@aidoo/ui';
 
-import { useAuth } from '@/src/domains/auth/auth-provider';
+import { useAuth } from '@/src/platform/auth/auth-provider';
 import {
   listMeetings,
   type MeetingListItem,
   type MeetingScope,
-} from '@/src/domains/meeting/meeting-api';
-import { buildWorkspaceAppPath } from '@/src/domains/workspaces/workspace-utils';
+} from '../../api/meeting-api';
+import { buildWorkspaceAppPath } from '@/src/platform/workspaces/workspace-utils';
 
 import { MeetingList } from './MeetingList';
 import { MeetingCreateModal } from './MeetingCreateModal';

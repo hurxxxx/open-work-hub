@@ -1,16 +1,16 @@
 import { Navigate, useParams } from 'react-router-dom';
 
-import { getDefaultAdminPath } from '@/src/domains/admin/admin-permissions';
+import { getDefaultAdminPath } from '@/src/platform/admin/admin-permissions';
 import {
   hasWorkspaceMembership,
-} from '@/src/domains/auth/auth-api';
-import { useAuth } from '@/src/domains/auth/auth-provider';
-import { AccessDeniedView } from '@/src/domains/auth/settings-pages';
+} from '@/src/platform/auth/auth-api';
+import { useAuth } from '@/src/platform/auth/auth-provider';
+import { AccessDeniedView } from '@/src/platform/auth/settings-pages';
 import {
   buildWorkspaceAppPath,
   getWorkspaceBySlug,
   resolveRootEntryPath,
-} from '@/src/domains/workspaces/workspace-utils';
+} from '@/src/platform/workspaces/workspace-utils';
 
 export function AdminLandingRedirect() {
   const auth = useAuth();

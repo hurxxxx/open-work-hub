@@ -12,7 +12,7 @@ import type { ComponentProps } from 'react';
 // vi.mock calls below are hoisted by vitest, so it's safe for this import to
 // appear before them in source order — keeps import/first satisfied.
 import { AIView } from './AIView';
-import { WorkspaceBootstrapProvider } from '@/src/domains/workspaces/workspace-bootstrap-context';
+import { WorkspaceBootstrapProvider } from '@/src/platform/workspaces/workspace-bootstrap-context';
 
 const aiHarness = vi.hoisted(() => ({
   abandonAiApproval: vi.fn(),
@@ -34,15 +34,15 @@ vi.mock('motion/react', () => ({
   },
 }));
 
-vi.mock('@/src/domains/auth/auth-provider', () => ({
+vi.mock('@/src/platform/auth/auth-provider', () => ({
   useAuth: () => ({
     token: 'test-token',
   }),
 }));
 
-vi.mock('@/src/domains/ai/ai-api', async () => {
-  const actual = await vi.importActual<typeof import('@/src/domains/ai/ai-api')>(
-    '@/src/domains/ai/ai-api',
+vi.mock('../api/ai-api', async () => {
+  const actual = await vi.importActual<typeof import('../api/ai-api')>(
+    '../api/ai-api',
   );
   return {
     ...actual,
@@ -55,10 +55,10 @@ vi.mock('@/src/domains/ai/ai-api', async () => {
   };
 });
 
-vi.mock('@/src/domains/ai/conversations-api', async () => {
+vi.mock('../api/conversations-api', async () => {
   const actual = await vi.importActual<
-    typeof import('@/src/domains/ai/conversations-api')
-  >('@/src/domains/ai/conversations-api');
+    typeof import('../api/conversations-api')
+  >('../api/conversations-api');
   return {
     ...actual,
     getConversation: conversationsHarness.getConversation,
@@ -69,10 +69,10 @@ const meetingHarness = vi.hoisted(() => ({
   getMeeting: vi.fn(),
 }));
 
-vi.mock('@/src/domains/meeting/meeting-api', async () => {
+vi.mock('@/src/app-modules/meeting/public-api', async () => {
   const actual = await vi.importActual<
-    typeof import('@/src/domains/meeting/meeting-api')
-  >('@/src/domains/meeting/meeting-api');
+    typeof import('@/src/app-modules/meeting/public-api')
+  >('@/src/app-modules/meeting/public-api');
   return {
     ...actual,
     getMeeting: meetingHarness.getMeeting,

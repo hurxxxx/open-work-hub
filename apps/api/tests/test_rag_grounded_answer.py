@@ -7,7 +7,6 @@ import pytest
 from aidoo_api.domains.rag import application as rag_application
 from aidoo_api.domains.rag.contracts import (
     RagAnswerMode,
-    RagGroundedAnswer,
     RagProjection,
     RagQueryRequest,
     RagQueryResponse,

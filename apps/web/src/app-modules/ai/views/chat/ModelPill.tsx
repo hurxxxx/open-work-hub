@@ -11,7 +11,7 @@ import type {
   AiBackendMode,
   LlmHealthResponse,
   LlmPoolHealthResponse,
-} from '@/src/domains/ai/ai-api';
+} from '../../api/ai-api';
 
 interface ModelPillProps {
   backendMode: AiBackendMode;

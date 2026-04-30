@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 import type { NavigateFunction } from 'react-router-dom';
 import type { LucideIcon } from 'lucide-react';
 
-import type { AuthUser } from '@/src/domains/auth/auth-api';
+import type { AuthUser } from '@/src/platform/auth/auth-api';
 import type { AppModuleId, NavItem } from './navigation-types';
 
 export interface AppSidebarActionContext {

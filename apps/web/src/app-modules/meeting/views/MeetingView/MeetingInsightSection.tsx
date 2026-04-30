@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Loader2, Sparkles } from 'lucide-react';
 
-import { AiApiError } from '@/src/domains/ai/ai-api';
-import type { MeetingDetail } from '@/src/domains/meeting/meeting-api';
+import { AiApiError } from '@/src/app-modules/ai/public-api';
+import type { MeetingDetail } from '../../api/meeting-api';
 import {
   draftFollowupSchedule,
   extractActions,
@@ -10,7 +10,7 @@ import {
   type MeetingFollowupResult,
   type MeetingInsightItem,
   type MeetingInsightListResult,
-} from '@/src/domains/meeting/meeting-insights-api';
+} from '../../api/meeting-insights-api';
 
 import { EmptyRow, Section } from './MeetingSection';
 

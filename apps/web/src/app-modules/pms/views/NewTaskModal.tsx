@@ -8,9 +8,9 @@ import {
 } from 'lucide-react';
 import { Dialog, Button, BlockEditor } from '@aidoo/ui';
 import type { BlockContent } from '@aidoo/ui';
-import { useAuth } from '@/src/domains/auth/auth-provider';
-import { useMediaUpload } from '@/src/domains/media/use-media-upload';
-import { createTaskListIssue, listTaskTemplates, type PmsTaskListStatus, type PmsTaskTemplate } from '@/src/domains/pms/pms-api';
+import { useAuth } from '@/src/platform/auth/auth-provider';
+import { useMediaUpload } from '@/src/platform/media/use-media-upload';
+import { createTaskListIssue, listTaskTemplates, type PmsTaskListStatus, type PmsTaskTemplate } from '../api/pms-api';
 import { getStatusSlugs, getStatusLabel } from './pms-constants';
 
 export const NewTaskModal = ({

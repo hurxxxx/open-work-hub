@@ -1,13 +1,13 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { AiApiError } from '@/src/domains/ai/ai-api';
-import type { MeetingDetail } from '@/src/domains/meeting/meeting-api';
+import { AiApiError } from '@/src/app-modules/ai/public-api';
+import type { MeetingDetail } from '../../api/meeting-api';
 import type {
   MeetingFollowupResult,
   MeetingInsightItem,
   MeetingInsightListResult,
-} from '@/src/domains/meeting/meeting-insights-api';
+} from '../../api/meeting-insights-api';
 
 import { MeetingInsightSection } from './MeetingInsightSection';
 
@@ -17,10 +17,10 @@ const insightsHarness = vi.hoisted(() => ({
   draftFollowupSchedule: vi.fn(),
 }));
 
-vi.mock('@/src/domains/meeting/meeting-insights-api', async () => {
+vi.mock('../../api/meeting-insights-api', async () => {
   const actual = await vi.importActual<
-    typeof import('@/src/domains/meeting/meeting-insights-api')
-  >('@/src/domains/meeting/meeting-insights-api');
+    typeof import('../../api/meeting-insights-api')
+  >('../../api/meeting-insights-api');
   return {
     ...actual,
     extractActions: insightsHarness.extractActions,

@@ -33,7 +33,7 @@ import type {
 } from '@fullcalendar/core';
 import type { EventResizeDoneArg } from '@fullcalendar/interaction';
 
-import type { CalendarEvent } from '@/src/domains/calendar/calendar-types';
+import type { CalendarEvent } from '@/src/platform/calendar/calendar-types';
 import { getKoreanHolidayNames } from '@/src/lib/korean-holidays';
 
 export type UnifiedCalendarView =

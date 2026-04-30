@@ -1,7 +1,7 @@
 import { X } from 'lucide-react';
 import 'highlight.js/styles/github.css';
 
-import type { ArtifactBuffer } from '@/src/domains/ai/agent-events';
+import type { ArtifactBuffer } from '../../api/agent-events';
 
 import {
   CodeArtifact,

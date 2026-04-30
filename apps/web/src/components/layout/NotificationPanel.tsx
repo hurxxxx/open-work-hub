@@ -2,13 +2,13 @@ import { useState, useEffect, useCallback } from 'react';
 import { motion } from 'motion/react';
 import { X, Check, CheckCheck, Loader2 } from 'lucide-react';
 import { Button } from '@aidoo/ui';
-import { useAuth } from '@/src/domains/auth/auth-provider';
+import { useAuth } from '@/src/platform/auth/auth-provider';
 import {
   listNotifications,
   markNotificationRead,
   markAllNotificationsRead,
-  type PmsNotification,
-} from '@/src/domains/pms/pms-api';
+  type WorkspaceNotification,
+} from '@/src/platform/notifications/notifications-api';
 
 function timeAgo(dateStr: string): string {
   const diff = Date.now() - new Date(dateStr).getTime();
@@ -33,7 +33,7 @@ export function NotificationPanel({
   workspaceSlug: string | null;
 }) {
   const { token } = useAuth();
-  const [notifications, setNotifications] = useState<PmsNotification[]>([]);
+  const [notifications, setNotifications] = useState<WorkspaceNotification[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -48,14 +48,14 @@ export function NotificationPanel({
       .finally(() => setLoading(false));
   }, [token, workspaceSlug]);
 
-  const handleRead = useCallback(async (n: PmsNotification) => {
+  const handleRead = useCallback(async (n: WorkspaceNotification) => {
     if (!token || !workspaceSlug || n.is_read) return;
     await markNotificationRead(token, n.id, workspaceSlug);
     setNotifications(prev => prev.map(item => item.id === n.id ? { ...item, is_read: true } : item));
     onCountChange?.(-1);
   }, [token, onCountChange, workspaceSlug]);
 
-  const handleClick = useCallback((n: PmsNotification) => {
+  const handleClick = useCallback((n: WorkspaceNotification) => {
     void handleRead(n);
     if (n.reference_id && onNavigateToIssue) {
       onNavigateToIssue(n.reference_id);

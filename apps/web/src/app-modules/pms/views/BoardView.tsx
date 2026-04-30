@@ -1,7 +1,7 @@
 import { motion } from 'motion/react';
 import { Plus, MoreHorizontal, Flag, Calendar, User2, CheckSquare, Clock } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
-import type { PmsIssue, PmsTaskListStatus } from '@/src/domains/pms/pms-api';
+import type { PmsIssue, PmsTaskListStatus } from '../api/pms-api';
 import { getStatusSlugs, STATUS_DOT_COLOR, PRIORITY_COLOR, initials, formatDate } from './pms-constants';
 
 export const BoardView = ({

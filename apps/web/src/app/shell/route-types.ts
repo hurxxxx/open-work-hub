@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 
-import type { WorkspaceAppId } from '@/src/domains/workspaces/workspace-utils';
+import type { WorkspaceAppId } from '@/src/platform/workspaces/workspace-utils';
 
 export interface WorkspaceRouteDefinition {
   appId: WorkspaceAppId;

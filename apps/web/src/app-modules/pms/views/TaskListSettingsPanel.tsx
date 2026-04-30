@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { motion } from 'motion/react';
 import { X, Plus, Pencil, Trash2, Check, Loader2 } from 'lucide-react';
 import { Button, InlineNotice, Select } from '@aidoo/ui';
-import { useAuth } from '@/src/domains/auth/auth-provider';
+import { useAuth } from '@/src/platform/auth/auth-provider';
 import {
   addSpaceMember,
   listTaskListLabels,
@@ -21,7 +21,7 @@ import {
   type PmsSpaceMember,
   type PmsTaskListStatus,
   type PmsUserSummary,
-} from '@/src/domains/pms/pms-api';
+} from '../api/pms-api';
 
 const PRESET_COLORS = [
   '#b45309', '#1d4ed8', '#0f766e', '#7c3aed', '#dc2626',

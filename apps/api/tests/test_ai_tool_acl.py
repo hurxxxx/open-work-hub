@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from aidoo_api.core import llm as llm_core
 from aidoo_api.core.db import get_engine, get_session_factory
+from aidoo_api.core.settings import get_settings
 from aidoo_api.domains.ai.models import LlmPolicy
 from aidoo_api.domains.auth.access import ensure_dev_login_seed_data
 from aidoo_api.domains.auth.models import AuditLog
@@ -184,6 +185,7 @@ def test_agent_loop_tool_error_does_not_leak_cross_workspace_doc_content(
     owner = _dev_login(client, "delivery-hub-admin")
     outsider = _dev_login(client, "knowledge-base-admin")
     _set_policy("chatbot", "local_only")
+    monkeypatch.setattr(get_settings(), "ai_local_tool_calling_enabled", True)
 
     doc_response = client.post(
         "/api/v1/workspaces/delivery-hub/docs/items",

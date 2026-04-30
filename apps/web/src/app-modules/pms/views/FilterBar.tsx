@@ -1,10 +1,10 @@
 import { useState, useRef, useEffect } from 'react';
 import { X, Filter, ChevronDown, Save, BookmarkCheck, Search } from 'lucide-react';
-import type { IssueFilterParams, PmsTaskListMember, PmsMilestone, PmsLabel, PmsTaskListStatus } from '@/src/domains/pms/pms-api';
+import type { IssueFilterParams, PmsTaskListMember, PmsMilestone, PmsLabel, PmsTaskListStatus } from '../api/pms-api';
 import {
   createDefaultIssueFilterParams,
   DEFAULT_ISSUE_ARCHIVED_STATE,
-} from '@/src/domains/pms/pms-filters';
+} from '../api/pms-filters';
 
 const DEFAULT_statusOptions = [
   { value: 'backlog', label: 'Backlog' },

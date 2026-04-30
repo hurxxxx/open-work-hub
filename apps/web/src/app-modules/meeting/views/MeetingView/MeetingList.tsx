@@ -4,7 +4,7 @@ import { CheckSquare, FileText, Users } from 'lucide-react';
 import {
   parseServerDateTime,
   type MeetingListItem,
-} from '@/src/domains/meeting/meeting-api';
+} from '../../api/meeting-api';
 
 interface MeetingListProps {
   items: MeetingListItem[];

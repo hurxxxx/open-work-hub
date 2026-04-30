@@ -54,7 +54,7 @@ from aidoo_api.domains.docs.registry import (
     project_container_access,
     resolve_container_label,
 )
-from aidoo_api.domains.media.router import cleanup_media_for_resource, sync_embedded_media
+from aidoo_api.domains.media.service import cleanup_media_for_resource, sync_embedded_media
 from aidoo_api.domains.rag.contracts import RagSyncOperation
 
 

@@ -6,7 +6,7 @@ import {
   Loader2,
 } from 'lucide-react';
 
-import type { ArtifactBuffer } from '@/src/domains/ai/agent-events';
+import type { ArtifactBuffer } from '../../api/agent-events';
 import { cn } from '@/src/lib/utils';
 
 export interface ArtifactCardProps {

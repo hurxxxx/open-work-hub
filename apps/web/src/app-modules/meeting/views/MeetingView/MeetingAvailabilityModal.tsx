@@ -5,7 +5,7 @@ import { ChevronLeft, ChevronRight, Loader2 } from 'lucide-react';
 import type {
   MeetingAvailabilityBlock,
   MeetingUser,
-} from '@/src/domains/meeting/meeting-api';
+} from '../../api/meeting-api';
 
 import {
   AVAILABILITY_NAME_COLUMN_PX,

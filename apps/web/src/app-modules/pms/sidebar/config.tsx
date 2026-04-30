@@ -5,7 +5,7 @@ import type {
   AppSidebarConfig,
   AppSidebarRenderContext,
 } from '@/src/app/shell/sidebar-types';
-import { resolveNavItemHref } from '@/src/domains/workspaces/workspace-utils';
+import { resolveNavItemHref } from '@/src/platform/workspaces/workspace-utils';
 import { cn } from '@/src/lib/utils';
 import { PmsSidebarSpaces } from './PmsSidebarSpaces';
 

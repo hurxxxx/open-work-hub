@@ -3,7 +3,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { vi } from 'vitest';
 
 import { TaskDetail } from './TaskDetail';
-import type { PmsIssue } from '@/src/domains/pms/pms-api';
+import type { PmsIssue } from '../api/pms-api';
 
 const mockGetIssueDetail = vi.fn();
 const mockListIssueActivityLogs = vi.fn();
@@ -43,13 +43,13 @@ vi.mock('@aidoo/ui', () => ({
   BlockViewer: () => <div data-testid="block-viewer" />,
 }));
 
-vi.mock('@/src/domains/auth/auth-provider', () => ({
+vi.mock('@/src/platform/auth/auth-provider', () => ({
   useAuth: () => ({
     token: 'test-token',
   }),
 }));
 
-vi.mock('@/src/domains/pms/pms-api', () => ({
+vi.mock('../api/pms-api', () => ({
   getIssueDetail: (...args: unknown[]) => mockGetIssueDetail(...args),
   listIssueActivityLogs: (...args: unknown[]) => mockListIssueActivityLogs(...args),
   updateIssue: (...args: unknown[]) => mockUpdateIssue(...args),

@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type {
   LlmHealthResponse,
   LlmPoolHealthResponse,
-} from '@/src/domains/ai/ai-api';
+} from '../../api/ai-api';
 
 import { ModelPill, computePanelPosition } from './ModelPill';
 

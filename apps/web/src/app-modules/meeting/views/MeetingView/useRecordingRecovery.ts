@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
-import { listRecordingStaging, type RecordingStagingItem } from '@/src/domains/meeting/meeting-api';
+import { listRecordingStaging, type RecordingStagingItem } from '../../api/meeting-api';
 import {
   buildSessionBlob,
   getChunks,
   listIncompleteSessions,
   type RecordingSessionState,
-} from '@/src/domains/meeting/recording-db';
+} from '../../api/recording-db';
 
 export interface RecoverySessionItem {
   stagingId: string;

@@ -2,10 +2,10 @@ import { useEffect, useMemo, useState } from 'react';
 import { Button, Dialog } from '@aidoo/ui';
 import { Loader2 } from 'lucide-react';
 
-import { useAuth } from '@/src/domains/auth/auth-provider';
-import { hasWorkspaceMembership } from '@/src/domains/auth/auth-api';
+import { useAuth } from '@/src/platform/auth/auth-provider';
+import { hasWorkspaceMembership } from '@/src/platform/auth/auth-api';
 import { NoAccessNotice } from '@/src/components/common/NoAccessNotice';
-import { listDocsHub, type DocsHubItem } from '@/src/domains/docs/docs-api';
+import { listDocsHub, type DocsHubItem } from '@/src/app-modules/docs/public-api';
 
 interface DocPickerModalProps {
   isOpen: boolean;

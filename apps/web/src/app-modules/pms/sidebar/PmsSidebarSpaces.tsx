@@ -12,12 +12,12 @@ import {
   updateDocsItem,
   withDocsItemPrimaryContainerSortOrder,
   type DocsHubItem,
-} from '@/src/domains/docs/docs-api';
-import { useAuth } from '@/src/domains/auth/auth-provider';
+} from '@/src/app-modules/docs/public-api';
+import { useAuth } from '@/src/platform/auth/auth-provider';
 import {
   hasWorkspaceMembership,
   teamRoleAllows,
-} from '@/src/domains/auth/auth-api';
+} from '@/src/platform/auth/auth-api';
 import {
   listPmsTaskLists,
   listFolders,
@@ -31,16 +31,16 @@ import {
   type PmsFolder,
   type PmsTaskList,
   type PmsSpace,
-} from '@/src/domains/pms/pms-api';
+} from '../api/pms-api';
 import {
   applyFlatReorder,
   computeFlatDropTarget,
   type FlatDropZone,
-} from '@/src/domains/pms/pms-sidebar-reorder';
+} from '../api/pms-sidebar-reorder';
 import {
   buildWorkspaceAppPath,
   resolveDefaultWorkspaceAppPath,
-} from '@/src/domains/workspaces/workspace-utils';
+} from '@/src/platform/workspaces/workspace-utils';
 import { CreateTaskListModal } from '../views/CreateTaskListModal';
 import { CreateSpaceModal } from '../views/CreateSpaceModal';
 import { SpaceMembersModal } from '../views/SpaceMembersModal';

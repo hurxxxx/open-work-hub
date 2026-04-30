@@ -1,11 +1,11 @@
 import { useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 
-import { useAuth } from '@/src/domains/auth/auth-provider';
+import { useAuth } from '@/src/platform/auth/auth-provider';
 import {
   buildWorkspaceAppPath,
   resolveDefaultWorkspaceAppPath,
-} from '@/src/domains/workspaces/workspace-utils';
+} from '@/src/platform/workspaces/workspace-utils';
 
 export const SpaceDocsView = ({
   spaceId,

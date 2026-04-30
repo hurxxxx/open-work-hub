@@ -136,25 +136,25 @@ const plannerHarness = vi.hoisted(() => {
   };
 });
 
-vi.mock('@/src/domains/auth/auth-provider', () => ({
+vi.mock('@/src/platform/auth/auth-provider', () => ({
   useAuth: () => ({
     token: 'test-token',
   }),
 }));
 
-vi.mock('@/src/domains/calendar/use-calendar-events', () => ({
+vi.mock('@/src/platform/calendar/use-calendar-events', () => ({
   useCalendarEvents: (options: unknown) => plannerHarness.useCalendarEvents(options),
 }));
 
-vi.mock('@/src/domains/meeting/meeting-api', () => ({
+vi.mock('@/src/app-modules/meeting/public-api', () => ({
   updateMeeting: plannerHarness.updateMeeting,
 }));
 
-vi.mock('@/src/domains/pms/pms-api', () => ({
+vi.mock('@/src/app-modules/pms/public-api', () => ({
   updateIssue: plannerHarness.updateIssue,
 }));
 
-vi.mock('@/src/domains/planner/planner-api', () => ({
+vi.mock('../api/planner-api', () => ({
   updatePlannerEvent: plannerHarness.updatePlannerEvent,
 }));
 

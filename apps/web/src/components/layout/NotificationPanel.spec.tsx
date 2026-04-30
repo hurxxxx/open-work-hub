@@ -7,13 +7,13 @@ const mockListNotifications = vi.fn();
 const mockMarkNotificationRead = vi.fn();
 const mockMarkAllNotificationsRead = vi.fn();
 
-vi.mock('@/src/domains/auth/auth-provider', () => ({
+vi.mock('@/src/platform/auth/auth-provider', () => ({
   useAuth: () => ({
     token: 'test-token',
   }),
 }));
 
-vi.mock('@/src/domains/pms/pms-api', () => ({
+vi.mock('@/src/platform/notifications/notifications-api', () => ({
   listNotifications: (...args: unknown[]) => mockListNotifications(...args),
   markNotificationRead: (...args: unknown[]) => mockMarkNotificationRead(...args),
   markAllNotificationsRead: (...args: unknown[]) => mockMarkAllNotificationsRead(...args),

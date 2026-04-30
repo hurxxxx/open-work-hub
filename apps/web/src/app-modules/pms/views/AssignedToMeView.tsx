@@ -2,15 +2,15 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Loader2 } from 'lucide-react';
 import { useParams, useSearchParams } from 'react-router-dom';
-import { useAuth } from '@/src/domains/auth/auth-provider';
+import { useAuth } from '@/src/platform/auth/auth-provider';
 import {
   getIssueDetail,
   listAssignedIssues,
   listPmsTaskLists,
   type PmsIssue,
   type PmsTaskList,
-} from '@/src/domains/pms/pms-api';
-import { taskListRoleAllows } from '@/src/domains/pms/pms-permissions';
+} from '../api/pms-api';
+import { taskListRoleAllows } from '../api/pms-permissions';
 import { ListView } from './ListView';
 import { TaskDetail } from './TaskDetail';
 

@@ -24,6 +24,7 @@ class _RecordingTransport:
         source,
         call_id=None,
         agent_run_id=None,
+        conversation_id=None,
     ) -> dict:
         self.call = {
             "db": db,
@@ -35,6 +36,7 @@ class _RecordingTransport:
             "source": source,
             "call_id": call_id,
             "agent_run_id": agent_run_id,
+            "conversation_id": conversation_id,
         }
         return dict(self.result)
 
@@ -93,4 +95,5 @@ def test_ai_mcp_client_call_tool_forwards_to_transport() -> None:
         "source": "test",
         "call_id": "call-1",
         "agent_run_id": "run-1",
+        "conversation_id": None,
     }

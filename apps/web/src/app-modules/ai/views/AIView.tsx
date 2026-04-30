@@ -10,22 +10,22 @@ import {
   type AiBackendMode,
   type AiChatMessage,
   type LlmHealthResponse,
-} from '@/src/domains/ai/ai-api';
+} from '../api/ai-api';
 import {
   CONVERSATIONS_UPDATED_EVENT,
   getConversation,
   type ConversationDetail,
   type ConversationLivePendingApproval,
   type ConversationTurn as ApiConversationTurn,
-} from '@/src/domains/ai/conversations-api';
-import { useChatStream } from '@/src/domains/ai/useChatStream';
-import { useAuth } from '@/src/domains/auth/auth-provider';
-import { getMeeting } from '@/src/domains/meeting/meeting-api';
+} from '../api/conversations-api';
+import { useChatStream } from '../api/useChatStream';
+import { useAuth } from '@/src/platform/auth/auth-provider';
+import { getMeeting } from '@/src/app-modules/meeting/public-api';
 import {
   buildWorkspaceAppPath,
   resolveToolInvocationHref,
-} from '@/src/domains/workspaces/workspace-utils';
-import { useWorkspaceBootstrapContext } from '@/src/domains/workspaces/workspace-bootstrap-context';
+} from '@/src/platform/workspaces/workspace-utils';
+import { useWorkspaceBootstrapContext } from '@/src/platform/workspaces/workspace-bootstrap-context';
 import { ChatThread } from './chat/ChatThread';
 import { ApprovalModal } from './chat/ApprovalModal';
 import { ArtifactPanel } from './chat/ArtifactPanel';
@@ -40,7 +40,7 @@ import type {
   ArtifactBuffer,
   PendingApproval,
   ToolCallBuffer,
-} from '@/src/domains/ai/agent-events';
+} from '../api/agent-events';
 import type { NavItem } from '@/src/app/shell/navigation-types';
 
 const AI_BACKEND_MODE_STORAGE_KEY = 'aidoo.ai.backendMode';

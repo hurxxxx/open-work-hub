@@ -1,7 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
-import type { ArtifactBuffer } from '@/src/domains/ai/agent-events';
+import type { ArtifactBuffer } from '../../api/agent-events';
 
 import { ArtifactPanel } from './ArtifactPanel';
 

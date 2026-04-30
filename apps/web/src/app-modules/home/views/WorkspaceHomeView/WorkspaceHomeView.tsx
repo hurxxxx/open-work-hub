@@ -11,20 +11,20 @@ import {
   Plus,
   Video,
 } from 'lucide-react';
-import { useAuth } from '@/src/domains/auth/auth-provider';
+import { useAuth } from '@/src/platform/auth/auth-provider';
 import {
   listAssignedIssues,
   type PmsIssue,
-} from '@/src/domains/pms/pms-api';
+} from '@/src/app-modules/pms/public-api';
 import {
   listRecentPages,
   type RecentPageItem,
-} from '@/src/domains/docs/docs-api';
+} from '@/src/app-modules/docs/public-api';
 import {
   listMeetings,
   type MeetingListItem,
-} from '@/src/domains/meeting/meeting-api';
-import { buildWorkspaceAppPath } from '@/src/domains/workspaces/workspace-utils';
+} from '@/src/app-modules/meeting/public-api';
+import { buildWorkspaceAppPath } from '@/src/platform/workspaces/workspace-utils';
 import { getKoreanHolidayNames } from '@/src/lib/korean-holidays';
 
 function getGreeting(): string {

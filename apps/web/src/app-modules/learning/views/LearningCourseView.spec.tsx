@@ -8,7 +8,7 @@ type Lesson = { id: string; slug: string; title: string; file: string };
 type Part = { slug: string; title: string; lessons: Lesson[] };
 type Course = { slug: string; title: string; description: string; parts: Part[] };
 
-vi.mock('@/src/domains/auth/auth-provider', () => ({
+vi.mock('@/src/platform/auth/auth-provider', () => ({
   useAuth: () => ({ token: null, user: null, status: 'authenticated' }),
 }));
 
@@ -26,9 +26,9 @@ const contentHarness = vi.hoisted(() => ({
   bodies: {} as Record<string, string>,
 }));
 
-vi.mock('@/src/domains/learning/manifest', async () => {
-  const actual = await vi.importActual<typeof import('@/src/domains/learning/manifest')>(
-    '@/src/domains/learning/manifest',
+vi.mock('../model/manifest', async () => {
+  const actual = await vi.importActual<typeof import('../model/manifest')>(
+    '../model/manifest',
   );
   const flatten = (course: Course) => course.parts.flatMap((part) => part.lessons);
   return {
@@ -49,7 +49,7 @@ vi.mock('@/src/domains/learning/manifest', async () => {
   };
 });
 
-vi.mock('@/src/domains/learning/content', () => ({
+vi.mock('../model/content', () => ({
   getLessonBody: (file: string) => contentHarness.bodies[file] ?? null,
   listAvailableLessonFiles: () => Object.keys(contentHarness.bodies),
 }));

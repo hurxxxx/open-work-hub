@@ -4,7 +4,7 @@
 // the calendar's MeetingPreviewModal.
 import { Navigate, useNavigate, useParams } from 'react-router-dom';
 
-import { buildWorkspaceAppPath } from '@/src/domains/workspaces/workspace-utils';
+import { buildWorkspaceAppPath } from '@/src/platform/workspaces/workspace-utils';
 
 import { MeetingWorkspaceLayout } from './MeetingWorkspaceLayout';
 

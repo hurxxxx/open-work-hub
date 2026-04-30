@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import { FolderOpen } from 'lucide-react';
 import { Dialog, Button } from '@aidoo/ui';
-import { useAuth } from '@/src/domains/auth/auth-provider';
-import { createFolder, type PmsFolder } from '@/src/domains/pms/pms-api';
+import { useAuth } from '@/src/platform/auth/auth-provider';
+import { createFolder, type PmsFolder } from '../api/pms-api';
 
 export const CreateFolderModal = ({
   isOpen,

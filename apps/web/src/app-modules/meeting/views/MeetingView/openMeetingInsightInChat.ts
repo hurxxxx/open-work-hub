@@ -1,9 +1,9 @@
 import type { NavigateFunction } from 'react-router-dom';
 
-import { createConversation } from '@/src/domains/ai/conversations-api';
-import type { MeetingDetail } from '@/src/domains/meeting/meeting-api';
-import type { MeetingInsightItem } from '@/src/domains/meeting/meeting-insights-api';
-import { buildWorkspaceAppPath } from '@/src/domains/workspaces/workspace-utils';
+import { createConversation } from '@/src/app-modules/ai/public-api';
+import type { MeetingDetail } from '../../api/meeting-api';
+import type { MeetingInsightItem } from '../../api/meeting-insights-api';
+import { buildWorkspaceAppPath } from '@/src/platform/workspaces/workspace-utils';
 
 /**
  * Pull the primary title/label out of a raw ``MeetingInsightItem``.

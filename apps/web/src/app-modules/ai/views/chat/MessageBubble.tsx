@@ -7,7 +7,7 @@ import type {
   ChatStreamStatus,
   PendingApproval,
   ToolCallBuffer,
-} from '@/src/domains/ai/agent-events';
+} from '../../api/agent-events';
 
 export interface ChatTurn {
   id: string;

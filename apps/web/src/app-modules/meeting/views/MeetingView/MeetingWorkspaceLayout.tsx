@@ -11,7 +11,7 @@ import { Link } from 'react-router-dom';
 import { ArrowLeft, ExternalLink, Loader2, X } from 'lucide-react';
 import { BlockViewer, Button, CollaborativeBlockEditor } from '@aidoo/ui';
 
-import { useAuth } from '@/src/domains/auth/auth-provider';
+import { useAuth } from '@/src/platform/auth/auth-provider';
 import {
   getDocsCollabSession,
   getDocsItem,
@@ -22,15 +22,15 @@ import {
   updateDocPage,
   type DocsHubItem,
   type DocsPageItem,
-} from '@/src/domains/docs/docs-api';
-import { useMediaUpload } from '@/src/domains/media/use-media-upload';
+} from '@/src/app-modules/docs/public-api';
+import { useMediaUpload } from '@/src/platform/media/use-media-upload';
 import {
   ensureMeetingNotes,
   getMeeting,
   parseServerDateTime,
   type MeetingDetail as MeetingDetailType,
-} from '@/src/domains/meeting/meeting-api';
-import { buildWorkspaceAppPath } from '@/src/domains/workspaces/workspace-utils';
+} from '../../api/meeting-api';
+import { buildWorkspaceAppPath } from '@/src/platform/workspaces/workspace-utils';
 
 import { MeetingDetail } from './MeetingDetail';
 

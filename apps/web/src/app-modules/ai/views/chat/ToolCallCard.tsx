@@ -7,7 +7,7 @@ import {
   Wrench,
 } from 'lucide-react';
 
-import type { ToolCallBuffer } from '@/src/domains/ai/agent-events';
+import type { ToolCallBuffer } from '../../api/agent-events';
 
 export interface ToolCallCardProps {
   call: ToolCallBuffer;

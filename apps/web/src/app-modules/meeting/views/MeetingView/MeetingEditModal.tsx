@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Button, Dialog } from '@aidoo/ui';
 import { X } from 'lucide-react';
 
-import { useAuth } from '@/src/domains/auth/auth-provider';
+import { useAuth } from '@/src/platform/auth/auth-provider';
 import {
   listMeetingUsers,
   parseServerDateTime,
@@ -10,7 +10,7 @@ import {
   type MeetingAttendeeInput,
   type MeetingDetail,
   type MeetingUser,
-} from '@/src/domains/meeting/meeting-api';
+} from '../../api/meeting-api';
 
 import { MeetingAvailabilityPanel } from './MeetingAvailabilityPanel';
 

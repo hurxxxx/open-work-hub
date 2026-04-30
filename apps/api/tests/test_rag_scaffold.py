@@ -31,6 +31,12 @@ def test_rag_settings_are_disabled_by_default(monkeypatch) -> None:
     settings = Settings(
         _env_file=None,
         DOOWON_POSTGRES_DSN="postgresql+psycopg://test:test@127.0.0.1:5432/test",
+        AIDOO_RAG_ENABLED=False,
+        AIDOO_RAG_UI_ENABLED=False,
+        AIDOO_VECTOR_INDEX_PROVIDER="fake",
+        AIDOO_EMBEDDING_PROVIDER="fake",
+        AIDOO_OCR_PROVIDER="fake",
+        AIDOO_RERANK_PROVIDER="fake",
     )
 
     assert settings.rag_enabled is False
@@ -57,6 +63,7 @@ def test_rag_settings_ignore_deepinfra_alias_validation_when_provider_not_select
     settings = Settings(
         _env_file=None,
         DOOWON_POSTGRES_DSN="postgresql+psycopg://test:test@127.0.0.1:5432/test",
+        AIDOO_RAG_ENABLED=False,
         DEEPINFRA_BASE_URL="http://127.0.0.1:8080/openai",
     )
 
@@ -68,6 +75,7 @@ def test_ensure_rag_enabled_raises_domain_error(monkeypatch) -> None:
     settings = Settings(
         _env_file=None,
         DOOWON_POSTGRES_DSN="postgresql+psycopg://test:test@127.0.0.1:5432/test",
+        AIDOO_RAG_ENABLED=False,
     )
 
     with pytest.raises(rag_application.RagUnavailableError, match="RAG is disabled"):
@@ -131,8 +139,8 @@ def test_workspace_rag_query_defaults_to_text_hits_when_binary_hits_not_requeste
     captured_filters: dict[str, object] = {}
 
     class StubQueryService:
-        def query(self, request, *, post_filter):
-            del post_filter
+        def query(self, request, *, post_filter, grounded_answer_synthesizer=None):
+            del post_filter, grounded_answer_synthesizer
             captured_filters.update(request.filters)
             return RagQueryResponse(
                 query=request.query,
@@ -186,8 +194,8 @@ def test_workspace_rag_query_respects_explicit_content_modality_filter(monkeypat
     captured_filters: dict[str, object] = {}
 
     class StubQueryService:
-        def query(self, request, *, post_filter):
-            del post_filter
+        def query(self, request, *, post_filter, grounded_answer_synthesizer=None):
+            del post_filter, grounded_answer_synthesizer
             captured_filters.update(request.filters)
             return RagQueryResponse(
                 query=request.query,

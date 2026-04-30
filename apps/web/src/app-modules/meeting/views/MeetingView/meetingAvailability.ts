@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react';
 
-import { useAuth } from '@/src/domains/auth/auth-provider';
+import { useAuth } from '@/src/platform/auth/auth-provider';
 import {
   getMeetingAvailability,
   type MeetingAvailabilityBlock,
   type MeetingAvailabilityItem,
-} from '@/src/domains/meeting/meeting-api';
+} from '../../api/meeting-api';
 
 export const HALF_HOUR_MS = 30 * 60 * 1000;
 /** Legacy fixed-width constants — still referenced by inline previews that

@@ -4,7 +4,7 @@ import type { AppSidebarConfig } from '@/src/app/shell/sidebar-types';
 import {
   buildWorkspaceAppPath,
   resolveDefaultWorkspaceAppPath,
-} from '@/src/domains/workspaces/workspace-utils';
+} from '@/src/platform/workspaces/workspace-utils';
 
 export const meetingSidebarConfig: AppSidebarConfig = {
   createActions: ({ currentPathname, currentWorkspaceSlug, navigate, user }) => [

@@ -5,7 +5,7 @@ from datetime import UTC, datetime, timedelta
 from sqlalchemy import select
 
 from aidoo_api.core.db import get_session_factory
-from aidoo_api.domains.auth.access import ensure_dev_login_seed_data
+from aidoo_api.domains.auth.access import bind_current_workspace, ensure_dev_login_seed_data
 from aidoo_api.domains.auth.models import Team, User, Workspace
 from aidoo_api.domains.auth.security import new_id
 from aidoo_api.domains.pms.access_grants import grant_issue_access
@@ -138,6 +138,7 @@ def test_issue_query_post_filter_rejects_expired_grant_hits(client) -> None:
         assert owner is not None
         assert expired_user is not None
         assert workspace is not None
+        bind_current_workspace(db, workspace)
         workspace_id = workspace.id
 
         team_id = new_id()

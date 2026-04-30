@@ -11,12 +11,12 @@ import {
   deleteConversation,
   listConversations,
   type ConversationSummary,
-} from '@/src/domains/ai/conversations-api';
-import { useAuth } from '@/src/domains/auth/auth-provider';
+} from './api/conversations-api';
+import { useAuth } from '@/src/platform/auth/auth-provider';
 import {
   buildWorkspaceAppPath,
   resolveToolInvocationHref,
-} from '@/src/domains/workspaces/workspace-utils';
+} from '@/src/platform/workspaces/workspace-utils';
 import { cn } from '@/src/lib/utils';
 
 interface AiSidebarSectionProps {

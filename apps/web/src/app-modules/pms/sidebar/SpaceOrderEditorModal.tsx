@@ -5,14 +5,14 @@ import { ArrowDown, ArrowUp, FileText, FolderOpen, List as ListIcon } from 'luci
 import {
   getDocsItemPrimaryContainerSortOrder,
   type DocsHubItem,
-} from '@/src/domains/docs/docs-api';
-import type { PmsFolder, PmsTaskList } from '@/src/domains/pms/pms-api';
+} from '@/src/app-modules/docs/public-api';
+import type { PmsFolder, PmsTaskList } from '../api/pms-api';
 import {
   applyFlatReorder,
   computeFlatDropTarget,
   sortedSiblings,
   type ReorderableItem,
-} from '@/src/domains/pms/pms-sidebar-reorder';
+} from '../api/pms-sidebar-reorder';
 
 type DraftList = Pick<PmsTaskList, 'id' | 'name' | 'folder_id' | 'sort_order' | 'issue_count'>;
 type DraftDoc = {

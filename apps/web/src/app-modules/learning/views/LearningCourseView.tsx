@@ -18,9 +18,9 @@ import {
   getAllLessons,
   type LearningCourse,
   type LearningLesson,
-} from '@/src/domains/learning/manifest';
-import { getLessonBody } from '@/src/domains/learning/content';
-import { useAuth } from '@/src/domains/auth/auth-provider';
+} from '../model/manifest';
+import { getLessonBody } from '../model/content';
+import { useAuth } from '@/src/platform/auth/auth-provider';
 import { LearningPageNotesPanel } from './learning-notes/LearningPageNotesPanel';
 
 const REMARK_PLUGINS = [remarkGfm];

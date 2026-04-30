@@ -11,7 +11,7 @@ import {
 } from 'lucide-react';
 import { createPortal } from 'react-dom';
 
-import { useAuth } from '@/src/domains/auth/auth-provider';
+import { useAuth } from '@/src/platform/auth/auth-provider';
 import {
   addSpaceMember,
   listPmsUsers,
@@ -20,7 +20,7 @@ import {
   updateSpaceMemberRole,
   type PmsSpaceMember,
   type PmsUserSummary,
-} from '@/src/domains/pms/pms-api';
+} from '../api/pms-api';
 import { initials } from './pms-constants';
 
 interface SpaceMembersModalProps {

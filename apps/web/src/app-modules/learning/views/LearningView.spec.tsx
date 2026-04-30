@@ -12,7 +12,7 @@ const manifestHarness = vi.hoisted(() => ({
   courses: [] as Course[],
 }));
 
-vi.mock('@/src/domains/learning/manifest', () => ({
+vi.mock('../model/manifest', () => ({
   get LEARNING_COURSES() {
     return manifestHarness.courses;
   },

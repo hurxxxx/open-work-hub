@@ -10,7 +10,7 @@ import { ThinkingPanel } from './ThinkingPanel';
 import type {
   ArtifactBuffer,
   ChatStreamStatus,
-} from '@/src/domains/ai/agent-events';
+} from '../../api/agent-events';
 
 export interface LiveAssistant {
   content: string;

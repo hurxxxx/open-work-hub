@@ -11,7 +11,7 @@ import {
   X,
 } from 'lucide-react';
 
-import { useAuth } from '@/src/domains/auth/auth-provider';
+import { useAuth } from '@/src/platform/auth/auth-provider';
 import {
   queryWorkspaceKeywordSearch,
   SearchApiError,
@@ -19,12 +19,12 @@ import {
   type KeywordSearchHit,
   type KeywordSearchResponse,
   type KeywordSearchSnippet,
-} from '@/src/domains/search/search-api';
-import { useWorkspaceBootstrapContext } from '@/src/domains/workspaces/workspace-bootstrap-context';
+} from '@/src/platform/search/search-api';
+import { useWorkspaceBootstrapContext } from '@/src/platform/workspaces/workspace-bootstrap-context';
 import {
   getWorkspaceBySlug,
   resolveShellWorkspaceSlug,
-} from '@/src/domains/workspaces/workspace-utils';
+} from '@/src/platform/workspaces/workspace-utils';
 import { cn } from '@/src/lib/utils';
 
 const ENTITY_OPTIONS: Array<{ id: KeywordSearchEntityType | 'all'; label: string }> = [

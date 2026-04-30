@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Button, Dialog } from '@aidoo/ui';
 
-import { useAuth } from '@/src/domains/auth/auth-provider';
+import { useAuth } from '@/src/platform/auth/auth-provider';
 import {
   createPlannerEvent,
   deletePlannerEvent,
@@ -9,7 +9,7 @@ import {
   updatePlannerEvent,
   type PlannerEvent,
   type PlannerEventVisibility,
-} from '@/src/domains/planner/planner-api';
+} from '../api/planner-api';
 
 interface PlannerEventModalProps {
   isOpen: boolean;

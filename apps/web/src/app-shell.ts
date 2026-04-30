@@ -3,8 +3,8 @@ import {
   hasAdminConsoleAccess,
   hasWorkspaceMembership,
   type AuthUser,
-} from './domains/auth/auth-api';
-import { getWorkspaceSlugFromPath } from './domains/workspaces/workspace-utils';
+} from './platform/auth/auth-api';
+import { getWorkspaceSlugFromPath } from './platform/workspaces/workspace-utils';
 
 export type ShellAppId =
   | 'home'

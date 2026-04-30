@@ -14,7 +14,7 @@ import {
 } from 'lucide-react';
 import { Button, useConfirm } from '@aidoo/ui';
 
-import { useAuth } from '@/src/domains/auth/auth-provider';
+import { useAuth } from '@/src/platform/auth/auth-provider';
 import {
   RAIL_VISIBLE_STATUSES,
   attachDocToMeeting,
@@ -30,14 +30,14 @@ import {
   retryMeetingRecording,
   uploadMeetingFile,
   type MeetingDetail as MeetingDetailType,
-} from '@/src/domains/meeting/meeting-api';
+} from '../../api/meeting-api';
 import {
   canAttachToMeeting,
   canEditMeeting,
   canInviteAttendees,
   canRemoveAttachment,
-} from '@/src/domains/meeting/meeting-permissions';
-import { buildWorkspaceAppPath } from '@/src/domains/workspaces/workspace-utils';
+} from '../../api/meeting-permissions';
+import { buildWorkspaceAppPath } from '@/src/platform/workspaces/workspace-utils';
 
 import { AddAttendeesModal } from './AddAttendeesModal';
 import { MeetingEditModal } from './MeetingEditModal';

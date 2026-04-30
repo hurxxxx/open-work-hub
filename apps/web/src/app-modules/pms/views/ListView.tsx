@@ -1,6 +1,6 @@
 import { Activity, Plus, Layout, ChevronDown, Circle, User2, CheckSquare, Clock } from 'lucide-react';
 import { Badge, Button } from '@aidoo/ui';
-import type { PmsIssue, PmsTaskListStatus } from '@/src/domains/pms/pms-api';
+import type { PmsIssue, PmsTaskListStatus } from '../api/pms-api';
 import { getStatusSlugs, getStatusTone, PRIORITY_COLOR, initials, formatDate } from './pms-constants';
 
 export const ListView = ({

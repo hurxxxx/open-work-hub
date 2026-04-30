@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { X, ChevronDown, Trash2, Archive } from 'lucide-react';
-import { bulkUpdateIssues, type PmsTaskListMember, type PmsLabel, type PmsTaskListStatus } from '@/src/domains/pms/pms-api';
-import { useAuth } from '@/src/domains/auth/auth-provider';
+import { bulkUpdateIssues, type PmsTaskListMember, type PmsLabel, type PmsTaskListStatus } from '../api/pms-api';
+import { useAuth } from '@/src/platform/auth/auth-provider';
 
 const DEFAULT_STATUS_OPTIONS = [
   { value: 'backlog', label: 'Backlog' },

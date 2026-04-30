@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { vi } from 'vitest';
 
-import type { AuthUser } from '@/src/domains/auth/auth-api';
+import type { AuthUser } from '@/src/platform/auth/auth-api';
 import { CreateSpaceModal } from './CreateSpaceModal';
 
 const mockUseAuth = vi.fn();
@@ -43,11 +43,11 @@ vi.mock('@aidoo/ui', () => ({
   ),
 }));
 
-vi.mock('@/src/domains/auth/auth-provider', () => ({
+vi.mock('@/src/platform/auth/auth-provider', () => ({
   useAuth: () => mockUseAuth(),
 }));
 
-vi.mock('@/src/domains/pms/pms-api', () => ({
+vi.mock('../api/pms-api', () => ({
   addSpaceMember: (...args: unknown[]) => mockAddSpaceMember(...args),
   createSpace: (...args: unknown[]) => mockCreateSpace(...args),
   listPmsUsers: (...args: unknown[]) => mockListPmsUsers(...args),

@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { ChevronDown, ChevronRight, GraduationCap } from 'lucide-react';
 
 import type { AppSidebarConfig } from '@/src/app/shell/sidebar-types';
-import { LEARNING_COURSES, type LearningCourse } from '@/src/domains/learning/manifest';
+import { LEARNING_COURSES, type LearningCourse } from './model/manifest';
 import { cn } from '@/src/lib/utils';
 
 interface LearningPathState {

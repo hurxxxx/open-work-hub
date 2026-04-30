@@ -1,6 +1,6 @@
 /** PMS status/priority display constants shared across views. */
 
-import type { PmsTaskListStatus } from '@/src/domains/pms/pms-api';
+import type { PmsTaskListStatus } from '../api/pms-api';
 
 export const ISSUE_STATUSES = ['backlog', 'todo', 'in_progress', 'done', 'canceled'] as const;
 

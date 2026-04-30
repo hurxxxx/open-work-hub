@@ -4,7 +4,7 @@ import type { AppModuleId } from './navigation-types';
 import type {
   WorkspaceBootstrapApp,
   WorkspaceBootstrapNavItem,
-} from '@/src/domains/workspaces/workspaces-api';
+} from '@/src/platform/workspaces/workspaces-api';
 
 function isAppModuleId(value: string): value is AppModuleId {
   return getAppModuleManifest(value as AppModuleId) !== null;

@@ -3,7 +3,7 @@ import { Tooltip } from '@aidoo/ui';
 import type {
   AiBackendMode,
   LlmHealthResponse,
-} from '@/src/domains/ai/ai-api';
+} from '../../api/ai-api';
 
 interface RoutingStatusIconProps {
   backendMode: AiBackendMode;

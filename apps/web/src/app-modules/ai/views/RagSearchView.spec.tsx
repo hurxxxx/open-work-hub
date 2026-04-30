@@ -3,8 +3,8 @@ import { MemoryRouter, useLocation } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { RagSearchView } from './RagSearchView';
-import { WorkspaceBootstrapProvider } from '@/src/domains/workspaces/workspace-bootstrap-context';
-import { SearchApiError } from '@/src/domains/search/search-api';
+import { WorkspaceBootstrapProvider } from '@/src/platform/workspaces/workspace-bootstrap-context';
+import { SearchApiError } from '@/src/platform/search/search-api';
 
 const authHarness = vi.hoisted(() => ({
   logout: vi.fn(),
@@ -39,16 +39,16 @@ const searchHarness = vi.hoisted(() => ({
   queryWorkspaceKeywordSearch: vi.fn(),
 }));
 
-vi.mock('@/src/domains/auth/auth-provider', () => ({
+vi.mock('@/src/platform/auth/auth-provider', () => ({
   useAuth: () => ({
     ...authHarness.state,
     logout: authHarness.logout,
   }),
 }));
 
-vi.mock('@/src/domains/search/search-api', async () => {
-  const actual = await vi.importActual<typeof import('@/src/domains/search/search-api')>(
-    '@/src/domains/search/search-api',
+vi.mock('@/src/platform/search/search-api', async () => {
+  const actual = await vi.importActual<typeof import('@/src/platform/search/search-api')>(
+    '@/src/platform/search/search-api',
   );
   return {
     ...actual,

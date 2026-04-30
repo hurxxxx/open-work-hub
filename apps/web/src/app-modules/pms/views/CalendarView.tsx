@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { cn } from '@/src/lib/utils';
-import type { PmsIssue, PmsTaskListStatus } from '@/src/domains/pms/pms-api';
+import type { PmsIssue, PmsTaskListStatus } from '../api/pms-api';
 
 const STATUS_COLORS: Record<string, string> = {
   backlog: '#6b7280',

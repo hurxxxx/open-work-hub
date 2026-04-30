@@ -9,20 +9,26 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload, selectinload
 
 from aidoo_api.core.principal import CallerPrincipal
-from aidoo_api.domains.auth.access import bind_current_workspace, get_current_workspace
+from aidoo_api.domains.auth.access import bind_current_workspace, get_current_workspace, resolve_workspaces
 from aidoo_api.domains.auth.models import User, Workspace
 from aidoo_api.domains.auth.security import new_id
 from aidoo_api.domains.docs.collab import sync_collab_record_from_rest_patch
 from aidoo_api.domains.docs.models import (
     DocMeetingAccess,
+    DocsUserItemPref,
     NativeDoc,
     NativeDocContainer,
     NativeDocLinkShare,
     NativeDocPage,
 )
 from aidoo_api.domains.docs.rag_sync import enqueue_native_doc_rag_sync
-from aidoo_api.domains.docs.registry import ContainerRef, project_container_access
-from aidoo_api.domains.media.router import sync_embedded_media
+from aidoo_api.domains.docs.registry import (
+    ContainerRef,
+    describe_source,
+    project_container_access,
+    resolve_container_label,
+)
+from aidoo_api.domains.media.service import sync_embedded_media
 from aidoo_api.domains.rag.contracts import RagSyncOperation
 
 
@@ -30,6 +36,8 @@ TEAM_ACCESS_LEVEL_RANK = {
     "read": 10,
     "edit": 20,
 }
+SOURCE_NATIVE_DOC = "native_doc"
+PAGE_SOURCE_NATIVE_DOC = "native_doc_page"
 
 
 def create_native_doc_for_user(
@@ -418,10 +426,275 @@ def _native_doc_from_item_or_404(
     return doc, access
 
 
-def _router():
-    from aidoo_api.domains.docs import router as docs_router
+def _share_token_allows_item_without_docs_access(item_id: str) -> bool:
+    prefix, _raw_id = _split_prefixed_id(item_id)
+    return prefix in {None, SOURCE_NATIVE_DOC}
 
-    return docs_router
+
+def _share_token_allows_page_without_docs_access(page_id: str) -> bool:
+    prefix, _raw_id = _split_prefixed_id(page_id)
+    return prefix in {None, PAGE_SOURCE_NATIVE_DOC}
+
+
+def _ensure_docs_workspace_access(db: Session, user: User) -> Workspace:
+    current_workspace = get_current_workspace(db)
+    if current_workspace is not None:
+        return current_workspace
+
+    for summary in resolve_workspaces(db, user):
+        workspace = db.scalar(
+            select(Workspace).where(
+                Workspace.id == summary["id"],
+                Workspace.active.is_(True),
+            )
+        )
+        if workspace is None:
+            continue
+        bind_current_workspace(db, workspace)
+        return workspace
+
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="Docs requests require a workspace context.",
+    )
+
+
+def _primary_container(doc: NativeDoc) -> NativeDocContainer | None:
+    active = list(doc.containers)
+    if not active:
+        return None
+    active.sort(
+        key=lambda item: (
+            0 if item.is_primary else 1,
+            item.sort_order,
+            item.created_at,
+        )
+    )
+    return active[0]
+
+
+def _load_accessible_native_docs(db: Session, user: User) -> list[NativeDoc]:
+    current_workspace = get_current_workspace(db)
+    if current_workspace is None:
+        return []
+    docs = list(db.scalars(_doc_query().where(NativeDoc.workspace_id == current_workspace.id)))
+    return [doc for doc in docs if _resolve_native_doc_access(db, doc, user).can_view]
+
+
+def _get_pref_map(
+    db: Session,
+    user_id: str,
+) -> dict[tuple[str, str], DocsUserItemPref]:
+    rows = list(
+        db.scalars(
+            select(DocsUserItemPref).where(DocsUserItemPref.user_id == user_id)
+        )
+    )
+    return {(row.source_type, row.source_doc_id): row for row in rows}
+
+
+def _serialize_primary_container(container: NativeDocContainer | None) -> dict[str, Any] | None:
+    if container is None:
+        return None
+    return {
+        "app": container.container_app,
+        "type": container.container_type,
+        "id": container.container_id,
+        "sort_order": container.sort_order,
+    }
+
+
+def _serialize_native_share_summary(doc: NativeDoc) -> dict[str, Any]:
+    active_link = next((item for item in doc.link_shares if item.active), None)
+    user_share_count = len(doc.user_shares)
+    primary_container = _primary_container(doc)
+    is_container_shared = primary_container is not None
+    is_meeting_note = doc.source_app == "meeting" and doc.source_kind == "meeting_notes"
+    return {
+        "visibility": (
+            "shared"
+            if user_share_count > 0
+            or active_link is not None
+            or is_container_shared
+            or is_meeting_note
+            else "private"
+        ),
+        "user_share_count": user_share_count,
+        "link_active": active_link is not None,
+        "link_access_level": active_link.access_level if active_link is not None else None,
+    }
+
+
+def _serialize_native_item(
+    db: Session,
+    doc: NativeDoc,
+    access: NativeAccess,
+    pref: DocsUserItemPref | None,
+) -> dict[str, Any]:
+    workspace = _workspace_for_doc(db, doc)
+    primary_container = _primary_container(doc)
+    location_label = resolve_container_label(
+        db=db,
+        workspace=workspace,
+        container=primary_container,
+    )
+    source = describe_source(
+        workspace=workspace,
+        doc=doc,
+        primary_container=primary_container,
+    )
+    active_pages = [page for page in doc.pages if page.trashed_at is None]
+    sharing_summary = _serialize_native_share_summary(doc)
+    return {
+        "id": doc.id,
+        "source_app": doc.source_app,
+        "source_type": SOURCE_NATIVE_DOC,
+        "source_id": doc.id,
+        "source_kind": doc.source_kind,
+        "source_ref": doc.source_ref,
+        "generation_kind": doc.generation_kind,
+        "structure_kind": "page_tree",
+        "location_label": location_label,
+        "container_label": location_label,
+        "primary_container": _serialize_primary_container(primary_container),
+        "source_badge": source.badge,
+        "source_deeplink": source.deep_link,
+        "title": doc.title,
+        "page_count": len(active_pages),
+        "created_by_id": doc.owner_id,
+        "created_by_name": getattr(doc.owner, "full_name", ""),
+        "created_at": doc.created_at,
+        "updated_at": doc.updated_at,
+        "trashed_at": doc.trashed_at,
+        "is_favorite": bool(pref and pref.is_favorite),
+        "is_private": sharing_summary["visibility"] == "private",
+        "last_viewed_at": pref.last_viewed_at if pref else None,
+        "can_view": access.can_view,
+        "can_edit": access.can_edit,
+        "can_share": access.can_share,
+        "can_manage": access.can_manage,
+        "sharing_summary": sharing_summary,
+    }
+
+
+def _lookup_item(
+    db: Session,
+    item_id: str,
+    current_user: User,
+    *,
+    share_token: str | None = None,
+) -> dict[str, Any]:
+    doc, access = _native_doc_from_item_or_404(
+        db,
+        item_id,
+        current_user,
+        share_token=share_token,
+    )
+    pref_map = _get_pref_map(db, current_user.id)
+    return _serialize_native_item(
+        db,
+        doc,
+        access,
+        pref_map.get((SOURCE_NATIVE_DOC, doc.id)),
+    )
+
+
+def _filter_docs(
+    docs: list[dict[str, Any]],
+    *,
+    current_user_id: str,
+    query: dict[str, Any],
+) -> list[dict[str, Any]]:
+    filtered = docs
+    view = query["view"]
+    if view == "mine":
+        filtered = [
+            item
+            for item in filtered
+            if item["trashed_at"] is None and item["created_by_id"] == current_user_id
+        ]
+    elif view == "shared":
+        filtered = [
+            item
+            for item in filtered
+            if item["trashed_at"] is None and item["created_by_id"] != current_user_id
+        ]
+    elif view == "private":
+        filtered = [
+            item
+            for item in filtered
+            if item["trashed_at"] is None
+            and item["created_by_id"] == current_user_id
+            and item["is_private"]
+        ]
+    elif view == "meeting_notes":
+        filtered = [
+            item
+            for item in filtered
+            if item["trashed_at"] is None
+            and item["source_app"] == "meeting"
+            and item["source_kind"] == "meeting_notes"
+        ]
+    elif view == "recent":
+        filtered = [
+            item
+            for item in filtered
+            if item["trashed_at"] is None and item["last_viewed_at"] is not None
+        ]
+    elif view == "archived":
+        filtered = [item for item in filtered if item["trashed_at"] is not None]
+    else:
+        filtered = [item for item in filtered if item["trashed_at"] is None]
+
+    for key in ("source_app", "source_kind"):
+        if query[key]:
+            filtered = [item for item in filtered if item[key] == query[key]]
+
+    for query_key, container_key in (
+        ("container_app", "app"),
+        ("container_type", "type"),
+        ("container_id", "id"),
+    ):
+        if query[query_key]:
+            filtered = [
+                item
+                for item in filtered
+                if item["primary_container"] is not None
+                and item["primary_container"][container_key] == query[query_key]
+            ]
+
+    search = query["q"].strip().lower()
+    if search:
+        filtered = [
+            item
+            for item in filtered
+            if search in item["title"].lower()
+            or search in item["location_label"].lower()
+            or search in item["source_badge"].lower()
+        ]
+    return filtered
+
+
+def _sort_docs(
+    docs: list[dict[str, Any]],
+    *,
+    sort_by: str,
+    sort_dir: str,
+) -> list[dict[str, Any]]:
+    reverse = sort_dir != "asc"
+
+    def sort_key(item: dict[str, Any]):
+        if sort_by == "title":
+            return item["title"].lower()
+        if sort_by == "created_at":
+            return item["created_at"]
+        if sort_by == "last_viewed_at":
+            return item["last_viewed_at"] or datetime.min
+        if sort_by == "container_sort_order":
+            return item["primary_container"]["sort_order"] if item["primary_container"] else 0
+        return item["updated_at"]
+
+    return sorted(docs, key=sort_key, reverse=reverse)
 
 
 def create_page(
@@ -516,21 +789,41 @@ def list_hub(
     container_type: str | None = None,
     container_id: str | None = None,
 ) -> dict[str, Any]:
-    helpers = _router()
-    query = helpers.DocsHubQuery(
-        view=view,
-        q=q,
-        sort_by=sort_by,
-        sort_dir=sort_dir,
-        page=page,
-        page_size=page_size,
-        source_app=source_app,
-        source_kind=source_kind,
-        container_app=container_app,
-        container_type=container_type,
-        container_id=container_id,
-    )
-    return helpers.list_hub_internal(db, user=user, query=query).model_dump()
+    _ensure_docs_workspace_access(db, user)
+    query = {
+        "view": view,
+        "q": q,
+        "sort_by": sort_by,
+        "sort_dir": sort_dir,
+        "page": page,
+        "page_size": page_size,
+        "source_app": source_app,
+        "source_kind": source_kind,
+        "container_app": container_app,
+        "container_type": container_type,
+        "container_id": container_id,
+    }
+    pref_map = _get_pref_map(db, user.id)
+    docs = [
+        _serialize_native_item(
+            db,
+            doc,
+            _resolve_native_doc_access(db, doc, user),
+            pref_map.get((SOURCE_NATIVE_DOC, doc.id)),
+        )
+        for doc in _load_accessible_native_docs(db, user)
+    ]
+    docs = _filter_docs(docs, current_user_id=user.id, query=query)
+    docs = _sort_docs(docs, sort_by=sort_by, sort_dir=sort_dir)
+    total = len(docs)
+    start = (page - 1) * page_size
+    end = start + page_size
+    return {
+        "items": docs[start:end],
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+    }
 
 
 def get_item(
@@ -540,13 +833,9 @@ def get_item(
     item_id: str,
     share_token: str | None = None,
 ) -> dict[str, Any]:
-    helpers = _router()
-    return helpers.get_item_internal(
-        db,
-        user=user,
-        item_id=item_id,
-        share_token=share_token,
-    ).model_dump()
+    if share_token is None or not _share_token_allows_item_without_docs_access(item_id):
+        _ensure_docs_workspace_access(db, user)
+    return _lookup_item(db, item_id, user, share_token=share_token)
 
 
 def list_pages(
@@ -556,13 +845,21 @@ def list_pages(
     item_id: str,
     share_token: str | None = None,
 ) -> dict[str, Any]:
-    helpers = _router()
-    return helpers.list_pages_internal(
-        db,
-        user=user,
-        item_id=item_id,
-        share_token=share_token,
-    ).model_dump()
+    if share_token is None or not _share_token_allows_item_without_docs_access(item_id):
+        _ensure_docs_workspace_access(db, user)
+    doc, access = _native_doc_from_item_or_404(db, item_id, user, share_token=share_token)
+    pages = [
+        _serialize_native_page(page, can_edit=access.can_edit)
+        for page in sorted(
+            [page for page in doc.pages if page.trashed_at is None],
+            key=lambda page: (
+                "" if page.parent_id is None else page.parent_id,
+                page.sort_order,
+                page.created_at,
+            ),
+        )
+    ]
+    return {"items": pages}
 
 
 def read_page(
@@ -572,10 +869,15 @@ def read_page(
     page_id: str,
     share_token: str | None = None,
 ) -> dict[str, Any]:
-    helpers = _router()
-    return helpers.read_page_internal(
-        db,
-        user=user,
-        page_id=page_id,
-        share_token=share_token,
-    ).model_dump()
+    if share_token is None or not _share_token_allows_page_without_docs_access(page_id):
+        _ensure_docs_workspace_access(db, user)
+    page = _load_native_page(db, _normalize_page_id(page_id))
+    if page is None or page.doc is None:
+        raise HTTPException(status_code=404, detail="Page not found.")
+    doc = _load_native_doc_for_access(db, page.doc_id)
+    if doc is None:
+        raise HTTPException(status_code=404, detail="Page not found.")
+    access = _resolve_native_doc_access(db, doc, user, share_token=share_token)
+    if not access.can_view or page.trashed_at is not None or doc.trashed_at is not None:
+        raise HTTPException(status_code=403, detail="Page access required.")
+    return _serialize_native_page(page, can_edit=access.can_edit)

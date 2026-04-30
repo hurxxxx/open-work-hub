@@ -2,15 +2,15 @@ import { useEffect, useMemo, useState } from 'react';
 import { Button, Dialog } from '@aidoo/ui';
 import { Loader2 } from 'lucide-react';
 
-import { useAuth } from '@/src/domains/auth/auth-provider';
-import { hasWorkspaceMembership } from '@/src/domains/auth/auth-api';
+import { useAuth } from '@/src/platform/auth/auth-provider';
+import { hasWorkspaceMembership } from '@/src/platform/auth/auth-api';
 import { NoAccessNotice } from '@/src/components/common/NoAccessNotice';
 import {
   listPmsTaskLists,
   listTaskListIssues,
   type PmsIssue,
   type PmsTaskList,
-} from '@/src/domains/pms/pms-api';
+} from '@/src/app-modules/pms/public-api';
 
 interface TaskPickerModalProps {
   isOpen: boolean;

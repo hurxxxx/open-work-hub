@@ -1,7 +1,7 @@
 import { Loader2, Lock, Mic, Square, Upload } from 'lucide-react';
 import { useRef, useState } from 'react';
 
-import type { ActiveRecordingLock, MeetingTaskLink } from '@/src/domains/meeting/meeting-api';
+import type { ActiveRecordingLock, MeetingTaskLink } from '../../api/meeting-api';
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;

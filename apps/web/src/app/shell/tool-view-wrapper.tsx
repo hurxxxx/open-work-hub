@@ -4,19 +4,19 @@ import { getNavItem } from '@/src/app/shell/app-registry';
 import { RagSearchView } from '@/src/app-modules/ai';
 import { DocsView } from '@/src/app-modules/docs';
 import { PMSView } from '@/src/app-modules/pms';
-import { hasWorkspaceMembership } from '@/src/domains/auth/auth-api';
-import { useAuth } from '@/src/domains/auth/auth-provider';
-import { AccessDeniedView } from '@/src/domains/auth/settings-pages';
+import { hasWorkspaceMembership } from '@/src/platform/auth/auth-api';
+import { useAuth } from '@/src/platform/auth/auth-provider';
+import { AccessDeniedView } from '@/src/platform/auth/settings-pages';
 import {
   canUseWorkspaceSearchTool,
   isWorkspaceAppEnabled,
-} from '@/src/domains/rag/rag-ui-access';
-import { useWorkspaceBootstrapContext } from '@/src/domains/workspaces/workspace-bootstrap-context';
+} from '@/src/platform/rag/rag-ui-access';
+import { useWorkspaceBootstrapContext } from '@/src/platform/workspaces/workspace-bootstrap-context';
 import {
   getToolWorkspaceSlugFromSearch,
   resolveDefaultWorkspaceAppPath,
   resolveShellWorkspaceSlug,
-} from '@/src/domains/workspaces/workspace-utils';
+} from '@/src/platform/workspaces/workspace-utils';
 import { ComingSoonView } from './tool-views/ComingSoonView';
 import { ToolView } from './tool-views/ToolView';
 

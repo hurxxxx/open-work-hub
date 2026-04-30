@@ -70,6 +70,7 @@ export default [
             {
               group: [
                 '@/src/components/views/**',
+                '@/src/domains/**',
                 '@/src/app-modules/*/routes',
                 '@/src/app-modules/*/routes/**',
                 '@/src/app-modules/*/api/**',

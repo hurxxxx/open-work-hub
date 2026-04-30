@@ -9,13 +9,13 @@ import {
   Loader2,
 } from 'lucide-react';
 import { DonutChartCard, Panel } from '@aidoo/ui';
-import { useAuth } from '@/src/domains/auth/auth-provider';
+import { useAuth } from '@/src/platform/auth/auth-provider';
 import {
   getPmsDashboardSummary,
   listPmsTaskLists,
   type PmsDashboardSummary,
   type PmsTaskList,
-} from '@/src/domains/pms/pms-api';
+} from '../api/pms-api';
 import { CreateTaskListModal } from './CreateTaskListModal';
 
 function upsertTaskList(taskLists: PmsTaskList[], taskList: PmsTaskList): PmsTaskList[] {

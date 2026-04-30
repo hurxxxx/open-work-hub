@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Brain, ChevronDown, ChevronRight, Loader2 } from 'lucide-react';
 
-import type { ChatStreamStatus } from '@/src/domains/ai/agent-events';
+import type { ChatStreamStatus } from '../../api/agent-events';
 
 export interface ThinkingPanelProps {
   reasoning: string;

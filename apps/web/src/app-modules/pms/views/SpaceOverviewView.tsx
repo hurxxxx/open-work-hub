@@ -11,12 +11,12 @@ import {
   Users,
 } from 'lucide-react';
 import { Panel } from '@aidoo/ui';
-import { useAuth } from '@/src/domains/auth/auth-provider';
+import { useAuth } from '@/src/platform/auth/auth-provider';
 import {
   getDocsItemPrimaryContainerSortOrder,
   listDocsHub,
   type DocsHubItem,
-} from '@/src/domains/docs/docs-api';
+} from '@/src/app-modules/docs/public-api';
 import {
   listPmsTaskLists,
   listFolders,
@@ -26,7 +26,7 @@ import {
   type PmsFolder,
   type PmsSpace,
   type PmsSpaceMember,
-} from '@/src/domains/pms/pms-api';
+} from '../api/pms-api';
 import { initials } from './pms-constants';
 import { CreateTaskListModal } from './CreateTaskListModal';
 import { SpaceMembersModal } from './SpaceMembersModal';

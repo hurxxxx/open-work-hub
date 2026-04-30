@@ -1,6 +1,6 @@
 import { MessageSquare, Flag, MoreHorizontal, CheckSquare, Clock } from 'lucide-react';
 import { Badge, Button } from '@aidoo/ui';
-import type { PmsIssue, PmsTaskListStatus } from '@/src/domains/pms/pms-api';
+import type { PmsIssue, PmsTaskListStatus } from '../api/pms-api';
 import { getStatusTone, PRIORITY_COLOR, initials, formatDate } from './pms-constants';
 
 export const TableView = ({

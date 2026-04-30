@@ -7,7 +7,7 @@ const repoRoot = process.cwd();
 const webSrcRoot = path.join(repoRoot, 'apps/web/src');
 const appModulesRoot = path.join(webSrcRoot, 'app-modules');
 const internalSegments = new Set(['api', 'lib', 'model', 'pages', 'routes', 'sidebar', 'ui', 'views']);
-const publicAppModuleAliasPattern = /^@\/src\/app-modules\/[^/]+(?:\/manifest)?$/;
+const publicAppModuleAliasPattern = /^@\/src\/app-modules\/[^/]+(?:\/manifest|\/public-api)?$/;
 const sourceExtensions = new Set(['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs']);
 
 function walk(dir) {
@@ -81,6 +81,15 @@ for (const file of walk(webSrcRoot)) {
         file,
         specifier,
         reason: 'App-specific views must live inside app-modules/<appId>/views, not shared components/views.',
+      });
+      continue;
+    }
+
+    if (specifier.startsWith('@/src/domains/')) {
+      violations.push({
+        file,
+        specifier,
+        reason: 'Legacy domains imports are closed. Use platform/* or app-modules/<appId> public/internal boundaries.',
       });
       continue;
     }

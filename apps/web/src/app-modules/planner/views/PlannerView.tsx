@@ -4,12 +4,12 @@ import { motion } from 'motion/react';
 import { ChevronLeft, ChevronRight, Plus } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 import { getKoreanHolidayNames } from '@/src/lib/korean-holidays';
-import { useAuth } from '@/src/domains/auth/auth-provider';
-import { useCalendarEvents } from '@/src/domains/calendar/use-calendar-events';
-import type { CalendarEvent } from '@/src/domains/calendar/calendar-types';
-import { updateMeeting } from '@/src/domains/meeting/meeting-api';
-import { updateIssue } from '@/src/domains/pms/pms-api';
-import { updatePlannerEvent } from '@/src/domains/planner/planner-api';
+import { useAuth } from '@/src/platform/auth/auth-provider';
+import { useCalendarEvents } from '@/src/platform/calendar/use-calendar-events';
+import type { CalendarEvent } from '@/src/platform/calendar/calendar-types';
+import { updateMeeting } from '@/src/app-modules/meeting/public-api';
+import { updateIssue } from '@/src/app-modules/pms/public-api';
+import { updatePlannerEvent } from '../api/planner-api';
 import {
   UnifiedCalendar,
   type UnifiedCalendarHandle,

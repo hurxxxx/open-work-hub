@@ -53,7 +53,7 @@ def _hit(chunk_id: str, text: str, score: float = 0.1) -> RagVectorSearchHit:
 def test_deepinfra_embedding_client_embeds_texts(monkeypatch: pytest.MonkeyPatch) -> None:
     called: dict[str, object] = {}
 
-    def _post(self, url: str, *, json):
+    def _post(self, url: str, *, json, timeout=None):
         called["url"] = url
         called["json"] = json
         called["authorization"] = self.headers["Authorization"]
@@ -92,7 +92,7 @@ def test_deepinfra_embedding_client_embeds_texts(monkeypatch: pytest.MonkeyPatch
 
 
 def test_deepinfra_embedding_client_raises_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
-    def _post(self, url: str, *, json):
+    def _post(self, url: str, *, json, timeout=None):
         raise httpx.ReadTimeout("timed out")
 
     monkeypatch.setattr(httpx.Client, "post", _post)
@@ -109,7 +109,7 @@ def test_deepinfra_embedding_client_raises_timeout(monkeypatch: pytest.MonkeyPat
 def test_deepinfra_embedding_client_raises_transient_on_server_error(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    def _post(self, url: str, *, json):
+    def _post(self, url: str, *, json, timeout=None):
         return _StubResponse(503, {"error": "retry later"}, text="retry later")
 
     monkeypatch.setattr(httpx.Client, "post", _post)
@@ -126,7 +126,7 @@ def test_deepinfra_embedding_client_raises_transient_on_server_error(
 def test_deepinfra_embedding_client_raises_transient_on_rate_limit(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    def _post(self, url: str, *, json):
+    def _post(self, url: str, *, json, timeout=None):
         return _StubResponse(429, {"error": "slow down"}, text="slow down")
 
     monkeypatch.setattr(httpx.Client, "post", _post)
@@ -143,7 +143,7 @@ def test_deepinfra_embedding_client_raises_transient_on_rate_limit(
 def test_deepinfra_embedding_client_surfaces_retry_after_from_rate_limit(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    def _post(self, url: str, *, json):
+    def _post(self, url: str, *, json, timeout=None):
         return _StubResponse(
             429,
             {"error": "slow down"},
@@ -170,7 +170,7 @@ def test_deepinfra_embedding_client_opens_circuit_after_repeated_transient_failu
     calls: list[str] = []
     now = {"value": 100.0}
 
-    def _post(self, url: str, *, json):
+    def _post(self, url: str, *, json, timeout=None):
         calls.append(url)
         return _StubResponse(503, {"error": "retry later"}, text="retry later")
 
@@ -196,7 +196,7 @@ def test_deepinfra_embedding_client_opens_circuit_after_repeated_transient_failu
 def test_deepinfra_embedding_client_raises_provider_error_on_client_error(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    def _post(self, url: str, *, json):
+    def _post(self, url: str, *, json, timeout=None):
         return _StubResponse(400, {"error": "bad request"}, text="bad request")
 
     monkeypatch.setattr(httpx.Client, "post", _post)
@@ -213,7 +213,7 @@ def test_deepinfra_embedding_client_raises_provider_error_on_client_error(
 def test_deepinfra_embedding_client_marks_unauthorized_as_permanent_error(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    def _post(self, url: str, *, json):
+    def _post(self, url: str, *, json, timeout=None):
         return _StubResponse(401, {"error": "unauthorized"}, text="unauthorized")
 
     monkeypatch.setattr(httpx.Client, "post", _post)
@@ -232,7 +232,7 @@ def test_deepinfra_rerank_client_uses_inference_endpoint_when_available(
 ) -> None:
     called: dict[str, object] = {}
 
-    def _post(self, url: str, *, json):
+    def _post(self, url: str, *, json, timeout=None):
         called["authorization"] = self.headers["Authorization"]
         called["content_type"] = self.headers["Content-Type"]
         called["timeout"] = self.timeout.connect
@@ -271,7 +271,7 @@ def test_openai_compatible_rerank_client_falls_back_to_chat_completion(
 ) -> None:
     calls: list[tuple[str, dict]] = []
 
-    def _post(self, url: str, *, json):
+    def _post(self, url: str, *, json, timeout=None):
         calls.append((url, json))
         if url.endswith("/rerank"):
             return _StubResponse(404, {"error": "not found"}, text="not found")
@@ -313,7 +313,7 @@ def test_openai_compatible_rerank_client_falls_back_to_chat_completion(
 
 
 def test_deepinfra_rerank_client_raises_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
-    def _post(self, url: str, *, json):
+    def _post(self, url: str, *, json, timeout=None):
         raise httpx.ReadTimeout("timed out")
 
     monkeypatch.setattr(httpx.Client, "post", _post)
@@ -330,7 +330,7 @@ def test_deepinfra_rerank_client_raises_timeout(monkeypatch: pytest.MonkeyPatch)
 def test_deepinfra_rerank_client_raises_transient_on_rate_limit(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    def _post(self, url: str, *, json):
+    def _post(self, url: str, *, json, timeout=None):
         return _StubResponse(429, {"error": "slow down"}, text="slow down")
 
     monkeypatch.setattr(httpx.Client, "post", _post)

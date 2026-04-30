@@ -5,7 +5,7 @@ import {
   ACTIVE_RECORDING_STATUSES,
   type MeetingRecording,
   type MeetingRecordingStatus,
-} from '@/src/domains/meeting/meeting-api';
+} from '../../api/meeting-api';
 
 import { RecordingProgressRail } from './RecordingProgressRail';
 

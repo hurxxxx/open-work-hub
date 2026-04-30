@@ -454,7 +454,7 @@ async def _run_agent_loop_stream(
                     turn_finish_reason = chunk.finish_reason or "stop"
                     continue
 
-            if turn_finish_reason != "tool_calls":
+            if str(turn_finish_reason) != "tool_calls":
                 _complete_snapshot_if_needed(db, current_snapshot)
                 if buffer_content_for_write_guard:
                     yield make_envelope(

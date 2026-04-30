@@ -9,7 +9,7 @@ import {
   MoreHorizontal
 } from 'lucide-react';
 import { BlockEditor } from '@aidoo/ui';
-import { useMediaUpload } from '@/src/domains/media/use-media-upload';
+import { useMediaUpload } from '@/src/platform/media/use-media-upload';
 import { cn } from '@/src/lib/utils';
 
 export const TeamDocsView = () => {

@@ -66,6 +66,10 @@ def test_llm_settings_default_to_local_mlx() -> None:
         DOOWON_POSTGRES_DSN=(
             "postgresql+psycopg://aidoo_test:aidoo_test@127.0.0.1:5432/aidoo_test"
         ),
+        DOOWON_LLM_DEFAULT_MODEL="",
+        DOOWON_LLM_CANONICAL_MODEL="",
+        DOOWON_LLM_EXTERNAL_DEFAULT_MODEL="",
+        DOOWON_LLM_EXTERNAL_CANONICAL_MODEL="",
     )
 
     assert settings.llm_local_provider == "mlx-lm"

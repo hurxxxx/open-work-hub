@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import { Calendar, AlertCircle, CheckCircle2, Loader2 } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
-import { useAuth } from '@/src/domains/auth/auth-provider';
-import { listPmsTaskLists, listTaskListIssues, type PmsIssue } from '@/src/domains/pms/pms-api';
+import { useAuth } from '@/src/platform/auth/auth-provider';
+import { listPmsTaskLists, listTaskListIssues, type PmsIssue } from '../api/pms-api';
 import { initials, formatDate } from './pms-constants';
 
 export const TodayOverdueView = () => {

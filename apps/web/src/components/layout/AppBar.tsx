@@ -14,23 +14,23 @@ import { APP_BAR_ITEMS } from '@/src/app/shell/app-registry';
 import {
   getDefaultAdminPath,
   hasAnyAdminReadPermission,
-} from '@/src/domains/admin/admin-permissions';
+} from '@/src/platform/admin/admin-permissions';
 import {
   hasAdminConsoleAccess,
   type AuthUser,
   workspaceRoleAllows,
-} from '@/src/domains/auth/auth-api';
+} from '@/src/platform/auth/auth-api';
 import {
   buildWorkspaceAppPath,
   getPreferredWorkspace,
   persistLastWorkspaceSlug,
   resolveWorkspaceSwitchPath,
   type WorkspaceAppId,
-} from '@/src/domains/workspaces/workspace-utils';
-import { canUseWorkspaceSearchTool } from '@/src/domains/rag/rag-ui-access';
-import type { WorkspaceBootstrapApp } from '@/src/domains/workspaces/workspaces-api';
-import { useAuth } from '@/src/domains/auth/auth-provider';
-import { getUnreadNotificationCount } from '@/src/domains/pms/pms-api';
+} from '@/src/platform/workspaces/workspace-utils';
+import { canUseWorkspaceSearchTool } from '@/src/platform/rag/rag-ui-access';
+import type { WorkspaceBootstrapApp } from '@/src/platform/workspaces/workspaces-api';
+import { useAuth } from '@/src/platform/auth/auth-provider';
+import { getUnreadNotificationCount } from '@/src/platform/notifications/notifications-api';
 import { cn } from '@/src/lib/utils';
 import { NotificationPanel } from './NotificationPanel';
 

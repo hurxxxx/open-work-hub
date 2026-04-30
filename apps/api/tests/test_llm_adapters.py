@@ -24,6 +24,7 @@ from aidoo_api.core.llm_adapters import (
 )
 from aidoo_api.domains.ai.models import LlmPolicy
 from aidoo_api.domains.auth.models import AuditLog
+from aidoo_api.core.settings import get_settings
 
 
 pytestmark = pytest.mark.anyio
@@ -306,6 +307,13 @@ def _set_policy(task_kind: str, mode: str) -> None:
         session.commit()
 
 
+def _configure_external_pool(monkeypatch: pytest.MonkeyPatch) -> None:
+    settings = get_settings()
+    monkeypatch.setattr(settings, "llm_external_api_key", "test-external-key")
+    monkeypatch.setattr(settings, "llm_external_default_model", "openai/gpt-5.4-mini")
+    monkeypatch.setattr(settings, "llm_external_canonical_model", "openai/gpt-5.4-mini")
+
+
 def _audit_rows() -> list[AuditLog]:
     with _make_db_session() as session:
         return list(
@@ -495,6 +503,7 @@ async def test_complete_chat_stream_uses_external_reasoning_shape(
     monkeypatch: pytest.MonkeyPatch, client_seed_workspace: None
 ) -> None:
     _set_policy("chatbot", "external")
+    _configure_external_pool(monkeypatch)
     completions = _install_fake_pool(
         monkeypatch,
         [_delta_chunk(content="x", finish_reason="stop")],
@@ -524,6 +533,7 @@ async def test_complete_chat_stream_uses_external_defaults_when_unset(
     monkeypatch: pytest.MonkeyPatch, client_seed_workspace: None
 ) -> None:
     _set_policy("chatbot", "external")
+    _configure_external_pool(monkeypatch)
     completions = _install_fake_pool(
         monkeypatch,
         [_delta_chunk(content="x", finish_reason="stop")],

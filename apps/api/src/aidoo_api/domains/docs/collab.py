@@ -35,12 +35,11 @@ from aidoo_api.domains.docs.models import (
     DocMeetingAccess,
     DocsCollabDocument,
     NativeDoc,
-    NativeDocContainer,
     NativeDocPage,
     NativeDocUserShare,
 )
 from aidoo_api.domains.docs.registry import ContainerRef, project_container_access
-from aidoo_api.domains.media.router import sync_embedded_media
+from aidoo_api.domains.media.service import sync_embedded_media
 from aidoo_api.domains.search.hooks import enqueue_doc_search_index
 
 

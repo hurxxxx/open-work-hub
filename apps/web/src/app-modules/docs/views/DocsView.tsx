@@ -44,9 +44,9 @@ import {
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 
-import { useMediaUpload } from '@/src/domains/media/use-media-upload';
-import { useAuth } from '@/src/domains/auth/auth-provider';
-import { hasWorkspaceMembership } from '@/src/domains/auth/auth-api';
+import { useMediaUpload } from '@/src/platform/media/use-media-upload';
+import { useAuth } from '@/src/platform/auth/auth-provider';
+import { hasWorkspaceMembership } from '@/src/platform/auth/auth-api';
 import { cn } from '@/src/lib/utils';
 import {
   createDocPage,
@@ -77,7 +77,7 @@ import {
   type DocsPageItem,
   type NativeDocSharingResponse,
   type ShareableUserItem,
-} from '@/src/domains/docs/docs-api';
+} from '../api/docs-api';
 import {
   applyReorder,
   collectDescendantIds,
@@ -85,12 +85,12 @@ import {
   flattenVisibleTree,
   resolveDropZone,
   type DropZone,
-} from '@/src/domains/docs/docs-page-reorder';
+} from '../api/docs-page-reorder';
 import {
   buildWorkspaceAppPath,
   resolveDefaultWorkspaceAppPath,
-} from '@/src/domains/workspaces/workspace-utils';
-import { listSpaces, type PmsSpace } from '@/src/domains/pms/pms-api';
+} from '@/src/platform/workspaces/workspace-utils';
+import { listSpaces, type PmsSpace } from '@/src/app-modules/pms/public-api';
 
 const CATEGORY_MAP: Record<string, string> = {
   'docs-all': 'all',
