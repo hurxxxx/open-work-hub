@@ -138,6 +138,10 @@ class AgentInvocation(Base):
             "status IN ('pending','running','awaiting_approval','resumed','completed','failed','cancelled','abandoned')",
             name="ck_ai_agent_invocations_status",
         ),
+        CheckConstraint(
+            "invocation_seq >= 0",
+            name="ck_ai_agent_invocations_invocation_seq_nonnegative",
+        ),
         Index(
             "uq_ai_agent_invocations_run_seq",
             "agent_run_id",

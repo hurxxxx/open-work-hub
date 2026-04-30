@@ -196,6 +196,31 @@ def test_agent_invocation_allows_only_one_awaiting_approval_per_run(
             db.commit()
 
 
+def test_agent_invocation_rejects_negative_invocation_seq(
+    runtime_session_factory: sessionmaker[Session],
+) -> None:
+    with runtime_session_factory() as db:
+        workspace, user, conversation = _seed_scope(db)
+        run = _runtime_run(workspace=workspace, user=user, conversation=conversation)
+        db.add(run)
+        db.flush()
+
+        db.add(
+            AgentInvocation(
+                id=new_id(),
+                agent_run_id=run.id,
+                workspace_id=workspace.id,
+                conversation_id=conversation.id,
+                invocation_seq=-1,
+                agent_id="domain.pms",
+                status="pending",
+                purpose="invalid sequence",
+            )
+        )
+        with pytest.raises(IntegrityError):
+            db.commit()
+
+
 def test_legacy_approval_allows_only_one_pending_approval_per_snapshot(
     runtime_session_factory: sessionmaker[Session],
 ) -> None:
