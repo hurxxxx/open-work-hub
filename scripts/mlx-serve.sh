@@ -5,19 +5,23 @@
 #   bash scripts/mlx-serve.sh            # foreground
 #   nohup bash scripts/mlx-serve.sh &    # background
 #
-# Default model: mlx-community/Qwen3.6-35B-A3B-4bit
 # Default port:  8080 (matches DOOWON_LLM_LOCAL_BASE_URL default)
 #
 # Override via env:
-#   MLX_MODEL=mlx-community/Qwen3.6-35B-A3B-8bit MLX_PORT=8090 bash scripts/mlx-serve.sh
-#   MLX_CHAT_TEMPLATE_ARGS='{"enable_thinking":true}' bash scripts/mlx-serve.sh
+#   MLX_MODEL=mlx-community/<model> MLX_PORT=8090 bash scripts/mlx-serve.sh
+#   MLX_CHAT_TEMPLATE_ARGS='{"some_model_specific_option":false}' bash scripts/mlx-serve.sh
 set -euo pipefail
 
 MLX_HOST="${MLX_HOST:-127.0.0.1}"
 MLX_PORT="${MLX_PORT:-8080}"
-MLX_MODEL="${MLX_MODEL:-mlx-community/Qwen3.6-35B-A3B-4bit}"
+MLX_MODEL="${MLX_MODEL:-${DOOWON_LLM_LOCAL_DEFAULT_MODEL:-${DOOWON_LLM_DEFAULT_MODEL:-}}}"
 MLX_VENV="${MLX_VENV:-$HOME/.local/share/mlx-lm-venv}"
-MLX_CHAT_TEMPLATE_ARGS="${MLX_CHAT_TEMPLATE_ARGS:-{\"enable_thinking\":false}}"
+MLX_CHAT_TEMPLATE_ARGS="${MLX_CHAT_TEMPLATE_ARGS:-}"
+
+if [[ -z "$MLX_MODEL" ]]; then
+  echo "[mlx-serve] Set MLX_MODEL or DOOWON_LLM_LOCAL_DEFAULT_MODEL." >&2
+  exit 2
+fi
 
 # Create venv on first run.
 if [[ ! -x "$MLX_VENV/bin/mlx_lm.server" ]]; then

@@ -358,6 +358,69 @@ Final cleanup state:
 - Test-created hard resources were removed: `AI E2E Hard%` PMS issue count `0`, planner event count `0`.
 - `DEMO-50` was deleted during the approval-gate bypass test after tester approval; it was a test-created issue from the earlier smoke.
 
+## 2026-04-30 Gemma 4 26B A4B MLX Bakeoff
+
+Purpose:
+
+- Remove Qwen-specific chat-model defaults and workarounds from code/setup.
+- Try `mlx-community/gemma-4-26B-A4B-it-OptiQ-4bit` as a drop-in local MLX chat model.
+- Check whether the same Docs/PMS/Planner AI tool flow quality is preserved.
+
+Environment:
+
+- Hardware: Apple M5 Pro, 48GB RAM.
+- Model source: https://huggingface.co/mlx-community/gemma-4-26B-A4B-it-OptiQ-4bit
+- MLX server: `127.0.0.1:8080`, API `127.0.0.1:8000`, web `127.0.0.1:4200`.
+- Browser account: `delivery-hub-member@aidoo.local`, route `/w/delivery-hub/ai`.
+- Gemma cache size after first load: about `15G`.
+
+Code/setup cleanup:
+
+- `settings.py` no longer embeds a concrete local or external chat model as a silent default.
+- `scripts/mlx-serve.sh` no longer embeds a model-specific default or Qwen `enable_thinking=false` workaround. It now requires `MLX_MODEL` or `DOOWON_LLM_LOCAL_DEFAULT_MODEL`.
+- `.env.example` and API README use Gemma/OpenAI values only as explicit sample configuration.
+- ASR and RAG embedding/reranker Qwen-family defaults were intentionally left unchanged because they are separate model surfaces, not the local chat/internal-agent model.
+
+Results:
+
+| Case | Result | Time / Note |
+|---|---|---|
+| MLX model load | Passed | First load downloaded and started successfully. |
+| `/readyz` local pool | Passed | Local pool ready with `mlx-community/gemma-4-26B-A4B-it-OptiQ-4bit`, canonical `gemma/gemma-4-26b-a4b-it`. |
+| Text-only browser SSE, no tools | Passed | `allowed_app_ids=[]`, `max_tokens=4096`, answer streamed in about `4.5s`. |
+| Low-token text-only smoke | Failed quality | With small `max_tokens`, Gemma often spends tokens in hidden/parsed reasoning and returns no `content_delta` before `finish_reason=length`. |
+| Natural-language Docs read with tools | Failed | MLX Gemma tool parser raised `ValueError("No function provided.")`; the browser stream ended without useful tool output. |
+| UI prompt with “수정하지 마” | Failed safely but incorrectly | Existing write-intent guard treated the negated word `수정` as write intent and blocked a read request. |
+| PMS/Planner CRUD natural-language parity | Not accepted | Same CRUD-quality test suite cannot be considered passed because native tool-calling fails before reliable internal agent execution. |
+
+Conclusion:
+
+- Gemma 4 26B A4B 4-bit is usable as a local text-only chat model on this machine.
+- It is **not** a safe drop-in replacement for the current OpenAI-compatible native tool-calling loop under MLX.
+- Current dev local profile is reverted to `mlx-community/Qwen3.6-35B-A3B-4bit` with explicit `MLX_CHAT_TEMPLATE_ARGS='{"enable_thinking":false}'` for stable content output.
+- This Qwen choice is a profile selection, not a service/runtime name. Code and tests should keep model-neutral naming.
+- Model interchangeability requires an explicit capability profile, at minimum:
+  - `supports_text_chat`
+  - `supports_streaming_content`
+  - `supports_native_tool_calling`
+  - `reasoning_channel_behavior`
+  - `min_safe_max_tokens`
+- For Gemma-class local models, the next architecture step should be a non-native tool path: manager emits structured JSON/tool proposals as plain text, server validates and executes internal tools, then the local model summarizes. Do not rely on MLX native tool parsing for CRUD.
+
+Follow-up priority changes:
+
+1. Add model capability profile config instead of assuming all local OpenAI-compatible models support native tool calls.
+2. Add a non-native local tool planner/gateway path for models whose chat server cannot parse function calls reliably.
+3. Make write-intent detection negation-aware before any more read/write E2E bakeoffs.
+4. Re-run the same Docs/PMS/Planner CRUD suite only after the non-native tool path exists.
+
+Current Qwen quality guardrails:
+
+1. Keep native tool-calling enabled only for profiles that pass Docs/PMS/Planner tool smoke tests.
+2. Keep current Qwen profile on non-thinking mode for user-facing chat and internal summaries unless an eval explicitly enables reasoning.
+3. Pin every agent run to the resolved `ModelProfile`; do not silently continue a run if the local MoE checkpoint changes.
+4. Treat future MoE models as new profiles that must prove text streaming, native tool calling, reasoning channel behavior, and approval-gated CRUD parity before becoming default.
+
 ## References
 
 - OpenAI Agents SDK overview: https://developers.openai.com/api/docs/guides/agents

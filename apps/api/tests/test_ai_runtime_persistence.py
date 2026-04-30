@@ -378,7 +378,7 @@ def test_snapshot_shadow_uses_runtime_profile_from_model_meta(
             messages_json=[{"role": "user", "content": "보고서 작성"}],
             blocked_call_id="call-profile",
             model_meta={
-                "model": "qwen/qwen3.6-35b-a3b",
+                "model": "local/current-moe-test-profile",
                 "runtime_profile": "grounded_report",
                 "runtime_routing_reason_codes": ["grounded_report_signal"],
             },

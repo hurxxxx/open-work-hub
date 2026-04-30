@@ -40,7 +40,7 @@ def _execution() -> ResolvedLlmExecution:
         base_url="http://127.0.0.1:8080/v1",
         api_key="mlx",
         default_model="mlx-community/model",
-        canonical_model="qwen/qwen3.6-35b-a3b",
+        canonical_model="local/current-moe-test-profile",
         long_generation_timeout_seconds=30,
         enabled=True,
     )

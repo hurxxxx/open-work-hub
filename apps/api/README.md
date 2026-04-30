@@ -22,14 +22,17 @@ LLM 설정은 **로컬 풀**(Apple Silicon mlx-lm)과 **외부 풀**(OpenRouter)
 로컬 mlx-lm 서버 구동:
 
 ```bash
-bash scripts/mlx-serve.sh          # foreground
-nohup bash scripts/mlx-serve.sh &  # background
+MLX_MODEL=mlx-community/Qwen3.6-35B-A3B-4bit \
+MLX_CHAT_TEMPLATE_ARGS='{"enable_thinking":false}' \
+bash scripts/mlx-serve.sh
 ```
 
 최초 실행 시 `~/.local/share/mlx-lm-venv`에 venv를 만들고 `mlx-lm`을 설치한다.
-모델(약 19GB)은 `~/.cache/huggingface` 로 첫 요청 시 캐시된다.
-기본 스크립트는 내부 agent 요약이 `message.content`로 안정적으로 나오도록
-`MLX_CHAT_TEMPLATE_ARGS='{"enable_thinking":false}'`로 Qwen thinking을 끈다.
+모델은 `~/.cache/huggingface` 로 첫 요청 시 캐시된다. 현재 개발 기본 local profile은
+Qwen3.6 35B A3B 4-bit이지만, 런타임 코드는 특정 모델명에 의존하지 않는다.
+기본 스크립트는 모델별 chat template option을 주입하지 않는다. 특정 모델에만 필요한 옵션은
+`MLX_CHAT_TEMPLATE_ARGS`로 명시적으로 넘긴다. 현재 Qwen profile은 내부 agent 요약이
+`message.content`로 안정적으로 나오도록 non-thinking 경로를 사용한다.
 
 ```env
 # Local pool
@@ -44,7 +47,7 @@ DOOWON_LLM_LOCAL_LONG_GENERATION_TIMEOUT_SECONDS=1200
 DOOWON_LLM_EXTERNAL_ENABLED=true
 DOOWON_LLM_EXTERNAL_PROVIDER=openrouter
 DOOWON_LLM_EXTERNAL_BASE_URL=https://openrouter.ai/api/v1
-DOOWON_LLM_EXTERNAL_DEFAULT_MODEL=qwen/qwen3.6-35b-a3b
+DOOWON_LLM_EXTERNAL_DEFAULT_MODEL=openai/gpt-5.4-mini
 DOOWON_LLM_EXTERNAL_API_KEY=
 DOOWON_LLM_EXTERNAL_LONG_GENERATION_TIMEOUT_SECONDS=900
 ```

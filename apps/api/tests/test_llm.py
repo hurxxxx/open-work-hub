@@ -3,7 +3,7 @@ from types import SimpleNamespace
 import pytest
 
 from aidoo_api.core import llm
-from aidoo_api.core.settings import get_settings
+from aidoo_api.core.settings import Settings, get_settings
 
 
 class FakeModels:
@@ -61,15 +61,20 @@ def clear_settings_cache(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_llm_settings_default_to_local_mlx() -> None:
-    settings = get_settings()
+    settings = Settings(
+        _env_file=None,
+        DOOWON_POSTGRES_DSN=(
+            "postgresql+psycopg://aidoo_test:aidoo_test@127.0.0.1:5432/aidoo_test"
+        ),
+    )
 
     assert settings.llm_local_provider == "mlx-lm"
     assert settings.llm_local_base_url == "http://127.0.0.1:8080/v1"
     assert settings.llm_local_api_key == "mlx"
-    assert settings.llm_local_default_model == "mlx-community/Qwen3.6-35B-A3B-4bit"
-    assert settings.llm_local_canonical_model == "qwen/qwen3.6-35b-a3b"
+    assert settings.llm_local_default_model == ""
+    assert settings.llm_local_canonical_model == ""
     assert settings.llm_external_enabled is True
-    assert settings.llm_external_default_model == "qwen/qwen3.6-35b-a3b"
+    assert settings.llm_external_default_model == ""
     assert settings.llm_request_timeout_seconds == 60.0
     assert settings.llm_local_long_generation_timeout_seconds == 1200.0
 
@@ -78,12 +83,12 @@ def test_pool_health_ready_when_configured_model_exists(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv(
-        "DOOWON_LLM_LOCAL_DEFAULT_MODEL", "mlx-community/Qwen3.6-35B-A3B-4bit"
+        "DOOWON_LLM_LOCAL_DEFAULT_MODEL", "local/current-moe-test-model"
     )
     monkeypatch.setattr(
         llm,
         "get_pool_client",
-        lambda pool: FakeClient(["mlx-community/Qwen3.6-35B-A3B-4bit"]),
+        lambda pool: FakeClient(["local/current-moe-test-model"]),
     )
 
     health = llm.check_pool_health("local")
@@ -94,30 +99,31 @@ def test_pool_health_ready_when_configured_model_exists(
 
 def test_pool_health_reports_missing_model(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv(
-        "DOOWON_LLM_LOCAL_DEFAULT_MODEL", "mlx-community/Qwen3.6-35B-A3B-4bit"
+        "DOOWON_LLM_LOCAL_DEFAULT_MODEL", "local/current-moe-test-model"
     )
-    monkeypatch.setattr(llm, "get_pool_client", lambda pool: FakeClient(["gemma4:31b"]))
+    monkeypatch.setattr(llm, "get_pool_client", lambda pool: FakeClient(["other-local-model"]))
 
     health = llm.check_pool_health("local")
 
     assert health.ready is False
     assert health.status == "model_missing"
-    assert "gemma4:31b" in (health.detail or "")
+    assert "other-local-model" in (health.detail or "")
 
 
 def test_dual_health_reports_each_pool_independently(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv(
-        "DOOWON_LLM_LOCAL_DEFAULT_MODEL", "mlx-community/Qwen3.6-35B-A3B-4bit"
+        "DOOWON_LLM_LOCAL_DEFAULT_MODEL", "local/current-moe-test-model"
     )
     monkeypatch.setenv("DOOWON_LLM_EXTERNAL_API_KEY", "test-openrouter-key")
-    monkeypatch.setenv("DOOWON_LLM_EXTERNAL_DEFAULT_MODEL", "qwen/qwen3.6-35b-a3b")
+    monkeypatch.setenv("DOOWON_LLM_EXTERNAL_DEFAULT_MODEL", "openai/gpt-5.4-mini")
+    monkeypatch.setenv("DOOWON_LLM_EXTERNAL_CANONICAL_MODEL", "openai/gpt-5.4-mini")
 
     def fake_pool_client(pool: str) -> FakeClient:
         if pool == "external":
-            return FakeClient(["qwen/qwen3.6-35b-a3b"])
-        return FakeClient(["gemma4:31b"])
+            return FakeClient(["openai/gpt-5.4-mini"])
+        return FakeClient(["other-local-model"])
 
     monkeypatch.setattr(llm, "get_pool_client", fake_pool_client)
 
@@ -126,7 +132,7 @@ def test_dual_health_reports_each_pool_independently(
     assert dual.local.status == "model_missing"
     assert dual.external is not None
     assert dual.external.ready is True
-    assert dual.external.canonical_model == "qwen/qwen3.6-35b-a3b"
+    assert dual.external.canonical_model == "openai/gpt-5.4-mini"
 
 
 def test_choose_pool_defaults_to_local_only_without_policy_row(

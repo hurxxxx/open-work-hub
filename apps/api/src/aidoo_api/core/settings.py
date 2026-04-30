@@ -173,14 +173,14 @@ class Settings(BaseSettings):
         ),
     )
     llm_local_default_model: str = Field(
-        default="mlx-community/Qwen3.6-35B-A3B-4bit",
+        default="",
         validation_alias=AliasChoices(
             "DOOWON_LLM_LOCAL_DEFAULT_MODEL",
             "DOOWON_LLM_DEFAULT_MODEL",
         ),
     )
     llm_local_canonical_model: str = Field(
-        default="qwen/qwen3.6-35b-a3b",
+        default="",
         validation_alias=AliasChoices(
             "DOOWON_LLM_LOCAL_CANONICAL_MODEL",
             "DOOWON_LLM_CANONICAL_MODEL",
@@ -211,11 +211,11 @@ class Settings(BaseSettings):
         validation_alias=AliasChoices("DOOWON_LLM_EXTERNAL_API_KEY"),
     )
     llm_external_default_model: str = Field(
-        default="qwen/qwen3.6-35b-a3b",
+        default="",
         validation_alias=AliasChoices("DOOWON_LLM_EXTERNAL_DEFAULT_MODEL"),
     )
     llm_external_canonical_model: str = Field(
-        default="qwen/qwen3.6-35b-a3b",
+        default="",
         validation_alias=AliasChoices("DOOWON_LLM_EXTERNAL_CANONICAL_MODEL"),
     )
     llm_external_long_generation_timeout_seconds: float = Field(

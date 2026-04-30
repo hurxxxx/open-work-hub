@@ -310,12 +310,14 @@ v1의 default `ModelProfile`은 환경 설정으로 선택되는 `configured loc
 `ModelProfile`은 다음을 포함한다.
 
 - tool-call parser/format.
+- native tool-calling support 여부와 fallback strategy.
 - reasoning field visibility와 streaming behavior.
 - finish_reason mapping.
 - malformed tool call retry policy.
 - per-model prompt fragment override.
 - reasoning mode support와 disable mechanism.
 - thinking mode 기본값과 budget.
+- hidden/parsed reasoning channel이 content budget을 잠식하는 정도와 safe minimum `max_tokens`.
 - context window, context profile, reasoning escalation policy.
 - prefix-cache stable prompt segment와 dynamic slot 구분.
 - structured decoding availability.
@@ -329,7 +331,9 @@ type ReasoningModeSupport =
   | "hybrid_default_non_thinking"
 ```
 
-`AgentDefinition`은 모델 독립 기본 prompt를 갖고, `ModelProfile`이 local/open-source/external provider 계열 override를 제공한다. `ModelProfile`은 `AgentRun` 생성 시 고정한다. 실행 중 모델 프로필이 바뀌면 기존 invocation을 조용히 이어가지 않고, 거부하거나 새 profile로 새 invocation을 시작한다. OpenAI-compatible API는 transport compatibility로만 취급하고, reasoning field, tool-call parsing, finish reason, structured output guarantee는 `ModelProfile`이 관리한다.
+`AgentDefinition`은 모델 독립 기본 prompt를 갖고, `ModelProfile`이 local/open-source/external provider 계열 override를 제공한다. `ModelProfile`은 `AgentRun` 생성 시 고정한다. 실행 중 모델 프로필이 바뀌면 기존 invocation을 조용히 이어가지 않고, 거부하거나 새 profile로 새 invocation을 시작한다. OpenAI-compatible API는 transport compatibility로만 취급하고, reasoning field, native tool-call parsing, finish reason, structured output guarantee는 `ModelProfile`이 관리한다.
+
+2026-04-30 Gemma MLX bakeoff 결과, text-only chat은 가능했지만 native tool-calling은 `No function provided` parser failure로 실패했다. 따라서 `OpenAI-compatible`은 `supports_native_tool_calling=true`를 의미하지 않는다. native tool-calling이 불안정한 profile은 plain-text JSON/tool proposal 방식의 non-native gateway로 내려가야 한다.
 
 ### 10. Runtime profiles over always-on reasoning
 
@@ -354,7 +358,7 @@ type ReasoningModeSupport =
 
 `RuntimeProfile`은 workload 성격을 나타내며 local/external provider 선택 기준으로 확장하지 않는다. `external_planning`, `external_reasoning`, `external_quality_review`, `external_search` 같은 값은 `RuntimeProfile`에 넣지 않고 `AgentInvocation` purpose, `ModelRouteDecision`, provider decision, feature flag로 표현한다.
 
-local model profile은 `enable_thinking=false`에 해당하는 non-thinking 경로를 기본값으로 보고, thinking은 `ModelProfile.reasoning_escalation_policy`가 허용할 때만 켠다. GPT/Claude 등 외부 profile도 같은 contract를 유지하되, provider별 reasoning control은 adapter와 prompt override가 흡수한다.
+local model profile은 provider-specific reasoning side channel을 기본 chat content와 분리한다. 모델별 thinking/reasoning option은 `ModelProfile.reasoning_escalation_policy`, adapter, prompt override가 흡수하며, 런타임 공통 계약에는 특정 모델의 chat template flag를 박지 않는다. GPT/Claude 등 외부 profile도 같은 contract를 유지한다.
 
 Thinking escalation은 다음 조건에서만 허용한다.
 

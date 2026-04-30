@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from aidoo_api.core import llm as llm_core
 from aidoo_api.core.db import get_engine
+from aidoo_api.core.settings import get_settings
 from aidoo_api.domains.ai.models import LlmPolicy
 from aidoo_api.domains.ai import router as ai_router
 from aidoo_api.domains.auth.models import AuditLog
@@ -85,6 +86,13 @@ def _set_policy(task_kind: str, policy_mode: str) -> None:
         session.commit()
 
 
+def _configure_external_llm(monkeypatch) -> None:
+    settings = get_settings()
+    monkeypatch.setattr(settings, "llm_external_api_key", "test-openrouter-key")
+    monkeypatch.setattr(settings, "llm_external_default_model", "openai/gpt-5.4-mini")
+    monkeypatch.setattr(settings, "llm_external_canonical_model", "openai/gpt-5.4-mini")
+
+
 def _llm_audit_rows() -> list[AuditLog]:
     with Session(get_engine()) as session:
         return list(
@@ -120,13 +128,14 @@ def test_ai_chat_local_mode_uses_policy_path_and_persists_audit(
     auth = _seeded_dev_login(client, "hq-admin")
     workspace_slug = auth["user"]["workspaces"][0]["slug"]
     _set_policy("chatbot", "external")
+    _configure_external_llm(monkeypatch)
 
     local_client = FakePoolClient(
-        ["mlx-community/Qwen3.6-35B-A3B-4bit"],
+        ["local/current-moe-test-model"],
         content="local response",
     )
     external_client = FakePoolClient(
-        ["qwen/qwen3.6-35b-a3b"],
+        ["openai/gpt-5.4-mini"],
         content="external response",
     )
     monkeypatch.setattr(
@@ -170,13 +179,14 @@ def test_ai_chat_external_policy_uses_external_reasoning_shape(
     auth = _seeded_dev_login(client, "hq-admin")
     workspace_slug = auth["user"]["workspaces"][0]["slug"]
     _set_policy("chatbot", "external")
+    _configure_external_llm(monkeypatch)
 
     local_client = FakePoolClient(
-        ["mlx-community/Qwen3.6-35B-A3B-4bit"],
+        ["local/current-moe-test-model"],
         content="local response",
     )
     external_client = FakePoolClient(
-        ["qwen/qwen3.6-35b-a3b"],
+        ["openai/gpt-5.4-mini"],
         content="external response",
     )
     monkeypatch.setattr(
@@ -216,7 +226,7 @@ def test_ai_chat_local_defaults_disable_reasoning_and_use_chat_budget(
     _set_policy("chatbot", "local_only")
 
     local_client = FakePoolClient(
-        ["mlx-community/Qwen3.6-35B-A3B-4bit"],
+        ["local/current-moe-test-model"],
         content="local response",
     )
     monkeypatch.setattr(llm_core, "get_pool_client", lambda pool: local_client)
@@ -243,13 +253,14 @@ def test_ai_chat_external_defaults_use_medium_reasoning_and_chat_budget(
     auth = _seeded_dev_login(client, "hq-admin")
     workspace_slug = auth["user"]["workspaces"][0]["slug"]
     _set_policy("chatbot", "external")
+    _configure_external_llm(monkeypatch)
 
     local_client = FakePoolClient(
-        ["mlx-community/Qwen3.6-35B-A3B-4bit"],
+        ["local/current-moe-test-model"],
         content="local response",
     )
     external_client = FakePoolClient(
-        ["qwen/qwen3.6-35b-a3b"],
+        ["openai/gpt-5.4-mini"],
         content="external response",
     )
     monkeypatch.setattr(
@@ -406,11 +417,11 @@ def test_ai_chat_external_policy_forces_local_on_pii(
     _set_policy("chatbot", "external")
 
     local_client = FakePoolClient(
-        ["mlx-community/Qwen3.6-35B-A3B-4bit"],
+        ["local/current-moe-test-model"],
         content="safe local response",
     )
     external_client = FakePoolClient(
-        ["qwen/qwen3.6-35b-a3b"],
+        ["openai/gpt-5.4-mini"],
         content="external response",
     )
     monkeypatch.setattr(
@@ -456,13 +467,14 @@ def test_ai_chat_provider_error_still_persists_audit(
     auth = _seeded_dev_login(client, "hq-admin")
     workspace_slug = auth["user"]["workspaces"][0]["slug"]
     _set_policy("chatbot", "external")
+    _configure_external_llm(monkeypatch)
 
     local_client = FakePoolClient(
-        ["mlx-community/Qwen3.6-35B-A3B-4bit"],
+        ["local/current-moe-test-model"],
         content="local response",
     )
     external_client = FakePoolClient(
-        ["qwen/qwen3.6-35b-a3b"],
+        ["openai/gpt-5.4-mini"],
         error=OpenAIError("provider boom"),
     )
     monkeypatch.setattr(
@@ -494,11 +506,12 @@ def test_readyz_uses_effective_readiness_while_ai_health_stays_raw(
 ) -> None:
     auth = _seeded_dev_login(client, "hq-admin")
     workspace_slug = auth["user"]["workspaces"][0]["slug"]
+    _configure_external_llm(monkeypatch)
 
     def fake_pool_client(pool: llm_core.LlmPoolName) -> FakePoolClient:
         if pool == "external":
-            return FakePoolClient(["qwen/qwen3.6-35b-a3b"])
-        return FakePoolClient(["gemma4:31b"])
+            return FakePoolClient(["openai/gpt-5.4-mini"])
+        return FakePoolClient(["other-local-model"])
 
     monkeypatch.setattr(llm_core, "get_pool_client", fake_pool_client)
 

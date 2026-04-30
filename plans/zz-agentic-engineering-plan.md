@@ -4,6 +4,8 @@
 
 지금까지의 대화 내용을 다시 검토한 결과, 큰 방향은 **타당**합니다. 다만 몇 가지 표현과 설계 위치는 수정해야 합니다.
 
+2026-04-30 추가 bakeoff 결과: Qwen 전용 기본값과 `enable_thinking=false`류 workaround는 코드에 박지 않는 것이 맞지만, 이를 Gemma 하드코딩으로 바꾸는 것도 범용화가 아니다. `mlx-community/gemma-4-26B-A4B-it-OptiQ-4bit`는 local text-only chat은 동작했으나 MLX native tool-calling에서 `ValueError("No function provided.")`가 재현되어 Docs/PMS/Planner 자연어 CRUD 품질을 유지하지 못했다. 따라서 현재 dev local profile은 Qwen3.6 35B A3B로 되돌리고, 다음 설계는 특정 모델명이 아니라 `ModelCapabilityProfile`과 non-native tool gateway를 기준으로 가야 한다.
+
 최종 권장 방향은 다음입니다.
 
 > 기존 계획의 **Evidence-First Agent Runtime**을 폐기하지 말고, 이를 **Evidence-First Hybrid Agent Runtime**으로 확장한다.
@@ -22,7 +24,7 @@
 
 ### 1.1.1 로컬 LLM만으로 모든 것을 처리하는 전략은 한계가 있다
 
-기존 계획은 `Qwen/local model profile`를 canonical model로 두고, 로컬 MLX PoC checkpoint로 `mlx-community/local model profile-4bit`를 사용하는 방향을 전제합니다. 동시에 긴 context와 tool calling은 가능하지만, 큰 tool catalog와 긴 대화 이력에는 취약하다고 보고 있습니다.
+기존 계획은 `configured local model profile`를 canonical model로 두고, 로컬 MLX PoC checkpoint로 `mlx-community/local model profile-4bit`를 사용하는 방향을 전제합니다. 동시에 긴 context와 tool calling은 가능하지만, 큰 tool catalog와 긴 대화 이력에는 취약하다고 보고 있습니다.
 
 이 판단은 맞습니다. 로컬 35B급 모델은 내부 데이터 처리에는 유리하지만, 다음 작업에서는 외부 manager model 또는 SDK 기반 agent/search capability가 더 효율적일 수 있습니다.
 

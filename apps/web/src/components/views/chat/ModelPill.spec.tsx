@@ -15,8 +15,8 @@ function pool(
     pool: 'local',
     provider: 'ollama',
     base_url: 'http://localhost',
-    model: 'qwen3.6-35b',
-    canonical_model: 'qwen3.6-35b-a3b',
+    model: 'current-moe-test-model',
+    canonical_model: 'current-moe-test-profile',
     status: 'ready',
     ready: true,
     detail: null,
@@ -61,7 +61,7 @@ describe('ModelPill', () => {
         canRefresh
       />,
     );
-    expect(screen.getByText('qwen3.6-35b-a3b · 로컬')).not.toBeNull();
+    expect(screen.getByText('current-moe-test-profile · 로컬')).not.toBeNull();
   });
 
   it('opens popover on click and renders mode options + refresh control', () => {

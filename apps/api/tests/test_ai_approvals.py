@@ -200,7 +200,7 @@ def _seed_pending_approval(
             messages_json=[{"role": "user", "content": "create an issue"}],
             blocked_call_id="call-1",
             model_meta=model_meta or {
-                "model": "qwen/qwen3.6-35b-a3b",
+                "model": "local/current-moe-test-profile",
                 "policy": "local_only",
                 "chosen_pool": "local",
                 "parallel_tool_calls": False,
@@ -265,7 +265,7 @@ def test_pending_approval_shadow_writes_graph_candidate_trace_events(
     seed = _seed_pending_approval(
         client,
         model_meta={
-            "model": "qwen/qwen3.6-35b-a3b",
+            "model": "local/current-moe-test-profile",
             "policy": "local_only",
             "chosen_pool": "local",
             "runtime_profile": "high_risk_action",
@@ -867,7 +867,7 @@ def test_chat_resume_accepts_frozen_scope_when_scope_is_omitted(
         tool_name=_APPROVAL_TOOL_NAME,
         resource_preview="Approval Test Write\nCreates an approval-gated test resource.\nTitle: Approval issue",
         model_meta={
-            "model": "qwen/qwen3.6-35b-a3b",
+            "model": "local/current-moe-test-profile",
             "policy": "local_only",
             "chosen_pool": "local",
             "scope": {

@@ -52,7 +52,7 @@ Terminal frame. `finish_reason` values: `stop`, `length`, `cancelled`, `error`,
       "policy":"external","chosen_pool":"local","decision_reason":"pii_detected",
       "forced_local":true,"pii_hits":["email"],
       "model":"mlx-community/...","chosen_model":"mlx-community/...",
-      "canonical_model":"qwen3-next-80b",
+      "canonical_model":"local-model-profile",
       "provider":"mlx-lm"
     }
   }
