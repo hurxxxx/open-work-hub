@@ -8,7 +8,7 @@ import time
 
 import pytest
 from alembic import command
-from sqlalchemy import create_engine, inspect
+from sqlalchemy import create_engine, inspect, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -19,8 +19,10 @@ from aidoo_api.domains.ai.runtime.models import (
     AgentTraceEvent,
 )
 from aidoo_api.domains.ai.runtime.persistence import (
+    append_graph_schedule_trace_events,
     append_trace_event,
     prepare_trace_payload,
+    persist_graph_schedule_invocation_skeletons,
     scrub_completed_runtime_records,
     scrub_trace_payload,
 )
@@ -219,6 +221,70 @@ def test_agent_invocation_rejects_negative_invocation_seq(
         )
         with pytest.raises(IntegrityError):
             db.commit()
+
+
+def test_graph_schedule_persistence_skips_negative_invocation_seq(
+    runtime_session_factory: sessionmaker[Session],
+) -> None:
+    with runtime_session_factory() as db:
+        workspace, user, conversation = _seed_scope(db)
+        run = _runtime_run(workspace=workspace, user=user, conversation=conversation)
+        db.add(run)
+        db.flush()
+
+        runtime_metadata = {
+            "graph_schedule_summary": {
+                "state": "planned",
+                "steps": [
+                    {"invocation_seq": -1, "agent_id": "domain.meeting"},
+                    {"invocation_seq": "invalid", "agent_id": "domain.docs"},
+                    {"invocation_seq": 0, "agent_id": "domain.pms"},
+                ],
+            }
+        }
+
+        invocations_by_seq = persist_graph_schedule_invocation_skeletons(
+            db,
+            agent_run_id=run.id,
+            workspace_id=workspace.id,
+            conversation_id=conversation.id,
+            runtime_metadata=runtime_metadata,
+        )
+        append_graph_schedule_trace_events(
+            db,
+            agent_run_id=run.id,
+            workspace_id=workspace.id,
+            conversation_id=conversation.id,
+            runtime_metadata=runtime_metadata,
+            graph_invocations_by_seq=invocations_by_seq,
+        )
+        db.commit()
+
+        invocations = list(
+            db.scalars(
+                select(AgentInvocation)
+                .where(AgentInvocation.agent_run_id == run.id)
+                .order_by(AgentInvocation.invocation_seq)
+            )
+        )
+        trace_events = list(
+            db.scalars(
+                select(AgentTraceEvent)
+                .where(AgentTraceEvent.agent_run_id == run.id)
+                .order_by(AgentTraceEvent.event_seq)
+            )
+        )
+
+        assert list(invocations_by_seq) == [0]
+        assert [(invocation.invocation_seq, invocation.agent_id) for invocation in invocations] == [
+            (0, "domain.pms")
+        ]
+        assert [event.event_type for event in trace_events] == [
+            "graph_schedule_planned",
+            "graph_node_planned",
+        ]
+        assert trace_events[1].invocation_seq == 0
+        assert trace_events[1].payload_json["agent_id"] == "domain.pms"
 
 
 def test_legacy_approval_allows_only_one_pending_approval_per_snapshot(

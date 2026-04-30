@@ -306,6 +306,8 @@ def append_graph_schedule_trace_events(
             invocation_seq = int(step.get("invocation_seq") or 0)
         except (TypeError, ValueError):
             continue
+        if invocation_seq < 0:
+            continue
         graph_invocation = (graph_invocations_by_seq or {}).get(invocation_seq)
         append_trace_event(
             db,
@@ -384,6 +386,8 @@ def persist_graph_schedule_invocation_skeletons(
         try:
             invocation_seq = int(step.get("invocation_seq") or 0)
         except (TypeError, ValueError):
+            continue
+        if invocation_seq < 0:
             continue
         if invocation_seq in invocations_by_seq:
             continue

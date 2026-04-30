@@ -2683,7 +2683,9 @@ def _graph_schedule_steps(runtime_routing: RuntimeRoutingDecision) -> list[dict[
         try:
             invocation_seq = int(step.get("invocation_seq") or 0)
         except (TypeError, ValueError):
-            invocation_seq = 0
+            continue
+        if invocation_seq < 0:
+            continue
         normalized.append({**step, "agent_id": agent_id, "invocation_seq": invocation_seq})
     return sorted(normalized, key=lambda item: int(item["invocation_seq"]))
 
