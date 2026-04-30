@@ -1,9 +1,9 @@
 import { Navigate, useLocation, useParams } from 'react-router-dom';
 
 import { getNavItem } from '@/src/app/shell/app-registry';
-import { RagSearchView } from '@/src/app-modules/ai';
-import { DocsView } from '@/src/app-modules/docs';
-import { PMSView } from '@/src/app-modules/pms';
+import { ragSearchToolElement } from '@/src/app-modules/ai';
+import { docsToolElement } from '@/src/app-modules/docs';
+import { pmsToolElement } from '@/src/app-modules/pms';
 import { hasWorkspaceMembership } from '@/src/platform/auth/auth-api';
 import { useAuth } from '@/src/platform/auth/auth-provider';
 import { AccessDeniedView } from '@/src/platform/auth/settings-pages';
@@ -48,7 +48,7 @@ export function ToolViewWrapper() {
         <AccessDeniedView description="현재 계정에는 이 도구가 속한 워크스페이스 접근 권한이 없습니다." />
       );
     }
-    return <PMSView />;
+    return pmsToolElement;
   }
 
   const item = toolId ? getNavItem(toolId) : null;
@@ -86,11 +86,11 @@ export function ToolViewWrapper() {
   }
 
   if (item.appId === 'pms') {
-    return <PMSView />;
+    return pmsToolElement;
   }
 
   if (item.appId === 'docs') {
-    return <DocsView />;
+    return docsToolElement;
   }
 
   if (toolId === 'search') {
@@ -99,7 +99,7 @@ export function ToolViewWrapper() {
         <AccessDeniedView description="현재 workspace에서는 통합검색을 사용할 수 없습니다." />
       );
     }
-    return <RagSearchView />;
+    return ragSearchToolElement;
   }
 
   if (item.comingSoon) {

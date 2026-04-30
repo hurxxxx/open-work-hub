@@ -1,3 +1,4 @@
+import { ApiRequestError, apiFetchJson } from '@/src/platform/api/client';
 import type { ApiSchema } from '@/src/platform/api/types';
 
 export type ThemePreference = 'system' | 'light' | 'dark';
@@ -226,44 +227,20 @@ async function request<T>(
   init: RequestInit = {},
   token?: string,
 ): Promise<T> {
-  const headers = new Headers(init.headers);
-  headers.set('Accept', 'application/json');
-
-  if (token) {
-    headers.set('Authorization', `Bearer ${token}`);
-  }
-
-  if (init.body) {
-    headers.set('Content-Type', 'application/json');
-  }
-
-  let response: Response;
   try {
-    response = await fetch(path, {
-      ...init,
-      headers,
-      cache: 'no-store',
-    });
-  } catch {
+    return await apiFetchJson<T>(path, token, init);
+  } catch (error) {
+    if (error instanceof ApiRequestError) {
+      throw new AuthApiError(
+        error.status,
+        resolveAuthErrorMessage(path, error.status, error.payload),
+      );
+    }
     throw new AuthApiError(
       0,
       '인증 서버에 연결하지 못했습니다. API 서버가 실행 중인지 확인해 주세요.',
     );
   }
-
-  if (response.status === 204) {
-    return undefined as T;
-  }
-
-  const payload = await response.json().catch(() => null);
-  if (!response.ok) {
-    throw new AuthApiError(
-      response.status,
-      resolveAuthErrorMessage(path, response.status, payload),
-    );
-  }
-
-  return payload as T;
 }
 
 export function getBootstrapStatus(): Promise<BootstrapStatusResponse> {

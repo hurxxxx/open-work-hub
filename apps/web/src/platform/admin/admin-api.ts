@@ -1,3 +1,4 @@
+import { ApiRequestError, apiFetchJson } from '@/src/platform/api/client';
 import type { AuthUser } from '@/src/platform/auth/auth-api';
 
 export interface OrgUnitItem {
@@ -194,42 +195,21 @@ function resolveAdminErrorMessage(path: string, status: number, method: string, 
 }
 
 async function request<T>(token: string, path: string, init: RequestInit = {}): Promise<T> {
-  const headers = new Headers(init.headers);
-  headers.set('Accept', 'application/json');
-  headers.set('Authorization', `Bearer ${token}`);
-
-  if (init.body) {
-    headers.set('Content-Type', 'application/json');
-  }
-
   const method = init.method ?? 'GET';
-  let response: Response;
   try {
-    response = await fetch(path, {
-      ...init,
-      headers,
-      cache: 'no-store',
-    });
-  } catch {
+    return await apiFetchJson<T>(path, token, init);
+  } catch (error) {
+    if (error instanceof ApiRequestError) {
+      throw new AdminApiError(
+        error.status,
+        resolveAdminErrorMessage(path, error.status, method, error.payload),
+      );
+    }
     throw new AdminApiError(
       0,
       '관리자 API 서버에 연결하지 못했습니다. 서버 상태를 확인해 주세요.',
     );
   }
-
-  if (response.status === 204) {
-    return undefined as T;
-  }
-
-  const payload = await response.json().catch(() => null);
-  if (!response.ok) {
-    throw new AdminApiError(
-      response.status,
-      resolveAdminErrorMessage(path, response.status, method, payload),
-    );
-  }
-
-  return payload as T;
 }
 
 export function listAdminUsers(

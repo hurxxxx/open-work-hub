@@ -1,3 +1,4 @@
+import { ApiRequestError, apiFetchJson } from '@/src/platform/api/client';
 import { rewriteWorkspaceApiPath } from '@/src/platform/workspaces/workspace-utils';
 
 type FilterScalar = string | number | boolean;
@@ -87,27 +88,23 @@ export async function listWorkspaceRagSources(
   workspaceSlug?: string | null,
   options?: { signal?: AbortSignal },
 ): Promise<RagSourceListResponse> {
-  const response = await fetch(
-    rewriteWorkspaceApiPath('/api/v1/rag/sources', workspaceSlug),
-    {
-      cache: 'no-store',
-      headers: {
-        Accept: 'application/json',
-        Authorization: `Bearer ${token}`,
+  try {
+    return await apiFetchJson<RagSourceListResponse>(
+      rewriteWorkspaceApiPath('/api/v1/rag/sources', workspaceSlug),
+      token,
+      {
+        signal: options?.signal,
       },
-      signal: options?.signal,
-    },
-  );
-
-  const payload = await response.json().catch(() => null);
-  if (!response.ok) {
-    throw new RagApiError(
-      response.status,
-      extractErrorMessage(payload, response.status, '검색 source 목록을 불러오지 못했습니다.'),
     );
+  } catch (error) {
+    if (error instanceof ApiRequestError) {
+      throw new RagApiError(
+        error.status,
+        extractErrorMessage(error.payload, error.status, '검색 source 목록을 불러오지 못했습니다.'),
+      );
+    }
+    throw error;
   }
-
-  return payload as RagSourceListResponse;
 }
 
 export async function queryWorkspaceRag(
@@ -116,37 +113,32 @@ export async function queryWorkspaceRag(
   workspaceSlug?: string | null,
   options?: { signal?: AbortSignal },
 ): Promise<RagQueryResponse> {
-  const response = await fetch(
-    rewriteWorkspaceApiPath('/api/v1/rag/query', workspaceSlug),
-    {
-      method: 'POST',
-      cache: 'no-store',
-      headers: {
-        Accept: 'application/json',
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
+  try {
+    return await apiFetchJson<RagQueryResponse>(
+      rewriteWorkspaceApiPath('/api/v1/rag/query', workspaceSlug),
+      token,
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          query: payload.query,
+          answer_mode: payload.answer_mode ?? RAG_QUERY_DEFAULT_ANSWER_MODE,
+          source_kinds: payload.source_kinds ?? [],
+          filters: payload.filters ?? {},
+          top_k: payload.top_k ?? RAG_QUERY_DEFAULT_TOP_K,
+          include_binary_hits: payload.include_binary_hits ?? false,
+        }),
+        signal: options?.signal,
       },
-      body: JSON.stringify({
-        query: payload.query,
-        answer_mode: payload.answer_mode ?? RAG_QUERY_DEFAULT_ANSWER_MODE,
-        source_kinds: payload.source_kinds ?? [],
-        filters: payload.filters ?? {},
-        top_k: payload.top_k ?? RAG_QUERY_DEFAULT_TOP_K,
-        include_binary_hits: payload.include_binary_hits ?? false,
-      }),
-      signal: options?.signal,
-    },
-  );
-
-  const result = await response.json().catch(() => null);
-  if (!response.ok) {
-    throw new RagApiError(
-      response.status,
-      extractErrorMessage(result, response.status, '검색 결과를 불러오지 못했습니다.'),
     );
+  } catch (error) {
+    if (error instanceof ApiRequestError) {
+      throw new RagApiError(
+        error.status,
+        extractErrorMessage(error.payload, error.status, '검색 결과를 불러오지 못했습니다.'),
+      );
+    }
+    throw error;
   }
-
-  return result as RagQueryResponse;
 }
 
 function extractErrorMessage(

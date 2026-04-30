@@ -1,3 +1,4 @@
+import { ApiRequestError, apiFetchJson } from '@/src/platform/api/client';
 import { rewriteWorkspaceApiPath } from '@/src/platform/workspaces/workspace-utils';
 
 export type PlannerEventVisibility = 'private' | 'public';
@@ -58,27 +59,17 @@ async function request<T>(
   workspaceSlug: string,
   init: RequestInit = {},
 ): Promise<T> {
-  const response = await fetch(rewriteWorkspaceApiPath(path, workspaceSlug), {
-    ...init,
-    headers: {
-      Accept: 'application/json',
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json',
-      ...(init.headers ?? {}),
-    },
-    cache: 'no-store',
-  });
-  if (response.status === 204) {
-    return undefined as T;
+  try {
+    return await apiFetchJson<T>(rewriteWorkspaceApiPath(path, workspaceSlug), token, init);
+  } catch (error) {
+    if (error instanceof ApiRequestError) {
+      throw new PlannerApiError(
+        error.status,
+        error.message || `Planner request failed with ${error.status}.`,
+      );
+    }
+    throw error;
   }
-  const payload = await response.json().catch(() => null);
-  if (!response.ok) {
-    throw new PlannerApiError(
-      response.status,
-      payload?.detail ?? `Planner request failed with ${response.status}.`,
-    );
-  }
-  return payload as T;
 }
 
 export function listPlannerEvents(

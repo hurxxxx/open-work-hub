@@ -362,6 +362,31 @@ const EMPTY_PMS_DASHBOARD = {
   recent_activity: [],
 };
 
+const EMPTY_KEYWORD_SEARCH_RESPONSE = {
+  query: '',
+  hits: [],
+  facets: {
+    entity_types: [],
+    status: [],
+    containers: [],
+  },
+  total: 0,
+  has_more: false,
+  next_offset: null,
+  trace_id: 'trace-e2e-empty-search',
+};
+
+const EMPTY_RAG_QUERY_RESPONSE = {
+  query: '',
+  answer_mode: 'grounded-answer',
+  hits: [],
+  grounded_answer: null,
+  sources_used: [],
+  query_profile: {},
+  trace_id: 'trace-e2e-empty-rag',
+  latency_ms: 0,
+};
+
 /**
  * Stub app-specific list endpoints used by the shell smoke suite. The goal is
  * not feature coverage; it prevents route smoke tests from relying on a live
@@ -434,6 +459,16 @@ export async function stubWorkspaceAppDataBackend(page: Page): Promise<void> {
   );
   await page.route('**/api/v1/workspaces/*/docs/shareable-users**', (route: Route) =>
     route.fulfill({ json: [] }),
+  );
+
+  await page.route('**/api/v1/workspaces/*/search/query**', (route: Route) =>
+    route.fulfill({ json: EMPTY_KEYWORD_SEARCH_RESPONSE }),
+  );
+  await page.route('**/api/v1/workspaces/*/rag/sources**', (route: Route) =>
+    route.fulfill({ json: { sources: [] } }),
+  );
+  await page.route('**/api/v1/workspaces/*/rag/query**', (route: Route) =>
+    route.fulfill({ json: EMPTY_RAG_QUERY_RESPONSE }),
   );
 
   await page.route('**/api/v1/admin/workspaces**', (route: Route) =>

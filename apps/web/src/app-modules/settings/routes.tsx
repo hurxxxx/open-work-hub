@@ -1,11 +1,22 @@
+import { lazy } from 'react';
 import { Navigate } from 'react-router-dom';
 
-import { AdminConsoleView } from '@/src/platform/admin/admin-console';
-import { WorkspaceSettingsView } from '@/src/platform/workspaces/WorkspaceSettingsView';
+import { lazyRoute } from '@/src/app/shell/lazy-route';
+
+const AdminConsoleView = lazy(() =>
+  import('@/src/platform/admin/admin-console').then((module) => ({
+    default: module.AdminConsoleView,
+  })),
+);
+const WorkspaceSettingsView = lazy(() =>
+  import('@/src/platform/workspaces/WorkspaceSettingsView').then((module) => ({
+    default: module.WorkspaceSettingsView,
+  })),
+);
 
 export const workspaceSettingsRoute = {
   path: '/w/:workspaceSlug/settings',
-  element: <WorkspaceSettingsView />,
+  element: lazyRoute(<WorkspaceSettingsView />),
 };
 
 export const adminRedirectRoutes = [
@@ -16,9 +27,9 @@ export const adminRedirectRoutes = [
 ];
 
 export const adminSectionRoutes = [
-  { path: '/admin/general', section: 'general', element: <AdminConsoleView section="general" /> },
-  { path: '/admin/people', section: 'people', element: <AdminConsoleView section="people" /> },
-  { path: '/admin/workspaces', section: 'workspaces', element: <AdminConsoleView section="workspaces" /> },
-  { path: '/admin/security', section: 'security', element: <AdminConsoleView section="security" /> },
-  { path: '/admin/audit', section: 'audit', element: <AdminConsoleView section="audit" /> },
+  { path: '/admin/general', section: 'general', element: lazyRoute(<AdminConsoleView section="general" />) },
+  { path: '/admin/people', section: 'people', element: lazyRoute(<AdminConsoleView section="people" />) },
+  { path: '/admin/workspaces', section: 'workspaces', element: lazyRoute(<AdminConsoleView section="workspaces" />) },
+  { path: '/admin/security', section: 'security', element: lazyRoute(<AdminConsoleView section="security" />) },
+  { path: '/admin/audit', section: 'audit', element: lazyRoute(<AdminConsoleView section="audit" />) },
 ] as const;

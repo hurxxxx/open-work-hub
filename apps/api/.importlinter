@@ -6,6 +6,7 @@ name = Router modules are imported only by the API composition registry
 type = protected
 protected_modules =
     aidoo_api.domains.*.router
+    aidoo_api.domains.auth.workspace_router
 allowed_importers =
     aidoo_api.api_registry
 as_packages = false

@@ -51,6 +51,7 @@ export default defineConfig(() => ({
     outDir: '../../dist/apps/web',
     emptyOutDir: true,
     reportCompressedSize: true,
+    chunkSizeWarningLimit: 2200,
     commonjsOptions: {
       transformMixedEsModules: true,
     },

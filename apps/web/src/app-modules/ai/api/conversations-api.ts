@@ -1,3 +1,4 @@
+import { ApiRequestError, apiFetchJson } from '@/src/platform/api/client';
 import { rewriteWorkspaceApiPath } from '@/src/platform/workspaces/workspace-utils';
 
 export interface ConversationArtifact {
@@ -79,41 +80,22 @@ async function request<T>(
   token: string,
   init: RequestInit = {},
 ): Promise<T> {
-  const headers = new Headers(init.headers);
-  headers.set('Accept', 'application/json');
-  headers.set('Authorization', `Bearer ${token}`);
-  if (init.body) {
-    headers.set('Content-Type', 'application/json');
-  }
-
-  let response: Response;
   try {
-    response = await fetch(rewriteWorkspaceApiPath(path), {
-      ...init,
-      headers,
-      cache: 'no-store',
-    });
-  } catch {
+    return await apiFetchJson<T>(rewriteWorkspaceApiPath(path), token, init);
+  } catch (error) {
+    if (error instanceof ApiRequestError) {
+      const message =
+        error.payload && typeof error.payload === 'object' && 'detail' in error.payload &&
+        typeof (error.payload as { detail?: unknown }).detail === 'string'
+          ? ((error.payload as { detail: string }).detail)
+          : `대화 요청에 실패했습니다. (${error.status})`;
+      throw new ConversationsApiError(error.status, message);
+    }
     throw new ConversationsApiError(
       0,
       '대화 내역 서버에 연결하지 못했습니다.',
     );
   }
-
-  if (response.status === 204) {
-    return undefined as T;
-  }
-
-  const payload = await response.json().catch(() => null);
-  if (!response.ok) {
-    const message =
-      payload && typeof payload === 'object' && 'detail' in payload &&
-      typeof (payload as { detail?: unknown }).detail === 'string'
-        ? ((payload as { detail: string }).detail)
-        : `대화 요청에 실패했습니다. (${response.status})`;
-    throw new ConversationsApiError(response.status, message);
-  }
-  return payload as T;
 }
 
 /**

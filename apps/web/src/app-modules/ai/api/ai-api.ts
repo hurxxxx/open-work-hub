@@ -1,3 +1,4 @@
+import { ApiRequestError, apiFetchJson } from '@/src/platform/api/client';
 import { rewriteWorkspaceApiPath } from '@/src/platform/workspaces/workspace-utils';
 
 export type AiChatRole = 'system' | 'user' | 'assistant';
@@ -122,40 +123,23 @@ async function aiRequest<T>(
   token: string,
   init: RequestInit = {},
 ): Promise<T> {
-  const headers = new Headers(init.headers);
-  headers.set('Accept', 'application/json');
-  headers.set('Authorization', `Bearer ${token}`);
-
-  if (init.body) {
-    headers.set('Content-Type', 'application/json');
-  }
-
-  let response: Response;
   try {
-    response = await fetch(rewriteWorkspaceApiPath(path), {
-      ...init,
-      headers,
-      cache: 'no-store',
-    });
-  } catch {
+    return await apiFetchJson<T>(rewriteWorkspaceApiPath(path), token, init);
+  } catch (error) {
+    if (error instanceof ApiRequestError) {
+      throw new AiApiError(
+        error.status,
+        resolveErrorMessage(
+          error.payload,
+          `AI 요청에 실패했습니다. (${error.status})`,
+        ),
+      );
+    }
     throw new AiApiError(
       0,
       'AI 서버에 연결하지 못했습니다. API 서버가 실행 중인지 확인해 주세요.',
     );
   }
-
-  const payload = await response.json().catch(() => null);
-  if (!response.ok) {
-    throw new AiApiError(
-      response.status,
-      resolveErrorMessage(
-        payload,
-        `AI 요청에 실패했습니다. (${response.status})`,
-      ),
-    );
-  }
-
-  return payload as T;
 }
 
 export function getLlmHealth(token: string): Promise<LlmHealthResponse> {

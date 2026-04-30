@@ -1,3 +1,4 @@
+import { ApiRequestError, apiFetchJson } from '@/src/platform/api/client';
 import { rewriteWorkspaceApiPath } from '@/src/platform/workspaces/workspace-utils';
 
 export class DocsApiError extends Error {
@@ -16,30 +17,14 @@ async function request<T>(
   workspaceSlug?: string | null,
 ): Promise<T> {
   const resolvedPath = resolveDocsPath(path, workspaceSlug);
-  const response = await fetch(resolvedPath, {
-    ...init,
-    headers: {
-      Accept: 'application/json',
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json',
-      ...(init.headers ?? {}),
-    },
-    cache: 'no-store',
-  });
-
-  if (response.status === 204) {
-    return undefined as T;
+  try {
+    return await apiFetchJson<T>(resolvedPath, token, init);
+  } catch (error) {
+    if (error instanceof ApiRequestError) {
+      throw new DocsApiError(error.status, error.message);
+    }
+    throw error;
   }
-
-  const payload = await response.json().catch(() => null);
-  if (!response.ok) {
-    throw new DocsApiError(
-      response.status,
-      payload?.detail ?? `Request failed with ${response.status}.`,
-    );
-  }
-
-  return payload as T;
 }
 
 function withShareToken(path: string, shareToken?: string | null): string {

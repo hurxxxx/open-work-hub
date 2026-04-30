@@ -1,22 +1,28 @@
+import { lazy } from 'react';
+
+import { lazyRoute } from '@/src/app/shell/lazy-route';
 import type { WorkspaceRouteDefinition } from '@/src/app/shell/route-types';
-import { DocsView } from './views/DocsView';
+
+const DocsView = lazy(() => import('./views/DocsView').then((module) => ({ default: module.DocsView })));
+
+export const docsToolElement = lazyRoute(<DocsView />);
 
 export const docsWorkspaceRoutes: WorkspaceRouteDefinition[] = [
   {
     appId: 'docs',
     path: '/w/:workspaceSlug/docs',
-    element: <DocsView />,
+    element: docsToolElement,
   },
   {
     appId: 'docs',
     path: '/w/:workspaceSlug/docs/:docId',
-    element: <DocsView />,
+    element: docsToolElement,
   },
 ];
 
 export const docsGlobalRoutes = [
   {
     path: '/docs/shared/:shareToken',
-    element: <DocsView />,
+    element: docsToolElement,
   },
 ];

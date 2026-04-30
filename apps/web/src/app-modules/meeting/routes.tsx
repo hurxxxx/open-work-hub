@@ -1,16 +1,26 @@
+import { lazy } from 'react';
+
+import { lazyRoute } from '@/src/app/shell/lazy-route';
 import type { WorkspaceRouteDefinition } from '@/src/app/shell/route-types';
-import { MeetingView } from './views/MeetingView/MeetingView';
-import { MeetingWorkspaceView } from './views/MeetingView/MeetingWorkspaceView';
+
+const MeetingView = lazy(() =>
+  import('./views/MeetingView/MeetingView').then((module) => ({ default: module.MeetingView })),
+);
+const MeetingWorkspaceView = lazy(() =>
+  import('./views/MeetingView/MeetingWorkspaceView').then((module) => ({
+    default: module.MeetingWorkspaceView,
+  })),
+);
 
 export const meetingWorkspaceRoutes: WorkspaceRouteDefinition[] = [
   {
     appId: 'meeting',
     path: '/w/:workspaceSlug/meeting',
-    element: <MeetingView />,
+    element: lazyRoute(<MeetingView />),
   },
   {
     appId: 'meeting',
     path: '/w/:workspaceSlug/meeting/:meetingId',
-    element: <MeetingWorkspaceView />,
+    element: lazyRoute(<MeetingWorkspaceView />),
   },
 ];

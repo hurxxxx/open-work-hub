@@ -1,3 +1,4 @@
+import { ApiRequestError, apiFetchJson } from '@/src/platform/api/client';
 import { rewriteWorkspaceApiPath } from '@/src/platform/workspaces/workspace-utils';
 
 export type KeywordSearchEntityType = 'doc' | 'meeting' | 'pms_issue' | 'planner_event';
@@ -119,37 +120,33 @@ export async function queryWorkspaceKeywordSearch(
   workspaceSlug?: string | null,
   options?: { signal?: AbortSignal },
 ): Promise<KeywordSearchResponse> {
-  const response = await fetch(
-    rewriteWorkspaceApiPath('/api/v1/search/query', workspaceSlug),
-    {
-      method: 'POST',
-      cache: 'no-store',
-      headers: {
-        Accept: 'application/json',
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
+  try {
+    return await apiFetchJson<KeywordSearchResponse>(
+      rewriteWorkspaceApiPath('/api/v1/search/query', workspaceSlug),
+      token,
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          query: payload.query,
+          workspace_id: payload.workspace_id ?? null,
+          entity_types: payload.entity_types ?? [],
+          people: payload.people ?? { role: 'any', user_ids: [] },
+          status_by_type: payload.status_by_type ?? {},
+          date_filters: payload.date_filters ?? [],
+          container_refs: payload.container_refs ?? [],
+          sort: payload.sort ?? { field: 'relevance', direction: 'desc' },
+          limit: payload.limit ?? 20,
+          offset: payload.offset ?? 0,
+        }),
+        signal: options?.signal,
       },
-      body: JSON.stringify({
-        query: payload.query,
-        workspace_id: payload.workspace_id ?? null,
-        entity_types: payload.entity_types ?? [],
-        people: payload.people ?? { role: 'any', user_ids: [] },
-        status_by_type: payload.status_by_type ?? {},
-        date_filters: payload.date_filters ?? [],
-        container_refs: payload.container_refs ?? [],
-        sort: payload.sort ?? { field: 'relevance', direction: 'desc' },
-        limit: payload.limit ?? 20,
-        offset: payload.offset ?? 0,
-      }),
-      signal: options?.signal,
-    },
-  );
-
-  const result = await response.json().catch(() => null);
-  if (!response.ok) {
-    throw new SearchApiError(response.status, extractErrorMessage(result, response.status));
+    );
+  } catch (error) {
+    if (error instanceof ApiRequestError) {
+      throw new SearchApiError(error.status, extractErrorMessage(error.payload, error.status));
+    }
+    throw error;
   }
-  return result as KeywordSearchResponse;
 }
 
 function extractErrorMessage(payload: unknown, status: number): string {

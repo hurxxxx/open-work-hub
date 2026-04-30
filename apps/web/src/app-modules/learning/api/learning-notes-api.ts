@@ -1,3 +1,5 @@
+import { ApiRequestError, apiFetchJson } from '@/src/platform/api/client';
+
 import type {
   LearningPageNoteDetail,
   LearningPageNoteListResponse,
@@ -20,27 +22,20 @@ async function request<T>(
   token: string,
   init: RequestInit = {},
 ): Promise<T | null> {
-  const response = await fetch(path, {
-    ...init,
-    headers: {
-      Accept: 'application/json',
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json',
-      ...(init.headers ?? {}),
-    },
-    cache: 'no-store',
-  });
-  if (response.status === 404) {
-    return null;
+  try {
+    return await apiFetchJson<T>(path, token, init);
+  } catch (error) {
+    if (error instanceof ApiRequestError) {
+      if (error.status === 404) {
+        return null;
+      }
+      throw new LearningNotesApiError(
+        error.status,
+        error.message || `Learning notes request failed with ${error.status}.`,
+      );
+    }
+    throw error;
   }
-  const payload = await response.json().catch(() => null);
-  if (!response.ok) {
-    throw new LearningNotesApiError(
-      response.status,
-      payload?.detail ?? `Learning notes request failed with ${response.status}.`,
-    );
-  }
-  return payload as T;
 }
 
 export async function listLearningPageNotes(

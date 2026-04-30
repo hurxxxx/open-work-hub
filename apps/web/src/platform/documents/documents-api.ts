@@ -1,3 +1,4 @@
+import { ApiRequestError, apiFetchJson } from '@/src/platform/api/client';
 import { rewriteWorkspaceApiPath } from '@/src/platform/workspaces/workspace-utils';
 
 export interface SearchDocumentsFilters {
@@ -65,24 +66,19 @@ export async function searchDocuments(
   payload: SearchDocumentsPayload,
   token: string,
 ): Promise<SearchDocumentsResponse> {
-  const response = await fetch(rewriteWorkspaceApiPath('/api/v1/search/documents'), {
-    method: 'POST',
-    headers: {
-      Accept: 'application/json',
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(payload),
-    cache: 'no-store',
-  });
-
-  const result = await response.json().catch(() => null);
-  if (!response.ok) {
-    throw new DocumentsApiError(
-      response.status,
-      result?.detail ?? `Request failed with ${response.status}.`,
+  try {
+    return await apiFetchJson<SearchDocumentsResponse>(
+      rewriteWorkspaceApiPath('/api/v1/search/documents'),
+      token,
+      {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      },
     );
+  } catch (error) {
+    if (error instanceof ApiRequestError) {
+      throw new DocumentsApiError(error.status, error.message);
+    }
+    throw error;
   }
-
-  return result as SearchDocumentsResponse;
 }

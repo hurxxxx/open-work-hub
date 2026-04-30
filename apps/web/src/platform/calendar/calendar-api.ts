@@ -4,6 +4,7 @@
 //
 // During Phase 1.3 the backend endpoint does not yet exist. The hook in
 // use-calendar-events.ts can fall back to MOCK_CALENDAR_EVENTS until Phase 2 lands.
+import { ApiRequestError, apiFetchJson } from '@/src/platform/api/client';
 import { rewriteWorkspaceApiPath } from '@/src/platform/workspaces/workspace-utils';
 
 import {
@@ -48,21 +49,17 @@ export async function listCalendarEvents(
     `/api/v1/calendar/events?${params.toString()}`,
     workspaceSlug,
   );
-  const response = await fetch(path, {
-    headers: {
-      Accept: 'application/json',
-      Authorization: `Bearer ${token}`,
-    },
-    cache: 'no-store',
-  });
-  const payload = await response.json().catch(() => null);
-  if (!response.ok) {
-    throw new CalendarApiError(
-      response.status,
-      payload?.detail ?? `Calendar events request failed with ${response.status}.`,
-    );
+  try {
+    return await apiFetchJson<CalendarEventsResponse>(path, token);
+  } catch (error) {
+    if (error instanceof ApiRequestError) {
+      throw new CalendarApiError(
+        error.status,
+        error.message || `Calendar events request failed with ${error.status}.`,
+      );
+    }
+    throw error;
   }
-  return payload as CalendarEventsResponse;
 }
 
 // Mock fixture used while the backend endpoint is not yet wired (Phase 1.3 → Phase 2).

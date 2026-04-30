@@ -1,10 +1,18 @@
+import { lazy } from 'react';
+
+import { lazyRoute } from '@/src/app/shell/lazy-route';
 import type { WorkspaceRouteDefinition } from '@/src/app/shell/route-types';
-import { WorkspaceHomeView } from './views/WorkspaceHomeView/WorkspaceHomeView';
+
+const WorkspaceHomeView = lazy(() =>
+  import('./views/WorkspaceHomeView/WorkspaceHomeView').then((module) => ({
+    default: module.WorkspaceHomeView,
+  })),
+);
 
 export const homeWorkspaceRoutes: WorkspaceRouteDefinition[] = [
   {
     appId: 'home',
     path: '/w/:workspaceSlug/home',
-    element: <WorkspaceHomeView />,
+    element: lazyRoute(<WorkspaceHomeView />),
   },
 ];
