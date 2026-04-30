@@ -679,12 +679,22 @@ def test_ai_tool_invoke_pms_write_tool_requires_approval_when_enabled(
         audit_payload = _tool_audit_rows()[-1].payload
         assert audit_payload["tool_name"] == "pms.create_issue"
         assert audit_payload["status"] == "blocked"
+
+        delete_response = client.post(
+            _workspace_tool_path("delivery-hub", "pms.delete_issue"),
+            headers=_auth_headers(token),
+            json={"arguments": {"issue_id": "issue-approval-target"}},
+        )
+        assert delete_response.status_code == 409, delete_response.text
+        delete_audit_payload = _tool_audit_rows()[-1].payload
+        assert delete_audit_payload["tool_name"] == "pms.delete_issue"
+        assert delete_audit_payload["status"] == "blocked"
     finally:
         monkeypatch.delenv("AIDOO_AI_WRITE_TOOLS_ENABLED", raising=False)
         _reset_settings_and_registry()
 
 
-def test_ai_tool_invoke_meeting_planner_and_docs_write_tools_require_approval_when_enabled(
+def test_ai_tool_invoke_meeting_and_planner_write_tools_require_approval_when_enabled(
     client: TestClient,
     monkeypatch,
 ) -> None:
@@ -693,14 +703,6 @@ def test_ai_tool_invoke_meeting_planner_and_docs_write_tools_require_approval_wh
     try:
         session = _dev_login(client, "delivery-hub-admin")
         token = session["token"]
-
-        docs_response = client.post(
-            "/api/v1/workspaces/delivery-hub/docs/items",
-            headers=_auth_headers(token),
-            json={"title": "AI Docs Hub"},
-        )
-        assert docs_response.status_code == 201, docs_response.text
-        doc = docs_response.json()
 
         meeting_response = client.post(
             _workspace_tool_path("delivery-hub", "meeting.create_meeting"),
@@ -729,18 +731,24 @@ def test_ai_tool_invoke_meeting_planner_and_docs_write_tools_require_approval_wh
         )
         assert planner_response.status_code == 409, planner_response.text
 
-        docs_page_response = client.post(
-            _workspace_tool_path("delivery-hub", "docs.create_page"),
+        planner_update_response = client.post(
+            _workspace_tool_path("delivery-hub", "planner.update_event"),
             headers=_auth_headers(token),
             json={
                 "arguments": {
-                    "hub_id": doc["id"],
-                    "title": "AI gated page",
-                    "content_markdown": "# 제목\n\n본문",
+                    "event_id": "event-approval-target",
+                    "title": "AI gated event update",
                 }
             },
         )
-        assert docs_page_response.status_code == 409, docs_page_response.text
+        assert planner_update_response.status_code == 409, planner_update_response.text
+
+        planner_delete_response = client.post(
+            _workspace_tool_path("delivery-hub", "planner.delete_event"),
+            headers=_auth_headers(token),
+            json={"arguments": {"event_id": "event-approval-target"}},
+        )
+        assert planner_delete_response.status_code == 409, planner_delete_response.text
     finally:
         monkeypatch.delenv("AIDOO_AI_WRITE_TOOLS_ENABLED", raising=False)
         _reset_settings_and_registry()

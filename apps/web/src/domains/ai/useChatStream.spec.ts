@@ -660,8 +660,14 @@ describe('useChatStream', () => {
             decision: 'approved',
             reason: null,
           }),
-          frame('content_delta', 1, { text: '재개 완료' }),
-          frame('done', 2, {
+          frame('tool_result', 1, {
+            call_id: 'call-1',
+            status: 'ok',
+            result_preview: '{"id":"created-1"}',
+            error: null,
+          }),
+          frame('content_delta', 2, { text: '재개 완료' }),
+          frame('done', 3, {
             finish_reason: 'stop',
             audit_id: null,
             meta: null,
@@ -696,6 +702,14 @@ describe('useChatStream', () => {
     expect(fetchMock.mock.calls[0][0]).toContain('/api/v1/ai/chat/resume');
     expect(result.current.state.contentBuffer).toBe('재개 완료');
     expect(result.current.state.pendingApprovals[0].decision).toBe('approved');
+    expect(result.current.state.toolCalls).toMatchObject([
+      {
+        call_id: 'call-1',
+        name: 'docs.create_page',
+        status: 'ok',
+        result: { status: 'ok', preview: '{"id":"created-1"}', error: null },
+      },
+    ]);
     expect(result.current.state.status).toBe('done');
   });
 

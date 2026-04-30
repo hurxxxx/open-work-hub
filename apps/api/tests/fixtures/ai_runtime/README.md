@@ -17,7 +17,7 @@ metadata, not raw prompts, raw queries, or raw provider output.
 
 ## Structured Output Hard Gate
 
-Before graph runtime rollout, Qwen3.6-35B-A3B and the selected serving stack
+Before graph runtime rollout, local model profile and the selected serving stack
 must be measured for:
 
 - `ExecutionGraph` schema success rate

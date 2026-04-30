@@ -592,20 +592,39 @@ function applyEnvelope(
           : data.status === 'rejected'
             ? 'rejected'
             : 'error';
-      const next = prev.toolCalls.map((call) =>
-        call.call_id === data.call_id
-          ? {
-              ...call,
-              completedAtMs: event.timestamp_ms,
-              status: nextStatus,
-              result: {
-                status: data.status,
-                preview: data.result_preview ?? null,
-                error: data.error ?? null,
-              },
-            }
-          : call,
-      );
+      const result = {
+        status: data.status,
+        preview: data.result_preview ?? null,
+        error: data.error ?? null,
+      };
+      let matched = false;
+      const next = prev.toolCalls.map((call) => {
+        if (call.call_id !== data.call_id) {
+          return call;
+        }
+        matched = true;
+        return {
+          ...call,
+          completedAtMs: event.timestamp_ms,
+          status: nextStatus,
+          result,
+        };
+      });
+      if (!matched) {
+        const approval = prev.pendingApprovals.find(
+          (item) => item.call_id === data.call_id,
+        );
+        next.push({
+          call_id: data.call_id,
+          name: approval?.tool ?? 'tool',
+          args_preview: null,
+          argsBuffer: '',
+          startedAtMs: event.timestamp_ms,
+          completedAtMs: event.timestamp_ms,
+          status: nextStatus,
+          result,
+        });
+      }
       return { next: { ...prev, toolCalls: next }, terminal: false };
     }
     case 'approval_required': {

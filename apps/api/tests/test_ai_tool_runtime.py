@@ -42,9 +42,9 @@ def test_execute_tool_call_maps_approval_required_exception_to_blocked(
         del args, kwargs
         raise ToolRequiresApproval(
             tool_call_id="call-1",
-            tool_name="docs.create_page",
-            arguments_json='{"title":"Draft"}',
-            resource_preview="Draft",
+            tool_name="pms.delete_issue",
+            arguments_json='{"issue_id":"issue-1"}',
+            resource_preview="issue-1",
         )
 
     monkeypatch.setattr(tool_runtime, "execute_tool", fake_execute_tool)
@@ -54,11 +54,11 @@ def test_execute_tool_call_maps_approval_required_exception_to_blocked(
         workspace=SimpleNamespace(id="ws-1"),
         principal=SimpleNamespace(kind="user", user_id="user-1"),
         user=SimpleNamespace(id="user-1"),
-        tool_name="docs.create_page",
-        arguments={"title": "Draft"},
+        tool_name="pms.delete_issue",
+        arguments={"issue_id": "issue-1"},
         source="test.runtime",
     )
 
     assert result.status == "blocked"
-    assert result.resource_preview == "Draft"
-    assert result.arguments_json == '{"title":"Draft"}'
+    assert result.resource_preview == "issue-1"
+    assert result.arguments_json == '{"issue_id":"issue-1"}'

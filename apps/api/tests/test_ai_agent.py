@@ -54,10 +54,20 @@ def _execution() -> ResolvedLlmExecution:
     )
 
 
-async def _collect_events(monkeypatch: pytest.MonkeyPatch, streams: list[list[StreamChunk]]):
+async def _collect_events(
+    monkeypatch: pytest.MonkeyPatch,
+    streams: list[list[StreamChunk]],
+    *,
+    max_turns: int = 4,
+    captured_stream_kwargs: list[dict[str, Any]] | None = None,
+    messages: list[dict[str, Any]] | None = None,
+    tool_specs: list[dict[str, Any]] | None = None,
+):
     stream_iter = iter(streams)
 
     async def fake_complete_chat_stream(*args: Any, **kwargs: Any):
+        if captured_stream_kwargs is not None:
+            captured_stream_kwargs.append(dict(kwargs))
         for chunk in next(stream_iter):
             yield chunk, _execution().decision, _execution().config
 
@@ -76,15 +86,15 @@ async def _collect_events(monkeypatch: pytest.MonkeyPatch, streams: list[list[St
                 source="test.agent",
             ),
             user=SimpleNamespace(id="user-1"),
-            messages=[{"role": "user", "content": "hi"}],
+            messages=messages or [{"role": "user", "content": "hi"}],
             temperature=0.2,
             stream_reasoning=True,
             encoder=EnvelopeEncoder(),
-            max_turns=4,
+            max_turns=max_turns,
             max_tool_calls=8,
             max_consecutive_tool_errors=3,
             agent_run_id="agent-run-1",
-            tool_specs=[
+            tool_specs=tool_specs or [
                 {
                     "type": "function",
                     "function": {
@@ -121,6 +131,40 @@ async def test_run_agent_turn_stream_passes_plain_response_through(
     )
 
     assert [event.type for event in events] == ["content_delta", "usage", "done"]
+    assert events[-1].data.finish_reason == "stop"
+
+
+async def test_run_agent_turn_stream_blocks_write_success_without_write_tool(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    events = await _collect_events(
+        monkeypatch,
+        [
+            [
+                StreamChunk(kind="content", text="PMS 이슈가 성공적으로 변경되었습니다."),
+                StreamChunk(kind="done", finish_reason="stop"),
+            ]
+        ],
+        messages=[{"role": "user", "content": "PMS 이슈 상태를 in progress로 변경해줘"}],
+        tool_specs=[
+            {
+                "type": "function",
+                "function": {
+                    "name": "pms.update_issue",
+                    "description": "Update issue",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {},
+                        "additionalProperties": False,
+                    },
+                },
+            }
+        ],
+    )
+
+    assert [event.type for event in events] == ["content_delta", "done"]
+    assert "write tool 실행 결과가 없습니다" in events[0].data.text
+    assert "성공적으로 변경" not in events[0].data.text
     assert events[-1].data.finish_reason == "stop"
 
 
@@ -178,7 +222,85 @@ async def test_run_agent_turn_stream_executes_tool_then_continues(
     assert events[-1].data.finish_reason == "stop"
 
 
-async def test_run_agent_turn_stream_rejects_duplicate_tool_call(
+async def test_run_agent_turn_stream_forces_final_answer_after_tool_turn_cap(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def fake_execute_tool_call(*args: Any, **kwargs: Any) -> ToolCallExecution:
+        return ToolCallExecution(
+            call_id=str(kwargs["call_id"]),
+            tool_name=str(kwargs["tool_name"]),
+            arguments_json=kwargs["arguments_json"]
+            if "arguments_json" in kwargs
+            else '{"q":"런칭 체크리스트"}',
+            status="ok",
+            response={
+                "tool": kwargs["tool_name"],
+                "owner_domain": "docs",
+                "approval_required": False,
+                "result": {"items": [{"id": "doc-1", "title": "런칭 체크리스트"}]},
+            },
+        )
+
+    captured_calls: list[dict[str, Any]] = []
+    monkeypatch.setattr(agent_module, "execute_tool_call", fake_execute_tool_call)
+
+    events = await _collect_events(
+        monkeypatch,
+        [
+            [
+                StreamChunk(
+                    kind="tool_call_start",
+                    tool_call_id="call-1",
+                    tool_name="docs.list_hub",
+                ),
+                StreamChunk(
+                    kind="tool_call_args",
+                    tool_call_id="call-1",
+                    tool_name="docs.list_hub",
+                    args_delta='{"q":"런칭 체크리스트"}',
+                ),
+                StreamChunk(kind="done", finish_reason="tool_calls"),
+            ],
+            [
+                StreamChunk(
+                    kind="tool_call_start",
+                    tool_call_id="call-2",
+                    tool_name="docs.get_item",
+                ),
+                StreamChunk(
+                    kind="tool_call_args",
+                    tool_call_id="call-2",
+                    tool_name="docs.get_item",
+                    args_delta='{"item_id":"doc-1"}',
+                ),
+                StreamChunk(kind="done", finish_reason="tool_calls"),
+            ],
+            [
+                StreamChunk(kind="content", text="런칭 체크리스트의 남은 리스크는 보안 승인입니다."),
+                StreamChunk(kind="done", finish_reason="stop"),
+            ],
+        ],
+        max_turns=2,
+        captured_stream_kwargs=captured_calls,
+    )
+
+    assert [event.type for event in events] == [
+        "tool_call_started",
+        "tool_call_args_delta",
+        "tool_result",
+        "tool_call_started",
+        "tool_call_args_delta",
+        "tool_result",
+        "content_delta",
+        "done",
+    ]
+    assert events[-2].data.text.startswith("런칭 체크리스트")
+    assert events[-1].data.finish_reason == "stop"
+    assert captured_calls[-1]["tools"] is None
+    assert captured_calls[-1]["tool_choice"] is None
+
+
+async def test_run_agent_turn_stream_finalizes_after_duplicate_tool_call(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     def fake_execute_tool_call(*args: Any, **kwargs: Any) -> ToolCallExecution:
@@ -228,12 +350,26 @@ async def test_run_agent_turn_stream_rejects_duplicate_tool_call(
                 ),
                 StreamChunk(kind="done", finish_reason="tool_calls"),
             ],
+            [
+                StreamChunk(kind="content", text="기존 조회 결과로 답변합니다."),
+                StreamChunk(kind="done", finish_reason="stop"),
+            ],
         ],
     )
 
-    assert events[-2].type == "error"
-    assert events[-2].data.code == "agent_loop_duplicate_tool_call"
-    assert events[-1].data.finish_reason == "error"
+    assert [event.type for event in events] == [
+        "tool_call_started",
+        "tool_call_args_delta",
+        "tool_result",
+        "tool_call_started",
+        "tool_call_args_delta",
+        "tool_result",
+        "content_delta",
+        "done",
+    ]
+    assert events[5].data.status == "error"
+    assert "중복 도구 호출" in events[5].data.error
+    assert events[-1].data.finish_reason == "stop"
 
 
 async def test_run_agent_turn_stream_allows_model_recovery_after_tool_error(

@@ -77,6 +77,8 @@ def test_capability_manifest_returns_filtered_tool_inventory(client: TestClient)
         "pms.list_spaces",
         "pms.list_task_lists",
         "pms.search_issues",
+        "rag.list_sources",
+        "rag.query",
     ]
     assert payload["server"]["transport"] == "inproc"
     assert all("annotations" in item for item in payload["tools"])
@@ -146,10 +148,13 @@ def test_manifest_and_openapi_include_pms_write_tools_when_enabled(
             "pms.create_issue",
             "pms.update_issue",
             "pms.add_comment",
+            "pms.delete_issue",
             "meeting.create_meeting",
             "planner.create_event",
-            "docs.create_page",
+            "planner.update_event",
+            "planner.delete_event",
         } <= tool_names
+        assert "docs.create_page" not in tool_names
 
         openapi_response = client.get(
             _workspace_ai_path("delivery-hub", "/capabilities/openapi.json"),
@@ -160,9 +165,12 @@ def test_manifest_and_openapi_include_pms_write_tools_when_enabled(
         assert "/mcp/tools/pms.create_issue" in openapi_payload["paths"]
         assert "/mcp/tools/pms.update_issue" in openapi_payload["paths"]
         assert "/mcp/tools/pms.add_comment" in openapi_payload["paths"]
+        assert "/mcp/tools/pms.delete_issue" in openapi_payload["paths"]
         assert "/mcp/tools/meeting.create_meeting" in openapi_payload["paths"]
         assert "/mcp/tools/planner.create_event" in openapi_payload["paths"]
-        assert "/mcp/tools/docs.create_page" in openapi_payload["paths"]
+        assert "/mcp/tools/planner.update_event" in openapi_payload["paths"]
+        assert "/mcp/tools/planner.delete_event" in openapi_payload["paths"]
+        assert "/mcp/tools/docs.create_page" not in openapi_payload["paths"]
     finally:
         monkeypatch.delenv("AIDOO_AI_WRITE_TOOLS_ENABLED", raising=False)
         _reset_settings_and_registry()
@@ -186,6 +194,8 @@ def test_planner_app_manifest_and_openapi_include_write_tool_when_enabled(
         assert {item["name"] for item in manifest_payload["tools"]} == {
             "planner.list_events",
             "planner.create_event",
+            "planner.update_event",
+            "planner.delete_event",
         }
 
         openapi_response = client.get(
@@ -197,6 +207,8 @@ def test_planner_app_manifest_and_openapi_include_write_tool_when_enabled(
         assert set(openapi_payload["paths"].keys()) == {
             "/mcp/tools/planner.list_events",
             "/mcp/tools/planner.create_event",
+            "/mcp/tools/planner.update_event",
+            "/mcp/tools/planner.delete_event",
         }
     finally:
         monkeypatch.delenv("AIDOO_AI_WRITE_TOOLS_ENABLED", raising=False)

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from contextlib import asynccontextmanager
+from dataclasses import replace
 import json
 import socket
 from types import SimpleNamespace
@@ -612,6 +613,102 @@ def test_chat_stream_emits_content_and_reasoning_in_order(
         "completion_tokens": 2,
         "total_tokens": 3,
     }
+
+
+def test_chat_stream_ai_manager_enabled_uses_sdk_adapter_boundary(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    auth = _seeded_dev_login(client, "hq-admin")
+    slug = auth["user"]["workspaces"][0]["slug"]
+    settings = get_settings()
+    monkeypatch.setattr(settings, "ai_manager_enabled", True)
+    monkeypatch.setattr(settings, "ai_manager_provider", "openai")
+    monkeypatch.setattr(settings, "ai_manager_model", "gpt-test")
+    monkeypatch.setattr(settings, "ai_manager_max_loops", 3)
+
+    from aidoo_api.domains.ai.manager_runtime import (
+        StaticLocalSpecialistRunner,
+        run_ai_manager_stream,
+    )
+
+    async def _mock_manager_stream(**kwargs: Any):
+        kwargs["context"] = replace(
+            kwargs["context"],
+            local_runner=StaticLocalSpecialistRunner(
+                redacted_summary="safe local summary"
+            ),
+        )
+        async for event in run_ai_manager_stream(**kwargs):
+            yield event
+
+    monkeypatch.setattr(
+        ai_router,
+        "run_openai_ai_manager_stream",
+        _mock_manager_stream,
+    )
+
+    before = len(_llm_audit_rows())
+    status_code, events = _stream_post(
+        client,
+        _workspace_ai_path(slug, "/chat/stream"),
+        headers=_auth_headers(auth["token"]),
+        json_body={"messages": [{"role": "user", "content": "문서를 요약해줘"}]},
+    )
+
+    assert status_code == 200
+    chat = _chat_events(events)
+    assert [event["type"] for event in chat] == [
+        "reasoning_delta",
+        "tool_call_started",
+        "tool_call_args_delta",
+        "tool_result",
+        "reasoning_delta",
+        "content_delta",
+        "done",
+    ]
+    assert [event["seq"] for event in events] == list(range(len(events)))
+    assert chat[1]["data"]["name"] == "run_local_specialist"
+    assert chat[3]["data"]["status"] == "ok"
+    done_meta = chat[-1]["data"]["meta"]
+    assert done_meta["policy"] == "ai_manager"
+    assert done_meta["provider"] == "openai"
+    assert done_meta["model"] == "gpt-test"
+    assert done_meta["runtime_profile"] == "ai_manager"
+    assert done_meta["external_egress_summary"]["hosted_tools_enabled"] is False
+    assert done_meta["external_egress_summary"]["response_storage"] is False
+    assert done_meta["external_egress_summary"]["trace_sensitive_data"] is False
+    assert len(_llm_audit_rows()) == before
+
+
+def test_chat_stream_ai_manager_error_returns_sse_error_done(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    auth = _seeded_dev_login(client, "hq-admin")
+    slug = auth["user"]["workspaces"][0]["slug"]
+    settings = get_settings()
+    monkeypatch.setattr(settings, "ai_manager_enabled", True)
+    monkeypatch.setattr(settings, "ai_manager_provider", "openai")
+    monkeypatch.setattr(settings, "ai_manager_model", "gpt-test")
+
+    async def _boom_stream(**_: Any):
+        raise RuntimeError("AI manager down")
+        yield  # pragma: no cover
+
+    monkeypatch.setattr(ai_router, "run_openai_ai_manager_stream", _boom_stream)
+
+    status_code, events = _stream_post(
+        client,
+        _workspace_ai_path(slug, "/chat/stream"),
+        headers=_auth_headers(auth["token"]),
+        json_body={"messages": [{"role": "user", "content": "문서를 요약해줘"}]},
+    )
+
+    assert status_code == 200
+    chat = _chat_events(events)
+    assert [event["type"] for event in chat] == ["error", "done"]
+    assert chat[0]["data"]["code"] == "adapter_error"
+    assert chat[0]["data"]["message"] == "AI manager down"
+    assert chat[1]["data"]["finish_reason"] == "error"
 
 
 def test_chat_stream_suppresses_reasoning_when_stream_reasoning_false(

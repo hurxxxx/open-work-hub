@@ -9,10 +9,12 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session, joinedload, selectinload
 
 from aidoo_api.core.principal import CallerPrincipal
+from aidoo_api.core.settings import get_settings
+from aidoo_api.core.storage import get_minio_client
 from aidoo_api.domains.auth.access import bind_current_workspace
 from aidoo_api.domains.auth.models import TeamMember, User, Workspace
 from aidoo_api.domains.auth.security import new_id
-from aidoo_api.domains.media.router import sync_embedded_media
+from aidoo_api.domains.media.router import cleanup_media_for_resource, sync_embedded_media
 from aidoo_api.domains.pms.access import _ensure_issue_readable, _ensure_list_editor
 from aidoo_api.domains.pms.rag_sync import enqueue_issue_rag_sync
 from aidoo_api.domains.pms.models import (
@@ -1287,3 +1289,39 @@ def add_issue_comment(
     db.commit()
     reloaded = _reload_comment(db, comment_id=comment.id)
     return _serialize_comment_item(reloaded)
+
+
+def delete_issue(
+    db: Session,
+    *,
+    workspace: Workspace,
+    principal: CallerPrincipal,
+    user: User,
+    issue_id: str,
+    approved_call_id: str | None = None,
+) -> dict[str, Any]:
+    del approved_call_id
+    _require_user_write_principal(principal)
+    _bind_workspace_context(db, workspace=workspace, principal=principal, user=user)
+
+    issue, _task_list = _get_issue_for_user(db, user, issue_id, require_editor=True)
+    for child in issue.subtasks:
+        child.parent_id = None
+    media_keys = cleanup_media_for_resource(db, "issue", issue.id)
+    enqueue_issue_rag_sync(
+        db,
+        issue=issue,
+        operation=RagSyncOperation.DELETE,
+    )
+    deleted_issue_id = issue.id
+    db.delete(issue)
+    db.commit()
+    if media_keys:
+        settings = get_settings()
+        client = get_minio_client()
+        for key in media_keys:
+            try:
+                client.remove_object(settings.minio_bucket, key)
+            except Exception:
+                pass
+    return {"id": deleted_issue_id, "deleted": True}

@@ -15,8 +15,11 @@ export interface ToolCallCardProps {
 
 export function ToolCallCard({ call }: ToolCallCardProps) {
   const [expanded, setExpanded] = useState(false);
-  const Icon = useMemo(() => resolveToolIcon(call.name), [call.name]);
-  const argsPreview = call.args_preview ?? previewText(call.argsBuffer || '{}', 80);
+  const toolName = typeof call.name === 'string' && call.name ? call.name : 'tool';
+  const argsBuffer =
+    typeof call.argsBuffer === 'string' && call.argsBuffer ? call.argsBuffer : '{}';
+  const Icon = useMemo(() => resolveToolIcon(toolName), [toolName]);
+  const argsPreview = call.args_preview ?? previewText(argsBuffer, 80);
   const durationMs =
     call.completedAtMs !== null
       ? Math.max(0, call.completedAtMs - call.startedAtMs)
@@ -35,7 +38,7 @@ export function ToolCallCard({ call }: ToolCallCardProps) {
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <span className="app-text-control-sm font-mono text-app-ink">
-              {call.name}
+              {toolName}
             </span>
             <StatusPill status={call.status} />
             {durationMs !== null ? (
@@ -61,7 +64,7 @@ export function ToolCallCard({ call }: ToolCallCardProps) {
       {expanded ? (
         <div className="mt-3 space-y-3">
           <pre className="overflow-x-auto rounded-md border border-app-border bg-app-bg px-3 py-2 text-xs leading-relaxed text-app-ink">
-            {call.argsBuffer || '{}'}
+            {argsBuffer}
           </pre>
           {call.result?.preview ? (
             <pre className="overflow-x-auto rounded-md border border-app-border bg-app-bg px-3 py-2 text-xs leading-relaxed text-app-ink">

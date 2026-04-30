@@ -1,393 +1,341 @@
-# Phase 6 Evidence Runtime Implementation Plan
+# Phase 6 AI Manager MVP Implementation Plan
 
-> 문서 성격: `Evidence-First Hybrid Agent Runtime`의 Phase 0-A 구현 플랜.
+> 문서 성격: `Evidence-First Hybrid Agent Runtime`의 새 Phase 6 구현 플랜.
 > 기준 문서: [`02-evidence-first-agent-runtime.md`](./02-evidence-first-agent-runtime.md)
-> 범위: Phase 0 gate + Phase A minimal runtime kernel. Graph manager, verifier, search/external provider, template writer 구현은 후속 플랜으로 넘긴다.
+> 범위: 교체 가능한 AI manager adapter와 독립 local model internal agent runtime을 연결하는 최소 vertical slice. 첫 adapter만 OpenAI Agents SDK를 사용한다.
 
 ## Context
 
-Phase 6 전체 목표는 기존 single-loop agent를 deterministic fast path, manager-controlled graph, evidence-first specialist runtime으로 확장하는 것이다. 다만 첫 구현에서 전체 hybrid surface를 한 번에 만들면 상태기계, approval migration, external egress policy, graph runtime이 동시에 흔들린다.
+Phase 6의 구현 방향을 전환한다. 이전 runtime-kernel 우선 계획은 production foundation을 먼저 단단하게 만드는 방향이었고, 실제 사용자 경험인 "프롬프트 -> 계획 -> 내부 근거 수집 -> 리뷰 -> 최종 응답" 검증보다 runtime persistence, inspection, trace invariant hardening이 앞섰다.
 
-따라서 이 플랜의 목표는 **나중에 graph/search/verifier/external path를 얹을 수 있는 최소 실행 기반**을 먼저 고정하는 것이다.
+이제 active 목표는 **OpenAI AI manager adapter + local model internal agent MVP**다. 외부 manager model은 계획, 작업 지시, 감시, 리뷰, 사용자 의사결정 요청을 담당한다. PMS/Planner/Docs 같은 내부 agent는 OpenAI SDK Agent/handoff가 아니라 provider-independent internal agent이며, 현재 모델은 `configured local model profile` 또는 로컬 MLX checkpoint다. 내부 문서, RAG, domain service, workspace-scoped tool gateway 접근은 이 internal agent runtime 안에서만 수행한다.
 
-현재 코드 기준:
-
-- 기존 interactive chat 실행은 `domains/ai/agent.py` single-loop path가 담당한다.
-- 기존 approval checkpoint는 `domains/ai/approvals.py::AgentRunSnapshot`과 `AiToolApproval`이 담당한다.
-- 기존 AI route, SSE envelope, tool registry, MCP bridge, RAG tools는 유지한다.
-- 새 runtime 패키지와 additive DB table은 Phase 0-A에서 추가되었고, 현재는 shadow-write/inspection 용도로만 사용한다.
-
-이 플랜은 기존 single-loop behavior를 canonical fallback으로 유지한다. `AIDOO_AI_RUNTIME_GRAPH_ENABLED=false`가 기본값이며, Phase 0-A에서는 graph manager를 실제 실행하지 않는다.
+기존 runtime table, graph adapter, trace/inspection 코드는 폐기하지 않는다. 단, 지금부터는 더 키우지 않고 MVP 관측/호환 레이어로만 사용한다.
 
 ## Current Execution State
 
-이 섹션은 세션 handoff용이다. 구현 세션이 끝날 때마다 짧게 갱신한다.
-
-- Current PR/stage: Phase 0-BE invalid graph schedule step hardening after `080395b`.
-- Last completed: Hardened graph schedule persistence and graph-node runner step normalization to skip negative or nonnumeric `invocation_seq` values before they can break shadow writes or violate trace/invocation ordering constraints. Added persistence regression coverage that only valid planned graph steps materialize skeleton invocations and trace events.
-- In progress: None.
-- Next exact task: Continue the Phase 6 review pass against graph execution persistence and inspection invariants; keep fixes mock-provider/local unless a real external adapter is explicitly requested.
-- Files touched in Phase 0-BE: `apps/api/src/aidoo_api/domains/ai/runtime/persistence.py`, `apps/api/src/aidoo_api/domains/ai/router.py`, `apps/api/tests/test_ai_runtime_persistence.py`, `plans/03-phase6-evidence-runtime-implementation.md`.
-- Tests/checks run: `cd apps/api && uv run ruff check src/aidoo_api/domains/ai/runtime/persistence.py src/aidoo_api/domains/ai/router.py tests/test_ai_runtime_persistence.py`; `cd apps/api && uv run pytest tests/test_ai_runtime_persistence.py::test_graph_schedule_persistence_skips_negative_invocation_seq tests/test_ai_runtime_persistence.py::test_agent_invocation_rejects_negative_invocation_seq tests/test_ai_stream.py::test_chat_stream_graph_execution_adapter_runs_when_enabled -q`; `cd apps/api && uv run pytest tests/test_ai_runtime_persistence.py tests/test_alembic_migrations.py -q`; `scripts/phase6-runtime-regression.sh -q`.
-- Known blockers: OpenAI/Anthropic-backed manager/search execution is still not enabled. The egress/planner/search contracts only decide, sanitize, and build request envelopes; they do not call external APIs. `graph_node_runner_v0` remains an in-process runner, not a durable workflow backend. Hidden node outputs are not persisted verbatim; only status/count/error summary is persisted. High-risk / approval-preview graphs are intentionally not supported by this adapter.
+- Current PR/stage: PR1 through PR5 workspace draft implemented as a mockable AI Manager MVP vertical slice, with the first OpenAI Agents SDK adapter boundary and independent internal local-agent runner in place.
+- Last completed: `openai-agents` dependency, AI manager settings, safe SDK defaults, module boundary, manager DTOs, prompt redaction boundary, `LocalAgentResult` safety validation, `run_local_specialist` adapter boundary, mock manager SSE stream path behind `AIDOO_AI_MANAGER_ENABLED`, bounded manager review loop tests, OpenAI Agents SDK agent/run-config/tool/stream adapter tests, provider-independent `LocalModelAgentRunner` using the existing local pool with `pool_hint="local"`, `ToolGatewayLocalAgentRunner` for read-tool evidence calls plus local model summary, real OpenAI smoke with `gpt-5.4-mini`, MLX local-model smoke for Docs/PMS/Planner read tasks, and approval-gated PMS/Planner CRUD capability expansion.
+- Current domain write policy: PMS supports approval-gated create/update/comment/delete, Planner supports approval-gated create/update/delete, Meeting create remains approval-gated, and Docs is intentionally AI read-only for now. Docs write capability can be reconsidered later but must not be exposed in the MVP capability registry.
+- Stopped/deferred: runtime-kernel expansion, graph persistence invariant hardening, runtime retention scheduler, inspection hardening, durable workflow backend design, high-risk graph support, approval-preview graph execution.
+- Next exact task: Run an API-route smoke with AI manager enabled, local server dependencies available, and a seeded workspace prompt that covers Docs read, PMS read/write proposal, and Planner read/write proposal. Then add approval persistence/resume for manager-driven write execution if the smoke exposes a UX gap.
+- Non-goal for the next task: LangGraph adoption, Claude Agent SDK adoption, external search, broad DB migration, new admin policy UI, durable long-running workflow, or OpenAI hosted tools.
 
 ## Architecture / Principles
 
-### 1. Minimal kernel first
+### 1. OpenAI Agents SDK is the MVP manager runtime
 
-첫 구현은 다음 최소 contract만 실제 코드로 고정한다.
+Phase 6 MVP adopts OpenAI Agents SDK as the AI manager runtime. The SDK owns the agent loop, model calls, tool-call round trips, streaming result surface, resumable state concept, human-review concept, and optional tracing surface.
 
-- `AgentRun`
-- `AgentInvocation`
-- `AgentTraceEvent`
-- minimal `ExecutionGraph`
-- minimal `EvidencePacket`
-- runtime/eval feature flag skeleton
+Implementation must use Direct OpenAI for this manager path, not the existing OpenRouter-compatible chat pool. The existing OpenRouter-compatible pool remains available for normal chat routing and later provider experiments.
 
-External LLM/search DTO, provider adapter, verifier, writer, graph manager는 정본 설계에는 남기지만 Phase 0-A 구현 대상이 아니다.
+Required implementation dependency:
 
-### 2. Additive migration only
+- `openai-agents` Python package in `apps/api/pyproject.toml`.
 
-기존 `AgentRunSnapshot`을 즉시 제거하지 않는다. 새 runtime table은 additive로 추가하고, 기존 approval flow에서 shadow-write로 새 runtime record를 남긴다.
+Required feature flags/settings:
 
-초기 read path는 기존 snapshot을 계속 사용할 수 있다. 새 runtime table은 inspection, invariant test, future cutover 준비에 사용한다.
+- `AIDOO_AI_MANAGER_ENABLED=false`
+- `AIDOO_AI_MANAGER_PROVIDER=openai`
+- `AIDOO_AI_MANAGER_MODEL=gpt-5.4-mini` for MVP/dev smoke, with no silent default in production
+- `AIDOO_AI_MANAGER_MAX_LOOPS=3`
+- `AIDOO_AI_MANAGER_TRACE_SENSITIVE_DATA=false`
+- `AIDOO_AI_MANAGER_STORE_RESPONSE=false`
+- `AIDOO_AI_MANAGER_HOSTED_TOOLS_ENABLED=false`
 
-### 3. State invariants before graph behavior
+### 2. Manager owns decisions; internal agents own internal data
 
-Phase A의 핵심 성공 기준은 graph execution이 아니라 상태 불변식이다.
+The OpenAI manager adapter may receive:
 
-- 한 conversation에는 live `AgentRun`이 하나만 있어야 한다.
-- 한 `AgentRun`에는 pending approval이 하나만 있어야 한다.
-- approval halt/resume은 동일 `AgentRun` 아래 새 `AgentInvocation`으로 표현 가능해야 한다.
-- resume에서 tool surface가 넓어지면 안 된다.
-- trace event ordering은 UUID가 아니라 per-run monotonic sequence여야 한다.
+- raw user prompt only when `RequestSensitivityClassifier` allows it
+- redacted user prompt when the raw prompt contains customer, order, product, price, contract, credential, or other forbidden entities
+- conversation/task metadata
+- available specialist agent ids and descriptions
+- public tool descriptions
+- workspace/app metadata that is not sensitive
+- low-sensitivity personal planning data, such as personal plans or meal plans, when workspace policy allows it
+- prior loop state, gap summaries, and redacted evidence summaries
 
-### 4. Runtime profile routing is shadow-only in Phase 0-A
+The OpenAI manager adapter must not receive:
 
-`select_runtime_profile()`는 Phase 0-A에서 실행 분기를 바꾸지 않고 model metadata와 runtime shadow state에 기록하는 shadow classifier다. `AIDOO_AI_RUNTIME_GRAPH_ENABLED=false`이면 graph behavior는 계속 비활성이다.
+- unsanitized user prompt when the classifier detects forbidden or unresolved sensitive entities
+- internal document raw text
+- raw RAG chunks
+- raw tool results
+- PLM rows
+- order, contract, BOM, cost, price, or quote details
+- customer names, product codes, order numbers, drawing numbers, internal URLs, credentials, secrets
+- raw `EvidencePacket`
 
-초기 rule priority는 `long_doc` signal을 먼저 보고, 그 다음 report/multi-app synthesis signal을 본 뒤, 마지막으로 write/external action signal을 본다. 따라서 "보고서/리포트/비교" 의도와 "초안" 같은 draft 표현이 함께 있는 경우에는 `grounded_report`로 분류하고, 명시적 write/create/update action만 있는 경우 `high_risk_action`으로 분류한다.
+Internal agent output returned to the manager must use `LocalAgentResult`: status, concise redacted evidence summary, artifact references, coverage/gap information, sensitivity labels, and blocked reason. Raw internal data remains inside the local execution boundary.
 
-### 5. No external provider execution
+### 3. Internal agents are provider-independent, not OpenAI handoffs
 
-Phase 0-A에서는 external provider를 호출하지 않는다. Feature flag와 config skeleton만 추가한다.
+PMS/Planner/Docs/domain agents must not be implemented as OpenAI SDK `Agent(...)` objects or SDK handoffs. They live behind the provider-independent `domains.ai.internal_agents` runtime and use local model/tool gateway/application services. The manager remains responsible for the final answer and calls internal agents through a single adapter-visible delegate tool:
 
-`review_queue_required`는 미래 contract로만 남긴다. Phase 0-A runtime은 review queue backend가 없으면 approval 또는 denial로 수렴하도록 이후 단계에서 구현한다.
+```text
+User
+  -> AiManagerAdapter
+       current: OpenAI Agents SDK
+       future: Claude Agent SDK / OSS manager model / custom manager
+     -> run_local_specialist adapter tool
+        -> provider-independent internal agent dispatcher
+           -> domain.docs / domain.pms / domain.planner
+              model: configured local model profile
+              data: workspace-scoped tools and application services
+        <- LocalAgentResult only
+  <- final answer / ask user / retry
+```
+
+`run_local_specialist` executes inside the API process and delegates to `domains.ai.internal_agents`. This internal module must not import OpenAI Agents SDK, Claude Agent SDK, or provider-specific manager code. It reuses the existing local LLM path, MCP-shaped capability registry, RAG/domain tools, approval guard, and workspace ACL checks. The function tool is only an adapter boundary between external reasoning and internal data.
+
+### 4. Bounded loop first
+
+The MVP loop is intentionally bounded:
+
+1. Manager analyzes the user prompt and available agents.
+2. Manager calls one or more internal agent tasks through the function tool.
+3. Manager reviews each `LocalAgentResult`.
+4. Manager either calls another specialist, asks the user a clarifying/approval question, or produces the final response.
+5. The run stops at `AIDOO_AI_MANAGER_MAX_LOOPS`, default 3, with a partial answer and explicit gap if still unresolved.
+
+No autonomous unbounded loop is allowed. A loop iteration means one manager review cycle after internal agent work, not every token/tool event inside the SDK.
+
+### 5. Tracing is useful but not source of truth
+
+OpenAI Agents SDK tracing may be used for development observability only when sensitive payload capture is disabled or scrubbed. Internal audit and trace remain the source of truth for production. Raw local tool inputs/outputs and internal evidence must not be sent to OpenAI tracing.
+
+The manager path must use the Responses model path with provider-side response storage disabled where the SDK/API exposes that control. Do not enable OpenAI hosted tools in the MVP. `WebSearchTool`, `FileSearchTool`, hosted MCP, code interpreter, hosted shell, and other provider-side tools stay disabled until a separate external-tool gate exists.
+
+Claude Agent SDK is deferred. It is a strong candidate for an MCP-heavy spike after internal capabilities are exposed as stable MCP servers, but it is not part of the first MVP. Any Claude spike must run with filesystem settings disabled (`setting_sources=[]` or equivalent), auto memory disabled, explicit MCP server allowlist, and no `.claude/` active instruction path in this repository.
+
+LangGraph/custom graph runtime is deferred until there is a concrete durable-workflow need: long-running batch, approval-wait resume, retry across process restarts, review queue orchestration, or time-travel/debuggable graph state.
 
 ## Implementation Stages
 
-### PR 1 — Phase 0 Eval And Gate Skeleton
+### PR 1 — Documented Pivot And Dependency Skeleton
 
-목표: runtime 구현 전 baseline/eval을 담을 위치와 schema를 고정한다.
+Goal: make the active plan and config surface unambiguous.
 
-변경:
+Changes:
 
-- `apps/api/tests/fixtures/ai_runtime/` 디렉터리를 추가한다.
-- seed fixture는 네 그룹으로 둔다.
-  - `routing_cases.json`
-  - `grounded_answer_cases.json`
-  - `sanitizer_leakage_cases.json`
-  - `approval_safe_drafting_cases.json`
-- fixture loader/helper를 테스트 전용 모듈에 둔다. production runtime은 이 fixture에 의존하지 않는다.
-- launch SLO 항목을 fixture metadata 또는 plan-adjacent markdown에 명시한다.
-  - concurrent active users
-  - p95 TTFT
-  - p95 report latency
-  - approval wait time
-- Qwen structured output hard gate는 benchmark target으로만 기록한다.
-  - `ExecutionGraph` schema success rate
-  - tool-call stability
-  - malformed output rate
+- Add `openai-agents` to `apps/api/pyproject.toml`.
+- Add AI manager settings to `core/settings.py`.
+- Add a feature-gated module boundary, e.g. `domains/ai/manager_runtime/`.
+- Add SDK run configuration defaults: tracing sensitive data off, response storage off, hosted tools off.
+- Keep the feature disabled by default.
+- Do not alter the default single-loop chat behavior.
 
-완료 조건:
+Completion:
 
-- fixture loader가 네 그룹을 모두 읽고 schema validation을 수행한다.
-- fixture는 실제 고객명/제품명/주문번호를 포함하지 않는다.
-- 테스트는 LLM/network 호출 없이 실행된다.
+- Settings parse with defaults.
+- Importing the new module does not require `OPENAI_API_KEY`.
+- Defaults map to no OpenAI hosted tools, no sensitive trace capture, and no provider-side response storage.
+- `git diff --check` passes.
 
-### PR 2 — Runtime Kernel Contracts
+### PR 2 — Manager DTOs And Redaction Boundary
 
-목표: runtime package와 최소 DTO를 추가한다.
+Goal: define the minimum data shapes that prevent raw internal data leakage.
 
-변경:
+Contracts:
 
-- 새 패키지: `apps/api/src/aidoo_api/domains/ai/runtime/`
-- 권장 모듈:
-  - `contracts.py`: Pydantic/dataclass contract.
-  - `registry_validation.py`: registry-validated string helper.
-  - `trace.py`: monotonic trace sequence helper.
-- `ExecutionGraph`는 closed enum을 쓰지 않는다.
-  - `agent_id: str`
-  - `intent: str`
-  - `domains: list[str]`
-  - `output_kind: str`
-  - `risk: Literal["low", "medium", "high"]` 또는 기존 risk literal과 같은 값.
-- `AgentInvocationSpec.agent_id`는 `AgentDefinitionResolver`나 runtime registry 결과에 있어야 valid다.
-- minimal `EvidencePacket`은 internal evidence 중심으로 둔다.
-  - query plan metadata.
-  - evidence items.
-  - coverage summary.
-  - external-specific fields는 optional로 두되 Phase 0-A runtime에서는 생성하지 않는다.
-- `AgentTraceEvent` contract는 `run_seq`, `invocation_seq`, `event_seq`를 포함한다.
+- `AiManagerInput`
+- `ManagerPlan`
+- `LocalAgentTask`
+- `LocalAgentResult`
+- `ManagerReview`
 
-완료 조건:
+Rules:
 
-- invalid `agent_id`, `intent`, `domain`, `output_kind`를 registry validator가 거부한다.
-- trace sequence helper가 같은 run 안에서 monotonic ordering을 보장한다.
-- contract tests가 LLM/network 없이 통과한다.
+- `AiManagerInput` can include raw user prompt only after request sensitivity classification allows it.
+- If the prompt contains forbidden entities, `AiManagerInput` must carry a redacted prompt plus redaction summary.
+- `LocalAgentResult` cannot include raw tool result, raw RAG chunk, or raw internal document text.
+- Any internal artifact is referenced by id/ref, not copied into the manager payload.
+- Sensitivity labels travel with all specialist results.
 
-### PR 3 — Runtime Persistence And Migration
+Completion:
 
-목표: additive DB table과 SQLAlchemy model을 추가한다.
+- DTO tests cover allowed raw prompt and forbidden raw internal fields.
+- DTO tests cover raw prompt allowed, redacted prompt required, and prompt blocked cases.
+- Redaction/scrub tests reject representative customer/product/order/price/internal URL leakage.
 
-변경:
+### PR 3 — Internal Agents And Delegate Tool
 
-- Alembic migration으로 새 table을 추가한다.
-  - `ai_agent_runs`
-  - `ai_agent_invocations`
-  - `ai_agent_trace_events`
-- `alembic/env.py`와 test metadata import path에 runtime models를 포함한다.
-- `AgentRun` status는 최소 다음 값을 가진다.
-  - `pending`
-  - `running`
-  - `awaiting_approval`
-  - `completed`
-  - `failed`
-  - `cancelled`
-  - `abandoned`
-- `AgentInvocation` status도 동일 계열을 사용하되 invocation 단위로 저장한다.
-- `AgentTraceEvent`는 per-run ordering을 위해 정수 sequence를 저장한다.
-- DB invariant:
-  - live status에 해당하는 conversation당 run은 하나만 허용한다.
-  - pending approval에 연결된 run은 하나의 pending approval만 허용하도록 기존 approval table 또는 runtime projection에 partial unique index를 추가한다.
+Goal: expose independent local model internal agents to any AI manager adapter through one delegate tool.
 
-권장 column 원칙:
+Behavior:
 
-- `workspace_id`, `conversation_id`, `requested_by_user_id`는 query와 audit에 필요한 FK/index를 가진다.
-- `runtime_profile`, `model_profile_id`, `graph_enabled`, `fallback_reason`은 nullable metadata로 시작한다.
-- payload는 JSONB로 둘 수 있지만 raw reasoning, tool secret, raw provider reasoning trace는 저장하지 않는다.
+- Tool name: `run_local_specialist`.
+- Internal task inputs: `agent_id`, `objective`, `allowed_tool_names`, optional `tool_arguments`, optional `approved_call_id`, `context_boundary`, `expected_output`. The OpenAI function-tool adapter exposes exact tool args as `tool_arguments_json` to keep the SDK strict schema compatible, then parses it into internal `tool_arguments`.
+- It resolves the requested specialist from the existing AI capability registry or runtime agent definitions.
+- It executes through provider-independent `domains.ai.internal_agents`, local model, and local tool gateway only.
+- PMS/Planner/Docs are not OpenAI SDK agents, Claude SDK agents, or handoffs.
+- It applies existing workspace ACL and approval-required tool gates.
+- It may execute approval-gated write tools only when an existing `approved_call_id` is supplied by the existing approval flow; otherwise it returns blocked `approval_required`.
+- Docs internal agent is read-only in MVP. It may use `docs.list_hub`, `docs.get_item`, `docs.list_pages`, `docs.read_page`, and RAG read tools only.
+- PMS/Planner internal agents may use approval-gated write/delete tools after approval. PMS supports `pms.create_issue`, `pms.update_issue`, `pms.add_comment`, `pms.delete_issue`; Planner supports `planner.create_event`, `planner.update_event`, `planner.delete_event`.
+- It uses function-tool input/output guardrails or equivalent local validation around every call.
+- It returns `LocalAgentResult`.
 
-완료 조건:
+Completion:
 
-- migration upgrade/downgrade가 안전하게 동작한다.
-- model smoke test가 create/read를 검증한다.
-- concurrent test가 live run/pending approval invariant를 검증한다.
+- Unit tests use a fake internal agent runner and prove no raw result leaves the tool.
+- Unit tests assert `domains.ai.internal_agents` has no OpenAI/Claude provider SDK dependency.
+- Invalid `agent_id`, out-of-scope tool, and ACL-denied cases return blocked `LocalAgentResult`.
+- Guardrail tests reject malformed task input and raw-data-bearing tool output.
 
-### PR 4 — Snapshot Shadow-Write And Resume Scope Guard
+### PR 4 — OpenAI Manager Agent Stream Path
 
-목표: 기존 approval halt/resume flow를 깨지 않고 새 runtime record를 남기며, resume scope widening을 차단한다.
+Goal: connect the manager to the existing SSE chat surface without replacing normal chat.
 
-변경:
+Behavior:
 
-- 기존 `persist_snapshot_on_halt` 흐름에서 새 `AgentRun`/`AgentInvocation`을 shadow-write한다.
-- 기존 `AgentRunSnapshot.model_meta` 또는 새 compat metadata에 다음을 저장한다.
-  - resolved tool names.
-  - resolved agent/app scope.
-  - original `allowed_app_ids`.
-  - blocked tool call id.
-  - payload hash 또는 approval payload reference.
-- `/chat/resume`에서 `allowed_app_ids`가 생략되면 원 halt scope를 그대로 사용한다.
-- `/chat/resume`에서 `allowed_app_ids`가 전달되면 저장된 scope와 같거나 더 좁은 경우만 허용한다.
-- resume execution은 저장된 `resolved_tool_names`와 현재 entitlement/registry 결과의 교집합만 agent loop에 전달한다.
-- wider scope 요청은 400 또는 approval-specific error로 차단한다.
-- narrower scope가 승인된 tool을 제외하면 resume을 거부한다.
-- re-halt는 같은 `AgentRun` 아래 새 invocation/checkpoint로 표현할 수 있게 trace/persistence helper를 둔다.
+- When `AIDOO_AI_MANAGER_ENABLED=false`, current chat behavior is unchanged.
+- When enabled and a request is ai-manager eligible, the API creates an OpenAI manager adapter with the `run_local_specialist` function tool. No PMS/Planner/Docs OpenAI SDK agents or handoffs are created.
+- The API streams manager planning, internal agent execution status, review status, and final answer through existing `AgentEventEnvelope` types where possible.
+- SDK run state is not treated as the internal audit source of truth; internal run metadata stores only scrubbed summaries.
+- Responses storage is disabled where supported, and OpenAI hosted tools are not attached to the manager agent in MVP.
 
-완료 조건:
+Completion:
 
-- 기존 approval API 응답 shape는 유지된다.
-- 기존 approval tests가 통과한다.
-- omission, equal scope, narrower scope, wider scope 네 케이스가 테스트된다.
-- resume 시 tool registry가 전체 entitlement로 넓어지지 않는다.
-- runtime shadow-write 실패는 user-facing approval flow를 abort하지 않는다.
+- Workspace draft status: mock manager path implemented and route-tested; OpenAI Agents SDK adapter now builds the real Agent/Runner boundary with safe defaults, fake-run tests, and real-key `gpt-5.4-mini` smoke.
+- Mocked OpenAI manager test streams an end-to-end final answer.
+- OpenAI failure returns clear error/done SSE events.
+- Cancellation propagates to the active manager run and internal agent task where possible.
+- Tests assert `trace_include_sensitive_data=False`, response storage disabled, and no hosted tools registered.
 
-### PR 5 — Trace And Inspection Endpoint
+### PR 5 — Bounded Review Loop And User Decision Points
 
-목표: runtime record를 운영자가 SQL 없이 확인할 수 있게 한다.
+Goal: make the MVP behave like a supervised coding-agent loop without unbounded autonomy.
 
-변경:
+Behavior:
 
-- runtime trace write helper를 추가한다.
-- 기존 agent/approval flow에서 최소 trace event를 남긴다.
-  - `run_created`
-  - `invocation_started`
-  - `approval_required`
-  - `approval_resumed`
-  - `invocation_completed`
-  - `run_completed`
-  - `run_failed`
-- read-only inspection endpoint를 추가한다.
-  - workspace-scoped `/api/v1/workspaces/{workspace_slug}/ai/runtime/runs/{run_id}`
-  - 필요하면 list endpoint는 Phase A 후속으로 미룬다.
-- endpoint는 기존 workspace auth dependency와 ACL boundary를 사용한다.
-- 응답은 raw reasoning, tool secret, raw provider payload를 포함하지 않는다.
+- Max review loops defaults to 3.
+- Manager may request another internal agent call only while under the limit.
+- Manager may stop and ask the user when evidence is missing, permission is needed, or intent is ambiguous.
+- Approval-required write tools continue using existing `AiToolApproval`; SDK human review is a reference pattern, not a replacement in MVP. Docs write is excluded from MVP even if the base application supports manual Docs editing.
 
-완료 조건:
+Completion:
 
-- 같은 workspace 사용자는 run/invocation/trace summary를 조회할 수 있다.
-- 다른 workspace 사용자는 조회할 수 없다.
-- event ordering이 run 안에서 재현 가능하다.
-- trace payload scrub test가 통과한다.
+- Workspace draft status: bounded mock manager loop implemented with unit coverage for final, retry, loop-limit partial, user-question, approval-required, and failed-review stops.
+- Tests cover final success, one retry success, loop-limit partial answer, user-question stop, and approval-required stop.
+
+### PR 6 — UI/E2E Smoke
+
+Goal: verify the actual user experience rather than only runtime contracts.
+
+Checks:
+
+- Start local API, web, and MLX as needed.
+- Enable AI manager with a test OpenAI key only in local/dev.
+- Submit a prompt that requires internal RAG/domain evidence.
+- Verify UI shows progress, internal agent work, manager review, and final/gap.
+- Verify console and page errors are clean.
+
+Completion:
+
+- Record smoke result in this plan or a root work log.
+- Include the final URL, accessibility snapshot summary, console, and page error summary.
 
 ## Verification
 
-### Targeted tests
-
-Phase 0-A 구현 후 최소 다음을 실행한다.
+Targeted tests:
 
 ```bash
 cd apps/api
-pytest tests/test_ai_approvals.py
-pytest tests/test_ai_stream.py
-pytest tests/test_ai_events.py
-pytest tests/test_ai_conversations.py
+uv run pytest tests/test_ai_stream.py tests/test_ai_events.py
+uv run pytest \
+  tests/test_ai_manager_config.py \
+  tests/test_ai_manager_contracts.py \
+  tests/test_ai_manager_live.py \
+  tests/test_ai_manager_openai_adapter.py \
+  tests/test_ai_manager_specialist_tool.py \
+  tests/test_ai_manager_stream.py
+uv run pytest \
+  tests/test_ai_registry.py \
+  tests/test_ai_mcp_bridge.py \
+  tests/test_ai_tool_runtime.py \
+  tests/test_ai_tools.py \
+  tests/test_domain_write_services.py
 ```
 
-### New tests
+Live OpenAI smoke, opt-in:
 
-- `test_ai_runtime_contracts.py`
-  - DTO validation.
-  - registry-validated string rejection.
-  - trace monotonicity.
-- `test_ai_runtime_persistence.py`
-  - `AgentRun` / `AgentInvocation` / `AgentTraceEvent` create/read.
-  - live run invariant.
-  - pending approval invariant.
-- `test_ai_runtime_eval_fixtures.py`
-  - fixture loader.
-  - fixture schema validation.
-  - no network/LLM dependency.
-- approval regression additions.
-  - resume without `allowed_app_ids` does not widen tools.
-  - same scope resume works.
-  - narrower scope resume works only when it does not invalidate the approved tool.
-  - wider scope resume is rejected.
-- inspection endpoint tests.
-  - auth required.
-  - workspace isolation.
-  - payload omits raw reasoning/tool secrets.
+```bash
+cd apps/api
+AIDOO_RUN_LIVE_OPENAI_AI_MANAGER=1 \
+AIDOO_AI_MANAGER_MODEL=gpt-5.4-mini \
+uv run pytest tests/test_ai_manager_live.py
+```
 
-### Static checks
+Static checks:
 
 ```bash
 git diff --check
-cd apps/api && pytest tests/test_ai_runtime_contracts.py tests/test_ai_runtime_persistence.py tests/test_ai_runtime_eval_fixtures.py
+cd apps/api && uv run ruff check src tests
 ```
+
+Document checks:
+
+```bash
+rg -n "Phase 0-A.*minimal.*runtime kernel|No external provider.*execution|Continue.*Phase 6 review pass" \
+  plans/00-ai-platform-roadmap.md plans/02-evidence-first-agent-runtime.md plans/README.md \
+  | rg -v "rg -n"
+```
+
+The command should return only historical/deferred notes, not active next-step instructions.
 
 ## Decision Log
 
 | 항목 | 결정 |
 |---|---|
-| 구현 범위 | Phase 0-A minimal kernel only |
-| graph runtime | Phase 0-A에서는 실행하지 않음 |
-| external provider | Phase 0-A에서는 호출하지 않음 |
-| 기존 single-loop | canonical fallback으로 유지 |
-| `AgentRunSnapshot` | 즉시 제거하지 않고 shadow-write/compat projection 사용 |
-| `ExecutionGraph` value | closed enum이 아니라 registry-validated string |
-| trace ordering | per-run monotonic sequence |
-| resume scope | halt 시 저장한 scope와 같거나 더 좁은 경우만 허용 |
-| resume tool surface | 저장된 `resolved_tool_names`와 현재 entitlement/registry 결과의 교집합만 허용 |
-| review queue | backend 준비 전에는 구현하지 않음 |
+| MVP manager runtime | OpenAI Agents SDK |
+| External manager API | Direct OpenAI, Responses model path through Agents SDK |
+| Claude Agent SDK | Deferred MCP-heavy spike |
+| LangGraph/custom graph runtime | MVP 제외 |
+| Internal agents | Provider-independent `domains.ai.internal_agents`; PMS/Planner/Docs are not OpenAI SDK agents or handoffs |
+| Domain write surface | PMS and Planner have approval-gated CRUD where supported; Docs is AI read-only in MVP |
+| Local model | `configured local model profile`, local MLX checkpoint for dev |
+| Loop policy | bounded, default max 3 review cycles |
+| Raw user prompt to manager | allowed only after request sensitivity classification |
+| Raw internal data to manager | forbidden |
+| SDK tracing | disabled or sensitive capture off by default |
+| Responses storage | disabled by default where supported |
+| OpenAI hosted tools | disabled in MVP |
+| Raw prompt egress | allowed only after request sensitivity classification; otherwise redacted or blocked |
+| Claude spike prerequisites | stable internal MCP servers, explicit server allowlist, filesystem settings disabled, auto memory disabled |
+| LangGraph revisit trigger | durable workflow or checkpoint/resume requirement |
+| Existing runtime hardening | stopped/deferred unless needed by MVP |
 
-## Known Follow-Ups Before Graph Manager Execution
+## 2026-04-30 Local E2E Check
 
-- Manager candidate graph generation/validation is now wired to both metadata and the first graph-aware execution adapter. `AIDOO_AI_RUNTIME_GRAPH_ENABLED=true` plus `AIDOO_AI_RUNTIME_GRAPH_EXECUTION_ENABLED=true` is required before supported accepted graphs use the adapter.
-- Accepted graph validation is still not sufficient by itself. Execution requires the separate execution gate and adapter support; unsupported graphs keep fallback metadata.
-- Candidate graph summary is intentionally allowlisted to high-level fields only: intent, domains, risk, output kind, invocation agent ids, verifier flag, and approval-preview flag.
-- Graph schedule summary remains `state=planned`, agent ids, invocation sequence, and dependency ids. `execution_enabled=true` currently means `graph_node_runner_v0` or another execution adapter was selected; it does not yet mean a durable workflow backend owns the run.
-- Candidate graph trace events materialize for approval shadow runs and persisted non-approval graph-eligible fallback streams. `persist=false` streams still expose the summary only in SSE metadata because they intentionally do not create conversation/runtime records.
-- Graph execution adapter trace events materialize for persisted adapter streams as `graph_execution_shadow`; `graph_node_runner_v0` records per-node status events, but raw node output remains ephemeral and is summarized only in terminal metadata.
-- Long-running graph trace scheduler를 붙이기 전에 runtime retention helper를 실제 운영 job/admin trigger로 연결한다.
-- Runtime metrics now include trace, inspection, shadow-write, and external execution outcome counters. Operator-facing rollout 전 dashboard/alert threshold를 별도 정의한다.
-- Phase 0-A에서 기존 table에 추가하는 `ai_tool_approvals` partial index는 의도된 tooling index 1건으로 기록한다. 이후 hot-table index 변경은 별도 concurrent migration으로 분리한다.
-- 새 runtime status를 추가할 때 migration SQL, ORM partial index, runtime status constant의 live-status literal drift를 함께 점검한다.
+- Reset the local environment back to the existing Doowon stack: removed accidental `doowon-dev-*` containers/volumes and used `doowon-postgres` / `doowon_ai_portal_dev`.
+- Ran API on `127.0.0.1:8000`, web on `127.0.0.1:4200`, and MLX local model server on `127.0.0.1:8080`.
+- Browser E2E session used `delivery-hub-member@aidoo.local` in `/w/delivery-hub/ai`.
+- Docs read flow passed: the agent called `docs.list_hub`, `docs.get_item`, `docs.list_pages`, and `docs.read_page`, then summarized launch checklist risks without requesting Docs writes.
+- PMS read flow passed: the agent searched delivery-delay issues and summarized status, priority, and assignee.
+- Planner read flow passed: the agent listed onboarding events and summarized date, place, and visibility.
+- PMS write approval flow passed: the agent requested approval for `pms.create_issue`; after approval, issue `DEMO-50` was created and the browser showed the tool card as completed.
+- Planner write approval flow passed for create: the agent requested approval for `planner.create_event`; after approval, event `AI E2E Planner 생성 테스트` was created.
+- Planner update E2E exposed a local-model failure: the model claimed update success without calling `planner.update_event`, and the database remained unchanged. A write-intent guard now blocks that false-success path when no write tool result exists.
+- Fixes made from the E2E findings: the API now forces a no-tools final answer after useful tool results when the local model repeats calls or hits the turn cap; the web stream now closes approval-resume tool cards when the final `tool_result` arrives in a resumed stream.
+- Residual risk: the current local model can still over-call tools or avoid write tools for some update/delete prompts. Duplicate/skipped calls are now closed visibly and false write-success answers are blocked, but prompt/tool-result compaction and better tool-choice discipline remain follow-up work.
+- Browser audit checked final URL, accessibility snapshot, console, and page errors. The console was clean in the final pass; `agent-browser errors` still emitted blank historical entries without message or stack.
 
-## E2E Smoke Log
+## References
 
-### 2026-04-29 Phase 0-R Graph Runtime Smoke
-
-- Reused existing web dev server on `127.0.0.1:4200`.
-- The previous `uvicorn --reload` process on `127.0.0.1:8000` was stale and did not respond; it was terminated and API was restarted with `DOOWON_API_AUTO_MIGRATE=1 pnpm nx dev api`.
-- Local Postgres schema was empty, so startup applied Alembic migrations through `e7f8a9b0c1d2` and seeded the baseline records.
-- Created the initial local admin with `POST /api/v1/auth/setup` as `admin@aidoo.local`; subsequent bootstrap status exposed the seeded dev-login accounts.
-- API smoke:
-  - `GET /api/v1/auth/bootstrap-status` returned 200 through both API direct and web proxy.
-  - Authenticated `GET /api/v1/auth/me` returned 200 for `admin@aidoo.local`.
-  - Authenticated `GET /api/v1/ai/health` returned 200 with `ready=false` because the local MLX server was not running and external OpenRouter credentials are not configured.
-- Browser smoke with `agent-browser --session phase6-smoke`:
-  - Opened `http://127.0.0.1:4200/`, quick-login as `Aidoo HQ Admin` succeeded, final URL `/w/hq/home`.
-  - Navigated to `/w/hq/ai`; AI workspace shell and composer rendered.
-  - Final URL: `http://127.0.0.1:4200/w/hq/ai`.
-  - Accessibility snapshot exposed workspace navigation, AI side menu, routing status button, app context selector, routing selector, and disabled send button before text entry.
-  - Console contained only Vite debug lines and the React DevTools info message; `agent-browser errors` returned no page errors.
-
-### 2026-04-29 Phase 0-R MLX Local LLM Smoke
-
-- Started MLX with `bash scripts/mlx-serve.sh`; server is listening on `127.0.0.1:8080` with `mlx-community/Qwen3.6-35B-A3B-4bit`.
-- Fixed the local API dev command so `pnpm nx dev api` runs with `DOOWON_API_AUTO_MIGRATE=1`; this prevents reload/startup from calling seed data against an unmigrated empty DB and failing on missing `org_units`.
-- `GET http://127.0.0.1:8080/v1/models` returned 200 and listed the configured MLX model.
-- Authenticated `GET /api/v1/ai/health` returned 200 with `local.ready=true` and external pool still `not_configured`.
-- Direct MLX chat completion with `max_tokens=512` returned assistant content `MLX smoke OK`. Lower `max_tokens` values can finish inside Qwen reasoning output before content is emitted.
-- API sync chat through `/api/v1/workspaces/hq/ai/chat` with `backend_mode=local`, `max_tokens=512`, and `Say exactly: MLX smoke OK` returned 200:
-  - `provider=mlx-lm`
-  - `chosen_pool=local`
-  - `policy=local_only`
-  - `finish_reason=stop`
-  - content `MLX smoke OK`
-- Browser smoke with `agent-browser --session phase6-mlx-check`:
-  - Quick-login as `Aidoo HQ Admin` succeeded and `/w/hq/ai` rendered.
-  - The AI conversation list showed `Say exactly: MLX smoke OK`.
-  - Opening the conversation rendered the persisted user turn, assistant content `MLX smoke OK`, and routing metadata `local 풀 · local_only · policy_local_only`.
-  - Console contained only Vite debug lines and the React DevTools info message; `agent-browser errors` returned no page errors.
-
-### 2026-04-29 Phase 0-AM Local API/MLX Smoke
-
-- Reused the already-running API server on `127.0.0.1:8000` (`uvicorn --reload` parent and worker were listening).
-- `GET /api/v1/auth/bootstrap-status` returned 200 and exposed the seeded dev-login accounts.
-- `POST /api/v1/auth/dev-login` for `hq-admin` returned a valid session for workspace `hq`; authenticated `GET /api/v1/auth/me` returned 200.
-- Authenticated `GET /api/v1/ai/health` returned 200 with the local MLX pool `ready=true` at `http://127.0.0.1:8080/v1`. External OpenRouter was `not_configured`, expected because this phase continues with mock/local provider work.
-- Authenticated `POST /api/v1/workspaces/hq/ai/chat/stream` with `backend_mode=local` and `persist=false` returned SSE events ending in `done`. Default server flags kept `graph_used=false`, which is expected outside the explicit graph/mock test harness.
-
-### 2026-04-29 Phase 0-AP UI E2E Smoke
-
-- Reused local web/API/MLX servers on `127.0.0.1:4200`, `127.0.0.1:8000`, and `127.0.0.1:8080`.
-- `agent-browser --session phase6-ui-e2e` opened `/login`, quick-login as `Aidoo HQ Admin` succeeded, and navigation reached `/w/hq/ai`.
-- `/w/hq/ai` rendered workspace navigation, AI side menu, conversation list, routing status, scope picker, routing selector, and composer controls.
-- Submitted `UI E2E smoke입니다. 한 문장으로 응답해줘.` through the composer. The final URL was `http://127.0.0.1:4200/w/hq/ai?c=ffcc5a71-f42f-4153-b475-6f9e544eee93`, and the conversation appeared in the recent list.
-- The stream terminated and re-enabled the composer, but the assistant bubble showed the length fallback text `응답이 토큰 한도에 도달해 중간에서 잘렸습니다...` with routing metadata `local 풀 · local_only · policy_local_only`.
-- Console contained only Vite debug and React DevTools info; `agent-browser errors` returned no page errors.
-
-### 2026-04-29 Phase 0-AS UI E2E After Local Tool Gate
-
-- Reused local web/API/MLX servers on `127.0.0.1:4200`, `127.0.0.1:8000`, and `127.0.0.1:8080`.
-- `agent-browser --session phase6-ui-e2e-2` quick-login as `Aidoo HQ Admin` succeeded and reached `/w/hq/ai`.
-- Submitted `UI E2E smoke입니다. 한 문장으로 응답해줘.` through the composer with the default full app context.
-- Final URL was `http://127.0.0.1:4200/w/hq/ai?c=99515149-61a5-4a87-835c-b8fd5f7a9dfc`.
-- The assistant bubble rendered `UI E2E smoke 테스트가 정상적으로 완료되었습니다.` with routing metadata `local 풀 · local_only · policy_local_only`; the token-length fallback no longer appeared.
-- Console contained only Vite debug and React DevTools info; `agent-browser errors` returned no page errors.
-
-### 2026-04-28 Phase 0-A Hardening Smoke
-
-- Reused local web/API servers on `127.0.0.1:4200` and `127.0.0.1:8000`.
-- Started the local MLX server with `bash scripts/mlx-serve.sh` on `127.0.0.1:8080`; the reusable local session is `tmux attach -t doowon-mlx`.
-- `agent-browser --session doowon-e2e` login through the form as `delivery-hub-admin@aidoo.local` succeeded; seed quick-login card click did not trigger login in automation.
-- `/w/delivery-hub/home` and `/w/delivery-hub/ai` rendered without browser page errors or console errors.
-- Authenticated AI health returned `ready=true` for the local `mlx-lm` pool after the MLX server was started.
-- AI composer enabled send after text entry, created a conversation, streamed a local model response, and saved user plus assistant turns.
-- The rendered UI contained the assistant response and local routing metadata: `local` pool, `local_only`, `policy_local_only`.
+- OpenAI Agents SDK overview: https://developers.openai.com/api/docs/guides/agents
+- OpenAI Agents SDK running/streaming/state: https://developers.openai.com/api/docs/guides/agents/running-agents
+- OpenAI Agents SDK orchestration: https://developers.openai.com/api/docs/guides/agents/orchestration
+- OpenAI Agents SDK guardrails/approvals: https://developers.openai.com/api/docs/guides/agents/guardrails-approvals
+- OpenAI Agents SDK tracing: https://openai.github.io/openai-agents-python/tracing/
+- Claude Agent SDK overview: https://code.claude.com/docs/en/agent-sdk/overview
+- Claude Agent SDK Python reference: https://code.claude.com/docs/en/agent-sdk/python
+- Claude Agent SDK MCP: https://platform.claude.com/docs/en/agent-sdk/mcp
 
 ## Rollback Plan
 
-- `AIDOO_AI_RUNTIME_GRAPH_ENABLED=false`가 기본값이므로 graph behavior는 활성화되지 않는다.
-- runtime shadow-write에 문제가 있으면 `AIDOO_AI_RUNTIME_SHADOW_WRITE_ENABLED=false`로 shadow-write helper를 비활성화하고 기존 `AgentRunSnapshot` read/write path를 유지한다.
-- inspection endpoint에 문제가 있으면 route registration만 끄고 persistence는 유지한다.
-- migration rollback은 새 runtime table을 제거하되 기존 `AgentRunSnapshot`과 `AiToolApproval` table은 변경하지 않는 방향으로 작성한다.
-- resume scope guard에서 false reject가 발생하면 기존 approval tests와 audit trace로 원인을 확인하고, widen 허용 없이 scope comparison 로직만 수정한다.
-
-## Assumptions
-
-- `compose.dev.yml`의 현재 local modification은 unrelated이며 이 플랜 구현에서 건드리지 않는다.
-- Phase 0-A는 code foundation이며 사용자-facing graph behavior를 켜지 않는다.
-- `review_queue_required`는 이후 Phase 7/admin policy 또는 durable workflow backend가 생긴 뒤 활성화한다.
-- External LLM/search DTO와 provider adapter는 Phase B/C 이후 별도 구현 플랜에서 다룬다.
-- 구현 완료 후 commit/push는 사용자가 별도로 요청할 때만 수행한다.
+- Keep `AIDOO_AI_MANAGER_ENABLED=false` as the default.
+- If the manager path fails, route back to the existing single-loop chat path.
+- If a leakage risk is found, disable AI manager, revoke provider keys if needed, and preserve affected run summaries for audit.
+- If OpenAI Agents SDK blocks required behavior, keep DTOs and internal agent boundary, then replace only the manager runner implementation.

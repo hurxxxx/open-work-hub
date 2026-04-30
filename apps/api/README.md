@@ -28,6 +28,8 @@ nohup bash scripts/mlx-serve.sh &  # background
 
 최초 실행 시 `~/.local/share/mlx-lm-venv`에 venv를 만들고 `mlx-lm`을 설치한다.
 모델(약 19GB)은 `~/.cache/huggingface` 로 첫 요청 시 캐시된다.
+기본 스크립트는 내부 agent 요약이 `message.content`로 안정적으로 나오도록
+`MLX_CHAT_TEMPLATE_ARGS='{"enable_thinking":false}'`로 Qwen thinking을 끈다.
 
 ```env
 # Local pool

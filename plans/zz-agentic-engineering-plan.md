@@ -22,9 +22,9 @@
 
 ### 1.1.1 로컬 LLM만으로 모든 것을 처리하는 전략은 한계가 있다
 
-기존 계획은 `Qwen/Qwen3.6-35B-A3B`를 canonical model로 두고, 로컬 MLX PoC checkpoint로 `mlx-community/Qwen3.6-35B-A3B-4bit`를 사용하는 방향을 전제합니다. 동시에 긴 context와 tool calling은 가능하지만, 큰 tool catalog와 긴 대화 이력에는 취약하다고 보고 있습니다.
+기존 계획은 `Qwen/local model profile`를 canonical model로 두고, 로컬 MLX PoC checkpoint로 `mlx-community/local model profile-4bit`를 사용하는 방향을 전제합니다. 동시에 긴 context와 tool calling은 가능하지만, 큰 tool catalog와 긴 대화 이력에는 취약하다고 보고 있습니다.
 
-이 판단은 맞습니다. 로컬 35B급 모델은 내부 데이터 처리에는 유리하지만, 다음 작업에서는 외부 frontier model 또는 SDK 기반 agent/search capability가 더 효율적일 수 있습니다.
+이 판단은 맞습니다. 로컬 35B급 모델은 내부 데이터 처리에는 유리하지만, 다음 작업에서는 외부 manager model 또는 SDK 기반 agent/search capability가 더 효율적일 수 있습니다.
 
 ```text
 - 복잡한 사용자 의도 분해
@@ -192,7 +192,7 @@ Local-first + policy-controlled external reasoning/search runtime
 [Data Sensitivity Classifier]
         ↓
 [ModelRouter / SearchRouter]
-        ├─ Local Qwen Profile
+        ├─ Local Model Profile
         ├─ External OpenAI Profile
         ├─ External Claude Profile
         ├─ Internal RAG Search
@@ -1158,7 +1158,7 @@ Core Runtime:
   - AgentRun / AgentInvocation / AgentTraceEvent
 
 Local Processing:
-  - Qwen3.6-35B-A3B
+  - local model profile
   - local RAG
   - PLM DB query
   - internal docs

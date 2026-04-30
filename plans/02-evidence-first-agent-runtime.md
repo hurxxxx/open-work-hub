@@ -2,26 +2,26 @@
 
 > 문서 성격: Doowon AI runtime 재설계를 위한 실행 설계 문서.  
 > 참고 연구 문서: [`01-agentic-harness-engineering-report.md`](../docs/planning/01-agentic-harness-engineering-report.md)
-> 목표: Qwen3.6-35B-A3B 기반 local-first runtime을 유지하면서, 정책적으로 통제된 external LLM/search provider를 붙일 수 있는 agent 운영 구조를 만든다.
+> 목표: 교체 가능한 AI manager adapter와 local model profile 기반 독립 internal agent runtime을 결합해, 외부 manager model의 계획/감시 능력과 내부 local model의 데이터 경계를 함께 쓰는 agent 운영 구조를 만든다. 첫 manager adapter만 OpenAI Agents SDK를 사용한다.
 
 ## Context
 
 현재 Doowon AI 플랫폼은 MCP-shaped capability registry, workspace-scoped tool gateway, RAG provider, approval flow, streaming envelope를 이미 갖고 있다. 다만 agent 실행 모델은 아직 단일 agent loop 중심이다. 이 구조는 단기 구현에는 빠르지만, 다음 요구가 커질수록 유지보수 비용이 높아진다.
 
-- v1 canonical 모델은 `Qwen/Qwen3.6-35B-A3B`로 고정한다.
-- 로컬 MLX 개발/PoC checkpoint는 `mlx-community/Qwen3.6-35B-A3B-4bit`를 기본값으로 사용한다.
-- Qwen3.6-35B-A3B는 긴 context와 tool calling을 지원하지만, 큰 tool catalog와 긴 대화 이력에 취약하다.
+- v1 내부 agent 모델은 `ModelProfile`/환경 설정에서 선택한다. 서비스명, 패키지명, agent id에는 특정 모델명(Qwen/Gemma/DeepSeek/OpenAI/Claude)을 박지 않는다.
+- 로컬 MLX 개발/PoC checkpoint는 환경 설정으로 주입하며, 문서와 코드의 runtime 경계는 `configured local model profile`로만 표현한다.
+- configured local model profile는 긴 context와 tool calling을 지원할 수 있지만, 큰 tool catalog와 긴 대화 이력에 취약할 수 있다.
 - PMS, Meeting, Docs, Planner, RAG 같은 도메인 컨텍스트가 계속 늘어난다.
 - 추후 LLM 모델이나 serving stack이 바뀌어도 agent contract와 tool/context boundary는 유지되어야 한다.
 - 사용자 정의 템플릿, batch 작업, ambient/event-driven 작업까지 확장하려면 실행 trace와 approval policy가 agent 단위로 남아야 한다.
 
-따라서 목표는 "모든 요청을 multi-agent로 비싸게 실행"하는 것이 아니라, **deterministic shortcut + graph orchestrator + evidence-first specialist runtime**을 만드는 것이다.
+따라서 목표는 "모든 요청을 multi-agent로 비싸게 실행"하는 것이 아니라, **deterministic shortcut + 교체 가능한 AI manager adapter + evidence-first local model internal agent runtime**을 만드는 것이다.
 
-Doowon AI runtime은 local-first를 기본 원칙으로 유지하지만 external LLM과 external search를 완전히 배제하지 않는다. 내부 문서 원문, PLM row, 주문서/문서 전문, 제품 사양 비교, sensitive draft generation은 local model과 workspace-scoped tool gateway 안에서 처리한다.
+Doowon AI runtime은 local-first 데이터 처리 원칙을 유지하지만, 복잡한 계획/감시/리뷰에는 external manager model을 적극 사용한다. 내부 문서 원문, PLM row, 주문서/문서 전문, 제품 사양 비교, sensitive draft generation은 local model과 workspace-scoped tool gateway 안에서 처리한다.
 
-반면 복잡한 planning, execution graph candidate generation, report outline, redacted quality review, clarification generation, 외부 공개 자료 검색은 `DataSensitivity`, `ExternalEgressPolicy`, `ModelProfile`, `RuntimeProfile`, `ToolSecurityPolicy`를 통과한 경우 external provider profile을 사용할 수 있다. External provider는 runtime core가 아니라 policy-controlled provider adapter다.
+반면 요구 분석, 작업 계획, internal agent 지시, 결과 리뷰, gap 판단, clarification generation은 AI manager adapter path를 우선 사용한다. MVP 첫 adapter는 OpenAI Agents SDK지만, external provider는 내부 데이터 processor가 아니라 교체 가능한 manager runtime이다. Claude Agent SDK는 MCP-heavy 대안 spike 후보로 남기되, Phase 6 MVP 기본 runtime에는 포함하지 않는다.
 
-`EvidencePacket`은 내부 runtime contract로 유지하며 external provider에 직접 전달하지 않는다. 외부 reasoning에는 `ExternalSafeEvidenceSummary`를 사용하고, 외부 검색에는 sanitized query만 사용한다. 외부 검색 결과는 `ExternalSearchResult`로 정규화한 뒤 trust level, provenance, provider metadata를 포함해 `EvidencePacket`에 편입한다.
+`EvidencePacket`은 내부 runtime contract로 유지하며 external manager에 직접 전달하지 않는다. 외부 manager에는 `LocalAgentResult`, redacted evidence summary, coverage/gap summary, artifact reference만 전달한다. 외부 검색이 필요한 경우는 후속 단계에서 `ExternalSearchResult`로 정규화한 뒤 trust level, provenance, provider metadata를 포함해 `EvidencePacket`에 편입한다.
 
 이 문서는 별도 검토에서 채택한 기술 항목을 반영한 정본 계획이다. 검토 로그 원문과 내부 메타데이터는 실행 기준으로 취급하지 않는다.
 
@@ -36,47 +36,53 @@ Doowon AI runtime은 local-first를 기본 원칙으로 유지하지만 external
 - 명확한 single-domain read intent가 keyword/rule로 판정되는 경우.
 - 사용자가 text-only 또는 no-tool scope를 명시한 경우.
 
-복잡하거나 애매한 요청만 manager graph path로 올린다. 이때도 decomposition과 chosen execution graph는 한 번의 manager LLM 호출에서 함께 받는다.
+복잡하거나 애매한 요청만 AI manager path로 올린다. 이때도 요구 분석, specialist 선택, success criteria는 한 번의 manager planning step에서 먼저 받는다.
 
-### 2. Graph orchestrator, not free handoff
+### 2. AI manager adapter, not free handoff
 
-에이전트가 서로 자유롭게 위임하는 구조는 로컬 LLM 환경에서 루프, 비용, 디버깅 리스크가 크다. Doowon v1은 manager가 실행 graph를 통제한다.
+에이전트가 서로 자유롭게 위임하는 구조는 루프, 비용, 디버깅 리스크가 크다. Doowon v1 MVP는 AI manager adapter가 전체 작업의 최종 책임을 가진다.
 
-- Manager가 domain agent, search, verifier, writer invocation을 생성한다.
-- Specialist는 자기 tool allowlist와 context source 안에서만 실행된다.
-- Verifier는 판단만 하고 recovery를 실행하지 않는다.
-- Recovery 결정은 manager policy table이 담당한다.
+- Manager는 `run_local_specialist` delegate tool을 호출해 domain/RAG/tool 작업을 지시한다.
+- PMS/Planner/Docs internal agent는 OpenAI SDK Agent/handoff가 아니라 `domains.ai.internal_agents` 아래에서 실행된다.
+- Internal agent는 자기 tool allowlist와 context source 안에서만 실행된다.
+- Internal agent는 raw internal data가 아니라 `LocalAgentResult`를 반환한다.
+- MVP domain action surface는 의도적으로 좁힌다. PMS는 approval-gated issue create/update/comment/delete, Planner는 approval-gated event create/update/delete까지 허용하고, Docs는 AI read-only(`docs.list_hub/get_item/list_pages/read_page`)로 둔다.
+- Manager는 `LocalAgentResult`를 리뷰하고 재작업, 사용자 질문, partial answer, final answer 중 하나를 선택한다.
+- Recovery는 bounded loop로 제한하며 기본 최대 3 review cycle을 넘지 않는다.
 
-### 3. External LLM usage is policy-controlled, not prompt-controlled
+### 3. External manager usage is policy-controlled, not data processing
 
-Doowon runtime은 local-first를 기본 원칙으로 유지하되, external LLM을 완전히 배제하지 않는다. 내부 데이터 원문 접근, PLM row 해석, 주문서/문서 전문 처리, 제품 사양 비교는 local model과 workspace-scoped tool gateway 안에서 수행한다.
+Doowon runtime은 내부 데이터 처리는 local-first로 유지하되, 외부 manager model을 manager로 사용한다. 내부 데이터 원문 접근, PLM row 해석, 주문서/문서 전문 처리, 제품 사양 비교는 local model과 workspace-scoped tool gateway 안에서 수행한다.
 
-External LLM은 내부 데이터 processor가 아니라 policy-controlled reasoning provider다. 사용할 수 있는 역할은 sanitized intent 기반 planning, execution graph candidate generation, report outline, redacted quality review, clarification question generation으로 제한한다.
+OpenAI Agents SDK manager adapter는 내부 데이터 processor가 아니라 policy-controlled planner/reviewer다. 사용할 수 있는 역할은 요구 분석, 작업 계획, internal agent 호출, 결과 리뷰, gap 판단, clarification question generation, redacted quality review로 제한한다.
 
-External LLM 사용 여부는 사용자 prompt가 아니라 runtime policy, workspace setting, data sensitivity, provider availability, cost/latency budget, approval policy가 결정한다. `EvidencePacket`은 external provider로 직접 전달하지 않으며, 필요한 경우 `ExternalSafeEvidenceSummary`로 축약, 익명화, 최소화한 뒤 전송한다.
+External manager 사용 여부는 feature flag, runtime policy, workspace setting, data sensitivity, provider availability, cost/latency budget, approval policy가 결정한다. 사용자 prompt도 데이터 반출 대상이므로 `RequestSensitivityClassifier`가 먼저 raw prompt 허용, redacted prompt 필요, external manager 차단 중 하나로 결정한다. `EvidencePacket`은 external manager로 직접 전달하지 않으며, 필요한 경우 `LocalAgentResult`와 redacted summary로 축약, 익명화, 최소화한 뒤 전송한다.
 
-External LLM에 보내면 안 되는 데이터는 다음이다.
+External manager에 보낼 수 있는 데이터는 다음이다.
+
+- `RequestSensitivityClassifier`가 safe로 판정한 사용자 prompt 원문.
+- raw prompt가 민감 엔티티를 포함하는 경우 redacted prompt와 redaction summary.
+- available agent/tool 목록과 public description.
+- workspace/app metadata 중 민감하지 않은 값.
+- low-sensitivity personal planning data. 예: 개인 계획, 식단표.
+- `LocalAgentResult`의 redacted evidence summary, artifact reference, coverage/gap summary.
+- missing intents, clarification candidates, review status.
+
+External manager에 보내면 안 되는 데이터는 다음이다.
 
 - 내부 문서 원문.
+- raw RAG chunk.
+- raw tool result.
 - `EvidencePacket` raw item.
 - PLM row.
 - 주문서 전문.
 - 고객명, 제품코드, 주문번호, 도면번호.
 - BOM, 원가, 가격, 계약 조건.
 - 내부 시스템 URL.
+- credentials, secrets.
+- sensitivity classification 전의 raw prompt 또는 classifier가 민감 엔티티를 제거하지 못한 prompt.
 
-External LLM에 보낼 수 있는 데이터는 다음으로 제한한다.
-
-- sanitized user intent.
-- available agent 목록.
-- public tool description.
-- domain metadata.
-- `ExternalSafeEvidenceSummary`.
-- redacted draft.
-- evidence coverage summary.
-- missing intents.
-
-OpenAI/Claude SDK와 API는 runtime contract가 아니라 provider adapter다. OpenAI Agents SDK의 guardrail/tracing이나 Claude SDK의 agent harness 기능은 참고할 수 있지만, Doowon의 egress decision, sanitizer, verifier, approval, trace source of truth를 대체하지 않는다.
+OpenAI Agents SDK는 Phase 6 MVP manager runtime으로 채택한다. SDK의 guardrail, human review, result/state, streaming, tracing은 활용할 수 있지만 Doowon의 ACL, approval, redaction, audit, internal trace source of truth를 대체하지 않는다. MVP manager path는 Responses model path를 쓰되 provider-side response storage를 비활성화하고, sensitive tracing capture를 끄며, OpenAI hosted tools를 붙이지 않는다. Claude Agent SDK는 MCP-heavy alternative spike로 보류한다.
 
 ### 4. External Search Provider Boundary
 
@@ -121,15 +127,15 @@ A고객 DX-2400B 주문서 유럽 CE 인증 리스크
 industrial electronic component CE certification EU regulatory requirements recent changes
 ```
 
-External search result는 기본적으로 `untrusted` 또는 `mixed` trust level로 `EvidencePacket`에 들어간다. 다만 공식 기관, 표준기관, 규제기관 allowlist source는 policy에 따라 `trusted`로 승격될 수 있다. Internal/external conflict는 단순 source 위치가 아니라 `authority_class`, freshness, trust level, workspace policy, verifier confidence를 기준으로 판단한다. Claude Code SDK는 개발 자동화와 coding agent에는 사용할 수 있지만, 운영 runtime의 기본 external search provider로 직접 채택하지 않는다.
+External search result는 기본적으로 `untrusted` 또는 `mixed` trust level로 `EvidencePacket`에 들어간다. 다만 공식 기관, 표준기관, 규제기관 allowlist source는 policy에 따라 `trusted`로 승격될 수 있다. Internal/external conflict는 단순 source 위치가 아니라 `authority_class`, freshness, trust level, workspace policy, verifier confidence를 기준으로 판단한다. Claude Agent SDK는 개발 자동화와 MCP-heavy agent spike에는 사용할 수 있지만, Phase 6 MVP manager runtime으로 직접 채택하지 않는다.
 
-### 5. Structured outputs and constrained generation
+### 5. SDK manager outputs and structured boundaries
 
-Graph path의 manager LLM 응답은 자유 텍스트가 아니라 `ExecutionGraph` 구조로 고정한다. 출력은 serving stack이 지원하는 경우 JSON schema/function schema/constrained decoding으로 먼저 제한하고, 이후 Pydantic schema와 runtime business validator로 다시 검증한다.
+SDK manager path의 핵심 산출물은 자유 텍스트가 아니라 manager plan/result contract로 제한한다. OpenAI Agents SDK function tool schema, Responses structured output, Pydantic schema, runtime business validator를 함께 사용한다.
 
 ```text
-LLM structured generation
-  -> constrained decoding / JSON schema / function schema
+OpenAI Agents SDK manager
+  -> function tool schema / structured output
   -> Pydantic validation
   -> runtime business validator
   -> fallback or retry
@@ -137,38 +143,46 @@ LLM structured generation
 
 적용 원칙:
 
-- `manager.orchestrator`, `verifier.grounding`, `writer.template`의 구조화 산출물은 constrained generation을 우선 사용한다.
+- `AiManagerInput`, `ManagerPlan`, `LocalAgentTask`, `LocalAgentResult`, `ManagerReview`를 MVP contract로 둔다.
+- `run_local_specialist`는 external manager adapter가 호출할 수 있는 유일한 internal-data-touching delegate tool이다.
+- `LocalAgentResult`는 raw internal payload를 포함하지 않는다.
+- manager final answer는 `LocalAgentResult`와 redacted summary 기준으로 작성한다.
 - `search.planner`는 deterministic builder를 우선하고, LLM query expansion이 필요한 경우에만 constrained output을 사용한다.
 - `approval.proposal_preview`의 설명은 LLM이 만들 수 있지만, 실제 실행 대상은 deterministic canonical object여야 한다.
 - Pydantic validation은 mandatory지만 첫 번째 방어선으로 보지 않는다.
 
 ```python
-class InvocationSpec(BaseModel):
+class LocalAgentTask(BaseModel):
     agent_id: str
-    inputs_ref: str | None = None
-    must_run_after: list[str] = []
-    purpose: str
+    objective: str
+    allowed_tool_names: list[str] = []
+    tool_arguments: dict[str, Any] = {}
+    approved_call_id: str | None = None
+    context_boundary: str
+    expected_output: str
 
 
-class ExecutionGraph(BaseModel):
-    intent: str
-    domains: list[str]
-    risk: RiskLevel
-    output_kind: str
-    invocations: list[InvocationSpec]
-    requires_verifier: bool
-    requires_approval_preview: bool
+class LocalAgentResult(BaseModel):
+    agent_id: str
+    status: Literal["completed", "blocked", "failed"]
+    redacted_summary: str
+    artifact_refs: list[str] = []
+    coverage: dict[str, list[str]]
+    sensitivity_labels: list[str] = []
+    blocked_reason: str | None = None
 ```
 
 검증 규칙은 runtime에서 강제한다.
 
-- `agent_id`, `intent`, `domains`, `output_kind`는 DB enum migration이 필요한 closed enum으로 고정하지 않고 registry-validated open string으로 둔다.
+- `agent_id`는 DB enum migration이 필요한 closed enum으로 고정하지 않고 registry-validated open string으로 둔다.
 - `agent_id`는 workspace entitlement, `allowed_app_ids`, `AgentDefinitionResolver` 결과 안에 있어야 한다.
-- `intent`, `domains`, `output_kind`는 runtime registry와 prompt revision별 allowlist로 검증한다.
-- `external.search`는 direct invocation target이 될 수 없다. External search는 `search.executor` sub-path에서만 실행 가능하다.
-- manager output에 `agent_id=external.search`가 포함되면 graph validation failure로 처리하고 local manager path 또는 single-loop fallback으로 전환한다.
-- write-touching tool이 graph 안에 있으면 manager 출력과 무관하게 risk floor는 `high`다.
-- manager output validation이 실패하면 `AIDOO_AI_RUNTIME_GRAPH_ENABLED`가 켜져 있어도 기존 single-loop path로 fallback한다.
+- `run_local_specialist` 입력의 `allowed_tool_names`는 현재 entitlement와 specialist allowlist의 교집합이어야 한다.
+- write-touching tool이 포함되면 manager 출력과 무관하게 approval gate를 통과해야 한다. `approved_call_id`가 없으면 `approval_required`로 차단한다.
+- Docs internal agent는 MVP에서 write/delete tool을 받지 않는다. 문서 생성/수정/삭제가 필요하면 향후 별도 UX와 approval proposal을 설계한 뒤 capability registry에 다시 노출한다.
+- `run_local_specialist`는 function-tool input/output guardrail 또는 동등한 local validation을 매 호출마다 적용한다.
+- provider adapter가 strict function schema를 요구하면 exact tool arguments는 JSON string 형태로 받아 내부 `LocalAgentTask.tool_arguments` object로 변환한다. 내부 contract는 provider SDK의 schema 제약에 종속되지 않는다.
+- guardrail은 malformed task input, out-of-scope tool, raw internal data가 포함된 tool output을 차단한다.
+- manager output validation이 실패하면 기존 single-loop path 또는 clear failure로 전환한다.
 - malformed output은 serving stack, `ModelProfile`, prompt revision, invocation kind별로 trace에 남긴다.
 
 ### 6. Evidence-first
@@ -291,7 +305,7 @@ type ClaimCheck = {
 
 모델 교체성은 adapter만으로 충분하지 않다. tool call 형식, reasoning trace, finish reason, malformed tool call 회복 방식, prompt template이 모델마다 다르다.
 
-v1의 default `ModelProfile`은 canonical model `Qwen/Qwen3.6-35B-A3B`다. 로컬 MLX serving model id는 `mlx-community/Qwen3.6-35B-A3B-4bit`로 둔다. 다른 모델은 migration 또는 fallback 후보가 아니라 후속 검증 대상이다.
+v1의 default `ModelProfile`은 환경 설정으로 선택되는 `configured local model profile`이다. 로컬 MLX serving model id도 설정값으로 주입한다. 모델 교체는 서비스명 변경이 아니라 `ModelProfile`과 eval gate 변경으로 처리한다.
 
 `ModelProfile`은 다음을 포함한다.
 
@@ -315,16 +329,16 @@ type ReasoningModeSupport =
   | "hybrid_default_non_thinking"
 ```
 
-`AgentDefinition`은 모델 독립 기본 prompt를 갖고, `ModelProfile`이 Qwen/GPT/Claude 계열 override를 제공한다. `ModelProfile`은 `AgentRun` 생성 시 고정한다. 실행 중 모델 프로필이 바뀌면 기존 invocation을 조용히 이어가지 않고, 거부하거나 새 profile로 새 invocation을 시작한다. OpenAI-compatible API는 transport compatibility로만 취급하고, reasoning field, tool-call parsing, finish reason, structured output guarantee는 `ModelProfile`이 관리한다.
+`AgentDefinition`은 모델 독립 기본 prompt를 갖고, `ModelProfile`이 local/open-source/external provider 계열 override를 제공한다. `ModelProfile`은 `AgentRun` 생성 시 고정한다. 실행 중 모델 프로필이 바뀌면 기존 invocation을 조용히 이어가지 않고, 거부하거나 새 profile로 새 invocation을 시작한다. OpenAI-compatible API는 transport compatibility로만 취급하고, reasoning field, tool-call parsing, finish reason, structured output guarantee는 `ModelProfile`이 관리한다.
 
 ### 10. Runtime profiles over always-on reasoning
 
-로컬 Qwen3.6-35B-A3B/DGX Spark 운영에서는 "긴 context와 thinking을 쓸 수 있다"와 "항상 써야 한다"를 분리한다. Doowon runtime은 요청마다 runtime profile을 고정하고, profile별 budget을 trace에 남긴다.
+로컬 model profile/DGX Spark 운영에서는 "긴 context와 thinking을 쓸 수 있다"와 "항상 써야 한다"를 분리한다. Doowon runtime은 요청마다 runtime profile을 고정하고, profile별 budget을 trace에 남긴다.
 
 - `interactive_read`
   - 기본 profile.
   - non-thinking이 기본값이다.
-  - 단순 read/search/summary 요청은 graph path보다 deterministic fast path를 우선한다.
+  - 단순 read/search/summary 요청은 AI manager path보다 deterministic fast path를 우선한다.
   - context limit은 32K를 시작점으로 두고, 실측 후 64K까지 확장한다.
 - `grounded_report`
   - EvidencePacket 기반 보고서/비교/종합 요청.
@@ -340,7 +354,7 @@ type ReasoningModeSupport =
 
 `RuntimeProfile`은 workload 성격을 나타내며 local/external provider 선택 기준으로 확장하지 않는다. `external_planning`, `external_reasoning`, `external_quality_review`, `external_search` 같은 값은 `RuntimeProfile`에 넣지 않고 `AgentInvocation` purpose, `ModelRouteDecision`, provider decision, feature flag로 표현한다.
 
-Qwen3.6-35B-A3B profile은 `enable_thinking=false`에 해당하는 non-thinking 경로를 기본값으로 보고, thinking은 `ModelProfile.reasoning_escalation_policy`가 허용할 때만 켠다. GPT/Claude 등 외부 profile도 같은 contract를 유지하되, provider별 reasoning control은 adapter와 prompt override가 흡수한다.
+local model profile은 `enable_thinking=false`에 해당하는 non-thinking 경로를 기본값으로 보고, thinking은 `ModelProfile.reasoning_escalation_policy`가 허용할 때만 켠다. GPT/Claude 등 외부 profile도 같은 contract를 유지하되, provider별 reasoning control은 adapter와 prompt override가 흡수한다.
 
 Thinking escalation은 다음 조건에서만 허용한다.
 
@@ -371,25 +385,26 @@ Memory는 agent 성능 기능이 아니라 governance boundary로 다룬다.
 
 ### 12. Serving profile and deployment assumptions
 
-Agent runtime은 serving stack에 종속되지 않지만, 로컬 Qwen3.6-35B-A3B 운영 현실은 설계 가정에 반영한다.
+Agent runtime은 serving stack에 종속되지 않지만, 로컬 model profile 운영 현실은 설계 가정에 반영한다.
 
 - PoC와 Phase A~C는 단일 local OpenAI-compatible endpoint를 기준으로 한다.
-- v1 canonical 모델은 `Qwen/Qwen3.6-35B-A3B`로 고정한다.
-- MLX 개발/PoC 기본 checkpoint는 `mlx-community/Qwen3.6-35B-A3B-4bit`로 고정한다.
-- DGX Spark/Qwen3.6-35B-A3B 경로는 SGLang을 PoC default serving candidate로 두고, vLLM을 compatibility/bakeoff serving candidate로 검증한다.
+- v1 내부 agent 모델은 설정된 `ModelProfile`로 선택한다.
+- MLX 개발/PoC 기본 checkpoint는 환경 설정으로 선택한다.
+- DGX Spark/local model profile 경로는 SGLang을 PoC default serving candidate로 두고, vLLM을 compatibility/bakeoff serving candidate로 검증한다.
 - SGLang/vLLM 선택은 serving engine bakeoff로만 다룬다. 모델 후보 비교는 v1 범위에서 제외한다.
 - Serving engine 선택은 runtime profile별로 결정한다. `interactive_read`는 TTFT/TPOT/cache hit, `grounded_report`는 structured output과 evidence token 처리, `high_risk_action`은 tool-call argument 안정성, `long_doc`은 context degradation과 memory pressure를 본다.
 - DGX Spark는 local validation, pilot serving, batch/offline worker 후보로 평가한다. 별도 benchmark gate 없이 high-concurrency production 기준으로 가정하지 않는다.
 - K8s, Ray, Spark, LoRA 학습 파이프라인은 v1 runtime contract의 선행 조건이 아니다.
 - 두 번째 DGX Spark를 도입해도 초기 기본 전략은 tensor parallel보다 RAG/embedding, prefill/decode, domain worker 같은 service separation이다.
-- NIM, Triton, TensorRT-LLM, NVIDIA Dynamo, Qwen-Agent, LangGraph는 평가 후보로만 둔다. v1 문서는 특정 framework dependency를 runtime contract로 고정하지 않는다.
+- OpenAI Agents SDK는 MVP manager runtime dependency로 채택한다. NIM, Triton, TensorRT-LLM, NVIDIA Dynamo, model-specific agent frameworks, LangGraph는 serving/agent 확장 평가 후보로만 둔다.
 - 장기 model adaptation은 공통 base model + domain LoRA/PEFT + retrieval source + policy template 조합을 후보로 둔다. 자주 바뀌는 사실은 fine-tuning이 아니라 RAG로 처리한다.
 
 ### 13. Observable and reversible rollout
 
-Graph runtime은 feature flag 뒤에서 시작한다.
+AI manager path는 feature flag 뒤에서 시작한다.
 
-- `AIDOO_AI_RUNTIME_GRAPH_ENABLED=false`가 기본값이다.
+- `AIDOO_AI_MANAGER_ENABLED=false`가 기본값이다.
+- `AIDOO_AI_MANAGER_TRACE_SENSITIVE_DATA=false`, `AIDOO_AI_MANAGER_STORE_RESPONSE=false`, `AIDOO_AI_MANAGER_HOSTED_TOOLS_ENABLED=false`가 MVP 기본값이다.
 - single-loop path는 Phase B 이후에도 eval/perf gate 통과 전까지 canonical fallback으로 유지한다.
 - `AgentRun`, `AgentInvocation`, `AgentTraceEvent`는 read-only inspection endpoint를 제공한다. UI는 후속 UI 단계에서 붙이더라도 운영/검증은 SQL 없이 가능해야 한다.
 - `AgentTraceEvent` 이름과 payload는 OTel-exportable하게 설계하고, GenAI semantic convention version을 고정한다.
@@ -648,8 +663,10 @@ pending
 
 ### Agent set v1
 
-- `manager.orchestrator`
-  - fast path가 아닌 요청의 decomposition, graph 생성, recovery, 최종 synthesis를 담당한다.
+- `manager.adapter.openai`
+  - OpenAI Agents SDK 기반 manager adapter. 요구 분석, internal agent task 생성, 결과 리뷰, 사용자 질문, 최종 synthesis를 담당한다. 이 adapter는 교체 가능한 외부 manager 구현이며 내부 domain agent의 소유자가 아니다.
+- `tool.run_local_specialist`
+  - external manager adapter가 호출할 수 있는 유일한 internal-data-touching delegate tool. 내부 실행은 provider-independent `domains.ai.internal_agents` dispatcher, local model, local tool gateway가 담당한다.
 - `domain.pms`
   - PMS issue/list/status context, issue summary, issue draft skill.
 - `domain.meeting`
@@ -666,39 +683,26 @@ pending
 - `search.executor`
   - 실제 검색 실행기. 새 RAG 구현이 아니라 기존 `domains/rag/application.py`와 domain tools를 호출하는 thin adapter다.
 - `verifier.grounding`
-  - evidence coverage, unsupported claim, missing requirement, policy risk를 판단한다.
+  - MVP에서는 manager review의 일부로 시작하고, 후속 단계에서 별도 local invocation으로 분리한다.
 - `writer.template`
-  - EvidencePacket과 사용자 정의 템플릿으로 최종 산출물을 작성한다.
+  - MVP에서는 manager final answer 또는 existing artifact parser를 사용하고, 후속 단계에서 EvidencePacket 기반 template writer로 분리한다.
 - `approval.proposal_preview`
   - write/batch 실행 전 사용자 검토용 preview를 만든다. 기존 `approvals.py::ApprovalPreview`와 중복 모델을 만들지 않고 연결한다.
-- `external.planning`
-  - feature flag 뒤에서만 사용하는 optional descriptor다.
-  - sanitized user intent, available agent list, domain metadata를 기반으로 execution graph candidate 또는 report outline을 만든다.
-  - raw internal evidence를 보지 않고, output은 `ExecutionGraph` validator를 반드시 통과한다.
-  - `external.planning`의 output은 final execution graph가 아니라 candidate graph다.
-  - candidate graph는 local `manager.orchestrator` 또는 runtime validator가 workspace scope, agent allowlist, risk floor, egress policy, approval policy를 검증한 뒤에만 실행 가능한 `ExecutionGraph`로 승격된다.
-  - external planning provider는 execution authority를 갖지 않는다.
-- `external.quality_review`
-  - redacted report draft, `ExternalSafeEvidenceSummary`, missing intent summary를 기반으로 품질 검토를 수행한다.
-  - verifier를 대체하지 않으며 내부 ref, raw excerpt, PLM row를 보지 않는다.
-  - external quality review output은 직접 최종 보고서가 되지 않는다.
-  - Runtime은 external quality review의 suggestion만 수용할 수 있으며, 최종 draft는 `writer.template`이 내부 `EvidencePacket`, verifier result, redacted-safe suggestion을 기준으로 다시 생성한다.
-  - external quality review suggestion도 policy, schema validation, leakage check를 통과해야 한다.
 - `external.search`
+  - MVP 이후 단계의 provider adapter다.
   - sanitized query를 기반으로 OpenAI/Claude SDK/API search capability를 호출한다.
   - raw user prompt를 직접 받지 않고, `ExternalSearchResult`로 normalize한 결과만 반환한다.
-  - `external.search`는 manager가 직접 invoke할 수 있는 general-purpose agent가 아니다.
   - `external.search`는 `search.executor` 내부의 provider adapter로만 호출된다.
-  - 모든 external search 호출은 `SearchPlanBuilder`, `ExternalSearchQuerySanitizer`, `ExternalEgressPolicy`를 통과해야 한다.
-  - manager의 `ExecutionGraph`가 `external.search`를 직접 invocation으로 지정하는 것은 `ManagerOutputValidator`가 차단한다.
 
 Domain agent는 새 domain service layer가 아니다. `{prompt fragment, tool allowlist, EvidencePacket shape, skills}`를 가진 runtime descriptor이며, 실제 실행은 기존 application service와 MCP capability를 통과한다.
+
+PMS/Planner/Docs/domain agent는 OpenAI SDK `Agent(...)`, OpenAI handoff, Claude SDK subagent가 아니다. 현재 구현은 `configured local model profile` 기반 내부 agent runtime으로 유지하며, future manager가 Claude Agent SDK, OSS manager model, custom manager로 바뀌어도 `LocalAgentTask -> LocalAgentResult` 계약은 유지한다.
 
 ### Artifact boundary
 
 기존 fast path와 single-loop fallback은 현재 artifact tag flow를 유지한다. 즉 assistant output의 `<artifact type="document|html|code|svg">...</artifact>`는 기존 `ArtifactStreamParser`가 처리한다.
 
-Graph path에서는 `writer.template`이 artifact emission의 소유자다. Domain/verifier/search invocation은 raw artifact tag를 직접 emit하지 않고, EvidencePacket, draft body, template output reference를 반환한다. Graph path에서 artifact가 필요한 경우 `writer.template`이 최종 artifact markup을 생성한다.
+AI manager path에서는 raw artifact tag를 internal agent가 직접 external manager로 전달하지 않는다. Artifact가 필요한 경우 local boundary 안에서 artifact reference를 만들고, manager는 redacted summary와 artifact reference를 기준으로 최종 응답을 작성한다.
 
 `writer.template`은 artifact 전체를 LLM 자유 생성에 맡기지 않는다.
 
@@ -715,26 +719,21 @@ Artifact wrapper, section ordering, citation insertion, required field validatio
 
 ### Execution flow
 
-1. Chat request가 들어오면 `AIDOO_AI_RUNTIME_GRAPH_ENABLED`와 fast path 조건을 먼저 평가한다.
+1. Chat request가 들어오면 `AIDOO_AI_MANAGER_ENABLED`와 fast path 조건을 먼저 평가한다.
 2. Entrypoint가 `interactive_read`, `grounded_report`, `long_doc`, `high_risk_action` 중 runtime profile을 고정한다.
 3. `RequestSensitivityClassifier`가 user request, conversation scope, attached data, requested context, available tool scope를 기준으로 pre-routing `DataSensitivityDecision`을 생성한다.
-4. `ModelRouter`가 runtime profile, `DataSensitivityDecision`, `ExternalEgressPolicy`, provider availability, cost/latency budget을 기준으로 local/external provider eligibility를 결정한다.
+4. `ModelRouter`가 runtime profile, `DataSensitivityDecision`, external manager feature flag, provider availability, cost/latency budget을 기준으로 AI manager eligibility를 결정한다.
 5. Feature flag가 꺼져 있으면 기존 single-loop path로 간다.
 6. Fast path면 해당 domain agent invocation을 바로 생성한다.
-7. Graph path면 manager가 `ExecutionGraph`를 만든다. External planning 후보는 feature flag가 켜진 경우 sanitized intent와 metadata만으로 candidate graph를 생성한다.
-8. External planning output은 final execution graph가 아니며, `ManagerOutputValidator`가 schema, workspace app scope, agent allowlist, risk floor, egress policy, approval policy를 검증한 뒤에만 실행 가능한 `ExecutionGraph`로 승격된다.
-9. 검증 실패 시 local manager path 또는 기존 single-loop path로 fallback한다.
-10. Domain agent는 필요한 경우 `SearchPlan`을 만들거나 `search.planner`를 호출한다.
-11. `search.executor`가 기존 MCP capability/RAG/domain service를 사용해 internal evidence를 수집한다.
-12. 외부 공개 자료가 필요하고 policy가 허용하면 `PayloadSensitivityClassifier`, `ExternalSearchQuerySanitizer`, `ExternalEgressPolicy`를 통과한 뒤 `ExternalSearchProvider`를 호출한다. Manager가 `external.search`를 직접 invocation으로 지정하는 것은 허용하지 않는다.
-13. External search result는 `ExternalSearchResult`로 normalize하고 trust level, `authority_class`, provider, retrieved_at, citation URL을 붙인 뒤 `EvidencePacket`에 merge한다.
-14. Domain agent는 inline skill로 extract/summarize/compare/draft를 수행한다.
-15. 고위험 또는 cross-domain 산출물은 verifier가 `VerifierResult`를 만든다.
-16. Internal/external evidence conflict는 `authority_class`, freshness, trust level, workspace policy, verifier confidence를 기준으로 판단한다.
-17. Verifier fail이면 manager가 recovery policy로 재검색, 추가 domain invocation, 사용자 질문, partial answer 중 하나를 선택한다.
-18. Template 요청이면 `writer.template`이 최종 산출물을 만든다.
-19. External quality review가 활성화된 경우에도 review output은 suggestion으로만 사용하며, 최종 산출물은 `writer.template`이 내부 `EvidencePacket`과 verifier result를 기준으로 다시 생성한다.
-20. Write/external/batch action은 risk-based approval gate 또는 review queue를 통과한다.
+7. Manager path면 선택된 manager adapter를 생성한다. MVP의 첫 adapter는 OpenAI Agents SDK이며 `AiManagerInput`을 전달한다.
+8. Manager는 `run_local_specialist` function tool을 통해 `LocalAgentTask`를 생성한다.
+9. `run_local_specialist`는 provider adapter boundary에서 `domains.ai.internal_agents`로 위임하고, agent id, workspace entitlement, `allowed_app_ids`, tool allowlist, approval policy를 검증한다.
+10. Internal agent는 local model gateway, 기존 MCP capability/RAG/domain service, workspace-scoped tool gateway를 사용해 internal evidence를 수집한다.
+11. Internal agent는 raw internal data가 아니라 `LocalAgentResult`를 반환한다.
+12. Manager는 `LocalAgentResult`를 리뷰하고 final answer, 추가 specialist call, 사용자 질문, partial answer 중 하나를 선택한다.
+13. 추가 specialist call은 `AIDOO_AI_MANAGER_MAX_LOOPS` 안에서만 허용한다. 기본값은 3 review cycle이다.
+14. 외부 공개 자료 검색은 MVP 후속 단계다. 활성화 시에도 external search result는 `ExternalSearchResult`로 normalize한 뒤 `EvidencePacket`에 merge한다.
+15. Write/external/batch action은 risk-based approval gate 또는 review queue를 통과한다. MVP에서는 기존 `AiToolApproval` 흐름을 유지한다.
 
 ### Recovery policy
 
@@ -800,7 +799,7 @@ Doowon Agent Runtime
 
 ### Durable workflow boundary
 
-Interactive agent execution은 v1에서 in-process graph runtime으로 유지한다. Long-running document analysis, batch jobs, ambient workflows, approval wait은 pilot 이후 durable workflow backend로 위임할 수 있게 둔다.
+Interactive agent execution은 MVP에서 API process 안의 OpenAI Agents SDK runner와 기존 stream path로 유지한다. Long-running document analysis, batch jobs, ambient workflows, approval wait은 pilot 이후 durable workflow backend로 위임할 수 있게 둔다.
 
 필요한 handoff 필드는 Phase A/E 상세 구현에서 검토한다.
 
@@ -869,7 +868,7 @@ A2A를 도입하더라도 내부 tool/context/approval contract를 대체하지 
 - malformed tool-call rate by model/provider.
 - structured decoding success rate by invocation/provider/serving stack.
 - OpenAI-compatible response shape diff.
-- Qwen thinking/non-thinking control success rate.
+- Local model thinking/non-thinking control success rate.
 - tool error/retry/duplicate-loop rate.
 - RAG citation coverage, groundedness, ACL-denied hit rate.
 - RAG vector/reranker baseline.
@@ -881,304 +880,101 @@ A2A를 도입하더라도 내부 tool/context/approval contract를 대체하지 
 - single-domain vs cross-domain request split.
 - Korean enterprise eval seed corpus를 먼저 만든다. 최소 범위는 routing, RAG relevance, grounded answer, sanitizer leakage, approval-safe drafting이다.
 - launch SLO를 수치로 고정한다. 최소 항목은 concurrent active users, p95 TTFT, p95 report latency, queue depth, approval wait time이다.
-- Qwen3.6-35B-A3B와 serving stack별 `ExecutionGraph` schema success rate, tool-call stability, malformed output rate를 Phase A 착수 전 hard gate로 측정한다.
-- graph rollout kill criteria에는 concurrency dimension을 포함한다. 예: graph path p95는 baseline x2 이내 조건을 1인 단독뿐 아니라 지정 동시성에서도 만족해야 한다.
+- OpenAI manager adapter structured output, `LocalAgentTask`, `LocalAgentResult`, redaction leakage, internal agent tool-call stability를 Phase A 착수 전 hard gate로 측정한다.
+- AI manager rollout kill criteria에는 concurrency dimension을 포함한다. 예: manager path p95는 baseline x2 이내 조건을 1인 단독뿐 아니라 지정 동시성에서도 만족해야 한다.
 - external provider는 Phase 0에서 운영 호출을 전제하지 않고, sandbox/eval 환경에서 cost, latency, citation quality, redaction leakage baseline만 측정한다.
-- graph rollout kill criteria: graph path p95는 baseline x2 이내, recovery path는 baseline x3 이내를 시작 기준으로 둔다.
+- AI manager rollout kill criteria: manager path p95는 baseline x2 이내, recovery path는 baseline x3 이내를 시작 기준으로 둔다.
 
-### Phase A - Runtime contract foundation
+### Phase A - AI manager MVP foundation
 
-- Phase A 구현 범위는 최소 kernel을 먼저 고정한다. 첫 PR은 `AgentRun`, `AgentInvocation`, `AgentTraceEvent`, minimal `ExecutionGraph`, minimal `EvidencePacket`, eval harness, feature flag skeleton에 집중한다.
-- full hybrid DTO는 정본 contract로 유지하되, `ExternalSafeEvidenceSummary`, `SanitizedExternalSearchQuery`, `ExternalSearchResult`, `ExternalCallProposal`, `ProviderDataPolicy` 같은 external DTO 구현은 실제 external path가 열리는 PR에서 추가한다.
-- `AgentDefinition`, `AgentDefinitionResolver`, `AgentRun`, `AgentInvocation`, `AgentTraceEvent`, `ExecutionGraph`, `EvidencePacket`, `SearchProfile`, `VerifierResult`, `ModelProfile` DTO를 추가한다.
-- runtime profile enum과 token/context/memory budget DTO를 추가한다.
-- `ModelProfile.reasoning_mode_support`와 structured decoding availability matrix를 추가한다.
-- `DataSensitivity`, `RequestSensitivityClassifier`, `PayloadSensitivityClassifier`, `DataSensitivityDecision`, `ExternalEgressPolicy`, `ModelRouter`, `ProviderProfile`, `ExternalSearchDecision`, `ExternalSafeEvidenceSummary`, `SanitizedExternalSearchQuery`, `ExternalSearchResult`, `ExternalCallDecision`, `ExternalCallProposal` contract를 추가한다.
-- `ModelProfile`에 `ProviderDataPolicy`, provider/search capability, retention/data-use constraint, provider-specific reasoning/search control 필드를 추가한다.
-- `SearchProfile`은 retrieval-only로 유지한다. external search eligibility, sanitizer policy, provider preference, external result trust default는 `ExternalSearchDecision`과 `ExternalEgressPolicy`가 소유한다.
-- `EvidencePacket.items[].authority_class`를 추가한다.
-- external search cache 관련 `cache_key`, `cache_hit`, `search_session_id` 필드를 추가한다.
-- `ToolSecurityPolicy`, `WriteProposal`, `ClaimCheck`는 개념 contract로 추가하되 세부 컬럼은 상세 구현에서 확정한다.
-- `AgentRun`, `AgentInvocation`, `Approval` 상태기계와 approval/resume/rehalt 불변식을 문서와 테스트로 고정한다.
-- 한 conversation의 live run, 한 run의 pending approval을 DB partial unique index 또는 동일 효력의 lock으로 보호하고 concurrent test를 추가한다.
-- approval halt 시 resolved tool/agent allowlist와 `allowed_app_ids`를 checkpoint에 저장하고, resume 시 동일성 또는 축소 여부를 검증한다.
-- 기존 `AgentRunSnapshot`과 새 `AgentRun`/`AgentInvocation`의 additive migration shape를 Phase A에서 정의한다. 초기 구현은 shadow-write와 read flag/compat projection으로 cutover risk를 낮춘다.
-- `AgentTraceEvent` ordering과 OTel export naming map을 정의하고 GenAI semantic convention version을 고정한다. ordering은 per-run monotonic sequence를 사용한다.
-- `AIDOO_AI_RUNTIME_GRAPH_ENABLED=false` feature flag를 추가한다.
-- external feature flag는 다음 이름으로 고정한다: `AIDOO_AI_EXTERNAL_LLM_ENABLED=false`, `AIDOO_AI_EXTERNAL_PLANNING_ENABLED=false`, `AIDOO_AI_EXTERNAL_REASONING_ENABLED=false`, `AIDOO_AI_EXTERNAL_QUALITY_REVIEW_ENABLED=false`, `AIDOO_AI_EXTERNAL_SEARCH_ENABLED=false`.
-- provider config는 feature flag와 분리한다. 기본값은 `AIDOO_AI_DEFAULT_EXTERNAL_SEARCH_PROVIDER=openai`, `AIDOO_AI_ALLOWED_EXTERNAL_PROVIDERS=openai,claude`로 둔다. 단일 config를 쓰는 경우 `AIDOO_AI_EXTERNAL_SEARCH_PROVIDER=none|openai|claude`로 두고, `none`은 `AIDOO_AI_EXTERNAL_SEARCH_ENABLED=false`와 동일하게 취급한다.
-- workspace policy storage seed를 추가한다. 최소 후보는 `workspace_egress_policies`, `workspace_external_provider_allowlist`, `workspace_url_allowlist`, `workspace_external_call_limits`이며 Phase 6에서는 read-only seed로 시작할 수 있다.
-- trace event taxonomy에 external routing, egress decision, query sanitization, provider call, external result normalization을 추가한다.
-- read-only inspection endpoint를 추가한다.
-- eval fixture format과 starter dataset을 정의한다. 기본 위치는 `apps/api/tests/fixtures/ai_runtime/`로 두고, Phase A는 seed cases를 고정하며 rollout gate의 목표 케이스 수는 Phase F까지 확장한다.
-- DB migration은 실행 전 상세 플랜에서 확정하되, one live run per conversation, one pending approval per run, retention/scrub 정책, snapshot compatibility/cutover 전략은 Phase A 산출물로 고정한다.
-- raw thinking/reasoning trace는 영구 저장하지 않고, distilled state와 evidence reference만 저장하는 retention rule을 고정한다.
+- `openai-agents` Python dependency를 추가한다.
+- OpenAI Agents SDK를 Phase 6 MVP manager runtime으로 채택한다.
+- Claude Agent SDK는 MCP-heavy spike 후보로만 문서화하고 첫 구현에 포함하지 않는다.
+- PMS/Planner/Docs internal agents는 OpenAI SDK Agent/handoff가 아니라 `domains.ai.internal_agents` 아래 provider-independent local agents로 둔다.
+- `AIDOO_AI_MANAGER_ENABLED=false`, `AIDOO_AI_MANAGER_PROVIDER=openai`, `AIDOO_AI_MANAGER_MODEL`, `AIDOO_AI_MANAGER_MAX_LOOPS=3`, `AIDOO_AI_MANAGER_TRACE_SENSITIVE_DATA=false`, `AIDOO_AI_MANAGER_STORE_RESPONSE=false`, `AIDOO_AI_MANAGER_HOSTED_TOOLS_ENABLED=false` 설정을 추가한다. MVP/dev smoke 권장 manager model은 `gpt-5.4-mini`이며, production에는 silent default를 두지 않는다.
+- `AiManagerInput`, `ManagerPlan`, `LocalAgentTask`, `LocalAgentResult`, `ManagerReview` DTO를 추가한다.
+- `LocalAgentResult`는 raw internal data를 포함할 수 없고, redacted summary, artifact ref, coverage/gap, sensitivity label만 포함한다.
+- OpenAI Agents SDK tracing은 sensitive data capture off 또는 scrubbed mode를 기본으로 둔다.
+- Responses storage는 SDK/API가 지원하는 범위에서 off로 고정하고, MVP manager에는 OpenAI hosted web/file/MCP/code/shell tools를 연결하지 않는다.
+- 기존 `AgentRun`, `AgentInvocation`, `AgentTraceEvent`, inspection endpoint, graph scheduler hardening은 지금 더 확장하지 않고 MVP 관측/호환 레이어로 둔다.
 
-### Phase B - Fast path and manager graph
+### Phase B - Internal agents and delegate tool
 
-- 기존 chat stream 진입점 앞에 fast path router를 추가한다.
-- runtime profile selector를 추가한다. 기본값은 `interactive_read`다.
-- manager graph path는 constrained generation이 가능한 경우 이를 사용해 `ExecutionGraph`를 생성한다.
-- `ManagerOutputValidator`를 구현한다.
-- `ExecutionGraph`의 `intent`, `domains`, `output_kind`, `agent_id`는 registry-validated open string으로 검증한다. closed enum migration이 필요한 설계는 v1 기본값으로 삼지 않는다.
-- malformed manager output, out-of-scope agent, invalid risk 또는 registry value는 기존 single-loop path로 fallback하고 fallback reason taxonomy를 trace에 남긴다.
-- risk floor를 적용한다. write-touching graph는 항상 high risk 이상이다.
-- `ModelProfile`을 `AgentRun` 생성 시 고정한다.
-- graph path 진입 시 transport envelope에 planning 상태 이벤트를 낼 수 있어야 한다. manager output 검증이 끝날 때까지 UI가 무응답처럼 보이지 않게 한다.
-- external planning 후보는 `AIDOO_AI_EXTERNAL_LLM_ENABLED`와 `AIDOO_AI_EXTERNAL_PLANNING_ENABLED` 뒤에서만 실행하고, sanitized intent, available agent list, domain metadata만 입력으로 사용한다.
-- external reasoning escalation은 `AIDOO_AI_EXTERNAL_REASONING_ENABLED` 뒤에서만 실행한다.
-- external planning output은 candidate graph로만 취급한다.
-- candidate graph는 local manager 또는 runtime validator가 검증한 뒤에만 실행 가능한 `ExecutionGraph`로 승격한다.
-- provider data-use policy가 workspace policy와 충돌하면 external planning/reasoning을 차단한다.
-- external planning output도 기존 `ExecutionGraph` schema와 `ManagerOutputValidator`를 반드시 통과한다.
-- external planning 실패 시 local manager path 또는 single-loop fallback으로 전환한다.
-- external provider cost, latency, error, fallback reason을 trace에 남긴다.
-- `ModelRouter`는 workspace/provider budget을 확인한다. daily/monthly bucket과 latency budget을 초과하면 local fallback, approval, 또는 denial로 수렴한다.
-- non-thinking default와 thinking escalation policy를 `ModelProfile`에서 강제한다.
-- OpenAI-compatible transport와 provider behavior contract를 분리한다.
-- SGLang/vLLM manager output success rate를 같은 fixture로 비교한다.
-- cancellation은 LLM stream과 graph node 사이마다 전파한다.
-- 기존 `agent.py` loop는 specialist invocation 내부 실행기 또는 fallback path로 축소한다.
+- OpenAI manager adapter에 `run_local_specialist` function tool을 추가한다.
+- `run_local_specialist`는 내부 데이터에 닿는 유일한 external-manager-visible delegate tool이다.
+- tool input은 `agent_id`, `objective`, `allowed_tool_names`, `context_boundary`, `expected_output`으로 제한한다.
+- tool 실행 전 workspace entitlement, `allowed_app_ids`, specialist allowlist, current registry, approval policy를 검증한다.
+- tool 내부 실행은 `domains.ai.internal_agents`의 provider-independent dispatcher로 위임한다.
+- PMS/Planner/Docs는 OpenAI SDK Agent/handoff가 아니며, 현재는 local model/MLX, 기존 `agent.py` loop, MCP-shaped capability registry, RAG/domain service, workspace ACL을 재사용한다.
+- raw tool result, raw RAG chunk, internal document text는 OpenAI manager로 반환하지 않는다.
+- function-tool input/output guardrail 또는 동등한 local validation이 malformed input, out-of-scope tool, raw-data-bearing output을 차단한다.
+- blocked/failed/approval-required 케이스도 `LocalAgentResult`로 반환해 manager가 사용자 질문, partial answer, final failure 중 하나를 선택하게 한다.
 
-### Phase C - Search and evidence
+### Phase C - OpenAI manager stream path
 
-- `search.planner`와 `search.executor` 경계를 도입한다.
-- `SearchPlanBuilder`는 deterministic-first로 구현하고, LLM query expansion은 optional path로 제한한다.
-- `search.executor`는 기존 `domains/rag/application.py`와 domain tools를 호출하는 thin adapter로 구현한다.
-- `search.executor` sub-path는 `internal.rag.search`, `internal.domain.search`, `external.web.openai`, `external.web.claude`, `external.document.fetch`로 구분한다.
-- `external.search`는 manager direct invocation이 아니라 `search.executor` provider adapter로만 호출한다.
-- `ExternalSearchProvider` boundary와 OpenAI/Claude web search adapter 후보를 추가한다.
-- external search provider 선택은 `AIDOO_AI_EXTERNAL_SEARCH_ENABLED`, `AIDOO_AI_DEFAULT_EXTERNAL_SEARCH_PROVIDER`, `AIDOO_AI_ALLOWED_EXTERNAL_PROVIDERS`로 제어한다.
-- `ExternalSearchQuerySanitizer`는 local/pre-egress로 실행한다.
-- `ExternalSearchQuerySanitizer`를 구현하고, sanitizer 실패 또는 restricted/secret query는 external search를 차단한다.
-- `external.document.fetch`는 URL allowlist/blocklist, SSRF 방어, private network 접근 차단, redirect 제한, file size limit, MIME type allowlist, timeout, safe parser boundary를 통과해야 한다.
-- `external.document.fetch`는 Cookie, Authorization, 내부 `X-*` header를 전달하지 않는다. 기본 허용 header는 `User-Agent`, `Accept` 같은 공개 fetch에 필요한 최소값으로 제한한다.
-- `external.document.fetch` redirect는 hop마다 URL allowlist/blocklist, scheme, DNS/IP classification을 다시 검증한다. HTTP downgrade, private IP/localhost/link-local/metadata endpoint 이동, mixed-script IDN/punycode homograph는 차단한다.
-- DNS rebinding 방지를 위해 resolve, IP classification, connection 대상, `Host` header 처리 순서를 명시하고 테스트한다.
-- external document fetch는 external search와 동일하게 data egress/audit 대상이며, fetched content는 기본 `untrusted` 또는 `mixed` trust level로 시작한다.
-- PDF, HTML, office 문서 등은 parser sandbox 또는 safe extraction boundary를 통과해야 한다.
-- `ExternalSearchResult` normalization을 구현한다.
-- 기존 RAG/domain tool result를 `EvidencePacket`으로 normalize한다.
-- external source kind, trust level, provider, retrieved_at, published_at, citation URL을 `EvidencePacket`에 반영한다.
-- external evidence에 `authority_class`를 부여한다.
-- external search cache key, cache hit, search session id를 trace에 남긴다.
-- 동일 `AgentRun` 안에서는 동일 sanitized query에 대해 동일 cached result를 사용한다.
-- source kind별 cache TTL 정책을 정의한다.
-- internal/external evidence merge policy를 구현한다. 내부 업무 사실, PLM row, 주문서, 고객 조건, 사내 승인 상태는 `internal_system_of_record` evidence를 우선한다. 법규, 표준, 인증, 공개 규제 변경은 `authority_class`, freshness, trust level, workspace policy, verifier confidence를 기준으로 판단한다.
-- external search provider failure는 internal-only answer, partial answer, 사용자 질문 중 하나로 fallback한다.
-- candidate top-k, rerank top-k, final evidence token budget, source kind, rerank, recency, embedding version, top-k policy를 trace에 남긴다.
-- pgvector/Qdrant 또는 기존 store 후보와 reranker 후보를 같은 Korean 업무 eval set으로 비교한다.
-- tool output trust level, malicious retrieved content handling, source provenance를 EvidencePacket normalization에 반영한다.
-- malicious/untrusted retrieved content는 structural separator와 source label로 격리하고, 다음 turn memory에 raw instruction처럼 carryover되지 않도록 한다.
-- EvidencePacket response shaper는 shared helper로 둔다.
-- workspace isolation은 query/tool execution 시점에서 검증한다.
-- trace event는 raw reasoning delta를 저장하지 않고 invocation 종료 시 summary/buffer flush 방식으로 기록한다.
+- 기존 chat stream 진입점 앞에 AI manager eligibility check를 추가한다.
+- feature flag가 꺼져 있거나 provider 설정이 없으면 기존 single-loop path로 간다.
+- manager path는 OpenAI Agents SDK Runner를 사용하고, Responses model path를 기본으로 한다.
+- manager는 request sensitivity classification을 통과한 raw user prompt 또는 redacted prompt, non-sensitive metadata, available agent/tool description, prior redacted summaries를 입력으로 받는다.
+- manager run config는 sensitive trace capture off, response storage off, hosted tools disabled를 강제한다.
+- manager output은 existing `AgentEventEnvelope`로 planning, specialist-running, review, final/gap 상태를 노출한다.
+- manager loop는 `AIDOO_AI_MANAGER_MAX_LOOPS` 안에서만 specialist 재호출을 허용한다.
+- OpenAI API failure, malformed tool args, internal agent failure, loop limit exceeded는 clear failure 또는 partial answer로 종료한다.
+- cancellation은 SDK run과 internal agent boundary 사이에 전파한다.
 
-### Phase D - Verifier and recovery
+### Phase D - Search and evidence
 
-- `verifier.grounding`을 별도 invocation으로 추가한다.
-- `VerifierResult`와 recovery policy table을 구현한다.
-- claim-level `ClaimCheck`는 `grounded_report`, `high_risk_action`, template output에서 먼저 검토한다.
-- verifier false pass/false fail eval을 추가한다.
-- contradicted evidence와 verifier unavailable policy를 명시한다.
-- external-only evidence에는 confidence cap을 적용한다.
-- internal/external evidence conflict는 `authority_class`, freshness, trust level, workspace policy, verifier confidence를 기준으로 판단한다.
-- 법규/표준/인증 관련 source는 `official_regulation` 또는 `standard_body` authority를 고려한다.
-- external search retry는 기본 최대 1회로 제한한다.
-- 재검색/추가 도메인/사용자 질문/partial answer 전환을 traceable하게 만든다.
-- recovery latency gate와 recovery token budget cap을 둔다.
-- verifier unavailable이면 answer를 unverified로 표시하고, 고위험 path에서는 사용자 검토로 보낸다.
+- 기존 RAG/domain tool result를 internal agent boundary 안에서 `EvidencePacket`으로 normalize한다.
+- external manager에는 raw `EvidencePacket`이 아니라 `LocalAgentResult`와 redacted evidence summary만 전달한다.
+- external search는 MVP 후속 단계로 둔다. 활성화 시에도 manager direct search가 아니라 `search.executor` provider adapter를 통과한다.
+- external result는 `ExternalSearchResult`로 normalize한 뒤에만 `EvidencePacket`에 들어간다.
 
-### Phase E - Approval and batch policy
+### Phase E - Post-MVP hardening
 
-- 기존 approval flow를 `AgentRun` checkpoint로 흡수한다.
-- canonical `WriteProposal`과 LLM-assisted `ApprovalPreview`를 분리한다.
-- `ExternalCallProposal`을 approval flow와 review queue에 연결한다.
-- `ExternalCallProposal`은 모든 external call 승인 강제가 아니라 policy decision object로 사용한다.
-- external call decision은 `auto_allowed`, `trace_only`, `approval_required`, `review_queue_required`, `denied` 중 하나다. 다만 Phase 6 v1은 review queue backend가 없으면 `review_queue_required`를 emit하지 않고 `approval_required` 또는 `denied`로 수렴한다.
-- confidential context에서 external call이 필요한 경우 approval을 경유한다. review queue는 Phase 7/admin policy surface 또는 durable workflow가 준비된 뒤 활성화한다.
-- ApprovalPreview는 설명일 뿐 actual execution source가 아님을 명시한다.
-- approval halt/resume은 same `AgentRun`, new `AgentInvocation` 원칙을 따른다.
-- approval resume idempotency와 tool surface widening 방지 test를 추가한다.
-- approval halt에서 저장한 resolved tool/agent allowlist와 resume 요청의 `allowed_app_ids`가 일치하거나 더 좁은지 검증한다.
-- external call approval resume 시 sanitized payload와 policy decision이 변경되지 않았는지 idempotency check를 수행한다.
-- 기존 `AgentRunSnapshot` compatibility/cutover 전략과 idempotent migration script는 Phase A migration shape를 기반으로 상세화한다.
-- partial unique index와 live approval constraint는 concurrent test로 검증한다.
-- batch 자동 승인 정책은 코드 상수가 아니라 DB 정책으로 둔다.
-- 정책 축은 workspace, domain, risk level, max cost, allowed actions, review required 여부를 포함한다.
-- approval wait, batch, review queue는 durable workflow boundary를 유지하되 구체 backend는 확정하지 않는다.
-
-### Phase F - Template writer and eval
-
-- 사용자 정의 템플릿 기반 `writer.template` invocation을 추가한다.
-- Graph path artifact emission은 `writer.template`이 소유한다.
-- deterministic renderer + LLM section filler 방식을 적용한다.
-- artifact wrapper, citation insertion, required section validation은 deterministic 처리한다.
-- template output schema validation과 hallucination eval을 추가한다.
-- external quality review 후보는 `AIDOO_AI_EXTERNAL_LLM_ENABLED`와 `AIDOO_AI_EXTERNAL_QUALITY_REVIEW_ENABLED` 뒤에서만 추가하고 verifier를 대체하지 않는다.
-- writer output을 external provider에 보낼 경우 redacted draft와 `ExternalSafeEvidenceSummary`만 허용한다.
-- external quality review output은 final artifact가 아니라 review suggestion으로만 저장한다.
-- writer.template은 internal `EvidencePacket`과 verifier result를 기준으로 최종 산출물을 다시 생성한다.
-- external quality review suggestion에 민감 정보가 포함되거나 unsupported claim이 포함되면 폐기한다.
-- redacted draft leakage eval과 external search citation quality eval을 추가한다.
-- external provider cost/latency/quality tradeoff를 측정한다.
-- routing, evidence, verifier, recovery, model swap, context addition eval fixture를 만든다.
-- prefix-cache hit rate와 `ModelProfile.prompt_revision` invalidation을 검증한다.
-- interactive/grounded_report/long_doc/high_risk_action profile별 latency, token, verifier pass rate를 비교한다.
-- profile별 SGLang/vLLM serving engine bakeoff 결과를 rollout decision에 반영한다.
+- MVP가 API stream/UI에서 검증된 뒤 external search, dedicated verifier, template writer, review queue, durable workflow, retention/inspection hardening을 재킥오프한다.
+- 이 단계에서도 OpenAI manager에는 raw `EvidencePacket`을 전달하지 않는다.
+- Claude Agent SDK는 internal capability를 MCP server로 안정적으로 노출한 뒤 MCP tool search/permissions spike로 평가한다. Spike 조건은 `setting_sources=[]` 또는 동등 설정, auto memory disabled, explicit MCP server allowlist, no `.claude/` active instruction path다.
+- LangGraph 또는 model-specific agent framework는 OpenAI Agents SDK manager loop가 실제 요구를 충족하지 못하거나 durable workflow/checkpoint/resume 요구가 명확해질 때만 재평가한다.
 
 ## Verification
 
-- Baseline and rollout gates
-  - single-loop baseline latency, malformed tool-call rate, duplicate-loop rate, eval pass rate를 기록한다.
-  - TTFT, TPOT, thinking tokens, cache hit rate, groundedness, citation coverage, loop-abort rate를 기록한다.
-  - routing confusion matrix, fast path false-positive/false-negative rate, cost per successful run을 기록한다.
-  - launch SLO와 concurrency baseline을 기록한다.
-  - Korean enterprise eval seed corpus가 존재하고 routing/RAG/grounding/sanitizer/approval-safe drafting fixture가 실행된다.
-  - Qwen3.6-35B-A3B의 `ExecutionGraph` schema success, tool-call stability, malformed output gate가 Phase A 착수 전에 측정된다.
-  - graph rollout은 feature flag와 perf gate를 통과한 뒤 활성화한다.
-- Structured output
-  - manager/verifier/writer output이 constrained generation으로 schema를 만족한다.
-  - Pydantic validation failure rate가 baseline 대비 감소한다.
-  - malformed JSON/tool-call 발생 시 fallback 또는 retry가 정상 동작한다.
-  - serving stack별 structured output success rate를 비교한다.
-- Fast path
-  - single-domain read 요청이 manager LLM 호출 없이 처리된다.
-  - meeting-scoped conversation이 meeting domain agent로 바로 간다.
-  - ambiguous request는 graph path로 넘어간다.
-- Graph path
-  - ambiguous/cross-domain/report 요청이 `ExecutionGraph`를 만든다.
-  - malformed manager output은 single-loop fallback으로 간다.
-  - out-of-scope agent와 invalid registry value는 validator가 차단한다.
-  - `ExecutionGraph`의 intent/domain/output kind는 registry-validated open string으로 검증된다.
-  - write-touching graph는 high risk로 승격된다.
-- Evidence contract
-  - PMS/Meeting/Docs/Planner/RAG 검색 결과가 동일한 `EvidencePacket` shape로 normalize된다.
-  - verifier와 writer는 domain별 raw result를 직접 보지 않는다.
-  - external result는 `ExternalSearchResult`로 normalize된 뒤에만 `EvidencePacket`에 들어간다.
-  - workspace isolation은 query/tool execution 시점에서 보장된다.
-  - retrieval candidate/rerank/final evidence token budget이 `SearchProfile`과 trace에 남는다.
-  - source provenance, access scope, provider, retrieved/published time, tool output trust level이 evidence normalization에 반영된다.
-- RAG and search
-  - deterministic `SearchPlanBuilder`가 대부분의 single-domain 요청을 LLM 없이 처리한다.
-  - LLM query expansion invocation rate가 trace에 남는다.
-  - vector store와 reranker 후보는 같은 Korean 업무 eval set으로 비교한다.
-  - malicious retrieved content가 writer/verifier를 오염시키지 않는지 테스트한다.
-  - external search provider 장애 시 internal-only answer, partial answer, 사용자 질문 fallback이 동작한다.
-- Verifier and recovery
-  - unsupported claim이 fail 처리된다.
-  - contradicted evidence가 감지된다.
-  - partial support claim은 caveat로 낮춰진다.
-  - verifier false pass와 false fail을 별도 측정한다.
-  - 재검색 max count 이후 사용자 질문 또는 review queue로 전환된다.
-  - recovery latency budget과 token budget cap을 지킨다.
-  - recovery iteration은 distinct `AgentInvocation`으로 저장된다.
-- Tool and approval security
-  - specialist allowlist 밖 tool call은 실행 전 차단된다.
-  - hidden workspace app tool은 manager/specialist 모두 접근할 수 없다.
-  - token passthrough 제한, SSRF/private network 접근 방지, secret redaction 정책을 검증한다.
-  - tool output은 trust level에 따라 처리된다.
-  - external write action은 approval gate를 우회할 수 없다.
-  - cross-workspace evidence leakage test를 통과한다.
-  - 사용자가 승인하는 canonical 대상은 `WriteProposal`이다.
-  - LLM `ApprovalPreview`는 execution source가 아니다.
-  - approval resume 시 tool surface가 넓어지지 않는다.
-  - approval halt에 저장된 resolved tool/agent allowlist와 resume 요청 scope가 일치하거나 더 좁은지 검증한다.
-  - 같은 approval을 재개해도 idempotency가 깨지지 않는다.
-  - one live `AgentRun` per conversation과 one pending approval per run 불변식을 검증한다.
-  - live run과 pending approval partial unique index 또는 동등한 lock이 concurrent test로 검증된다.
-  - 기존 `AgentRunSnapshot`과 새 `AgentRun` shadow-write/compat projection parity를 검증한다.
-- Model swap
-  - Qwen local profile과 OpenAI-compatible external profile에서 같은 agent contract가 유지된다.
-  - tool parser, finish reason, prompt override 차이를 `ModelProfile`로 흡수한다.
-  - `ModelProfile`은 run 시작 시 lock된다.
-  - non-thinking default와 thinking escalation policy가 provider별로 같은 runtime contract를 유지한다.
-  - OpenAI-compatible response shape 차이를 기록한다.
-  - Qwen reasoning/non-thinking control이 `ModelProfile.reasoning_mode_support`대로 동작한다.
-- External LLM routing
-  - `RequestSensitivityClassifier`가 pre-routing 단계에서 실행된다.
-  - `PayloadSensitivityClassifier`가 external provider 호출 직전에 항상 실행된다.
-  - sensitivity classification을 위해 raw prompt, raw evidence, raw tool result가 external provider로 전달되지 않는다.
-  - classifier가 confidence 부족, unknown sensitive entity, unsupported attachment type, policy mismatch를 감지하면 sensitivity를 낮추지 않고 conservative escalation을 적용한다.
-  - classification 실패 또는 ambiguity가 있으면 external provider 호출을 차단하거나 approval path로 전환한다. review queue는 backend가 있을 때만 허용한다.
-  - raw internal document, raw evidence, PLM row, order content가 external LLM으로 전달되지 않는다.
-  - confidential input은 approval/review policy를 통과한 redacted summary로만 external provider에 전달된다.
-  - restricted/secret input은 external provider 호출이 차단된다.
-  - external planning output은 candidate graph이며, validator를 통과하기 전에는 실행되지 않는다.
-  - external planning output은 `ExecutionGraph` schema와 runtime validator를 통과해야 한다.
-  - external planning 실패 시 local manager path 또는 single-loop fallback이 작동한다.
-  - provider data retention, training/data-use, region, logging policy가 workspace policy와 충돌하면 external provider 호출이 차단된다.
-  - provider policy 검증 결과가 `ModelRouteDecision`과 trace에 남는다.
-  - external provider invocation rate, cost, latency, error가 trace에 남는다.
-  - workspace/provider daily/monthly cost budget과 rate limit을 초과하면 external provider 호출이 차단되거나 fallback된다.
-- External search
-  - manager output에 `agent_id=external.search`가 포함되면 validator가 차단한다.
-  - `ExternalSearchQuerySanitizer`는 deterministic rule, local NER, local model, workspace metadata dictionary 기반으로 실행된다.
-  - sanitization/redaction을 수행하기 위해 raw prompt, raw evidence, raw tool result가 external provider로 전달되지 않는다.
-  - external search query에서 고객명, 제품코드, 주문번호, 도면번호, 내부 URL, 가격, 원가, BOM, 계약 조건이 제거된다.
-  - sanitizer가 customer, product code, order id, drawing id, price, cost, BOM, contract term, internal URL을 제거하지 못하면 external call이 차단된다.
-  - sanitizer 실패 또는 policy deny 시 external search가 차단된다.
-  - external web result는 기본 `untrusted` 또는 `mixed` trust로 들어간다.
-  - external evidence에는 `authority_class`가 부여된다.
-  - 공식 기관/표준기관 allowlist source는 정책에 따라 `trusted`로 승격 가능하다.
-  - 내부 업무 사실은 `internal_system_of_record` evidence가 우선한다.
-  - 법규/표준/인증 관련 conflict는 `official_regulation` 또는 `standard_body` authority가 우선될 수 있다.
-  - verifier는 conflict 판단 시 `authority_class`, freshness, trust level, workspace policy를 함께 고려한다.
-  - 외부 evidence만으로 high-risk action이 실행되지 않는다.
-  - 동일 `AgentRun` 안에서 동일 sanitized query는 동일 cached result를 사용한다.
-  - external search query와 provider response metadata가 trace에 남는다.
-  - `external.document.fetch`는 private IP, localhost, internal domain, metadata endpoint에 접근할 수 없다.
-  - redirect를 통해 private network로 이동하는 URL은 차단된다.
-  - HTTP downgrade, mixed-script IDN/punycode homograph, DNS rebinding, Cookie/Authorization/internal header passthrough가 차단된다.
-  - file size limit, MIME type allowlist, timeout이 적용된다.
-  - fetched external document는 기본 `untrusted` 또는 `mixed`로 `EvidencePacket`에 들어간다.
-- Data egress
-  - external LLM/search 호출 전 `ExternalEgressPolicy`가 항상 평가된다.
-  - external call은 `auto_allowed`, `trace_only`, `approval_required`, `review_queue_required`, `denied` 중 하나로 분류된다.
-  - Phase 6 v1에서 review queue backend가 없으면 `review_queue_required`는 emit되지 않는다.
-  - approval이 필요한 external call은 approval gate로 전환되고, review queue는 backend가 존재할 때만 사용된다.
-  - raw `EvidencePacket`은 external provider에 전달되지 않는다.
-  - `ExternalSafeEvidenceSummary`에 raw excerpt, internal ref, customer/product identifiers가 포함되지 않는다.
-  - 외부 전송 payload는 audit 가능한 deterministic DTO로 보존된다.
-  - raw provider reasoning trace는 저장하지 않는다.
-- Runtime profile and memory
-  - single-domain read 요청은 `interactive_read`에서 manager 없이 실행된다.
-  - 장문 요청은 `long_doc` profile로 분리되고 interactive queue를 막지 않는다.
-  - short-term memory는 최근 대화와 현재 evidence/tool result로 제한된다.
-  - long-term memory에는 typed/audited state만 저장되고 raw thinking은 저장되지 않는다.
-- Artifact and template
-  - fast path는 기존 artifact parser behavior를 유지한다.
-  - graph path는 `writer.template`만 artifact markup을 emit한다.
-  - artifact wrapper와 citation insertion은 deterministic renderer가 만든다.
-  - template required section 누락이 validation에서 감지된다.
-  - hallucinated section 또는 unsupported claim이 verifier에서 차단된다.
-  - external quality review output은 final artifact로 직접 사용되지 않는다.
-  - external quality review suggestion에 민감 정보 또는 unsupported claim이 포함되면 폐기된다.
-- Observability
-  - 모든 `AgentInvocation`은 OTel-exportable trace를 남긴다.
-  - internal trace table과 OTel span/event가 대응된다.
-  - GenAI semantic convention version이 명시된다.
-  - raw reasoning delta가 저장되지 않는다.
-  - trace로 routing, search, evidence, verifier, approval, recovery를 재현할 수 있다.
-- Future extension boundaries
-  - approval wait 중 process restart가 발생해도 durable workflow boundary로 resume 가능하도록 handoff 필드를 설계한다.
-  - batch retry 시 duplicate write를 막을 idempotency key 경계를 둔다.
-  - LLM gateway 후보를 붙여도 `ModelProfile`과 runtime policy contract가 바뀌지 않는다.
-  - A2A를 붙여도 내부 tool/context/approval contract를 대체하지 않는다.
-- Context addition
-  - 새 context provider가 provider + search profile + agent definition + eval fixture 추가만으로 연결된다.
+- AI manager adapter
+  - OpenAI manager adapter가 structured plan을 만들고 `run_local_specialist` delegate tool을 호출한다.
+  - manager는 sensitivity classification을 통과한 raw user prompt 또는 redacted prompt와 non-sensitive metadata만 받을 수 있다.
+  - manager loop는 `AIDOO_AI_MANAGER_MAX_LOOPS`를 넘지 않는다.
+  - OpenAI API failure, malformed tool args, internal agent failure, loop limit exceeded가 clear failure 또는 partial answer로 끝난다.
+- Internal agent boundary
+  - PMS/Planner/Docs internal agents는 OpenAI SDK Agent/handoff가 아니다.
+  - `domains.ai.internal_agents`는 local model gateway와 existing domain/RAG tools만 사용하며 provider SDK를 import하지 않는다.
+  - raw internal document, raw RAG chunk, raw tool result, PLM row, order/contract data가 OpenAI manager로 반환되지 않는다.
+  - invalid agent id, out-of-scope tool, hidden workspace app, ACL denied, approval-required cases가 blocked `LocalAgentResult`로 표현된다.
+  - `LocalAgentResult`는 redacted summary, artifact refs, coverage/gap, sensitivity labels만 포함한다.
+- Streaming and UI
+  - SSE는 planning, specialist-running, review, final/gap 상태를 노출한다.
+  - feature flag off 상태에서는 기존 single-loop chat behavior가 변하지 않는다.
+  - UI E2E는 final URL, accessibility snapshot, console, page errors를 기록한다.
+- Data boundary and observability
+  - OpenAI Agents SDK tracing은 sensitive data capture off 또는 scrubbed mode로 동작한다.
+  - Responses storage는 disabled로 설정되고, MVP manager에 OpenAI hosted tools가 등록되지 않는다.
+  - internal trace/audit remains source of truth.
+  - raw `EvidencePacket`은 external manager에 전달되지 않는다.
+  - 외부 전송 payload는 DTO 단위로 테스트 가능하다.
+- Post-MVP gates
+  - external search, dedicated verifier, template writer, durable workflow, review queue는 MVP E2E가 통과한 뒤 별도 gate로 시작한다.
 
 ## Alternatives Considered
 
 | 대안 | 결론 | 이유 |
 |---|---|---|
+| OpenAI Agents SDK | 채택 | manager loop, function tools, streaming, result/state, approvals, tracing을 제공해 custom orchestration 구현보다 MVP 구조를 줄인다. |
+| Claude Agent SDK | 보류 | 파일/명령/MCP-heavy agent에는 강하지만, 현재 업무 데이터 MVP에서는 내부 data boundary를 위해 동일한 internal agent delegate tool이 여전히 필요하다. 안정적 MCP server와 filesystem/memory/tool allowlist 제약을 갖춘 뒤 spike한다. |
+| LangGraph/model-specific agent framework 직접 의존 | 보류 | OpenAI Agents SDK로 MVP loop를 먼저 검증하고, durable workflow/checkpoint/resume 요구가 명확해질 때 재평가한다. |
 | Fast path only | 기각, 단 Phase B의 일부로 채택 | latency 개선에는 좋지만 grounding, verifier, template writer, context package 확장성을 해결하지 못한다. |
 | Verifier only | 기각, Phase D로 흡수 | 환각 억제에는 유용하지만 큰 tool catalog와 manager/specialist 경계 문제를 해결하지 못한다. |
 | 기존 `AgentRunSnapshot` 확장 | 차후 migration 상세에서 재검토 | additive migration은 안전하지만 approval 전용 모델에 runtime 전체 의미를 얹으면 장기적으로 상태 의미가 흐려진다. Phase A에서 shadow-write/compat projection과 cutover shape를 먼저 정하고, Phase E에서 상세 이관과 제거 시점을 결정한다. |
-| Qwen model bakeoff | 기각 | v1 기본 모델은 `Qwen/Qwen3.6-35B-A3B`로 고정한다. 다른 모델 비교는 현재 실행 계획 범위가 아니다. |
+| Local model bakeoff | 보류 | v1 MVP는 설정된 `ModelProfile` 하나로 vertical slice를 검증한다. Qwen/Gemma/DeepSeek 등 모델 비교는 서비스명 변경 없이 후속 eval gate에서 수행한다. |
 | 외부 A2A 또는 managed-agent runtime 우선 도입 | v1 제외 | 내부 제품 runtime의 tool/context/approval 계약을 먼저 안정화해야 한다. 외부 agent interoperability는 장기 후보로 둔다. |
 | 모든 task agent를 별도 invocation으로 분리 | 기각 | 로컬 LLM 비용과 latency가 커진다. 일반 task는 domain skill로 inline 처리하고 verifier/write/template만 분리한다. |
-| LangGraph/Qwen-Agent 직접 의존 | 보류 | 상태 그래프와 Qwen worker 개념은 참고하되, v1 runtime contract를 특정 framework에 묶지 않는다. |
 | 긴 context/thinking 기본값 | 기각 | 로컬 LLM에서는 latency와 동시성이 무너질 수 있다. runtime profile과 escalation policy로 제한한다. |
 | Pydantic validation only | 기각 | 사후 검증만으로 malformed output을 줄이기 어렵다. 가능한 경우 constrained generation을 먼저 적용한다. |
 | SGLang only | 보류 | PoC default 후보로는 가능하지만 vLLM과 runtime profile별 bakeoff가 필요하다. |
@@ -1190,21 +986,21 @@ A2A를 도입하더라도 내부 tool/context/approval contract를 대체하지 
 | Custom DB state machine만으로 batch/approval wait 처리 | 보류 | interactive는 가능하지만 long-running/batch/approval wait은 durable workflow boundary가 필요하다. |
 | DGX Spark를 high-concurrency production 기준으로 가정 | 기각 | PoC, pilot, batch/offline worker 기준으로 평가한다. |
 | 외부 LLM 완전 배제 | 기각 | 보안상 단순하지만 planning, report outline, quality review, 최신 공개 정보 검색에서 로컬 모델 한계가 커진다. |
-| 외부 LLM을 manager 기본값으로 사용 | 기각 | 비용, provider 장애, 데이터 반출 리스크가 커진다. local-first와 policy-controlled escalation이 더 안전하다. |
-| 외부 LLM에 `EvidencePacket` 직접 전달 | 기각 | raw excerpt, internal ref, 민감 정보 노출 가능성이 있다. `ExternalSafeEvidenceSummary`를 사용해야 한다. |
+| 외부 LLM을 내부 데이터 processor로 사용 | 기각 | 내부 문서 원문과 raw tool result가 provider로 나갈 위험이 커진다. external LLM은 manager/reviewer로 제한하고 실제 데이터 처리는 local model internal agent가 맡는다. |
+| 외부 LLM에 `EvidencePacket` 직접 전달 | 기각 | raw excerpt, internal ref, 민감 정보 노출 가능성이 있다. external manager에는 `LocalAgentResult`와 redacted summary만 전달한다. |
 | 자체 웹 검색 인프라 우선 구축 | 보류 | crawler, ranking, parsing, cache, freshness 판단 운영 부담이 크다. v1에서는 SDK/API search capability가 현실적이다. |
 | SDK 검색 결과를 그대로 최종 답변에 사용 | 기각 | provider ranking/citation을 그대로 신뢰하면 감사, 재현성, 신뢰도 문제가 생긴다. `ExternalSearchResult`와 `EvidencePacket`으로 normalize해야 한다. |
 | external search query sanitizer 생략 | 기각 | query 자체가 데이터 반출이다. 고객명, 제품코드, 주문번호 등이 query에 포함될 수 있다. |
-| Claude Code SDK를 운영 runtime search provider로 직접 사용 | 보류 | Claude Code SDK는 개발 자동화와 coding agent에 더 적합하다. 운영 external search는 Claude API/Web Search 또는 OpenAI Responses Web Search provider adapter로 둔다. |
+| Claude Agent SDK를 MVP manager runtime으로 사용 | 보류 | MCP tool search/permissions spike 후보로 남기되, 첫 구현 provider는 OpenAI Agents SDK로 고정한다. |
 | `external.search`를 일반 agent로 노출 | 기각 | manager가 sanitizer/egress policy를 우회해 외부 검색을 직접 호출할 위험이 있다. external search는 `search.executor` provider adapter로만 실행한다. |
-| external planning output을 그대로 실행 | 기각 | 외부 provider가 execution authority를 갖게 된다. candidate graph만 생성하고 runtime validator가 검증해야 한다. |
+| external planning output을 그대로 실행 | 기각 | 외부 provider가 execution authority를 갖게 된다. manager는 `LocalAgentTask` 후보만 만들고 local boundary가 entitlement, tool allowlist, data policy를 다시 검증해야 한다. |
 | sanitizer를 external LLM으로 수행 | 기각 | sanitization 자체가 data egress가 된다. sanitizer는 local/pre-egress로 수행해야 한다. |
 | 내부 evidence 항상 우선 | 부분 수정 | 내부 업무 사실에는 맞지만 법규/표준/인증은 official external authority가 더 우선될 수 있다. `authority_class` 기반 conflict rule을 사용한다. |
 | external search result cache 생략 | 기각 | 외부 검색 결과는 비결정적이다. 감사와 재현성을 위해 normalized result와 query hash를 저장해야 한다. |
 | external quality review output 직접 사용 | 기각 | 외부 output이 verifier/writer를 우회할 수 있다. suggestion으로만 사용하고 `writer.template`이 최종 산출물을 다시 생성한다. |
-| Phase A에서 full hybrid contract 전체 구현 | 부분 수정 | 정본 contract는 유지하되 첫 구현은 minimal kernel, state/migration invariant, eval harness를 먼저 둔다. External DTO와 provider adapter는 실제 external path가 열리는 PR에서 구현한다. |
+| Phase A에서 full hybrid contract 전체 구현 | 부분 수정 | 정본 contract는 유지하되 첫 구현은 OpenAI manager adapter, internal agent delegate tool, DTO/redaction boundary, eval harness로 제한한다. Persistence/inspection hardening은 후속 단계로 미룬다. |
 | `review_queue_required`를 Phase 6 v1에서 즉시 emit | 보류 | review queue backend/admin policy surface가 없으면 실행 의미가 없다. Phase 6 v1은 approval 또는 denied로 수렴하고, review queue는 Phase 7 이후 활성화한다. |
-| `ExecutionGraph` domain/intent/output을 closed enum으로 고정 | 기각 | 새 domain 추가 때 DB enum migration과 prompt/cache churn이 커진다. registry-validated open string으로 검증한다. |
+| `ManagerPlan`/`LocalAgentTask` domain/intent/output을 closed enum으로 고정 | 기각 | 새 domain 추가 때 DB enum migration과 prompt/cache churn이 커진다. registry-validated open string으로 검증한다. |
 
 ## Decision Log
 
@@ -1213,27 +1009,33 @@ A2A를 도입하더라도 내부 tool/context/approval contract를 대체하지 
 | 항목 | 결정 |
 |---|---|
 | 외부 A2A | v1 범위에서 제외 |
-| v1 실행 모델 | in-process graph orchestrator |
-| 기본 canonical 모델 | `Qwen/Qwen3.6-35B-A3B` |
-| 로컬 MLX 기본 checkpoint | `mlx-community/Qwen3.6-35B-A3B-4bit` |
-| 기본 제어 방식 | free handoff가 아니라 manager-controlled graph |
+| MVP manager runtime | OpenAI Agents SDK |
+| External manager API | Direct OpenAI, Responses model path through Agents SDK |
+| Claude Agent SDK | Deferred MCP-heavy spike. 조건: stable MCP servers, explicit server allowlist, filesystem settings disabled, auto memory disabled |
+| LangGraph/model-specific agent framework | MVP 제외. durable workflow/checkpoint/resume 요구가 생기면 후속 재평가 |
+| 기본 internal agent 모델 | 설정된 `ModelProfile` |
+| 로컬 MLX 기본 checkpoint | 환경 설정으로 주입 |
+| 기본 제어 방식 | AI manager adapter가 최종 답변을 소유하고 provider-independent internal agent runtime을 `run_local_specialist` delegate tool로 호출 |
 | 단순 요청 처리 | deterministic fast path 우선 |
-| decomposition | 모든 요청에 수행하지 않고 graph path에서 manager routing과 결합 |
-| structured output | constrained generation + Pydantic validation + runtime business validator |
-| manager output | `ExecutionGraph` schema + validator 필수 |
-| ExecutionGraph value type | `agent_id`, `intent`, `domains`, `output_kind`는 registry-validated open string으로 두고 closed enum migration을 피한다 |
-| graph rollout | `AIDOO_AI_RUNTIME_GRAPH_ENABLED=false` 기본값 |
-| 외부 LLM 사용 | v1에서 완전 배제하지 않고 feature flag 뒤 policy-controlled capability로 도입 |
-| 외부 LLM 역할 | 내부 데이터 processor가 아니라 planning, reasoning, quality review provider |
-| 외부 원문 전송 | 내부 문서 원문, PLM row, 주문서 전문, 고객명, 제품코드, BOM, 원가, 가격, 계약 조건은 전송 금지 |
-| 외부 전달 DTO | raw `EvidencePacket`이 아니라 `ExternalSafeEvidenceSummary` 사용 |
+| decomposition | 모든 요청에 수행하지 않고 manager-eligible path에서만 manager가 수행 |
+| structured output | OpenAI function tool schema/structured output + Pydantic validation + runtime business validator |
+| manager output | `ManagerPlan`, `LocalAgentTask`, `ManagerReview` contract |
+| internal agent output | `LocalAgentResult` contract |
+| rollout flag | `AIDOO_AI_MANAGER_ENABLED=false` 기본값 |
+| 외부 LLM 사용 | MVP의 OpenAI AI manager adapter는 planning, internal agent 지시, review, clarification, final synthesis에 사용 |
+| 외부 LLM 역할 | 내부 데이터 processor가 아니라 manager/reviewer |
+| 외부 원문 전송 | 사용자 raw prompt는 request sensitivity classification 통과 시에만 허용. 민감 엔티티가 있으면 redacted prompt 또는 차단. 내부 문서 원문/PLM/order/raw tool result/식별자/가격/계약/secret은 금지 |
+| 외부 전달 DTO | raw `EvidencePacket`이 아니라 `LocalAgentResult`와 redacted summary 사용 |
+| OpenAI response storage | MVP manager path는 provider-side response storage disabled 기본 |
+| OpenAI hosted tools | MVP manager에는 hosted web/file/MCP/code/shell tools 등록 금지 |
+| OpenAI trace sensitive data | sensitive data capture disabled 또는 scrubbed mode 기본 |
 | 외부 검색 | 별도 검색 인프라 우선 구축 대신 OpenAI/Claude SDK/API search capability를 `ExternalSearchProvider`로 활용 가능 |
 | 외부 검색 query | 데이터 반출로 취급하며 sanitization mandatory |
 | external search result | `ExternalSearchResult`로 normalize 후 `EvidencePacket`에 편입 |
 | external source trust | 기본 `untrusted` 또는 `mixed` |
 | sensitivity classification | pre-routing `RequestSensitivityClassifier`와 pre-egress `PayloadSensitivityClassifier`로 나눠 수행 |
 | external.search 호출 경계 | manager direct invocation 금지, `search.executor` provider adapter로만 호출 |
-| external planning 권한 | final execution graph가 아니라 candidate graph 생성만 허용 |
+| internal agent boundary | PMS/Planner/Docs는 OpenAI SDK Agent/handoff가 아니라 독립 local agents. External manager가 호출하는 유일한 internal-data-touching delegate tool은 `run_local_specialist` |
 | sanitizer 실행 위치 | external provider 호출 전 local/deterministic sanitizer 수행 |
 | evidence conflict 판단 | source 위치가 아니라 `authority_class`, freshness, trust level, workspace policy, verifier confidence 기준 |
 | external search cache | 동일 `AgentRun`/report generation 안에서 동일 sanitized query는 동일 cached result 사용 |
@@ -1242,17 +1044,17 @@ A2A를 도입하더라도 내부 tool/context/approval contract를 대체하지 
 | external.document.fetch | SSRF/private network/file/MIME/safe parser boundary 필수 |
 | external call approval | 모든 external call 승인 강제가 아니라 policy decision에 따라 auto/trace/approval/review/deny로 분류 |
 | review queue decision | Phase 6 v1에서 review queue backend가 없으면 `review_queue_required`를 emit하지 않고 approval/deny로 수렴 |
-| Phase A 구현 범위 | full hybrid DTO freeze가 아니라 minimal kernel, state/migration invariant, eval harness를 먼저 구현 |
-| AgentRunSnapshot cutover | Phase A에서 shadow-write/compat projection shape를 정의하고 Phase E에서 상세 이관한다 |
+| Phase A 구현 범위 | OpenAI Agents SDK dependency/settings, manager DTO, redaction boundary |
+| AgentRunSnapshot cutover | MVP 이후 필요할 때 상세 이관한다. 현재는 기존 path를 유지한다 |
 | resume scope | approval halt 시 resolved tool/agent allowlist를 저장하고 resume 시 scope widening을 차단한다 |
 | trace ordering | `AgentTraceEvent` ordering은 UUID가 아니라 per-run monotonic sequence를 사용한다 |
 | task agent | extract/summarize/compare/draft는 domain agent 내부 skill |
-| 별도 invocation | verifier, write_proposal, approval.proposal_preview, writer.template |
+| 별도 invocation | MVP 이후 verifier, write_proposal, approval.proposal_preview, writer.template 분리 |
 | evidence | `EvidencePacket`을 verifier/writer/search/domain 공통 contract로 사용 |
-| recovery | verifier가 아니라 manager policy가 결정 |
+| recovery | OpenAI manager review loop가 결정하되 기본 최대 3 cycle |
 | search executor | 기존 `domains/rag/application.py`와 domain tools의 thin adapter |
 | search planner | deterministic-first, LLM query expansion은 optional |
-| artifact ownership | graph path artifact는 `writer.template`이 소유, fast path는 기존 parser 유지 |
+| artifact ownership | MVP는 기존 parser와 artifact ref를 유지, template writer는 후속 분리 |
 | template writer | deterministic renderer + evidence-bound LLM section filler |
 | approval preview | canonical `WriteProposal`과 LLM explanation 분리 |
 | 모델 교체성 | adapter + `ModelProfile` + per-model prompt override |
@@ -1261,8 +1063,8 @@ A2A를 도입하더라도 내부 tool/context/approval contract를 대체하지 
 | context 기본값 | interactive는 32K 시작, 64K 이상은 benchmark gate 후 확장 |
 | retrieval budget | 후보 20~40개, rerank 4~8개, 일반 final evidence 2K~4K token 시작점 |
 | memory | short-term은 8~16턴과 현재 evidence/tool result, long-term은 typed/audited state만 저장 |
-| serving v1 | `Qwen/Qwen3.6-35B-A3B` local OpenAI-compatible endpoint 기준 |
-| Serving engine 평가 | Qwen3.6-35B-A3B 고정 후 SGLang/vLLM runtime profile별 bakeoff |
+| serving v1 | 설정된 local OpenAI-compatible endpoint 기준 |
+| Serving engine 평가 | 설정된 model profile 기준으로 SGLang/vLLM runtime profile별 bakeoff |
 | Internal tools | typed service + tool gateway 유지 |
 | MCP | 외부 capability boundary 중심 |
 | Observability | internal trace source of truth + OTel export |
@@ -1273,7 +1075,7 @@ A2A를 도입하더라도 내부 tool/context/approval contract를 대체하지 
 
 | 항목 | 검증 방식 |
 |---|---|
-| Graph path가 로컬 LLM에서도 비용 대비 가치가 있다 | Phase 0 baseline과 Phase B/F perf gate |
+| AI manager path가 비용 대비 충분한 결과 품질 개선을 만든다 | Phase 0 baseline과 Phase C/E perf-quality gate |
 | `EvidencePacket` query_plan 필드가 verifier/eval에 충분히 유용하다 | Phase C/D eval fixture |
 | `writer.template`를 별도 invocation으로 두는 가치가 있다 | Phase F template output eval |
 | new AgentRun tables가 Snapshot 확장보다 낫다 | Phase A/E migration 상세 플랜 |
@@ -1284,7 +1086,7 @@ A2A를 도입하더라도 내부 tool/context/approval contract를 대체하지 
 | Qdrant가 hybrid retrieval 품질을 개선한다 | dense+sparse retrieval eval |
 | local reranker가 한국어 업무 데이터에 충분하다 | Korean 업무 eval set |
 | deterministic search planner가 대부분 요청을 처리한다 | LLM query expansion invocation rate |
-| external planning이 local manager보다 복잡한 요청에서 더 좋은 graph를 만든다 | routing / graph success eval |
+| OpenAI manager가 local-only single loop보다 복잡한 요청에서 더 좋은 task plan과 gap review를 만든다 | routing / manager plan success eval |
 | external quality review가 template output의 누락 항목을 줄인다 | report quality eval |
 | SDK/API search가 자체 infra 없이도 v1 외부 검색 요구를 충족한다 | external search relevance / citation eval |
 | query sanitizer가 업무 식별자 제거에 충분하다 | leakage eval |
@@ -1313,8 +1115,8 @@ A2A를 도입하더라도 내부 tool/context/approval contract를 대체하지 
 | LoRA/PEFT domain adaptation 도입 | eval dataset과 운영 로그 큐레이션 체계 확정 후 |
 | K8s/Ray/Spark 운영 스택 | single-node PoC와 pilot benchmark 이후 |
 | LLM Gateway를 내부 구현할지 LiteLLM 등으로 갈지 | pilot benchmark 이후 |
-| 기본 external LLM provider | Phase B/C provider bakeoff 이후 |
-| 기본 external search provider | Phase C external search eval 이후 |
+| 기본 general chat external provider | Phase 6 manager MVP 이후 필요 시 |
+| 기본 external search provider | MVP 이후 external search gate 착수 시 |
 | external search cache 정책 | Phase C 이후 |
 | provider별 data retention 설정 | security review 이후 |
 | confidential external call approval 기본값 | workspace admin policy 설계 시 |
@@ -1326,20 +1128,20 @@ A2A를 도입하더라도 내부 tool/context/approval contract를 대체하지 
 | Langfuse/Phoenix/MLflow UI | OTel export와 내부 trace 안정화 후 |
 | NVIDIA Dynamo 도입 여부 | multi-node/high-concurrency 요구 발생 후 |
 | remote MCP production 범위 | external integration security review 후 |
-| A2A protocol 도입 여부 | internal runtime contract 안정화 후 |
+| A2A protocol 도입 여부 | MVP flow와 data boundary 검증 후 |
 
 ## Rollback Plan
 
 이 문서는 설계 계획이므로 코드 rollback은 없다. 이후 구현 단계에서 문제가 생기면 다음 순서로 되돌린다.
 
-1. `AIDOO_AI_RUNTIME_GRAPH_ENABLED=false`로 graph runtime 진입을 중단한다.
-2. `AIDOO_AI_EXTERNAL_LLM_ENABLED=false`로 모든 external LLM 호출을 중단한다.
+1. `AIDOO_AI_MANAGER_ENABLED=false`로 AI manager 진입을 중단한다.
+2. OpenAI provider key 또는 manager provider 설정을 비활성화해 모든 external manager 호출을 중단한다.
 3. `AIDOO_AI_EXTERNAL_SEARCH_ENABLED=false`로 모든 external search 호출을 중단한다.
-4. external planning path를 local manager path로 되돌린다.
+4. AI manager path를 기존 single-loop/local path로 되돌린다.
 5. external quality review를 비활성화하고 local verifier만 사용한다.
 6. ExternalSearchProvider 장애 시 internal-only search로 fallback한다.
 7. chat entrypoint를 기존 single-loop agent path로 전환한다.
-8. 새 runtime trace table과 external call trace는 read-only로 보존하고 신규 write만 중단한다.
+8. 새 manager trace와 external call trace는 read-only로 보존하고 신규 write만 중단한다.
 9. approval flow는 기존 approval endpoint 계약을 유지한 채 compatibility shim 또는 old snapshot path로 되돌린다.
 10. egress policy 위반이 발견되면 provider key를 revoke하고 affected `AgentRun`을 audit 대상으로 표시한다.
 11. 실패 원인을 eval fixture와 trace event로 정리한 뒤 단계별 재도입한다.

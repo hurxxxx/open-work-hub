@@ -43,9 +43,9 @@ NN-<kebab-slug>.md
 
 | 파일 | 유형 | 상태 |
 |---|---|---|
-| [`00-ai-platform-roadmap.md`](./00-ai-platform-roadmap.md) | 로드맵 | Phase 6 Evidence-First Hybrid Agent Runtime 반영 |
-| [`02-evidence-first-agent-runtime.md`](./02-evidence-first-agent-runtime.md) | 실행 설계 | Phase 6 정본 설계, 구현 플랜 작성 대상 |
-| [`03-phase6-evidence-runtime-implementation.md`](./03-phase6-evidence-runtime-implementation.md) | 실행 계획 | Phase 0-A minimal runtime kernel 구현 계획 |
+| [`00-ai-platform-roadmap.md`](./00-ai-platform-roadmap.md) | 로드맵 | Phase 6 OpenAI manager adapter + 독립 local model internal agent MVP 반영 |
+| [`02-evidence-first-agent-runtime.md`](./02-evidence-first-agent-runtime.md) | 실행 설계 | 교체 가능한 AI manager adapter와 provider-independent internal agent runtime 정본 설계 |
+| [`03-phase6-evidence-runtime-implementation.md`](./03-phase6-evidence-runtime-implementation.md) | 실행 계획 | AI manager MVP vertical slice와 OpenAI SDK adapter boundary 구현, real-key smoke 대기 |
 | [`04-whiteboard-app-implementation.md`](./04-whiteboard-app-implementation.md) | 실행 계획 | Excalidraw 기반 Whiteboard 앱 (Docs 동등 first-class entity) 구현 계획 |
 
 완료된 플랜은 [`docs/planning-log.md`](../docs/planning-log.md)에서 확인.

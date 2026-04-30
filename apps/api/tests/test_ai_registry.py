@@ -47,7 +47,7 @@ def test_openai_tool_specs_export_registered_read_tools() -> None:
 
     specs = registry.openai_tool_specs()
 
-    assert len(specs) == 15
+    assert len(specs) == 17
     assert [spec["function"]["name"] for spec in specs] == sorted(registry.tools.keys())
     for spec in specs:
         function = spec["function"]
@@ -104,9 +104,11 @@ def test_pms_write_anchors_are_hidden_when_write_tools_disabled() -> None:
     assert registry.resolve_preview_builder("pms.issue_create_preview") is not None
     assert registry.resolve_preview_builder("pms.issue_update_preview") is not None
     assert registry.resolve_preview_builder("pms.issue_comment_preview") is not None
+    assert registry.resolve_preview_builder("pms.issue_delete_preview") is not None
     assert "pms.create_issue" not in registry.tools
     assert "pms.update_issue" not in registry.tools
     assert "pms.add_comment" not in registry.tools
+    assert "pms.delete_issue" not in registry.tools
 
 
 def test_pms_write_tools_register_when_enabled(monkeypatch) -> None:
@@ -120,10 +122,13 @@ def test_pms_write_tools_register_when_enabled(monkeypatch) -> None:
             "pms.create_issue",
             "pms.update_issue",
             "pms.add_comment",
+            "pms.delete_issue",
             "meeting.create_meeting",
             "planner.create_event",
-            "docs.create_page",
+            "planner.update_event",
+            "planner.delete_event",
         } <= set(registry.tools)
+        assert "docs.create_page" not in registry.tools
 
         default_specs = {spec["function"]["name"] for spec in registry.openai_tool_specs()}
         full_specs = {
@@ -135,10 +140,13 @@ def test_pms_write_tools_register_when_enabled(monkeypatch) -> None:
             "pms.create_issue",
             "pms.update_issue",
             "pms.add_comment",
+            "pms.delete_issue",
             "meeting.create_meeting",
             "planner.create_event",
-            "docs.create_page",
+            "planner.update_event",
+            "planner.delete_event",
         } <= full_specs
+        assert "docs.create_page" not in full_specs
     finally:
         monkeypatch.delenv("AIDOO_AI_WRITE_TOOLS_ENABLED", raising=False)
         _reset_settings_and_registry()

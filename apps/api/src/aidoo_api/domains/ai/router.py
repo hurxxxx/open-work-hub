@@ -42,6 +42,17 @@ from aidoo_api.domains.ai.events import (
     make_envelope,
     serialize_sse,
 )
+from aidoo_api.domains.ai.manager_runtime import (
+    AiManagerConfig,
+    AiManagerStreamContext,
+    build_ai_manager_config,
+    build_ai_manager_input,
+    run_openai_ai_manager_stream,
+)
+from aidoo_api.domains.ai.internal_agents import (
+    ToolGatewayLocalAgentRunner,
+    build_local_agent_runtime_context,
+)
 from aidoo_api.domains.ai.mcp import AiMcpClient
 from aidoo_api.domains.ai.registry import get_ai_capability_registry
 from aidoo_api.domains.ai.runtime.metrics import (
@@ -1567,6 +1578,7 @@ async def _chat_stream_publisher(
     reasoning_gate = payload.stream_reasoning and payload.reasoning_effort != "none"
     messages_dict = [message.model_dump() for message in payload.messages]
     settings = get_settings()
+    ai_manager_config = build_ai_manager_config(settings)
     runtime_routing = select_runtime_profile(
         messages=messages_dict,
         allowed_app_ids=payload.allowed_app_ids,
@@ -1681,6 +1693,72 @@ async def _chat_stream_publisher(
             ):
                 buffer.observe(event)
                 yield event
+            return
+
+        if _should_use_ai_manager(payload, config=ai_manager_config):
+            chosen_model = ai_manager_config.model
+            enabled_app_ids = resolve_workspace_enabled_app_ids(db, workspace.id)
+            filtered_tool_specs, _has_approval_required_tools = _resolve_agent_tool_specs(
+                db,
+                workspace=workspace,
+                principal=principal,
+                messages=messages_dict,
+                allowed_app_ids=payload.allowed_app_ids,
+            )
+            del _has_approval_required_tools
+            available_tool_names = _tool_names_from_openai_specs(filtered_tool_specs)
+            resolved_agents = resolve_agent_definitions(
+                enabled_app_ids=enabled_app_ids,
+                allowed_app_ids=payload.allowed_app_ids,
+            )
+            manager_input = build_ai_manager_input(
+                raw_prompt=_latest_message_text(messages_dict),
+                available_agent_ids=sorted(resolved_agents.agent_ids),
+                available_tool_names=available_tool_names,
+                workspace_metadata={"scope": "workspace_current"},
+            )
+            local_context = build_local_agent_runtime_context(
+                enabled_app_ids=enabled_app_ids,
+                allowed_app_ids=payload.allowed_app_ids,
+                available_tool_names=available_tool_names,
+                approval_required_tool_names=(
+                    _approval_required_tool_names_from_specs(filtered_tool_specs)
+                ),
+            )
+            manager_stream = run_openai_ai_manager_stream(
+                context=AiManagerStreamContext(
+                    config=ai_manager_config,
+                    manager_input=manager_input,
+                    local_context=local_context,
+                    local_runner=ToolGatewayLocalAgentRunner(
+                        db=db,
+                        workspace=workspace,
+                        principal=principal,
+                        user=current_user,
+                        llm_context=context,
+                        available_tool_names=frozenset(available_tool_names),
+                        temperature=0.1,
+                        max_tokens=_ai_manager_internal_agent_max_tokens(
+                            payload.max_tokens
+                        ),
+                        conversation_id=conversation.id
+                        if conversation is not None
+                        else payload.conversation_id,
+                    ),
+                    encoder=encoder,
+                    stream_reasoning=payload.stream_reasoning,
+                    temperature=payload.temperature,
+                    max_tokens=payload.max_tokens,
+                )
+            )
+            async for event in manager_stream:
+                for serialized in _serialize_agent_event_through_artifacts(
+                    event=event,
+                    artifact_parser=artifact_parser,
+                    buffer=buffer,
+                    encoder=encoder,
+                ):
+                    yield serialized
             return
 
         scope_system_prompt = _conversation_scope_system_prompt(
@@ -2194,6 +2272,48 @@ def _stream_tool_calling_enabled(settings: Any, pool: str) -> bool:
     ):
         return False
     return supports_tool_calling(pool)
+
+
+def _should_use_ai_manager(
+    payload: "ChatStreamRequest",
+    *,
+    config: AiManagerConfig,
+) -> bool:
+    if not config.ready:
+        return False
+    return payload.backend_mode == "auto"
+
+
+def _ai_manager_internal_agent_max_tokens(requested_max_tokens: int | None) -> int:
+    if requested_max_tokens is None:
+        return 2048
+    return min(max(requested_max_tokens, 256), 4096)
+
+
+def _tool_names_from_openai_specs(tool_specs: list[dict[str, Any]]) -> list[str]:
+    names: list[str] = []
+    for spec in tool_specs:
+        function = spec.get("function")
+        if not isinstance(function, dict):
+            continue
+        name = function.get("name")
+        if isinstance(name, str) and name.strip():
+            names.append(name.strip())
+    return sorted(set(names))
+
+
+def _approval_required_tool_names_from_specs(tool_specs: list[dict[str, Any]]) -> list[str]:
+    registry = get_ai_capability_registry()
+    approval_required: list[str] = []
+    for name in _tool_names_from_openai_specs(tool_specs):
+        definition = registry.tools.get(name)
+        descriptor = registry.descriptors.get(name)
+        if definition is not None and definition.approval_required:
+            approval_required.append(name)
+            continue
+        if descriptor is not None and descriptor.approval_policy == "required":
+            approval_required.append(name)
+    return approval_required
 
 
 def _latest_message_text(messages: list[dict[str, Any]]) -> str:

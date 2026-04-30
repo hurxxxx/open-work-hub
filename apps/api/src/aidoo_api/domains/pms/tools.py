@@ -78,6 +78,10 @@ class PmsAddCommentAiInput(_ToolArgsModel):
     body: str = Field(..., min_length=1)
 
 
+class PmsDeleteIssueAiInput(_ToolArgsModel):
+    issue_id: str = Field(..., min_length=1)
+
+
 def _pms_service():
     from aidoo_api.domains.pms import service as pms_service
 
@@ -240,6 +244,25 @@ def _add_comment(
     )
 
 
+def _delete_issue(
+    db: Session,
+    workspace: Workspace,
+    principal: CallerPrincipal,
+    user: User,
+    arguments: Mapping[str, Any],
+    *,
+    approved_call_id: str | None = None,
+) -> dict[str, Any]:
+    return _pms_service().delete_issue(
+        db,
+        workspace=workspace,
+        principal=principal,
+        user=user,
+        issue_id=str(arguments["issue_id"]),
+        approved_call_id=approved_call_id,
+    )
+
+
 def _string_list_or_none(value: Any) -> list[str] | None:
     if value is None:
         return None
@@ -334,6 +357,21 @@ def _build_add_comment_preview(
     )
 
 
+def _build_delete_issue_preview(
+    principal: CallerPrincipal,
+    workspace: WorkspaceContext,
+    parsed_args: BaseModel | Mapping[str, Any],
+) -> ApprovalPreview:
+    values = _preview_values(parsed_args)
+    return ApprovalPreview(
+        title=f"[{workspace.display_name}] Delete PMS issue",
+        summary="Delete one PMS issue from AI.",
+        fields=(
+            PreviewField(label="Issue", value=str(values.get("issue_id", "-"))),
+        ),
+    )
+
+
 def register_ai_capabilities(registry: AiCapabilityRegistry) -> None:
     registry.register_preview_builder(
         preview_builder_id="pms.issue_create_preview",
@@ -346,6 +384,10 @@ def register_ai_capabilities(registry: AiCapabilityRegistry) -> None:
     registry.register_preview_builder(
         preview_builder_id="pms.issue_comment_preview",
         builder=_build_add_comment_preview,
+    )
+    registry.register_preview_builder(
+        preview_builder_id="pms.issue_delete_preview",
+        builder=_build_delete_issue_preview,
     )
     registry.register_tool(
         name="pms.search_issues",
@@ -413,5 +455,17 @@ def register_ai_capabilities(registry: AiCapabilityRegistry) -> None:
         approval_required=True,
         discoverability_predicate_id="pms.issue_write",
         preview_builder_id="pms.issue_comment_preview",
+        output_projection="resource_ids",
+    )
+    registry.register_tool(
+        name="pms.delete_issue",
+        description="Delete one PMS issue in the current workspace.",
+        owner_domain="pms",
+        handler=_delete_issue,
+        args_model=PmsDeleteIssueAiInput,
+        mode="write",
+        approval_required=True,
+        discoverability_predicate_id="pms.issue_write",
+        preview_builder_id="pms.issue_delete_preview",
         output_projection="resource_ids",
     )

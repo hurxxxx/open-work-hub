@@ -153,23 +153,38 @@ class Settings(BaseSettings):
     # LLM — Local pool (Apple Silicon mlx-lm by default)
     llm_local_provider: str = Field(
         default="mlx-lm",
-        validation_alias=AliasChoices("DOOWON_LLM_LOCAL_PROVIDER"),
+        validation_alias=AliasChoices(
+            "DOOWON_LLM_LOCAL_PROVIDER",
+            "DOOWON_LLM_PROVIDER",
+        ),
     )
     llm_local_base_url: str = Field(
         default="http://127.0.0.1:8080/v1",
-        validation_alias=AliasChoices("DOOWON_LLM_LOCAL_BASE_URL"),
+        validation_alias=AliasChoices(
+            "DOOWON_LLM_LOCAL_BASE_URL",
+            "DOOWON_LLM_BASE_URL",
+        ),
     )
     llm_local_api_key: str = Field(
         default="mlx",
-        validation_alias=AliasChoices("DOOWON_LLM_LOCAL_API_KEY"),
+        validation_alias=AliasChoices(
+            "DOOWON_LLM_LOCAL_API_KEY",
+            "DOOWON_LLM_API_KEY",
+        ),
     )
     llm_local_default_model: str = Field(
         default="mlx-community/Qwen3.6-35B-A3B-4bit",
-        validation_alias=AliasChoices("DOOWON_LLM_LOCAL_DEFAULT_MODEL"),
+        validation_alias=AliasChoices(
+            "DOOWON_LLM_LOCAL_DEFAULT_MODEL",
+            "DOOWON_LLM_DEFAULT_MODEL",
+        ),
     )
     llm_local_canonical_model: str = Field(
         default="qwen/qwen3.6-35b-a3b",
-        validation_alias=AliasChoices("DOOWON_LLM_LOCAL_CANONICAL_MODEL"),
+        validation_alias=AliasChoices(
+            "DOOWON_LLM_LOCAL_CANONICAL_MODEL",
+            "DOOWON_LLM_CANONICAL_MODEL",
+        ),
     )
     llm_local_long_generation_timeout_seconds: float = Field(
         default=1200.0,
@@ -263,6 +278,64 @@ class Settings(BaseSettings):
             "AIDOO_AI_WRITE_TOOLS_ENABLED",
             "DOOWON_AIDOO_AI_WRITE_TOOLS_ENABLED",
             "DOOWON_API_AIDOO_AI_WRITE_TOOLS_ENABLED",
+        ),
+    )
+    ai_manager_enabled: bool = Field(
+        default=False,
+        validation_alias=AliasChoices(
+            "AIDOO_AI_MANAGER_ENABLED",
+            "DOOWON_AIDOO_AI_MANAGER_ENABLED",
+            "DOOWON_API_AIDOO_AI_MANAGER_ENABLED",
+        ),
+    )
+    ai_manager_provider: str = Field(
+        default="openai",
+        validation_alias=AliasChoices(
+            "AIDOO_AI_MANAGER_PROVIDER",
+            "DOOWON_AIDOO_AI_MANAGER_PROVIDER",
+            "DOOWON_API_AIDOO_AI_MANAGER_PROVIDER",
+        ),
+    )
+    ai_manager_model: str = Field(
+        default="",
+        validation_alias=AliasChoices(
+            "AIDOO_AI_MANAGER_MODEL",
+            "DOOWON_AIDOO_AI_MANAGER_MODEL",
+            "DOOWON_API_AIDOO_AI_MANAGER_MODEL",
+        ),
+    )
+    ai_manager_max_loops: int = Field(
+        default=3,
+        ge=1,
+        le=10,
+        validation_alias=AliasChoices(
+            "AIDOO_AI_MANAGER_MAX_LOOPS",
+            "DOOWON_AIDOO_AI_MANAGER_MAX_LOOPS",
+            "DOOWON_API_AIDOO_AI_MANAGER_MAX_LOOPS",
+        ),
+    )
+    ai_manager_trace_sensitive_data: bool = Field(
+        default=False,
+        validation_alias=AliasChoices(
+            "AIDOO_AI_MANAGER_TRACE_SENSITIVE_DATA",
+            "DOOWON_AIDOO_AI_MANAGER_TRACE_SENSITIVE_DATA",
+            "DOOWON_API_AIDOO_AI_MANAGER_TRACE_SENSITIVE_DATA",
+        ),
+    )
+    ai_manager_store_response: bool = Field(
+        default=False,
+        validation_alias=AliasChoices(
+            "AIDOO_AI_MANAGER_STORE_RESPONSE",
+            "DOOWON_AIDOO_AI_MANAGER_STORE_RESPONSE",
+            "DOOWON_API_AIDOO_AI_MANAGER_STORE_RESPONSE",
+        ),
+    )
+    ai_manager_hosted_tools_enabled: bool = Field(
+        default=False,
+        validation_alias=AliasChoices(
+            "AIDOO_AI_MANAGER_HOSTED_TOOLS_ENABLED",
+            "DOOWON_AIDOO_AI_MANAGER_HOSTED_TOOLS_ENABLED",
+            "DOOWON_API_AIDOO_AI_MANAGER_HOSTED_TOOLS_ENABLED",
         ),
     )
     ai_runtime_graph_enabled: bool = Field(

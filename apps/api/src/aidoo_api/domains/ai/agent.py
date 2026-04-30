@@ -20,6 +20,7 @@ from aidoo_api.core.llm import (
 from aidoo_api.core.principal import CallerPrincipal
 from aidoo_api.domains.ai import approvals as ai_approvals
 from aidoo_api.domains.ai.events import EnvelopeEncoder, make_envelope
+from aidoo_api.domains.ai.registry import get_ai_capability_registry
 from aidoo_api.domains.ai.runtime.contracts import RuntimeProfile
 from aidoo_api.domains.ai.tool_runtime import execute_tool_call, iter_tool_call_events
 from aidoo_api.domains.auth.models import User, Workspace
@@ -32,6 +33,8 @@ AGENT_SYSTEM_PROMPT = (
     "워크스페이스 사실은 추정하지 말고 가능하면 도구를 우선 사용한다. "
     "도구 결과가 있으면 그 범위 안에서만 답하고, 부족하면 부족하다고 말한다. "
     "도구 오류가 나면 조용히 무시하지 말고 필요한 경우 다시 시도하거나 한계를 설명한다.\n\n"
+    "생성, 수정, 삭제, 댓글, 상태 변경 같은 쓰기 요청은 반드시 해당 write tool 결과를 받은 뒤에만 완료 여부를 말한다. "
+    "write tool 결과가 없으면 실제 데이터가 변경됐다고 말하지 않는다.\n\n"
     "긴 산출물은 chat 말풍선에 쏟지 말고 오른쪽 사이드 패널(artifact) 에 렌더한다. "
     "chat 에는 한두 문장 요약만 남기고 실제 내용은 artifact 안에 넣는다. "
     "산출물 성격에 따라 artifact type 을 골라 감싼다:\n\n"
@@ -65,6 +68,18 @@ AGENT_SYSTEM_PROMPT = (
     "문서 본문 안에 짧은 코드 예시가 필요하면 document artifact 안에서 markdown fenced code block 으로 인라인 배치한다."
 )
 
+FORCED_FINAL_ANSWER_PROMPT = (
+    "도구 호출은 여기서 중단한다. 지금까지 받은 tool 결과만 근거로 사용자 요청에 대한 "
+    "최종 답변을 한국어로 작성하라. 근거가 부족한 부분은 부족하다고 명시하고, "
+    "새 도구 호출이나 추가 조회를 시도하지 말라."
+)
+
+WRITE_TOOL_REQUIRED_MESSAGE = (
+    "요청은 생성/수정/삭제 같은 쓰기 작업으로 보이지만 실제 write tool 실행 결과가 없습니다. "
+    "데이터가 변경됐다고 확인할 수 없으므로 완료됐다고 답할 수 없습니다. "
+    "대상과 변경 내용을 확인한 뒤 다시 요청해 주세요."
+)
+
 
 @dataclass
 class _PendingToolCall:
@@ -76,6 +91,7 @@ class _PendingToolCall:
 @dataclass
 class _LoopState:
     total_tool_calls: int = 0
+    observed_write_tool_calls: int = 0
     consecutive_tool_errors: int = 0
     last_tool_signature: str | None = None
     aggregated_usage: dict[str, int] | None = None
@@ -274,6 +290,10 @@ async def _run_agent_loop_stream(
     include_agent_run_id_in_done: bool,
 ) -> AsyncIterator[Any]:
     state = _LoopState()
+    write_tool_names = _write_tool_names_from_specs(tool_specs)
+    write_guard_required = bool(write_tool_names) and _latest_user_message_has_write_intent(
+        conversation
+    )
     replay_tool_executed = False
     try:
         if replay_approval is not None:
@@ -303,6 +323,8 @@ async def _run_agent_loop_stream(
                 approved_call_id=replay_approval.id,
             )
             replay_tool_executed = True
+            if replay_execution.tool_name in write_tool_names:
+                state.observed_write_tool_calls += 1
             for event in iter_tool_call_events(
                 encoder=encoder,
                 execution=replay_execution,
@@ -349,6 +371,10 @@ async def _run_agent_loop_stream(
             pending_calls: dict[str, _PendingToolCall] = {}
             pending_order: list[str] = []
             turn_finish_reason = "stop"
+            buffer_content_for_write_guard = (
+                write_guard_required and state.observed_write_tool_calls == 0
+            )
+            buffered_content_chunks: list[str] = []
 
             async for chunk, _decision, _config in complete_chat_stream(
                 context,
@@ -364,6 +390,9 @@ async def _run_agent_loop_stream(
                 conversation_id=bound_conversation.id if bound_conversation is not None else None,
             ):
                 if chunk.kind == "content" and chunk.text:
+                    if buffer_content_for_write_guard:
+                        buffered_content_chunks.append(chunk.text)
+                        continue
                     yield make_envelope(
                         "content_delta",
                         encoder.next_seq(),
@@ -427,6 +456,39 @@ async def _run_agent_loop_stream(
 
             if turn_finish_reason != "tool_calls":
                 _complete_snapshot_if_needed(db, current_snapshot)
+                if buffer_content_for_write_guard:
+                    yield make_envelope(
+                        "content_delta",
+                        encoder.next_seq(),
+                        {"text": WRITE_TOOL_REQUIRED_MESSAGE},
+                    )
+                    if state.aggregated_usage:
+                        yield make_envelope(
+                            "usage",
+                            encoder.next_seq(),
+                            state.aggregated_usage,
+                        )
+                    yield make_envelope(
+                        "done",
+                        encoder.next_seq(),
+                        {
+                            "finish_reason": "stop",
+                            "audit_id": None,
+                            "meta": _loop_done_meta(
+                                execution,
+                                model_meta=model_meta,
+                                agent_run_id=agent_run_id,
+                                include_agent_run_id=include_agent_run_id_in_done,
+                            ),
+                        },
+                    )
+                    return
+                for text in buffered_content_chunks:
+                    yield make_envelope(
+                        "content_delta",
+                        encoder.next_seq(),
+                        {"text": text},
+                    )
                 if state.aggregated_usage:
                     yield make_envelope(
                         "usage",
@@ -448,6 +510,13 @@ async def _run_agent_loop_stream(
                     },
                 )
                 return
+
+            for text in buffered_content_chunks:
+                yield make_envelope(
+                    "content_delta",
+                    encoder.next_seq(),
+                    {"text": text},
+                )
 
             if not pending_order:
                 _complete_snapshot_if_needed(db, current_snapshot)
@@ -481,6 +550,29 @@ async def _run_agent_loop_stream(
                 state.total_tool_calls += 1
                 if state.total_tool_calls > max_tool_calls:
                     _complete_snapshot_if_needed(db, current_snapshot)
+                    yield _skipped_tool_result(
+                        encoder=encoder,
+                        call_id=pending.call_id,
+                        error="도구 호출 예산을 초과해 추가 호출을 생략했습니다.",
+                    )
+                    if state.total_tool_calls > 1:
+                        async for event in _run_forced_final_answer_stream(
+                            context=context,
+                            execution=execution,
+                            db=db,
+                            conversation=conversation,
+                            temperature=temperature,
+                            stream_reasoning=stream_reasoning,
+                            encoder=encoder,
+                            state=state,
+                            agent_run_id=agent_run_id,
+                            bound_conversation=bound_conversation,
+                            model_meta=model_meta,
+                            include_agent_run_id_in_done=include_agent_run_id_in_done,
+                            recovery_reason="agent_loop_tool_budget",
+                        ):
+                            yield event
+                        return
                     yield make_envelope(
                         "error",
                         encoder.next_seq(),
@@ -510,6 +602,29 @@ async def _run_agent_loop_stream(
                 signature = _tool_signature(pending.name, parsed_arguments)
                 if state.last_tool_signature == signature:
                     _complete_snapshot_if_needed(db, current_snapshot)
+                    yield _skipped_tool_result(
+                        encoder=encoder,
+                        call_id=pending.call_id,
+                        error=f"중복 도구 호출을 생략했습니다: {pending.name}",
+                    )
+                    if state.total_tool_calls > 1:
+                        async for event in _run_forced_final_answer_stream(
+                            context=context,
+                            execution=execution,
+                            db=db,
+                            conversation=conversation,
+                            temperature=temperature,
+                            stream_reasoning=stream_reasoning,
+                            encoder=encoder,
+                            state=state,
+                            agent_run_id=agent_run_id,
+                            bound_conversation=bound_conversation,
+                            model_meta=model_meta,
+                            include_agent_run_id_in_done=include_agent_run_id_in_done,
+                            recovery_reason="agent_loop_duplicate_tool_call",
+                        ):
+                            yield event
+                        return
                     yield make_envelope(
                         "error",
                         encoder.next_seq(),
@@ -621,6 +736,8 @@ async def _run_agent_loop_stream(
                     include_call_frames=False,
                 ):
                     yield event
+                if tool_execution.tool_name in write_tool_names:
+                    state.observed_write_tool_calls += 1
                 _append_tool_exchange(
                     conversation,
                     call_id=pending.call_id,
@@ -661,6 +778,24 @@ async def _run_agent_loop_stream(
                     state.consecutive_tool_errors = 0
 
         _complete_snapshot_if_needed(db, current_snapshot)
+        if state.total_tool_calls > 0:
+            async for event in _run_forced_final_answer_stream(
+                context=context,
+                execution=execution,
+                db=db,
+                conversation=conversation,
+                temperature=temperature,
+                stream_reasoning=stream_reasoning,
+                encoder=encoder,
+                state=state,
+                agent_run_id=agent_run_id,
+                bound_conversation=bound_conversation,
+                model_meta=model_meta,
+                include_agent_run_id_in_done=include_agent_run_id_in_done,
+                recovery_reason="agent_loop_turn_cap",
+            ):
+                yield event
+            return
         yield make_envelope(
             "error",
             encoder.next_seq(),
@@ -717,6 +852,198 @@ def _prepend_agent_system_message(
         {"role": "system", "content": system_prompt},
         *[dict(message) for message in messages],
     ]
+
+
+def _write_tool_names_from_specs(tool_specs: list[dict[str, Any]]) -> frozenset[str]:
+    registry = get_ai_capability_registry()
+    names: set[str] = set()
+    for spec in tool_specs:
+        raw_name = spec.get("function", {}).get("name")
+        if not isinstance(raw_name, str):
+            continue
+        descriptor = registry.get_descriptor(raw_name)
+        if (descriptor is not None and descriptor.mode == "write") or _tool_name_looks_write(
+            raw_name
+        ):
+            names.add(raw_name)
+    return frozenset(names)
+
+
+def _tool_name_looks_write(tool_name: str) -> bool:
+    return any(
+        marker in tool_name
+        for marker in (
+            ".create_",
+            ".update_",
+            ".delete_",
+            ".add_",
+            ".remove_",
+            ".archive_",
+            ".restore_",
+        )
+    )
+
+
+def _latest_user_message_has_write_intent(messages: list[dict[str, Any]]) -> bool:
+    latest_text = ""
+    for message in reversed(messages):
+        if message.get("role") != "user":
+            continue
+        latest_text = _message_content_text(message.get("content"))
+        break
+    if not latest_text:
+        return False
+    normalized = latest_text.lower()
+    if any(
+        marker in normalized
+        for marker in (
+            "방법",
+            "어떻게",
+            "가이드",
+            "절차",
+            "설명해",
+            "알려줘",
+            "can i",
+            "how to",
+            "how do",
+        )
+    ):
+        return False
+    return any(
+        marker in normalized
+        for marker in (
+            "생성",
+            "만들",
+            "추가",
+            "등록",
+            "수정",
+            "변경",
+            "바꿔",
+            "업데이트",
+            "삭제",
+            "지워",
+            "제거",
+            "댓글",
+            "comment",
+            "create",
+            "add ",
+            "update",
+            "change",
+            "delete",
+            "remove",
+        )
+    )
+
+
+def _message_content_text(content: Any) -> str:
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts: list[str] = []
+        for item in content:
+            if isinstance(item, dict):
+                raw_text = item.get("text")
+                if isinstance(raw_text, str):
+                    parts.append(raw_text)
+        return "\n".join(parts)
+    return ""
+
+
+async def _run_forced_final_answer_stream(
+    *,
+    context: LlmTaskContext,
+    execution: ResolvedLlmExecution,
+    db: Session,
+    conversation: list[dict[str, Any]],
+    temperature: float | None,
+    stream_reasoning: bool,
+    encoder: EnvelopeEncoder,
+    state: _LoopState,
+    agent_run_id: str,
+    bound_conversation: Conversation | None,
+    model_meta: dict[str, Any],
+    include_agent_run_id_in_done: bool,
+    recovery_reason: str,
+) -> AsyncIterator[Any]:
+    final_messages = [
+        *conversation,
+        {"role": "user", "content": FORCED_FINAL_ANSWER_PROMPT},
+    ]
+    finish_reason = "stop"
+
+    async for chunk, _decision, _config in complete_chat_stream(
+        context,
+        db,
+        messages=final_messages,
+        temperature=temperature,
+        stream_reasoning=stream_reasoning,
+        tools=None,
+        tool_choice=None,
+        parallel_tool_calls=None,
+        resolved_execution=execution,
+        agent_run_id=agent_run_id,
+        conversation_id=bound_conversation.id if bound_conversation is not None else None,
+    ):
+        if chunk.kind == "content" and chunk.text:
+            yield make_envelope(
+                "content_delta",
+                encoder.next_seq(),
+                {"text": chunk.text},
+            )
+            continue
+        if chunk.kind == "reasoning" and chunk.text and stream_reasoning:
+            yield make_envelope(
+                "reasoning_delta",
+                encoder.next_seq(),
+                {"text": chunk.text},
+            )
+            continue
+        if chunk.kind == "usage" and chunk.usage:
+            state.aggregated_usage = _merge_usage(state.aggregated_usage, chunk.usage)
+            continue
+        if chunk.kind == "done":
+            finish_reason = chunk.finish_reason or "stop"
+            continue
+
+    if state.aggregated_usage:
+        yield make_envelope(
+            "usage",
+            encoder.next_seq(),
+            state.aggregated_usage,
+        )
+    del recovery_reason
+    meta = _loop_done_meta(
+        execution,
+        model_meta=model_meta,
+        agent_run_id=agent_run_id,
+        include_agent_run_id=include_agent_run_id_in_done,
+    )
+    yield make_envelope(
+        "done",
+        encoder.next_seq(),
+        {
+            "finish_reason": finish_reason,
+            "audit_id": None,
+            "meta": meta,
+        },
+    )
+
+
+def _skipped_tool_result(
+    *,
+    encoder: EnvelopeEncoder,
+    call_id: str,
+    error: str,
+) -> Any:
+    return make_envelope(
+        "tool_result",
+        encoder.next_seq(),
+        {
+            "call_id": call_id,
+            "status": "error",
+            "error": error,
+        },
+    )
 
 
 def _assistant_tool_call_message(

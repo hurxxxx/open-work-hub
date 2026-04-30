@@ -300,6 +300,69 @@ def get_event(
     return _serialize_event(event)
 
 
+def update_event_for_ai(
+    db: Session,
+    *,
+    workspace: Workspace,
+    principal: CallerPrincipal,
+    user: User,
+    event_id: str,
+    title: str | None = None,
+    start_at: datetime | None = None,
+    end_at: datetime | None = None,
+    description: str | None = None,
+    visibility: str | None = None,
+    location: str | None = None,
+    approved_call_id: str | None = None,
+) -> dict[str, object]:
+    del approved_call_id
+    _require_user_write_principal(principal)
+    _bind_workspace_context(db, workspace=workspace, principal=principal, user=user)
+    if (start_at is None) != (end_at is None):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Planner event updates must provide both start_at and end_at together.",
+        )
+    payload = PlannerEventUpdateRequest(
+        title=title,
+        description=description,
+        location=location,
+        visibility=visibility,
+        all_day=False if start_at is not None else None,
+        start=_utc_iso(start_at) if start_at is not None else None,
+        end=_utc_iso(end_at) if end_at is not None else None,
+    )
+    result = update_event(
+        db,
+        workspace=workspace,
+        user=user,
+        event_id=event_id,
+        payload=payload,
+    )
+    return result.model_dump(mode="json", by_alias=True)
+
+
+def delete_event_for_ai(
+    db: Session,
+    *,
+    workspace: Workspace,
+    principal: CallerPrincipal,
+    user: User,
+    event_id: str,
+    approved_call_id: str | None = None,
+) -> dict[str, object]:
+    del approved_call_id
+    _require_user_write_principal(principal)
+    _bind_workspace_context(db, workspace=workspace, principal=principal, user=user)
+    delete_event(
+        db,
+        workspace=workspace,
+        user=user,
+        event_id=event_id,
+    )
+    return {"id": event_id, "deleted": True}
+
+
 def list_events(
     db: Session,
     *,

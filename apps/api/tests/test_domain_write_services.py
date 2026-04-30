@@ -14,6 +14,7 @@ from aidoo_api.domains.meeting import service as meeting_service
 from aidoo_api.domains.pms import service as pms_service
 from aidoo_api.domains.pms.models import Issue, IssueActivityLog, IssueComment, Notification
 from aidoo_api.domains.planner import service as planner_service
+from aidoo_api.domains.planner.models import PlannerEvent
 
 
 def _dev_login(client: TestClient, account_key: str) -> dict:
@@ -132,6 +133,59 @@ def test_planner_create_event_for_ai_rejects_team_scope(client: TestClient) -> N
                 scope="team",
                 team_id="team-1",
             )
+
+
+def test_planner_update_and_delete_event_for_ai_mutate_event(client: TestClient) -> None:
+    session = _dev_login(client, "delivery-hub-admin")
+    with get_session_factory()() as db:
+        user = load_user_graph(db, session["user"]["id"])
+        workspace = db.scalar(select(Workspace).where(Workspace.key == "delivery-hub"))
+        assert user is not None
+        assert workspace is not None
+        principal = user_principal(
+            workspace_id=workspace.id,
+            user_id=user.id,
+            source="test.planner.crud_for_ai",
+        )
+
+        created = planner_service.create_event_for_ai(
+            db,
+            workspace=workspace,
+            principal=principal,
+            user=user,
+            title="AI event before update",
+            start_at=planner_service.parse_iso_or_date("2026-05-17T01:00:00+00:00"),
+            end_at=planner_service.parse_iso_or_date("2026-05-17T02:00:00+00:00"),
+            approved_call_id="approval-event-crud-1",
+        )
+        updated = planner_service.update_event_for_ai(
+            db,
+            workspace=workspace,
+            principal=principal,
+            user=user,
+            event_id=created["id"],
+            title="AI event after update",
+            description="updated by AI approval path",
+            visibility="public",
+            approved_call_id="approval-event-crud-update-1",
+        )
+
+        assert updated["title"] == "AI event after update"
+        assert updated["description"] == "updated by AI approval path"
+        assert updated["visibility"] == "public"
+
+        deleted = planner_service.delete_event_for_ai(
+            db,
+            workspace=workspace,
+            principal=principal,
+            user=user,
+            event_id=created["id"],
+            approved_call_id="approval-event-crud-delete-1",
+        )
+        remaining = db.scalar(select(PlannerEvent).where(PlannerEvent.id == created["id"]))
+
+    assert deleted == {"id": "approval-event-crud-1", "deleted": True}
+    assert remaining is None
 
 
 def test_docs_create_page_service_creates_page_and_is_idempotent(client: TestClient) -> None:
@@ -374,3 +428,47 @@ def test_pms_update_issue_service_does_not_duplicate_side_effects_on_replay(
     assert replayed["id"] == updated["id"]
     assert activity_ids_after_second == activity_ids_after_first
     assert notification_ids_after_second == notification_ids_after_first
+
+
+def test_pms_delete_issue_service_deletes_issue(client: TestClient) -> None:
+    session = _dev_login(client, "delivery-hub-admin")
+    token = session["token"]
+
+    task_list_response = client.post(
+        "/api/v1/pms/lists",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"key": "AIWRITEDEL", "name": "AI Write Delete", "description": "write source"},
+    )
+    assert task_list_response.status_code == 201, task_list_response.text
+    task_list = task_list_response.json()
+
+    issue_response = client.post(
+        f"/api/v1/pms/lists/{task_list['id']}/issues",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"title": "AI delete target"},
+    )
+    assert issue_response.status_code == 201, issue_response.text
+    issue = issue_response.json()
+
+    with get_session_factory()() as db:
+        user = load_user_graph(db, session["user"]["id"])
+        workspace = db.scalar(select(Workspace).where(Workspace.key == "delivery-hub"))
+        assert user is not None
+        assert workspace is not None
+
+        deleted = pms_service.delete_issue(
+            db,
+            workspace=workspace,
+            principal=user_principal(
+                workspace_id=workspace.id,
+                user_id=user.id,
+                source="test.pms.delete_issue",
+            ),
+            user=user,
+            issue_id=issue["id"],
+            approved_call_id="approval-pms-delete-1",
+        )
+        remaining = db.scalar(select(Issue).where(Issue.id == issue["id"]))
+
+    assert deleted == {"id": issue["id"], "deleted": True}
+    assert remaining is None
