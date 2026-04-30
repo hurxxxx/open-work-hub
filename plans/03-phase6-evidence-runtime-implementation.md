@@ -307,20 +307,56 @@ The command should return only historical/deferred notes, not active next-step i
 | LangGraph revisit trigger | durable workflow or checkpoint/resume requirement |
 | Existing runtime hardening | stopped/deferred unless needed by MVP |
 
-## 2026-04-30 Local E2E Check
+## 2026-04-30 Local E2E Findings
 
-- Reset the local environment back to the existing Doowon stack: removed accidental `doowon-dev-*` containers/volumes and used `doowon-postgres` / `doowon_ai_portal_dev`.
-- Ran API on `127.0.0.1:8000`, web on `127.0.0.1:4200`, and MLX local model server on `127.0.0.1:8080`.
-- Browser E2E session used `delivery-hub-member@aidoo.local` in `/w/delivery-hub/ai`.
-- Docs read flow passed: the agent called `docs.list_hub`, `docs.get_item`, `docs.list_pages`, and `docs.read_page`, then summarized launch checklist risks without requesting Docs writes.
-- PMS read flow passed: the agent searched delivery-delay issues and summarized status, priority, and assignee.
-- Planner read flow passed: the agent listed onboarding events and summarized date, place, and visibility.
-- PMS write approval flow passed: the agent requested approval for `pms.create_issue`; after approval, issue `DEMO-50` was created and the browser showed the tool card as completed.
-- Planner write approval flow passed for create: the agent requested approval for `planner.create_event`; after approval, event `AI E2E Planner 생성 테스트` was created.
-- Planner update E2E exposed a local-model failure: the model claimed update success without calling `planner.update_event`, and the database remained unchanged. A write-intent guard now blocks that false-success path when no write tool result exists.
-- Fixes made from the E2E findings: the API now forces a no-tools final answer after useful tool results when the local model repeats calls or hits the turn cap; the web stream now closes approval-resume tool cards when the final `tool_result` arrives in a resumed stream.
-- Residual risk: the current local model can still over-call tools or avoid write tools for some update/delete prompts. Duplicate/skipped calls are now closed visibly and false write-success answers are blocked, but prompt/tool-result compaction and better tool-choice discipline remain follow-up work.
-- Browser audit checked final URL, accessibility snapshot, console, and page errors. The console was clean in the final pass; `agent-browser errors` still emitted blank historical entries without message or stack.
+Environment:
+
+- Reset local infra back to the existing Doowon stack and removed accidental `doowon-dev-*` resources.
+- Used `doowon-postgres` / `doowon_ai_portal_dev`, API `127.0.0.1:8000`, web `127.0.0.1:4200`, and MLX local model server `127.0.0.1:8080`.
+- Browser account: `delivery-hub-member@aidoo.local`, workspace route `/w/delivery-hub/ai`.
+- Browser audit checked final URL, accessibility snapshots, console logs, and page errors. Console output was limited to Vite/React DevTools messages; `agent-browser errors` still showed blank historical entries without stack/message.
+
+Test summary:
+
+| Area | Case | Result | Time |
+|---|---|---|---|
+| Docs read | Launch checklist summary | Passed. Used Docs tools and produced the expected summary artifact. | 8s |
+| Docs write denial | Delete launch checklist | Passed. No write tool exposed; write guard blocked completion. DB doc/page counts stayed `36 / 36`. | 6s |
+| PMS read | Delivery-delay issues | Passed, but one response used `DEMO-??`; grounding/formatting needs tightening. | 11s |
+| PMS create | Approval then create | Passed in the first smoke. Tool card closed correctly after approval. | ~9s |
+| PMS create reject | Reject `AI E2E Hard Reject PMS 20260430` | Passed. `pms.create_issue` rejected; DB count `0`. | 4s approval, 9s total |
+| PMS update | `DEMO-50`, search first then update | Passed. `pms.search_issues` resolved the UUID before `pms.update_issue`. | 4s approval, 9s total |
+| PMS comment | Internal UUID | Passed. `pms.add_comment` succeeded and DB confirmed one comment. | 4s approval, 9s total |
+| PMS comment | Human key `DEMO-50` | Failed after approval. Tool received `issue_id="DEMO-50"` and no comment was created. | 4s approval |
+| PMS delete | Asked to skip approval | Approval gate still appeared. After tester approval, `pms.delete_issue` succeeded. | 5s approval, 9s total |
+| Planner read | Onboarding events | Passed. Used `planner.list_events` and RAG fallback. | 7s |
+| Planner create | Without location | Passed. `planner.create_event` succeeded. | 4s approval, 9s total |
+| Planner create reject | Reject `AI E2E Hard Reject Planner 20260430` | Passed. DB count `0`. | 4s approval, 9s total |
+| Planner create | With location | Failed. `planner.create_event` validation rejected unsupported `location`; assistant text was confusing. | 7s |
+| Planner update/delete | Internal UUID | Passed in smoke/stress checks. DB confirmed changes/deletes. | 4-5s approval, 9s total |
+| Planner update/delete | Title reference | Failed. `planner.list_events` ran but the model did not reliably resolve title to event UUID; guard blocked false success. | 8-9s |
+| Multi-app read | Docs + PMS + Planner risk summary | Useful but slow. It unexpectedly called `meeting.list_meetings`, so scope discipline is loose. | 42s |
+| Read-only injection style | “수정하지 말고” prompt | Failed safely but incorrectly. Negated write intent triggered the write guard false positive. | 9s |
+
+Fixes already made from the E2E findings:
+
+- API forces a no-tools final answer after useful tool results when the local model repeats calls or hits the turn cap.
+- Web stream closes approval-resume tool cards when the final `tool_result` arrives in a resumed stream.
+- Write-intent guard blocks false success when a create/update/delete request ends without a write tool result.
+
+Priority follow-ups:
+
+1. Add human-facing reference resolution for AI tools: `DEMO-50`, issue titles, event titles, and similar user-visible handles must resolve to internal UUIDs before write execution.
+2. Make write-intent detection negation-aware so prompts like “수정하지 말고 요약해줘” are treated as read-only.
+3. Align Planner `create_event` schema with user expectations by either supporting `location` at create time or making the model ask for a follow-up update.
+4. Tighten tool scope discipline for multi-app read prompts; avoid opportunistic `meeting.*` calls unless requested or justified.
+5. Improve answer grounding/formatting so partial identifiers like `DEMO-??` are never emitted.
+6. Clean up noisy “응답을 생성하지 못했습니다.” flashes after approval-success flows.
+
+Final cleanup state:
+
+- Test-created hard resources were removed: `AI E2E Hard%` PMS issue count `0`, planner event count `0`.
+- `DEMO-50` was deleted during the approval-gate bypass test after tester approval; it was a test-created issue from the earlier smoke.
 
 ## References
 
