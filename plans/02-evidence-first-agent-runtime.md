@@ -2,7 +2,7 @@
 
 > 문서 성격: Doowon AI runtime 재설계를 위한 실행 설계 문서.  
 > 참고 연구 문서: [`01-agentic-harness-engineering-report.md`](../docs/planning/01-agentic-harness-engineering-report.md)
-> 목표: 교체 가능한 AI manager adapter와 local model profile 기반 독립 internal agent runtime을 결합해, 외부 manager model의 계획/감시 능력과 내부 local model의 데이터 경계를 함께 쓰는 agent 운영 구조를 만든다. 첫 manager adapter만 OpenAI Agents SDK를 사용한다.
+> 목표: local-first 데이터 처리와 policy-controlled external review/search를 결합하는 장기 runtime 원칙을 정의한다. 현재 즉시 실행 정본은 [`05-meeting-work-intelligence.md`](./05-meeting-work-intelligence.md)이며, OpenAI manager adapter 확장은 보류된 spike 기록이다.
 
 ## Context
 
@@ -15,11 +15,11 @@
 - 추후 LLM 모델이나 serving stack이 바뀌어도 agent contract와 tool/context boundary는 유지되어야 한다.
 - 사용자 정의 템플릿, batch 작업, ambient/event-driven 작업까지 확장하려면 실행 trace와 approval policy가 agent 단위로 남아야 한다.
 
-따라서 목표는 "모든 요청을 multi-agent로 비싸게 실행"하는 것이 아니라, **deterministic shortcut + 교체 가능한 AI manager adapter + evidence-first local model internal agent runtime**을 만드는 것이다.
+따라서 장기 목표는 "모든 요청을 multi-agent로 비싸게 실행"하는 것이 아니라, **deterministic shortcut + local-first structured extraction + 필요한 경우에만 교체 가능한 external reviewer/manager**를 사용하는 것이다.
 
-Doowon AI runtime은 local-first 데이터 처리 원칙을 유지하지만, 복잡한 계획/감시/리뷰에는 external manager model을 적극 사용한다. 내부 문서 원문, PLM row, 주문서/문서 전문, 제품 사양 비교, sensitive draft generation은 local model과 workspace-scoped tool gateway 안에서 처리한다.
+Doowon AI runtime은 local-first 데이터 처리 원칙을 유지한다. 내부 문서 원문, 회의록/전사/카카오톡 export, PLM row, 주문서/문서 전문, 제품 사양 비교, sensitive draft generation은 local model과 workspace-scoped tool gateway 안에서 처리한다.
 
-반면 요구 분석, 작업 계획, internal agent 지시, 결과 리뷰, gap 판단, clarification generation은 AI manager adapter path를 우선 사용한다. MVP 첫 adapter는 OpenAI Agents SDK지만, external provider는 내부 데이터 processor가 아니라 교체 가능한 manager runtime이다. Claude Agent SDK는 MCP-heavy 대안 spike 후보로 남기되, Phase 6 MVP 기본 runtime에는 포함하지 않는다.
+반면 외부 모델은 기본 manager가 아니라 명시 허용된 reviewer/writer/search provider로 제한한다. 요구 분석, 작업 계획, 결과 리뷰, gap 판단, clarification generation에 외부 provider를 쓸 수는 있지만, active implementation은 회의록/채팅 원문을 local-first structured extraction으로 업무 항목화하는 `Meeting Work Intelligence` vertical slice다. Claude Agent SDK와 OpenAI Agents SDK manager path는 후속 spike 후보로 남긴다.
 
 `EvidencePacket`은 내부 runtime contract로 유지하며 external manager에 직접 전달하지 않는다. 외부 manager에는 `LocalAgentResult`, redacted evidence summary, coverage/gap summary, artifact reference만 전달한다. 외부 검색이 필요한 경우는 후속 단계에서 `ExternalSearchResult`로 정규화한 뒤 trust level, provenance, provider metadata를 포함해 `EvidencePacket`에 편입한다.
 
@@ -38,25 +38,26 @@ Doowon AI runtime은 local-first 데이터 처리 원칙을 유지하지만, 복
 
 복잡하거나 애매한 요청만 AI manager path로 올린다. 이때도 요구 분석, specialist 선택, success criteria는 한 번의 manager planning step에서 먼저 받는다.
 
-### 2. AI manager adapter, not free handoff
+### 2. Structured local work before external manager
 
-에이전트가 서로 자유롭게 위임하는 구조는 루프, 비용, 디버깅 리스크가 크다. Doowon v1 MVP는 AI manager adapter가 전체 작업의 최종 책임을 가진다.
+에이전트가 서로 자유롭게 위임하는 구조는 루프, 비용, 디버깅 리스크가 크다. Doowon의 단기 실행은 AI manager가 모든 작업을 지휘하는 구조가 아니라, local model이 내부 원문을 structured extraction으로 먼저 처리하고 필요한 경우에만 external reviewer가 결과를 검토하는 구조다.
 
-- Manager는 `run_local_specialist` delegate tool을 호출해 domain/RAG/tool 작업을 지시한다.
+- Meeting Work Intelligence에서는 local worker가 raw 회의록/채팅/전사를 읽고 structured result를 만든다.
+- External reviewer는 명시 허용된 경우에만 structured result, 최소 source quote, gap summary를 검토한다.
 - PMS/Planner/Docs internal agent는 OpenAI SDK Agent/handoff가 아니라 `domains.ai.internal_agents` 아래에서 실행된다.
 - Internal agent는 자기 tool allowlist와 context source 안에서만 실행된다.
 - Internal agent는 raw internal data가 아니라 `LocalAgentResult`를 반환한다.
 - MVP domain action surface는 의도적으로 좁힌다. PMS는 approval-gated issue create/update/comment/delete, Planner는 approval-gated event create/update/delete까지 허용하고, Docs는 AI read-only(`docs.list_hub/get_item/list_pages/read_page`)로 둔다.
-- Manager는 `LocalAgentResult`를 리뷰하고 재작업, 사용자 질문, partial answer, final answer 중 하나를 선택한다.
+- 후속 manager runtime을 재개할 경우 manager는 `LocalAgentResult`를 리뷰하고 재작업, 사용자 질문, partial answer, final answer 중 하나를 선택한다.
 - Recovery는 bounded loop로 제한하며 기본 최대 3 review cycle을 넘지 않는다.
 
-### 3. External manager usage is policy-controlled, not data processing
+### 3. External model usage is opt-in review, not raw data processing
 
-Doowon runtime은 내부 데이터 처리는 local-first로 유지하되, 외부 manager model을 manager로 사용한다. 내부 데이터 원문 접근, PLM row 해석, 주문서/문서 전문 처리, 제품 사양 비교는 local model과 workspace-scoped tool gateway 안에서 수행한다.
+Doowon runtime은 내부 데이터 처리는 local-first로 유지한다. 내부 데이터 원문 접근, 회의록/전사/카카오톡 export 처리, PLM row 해석, 주문서/문서 전문 처리, 제품 사양 비교는 local model과 workspace-scoped tool gateway 안에서 수행한다.
 
-OpenAI Agents SDK manager adapter는 내부 데이터 processor가 아니라 policy-controlled planner/reviewer다. 사용할 수 있는 역할은 요구 분석, 작업 계획, internal agent 호출, 결과 리뷰, gap 판단, clarification question generation, redacted quality review로 제한한다.
+External model은 내부 데이터 processor가 아니라 policy-controlled reviewer/writer/search provider다. 사용할 수 있는 역할은 결과 리뷰, gap 판단, clarification question generation, redacted quality review, 최종 보고서 문장 정리로 제한한다. OpenAI Agents SDK manager adapter는 보류된 spike이며, 재개하더라도 이 data boundary를 따른다.
 
-External manager 사용 여부는 feature flag, runtime policy, workspace setting, data sensitivity, provider availability, cost/latency budget, approval policy가 결정한다. 사용자 prompt도 데이터 반출 대상이므로 `RequestSensitivityClassifier`가 먼저 raw prompt 허용, redacted prompt 필요, external manager 차단 중 하나로 결정한다. `EvidencePacket`은 external manager로 직접 전달하지 않으며, 필요한 경우 `LocalAgentResult`와 redacted summary로 축약, 익명화, 최소화한 뒤 전송한다.
+External model 사용 여부는 사용자 명시 허용, feature flag, runtime policy, workspace setting, data sensitivity, provider availability, cost/latency budget, approval policy가 결정한다. 사용자 prompt도 데이터 반출 대상이므로 `RequestSensitivityClassifier`가 먼저 raw prompt 허용, redacted prompt 필요, external call 차단 중 하나로 결정한다. `EvidencePacket`은 external provider로 직접 전달하지 않으며, 필요한 경우 structured extraction result, `LocalAgentResult`, redacted summary로 축약, 익명화, 최소화한 뒤 전송한다.
 
 External manager에 보낼 수 있는 데이터는 다음이다.
 
@@ -889,6 +890,8 @@ A2A를 도입하더라도 내부 tool/context/approval contract를 대체하지 
 - external provider는 Phase 0에서 운영 호출을 전제하지 않고, sandbox/eval 환경에서 cost, latency, citation quality, redaction leakage baseline만 측정한다.
 - AI manager rollout kill criteria: manager path p95는 baseline x2 이내, recovery path는 baseline x3 이내를 시작 기준으로 둔다.
 
+> 2026-04-30 update: 아래 Phase A~D는 manager/runtime spike 기록으로 유지한다. 현재 active implementation은 [`05-meeting-work-intelligence.md`](./05-meeting-work-intelligence.md)의 local-first structured extraction + optional external review path다.
+
 ### Phase A - AI manager MVP foundation
 
 - `openai-agents` Python dependency를 추가한다.
@@ -1013,8 +1016,11 @@ A2A를 도입하더라도 내부 tool/context/approval contract를 대체하지 
 | 항목 | 결정 |
 |---|---|
 | 외부 A2A | v1 범위에서 제외 |
-| MVP manager runtime | OpenAI Agents SDK |
-| External manager API | Direct OpenAI, Responses model path through Agents SDK |
+| 현재 active implementation | Meeting Work Intelligence MVP (`05-meeting-work-intelligence.md`) |
+| Raw 회의록/채팅 처리 | local-first structured extraction |
+| External model 역할 | 명시 허용된 reviewer/writer/search provider |
+| MVP manager runtime | 보류된 spike: OpenAI Agents SDK |
+| External manager API | 보류된 spike: Direct OpenAI, Responses model path through Agents SDK |
 | Claude Agent SDK | Deferred MCP-heavy spike. 조건: stable MCP servers, explicit server allowlist, filesystem settings disabled, auto memory disabled |
 | LangGraph/model-specific agent framework | MVP 제외. durable workflow/checkpoint/resume 요구가 생기면 후속 재평가 |
 | 기본 internal agent 모델 | 설정된 `ModelProfile` |
@@ -1026,8 +1032,8 @@ A2A를 도입하더라도 내부 tool/context/approval contract를 대체하지 
 | manager output | `ManagerPlan`, `LocalAgentTask`, `ManagerReview` contract |
 | internal agent output | `LocalAgentResult` contract |
 | rollout flag | `AIDOO_AI_MANAGER_ENABLED=false` 기본값 |
-| 외부 LLM 사용 | MVP의 OpenAI AI manager adapter는 planning, internal agent 지시, review, clarification, final synthesis에 사용 |
-| 외부 LLM 역할 | 내부 데이터 processor가 아니라 manager/reviewer |
+| 외부 LLM 사용 | 기본 manager가 아니라 optional external reviewer/writer로 사용 |
+| 외부 LLM 역할 | 내부 데이터 processor가 아니라 reviewer/writer/search provider |
 | 외부 원문 전송 | 사용자 raw prompt는 request sensitivity classification 통과 시에만 허용. 민감 엔티티가 있으면 redacted prompt 또는 차단. 내부 문서 원문/PLM/order/raw tool result/식별자/가격/계약/secret은 금지 |
 | 외부 전달 DTO | raw `EvidencePacket`이 아니라 `LocalAgentResult`와 redacted summary 사용 |
 | OpenAI response storage | MVP manager path는 provider-side response storage disabled 기본 |

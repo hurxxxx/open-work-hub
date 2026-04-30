@@ -1,24 +1,24 @@
-# Phase 6 AI Manager MVP Implementation Plan
+# Phase 6 AI Manager Runtime Spike Record
 
 > 문서 성격: `Evidence-First Hybrid Agent Runtime`의 새 Phase 6 구현 플랜.
 > 기준 문서: [`02-evidence-first-agent-runtime.md`](./02-evidence-first-agent-runtime.md)
-> 범위: 교체 가능한 AI manager adapter와 독립 local model internal agent runtime을 연결하는 최소 vertical slice. 첫 adapter만 OpenAI Agents SDK를 사용한다.
+> 현재 상태: manager/runtime spike 완료 및 보류 기록. 즉시 실행 정본은 [`05-meeting-work-intelligence.md`](./05-meeting-work-intelligence.md)다.
 
 ## Context
 
 Phase 6의 구현 방향을 전환한다. 이전 runtime-kernel 우선 계획은 production foundation을 먼저 단단하게 만드는 방향이었고, 실제 사용자 경험인 "프롬프트 -> 계획 -> 내부 근거 수집 -> 리뷰 -> 최종 응답" 검증보다 runtime persistence, inspection, trace invariant hardening이 앞섰다.
 
-이제 active 목표는 **OpenAI AI manager adapter + local model internal agent MVP**다. 외부 manager model은 계획, 작업 지시, 감시, 리뷰, 사용자 의사결정 요청을 담당한다. PMS/Planner/Docs 같은 내부 agent는 OpenAI SDK Agent/handoff가 아니라 provider-independent internal agent이며, 현재 모델은 `configured local model profile` 또는 로컬 MLX checkpoint다. 내부 문서, RAG, domain service, workspace-scoped tool gateway 접근은 이 internal agent runtime 안에서만 수행한다.
+이 문서의 manager/runtime 구현 계획은 spike로 완료/보류한다. 다음 active 목표는 **Meeting Work Intelligence MVP**다. 회의록/채팅 원문은 local-first structured extraction으로 처리하고, 외부 모델은 사용자가 명시적으로 허용한 경우 reviewer/writer 역할로만 사용한다. PMS/Planner 반영은 기존 approval-gated capability를 사용하며 Docs는 read-only로 유지한다.
 
 기존 runtime table, graph adapter, trace/inspection 코드는 폐기하지 않는다. 단, 지금부터는 더 키우지 않고 MVP 관측/호환 레이어로만 사용한다.
 
 ## Current Execution State
 
-- Current PR/stage: PR1 through PR5 workspace draft implemented as a mockable AI Manager MVP vertical slice, with the first OpenAI Agents SDK adapter boundary and independent internal local-agent runner in place.
+- Current PR/stage: PR1 through PR5 workspace draft implemented as a mockable manager/runtime spike, with the first OpenAI Agents SDK adapter boundary and independent internal local-agent runner in place.
 - Last completed: `openai-agents` dependency, AI manager settings, safe SDK defaults, module boundary, manager DTOs, prompt redaction boundary, `LocalAgentResult` safety validation, `run_local_specialist` adapter boundary, mock manager SSE stream path behind `AIDOO_AI_MANAGER_ENABLED`, bounded manager review loop tests, OpenAI Agents SDK agent/run-config/tool/stream adapter tests, provider-independent `LocalModelAgentRunner` using the existing local pool with `pool_hint="local"`, `ToolGatewayLocalAgentRunner` for read-tool evidence calls plus local model summary, real OpenAI smoke with `gpt-5.4-mini`, MLX local-model smoke for Docs/PMS/Planner read tasks, and approval-gated PMS/Planner CRUD capability expansion.
 - Current domain write policy: PMS supports approval-gated create/update/comment/delete, Planner supports approval-gated create/update/delete, Meeting create remains approval-gated, and Docs is intentionally AI read-only for now. Docs write capability can be reconsidered later but must not be exposed in the MVP capability registry.
 - Stopped/deferred: runtime-kernel expansion, graph persistence invariant hardening, runtime retention scheduler, inspection hardening, durable workflow backend design, high-risk graph support, approval-preview graph execution.
-- Next exact task: Run an API-route smoke with AI manager enabled, local server dependencies available, and a seeded workspace prompt that covers Docs read, PMS read/write proposal, and Planner read/write proposal. Then add approval persistence/resume for manager-driven write execution if the smoke exposes a UX gap.
+- Next exact task: switch active implementation to [`05-meeting-work-intelligence.md`](./05-meeting-work-intelligence.md): local-first meeting/chat structured extraction, golden sample quality gate, wizard UI, and approval-gated PMS/Planner handoff.
 - Non-goal for the next task: LangGraph adoption, Claude Agent SDK adoption, external search, broad DB migration, new admin policy UI, durable long-running workflow, or OpenAI hosted tools.
 
 ## Architecture / Principles
@@ -112,6 +112,8 @@ Claude Agent SDK is deferred. It is a strong candidate for an MCP-heavy spike af
 LangGraph/custom graph runtime is deferred until there is a concrete durable-workflow need: long-running batch, approval-wait resume, retry across process restarts, review queue orchestration, or time-travel/debuggable graph state.
 
 ## Implementation Stages
+
+> 아래 stages는 현재 실행 지시가 아니라 manager/runtime spike 기록이다. 새 작업은 `05-meeting-work-intelligence.md`에서 시작한다.
 
 ### PR 1 — Documented Pivot And Dependency Skeleton
 
@@ -289,7 +291,8 @@ The command should return only historical/deferred notes, not active next-step i
 
 | 항목 | 결정 |
 |---|---|
-| MVP manager runtime | OpenAI Agents SDK |
+| 현재 active implementation | [`05-meeting-work-intelligence.md`](./05-meeting-work-intelligence.md) |
+| MVP manager runtime | 보류된 spike: OpenAI Agents SDK |
 | External manager API | Direct OpenAI, Responses model path through Agents SDK |
 | Claude Agent SDK | Deferred MCP-heavy spike |
 | LangGraph/custom graph runtime | MVP 제외 |
@@ -399,6 +402,7 @@ Conclusion:
 - It is **not** a safe drop-in replacement for the current OpenAI-compatible native tool-calling loop under MLX.
 - Current dev local profile is reverted to `mlx-community/Qwen3.6-35B-A3B-4bit` with explicit `MLX_CHAT_TEMPLATE_ARGS='{"enable_thinking":false}'` for stable content output.
 - This Qwen choice is a profile selection, not a service/runtime name. Code and tests should keep model-neutral naming.
+- This section is a model selection/eval record only; service names and execution plans must stay model-neutral.
 - Model interchangeability requires an explicit capability profile, at minimum:
   - `supports_text_chat`
   - `supports_streaming_content`

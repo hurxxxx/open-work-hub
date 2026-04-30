@@ -326,46 +326,35 @@ Phase 3로 넘어가기 전에 아래 4개 계약을 먼저 고정한다. 목표
 
 ---
 
-### Phase 6 — AI Manager Adapter + Local Model Internal Agent MVP
-**목표**: 기존 single-loop agent의 한계를 **deterministic shortcut + OpenAI Agents SDK AI manager adapter + 독립 local model internal agent runtime** vertical slice로 먼저 검증한다. Local-first 원칙은 유지하되 external manager model은 계획, 내부 agent 지시, 리뷰, 사용자 clarification, 최종 synthesis를 담당하고 내부 raw data 처리는 하지 않는다. PMS/Planner/Docs는 OpenAI SDK Agent/handoff가 아니라 `configured local model profile` 기반 내부 agent다.
+### Phase 6 — Meeting Work Intelligence MVP
+**목표**: 범용 manager runtime 확장보다 먼저 **회의록/채팅 원문 -> 업무 항목화** vertical slice를 제품 경험으로 검증한다. Local-first 원칙을 기본으로 raw 내부 원문은 configured local model profile에서 처리하고, external model은 사용자가 명시적으로 허용한 경우 reviewer/writer 역할로만 사용한다.
 
 **핵심 산출물**:
-1. **SDK manager foundation**
-   - `openai-agents` Python dependency를 추가한다.
-   - Phase 6 manager primary path는 Direct OpenAI + OpenAI Agents SDK + Responses model path로 고정한다.
-   - 기존 OpenRouter-compatible pool은 일반 chat fallback/설정 후보로 남기되, Phase 6 manager runtime의 primary path로 쓰지 않는다.
-   - 기본 설정은 `AIDOO_AI_MANAGER_ENABLED=false`, `AIDOO_AI_MANAGER_PROVIDER=openai`, `AIDOO_AI_MANAGER_MODEL`, `AIDOO_AI_MANAGER_MAX_LOOPS=3`, `AIDOO_AI_MANAGER_TRACE_SENSITIVE_DATA=false`, `AIDOO_AI_MANAGER_STORE_RESPONSE=false`, `AIDOO_AI_MANAGER_HOSTED_TOOLS_ENABLED=false`.
-   - MVP/dev smoke 권장 manager model은 `gpt-5.4-mini`다. Production에는 silent default를 두지 않는다.
-   - 기존 custom runtime, inspection, trace, persistence hardening은 더 키우지 않고 MVP 관측/호환 레이어로 둔다.
-2. **Internal agent runtime and delegate tool**
-   - External manager가 호출할 수 있는 internal-data-touching delegate tool은 `run_local_specialist` 하나로 제한한다.
-   - `run_local_specialist`는 OpenAI SDK에 속한 agent가 아니라 `domains.ai.internal_agents` dispatcher로 들어가는 adapter boundary다.
-   - PMS/Planner/Docs 내부 agent는 `configured local model profile`, local gateway, MCP-shaped capability bridge, domain/RAG application service를 사용한다.
-   - `LocalAgentTask`는 agent id, objective, allowed tools, optional tool arguments, optional approved call id, context boundary, expected output을 담는다.
-   - `LocalAgentResult`는 raw internal data, raw `EvidencePacket`, raw RAG chunk, raw tool result를 포함하지 않고 redacted summary, artifact ref, coverage/gap, sensitivity label만 반환한다.
-   - MVP domain action surface는 PMS approval-gated issue create/update/comment/delete, Planner approval-gated event create/update/delete, Docs read-only로 고정한다.
-3. **Bounded manager loop**
-   - manager flow는 `analyze prompt -> plan local task -> call internal agent -> review result/gap -> final|retry|ask user|partial answer`로 제한한다.
-   - 재작업은 `AIDOO_AI_MANAGER_MAX_LOOPS` 안에서만 허용하며 기본값은 3이다.
-   - OpenAI API failure, tool argument validation failure, internal agent failure, loop limit 초과는 partial answer 또는 clear failure로 종료한다.
-4. **Data boundary and tracing**
-   - External manager 허용 입력: request sensitivity classification을 통과한 raw prompt 또는 redacted prompt, agent/tool metadata, non-sensitive workspace/app metadata, low-sensitivity personal planning data, redacted summary.
-   - External manager 금지 입력: 내부 문서 원문, raw RAG chunk, raw tool result, raw `EvidencePacket`, PLM/order/customer/product/drawing identifiers, BOM, cost, price, contract, internal URL, credential, secret.
-   - OpenAI Agents tracing은 sensitive data capture disabled 또는 scrubbed mode로 동작하고, provider-side response storage는 disabled로 설정한다.
-   - MVP manager에는 OpenAI hosted web/file/MCP/code/shell tools를 등록하지 않는다.
-5. **Stream/UI smoke**
-   - API stream과 UI에서 manager adapter -> internal agent -> manager review -> final/gap이 실제로 보인다.
-   - mock provider 또는 sandbox 설정으로 OpenAI/Anthropic 없이도 flow contract를 검증할 수 있어야 한다.
-6. **Deferred after MVP**
-   - LangGraph/custom graph runtime은 MVP에서 제외하고, durable workflow/checkpoint/resume 요구가 명확할 때만 재평가한다.
-   - Claude Agent SDK는 MCP-heavy 대안 spike로 보류한다. Spike 조건은 stable MCP servers, explicit server allowlist, filesystem settings disabled, auto memory disabled, no `.claude/` active instruction path다.
-   - dedicated verifier, template writer, external search provider, durable workflow, review queue, persistence/inspection hardening은 MVP flow와 data boundary 검증 후 별도 gate로 진행한다.
+1. **Structured extraction contract**
+   - 자유 요약보다 결정사항, 액션아이템, 리스크, 확인 필요, 근거 quote, source speaker/date, confidence, certainty를 우선 산출한다.
+   - `certainty`는 `confirmed`, `planned`, `discussed`, `inferred`, `needs_confirmation`로 제한한다.
+   - 긴 transcript/text는 12,000자 단순 발췌가 아니라 `chunk extract -> merge -> verifier` 흐름으로 처리한다.
+2. **Local-first data boundary**
+   - 회의록, 전사, 카카오톡 export, 내부 문서 원문은 기본적으로 local model만 읽는다.
+   - 외부 리뷰 허용 시에도 기본 payload는 raw 원문이 아니라 structured extraction result와 최소 source quote다.
+   - raw 원문 외부 전송은 사용자가 별도로 허용한 경우에만 후속 옵션으로 제공한다.
+3. **Wizard-first UX**
+   - `/w/:workspace/ai` 첫 화면은 순수 챗봇보다 작업 카드 중심으로 전환한다.
+   - v1 카드: `회의록 업무화`, `액션아이템 만들기`, `결정사항 정리`, `PMS 태스크 초안 생성`.
+   - wizard는 입력 선택, 처리 정책 선택, 분석 실행, 결과 검토, PMS/Planner approval 반영으로 구성한다.
+4. **Approval-gated work handoff**
+   - PMS/Planner 반영은 기존 approval-gated capability를 사용한다.
+   - AI는 write payload 초안만 만들고 실제 생성/수정은 사용자 승인 후 실행한다.
+   - Docs는 v1에서 read-only로 유지한다.
+5. **Deferred runtime expansion**
+   - OpenAI manager adapter, graph runtime 확장, durable workflow, external search provider, review queue는 후속 후보로 낮춘다.
+   - `03-phase6-evidence-runtime-implementation.md`의 manager/runtime 작업은 spike/보류 기록으로 유지하고, 현재 active implementation은 `05-meeting-work-intelligence.md`를 따른다.
 
-**완료 조건**: OpenAI manager adapter가 structured plan을 만들고 `run_local_specialist`를 호출한다. PMS/Planner/Docs internal agents는 local-model internal gateway로 내부 문서와 데이터에 접근하지만 raw internal data를 OpenAI로 반환하지 않는다. Manager는 request sensitivity classification을 통과한 raw prompt 또는 redacted prompt만 받는다. Manager는 result/gap을 보고 최대 3회 안에 재작업, 사용자 질문, final, partial/failure 중 하나로 종료한다. API stream/UI에서 이 흐름이 확인되고 OpenAI tracing은 sensitive data를 캡처하지 않으며 provider-side response storage와 hosted tools는 비활성이다.
+**완료 조건**: 장문 회의록/카카오톡 원문에서 결정사항, 액션아이템, 리스크, 확인 필요를 근거와 확정성 라벨까지 포함해 추출한다. Local-only 모드에서는 external API 호출이 없어야 한다. 사용자는 wizard에서 결과를 검토하고 선택한 항목만 PMS task 또는 Planner event approval preview로 넘길 수 있다. Golden sample `Talk_2026.4.29 17:39-1.txt` 기준 핵심 사업 이벤트를 누락하지 않고 잡담/감사/중복 공유를 주요 업무 항목으로 만들지 않는다.
 
-**전제**: Phase 1~5에서 구축한 LLM context, streaming envelope, MCP bridge, approval flow, RAG orchestration을 재사용한다. 기존 single-loop path는 feature flag rollout 동안 canonical fallback으로 유지한다. Phase 7/8 착수 전제는 runtime foundation 완성이 아니라 MVP flow와 data boundary 검증 완료다.
+**전제**: Phase 1~5에서 구축한 LLM context, streaming envelope, MCP bridge, approval flow, meeting insight, RAG orchestration을 재사용한다. Phase 7/8 착수 전제는 manager runtime 안정화가 아니라 Meeting Work Intelligence의 품질, 보안, approval flow 검증 완료다.
 
-**상세 플랜 파일**: [`02-evidence-first-agent-runtime.md`](./02-evidence-first-agent-runtime.md), [`03-phase6-evidence-runtime-implementation.md`](./03-phase6-evidence-runtime-implementation.md)
+**상세 플랜 파일**: [`05-meeting-work-intelligence.md`](./05-meeting-work-intelligence.md). 장기 hybrid runtime 설계는 [`02-evidence-first-agent-runtime.md`](./02-evidence-first-agent-runtime.md), manager/runtime spike 기록은 [`03-phase6-evidence-runtime-implementation.md`](./03-phase6-evidence-runtime-implementation.md)에 둔다.
 
 ---
 
@@ -483,9 +472,9 @@ Phase별 신규 영역:
 | **Phase 3.5 완료 (2026-04-20)** | MCP-shaped descriptor + InProc bridge를 capability 정본으로 채택. OpenAI function spec / OpenAPI는 파생 산출물로 유지. |
 | **Phase 4 완료 (2026-04-22)** | `MeetingInsight` 별도 테이블, halt당 1 approval, meeting-only `scope_ref`, reload restore(`live_pending_approval`), approval-gated write capability까지 구현/검증 완료. |
 | **Phase 5 완료 (2026-04-23)** | internal `domains/rag/` orchestration, provider/Qdrant adapter, workspace RAG REST/AI surface, `/tool/search`, trace-first observability까지 구현/검증 완료. |
-| **Phase 6 방향** | AI Manager Adapter + Local Model Internal Agent MVP. deterministic shortcut은 유지하고, 복잡한 요청은 첫 OpenAI Agents SDK manager adapter가 provider-independent internal agent dispatcher를 호출하는 vertical slice로 검증. |
-| Phase 6 manager SDK | OpenAI Agents SDK 채택. LangGraph/custom graph runtime은 MVP 제외, Claude Agent SDK는 MCP-heavy spike 후보로 보류. |
-| Phase 6 external provider 원칙 | manager primary path는 Direct OpenAI. external LLM/search는 fallback이 아니라 policy-controlled provider adapter. Raw internal evidence 전송 금지. |
+| **Phase 6 방향** | Meeting Work Intelligence MVP. 회의록/채팅 원문을 local-first structured extraction으로 업무 항목화하고 PMS/Planner approval flow까지 검증. |
+| Phase 6 manager/runtime spike | OpenAI manager adapter와 independent internal agent boundary는 spike 완료/보류 기록으로 유지. 현재 active path는 manager 기본값이 아니라 meeting work intelligence. |
+| Phase 6 external provider 원칙 | external LLM/search는 기본 manager가 아니라 명시 허용된 reviewer/writer 또는 후속 provider adapter. Raw internal evidence 전송 금지. |
 | Phase 6 raw prompt egress | request sensitivity classification 통과 시에만 raw prompt 허용. 민감 엔티티가 있으면 redacted prompt 또는 차단. |
 | Phase 6 OpenAI SDK safety defaults | response storage disabled, sensitive tracing disabled/scrubbed, hosted tools disabled. |
 | Phase 6 RuntimeProfile | workload 성격(`interactive_read`, `grounded_report`, `long_doc`, `high_risk_action`)만 표현. external 여부는 `ModelRouter`/provider decision/feature flag로 분리. |
@@ -493,7 +482,7 @@ Phase별 신규 영역:
 | Phase 6 domain action surface | PMS/Planner만 approval-gated CRUD를 노출한다. Docs는 AI read-only로 유지하고 문서 생성/수정/삭제는 후속 UX/approval proposal 설계 이후 재검토한다. |
 | Phase 6 external search | MVP 이후 단계. 활성화하더라도 manager direct invocation 금지, `search.executor` provider adapter로만 호출. |
 | Phase 6 evidence conflict | 내부 업무 사실은 `internal_system_of_record` 우선, 법규/표준/인증은 `authority_class`와 freshness/trust/workspace policy/verifier confidence 기준. |
-| Phase 6 external quality review | MVP에서는 OpenAI manager review가 `LocalAgentResult`/gap만 판단한다. Dedicated quality review와 `writer.template` 최종 산출물 생성은 MVP 이후. |
+| Phase 6 external quality review | Meeting Work Intelligence에서는 명시 허용된 경우에만 structured extraction result 기반 reviewer/writer로 사용한다. |
 | 전사 프로바이더 | 기존 `core/asr.py` 설정 유지 |
 | 챗 히스토리 | 영구 보존, soft delete |
 
@@ -502,9 +491,9 @@ Phase별 신규 영역:
 |---|---|
 | PII 값 자체 마스킹 | 법무 검토 후 (외부 풀 사용 업무 한정) |
 | 장애 알람 채널 (Slack/이메일/Jira) | 인프라 구축 단계 |
-| Phase 6 `AgentRun` DB schema 세부 컬럼 | MVP flow 이후 persistence hardening 착수 시 |
-| Phase 6 기존 `AgentRunSnapshot` 이관 방식 | MVP flow 이후 persistence hardening 착수 시 |
-| 기본 general chat external provider | Phase 6 manager MVP 이후 필요 시 |
+| Phase 6 `AgentRun` DB schema 세부 컬럼 | manager/runtime 재개 시 |
+| Phase 6 기존 `AgentRunSnapshot` 이관 방식 | manager/runtime 재개 시 |
+| 기본 general chat external provider | Meeting Work Intelligence 품질/보안 검증 이후 필요 시 |
 | 기본 external search provider | MVP 이후 external search gate 착수 시 |
 | provider별 data retention 설정 | security review 이후 |
 | 비용/성능 모니터링 UI | Phase 7 확장 후보 |
@@ -590,20 +579,15 @@ Phase별 신규 영역:
 
 ## 다음 단계
 
-현재 AI platform 트랙의 다음 작업은 [`03-phase6-evidence-runtime-implementation.md`](./03-phase6-evidence-runtime-implementation.md)에 따라 **AI manager enabled API-route smoke와 bounded local tool loop 확장**을 진행하는 것이다.
+현재 AI platform 트랙의 다음 작업은 [`05-meeting-work-intelligence.md`](./05-meeting-work-intelligence.md)에 따라 **회의록/채팅 원문을 local-first structured extraction으로 업무 항목화하는 vertical slice**를 구현하는 것이다.
 
-Phase 6 구현은 [`02-evidence-first-agent-runtime.md`](./02-evidence-first-agent-runtime.md)를 정본 설계로 삼되, 첫 구현은 manager adapter -> independent internal agent -> manager review -> final/gap vertical slice에 한정한다.
+Phase 6 구현은 기존 [`02-evidence-first-agent-runtime.md`](./02-evidence-first-agent-runtime.md)의 장기 hybrid runtime 원칙을 유지하되, 당장 실행할 제품 경험은 manager runtime 확장이 아니라 다음 순서로 고정한다.
 
-첫 구현 분할은 `03-phase6-evidence-runtime-implementation.md`에 고정한다.
+- Stage 1: Meeting Work Intelligence extraction contract와 긴 원문 `chunk extract -> merge -> verifier` 경로.
+- Stage 2: `Talk_2026.4.29 17:39-1.txt` 기반 golden sample quality gate.
+- Stage 3: AI 홈 작업 카드와 `회의록 업무화` wizard.
+- Stage 4: 명시 허용된 optional external reviewer/writer.
 
-- PR 1: `openai-agents` dependency, feature flags, manager settings skeleton. (workspace draft done)
-- PR 2: `AiManagerInput`, `ManagerPlan`, `LocalAgentTask`, `LocalAgentResult`, `ManagerReview` DTO와 redaction boundary. (workspace draft done)
-- PR 3: `domains.ai.internal_agents` runtime과 `run_local_specialist` delegate tool boundary. (workspace draft done with static/local model/tool-gateway runners)
-- PR 4: manager stream path behind feature flag. (workspace draft done with deterministic mock manager + OpenAI Agents SDK adapter tests)
-- PR 5: bounded review loop, user clarification, partial/failure handling. (workspace draft done with unit coverage)
-- PR 6: API stream + UI E2E smoke.
-- Next implementation: 실제 OpenAI key와 `gpt-5.4-mini`로 SDK adapter smoke는 통과했으므로, API route에서 AI manager를 켠 상태로 seeded workspace prompt를 검증하고 internal agent gateway를 one-shot read tool에서 bounded local tool loop로 확장한다.
+`03-phase6-evidence-runtime-implementation.md`의 OpenAI manager adapter, bounded review loop, internal agent gateway 작업은 spike/보류 기록으로 유지한다. Persistence/inspection hardening, dedicated verifier, template writer, external search provider, durable workflow, review queue, Claude Agent SDK spike는 Meeting Work Intelligence의 품질/보안/approval flow가 검증된 뒤 별도 gate로 재평가한다.
 
-Persistence/inspection hardening, dedicated verifier, template writer, external search provider, durable workflow, review queue, Claude Agent SDK spike는 MVP flow와 data boundary 검증 후 별도 gate로 진행한다.
-
-Phase 7 Batch/Admin UI와 Phase 8 External Integration은 Phase 6 MVP flow와 data boundary가 검증된 뒤 재킥오프한다.
+Phase 7 Batch/Admin UI와 Phase 8 External Integration은 Meeting Work Intelligence의 품질, data boundary, approval flow가 검증된 뒤 재킥오프한다.

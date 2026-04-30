@@ -43,10 +43,11 @@ NN-<kebab-slug>.md
 
 | 파일 | 유형 | 상태 |
 |---|---|---|
-| [`00-ai-platform-roadmap.md`](./00-ai-platform-roadmap.md) | 로드맵 | Phase 6 OpenAI manager adapter + 독립 local model internal agent MVP 반영 |
-| [`02-evidence-first-agent-runtime.md`](./02-evidence-first-agent-runtime.md) | 실행 설계 | 교체 가능한 AI manager adapter와 provider-independent internal agent runtime 정본 설계 |
-| [`03-phase6-evidence-runtime-implementation.md`](./03-phase6-evidence-runtime-implementation.md) | 실행 계획 | AI manager MVP vertical slice 구현 및 local MLX E2E 완료, reference resolution/guard follow-up 식별 |
+| [`00-ai-platform-roadmap.md`](./00-ai-platform-roadmap.md) | 로드맵 | Phase 6 후속 우선순위를 Meeting Work Intelligence MVP로 전환 |
+| [`02-evidence-first-agent-runtime.md`](./02-evidence-first-agent-runtime.md) | 실행 설계 | 장기 hybrid runtime 설계. 단기 실행은 local-first structured extraction + optional external review |
+| [`03-phase6-evidence-runtime-implementation.md`](./03-phase6-evidence-runtime-implementation.md) | 실행 기록/보류 계획 | AI manager/runtime spike 완료, Meeting Work Intelligence로 후속 전환 |
 | [`04-whiteboard-app-implementation.md`](./04-whiteboard-app-implementation.md) | 실행 계획 | Excalidraw 기반 Whiteboard 앱 (Docs 동등 first-class entity) 구현 계획 |
+| [`05-meeting-work-intelligence.md`](./05-meeting-work-intelligence.md) | 실행 계획 | 회의록/채팅 원문을 업무 항목으로 전환하는 local-first vertical slice |
 
 완료된 플랜은 [`docs/planning-log.md`](../docs/planning-log.md)에서 확인.
 
