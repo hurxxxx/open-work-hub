@@ -148,7 +148,7 @@ export function MeetingCreateModal({
     setSubmitting(false);
     setCreatedMeetingId(null);
     setPartialFailures([]);
-  }, [isOpen, initialRange]);
+  }, [isOpen, initialRange, user]);
 
   // Server-side user search. Only fires when there's an actual query so an
   // empty focus doesn't surface a misleading "first 8 alphabetical users"
@@ -180,7 +180,7 @@ export function MeetingCreateModal({
       cancelled = true;
       window.clearTimeout(handle);
     };
-  }, [isOpen, token, userQuery, userQueryFocused]);
+  }, [isOpen, token, userQuery, userQueryFocused, workspaceSlug]);
 
   const userLookup = useMemo(() => {
     const map = new Map<string, MeetingUser>();

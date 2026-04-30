@@ -1938,6 +1938,8 @@ function SecuritySection({
 
   useEffect(() => {
     void load();
+    // `load` intentionally stays local so it reads the latest permission gates.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [canReadGroups, canReadUsers, token]);
 
   useEffect(() => {

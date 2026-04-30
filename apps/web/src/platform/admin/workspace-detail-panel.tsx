@@ -1577,7 +1577,7 @@ function WorkspaceMembersDrawer({
                   </td>
                 </tr>
               ) : (
-                data!.items.map((item) => {
+                (data?.items ?? []).map((item) => {
                   const key = `${item.subject_type}:${item.subject_id}`;
                   const isSelf =
                     item.subject_type === 'user' && item.subject_id === currentUserId;

@@ -261,7 +261,7 @@ export const PMSView = () => {
     return () => {
       cancelled = true;
     };
-  }, [createTaskRequested, getErrorMessage, routeTaskListId, token]);
+  }, [createTaskRequested, currentWorkspaceSlug, getErrorMessage, routeTaskListId, token]);
 
   const reloadIssues = useCallback(async () => {
     if (!token || !selectedTaskListId) return;
@@ -388,7 +388,7 @@ export const PMSView = () => {
     return () => {
       cancelled = true;
     };
-  }, [getErrorMessage, requestedIssueId, token]);
+  }, [currentWorkspaceSlug, getErrorMessage, requestedIssueId, token]);
 
   useEffect(() => {
     if (!createTaskRequested || loading) {

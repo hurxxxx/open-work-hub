@@ -81,11 +81,12 @@ export function MeetingAvailabilityModal({
   const [weekStart, setWeekStart] = useState<Date | null>(
     meetingStart ? startOfAvailabilityWeek(meetingStart) : null,
   );
+  const meetingStartTime = meetingStart?.getTime() ?? null;
 
   useEffect(() => {
-    if (!isOpen || !meetingStart) return;
-    setWeekStart(startOfAvailabilityWeek(meetingStart));
-  }, [isOpen, meetingStart?.getTime()]);
+    if (!isOpen || meetingStartTime === null) return;
+    setWeekStart(startOfAvailabilityWeek(new Date(meetingStartTime)));
+  }, [isOpen, meetingStartTime]);
 
   const weekEnd = weekStart ? addLocalDays(weekStart, 7) : null;
   const { items, loading, error } = useMeetingAvailabilityQuery({

@@ -442,6 +442,12 @@ export async function stubWorkspaceAppDataBackend(page: Page): Promise<void> {
   await page.route('**/api/v1/admin/groups**', (route: Route) =>
     route.fulfill({ json: [] }),
   );
+  await page.route('**/api/v1/admin/teams**', (route: Route) =>
+    route.fulfill({ json: [] }),
+  );
+  await page.route('**/api/v1/admin/audit-logs**', (route: Route) =>
+    route.fulfill({ json: [] }),
+  );
   await page.route('**/api/v1/admin/users**', (route: Route) =>
     route.fulfill({ json: { ...EMPTY_PAGE, page_size: 20 } }),
   );

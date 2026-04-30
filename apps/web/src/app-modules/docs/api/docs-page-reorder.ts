@@ -45,7 +45,8 @@ export function collectDescendantIds(pages: DocsPageItem[], rootId: string): Set
   const result = new Set<string>();
   const stack = [rootId];
   while (stack.length > 0) {
-    const current = stack.pop()!;
+    const current = stack.pop();
+    if (current === undefined) break;
     if (result.has(current)) continue;
     result.add(current);
     const kids = childrenByParent.get(current) ?? [];

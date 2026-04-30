@@ -5,7 +5,12 @@ import App from './App';
 import './index.css';
 import './styles/fullcalendar-theme.css';
 
-createRoot(document.getElementById('root')!).render(
+const rootElement = document.getElementById('root');
+if (!rootElement) {
+  throw new Error('Missing root element.');
+}
+
+createRoot(rootElement).render(
   <StrictMode>
     <App />
   </StrictMode>,

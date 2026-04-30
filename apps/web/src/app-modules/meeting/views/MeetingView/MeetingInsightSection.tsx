@@ -338,7 +338,6 @@ export function MeetingInsightSection({
         };
       });
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token, meeting.id, recordingSignature]);
 
   const refreshAll = useCallback(async () => {

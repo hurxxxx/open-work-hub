@@ -223,7 +223,8 @@ export function MeetingWorkspaceLayout({
   const notesDocPath = meeting.notes_doc_id
     ? buildWorkspaceAppPath(workspaceSlug, 'docs', meeting.notes_doc_id)
     : null;
-  const canEditNotes = Boolean(notesDoc?.can_edit && notesPage.can_edit);
+  const editorAuthToken = token;
+  const canEditNotes = Boolean(editorAuthToken && notesDoc?.can_edit && notesPage.can_edit);
 
   const handleChanged = () => {
     void loadWorkspace();
@@ -316,13 +317,13 @@ export function MeetingWorkspaceLayout({
               </div>
 
               <div className="prose max-w-none dark:prose-invert">
-                {canEditNotes ? (
+                {canEditNotes && editorAuthToken ? (
                   <CollaborativeBlockEditor
                     sessionKey={`${workspaceSlug}:${notesPage.id}`}
-                    authToken={token!}
+                    authToken={editorAuthToken}
                     loadSession={async () => {
                       const session = await getDocsCollabSession(
-                        token!,
+                        editorAuthToken,
                         makeDocsPageRef(notesPage.source_type, notesPage.source_page_id),
                         workspaceSlug,
                       );

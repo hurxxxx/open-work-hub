@@ -1,3 +1,4 @@
+import { ApiRequestError, apiFetchJson } from '@/src/platform/api/client';
 import type { ApiSchema } from '@/src/platform/api/types';
 import { rewriteWorkspaceApiPath } from '@/src/platform/workspaces/workspace-utils';
 
@@ -159,30 +160,14 @@ async function request<T>(
   init: RequestInit = {},
   workspaceSlug?: string | null,
 ): Promise<T> {
-  const response = await fetch(resolvePmsPath(path, workspaceSlug), {
-    ...init,
-    headers: {
-      Accept: 'application/json',
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json',
-      ...(init.headers ?? {}),
-    },
-    cache: 'no-store',
-  });
-
-  if (response.status === 204) {
-    return undefined as T;
+  try {
+    return await apiFetchJson<T>(resolvePmsPath(path, workspaceSlug), token, init);
+  } catch (error) {
+    if (error instanceof ApiRequestError) {
+      throw new PmsApiError(error.status, error.message);
+    }
+    throw error;
   }
-
-  const payload = await response.json().catch(() => null);
-  if (!response.ok) {
-    throw new PmsApiError(
-      response.status,
-      payload?.detail ?? `Request failed with ${response.status}.`,
-    );
-  }
-
-  return payload as T;
 }
 
 function resolvePmsPath(path: string, workspaceSlug?: string | null): string {
@@ -567,16 +552,21 @@ export async function uploadAttachment(
 ): Promise<PmsAttachment> {
   const formData = new FormData();
   formData.append('file', file);
-  const response = await fetch(resolvePmsPath(`/api/v1/pms/issues/${issueId}/attachments`), {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${token}` },
-    body: formData,
-  });
-  const payload = await response.json().catch(() => null);
-  if (!response.ok) {
-    throw new PmsApiError(response.status, payload?.detail ?? `Upload failed with ${response.status}.`);
+  try {
+    return await apiFetchJson<PmsAttachment>(
+      resolvePmsPath(`/api/v1/pms/issues/${issueId}/attachments`),
+      token,
+      {
+        method: 'POST',
+        body: formData,
+      },
+    );
+  } catch (error) {
+    if (error instanceof ApiRequestError) {
+      throw new PmsApiError(error.status, error.message);
+    }
+    throw error;
   }
-  return payload as PmsAttachment;
 }
 
 export function deleteAttachment(token: string, attachmentId: string): Promise<void> {

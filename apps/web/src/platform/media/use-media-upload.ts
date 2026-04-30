@@ -64,8 +64,9 @@ export function useMediaUpload() {
       // Batch via microtask
       return new Promise<string>((resolve) => {
         const pending = pendingRef.current;
-        if (!pending.has(url)) pending.set(url, []);
-        pending.get(url)!.push(resolve);
+        const resolvers = pending.get(url) ?? [];
+        resolvers.push(resolve);
+        pending.set(url, resolvers);
 
         if (!scheduledRef.current) {
           scheduledRef.current = true;

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 import { useAuth } from '@/src/platform/auth/auth-provider';
 import {
@@ -133,8 +133,14 @@ export function useMeetingAvailabilityQuery(options: {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const uniqueUserIds = Array.from(new Set(userIds.filter(Boolean)));
-  const userIdsKey = uniqueUserIds.join('\u0000');
+  const userIdsKey = useMemo(
+    () => Array.from(new Set(userIds.filter(Boolean))).join('\u0000'),
+    [userIds],
+  );
+  const uniqueUserIds = useMemo(
+    () => userIdsKey.split('\u0000').filter(Boolean),
+    [userIdsKey],
+  );
   const rangeStartMs = rangeStart?.getTime() ?? null;
   const rangeEndMs = rangeEnd?.getTime() ?? null;
 
@@ -179,7 +185,7 @@ export function useMeetingAvailabilityQuery(options: {
     return () => {
       cancelled = true;
     };
-  }, [enabled, token, workspaceSlug, userIdsKey, rangeStartMs, rangeEndMs]);
+  }, [enabled, token, workspaceSlug, uniqueUserIds, userIdsKey, rangeStartMs, rangeEndMs]);
 
   return {
     items,

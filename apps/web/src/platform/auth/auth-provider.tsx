@@ -438,7 +438,7 @@ export function RequireAuth({ children }: { children: ReactNode }) {
     );
   }
 
-  return <>{children}</>;
+  return children;
 }
 
 export function LoginRoute() {

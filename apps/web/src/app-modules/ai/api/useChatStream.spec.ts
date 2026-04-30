@@ -8,6 +8,13 @@ const SEND_PAYLOAD = {
   messages: [{ role: 'user' as const, content: 'hi' }],
 };
 
+function readAbortSignal(init: RequestInit | undefined): AbortSignal {
+  if (!(init?.signal instanceof AbortSignal)) {
+    throw new Error('expected request AbortSignal');
+  }
+  return init.signal;
+}
+
 function sseBytes(frames: string[]): Uint8Array {
   const encoder = new TextEncoder();
   return encoder.encode(frames.map((frame) => `${frame}\r\n\r\n`).join(''));
@@ -184,7 +191,7 @@ describe('useChatStream', () => {
 
   it('abort() transitions to cancelled status', async () => {
     globalThis.fetch = vi.fn().mockImplementation((_input, init) => {
-      const signal = (init as RequestInit).signal!;
+      const signal = readAbortSignal(init as RequestInit | undefined);
       return new Promise((_, reject) => {
         signal.addEventListener('abort', () => {
           const err = new Error('aborted');
@@ -213,7 +220,7 @@ describe('useChatStream', () => {
 
   it('reset() aborts the active run and ignores its stale terminal updates', async () => {
     globalThis.fetch = vi.fn().mockImplementation((_input, init) => {
-      const signal = (init as RequestInit).signal!;
+      const signal = readAbortSignal(init as RequestInit | undefined);
       return new Promise((_, reject) => {
         signal.addEventListener('abort', () => {
           const err = new Error('aborted');

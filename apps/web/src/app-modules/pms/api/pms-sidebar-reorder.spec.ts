@@ -30,6 +30,12 @@ function makeListsAcrossFolders(): Row[] {
   ];
 }
 
+function expectPresent<T>(value: T | null | undefined): T {
+  expect(value).not.toBeNull();
+  expect(value).not.toBeUndefined();
+  return value as T;
+}
+
 describe('resolveFlatDropZone', () => {
   const rect = { top: 100, height: 40 };
   it('returns before for upper half', () => {
@@ -61,19 +67,21 @@ describe('applyFlatReorder — sibling reorder', () => {
     const items = makeFolders();
     const target = computeFlatDropTarget(items, 'F-B', 'after');
     expect(target).not.toBeNull();
-    const result = applyFlatReorder(items, 'F-A', target!);
+    const result = applyFlatReorder(items, 'F-A', expectPresent(target));
     expect(result).not.toBeNull();
-    expect(sortedSiblings(result!.nextItems, null).map((row) => row.id)).toEqual(['F-B', 'F-A', 'F-C']);
-    expect(result!.patches.map((patch) => `${patch.id}:${patch.sort_order}`)).toEqual(['F-B:0', 'F-A:1000']);
+    const next = expectPresent(result);
+    expect(sortedSiblings(next.nextItems, null).map((row) => row.id)).toEqual(['F-B', 'F-A', 'F-C']);
+    expect(next.patches.map((patch) => `${patch.id}:${patch.sort_order}`)).toEqual(['F-B:0', 'F-A:1000']);
   });
 
   it('moves folder A below C at root', () => {
     const items = makeFolders();
     const result = applyFlatReorder(items, 'F-A', { parentId: null, index: 3, zone: 'after' });
     expect(result).not.toBeNull();
-    expect(sortedSiblings(result!.nextItems, null).map((row) => row.id)).toEqual(['F-B', 'F-C', 'F-A']);
+    const next = expectPresent(result);
+    expect(sortedSiblings(next.nextItems, null).map((row) => row.id)).toEqual(['F-B', 'F-C', 'F-A']);
     // A lands at index 2 → sort_order 2000; B drops to 0; C drops to 1000
-    const patchA = result!.patches.find((p) => p.id === 'F-A')!;
+    const patchA = expectPresent(next.patches.find((p) => p.id === 'F-A'));
     expect(patchA.parent_changed).toBe(false);
     expect(patchA.sort_order).toBe(2000);
   });
@@ -91,9 +99,10 @@ describe('applyFlatReorder — cross-parent move', () => {
     const items = makeListsAcrossFolders();
     const result = applyFlatReorder(items, 'L-1', { parentId: 'F-B', index: 1, zone: 'after' });
     expect(result).not.toBeNull();
-    expect(sortedSiblings(result!.nextItems, 'F-A').map((row) => row.id)).toEqual(['L-2']);
-    expect(sortedSiblings(result!.nextItems, 'F-B').map((row) => row.id)).toEqual(['L-3', 'L-1']);
-    const patchL1 = result!.patches.find((p) => p.id === 'L-1')!;
+    const next = expectPresent(result);
+    expect(sortedSiblings(next.nextItems, 'F-A').map((row) => row.id)).toEqual(['L-2']);
+    expect(sortedSiblings(next.nextItems, 'F-B').map((row) => row.id)).toEqual(['L-3', 'L-1']);
+    const patchL1 = expectPresent(next.patches.find((p) => p.id === 'L-1'));
     expect(patchL1.parent_changed).toBe(true);
     expect(patchL1.parent_id).toBe('F-B');
     expect(patchL1.sort_order).toBe(1000);
@@ -114,7 +123,8 @@ describe('applyFlatReorder — cross-parent move', () => {
     const items = makeListsAcrossFolders();
     const result = applyFlatReorder(items, 'L-2', { parentId: null, index: 0, zone: 'before' });
     expect(result).not.toBeNull();
-    const patchL2 = result!.patches.find((p) => p.id === 'L-2')!;
+    const next = expectPresent(result);
+    const patchL2 = expectPresent(next.patches.find((p) => p.id === 'L-2'));
     expect(patchL2.parent_changed).toBe(true);
     expect(patchL2.parent_id).toBeNull();
   });

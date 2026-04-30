@@ -179,6 +179,7 @@ export function ProfilePage({ initialTab }: { initialTab: SettingsSection }) {
   const [newPassword, setNewPassword] = useState('');
   const [sessions, setSessions] = useState<AuthSessionItem[]>([]);
   const [loadingSessions, setLoadingSessions] = useState(false);
+  const { listSessions } = auth;
 
   useEffect(() => { setActiveSection(initialTab); }, [initialTab]);
 
@@ -197,7 +198,7 @@ export function ProfilePage({ initialTab }: { initialTab: SettingsSection }) {
     async function loadSessions() {
       setLoadingSessions(true);
       try {
-        const items = await auth.listSessions();
+        const items = await listSessions();
         if (!cancelled) setSessions(items);
       } catch (caughtError) {
         if (!cancelled) setError(getErrorMessage(caughtError, '세션 목록을 불러오지 못했습니다.'));
@@ -208,7 +209,7 @@ export function ProfilePage({ initialTab }: { initialTab: SettingsSection }) {
 
     void loadSessions();
     return () => { cancelled = true; };
-  }, [activeSection]);
+  }, [activeSection, listSessions]);
 
   if (!user) return null;
 

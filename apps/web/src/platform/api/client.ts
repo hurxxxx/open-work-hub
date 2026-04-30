@@ -52,10 +52,12 @@ export async function apiFetchJson<T>(
   token?: string | null,
   init: RequestInit = {},
 ): Promise<T> {
+  const shouldSendJsonContentType =
+    init.body != null && !(typeof FormData !== 'undefined' && init.body instanceof FormData);
   const response = await fetch(path, {
     ...init,
     headers: {
-      ...(init.body == null ? jsonHeaders(token) : jsonBodyHeaders(token)),
+      ...(shouldSendJsonContentType ? jsonBodyHeaders(token) : jsonHeaders(token)),
       ...(init.headers ?? {}),
     },
     cache: init.cache ?? 'no-store',

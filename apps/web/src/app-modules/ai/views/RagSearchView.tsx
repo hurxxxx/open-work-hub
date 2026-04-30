@@ -648,7 +648,7 @@ function PreviewField({ label, values }: { label: string; values: string[] }) {
 
 function HighlightedSnippet({ snippet }: { snippet: KeywordSearchSnippet }) {
   if (snippet.highlights.length === 0) {
-    return <>{snippet.text}</>;
+    return snippet.text;
   }
   const [highlight] = snippet.highlights;
   return (

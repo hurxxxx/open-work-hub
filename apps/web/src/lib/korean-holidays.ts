@@ -58,7 +58,6 @@ const warnedYears = new Set<number>();
 function warnMissingYear(year: number): void {
   if (warnedYears.has(year)) return;
   warnedYears.add(year);
-  // eslint-disable-next-line no-console
   console.warn(
     `[korean-holidays] No holiday data for ${year}. The Planner will render ` +
       `this year without holiday markers. Bump @hyunbinseo/holidays-kr and ` +

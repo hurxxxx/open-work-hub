@@ -122,7 +122,7 @@ export function MeetingEditModal({
       cancelled = true;
       window.clearTimeout(handle);
     };
-  }, [isOpen, token, userQuery, userQueryFocused]);
+  }, [isOpen, token, userQuery, userQueryFocused, workspaceSlug]);
 
   const userLookup = useMemo(() => {
     const map = new Map<string, MeetingUser>();

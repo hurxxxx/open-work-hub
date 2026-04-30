@@ -17,7 +17,10 @@ describe('LEARNING_COURSES manifest', () => {
         );
         const body = getLessonBody(lesson.file);
         expect(body, `empty body for ${lesson.file}`).toBeTruthy();
-        expect(body!.length).toBeGreaterThan(0);
+        if (!body) {
+          throw new Error(`empty body for ${lesson.file}`);
+        }
+        expect(body.length).toBeGreaterThan(0);
       }
     }
   });

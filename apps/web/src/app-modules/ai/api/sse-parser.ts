@@ -27,6 +27,10 @@ export async function* iterSseEvents(
   });
 
   const reader = body.getReader();
+  const waitForNextEvent = () =>
+    new Promise<void>((resolve) => {
+      resolvePending = resolve;
+    });
 
   const pump = async () => {
     try {
@@ -56,7 +60,10 @@ export async function* iterSseEvents(
   try {
     while (true) {
       if (queue.length > 0) {
-        yield queue.shift()!;
+        const nextEvent = queue.shift();
+        if (nextEvent) {
+          yield nextEvent;
+        }
         continue;
       }
       if (producerDone) {
@@ -65,9 +72,7 @@ export async function* iterSseEvents(
         }
         return;
       }
-      await new Promise<void>((resolve) => {
-        resolvePending = resolve;
-      });
+      await waitForNextEvent();
     }
   } finally {
     await pumpPromise.catch(() => undefined);

@@ -45,6 +45,7 @@ import type { NavItem } from '@/src/app/shell/navigation-types';
 
 const AI_BACKEND_MODE_STORAGE_KEY = 'aidoo.ai.backendMode';
 const AI_SCOPE_STORAGE_PREFIX = 'aidoo.ai.scope.';
+const FALLBACK_CHATBOT_APP_IDS = ['pms', 'meeting', 'planner', 'docs', 'ai'];
 
 function chatScopeStorageKey(workspaceSlug: string | undefined): string | null {
   if (!workspaceSlug) return null;
@@ -257,7 +258,6 @@ export function AIView({ toolItems = [] }: { toolItems?: NavItem[] }) {
   // bootstrap fetch hasn't completed) we fall back to the static union of
   // domains that own tools today so the picker always renders something the
   // user can interact with.
-  const FALLBACK_CHATBOT_APP_IDS = ['pms', 'meeting', 'planner', 'docs', 'ai'];
   const chatbotCapableAppIds = useMemo(() => {
     const fromBootstrap = workspaceBootstrap.data?.chatbot_app_ids;
     if (fromBootstrap && fromBootstrap.length > 0) return fromBootstrap;
@@ -973,6 +973,7 @@ export function AIView({ toolItems = [] }: { toolItems?: NavItem[] }) {
     // intentionally excluding chat/pendingUserTurnId/pendingUserInput from deps:
     // the hook's state transitions drive the effect; adding unstable refs to
     // deps would retrigger the commit block.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chat.state.pendingApprovals.length, chat.state.status, resetChat]);
 
   // Gather every artifact the thread knows about — both persisted (on

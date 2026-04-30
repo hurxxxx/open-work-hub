@@ -29,6 +29,12 @@ vi.mock('../../api/meeting-insights-api', async () => {
   };
 });
 
+function expectPresent<T>(value: T | null | undefined): T {
+  expect(value).not.toBeNull();
+  expect(value).not.toBeUndefined();
+  return value as T;
+}
+
 function insightItem(
   overrides: Partial<MeetingInsightItem> & Pick<MeetingInsightItem, 'id' | 'insight_type' | 'payload'>,
 ): MeetingInsightItem {
@@ -333,7 +339,7 @@ describe('MeetingInsightSection', () => {
 
     await screen.findByText('첫째');
     const buttons = screen.getAllByRole('button', { name: '챗에서 진행' });
-    fireEvent.click(buttons[0]!);
+    fireEvent.click(expectPresent(buttons[0]));
     await screen.findByText('conversation down');
     // After rejection settles, openingInsightId clears and the other
     // button becomes clickable again.
@@ -382,7 +388,7 @@ describe('MeetingInsightSection', () => {
     const updatedMeeting = baseMeeting({
       recordings: [
         {
-          ...initialMeeting.recordings[0]!,
+          ...expectPresent(initialMeeting.recordings[0]),
           transcription_status: 'extracting_insights',
           progress_pct: 90,
         },
@@ -415,7 +421,7 @@ describe('MeetingInsightSection', () => {
     const meeting = baseMeeting({
       recordings: [
         {
-          ...baseMeeting().recordings[0]!,
+          ...expectPresent(baseMeeting().recordings[0]),
           transcription_status: 'extracting_insights',
           progress_pct: 90,
         },

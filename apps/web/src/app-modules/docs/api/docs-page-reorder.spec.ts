@@ -38,6 +38,12 @@ function makeTree(): DocsPageItem[] {
   ];
 }
 
+function expectPresent<T>(value: T | null | undefined): T {
+  expect(value).not.toBeNull();
+  expect(value).not.toBeUndefined();
+  return value as T;
+}
+
 describe('resolveDropZone', () => {
   const rect = { top: 100, height: 40 };
   it('returns before when pointer near top', () => {
@@ -104,21 +110,23 @@ describe('applyReorder — sibling reorder within same parent', () => {
     const pages = makeTree();
     const result = applyReorder(pages, 'A', { parentId: null, index: 2, zone: 'after' });
     expect(result).not.toBeNull();
-    const roots = sortedChildren(result!.nextPages, null).map((p) => p.id);
+    const next = expectPresent(result);
+    const roots = sortedChildren(next.nextPages, null).map((p) => p.id);
     expect(roots).toEqual(['B', 'A', 'C']);
-    expect(result!.patches.map((patch) => `${patch.id}:${patch.sort_order}`)).toEqual(['B:0', 'A:1000']);
+    expect(next.patches.map((patch) => `${patch.id}:${patch.sort_order}`)).toEqual(['B:0', 'A:1000']);
   });
 
   it('moves A after C at root', () => {
     const pages = makeTree();
     const result = applyReorder(pages, 'A', { parentId: null, index: 3, zone: 'after' });
     expect(result).not.toBeNull();
-    const roots = sortedChildren(result!.nextPages, null).map((p) => p.id);
+    const next = expectPresent(result);
+    const roots = sortedChildren(next.nextPages, null).map((p) => p.id);
     expect(roots).toEqual(['B', 'C', 'A']);
     // A moves to index 2 → 2000, B drops to 0, C drops to 1000
-    const patchIds = result!.patches.map((patch) => patch.id).sort();
+    const patchIds = next.patches.map((patch) => patch.id).sort();
     expect(patchIds).toEqual(['A', 'B', 'C'].sort());
-    const patchA = result!.patches.find((p) => p.id === 'A')!;
+    const patchA = expectPresent(next.patches.find((p) => p.id === 'A'));
     expect(patchA.parent_changed).toBe(false);
     expect(patchA.sort_order).toBe(2000);
   });
@@ -137,11 +145,12 @@ describe('applyReorder — move to new parent', () => {
     const pages = makeTree();
     const result = applyReorder(pages, 'C', { parentId: 'B', index: 2, zone: 'inside' });
     expect(result).not.toBeNull();
-    const bChildren = sortedChildren(result!.nextPages, 'B').map((p) => p.id);
+    const next = expectPresent(result);
+    const bChildren = sortedChildren(next.nextPages, 'B').map((p) => p.id);
     expect(bChildren).toEqual(['B1', 'B2', 'C']);
-    const rootIds = sortedChildren(result!.nextPages, null).map((p) => p.id);
+    const rootIds = sortedChildren(next.nextPages, null).map((p) => p.id);
     expect(rootIds).toEqual(['A', 'B']);
-    const patchC = result!.patches.find((p) => p.id === 'C')!;
+    const patchC = expectPresent(next.patches.find((p) => p.id === 'C'));
     expect(patchC.parent_changed).toBe(true);
     expect(patchC.parent_id).toBe('B');
     expect(patchC.sort_order).toBe(2000);
@@ -151,11 +160,12 @@ describe('applyReorder — move to new parent', () => {
     const pages = makeTree();
     const result = applyReorder(pages, 'B1', { parentId: null, index: 1, zone: 'before' });
     expect(result).not.toBeNull();
-    const rootIds = sortedChildren(result!.nextPages, null).map((p) => p.id);
+    const next = expectPresent(result);
+    const rootIds = sortedChildren(next.nextPages, null).map((p) => p.id);
     expect(rootIds).toEqual(['A', 'B1', 'B', 'C']);
-    const bChildren = sortedChildren(result!.nextPages, 'B').map((p) => p.id);
+    const bChildren = sortedChildren(next.nextPages, 'B').map((p) => p.id);
     expect(bChildren).toEqual(['B2']);
-    const patchB1 = result!.patches.find((p) => p.id === 'B1')!;
+    const patchB1 = expectPresent(next.patches.find((p) => p.id === 'B1'));
     expect(patchB1.parent_changed).toBe(true);
     expect(patchB1.parent_id).toBeNull();
   });

@@ -1,3 +1,4 @@
+import { ApiRequestError, apiFetchJson } from '@/src/platform/api/client';
 import type { ApiSchema } from '@/src/platform/api/types';
 import { rewriteWorkspaceApiPath } from '@/src/platform/workspaces/workspace-utils';
 
@@ -144,30 +145,14 @@ async function request<T>(
   workspaceSlug: string,
   init: RequestInit = {},
 ): Promise<T> {
-  const response = await fetch(resolveMeetingPath(path, workspaceSlug), {
-    ...init,
-    headers: {
-      Accept: 'application/json',
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json',
-      ...(init.headers ?? {}),
-    },
-    cache: 'no-store',
-  });
-
-  if (response.status === 204) {
-    return undefined as T;
+  try {
+    return await apiFetchJson<T>(resolveMeetingPath(path, workspaceSlug), token, init);
+  } catch (error) {
+    if (error instanceof ApiRequestError) {
+      throw new MeetingApiError(error.status, error.message);
+    }
+    throw error;
   }
-
-  const payload = await response.json().catch(() => null);
-  if (!response.ok) {
-    throw new MeetingApiError(
-      response.status,
-      payload?.detail ?? `Request failed with ${response.status}.`,
-    );
-  }
-
-  return payload as T;
 }
 
 async function multipartRequest<T>(
@@ -176,26 +161,7 @@ async function multipartRequest<T>(
   workspaceSlug: string,
   init: RequestInit = {},
 ): Promise<T> {
-  const response = await fetch(resolveMeetingPath(path, workspaceSlug), {
-    ...init,
-    headers: {
-      Accept: 'application/json',
-      Authorization: `Bearer ${token}`,
-      ...(init.headers ?? {}),
-    },
-    cache: 'no-store',
-  });
-  if (response.status === 204) {
-    return undefined as T;
-  }
-  const payload = await response.json().catch(() => null);
-  if (!response.ok) {
-    throw new MeetingApiError(
-      response.status,
-      payload?.detail ?? `Request failed with ${response.status}.`,
-    );
-  }
-  return payload as T;
+  return request<T>(path, token, workspaceSlug, init);
 }
 
 function resolveMeetingPath(path: string, workspaceSlug: string): string {
@@ -390,27 +356,15 @@ export async function uploadMeetingFile(
 ): Promise<MeetingDetail> {
   const formData = new FormData();
   formData.append('file', file);
-  const response = await fetch(
-    resolveMeetingPath(`/api/v1/meeting/meetings/${meetingId}/files`, workspaceSlug),
+  return multipartRequest<MeetingDetail>(
+    `/api/v1/meeting/meetings/${meetingId}/files`,
+    token,
+    workspaceSlug,
     {
       method: 'POST',
-      headers: {
-        // Do not set Content-Type — the browser fills in the multipart boundary.
-        Accept: 'application/json',
-        Authorization: `Bearer ${token}`,
-      },
       body: formData,
-      cache: 'no-store',
     },
   );
-  const payload = await response.json().catch(() => null);
-  if (!response.ok) {
-    throw new MeetingApiError(
-      response.status,
-      payload?.detail ?? `파일 업로드에 실패했습니다 (${response.status}).`,
-    );
-  }
-  return payload as MeetingDetail;
 }
 
 export function deleteMeetingFile(
