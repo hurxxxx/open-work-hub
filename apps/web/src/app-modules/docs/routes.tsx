@@ -1,5 +1,5 @@
-import { DocsView } from '@/src/components/views/DocsView';
 import type { WorkspaceRouteDefinition } from '@/src/app/shell/route-types';
+import { DocsView } from './views/DocsView';
 
 export const docsWorkspaceRoutes: WorkspaceRouteDefinition[] = [
   {

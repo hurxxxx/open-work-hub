@@ -162,11 +162,11 @@ vi.mock('@/src/components/calendar/MeetingPreviewModal', () => ({
   MeetingPreviewModal: () => null,
 }));
 
-vi.mock('@/src/components/views/MeetingView/MeetingCreateModal', () => ({
+vi.mock('@/src/app-modules/meeting', () => ({
   MeetingCreateModal: ({ isOpen }: { isOpen: boolean }) => (isOpen ? <div data-testid="mock-meeting-create-modal" /> : null),
 }));
 
-vi.mock('@/src/components/views/PlannerEventModal', () => ({
+vi.mock('./PlannerEventModal', () => ({
   PlannerEventModal: ({ isOpen }: { isOpen: boolean }) => (isOpen ? <div data-testid="mock-planner-event-modal" /> : null),
 }));
 

@@ -69,6 +69,7 @@ export default [
             },
             {
               group: [
+                '@/src/components/views/**',
                 '@/src/app-modules/*/routes',
                 '@/src/app-modules/*/routes/**',
                 '@/src/app-modules/*/api/**',
@@ -82,7 +83,7 @@ export default [
                 '@/src/app-modules/*/views/**',
               ],
               message:
-                'Import app modules through their public registry/manifest boundary. Inside the same app module, use relative imports.',
+                'Import app modules through their public registry/manifest boundary. App-specific views belong under app-modules/<appId>/views.',
             },
             {
               group: [

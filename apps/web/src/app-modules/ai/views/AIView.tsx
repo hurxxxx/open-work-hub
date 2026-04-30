@@ -26,16 +26,16 @@ import {
   resolveToolInvocationHref,
 } from '@/src/domains/workspaces/workspace-utils';
 import { useWorkspaceBootstrapContext } from '@/src/domains/workspaces/workspace-bootstrap-context';
-import { ChatThread } from '@/src/components/views/chat/ChatThread';
-import { ApprovalModal } from '@/src/components/views/chat/ApprovalModal';
-import { ArtifactPanel } from '@/src/components/views/chat/ArtifactPanel';
-import { ToolCallCard } from '@/src/components/views/chat/ToolCallCard';
-import { ChatTopBar } from '@/src/components/views/chat/ChatTopBar';
-import { ModelPill } from '@/src/components/views/chat/ModelPill';
-import { ChatScopePicker } from '@/src/components/views/chat/ChatScopePicker';
-import { ChatComposer } from '@/src/components/views/chat/ChatComposer';
-import { EmptyState } from '@/src/components/views/chat/EmptyState';
-import type { ChatTurn } from '@/src/components/views/chat/MessageBubble';
+import { ChatThread } from './chat/ChatThread';
+import { ApprovalModal } from './chat/ApprovalModal';
+import { ArtifactPanel } from './chat/ArtifactPanel';
+import { ToolCallCard } from './chat/ToolCallCard';
+import { ChatTopBar } from './chat/ChatTopBar';
+import { ModelPill } from './chat/ModelPill';
+import { ChatScopePicker } from './chat/ChatScopePicker';
+import { ChatComposer } from './chat/ChatComposer';
+import { EmptyState } from './chat/EmptyState';
+import type { ChatTurn } from './chat/MessageBubble';
 import type {
   ArtifactBuffer,
   PendingApproval,

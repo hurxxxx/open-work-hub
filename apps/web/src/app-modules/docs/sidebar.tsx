@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { FileText } from 'lucide-react';
 
+import type { AppSidebarConfig } from '@/src/app/shell/sidebar-types';
 import { useAuth } from '@/src/domains/auth/auth-provider';
 import {
   listFavoriteDocs,
@@ -106,3 +107,19 @@ export function DocsSidebarExtras({ currentWorkspaceSlug }: DocsSidebarExtrasPro
     </>
   );
 }
+
+export const docsSidebarConfig: AppSidebarConfig = {
+  createActions: () => [
+    {
+      id: 'docs-create-doc',
+      label: 'Doc',
+      icon: FileText,
+      run: () => {
+        window.dispatchEvent(new CustomEvent('docs:create'));
+      },
+    },
+  ],
+  afterCategories: ({ currentWorkspaceSlug }) => (
+    <DocsSidebarExtras currentWorkspaceSlug={currentWorkspaceSlug} />
+  ),
+};

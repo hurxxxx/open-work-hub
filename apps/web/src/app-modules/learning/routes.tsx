@@ -1,6 +1,6 @@
-import { LearningCourseView } from '@/src/components/views/LearningCourseView';
-import { LearningView } from '@/src/components/views/LearningView';
 import type { WorkspaceRouteDefinition } from '@/src/app/shell/route-types';
+import { LearningCourseView } from './views/LearningCourseView';
+import { LearningView } from './views/LearningView';
 
 export const learningWorkspaceRoutes: WorkspaceRouteDefinition[] = [
   {

@@ -1,42 +1,39 @@
-import { useState, useEffect, useMemo, useRef } from 'react';
+import {
+  Fragment,
+  useCallback,
+  useState,
+  useEffect,
+  useMemo,
+  useRef,
+} from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import {
-  Calendar,
-  CheckSquare,
   ChevronDown,
   ChevronRight,
   Plus,
-  Layout,
-  FileText,
   PanelLeftClose,
   PanelLeftOpen,
-  Sparkles,
-  Users,
 } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 import { APP_BAR_ITEMS, NAV_ITEMS } from '@/src/app/shell/app-registry';
+import { getAppSidebarConfig } from '@/src/app/shell/app-sidebar-registry';
 import {
   hasAdminSectionAccess,
   type AdminSection,
 } from '@/src/domains/admin/admin-permissions';
 import { useAuth } from '@/src/domains/auth/auth-provider';
 import { hasWorkspaceMembership } from '@/src/domains/auth/auth-api';
-import { AiSidebarSection } from '@/src/app-modules/ai';
-import { DocsSidebarExtras } from '@/src/app-modules/docs';
-import { LearningSidebarTree } from '@/src/app-modules/learning';
-import { PmsSidebarSpaces } from '@/src/app-modules/pms';
-import {
-  buildWorkspaceAppPath,
-  resolveDefaultWorkspaceAppPath,
-  resolveNavItemHref,
-  resolveToolInvocationHref,
-} from '@/src/domains/workspaces/workspace-utils';
+import { resolveNavItemHref } from '@/src/domains/workspaces/workspace-utils';
 import type {
   WorkspaceBootstrapApp,
   WorkspaceBootstrapNavItem,
 } from '@/src/domains/workspaces/workspaces-api';
-import type { NavItem } from '@/src/app/shell/navigation-types';
+import type { AppModuleId, NavItem } from '@/src/app/shell/navigation-types';
+import type {
+  AppSidebarActionContext,
+  AppSidebarRenderContext,
+} from '@/src/app/shell/sidebar-types';
 import { buildSidebarCategories } from './sub-sidebar-categories';
 
 function isDefined<T>(value: T | null): value is T {
@@ -60,7 +57,6 @@ export const SubSidebar = ({
   const navigate = useNavigate();
   const { user } = useAuth();
   const canReadTeams = hasWorkspaceMembership(user, currentWorkspaceSlug);
-  const meetingRootPath = resolveDefaultWorkspaceAppPath(user, 'meeting');
 
   const [expandedCategories, setExpandedCategories] = useState<string[]>([]);
   const [createMenuOpen, setCreateMenuOpen] = useState(false);
@@ -157,6 +153,7 @@ export const SubSidebar = ({
     () => new Map(workspaceApps.map((item) => [item.app_id, item])),
     [workspaceApps],
   );
+  const sidebarConfig = getAppSidebarConfig(activeAppId);
 
   const filteredItems = useMemo(() => {
     if (activeAppId !== 'settings') {
@@ -205,27 +202,66 @@ export const SubSidebar = ({
         : false;
     });
   }, [activeAppId, navItemRegistry, user?.system_roles, workspaceNavItems]);
-  const categories = useMemo(
-    () =>
-      buildSidebarCategories(
-        filteredItems.map((item) => item.category),
-        activeAppId,
-        canReadTeams,
-      ),
-    [activeAppId, canReadTeams, filteredItems],
-  );
-
-  useEffect(() => {
-    setExpandedCategories(categories);
-  }, [categories]);
-
-  const toggleCategory = (category: string) => {
+  const toggleCategory = useCallback((category: string) => {
     setExpandedCategories((prev) =>
       prev.includes(category)
         ? prev.filter((current) => current !== category)
         : [...prev, category],
     );
-  };
+  }, []);
+  const isCategoryExpanded = useCallback(
+    (category: string) => expandedCategories.includes(category),
+    [expandedCategories],
+  );
+  const sidebarActionContext = useMemo<AppSidebarActionContext>(
+    () => ({
+      currentPathname: location.pathname,
+      currentWorkspaceSlug,
+      navigate,
+      user,
+    }),
+    [currentWorkspaceSlug, location.pathname, navigate, user],
+  );
+  const sidebarContext = useMemo<AppSidebarRenderContext>(
+    () => ({
+      ...sidebarActionContext,
+      activeAppId: activeAppId as AppModuleId,
+      activeNavItemId,
+      canReadWorkspace: canReadTeams,
+      filteredItems,
+      isCategoryExpanded,
+      toggleCategory,
+    }),
+    [
+      activeAppId,
+      activeNavItemId,
+      canReadTeams,
+      filteredItems,
+      isCategoryExpanded,
+      sidebarActionContext,
+      toggleCategory,
+    ],
+  );
+  const baseCategories = useMemo(
+    () => buildSidebarCategories(filteredItems.map((item) => item.category)),
+    [filteredItems],
+  );
+  const categories = useMemo(
+    () =>
+      sidebarConfig?.extendCategories?.(baseCategories, {
+        canReadWorkspace: canReadTeams,
+      }) ??
+      baseCategories,
+    [baseCategories, canReadTeams, sidebarConfig],
+  );
+  const createActions = useMemo(
+    () => sidebarConfig?.createActions?.(sidebarActionContext) ?? [],
+    [sidebarActionContext, sidebarConfig],
+  );
+
+  useEffect(() => {
+    setExpandedCategories(categories);
+  }, [categories]);
 
   if (activeAppId === 'home') {
     return null;
@@ -256,11 +292,7 @@ export const SubSidebar = ({
               APP_BAR_ITEMS.find((item) => item.id === activeAppId)?.title)}
         </h2>
         <div className="flex items-center gap-1.5">
-          {activeAppId === 'pms' ||
-          activeAppId === 'docs' ||
-          activeAppId === 'planner' ||
-          activeAppId === 'ai' ||
-          activeAppId === 'meeting' ? (
+          {createActions.length > 0 ? (
             <div ref={createMenuRef} className="relative">
               <button
                 type="button"
@@ -275,135 +307,23 @@ export const SubSidebar = ({
                   <div className="app-text-overline px-3 pt-1.5 pb-1 text-gray-500">
                     Create
                   </div>
-                  {activeAppId === 'pms' ? (
-                    <>
+                  {createActions.map((action) => {
+                    const Icon = action.icon;
+                    return (
                       <button
+                        key={action.id}
                         type="button"
                         onClick={() => {
                           setCreateMenuOpen(false);
-                          window.dispatchEvent(
-                            new CustomEvent('pms:create-task'),
-                          );
+                          action.run(sidebarActionContext);
                         }}
                         className="app-text-control-sm flex w-full items-center gap-2 px-3 py-2 text-left text-app-ink hover:bg-app-surface-hover"
                       >
-                        <CheckSquare size={14} className="text-gray-500" />
-                        <span>Task</span>
+                        <Icon size={14} className="text-gray-500" />
+                        <span>{action.label}</span>
                       </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setCreateMenuOpen(false);
-                          window.dispatchEvent(
-                            new CustomEvent('pms:create-space'),
-                          );
-                        }}
-                        className="app-text-control-sm flex w-full items-center gap-2 px-3 py-2 text-left text-app-ink hover:bg-app-surface-hover"
-                      >
-                        <Layout size={14} className="text-gray-500" />
-                        <span>Space</span>
-                      </button>
-                    </>
-                  ) : null}
-                  {activeAppId === 'docs' ? (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setCreateMenuOpen(false);
-                        window.dispatchEvent(new CustomEvent('docs:create'));
-                      }}
-                      className="app-text-control-sm flex w-full items-center gap-2 px-3 py-2 text-left text-app-ink hover:bg-app-surface-hover"
-                    >
-                      <FileText size={14} className="text-gray-500" />
-                      <span>Doc</span>
-                    </button>
-                  ) : null}
-                  {activeAppId === 'planner' ? (
-                    <>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setCreateMenuOpen(false);
-                          window.dispatchEvent(
-                            new CustomEvent('planner:create-event'),
-                          );
-                        }}
-                        className="app-text-control-sm flex w-full items-center gap-2 px-3 py-2 text-left text-app-ink hover:bg-app-surface-hover"
-                      >
-                        <Calendar size={14} className="text-gray-500" />
-                        <span>Event</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setCreateMenuOpen(false);
-                          window.dispatchEvent(
-                            new CustomEvent('planner:create-meeting'),
-                          );
-                        }}
-                        className="app-text-control-sm flex w-full items-center gap-2 px-3 py-2 text-left text-app-ink hover:bg-app-surface-hover"
-                      >
-                        <Users size={14} className="text-gray-500" />
-                        <span>Meeting</span>
-                      </button>
-                    </>
-                  ) : null}
-                  {activeAppId === 'ai' ? (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setCreateMenuOpen(false);
-                        const searchItem = NAV_ITEMS.find(
-                          (item) => item.id === 'search',
-                        );
-                        navigate(
-                          searchItem
-                            ? resolveToolInvocationHref(
-                                searchItem,
-                                currentWorkspaceSlug,
-                                user,
-                              )
-                            : '/tool/search',
-                        );
-                      }}
-                      className="app-text-control-sm flex w-full items-center gap-2 px-3 py-2 text-left text-app-ink hover:bg-app-surface-hover"
-                    >
-                      <Sparkles size={14} className="text-gray-500" />
-                      <span>아이두 통합검색</span>
-                    </button>
-                  ) : null}
-                  {activeAppId === 'meeting' ? (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setCreateMenuOpen(false);
-                        if (window.location.pathname.includes('/meeting')) {
-                          window.dispatchEvent(
-                            new CustomEvent('meeting:create-event'),
-                          );
-                        } else {
-                          navigate(
-                            currentWorkspaceSlug
-                              ? buildWorkspaceAppPath(
-                                  currentWorkspaceSlug,
-                                  'meeting',
-                                )
-                              : meetingRootPath,
-                          );
-                          // Defer the dispatch until after the route mounts.
-                          setTimeout(() => {
-                            window.dispatchEvent(
-                              new CustomEvent('meeting:create-event'),
-                            );
-                          }, 50);
-                        }
-                      }}
-                      className="app-text-control-sm flex w-full items-center gap-2 px-3 py-2 text-left text-app-ink hover:bg-app-surface-hover"
-                    >
-                      <Users size={14} className="text-gray-500" />
-                      <span>Meeting</span>
-                    </button>
-                  ) : null}
+                    );
+                  })}
                 </div>
               ) : null}
             </div>
@@ -421,20 +341,14 @@ export const SubSidebar = ({
       </div>
 
       <div className="flex-1 overflow-y-auto py-4 px-2 space-y-6 custom-scrollbar">
-        {activeAppId === 'ai' && currentWorkspaceSlug ? (
-          <AiSidebarSection currentWorkspaceSlug={currentWorkspaceSlug} />
-        ) : null}
+        {sidebarConfig?.beforeCategories?.(sidebarContext)}
         {categories.map((category) => {
-          if (activeAppId === 'pms' && category === 'Spaces') {
-            return (
-              <PmsSidebarSpaces
-                key={category}
-                activeNavItemId={activeNavItemId}
-                currentWorkspaceSlug={currentWorkspaceSlug}
-                isExpanded={expandedCategories.includes('Spaces')}
-                onToggle={() => toggleCategory('Spaces')}
-              />
-            );
+          const customCategory = sidebarConfig?.renderCategory?.(
+            category,
+            sidebarContext,
+          );
+          if (customCategory !== undefined) {
+            return <Fragment key={category}>{customCategory}</Fragment>;
           }
 
           return (
@@ -468,63 +382,6 @@ export const SubSidebar = ({
                     {filteredItems
                       .filter((item) => item.category === category)
                       .map((item) => {
-                        if (activeAppId === 'pms' && category === 'Personal') {
-                          if (item.id === 'pms-tasks') {
-                            const subTasks = filteredItems.filter(
-                              (entry) =>
-                                entry.category === 'Personal' &&
-                                entry.id.startsWith('pms-tasks-'),
-                            );
-                            const isMyTasksActive =
-                              activeNavItemId === 'pms-tasks' ||
-                              activeNavItemId.startsWith('pms-tasks-');
-                            return (
-                              <div key={item.id} className="space-y-1">
-                                <div
-                                  className={cn(
-                                    'sidebar-submenu-group ml-1 cursor-default',
-                                    isMyTasksActive &&
-                                      'sidebar-submenu-item-active',
-                                  )}
-                                >
-                                  <item.icon
-                                    size={16}
-                                    className={cn(
-                                      'text-gray-500 dark:text-gray-400',
-                                      isMyTasksActive && 'text-app-accent',
-                                    )}
-                                  />
-                                  <span className="sidebar-submenu-label">
-                                    {item.title}
-                                  </span>
-                                </div>
-                                <div className="ml-6 border-l border-app-border pl-2 space-y-1">
-                                  {subTasks.map((sub) => (
-                                    <Link
-                                      key={sub.id}
-                                      to={`/tool/${sub.id}`}
-                                      className={cn(
-                                        'sidebar-submenu-item',
-                                        activeNavItemId === sub.id &&
-                                          'sidebar-submenu-item-active',
-                                      )}
-                                    >
-                                      <sub.icon
-                                        size={14}
-                                        className="text-gray-500 dark:text-gray-400"
-                                      />
-                                      <span className="sidebar-submenu-label">
-                                        {sub.title}
-                                      </span>
-                                    </Link>
-                                  ))}
-                                </div>
-                              </div>
-                            );
-                          }
-                          if (item.id.startsWith('pms-tasks-')) return null;
-                        }
-
                         return (
                           <Link
                             key={item.id}
@@ -561,14 +418,7 @@ export const SubSidebar = ({
             </div>
           );
         })}
-
-        {activeAppId === 'docs' && (
-          <DocsSidebarExtras currentWorkspaceSlug={currentWorkspaceSlug} />
-        )}
-
-        {activeAppId === 'learning' ? (
-          <LearningSidebarTree currentPathname={location.pathname} />
-        ) : null}
+        {sidebarConfig?.afterCategories?.(sidebarContext)}
       </div>
 
       {/* Resize handle */}

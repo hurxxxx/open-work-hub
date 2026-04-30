@@ -18,7 +18,11 @@ import {
   setupFirstUser as setupFirstUserRequest,
   updatePreferences as updatePreferencesRequest,
   type AuthUser,
+  type ChangePasswordPayload,
   type DevLoginAccount,
+  type LoginPayload,
+  type SetupFirstUserPayload,
+  type UpdatePreferencesPayload,
 } from './auth-api';
 import {
   AuthContext,

@@ -1,6 +1,6 @@
-import { AIView } from '@/src/components/views/AIView';
 import type { WorkspaceRouteDefinition } from '@/src/app/shell/route-types';
 import { aiManifest } from './manifest';
+import { AIView } from './views/AIView';
 
 export const aiWorkspaceRoutes: WorkspaceRouteDefinition[] = [
   {

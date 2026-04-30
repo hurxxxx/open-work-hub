@@ -11,7 +11,7 @@
 // own chrome fills the surface cleanly.
 import { Dialog } from '@aidoo/ui';
 
-import { MeetingWorkspaceLayout } from '@/src/components/views/MeetingView/MeetingWorkspaceLayout';
+import { MeetingWorkspaceLayout } from '@/src/app-modules/meeting';
 
 interface MeetingPreviewModalProps {
   meetingId: string | null;

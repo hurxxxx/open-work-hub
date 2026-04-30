@@ -5,7 +5,7 @@ import type { NavItem } from '@/src/app/shell/navigation-types';
 import {
   SlashCommandMenu,
   useSlashCommandItems,
-} from '@/src/components/views/chat/SlashCommandMenu';
+} from './SlashCommandMenu';
 
 export interface ChatComposerProps {
   input: string;

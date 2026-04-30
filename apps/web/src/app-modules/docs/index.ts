@@ -1,3 +1,4 @@
 export { docsManifest } from './manifest';
 export { docsGlobalRoutes, docsWorkspaceRoutes } from './routes';
-export { DocsSidebarExtras } from './sidebar';
+export { DocsSidebarExtras, docsSidebarConfig } from './sidebar';
+export { DocsView } from './views/DocsView';

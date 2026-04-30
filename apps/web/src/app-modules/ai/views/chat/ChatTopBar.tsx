@@ -2,7 +2,7 @@ import type {
   AiBackendMode,
   LlmHealthResponse,
 } from '@/src/domains/ai/ai-api';
-import { RoutingStatusIcon } from '@/src/components/views/chat/RoutingStatusIcon';
+import { RoutingStatusIcon } from './RoutingStatusIcon';
 
 interface ChatTopBarProps {
   title: string;

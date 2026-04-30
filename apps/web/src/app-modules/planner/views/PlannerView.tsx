@@ -16,9 +16,9 @@ import {
   type UnifiedCalendarView,
 } from '@/src/components/calendar/UnifiedCalendar';
 import { MeetingPreviewModal } from '@/src/components/calendar/MeetingPreviewModal';
-import { MeetingCreateModal } from '@/src/components/views/MeetingView/MeetingCreateModal';
-import { PlannerEventModal } from '@/src/components/views/PlannerEventModal';
-import { PlannerEventChoicePopover } from '@/src/components/views/PlannerEventChoicePopover';
+import { MeetingCreateModal } from '@/src/app-modules/meeting';
+import { PlannerEventModal } from './PlannerEventModal';
+import { PlannerEventChoicePopover } from './PlannerEventChoicePopover';
 
 const MONTH_NAMES_LONG = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 const PICKER_DAYS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];

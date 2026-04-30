@@ -1,3 +1,3 @@
 export { learningManifest } from './manifest';
 export { learningWorkspaceRoutes } from './routes';
-export { LearningSidebarTree } from './sidebar';
+export { LearningSidebarTree, learningSidebarConfig } from './sidebar';

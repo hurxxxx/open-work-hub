@@ -1,12 +1,12 @@
 import { useEffect, useRef } from 'react';
 import { Bot, Loader2 } from 'lucide-react';
 
-import { ArtifactCard } from '@/src/components/views/chat/ArtifactCard';
+import { ArtifactCard } from './ArtifactCard';
 import {
   MessageBubble,
   type ChatTurn,
-} from '@/src/components/views/chat/MessageBubble';
-import { ThinkingPanel } from '@/src/components/views/chat/ThinkingPanel';
+} from './MessageBubble';
+import { ThinkingPanel } from './ThinkingPanel';
 import type {
   ArtifactBuffer,
   ChatStreamStatus,

@@ -1,3 +1,4 @@
 export { aiManifest } from './manifest';
 export { aiWorkspaceRoutes } from './routes';
-export { AiSidebarSection } from './sidebar';
+export { AiSidebarSection, aiSidebarConfig } from './sidebar';
+export { RagSearchView } from './views/RagSearchView';

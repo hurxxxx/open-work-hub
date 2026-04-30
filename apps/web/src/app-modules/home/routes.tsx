@@ -1,5 +1,5 @@
-import { WorkspaceHomeView } from '@/src/components/views/WorkspaceHomeView/WorkspaceHomeView';
 import type { WorkspaceRouteDefinition } from '@/src/app/shell/route-types';
+import { WorkspaceHomeView } from './views/WorkspaceHomeView/WorkspaceHomeView';
 
 export const homeWorkspaceRoutes: WorkspaceRouteDefinition[] = [
   {

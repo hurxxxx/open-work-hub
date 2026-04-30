@@ -4,6 +4,8 @@ import { useLocation, useNavigate } from 'react-router-dom';
 
 import { useConfirm } from '@aidoo/ui';
 
+import { aiManifest } from './manifest';
+import type { AppSidebarConfig } from '@/src/app/shell/sidebar-types';
 import {
   CONVERSATIONS_UPDATED_EVENT,
   deleteConversation,
@@ -11,7 +13,10 @@ import {
   type ConversationSummary,
 } from '@/src/domains/ai/conversations-api';
 import { useAuth } from '@/src/domains/auth/auth-provider';
-import { buildWorkspaceAppPath } from '@/src/domains/workspaces/workspace-utils';
+import {
+  buildWorkspaceAppPath,
+  resolveToolInvocationHref,
+} from '@/src/domains/workspaces/workspace-utils';
 import { cn } from '@/src/lib/utils';
 
 interface AiSidebarSectionProps {
@@ -217,3 +222,25 @@ export function AiSidebarSection({ currentWorkspaceSlug }: AiSidebarSectionProps
     </>
   );
 }
+
+export const aiSidebarConfig: AppSidebarConfig = {
+  createActions: ({ currentWorkspaceSlug, navigate, user }) => [
+    {
+      id: 'ai-search',
+      label: '아이두 통합검색',
+      icon: Sparkles,
+      run: () => {
+        const searchItem = aiManifest.navItems.find((item) => item.id === 'search');
+        navigate(
+          searchItem
+            ? resolveToolInvocationHref(searchItem, currentWorkspaceSlug, user)
+            : '/tool/search',
+        );
+      },
+    },
+  ],
+  beforeCategories: ({ currentWorkspaceSlug }) =>
+    currentWorkspaceSlug ? (
+      <AiSidebarSection currentWorkspaceSlug={currentWorkspaceSlug} />
+    ) : null,
+};

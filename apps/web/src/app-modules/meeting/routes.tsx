@@ -1,6 +1,6 @@
-import { MeetingView } from '@/src/components/views/MeetingView/MeetingView';
-import { MeetingWorkspaceView } from '@/src/components/views/MeetingView/MeetingWorkspaceView';
 import type { WorkspaceRouteDefinition } from '@/src/app/shell/route-types';
+import { MeetingView } from './views/MeetingView/MeetingView';
+import { MeetingWorkspaceView } from './views/MeetingView/MeetingWorkspaceView';
 
 export const meetingWorkspaceRoutes: WorkspaceRouteDefinition[] = [
   {

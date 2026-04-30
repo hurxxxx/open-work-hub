@@ -1,7 +1,7 @@
 import { Bot, User } from 'lucide-react';
 
-import { ArtifactCard } from '@/src/components/views/chat/ArtifactCard';
-import { ThinkingPanel } from '@/src/components/views/chat/ThinkingPanel';
+import { ArtifactCard } from './ArtifactCard';
+import { ThinkingPanel } from './ThinkingPanel';
 import type {
   ArtifactBuffer,
   ChatStreamStatus,

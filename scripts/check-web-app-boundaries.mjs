@@ -74,6 +74,17 @@ for (const file of walk(webSrcRoot)) {
   const importerApp = parseAppModulePath(file);
 
   for (const specifier of collectSpecifiers(source)) {
+    const isPublicAppModuleAlias = publicAppModuleAliasPattern.test(specifier);
+
+    if (specifier.startsWith('@/src/components/views/')) {
+      violations.push({
+        file,
+        specifier,
+        reason: 'App-specific views must live inside app-modules/<appId>/views, not shared components/views.',
+      });
+      continue;
+    }
+
     if (specifier.includes('components/views/PMSView')) {
       violations.push({
         file,
@@ -85,7 +96,7 @@ for (const file of walk(webSrcRoot)) {
 
     if (
       specifier.startsWith('@/src/app-modules/') &&
-      !publicAppModuleAliasPattern.test(specifier)
+      !isPublicAppModuleAlias
     ) {
       violations.push({
         file,
@@ -106,6 +117,9 @@ for (const file of walk(webSrcRoot)) {
     }
 
     if (importerApp && importerApp.appId !== targetApp.appId) {
+      if (isPublicAppModuleAlias) {
+        continue;
+      }
       violations.push({
         file,
         specifier,

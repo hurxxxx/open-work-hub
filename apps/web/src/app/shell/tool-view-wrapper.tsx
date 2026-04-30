@@ -1,11 +1,9 @@
 import { Navigate, useLocation, useParams } from 'react-router-dom';
 
 import { getNavItem } from '@/src/app/shell/app-registry';
-import { DocsView } from '@/src/components/views/DocsView';
-import { ComingSoonView } from '@/src/components/views/ComingSoonView';
+import { RagSearchView } from '@/src/app-modules/ai';
+import { DocsView } from '@/src/app-modules/docs';
 import { PMSView } from '@/src/app-modules/pms';
-import { RagSearchView } from '@/src/components/views/RagSearchView';
-import { ToolView } from '@/src/components/views/ToolView';
 import { hasWorkspaceMembership } from '@/src/domains/auth/auth-api';
 import { useAuth } from '@/src/domains/auth/auth-provider';
 import { AccessDeniedView } from '@/src/domains/auth/settings-pages';
@@ -19,6 +17,8 @@ import {
   resolveDefaultWorkspaceAppPath,
   resolveShellWorkspaceSlug,
 } from '@/src/domains/workspaces/workspace-utils';
+import { ComingSoonView } from './tool-views/ComingSoonView';
+import { ToolView } from './tool-views/ToolView';
 
 export function ToolViewWrapper() {
   const auth = useAuth();

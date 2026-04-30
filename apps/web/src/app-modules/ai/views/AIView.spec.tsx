@@ -79,7 +79,7 @@ vi.mock('@/src/domains/meeting/meeting-api', async () => {
   };
 });
 
-vi.mock('@/src/components/views/chat/ToolCallCard', () => ({
+vi.mock('./chat/ToolCallCard', () => ({
   ToolCallCard: ({ call }: { call: { call_id: string; name: string; argsBuffer: string } }) => (
     <div data-testid={`tool-call-${call.call_id}`}>
       {call.name}:{call.argsBuffer}
@@ -87,7 +87,7 @@ vi.mock('@/src/components/views/chat/ToolCallCard', () => ({
   ),
 }));
 
-vi.mock('@/src/components/views/chat/ApprovalModal', () => ({
+vi.mock('./chat/ApprovalModal', () => ({
   ApprovalModal: ({
     approval,
     errorMessage,
