@@ -1,14 +1,27 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { MessageSquare, Plus, Sparkles, Trash2 } from 'lucide-react';
+import { useLocation, useNavigate } from 'react-router-dom';
 
-import type { ConversationSummary } from '@/src/domains/ai/conversations-api';
+import { useConfirm } from '@aidoo/ui';
+
+import {
+  CONVERSATIONS_UPDATED_EVENT,
+  deleteConversation,
+  listConversations,
+  type ConversationSummary,
+} from '@/src/domains/ai/conversations-api';
+import { useAuth } from '@/src/domains/auth/auth-provider';
+import { buildWorkspaceAppPath } from '@/src/domains/workspaces/workspace-utils';
 import { cn } from '@/src/lib/utils';
 
-export interface AiConversationsSectionProps {
+interface AiSidebarSectionProps {
+  currentWorkspaceSlug: string;
+}
+
+interface AiConversationsSectionProps {
   conversations: ConversationSummary[];
   error: string | null;
   activeConversationId: string | null;
-  workspaceSlug: string;
   onSelect: (conversationId: string) => void;
   onNewConversation: () => void;
   onDelete: (conversationId: string) => void | Promise<void>;
@@ -16,7 +29,7 @@ export interface AiConversationsSectionProps {
 
 const MAX_VISIBLE = 8;
 
-export function AiConversationsSection({
+function AiConversationsSection({
   conversations,
   error,
   activeConversationId,
@@ -113,5 +126,94 @@ export function AiConversationsSection({
         ) : null}
       </div>
     </div>
+  );
+}
+
+export function AiSidebarSection({ currentWorkspaceSlug }: AiSidebarSectionProps) {
+  const { token } = useAuth();
+  const location = useLocation();
+  const navigate = useNavigate();
+  const { confirm, confirmDialog } = useConfirm();
+  const [conversations, setConversations] = useState<ConversationSummary[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+    const handler = () => {
+      setRefreshKey((current) => current + 1);
+    };
+    window.addEventListener(CONVERSATIONS_UPDATED_EVENT, handler);
+    return () => {
+      window.removeEventListener(CONVERSATIONS_UPDATED_EVENT, handler);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!token || !currentWorkspaceSlug) {
+      setConversations([]);
+      setError(null);
+      return;
+    }
+    let cancelled = false;
+    listConversations(token, { limit: 20 })
+      .then((response) => {
+        if (cancelled) return;
+        setConversations(response.items);
+        setError(null);
+      })
+      .catch((caughtError: unknown) => {
+        if (cancelled) return;
+        setConversations([]);
+        setError(
+          caughtError instanceof Error
+            ? caughtError.message
+            : '대화 목록을 불러오지 못했습니다.',
+        );
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [currentWorkspaceSlug, location.search, refreshKey, token]);
+
+  return (
+    <>
+      {confirmDialog}
+      <AiConversationsSection
+        conversations={conversations}
+        error={error}
+        activeConversationId={new URLSearchParams(location.search).get('c')}
+        onSelect={(conversationId) => {
+          navigate(
+            `${buildWorkspaceAppPath(
+              currentWorkspaceSlug,
+              'ai',
+            )}?c=${encodeURIComponent(conversationId)}`,
+          );
+        }}
+        onNewConversation={() => {
+          navigate(buildWorkspaceAppPath(currentWorkspaceSlug, 'ai'));
+        }}
+        onDelete={async (conversationId) => {
+          if (!token) return;
+          const confirmed = await confirm({
+            title: '대화 삭제',
+            description:
+              '이 대화를 삭제하면 목록에서 숨겨집니다. 복구는 관리자만 가능합니다.',
+            confirmLabel: '삭제',
+            variant: 'danger',
+          });
+          if (!confirmed) return;
+          await deleteConversation(token, conversationId);
+          setConversations((current) =>
+            current.filter((item) => item.id !== conversationId),
+          );
+          const activeId = new URLSearchParams(location.search).get('c');
+          if (activeId === conversationId) {
+            navigate(buildWorkspaceAppPath(currentWorkspaceSlug, 'ai'));
+          }
+        }}
+      />
+    </>
   );
 }

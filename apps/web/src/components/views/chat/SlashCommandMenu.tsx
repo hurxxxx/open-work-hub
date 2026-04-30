@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef } from 'react';
 
-import type { NavItem } from '@/src/constants';
+import type { NavItem } from '@/src/app/shell/navigation-types';
 
 export interface SlashCommandMenuProps {
   items: NavItem[];

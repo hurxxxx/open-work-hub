@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { AlertTriangle, FileText, Mic, Search, Settings } from 'lucide-react';
 
 import type { AuthUser } from '../auth/auth-api';
-import type { NavItem } from '@/src/constants';
+import type { NavItem } from '@/src/app/shell/navigation-types';
 import {
   resolveBootstrapWorkspaceSlug,
   rewriteWorkspaceApiPath,

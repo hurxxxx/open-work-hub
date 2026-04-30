@@ -1,7 +1,7 @@
 import { motion } from 'motion/react';
 import { Construction } from 'lucide-react';
 
-import type { NavItem } from '@/src/constants';
+import type { NavItem } from '@/src/app/shell/navigation-types';
 
 export const ComingSoonView = ({ item }: { item: NavItem }) => {
   return (

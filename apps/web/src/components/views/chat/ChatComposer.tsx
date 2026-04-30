@@ -1,7 +1,8 @@
 import { FormEvent, ReactNode, useCallback, useEffect, useState } from 'react';
 import { ArrowUp, Loader2, Square } from 'lucide-react';
 
-import { NAV_ITEMS, type NavItem } from '@/src/constants';
+import { NAV_ITEMS } from '@/src/app/shell/app-registry';
+import type { NavItem } from '@/src/app/shell/navigation-types';
 import {
   SlashCommandMenu,
   useSlashCommandItems,

@@ -1,4 +1,4 @@
-import { NAV_ITEMS } from './constants';
+import { NAV_ITEMS } from './app/shell/app-registry';
 import {
   hasAdminConsoleAccess,
   hasWorkspaceMembership,

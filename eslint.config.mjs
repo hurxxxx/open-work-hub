@@ -53,11 +53,33 @@ export default [
         'error',
         {
           paths: [
-            { name: 'recharts', message: 'Use chart components from @aidoo/ui instead.' },
-            { name: '@tanstack/react-table', message: 'Use DataTable from @aidoo/ui instead.' },
+            {
+              name: 'recharts',
+              message: 'Use chart components from @aidoo/ui instead.',
+            },
+            {
+              name: '@tanstack/react-table',
+              message: 'Use DataTable from @aidoo/ui instead.',
+            },
           ],
           patterns: [
-            { group: ['@radix-ui/*'], message: 'Use primitives from @aidoo/ui instead.' },
+            {
+              group: ['@radix-ui/*'],
+              message: 'Use primitives from @aidoo/ui instead.',
+            },
+            {
+              group: [
+                '@/src/app-modules/*/api/**',
+                '@/src/app-modules/*/lib/**',
+                '@/src/app-modules/*/model/**',
+                '@/src/app-modules/*/pages/**',
+                '@/src/app-modules/*/sidebar/**',
+                '@/src/app-modules/*/ui/**',
+                '@/src/app-modules/*/views/**',
+              ],
+              message:
+                'Import app modules through their public registry/manifest boundary. Inside the same app module, use relative imports.',
+            },
             {
               group: [
                 '@fullcalendar/resource-*',

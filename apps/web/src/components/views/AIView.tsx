@@ -26,7 +26,7 @@ import {
   resolveToolInvocationHref,
 } from '@/src/domains/workspaces/workspace-utils';
 import { useWorkspaceBootstrapContext } from '@/src/domains/workspaces/workspace-bootstrap-context';
-import { NAV_ITEMS } from '@/src/constants';
+import { NAV_ITEMS } from '@/src/app/shell/app-registry';
 import { ChatThread } from '@/src/components/views/chat/ChatThread';
 import { ApprovalModal } from '@/src/components/views/chat/ApprovalModal';
 import { ArtifactPanel } from '@/src/components/views/chat/ArtifactPanel';
@@ -42,7 +42,7 @@ import type {
   PendingApproval,
   ToolCallBuffer,
 } from '@/src/domains/ai/agent-events';
-import type { NavItem } from '@/src/constants';
+import type { NavItem } from '@/src/app/shell/navigation-types';
 
 const AI_BACKEND_MODE_STORAGE_KEY = 'aidoo.ai.backendMode';
 const AI_SCOPE_STORAGE_PREFIX = 'aidoo.ai.scope.';

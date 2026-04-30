@@ -3,7 +3,7 @@ import {
   type AuthUser,
 } from '@/src/domains/auth/auth-api';
 import { getDefaultAdminPath } from '@/src/domains/admin/admin-permissions';
-import type { NavItem } from '@/src/constants';
+import type { NavItem } from '@/src/app/shell/navigation-types';
 
 export type WorkspaceAppId =
   | 'home'

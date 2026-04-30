@@ -23,6 +23,7 @@
     "dev:api:2": "bash ./scripts/dev-api.sh 8002",
     "dev:smoke": "bash ./scripts/dev-smoke.sh",
     "fix:codex-issue-16849": "bash ./scripts/apply-codex-issue-16849-fix.sh",
+    "check:web-boundaries": "node scripts/check-web-app-boundaries.mjs",
     "lint": "nx run-many -t lint --all",
     "test": "nx run-many -t test --all",
     "e2e": "playwright test --config apps/web/playwright.config.ts",

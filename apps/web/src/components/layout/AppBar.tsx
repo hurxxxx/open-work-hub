@@ -10,7 +10,7 @@ import {
 } from 'lucide-react';
 import { AnimatePresence } from 'motion/react';
 
-import { APP_BAR_ITEMS } from '@/src/constants';
+import { APP_BAR_ITEMS } from '@/src/app/shell/app-registry';
 import {
   getDefaultAdminPath,
   hasAnyAdminReadPermission,

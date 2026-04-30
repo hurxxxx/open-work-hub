@@ -9,7 +9,7 @@ import {
   FileText, 
   HelpCircle 
 } from 'lucide-react';
-import { NavItem } from '@/src/constants';
+import type { NavItem } from '@/src/app/shell/navigation-types';
 
 export const ToolView = ({ item }: { item: NavItem }) => {
   return (

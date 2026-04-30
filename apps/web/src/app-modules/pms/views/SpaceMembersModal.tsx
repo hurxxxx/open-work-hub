@@ -12,7 +12,6 @@ import {
 import { createPortal } from 'react-dom';
 
 import { useAuth } from '@/src/domains/auth/auth-provider';
-import { initials } from '@/src/components/views/PMSView/pms-constants';
 import {
   addSpaceMember,
   listPmsUsers,
@@ -22,6 +21,7 @@ import {
   type PmsSpaceMember,
   type PmsUserSummary,
 } from '@/src/domains/pms/pms-api';
+import { initials } from './pms-constants';
 
 interface SpaceMembersModalProps {
   isOpen: boolean;
@@ -35,13 +35,26 @@ interface SpaceMembersModalProps {
 
 type RoleValue = 'owner' | 'admin' | 'member' | 'viewer';
 
-const ROLE_OPTIONS: { value: RoleValue; label: string; description: string }[] = [
-  { value: 'admin', label: '관리자', description: '멤버 관리 및 설정 변경 가능' },
-  { value: 'member', label: '멤버', description: '리스트, 폴더, 문서 생성 및 편집' },
-  { value: 'viewer', label: '뷰어', description: '읽기 전용' },
-];
+const ROLE_OPTIONS: { value: RoleValue; label: string; description: string }[] =
+  [
+    {
+      value: 'admin',
+      label: '관리자',
+      description: '멤버 관리 및 설정 변경 가능',
+    },
+    {
+      value: 'member',
+      label: '멤버',
+      description: '리스트, 폴더, 문서 생성 및 편집',
+    },
+    { value: 'viewer', label: '뷰어', description: '읽기 전용' },
+  ];
 
-const OWNER_ROLE_OPTION: { value: RoleValue; label: string; description: string } = {
+const OWNER_ROLE_OPTION: {
+  value: RoleValue;
+  label: string;
+  description: string;
+} = {
   value: 'owner',
   label: '소유자',
   description: '관리자 지정과 소유권 변경 가능',
@@ -226,10 +239,13 @@ export function SpaceMembersModal({
   const [inviteFocused, setInviteFocused] = useState(false);
   const [memberSearch, setMemberSearch] = useState('');
   const [openRowMenu, setOpenRowMenu] = useState<string | null>(null);
-  const rowMenuAnchors = useRef<Map<string, HTMLButtonElement | null>>(new Map());
+  const rowMenuAnchors = useRef<Map<string, HTMLButtonElement | null>>(
+    new Map(),
+  );
   const canManageAdmins = currentUserRole === 'owner';
   const roleOptions = useMemo(
-    () => (canManageAdmins ? [OWNER_ROLE_OPTION, ...ROLE_OPTIONS] : ROLE_OPTIONS),
+    () =>
+      canManageAdmins ? [OWNER_ROLE_OPTION, ...ROLE_OPTIONS] : ROLE_OPTIONS,
     [canManageAdmins],
   );
 
@@ -240,12 +256,16 @@ export function SpaceMembersModal({
     try {
       const [memberRes, users] = await Promise.all([
         listSpaceMembers(token, spaceId),
-        canManage ? listPmsUsers(token) : Promise.resolve([] as PmsUserSummary[]),
+        canManage
+          ? listPmsUsers(token)
+          : Promise.resolve([] as PmsUserSummary[]),
       ]);
       setMembers(memberRes.items);
       setAllUsers(users);
     } catch (err) {
-      setError(err instanceof Error ? err.message : '멤버를 불러올 수 없습니다.');
+      setError(
+        err instanceof Error ? err.message : '멤버를 불러올 수 없습니다.',
+      );
     } finally {
       setLoading(false);
     }
@@ -317,7 +337,9 @@ export function SpaceMembersModal({
       onChanged?.();
       setInviteQuery('');
     } catch (err) {
-      setError(err instanceof Error ? err.message : '멤버를 추가할 수 없습니다.');
+      setError(
+        err instanceof Error ? err.message : '멤버를 추가할 수 없습니다.',
+      );
     } finally {
       setBusyUserId(null);
     }
@@ -332,7 +354,9 @@ export function SpaceMembersModal({
       await refresh();
       onChanged?.();
     } catch (err) {
-      setError(err instanceof Error ? err.message : '역할을 변경할 수 없습니다.');
+      setError(
+        err instanceof Error ? err.message : '역할을 변경할 수 없습니다.',
+      );
     } finally {
       setBusyUserId(null);
     }
@@ -348,7 +372,9 @@ export function SpaceMembersModal({
       await refresh();
       onChanged?.();
     } catch (err) {
-      setError(err instanceof Error ? err.message : '멤버를 제거할 수 없습니다.');
+      setError(
+        err instanceof Error ? err.message : '멤버를 제거할 수 없습니다.',
+      );
     } finally {
       setBusyUserId(null);
     }
@@ -381,7 +407,8 @@ export function SpaceMembersModal({
       <div className="space-y-6 text-app-ink">
         {!canManage ? (
           <div className="app-text-caption rounded-md border border-app-border bg-app-surface-sidebar px-3 py-2 text-app-ink/60 dark:text-app-ink/70">
-            이 스페이스의 멤버를 수정할 권한이 없습니다. 현재 멤버만 볼 수 있습니다.
+            이 스페이스의 멤버를 수정할 권한이 없습니다. 현재 멤버만 볼 수
+            있습니다.
           </div>
         ) : null}
 
@@ -412,7 +439,8 @@ export function SpaceMembersModal({
                 placeholder="이름 또는 이메일로 사용자 검색"
                 className="app-text-body w-full rounded-md border border-app-border bg-app-surface-sidebar py-2 pl-9 pr-3 text-app-ink placeholder:text-app-ink/30 focus:border-app-accent focus:outline-none"
               />
-              {inviteFocused && (inviteQuery.trim() || inviteCandidates.length > 0) ? (
+              {inviteFocused &&
+              (inviteQuery.trim() || inviteCandidates.length > 0) ? (
                 <div className="absolute left-0 right-0 top-full z-10 mt-1 max-h-56 overflow-y-auto rounded-md border border-app-border bg-app-surface shadow-lg">
                   {inviteCandidates.length === 0 ? (
                     <div className="app-text-caption px-3 py-3 text-app-ink/40">
@@ -431,7 +459,10 @@ export function SpaceMembersModal({
                             disabled={busyUserId !== null}
                             className="flex w-full items-center gap-3 px-3 py-2 text-left hover:bg-app-surface-hover disabled:opacity-50"
                           >
-                            <MemberAvatar name={user.full_name} seed={user.id} />
+                            <MemberAvatar
+                              name={user.full_name}
+                              seed={user.id}
+                            />
                             <div className="min-w-0 flex-1">
                               <div className="app-text-body line-clamp-1 text-app-ink">
                                 {user.full_name}
@@ -455,7 +486,8 @@ export function SpaceMembersModal({
               ) : null}
             </div>
             <p className="app-text-caption text-app-ink/40">
-              초대된 멤버는 기본 "멤버" 역할로 추가됩니다. 역할은 아래 리스트에서 변경할 수 있습니다.
+              초대된 멤버는 기본 "멤버" 역할로 추가됩니다. 역할은 아래
+              리스트에서 변경할 수 있습니다.
             </p>
           </section>
         ) : null}
@@ -496,9 +528,11 @@ export function SpaceMembersModal({
               {visibleMembers.map((member) => {
                 const isBusy = busyUserId === member.user_id;
                 const isSelf = member.user_id === user?.id;
-                const canMutate = canManage
-                  && !isSelf
-                  && (canManageAdmins || (member.role !== 'owner' && member.role !== 'admin'));
+                const canMutate =
+                  canManage &&
+                  !isSelf &&
+                  (canManageAdmins ||
+                    (member.role !== 'owner' && member.role !== 'admin'));
                 return (
                   <li
                     key={member.user_id}

@@ -78,6 +78,12 @@ describe('resolveShellState', () => {
       activeAppId: 'home',
       activeNavItemId: '',
     });
+    for (const legacyPath of ['/docs', '/pms', '/planner', '/ai']) {
+      expect(resolveShellState(legacyPath, buildUser())).toEqual({
+        activeAppId: 'home',
+        activeNavItemId: '',
+      });
+    }
   });
 
   it('falls back to home when the workspace bootstrap disables the app', () => {
