@@ -1,6 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
+import { aiManifest } from '@/src/app-modules/ai/manifest';
 import { ChatComposer } from './ChatComposer';
 
 function defaultProps(overrides: Partial<Parameters<typeof ChatComposer>[0]> = {}) {
@@ -12,6 +13,7 @@ function defaultProps(overrides: Partial<Parameters<typeof ChatComposer>[0]> = {
     isSending: false,
     isStreaming: false,
     chatError: null,
+    toolItems: aiManifest.navItems,
     ...overrides,
   };
 }
@@ -213,7 +215,7 @@ describe('ChatComposer', () => {
       // Move from index 0 to 1.
       fireEvent.keyDown(textarea, { key: 'ArrowDown' });
       fireEvent.keyDown(textarea, { key: 'Enter' });
-      // NAV_ITEMS AI section starts with 'chatbot' then 'search'.
+      // AI manifest order starts with 'chatbot' then 'search'.
       expect(onSelectTool.mock.calls[0][0].id).toBe('search');
     });
 

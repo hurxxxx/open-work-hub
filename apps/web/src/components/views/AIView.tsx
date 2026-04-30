@@ -26,7 +26,6 @@ import {
   resolveToolInvocationHref,
 } from '@/src/domains/workspaces/workspace-utils';
 import { useWorkspaceBootstrapContext } from '@/src/domains/workspaces/workspace-bootstrap-context';
-import { NAV_ITEMS } from '@/src/app/shell/app-registry';
 import { ChatThread } from '@/src/components/views/chat/ChatThread';
 import { ApprovalModal } from '@/src/components/views/chat/ApprovalModal';
 import { ArtifactPanel } from '@/src/components/views/chat/ArtifactPanel';
@@ -198,7 +197,7 @@ function ScopeChip({
   );
 }
 
-export const AIView = () => {
+export function AIView({ toolItems = [] }: { toolItems?: NavItem[] }) {
   const { status: authStatus, token, user } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
@@ -348,14 +347,15 @@ export const AIView = () => {
     isSending || isLoadingConversation || !isConversationReady || blockingApproval !== null;
 
   // Slash-command candidates: merge workspace bootstrap nav (filters out
-  // disabled/unauthorized tools) with the local NAV_ITEMS registry (supplies
+  // disabled/unauthorized tools) with the owning app manifest (supplies
   // icons + full metadata). Falls back to the local AI-only list while
   // bootstrap is still loading so the menu stays usable.
   const slashCommandItems = useMemo(() => {
-    const registry = new Map(NAV_ITEMS.map((item) => [item.id, item]));
+    const fallbackItems = toolItems.filter((item) => item.appId === 'ai');
+    const registry = new Map(fallbackItems.map((item) => [item.id, item]));
     const bootstrapNav = workspaceBootstrap.data?.nav ?? null;
     if (!bootstrapNav) {
-      return NAV_ITEMS.filter((item) => item.appId === 'ai');
+      return fallbackItems;
     }
     return bootstrapNav
       .filter((entry) => entry.app_id === 'ai')
@@ -371,7 +371,7 @@ export const AIView = () => {
         };
       })
       .filter((item): item is NavItem => item !== null);
-  }, [workspaceBootstrap.data]);
+  }, [toolItems, workspaceBootstrap.data]);
 
   const currentConversationId = activeConversationId ?? routeConversationId;
   const abortHydrateRef = useRef<AbortController | null>(null);
@@ -1319,7 +1319,7 @@ export const AIView = () => {
       <ArtifactPanel artifact={activeArtifact} onClose={handleCloseArtifact} />
     </motion.div>
   );
-};
+}
 
 function mergeToolCalls(
   finalized: ToolCallBuffer[],

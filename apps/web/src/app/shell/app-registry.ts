@@ -1,11 +1,11 @@
-import { aiManifest } from '@/src/app-modules/ai/manifest';
-import { docsManifest } from '@/src/app-modules/docs/manifest';
-import { homeManifest } from '@/src/app-modules/home/manifest';
-import { learningManifest } from '@/src/app-modules/learning/manifest';
-import { meetingManifest } from '@/src/app-modules/meeting/manifest';
-import { plannerManifest } from '@/src/app-modules/planner/manifest';
-import { pmsManifest } from '@/src/app-modules/pms/manifest';
-import { settingsManifest } from '@/src/app-modules/settings/manifest';
+import { aiManifest } from '@/src/app-modules/ai';
+import { docsManifest } from '@/src/app-modules/docs';
+import { homeManifest } from '@/src/app-modules/home';
+import { learningManifest } from '@/src/app-modules/learning';
+import { meetingManifest } from '@/src/app-modules/meeting';
+import { plannerManifest } from '@/src/app-modules/planner';
+import { pmsManifest } from '@/src/app-modules/pms';
+import { settingsManifest } from '@/src/app-modules/settings';
 import type {
   AppBarItem,
   AppModuleId,

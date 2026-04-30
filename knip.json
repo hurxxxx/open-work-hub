@@ -1,0 +1,66 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "ignoreFiles": [
+    "coverage/**",
+    "dist/**",
+    "legacy_ai_portal_prototype/**",
+    "node_modules/**"
+  ],
+  "workspaces": {
+    ".": {
+      "entry": [
+        "eslint.config.mjs",
+        "scripts/blocknote-collab-codec.mjs",
+        "scripts/check-web-app-boundaries.mjs"
+      ],
+      "project": [
+        "*.cjs",
+        "*.mjs",
+        "scripts/**/*.mjs"
+      ]
+    },
+    "apps/web": {
+      "entry": [
+        "src/main.tsx",
+        "src/App.tsx",
+        "src/app/AppRoot.tsx",
+        "vite.config.mts",
+        "playwright.config.ts"
+      ],
+      "ignore": [
+        "src/**/*.spec.{ts,tsx}",
+        "src/**/*.test.{ts,tsx}",
+        "src/test-setup.ts",
+        "tests/**"
+      ],
+      "paths": {
+        "@/src/*": [
+          "src/*"
+        ],
+        "@aidoo/ui": [
+          "../../packages/ui/src/index.ts"
+        ],
+        "@aidoo/ui/styles.css": [
+          "../../packages/ui/styles.css"
+        ]
+      },
+      "project": [
+        "*.config.{ts,mts}",
+        "playwright.config.ts",
+        "src/**/*.{ts,tsx}",
+        "tests/**/*.{ts,tsx}",
+        "vite.config.mts"
+      ]
+    },
+    "packages/ui": {
+      "entry": [
+        "src/index.ts",
+        "styles.css"
+      ],
+      "project": [
+        "src/**/*.{ts,tsx}",
+        "styles.css"
+      ]
+    }
+  }
+}

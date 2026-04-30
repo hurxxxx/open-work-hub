@@ -69,12 +69,16 @@ export default [
             },
             {
               group: [
+                '@/src/app-modules/*/routes',
+                '@/src/app-modules/*/routes/**',
                 '@/src/app-modules/*/api/**',
                 '@/src/app-modules/*/lib/**',
                 '@/src/app-modules/*/model/**',
                 '@/src/app-modules/*/pages/**',
+                '@/src/app-modules/*/sidebar',
                 '@/src/app-modules/*/sidebar/**',
                 '@/src/app-modules/*/ui/**',
+                '@/src/app-modules/*/views',
                 '@/src/app-modules/*/views/**',
               ],
               message:

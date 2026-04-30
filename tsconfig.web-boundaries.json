@@ -1,0 +1,12 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@/src/*": ["apps/web/src/*"],
+      "@aidoo/ui": ["packages/ui/src/index.ts"],
+      "@aidoo/ui/styles.css": ["packages/ui/styles.css"]
+    }
+  },
+  "include": ["apps/web/src/**/*.ts", "apps/web/src/**/*.tsx"]
+}

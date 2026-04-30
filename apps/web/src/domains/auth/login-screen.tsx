@@ -4,7 +4,7 @@ import { ArrowRight, Lock, Mail, ShieldCheck, User } from 'lucide-react';
 
 import { InlineNotice } from '@aidoo/ui';
 
-import { useAuth } from './auth-provider';
+import { useAuth } from './auth-context';
 
 function getMessage(caughtError: unknown, fallback: string): string {
   if (caughtError instanceof Error && caughtError.message) {

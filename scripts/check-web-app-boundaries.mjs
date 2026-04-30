@@ -6,7 +6,8 @@ import path from 'node:path';
 const repoRoot = process.cwd();
 const webSrcRoot = path.join(repoRoot, 'apps/web/src');
 const appModulesRoot = path.join(webSrcRoot, 'app-modules');
-const internalSegments = new Set(['api', 'lib', 'model', 'pages', 'sidebar', 'ui', 'views']);
+const internalSegments = new Set(['api', 'lib', 'model', 'pages', 'routes', 'sidebar', 'ui', 'views']);
+const publicAppModuleAliasPattern = /^@\/src\/app-modules\/[^/]+(?:\/manifest)?$/;
 const sourceExtensions = new Set(['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs']);
 
 function walk(dir) {
@@ -82,30 +83,42 @@ for (const file of walk(webSrcRoot)) {
       continue;
     }
 
+    if (
+      specifier.startsWith('@/src/app-modules/') &&
+      !publicAppModuleAliasPattern.test(specifier)
+    ) {
+      violations.push({
+        file,
+        specifier,
+        reason: 'Import app modules through their public module root or manifest boundary only.',
+      });
+      continue;
+    }
+
     const resolved = resolveSpecifier(file, specifier);
     if (!resolved) {
       continue;
     }
 
     const targetApp = parseAppModulePath(resolved);
-    if (!targetApp || !internalSegments.has(targetApp.segment)) {
+    if (!targetApp) {
       continue;
     }
 
-    if (specifier.startsWith('@/src/app-modules/')) {
+    if (importerApp && importerApp.appId !== targetApp.appId) {
       violations.push({
         file,
         specifier,
-        reason: 'Do not import app module internals by alias. Import the public app module boundary instead.',
+        reason: `Cross-app imports must go through the shell registry/public app boundary, not ${importerApp.appId} to ${targetApp.appId}.`,
       });
       continue;
     }
 
-    if (importerApp?.appId !== targetApp.appId) {
+    if (!importerApp && internalSegments.has(targetApp.segment)) {
       violations.push({
         file,
         specifier,
-        reason: `Cross-app internal import from ${importerApp?.appId ?? 'outside app-modules'} to ${targetApp.appId}/${targetApp.segment}.`,
+        reason: `Outside app-modules cannot import ${targetApp.appId}/${targetApp.segment} internals.`,
       });
     }
   }

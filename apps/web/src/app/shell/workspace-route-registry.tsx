@@ -1,17 +1,17 @@
 import { Route } from 'react-router-dom';
 
-import { aiWorkspaceRoutes } from '@/src/app-modules/ai/routes';
-import { docsGlobalRoutes, docsWorkspaceRoutes } from '@/src/app-modules/docs/routes';
-import { homeWorkspaceRoutes } from '@/src/app-modules/home/routes';
-import { learningWorkspaceRoutes } from '@/src/app-modules/learning/routes';
-import { meetingWorkspaceRoutes } from '@/src/app-modules/meeting/routes';
-import { plannerWorkspaceRoutes } from '@/src/app-modules/planner/routes';
-import { pmsWorkspaceRoutes } from '@/src/app-modules/pms/routes';
+import { aiWorkspaceRoutes } from '@/src/app-modules/ai';
+import { docsGlobalRoutes, docsWorkspaceRoutes } from '@/src/app-modules/docs';
+import { homeWorkspaceRoutes } from '@/src/app-modules/home';
+import { learningWorkspaceRoutes } from '@/src/app-modules/learning';
+import { meetingWorkspaceRoutes } from '@/src/app-modules/meeting';
+import { plannerWorkspaceRoutes } from '@/src/app-modules/planner';
+import { pmsWorkspaceRoutes } from '@/src/app-modules/pms';
 import {
   adminRedirectRoutes,
   adminSectionRoutes,
   workspaceSettingsRoute,
-} from '@/src/app-modules/settings/routes';
+} from '@/src/app-modules/settings';
 import { AdminGate, WorkspaceGate } from './gates';
 
 export const workspaceRouteDefinitions = [

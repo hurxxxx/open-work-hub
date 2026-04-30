@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { createContext, useContext, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 
 import {
@@ -17,14 +17,14 @@ import {
   revokeSession as revokeSessionRequest,
   setupFirstUser as setupFirstUserRequest,
   updatePreferences as updatePreferencesRequest,
-  type AuthSessionItem,
   type AuthUser,
-  type ChangePasswordPayload,
   type DevLoginAccount,
-  type LoginPayload,
-  type SetupFirstUserPayload,
-  type UpdatePreferencesPayload,
 } from './auth-api';
+import {
+  AuthContext,
+  useAuth as useAuthContext,
+  type AuthSessionStatus,
+} from './auth-context';
 import {
   clearStoredAuthToken,
   consumePostLogoutHomeRedirect,
@@ -34,32 +34,7 @@ import {
 } from './auth-storage';
 import { LoginScreen } from './login-screen';
 
-export type AuthSessionStatus =
-  | 'bootstrapping'
-  | 'authenticated'
-  | 'unauthenticated';
-
-export interface AuthContextValue {
-  status: AuthSessionStatus;
-  user: AuthUser | null;
-  token: string | null;
-  requiresSetup: boolean;
-  devAdminLoginAvailable: boolean;
-  devLoginAccounts: DevLoginAccount[];
-  bootstrapError: string | null;
-  login: (payload: LoginPayload) => Promise<void>;
-  loginAsDevelopmentAdmin: () => Promise<void>;
-  loginAsDevelopmentAccount: (accountKey: string) => Promise<void>;
-  setupFirstUser: (payload: SetupFirstUserPayload) => Promise<void>;
-  logout: () => Promise<void>;
-  refreshSession: () => Promise<void>;
-  updatePreferences: (payload: UpdatePreferencesPayload) => Promise<void>;
-  changePassword: (payload: ChangePasswordPayload) => Promise<void>;
-  listSessions: () => Promise<AuthSessionItem[]>;
-  revokeSession: (sessionId: string) => Promise<void>;
-  hasPermission: (permission: string) => boolean;
-  hasFeature: (featureCode: string, workspaceSlug?: string | null) => boolean;
-}
+export { useAuth } from './auth-context';
 
 interface AuthState {
   status: AuthSessionStatus;
@@ -70,8 +45,6 @@ interface AuthState {
   devLoginAccounts: DevLoginAccount[];
   bootstrapError: string | null;
 }
-
-const AuthContext = createContext<AuthContextValue | null>(null);
 
 const PERMISSION_ROLE_MAP: Record<string, string[]> = {
   'admin.access': ['platform_admin'],
@@ -441,18 +414,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 }
 
-export function useAuth() {
-  const context = useContext(AuthContext);
-
-  if (!context) {
-    throw new Error('useAuth must be used within AuthProvider');
-  }
-
-  return context;
-}
-
 export function RequireAuth({ children }: { children: ReactNode }) {
-  const auth = useAuth();
+  const auth = useAuthContext();
   const location = useLocation();
 
   if (auth.status === 'bootstrapping') {
@@ -475,7 +438,7 @@ export function RequireAuth({ children }: { children: ReactNode }) {
 }
 
 export function LoginRoute() {
-  const auth = useAuth();
+  const auth = useAuthContext();
   const location = useLocation();
   const [redirectToHomeAfterLogout] = useState(() => consumePostLogoutHomeRedirect());
 

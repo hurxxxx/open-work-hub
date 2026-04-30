@@ -1,7 +1,6 @@
 import { FormEvent, ReactNode, useCallback, useEffect, useState } from 'react';
 import { ArrowUp, Loader2, Square } from 'lucide-react';
 
-import { NAV_ITEMS } from '@/src/app/shell/app-registry';
 import type { NavItem } from '@/src/app/shell/navigation-types';
 import {
   SlashCommandMenu,
@@ -36,11 +35,9 @@ export interface ChatComposerProps {
   leadingControls?: ReactNode;
 }
 
-const DEFAULT_TOOL_ITEMS = NAV_ITEMS.filter((item) => item.appId === 'ai');
-
 export function ChatComposer(props: ChatComposerProps) {
   const slashItems = useSlashCommandItems(
-    props.toolItems ?? DEFAULT_TOOL_ITEMS,
+    props.toolItems ?? [],
     props.input,
   );
   // Only treat the buffer as a slash command when there's at least one
