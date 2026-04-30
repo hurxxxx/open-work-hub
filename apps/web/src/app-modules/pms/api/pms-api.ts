@@ -1,228 +1,76 @@
+import type { ApiSchema } from '@/src/platform/api/types';
 import { rewriteWorkspaceApiPath } from '@/src/platform/workspaces/workspace-utils';
 
-export interface PmsTaskList {
-  id: string;
-  key: string;
-  name: string;
-  description: string;
-  status: string;
-  archived: boolean;
-  team_id: string | null;
-  team_name: string | null;
+export type PmsTaskList = Omit<ApiSchema<'TaskListItem'>, 'folder_id' | 'folder_name'> & {
   folder_id: string | null;
   folder_name: string | null;
-  sort_order: number;
-  role: string;
-  progress: number;
-  member_count: number;
-  milestone_count: number;
-  issue_count: number;
-  overdue_issue_count: number;
-  created_at: string;
-  updated_at: string;
-}
+};
 
-export interface PmsTaskListsResponse {
+export type PmsTaskListsResponse = Omit<ApiSchema<'TaskListsResponse'>, 'items'> & {
   items: PmsTaskList[];
-  total: number;
-  page: number;
-  page_size: number;
-}
+};
 
-export interface PmsTaskListMember {
-  user_id: string;
-  email: string;
-  full_name: string;
-  is_admin: boolean;
-  role: string;
-  joined_at: string;
-}
+export type PmsTaskListMember = ApiSchema<'SpaceMemberItem'>;
 
-export interface PmsTaskListMembersResponse {
+export type PmsTaskListMembersResponse = Omit<ApiSchema<'SpaceMemberListResponse'>, 'items'> & {
   items: PmsTaskListMember[];
-  total: number;
-  page: number;
-  page_size: number;
-}
+};
 
-export interface PmsSpace {
-  id: string;
-  workspace_id: string;
-  workspace_key: string;
-  key: string;
-  name: string;
-  description: string;
-  member_count: number;
-  current_user_role: string | null;
-  created_at: string;
-  updated_at: string;
-}
+export type PmsSpace = ApiSchema<'SpaceItem'>;
 
-export interface PmsSpaceMember {
-  user_id: string;
-  email: string;
-  full_name: string;
-  is_admin: boolean;
-  role: string;
-  joined_at: string;
-}
+export type PmsSpaceMember = ApiSchema<'SpaceMemberItem'>;
 
-export interface PmsSpaceMembersResponse {
+export type PmsSpaceMembersResponse = Omit<ApiSchema<'SpaceMemberListResponse'>, 'items'> & {
   items: PmsSpaceMember[];
-  total: number;
-  page: number;
-  page_size: number;
-}
+};
 
-export interface PmsUserSummary {
-  id: string;
-  email: string;
-  full_name: string;
-}
+export type PmsUserSummary = ApiSchema<'SpaceUserItem'>;
 
-export interface PmsMilestone {
-  id: string;
-  list_id: string;
-  title: string;
-  description: string;
-  status: string;
-  start_date: string | null;
-  due_date: string | null;
-  sort_order: number;
-  progress: number;
-  issue_count: number;
-  completed_issue_count: number;
-  updated_at: string;
-}
+export type PmsMilestone = ApiSchema<'MilestoneItem'>;
 
-export interface PmsMilestonesResponse {
+export type PmsMilestonesResponse = Omit<ApiSchema<'MilestoneListResponse'>, 'items'> & {
   items: PmsMilestone[];
-  total: number;
-  page: number;
-  page_size: number;
-}
+};
 
-export interface PmsLabel {
-  id: string;
-  name: string;
-  color: string;
-}
+export type PmsLabel = ApiSchema<'LabelItem'>;
 
-export interface PmsIssue {
-  id: string;
-  list_id: string;
-  reference: string;
-  title: string;
-  description: string;
+export type PmsIssue = Omit<
+  ApiSchema<'IssueListItem'>,
+  'description_blocks' | 'estimate_hours' | 'labels' | 'parent_id' | 'recurrence_rule'
+> & {
   description_blocks: Record<string, unknown>[] | null;
   parent_id: string | null;
-  subtask_count: number;
-  status: string;
-  status_label: string;
-  priority: string;
-  priority_label: string;
-  assignee_id: string | null;
-  assignee_name: string | null;
-  reporter_id: string;
-  reporter_name: string;
-  milestone_id: string | null;
-  milestone_title: string | null;
-  start_date: string | null;
-  due_date: string | null;
-  board_position: number;
-  archived: boolean;
-  progress: number | null;
-  comments_count: number;
-  checklist_total: number;
-  checklist_done: number;
   estimate_hours: number | null;
-  time_spent_minutes: number;
   recurrence_rule: string | null;
-  assignee_ids: string[];
-  assignee_names: string[];
   labels: PmsLabel[];
-  updated_at: string;
-}
+};
 
-export interface PmsIssuesResponse {
+export type PmsIssuesResponse = Omit<ApiSchema<'IssueListResponse'>, 'items'> & {
   items: PmsIssue[];
-  total: number;
-  page: number;
-  page_size: number;
-}
+};
 
-export interface PmsDependency {
-  id: string;
-  predecessor_kind: string;
-  predecessor_id: string;
-  successor_kind: string;
-  successor_id: string;
-  relation_type: string;
-}
+export type PmsDependency = ApiSchema<'DependencyItem'>;
 
-export interface PmsComment {
-  id: string;
-  issue_id: string;
-  author_id: string;
-  author_name: string;
-  body: string;
+export type PmsComment = Omit<ApiSchema<'IssueCommentItem'>, 'body_blocks'> & {
   body_blocks: Record<string, unknown>[] | null;
-  created_at: string;
-}
+};
 
-export interface PmsActivityLog {
-  id: string;
-  issue_id: string;
-  actor_id: string | null;
-  actor_name: string | null;
-  action: string;
-  field_name: string | null;
-  from_value: string | null;
-  to_value: string | null;
-  message: string;
-  created_at: string;
-}
+export type PmsActivityLog = ApiSchema<'ActivityLogItem'>;
 
-export interface PmsActivityLogsResponse {
+export type PmsActivityLogsResponse = Omit<ApiSchema<'ActivityLogListResponse'>, 'items'> & {
   items: PmsActivityLog[];
-  total: number;
-  page: number;
-  page_size: number;
-}
+};
 
-export interface PmsAttachment {
-  id: string;
-  issue_id: string;
-  filename: string;
-  content_type: string;
-  size_bytes: number;
-  download_url: string;
-  uploaded_by_id: string;
-  uploaded_by_name: string;
-  created_at: string;
-}
+export type PmsAttachment = ApiSchema<'AttachmentItem'>;
 
-export interface PmsChecklistItem {
-  id: string;
-  issue_id: string;
-  text: string;
-  completed: boolean;
-  sort_order: number;
-  created_at: string;
-}
+export type PmsChecklistItem = ApiSchema<'ChecklistItemResponse'>;
 
-export interface PmsTimeEntry {
-  id: string;
-  issue_id: string;
-  user_id: string;
-  user_name: string;
-  duration_minutes: number;
-  description: string;
-  entry_date: string;
-  created_at: string;
-}
+export type PmsTimeEntry = ApiSchema<'TimeEntryItem'>;
 
-export interface PmsIssueDetail {
+export type PmsIssueDetail = Omit<
+  ApiSchema<'IssueDetailResponse'>,
+  'attachments' | 'checklist_items' | 'comments' | 'dependencies' | 'issue' | 'subtasks' | 'time_entries'
+> & {
   issue: PmsIssue;
   comments: PmsComment[];
   dependencies: PmsDependency[];
@@ -230,125 +78,71 @@ export interface PmsIssueDetail {
   attachments: PmsAttachment[];
   checklist_items: PmsChecklistItem[];
   time_entries: PmsTimeEntry[];
-}
+};
 
-export interface PmsLabelsResponse {
+export type PmsLabelsResponse = Omit<ApiSchema<'LabelListResponse'>, 'items'> & {
   items: PmsLabel[];
-  total: number;
-  page: number;
-  page_size: number;
-}
+};
 
 export type IssueArchivedState = 'active' | 'archived' | 'all';
 
-export interface PmsDashboardStatusCount {
-  status: string;
-  label: string;
-  count: number;
-}
+export type PmsDashboardStatusCount = ApiSchema<'StatusCountItem'>;
 
-export interface PmsDashboardPriorityCount {
-  priority: string;
-  label: string;
-  count: number;
-}
+export type PmsDashboardPriorityCount = ApiSchema<'PriorityCountItem'>;
 
-export interface PmsDashboardTaskList {
-  list_id: string;
-  key: string;
-  name: string;
-  progress: number;
-  open_issue_count: number;
-  overdue_issue_count: number;
-  next_due_date: string | null;
-}
+export type PmsDashboardTaskList = ApiSchema<'DashboardTaskListItem'>;
 
-export interface PmsDashboardRecentActivity {
-  id: string;
-  issue_id: string;
-  issue_reference: string;
-  message: string;
-  actor_name: string | null;
-  created_at: string;
-}
+export type PmsDashboardRecentActivity = ApiSchema<'RecentActivityItem'>;
 
-export interface PmsDashboardSummary {
-  list_count: number;
-  active_issue_count: number;
-  overdue_issue_count: number;
-  my_issue_count: number;
-  milestone_due_soon_count: number;
+export type PmsDashboardSummary = Omit<
+  ApiSchema<'DashboardSummaryResponse'>,
+  'lists' | 'priority_counts' | 'recent_activity' | 'status_counts'
+> & {
   status_counts: PmsDashboardStatusCount[];
   priority_counts: PmsDashboardPriorityCount[];
   lists: PmsDashboardTaskList[];
   recent_activity: PmsDashboardRecentActivity[];
-}
+};
 
 // ── Folders ─────────────────────────────────────────────────────────
 
-export interface PmsFolder {
-  id: string;
-  team_id: string | null;
-  name: string;
-  sort_order: number;
-  list_count: number;
-}
+export type PmsFolder = ApiSchema<'FolderItem'>;
 
-export interface PmsFoldersResponse {
+export type PmsFoldersResponse = Omit<ApiSchema<'FolderListResponse'>, 'items'> & {
   items: PmsFolder[];
-}
+};
 
 // ── Task Templates ──────────────────────────────────────────────────
 
-export interface PmsTaskTemplate {
-  id: string;
-  list_id: string;
-  name: string;
-  description: string;
-  default_status: string;
-  default_priority: string;
+export type PmsTaskTemplate = Omit<ApiSchema<'TaskTemplateItem'>, 'checklist_items'> & {
   checklist_items: { text: string }[] | null;
-  created_at: string;
-}
+};
 
-export interface PmsTaskTemplatesResponse {
+export type PmsTaskTemplatesResponse = Omit<ApiSchema<'TaskTemplateListResponse'>, 'items'> & {
   items: PmsTaskTemplate[];
-}
+};
 
 // ── Custom Fields ───────────────────────────────────────────────────
 
-export interface PmsCustomField {
-  id: string;
-  list_id: string;
-  name: string;
+export type PmsCustomField = Omit<ApiSchema<'CustomFieldItem'>, 'field_type'> & {
   field_type: 'text' | 'number' | 'date' | 'select';
-  options: string[] | null;
-  sort_order: number;
-}
+};
 
-export interface PmsCustomFieldsResponse {
+export type PmsCustomFieldsResponse = Omit<ApiSchema<'CustomFieldListResponse'>, 'items'> & {
   items: PmsCustomField[];
-}
+};
 
-export interface PmsCustomFieldValue {
-  field_id: string;
-  value: string;
-}
+export type PmsCustomFieldValue = ApiSchema<'CustomFieldValueItem'>;
 
 // ── Task List Custom Statuses ───────────────────────────────────────
 
-export interface PmsTaskListStatus {
-  id: string;
-  slug: string;
-  name: string;
-  color: string;
+export type PmsTaskListStatus = Omit<ApiSchema<'TaskListStatusItem'>, 'category'> & {
   category: 'backlog' | 'active' | 'done' | 'canceled';
-  sort_order: number;
-}
+};
 
-export interface PmsTaskListStatusesResponse {
+export type PmsTaskListStatusesResponse = Omit<ApiSchema<'TaskListStatusesResponse'>, 'items'> & {
   items: PmsTaskListStatus[];
-}
+};
 
 class PmsApiError extends Error {
   status: number;
@@ -807,21 +601,13 @@ export function deleteDependency(token: string, dependencyId: string): Promise<v
 
 // ── Bulk Operations ─────────────────────────────────────────────────
 
-export interface BulkUpdatePayload {
-  issue_ids: string[];
+export type BulkUpdatePayload = Omit<ApiSchema<'BulkUpdateRequest'>, 'delete' | 'priority' | 'status'> & {
   status?: string;
   priority?: string;
-  assignee_id?: string | null;
-  add_label_ids?: string[];
-  remove_label_ids?: string[];
-  archived?: boolean;
   delete?: boolean;
-}
+};
 
-export interface BulkUpdateResult {
-  updated_count: number;
-  deleted_count: number;
-}
+export type BulkUpdateResult = ApiSchema<'BulkUpdateResponse'>;
 
 export function bulkUpdateIssues(
   token: string,
@@ -1094,10 +880,7 @@ export function setIssueCustomFieldValue(
 
 // ── Issue Assignees (Multiple) ─────────────────────────────────────
 
-export interface PmsIssueAssignee {
-  user_id: string;
-  full_name: string;
-}
+export type PmsIssueAssignee = ApiSchema<'IssueAssigneeItem'>;
 
 export function setIssueAssignees(
   token: string,

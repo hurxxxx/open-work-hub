@@ -1,11 +1,8 @@
+import type { ApiSchema } from '@/src/platform/api/types';
+
 export type ThemePreference = 'system' | 'light' | 'dark';
 
-export interface OrgUnitSummary {
-  id: string;
-  name: string;
-  slug: string;
-  parent_id: string | null;
-}
+export type OrgUnitSummary = ApiSchema<'OrgUnitSummaryResponse'>;
 
 export interface WorkspaceRole {
   workspace_id: string;
@@ -14,12 +11,7 @@ export interface WorkspaceRole {
   role: string;
 }
 
-export interface WorkspaceSummary {
-  id: string;
-  slug: string;
-  name: string;
-  role: string;
-}
+export type WorkspaceSummary = ApiSchema<'WorkspaceSummaryResponse'>;
 
 const WORKSPACE_ROLE_RANK: Record<string, number> = {
   member: 20,
@@ -33,24 +25,18 @@ const TEAM_ROLE_RANK: Record<string, number> = {
   owner: 40,
 };
 
-export interface AuthUser {
-  id: string;
-  email: string;
-  full_name: string;
-  display_name: string;
+export type AuthUser = Omit<
+  ApiSchema<'AuthUserResponse'>,
+  'created_at' | 'job_title' | 'last_login_at' | 'primary_org_unit' | 'theme_preference' | 'workspaces'
+> & {
   job_title?: string | null;
-  status: string;
   theme_preference: ThemePreference;
   primary_org_unit: OrgUnitSummary | null;
-  system_roles: string[];
   workspaces: WorkspaceSummary[];
   workspace_roles?: WorkspaceRole[];
-  group_ids: string[];
-  group_slugs: string[];
-  must_change_password: boolean;
   last_login_at?: string | null;
   created_at?: string;
-}
+};
 
 export function getWorkspaceRoleByKey(
   user: Pick<AuthUser, 'workspaces' | 'workspace_roles'> | null | undefined,
@@ -138,60 +124,27 @@ export function hasAdminConsoleAccess(
   return hasAnySystemRole(user, ['platform_admin']);
 }
 
-export interface BootstrapStatusResponse {
-  requires_setup: boolean;
-  dev_admin_login_available?: boolean;
-  dev_login_accounts?: DevLoginAccount[];
-}
+export type BootstrapStatusResponse = ApiSchema<'BootstrapStatusResponse'>;
 
-export interface DevLoginAccount {
-  account_key: string;
-  label: string;
-  email: string;
-  description: string;
-  category: string;
-}
+export type DevLoginAccount = ApiSchema<'DevLoginAccountResponse'>;
 
-export interface AuthSessionResponse {
-  token: string;
+export type AuthSessionResponse = Omit<ApiSchema<'AuthSessionResponse'>, 'user'> & {
   user: AuthUser;
-}
+};
 
-export interface LoginPayload {
-  email: string;
-  password: string;
-}
+export type LoginPayload = ApiSchema<'LoginRequest'>;
 
-export interface SetupFirstUserPayload extends LoginPayload {
-  full_name: string;
-}
+export type SetupFirstUserPayload = ApiSchema<'SetupFirstUserRequest'>;
 
-export interface UpdatePreferencesPayload {
-  display_name?: string;
-  full_name?: string;
-  job_title?: string;
+export type UpdatePreferencesPayload = Omit<ApiSchema<'UpdatePreferencesRequest'>, 'theme_preference'> & {
   theme_preference?: ThemePreference;
-}
+};
 
-export interface ChangePasswordPayload {
-  current_password: string;
-  new_password: string;
-}
+export type ChangePasswordPayload = ApiSchema<'ChangePasswordRequest'>;
 
-export interface AuthSessionItem {
-  id: string;
-  is_current: boolean;
-  created_at: string;
-  expires_at: string;
-  revoked_at: string | null;
-  last_seen_at: string | null;
-  user_agent: string | null;
-  ip_address: string | null;
-}
+export type AuthSessionItem = ApiSchema<'SessionListItemResponse'>;
 
-export interface AuthSessionsResponse {
-  items: AuthSessionItem[];
-}
+export type AuthSessionsResponse = ApiSchema<'SessionListResponse'>;
 
 export class AuthApiError extends Error {
   status: number;

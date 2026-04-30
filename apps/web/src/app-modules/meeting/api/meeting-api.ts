@@ -1,46 +1,17 @@
+import type { ApiSchema } from '@/src/platform/api/types';
 import { rewriteWorkspaceApiPath } from '@/src/platform/workspaces/workspace-utils';
 
-export type MeetingStatus = 'scheduled' | 'in_progress' | 'completed' | 'cancelled';
-export type AttendeeRole = 'required' | 'optional';
-export type AttendeeResponse = 'pending' | 'accepted' | 'declined' | 'tentative';
+export type MeetingStatus = ApiSchema<'MeetingDetail'>['status'];
+export type AttendeeRole = ApiSchema<'MeetingAttendeeInput'>['role'];
+export type AttendeeResponse = ApiSchema<'MeetingAttendeeOut'>['response'];
 
-export interface MeetingAttendee {
-  id: string;
-  user_id: string;
-  email: string;
-  full_name: string;
-  role: AttendeeRole;
-  response: AttendeeResponse;
-}
+export type MeetingAttendee = ApiSchema<'MeetingAttendeeOut'>;
 
-export interface MeetingTaskLink {
-  id: string;
-  issue_id: string;
-  issue_title: string;
-  list_key: string;
-  issue_number: number;
-  added_by_id: string;
-  created_at: string;
-}
+export type MeetingTaskLink = ApiSchema<'MeetingTaskLinkOut'>;
 
-export interface MeetingDocLink {
-  id: string;
-  doc_id: string;
-  doc_title: string;
-  added_by_id: string;
-  created_at: string;
-}
+export type MeetingDocLink = ApiSchema<'MeetingDocLinkOut'>;
 
-export interface MeetingFileAttachment {
-  id: string;
-  filename: string;
-  content_type: string;
-  size_bytes: number;
-  download_url: string;
-  added_by_id: string;
-  added_by_name: string;
-  created_at: string;
-}
+export type MeetingFileAttachment = ApiSchema<'MeetingFileAttachmentOut'>;
 
 export type MeetingRecordingStatus =
   | 'pending'
@@ -78,91 +49,26 @@ export const RAIL_VISIBLE_STATUSES: ReadonlySet<MeetingRecordingStatus> = new Se
   'failed',
 ]);
 
-export interface MeetingRecording {
-  id: string;
-  meeting_id: string;
-  uploaded_by_id: string;
-  storage_key: string;
-  duration_sec: number | null;
-  source: string;
+export type MeetingRecording = Omit<ApiSchema<'MeetingRecordingOut'>, 'transcription_status'> & {
   transcription_status: MeetingRecordingStatus;
-  progress_pct: number;
-  file_size: number;
-  mime_type: string;
-  failure_reason: string | null;
-  linked_doc_id: string | null;
-  linked_task_id: string | null;
-  transcribe_started_at: string | null;
-  transcribe_completed_at: string | null;
-  created_at: string;
-}
+};
 
-export interface RecordingStagingItem {
-  id: string;
-  meeting_id: string;
-  uploaded_by_id: string;
-  idempotency_key: string;
-  status: string;
-  mime_type: string;
-  bytes_received: number;
-  chunk_count: number;
-  highest_seq: number;
-  linked_task_id: string | null;
-  started_at: string;
-  last_chunk_at: string;
-  completed_at: string | null;
-}
+export type RecordingStagingItem = ApiSchema<'RecordingStagingItem'>;
 
-export interface RecordingChunkAck {
-  seq: number;
-  bytes_received: number;
-  highest_seq: number;
-}
+export type RecordingChunkAck = ApiSchema<'RecordingChunkAck'>;
 
-export interface RecordingPlaybackResponse {
-  url: string;
-  expires_at: string;
-}
+export type RecordingPlaybackResponse = ApiSchema<'RecordingPlaybackResponse'>;
 
-export interface MeetingListItem {
-  id: string;
-  title: string;
-  organizer_id: string;
-  organizer_name: string;
-  start_at: string;
-  end_at: string;
-  status: MeetingStatus;
-  attendee_count: number;
-  task_link_count: number;
-  doc_link_count: number;
-}
+export type MeetingListItem = ApiSchema<'MeetingListItem'>;
 
-export interface MeetingListResponse {
-  items: MeetingListItem[];
-  total: number;
-}
+export type MeetingListResponse = ApiSchema<'MeetingListResponse'>;
 
-export interface ActiveRecordingLock {
-  staging_id: string;
-  user_id: string;
-  user_name: string;
-  started_at: string;
-  /** When the recorder last uploaded a chunk. Used to render "x초 전 활동". */
-  last_active_at: string;
-}
+export type ActiveRecordingLock = ApiSchema<'ActiveRecordingLockOut'>;
 
-export interface MeetingDetail {
-  id: string;
-  workspace_id: string;
-  organizer_id: string;
-  organizer_name: string;
-  notes_doc_id: string | null;
-  notes_page_id: string | null;
-  title: string;
-  agenda: string;
-  start_at: string;
-  end_at: string;
-  status: MeetingStatus;
+export type MeetingDetail = Omit<
+  ApiSchema<'MeetingDetail'>,
+  'active_recording_lock' | 'attendees' | 'doc_links' | 'file_attachments' | 'recordings' | 'task_links'
+> & {
   attendees: MeetingAttendee[];
   task_links: MeetingTaskLink[];
   doc_links: MeetingDocLink[];
@@ -175,60 +81,26 @@ export interface MeetingDetail {
    * never permanently blocks other participants.
    */
   active_recording_lock: ActiveRecordingLock | null;
-  created_at: string;
-  updated_at: string;
-}
+};
 
-export interface MeetingUser {
-  id: string;
-  email: string;
-  full_name: string;
-}
+export type MeetingUser = ApiSchema<'MeetingUserItem'>;
 
-export interface MeetingAvailabilityBlock {
-  id: string;
-  start: string;
-  end: string;
-  allDay: boolean;
-  sourceType: 'meeting' | 'planner_event';
-  masked: boolean;
-  title: string | null;
-  location: string | null;
-}
+export type MeetingAvailabilityBlock = ApiSchema<'MeetingAvailabilityBlock'>;
 
-export interface MeetingAvailabilityItem {
-  userId: string;
-  fullName: string;
-  blocks: MeetingAvailabilityBlock[];
-}
+export type MeetingAvailabilityItem = ApiSchema<'MeetingAvailabilityItem'>;
 
-export interface MeetingAvailabilityResponse {
-  items: MeetingAvailabilityItem[];
-}
+export type MeetingAvailabilityResponse = ApiSchema<'MeetingAvailabilityResponse'>;
 
-export interface MeetingAttendeeInput {
-  user_id: string;
-  role: AttendeeRole;
-}
+export type MeetingAttendeeInput = ApiSchema<'MeetingAttendeeInput'>;
 
-export interface MeetingCreateInput {
-  title: string;
-  agenda: string;
-  start_at: string;
-  end_at: string;
+export type MeetingCreateInput = Omit<ApiSchema<'MeetingCreateRequest'>, 'attendees'> & {
   attendees: MeetingAttendeeInput[];
-  task_ids?: string[];
-  doc_ids?: string[];
-}
+};
 
-export interface MeetingUpdateInput {
-  title?: string;
-  agenda?: string;
-  start_at?: string;
-  end_at?: string;
+export type MeetingUpdateInput = Omit<ApiSchema<'MeetingUpdateRequest'>, 'attendees' | 'status'> & {
   status?: MeetingStatus;
   attendees?: MeetingAttendeeInput[];
-}
+};
 
 export type MeetingScope = 'mine' | 'upcoming' | 'all';
 

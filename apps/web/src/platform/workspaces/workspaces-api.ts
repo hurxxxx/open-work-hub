@@ -1,35 +1,25 @@
 import { useEffect, useState } from 'react';
 
+import { ApiRequestError, apiFetchJson } from '@/src/platform/api/client';
+import type { ApiSchema } from '@/src/platform/api/types';
 
-export interface WorkspaceBootstrapWorkspace {
-  id: string;
-  slug: string;
-  name: string;
-  role: string;
-}
+export type WorkspaceBootstrapWorkspace = ApiSchema<'WorkspaceBootstrapWorkspaceResponse'>;
 
-export interface WorkspaceBootstrapNavItem {
-  id: string;
-  app_id: string;
-  title: string;
-  category: string;
-  icon_key: string;
-  link_app_id?: string | null;
-  path_suffix?: string | null;
-  absolute_path?: string | null;
+export type WorkspaceBootstrapNavItem = ApiSchema<'WorkspaceBootstrapNavItemResponse'> & {
   coming_soon?: boolean | null;
-}
+};
 
-export interface WorkspaceBootstrapApp {
-  app_id: string;
-  title: string;
-  route_base: string;
-  icon_key: string;
-  enabled: boolean;
+export type WorkspaceBootstrapApp = Omit<
+  ApiSchema<'WorkspaceBootstrapAppResponse'>,
+  'nav_items'
+> & {
   nav_items: WorkspaceBootstrapNavItem[];
-}
+};
 
-export interface WorkspaceBootstrapResponse {
+export type WorkspaceBootstrapResponse = Omit<
+  ApiSchema<'WorkspaceBootstrapResponse'>,
+  'apps' | 'nav' | 'workspace'
+> & {
   workspace: WorkspaceBootstrapWorkspace;
   apps: WorkspaceBootstrapApp[];
   nav: WorkspaceBootstrapNavItem[];
@@ -40,37 +30,25 @@ export interface WorkspaceBootstrapResponse {
    * so no frontend code change is needed to expose it.
    */
   chatbot_app_ids?: string[];
-}
+};
 
 export async function getWorkspaceBootstrap(
   token: string,
   workspaceSlug: string,
 ): Promise<WorkspaceBootstrapResponse> {
-  const response = await fetch(
-    `/api/v1/workspaces/${encodeURIComponent(workspaceSlug)}/bootstrap`,
-    {
-      cache: 'no-store',
-      headers: {
-        Accept: 'application/json',
-        Authorization: `Bearer ${token}`,
-      },
-    },
-  );
-
-  const payload = await response.json().catch(() => null);
-  if (!response.ok) {
-    const detail = (
-      payload
-      && typeof payload === 'object'
-      && 'detail' in payload
-      && typeof payload.detail === 'string'
-    )
-      ? payload.detail
-      : `워크스페이스 bootstrap 요청에 실패했습니다. (${response.status})`;
-    throw new Error(detail);
+  try {
+    return await apiFetchJson<WorkspaceBootstrapResponse>(
+      `/api/v1/workspaces/${encodeURIComponent(workspaceSlug)}/bootstrap`,
+      token,
+    );
+  } catch (caughtError) {
+    if (caughtError instanceof ApiRequestError) {
+      throw new Error(
+        caughtError.message || `워크스페이스 bootstrap 요청에 실패했습니다. (${caughtError.status})`,
+      );
+    }
+    throw caughtError;
   }
-
-  return payload as WorkspaceBootstrapResponse;
 }
 
 export function useWorkspaceBootstrap(

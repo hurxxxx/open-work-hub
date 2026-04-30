@@ -181,3 +181,9 @@
   - 8 files, 35 passed (2026-04-14)
 - [x] dev E2E 스모크 (hq-admin 시드, playwright)
   - `/w/hq/pms` → CreateTaskListModal → List 생성 → NewTaskModal 태스크 생성, `/tool/pms-tasks-assigned`, `/w/hq/meeting`, `/w/hq/docs/:docId` 콘솔 에러 0건 (2026-04-14)
+- [x] 실제 브라우저 Phase 3 smoke (2026-05-01, agent-browser)
+  - `Aidoo HQ Admin`: `/w/hq/{home,ai,pms,docs,planner,meeting,learning,settings}`, `/tool/search?workspace=hq`, legacy `/meeting` NotFound 확인, 콘솔/페이지 오류 0건
+  - `Platform Admin`: `/admin/workspaces` 관리자 화면 렌더 확인, 콘솔/페이지 오류 0건
+- [x] Phase 3 API facade 타입 경계 강화 (2026-05-01)
+  - `auth`, `workspaces`, `meeting`, `pms` facade의 주요 request/response 타입을 `openapi.generated.d.ts` schema alias 기반으로 전환
+  - 검증: `pnpm ci:web` 통과 (OpenAPI drift check, web architecture, typecheck, lint, test, build, e2e-shell)

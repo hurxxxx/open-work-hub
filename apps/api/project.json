@@ -39,6 +39,18 @@
         "cwd": "apps/api",
         "command": "uv run --python 3.12 python -m compileall src"
       }
+    },
+    "architecture": {
+      "executor": "nx:run-commands",
+      "cache": true,
+      "inputs": [
+        "default",
+        "{projectRoot}/.importlinter"
+      ],
+      "options": {
+        "cwd": ".",
+        "command": "pnpm check:api-architecture"
+      }
     }
   }
 }
