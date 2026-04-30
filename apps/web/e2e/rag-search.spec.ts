@@ -75,7 +75,7 @@ async function stubKeywordSearch(page: Page, payload: KeywordSearchPayload = {})
     await route.fulfill({
       json: {
         ...keywordResponse(payload),
-        query: requestBody?.query ?? payload.query ?? 'budget risk',
+        query: readQueryValue(requestBody, payload.query ?? 'budget risk'),
       },
     });
   });
@@ -95,7 +95,7 @@ async function stubKeywordSearchSequence(page: Page) {
     }
     await route.fulfill({
       json: keywordResponse({
-        query: requestBody?.query ?? 'budget risk',
+        query: readQueryValue(requestBody, 'budget risk'),
         hits: [
           {
             ...baseHit,
@@ -130,6 +130,10 @@ function readJsonRequest(route: Route): Record<string, unknown> {
   } catch {
     return {};
   }
+}
+
+function readQueryValue(request: Record<string, unknown>, fallback: string): string {
+  return typeof request.query === 'string' ? request.query : fallback;
 }
 
 async function failLegacyRagRoutes(page: Page) {

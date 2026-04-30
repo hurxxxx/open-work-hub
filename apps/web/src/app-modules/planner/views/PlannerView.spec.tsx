@@ -158,7 +158,7 @@ vi.mock('@/src/domains/planner/planner-api', () => ({
   updatePlannerEvent: plannerHarness.updatePlannerEvent,
 }));
 
-vi.mock('@/src/components/calendar/MeetingPreviewModal', () => ({
+vi.mock('./calendar/MeetingPreviewModal', () => ({
   MeetingPreviewModal: () => null,
 }));
 

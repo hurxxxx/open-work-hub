@@ -3,9 +3,42 @@ import type { Page, Route } from '@playwright/test';
 const FAKE_TOKEN = 'e2e-test-token';
 const AUTH_TOKEN_STORAGE_KEY = 'aidoo.auth.token';
 
+type E2EUser = {
+  id: string;
+  email: string;
+  full_name: string;
+  display_name: string;
+  status: string;
+  theme_preference: string;
+  primary_org_unit: null;
+  workspaces: Array<{
+    id: string;
+    slug: string;
+    name: string;
+    role: string;
+  }>;
+  workspace_roles: string[];
+  system_roles: string[];
+  group_ids: string[];
+  group_slugs: string[];
+  must_change_password: boolean;
+};
+
+type WorkspaceBootstrapNavFixture = {
+  id: string;
+  app_id: string;
+  title: string;
+  category: string;
+  icon_key: string;
+  link_app_id: string | null;
+  path_suffix: string | null;
+  absolute_path: string | null;
+  coming_soon?: boolean | null;
+};
+
 // Fake user payload matching AuthUser. Returned by the /auth/me mock so the
 // provider treats the seeded token as a live session.
-const FAKE_USER = {
+export const FAKE_WORKSPACE_USER: E2EUser = {
   id: 'user-e2e',
   email: 'e2e@aidoo.local',
   full_name: 'E2E Tester',
@@ -23,107 +56,416 @@ const FAKE_USER = {
   must_change_password: false,
 };
 
+export const FAKE_PLATFORM_ADMIN_USER: E2EUser = {
+  ...FAKE_WORKSPACE_USER,
+  email: 'platform-admin@aidoo.local',
+  full_name: 'Platform Admin',
+  display_name: 'Platform Admin',
+  system_roles: ['platform_admin'],
+};
+
 const BOOTSTRAP_STATUS = {
   requires_setup: false,
   dev_admin_login_available: false,
   dev_login_accounts: [],
 };
 
-// Full WorkspaceBootstrapResponse payload (mirrors the production schema in
-// workspaces-api.ts). Ships all AI nav items the slash menu cares about, plus
-// apps[] with ai/pms/docs/etc. enabled so the AppBar and route gates render
-// with real contract fields instead of a trimmed-down subset.
-const NAV_ITEMS_AI = [
-  {
-    id: 'search',
-    app_id: 'ai',
-    title: '아이두 통합검색',
-    category: 'Core Tools',
-    icon_key: 'search',
+function navItem(
+  item: Omit<WorkspaceBootstrapNavFixture, 'link_app_id' | 'path_suffix' | 'absolute_path'> &
+    Partial<Pick<WorkspaceBootstrapNavFixture, 'link_app_id' | 'path_suffix' | 'absolute_path'>>,
+): WorkspaceBootstrapNavFixture {
+  return {
     link_app_id: null,
     path_suffix: null,
     absolute_path: null,
-  },
-  {
-    id: 'drafting',
-    app_id: 'ai',
-    title: '기안작성 도우미',
-    category: 'Core Tools',
-    icon_key: 'file-text',
-    link_app_id: null,
-    path_suffix: null,
-    absolute_path: null,
-  },
-  {
-    id: 'translate',
-    app_id: 'ai',
-    title: '문서 번역/요약',
-    category: 'Core Tools',
-    icon_key: 'languages',
-    link_app_id: null,
-    path_suffix: null,
-    absolute_path: null,
-  },
-  {
-    id: 'spec-compare',
-    app_id: 'ai',
-    title: '규격서 비교',
-    category: 'Core Tools',
-    icon_key: 'file-search',
-    link_app_id: null,
-    path_suffix: null,
-    absolute_path: null,
-  },
-  {
-    id: 'fmea-compare',
-    app_id: 'ai',
-    title: 'FMEA 비교',
-    category: 'Core Tools',
-    icon_key: 'alert-triangle',
-    link_app_id: null,
-    path_suffix: null,
-    absolute_path: null,
-  },
-  {
-    id: 'meeting-minutes',
-    app_id: 'ai',
-    title: '회의록',
-    category: 'Assistants',
-    icon_key: 'mic',
-    link_app_id: 'meeting',
-    path_suffix: '?tab=recordings',
-    absolute_path: null,
-  },
+    ...item,
+  };
+}
+
+// Full WorkspaceBootstrapResponse nav payload. It mirrors the app manifests
+// closely enough for shell/AppBar/SubSidebar E2E smoke tests to stay hermetic.
+const NAV_ITEMS_BY_APP: Record<string, WorkspaceBootstrapNavFixture[]> = {
+  ai: [
+    navItem({
+      id: 'chatbot',
+      app_id: 'ai',
+      title: 'AI 챗봇',
+      category: 'Core Tools',
+      icon_key: 'message-square',
+    }),
+    navItem({
+      id: 'search',
+      app_id: 'ai',
+      title: '아이두 통합검색',
+      category: 'Core Tools',
+      icon_key: 'search',
+    }),
+    navItem({
+      id: 'drafting',
+      app_id: 'ai',
+      title: '기안작성 도우미',
+      category: 'Core Tools',
+      icon_key: 'file-text',
+    }),
+    navItem({
+      id: 'translate',
+      app_id: 'ai',
+      title: '문서 번역/요약',
+      category: 'Core Tools',
+      icon_key: 'languages',
+    }),
+    navItem({
+      id: 'spec-compare',
+      app_id: 'ai',
+      title: '규격서 비교',
+      category: 'Core Tools',
+      icon_key: 'file-search',
+    }),
+    navItem({
+      id: 'fmea-compare',
+      app_id: 'ai',
+      title: 'FMEA 비교',
+      category: 'Core Tools',
+      icon_key: 'alert-triangle',
+    }),
+    navItem({
+      id: 'meeting-minutes',
+      app_id: 'ai',
+      title: '회의록',
+      category: 'Assistants',
+      icon_key: 'mic',
+      link_app_id: 'meeting',
+      path_suffix: '?tab=recordings',
+    }),
+  ],
+  pms: [
+    navItem({
+      id: 'pms-inbox',
+      app_id: 'pms',
+      title: 'Inbox',
+      category: 'Personal',
+      icon_key: 'inbox',
+    }),
+    navItem({
+      id: 'pms-tasks',
+      app_id: 'pms',
+      title: 'My Tasks',
+      category: 'Personal',
+      icon_key: 'check-circle',
+      path_suffix: '/assigned',
+    }),
+    navItem({
+      id: 'pms-tasks-assigned',
+      app_id: 'pms',
+      title: 'Assigned to me',
+      category: 'Personal',
+      icon_key: 'user',
+      path_suffix: '/assigned',
+    }),
+    navItem({
+      id: 'pms-tasks-today',
+      app_id: 'pms',
+      title: 'Today & Overdue',
+      category: 'Personal',
+      icon_key: 'calendar',
+      path_suffix: '/today',
+    }),
+    navItem({
+      id: 'pms-tasks-personal',
+      app_id: 'pms',
+      title: 'Personal List',
+      category: 'Personal',
+      icon_key: 'list',
+      path_suffix: '/personal',
+    }),
+  ],
+  docs: [
+    navItem({
+      id: 'docs-all',
+      app_id: 'docs',
+      title: 'All Docs',
+      category: 'Library',
+      icon_key: 'files',
+    }),
+    navItem({
+      id: 'docs-my',
+      app_id: 'docs',
+      title: 'My Docs',
+      category: 'Library',
+      icon_key: 'user',
+    }),
+    navItem({
+      id: 'docs-shared',
+      app_id: 'docs',
+      title: 'Shared with me',
+      category: 'Library',
+      icon_key: 'share',
+    }),
+    navItem({
+      id: 'docs-private',
+      app_id: 'docs',
+      title: 'Private',
+      category: 'Library',
+      icon_key: 'lock',
+    }),
+    navItem({
+      id: 'docs-notes',
+      app_id: 'docs',
+      title: 'Meeting Notes',
+      category: 'Library',
+      icon_key: 'mic',
+    }),
+    navItem({
+      id: 'docs-recent',
+      app_id: 'docs',
+      title: 'Recent Pages',
+      category: 'Library',
+      icon_key: 'history',
+    }),
+    navItem({
+      id: 'docs-archived',
+      app_id: 'docs',
+      title: 'Archived',
+      category: 'Library',
+      icon_key: 'history',
+    }),
+  ],
+  planner: [
+    navItem({
+      id: 'planner-calendar',
+      app_id: 'planner',
+      title: '캘린더',
+      category: 'Schedule',
+      icon_key: 'calendar',
+    }),
+    navItem({
+      id: 'planner-timeline',
+      app_id: 'planner',
+      title: '타임라인',
+      category: 'Schedule',
+      icon_key: 'activity',
+    }),
+  ],
+  meeting: [
+    navItem({
+      id: 'meeting-upcoming',
+      app_id: 'meeting',
+      title: 'Upcoming',
+      category: 'Meetings',
+      icon_key: 'calendar',
+    }),
+    navItem({
+      id: 'meeting-mine',
+      app_id: 'meeting',
+      title: 'My Meetings',
+      category: 'Meetings',
+      icon_key: 'user',
+      path_suffix: '?scope=mine',
+    }),
+    navItem({
+      id: 'meeting-recordings',
+      app_id: 'meeting',
+      title: 'Recordings',
+      category: 'Meetings',
+      icon_key: 'video',
+      path_suffix: '?tab=recordings',
+    }),
+  ],
+  learning: [
+    navItem({
+      id: 'learning-home',
+      app_id: 'learning',
+      title: '전체 학습 홈',
+      category: 'Courses',
+      icon_key: 'graduation-cap',
+    }),
+  ],
+};
+
+const APP_FIXTURES = [
+  { app_id: 'home', title: 'HOME', icon_key: 'home' },
+  { app_id: 'ai', title: 'AI', icon_key: 'brain' },
+  { app_id: 'pms', title: 'PMS', icon_key: 'briefcase' },
+  { app_id: 'docs', title: 'DOCS', icon_key: 'files' },
+  { app_id: 'planner', title: 'Planner', icon_key: 'calendar' },
+  { app_id: 'meeting', title: 'MEETING', icon_key: 'users' },
+  { app_id: 'learning', title: '학습', icon_key: 'graduation-cap' },
 ];
 
-function buildApp(app_id: string, title: string, icon_key: string) {
+const DEFAULT_ENABLED_APP_IDS = APP_FIXTURES.map((app) => app.app_id);
+
+function buildApp(
+  app_id: string,
+  title: string,
+  icon_key: string,
+  enabledAppIds: readonly string[],
+) {
+  const enabled = enabledAppIds.includes(app_id);
   return {
     app_id,
     title,
     route_base: app_id,
     icon_key,
-    enabled: true,
-    nav_items: app_id === 'ai' ? NAV_ITEMS_AI : [],
+    enabled,
+    nav_items: enabled ? NAV_ITEMS_BY_APP[app_id] ?? [] : [],
   };
 }
 
-const WORKSPACE_BOOTSTRAP = {
-  workspace: {
-    id: 'workspace-hq',
-    slug: 'hq',
-    name: 'Aidoo HQ',
-    role: 'admin',
-  },
-  apps: [
-    buildApp('home', '홈', 'home'),
-    buildApp('ai', 'AI', 'brain'),
-    buildApp('pms', 'PMS', 'briefcase'),
-    buildApp('docs', 'Docs', 'files'),
-    buildApp('planner', 'Planner', 'calendar'),
-    buildApp('meeting', 'Meeting', 'users'),
-  ],
-  nav: NAV_ITEMS_AI,
+function buildWorkspaceBootstrap(
+  enabledAppIds: readonly string[] = DEFAULT_ENABLED_APP_IDS,
+) {
+  const apps = APP_FIXTURES.map((app) =>
+    buildApp(app.app_id, app.title, app.icon_key, enabledAppIds),
+  );
+  return {
+    workspace: {
+      id: 'workspace-hq',
+      slug: 'hq',
+      name: 'Aidoo HQ',
+      role: 'admin',
+    },
+    apps,
+    nav: apps.flatMap((app) => app.nav_items),
+  };
+}
+
+const WORKSPACE_FIXTURE = {
+  id: 'workspace-hq',
+  key: 'hq',
+  name: 'Aidoo HQ',
+  description: 'E2E workspace',
+  active: true,
+  team_count: 0,
+  member_count: 1,
+  meeting_count: 0,
+  doc_count: 0,
+  created_at: '2026-04-30T00:00:00Z',
+  updated_at: '2026-04-30T00:00:00Z',
 };
+
+const EMPTY_PAGE = {
+  items: [],
+  total: 0,
+  page: 1,
+  page_size: 50,
+};
+
+const EMPTY_PMS_DASHBOARD = {
+  list_count: 0,
+  active_issue_count: 0,
+  overdue_issue_count: 0,
+  my_issue_count: 0,
+  milestone_due_soon_count: 0,
+  status_counts: [],
+  priority_counts: [],
+  lists: [],
+  recent_activity: [],
+};
+
+/**
+ * Stub app-specific list endpoints used by the shell smoke suite. The goal is
+ * not feature coverage; it prevents route smoke tests from relying on a live
+ * API while keeping each app's empty state renderable.
+ */
+export async function stubWorkspaceAppDataBackend(page: Page): Promise<void> {
+  await page.route('**/api/v1/workspaces/*/calendar/events**', (route: Route) =>
+    route.fulfill({ json: { items: [] } }),
+  );
+  await page.route('**/api/v1/calendar/events**', (route: Route) =>
+    route.fulfill({ json: { items: [] } }),
+  );
+
+  await page.route('**/api/v1/workspaces/*/planner/events**', (route: Route) =>
+    route.fulfill({ json: { items: [] } }),
+  );
+
+  await page.route('**/api/v1/workspaces/*/meeting/users**', (route: Route) =>
+    route.fulfill({ json: [] }),
+  );
+  await page.route('**/api/v1/workspaces/*/meeting/availability**', (route: Route) =>
+    route.fulfill({ json: { items: [] } }),
+  );
+  await page.route('**/api/v1/workspaces/*/meeting/meetings**', (route: Route) => {
+    if (route.request().url().includes('/recordings/staging')) {
+      return route.fulfill({ json: [] });
+    }
+    return route.fulfill({ json: { items: [], total: 0 } });
+  });
+
+  await page.route('**/api/v1/workspaces/*/pms/notifications**', (route: Route) =>
+    route.fulfill({ json: EMPTY_PAGE }),
+  );
+  await page.route('**/api/v1/workspaces/*/pms/notifications/unread-count', (route: Route) =>
+    route.fulfill({ json: { count: 0 } }),
+  );
+  await page.route('**/api/v1/workspaces/*/pms/spaces**', (route: Route) =>
+    route.fulfill({ json: [] }),
+  );
+  await page.route('**/api/v1/workspaces/*/pms/lists**', (route: Route) =>
+    route.fulfill({ json: EMPTY_PAGE }),
+  );
+  await page.route('**/api/v1/workspaces/*/pms/issues/assigned**', (route: Route) =>
+    route.fulfill({ json: EMPTY_PAGE }),
+  );
+  await page.route('**/api/v1/workspaces/*/pms/dashboard/summary**', (route: Route) =>
+    route.fulfill({ json: EMPTY_PMS_DASHBOARD }),
+  );
+  await page.route('**/api/v1/workspaces/*/pms/folders**', (route: Route) =>
+    route.fulfill({ json: { items: [] } }),
+  );
+  await page.route('**/api/v1/workspaces/*/pms/users**', (route: Route) =>
+    route.fulfill({ json: [] }),
+  );
+
+  await page.route('**/api/v1/workspaces/*/docs/hub**', (route: Route) =>
+    route.fulfill({ json: EMPTY_PAGE }),
+  );
+  await page.route('**/api/v1/workspaces/*/docs/recent-pages**', (route: Route) =>
+    route.fulfill({ json: [] }),
+  );
+  await page.route('**/api/v1/docs/recent-pages**', (route: Route) =>
+    route.fulfill({ json: [] }),
+  );
+  await page.route('**/api/v1/workspaces/*/docs/favorites**', (route: Route) =>
+    route.fulfill({ json: [] }),
+  );
+  await page.route('**/api/v1/docs/favorites**', (route: Route) =>
+    route.fulfill({ json: [] }),
+  );
+  await page.route('**/api/v1/workspaces/*/docs/shareable-users**', (route: Route) =>
+    route.fulfill({ json: [] }),
+  );
+
+  await page.route('**/api/v1/admin/workspaces**', (route: Route) =>
+    route.fulfill({ json: [WORKSPACE_FIXTURE] }),
+  );
+  await page.route('**/api/v1/admin/groups**', (route: Route) =>
+    route.fulfill({ json: [] }),
+  );
+  await page.route('**/api/v1/admin/users**', (route: Route) =>
+    route.fulfill({ json: { ...EMPTY_PAGE, page_size: 20 } }),
+  );
+  await page.route('**/api/v1/admin/workspaces/*/members**', (route: Route) =>
+    route.fulfill({
+      json: {
+        ...EMPTY_PAGE,
+        page_size: 20,
+        role_counts: { admin: 0, member: 0 },
+        user_count: 0,
+        group_count: 0,
+        pending_count: 0,
+      },
+    }),
+  );
+}
+
+interface ShellBackendOptions {
+  enabledAppIds?: readonly string[];
+  user?: E2EUser;
+}
+
+// Legacy constant retained for compatibility with older helper consumers.
+const FAKE_USER = FAKE_WORKSPACE_USER;
 
 const LLM_HEALTH = {
   ready: true,
@@ -145,19 +487,25 @@ const LLM_HEALTH = {
  * Call inside `test.beforeEach` (or at the top of a single test) before the
  * first page.goto().
  */
-export async function stubShellBackend(page: Page): Promise<void> {
+export async function stubShellBackend(
+  page: Page,
+  options: ShellBackendOptions = {},
+): Promise<void> {
+  const user = options.user ?? FAKE_USER;
+  const workspaceBootstrap = buildWorkspaceBootstrap(options.enabledAppIds);
+
   // Auth bootstrap: hit on every mount to check setup status.
   await page.route('**/api/v1/auth/bootstrap-status', (route: Route) =>
     route.fulfill({ json: BOOTSTRAP_STATUS }),
   );
   // /auth/me is the "is this token still valid" probe for a stored token.
   await page.route('**/api/v1/auth/me', (route: Route) =>
-    route.fulfill({ json: FAKE_USER }),
+    route.fulfill({ json: user }),
   );
 
   // Workspace bootstrap: gates routes + feeds the slash command palette.
   await page.route('**/api/v1/workspaces/*/bootstrap', (route: Route) =>
-    route.fulfill({ json: WORKSPACE_BOOTSTRAP }),
+    route.fulfill({ json: workspaceBootstrap }),
   );
 
   // AI health: drives the ChatTopBar model pill and shield icon. The frontend
@@ -217,6 +565,7 @@ export interface ConversationStubs {
       role: string;
       content: string;
       createdAt: string;
+      artifacts?: unknown[];
     }>;
   };
   detail?: Record<
@@ -244,6 +593,7 @@ export interface ConversationStubs {
         role: string;
         content: string;
         createdAt: string;
+        artifacts?: unknown[];
       }>;
     }
   >;

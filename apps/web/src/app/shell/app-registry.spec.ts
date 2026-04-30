@@ -6,6 +6,7 @@ import {
   createAppModuleRegistry,
   getNavItem,
 } from './app-registry';
+import { getAppSidebarConfig } from './app-sidebar-registry';
 import { workspaceRouteDefinitions } from './workspace-route-registry';
 import type { AppModuleManifest } from './navigation-types';
 
@@ -47,9 +48,36 @@ describe('app module registry', () => {
     }
   });
 
+  it('keeps manifest workspace paths under their owning app prefix', () => {
+    for (const manifest of APP_MODULE_MANIFESTS) {
+      const appId = manifest.appBarItem.id;
+      for (const routePath of manifest.workspaceRoutePaths) {
+        expect(routePath).toMatch(new RegExp(`^/w/:workspaceSlug/${appId}(?:/|$)`));
+      }
+    }
+  });
+
+  it('keeps manifest nav items owned by their declaring app', () => {
+    for (const manifest of APP_MODULE_MANIFESTS) {
+      const appId = manifest.appBarItem.id;
+      for (const navItem of manifest.navItems) {
+        expect(navItem.appId).toBe(appId);
+      }
+    }
+  });
+
   it('exposes nav items through the registry public API', () => {
     expect(getNavItem('search')?.appId).toBe('ai');
     expect(getNavItem('pms-tasks-assigned')?.appId).toBe('pms');
     expect(getNavItem('missing-tool')).toBeNull();
+  });
+
+  it('exposes app sidebars through the shell sidebar registry', () => {
+    expect(getAppSidebarConfig('ai')).not.toBeNull();
+    expect(getAppSidebarConfig('pms')).not.toBeNull();
+    expect(getAppSidebarConfig('docs')).not.toBeNull();
+    expect(getAppSidebarConfig('learning')).not.toBeNull();
+    expect(getAppSidebarConfig('home')).toBeNull();
+    expect(getAppSidebarConfig('settings')).toBeNull();
   });
 });

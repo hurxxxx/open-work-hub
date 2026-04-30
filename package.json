@@ -27,10 +27,11 @@
     "depcruise:web": "depcruise --config .dependency-cruiser.cjs --include-only '^apps/web/src' apps/web/src",
     "knip:web": "knip --config knip.json --include files,unresolved --reporter compact",
     "check:web-architecture": "pnpm check:web-boundaries && pnpm depcruise:web && pnpm knip:web",
-    "ci:web": "pnpm check:web-architecture && pnpm nx lint web && pnpm nx test web && pnpm nx build web",
+    "ci:web": "pnpm check:web-architecture && pnpm nx lint web && pnpm nx test web && pnpm nx build web && pnpm nx e2e-shell web",
     "lint": "nx run-many -t lint --all",
     "test": "nx run-many -t test --all",
     "e2e": "playwright test --config apps/web/playwright.config.ts",
+    "e2e:shell": "playwright test --config apps/web/playwright.config.ts apps/web/e2e/app-boundary-smoke.spec.ts",
     "e2e:ui": "playwright test --config apps/web/playwright.config.ts --ui",
     "e2e:install": "playwright install chromium"
   },

@@ -20,6 +20,14 @@
         "command": "pnpm check:web-architecture",
         "cwd": "."
       }
+    },
+    "e2e-shell": {
+      "executor": "nx:run-commands",
+      "cache": false,
+      "options": {
+        "command": "pnpm exec playwright test --config apps/web/playwright.config.ts apps/web/e2e/app-boundary-smoke.spec.ts",
+        "cwd": "."
+      }
     }
   }
 }

@@ -154,7 +154,7 @@ test.describe('AI chat artifacts', () => {
                   status: 'closed',
                 },
               ],
-            } as Record<string, unknown>,
+            },
           ],
         },
       },

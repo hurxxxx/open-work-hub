@@ -15,8 +15,8 @@ import {
   type UnifiedCalendarHandle,
   type UnifiedCalendarView,
 } from '@/src/components/calendar/UnifiedCalendar';
-import { MeetingPreviewModal } from '@/src/components/calendar/MeetingPreviewModal';
 import { MeetingCreateModal } from '@/src/app-modules/meeting';
+import { MeetingPreviewModal } from './calendar/MeetingPreviewModal';
 import { PlannerEventModal } from './PlannerEventModal';
 import { PlannerEventChoicePopover } from './PlannerEventChoicePopover';
 
