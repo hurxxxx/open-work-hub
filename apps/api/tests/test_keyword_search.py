@@ -9,7 +9,17 @@ import httpx
 import pytest
 from sqlalchemy import select
 
-from conftest import _build_client, _ensure_docker_image, _find_free_port, _teardown_client_state
+from conftest import (
+    _build_client,
+    _docker_command,
+    _docker_network_args,
+    _docker_publish_args,
+    _docker_rm,
+    _docker_uses_host_network,
+    _ensure_docker_image,
+    _find_free_port,
+    _teardown_client_state,
+)
 from aidoo_api.core.db import get_session_factory
 from aidoo_api.domains.auth.access import ensure_dev_login_seed_data
 from aidoo_api.domains.auth.models import Workspace
@@ -26,25 +36,31 @@ OPENSEARCH_IMAGE = "opensearchproject/opensearch:3.3.2"
 def opensearch_url() -> str:
     _ensure_docker_image(OPENSEARCH_IMAGE)
     port = _find_free_port()
+    transport_port = _find_free_port()
     container_name = f"aidoo-opensearch-test-{uuid.uuid4().hex[:10]}"
     url = f"http://127.0.0.1:{port}"
     subprocess.run(
         [
-            "docker",
+            *_docker_command(),
             "run",
             "--rm",
             "-d",
             "--name",
             container_name,
+            *_docker_network_args(),
             "-e",
             "discovery.type=single-node",
             "-e",
             "DISABLE_SECURITY_PLUGIN=true",
             "-e",
             "OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m",
-            "-p",
-            f"{port}:9200",
+            *_docker_publish_args(port, 9200),
             OPENSEARCH_IMAGE,
+            *(
+                []
+                if not _docker_uses_host_network()
+                else ["opensearch", f"-Ehttp.port={port}", f"-Etransport.port={transport_port}"]
+            ),
         ],
         check=True,
     )
@@ -52,7 +68,7 @@ def opensearch_url() -> str:
         _wait_for_opensearch(url)
         yield url
     finally:
-        subprocess.run(["docker", "rm", "-f", container_name], check=False)
+        _docker_rm(container_name)
 
 
 @pytest.fixture

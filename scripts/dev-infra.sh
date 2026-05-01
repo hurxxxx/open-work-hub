@@ -17,16 +17,16 @@ case "$COMMAND" in
     if dev_use_local_minio; then
       services=(minio "${services[@]}")
     fi
-    docker compose -f compose.dev.yml up -d "${services[@]}"
+    dev_docker compose -f compose.dev.yml up -d "${services[@]}"
     ;;
   down|stop)
-    docker compose -f compose.dev.yml down
+    dev_docker compose -f compose.dev.yml down
     ;;
   logs)
-    docker compose -f compose.dev.yml logs -f
+    dev_docker compose -f compose.dev.yml logs -f
     ;;
   ps|status)
-    docker compose -f compose.dev.yml ps
+    dev_docker compose -f compose.dev.yml ps
     ;;
   *)
     echo "Usage: $0 {up|down|logs|ps|start|stop|status}" >&2

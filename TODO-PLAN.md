@@ -9,6 +9,7 @@
 
 ## 최근 작업 기록
 
+- 2026-05-01 VM Docker/agent-browser 테스트 환경 셋업: 현재 VM 세션에서 `docker` socket ACL을 열고 사용자를 `docker` 그룹에 포함시켜 Docker CLI 접근을 복구했다. repo 스크립트는 Docker 직접 접근 실패 시 `sudo -n docker`를 자동 fallback으로 쓰도록 `dev_docker` helper를 추가했다. API Docker fixture는 `AIDOO_TEST_DOCKER_NETWORK=host` 설정을 지원해 Postgres/Redis/MinIO/OpenSearch 테스트 컨테이너가 host network에서 랜덤 포트로 뜰 수 있게 했다. 신규 로컬 명령: `pnpm test:api:host-network`, `pnpm test:api:host-network:collect`, `pnpm agent-browser:smoke`. 검증: host network `test_healthz` 1 passed, host network keyword search 1 passed, `pnpm agent-browser:smoke` 4 passed.
 - 2026-05-01 CI/회귀 테스트 경량화: GitHub Actions workflow를 제거해 원격 CI를 중단했고, 로컬 Playwright 회귀는 `app-boundary-smoke.spec.ts` shell smoke만 남기도록 정리했다. 실제 local API 의존 `e2e-live-smoke` target과 관련 config/spec를 삭제했다. API 테스트에서는 외부 OpenAI live smoke, external adapter 선택 중복 테스트, fixture shape만 잠그던 eval fixture 테스트와 전용 JSON fixture를 제거했다. `scripts/phase6-runtime-regression.sh` 도 삭제된 adapter 테스트를 더 이상 참조하지 않도록 조정했다. 로컬 `pnpm nx` 실행은 외부 `NODE_ENV=production`에 오염되지 않도록 정리해 web unit suite가 React development/test runtime으로 돈다. 로컬 기준: API 테스트 파일 68개 -> 65개, web e2e spec 9개 -> 1개.
 - 2026-05-01 Phase 2 legacy API 제거 + live smoke 강화: workspace context가 필요한 legacy global API mount(`ai`, `documents`, `plm`, `drafts`, `ocr`, `wiki_pms`, `pms`, `meeting`, `calendar`, `planner`)를 제거하고 OpenAPI/types/tests를 workspace-scoped API 기준으로 갱신했다. docs shared-link는 의도된 public route만 `/api/v1/docs/*` 로 보존했고, PMS deprecated list-member/project alias는 계약에서 제거했다. import-linter contract는 domain -> app/main/api_registry 역참조 금지를 추가했다. Web은 주요 app/platform API 타입을 OpenAPI generated schema 기반으로 확장했고, Learning markdown과 AI artifact panel을 lazy split해 route chunk를 줄였다. 신규 `pnpm nx e2e-live-smoke web` 은 실제 local API + dev-login으로 `/w/hq/{home,ai,pms,docs,planner,meeting,learning,settings}`, `/tool/search?workspace=hq`, `/admin/workspaces`, legacy NotFound를 검증한다. 로컬 OpenSearch index 미준비 시 `/search/query` 503은 shell smoke에서 명시적으로 허용한다. 브라우저 검증: `pnpm nx e2e-shell web` 4 passed, `pnpm nx e2e-live-smoke web` 3 passed.
 - 2026-05-01 Phase 2 API boundary 후속 마무리: web app/platform API facade 전반을 `apiFetchJson` 기반 공통 JSON client로 맞춰 인증 header/error normalization 중복을 줄였고, `platform/api/types.ts` 에 OpenAPI operation response/request helper type을 추가했다. workspace 검색/RAG E2E 스텁을 보강해 `/tool/search?workspace=hq` smoke가 실제 API 401/로그아웃 흐름에 의존하지 않도록 했으며, `auth.workspace_router` 도 import-linter protected router 목록에 포함했다. route module은 `React.lazy` + `app/shell/lazy-route.tsx` 로 앱별 chunk를 분리하고 `/tool/*` wrapper도 app module public element만 사용하도록 정리했다. `package.json` 의 Nx wrapper는 `env -u NO_COLOR nx` 로 바꿔 FORCE_COLOR/NO_COLOR 경고를 없앴고, Vite chunk warning도 lazy split 이후 기준값에 맞춰 사라졌다. 브라우저 검증: Playwright `pnpm nx e2e-shell web` 4 passed (`/w/hq/{home,ai,pms,docs,planner,meeting,learning,settings}`, `/tool/search`, disabled app, legacy NotFound, admin routes). 전체 검증: `pnpm ci:web` 통과, `pnpm ci:api` 통과 (`663 passed`, `1 skipped`, warnings 3), `git diff --check` 통과.
@@ -25,7 +26,7 @@
 
 ## 다음 세션 핸드오프 (2026-05-01)
 
-> 업데이트: GitHub Actions와 live API Playwright smoke는 2026-05-01 테스트 경량화 작업에서 제거했다. 다음 작업은 로컬 검증 기준(`lint`, `typecheck`, focused unit/API tests, `pnpm nx e2e-shell web`)으로 진행한다.
+> 업데이트: GitHub Actions와 live API Playwright smoke는 2026-05-01 테스트 경량화 작업에서 제거했다. VM에서는 Docker direct 또는 `sudo -n docker` fallback과 `AIDOO_TEST_DOCKER_NETWORK=host`로 API Docker fixture를 실행할 수 있다. 다음 작업은 로컬 검증 기준(`lint`, `typecheck`, focused unit/API tests, `pnpm nx e2e-shell web`)으로 진행한다.
 
 ### 기준 상태
 
@@ -42,6 +43,9 @@
 ### 마지막 검증 결과
 
 - `uv run --python 3.12 --group dev python -m pytest --collect-only` 통과: `655 tests`
+- `pnpm test:api:host-network:collect` 통과: `655 tests`
+- `AIDOO_TEST_DOCKER_NETWORK=host ... tests/test_health.py::test_healthz` 통과
+- `AIDOO_TEST_DOCKER_NETWORK=host ... tests/test_keyword_search.py::test_keyword_search_returns_contract_facets_snippets_and_deep_links` 통과
 - `bash scripts/phase6-runtime-regression.sh --collect-only` 통과: `102 tests`
 - `pnpm check:api-architecture` 통과
 - `pnpm nx lint api` 통과
@@ -53,6 +57,7 @@
 - `pnpm nx build web` 통과
 - `pnpm exec tsc --noEmit -p apps/web/tsconfig.e2e.json` 통과
 - `pnpm nx e2e-shell web` 통과: `4 passed`
+- `pnpm agent-browser:smoke` 통과: `4 passed`
 - `git diff --check` 통과
 
 ### 다음 권장 작업 순서

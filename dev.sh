@@ -161,7 +161,7 @@ start_dev_infra() {
     echo "docker CLI not found; skipping dev infra startup." >&2
     return 0
   fi
-  if ! docker info >/dev/null 2>&1; then
+  if ! dev_docker_available; then
     echo "Docker daemon not reachable; skipping dev infra startup." >&2
     return 0
   fi
@@ -187,10 +187,10 @@ start_dev_infra() {
     fi
   done
   if (( web_in_projects )); then
-    if docker inspect doowon-dev-nginx >/dev/null 2>&1; then
+    if dev_docker inspect doowon-dev-nginx >/dev/null 2>&1; then
       echo "Neutralizing dev-nginx (conflicts with web dev server on 4200)..."
-      docker update --restart=no doowon-dev-nginx >/dev/null 2>&1 || true
-      docker stop doowon-dev-nginx >/dev/null 2>&1 || true
+      dev_docker update --restart=no doowon-dev-nginx >/dev/null 2>&1 || true
+      dev_docker stop doowon-dev-nginx >/dev/null 2>&1 || true
     fi
   fi
 
@@ -226,7 +226,7 @@ start_dev_infra() {
   fi
 
   echo "Starting dev infra: ${services[*]}"
-  if ! docker compose -f compose.dev.yml up -d "${services[@]}"; then
+  if ! dev_docker compose -f compose.dev.yml up -d "${services[@]}"; then
     echo "Failed to start dev infra via docker compose." >&2
     exit 1
   fi
@@ -241,7 +241,7 @@ start_dev_infra() {
   if (( started_redis )); then
     local attempts=0
     while (( attempts < 30 )); do
-      if docker compose -f compose.dev.yml exec -T redis redis-cli ping >/dev/null 2>&1; then
+      if dev_docker compose -f compose.dev.yml exec -T redis redis-cli ping >/dev/null 2>&1; then
         return 0
       fi
       attempts=$((attempts + 1))

@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import os
+import shlex
+import shutil
 import socket
 import subprocess
 import time
@@ -32,16 +35,64 @@ def _find_free_port() -> int:
         return int(sock.getsockname()[1])
 
 
+def _docker_command() -> list[str]:
+    configured = os.getenv("AIDOO_TEST_DOCKER_COMMAND")
+    if configured:
+        return shlex.split(configured)
+
+    if shutil.which("docker") is not None:
+        direct = subprocess.run(
+            ["docker", "version", "--format", "{{.Server.Version}}"],
+            check=False,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        if direct.returncode == 0:
+            return ["docker"]
+
+    if shutil.which("sudo") is not None and shutil.which("docker") is not None:
+        sudo = subprocess.run(
+            ["sudo", "-n", "docker", "version", "--format", "{{.Server.Version}}"],
+            check=False,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        if sudo.returncode == 0:
+            return ["sudo", "-n", "docker"]
+
+    return ["docker"]
+
+
+def _docker_uses_host_network() -> bool:
+    return os.getenv("AIDOO_TEST_DOCKER_NETWORK", "bridge").lower() == "host"
+
+
+def _docker_network_args() -> list[str]:
+    if _docker_uses_host_network():
+        return ["--network", "host"]
+    return []
+
+
+def _docker_publish_args(host_port: int, container_port: int) -> list[str]:
+    if _docker_uses_host_network():
+        return []
+    return ["-p", f"{host_port}:{container_port}"]
+
+
+def _docker_rm(container_name: str) -> None:
+    subprocess.run([*_docker_command(), "rm", "-f", container_name], check=False)
+
+
 def _ensure_docker_image(image: str) -> None:
     inspected = subprocess.run(
-        ["docker", "image", "inspect", image],
+        [*_docker_command(), "image", "inspect", image],
         check=False,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
     )
     if inspected.returncode == 0:
         return
-    subprocess.run(["docker", "pull", image], check=True)
+    subprocess.run([*_docker_command(), "pull", image], check=True)
 
 
 def _wait_for_postgres(dsn: str, timeout_seconds: int = 45) -> None:
@@ -104,21 +155,22 @@ def postgres_dsn() -> str:
 
     subprocess.run(
         [
-            "docker",
+            *_docker_command(),
             "run",
             "--rm",
             "-d",
             "--name",
             container_name,
+            *_docker_network_args(),
             "-e",
             "POSTGRES_USER=aidoo_test",
             "-e",
             "POSTGRES_PASSWORD=aidoo_test",
             "-e",
             "POSTGRES_DB=aidoo_test",
-            "-p",
-            f"{port}:5432",
+            *_docker_publish_args(port, 5432),
             POSTGRES_IMAGE,
+            *([] if not _docker_uses_host_network() else ["-c", f"port={port}"]),
         ],
         check=True,
     )
@@ -127,7 +179,7 @@ def postgres_dsn() -> str:
         _wait_for_postgres(dsn)
         yield dsn
     finally:
-        subprocess.run(["docker", "rm", "-f", container_name], check=False)
+        _docker_rm(container_name)
 
 
 @pytest.fixture(scope="session")
@@ -139,15 +191,16 @@ def redis_url() -> str:
 
     subprocess.run(
         [
-            "docker",
+            *_docker_command(),
             "run",
             "--rm",
             "-d",
             "--name",
             container_name,
-            "-p",
-            f"{port}:6379",
+            *_docker_network_args(),
+            *_docker_publish_args(port, 6379),
             REDIS_IMAGE,
+            *([] if not _docker_uses_host_network() else ["redis-server", "--port", str(port)]),
         ],
         check=True,
     )
@@ -156,7 +209,7 @@ def redis_url() -> str:
         _wait_for_tcp("127.0.0.1", port)
         yield url
     finally:
-        subprocess.run(["docker", "rm", "-f", container_name], check=False)
+        _docker_rm(container_name)
 
 
 @pytest.fixture(scope="session")
@@ -169,27 +222,26 @@ def minio_endpoint() -> str:
 
     subprocess.run(
         [
-            "docker",
+            *_docker_command(),
             "run",
             "--rm",
             "-d",
             "--name",
             container_name,
+            *_docker_network_args(),
             "-e",
             f"MINIO_ROOT_USER={MINIO_ACCESS_KEY}",
             "-e",
             f"MINIO_ROOT_PASSWORD={MINIO_SECRET_KEY}",
-            "-p",
-            f"{port}:9000",
-            "-p",
-            f"{console_port}:9001",
+            *_docker_publish_args(port, 9000),
+            *_docker_publish_args(console_port, 9001),
             MINIO_IMAGE,
             "server",
             "/data",
             "--address",
-            ":9000",
+            f":{port if _docker_uses_host_network() else 9000}",
             "--console-address",
-            ":9001",
+            f":{console_port if _docker_uses_host_network() else 9001}",
         ],
         check=True,
     )
@@ -198,7 +250,7 @@ def minio_endpoint() -> str:
         _wait_for_http_ok(f"{endpoint}/minio/health/ready")
         yield endpoint
     finally:
-        subprocess.run(["docker", "rm", "-f", container_name], check=False)
+        _docker_rm(container_name)
 
 
 def _build_client(

@@ -61,6 +61,7 @@ export DOOWON_DEV_PID_DIR="${DOOWON_DEV_PID_DIR:-$DOOWON_DEV_RUNTIME_DIR/pids}"
 export DOOWON_DEV_LOG_DIR="${DOOWON_DEV_LOG_DIR:-$DOOWON_DEV_RUNTIME_DIR/logs}"
 export DOOWON_DEV_NGINX_CONF_TEMPLATE_PATH="${DOOWON_DEV_NGINX_CONF_TEMPLATE_PATH:-$ROOT_DIR/ops/dev/nginx.conf.template}"
 export DOOWON_DEV_NGINX_CONF_PATH="${DOOWON_DEV_NGINX_CONF_PATH:-$DOOWON_DEV_RUNTIME_DIR/nginx.conf}"
+export DOOWON_DOCKER_CMD="${DOOWON_DOCKER_CMD:-}"
 
 export DOOWON_POSTGRES_DSN="${DOOWON_POSTGRES_DSN:-postgresql+psycopg://aidoo_db:aidoo_db@127.0.0.1:${DOOWON_DEV_POSTGRES_PORT}/doowon_ai_portal}"
 export DOOWON_REDIS_URL="$DOOWON_DEV_REDIS_URL"
@@ -74,6 +75,31 @@ export DOOWON_MINIO_BUCKET="${DOOWON_MINIO_BUCKET:-aidoo-portal}"
 export DOOWON_LLM_HEALTHCHECK_ON_STARTUP="${DOOWON_LLM_HEALTHCHECK_ON_STARTUP:-0}"
 export DOOWON_LLM_REQUIRED="${DOOWON_LLM_REQUIRED:-0}"
 export DOOWON_API_ALLOW_DEV_ADMIN_LOGIN="${DOOWON_API_ALLOW_DEV_ADMIN_LOGIN:-1}"
+
+dev_docker() {
+  if [[ -n "$DOOWON_DOCKER_CMD" ]]; then
+    # Allows values such as `sudo -n docker` for VM environments where the
+    # current user is not in the docker group yet.
+    $DOOWON_DOCKER_CMD "$@"
+    return
+  fi
+
+  if docker info >/dev/null 2>&1; then
+    docker "$@"
+    return
+  fi
+
+  if command -v sudo >/dev/null 2>&1 && sudo -n docker info >/dev/null 2>&1; then
+    sudo -n docker "$@"
+    return
+  fi
+
+  docker "$@"
+}
+
+dev_docker_available() {
+  dev_docker info >/dev/null 2>&1
+}
 
 dev_api_port() {
   local index="${1:?instance index is required}"
@@ -90,7 +116,7 @@ dev_ensure_runtime_dirs() {
 }
 
 dev_detect_api_upstream_host() {
-  docker run --rm --add-host=dev-host:host-gateway nginx:1.27-alpine \
+  dev_docker run --rm --add-host=dev-host:host-gateway nginx:1.27-alpine \
     sh -lc "grep -m1 -E '^[0-9]+(\\.[0-9]+){3}[[:space:]]+dev-host([[:space:]]|\$)' /etc/hosts | awk '{print \$1}'"
 }
 
