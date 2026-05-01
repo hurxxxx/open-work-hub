@@ -22,6 +22,86 @@
 - 2026-04-30 AI-friendly sidebar boundary refactor 2차 적용: AI 최근 대화, Docs Favorites/Recent Pages, Learning 목차를 각 `app-modules/{ai,docs,learning}/sidebar.tsx` 로 분리하고 PMS `SpaceOrderEditorModal` 을 `app-modules/pms/sidebar/` 로 이동했다. `agent-browser` smoke 로 `/w/hq/{ai,docs,learning,pms}` 렌더링과 앱별 sidebar 항목 노출을 확인했고, page error 0건이었다.
 - 2026-04-30 AI-friendly web app boundary refactor 1차 적용: `apps/web/src/app/` shell, `apps/web/src/app-modules/*` manifests/routes, registry 기반 AppBar/SubSidebar/route composition 으로 이동. `agent-browser` smoke 로 `hq-admin` 기준 `/w/hq/{home,ai,pms,docs,planner,meeting,learning}`, `/tool/search`, legacy `/meeting|/docs|/pms|/planner|/ai` NotFound 를 확인했고, `platform-admin` 기준 `/admin/general` 렌더링도 확인했다. 브라우저 page error 0건, 콘솔은 Vite/React dev 안내와 PMS chart size warning 2건만 확인.
 
+## 다음 세션 핸드오프 (2026-05-01)
+
+### 기준 상태
+
+- 최신 반영 커밋: `f9ff885 refactor API boundaries and remove legacy mounts`
+- 브랜치/원격: `main` -> `origin/main` 푸시 완료
+- 현재 리팩토링 상태:
+  - web app boundary refactor 완료: 앱별 `app-modules/*` 구조, shell registry, sidebar delegator, public API/import boundary 적용
+  - Phase 2 contract-first API boundary 완료: FastAPI app factory, OpenAPI codegen, platform API client, app/platform facade 분리, import-linter API boundary 적용
+  - legacy workspace API cleanup 완료: workspace context가 필요한 global API mount 제거, `/api/v1/workspaces/{workspace_slug}/...` 기준으로 API/tests/frontend 호출 정리
+  - public docs shared-link route만 intentional non-workspace API로 유지
+  - PMS deprecated list-member/project alias 제거
+  - live smoke target 추가: `pnpm nx e2e-live-smoke web`
+
+### 마지막 검증 결과
+
+- `pnpm generate:api-client` 통과
+- `pnpm check:api-contract` 통과
+- `pnpm check:web-architecture` 통과
+- `pnpm check:api-architecture` 통과
+- `pnpm nx lint api` 통과
+- `pnpm nx typecheck api` 통과
+- `pnpm nx test api` 통과: `664 passed`, `1 skipped`
+- `pnpm nx typecheck web` 통과
+- `pnpm nx lint web` 통과
+- `pnpm nx test web` 통과: `294 passed`
+- `pnpm nx build web` 통과, Vite chunk warning 없음
+- `pnpm nx e2e-shell web` 통과: `4 passed`
+- `pnpm nx e2e-live-smoke web` 통과: `3 passed`
+- `pnpm ci:all` 통과
+- `git diff --check` 통과
+
+### 다음 권장 작업 순서
+
+1. GitHub Actions 원격 CI 확인
+   - 방금 `main`에 푸시된 `f9ff885`가 원격 CI에서도 로컬과 같은 결과인지 먼저 확인한다.
+   - 실패가 있으면 새 기능 작업보다 CI 수정이 우선이다.
+   - 특히 로컬과 원격의 API seed, OpenSearch, browser dependency 차이를 먼저 본다.
+
+2. CI workflow 고정
+   - GitHub Actions에 최소 게이트를 명시한다.
+   - 권장 필수 게이트: `pnpm ci:all`, `pnpm check:api-contract`, `pnpm check:web-architecture`, `pnpm check:api-architecture`
+   - `pnpm nx e2e-shell web`은 PR/main 필수 smoke로 유지한다.
+   - `pnpm nx e2e-live-smoke web`은 local API/seed/OpenSearch 상태 의존성이 있으므로 처음에는 manual 또는 nightly workflow로 분리하는 편이 안전하다.
+
+3. OpenAPI 계약 품질 개선
+   - FastAPI route의 `operation_id`, request/response schema, error schema를 정리한다.
+   - generated type 이름이 안정적으로 나오도록 중복/익명 schema를 줄인다.
+   - frontend facade에서 남은 hand-written API 타입을 더 줄이고, UI-only view model과 server contract type의 경계를 명확히 한다.
+   - raw `fetch`는 SSE stream, blob/download, direct media playback처럼 JSON client가 맞지 않는 경우에만 남긴다.
+
+4. Backend domain boundary v3
+   - 현재는 router 역참조, app/main/api_registry 역참조, legacy mount를 끊은 상태다.
+   - 다음은 cross-domain service 직접 호출을 줄이는 단계다.
+   - 필요한 협업은 domain service끼리 직접 물리는 대신 application service 또는 명확한 read model/helper 경계로 올린다.
+   - import-linter contract를 확장할 때는 기존 테스트 double/seed 흐름이 깨지지 않는지 함께 본다.
+
+5. 실제 UX 회귀 검증 강화
+   - Playwright smoke는 shell routing 중심이다. 다음 세션에서는 실제 사용자 플로우를 `agent-browser`로 한 단계 더 깊게 확인한다.
+   - 우선순위:
+     - docs 생성/편집/shared-link 접근
+     - meeting 생성/녹음/전사/문서 연결
+     - PMS task 생성/이동/담당자 변경
+     - AI chat stream 및 artifact panel
+     - `/tool/search?workspace=hq` 검색 결과와 OpenSearch 준비 상태
+   - 브라우저 기반 점검을 수행하면 이 파일의 최근 작업 기록에 final URL, accessibility snapshot, console/page error 결과를 남긴다.
+
+6. 성능/번들 후속
+   - AIView와 LearningCourseView chunk는 크게 줄었다.
+   - main chunk는 아직 큰 편이므로 다음 후보는 shell-level provider, editor dependency, admin/settings route split이다.
+   - 단, chunk split은 behavior 안정화 이후에 작게 진행한다.
+
+### 주의할 점
+
+- DB schema migration은 이번 리팩토링 범위에 없었다. API surface cleanup만 수행했다.
+- 숨은 legacy 클라이언트가 `/api/v1/{ai,pms,docs,meeting,planner,...}` global path를 호출하면 실패하는 것이 의도된 상태다.
+- docs shared-link처럼 의도적으로 workspace가 없는 public route는 `/api/v1/docs/*`에 남아 있다.
+- local OpenSearch index가 준비되지 않은 환경에서는 `/api/v1/workspaces/hq/search/query`가 `503`을 낼 수 있다. live smoke에서는 shell routing 회귀와 구분하기 위해 이 경우만 명시적으로 허용한다.
+- 새 에이전트 지시 파일(`AGENTS.md`, `CLAUDE.md`, `.codex/`, `.claude/`)은 만들지 않는다. 활성 규칙은 루트 `agents.md`만 사용한다.
+
 ## 구현 완료
 
 ### Stage 1 안정화
