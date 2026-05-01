@@ -3,10 +3,17 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { MeetingAvailabilityPanel } from './MeetingAvailabilityPanel';
+import {
+  addLocalDays,
+  startOfAvailabilityWeek,
+} from './meetingAvailability';
 
 const availabilityHarness = vi.hoisted(() => ({
   useMeetingAvailabilityQuery: vi.fn(),
 }));
+
+const MEETING_START_ISO = '2026-04-14T05:00:00.000Z';
+const MEETING_END_ISO = '2026-04-14T06:00:00.000Z';
 
 vi.mock('@aidoo/ui', () => ({
   Dialog: ({
@@ -87,8 +94,8 @@ describe('MeetingAvailabilityPanel', () => {
           { id: 'user-1', email: 'alice@aidoo.ai', full_name: 'Alice Kim' },
           { id: 'user-2', email: 'bob@aidoo.ai', full_name: 'Bob Lee' },
         ]}
-        meetingStart={new Date(2026, 3, 14, 14, 0, 0, 0)}
-        meetingEnd={new Date(2026, 3, 14, 15, 0, 0, 0)}
+        meetingStart={new Date(MEETING_START_ISO)}
+        meetingEnd={new Date(MEETING_END_ISO)}
       />,
     );
 
@@ -106,14 +113,20 @@ describe('MeetingAvailabilityPanel', () => {
   });
 
   it('moves the compared week when the modal navigation buttons are clicked', async () => {
+    const meetingStart = new Date(MEETING_START_ISO);
+    const expectedWeekStart = startOfAvailabilityWeek(meetingStart);
+    const expectedWeekEnd = addLocalDays(expectedWeekStart, 7);
+    const expectedNextWeekStart = addLocalDays(expectedWeekStart, 7);
+    const expectedNextWeekEnd = addLocalDays(expectedWeekStart, 14);
+
     render(
       <MeetingAvailabilityPanel
         workspaceSlug="hq"
         attendeeUsers={[
           { id: 'user-1', email: 'alice@aidoo.ai', full_name: 'Alice Kim' },
         ]}
-        meetingStart={new Date(2026, 3, 14, 14, 0, 0, 0)}
-        meetingEnd={new Date(2026, 3, 14, 15, 0, 0, 0)}
+        meetingStart={meetingStart}
+        meetingEnd={new Date(MEETING_END_ISO)}
       />,
     );
 
@@ -129,8 +142,8 @@ describe('MeetingAvailabilityPanel', () => {
       rangeEnd: Date;
     };
     expect(initialOpenCall.enabled).toBe(true);
-    expect(initialOpenCall.rangeStart.toISOString()).toBe('2026-04-11T15:00:00.000Z');
-    expect(initialOpenCall.rangeEnd.toISOString()).toBe('2026-04-18T15:00:00.000Z');
+    expect(initialOpenCall.rangeStart.getTime()).toBe(expectedWeekStart.getTime());
+    expect(initialOpenCall.rangeEnd.getTime()).toBe(expectedWeekEnd.getTime());
 
     fireEvent.click(screen.getByRole('button', { name: 'Next availability week' }));
 
@@ -139,8 +152,8 @@ describe('MeetingAvailabilityPanel', () => {
         rangeStart: Date;
         rangeEnd: Date;
       };
-      expect(nextCall.rangeStart.toISOString()).toBe('2026-04-18T15:00:00.000Z');
-      expect(nextCall.rangeEnd.toISOString()).toBe('2026-04-25T15:00:00.000Z');
+      expect(nextCall.rangeStart.getTime()).toBe(expectedNextWeekStart.getTime());
+      expect(nextCall.rangeEnd.getTime()).toBe(expectedNextWeekEnd.getTime());
     });
   });
 });

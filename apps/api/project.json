@@ -30,7 +30,7 @@
       "executor": "nx:run-commands",
       "options": {
         "cwd": "apps/api",
-        "command": "uv run --python 3.12 --group dev pytest"
+        "command": "uv run --python 3.12 --group dev python -m pytest"
       }
     },
     "typecheck": {
