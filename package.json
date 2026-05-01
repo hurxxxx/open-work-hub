@@ -3,7 +3,7 @@
   "private": true,
   "packageManager": "pnpm@10.33.0",
   "scripts": {
-    "nx": "env -u NO_COLOR nx",
+    "nx": "env -u NO_COLOR -u NODE_ENV nx",
     "dev": "./dev.sh",
     "dev:web": "nx dev web",
     "dev:api": "nx dev api",

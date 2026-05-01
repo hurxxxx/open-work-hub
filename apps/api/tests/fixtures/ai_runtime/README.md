@@ -1,12 +1,12 @@
 # AI Runtime Phase 0 Gates
 
-These fixtures are synthetic seed cases for Phase 6 Evidence Runtime PR 1.
+These fixtures are synthetic seed cases for Phase 6 Evidence Runtime checks.
 They are intentionally small and deterministic. They must not call an LLM,
 network provider, or workspace data source during tests.
 
-`external_execution_summary_cases.json` also stays deterministic: it exercises
-only local mock external planner/search adapters and records safe summary
-metadata, not raw prompts, raw queries, or raw provider output.
+Only fixtures that feed active runtime tests live here. Removed snapshot-only
+fixtures should stay out of the local suite unless they drive executable
+behavior.
 
 ## Launch SLO Metrics
 

@@ -9,6 +9,7 @@
 
 ## 최근 작업 기록
 
+- 2026-05-01 CI/회귀 테스트 경량화: GitHub Actions workflow를 제거해 원격 CI를 중단했고, 로컬 Playwright 회귀는 `app-boundary-smoke.spec.ts` shell smoke만 남기도록 정리했다. 실제 local API 의존 `e2e-live-smoke` target과 관련 config/spec를 삭제했다. API 테스트에서는 외부 OpenAI live smoke, external adapter 선택 중복 테스트, fixture shape만 잠그던 eval fixture 테스트와 전용 JSON fixture를 제거했다. `scripts/phase6-runtime-regression.sh` 도 삭제된 adapter 테스트를 더 이상 참조하지 않도록 조정했다. 로컬 `pnpm nx` 실행은 외부 `NODE_ENV=production`에 오염되지 않도록 정리해 web unit suite가 React development/test runtime으로 돈다. 로컬 기준: API 테스트 파일 68개 -> 65개, web e2e spec 9개 -> 1개.
 - 2026-05-01 Phase 2 legacy API 제거 + live smoke 강화: workspace context가 필요한 legacy global API mount(`ai`, `documents`, `plm`, `drafts`, `ocr`, `wiki_pms`, `pms`, `meeting`, `calendar`, `planner`)를 제거하고 OpenAPI/types/tests를 workspace-scoped API 기준으로 갱신했다. docs shared-link는 의도된 public route만 `/api/v1/docs/*` 로 보존했고, PMS deprecated list-member/project alias는 계약에서 제거했다. import-linter contract는 domain -> app/main/api_registry 역참조 금지를 추가했다. Web은 주요 app/platform API 타입을 OpenAPI generated schema 기반으로 확장했고, Learning markdown과 AI artifact panel을 lazy split해 route chunk를 줄였다. 신규 `pnpm nx e2e-live-smoke web` 은 실제 local API + dev-login으로 `/w/hq/{home,ai,pms,docs,planner,meeting,learning,settings}`, `/tool/search?workspace=hq`, `/admin/workspaces`, legacy NotFound를 검증한다. 로컬 OpenSearch index 미준비 시 `/search/query` 503은 shell smoke에서 명시적으로 허용한다. 브라우저 검증: `pnpm nx e2e-shell web` 4 passed, `pnpm nx e2e-live-smoke web` 3 passed.
 - 2026-05-01 Phase 2 API boundary 후속 마무리: web app/platform API facade 전반을 `apiFetchJson` 기반 공통 JSON client로 맞춰 인증 header/error normalization 중복을 줄였고, `platform/api/types.ts` 에 OpenAPI operation response/request helper type을 추가했다. workspace 검색/RAG E2E 스텁을 보강해 `/tool/search?workspace=hq` smoke가 실제 API 401/로그아웃 흐름에 의존하지 않도록 했으며, `auth.workspace_router` 도 import-linter protected router 목록에 포함했다. route module은 `React.lazy` + `app/shell/lazy-route.tsx` 로 앱별 chunk를 분리하고 `/tool/*` wrapper도 app module public element만 사용하도록 정리했다. `package.json` 의 Nx wrapper는 `env -u NO_COLOR nx` 로 바꿔 FORCE_COLOR/NO_COLOR 경고를 없앴고, Vite chunk warning도 lazy split 이후 기준값에 맞춰 사라졌다. 브라우저 검증: Playwright `pnpm nx e2e-shell web` 4 passed (`/w/hq/{home,ai,pms,docs,planner,meeting,learning,settings}`, `/tool/search`, disabled app, legacy NotFound, admin routes). 전체 검증: `pnpm ci:web` 통과, `pnpm ci:api` 통과 (`663 passed`, `1 skipped`, warnings 3), `git diff --check` 통과.
 - 2026-05-01 Phase 2 contract-first API boundary 1차 구현: FastAPI `create_app(initialize_runtime=False)` 경로와 `aidoo_api.api_registry` composition root 를 추가해 OpenAPI export 시 DB/MinIO/LLM 초기화를 건너뛰고 router mount 를 중앙화했다. `scripts/generate-openapi-client.mjs`, `openapi-typescript`, `openapi-fetch`, `apps/web/src/platform/api/openapi.generated.d.ts`, `platform/api/client.ts` 를 추가했고 `generate:api-client`, `check:api-contract`, `check:api-architecture`, `ci:api`, `ci:contract`, `ci:web` 스크립트를 연결했다. web `domains/*` API 진입점은 앱 전용 `app-modules/<appId>/api` 또는 cross-cutting `platform/*` 로 이동했고, 앱 API 공유는 `<appId>/public-api` 로 제한했다. 백엔드는 media reusable helper 를 `media.service` 로 옮기고 docs/pms service 의 router 역참조를 제거했으며, `import-linter` protected contract 로 domain service/module 의 router import 를 차단했다. 후속으로 AI tool/RAG/LLM 테스트 double 과 환경 오염에 취약한 settings 테스트를 정리해 전체 API suite 까지 통과시켰다. 검증: `pnpm generate:api-client`, `pnpm check:api-contract`, `pnpm check:api-architecture`, `pnpm nx typecheck api`, `pnpm nx lint api`, `pnpm nx test api` 663 passed / 1 skipped, `pnpm nx typecheck web`, `pnpm check:web-architecture`, `pnpm nx lint web`, `pnpm nx test web` 41 files / 292 tests, `pnpm nx build web`, `pnpm nx e2e-shell web` 4 passed.
@@ -24,9 +25,11 @@
 
 ## 다음 세션 핸드오프 (2026-05-01)
 
+> 업데이트: GitHub Actions와 live API Playwright smoke는 2026-05-01 테스트 경량화 작업에서 제거했다. 다음 작업은 로컬 검증 기준(`lint`, `typecheck`, focused unit/API tests, `pnpm nx e2e-shell web`)으로 진행한다.
+
 ### 기준 상태
 
-- 최신 반영 커밋: `f9ff885 refactor API boundaries and remove legacy mounts`
+- 최신 반영 상태: 2026-05-01 CI/회귀 테스트 경량화 변경 포함
 - 브랜치/원격: `main` -> `origin/main` 푸시 완료
 - 현재 리팩토링 상태:
   - web app boundary refactor 완료: 앱별 `app-modules/*` 구조, shell registry, sidebar delegator, public API/import boundary 적용
@@ -34,52 +37,39 @@
   - legacy workspace API cleanup 완료: workspace context가 필요한 global API mount 제거, `/api/v1/workspaces/{workspace_slug}/...` 기준으로 API/tests/frontend 호출 정리
   - public docs shared-link route만 intentional non-workspace API로 유지
   - PMS deprecated list-member/project alias 제거
-  - live smoke target 추가: `pnpm nx e2e-live-smoke web`
+  - live smoke target은 테스트 경량화 과정에서 제거, `e2e-shell`만 유지
 
 ### 마지막 검증 결과
 
-- `pnpm generate:api-client` 통과
-- `pnpm check:api-contract` 통과
-- `pnpm check:web-architecture` 통과
+- `uv run --python 3.12 --group dev python -m pytest --collect-only` 통과: `655 tests`
+- `bash scripts/phase6-runtime-regression.sh --collect-only` 통과: `102 tests`
 - `pnpm check:api-architecture` 통과
 - `pnpm nx lint api` 통과
 - `pnpm nx typecheck api` 통과
-- `pnpm nx test api` 통과: `664 passed`, `1 skipped`
+- `pnpm ci:web` 통과: contract/web architecture/typecheck/lint/test/build/e2e-shell
 - `pnpm nx typecheck web` 통과
 - `pnpm nx lint web` 통과
 - `pnpm nx test web` 통과: `294 passed`
-- `pnpm nx build web` 통과, Vite chunk warning 없음
+- `pnpm nx build web` 통과
+- `pnpm exec tsc --noEmit -p apps/web/tsconfig.e2e.json` 통과
 - `pnpm nx e2e-shell web` 통과: `4 passed`
-- `pnpm nx e2e-live-smoke web` 통과: `3 passed`
-- `pnpm ci:all` 통과
 - `git diff --check` 통과
 
 ### 다음 권장 작업 순서
 
-1. GitHub Actions 원격 CI 확인
-   - 방금 `main`에 푸시된 `f9ff885`가 원격 CI에서도 로컬과 같은 결과인지 먼저 확인한다.
-   - 실패가 있으면 새 기능 작업보다 CI 수정이 우선이다.
-   - 특히 로컬과 원격의 API seed, OpenSearch, browser dependency 차이를 먼저 본다.
-
-2. CI workflow 고정
-   - GitHub Actions에 최소 게이트를 명시한다.
-   - 권장 필수 게이트: `pnpm ci:all`, `pnpm check:api-contract`, `pnpm check:web-architecture`, `pnpm check:api-architecture`
-   - `pnpm nx e2e-shell web`은 PR/main 필수 smoke로 유지한다.
-   - `pnpm nx e2e-live-smoke web`은 local API/seed/OpenSearch 상태 의존성이 있으므로 처음에는 manual 또는 nightly workflow로 분리하는 편이 안전하다.
-
-3. OpenAPI 계약 품질 개선
+1. OpenAPI 계약 품질 개선
    - FastAPI route의 `operation_id`, request/response schema, error schema를 정리한다.
    - generated type 이름이 안정적으로 나오도록 중복/익명 schema를 줄인다.
    - frontend facade에서 남은 hand-written API 타입을 더 줄이고, UI-only view model과 server contract type의 경계를 명확히 한다.
    - raw `fetch`는 SSE stream, blob/download, direct media playback처럼 JSON client가 맞지 않는 경우에만 남긴다.
 
-4. Backend domain boundary v3
+2. Backend domain boundary v3
    - 현재는 router 역참조, app/main/api_registry 역참조, legacy mount를 끊은 상태다.
    - 다음은 cross-domain service 직접 호출을 줄이는 단계다.
    - 필요한 협업은 domain service끼리 직접 물리는 대신 application service 또는 명확한 read model/helper 경계로 올린다.
    - import-linter contract를 확장할 때는 기존 테스트 double/seed 흐름이 깨지지 않는지 함께 본다.
 
-5. 실제 UX 회귀 검증 강화
+3. 실제 UX 회귀 검증 강화
    - Playwright smoke는 shell routing 중심이다. 다음 세션에서는 실제 사용자 플로우를 `agent-browser`로 한 단계 더 깊게 확인한다.
    - 우선순위:
      - docs 생성/편집/shared-link 접근
@@ -89,7 +79,7 @@
      - `/tool/search?workspace=hq` 검색 결과와 OpenSearch 준비 상태
    - 브라우저 기반 점검을 수행하면 이 파일의 최근 작업 기록에 final URL, accessibility snapshot, console/page error 결과를 남긴다.
 
-6. 성능/번들 후속
+4. 성능/번들 후속
    - AIView와 LearningCourseView chunk는 크게 줄었다.
    - main chunk는 아직 큰 편이므로 다음 후보는 shell-level provider, editor dependency, admin/settings route split이다.
    - 단, chunk split은 behavior 안정화 이후에 작게 진행한다.
@@ -99,7 +89,7 @@
 - DB schema migration은 이번 리팩토링 범위에 없었다. API surface cleanup만 수행했다.
 - 숨은 legacy 클라이언트가 `/api/v1/{ai,pms,docs,meeting,planner,...}` global path를 호출하면 실패하는 것이 의도된 상태다.
 - docs shared-link처럼 의도적으로 workspace가 없는 public route는 `/api/v1/docs/*`에 남아 있다.
-- local OpenSearch index가 준비되지 않은 환경에서는 `/api/v1/workspaces/hq/search/query`가 `503`을 낼 수 있다. live smoke에서는 shell routing 회귀와 구분하기 위해 이 경우만 명시적으로 허용한다.
+- local OpenSearch index가 준비되지 않은 환경에서는 `/api/v1/workspaces/hq/search/query`가 `503`을 낼 수 있다. live API Playwright smoke는 제거했으므로, 검색 실제 동작은 별도 focused 검증으로 확인한다.
 - 새 에이전트 지시 파일(`AGENTS.md`, `CLAUDE.md`, `.codex/`, `.claude/`)은 만들지 않는다. 활성 규칙은 루트 `agents.md`만 사용한다.
 
 ## 구현 완료

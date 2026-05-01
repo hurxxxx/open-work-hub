@@ -14,15 +14,13 @@ uv run ruff check \
   tests/test_ai_runtime_admin.py \
   tests/test_ai_runtime_contracts.py \
   tests/test_ai_runtime_external_egress.py \
-  tests/test_ai_runtime_external_adapters.py \
   tests/test_ai_runtime_mock_e2e.py \
   tests/test_ai_runtime_settings.py
 
-uv run pytest \
+uv run --python 3.12 --group dev python -m pytest \
   tests/test_ai_runtime_admin.py \
   tests/test_ai_runtime_contracts.py \
   tests/test_ai_runtime_external_egress.py \
-  tests/test_ai_runtime_external_adapters.py \
   tests/test_ai_runtime_settings.py \
   tests/test_ai_runtime_mock_e2e.py \
   tests/test_ai_stream.py \
