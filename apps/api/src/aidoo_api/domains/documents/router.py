@@ -20,7 +20,7 @@ class SearchDocumentsRequest(BaseModel):
     answer_mode: Literal["search-only", "grounded-answer"] = "search-only"
 
 
-class SearchHit(BaseModel):
+class SearchDocumentHit(BaseModel):
     document_id: str
     title: str
     summary: str
@@ -54,13 +54,13 @@ class SearchDocumentsResponse(BaseModel):
     scenario_id: str = "documents-rag"
     query_profile: str = "bm25 + vector + rerank"
     filters_applied: SearchDocumentsFilters
-    hits: list[SearchHit]
+    hits: list[SearchDocumentHit]
     next_actions: list[str]
     grounded_answer: GroundedAnswer | None = None
 
 
 DOCUMENT_FIXTURES = [
-    SearchHit(
+    SearchDocumentHit(
         document_id="doc-spec-001",
         title="KX-21 Compressor Specification",
         summary="Pressure rating and seal material revisions indexed for the latest production line.",
@@ -78,7 +78,7 @@ DOCUMENT_FIXTURES = [
         ),
         next_actions=["Open source document", "Attach citation blocks to draft"],
     ),
-    SearchHit(
+    SearchDocumentHit(
         document_id="doc-revision-002",
         title="Seal Material Change Notice",
         summary="Change notice with approval history and linked project references.",
@@ -96,7 +96,7 @@ DOCUMENT_FIXTURES = [
         ),
         next_actions=["Review approval chain", "Compare against current BOM"],
     ),
-    SearchHit(
+    SearchDocumentHit(
         document_id="doc-memo-003",
         title="High Temperature Risk Review Memo",
         summary="Risk memo covering compressor temperature drift, mitigation, and approval notes.",
@@ -114,7 +114,7 @@ DOCUMENT_FIXTURES = [
         ),
         next_actions=["Check linked test reports", "Escalate unresolved risk items"],
     ),
-    SearchHit(
+    SearchDocumentHit(
         document_id="doc-guide-004",
         title="Supplier Quality Response Guide",
         summary="Guide for supplier-facing issue triage, containment, and response templates.",
@@ -139,7 +139,7 @@ def _tokenize_query(query: str) -> list[str]:
     return [term for term in re.split(r"[^0-9a-z]+", query.lower()) if term]
 
 
-def _matches_filters(hit: SearchHit, filters: SearchDocumentsFilters) -> bool:
+def _matches_filters(hit: SearchDocumentHit, filters: SearchDocumentsFilters) -> bool:
     if filters.doc_type and hit.source_type not in filters.doc_type:
         return False
     if filters.project and hit.project not in filters.project:
@@ -149,7 +149,7 @@ def _matches_filters(hit: SearchHit, filters: SearchDocumentsFilters) -> bool:
     return True
 
 
-def _score_hit(hit: SearchHit, query: str, terms: list[str]) -> float:
+def _score_hit(hit: SearchDocumentHit, query: str, terms: list[str]) -> float:
     haystack = " ".join(
         [
             hit.title,
@@ -167,7 +167,7 @@ def _score_hit(hit: SearchHit, query: str, terms: list[str]) -> float:
     return round(min(0.99, 0.52 + (term_score * 0.32) + phrase_bonus), 2)
 
 
-def _build_grounded_answer(query: str, hits: list[SearchHit]) -> GroundedAnswer | None:
+def _build_grounded_answer(query: str, hits: list[SearchDocumentHit]) -> GroundedAnswer | None:
     if not hits:
         return None
 

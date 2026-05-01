@@ -1,4 +1,7 @@
-from fastapi import Depends, FastAPI
+from collections.abc import Sequence
+
+from fastapi import APIRouter, Depends, FastAPI
+from fastapi.params import Depends as DependsParam
 
 from aidoo_api.core.settings import Settings
 from aidoo_api.domains.ai.router import router as ai_router
@@ -26,6 +29,22 @@ from aidoo_api.domains.pms.router import router as pms_router
 from aidoo_api.domains.rag.router import router as rag_router
 from aidoo_api.domains.search.router import router as search_router
 from aidoo_api.domains.wiki_pms.router import router as wiki_pms_router
+from aidoo_api.openapi_contract import PROTECTED_ERROR_RESPONSES
+
+
+def _include_protected_router(
+    app: FastAPI,
+    router: APIRouter,
+    *,
+    prefix: str,
+    dependencies: Sequence[DependsParam],
+) -> None:
+    app.include_router(
+        router,
+        prefix=prefix,
+        dependencies=dependencies,
+        responses=PROTECTED_ERROR_RESPONSES,
+    )
 
 
 def register_api_routers(app: FastAPI, settings: Settings) -> None:
@@ -37,41 +56,124 @@ def register_api_routers(app: FastAPI, settings: Settings) -> None:
     ]
     workspace_prefix = f"{settings.api_prefix}/workspaces/{{workspace_slug}}"
 
-    app.include_router(
+    _include_protected_router(
+        app,
         workspace_router,
         prefix=settings.api_prefix,
         dependencies=workspace_dependencies,
     )
-    app.include_router(ai_router, prefix=workspace_prefix, dependencies=workspace_dependencies)
-    app.include_router(admin_router, prefix=settings.api_prefix, dependencies=protected_dependencies)
-    app.include_router(documents_router, prefix=workspace_prefix, dependencies=workspace_dependencies)
-    app.include_router(docs_public_router, prefix=settings.api_prefix, dependencies=protected_dependencies)
-    app.include_router(docs_router, prefix=workspace_prefix, dependencies=workspace_dependencies)
+    _include_protected_router(
+        app,
+        ai_router,
+        prefix=workspace_prefix,
+        dependencies=workspace_dependencies,
+    )
+    _include_protected_router(
+        app,
+        admin_router,
+        prefix=settings.api_prefix,
+        dependencies=protected_dependencies,
+    )
+    _include_protected_router(
+        app,
+        documents_router,
+        prefix=workspace_prefix,
+        dependencies=workspace_dependencies,
+    )
+    _include_protected_router(
+        app,
+        docs_public_router,
+        prefix=settings.api_prefix,
+        dependencies=protected_dependencies,
+    )
+    _include_protected_router(
+        app,
+        docs_router,
+        prefix=workspace_prefix,
+        dependencies=workspace_dependencies,
+    )
     app.include_router(docs_ws_router, prefix=workspace_prefix)
-    app.include_router(plm_router, prefix=workspace_prefix, dependencies=workspace_dependencies)
-    app.include_router(drafts_router, prefix=workspace_prefix, dependencies=workspace_dependencies)
-    app.include_router(ocr_router, prefix=workspace_prefix, dependencies=workspace_dependencies)
-    app.include_router(wiki_pms_router, prefix=workspace_prefix, dependencies=workspace_dependencies)
-    app.include_router(pms_router, prefix=workspace_prefix, dependencies=workspace_dependencies)
-    app.include_router(meeting_router, prefix=workspace_prefix, dependencies=workspace_dependencies)
-    app.include_router(calendar_router, prefix=workspace_prefix, dependencies=workspace_dependencies)
-    app.include_router(planner_router, prefix=workspace_prefix, dependencies=workspace_dependencies)
-    app.include_router(rag_router, prefix=workspace_prefix, dependencies=workspace_dependencies)
-    app.include_router(search_router, prefix=workspace_prefix, dependencies=workspace_dependencies)
+    _include_protected_router(
+        app,
+        plm_router,
+        prefix=workspace_prefix,
+        dependencies=workspace_dependencies,
+    )
+    _include_protected_router(
+        app,
+        drafts_router,
+        prefix=workspace_prefix,
+        dependencies=workspace_dependencies,
+    )
+    _include_protected_router(
+        app,
+        ocr_router,
+        prefix=workspace_prefix,
+        dependencies=workspace_dependencies,
+    )
+    _include_protected_router(
+        app,
+        wiki_pms_router,
+        prefix=workspace_prefix,
+        dependencies=workspace_dependencies,
+    )
+    _include_protected_router(
+        app,
+        pms_router,
+        prefix=workspace_prefix,
+        dependencies=workspace_dependencies,
+    )
+    _include_protected_router(
+        app,
+        meeting_router,
+        prefix=workspace_prefix,
+        dependencies=workspace_dependencies,
+    )
+    _include_protected_router(
+        app,
+        calendar_router,
+        prefix=workspace_prefix,
+        dependencies=workspace_dependencies,
+    )
+    _include_protected_router(
+        app,
+        planner_router,
+        prefix=workspace_prefix,
+        dependencies=workspace_dependencies,
+    )
+    _include_protected_router(
+        app,
+        rag_router,
+        prefix=workspace_prefix,
+        dependencies=workspace_dependencies,
+    )
+    _include_protected_router(
+        app,
+        search_router,
+        prefix=workspace_prefix,
+        dependencies=workspace_dependencies,
+    )
     # Conversations are a new workspace-scoped feature with no pre-scoped
     # clients, so we intentionally mount only the /workspaces/:slug/ shape.
     # The legacy /api/v1/conversations mount would auto-bind to whichever
     # workspace `require_legacy_workspace_membership()` returned first, which
     # silently hides conversations from a user's other workspaces.
-    app.include_router(
+    _include_protected_router(
+        app,
         conversations_router,
         prefix=workspace_prefix,
         dependencies=workspace_dependencies,
     )
-    app.include_router(media_router, prefix=settings.api_prefix, dependencies=protected_dependencies)
+    _include_protected_router(
+        app,
+        media_router,
+        prefix=settings.api_prefix,
+        dependencies=protected_dependencies,
+    )
     # Learning page notes: global content, gated by the router's own permission
     # checks instead of workspace membership.
-    app.include_router(
+    _include_protected_router(
+        app,
         learning_notes_router,
         prefix=settings.api_prefix,
         dependencies=protected_dependencies,

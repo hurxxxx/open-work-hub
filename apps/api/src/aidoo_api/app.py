@@ -25,6 +25,7 @@ from aidoo_api.domains.ai.registry import initialize_ai_capability_registry
 from aidoo_api.domains.ai.runtime.registry_validation import RuntimeRegistryValidationError
 from aidoo_api.domains.docs.collab import DocsCollabHub
 from aidoo_api.domains.rag.runtime import close_rag_runtime_resources, get_rag_runtime_health
+from aidoo_api.openapi_contract import stable_operation_id
 
 
 logger = logging.getLogger(__name__)
@@ -81,6 +82,7 @@ def create_app(*, initialize_runtime: bool = True) -> FastAPI:
         docs_url="/docs",
         redoc_url="/redoc",
         lifespan=lifespan,
+        generate_unique_id_function=stable_operation_id,
     )
     app.state.telemetry_enabled = telemetry_enabled
     app.add_exception_handler(
