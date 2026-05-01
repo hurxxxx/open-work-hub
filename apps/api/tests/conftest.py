@@ -16,6 +16,7 @@ REDIS_IMAGE = "redis:7"
 MINIO_IMAGE = "minio/minio:latest"
 MINIO_ACCESS_KEY = "minioadmin"
 MINIO_SECRET_KEY = "minioadmin"
+TEST_POSTGRES_DSN = "postgresql+psycopg://aidoo_test:aidoo_test@127.0.0.1:5432/aidoo_test"
 TEST_LOCAL_LLM_MODEL = "local/current-moe-test-model"
 
 
@@ -87,6 +88,11 @@ def _wait_for_http_ok(url: str, timeout_seconds: int = 60) -> None:
             last_error = error
             time.sleep(1)
     raise RuntimeError(f"Timed out waiting for HTTP service at {url}: {last_error}")
+
+
+@pytest.fixture(autouse=True)
+def _required_settings_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("DOOWON_POSTGRES_DSN", TEST_POSTGRES_DSN)
 
 
 @pytest.fixture(scope="session")
@@ -222,6 +228,7 @@ def _build_client(
     # are still gated by pool configuration before they are invoked.
     monkeypatch.setenv("DOOWON_LLM_LOCAL_DEFAULT_MODEL", TEST_LOCAL_LLM_MODEL)
     monkeypatch.setenv("DOOWON_LLM_LOCAL_CANONICAL_MODEL", TEST_LOCAL_LLM_MODEL)
+    monkeypatch.setenv("AIDOO_RAG_ENABLED", "1")
 
     from aidoo_api.core.db import Base, get_engine, get_session_factory
     from aidoo_api.core.llm import (
@@ -230,9 +237,11 @@ def _build_client(
     )
     from aidoo_api.core.settings import get_settings
     from aidoo_api.core.storage import get_minio_client
+    from aidoo_api.domains.ai.registry import reset_ai_capability_registry
     from aidoo_api.domains.auth import models as auth_models  # noqa: F401
     from aidoo_api.domains.meeting import models as meeting_models  # noqa: F401
     from aidoo_api.domains.pms import models as pms_models  # noqa: F401
+    from aidoo_api.domains.rag.runtime import reset_rag_runtime_caches
 
     _clear_cache(get_settings)
     _clear_cache(get_async_pool_client)
@@ -240,6 +249,8 @@ def _build_client(
     _clear_cache(get_minio_client)
     _clear_cache(get_engine)
     _clear_cache(get_session_factory)
+    reset_ai_capability_registry()
+    reset_rag_runtime_caches()
 
     engine = get_engine()
     Base.metadata.drop_all(bind=engine)
@@ -260,6 +271,8 @@ def _teardown_client_state() -> None:
     )
     from aidoo_api.core.settings import get_settings
     from aidoo_api.core.storage import get_minio_client
+    from aidoo_api.domains.ai.registry import reset_ai_capability_registry
+    from aidoo_api.domains.rag.runtime import reset_rag_runtime_caches
 
     engine = get_engine()
     Base.metadata.drop_all(bind=engine)
@@ -272,6 +285,8 @@ def _teardown_client_state() -> None:
     _clear_cache(get_minio_client)
     _clear_cache(get_engine)
     _clear_cache(get_session_factory)
+    reset_ai_capability_registry()
+    reset_rag_runtime_caches()
 
 
 @pytest.fixture

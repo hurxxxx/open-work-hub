@@ -626,6 +626,7 @@ class Settings(BaseSettings):
         env_file=str(ENV_FILE),
         env_file_encoding="utf-8",
         extra="ignore",
+        populate_by_name=True,
     )
 
     @model_validator(mode="after")
