@@ -44,6 +44,7 @@
 
 - `uv run --python 3.12 --group dev python -m pytest --collect-only` 통과: `655 tests`
 - `pnpm test:api:vm:collect` 통과: `655 tests`
+- `pnpm test:api:vm` 통과: `655 passed`, warnings 3, `0:12:34`
 - `pnpm test:api:vm -- tests/test_health.py::test_healthz tests/test_keyword_search.py::test_keyword_search_returns_contract_facets_snippets_and_deep_links` 통과: `2 passed`
 - `bash scripts/phase6-runtime-regression.sh --collect-only` 통과: `102 tests`
 - `pnpm check:api-architecture` 통과
