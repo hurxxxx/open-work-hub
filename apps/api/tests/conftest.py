@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import os
 import shlex
-import shutil
 import socket
 import subprocess
 import time
@@ -40,7 +39,7 @@ def _docker_command() -> list[str]:
     if configured:
         return shlex.split(configured)
 
-    if shutil.which("docker") is not None:
+    if os.getenv("AIDOO_ENV_PROFILE", "local").lower() == "vm":
         direct = subprocess.run(
             ["docker", "version", "--format", "{{.Server.Version}}"],
             check=False,
@@ -50,7 +49,6 @@ def _docker_command() -> list[str]:
         if direct.returncode == 0:
             return ["docker"]
 
-    if shutil.which("sudo") is not None and shutil.which("docker") is not None:
         sudo = subprocess.run(
             ["sudo", "-n", "docker", "version", "--format", "{{.Server.Version}}"],
             check=False,
@@ -64,7 +62,10 @@ def _docker_command() -> list[str]:
 
 
 def _docker_uses_host_network() -> bool:
-    return os.getenv("AIDOO_TEST_DOCKER_NETWORK", "bridge").lower() == "host"
+    configured = os.getenv("AIDOO_TEST_DOCKER_NETWORK")
+    if configured:
+        return configured.lower() == "host"
+    return os.getenv("AIDOO_ENV_PROFILE", "local").lower() == "vm"
 
 
 def _docker_network_args() -> list[str]:

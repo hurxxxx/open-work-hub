@@ -6,6 +6,8 @@ import tailwindcss from '@tailwindcss/vite';
 import { nxViteTsPaths } from '@nx/vite/plugins/nx-tsconfig-paths.plugin';
 import { nxCopyAssetsPlugin } from '@nx/vite/plugins/nx-copy-assets.plugin';
 
+const apiProxyTarget = process.env.DOOWON_WEB_API_PROXY_TARGET ?? 'http://127.0.0.1:8000';
+
 export default defineConfig(() => ({
   root: import.meta.dirname,
   cacheDir: '../../node_modules/.vite/apps/web',
@@ -15,7 +17,7 @@ export default defineConfig(() => ({
     allowedHosts: ['dwdcc.lumejs.com'],
     proxy: {
       '/api': {
-        target: 'http://127.0.0.1:8000',
+        target: apiProxyTarget,
         ws: true,
       },
     },
@@ -31,7 +33,7 @@ export default defineConfig(() => ({
     allowedHosts: ['dwdcc.lumejs.com'],
     proxy: {
       '/api': {
-        target: 'http://127.0.0.1:8000',
+        target: apiProxyTarget,
         ws: true,
       },
     },

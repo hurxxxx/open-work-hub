@@ -28,6 +28,8 @@ for raw_line in path.read_text(encoding="utf-8").splitlines():
         continue
     key, value = line.split("=", 1)
     key = key.strip()
+    if key == "AIDOO_ENV_PROFILE" and key in os.environ:
+        continue
     value = value.strip()
     if len(value) >= 2 and value[0] == value[-1] and value[0] in {"'", '"'}:
         value = value[1:-1]
@@ -61,7 +63,7 @@ export DOOWON_DEV_PID_DIR="${DOOWON_DEV_PID_DIR:-$DOOWON_DEV_RUNTIME_DIR/pids}"
 export DOOWON_DEV_LOG_DIR="${DOOWON_DEV_LOG_DIR:-$DOOWON_DEV_RUNTIME_DIR/logs}"
 export DOOWON_DEV_NGINX_CONF_TEMPLATE_PATH="${DOOWON_DEV_NGINX_CONF_TEMPLATE_PATH:-$ROOT_DIR/ops/dev/nginx.conf.template}"
 export DOOWON_DEV_NGINX_CONF_PATH="${DOOWON_DEV_NGINX_CONF_PATH:-$DOOWON_DEV_RUNTIME_DIR/nginx.conf}"
-export DOOWON_DOCKER_CMD="${DOOWON_DOCKER_CMD:-}"
+export AIDOO_ENV_PROFILE="${AIDOO_ENV_PROFILE:-local}"
 
 export DOOWON_POSTGRES_DSN="${DOOWON_POSTGRES_DSN:-postgresql+psycopg://aidoo_db:aidoo_db@127.0.0.1:${DOOWON_DEV_POSTGRES_PORT}/doowon_ai_portal}"
 export DOOWON_REDIS_URL="$DOOWON_DEV_REDIS_URL"
@@ -77,24 +79,28 @@ export DOOWON_LLM_REQUIRED="${DOOWON_LLM_REQUIRED:-0}"
 export DOOWON_API_ALLOW_DEV_ADMIN_LOGIN="${DOOWON_API_ALLOW_DEV_ADMIN_LOGIN:-1}"
 
 dev_docker() {
-  if [[ -n "$DOOWON_DOCKER_CMD" ]]; then
-    # Allows values such as `sudo -n docker` for VM environments where the
-    # current user is not in the docker group yet.
-    $DOOWON_DOCKER_CMD "$@"
-    return
-  fi
-
-  if docker info >/dev/null 2>&1; then
-    docker "$@"
-    return
-  fi
-
-  if command -v sudo >/dev/null 2>&1 && sudo -n docker info >/dev/null 2>&1; then
-    sudo -n docker "$@"
-    return
-  fi
-
-  docker "$@"
+  case "$AIDOO_ENV_PROFILE" in
+    local|"")
+      docker "$@"
+      ;;
+    vm)
+      if docker info >/dev/null 2>&1; then
+        docker "$@"
+      elif command -v sudo >/dev/null 2>&1 && sudo -n docker info >/dev/null 2>&1; then
+        sudo -n docker "$@"
+      else
+        docker "$@"
+      fi
+      ;;
+    prod|production)
+      echo "[dev] AIDOO_ENV_PROFILE=$AIDOO_ENV_PROFILE is not supported for dev docker commands" >&2
+      return 1
+      ;;
+    *)
+      echo "[dev] invalid AIDOO_ENV_PROFILE: $AIDOO_ENV_PROFILE (expected local, vm, prod)" >&2
+      return 1
+      ;;
+  esac
 }
 
 dev_docker_available() {
