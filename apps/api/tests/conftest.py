@@ -16,6 +16,7 @@ REDIS_IMAGE = "redis:7"
 MINIO_IMAGE = "minio/minio:latest"
 MINIO_ACCESS_KEY = "minioadmin"
 MINIO_SECRET_KEY = "minioadmin"
+TEST_LOCAL_LLM_MODEL = "local/current-moe-test-model"
 
 
 def _clear_cache(func) -> None:
@@ -217,6 +218,10 @@ def _build_client(
     # external pool key so ``LlmPoolConfig.configured`` is True when a test
     # exercises the external pool via monkeypatched ``get_pool_client``.
     monkeypatch.setenv("DOOWON_LLM_EXTERNAL_API_KEY", "test-external-key")
+    # Keep tests independent of the developer's local `.env`: fake pool clients
+    # are still gated by pool configuration before they are invoked.
+    monkeypatch.setenv("DOOWON_LLM_LOCAL_DEFAULT_MODEL", TEST_LOCAL_LLM_MODEL)
+    monkeypatch.setenv("DOOWON_LLM_LOCAL_CANONICAL_MODEL", TEST_LOCAL_LLM_MODEL)
 
     from aidoo_api.core.db import Base, get_engine, get_session_factory
     from aidoo_api.core.llm import (
