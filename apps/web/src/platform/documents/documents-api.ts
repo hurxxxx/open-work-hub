@@ -1,57 +1,39 @@
 import { ApiRequestError, apiFetchJson } from '@/src/platform/api/client';
+import type { ApiSchema } from '@/src/platform/api/types';
 import { rewriteWorkspaceApiPath } from '@/src/platform/workspaces/workspace-utils';
 
-export interface SearchDocumentsFilters {
+export type SearchDocumentsFilters = Omit<
+  ApiSchema<'SearchDocumentsFilters'>,
+  'department' | 'doc_type' | 'project'
+> & {
   doc_type: string[];
   project: string[];
   department: string[];
-}
-
-export interface SearchDocumentsPayload {
-  query: string;
+};
+export type SearchDocumentsPayload = Omit<
+  ApiSchema<'SearchDocumentsRequest'>,
+  'answer_mode' | 'filters' | 'top_k'
+> & {
   filters: SearchDocumentsFilters;
   top_k?: number;
-  answer_mode?: 'search-only' | 'grounded-answer';
-}
-
-export interface SearchDocumentHit {
-  document_id: string;
-  title: string;
-  summary: string;
-  source_type: string;
-  score: number;
-  updated: string;
-  project: string;
-  department: string;
-  acl: string;
-  owner: string;
-  page_reference: string;
-  citation: string;
+  answer_mode?: ApiSchema<'SearchDocumentsRequest'>['answer_mode'];
+};
+export type SearchDocumentHit = Omit<
+  ApiSchema<'SearchDocumentsResponse'>['hits'][number],
+  'next_actions'
+> & {
   next_actions: string[];
-}
-
-export interface GroundedAnswerCitation {
-  document_id: string;
-  title: string;
-  page_reference: string;
-  quote: string;
-}
-
-export interface GroundedAnswer {
-  summary: string;
-  key_points: string[];
-  citations: GroundedAnswerCitation[];
-  next_actions: string[];
-}
-
-export interface SearchDocumentsResponse {
-  scenario_id: string;
-  query_profile: string;
+};
+export type GroundedAnswerCitation = ApiSchema<'GroundedAnswer'>['citations'][number];
+export type GroundedAnswer = ApiSchema<'GroundedAnswer'>;
+export type SearchDocumentsResponse = Omit<
+  ApiSchema<'SearchDocumentsResponse'>,
+  'filters_applied' | 'grounded_answer' | 'hits'
+> & {
   filters_applied: SearchDocumentsFilters;
   hits: SearchDocumentHit[];
-  next_actions: string[];
   grounded_answer: GroundedAnswer | null;
-}
+};
 
 class DocumentsApiError extends Error {
   status: number;

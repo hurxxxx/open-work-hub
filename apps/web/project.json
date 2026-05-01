@@ -28,6 +28,14 @@
         "command": "pnpm exec playwright test --config apps/web/playwright.config.ts apps/web/e2e/app-boundary-smoke.spec.ts",
         "cwd": "."
       }
+    },
+    "e2e-live-smoke": {
+      "executor": "nx:run-commands",
+      "cache": false,
+      "options": {
+        "command": "pnpm exec playwright test --config apps/web/playwright.live.config.ts",
+        "cwd": "."
+      }
     }
   }
 }

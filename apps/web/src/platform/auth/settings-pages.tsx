@@ -10,7 +10,8 @@ import {
   User,
 } from 'lucide-react';
 
-import { Button, InlineNotice } from '@aidoo/ui';
+import { InlineNotice } from '@aidoo/ui/feedback/inline-notice';
+import { Button } from '@aidoo/ui/primitives/button';
 
 import { cn } from '@/src/lib/utils';
 

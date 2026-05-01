@@ -5,6 +5,7 @@
 // During Phase 1.3 the backend endpoint does not yet exist. The hook in
 // use-calendar-events.ts can fall back to MOCK_CALENDAR_EVENTS until Phase 2 lands.
 import { ApiRequestError, apiFetchJson } from '@/src/platform/api/client';
+import type { ApiSchema } from '@/src/platform/api/types';
 import { rewriteWorkspaceApiPath } from '@/src/platform/workspaces/workspace-utils';
 
 import {
@@ -29,9 +30,7 @@ export interface ListCalendarEventsOptions {
   sources?: CalendarSourceFilter;
 }
 
-export interface CalendarEventsResponse {
-  items: CalendarEvent[];
-}
+export type CalendarEventsResponse = ApiSchema<'CalendarEventsResponse'>;
 
 export async function listCalendarEvents(
   token: string,

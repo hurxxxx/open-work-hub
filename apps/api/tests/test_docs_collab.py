@@ -72,7 +72,7 @@ def _create_unlinked_media(uploaded_by_id: str) -> dict[str, str]:
 
 def _create_native_doc_page(client: TestClient, token: str, workspace_slug: str) -> tuple[dict, dict]:
     create_doc_response = client.post(
-        "/api/v1/docs/items",
+        "/api/v1/workspaces/hq/docs/items",
         headers=_auth_headers(token),
         json={"title": "Realtime Notes"},
     )
@@ -196,7 +196,7 @@ def test_docs_native_page_linked_media_resolves_for_shared_user(client: TestClie
     member_token = _login(client, member["user"]["email"], member["temporary_password"])
 
     share_response = client.put(
-        f"/api/v1/docs/items/{doc['id']}/sharing/users/{member['user']['id']}",
+        f"/api/v1/workspaces/hq/docs/items/{doc['id']}/sharing/users/{member['user']['id']}",
         headers=_auth_headers(admin["token"]),
         json={"access_level": "edit"},
     )

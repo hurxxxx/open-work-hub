@@ -88,9 +88,15 @@ def _enable_pms_rag(monkeypatch) -> None:
     )
 
 
-def _create_space(client: TestClient, token: str, *, name: str) -> dict:
+def _create_space(
+    client: TestClient,
+    token: str,
+    *,
+    name: str,
+    workspace_slug: str = "delivery-hub",
+) -> dict:
     response = client.post(
-        "/api/v1/pms/spaces",
+        f"/api/v1/workspaces/{workspace_slug}/pms/spaces",
         headers=_auth_headers(token),
         json={"name": name, "description": ""},
     )
@@ -98,9 +104,17 @@ def _create_space(client: TestClient, token: str, *, name: str) -> dict:
     return response.json()
 
 
-def _create_task_list(client: TestClient, token: str, *, team_id: str, key: str, name: str) -> dict:
+def _create_task_list(
+    client: TestClient,
+    token: str,
+    *,
+    team_id: str,
+    key: str,
+    name: str,
+    workspace_slug: str = "delivery-hub",
+) -> dict:
     response = client.post(
-        "/api/v1/pms/lists",
+        f"/api/v1/workspaces/{workspace_slug}/pms/lists",
         headers=_auth_headers(token),
         json={
             "key": key,
@@ -113,9 +127,16 @@ def _create_task_list(client: TestClient, token: str, *, team_id: str, key: str,
     return response.json()
 
 
-def _create_issue(client: TestClient, token: str, *, list_id: str, title: str) -> dict:
+def _create_issue(
+    client: TestClient,
+    token: str,
+    *,
+    list_id: str,
+    title: str,
+    workspace_slug: str = "delivery-hub",
+) -> dict:
     response = client.post(
-        f"/api/v1/pms/lists/{list_id}/issues",
+        f"/api/v1/workspaces/{workspace_slug}/pms/lists/{list_id}/issues",
         headers=_auth_headers(token),
         json={
             "title": title,
@@ -155,7 +176,7 @@ def test_pms_router_issue_mutations_enqueue_distinct_rag_jobs(
     _mark_sync_jobs_succeeded(create_jobs[0].id)
 
     update_response = client.patch(
-        f"/api/v1/pms/issues/{issue['id']}",
+        f"/api/v1/workspaces/delivery-hub/pms/issues/{issue['id']}",
         headers=_auth_headers(owner["token"]),
         json={"title": "RAG PMS Issue Updated"},
     )
@@ -166,7 +187,7 @@ def test_pms_router_issue_mutations_enqueue_distinct_rag_jobs(
     _mark_sync_jobs_succeeded(update_jobs[-1].id)
 
     comment_response = client.post(
-        f"/api/v1/pms/issues/{issue['id']}/comments",
+        f"/api/v1/workspaces/delivery-hub/pms/issues/{issue['id']}/comments",
         headers=_auth_headers(owner["token"]),
         json={"body": "latest progress note"},
     )
@@ -177,7 +198,7 @@ def test_pms_router_issue_mutations_enqueue_distinct_rag_jobs(
     _mark_sync_jobs_succeeded(comment_jobs[-1].id)
 
     delete_response = client.delete(
-        f"/api/v1/pms/issues/{issue['id']}",
+        f"/api/v1/workspaces/delivery-hub/pms/issues/{issue['id']}",
         headers=_auth_headers(owner["token"]),
     )
     assert delete_response.status_code == 204, delete_response.text
@@ -212,7 +233,7 @@ def test_pms_bulk_issue_mutations_enqueue_rag_jobs(
     _mark_sync_jobs_succeeded(*created_job_ids)
 
     bulk_update_response = client.patch(
-        f"/api/v1/pms/lists/{task_list['id']}/issues/bulk",
+        f"/api/v1/workspaces/delivery-hub/pms/lists/{task_list['id']}/issues/bulk",
         headers=_auth_headers(owner["token"]),
         json={
             "issue_ids": [first_issue["id"], second_issue["id"]],
@@ -238,7 +259,7 @@ def test_pms_bulk_issue_mutations_enqueue_rag_jobs(
     )
 
     bulk_delete_response = client.patch(
-        f"/api/v1/pms/lists/{task_list['id']}/issues/bulk",
+        f"/api/v1/workspaces/delivery-hub/pms/lists/{task_list['id']}/issues/bulk",
         headers=_auth_headers(owner["token"]),
         json={
             "issue_ids": [first_issue["id"], second_issue["id"]],
@@ -275,7 +296,7 @@ def test_pms_metadata_mutations_enqueue_visibility_recompute_jobs(
     _mark_sync_jobs_succeeded(*[job.id for job in _job_rows() if job.resource_id == issue["id"]])
 
     list_update = client.patch(
-        f"/api/v1/pms/lists/{task_list['id']}",
+        f"/api/v1/workspaces/delivery-hub/pms/lists/{task_list['id']}",
         headers=_auth_headers(owner["token"]),
         json={"name": "RAG PMS Metadata List Updated"},
     )
@@ -288,7 +309,7 @@ def test_pms_metadata_mutations_enqueue_visibility_recompute_jobs(
     _mark_visibility_jobs_succeeded(list_jobs[0].id)
 
     milestone_response = client.post(
-        f"/api/v1/pms/lists/{task_list['id']}/milestones",
+        f"/api/v1/workspaces/delivery-hub/pms/lists/{task_list['id']}/milestones",
         headers=_auth_headers(owner["token"]),
         json={"title": "Sprint Alpha", "description": "", "status": "planned", "sort_order": 0},
     )
@@ -296,7 +317,7 @@ def test_pms_metadata_mutations_enqueue_visibility_recompute_jobs(
     milestone = milestone_response.json()
 
     milestone_update = client.patch(
-        f"/api/v1/pms/milestones/{milestone['id']}",
+        f"/api/v1/workspaces/delivery-hub/pms/milestones/{milestone['id']}",
         headers=_auth_headers(owner["token"]),
         json={"title": "Sprint Beta"},
     )
@@ -309,7 +330,7 @@ def test_pms_metadata_mutations_enqueue_visibility_recompute_jobs(
     _mark_visibility_jobs_succeeded(milestone_jobs[0].id)
 
     label_response = client.post(
-        f"/api/v1/pms/lists/{task_list['id']}/labels",
+        f"/api/v1/workspaces/delivery-hub/pms/lists/{task_list['id']}/labels",
         headers=_auth_headers(owner["token"]),
         json={"name": "Backend", "color": "#111827"},
     )
@@ -317,7 +338,7 @@ def test_pms_metadata_mutations_enqueue_visibility_recompute_jobs(
     label = label_response.json()
 
     assign_label = client.patch(
-        f"/api/v1/pms/issues/{issue['id']}",
+        f"/api/v1/workspaces/delivery-hub/pms/issues/{issue['id']}",
         headers=_auth_headers(owner["token"]),
         json={"label_ids": [label["id"]]},
     )
@@ -325,7 +346,7 @@ def test_pms_metadata_mutations_enqueue_visibility_recompute_jobs(
     _mark_sync_jobs_succeeded(*[job.id for job in _job_rows() if job.resource_id == issue["id"] and job.status == "pending"])
 
     label_update = client.patch(
-        f"/api/v1/pms/labels/{label['id']}",
+        f"/api/v1/workspaces/delivery-hub/pms/labels/{label['id']}",
         headers=_auth_headers(owner["token"]),
         json={"name": "Infra"},
     )
@@ -338,7 +359,7 @@ def test_pms_metadata_mutations_enqueue_visibility_recompute_jobs(
     _mark_visibility_jobs_succeeded(label_jobs[0].id)
 
     label_delete = client.delete(
-        f"/api/v1/pms/labels/{label['id']}",
+        f"/api/v1/workspaces/delivery-hub/pms/labels/{label['id']}",
         headers=_auth_headers(owner["token"]),
     )
     assert label_delete.status_code == 204, label_delete.text
@@ -364,19 +385,22 @@ def test_meeting_issue_acl_changes_enqueue_rag_visibility_recompute_jobs(
     admin = _bootstrap_admin_session(client)
     admin_token = admin["token"]
 
-    space = _create_space(client, admin_token, name="RAG Meeting Space")
+    workspace_slug = "hq"
+    space = _create_space(client, admin_token, name="RAG Meeting Space", workspace_slug=workspace_slug)
     task_list = _create_task_list(
         client,
         admin_token,
         team_id=space["id"],
         key="RAGMTG",
         name="RAG Meeting List",
+        workspace_slug=workspace_slug,
     )
     issue = _create_issue(
         client,
         admin_token,
         list_id=task_list["id"],
         title="Meeting-shared RAG issue",
+        workspace_slug=workspace_slug,
     )
     _mark_sync_jobs_succeeded(*[job.id for job in _job_rows() if job.resource_id == issue["id"]])
 
@@ -413,13 +437,13 @@ def test_meeting_issue_acl_changes_enqueue_rag_visibility_recompute_jobs(
     _mark_visibility_jobs_succeeded(grant_jobs[0].id)
 
     issue_detail = client.get(
-        f"/api/v1/pms/issues/{issue['id']}",
+        f"/api/v1/workspaces/{workspace_slug}/pms/issues/{issue['id']}",
         headers=_auth_headers(attendee_token),
     )
     assert issue_detail.status_code == 200, issue_detail.text
 
     detach_response = client.delete(
-        f"/api/v1/meeting/meetings/{meeting['id']}/tasks/{issue['id']}",
+        f"/api/v1/workspaces/{workspace_slug}/meeting/meetings/{meeting['id']}/tasks/{issue['id']}",
         headers=_auth_headers(admin_token),
     )
     assert detach_response.status_code == 200, detach_response.text

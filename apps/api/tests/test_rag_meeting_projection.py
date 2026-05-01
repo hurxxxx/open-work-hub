@@ -233,7 +233,7 @@ def test_meeting_router_mutations_enqueue_rag_jobs(client: TestClient, monkeypat
         late_attendee_id = late_attendee.id
 
     create_response = client.post(
-        "/api/v1/meeting/meetings",
+        "/api/v1/workspaces/delivery-hub/meeting/meetings",
         headers=_auth_headers(owner["token"]),
         json={
             "title": "Meeting Hook Sync",
@@ -253,7 +253,7 @@ def test_meeting_router_mutations_enqueue_rag_jobs(client: TestClient, monkeypat
     _mark_sync_jobs_succeeded(create_jobs[0].id)
 
     update_response = client.patch(
-        f"/api/v1/meeting/meetings/{meeting['id']}",
+        f"/api/v1/workspaces/delivery-hub/meeting/meetings/{meeting['id']}",
         headers=_auth_headers(owner["token"]),
         json={"title": "Meeting Hook Sync Updated"},
     )
@@ -267,7 +267,7 @@ def test_meeting_router_mutations_enqueue_rag_jobs(client: TestClient, monkeypat
     _mark_sync_jobs_succeeded(update_jobs[-1].id)
 
     attendee_response = client.post(
-        f"/api/v1/meeting/meetings/{meeting['id']}/attendees",
+        f"/api/v1/workspaces/delivery-hub/meeting/meetings/{meeting['id']}/attendees",
         headers=_auth_headers(owner["token"]),
         json={"attendees": [{"user_id": late_attendee_id, "role": "optional"}]},
     )
@@ -282,7 +282,7 @@ def test_meeting_router_mutations_enqueue_rag_jobs(client: TestClient, monkeypat
     _mark_sync_jobs_succeeded(attendee_jobs[-1].id)
 
     delete_response = client.delete(
-        f"/api/v1/meeting/meetings/{meeting['id']}",
+        f"/api/v1/workspaces/delivery-hub/meeting/meetings/{meeting['id']}",
         headers=_auth_headers(owner["token"]),
     )
     assert delete_response.status_code == 204, delete_response.text

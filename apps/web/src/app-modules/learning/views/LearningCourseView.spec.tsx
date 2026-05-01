@@ -50,7 +50,7 @@ vi.mock('../model/manifest', async () => {
 });
 
 vi.mock('../model/content', () => ({
-  getLessonBody: (file: string) => contentHarness.bodies[file] ?? null,
+  loadLessonBody: async (file: string) => contentHarness.bodies[file] ?? null,
   listAvailableLessonFiles: () => Object.keys(contentHarness.bodies),
 }));
 
@@ -112,10 +112,10 @@ describe('LearningCourseView', () => {
     };
   });
 
-  it('renders the selected lesson body and wires prev/next across part boundaries', () => {
+  it('renders the selected lesson body and wires prev/next across part boundaries', async () => {
     renderAt('/w/hq/learning/course/second');
 
-    const body = screen.getByTestId('learning-lesson-body-second');
+    const body = await screen.findByTestId('learning-lesson-body-second');
     expect(body.textContent).toContain('두 번째 레슨 본문');
 
     // prev crosses a part boundary (intro → main)
@@ -125,24 +125,30 @@ describe('LearningCourseView', () => {
     expect(next.getAttribute('href')).toBe('/w/hq/learning/course/third');
   });
 
-  it('hides prev on the first lesson', () => {
+  it('hides prev on the first lesson', async () => {
     renderAt('/w/hq/learning/course/first');
+    await screen.findByTestId('learning-lesson-body-first');
+
     expect(screen.queryByTestId('learning-lesson-prev')).toBeNull();
     expect(screen.getByTestId('learning-lesson-next').getAttribute('href')).toBe(
       '/w/hq/learning/course/second',
     );
   });
 
-  it('hides next on the last lesson', () => {
+  it('hides next on the last lesson', async () => {
     renderAt('/w/hq/learning/course/third');
+    await screen.findByTestId('learning-lesson-body-third');
+
     expect(screen.getByTestId('learning-lesson-prev').getAttribute('href')).toBe(
       '/w/hq/learning/course/second',
     );
     expect(screen.queryByTestId('learning-lesson-next')).toBeNull();
   });
 
-  it('redirects to the first lesson when the URL omits the lesson slug', () => {
+  it('redirects to the first lesson when the URL omits the lesson slug', async () => {
     renderAt('/w/hq/learning/course');
+    await screen.findByTestId('learning-lesson-body-first');
+
     expect(screen.getByTestId('location').textContent).toBe(
       '/w/hq/learning/course/first',
     );
@@ -153,8 +159,10 @@ describe('LearningCourseView', () => {
     expect(screen.getByTestId('learning-root')).toBeTruthy();
   });
 
-  it('mounts the page notes panel with the lesson stable id', () => {
+  it('mounts the page notes panel with the lesson stable id', async () => {
     renderAt('/w/hq/learning/course/second');
+    await screen.findByTestId('learning-lesson-body-second');
+
     expect(screen.getByTestId('learning-page-notes-panel-tc-002')).toBeTruthy();
   });
 

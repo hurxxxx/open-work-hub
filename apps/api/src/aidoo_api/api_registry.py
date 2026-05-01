@@ -5,13 +5,13 @@ from aidoo_api.domains.ai.router import router as ai_router
 from aidoo_api.domains.admin.router import router as admin_router
 from aidoo_api.domains.auth.dependencies import (
     require_current_user,
-    require_legacy_workspace_membership,
     require_workspace_membership,
 )
 from aidoo_api.domains.auth.router import router as auth_router
 from aidoo_api.domains.auth.workspace_router import router as workspace_router
 from aidoo_api.domains.calendar.router import router as calendar_router
 from aidoo_api.domains.conversations.router import router as conversations_router
+from aidoo_api.domains.docs.router import public_router as docs_public_router
 from aidoo_api.domains.docs.router import router as docs_router
 from aidoo_api.domains.docs.router import ws_router as docs_ws_router
 from aidoo_api.domains.documents.router import router as documents_router
@@ -35,10 +35,6 @@ def register_api_routers(app: FastAPI, settings: Settings) -> None:
         *protected_dependencies,
         Depends(require_workspace_membership()),
     ]
-    legacy_workspace_dependencies = [
-        *protected_dependencies,
-        Depends(require_legacy_workspace_membership()),
-    ]
     workspace_prefix = f"{settings.api_prefix}/workspaces/{{workspace_slug}}"
 
     app.include_router(
@@ -46,49 +42,19 @@ def register_api_routers(app: FastAPI, settings: Settings) -> None:
         prefix=settings.api_prefix,
         dependencies=workspace_dependencies,
     )
-    app.include_router(ai_router, prefix=settings.api_prefix, dependencies=legacy_workspace_dependencies)
     app.include_router(ai_router, prefix=workspace_prefix, dependencies=workspace_dependencies)
     app.include_router(admin_router, prefix=settings.api_prefix, dependencies=protected_dependencies)
-    app.include_router(
-        documents_router,
-        prefix=settings.api_prefix,
-        dependencies=legacy_workspace_dependencies,
-    )
     app.include_router(documents_router, prefix=workspace_prefix, dependencies=workspace_dependencies)
-    app.include_router(docs_router, prefix=settings.api_prefix, dependencies=protected_dependencies)
+    app.include_router(docs_public_router, prefix=settings.api_prefix, dependencies=protected_dependencies)
     app.include_router(docs_router, prefix=workspace_prefix, dependencies=workspace_dependencies)
     app.include_router(docs_ws_router, prefix=workspace_prefix)
-    app.include_router(plm_router, prefix=settings.api_prefix, dependencies=legacy_workspace_dependencies)
     app.include_router(plm_router, prefix=workspace_prefix, dependencies=workspace_dependencies)
-    app.include_router(drafts_router, prefix=settings.api_prefix, dependencies=legacy_workspace_dependencies)
     app.include_router(drafts_router, prefix=workspace_prefix, dependencies=workspace_dependencies)
-    app.include_router(ocr_router, prefix=settings.api_prefix, dependencies=legacy_workspace_dependencies)
     app.include_router(ocr_router, prefix=workspace_prefix, dependencies=workspace_dependencies)
-    app.include_router(
-        wiki_pms_router,
-        prefix=settings.api_prefix,
-        dependencies=legacy_workspace_dependencies,
-    )
     app.include_router(wiki_pms_router, prefix=workspace_prefix, dependencies=workspace_dependencies)
-    app.include_router(pms_router, prefix=settings.api_prefix, dependencies=legacy_workspace_dependencies)
     app.include_router(pms_router, prefix=workspace_prefix, dependencies=workspace_dependencies)
-    app.include_router(
-        meeting_router,
-        prefix=settings.api_prefix,
-        dependencies=legacy_workspace_dependencies,
-    )
     app.include_router(meeting_router, prefix=workspace_prefix, dependencies=workspace_dependencies)
-    app.include_router(
-        calendar_router,
-        prefix=settings.api_prefix,
-        dependencies=legacy_workspace_dependencies,
-    )
     app.include_router(calendar_router, prefix=workspace_prefix, dependencies=workspace_dependencies)
-    app.include_router(
-        planner_router,
-        prefix=settings.api_prefix,
-        dependencies=legacy_workspace_dependencies,
-    )
     app.include_router(planner_router, prefix=workspace_prefix, dependencies=workspace_dependencies)
     app.include_router(rag_router, prefix=workspace_prefix, dependencies=workspace_dependencies)
     app.include_router(search_router, prefix=workspace_prefix, dependencies=workspace_dependencies)

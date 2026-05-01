@@ -7,6 +7,7 @@ import { useCreateBlockNote } from '@blocknote/react';
 import { Loader2 } from 'lucide-react';
 import { WebsocketProvider } from 'y-websocket';
 import * as Y from 'yjs';
+import '@mantine/core/styles.css';
 import '@blocknote/core/fonts/inter.css';
 import '@blocknote/mantine/style.css';
 

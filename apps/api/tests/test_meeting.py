@@ -121,7 +121,7 @@ def _create_meeting(
     start = start_at or datetime(2026, 5, 1, 10, 0, 0)
     end = end_at or (start + timedelta(hours=1))
     response = client.post(
-        "/api/v1/meeting/meetings",
+        "/api/v1/workspaces/hq/meeting/meetings",
         headers=_auth_headers(token),
         json={
             "title": title,
@@ -154,7 +154,7 @@ def _create_task_list(
     if team_id is not None:
         payload["team_id"] = team_id
     response = client.post(
-        "/api/v1/pms/lists",
+        "/api/v1/workspaces/hq/pms/lists",
         headers=_auth_headers(token),
         json=payload,
     )
@@ -171,7 +171,7 @@ def _create_issue(
     status: str = "backlog",
 ) -> dict:
     response = client.post(
-        f"/api/v1/pms/lists/{list_id}/issues",
+        f"/api/v1/workspaces/hq/pms/lists/{list_id}/issues",
         headers=_auth_headers(token),
         json={
             "title": title,
@@ -209,14 +209,14 @@ def test_meeting_create_get_update_delete_happy_path(client: TestClient) -> None
     assert meeting["attendees"][0]["response"] == "accepted"
 
     detail_response = client.get(
-        f"/api/v1/meeting/meetings/{meeting['id']}",
+        f"/api/v1/workspaces/hq/meeting/meetings/{meeting['id']}",
         headers=_auth_headers(token),
     )
     assert detail_response.status_code == 200
     assert detail_response.json()["id"] == meeting["id"]
 
     update_response = client.patch(
-        f"/api/v1/meeting/meetings/{meeting['id']}",
+        f"/api/v1/workspaces/hq/meeting/meetings/{meeting['id']}",
         headers=_auth_headers(token),
         json={"title": "Kickoff (revised)", "agenda": "Revised agenda."},
     )
@@ -225,7 +225,7 @@ def test_meeting_create_get_update_delete_happy_path(client: TestClient) -> None
     assert update_response.json()["agenda"] == "Revised agenda."
 
     list_response = client.get(
-        "/api/v1/meeting/meetings",
+        "/api/v1/workspaces/hq/meeting/meetings",
         headers=_auth_headers(token),
         params={"scope": "mine"},
     )
@@ -235,13 +235,13 @@ def test_meeting_create_get_update_delete_happy_path(client: TestClient) -> None
     assert body["items"][0]["title"] == "Kickoff (revised)"
 
     delete_response = client.delete(
-        f"/api/v1/meeting/meetings/{meeting['id']}",
+        f"/api/v1/workspaces/hq/meeting/meetings/{meeting['id']}",
         headers=_auth_headers(token),
     )
     assert delete_response.status_code == 204
 
     after_delete = client.get(
-        f"/api/v1/meeting/meetings/{meeting['id']}",
+        f"/api/v1/workspaces/hq/meeting/meetings/{meeting['id']}",
         headers=_auth_headers(token),
     )
     assert after_delete.status_code == 404
@@ -275,14 +275,14 @@ def test_non_organizer_attendee_cannot_modify_meeting(client: TestClient) -> Non
 
     # Member can read.
     member_view = client.get(
-        f"/api/v1/meeting/meetings/{meeting['id']}",
+        f"/api/v1/workspaces/hq/meeting/meetings/{meeting['id']}",
         headers=_auth_headers(member_token),
     )
     assert member_view.status_code == 200
 
     # Member cannot patch.
     forbidden_patch = client.patch(
-        f"/api/v1/meeting/meetings/{meeting['id']}",
+        f"/api/v1/workspaces/hq/meeting/meetings/{meeting['id']}",
         headers=_auth_headers(member_token),
         json={"title": "Hijacked"},
     )
@@ -290,7 +290,7 @@ def test_non_organizer_attendee_cannot_modify_meeting(client: TestClient) -> Non
 
     # Member cannot delete.
     forbidden_delete = client.delete(
-        f"/api/v1/meeting/meetings/{meeting['id']}",
+        f"/api/v1/workspaces/hq/meeting/meetings/{meeting['id']}",
         headers=_auth_headers(member_token),
     )
     assert forbidden_delete.status_code == 403
@@ -341,7 +341,7 @@ def test_attendee_can_invite_other_attendees(client: TestClient) -> None:
 
     # invitee_a (an attendee, not organizer) can add invitee_b.
     add_response = client.post(
-        f"/api/v1/meeting/meetings/{meeting['id']}/attendees",
+        f"/api/v1/workspaces/hq/meeting/meetings/{meeting['id']}/attendees",
         headers=_auth_headers(invitee_a_token),
         json={
             "attendees": [
@@ -360,7 +360,7 @@ def test_attendee_can_invite_other_attendees(client: TestClient) -> None:
 
     # Idempotent: re-adding invitee_b succeeds without dupes.
     again = client.post(
-        f"/api/v1/meeting/meetings/{meeting['id']}/attendees",
+        f"/api/v1/workspaces/hq/meeting/meetings/{meeting['id']}/attendees",
         headers=_auth_headers(invitee_a_token),
         json={
             "attendees": [
@@ -378,7 +378,7 @@ def test_attendee_can_invite_other_attendees(client: TestClient) -> None:
 
     # Outsider (non-participant) cannot add anyone.
     forbidden = client.post(
-        f"/api/v1/meeting/meetings/{meeting['id']}/attendees",
+        f"/api/v1/workspaces/hq/meeting/meetings/{meeting['id']}/attendees",
         headers=_auth_headers(outsider_token),
         json={
             "attendees": [
@@ -390,7 +390,7 @@ def test_attendee_can_invite_other_attendees(client: TestClient) -> None:
 
     # Invitee A still cannot use the PATCH path (organizer-only).
     forbidden_patch = client.patch(
-        f"/api/v1/meeting/meetings/{meeting['id']}",
+        f"/api/v1/workspaces/hq/meeting/meetings/{meeting['id']}",
         headers=_auth_headers(invitee_a_token),
         json={"title": "Hijacked"},
     )
@@ -560,7 +560,7 @@ def test_attach_task_requires_issue_access(client: TestClient) -> None:
     meeting = _create_meeting(client, admin_token)
 
     attach_response = client.post(
-        f"/api/v1/meeting/meetings/{meeting['id']}/tasks",
+        f"/api/v1/workspaces/hq/meeting/meetings/{meeting['id']}/tasks",
         headers=_auth_headers(admin_token),
         json={"issue_id": issue["id"]},
     )
@@ -572,7 +572,7 @@ def test_attach_task_requires_issue_access(client: TestClient) -> None:
 
     # Re-attaching is idempotent.
     second_attach = client.post(
-        f"/api/v1/meeting/meetings/{meeting['id']}/tasks",
+        f"/api/v1/workspaces/hq/meeting/meetings/{meeting['id']}/tasks",
         headers=_auth_headers(admin_token),
         json={"issue_id": issue["id"]},
     )
@@ -581,7 +581,7 @@ def test_attach_task_requires_issue_access(client: TestClient) -> None:
 
     # Detach.
     detach_response = client.delete(
-        f"/api/v1/meeting/meetings/{meeting['id']}/tasks/{issue['id']}",
+        f"/api/v1/workspaces/hq/meeting/meetings/{meeting['id']}/tasks/{issue['id']}",
         headers=_auth_headers(admin_token),
     )
     assert detach_response.status_code == 200
@@ -621,7 +621,7 @@ def test_attach_task_returns_403_for_user_without_list_access(
     meeting = _create_meeting(client, organizer_token, title="External sync")
 
     forbidden_attach = client.post(
-        f"/api/v1/meeting/meetings/{meeting['id']}/tasks",
+        f"/api/v1/workspaces/hq/meeting/meetings/{meeting['id']}/tasks",
         headers=_auth_headers(organizer_token),
         json={"issue_id": issue["id"]},
     )
@@ -633,7 +633,7 @@ def test_attach_doc_links_native_doc_to_meeting(client: TestClient) -> None:
     admin_token = admin["token"]
 
     create_doc = client.post(
-        "/api/v1/docs/items",
+        "/api/v1/workspaces/hq/docs/items",
         headers=_auth_headers(admin_token),
         json={"title": "Meeting reference"},
     )
@@ -645,7 +645,7 @@ def test_attach_doc_links_native_doc_to_meeting(client: TestClient) -> None:
     meeting = _create_meeting(client, admin_token)
 
     attach_response = client.post(
-        f"/api/v1/meeting/meetings/{meeting['id']}/docs",
+        f"/api/v1/workspaces/hq/meeting/meetings/{meeting['id']}/docs",
         headers=_auth_headers(admin_token),
         json={"doc_id": doc_id},
     )
@@ -656,7 +656,7 @@ def test_attach_doc_links_native_doc_to_meeting(client: TestClient) -> None:
     assert body["doc_links"][0]["doc_title"] == "Meeting reference"
 
     detach_response = client.delete(
-        f"/api/v1/meeting/meetings/{meeting['id']}/docs/{doc_id}",
+        f"/api/v1/workspaces/hq/meeting/meetings/{meeting['id']}/docs/{doc_id}",
         headers=_auth_headers(admin_token),
     )
     assert detach_response.status_code == 200
@@ -670,7 +670,7 @@ def test_meeting_create_rejects_invalid_time_range(client: TestClient) -> None:
     start = datetime(2026, 5, 1, 10, 0, 0)
     end = start - timedelta(hours=1)
     response = client.post(
-        "/api/v1/meeting/meetings",
+        "/api/v1/workspaces/hq/meeting/meetings",
         headers=_auth_headers(token),
         json={
             "title": "Backwards",
@@ -700,7 +700,7 @@ def test_meeting_create_rejects_attendees_outside_meeting_workspace(
     )
 
     response = client.post(
-        "/api/v1/meeting/meetings",
+        "/api/v1/workspaces/hq/meeting/meetings",
         headers=_auth_headers(admin_token),
         json={
             "title": "Cross workspace attendee",
@@ -734,7 +734,7 @@ def test_user_without_meeting_workspace_access_is_blocked(
     )
 
     response = client.get(
-        "/api/v1/meeting/meetings",
+        "/api/v1/workspaces/hq/meeting/meetings",
         headers=_auth_headers(outsider_token),
         params={"scope": "mine"},
     )
@@ -771,7 +771,7 @@ def test_meeting_user_search_returns_users_without_pms_access(
 
     # No query — returns only meeting-workspace members.
     response = client.get(
-        "/api/v1/meeting/users",
+        "/api/v1/workspaces/hq/meeting/users",
         headers=_auth_headers(admin_token),
     )
     assert response.status_code == 200
@@ -782,7 +782,7 @@ def test_meeting_user_search_returns_users_without_pms_access(
 
     # Partial-name query.
     name_response = client.get(
-        "/api/v1/meeting/users",
+        "/api/v1/workspaces/hq/meeting/users",
         headers=_auth_headers(admin_token),
         params={"q": "alice"},
     )
@@ -792,7 +792,7 @@ def test_meeting_user_search_returns_users_without_pms_access(
     # Partial-email query — confirms that users without PMS workspace access
     # are still searchable from the meeting modal.
     email_response = client.get(
-        "/api/v1/meeting/users",
+        "/api/v1/workspaces/hq/meeting/users",
         headers=_auth_headers(admin_token),
         params={"q": "bob@"},
     )
@@ -828,7 +828,7 @@ def test_workspace_scoped_meeting_routes_keep_hq_context(client: TestClient) -> 
     assert "innovation-lab-admin@aidoo.local" not in scoped_emails
 
     legacy_users_response = client.get(
-        "/api/v1/meeting/users",
+        "/api/v1/workspaces/hq/meeting/users",
         headers=_auth_headers(hq_member_token),
         params={"q": "Admin"},
     )
@@ -877,7 +877,7 @@ def test_meeting_create_rolls_back_when_initial_attachments_fail(
     admin_token = admin["token"]
 
     before = client.get(
-        "/api/v1/meeting/meetings",
+        "/api/v1/workspaces/hq/meeting/meetings",
         headers=_auth_headers(admin_token),
         params={"scope": "mine"},
     )
@@ -885,7 +885,7 @@ def test_meeting_create_rolls_back_when_initial_attachments_fail(
     assert before.json()["total"] == 0
 
     missing_issue = client.post(
-        "/api/v1/meeting/meetings",
+        "/api/v1/workspaces/hq/meeting/meetings",
         headers=_auth_headers(admin_token),
         json={
             "title": "Broken issue attach",
@@ -899,7 +899,7 @@ def test_meeting_create_rolls_back_when_initial_attachments_fail(
     assert missing_issue.status_code == 404
 
     missing_doc = client.post(
-        "/api/v1/meeting/meetings",
+        "/api/v1/workspaces/hq/meeting/meetings",
         headers=_auth_headers(admin_token),
         json={
             "title": "Broken doc attach",
@@ -913,7 +913,7 @@ def test_meeting_create_rolls_back_when_initial_attachments_fail(
     assert missing_doc.status_code == 404
 
     after = client.get(
-        "/api/v1/meeting/meetings",
+        "/api/v1/workspaces/hq/meeting/meetings",
         headers=_auth_headers(admin_token),
         params={"scope": "mine"},
     )
@@ -964,7 +964,7 @@ def _install_fake_minio(monkeypatch) -> _FakeMinioClient:
 
 def _create_native_doc(client: TestClient, token: str, title: str) -> str:
     response = client.post(
-        "/api/v1/docs/items",
+        "/api/v1/workspaces/hq/docs/items",
         headers=_auth_headers(token),
         json={"title": title},
     )
@@ -989,7 +989,7 @@ def test_attendee_can_attach_task_via_space_access(client: TestClient) -> None:
 
     # Admin creates a PMS space, list, and an issue.
     space_response = client.post(
-        "/api/v1/pms/spaces",
+        "/api/v1/workspaces/hq/pms/spaces",
         headers=_auth_headers(admin_token),
         json={"name": "Meeting Attach Space", "description": ""},
     )
@@ -997,7 +997,7 @@ def test_attendee_can_attach_task_via_space_access(client: TestClient) -> None:
     space = space_response.json()
 
     task_list_response = client.post(
-        "/api/v1/pms/lists",
+        "/api/v1/workspaces/hq/pms/lists",
         headers=_auth_headers(admin_token),
         json={
             "key": "MEETIN",
@@ -1010,7 +1010,7 @@ def test_attendee_can_attach_task_via_space_access(client: TestClient) -> None:
     task_list = task_list_response.json()
 
     issue_response = client.post(
-        f"/api/v1/pms/lists/{task_list['id']}/issues",
+        f"/api/v1/workspaces/hq/pms/lists/{task_list['id']}/issues",
         headers=_auth_headers(admin_token),
         json={
             "title": "Prep task",
@@ -1034,7 +1034,7 @@ def test_attendee_can_attach_task_via_space_access(client: TestClient) -> None:
         workspace_keys=["meeting", "pms"],
     )
     add_space_member = client.post(
-        f"/api/v1/pms/spaces/{space['id']}/members",
+        f"/api/v1/workspaces/hq/pms/spaces/{space['id']}/members",
         headers=_auth_headers(admin_token),
         json={"user_id": attendee["user"]["id"], "role": "member"},
     )
@@ -1054,7 +1054,7 @@ def test_attendee_can_attach_task_via_space_access(client: TestClient) -> None:
 
     # Attendee attaches the task — should succeed via space membership.
     attach_response = client.post(
-        f"/api/v1/meeting/meetings/{meeting['id']}/tasks",
+        f"/api/v1/workspaces/hq/meeting/meetings/{meeting['id']}/tasks",
         headers=_auth_headers(attendee_token),
         json={"issue_id": issue["id"]},
     )
@@ -1102,7 +1102,7 @@ def test_attendee_can_attach_doc_and_only_adder_can_remove(
 
     # Attendee (non-organizer) attaches their own doc → success.
     attendee_attach = client.post(
-        f"/api/v1/meeting/meetings/{meeting['id']}/docs",
+        f"/api/v1/workspaces/hq/meeting/meetings/{meeting['id']}/docs",
         headers=_auth_headers(attendee_token),
         json={"doc_id": attendee_doc},
     )
@@ -1113,7 +1113,7 @@ def test_attendee_can_attach_doc_and_only_adder_can_remove(
 
     # Admin (organizer) attaches their own doc.
     organizer_attach = client.post(
-        f"/api/v1/meeting/meetings/{meeting['id']}/docs",
+        f"/api/v1/workspaces/hq/meeting/meetings/{meeting['id']}/docs",
         headers=_auth_headers(admin_token),
         json={"doc_id": admin_doc},
     )
@@ -1122,14 +1122,14 @@ def test_attendee_can_attach_doc_and_only_adder_can_remove(
 
     # Attendee tries to detach the organizer's doc → 403.
     forbidden = client.delete(
-        f"/api/v1/meeting/meetings/{meeting['id']}/docs/{admin_doc}",
+        f"/api/v1/workspaces/hq/meeting/meetings/{meeting['id']}/docs/{admin_doc}",
         headers=_auth_headers(attendee_token),
     )
     assert forbidden.status_code == 403, forbidden.text
 
     # Attendee detaches their own doc → success.
     own_detach = client.delete(
-        f"/api/v1/meeting/meetings/{meeting['id']}/docs/{attendee_doc}",
+        f"/api/v1/workspaces/hq/meeting/meetings/{meeting['id']}/docs/{attendee_doc}",
         headers=_auth_headers(attendee_token),
     )
     assert own_detach.status_code == 200
@@ -1140,14 +1140,14 @@ def test_attendee_can_attach_doc_and_only_adder_can_remove(
     # Re-attach attendee's doc, then organizer detaches it → success
     # (organizer always wins).
     re_attach = client.post(
-        f"/api/v1/meeting/meetings/{meeting['id']}/docs",
+        f"/api/v1/workspaces/hq/meeting/meetings/{meeting['id']}/docs",
         headers=_auth_headers(attendee_token),
         json={"doc_id": attendee_doc},
     )
     assert re_attach.status_code == 200
 
     organizer_removes_others = client.delete(
-        f"/api/v1/meeting/meetings/{meeting['id']}/docs/{attendee_doc}",
+        f"/api/v1/workspaces/hq/meeting/meetings/{meeting['id']}/docs/{attendee_doc}",
         headers=_auth_headers(admin_token),
     )
     assert organizer_removes_others.status_code == 200
@@ -1186,7 +1186,7 @@ def test_meeting_attachment_grants_allow_read_but_not_metadata_or_sharing(
     )
 
     issue_detail = client.get(
-        f"/api/v1/pms/issues/{issue['id']}",
+        f"/api/v1/workspaces/hq/pms/issues/{issue['id']}",
         headers=_auth_headers(attendee_token),
     )
     assert issue_detail.status_code == 200, issue_detail.text
@@ -1195,13 +1195,13 @@ def test_meeting_attachment_grants_allow_read_but_not_metadata_or_sharing(
     assert "project_id" not in issue_payload["issue"]
 
     issue_list = client.get(
-        f"/api/v1/pms/lists/{task_list['id']}/issues",
+        f"/api/v1/workspaces/hq/pms/lists/{task_list['id']}/issues",
         headers=_auth_headers(attendee_token),
     )
     assert issue_list.status_code == 403
 
     doc_item = client.get(
-        f"/api/v1/docs/items/{_native_item_id(doc_id)}",
+        f"/api/v1/workspaces/hq/docs/items/{_native_item_id(doc_id)}",
         headers=_auth_headers(attendee_token),
     )
     assert doc_item.status_code == 200, doc_item.text
@@ -1213,14 +1213,14 @@ def test_meeting_attachment_grants_allow_read_but_not_metadata_or_sharing(
     assert doc_payload["can_manage"] is False
 
     doc_pages = client.get(
-        f"/api/v1/docs/items/{_native_item_id(doc_id)}/pages",
+        f"/api/v1/workspaces/hq/docs/items/{_native_item_id(doc_id)}/pages",
         headers=_auth_headers(attendee_token),
     )
     assert doc_pages.status_code == 200, doc_pages.text
     assert len(doc_pages.json()["items"]) == 1
 
     doc_sharing = client.get(
-        f"/api/v1/docs/items/{_native_item_id(doc_id)}/sharing",
+        f"/api/v1/workspaces/hq/docs/items/{_native_item_id(doc_id)}/sharing",
         headers=_auth_headers(attendee_token),
     )
     assert doc_sharing.status_code == 403
@@ -1267,45 +1267,45 @@ def test_meeting_detach_preserves_other_meeting_grants_until_last_source_is_remo
     )
 
     first_issue_detach = client.delete(
-        f"/api/v1/meeting/meetings/{meeting_a['id']}/tasks/{issue['id']}",
+        f"/api/v1/workspaces/hq/meeting/meetings/{meeting_a['id']}/tasks/{issue['id']}",
         headers=_auth_headers(admin_token),
     )
     assert first_issue_detach.status_code == 200
     first_doc_detach = client.delete(
-        f"/api/v1/meeting/meetings/{meeting_a['id']}/docs/{doc_id}",
+        f"/api/v1/workspaces/hq/meeting/meetings/{meeting_a['id']}/docs/{doc_id}",
         headers=_auth_headers(admin_token),
     )
     assert first_doc_detach.status_code == 200
 
     still_can_read_issue = client.get(
-        f"/api/v1/pms/issues/{issue['id']}",
+        f"/api/v1/workspaces/hq/pms/issues/{issue['id']}",
         headers=_auth_headers(attendee_token),
     )
     assert still_can_read_issue.status_code == 200
     still_can_read_doc = client.get(
-        f"/api/v1/docs/items/{_native_item_id(doc_id)}",
+        f"/api/v1/workspaces/hq/docs/items/{_native_item_id(doc_id)}",
         headers=_auth_headers(attendee_token),
     )
     assert still_can_read_doc.status_code == 200
 
     second_issue_detach = client.delete(
-        f"/api/v1/meeting/meetings/{meeting_b['id']}/tasks/{issue['id']}",
+        f"/api/v1/workspaces/hq/meeting/meetings/{meeting_b['id']}/tasks/{issue['id']}",
         headers=_auth_headers(admin_token),
     )
     assert second_issue_detach.status_code == 200
     second_doc_detach = client.delete(
-        f"/api/v1/meeting/meetings/{meeting_b['id']}/docs/{doc_id}",
+        f"/api/v1/workspaces/hq/meeting/meetings/{meeting_b['id']}/docs/{doc_id}",
         headers=_auth_headers(admin_token),
     )
     assert second_doc_detach.status_code == 200
 
     blocked_issue = client.get(
-        f"/api/v1/pms/issues/{issue['id']}",
+        f"/api/v1/workspaces/hq/pms/issues/{issue['id']}",
         headers=_auth_headers(attendee_token),
     )
     assert blocked_issue.status_code == 403
     blocked_doc = client.get(
-        f"/api/v1/docs/items/{_native_item_id(doc_id)}",
+        f"/api/v1/workspaces/hq/docs/items/{_native_item_id(doc_id)}",
         headers=_auth_headers(attendee_token),
     )
     assert blocked_doc.status_code == 404
@@ -1344,18 +1344,18 @@ def test_meeting_reschedule_resyncs_issue_and_doc_grant_expiry(
     )
 
     initial_issue = client.get(
-        f"/api/v1/pms/issues/{issue['id']}",
+        f"/api/v1/workspaces/hq/pms/issues/{issue['id']}",
         headers=_auth_headers(attendee_token),
     )
     assert initial_issue.status_code == 200
     initial_doc = client.get(
-        f"/api/v1/docs/items/{_native_item_id(doc_id)}",
+        f"/api/v1/workspaces/hq/docs/items/{_native_item_id(doc_id)}",
         headers=_auth_headers(attendee_token),
     )
     assert initial_doc.status_code == 200
 
     expired_update = client.patch(
-        f"/api/v1/meeting/meetings/{meeting['id']}",
+        f"/api/v1/workspaces/hq/meeting/meetings/{meeting['id']}",
         headers=_auth_headers(admin_token),
         json={
             "start_at": "2000-01-01T09:00:00",
@@ -1365,18 +1365,18 @@ def test_meeting_reschedule_resyncs_issue_and_doc_grant_expiry(
     assert expired_update.status_code == 200, expired_update.text
 
     expired_issue = client.get(
-        f"/api/v1/pms/issues/{issue['id']}",
+        f"/api/v1/workspaces/hq/pms/issues/{issue['id']}",
         headers=_auth_headers(attendee_token),
     )
     assert expired_issue.status_code == 403
     expired_doc = client.get(
-        f"/api/v1/docs/items/{_native_item_id(doc_id)}",
+        f"/api/v1/workspaces/hq/docs/items/{_native_item_id(doc_id)}",
         headers=_auth_headers(attendee_token),
     )
     assert expired_doc.status_code == 404
 
     restored_update = client.patch(
-        f"/api/v1/meeting/meetings/{meeting['id']}",
+        f"/api/v1/workspaces/hq/meeting/meetings/{meeting['id']}",
         headers=_auth_headers(admin_token),
         json={
             "start_at": "2100-01-01T09:00:00",
@@ -1386,12 +1386,12 @@ def test_meeting_reschedule_resyncs_issue_and_doc_grant_expiry(
     assert restored_update.status_code == 200, restored_update.text
 
     restored_issue = client.get(
-        f"/api/v1/pms/issues/{issue['id']}",
+        f"/api/v1/workspaces/hq/pms/issues/{issue['id']}",
         headers=_auth_headers(attendee_token),
     )
     assert restored_issue.status_code == 200
     restored_doc = client.get(
-        f"/api/v1/docs/items/{_native_item_id(doc_id)}",
+        f"/api/v1/workspaces/hq/docs/items/{_native_item_id(doc_id)}",
         headers=_auth_headers(attendee_token),
     )
     assert restored_doc.status_code == 200
@@ -1428,7 +1428,7 @@ def test_meeting_file_attachment_upload_and_permission_matrix(
 
     # Attendee uploads a prep file → success.
     upload_response = client.post(
-        f"/api/v1/meeting/meetings/{meeting['id']}/files",
+        f"/api/v1/workspaces/hq/meeting/meetings/{meeting['id']}/files",
         headers=_auth_headers(attendee_token),
         files={"file": ("notes.txt", b"hello world", "text/plain")},
     )
@@ -1447,7 +1447,7 @@ def test_meeting_file_attachment_upload_and_permission_matrix(
 
     # GET via meeting detail surfaces the same data.
     detail_response = client.get(
-        f"/api/v1/meeting/meetings/{meeting['id']}",
+        f"/api/v1/workspaces/hq/meeting/meetings/{meeting['id']}",
         headers=_auth_headers(attendee_token),
     )
     assert detail_response.status_code == 200
@@ -1457,7 +1457,7 @@ def test_meeting_file_attachment_upload_and_permission_matrix(
 
     # Admin uploads their own file as the organizer.
     admin_upload = client.post(
-        f"/api/v1/meeting/meetings/{meeting['id']}/files",
+        f"/api/v1/workspaces/hq/meeting/meetings/{meeting['id']}/files",
         headers=_auth_headers(admin_token),
         files={"file": ("agenda.md", b"# agenda", "text/markdown")},
     )
@@ -1470,14 +1470,14 @@ def test_meeting_file_attachment_upload_and_permission_matrix(
 
     # Attendee tries to delete the organizer's file → 403.
     forbidden = client.delete(
-        f"/api/v1/meeting/meetings/{meeting['id']}/files/{admin_file_id}",
+        f"/api/v1/workspaces/hq/meeting/meetings/{meeting['id']}/files/{admin_file_id}",
         headers=_auth_headers(attendee_token),
     )
     assert forbidden.status_code == 403
 
     # Attendee deletes their own file → success.
     own_delete = client.delete(
-        f"/api/v1/meeting/meetings/{meeting['id']}/files/{file_id}",
+        f"/api/v1/workspaces/hq/meeting/meetings/{meeting['id']}/files/{file_id}",
         headers=_auth_headers(attendee_token),
     )
     assert own_delete.status_code == 200
@@ -1487,7 +1487,7 @@ def test_meeting_file_attachment_upload_and_permission_matrix(
 
     # Organizer deletes the remaining file (their own) → success.
     organizer_delete = client.delete(
-        f"/api/v1/meeting/meetings/{meeting['id']}/files/{admin_file_id}",
+        f"/api/v1/workspaces/hq/meeting/meetings/{meeting['id']}/files/{admin_file_id}",
         headers=_auth_headers(admin_token),
     )
     assert organizer_delete.status_code == 200
@@ -1516,7 +1516,7 @@ def test_meeting_file_upload_rejects_non_participant(
     meeting = _create_meeting(client, admin_token, title="Closed for files")
 
     response = client.post(
-        f"/api/v1/meeting/meetings/{meeting['id']}/files",
+        f"/api/v1/workspaces/hq/meeting/meetings/{meeting['id']}/files",
         headers=_auth_headers(stranger_token),
         files={"file": ("intruder.txt", b"hi", "text/plain")},
     )
@@ -1546,7 +1546,7 @@ def test_non_participant_cannot_attach_doc(client: TestClient) -> None:
     meeting = _create_meeting(client, admin_token, title="Closed meeting")
 
     forbidden = client.post(
-        f"/api/v1/meeting/meetings/{meeting['id']}/docs",
+        f"/api/v1/workspaces/hq/meeting/meetings/{meeting['id']}/docs",
         headers=_auth_headers(stranger_token),
         json={"doc_id": stranger_doc},
     )
@@ -1567,7 +1567,7 @@ def test_meeting_time_roundtrip_with_utc_iso_input(client: TestClient) -> None:
     request_end = "2026-05-10T13:30:00.000Z"
 
     response = client.post(
-        "/api/v1/meeting/meetings",
+        "/api/v1/workspaces/hq/meeting/meetings",
         headers=_auth_headers(token),
         json={
             "title": "TZ roundtrip",
@@ -1586,7 +1586,7 @@ def test_meeting_time_roundtrip_with_utc_iso_input(client: TestClient) -> None:
 
     # Re-fetch via GET to confirm the value persisted, not just echoed.
     fetched = client.get(
-        f"/api/v1/meeting/meetings/{body['id']}",
+        f"/api/v1/workspaces/hq/meeting/meetings/{body['id']}",
         headers=_auth_headers(token),
     )
     assert fetched.status_code == 200
@@ -1596,7 +1596,7 @@ def test_meeting_time_roundtrip_with_utc_iso_input(client: TestClient) -> None:
 
     # PATCH with another Z-suffixed UTC ISO and verify the same contract.
     patch_response = client.patch(
-        f"/api/v1/meeting/meetings/{body['id']}",
+        f"/api/v1/workspaces/hq/meeting/meetings/{body['id']}",
         headers=_auth_headers(token),
         json={
             "start_at": "2026-05-10T14:00:00.000Z",
@@ -1615,7 +1615,7 @@ def test_meeting_offset_datetime_patch_roundtrips_to_calendar(client: TestClient
 
     meeting = _create_meeting(client, token, title="Offset patch")
     patch_response = client.patch(
-        f"/api/v1/meeting/meetings/{meeting['id']}",
+        f"/api/v1/workspaces/hq/meeting/meetings/{meeting['id']}",
         headers=_auth_headers(token),
         json={
             "start_at": "2026-05-10T19:00:00+09:00",
@@ -1629,7 +1629,7 @@ def test_meeting_offset_datetime_patch_roundtrips_to_calendar(client: TestClient
     assert patched["end_at"] == "2026-05-10T11:00:00"
 
     fetched = client.get(
-        f"/api/v1/meeting/meetings/{meeting['id']}",
+        f"/api/v1/workspaces/hq/meeting/meetings/{meeting['id']}",
         headers=_auth_headers(token),
     )
     assert fetched.status_code == 200, fetched.text
@@ -1638,7 +1638,7 @@ def test_meeting_offset_datetime_patch_roundtrips_to_calendar(client: TestClient
     assert fetched_body["end_at"] == "2026-05-10T11:00:00"
 
     calendar = client.get(
-        "/api/v1/calendar/events",
+        "/api/v1/workspaces/hq/calendar/events",
         headers=_auth_headers(token),
         params={
             "from": "2026-05-10",
@@ -1680,7 +1680,7 @@ def test_upcoming_scope_does_not_leak_other_users_meetings(
     # workspace access.
     for scope in ("mine", "upcoming", "all"):
         response = client.get(
-            "/api/v1/meeting/meetings",
+            "/api/v1/workspaces/hq/meeting/meetings",
             headers=_auth_headers(outsider_token),
             params={"scope": scope},
         )
@@ -1692,7 +1692,7 @@ def test_upcoming_scope_does_not_leak_other_users_meetings(
 
     # Trying to GET the meeting directly is also blocked.
     direct = client.get(
-        f"/api/v1/meeting/meetings/{private['id']}",
+        f"/api/v1/workspaces/hq/meeting/meetings/{private['id']}",
         headers=_auth_headers(outsider_token),
     )
     assert direct.status_code == 403
@@ -1700,7 +1700,7 @@ def test_upcoming_scope_does_not_leak_other_users_meetings(
     # Now invite the outsider as an attendee. They should immediately see
     # the meeting in all scopes that include them.
     update_response = client.patch(
-        f"/api/v1/meeting/meetings/{private['id']}",
+        f"/api/v1/workspaces/hq/meeting/meetings/{private['id']}",
         headers=_auth_headers(admin_token),
         json={
             "attendees": [
@@ -1712,7 +1712,7 @@ def test_upcoming_scope_does_not_leak_other_users_meetings(
 
     for scope in ("mine", "upcoming", "all"):
         response = client.get(
-            "/api/v1/meeting/meetings",
+            "/api/v1/workspaces/hq/meeting/meetings",
             headers=_auth_headers(outsider_token),
             params={"scope": scope},
         )
@@ -1739,7 +1739,7 @@ def test_meeting_update_changes_time_and_attendees(client: TestClient) -> None:
     new_end = datetime(2026, 5, 2, 15, 30, 0).isoformat()
 
     update_response = client.patch(
-        f"/api/v1/meeting/meetings/{meeting['id']}",
+        f"/api/v1/workspaces/hq/meeting/meetings/{meeting['id']}",
         headers=_auth_headers(admin_token),
         json={
             "title": "Updated title",

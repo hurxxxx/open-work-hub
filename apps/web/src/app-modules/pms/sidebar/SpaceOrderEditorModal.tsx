@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Button, Dialog } from '@aidoo/ui';
+import { Dialog } from '@aidoo/ui/primitives/dialog';
+import { Button } from '@aidoo/ui/primitives/button';
 import { ArrowDown, ArrowUp, FileText, FolderOpen, List as ListIcon } from 'lucide-react';
 
 import {

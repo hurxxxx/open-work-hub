@@ -1,25 +1,12 @@
 import { ApiRequestError, apiFetchJson } from '@/src/platform/api/client';
+import type { ApiSchema } from '@/src/platform/api/types';
 import type { AuthUser } from '@/src/platform/auth/auth-api';
 
-export interface OrgUnitItem {
-  id: string;
-  name: string;
-  slug: string;
-  parent_id: string | null;
-  active: boolean;
-}
+export type OrgUnitItem = ApiSchema<'OrgUnitItemResponse'>;
 
-export interface AccessGroupItem {
-  id: string;
-  name: string;
-  slug: string;
-  description: string;
-  group_kind: string;
-  active: boolean;
-  system_roles: string[];
-  member_count: number;
+export type AccessGroupItem = Omit<ApiSchema<'AccessGroupItemResponse'>, 'workspace_bindings'> & {
   workspace_bindings: GroupWorkspaceBindingItem[];
-}
+};
 
 export interface GroupWorkspaceBindingItem {
   workspace_id: string;
@@ -28,62 +15,12 @@ export interface GroupWorkspaceBindingItem {
   role: string;
 }
 
-export interface WorkspaceItem {
-  id: string;
-  key: string;
-  name: string;
-  description: string;
-  active: boolean;
-  team_count: number;
-  member_count: number;
-  meeting_count: number;
-  doc_count: number;
-  created_at: string | null;
-  updated_at: string | null;
-}
-
-export interface WorkspaceBindingItem {
-  subject_id: string;
-  subject_type: 'user' | 'group';
-  subject_label: string;
-  subject_secondary?: string | null;
-  role: string;
-}
-
-export interface WorkspaceMemberCandidate {
-  id: string;
-  email: string;
-  full_name: string;
-  display_name: string;
-  status: string;
-}
-
-export interface WorkspaceMemberItem {
-  subject_id: string;
-  subject_type: 'user' | 'group';
-  subject_label: string;
-  subject_secondary: string | null;
-  role: string;
-  user_status: string | null;
-  last_login_at: string | null;
-  created_at: string | null;
-}
-
-export interface WorkspaceMemberRoleCounts {
-  admin: number;
-  member: number;
-}
-
-export interface WorkspaceMembersResponse {
-  items: WorkspaceMemberItem[];
-  total: number;
-  page: number;
-  page_size: number;
-  role_counts: WorkspaceMemberRoleCounts;
-  user_count: number;
-  group_count: number;
-  pending_count: number;
-}
+export type WorkspaceItem = ApiSchema<'WorkspaceItemResponse'>;
+export type WorkspaceBindingItem = ApiSchema<'WorkspaceBindingItemResponse'>;
+export type WorkspaceMemberCandidate = ApiSchema<'WorkspaceMemberCandidateResponse'>;
+export type WorkspaceMemberItem = ApiSchema<'WorkspaceMemberItemResponse'>;
+export type WorkspaceMemberRoleCounts = ApiSchema<'WorkspaceMemberRoleCounts'>;
+export type WorkspaceMembersResponse = ApiSchema<'WorkspaceMembersResponse'>;
 
 export interface WorkspaceMembersListParams {
   q?: string;
@@ -94,58 +31,16 @@ export interface WorkspaceMembersListParams {
   pendingOnly?: boolean;
 }
 
-export interface WorkspaceMemberBulkSubject {
-  subject_type: 'user' | 'group';
-  subject_id: string;
-  role?: string;
-}
-
-export interface WorkspaceMemberBulkResponse {
-  succeeded: number;
+export type WorkspaceMemberBulkSubject = ApiSchema<'WorkspaceMemberBulkSubject'>;
+export type WorkspaceMemberBulkResponse = Omit<ApiSchema<'WorkspaceMemberBulkResponse'>, 'failed'> & {
   failed: Array<{ subject_type: string; subject_id: string; detail: string }>;
-}
-
-export interface UserTeamMembershipItem {
-  id: string;
-  workspace_id: string;
-  workspace_key: string;
-  workspace_name: string;
-  key: string;
-  name: string;
-  description: string;
-  role: string;
-}
-
-export interface TeamItem {
-  id: string;
-  workspace_id: string;
-  workspace_key: string;
-  key: string;
-  name: string;
-  description: string;
-  active: boolean;
-  member_count: number;
-  current_user_role?: string | null;
-}
-
-export interface AuditLogItem {
-  id: string;
-  actor_user_id: string | null;
-  actor_name: string | null;
-  action: string;
-  entity_kind: string;
-  entity_id: string | null;
-  summary: string;
-  payload: Record<string, unknown>;
-  created_at: string;
-}
-
-export interface AdminUsersResponse {
+};
+export type UserTeamMembershipItem = ApiSchema<'UserTeamMembershipItemResponse'>;
+export type TeamItem = ApiSchema<'TeamItemResponse'>;
+export type AuditLogItem = ApiSchema<'AuditLogItemResponse'>;
+export type AdminUsersResponse = Omit<ApiSchema<'AdminUsersResponse'>, 'items'> & {
   items: AuthUser[];
-  total: number;
-  page: number;
-  page_size: number;
-}
+};
 
 export interface AdminUsersQuery {
   page?: number;
@@ -153,14 +48,10 @@ export interface AdminUsersQuery {
   q?: string;
 }
 
-export interface CreatedUserResponse {
+export type CreatedUserResponse = Omit<ApiSchema<'CreatedUserResponse'>, 'user'> & {
   user: AuthUser;
-  temporary_password: string;
-}
-
-export interface ResetPasswordResponse {
-  temporary_password: string;
-}
+};
+export type ResetPasswordResponse = ApiSchema<'ResetPasswordResponse'>;
 
 class AdminApiError extends Error {
   status: number;

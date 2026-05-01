@@ -1,69 +1,23 @@
 import { ApiRequestError, apiFetchJson } from '@/src/platform/api/client';
+import type { ApiSchema } from '@/src/platform/api/types';
 import { rewriteWorkspaceApiPath } from '@/src/platform/workspaces/workspace-utils';
 
-export interface ConversationArtifact {
-  id: string;
-  type: string;
-  title: string | null;
-  language?: string | null;
-  content: string;
-  status?: string | null;
-}
+export type ConversationArtifact = ApiSchema<'ArtifactOut'>;
 
 // Mirrors ConversationTurnOut on the server — the backend flattens its stored
 // `meta` dict into top-level camelCase fields so MessageBubble/ThinkingPanel/
 // ToolCallCard/ArtifactCard can render a reloaded turn without a second
 // translation pass.
-export interface ConversationTurn {
-  id: string;
-  seq: number;
-  role: 'user' | 'assistant';
-  content: string;
-  reasoning?: string | null;
-  reasoningStatus?: string | null;
-  finishReason?: string | null;
-  responseStatus?: string | null;
-  provider?: string | null;
-  policy?: string | null;
+export type ConversationTurn = Omit<ApiSchema<'ConversationTurnOut'>, 'chosenPool' | 'role'> & {
   chosenPool?: 'local' | 'external' | null;
-  decisionReason?: string | null;
-  forcedLocal?: boolean | null;
-  piiHits?: string[];
-  toolCalls?: Array<Record<string, unknown>>;
-  pendingApprovals?: Array<Record<string, unknown>>;
-  artifacts?: ConversationArtifact[];
-  createdAt: string;
-}
-
-export interface ConversationSummary {
-  id: string;
-  title: string;
-  scopeRef?: 'meeting' | null;
-  scopeResourceId?: string | null;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface ConversationLivePendingApproval {
-  approvalId: string;
-  agentRunId: string;
-  callId: string;
-  tool: string;
-  resourcePreview?: string | null;
-  expiresAtMs: number;
-  status: 'pending' | 'approved' | 'rejected';
-  reason?: string | null;
-}
-
-export interface ConversationDetail extends ConversationSummary {
-  livePendingApproval?: ConversationLivePendingApproval | null;
+  role: 'user' | 'assistant';
+};
+export type ConversationSummary = ApiSchema<'ConversationSummary'>;
+export type ConversationLivePendingApproval = ApiSchema<'ConversationLivePendingApproval'>;
+export type ConversationDetail = Omit<ApiSchema<'ConversationDetail'>, 'turns'> & {
   turns: ConversationTurn[];
-}
-
-export interface ConversationListResponse {
-  items: ConversationSummary[];
-  nextCursor: string | null;
-}
+};
+export type ConversationListResponse = ApiSchema<'ConversationListResponse'>;
 
 export class ConversationsApiError extends Error {
   status: number;

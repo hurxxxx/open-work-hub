@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { motion } from 'motion/react';
 import { X, Check, CheckCheck, Loader2 } from 'lucide-react';
-import { Button } from '@aidoo/ui';
+import { Button } from '@aidoo/ui/primitives/button';
 import { useAuth } from '@/src/platform/auth/auth-provider';
 import {
   listNotifications,

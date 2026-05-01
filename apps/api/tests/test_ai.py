@@ -292,7 +292,7 @@ def test_ai_chat_tool_command_executes_without_llm_call(
     workspace_slug = "delivery-hub"
 
     task_list_response = client.post(
-        "/api/v1/pms/lists",
+        f"/api/v1/workspaces/{workspace_slug}/pms/lists",
         headers=_auth_headers(auth["token"]),
         json={
             "key": "AICHAT",
@@ -304,7 +304,7 @@ def test_ai_chat_tool_command_executes_without_llm_call(
     task_list = task_list_response.json()
 
     issue_response = client.post(
-        f"/api/v1/pms/lists/{task_list['id']}/issues",
+        f"/api/v1/workspaces/{workspace_slug}/pms/lists/{task_list['id']}/issues",
         headers=_auth_headers(auth["token"]),
         json={"title": "AI chat tool issue", "description": "search target"},
     )
@@ -356,7 +356,7 @@ def test_ai_chat_tool_command_scoped_conversation_skips_scope_prompt_lookup(
     conversation_id = conversation_response.json()["id"]
 
     task_list_response = client.post(
-        "/api/v1/pms/lists",
+        "/api/v1/workspaces/hq/pms/lists",
         headers=_auth_headers(auth["token"]),
         json={
             "key": "AISCOPED",
@@ -368,7 +368,7 @@ def test_ai_chat_tool_command_scoped_conversation_skips_scope_prompt_lookup(
     task_list = task_list_response.json()
 
     issue_response = client.post(
-        f"/api/v1/pms/lists/{task_list['id']}/issues",
+        f"/api/v1/workspaces/hq/pms/lists/{task_list['id']}/issues",
         headers=_auth_headers(auth["token"]),
         json={"title": "Scoped AI chat tool issue", "description": "search target"},
     )

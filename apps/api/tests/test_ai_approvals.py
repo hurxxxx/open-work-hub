@@ -651,7 +651,7 @@ def test_rehydrate_model_meta_preserves_graph_schedule_summary() -> None:
     assert replay.raw["graph_execution_fallback_reason"] == "graph_execution_disabled"
 
 
-def test_get_and_resolve_approval_routes_work_on_workspace_and_legacy_mounts(
+def test_get_and_resolve_approval_routes_work_and_legacy_mount_is_removed(
     client: TestClient,
 ) -> None:
     seed = _seed_pending_approval(client)
@@ -679,8 +679,7 @@ def test_get_and_resolve_approval_routes_work_on_workspace_and_legacy_mounts(
         _legacy_ai_path(f"/approvals/{seed['approval_id']}"),
         headers=headers,
     )
-    assert legacy_get.status_code == 200, legacy_get.text
-    assert legacy_get.json()["status"] == "approved"
+    assert legacy_get.status_code in {404, 405}, legacy_get.text
 
 
 def test_abandon_approval_route_marks_snapshot_abandoned(client: TestClient) -> None:

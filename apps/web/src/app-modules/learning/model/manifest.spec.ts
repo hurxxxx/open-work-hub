@@ -1,21 +1,21 @@
 import { describe, expect, it } from 'vitest';
 
 import { LEARNING_COURSES, findCourse, findLesson, getAllLessons } from './manifest';
-import { getLessonBody, listAvailableLessonFiles } from './content';
+import { loadLessonBody, listAvailableLessonFiles } from './content';
 
 describe('LEARNING_COURSES manifest', () => {
   it('has at least one course and matches the shipped content', () => {
     expect(LEARNING_COURSES.length).toBeGreaterThan(0);
   });
 
-  it('each lesson.file resolves to a non-empty markdown body', () => {
+  it('each lesson.file resolves to a non-empty markdown body', async () => {
     const availableFiles = new Set(listAvailableLessonFiles());
     for (const course of LEARNING_COURSES) {
       for (const lesson of getAllLessons(course)) {
         expect(availableFiles, `missing file in content map: ${lesson.file}`).toContain(
           lesson.file,
         );
-        const body = getLessonBody(lesson.file);
+        const body = await loadLessonBody(lesson.file);
         expect(body, `empty body for ${lesson.file}`).toBeTruthy();
         if (!body) {
           throw new Error(`empty body for ${lesson.file}`);

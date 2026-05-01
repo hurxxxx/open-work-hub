@@ -7,7 +7,7 @@ from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, UploadFile, status
 from fastapi.responses import RedirectResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, joinedload, selectinload
 
@@ -159,6 +159,8 @@ class MilestoneUpdateRequest(BaseModel):
 
 
 class IssueCreateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     title: str = Field(..., min_length=2, max_length=180)
     description: str = Field(default="", max_length=4000)
     description_blocks: list[dict] | None = None
@@ -175,6 +177,8 @@ class IssueCreateRequest(BaseModel):
 
 
 class IssueUpdateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     title: str | None = Field(default=None, min_length=2, max_length=180)
     description: str | None = Field(default=None, max_length=4000)
     description_blocks: list[dict] | None = None
@@ -1740,89 +1744,6 @@ def reorder_space_lists(
 
     db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
-
-
-@router.get("/lists/{list_id}/members", response_model=SpaceMemberListResponse)
-def list_task_list_members(
-    list_id: str,
-    page: int = Query(default=1, ge=1),
-    page_size: int = Query(default=20, ge=1, le=100),
-    db: Session = Depends(get_db_session),
-    current_user: User = Depends(require_current_user),
-) -> SpaceMemberListResponse:
-    """A list's members are the members of its owning space. The list-level
-    membership model was removed; this route remains as a thin alias so
-    existing clients keep working."""
-    task_list, _ = _ensure_list_member(db, current_user, list_id)
-    if task_list.team_id is None:
-        raise HTTPException(status_code=409, detail="Task list space is not set.")
-    return list_space_members(
-        space_id=task_list.team_id,
-        page=page,
-        page_size=page_size,
-        db=db,
-        current_user=current_user,
-    )
-
-
-@router.post(
-    "/lists/{list_id}/members",
-    response_model=SpaceMemberItem,
-    status_code=status.HTTP_201_CREATED,
-)
-def add_task_list_member(
-    list_id: str,
-    payload: SpaceMemberCreateRequest,
-    db: Session = Depends(get_db_session),
-    current_user: User = Depends(require_current_user),
-) -> SpaceMemberItem:
-    task_list, _ = _ensure_list_owner(db, current_user, list_id)
-    if task_list.team_id is None:
-        raise HTTPException(status_code=409, detail="Task list space is not set.")
-    return add_space_member(
-        space_id=task_list.team_id,
-        payload=payload,
-        db=db,
-        current_user=current_user,
-    )
-
-
-@router.patch("/lists/{list_id}/members/{user_id}/role", response_model=SpaceMemberItem)
-def update_member_role(
-    list_id: str,
-    user_id: str,
-    payload: SpaceMemberRoleUpdateRequest,
-    db: Session = Depends(get_db_session),
-    current_user: User = Depends(require_current_user),
-) -> SpaceMemberItem:
-    task_list, _ = _ensure_list_owner(db, current_user, list_id)
-    if task_list.team_id is None:
-        raise HTTPException(status_code=409, detail="Task list space is not set.")
-    return update_space_member(
-        space_id=task_list.team_id,
-        user_id=user_id,
-        payload=payload,
-        db=db,
-        current_user=current_user,
-    )
-
-
-@router.delete("/lists/{list_id}/members/{user_id}")
-def remove_task_list_member(
-    list_id: str,
-    user_id: str,
-    db: Session = Depends(get_db_session),
-    current_user: User = Depends(require_current_user),
-) -> Response:
-    task_list, _ = _ensure_list_owner(db, current_user, list_id)
-    if task_list.team_id is None:
-        raise HTTPException(status_code=409, detail="Task list space is not set.")
-    return remove_space_member(
-        space_id=task_list.team_id,
-        user_id=user_id,
-        db=db,
-        current_user=current_user,
-    )
 
 
 @router.get("/lists/{list_id}/milestones", response_model=MilestoneListResponse)

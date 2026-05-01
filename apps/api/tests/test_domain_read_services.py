@@ -30,7 +30,7 @@ def test_pms_search_issues_service_returns_workspace_results(client: TestClient)
     token = session["token"]
 
     task_list_response = client.post(
-        "/api/v1/pms/lists",
+        "/api/v1/workspaces/delivery-hub/pms/lists",
         headers=_auth_headers(token),
         json={"key": "SRV", "name": "Service Search List", "description": "search source"},
     )
@@ -38,7 +38,7 @@ def test_pms_search_issues_service_returns_workspace_results(client: TestClient)
     task_list = task_list_response.json()
 
     issue_response = client.post(
-        f"/api/v1/pms/lists/{task_list['id']}/issues",
+        f"/api/v1/workspaces/delivery-hub/pms/lists/{task_list['id']}/issues",
         headers=_auth_headers(token),
         json={"title": "Service search issue", "description": "find me"},
     )
@@ -73,7 +73,7 @@ def test_docs_read_page_service_returns_page_content(client: TestClient) -> None
     token = session["token"]
 
     doc_response = client.post(
-        "/api/v1/docs/items",
+        "/api/v1/workspaces/delivery-hub/docs/items",
         headers=_auth_headers(token),
         json={"title": "Service Doc"},
     )
@@ -81,7 +81,7 @@ def test_docs_read_page_service_returns_page_content(client: TestClient) -> None
     doc = doc_response.json()
 
     page_response = client.post(
-        f"/api/v1/docs/items/{doc['id']}/pages",
+        f"/api/v1/workspaces/delivery-hub/docs/items/{doc['id']}/pages",
         headers=_auth_headers(token),
         json={
             "title": "Service Page",
@@ -113,7 +113,7 @@ def test_pms_create_issue_service_creates_issue(client: TestClient) -> None:
     token = session["token"]
 
     task_list_response = client.post(
-        "/api/v1/pms/lists",
+        "/api/v1/workspaces/delivery-hub/pms/lists",
         headers=_auth_headers(token),
         json={"key": "SRVCREATE", "name": "Service Create List", "description": "write source"},
     )
@@ -150,7 +150,7 @@ def test_pms_update_issue_service_updates_issue(client: TestClient) -> None:
     token = session["token"]
 
     task_list_response = client.post(
-        "/api/v1/pms/lists",
+        "/api/v1/workspaces/delivery-hub/pms/lists",
         headers=_auth_headers(token),
         json={"key": "SRVUPD", "name": "Service Update List", "description": "update source"},
     )
@@ -158,7 +158,7 @@ def test_pms_update_issue_service_updates_issue(client: TestClient) -> None:
     task_list = task_list_response.json()
 
     issue_response = client.post(
-        f"/api/v1/pms/lists/{task_list['id']}/issues",
+        f"/api/v1/workspaces/delivery-hub/pms/lists/{task_list['id']}/issues",
         headers=_auth_headers(token),
         json={"title": "Issue before update", "description": "old"},
     )
@@ -196,7 +196,7 @@ def test_pms_add_issue_comment_service_creates_comment(client: TestClient) -> No
     token = session["token"]
 
     task_list_response = client.post(
-        "/api/v1/pms/lists",
+        "/api/v1/workspaces/delivery-hub/pms/lists",
         headers=_auth_headers(token),
         json={"key": "SRVCMT", "name": "Service Comment List", "description": "comment source"},
     )
@@ -204,7 +204,7 @@ def test_pms_add_issue_comment_service_creates_comment(client: TestClient) -> No
     task_list = task_list_response.json()
 
     issue_response = client.post(
-        f"/api/v1/pms/lists/{task_list['id']}/issues",
+        f"/api/v1/workspaces/delivery-hub/pms/lists/{task_list['id']}/issues",
         headers=_auth_headers(token),
         json={"title": "Comment target"},
     )
@@ -241,7 +241,7 @@ def test_pms_create_issue_service_supports_multi_assignee_input(client: TestClie
     token = admin_session["token"]
 
     task_list_response = client.post(
-        "/api/v1/pms/lists",
+        "/api/v1/workspaces/delivery-hub/pms/lists",
         headers=_auth_headers(token),
         json={"key": "SRVMULTI", "name": "Service Multi List", "description": "multi assignee source"},
     )
@@ -278,7 +278,7 @@ def test_pms_update_issue_service_supports_multi_assignee_input(client: TestClie
     token = admin_session["token"]
 
     task_list_response = client.post(
-        "/api/v1/pms/lists",
+        "/api/v1/workspaces/delivery-hub/pms/lists",
         headers=_auth_headers(token),
         json={"key": "SRVMULTUPD", "name": "Service Multi Update List", "description": "multi update source"},
     )
@@ -286,7 +286,7 @@ def test_pms_update_issue_service_supports_multi_assignee_input(client: TestClie
     task_list = task_list_response.json()
 
     issue_response = client.post(
-        f"/api/v1/pms/lists/{task_list['id']}/issues",
+        f"/api/v1/workspaces/delivery-hub/pms/lists/{task_list['id']}/issues",
         headers=_auth_headers(token),
         json={"title": "Issue before assignee update"},
     )
@@ -322,7 +322,7 @@ def test_pms_create_issue_service_rejects_mismatched_user_principal(client: Test
     token = session["token"]
 
     task_list_response = client.post(
-        "/api/v1/pms/lists",
+        "/api/v1/workspaces/delivery-hub/pms/lists",
         headers=_auth_headers(token),
         json={"key": "SRVMISMATCH", "name": "Service Mismatch List", "description": "mismatch source"},
     )
@@ -355,7 +355,7 @@ def test_pms_create_issue_service_rejects_non_user_principal(client: TestClient)
     token = session["token"]
 
     task_list_response = client.post(
-        "/api/v1/pms/lists",
+        "/api/v1/workspaces/delivery-hub/pms/lists",
         headers=_auth_headers(token),
         json={"key": "SRVNONUSER", "name": "Service Non User List", "description": "non-user source"},
     )

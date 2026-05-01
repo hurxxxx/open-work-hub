@@ -47,7 +47,7 @@ def test_seed_preserves_user_created_space_membership(client: TestClient) -> Non
     user_id = session["user"]["id"]
 
     create_response = client.post(
-        "/api/v1/pms/spaces",
+        "/api/v1/workspaces/delivery-hub/pms/spaces",
         headers=_auth_headers(token),
         json={"name": "My Private Space", "description": ""},
     )
@@ -89,7 +89,7 @@ def test_seed_preserves_user_created_space_membership(client: TestClient) -> Non
 
     # And the user should still be able to list the space.
     list_response = client.get(
-        "/api/v1/pms/spaces",
+        "/api/v1/workspaces/delivery-hub/pms/spaces",
         headers=_auth_headers(token),
     )
     assert list_response.status_code == 200
@@ -123,7 +123,7 @@ def test_dev_login_is_idempotent_and_preserves_user_spaces(
     user_id = login.json()["user"]["id"]
 
     create = client.post(
-        "/api/v1/pms/spaces",
+        "/api/v1/workspaces/delivery-hub/pms/spaces",
         headers=_auth_headers(token),
         json={"name": "Private Space", "description": ""},
     )
@@ -170,7 +170,7 @@ def test_dev_login_is_idempotent_and_preserves_user_spaces(
 
     # The user-created space should also still be listed.
     list_response = client.get(
-        "/api/v1/pms/spaces",
+        "/api/v1/workspaces/delivery-hub/pms/spaces",
         headers=_auth_headers(token),
     )
     assert list_response.status_code == 200

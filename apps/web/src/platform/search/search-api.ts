@@ -1,109 +1,45 @@
 import { ApiRequestError, apiFetchJson } from '@/src/platform/api/client';
+import type { ApiSchema } from '@/src/platform/api/types';
 import { rewriteWorkspaceApiPath } from '@/src/platform/workspaces/workspace-utils';
 
-export type KeywordSearchEntityType = 'doc' | 'meeting' | 'pms_issue' | 'planner_event';
-
-export interface KeywordSearchHighlight {
-  start: number;
-  end: number;
-}
-
-export interface KeywordSearchSnippet {
-  text: string;
+export type KeywordSearchEntityType = ApiSchema<'SearchEntityType'>;
+export type KeywordSearchHighlight = ApiSchema<'SearchHighlight'>;
+export type KeywordSearchSnippet = Omit<ApiSchema<'SearchSnippet'>, 'highlights'> & {
   highlights: KeywordSearchHighlight[];
-}
-
-export interface KeywordSearchPerson {
-  role: string;
-  user_id: string;
-  label: string;
-}
-
-export interface KeywordSearchContainer {
-  type: string;
-  id: string;
-  label: string;
-}
-
-export interface KeywordSearchHit {
-  entity_type: KeywordSearchEntityType;
-  entity_id: string;
-  workspace_id: string;
-  title: string;
-  summary: string;
+};
+export type KeywordSearchPerson = ApiSchema<'SearchPerson'>;
+export type KeywordSearchContainer = ApiSchema<'SearchContainerRef'>;
+type KeywordSearchHitContract = ApiSchema<'KeywordSearchResponse'>['hits'][number];
+export type KeywordSearchHit = Omit<
+  KeywordSearchHitContract,
+  'containers' | 'date_markers' | 'metadata' | 'people' | 'snippet'
+> & {
   snippet: KeywordSearchSnippet;
-  score: number;
-  status: string | null;
-  status_label: string | null;
-  visibility: string | null;
-  updated_at: string;
-  created_at: string;
-  date_markers: Record<string, unknown>;
   people: KeywordSearchPerson[];
   containers: KeywordSearchContainer[];
-  deep_link: string;
-  preview_url: string | null;
+  date_markers: Record<string, unknown>;
   metadata: Record<string, unknown>;
-}
-
-export interface KeywordSearchFacetValue {
-  value: string;
-  label: string;
-  count: number;
-}
-
-export interface KeywordSearchStatusFacetValue extends KeywordSearchFacetValue {
-  entity_type: KeywordSearchEntityType;
-}
-
-export interface KeywordSearchContainerFacetValue {
-  type: string;
-  id: string;
-  label: string;
-  count: number;
-}
-
-export interface KeywordSearchFacets {
+};
+export type KeywordSearchFacetValue = ApiSchema<'EntityTypeFacet'>;
+export type KeywordSearchStatusFacetValue = ApiSchema<'StatusFacet'>;
+export type KeywordSearchContainerFacetValue = ApiSchema<'ContainerFacet'>;
+export type KeywordSearchFacets = Omit<ApiSchema<'SearchFacets'>, 'containers' | 'entity_types' | 'status'> & {
   entity_types: KeywordSearchFacetValue[];
   status: KeywordSearchStatusFacetValue[];
   containers: KeywordSearchContainerFacetValue[];
-}
-
-export interface KeywordSearchResponse {
-  query: string;
+};
+export type KeywordSearchResponse = Omit<
+  ApiSchema<'KeywordSearchResponse'>,
+  'facets' | 'hits' | 'next_offset' | 'trace_id'
+> & {
   hits: KeywordSearchHit[];
   facets: KeywordSearchFacets;
-  total: number;
-  has_more: boolean;
   next_offset: number | null;
   trace_id: string | null;
-}
-
-export interface KeywordSearchPayload {
-  workspace_id?: string | null;
+};
+export type KeywordSearchPayload = Partial<Omit<ApiSchema<'KeywordSearchRequest'>, 'query'>> & {
   query: string;
-  entity_types?: KeywordSearchEntityType[];
-  people?: {
-    role: 'any' | 'owner' | 'assignee' | 'participant';
-    user_ids: string[];
-  };
-  status_by_type?: Partial<Record<KeywordSearchEntityType, string[]>>;
-  date_filters?: Array<{
-    field: 'updated_at' | 'created_at' | 'due_date' | 'start_date' | 'event_start_at';
-    from?: string | null;
-    to?: string | null;
-  }>;
-  container_refs?: Array<{
-    type: string;
-    id: string;
-  }>;
-  sort?: {
-    field: 'relevance' | 'updated_at' | 'created_at';
-    direction: 'desc' | 'asc';
-  };
-  limit?: number;
-  offset?: number;
-}
+};
 
 export class SearchApiError extends Error {
   status: number;

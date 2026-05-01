@@ -26,7 +26,7 @@ def test_issue_list_archived_filters_and_bulk_restore(client: TestClient) -> Non
     archived_issue = _create_issue(client, token, task_list["id"], title="Archived issue")
 
     archive_response = client.patch(
-        f"/api/v1/pms/issues/{archived_issue['id']}",
+        f"/api/v1/workspaces/hq/pms/issues/{archived_issue['id']}",
         headers=_auth_headers(token),
         json={"archived": True},
     )
@@ -34,7 +34,7 @@ def test_issue_list_archived_filters_and_bulk_restore(client: TestClient) -> Non
     assert archive_response.json()["archived"] is True
 
     active_only_response = client.get(
-        f"/api/v1/pms/lists/{task_list['id']}/issues",
+        f"/api/v1/workspaces/hq/pms/lists/{task_list['id']}/issues",
         headers=_auth_headers(token),
         params={"archived": "false"},
     )
@@ -42,7 +42,7 @@ def test_issue_list_archived_filters_and_bulk_restore(client: TestClient) -> Non
     assert [item["id"] for item in active_only_response.json()["items"]] == [active_issue["id"]]
 
     archived_only_response = client.get(
-        f"/api/v1/pms/lists/{task_list['id']}/issues",
+        f"/api/v1/workspaces/hq/pms/lists/{task_list['id']}/issues",
         headers=_auth_headers(token),
         params={"archived": "true"},
     )
@@ -50,7 +50,7 @@ def test_issue_list_archived_filters_and_bulk_restore(client: TestClient) -> Non
     assert [item["id"] for item in archived_only_response.json()["items"]] == [archived_issue["id"]]
 
     restore_response = client.patch(
-        f"/api/v1/pms/lists/{task_list['id']}/issues/bulk",
+        f"/api/v1/workspaces/hq/pms/lists/{task_list['id']}/issues/bulk",
         headers=_auth_headers(token),
         json={"issue_ids": [archived_issue["id"]], "archived": False},
     )
@@ -58,7 +58,7 @@ def test_issue_list_archived_filters_and_bulk_restore(client: TestClient) -> Non
     assert restore_response.json() == {"updated_count": 1, "deleted_count": 0}
 
     archived_after_restore_response = client.get(
-        f"/api/v1/pms/lists/{task_list['id']}/issues",
+        f"/api/v1/workspaces/hq/pms/lists/{task_list['id']}/issues",
         headers=_auth_headers(token),
         params={"archived": "true"},
     )
@@ -66,7 +66,7 @@ def test_issue_list_archived_filters_and_bulk_restore(client: TestClient) -> Non
     assert archived_after_restore_response.json()["items"] == []
 
     active_after_restore_response = client.get(
-        f"/api/v1/pms/lists/{task_list['id']}/issues",
+        f"/api/v1/workspaces/hq/pms/lists/{task_list['id']}/issues",
         headers=_auth_headers(token),
         params={"archived": "false"},
     )
@@ -86,7 +86,7 @@ def test_bulk_status_updates_append_in_requested_order(client: TestClient) -> No
     backlog_second = _create_issue(client, token, task_list["id"], title="Backlog second", status="backlog")
 
     bulk_response = client.patch(
-        f"/api/v1/pms/lists/{task_list['id']}/issues/bulk",
+        f"/api/v1/workspaces/hq/pms/lists/{task_list['id']}/issues/bulk",
         headers=_auth_headers(token),
         json={
             "issue_ids": [backlog_second["id"], backlog_first["id"]],
@@ -97,7 +97,7 @@ def test_bulk_status_updates_append_in_requested_order(client: TestClient) -> No
     assert bulk_response.json() == {"updated_count": 2, "deleted_count": 0}
 
     todo_issues_response = client.get(
-        f"/api/v1/pms/lists/{task_list['id']}/issues",
+        f"/api/v1/workspaces/hq/pms/lists/{task_list['id']}/issues",
         headers=_auth_headers(token),
         params=[("status", "todo"), ("page_size", "100"), ("sort_by", "board_position"), ("sort_dir", "asc")],
     )
@@ -122,28 +122,28 @@ def test_viewer_cannot_modify_issue_comment_or_folder(client: TestClient) -> Non
     viewer_token = _login(client, viewer["user"]["email"], viewer["temporary_password"])
 
     update_response = client.patch(
-        f"/api/v1/pms/issues/{issue['id']}",
+        f"/api/v1/workspaces/hq/pms/issues/{issue['id']}",
         headers=_auth_headers(viewer_token),
         json={"title": "Viewer edit attempt"},
     )
     assert update_response.status_code == 403
 
     comment_response = client.post(
-        f"/api/v1/pms/issues/{issue['id']}/comments",
+        f"/api/v1/workspaces/hq/pms/issues/{issue['id']}/comments",
         headers=_auth_headers(viewer_token),
         json={"body": "viewer comment"},
     )
     assert comment_response.status_code == 403
 
     folder_response = client.post(
-        "/api/v1/pms/folders",
+        "/api/v1/workspaces/hq/pms/folders",
         headers=_auth_headers(viewer_token),
         json={"name": "Viewer folder", "team_id": task_list["team_id"]},
     )
     assert folder_response.status_code == 403
 
     space_doc_response = client.post(
-        "/api/v1/docs/items",
+        "/api/v1/workspaces/hq/docs/items",
         headers=_auth_headers(viewer_token),
         json={
             "title": "Viewer collection",
@@ -174,7 +174,7 @@ def test_explicit_null_clears_nullable_issue_fields(client: TestClient) -> None:
     )
 
     clear_response = client.patch(
-        f"/api/v1/pms/issues/{issue['id']}",
+        f"/api/v1/workspaces/hq/pms/issues/{issue['id']}",
         headers=_auth_headers(admin_session["token"]),
         json={
             "assignee_id": None,
@@ -198,7 +198,7 @@ def test_issue_assignees_reject_non_members(client: TestClient) -> None:
     outsider = _create_user(client, admin_session["token"], email="outsider@aidoo.local", full_name="Outsider User")
 
     response = client.put(
-        f"/api/v1/pms/issues/{issue['id']}/assignees",
+        f"/api/v1/workspaces/hq/pms/issues/{issue['id']}/assignees",
         headers=_auth_headers(admin_session["token"]),
         json={"user_ids": [outsider["user"]["id"]]},
     )
@@ -209,7 +209,7 @@ def test_issue_assignees_reject_non_members(client: TestClient) -> None:
 def test_list_alias_space_docs_and_status_rename_behave_as_expected(client: TestClient) -> None:
     admin_session = _bootstrap_admin_session(client)
     create_response = client.post(
-        "/api/v1/pms/lists",
+        "/api/v1/workspaces/hq/pms/lists",
         headers=_auth_headers(admin_session["token"]),
         json={
             "key": "LIST",
@@ -222,7 +222,7 @@ def test_list_alias_space_docs_and_status_rename_behave_as_expected(client: Test
     assert task_list["team_id"] is not None
 
     create_issue_response = client.post(
-        f"/api/v1/pms/lists/{task_list['id']}/issues",
+        f"/api/v1/workspaces/hq/pms/lists/{task_list['id']}/issues",
         headers=_auth_headers(admin_session["token"]),
         json={
             "title": "List-id issue",
@@ -237,8 +237,22 @@ def test_list_alias_space_docs_and_status_rename_behave_as_expected(client: Test
     assert issue["list_id"] == task_list["id"]
     assert "project_id" not in issue
 
+    project_alias_response = client.post(
+        f"/api/v1/workspaces/hq/pms/lists/{task_list['id']}/issues",
+        headers=_auth_headers(admin_session["token"]),
+        json={
+            "title": "Legacy project alias should fail",
+            "description": "",
+            "status": "backlog",
+            "priority": "medium",
+            "label_ids": [],
+            "project_id": task_list["id"],
+        },
+    )
+    assert project_alias_response.status_code == 422
+
     status_create_response = client.post(
-        f"/api/v1/pms/lists/{task_list['id']}/statuses",
+        f"/api/v1/workspaces/hq/pms/lists/{task_list['id']}/statuses",
         headers=_auth_headers(admin_session["token"]),
         json={"name": "QA Ready", "category": "active"},
     )
@@ -246,7 +260,7 @@ def test_list_alias_space_docs_and_status_rename_behave_as_expected(client: Test
     status_item = status_create_response.json()
 
     status_update_response = client.patch(
-        f"/api/v1/pms/task-list-statuses/{status_item['id']}",
+        f"/api/v1/workspaces/hq/pms/task-list-statuses/{status_item['id']}",
         headers=_auth_headers(admin_session["token"]),
         json={"name": "QA Signoff"},
     )
@@ -283,7 +297,7 @@ def test_list_alias_space_docs_and_status_rename_behave_as_expected(client: Test
     assert [item["id"] for item in listed_pages[1:]] == [page["id"], child_page["id"]]
 
     update_page_response = client.patch(
-        f"/api/v1/docs/pages/{page['id']}",
+        f"/api/v1/workspaces/hq/docs/pages/{page['id']}",
         headers=_auth_headers(admin_session["token"]),
         json={"title": "Updated Space Page"},
     )
@@ -291,7 +305,7 @@ def test_list_alias_space_docs_and_status_rename_behave_as_expected(client: Test
     assert update_page_response.json()["title"] == "Updated Space Page"
 
     delete_page_response = client.delete(
-        f"/api/v1/docs/pages/{page['id']}",
+        f"/api/v1/workspaces/hq/docs/pages/{page['id']}",
         headers=_auth_headers(admin_session["token"]),
     )
     assert delete_page_response.status_code == 204
@@ -301,13 +315,13 @@ def test_list_alias_space_docs_and_status_rename_behave_as_expected(client: Test
     assert list_pages_after_delete[0]["id"] != page["id"]
 
     deleted_page_response = client.get(
-        f"/api/v1/docs/pages/{page['id']}",
+        f"/api/v1/workspaces/hq/docs/pages/{page['id']}",
         headers=_auth_headers(admin_session["token"]),
     )
     assert deleted_page_response.status_code == 403
 
     deleted_child_response = client.get(
-        f"/api/v1/docs/pages/{child_page['id']}",
+        f"/api/v1/workspaces/hq/docs/pages/{child_page['id']}",
         headers=_auth_headers(admin_session["token"]),
     )
     assert deleted_child_response.status_code == 403
@@ -391,7 +405,7 @@ def test_space_docs_collection_permissions_and_soft_delete(client: TestClient) -
     outsider_token = _login(client, outsider["user"]["email"], outsider["temporary_password"])
 
     outsider_list_response = client.get(
-        "/api/v1/docs/hub",
+        "/api/v1/workspaces/hq/docs/hub",
         headers=_auth_headers(outsider_token),
         params={"container_app": "pms", "container_type": "space", "container_id": space_id},
     )
@@ -399,7 +413,7 @@ def test_space_docs_collection_permissions_and_soft_delete(client: TestClient) -
     assert outsider_list_response.json()["items"] == []
 
     outsider_create_response = client.post(
-        "/api/v1/docs/items",
+        "/api/v1/workspaces/hq/docs/items",
         headers=_auth_headers(outsider_token),
         json={
             "title": "Forbidden",
@@ -443,7 +457,7 @@ def test_space_docs_collection_permissions_and_soft_delete(client: TestClient) -
     assert member_page["doc_id"] == collection["id"]
 
     member_folder_response = client.post(
-        "/api/v1/pms/folders",
+        "/api/v1/workspaces/hq/pms/folders",
         headers=_auth_headers(task_list_editor_token),
         json={"name": "Member folder", "team_id": space_id},
     )
@@ -459,7 +473,7 @@ def test_space_docs_collection_permissions_and_soft_delete(client: TestClient) -
     )
 
     cross_collection_parent_response = client.post(
-        f"/api/v1/docs/items/{second_collection['id']}/pages",
+        f"/api/v1/workspaces/hq/docs/items/{second_collection['id']}/pages",
         headers=_auth_headers(admin_session["token"]),
         json={
             "title": "Invalid child",
@@ -470,7 +484,7 @@ def test_space_docs_collection_permissions_and_soft_delete(client: TestClient) -
     assert cross_collection_parent_response.json()["detail"] == "Parent page not found."
 
     delete_collection_response = client.delete(
-        f"/api/v1/docs/items/{collection['id']}",
+        f"/api/v1/workspaces/hq/docs/items/{collection['id']}",
         headers=_auth_headers(admin_session["token"]),
     )
     assert delete_collection_response.status_code == 204
@@ -479,20 +493,20 @@ def test_space_docs_collection_permissions_and_soft_delete(client: TestClient) -
     assert visible_ids == sorted([member_collection["id"], second_collection["id"]])
 
     deleted_collection_response = client.get(
-        f"/api/v1/docs/items/{collection['id']}",
+        f"/api/v1/workspaces/hq/docs/items/{collection['id']}",
         headers=_auth_headers(admin_session["token"]),
     )
     assert deleted_collection_response.status_code == 200
     assert deleted_collection_response.json()["trashed_at"] is not None
 
     deleted_page_response = client.get(
-        f"/api/v1/docs/pages/{first_page['id']}",
+        f"/api/v1/workspaces/hq/docs/pages/{first_page['id']}",
         headers=_auth_headers(admin_session["token"]),
     )
     assert deleted_page_response.status_code == 403
 
     deleted_child_response = client.get(
-        f"/api/v1/docs/pages/{child_page['id']}",
+        f"/api/v1/workspaces/hq/docs/pages/{child_page['id']}",
         headers=_auth_headers(admin_session["token"]),
     )
     assert deleted_child_response.status_code == 403
@@ -523,33 +537,33 @@ def test_task_list_member_api_grants_space_scope_for_task_list_resources(client:
     )
 
     task_list_detail_response = client.get(
-        f"/api/v1/pms/lists/{task_list['id']}",
+        f"/api/v1/workspaces/hq/pms/lists/{task_list['id']}",
         headers=_auth_headers(task_list_member_token),
     )
     assert task_list_detail_response.status_code == 200
 
     task_list_issue_detail_response = client.get(
-        f"/api/v1/pms/issues/{issue['id']}",
+        f"/api/v1/workspaces/hq/pms/issues/{issue['id']}",
         headers=_auth_headers(task_list_member_token),
     )
     assert task_list_issue_detail_response.status_code == 200
 
     space_lists_response = client.get(
-        f"/api/v1/pms/spaces/{space_id}/lists",
+        f"/api/v1/workspaces/hq/pms/spaces/{space_id}/lists",
         headers=_auth_headers(task_list_member_token),
     )
     assert space_lists_response.status_code == 200
     assert any(item["id"] == task_list["id"] for item in space_lists_response.json()["items"])
 
     space_folders_response = client.get(
-        "/api/v1/pms/folders",
+        "/api/v1/workspaces/hq/pms/folders",
         headers=_auth_headers(task_list_member_token),
         params={"team_id": space_id},
     )
     assert space_folders_response.status_code == 200
 
     space_docs_response = client.get(
-        "/api/v1/docs/hub",
+        "/api/v1/workspaces/hq/docs/hub",
         headers=_auth_headers(task_list_member_token),
         params={"container_app": "pms", "container_type": "space", "container_id": space_id},
     )
@@ -657,7 +671,7 @@ def test_team_soft_delete_hides_space_data_and_untrashes_default_space(client: T
     assert pms_workspace["team_count"] == 1
 
     folder_response = client.post(
-        "/api/v1/pms/folders",
+        "/api/v1/workspaces/hq/pms/folders",
         headers=headers,
         json={"name": "Operations", "team_id": space_id},
     )
@@ -694,28 +708,28 @@ def test_team_soft_delete_hides_space_data_and_untrashes_default_space(client: T
     assert deleted_team_members_response.status_code == 404
 
     visible_lists_response = client.get(
-        "/api/v1/pms/lists",
+        "/api/v1/workspaces/hq/pms/lists",
         headers=headers,
     )
     assert visible_lists_response.status_code == 200
     assert [item for item in visible_lists_response.json()["items"] if item["team_id"] == space_id] == []
 
     deleted_space_lists_response = client.get(
-        "/api/v1/pms/lists",
+        "/api/v1/workspaces/hq/pms/lists",
         headers=headers,
         params={"team_id": space_id},
     )
     assert deleted_space_lists_response.status_code == 404
 
     deleted_space_folders_response = client.get(
-        "/api/v1/pms/folders",
+        "/api/v1/workspaces/hq/pms/folders",
         headers=headers,
         params={"team_id": space_id},
     )
     assert deleted_space_folders_response.status_code == 404
 
     deleted_space_docs_response = client.get(
-        "/api/v1/docs/hub",
+        "/api/v1/workspaces/hq/docs/hub",
         headers=headers,
         params={"container_app": "pms", "container_type": "space", "container_id": space_id},
     )
@@ -723,7 +737,7 @@ def test_team_soft_delete_hides_space_data_and_untrashes_default_space(client: T
     assert [item["id"] for item in deleted_space_docs_response.json()["items"]] == [collection["id"]]
 
     deleted_page_response = client.get(
-        f"/api/v1/docs/pages/{page['id']}",
+        f"/api/v1/workspaces/hq/docs/pages/{page['id']}",
         headers=headers,
     )
     assert deleted_page_response.status_code == 200
@@ -736,7 +750,7 @@ def test_team_soft_delete_hides_space_data_and_untrashes_default_space(client: T
     assert pms_workspace_after_delete["team_count"] == 0
 
     recreated_task_list_response = client.post(
-        "/api/v1/pms/lists",
+        "/api/v1/workspaces/hq/pms/lists",
         headers=headers,
         json={
             "key": "PMS2",
@@ -775,30 +789,30 @@ def test_task_list_patch_sort_order_and_cross_folder_move(client: TestClient) ->
     assert space_id is not None
 
     folder_one = client.post(
-        "/api/v1/pms/folders",
+        "/api/v1/workspaces/hq/pms/folders",
         headers=_auth_headers(admin["token"]),
         json={"name": "Alpha", "team_id": space_id},
     ).json()
     folder_two = client.post(
-        "/api/v1/pms/folders",
+        "/api/v1/workspaces/hq/pms/folders",
         headers=_auth_headers(admin["token"]),
         json={"name": "Bravo", "team_id": space_id},
     ).json()
 
     task_list_b = client.post(
-        "/api/v1/pms/lists",
+        "/api/v1/workspaces/hq/pms/lists",
         headers=_auth_headers(admin["token"]),
         json={"name": "Reorder List B", "description": "", "team_id": space_id, "folder_id": folder_one["id"]},
     ).json()
     task_list_c = client.post(
-        "/api/v1/pms/lists",
+        "/api/v1/workspaces/hq/pms/lists",
         headers=_auth_headers(admin["token"]),
         json={"name": "Reorder List C", "description": "", "team_id": space_id, "folder_id": folder_one["id"]},
     ).json()
 
     # Reorder: B and C both live in folder_one. Assign explicit sort_order values.
     patch_b = client.patch(
-        f"/api/v1/pms/lists/{task_list_b['id']}",
+        f"/api/v1/workspaces/hq/pms/lists/{task_list_b['id']}",
         headers=_auth_headers(admin["token"]),
         json={"sort_order": 1000},
     )
@@ -806,7 +820,7 @@ def test_task_list_patch_sort_order_and_cross_folder_move(client: TestClient) ->
     assert patch_b.json()["sort_order"] == 1000
 
     patch_c = client.patch(
-        f"/api/v1/pms/lists/{task_list_c['id']}",
+        f"/api/v1/workspaces/hq/pms/lists/{task_list_c['id']}",
         headers=_auth_headers(admin["token"]),
         json={"sort_order": 0},
     )
@@ -814,7 +828,7 @@ def test_task_list_patch_sort_order_and_cross_folder_move(client: TestClient) ->
     assert patch_c.json()["sort_order"] == 0
 
     listed = client.get(
-        f"/api/v1/pms/spaces/{space_id}/lists",
+        f"/api/v1/workspaces/hq/pms/spaces/{space_id}/lists",
         headers=_auth_headers(admin["token"]),
         params={"sort_by": "sort_order"},
     ).json()["items"]
@@ -824,7 +838,7 @@ def test_task_list_patch_sort_order_and_cross_folder_move(client: TestClient) ->
 
     # Cross-folder move: B → folder_two, with new sort_order.
     move_b = client.patch(
-        f"/api/v1/pms/lists/{task_list_b['id']}",
+        f"/api/v1/workspaces/hq/pms/lists/{task_list_b['id']}",
         headers=_auth_headers(admin["token"]),
         json={"folder_id": folder_two["id"], "sort_order": 0},
     )
@@ -833,7 +847,7 @@ def test_task_list_patch_sort_order_and_cross_folder_move(client: TestClient) ->
     assert move_b.json()["sort_order"] == 0
 
     listed_after = client.get(
-        f"/api/v1/pms/spaces/{space_id}/lists",
+        f"/api/v1/workspaces/hq/pms/spaces/{space_id}/lists",
         headers=_auth_headers(admin["token"]),
         params={"sort_by": "sort_order"},
     ).json()["items"]
@@ -869,12 +883,12 @@ def test_space_member_can_reorder_task_list_without_owner_access(client: TestCli
     assert space_id is not None
 
     folder = client.post(
-        "/api/v1/pms/folders",
+        "/api/v1/workspaces/hq/pms/folders",
         headers=_auth_headers(admin["token"]),
         json={"name": "Target Folder", "team_id": space_id},
     ).json()
     task_list_b = client.post(
-        "/api/v1/pms/lists",
+        "/api/v1/workspaces/hq/pms/lists",
         headers=_auth_headers(admin["token"]),
         json={"name": "List Reorder B", "description": "", "team_id": space_id},
     ).json()
@@ -884,7 +898,7 @@ def test_space_member_can_reorder_task_list_without_owner_access(client: TestCli
     member_token = _login(client, member["user"]["email"], member["temporary_password"])
 
     reorder_response = client.patch(
-        f"/api/v1/pms/lists/{task_list_b['id']}",
+        f"/api/v1/workspaces/hq/pms/lists/{task_list_b['id']}",
         headers=_auth_headers(member_token),
         json={"folder_id": folder["id"], "sort_order": 0},
     )
@@ -893,7 +907,7 @@ def test_space_member_can_reorder_task_list_without_owner_access(client: TestCli
     assert reorder_response.json()["sort_order"] == 0
 
     rename_response = client.patch(
-        f"/api/v1/pms/lists/{task_list_b['id']}",
+        f"/api/v1/workspaces/hq/pms/lists/{task_list_b['id']}",
         headers=_auth_headers(member_token),
         json={"name": "Should still fail"},
     )
@@ -914,7 +928,7 @@ def test_space_member_can_reorder_space_doc_without_manager_access(client: TestC
     member_token = _login(client, member["user"]["email"], member["temporary_password"])
 
     reorder_response = client.put(
-        f"/api/v1/docs/items/{doc_b['id']}/container",
+        f"/api/v1/workspaces/hq/docs/items/{doc_b['id']}/container",
         headers=_auth_headers(member_token),
         json={"app": "pms", "type": "space", "id": space_id, "sort_order": 0},
     )
@@ -922,7 +936,7 @@ def test_space_member_can_reorder_space_doc_without_manager_access(client: TestC
     assert reorder_response.json()["primary_container"]["sort_order"] == 0
 
     rename_response = client.patch(
-        f"/api/v1/docs/items/{doc_a['id']}",
+        f"/api/v1/workspaces/hq/docs/items/{doc_a['id']}",
         headers=_auth_headers(member_token),
         json={"title": "Should still fail"},
     )
@@ -936,23 +950,23 @@ def test_bulk_reorder_space_lists_updates_order_and_folder_in_one_request(client
     assert space_id is not None
 
     folder = client.post(
-        "/api/v1/pms/folders",
+        "/api/v1/workspaces/hq/pms/folders",
         headers=_auth_headers(admin["token"]),
         json={"name": "Bulk Folder", "team_id": space_id},
     ).json()
     task_list_b = client.post(
-        "/api/v1/pms/lists",
+        "/api/v1/workspaces/hq/pms/lists",
         headers=_auth_headers(admin["token"]),
         json={"name": "Bulk List B", "description": "", "team_id": space_id},
     ).json()
     task_list_c = client.post(
-        "/api/v1/pms/lists",
+        "/api/v1/workspaces/hq/pms/lists",
         headers=_auth_headers(admin["token"]),
         json={"name": "Bulk List C", "description": "", "team_id": space_id},
     ).json()
 
     reorder_response = client.patch(
-        f"/api/v1/pms/spaces/{space_id}/lists/reorder",
+        f"/api/v1/workspaces/hq/pms/spaces/{space_id}/lists/reorder",
         headers=_auth_headers(admin["token"]),
         json={
             "items": [
@@ -965,7 +979,7 @@ def test_bulk_reorder_space_lists_updates_order_and_folder_in_one_request(client
     assert reorder_response.status_code == 204
 
     listed = client.get(
-        f"/api/v1/pms/spaces/{space_id}/lists",
+        f"/api/v1/workspaces/hq/pms/spaces/{space_id}/lists",
         headers=_auth_headers(admin["token"]),
         params={"sort_by": "sort_order"},
     ).json()["items"]
@@ -995,7 +1009,7 @@ def test_bulk_reorder_space_docs_allows_member_and_updates_order(client: TestCli
         (doc_c["id"], 2000),
     ]:
         response = client.put(
-            f"/api/v1/docs/items/{doc_id}/container",
+            f"/api/v1/workspaces/hq/docs/items/{doc_id}/container",
             headers=_auth_headers(member_token),
             json={"app": "pms", "type": "space", "id": space_id, "sort_order": sort_order},
         )
@@ -1049,14 +1063,14 @@ def test_assigned_issues_returns_only_current_users_open_issues(client: TestClie
         assignee_id=admin["user"]["id"],
     )
     close_response = client.patch(
-        f"/api/v1/pms/issues/{closed_issue['id']}",
+        f"/api/v1/workspaces/hq/pms/issues/{closed_issue['id']}",
         headers=_auth_headers(admin["token"]),
         json={"status": "done"},
     )
     assert close_response.status_code == 200
 
     response = client.get(
-        "/api/v1/pms/issues/assigned",
+        "/api/v1/workspaces/hq/pms/issues/assigned",
         headers=_auth_headers(admin["token"]),
     )
     assert response.status_code == 200
@@ -1084,14 +1098,14 @@ def test_assigned_issues_respects_limit_bounds(client: TestClient) -> None:
         )
 
     default_response = client.get(
-        "/api/v1/pms/issues/assigned",
+        "/api/v1/workspaces/hq/pms/issues/assigned",
         headers=_auth_headers(admin["token"]),
     )
     assert default_response.status_code == 200
     assert len(default_response.json()["items"]) == 3
 
     capped_response = client.get(
-        "/api/v1/pms/issues/assigned",
+        "/api/v1/workspaces/hq/pms/issues/assigned",
         headers=_auth_headers(admin["token"]),
         params={"limit": 2},
     )
@@ -1099,14 +1113,14 @@ def test_assigned_issues_respects_limit_bounds(client: TestClient) -> None:
     assert len(capped_response.json()["items"]) == 2
 
     too_low_response = client.get(
-        "/api/v1/pms/issues/assigned",
+        "/api/v1/workspaces/hq/pms/issues/assigned",
         headers=_auth_headers(admin["token"]),
         params={"limit": 0},
     )
     assert too_low_response.status_code == 422
 
     too_high_response = client.get(
-        "/api/v1/pms/issues/assigned",
+        "/api/v1/workspaces/hq/pms/issues/assigned",
         headers=_auth_headers(admin["token"]),
         params={"limit": 999},
     )
@@ -1161,7 +1175,7 @@ def test_assigned_issues_handles_unknown_priority_from_existing_data(client: Tes
         db.commit()
 
     response = client.get(
-        "/api/v1/pms/issues/assigned",
+        "/api/v1/workspaces/hq/pms/issues/assigned",
         headers=_auth_headers(admin["token"]),
     )
     assert response.status_code == 200
@@ -1191,7 +1205,7 @@ def _create_task_list(
     name: str = "PMS List",
 ) -> dict:
     response = client.post(
-        "/api/v1/pms/lists",
+        "/api/v1/workspaces/hq/pms/lists",
         headers=_auth_headers(token),
         json={
             "key": key,
@@ -1216,7 +1230,7 @@ def _create_issue(
     recurrence_rule: str | None = None,
 ) -> dict:
     response = client.post(
-        f"/api/v1/pms/lists/{list_id}/issues",
+        f"/api/v1/workspaces/hq/pms/lists/{list_id}/issues",
         headers=_auth_headers(token),
         json={
             "title": title,
@@ -1261,8 +1275,14 @@ def _login(client: TestClient, email: str, password: str) -> str:
 
 
 def _add_task_list_member(client: TestClient, token: str, list_id: str, user_id: str, role: str) -> dict:
+    list_response = client.get(
+        f"/api/v1/workspaces/hq/pms/lists/{list_id}",
+        headers=_auth_headers(token),
+    )
+    assert list_response.status_code == 200
+
     response = client.post(
-        f"/api/v1/pms/lists/{list_id}/members",
+        f"/api/v1/workspaces/hq/pms/spaces/{list_response.json()['team_id']}/members",
         headers=_auth_headers(token),
         json={"user_id": user_id, "role": role},
     )

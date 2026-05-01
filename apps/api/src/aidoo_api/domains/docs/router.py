@@ -59,6 +59,7 @@ from aidoo_api.domains.rag.contracts import RagSyncOperation
 
 
 router = APIRouter(prefix="/docs", tags=["docs"])
+public_router = APIRouter(prefix="/docs", tags=["docs"])
 ws_router = APIRouter(prefix="/docs", tags=["docs"])
 
 SOURCE_NATIVE_DOC = "native_doc"
@@ -1624,6 +1625,115 @@ def toggle_doc_favorite(
     return ToggleFavoriteResponse(is_favorite=pref.is_favorite)
 
 
+@public_router.get("/items/{item_id}", response_model=DocsHubItem)
+def get_shared_doc_item(
+    item_id: str,
+    share_token: str = Query(..., min_length=1),
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+) -> DocsHubItem:
+    return get_item_internal(
+        db,
+        user=current_user,
+        item_id=item_id,
+        share_token=share_token,
+    )
+
+
+@public_router.patch("/items/{item_id}", response_model=DocsHubItem)
+def update_shared_doc_item(
+    item_id: str,
+    payload: UpdateDocItemRequest,
+    share_token: str = Query(..., min_length=1),
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+) -> DocsHubItem:
+    return update_doc_item(item_id, payload, share_token, db, current_user)
+
+
+@public_router.post("/items/{item_id}/duplicate", response_model=DocsHubItem, status_code=status.HTTP_201_CREATED)
+def duplicate_shared_doc_item(
+    item_id: str,
+    share_token: str = Query(..., min_length=1),
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+) -> DocsHubItem:
+    return duplicate_doc_item(item_id, share_token, db, current_user)
+
+
+@public_router.get("/items/{item_id}/pages", response_model=DocsPageListResponse)
+def list_shared_doc_pages(
+    item_id: str,
+    share_token: str = Query(..., min_length=1),
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+) -> DocsPageListResponse:
+    return list_pages_internal(
+        db,
+        user=current_user,
+        item_id=item_id,
+        share_token=share_token,
+    )
+
+
+@public_router.post("/items/{item_id}/pages", response_model=DocsPageItem, status_code=status.HTTP_201_CREATED)
+def create_shared_doc_page(
+    item_id: str,
+    payload: CreateDocPageRequest,
+    share_token: str = Query(..., min_length=1),
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+) -> DocsPageItem:
+    return create_doc_page(item_id, payload, share_token, db, current_user)
+
+
+@public_router.get("/pages/{page_id}", response_model=DocsPageItem)
+def get_shared_doc_page(
+    page_id: str,
+    share_token: str = Query(..., min_length=1),
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+) -> DocsPageItem:
+    return read_page_internal(
+        db,
+        user=current_user,
+        page_id=page_id,
+        share_token=share_token,
+    )
+
+
+@public_router.patch("/pages/{page_id}", response_model=DocsPageItem)
+def update_shared_doc_page(
+    page_id: str,
+    payload: UpdateDocPageRequest,
+    share_token: str = Query(..., min_length=1),
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+) -> DocsPageItem:
+    return update_doc_page(page_id, payload, share_token, db, current_user)
+
+
+@public_router.delete("/pages/{page_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_shared_doc_page(
+    page_id: str,
+    share_token: str = Query(..., min_length=1),
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+) -> Response:
+    return delete_doc_page(page_id, share_token, db, current_user)
+
+
+@public_router.post("/items/{item_id}/view")
+def record_shared_doc_view(
+    item_id: str,
+    payload: RecordViewRequest,
+    share_token: str = Query(..., min_length=1),
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+) -> dict[str, bool]:
+    return record_doc_view(item_id, payload, share_token, db, current_user)
+
+
 @router.post("/items/{item_id}/view")
 def record_doc_view(
     item_id: str,
@@ -1928,7 +2038,7 @@ def disable_native_doc_link_share(
     return _serialize_sharing_response(doc)
 
 
-@router.get("/shared-links/{share_token}", response_model=ResolveSharedLinkResponse)
+@public_router.get("/shared-links/{share_token}", response_model=ResolveSharedLinkResponse)
 def resolve_shared_link(
     share_token: str,
     db: Session = Depends(get_db_session),

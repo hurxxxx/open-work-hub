@@ -43,7 +43,7 @@ def test_auth_bootstrap_and_protected_search(client: TestClient) -> None:
     }
 
     unauthenticated = client.post(
-        "/api/v1/search/documents",
+        "/api/v1/workspaces/hq/search/documents",
         json={"query": "compressor specification"},
     )
     assert unauthenticated.status_code == 401
@@ -74,7 +74,7 @@ def test_auth_bootstrap_and_protected_search(client: TestClient) -> None:
     assert me_response.json()["email"] == "admin@aidoo.local"
 
     search_response = client.post(
-        "/api/v1/search/documents",
+        "/api/v1/workspaces/hq/search/documents",
         headers={"Authorization": f"Bearer {token}"},
         json={"query": "compressor specification"},
     )
@@ -334,7 +334,7 @@ def test_documents_search_filters_and_grounded_answer(client: TestClient) -> Non
     token = setup_response.json()["token"]
 
     response = client.post(
-        "/api/v1/search/documents",
+        "/api/v1/workspaces/hq/search/documents",
         headers={"Authorization": f"Bearer {token}"},
         json={
             "query": "seal material change notice",
@@ -475,7 +475,7 @@ def _create_pms_task_list(
     name: str,
 ) -> dict[str, object]:
     response = client.post(
-        "/api/v1/pms/lists",
+        "/api/v1/workspaces/hq/pms/lists",
         headers={"Authorization": f"Bearer {token}"},
         json={
             "key": key,
@@ -496,7 +496,7 @@ def _create_pms_issue(
     parent_id: str | None = None,
 ) -> dict[str, object]:
     response = client.post(
-        f"/api/v1/pms/lists/{list_id}/issues",
+        f"/api/v1/workspaces/hq/pms/lists/{list_id}/issues",
         headers={"Authorization": f"Bearer {token}"},
         json={
             "title": title,
@@ -780,16 +780,9 @@ def test_non_workspace_routes_require_workspace_membership(client: TestClient) -
     admin_token = _bootstrap_admin(client)
     admin_headers = {"Authorization": f"Bearer {admin_token}"}
 
-    docs_workspace_response = client.post(
-        "/api/v1/admin/workspaces",
-        headers=admin_headers,
-        json={
-            "name": "Docs Workspace",
-            "description": "Docs-only workspace for feature access coverage",
-        },
-    )
-    assert docs_workspace_response.status_code == 201
-    docs_workspace = docs_workspace_response.json()
+    workspaces_response = client.get("/api/v1/admin/workspaces", headers=admin_headers)
+    assert workspaces_response.status_code == 200
+    hq_workspace = next(item for item in workspaces_response.json() if item["key"] == "hq")
 
     user_response = client.post(
         "/api/v1/admin/users",
@@ -805,34 +798,34 @@ def test_non_workspace_routes_require_workspace_membership(client: TestClient) -
     user_headers = {"Authorization": f"Bearer {user_token}"}
 
     documents_forbidden_response = client.post(
-        "/api/v1/search/documents",
+        "/api/v1/workspaces/hq/search/documents",
         headers=user_headers,
         json={"query": "compressor specification"},
     )
     assert documents_forbidden_response.status_code == 403
 
-    drafts_forbidden_response = client.get("/api/v1/drafts", headers=user_headers)
+    drafts_forbidden_response = client.get("/api/v1/workspaces/hq/drafts", headers=user_headers)
     assert drafts_forbidden_response.status_code == 403
 
-    wiki_forbidden_response = client.get("/api/v1/wiki/pages", headers=user_headers)
+    wiki_forbidden_response = client.get("/api/v1/workspaces/hq/wiki/pages", headers=user_headers)
     assert wiki_forbidden_response.status_code == 403
 
     plm_forbidden_response = client.post(
-        "/api/v1/search/plm",
+        "/api/v1/workspaces/hq/search/plm",
         headers=user_headers,
         json={"query": "release delay"},
     )
     assert plm_forbidden_response.status_code == 403
 
     ocr_forbidden_response = client.post(
-        "/api/v1/connectors/ocr/route",
+        "/api/v1/workspaces/hq/connectors/ocr/route",
         headers=user_headers,
         json={"asset_uri": "file://scan.pdf"},
     )
     assert ocr_forbidden_response.status_code == 403
 
     bind_docs_workspace_response = client.put(
-        f"/api/v1/admin/workspaces/{docs_workspace['id']}/bindings",
+        f"/api/v1/admin/workspaces/{hq_workspace['id']}/bindings",
         headers=admin_headers,
         json={
             "users": [{"subject_id": user["id"], "role": "member"}],
@@ -842,31 +835,50 @@ def test_non_workspace_routes_require_workspace_membership(client: TestClient) -
     assert bind_docs_workspace_response.status_code == 200
 
     documents_allowed_response = client.post(
-        "/api/v1/search/documents",
+        "/api/v1/workspaces/hq/search/documents",
         headers=user_headers,
         json={"query": "compressor specification"},
     )
     assert documents_allowed_response.status_code == 200
 
-    drafts_allowed_response = client.get("/api/v1/drafts", headers=user_headers)
+    drafts_allowed_response = client.get("/api/v1/workspaces/hq/drafts", headers=user_headers)
     assert drafts_allowed_response.status_code == 200
 
-    wiki_allowed_response = client.get("/api/v1/wiki/pages", headers=user_headers)
+    wiki_allowed_response = client.get("/api/v1/workspaces/hq/wiki/pages", headers=user_headers)
     assert wiki_allowed_response.status_code == 200
 
     plm_allowed_response = client.post(
-        "/api/v1/search/plm",
+        "/api/v1/workspaces/hq/search/plm",
         headers=user_headers,
         json={"query": "release delay"},
     )
     assert plm_allowed_response.status_code == 200
 
     ocr_allowed_response = client.post(
-        "/api/v1/connectors/ocr/route",
+        "/api/v1/workspaces/hq/connectors/ocr/route",
         headers=user_headers,
         json={"asset_uri": "file://scan.pdf"},
     )
     assert ocr_allowed_response.status_code == 200
+
+
+def test_removed_legacy_workspace_api_paths_fail(client: TestClient) -> None:
+    removed_paths = [
+        ("POST", "/api/v1/ai/chat", {"message": "hello"}),
+        ("GET", "/api/v1/calendar/events", None),
+        ("POST", "/api/v1/connectors/ocr/route", {"asset_uri": "file://scan.pdf"}),
+        ("GET", "/api/v1/docs/hub", None),
+        ("GET", "/api/v1/drafts", None),
+        ("GET", "/api/v1/meeting/meetings", None),
+        ("GET", "/api/v1/planner/events", None),
+        ("GET", "/api/v1/pms/lists", None),
+        ("POST", "/api/v1/search/documents", {"query": "compressor specification"}),
+        ("GET", "/api/v1/wiki/pages", None),
+    ]
+
+    for method, path, body in removed_paths:
+        response = client.request(method, path, json=body)
+        assert response.status_code in {404, 405}, path
 
 
 def test_pms_task_list_workflow_and_dashboard(client: TestClient) -> None:
@@ -874,7 +886,7 @@ def test_pms_task_list_workflow_and_dashboard(client: TestClient) -> None:
     overdue_date = (date.today() - timedelta(days=1)).isoformat()
 
     task_list_response = client.post(
-        "/api/v1/pms/lists",
+        "/api/v1/workspaces/hq/pms/lists",
         headers={"Authorization": f"Bearer {token}"},
         json={
             "key": "AID",
@@ -888,14 +900,14 @@ def test_pms_task_list_workflow_and_dashboard(client: TestClient) -> None:
     list_id = task_list["id"]
 
     members_response = client.get(
-        f"/api/v1/pms/lists/{list_id}/members",
+        f"/api/v1/workspaces/hq/pms/spaces/{task_list['team_id']}/members",
         headers={"Authorization": f"Bearer {token}"},
     )
     assert members_response.status_code == 200
     assert members_response.json()["items"][0]["role"] == "owner"
 
     milestone_response = client.post(
-        f"/api/v1/pms/lists/{list_id}/milestones",
+        f"/api/v1/workspaces/hq/pms/lists/{list_id}/milestones",
         headers={"Authorization": f"Bearer {token}"},
         json={
             "title": "Phase 1",
@@ -908,7 +920,7 @@ def test_pms_task_list_workflow_and_dashboard(client: TestClient) -> None:
     milestone_id = milestone_response.json()["id"]
 
     first_issue_response = client.post(
-        f"/api/v1/pms/lists/{list_id}/issues",
+        f"/api/v1/workspaces/hq/pms/lists/{list_id}/issues",
         headers={"Authorization": f"Bearer {token}"},
         json={
             "title": "Build dashboard",
@@ -923,7 +935,7 @@ def test_pms_task_list_workflow_and_dashboard(client: TestClient) -> None:
     first_issue = first_issue_response.json()
 
     second_issue_response = client.post(
-        f"/api/v1/pms/lists/{list_id}/issues",
+        f"/api/v1/workspaces/hq/pms/lists/{list_id}/issues",
         headers={"Authorization": f"Bearer {token}"},
         json={
             "title": "Build board",
@@ -937,7 +949,7 @@ def test_pms_task_list_workflow_and_dashboard(client: TestClient) -> None:
     second_issue = second_issue_response.json()
 
     dependency_response = client.post(
-        "/api/v1/pms/dependencies",
+        "/api/v1/workspaces/hq/pms/dependencies",
         headers={"Authorization": f"Bearer {token}"},
         json={
             "predecessor_id": first_issue["id"],
@@ -949,7 +961,7 @@ def test_pms_task_list_workflow_and_dashboard(client: TestClient) -> None:
     dependency_id = dependency_response.json()["id"]
 
     update_response = client.patch(
-        f"/api/v1/pms/issues/{first_issue['id']}",
+        f"/api/v1/workspaces/hq/pms/issues/{first_issue['id']}",
         headers={"Authorization": f"Bearer {token}"},
         json={"status": "in_progress", "board_position": 1},
     )
@@ -957,14 +969,14 @@ def test_pms_task_list_workflow_and_dashboard(client: TestClient) -> None:
     assert update_response.json()["status"] == "in_progress"
 
     comment_response = client.post(
-        f"/api/v1/pms/issues/{first_issue['id']}/comments",
+        f"/api/v1/workspaces/hq/pms/issues/{first_issue['id']}/comments",
         headers={"Authorization": f"Bearer {token}"},
         json={"body": "Need summary and overdue metrics."},
     )
     assert comment_response.status_code == 201
 
     detail_response = client.get(
-        f"/api/v1/pms/issues/{first_issue['id']}",
+        f"/api/v1/workspaces/hq/pms/issues/{first_issue['id']}",
         headers={"Authorization": f"Bearer {token}"},
     )
     assert detail_response.status_code == 200
@@ -974,7 +986,7 @@ def test_pms_task_list_workflow_and_dashboard(client: TestClient) -> None:
     assert detail["dependencies"][0]["id"] == dependency_id
 
     logs_response = client.get(
-        f"/api/v1/pms/issues/{first_issue['id']}/activity-logs",
+        f"/api/v1/workspaces/hq/pms/issues/{first_issue['id']}/activity-logs",
         headers={"Authorization": f"Bearer {token}"},
     )
     assert logs_response.status_code == 200
@@ -984,14 +996,14 @@ def test_pms_task_list_workflow_and_dashboard(client: TestClient) -> None:
     assert "commented" in log_actions
 
     issues_response = client.get(
-        f"/api/v1/pms/lists/{list_id}/issues?status=in_progress",
+        f"/api/v1/workspaces/hq/pms/lists/{list_id}/issues?status=in_progress",
         headers={"Authorization": f"Bearer {token}"},
     )
     assert issues_response.status_code == 200
     assert issues_response.json()["total"] == 1
 
     task_list_detail_response = client.get(
-        f"/api/v1/pms/lists/{list_id}",
+        f"/api/v1/workspaces/hq/pms/lists/{list_id}",
         headers={"Authorization": f"Bearer {token}"},
     )
     assert task_list_detail_response.status_code == 200
@@ -999,7 +1011,7 @@ def test_pms_task_list_workflow_and_dashboard(client: TestClient) -> None:
     assert task_list_detail_response.json()["overdue_issue_count"] == 1
 
     dashboard_response = client.get(
-        "/api/v1/pms/dashboard/summary",
+        "/api/v1/workspaces/hq/pms/dashboard/summary",
         headers={"Authorization": f"Bearer {token}"},
     )
     assert dashboard_response.status_code == 200
@@ -1010,7 +1022,7 @@ def test_pms_task_list_workflow_and_dashboard(client: TestClient) -> None:
     assert dashboard["lists"][0]["progress"] == 0.75
 
     dependency_delete = client.delete(
-        f"/api/v1/pms/dependencies/{dependency_id}",
+        f"/api/v1/workspaces/hq/pms/dependencies/{dependency_id}",
         headers={"Authorization": f"Bearer {token}"},
     )
     assert dependency_delete.status_code == 204
@@ -1025,7 +1037,7 @@ def test_pms_membership_permissions(client: TestClient) -> None:
     )
 
     task_list_response = client.post(
-        "/api/v1/pms/lists",
+        "/api/v1/workspaces/hq/pms/lists",
         headers={"Authorization": f"Bearer {admin_token}"},
         json={
             "key": "PERM",
@@ -1033,16 +1045,18 @@ def test_pms_membership_permissions(client: TestClient) -> None:
             "description": "Membership checks",
         },
     )
-    list_id = task_list_response.json()["id"]
+    task_list = task_list_response.json()
+    list_id = task_list["id"]
+    space_id = task_list["team_id"]
 
     forbidden_response = client.get(
-        f"/api/v1/pms/lists/{list_id}",
+        f"/api/v1/workspaces/hq/pms/lists/{list_id}",
         headers={"Authorization": f"Bearer {outsider_token}"},
     )
     assert forbidden_response.status_code == 403
 
     add_member_response = client.post(
-        f"/api/v1/pms/lists/{list_id}/members",
+        f"/api/v1/workspaces/hq/pms/spaces/{space_id}/members",
         headers={"Authorization": f"Bearer {admin_token}"},
         json={"user_id": outsider_id, "role": "member"},
     )
@@ -1050,7 +1064,7 @@ def test_pms_membership_permissions(client: TestClient) -> None:
     assert add_member_response.json()["role"] == "member"
 
     member_list_response = client.get(
-        f"/api/v1/pms/lists/{list_id}",
+        f"/api/v1/workspaces/hq/pms/lists/{list_id}",
         headers={"Authorization": f"Bearer {outsider_token}"},
     )
     assert member_list_response.status_code == 200
@@ -1065,7 +1079,7 @@ def test_pms_space_members_still_need_workspace_membership(client: TestClient) -
     )
 
     task_list_response = client.post(
-        "/api/v1/pms/lists",
+        "/api/v1/workspaces/hq/pms/lists",
         headers={"Authorization": f"Bearer {admin_token}"},
         json={
             "key": "SPACEONLY",
@@ -1074,17 +1088,19 @@ def test_pms_space_members_still_need_workspace_membership(client: TestClient) -
         },
     )
     assert task_list_response.status_code == 201
-    list_id = task_list_response.json()["id"]
+    task_list = task_list_response.json()
+    list_id = task_list["id"]
+    space_id = task_list["team_id"]
 
     add_member_response = client.post(
-        f"/api/v1/pms/lists/{list_id}/members",
+        f"/api/v1/workspaces/hq/pms/spaces/{space_id}/members",
         headers={"Authorization": f"Bearer {admin_token}"},
         json={"user_id": member_id, "role": "member"},
     )
     assert add_member_response.status_code == 201
 
     task_list_detail_response = client.get(
-        f"/api/v1/pms/lists/{list_id}",
+        f"/api/v1/workspaces/hq/pms/lists/{list_id}",
         headers={"Authorization": f"Bearer {member_token}"},
     )
     assert task_list_detail_response.status_code == 403
@@ -1099,7 +1115,7 @@ def test_pms_space_creator_becomes_owner_and_last_manager_is_protected(client: T
     )
 
     create_space_response = client.post(
-        "/api/v1/pms/spaces",
+        "/api/v1/workspaces/hq/pms/spaces",
         headers={"Authorization": f"Bearer {creator_token}"},
         json={"name": "Operations", "description": "Owner bootstrap"},
     )
@@ -1107,7 +1123,7 @@ def test_pms_space_creator_becomes_owner_and_last_manager_is_protected(client: T
     space = create_space_response.json()
 
     members_response = client.get(
-        f"/api/v1/pms/spaces/{space['id']}/members",
+        f"/api/v1/workspaces/hq/pms/spaces/{space['id']}/members",
         headers={"Authorization": f"Bearer {creator_token}"},
     )
     assert members_response.status_code == 200
@@ -1115,14 +1131,14 @@ def test_pms_space_creator_becomes_owner_and_last_manager_is_protected(client: T
     assert members_response.json()["items"][0]["role"] == "owner"
 
     demote_response = client.patch(
-        f"/api/v1/pms/spaces/{space['id']}/members/{creator_id}",
+        f"/api/v1/workspaces/hq/pms/spaces/{space['id']}/members/{creator_id}",
         headers={"Authorization": f"Bearer {creator_token}"},
         json={"role": "member"},
     )
     assert demote_response.status_code == 409
 
     remove_response = client.delete(
-        f"/api/v1/pms/spaces/{space['id']}/members/{creator_id}",
+        f"/api/v1/workspaces/hq/pms/spaces/{space['id']}/members/{creator_id}",
         headers={"Authorization": f"Bearer {creator_token}"},
     )
     assert remove_response.status_code == 409
@@ -1131,7 +1147,7 @@ def test_pms_space_creator_becomes_owner_and_last_manager_is_protected(client: T
 def test_platform_admin_without_workspace_membership_cannot_view_pms_spaces(client: TestClient) -> None:
     admin_token = _bootstrap_admin(client)
     task_list_response = client.post(
-        "/api/v1/pms/lists",
+        "/api/v1/workspaces/hq/pms/lists",
         headers={"Authorization": f"Bearer {admin_token}"},
         json={"key": "PLATADM", "name": "Platform Admin List", "description": "Visibility"},
     )
@@ -1152,7 +1168,7 @@ def test_platform_admin_without_workspace_membership_cannot_view_pms_spaces(clie
     assert "app_access" not in me_response.json()
 
     spaces_response = client.get(
-        "/api/v1/pms/spaces",
+        "/api/v1/workspaces/hq/pms/spaces",
         headers={"Authorization": f"Bearer {platform_admin_token}"},
     )
     assert spaces_response.status_code == 403
@@ -1292,28 +1308,28 @@ def test_pms_parent_issue_validation_and_label_conflicts(client: TestClient) -> 
     assert child_issue["parent_id"] == parent_issue["id"]
 
     detail_response = client.get(
-        f"/api/v1/pms/issues/{parent_issue['id']}",
+        f"/api/v1/workspaces/hq/pms/issues/{parent_issue['id']}",
         headers={"Authorization": f"Bearer {token}"},
     )
     assert detail_response.status_code == 200
     assert len(detail_response.json()["subtasks"]) == 1
 
     self_parent_response = client.patch(
-        f"/api/v1/pms/issues/{child_issue['id']}",
+        f"/api/v1/workspaces/hq/pms/issues/{child_issue['id']}",
         headers={"Authorization": f"Bearer {token}"},
         json={"parent_id": child_issue["id"]},
     )
     assert self_parent_response.status_code == 409
 
     cycle_response = client.patch(
-        f"/api/v1/pms/issues/{parent_issue['id']}",
+        f"/api/v1/workspaces/hq/pms/issues/{parent_issue['id']}",
         headers={"Authorization": f"Bearer {token}"},
         json={"parent_id": child_issue["id"]},
     )
     assert cycle_response.status_code == 409
 
     cross_list_response = client.post(
-        f"/api/v1/pms/lists/{secondary_list['id']}/issues",
+        f"/api/v1/workspaces/hq/pms/lists/{secondary_list['id']}/issues",
         headers={"Authorization": f"Bearer {token}"},
         json={
             "title": "Cross-list child",
@@ -1326,13 +1342,13 @@ def test_pms_parent_issue_validation_and_label_conflicts(client: TestClient) -> 
     assert cross_list_response.status_code == 400
 
     labels_response = client.get(
-        f"/api/v1/pms/lists/{primary_list['id']}/labels",
+        f"/api/v1/workspaces/hq/pms/lists/{primary_list['id']}/labels",
         headers={"Authorization": f"Bearer {token}"},
     )
     assert labels_response.status_code == 200
     labels = labels_response.json()["items"]
     rename_conflict_response = client.patch(
-        f"/api/v1/pms/labels/{labels[0]['id']}",
+        f"/api/v1/workspaces/hq/pms/labels/{labels[0]['id']}",
         headers={"Authorization": f"Bearer {token}"},
         json={"name": labels[1]["name"]},
     )

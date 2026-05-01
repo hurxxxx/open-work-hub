@@ -1,47 +1,12 @@
 import { ApiRequestError, apiFetchJson } from '@/src/platform/api/client';
+import type { ApiSchema } from '@/src/platform/api/types';
 import { rewriteWorkspaceApiPath } from '@/src/platform/workspaces/workspace-utils';
 
-export type PlannerEventVisibility = 'private' | 'public';
-
-export interface PlannerEvent {
-  id: string;
-  workspaceId: string;
-  ownerId: string;
-  ownerName: string;
-  title: string;
-  description: string;
-  location: string;
-  visibility: PlannerEventVisibility;
-  allDay: boolean;
-  start: string;
-  end: string;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface PlannerEventsResponse {
-  items: PlannerEvent[];
-}
-
-export interface PlannerEventCreateInput {
-  title: string;
-  description: string;
-  location: string;
-  visibility: PlannerEventVisibility;
-  allDay: boolean;
-  start: string;
-  end: string;
-}
-
-export interface PlannerEventUpdateInput {
-  title?: string;
-  description?: string;
-  location?: string;
-  visibility?: PlannerEventVisibility;
-  allDay?: boolean;
-  start?: string;
-  end?: string;
-}
+export type PlannerEvent = ApiSchema<'PlannerEventOut'>;
+export type PlannerEventVisibility = PlannerEvent['visibility'];
+export type PlannerEventsResponse = ApiSchema<'PlannerEventsResponse'>;
+export type PlannerEventCreateInput = ApiSchema<'PlannerEventCreateRequest'>;
+export type PlannerEventUpdateInput = ApiSchema<'PlannerEventUpdateRequest'>;
 
 export class PlannerApiError extends Error {
   status: number;

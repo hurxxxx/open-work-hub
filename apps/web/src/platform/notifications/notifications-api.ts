@@ -1,27 +1,10 @@
 import { apiFetchJson } from '@/src/platform/api/client';
+import type { ApiSchema } from '@/src/platform/api/types';
 import { rewriteWorkspaceApiPath } from '@/src/platform/workspaces/workspace-utils';
 
-export interface WorkspaceNotification {
-  id: string;
-  type: string;
-  title: string;
-  body: string;
-  reference_type: string;
-  reference_id: string | null;
-  is_read: boolean;
-  created_at: string;
-}
-
-export interface WorkspaceNotificationsResponse {
-  items: WorkspaceNotification[];
-  total: number;
-  page: number;
-  page_size: number;
-}
-
-export interface WorkspaceUnreadCountResponse {
-  count: number;
-}
+export type WorkspaceNotification = ApiSchema<'NotificationItem'>;
+export type WorkspaceNotificationsResponse = ApiSchema<'NotificationListResponse'>;
+export type WorkspaceUnreadCountResponse = ApiSchema<'UnreadCountResponse'>;
 
 export function listNotifications(
   token: string,

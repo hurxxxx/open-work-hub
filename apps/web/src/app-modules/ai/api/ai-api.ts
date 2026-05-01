@@ -1,92 +1,41 @@
 import { ApiRequestError, apiFetchJson } from '@/src/platform/api/client';
+import type { ApiSchema } from '@/src/platform/api/types';
 import { rewriteWorkspaceApiPath } from '@/src/platform/workspaces/workspace-utils';
 
-export type AiChatRole = 'system' | 'user' | 'assistant';
-export type AiBackendMode = 'auto' | 'local';
-
-export interface AiChatMessage {
-  role: AiChatRole;
-  content: string;
-}
-
-export interface AiChatRequest {
-  messages: AiChatMessage[];
-  backend_mode?: AiBackendMode;
-  max_tokens?: number;
-  temperature?: number;
-  reasoning_effort?: 'none' | 'low' | 'medium' | 'high';
-  conversation_id?: string | null;
-  persist?: boolean;
-  /**
-   * Subset of workspace app ids whose tools the chatbot may invoke this turn.
-   * - ``undefined`` → server exposes every entitled tool (legacy default).
-   * - ``[]`` → text-only conversation; no tools at all.
-   * - ``["pms", "meeting"]`` → tools are intersected with workspace
-   *   entitlements; this field can never widen access.
-   */
+export type AiChatRole = ApiSchema<'ChatMessage'>['role'];
+export type AiBackendMode = ApiSchema<'ConversationBoundChatRequest'>['backend_mode'];
+export type AiChatMessage = ApiSchema<'ChatMessage'>;
+type AiChatRequestContract = ApiSchema<'ConversationBoundChatRequest'>;
+export type AiChatRequest = Omit<
+  AiChatRequestContract,
+  'allowed_app_ids' | 'backend_mode' | 'persist' | 'temperature'
+> & {
   allowed_app_ids?: string[];
-}
-
-export interface AiChatUsage {
-  prompt_tokens: number | null;
-  completion_tokens: number | null;
-  total_tokens: number | null;
-}
-
-export interface AiChatResponseArtifact {
-  id: string;
-  type: string;
-  title: string | null;
-  /** Optional language hint for ``type="code"`` artifacts. Null for
-   *  other types (``document``, ``html``, ``svg``). */
-  language?: string | null;
-  content: string;
-}
-
-export interface AiChatResponse {
-  model: string;
-  content: string;
+  backend_mode?: AiBackendMode;
+  persist?: boolean;
+  temperature?: number;
+};
+export type AiChatUsage = ApiSchema<'ChatUsage'>;
+export type AiChatResponseArtifact = ApiSchema<'ChatArtifact'>;
+export type AiChatResponse = Omit<
+  ApiSchema<'ChatResponse'>,
+  'chosen_pool' | 'decision_reason' | 'pii_hits' | 'policy' | 'requested_backend_mode' | 'usage'
+> & {
   usage: AiChatUsage | null;
-  finish_reason?: string | null;
-  provider: string;
-  backend: string;
-  fallback_used: boolean;
-  canonical_model: string;
   requested_backend_mode: AiBackendMode;
   policy: string | null;
   chosen_pool: 'local' | 'external' | null;
   decision_reason: string | null;
-  forced_local: boolean;
   pii_hits: string[];
-  conversation_id?: string | null;
-  artifacts?: AiChatResponseArtifact[];
-}
-
-export interface LlmPoolHealthResponse {
+};
+export type LlmPoolHealthResponse = Omit<ApiSchema<'LlmPoolHealthResponse'>, 'detail' | 'pool'> & {
   pool: 'local' | 'external';
-  provider: string;
-  base_url: string;
-  model: string;
-  canonical_model: string;
-  status: string;
-  ready: boolean;
   detail: string | null;
-}
-
-export interface LlmTaskReadinessResponse {
-  task_kind: string;
-  description: string;
-  policy: string;
-  chosen_pool: 'local' | 'external' | null;
-  ready: boolean;
-  detail: string | null;
-}
-
-export interface LlmHealthResponse {
-  ready: boolean;
+};
+export type LlmHealthResponse = Omit<ApiSchema<'LlmDualHealthResponse'>, 'external' | 'local'> & {
   local: LlmPoolHealthResponse;
   external: LlmPoolHealthResponse | null;
-}
+};
 
 export class AiApiError extends Error {
   status: number;
@@ -195,42 +144,12 @@ export interface StreamAiChatArgs {
   signal: AbortSignal;
 }
 
-export interface AiApprovalStatusResponse {
-  id: string;
-  workspace_id: string;
-  conversation_id: string;
-  agent_run_id: string;
-  tool_call_id: string;
-  tool_name: string;
-  arguments_json: string;
-  resource_preview?: string | null;
-  status: string;
-  requested_by_user_id: string;
-  resolved_by_user_id?: string | null;
-  reject_reason?: string | null;
-  resolved_at?: string | null;
-  expires_at: string;
-  execution_result_json?: unknown;
-  error_message?: string | null;
-  created_at: string;
-  snapshot_status?: string | null;
-}
-
-export interface ResolveAiApprovalRequest {
-  decision: 'approved' | 'rejected';
-  reason?: string | null;
-}
-
-export interface AbandonAiApprovalRequest {
-  reason?: string | null;
-}
-
-export interface ResumeAiChatRequest {
-  conversation_id: string;
-  approval_id: string;
-  /** Mirror of ``AiChatRequest.allowed_app_ids`` for resume continuity. */
+export type AiApprovalStatusResponse = ApiSchema<'ApprovalStatusResponse'>;
+export type ResolveAiApprovalRequest = ApiSchema<'ApprovalResolveRequest'>;
+export type AbandonAiApprovalRequest = ApiSchema<'ApprovalAbandonRequest'>;
+export type ResumeAiChatRequest = Omit<ApiSchema<'ChatResumeRequest'>, 'allowed_app_ids'> & {
   allowed_app_ids?: string[];
-}
+};
 
 export interface StreamAiResumeArgs {
   payload: ResumeAiChatRequest;

@@ -10,37 +10,11 @@
 //   - metadata holds source-specific extras the UI wants to render in the popover
 //     without an extra fetch.
 
-export type CalendarSourceType = 'meeting' | 'pms_due' | 'pms_block' | 'planner_event';
+import type { ApiSchema } from '@/src/platform/api/types';
 
-export interface CalendarEventMetadata {
-  // Meeting-only
-  meetingId?: string;
-  attendeeCount?: number;
-  // PMS-only
-  taskListId?: string;
-  taskListKey?: string;
-  issueNumber?: number;
-  status?: string;
-  assigneeIds?: string[];
-  // Planner-only
-  plannerEventId?: string;
-  ownerId?: string;
-  ownerName?: string;
-  visibility?: 'private' | 'public';
-  location?: string;
-}
-
-export interface CalendarEvent {
-  id: string;
-  title: string;
-  start: string; // ISO with offset OR YYYY-MM-DD when allDay
-  end: string;   // exclusive end per FullCalendar convention
-  allDay: boolean;
-  sourceType: CalendarSourceType;
-  sourceId: string;
-  color: string; // hex or tailwind-resolved color string
-  metadata: CalendarEventMetadata;
-}
+export type CalendarEventMetadata = ApiSchema<'CalendarEventMetadata'>;
+export type CalendarEvent = ApiSchema<'CalendarEventOut'>;
+export type CalendarSourceType = CalendarEvent['sourceType'];
 
 export interface CalendarEventsRange {
   // Inclusive start, exclusive end. Both ISO date or datetime.

@@ -72,7 +72,7 @@ def test_ai_tool_invoke_search_issues_returns_workspace_results(client: TestClie
     workspace_slug = "delivery-hub"
 
     task_list_response = client.post(
-        "/api/v1/pms/lists",
+        "/api/v1/workspaces/delivery-hub/pms/lists",
         headers=_auth_headers(token),
         json={"key": "AITOOL", "name": "AI Tool Search List", "description": "tool source"},
     )
@@ -80,7 +80,7 @@ def test_ai_tool_invoke_search_issues_returns_workspace_results(client: TestClie
     task_list = task_list_response.json()
 
     issue_response = client.post(
-        f"/api/v1/pms/lists/{task_list['id']}/issues",
+        f"/api/v1/workspaces/delivery-hub/pms/lists/{task_list['id']}/issues",
         headers=_auth_headers(token),
         json={"title": "AI tool issue", "description": "search target"},
     )
@@ -661,7 +661,7 @@ def test_ai_tool_invoke_pms_write_tool_requires_approval_when_enabled(
         token = session["token"]
 
         task_list_response = client.post(
-            "/api/v1/pms/lists",
+            "/api/v1/workspaces/delivery-hub/pms/lists",
             headers=_auth_headers(token),
             json={"key": "AITOOLW", "name": "AI Tool Write List", "description": "write source"},
         )

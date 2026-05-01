@@ -73,7 +73,7 @@ def test_docs_router_mutations_enqueue_rag_jobs(client: TestClient, monkeypatch)
     member = _dev_login(client, "delivery-hub-member")
 
     create_response = client.post(
-        "/api/v1/docs/items",
+        "/api/v1/workspaces/delivery-hub/docs/items",
         headers=_auth_headers(owner["token"]),
         json={"title": "RAG Hook Doc"},
     )
@@ -86,7 +86,7 @@ def test_docs_router_mutations_enqueue_rag_jobs(client: TestClient, monkeypatch)
     _mark_sync_jobs_succeeded(create_jobs[0].id)
 
     create_page_response = client.post(
-        f"/api/v1/docs/items/{doc['id']}/pages",
+        f"/api/v1/workspaces/delivery-hub/docs/items/{doc['id']}/pages",
         headers=_auth_headers(owner["token"]),
         json={"title": "Follow-up"},
     )
@@ -97,7 +97,7 @@ def test_docs_router_mutations_enqueue_rag_jobs(client: TestClient, monkeypatch)
     _mark_sync_jobs_succeeded(page_jobs[-1].id)
 
     share_response = client.put(
-        f"/api/v1/docs/items/{doc['id']}/sharing/users/{member['user']['id']}",
+        f"/api/v1/workspaces/delivery-hub/docs/items/{doc['id']}/sharing/users/{member['user']['id']}",
         headers=_auth_headers(owner["token"]),
         json={"access_level": "read"},
     )
@@ -108,7 +108,7 @@ def test_docs_router_mutations_enqueue_rag_jobs(client: TestClient, monkeypatch)
     _mark_sync_jobs_succeeded(share_jobs[-1].id)
 
     delete_response = client.delete(
-        f"/api/v1/docs/items/{doc['id']}",
+        f"/api/v1/workspaces/delivery-hub/docs/items/{doc['id']}",
         headers=_auth_headers(owner["token"]),
     )
     assert delete_response.status_code == 204, delete_response.text
@@ -205,7 +205,7 @@ def test_meeting_doc_acl_changes_enqueue_rag_visibility_recompute_jobs(
     )
 
     create_doc = client.post(
-        "/api/v1/docs/items",
+        "/api/v1/workspaces/hq/docs/items",
         headers=_auth_headers(admin_token),
         json={"title": "Meeting RAG Reference"},
     )
@@ -237,13 +237,13 @@ def test_meeting_doc_acl_changes_enqueue_rag_visibility_recompute_jobs(
     ] == []
 
     doc_lookup = client.get(
-        f"/api/v1/docs/items/{doc['id']}",
+        f"/api/v1/workspaces/hq/docs/items/{doc['id']}",
         headers=_auth_headers(attendee_token),
     )
     assert doc_lookup.status_code == 200
 
     detach_response = client.delete(
-        f"/api/v1/meeting/meetings/{meeting['id']}/docs/{doc_id}",
+        f"/api/v1/workspaces/hq/meeting/meetings/{meeting['id']}/docs/{doc_id}",
         headers=_auth_headers(admin_token),
     )
     assert detach_response.status_code == 200, detach_response.text

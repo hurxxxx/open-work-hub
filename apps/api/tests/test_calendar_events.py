@@ -41,7 +41,7 @@ def _create_meeting(
     end_at: datetime,
 ) -> dict:
     response = client.post(
-        "/api/v1/meeting/meetings",
+        "/api/v1/workspaces/hq/meeting/meetings",
         headers=_auth_headers(token),
         json={
             "title": title,
@@ -59,7 +59,7 @@ def _create_meeting(
 
 def _create_task_list(client: TestClient, token: str) -> dict:
     response = client.post(
-        "/api/v1/pms/lists",
+        "/api/v1/workspaces/hq/pms/lists",
         headers=_auth_headers(token),
         json={
             "key": "CAL",
@@ -82,7 +82,7 @@ def _create_issue_with_due_date(
     title: str = "Issue with due date",
 ) -> dict:
     create = client.post(
-        f"/api/v1/pms/lists/{list_id}/issues",
+        f"/api/v1/workspaces/hq/pms/lists/{list_id}/issues",
         headers=_auth_headers(token),
         json={
             "title": title,
@@ -96,7 +96,7 @@ def _create_issue_with_due_date(
     issue = create.json()
     # Set due_date via update endpoint (setup endpoint doesn't take it directly)
     update = client.patch(
-        f"/api/v1/pms/issues/{issue['id']}",
+        f"/api/v1/workspaces/hq/pms/issues/{issue['id']}",
         headers=_auth_headers(token),
         json={
             "due_date": due_date,
@@ -110,7 +110,7 @@ def _create_issue_with_due_date(
 
 def test_calendar_events_requires_auth(client: TestClient) -> None:
     response = client.get(
-        "/api/v1/calendar/events",
+        "/api/v1/workspaces/hq/calendar/events",
         params={"from": "2026-04-01", "to": "2026-04-30"},
     )
     assert response.status_code in (401, 403)
@@ -119,7 +119,7 @@ def test_calendar_events_requires_auth(client: TestClient) -> None:
 def test_calendar_events_range_cap_enforced(client: TestClient) -> None:
     admin = _bootstrap_admin_session(client)
     response = client.get(
-        "/api/v1/calendar/events",
+        "/api/v1/workspaces/hq/calendar/events",
         headers=_auth_headers(admin["token"]),
         params={"from": "2020-01-01", "to": "2099-12-31"},
     )
@@ -130,7 +130,7 @@ def test_calendar_events_range_cap_enforced(client: TestClient) -> None:
 def test_calendar_events_invalid_source_rejected(client: TestClient) -> None:
     admin = _bootstrap_admin_session(client)
     response = client.get(
-        "/api/v1/calendar/events",
+        "/api/v1/workspaces/hq/calendar/events",
         headers=_auth_headers(admin["token"]),
         params={
             "from": "2026-04-01",
@@ -145,7 +145,7 @@ def test_calendar_events_invalid_source_rejected(client: TestClient) -> None:
 def test_calendar_events_empty_sources_returns_empty(client: TestClient) -> None:
     admin = _bootstrap_admin_session(client)
     response = client.get(
-        "/api/v1/calendar/events",
+        "/api/v1/workspaces/hq/calendar/events",
         headers=_auth_headers(admin["token"]),
         params={
             "from": "2026-04-01",
@@ -160,7 +160,7 @@ def test_calendar_events_empty_sources_returns_empty(client: TestClient) -> None
 def test_calendar_events_invalid_dates_rejected(client: TestClient) -> None:
     admin = _bootstrap_admin_session(client)
     response = client.get(
-        "/api/v1/calendar/events",
+        "/api/v1/workspaces/hq/calendar/events",
         headers=_auth_headers(admin["token"]),
         params={"from": "not a date", "to": "also not"},
     )
@@ -170,7 +170,7 @@ def test_calendar_events_invalid_dates_rejected(client: TestClient) -> None:
 def test_calendar_events_to_must_be_after_from(client: TestClient) -> None:
     admin = _bootstrap_admin_session(client)
     response = client.get(
-        "/api/v1/calendar/events",
+        "/api/v1/workspaces/hq/calendar/events",
         headers=_auth_headers(admin["token"]),
         params={"from": "2026-04-30", "to": "2026-04-01"},
     )
@@ -191,7 +191,7 @@ def test_calendar_events_returns_meeting_for_organizer(client: TestClient) -> No
     )
 
     response = client.get(
-        "/api/v1/calendar/events",
+        "/api/v1/workspaces/hq/calendar/events",
         headers=_auth_headers(token),
         params={
             "from": "2026-04-01",
@@ -224,7 +224,7 @@ def test_calendar_events_excludes_meeting_starting_at_exclusive_end(client: Test
     )
 
     response = client.get(
-        "/api/v1/calendar/events",
+        "/api/v1/workspaces/hq/calendar/events",
         headers=_auth_headers(token),
         params={
             "from": "2026-04-01",
@@ -250,7 +250,7 @@ def test_calendar_events_date_only_and_offset_ranges_match(client: TestClient) -
     )
 
     date_only = client.get(
-        "/api/v1/calendar/events",
+        "/api/v1/workspaces/hq/calendar/events",
         headers=_auth_headers(token),
         params={
             "from": "2026-04-15",
@@ -259,7 +259,7 @@ def test_calendar_events_date_only_and_offset_ranges_match(client: TestClient) -
         },
     )
     offset_range = client.get(
-        "/api/v1/calendar/events",
+        "/api/v1/workspaces/hq/calendar/events",
         headers=_auth_headers(token),
         params={
             "from": "2026-04-15T00:00:00+09:00",
@@ -295,7 +295,7 @@ def test_calendar_events_pms_all_day_end_is_exclusive(client: TestClient) -> Non
     )
 
     response = client.get(
-        "/api/v1/calendar/events",
+        "/api/v1/workspaces/hq/calendar/events",
         headers=_auth_headers(token),
         params={
             "from": "2026-04-01",
@@ -318,7 +318,7 @@ def test_calendar_events_assignee_id_query_param_is_ignored(client: TestClient) 
     # The endpoint does not declare assignee_id at all — extra params are silently
     # dropped by FastAPI. Ensure we still get back only the current user's data.
     response = client.get(
-        "/api/v1/calendar/events",
+        "/api/v1/workspaces/hq/calendar/events",
         headers=_auth_headers(token),
         params={
             "from": "2026-04-01",

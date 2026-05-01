@@ -23,12 +23,12 @@ def test_docs_native_docs_and_direct_user_share_grant_docs_access(client: TestCl
     me_payload = me_response.json()
     assert len(me_payload["workspaces"]) == 1
 
-    empty_hub_response = client.get("/api/v1/docs/hub", headers=_auth_headers(owner_token))
+    empty_hub_response = client.get("/api/v1/workspaces/hq/docs/hub", headers=_auth_headers(owner_token))
     assert empty_hub_response.status_code == 200
     assert empty_hub_response.json()["items"] == []
 
     create_doc_response = client.post(
-        "/api/v1/docs/items",
+        "/api/v1/workspaces/hq/docs/items",
         headers=_auth_headers(owner_token),
         json={"title": "Private Plan"},
     )
@@ -40,7 +40,7 @@ def test_docs_native_docs_and_direct_user_share_grant_docs_access(client: TestCl
     assert native_doc["is_private"] is True
 
     pages_response = client.get(
-        f"/api/v1/docs/items/{native_doc['id']}/pages",
+        f"/api/v1/workspaces/hq/docs/items/{native_doc['id']}/pages",
         headers=_auth_headers(owner_token),
     )
     assert pages_response.status_code == 200
@@ -57,7 +57,7 @@ def test_docs_native_docs_and_direct_user_share_grant_docs_access(client: TestCl
     shared_user_token = _login(client, shared_user["user"]["email"], shared_user["temporary_password"])
 
     share_response = client.put(
-        f"/api/v1/docs/items/{native_doc['id']}/sharing/users/{shared_user_id}",
+        f"/api/v1/workspaces/hq/docs/items/{native_doc['id']}/sharing/users/{shared_user_id}",
         headers=_auth_headers(owner_token),
         json={"access_level": "read"},
     )
@@ -68,7 +68,7 @@ def test_docs_native_docs_and_direct_user_share_grant_docs_access(client: TestCl
     assert shared_me_response.status_code == 200
     assert len(shared_me_response.json()["workspaces"]) == 1
 
-    shared_hub_response = client.get("/api/v1/docs/hub", headers=_auth_headers(shared_user_token))
+    shared_hub_response = client.get("/api/v1/workspaces/hq/docs/hub", headers=_auth_headers(shared_user_token))
     assert shared_hub_response.status_code == 200
     shared_items = shared_hub_response.json()["items"]
     assert [item["id"] for item in shared_items] == [native_doc["id"]]
@@ -76,7 +76,7 @@ def test_docs_native_docs_and_direct_user_share_grant_docs_access(client: TestCl
     assert shared_items[0]["can_share"] is False
 
     shared_page_update_response = client.patch(
-        f"/api/v1/docs/pages/{page['id']}",
+        f"/api/v1/workspaces/hq/docs/pages/{page['id']}",
         headers=_auth_headers(shared_user_token),
         json={"content_blocks": [{"type": "paragraph", "content": "blocked"}]},
     )
@@ -103,7 +103,7 @@ def test_docs_hub_reuses_pms_acl_and_blocks_resharing_of_source_docs(client: Tes
     _add_task_list_member(client, admin["token"], task_list["id"], viewer["user"]["id"], "viewer")
     viewer_token = _login(client, viewer["user"]["email"], viewer["temporary_password"])
 
-    viewer_hub_response = client.get("/api/v1/docs/hub", headers=_auth_headers(viewer_token))
+    viewer_hub_response = client.get("/api/v1/workspaces/hq/docs/hub", headers=_auth_headers(viewer_token))
     assert viewer_hub_response.status_code == 200
     viewer_items = {item["title"]: item for item in viewer_hub_response.json()["items"]}
     assert viewer_items["Space Handbook"]["source_app"] == "pms"
@@ -114,7 +114,7 @@ def test_docs_hub_reuses_pms_acl_and_blocks_resharing_of_source_docs(client: Tes
     assert viewer_items["Space Handbook"]["can_manage"] is False
 
     viewer_pages_response = client.get(
-        f"/api/v1/docs/items/{viewer_items['Space Handbook']['id']}/pages",
+        f"/api/v1/workspaces/hq/docs/items/{viewer_items['Space Handbook']['id']}/pages",
         headers=_auth_headers(viewer_token),
     )
     assert viewer_pages_response.status_code == 200
@@ -122,14 +122,14 @@ def test_docs_hub_reuses_pms_acl_and_blocks_resharing_of_source_docs(client: Tes
     assert viewer_page["can_edit"] is False
 
     viewer_page_update_response = client.patch(
-        f"/api/v1/docs/pages/{viewer_page['id']}",
+        f"/api/v1/workspaces/hq/docs/pages/{viewer_page['id']}",
         headers=_auth_headers(viewer_token),
         json={"content_blocks": [{"type": "paragraph", "content": "blocked"}]},
     )
     assert viewer_page_update_response.status_code == 403
 
     viewer_share_response = client.get(
-        f"/api/v1/docs/items/{viewer_items['Space Handbook']['id']}/sharing",
+        f"/api/v1/workspaces/hq/docs/items/{viewer_items['Space Handbook']['id']}/sharing",
         headers=_auth_headers(viewer_token),
     )
     assert viewer_share_response.status_code == 403
@@ -140,27 +140,27 @@ def test_docs_hub_reuses_pms_acl_and_blocks_resharing_of_source_docs(client: Tes
     _add_task_list_member(client, admin["token"], task_list["id"], member["user"]["id"], "member")
     member_token = _login(client, member["user"]["email"], member["temporary_password"])
 
-    member_hub_response = client.get("/api/v1/docs/hub", headers=_auth_headers(member_token))
+    member_hub_response = client.get("/api/v1/workspaces/hq/docs/hub", headers=_auth_headers(member_token))
     assert member_hub_response.status_code == 200
     member_items = {item["title"]: item for item in member_hub_response.json()["items"]}
     assert member_items["Space Handbook"]["can_edit"] is True
     assert member_items["Space Handbook"]["can_manage"] is False
 
     member_create_page_response = client.post(
-        f"/api/v1/docs/items/{member_items['Space Handbook']['id']}/pages",
+        f"/api/v1/workspaces/hq/docs/items/{member_items['Space Handbook']['id']}/pages",
         headers=_auth_headers(member_token),
         json={"title": "Member Page"},
     )
     assert member_create_page_response.status_code == 201
 
     member_delete_space_doc_response = client.delete(
-        f"/api/v1/docs/items/{member_items['Space Handbook']['id']}",
+        f"/api/v1/workspaces/hq/docs/items/{member_items['Space Handbook']['id']}",
         headers=_auth_headers(member_token),
     )
     assert member_delete_space_doc_response.status_code == 403
 
     original_space_page_lookup_response = client.get(
-        f"/api/v1/docs/items/{member_items['Space Handbook']['id']}/pages",
+        f"/api/v1/workspaces/hq/docs/items/{member_items['Space Handbook']['id']}/pages",
         headers=_auth_headers(member_token),
     )
     assert original_space_page_lookup_response.status_code == 200
@@ -170,7 +170,7 @@ def test_docs_hub_reuses_pms_acl_and_blocks_resharing_of_source_docs(client: Tes
     )
 
     update_space_page_response = client.patch(
-        f"/api/v1/docs/pages/{overview_page['id']}",
+        f"/api/v1/workspaces/hq/docs/pages/{overview_page['id']}",
         headers=_auth_headers(member_token),
         json={"content_blocks": [{"type": "paragraph", "content": "space edit"}]},
     )
@@ -188,7 +188,7 @@ def test_internal_shared_links_require_auth_and_honor_read_vs_edit(client: TestC
     recipient_token = _login(client, recipient["user"]["email"], recipient["temporary_password"])
 
     create_doc_response = client.post(
-        "/api/v1/docs/items",
+        "/api/v1/workspaces/hq/docs/items",
         headers=_auth_headers(owner_token),
         json={"title": "Shared Draft"},
     )
@@ -196,14 +196,14 @@ def test_internal_shared_links_require_auth_and_honor_read_vs_edit(client: TestC
     doc = create_doc_response.json()
 
     pages_response = client.get(
-        f"/api/v1/docs/items/{doc['id']}/pages",
+        f"/api/v1/workspaces/hq/docs/items/{doc['id']}/pages",
         headers=_auth_headers(owner_token),
     )
     assert pages_response.status_code == 200
     page = pages_response.json()["items"][0]
 
     enable_read_link_response = client.put(
-        f"/api/v1/docs/items/{doc['id']}/sharing/link",
+        f"/api/v1/workspaces/hq/docs/items/{doc['id']}/sharing/link",
         headers=_auth_headers(owner_token),
         json={"access_level": "read", "active": True},
     )
@@ -228,7 +228,7 @@ def test_internal_shared_links_require_auth_and_honor_read_vs_edit(client: TestC
     assert read_edit_attempt_response.status_code == 403
 
     enable_edit_link_response = client.put(
-        f"/api/v1/docs/items/{doc['id']}/sharing/link",
+        f"/api/v1/workspaces/hq/docs/items/{doc['id']}/sharing/link",
         headers=_auth_headers(owner_token),
         json={"access_level": "edit", "active": True},
     )
@@ -269,7 +269,7 @@ def test_workspace_scoped_shareable_users_stay_in_requested_docs_workspace(
     assert "innovation-lab-admin@aidoo.local" not in scoped_emails
 
     legacy_response = client.get(
-        "/api/v1/docs/shareable-users",
+        "/api/v1/workspaces/hq/docs/shareable-users",
         headers=_auth_headers(hq_member_token),
         params={"q": "Admin"},
     )
@@ -287,7 +287,7 @@ def test_duplicate_native_doc_clones_pages_into_new_private_doc(client: TestClie
     owner_token = _login(client, owner["user"]["email"], owner["temporary_password"])
 
     create_doc_response = client.post(
-        "/api/v1/docs/items",
+        "/api/v1/workspaces/hq/docs/items",
         headers=_auth_headers(owner_token),
         json={"title": "Original Doc"},
     )
@@ -296,12 +296,12 @@ def test_duplicate_native_doc_clones_pages_into_new_private_doc(client: TestClie
 
     # Add a child page so we can verify hierarchy is preserved.
     pages_response = client.get(
-        f"/api/v1/docs/items/{original['id']}/pages",
+        f"/api/v1/workspaces/hq/docs/items/{original['id']}/pages",
         headers=_auth_headers(owner_token),
     )
     root_page = pages_response.json()["items"][0]
     child_response = client.post(
-        f"/api/v1/docs/items/{original['id']}/pages",
+        f"/api/v1/workspaces/hq/docs/items/{original['id']}/pages",
         headers=_auth_headers(owner_token),
         json={"title": "Child", "parent_id": root_page["id"]},
     )
@@ -309,7 +309,7 @@ def test_duplicate_native_doc_clones_pages_into_new_private_doc(client: TestClie
 
     # Duplicate as the owner.
     duplicate_response = client.post(
-        f"/api/v1/docs/items/{original['id']}/duplicate",
+        f"/api/v1/workspaces/hq/docs/items/{original['id']}/duplicate",
         headers=_auth_headers(owner_token),
     )
     assert duplicate_response.status_code == 201
@@ -320,7 +320,7 @@ def test_duplicate_native_doc_clones_pages_into_new_private_doc(client: TestClie
     assert duplicate["is_private"] is True
 
     duplicate_pages_response = client.get(
-        f"/api/v1/docs/items/{duplicate['id']}/pages",
+        f"/api/v1/workspaces/hq/docs/items/{duplicate['id']}/pages",
         headers=_auth_headers(owner_token),
     )
     assert duplicate_pages_response.status_code == 200
@@ -341,21 +341,21 @@ def test_native_doc_page_patch_reorders_and_moves_parent(client: TestClient) -> 
     owner_token = _login(client, owner["user"]["email"], owner["temporary_password"])
 
     doc = client.post(
-        "/api/v1/docs/items",
+        "/api/v1/workspaces/hq/docs/items",
         headers=_auth_headers(owner_token),
         json={"title": "Reorder Plan"},
     ).json()
 
     # Initial doc already contains a root page; add three more siblings.
     root_pages = client.get(
-        f"/api/v1/docs/items/{doc['id']}/pages",
+        f"/api/v1/workspaces/hq/docs/items/{doc['id']}/pages",
         headers=_auth_headers(owner_token),
     ).json()["items"]
     assert len(root_pages) == 1
 
     def _create_page(title: str, parent_id: str | None = None) -> dict:
         response = client.post(
-            f"/api/v1/docs/items/{doc['id']}/pages",
+            f"/api/v1/workspaces/hq/docs/items/{doc['id']}/pages",
             headers=_auth_headers(owner_token),
             json={"title": title, "parent_id": parent_id},
         )
@@ -368,17 +368,17 @@ def test_native_doc_page_patch_reorders_and_moves_parent(client: TestClient) -> 
 
     # Reorder: drop C before A by setting explicit sort_order gaps.
     client.patch(
-        f"/api/v1/docs/pages/{page_a['id']}",
+        f"/api/v1/workspaces/hq/docs/pages/{page_a['id']}",
         headers=_auth_headers(owner_token),
         json={"sort_order": 1000},
     )
     client.patch(
-        f"/api/v1/docs/pages/{page_b['id']}",
+        f"/api/v1/workspaces/hq/docs/pages/{page_b['id']}",
         headers=_auth_headers(owner_token),
         json={"sort_order": 2000},
     )
     patch_c = client.patch(
-        f"/api/v1/docs/pages/{page_c['id']}",
+        f"/api/v1/workspaces/hq/docs/pages/{page_c['id']}",
         headers=_auth_headers(owner_token),
         json={"sort_order": 0},
     )
@@ -386,7 +386,7 @@ def test_native_doc_page_patch_reorders_and_moves_parent(client: TestClient) -> 
     assert patch_c.json()["sort_order"] == 0
 
     listing = client.get(
-        f"/api/v1/docs/items/{doc['id']}/pages",
+        f"/api/v1/workspaces/hq/docs/items/{doc['id']}/pages",
         headers=_auth_headers(owner_token),
     ).json()["items"]
     siblings_order = [
@@ -399,7 +399,7 @@ def test_native_doc_page_patch_reorders_and_moves_parent(client: TestClient) -> 
 
     # Move: nest Bravo under Alpha.
     move_b = client.patch(
-        f"/api/v1/docs/pages/{page_b['id']}",
+        f"/api/v1/workspaces/hq/docs/pages/{page_b['id']}",
         headers=_auth_headers(owner_token),
         json={"parent_id": page_a["id"], "sort_order": 0},
     )
@@ -407,7 +407,7 @@ def test_native_doc_page_patch_reorders_and_moves_parent(client: TestClient) -> 
     assert move_b.json()["parent_id"] == page_a["id"]
 
     listing = client.get(
-        f"/api/v1/docs/items/{doc['id']}/pages",
+        f"/api/v1/workspaces/hq/docs/items/{doc['id']}/pages",
         headers=_auth_headers(owner_token),
     ).json()["items"]
     bravo_after = next(page for page in listing if page["id"] == page_b["id"])
@@ -421,25 +421,25 @@ def test_native_doc_page_patch_rejects_cycle(client: TestClient) -> None:
     owner_token = _login(client, owner["user"]["email"], owner["temporary_password"])
 
     doc = client.post(
-        "/api/v1/docs/items",
+        "/api/v1/workspaces/hq/docs/items",
         headers=_auth_headers(owner_token),
         json={"title": "Cycle Plan"},
     ).json()
 
     parent = client.post(
-        f"/api/v1/docs/items/{doc['id']}/pages",
+        f"/api/v1/workspaces/hq/docs/items/{doc['id']}/pages",
         headers=_auth_headers(owner_token),
         json={"title": "Parent"},
     ).json()
     child = client.post(
-        f"/api/v1/docs/items/{doc['id']}/pages",
+        f"/api/v1/workspaces/hq/docs/items/{doc['id']}/pages",
         headers=_auth_headers(owner_token),
         json={"title": "Child", "parent_id": parent["id"]},
     ).json()
 
     # Attempt to move Parent underneath Child — should be rejected as a cycle.
     reject = client.patch(
-        f"/api/v1/docs/pages/{parent['id']}",
+        f"/api/v1/workspaces/hq/docs/pages/{parent['id']}",
         headers=_auth_headers(owner_token),
         json={"parent_id": child["id"]},
     )
@@ -459,14 +459,14 @@ def test_duplicate_doc_via_read_share_creates_private_copy_for_recipient(client:
     recipient_token = _login(client, recipient["user"]["email"], recipient["temporary_password"])
 
     create_doc_response = client.post(
-        "/api/v1/docs/items",
+        "/api/v1/workspaces/hq/docs/items",
         headers=_auth_headers(owner_token),
         json={"title": "Shared Plan"},
     )
     original = create_doc_response.json()
 
     share_response = client.put(
-        f"/api/v1/docs/items/{original['id']}/sharing/users/{recipient['user']['id']}",
+        f"/api/v1/workspaces/hq/docs/items/{original['id']}/sharing/users/{recipient['user']['id']}",
         headers=_auth_headers(owner_token),
         json={"access_level": "read"},
     )
@@ -474,7 +474,7 @@ def test_duplicate_doc_via_read_share_creates_private_copy_for_recipient(client:
 
     # Recipient with read access can duplicate even though they cannot manage.
     duplicate_response = client.post(
-        f"/api/v1/docs/items/{original['id']}/duplicate",
+        f"/api/v1/workspaces/hq/docs/items/{original['id']}/duplicate",
         headers=_auth_headers(recipient_token),
     )
     assert duplicate_response.status_code == 201
@@ -578,7 +578,7 @@ def _create_task_list(
     name: str,
 ) -> dict:
     response = client.post(
-        "/api/v1/pms/lists",
+        "/api/v1/workspaces/hq/pms/lists",
         headers=_auth_headers(token),
         json={
             "key": key,
@@ -591,8 +591,14 @@ def _create_task_list(
 
 
 def _add_task_list_member(client: TestClient, token: str, list_id: str, user_id: str, role: str) -> dict:
+    list_response = client.get(
+        f"/api/v1/workspaces/hq/pms/lists/{list_id}",
+        headers=_auth_headers(token),
+    )
+    assert list_response.status_code == 200
+
     response = client.post(
-        f"/api/v1/pms/lists/{list_id}/members",
+        f"/api/v1/workspaces/hq/pms/spaces/{list_response.json()['team_id']}/members",
         headers=_auth_headers(token),
         json={"user_id": user_id, "role": role},
     )
@@ -602,7 +608,7 @@ def _add_task_list_member(client: TestClient, token: str, list_id: str, user_id:
 
 def _create_space_doc(client: TestClient, token: str, space_id: str, *, title: str) -> dict:
     response = client.post(
-        "/api/v1/docs/items",
+        "/api/v1/workspaces/hq/docs/items",
         headers=_auth_headers(token),
         json={
             "title": title,
@@ -621,7 +627,7 @@ def _create_space_doc(client: TestClient, token: str, space_id: str, *, title: s
 
 def _list_space_docs(client: TestClient, token: str, space_id: str) -> list[dict]:
     response = client.get(
-        "/api/v1/docs/hub",
+        "/api/v1/workspaces/hq/docs/hub",
         headers=_auth_headers(token),
         params={
             "view": "all",
@@ -639,7 +645,7 @@ def _list_space_docs(client: TestClient, token: str, space_id: str) -> list[dict
 
 def _update_space_doc_sort_order(client: TestClient, token: str, doc_id: str, *, space_id: str, sort_order: int) -> dict:
     response = client.put(
-        f"/api/v1/docs/items/{doc_id}/container",
+        f"/api/v1/workspaces/hq/docs/items/{doc_id}/container",
         headers=_auth_headers(token),
         json={
             "app": "pms",
@@ -670,7 +676,7 @@ def _create_doc_page(
     if sort_order is not None:
         payload["sort_order"] = sort_order
     response = client.post(
-        f"/api/v1/docs/items/{doc_id}/pages",
+        f"/api/v1/workspaces/hq/docs/items/{doc_id}/pages",
         headers=_auth_headers(token),
         json=payload,
     )
@@ -680,7 +686,7 @@ def _create_doc_page(
 
 def _list_doc_pages(client: TestClient, token: str, doc_id: str) -> list[dict]:
     response = client.get(
-        f"/api/v1/docs/items/{doc_id}/pages",
+        f"/api/v1/workspaces/hq/docs/items/{doc_id}/pages",
         headers=_auth_headers(token),
     )
     assert response.status_code == 200, response.text

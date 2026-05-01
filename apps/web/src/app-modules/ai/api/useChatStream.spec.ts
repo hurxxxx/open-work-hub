@@ -263,6 +263,7 @@ describe('useChatStream', () => {
 
   it('falls back to sync chat when the hidden stream flag is off', async () => {
     window.localStorage.setItem(STREAM_FLAG_KEY, 'false');
+    window.localStorage.setItem('aidoo:last-workspace-slug', 'hq');
     globalThis.fetch = vi
       .fn()
       .mockResolvedValue(
@@ -295,7 +296,9 @@ describe('useChatStream', () => {
     expect(result.current.state.finishReason).toBe('length');
     expect(result.current.state.doneMeta?.provider).toBe('mlx-lm');
     expect(globalThis.fetch).toHaveBeenCalledTimes(1);
-    expect((globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls[0][0]).toContain('/api/v1/ai/chat');
+    expect((globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls[0][0]).toContain(
+      '/api/v1/workspaces/hq/ai/chat',
+    );
   });
 
   it('keeps persistence fields on the sync fallback payload and captures the returned conversation id', async () => {
@@ -319,6 +322,7 @@ describe('useChatStream', () => {
       }),
     );
     globalThis.fetch = fetchMock as typeof globalThis.fetch;
+    window.localStorage.setItem('aidoo:last-workspace-slug', 'hq');
 
     const { result } = renderHook(() => useChatStream('token-abc'));
     await act(async () => {
@@ -706,7 +710,7 @@ describe('useChatStream', () => {
     });
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(fetchMock.mock.calls[0][0]).toContain('/api/v1/ai/chat/resume');
+    expect(fetchMock.mock.calls[0][0]).toContain('/api/v1/workspaces/hq/ai/chat/resume');
     expect(result.current.state.contentBuffer).toBe('재개 완료');
     expect(result.current.state.pendingApprovals[0].decision).toBe('approved');
     expect(result.current.state.toolCalls).toMatchObject([

@@ -251,4 +251,32 @@ describe('rewriteWorkspaceApiPath', () => {
       '/api/v1/workspaces/lab/pms/issues/issue-1',
     );
   });
+
+  it('rewrites legacy app API prefixes to workspace-scoped endpoints', () => {
+    window.localStorage.setItem('aidoo:last-workspace-slug', 'hq');
+
+    expect(rewriteWorkspaceApiPath('/api/v1/meeting/meetings')).toBe(
+      '/api/v1/workspaces/hq/meeting/meetings',
+    );
+    expect(rewriteWorkspaceApiPath('/api/v1/calendar/events')).toBe(
+      '/api/v1/workspaces/hq/calendar/events',
+    );
+    expect(rewriteWorkspaceApiPath('/api/v1/planner/events')).toBe(
+      '/api/v1/workspaces/hq/planner/events',
+    );
+    expect(rewriteWorkspaceApiPath('/api/v1/docs/hub')).toBe(
+      '/api/v1/workspaces/hq/docs/hub',
+    );
+  });
+
+  it('preserves intentionally public docs shared-link endpoints', () => {
+    window.localStorage.setItem('aidoo:last-workspace-slug', 'hq');
+
+    expect(rewriteWorkspaceApiPath('/api/v1/docs/shared-links/share-1')).toBe(
+      '/api/v1/docs/shared-links/share-1',
+    );
+    expect(rewriteWorkspaceApiPath('/api/v1/docs/pages/page-1?share_token=share-1')).toBe(
+      '/api/v1/docs/pages/page-1?share_token=share-1',
+    );
+  });
 });

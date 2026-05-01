@@ -1,78 +1,26 @@
 import { ApiRequestError, apiFetchJson } from '@/src/platform/api/client';
+import type { ApiSchema } from '@/src/platform/api/types';
 import { rewriteWorkspaceApiPath } from '@/src/platform/workspaces/workspace-utils';
-
-type FilterScalar = string | number | boolean;
-type FilterValue = FilterScalar | FilterScalar[];
 
 export const RAG_QUERY_DEFAULT_ANSWER_MODE = 'grounded-answer' as const;
 export const RAG_QUERY_DEFAULT_TOP_K = 8;
 
-export interface RagQueryFilters {
-  resource_type?: string;
-  resource_id?: string;
-  visibility_refs_contains?: string;
-  metadata?: Record<string, FilterValue>;
-}
-
-export interface RagSourceDescriptor {
-  source_kind: string;
-  resource_type: string;
-  label: string;
-  app_id: string;
-}
-
-export interface RagSourceListResponse {
-  sources: RagSourceDescriptor[];
-}
-
-export interface RagGroundedCitation {
-  resource_id: string;
-  source_kind: string;
-  quote: string;
-  locator: string | null;
-}
-
-export interface RagGroundedAnswer {
-  text: string;
-  citations: RagGroundedCitation[];
-  unsupported_claims: string[];
-  sources_used: string[];
-}
-
-export interface RagQueryHit {
-  source_kind: string;
-  resource_type: string;
-  resource_id: string;
-  workspace_id: string;
-  title: string | null;
-  summary: string | null;
-  score: number;
-  citation: string | null;
-  owner_label: string | null;
-  acl_summary: string[];
-  origin_ref: string | null;
-  metadata: Record<string, unknown>;
-}
-
-export interface RagQueryResponse {
-  query: string;
-  answer_mode: 'search-only' | 'grounded-answer';
-  hits: RagQueryHit[];
-  grounded_answer: RagGroundedAnswer | null;
-  sources_used: string[];
-  query_profile: Record<string, unknown>;
-  trace_id: string | null;
-  latency_ms: number;
-}
-
-export interface RagQueryPayload {
-  query: string;
-  answer_mode?: 'search-only' | 'grounded-answer';
+export type RagQueryFilters = ApiSchema<'RagQueryFilters'>;
+export type RagSourceDescriptor = ApiSchema<'RagSourceDescriptor'>;
+export type RagSourceListResponse = ApiSchema<'RagSourceListResponse'>;
+export type RagGroundedCitation = ApiSchema<'RagGroundedCitation'>;
+export type RagGroundedAnswer = ApiSchema<'RagGroundedAnswer'>;
+export type RagQueryHit = ApiSchema<'RagQueryHit'>;
+export type RagQueryResponse = ApiSchema<'RagQueryResponse'>;
+export type RagQueryPayload = Omit<
+  ApiSchema<'RagQueryRestRequest'>,
+  'answer_mode' | 'include_binary_hits' | 'source_kinds' | 'top_k'
+> & {
+  answer_mode?: ApiSchema<'RagAnswerMode'>;
   source_kinds?: string[];
-  filters?: RagQueryFilters;
   top_k?: number;
   include_binary_hits?: boolean;
-}
+};
 
 export class RagApiError extends Error {
   status: number;

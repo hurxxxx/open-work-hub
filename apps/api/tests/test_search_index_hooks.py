@@ -118,7 +118,7 @@ def _process_pending_delete(
 
 def _create_space(client: TestClient, token: str, *, name: str) -> dict:
     response = client.post(
-        "/api/v1/pms/spaces",
+        "/api/v1/workspaces/hq/pms/spaces",
         headers=_auth_headers(token),
         json={"name": name, "description": ""},
     )
@@ -128,7 +128,7 @@ def _create_space(client: TestClient, token: str, *, name: str) -> dict:
 
 def _create_task_list(client: TestClient, token: str, *, team_id: str, key: str, name: str) -> dict:
     response = client.post(
-        "/api/v1/pms/lists",
+        "/api/v1/workspaces/hq/pms/lists",
         headers=_auth_headers(token),
         json={
             "key": key,
@@ -143,7 +143,7 @@ def _create_task_list(client: TestClient, token: str, *, team_id: str, key: str,
 
 def _create_issue(client: TestClient, token: str, *, list_id: str, title: str) -> dict:
     response = client.post(
-        f"/api/v1/pms/lists/{list_id}/issues",
+        f"/api/v1/workspaces/hq/pms/lists/{list_id}/issues",
         headers=_auth_headers(token),
         json={
             "title": title,
@@ -181,7 +181,7 @@ def test_doc_user_share_grant_and_revoke_refresh_search_acl_projection(
     owner_token = _login(client, owner["user"]["email"], owner["temporary_password"])
 
     create_response = client.post(
-        "/api/v1/docs/items",
+        "/api/v1/workspaces/hq/docs/items",
         headers=_auth_headers(owner_token),
         json={"title": "Incremental Search Doc"},
     )
@@ -189,7 +189,7 @@ def test_doc_user_share_grant_and_revoke_refresh_search_acl_projection(
     doc = create_response.json()
 
     share_response = client.put(
-        f"/api/v1/docs/items/{doc['id']}/sharing/users/{recipient['user']['id']}",
+        f"/api/v1/workspaces/hq/docs/items/{doc['id']}/sharing/users/{recipient['user']['id']}",
         headers=_auth_headers(owner_token),
         json={"access_level": "read"},
     )
@@ -199,7 +199,7 @@ def test_doc_user_share_grant_and_revoke_refresh_search_acl_projection(
     assert recipient["user"]["id"] in granted_projection["shared_user_ids"]
 
     revoke_response = client.delete(
-        f"/api/v1/docs/items/{doc['id']}/sharing/users/{recipient['user']['id']}",
+        f"/api/v1/workspaces/hq/docs/items/{doc['id']}/sharing/users/{recipient['user']['id']}",
         headers=_auth_headers(owner_token),
     )
     assert revoke_response.status_code == 200, revoke_response.text
@@ -230,7 +230,7 @@ def test_meeting_attendee_add_and_remove_refresh_search_acl_projection(
     )
 
     add_response = client.post(
-        f"/api/v1/meeting/meetings/{meeting['id']}/attendees",
+        f"/api/v1/workspaces/hq/meeting/meetings/{meeting['id']}/attendees",
         headers=_auth_headers(admin["token"]),
         json={"attendees": [{"user_id": attendee["user"]["id"], "role": "required"}]},
     )
@@ -240,7 +240,7 @@ def test_meeting_attendee_add_and_remove_refresh_search_acl_projection(
     assert attendee["user"]["id"] in added_projection["participant_user_ids"]
 
     remove_response = client.patch(
-        f"/api/v1/meeting/meetings/{meeting['id']}",
+        f"/api/v1/workspaces/hq/meeting/meetings/{meeting['id']}",
         headers=_auth_headers(admin["token"]),
         json={"attendees": []},
     )
@@ -282,21 +282,21 @@ def test_meeting_delete_detaches_access_grant_foreign_keys_and_deletes_search_do
     )
 
     add_response = client.post(
-        f"/api/v1/meeting/meetings/{meeting['id']}/attendees",
+        f"/api/v1/workspaces/hq/meeting/meetings/{meeting['id']}/attendees",
         headers=_auth_headers(admin["token"]),
         json={"attendees": [{"user_id": attendee["user"]["id"], "role": "required"}]},
     )
     assert add_response.status_code == 200, add_response.text
 
     remove_response = client.patch(
-        f"/api/v1/meeting/meetings/{meeting['id']}",
+        f"/api/v1/workspaces/hq/meeting/meetings/{meeting['id']}",
         headers=_auth_headers(admin["token"]),
         json={"attendees": []},
     )
     assert remove_response.status_code == 200, remove_response.text
 
     delete_response = client.delete(
-        f"/api/v1/meeting/meetings/{meeting['id']}",
+        f"/api/v1/workspaces/hq/meeting/meetings/{meeting['id']}",
         headers=_auth_headers(admin["token"]),
     )
     assert delete_response.status_code == 204, delete_response.text
@@ -368,7 +368,7 @@ def test_planner_visibility_changes_refresh_search_acl_projection(
     admin = _bootstrap_admin_session(client)
 
     create_response = client.post(
-        "/api/v1/planner/events",
+        "/api/v1/workspaces/hq/planner/events",
         headers=_auth_headers(admin["token"]),
         json={
             "title": "Incremental Search Planner Event",
@@ -391,7 +391,7 @@ def test_planner_visibility_changes_refresh_search_acl_projection(
     assert private_projection["visibility"] == "private"
 
     public_response = client.patch(
-        f"/api/v1/planner/events/{event['id']}",
+        f"/api/v1/workspaces/hq/planner/events/{event['id']}",
         headers=_auth_headers(admin["token"]),
         json={"visibility": "public"},
     )
@@ -405,7 +405,7 @@ def test_planner_visibility_changes_refresh_search_acl_projection(
     assert public_projection["visibility"] == "public"
 
     private_response = client.patch(
-        f"/api/v1/planner/events/{event['id']}",
+        f"/api/v1/workspaces/hq/planner/events/{event['id']}",
         headers=_auth_headers(admin["token"]),
         json={"visibility": "private"},
     )

@@ -38,9 +38,12 @@ def test_openapi_schema_exports_without_runtime_initialization(
     assert "/api/v1/workspaces/{workspace_slug}/docs/hub" in schema["paths"]
     assert "/api/v1/workspaces/{workspace_slug}/meeting/meetings" in schema["paths"]
     assert "/api/v1/workspaces/{workspace_slug}/planner/events" in schema["paths"]
-    assert "/api/v1/pms/lists" in schema["paths"]
-    assert "/api/v1/docs/hub" in schema["paths"]
-    assert "/api/v1/meeting/meetings" in schema["paths"]
-    assert "/api/v1/planner/events" in schema["paths"]
+    assert "/api/v1/docs/shared-links/{share_token}" in schema["paths"]
+    assert "/api/v1/ai/chat" not in schema["paths"]
+    assert "/api/v1/pms/lists" not in schema["paths"]
+    assert "/api/v1/docs/hub" not in schema["paths"]
+    assert "/api/v1/meeting/meetings" not in schema["paths"]
+    assert "/api/v1/planner/events" not in schema["paths"]
+    assert "/api/v1/calendar/events" not in schema["paths"]
 
     get_settings.cache_clear()

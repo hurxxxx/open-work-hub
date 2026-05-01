@@ -244,7 +244,7 @@ def test_pms_create_issue_service_is_idempotent_with_approved_call_id(client: Te
     token = session["token"]
 
     task_list_response = client.post(
-        "/api/v1/pms/lists",
+        "/api/v1/workspaces/delivery-hub/pms/lists",
         headers={"Authorization": f"Bearer {token}"},
         json={"key": "AIWRITECREATE", "name": "AI Write Create", "description": "write source"},
     )
@@ -295,7 +295,7 @@ def test_pms_add_issue_comment_service_is_idempotent_with_approved_call_id(clien
     token = session["token"]
 
     task_list_response = client.post(
-        "/api/v1/pms/lists",
+        "/api/v1/workspaces/delivery-hub/pms/lists",
         headers={"Authorization": f"Bearer {token}"},
         json={"key": "AIWRITECMT", "name": "AI Write Comment", "description": "write source"},
     )
@@ -303,7 +303,7 @@ def test_pms_add_issue_comment_service_is_idempotent_with_approved_call_id(clien
     task_list = task_list_response.json()
 
     issue_response = client.post(
-        f"/api/v1/pms/lists/{task_list['id']}/issues",
+        f"/api/v1/workspaces/delivery-hub/pms/lists/{task_list['id']}/issues",
         headers={"Authorization": f"Bearer {token}"},
         json={"title": "AI comment target"},
     )
@@ -359,7 +359,7 @@ def test_pms_update_issue_service_does_not_duplicate_side_effects_on_replay(
     token = admin_session["token"]
 
     task_list_response = client.post(
-        "/api/v1/pms/lists",
+        "/api/v1/workspaces/delivery-hub/pms/lists",
         headers={"Authorization": f"Bearer {token}"},
         json={"key": "AIWRITEUPD", "name": "AI Write Update", "description": "write source"},
     )
@@ -367,7 +367,7 @@ def test_pms_update_issue_service_does_not_duplicate_side_effects_on_replay(
     task_list = task_list_response.json()
 
     issue_response = client.post(
-        f"/api/v1/pms/lists/{task_list['id']}/issues",
+        f"/api/v1/workspaces/delivery-hub/pms/lists/{task_list['id']}/issues",
         headers={"Authorization": f"Bearer {token}"},
         json={"title": "AI update target"},
     )
@@ -435,7 +435,7 @@ def test_pms_delete_issue_service_deletes_issue(client: TestClient) -> None:
     token = session["token"]
 
     task_list_response = client.post(
-        "/api/v1/pms/lists",
+        "/api/v1/workspaces/delivery-hub/pms/lists",
         headers={"Authorization": f"Bearer {token}"},
         json={"key": "AIWRITEDEL", "name": "AI Write Delete", "description": "write source"},
     )
@@ -443,7 +443,7 @@ def test_pms_delete_issue_service_deletes_issue(client: TestClient) -> None:
     task_list = task_list_response.json()
 
     issue_response = client.post(
-        f"/api/v1/pms/lists/{task_list['id']}/issues",
+        f"/api/v1/workspaces/delivery-hub/pms/lists/{task_list['id']}/issues",
         headers={"Authorization": f"Bearer {token}"},
         json={"title": "AI delete target"},
     )

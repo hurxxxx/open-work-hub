@@ -1,19 +1,18 @@
 import { BrowserRouter as Router } from 'react-router-dom';
-import { MantineProvider } from '@mantine/core';
-import '@mantine/core/styles.css';
-import { ToastProvider, ToastViewport } from '@aidoo/ui';
+import {
+  ToastProvider,
+  ToastViewport,
+} from '@aidoo/ui/providers/toast-provider';
 
 import { AppContent } from './shell/AppContent';
 
 export default function AppRoot() {
   return (
-    <MantineProvider defaultColorScheme="auto">
-      <ToastProvider>
-        <Router>
-          <AppContent />
-        </Router>
-        <ToastViewport />
-      </ToastProvider>
-    </MantineProvider>
+    <ToastProvider>
+      <Router>
+        <AppContent />
+      </Router>
+      <ToastViewport />
+    </ToastProvider>
   );
 }

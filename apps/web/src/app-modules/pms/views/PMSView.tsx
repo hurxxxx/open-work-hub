@@ -27,8 +27,8 @@ import {
   getPmsTaskList,
   listPmsTaskLists,
   listSpaces,
+  listSpaceMembers,
   listTaskListIssues,
-  listTaskListMembers,
   listTaskListMilestones,
   listTaskListLabels,
   listTaskListStatuses,
@@ -279,11 +279,15 @@ export const PMSView = () => {
   useEffect(() => {
     if (!token || !selectedTaskListId) return;
     let cancelled = false;
+    const selectedList = taskLists.find((taskList) => taskList.id === selectedTaskListId);
+    const selectedSpaceId = selectedList?.team_id;
     setLoading(true);
     setError(null);
     Promise.all([
       listTaskListIssues(token, selectedTaskListId, filterParams),
-      listTaskListMembers(token, selectedTaskListId),
+      selectedSpaceId
+        ? listSpaceMembers(token, selectedSpaceId, currentWorkspaceSlug)
+        : Promise.resolve({ items: [], total: 0, page: 1, page_size: 20 }),
       listTaskListMilestones(token, selectedTaskListId),
       listTaskListLabels(token, selectedTaskListId),
       listTaskListStatuses(token, selectedTaskListId),
@@ -309,7 +313,7 @@ export const PMSView = () => {
     return () => {
       cancelled = true;
     };
-  }, [applyIssueCollection, getErrorMessage, token, selectedTaskListId, filterParams]);
+  }, [applyIssueCollection, currentWorkspaceSlug, getErrorMessage, taskLists, token, selectedTaskListId, filterParams]);
 
   const toggleIssueSelection = useCallback((issueId: string) => {
     setSelectedIssueIds(prev => {

@@ -2,6 +2,7 @@ import { useEffect, useCallback } from 'react';
 import { MantineProvider } from '@mantine/core';
 import { BlockNoteView } from '@blocknote/mantine';
 import { useCreateBlockNote } from '@blocknote/react';
+import '@mantine/core/styles.css';
 import '@blocknote/core/fonts/inter.css';
 import '@blocknote/mantine/style.css';
 import { compactSchema } from './schema';

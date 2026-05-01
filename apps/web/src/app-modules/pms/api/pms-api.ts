@@ -11,15 +11,11 @@ export type PmsTaskListsResponse = Omit<ApiSchema<'TaskListsResponse'>, 'items'>
   items: PmsTaskList[];
 };
 
-export type PmsTaskListMember = ApiSchema<'SpaceMemberItem'>;
-
-export type PmsTaskListMembersResponse = Omit<ApiSchema<'SpaceMemberListResponse'>, 'items'> & {
-  items: PmsTaskListMember[];
-};
-
 export type PmsSpace = ApiSchema<'SpaceItem'>;
 
 export type PmsSpaceMember = ApiSchema<'SpaceMemberItem'>;
+
+export type PmsTaskListMember = PmsSpaceMember;
 
 export type PmsSpaceMembersResponse = Omit<ApiSchema<'SpaceMemberListResponse'>, 'items'> & {
   items: PmsSpaceMember[];
@@ -327,32 +323,6 @@ export function getPmsDashboardSummary(
 ): Promise<PmsDashboardSummary> {
   const suffix = taskListId ? `?list_id=${encodeURIComponent(taskListId)}` : '';
   return request<PmsDashboardSummary>(`/api/v1/pms/dashboard/summary${suffix}`, token);
-}
-
-export function listTaskListMembers(
-  token: string,
-  taskListId: string,
-): Promise<PmsTaskListMembersResponse> {
-  return request<PmsTaskListMembersResponse>(
-    `/api/v1/pms/lists/${taskListId}/members?page=1&page_size=20`,
-    token,
-  );
-}
-
-export function updateMemberRole(
-  token: string,
-  taskListId: string,
-  userId: string,
-  role: string,
-): Promise<PmsTaskListMember> {
-  return request<PmsTaskListMember>(`/api/v1/pms/lists/${taskListId}/members/${userId}/role`, token, {
-    method: 'PATCH',
-    body: JSON.stringify({ role }),
-  });
-}
-
-export function removeTaskListMember(token: string, taskListId: string, userId: string): Promise<void> {
-  return request<void>(`/api/v1/pms/lists/${taskListId}/members/${userId}`, token, { method: 'DELETE' });
 }
 
 export function listTaskListMilestones(

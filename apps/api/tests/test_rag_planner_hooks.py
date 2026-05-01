@@ -71,7 +71,7 @@ def test_planner_router_mutations_enqueue_rag_jobs(
     owner = _dev_login(client, "delivery-hub-admin")
 
     create_response = client.post(
-        "/api/v1/planner/events",
+        "/api/v1/workspaces/delivery-hub/planner/events",
         headers=_auth_headers(owner["token"]),
         json={
             "title": "RAG Planner Event",
@@ -91,7 +91,7 @@ def test_planner_router_mutations_enqueue_rag_jobs(
     _mark_sync_jobs_succeeded(create_jobs[0].id)
 
     visibility_response = client.patch(
-        f"/api/v1/planner/events/{event['id']}",
+        f"/api/v1/workspaces/delivery-hub/planner/events/{event['id']}",
         headers=_auth_headers(owner["token"]),
         json={"visibility": "public"},
     )
@@ -102,7 +102,7 @@ def test_planner_router_mutations_enqueue_rag_jobs(
     _mark_sync_jobs_succeeded(visibility_jobs[-1].id)
 
     update_response = client.patch(
-        f"/api/v1/planner/events/{event['id']}",
+        f"/api/v1/workspaces/delivery-hub/planner/events/{event['id']}",
         headers=_auth_headers(owner["token"]),
         json={"location": "Seoul"},
     )
@@ -113,7 +113,7 @@ def test_planner_router_mutations_enqueue_rag_jobs(
     _mark_sync_jobs_succeeded(update_jobs[-1].id)
 
     delete_response = client.delete(
-        f"/api/v1/planner/events/{event['id']}",
+        f"/api/v1/workspaces/delivery-hub/planner/events/{event['id']}",
         headers=_auth_headers(owner["token"]),
     )
     assert delete_response.status_code == 204, delete_response.text
@@ -155,7 +155,7 @@ def test_public_planner_event_survives_rag_post_filter_for_workspace_member(
         viewer_id = viewer.id
 
     create_response = client.post(
-        "/api/v1/planner/events",
+        "/api/v1/workspaces/delivery-hub/planner/events",
         headers=_auth_headers(owner["token"]),
         json={
             "title": "Public Planner RAG Event",

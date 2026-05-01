@@ -10,3 +10,13 @@ protected_modules =
 allowed_importers =
     aidoo_api.api_registry
 as_packages = false
+
+[importlinter:contract:domains_do_not_import_composition_roots]
+name = Domain modules do not import API composition roots
+type = forbidden
+source_modules =
+    aidoo_api.domains
+forbidden_modules =
+    aidoo_api.app
+    aidoo_api.main
+    aidoo_api.api_registry

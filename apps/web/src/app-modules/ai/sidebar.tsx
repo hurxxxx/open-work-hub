@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { MessageSquare, Plus, Sparkles, Trash2 } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 
-import { useConfirm } from '@aidoo/ui';
+import { useConfirm } from '@aidoo/ui/feedback/confirm-dialog';
 
 import { aiManifest } from './manifest';
 import type { AppSidebarConfig } from '@/src/app/shell/sidebar-types';

@@ -1,4 +1,5 @@
 import { ApiRequestError, apiFetchJson } from '@/src/platform/api/client';
+import type { ApiSchema } from '@/src/platform/api/types';
 import { rewriteWorkspaceApiPath } from '@/src/platform/workspaces/workspace-utils';
 
 export class DocsApiError extends Error {
@@ -45,57 +46,22 @@ function resolveDocsPath(path: string, workspaceSlug?: string | null): string {
   return rewriteWorkspaceApiPath(path, workspaceSlug);
 }
 
-export interface DocsShareSummary {
-  visibility: 'private' | 'shared';
-  user_share_count: number;
-  link_active: boolean;
-  link_access_level: 'read' | 'edit' | null;
-}
-
-export interface DocsPrimaryContainer {
-  app: string;
-  type: string;
-  id: string;
-  sort_order: number;
-}
-
-export interface DocsHubItem {
-  id: string;
-  source_app: string;
-  source_type: 'native_doc';
-  source_id: string;
-  source_kind: string;
+export type DocsShareSummary = ApiSchema<'DocsShareSummary'>;
+export type DocsPrimaryContainer = ApiSchema<'DocsPrimaryContainer'>;
+export type DocsHubItem = Omit<
+  ApiSchema<'DocsHubItem'>,
+  'last_viewed_at' | 'primary_container' | 'sharing_summary' | 'source_deeplink' | 'source_ref' | 'trashed_at'
+> & {
   source_ref: string | null;
-  generation_kind: string;
-  structure_kind: 'page_tree';
-  location_label: string;
-  container_label: string;
   primary_container: DocsPrimaryContainer | null;
-  source_badge: string;
   source_deeplink: string | null;
-  title: string;
-  page_count: number;
-  created_by_id: string;
-  created_by_name: string;
-  created_at: string;
-  updated_at: string;
   trashed_at: string | null;
-  is_favorite: boolean;
-  is_private: boolean;
   last_viewed_at: string | null;
-  can_view: boolean;
-  can_edit: boolean;
-  can_share: boolean;
-  can_manage: boolean;
   sharing_summary: DocsShareSummary | null;
-}
-
-export interface DocsHubResponse {
+};
+export type DocsHubResponse = Omit<ApiSchema<'DocsHubResponse'>, 'items'> & {
   items: DocsHubItem[];
-  total: number;
-  page: number;
-  page_size: number;
-}
+};
 
 export function getDocsItemPrimaryContainerId(
   item: DocsHubItem,
@@ -135,27 +101,14 @@ export function withDocsItemPrimaryContainerSortOrder(
   };
 }
 
-export interface DocsPageItem {
-  id: string;
-  doc_id: string;
-  source_type: 'native_doc_page';
-  source_page_id: string;
+export type DocsPageItem = Omit<ApiSchema<'DocsPageItem'>, 'content_blocks' | 'parent_id' | 'trashed_at'> & {
   parent_id: string | null;
-  title: string;
   content_blocks: Record<string, unknown>[] | null;
-  sort_order: number;
-  created_by_id: string;
-  created_by_name: string;
-  created_at: string;
-  updated_at: string;
   trashed_at: string | null;
-  can_edit: boolean;
-  realtime_collab: boolean;
-}
-
-export interface DocsPageListResponse {
+};
+export type DocsPageListResponse = Omit<ApiSchema<'DocsPageListResponse'>, 'items'> & {
   items: DocsPageItem[];
-}
+};
 
 export function mediaResourceTypeForDocsPage(
   sourceType: DocsPageItem['source_type'],
@@ -163,74 +116,22 @@ export function mediaResourceTypeForDocsPage(
   return 'docs_native_page';
 }
 
-export interface DocsCollabSession {
-  page_ref: string;
-  source_type: 'native_doc_page';
-  source_page_id: string;
-  room_key: string;
-  ws_path: string;
-  can_edit: boolean;
-  realtime_status: 'enabled' | 'degraded';
+export type DocsCollabSession = Omit<
+  ApiSchema<'DocsCollabSessionResponse'>,
+  'read_only_reason' | 'snapshot_content_blocks' | 'yjs_state'
+> & {
   read_only_reason: 'relay_unavailable' | 'permission_revoked' | null;
-  user: {
-    id: string;
-    full_name: string;
-  };
   snapshot_content_blocks: Record<string, unknown>[] | null;
   yjs_state: string | null;
-}
-
-export interface DocsCollabSnapshotResponse {
-  updated_at: string;
-  last_snapshot_at: string;
-}
-
-export interface FavoriteDocItem {
-  id: string;
-  title: string;
-  source_type: string;
-}
-
-export interface RecentPageItem {
-  page_id: string;
-  page_title: string;
-  doc_id: string;
-  doc_title: string;
-  source_type: 'native_doc';
-  location_label: string;
-  last_viewed_at: string;
-}
-
-export interface ShareableUserItem {
-  id: string;
-  email: string;
-  full_name: string;
-}
-
-export interface NativeUserShareItem {
-  user_id: string;
-  email: string;
-  full_name: string;
-  access_level: 'read' | 'edit';
-}
-
-export interface NativeLinkShareItem {
-  token: string;
-  access_level: 'read' | 'edit';
-  active: boolean;
-  share_path: string;
-}
-
-export interface NativeDocSharingResponse {
-  doc_id: string;
-  owner_id: string;
-  users: NativeUserShareItem[];
-  link_share: NativeLinkShareItem | null;
-}
-
-export interface ResolveSharedLinkResponse {
-  item: DocsHubItem;
-}
+};
+export type DocsCollabSnapshotResponse = ApiSchema<'DocsCollabSnapshotResponse'>;
+export type FavoriteDocItem = ApiSchema<'FavoriteDocItem'>;
+export type RecentPageItem = ApiSchema<'RecentPageItem'>;
+export type ShareableUserItem = ApiSchema<'ShareableUserItem'>;
+export type NativeUserShareItem = ApiSchema<'NativeUserShareItem'>;
+export type NativeLinkShareItem = ApiSchema<'NativeLinkShareItem'>;
+export type NativeDocSharingResponse = ApiSchema<'NativeDocSharingResponse'>;
+export type ResolveSharedLinkResponse = ApiSchema<'ResolveSharedLinkResponse'>;
 
 export function listDocsHub(
   token: string,

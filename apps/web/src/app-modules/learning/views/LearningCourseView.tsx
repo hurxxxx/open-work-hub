@@ -19,7 +19,7 @@ import {
   type LearningCourse,
   type LearningLesson,
 } from '../model/manifest';
-import { getLessonBody } from '../model/content';
+import { loadLessonBody } from '../model/content';
 import { useAuth } from '@/src/platform/auth/auth-provider';
 import { LearningPageNotesPanel } from './learning-notes/LearningPageNotesPanel';
 
@@ -72,8 +72,6 @@ export function LearningCourseView() {
   const next: LearningLesson | null =
     index < allLessons.length - 1 ? allLessons[index + 1] : null;
 
-  const body = getLessonBody(lesson.file);
-
   return (
     <LessonLayout
       course={course}
@@ -81,7 +79,6 @@ export function LearningCourseView() {
       index={index}
       total={allLessons.length}
       basePath={basePath}
-      body={body}
       prev={prev}
       next={next}
     />
@@ -94,7 +91,6 @@ function LessonLayout({
   index,
   total,
   basePath,
-  body,
   prev,
   next,
 }: {
@@ -103,13 +99,30 @@ function LessonLayout({
   index: number;
   total: number;
   basePath: string;
-  body: string | null;
   prev: LearningLesson | null;
   next: LearningLesson | null;
 }) {
   const [wide, setWide] = useWideMode();
+  const [body, setBody] = useState<string | null>(null);
+  const [isBodyLoading, setIsBodyLoading] = useState(true);
   const rootRef = useRef<HTMLDivElement>(null);
   const { token } = useAuth();
+
+  useEffect(() => {
+    let isMounted = true;
+    setIsBodyLoading(true);
+    setBody(null);
+
+    loadLessonBody(lesson.file).then((loadedBody) => {
+      if (!isMounted) return;
+      setBody(loadedBody);
+      setIsBodyLoading(false);
+    });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [lesson.file]);
 
   useEffect(() => {
     let el: HTMLElement | null = rootRef.current;
@@ -174,7 +187,11 @@ function LessonLayout({
             <h1 className="app-text-display text-app-ink">{lesson.title}</h1>
           </header>
 
-          {body ? (
+          {isBodyLoading ? (
+            <p className="app-text-body text-app-ink/60">
+              레슨 본문을 불러오는 중입니다.
+            </p>
+          ) : body ? (
             <div
               data-testid={`learning-lesson-body-${lesson.slug}`}
               className="app-markdown prose prose-base max-w-none dark:prose-invert lg:prose-lg"

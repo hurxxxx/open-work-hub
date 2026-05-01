@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { motion } from 'motion/react';
 import { ArrowRight, Lock, Mail, ShieldCheck, User } from 'lucide-react';
 
-import { InlineNotice } from '@aidoo/ui';
+import { InlineNotice } from '@aidoo/ui/feedback/inline-notice';
 
 import { useAuth } from './auth-context';
 

@@ -2,7 +2,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { ChevronDown, ChevronRight, Loader2, Plus } from 'lucide-react';
-import { InlineNotice, useConfirm, usePrompt } from '@aidoo/ui';
+import { useConfirm } from '@aidoo/ui/feedback/confirm-dialog';
+import { InlineNotice } from '@aidoo/ui/feedback/inline-notice';
+import { usePrompt } from '@aidoo/ui/feedback/prompt-dialog';
 
 import {
   createNativeDoc,

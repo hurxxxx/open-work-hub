@@ -1,9 +1,7 @@
 import { ApiRequestError, apiFetchJson } from '@/src/platform/api/client';
+import type { ApiSchema } from '@/src/platform/api/types';
 
-export interface MediaUploadResponse {
-  id: string;
-  url: string;
-}
+export type MediaUploadResponse = ApiSchema<'MediaUploadResponse'>;
 
 export async function uploadMedia(token: string, file: File): Promise<MediaUploadResponse> {
   const formData = new FormData();
@@ -14,9 +12,7 @@ export async function uploadMedia(token: string, file: File): Promise<MediaUploa
   });
 }
 
-export interface MediaResolveResponse {
-  resolved: Record<string, string>;
-}
+export type MediaResolveResponse = ApiSchema<'MediaResolveResponse'>;
 
 export async function resolveMediaUrls(
   token: string,

@@ -38,7 +38,7 @@ def _create_planner_event(
     path = (
         f"/api/v1/workspaces/{workspace_slug}/planner/events"
         if workspace_slug
-        else "/api/v1/planner/events"
+        else "/api/v1/workspaces/hq/planner/events"
     )
     response = client.post(
         path,
@@ -105,14 +105,14 @@ def test_planner_event_crud_happy_path(client: TestClient) -> None:
     assert created["end"] == "2026-05-04T03:30:00+00:00"
 
     detail = client.get(
-        f"/api/v1/planner/events/{created['id']}",
+        f"/api/v1/workspaces/hq/planner/events/{created['id']}",
         headers=_auth_headers(token),
     )
     assert detail.status_code == 200, detail.text
     assert detail.json()["id"] == created["id"]
 
     updated = client.patch(
-        f"/api/v1/planner/events/{created['id']}",
+        f"/api/v1/workspaces/hq/planner/events/{created['id']}",
         headers=_auth_headers(token),
         json={
             "allDay": True,
@@ -131,7 +131,7 @@ def test_planner_event_crud_happy_path(client: TestClient) -> None:
     assert updated_body["location"] == "부산"
 
     listing = client.get(
-        "/api/v1/planner/events",
+        "/api/v1/workspaces/hq/planner/events",
         headers=_auth_headers(token),
         params={"from": "2026-05-01", "to": "2026-05-31"},
     )
@@ -139,13 +139,13 @@ def test_planner_event_crud_happy_path(client: TestClient) -> None:
     assert created["id"] in {item["id"] for item in listing.json()["items"]}
 
     deleted = client.delete(
-        f"/api/v1/planner/events/{created['id']}",
+        f"/api/v1/workspaces/hq/planner/events/{created['id']}",
         headers=_auth_headers(token),
     )
     assert deleted.status_code == 204
 
     after_delete = client.get(
-        f"/api/v1/planner/events/{created['id']}",
+        f"/api/v1/workspaces/hq/planner/events/{created['id']}",
         headers=_auth_headers(token),
     )
     assert after_delete.status_code == 404
@@ -171,20 +171,20 @@ def test_planner_event_owner_only_access(client: TestClient) -> None:
     )
 
     forbidden_get = client.get(
-        f"/api/v1/planner/events/{created['id']}",
+        f"/api/v1/workspaces/hq/planner/events/{created['id']}",
         headers=_auth_headers(member_token),
     )
     assert forbidden_get.status_code == 403
 
     forbidden_patch = client.patch(
-        f"/api/v1/planner/events/{created['id']}",
+        f"/api/v1/workspaces/hq/planner/events/{created['id']}",
         headers=_auth_headers(member_token),
         json={"title": "가로채기"},
     )
     assert forbidden_patch.status_code == 403
 
     forbidden_delete = client.delete(
-        f"/api/v1/planner/events/{created['id']}",
+        f"/api/v1/workspaces/hq/planner/events/{created['id']}",
         headers=_auth_headers(member_token),
     )
     assert forbidden_delete.status_code == 403
@@ -222,7 +222,7 @@ def test_calendar_events_include_only_current_user_planner_events(client: TestCl
     )
 
     response = client.get(
-        "/api/v1/calendar/events",
+        "/api/v1/workspaces/hq/calendar/events",
         headers=_auth_headers(admin_token),
         params={
             "from": "2026-05-01",

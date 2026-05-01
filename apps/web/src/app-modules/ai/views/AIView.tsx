@@ -1,6 +1,14 @@
 import { motion } from 'motion/react';
 import { Sparkles } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  Suspense,
+  lazy,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
   AiApiError,
@@ -28,7 +36,6 @@ import {
 import { useWorkspaceBootstrapContext } from '@/src/platform/workspaces/workspace-bootstrap-context';
 import { ChatThread } from './chat/ChatThread';
 import { ApprovalModal } from './chat/ApprovalModal';
-import { ArtifactPanel } from './chat/ArtifactPanel';
 import { ToolCallCard } from './chat/ToolCallCard';
 import { ChatTopBar } from './chat/ChatTopBar';
 import { ModelPill } from './chat/ModelPill';
@@ -42,6 +49,12 @@ import type {
   ToolCallBuffer,
 } from '../api/agent-events';
 import type { NavItem } from '@/src/app/shell/navigation-types';
+
+const ArtifactPanel = lazy(() =>
+  import('./chat/ArtifactPanel').then((module) => ({
+    default: module.ArtifactPanel,
+  })),
+);
 
 const AI_BACKEND_MODE_STORAGE_KEY = 'aidoo.ai.backendMode';
 const AI_SCOPE_STORAGE_PREFIX = 'aidoo.ai.scope.';
@@ -1317,7 +1330,14 @@ export function AIView({ toolItems = [] }: { toolItems?: NavItem[] }) {
           onClose={() => handleAbandonApproval(pendingApproval)}
         />
       ) : null}
-      <ArtifactPanel artifact={activeArtifact} onClose={handleCloseArtifact} />
+      {activeArtifact ? (
+        <Suspense fallback={null}>
+          <ArtifactPanel
+            artifact={activeArtifact}
+            onClose={handleCloseArtifact}
+          />
+        </Suspense>
+      ) : null}
     </motion.div>
   );
 }

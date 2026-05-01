@@ -26,13 +26,17 @@ export const WORKSPACE_APP_IDS: readonly WorkspaceAppId[] = [
 
 const WORKSPACE_API_PREFIXES = [
   '/api/v1/ai',
+  '/api/v1/calendar',
+  '/api/v1/connectors',
   '/api/v1/pms',
   '/api/v1/docs',
+  '/api/v1/drafts',
   '/api/v1/meeting',
+  '/api/v1/planner',
   '/api/v1/rag',
   '/api/v1/search',
-  '/api/v1/connectors/ocr',
   '/api/v1/conversations',
+  '/api/v1/wiki',
 ] as const;
 
 const LAST_WORKSPACE_STORAGE_KEY = 'aidoo:last-workspace-slug';
@@ -336,6 +340,8 @@ export function rewriteWorkspaceApiPath(
   if (
     !rawPath.startsWith('/api/v1/')
     || rawPath.startsWith('/api/v1/workspaces/')
+    || rawPath.startsWith('/api/v1/docs/shared-links/')
+    || rawPath.includes('share_token=')
     || !WORKSPACE_API_PREFIXES.some((prefix) => rawPath.startsWith(prefix))
   ) {
     return rawPath;

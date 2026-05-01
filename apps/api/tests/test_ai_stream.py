@@ -1,4 +1,4 @@
-"""Route-level tests for ``/api/v1/ai/chat/stream``."""
+"""Route-level tests for workspace-scoped AI chat stream endpoints."""
 
 from __future__ import annotations
 
@@ -474,7 +474,7 @@ def test_chat_stream_rejects_openrouter_backend_mode(client: TestClient) -> None
 
 def test_chat_stream_requires_auth(client: TestClient) -> None:
     response = client.post(
-        _legacy_ai_path("/chat/stream"),
+        _workspace_ai_path("hq", "/chat/stream"),
         json={"messages": [{"role": "user", "content": "hi"}]},
     )
     assert response.status_code in (401, 403)
@@ -749,7 +749,7 @@ def test_chat_stream_tool_command_emits_tool_events_without_llm_call(
     slug = "delivery-hub"
 
     task_list_response = client.post(
-        "/api/v1/pms/lists",
+        f"/api/v1/workspaces/{slug}/pms/lists",
         headers=_auth_headers(auth["token"]),
         json={
             "key": "AISTRM",
@@ -761,7 +761,7 @@ def test_chat_stream_tool_command_emits_tool_events_without_llm_call(
     task_list = task_list_response.json()
 
     issue_response = client.post(
-        f"/api/v1/pms/lists/{task_list['id']}/issues",
+        f"/api/v1/workspaces/{slug}/pms/lists/{task_list['id']}/issues",
         headers=_auth_headers(auth["token"]),
         json={"title": "AI stream tool issue", "description": "stream search target"},
     )
@@ -822,7 +822,7 @@ def test_chat_stream_tool_command_scoped_conversation_skips_scope_prompt_lookup(
     conversation_id = conversation_response.json()["id"]
 
     task_list_response = client.post(
-        "/api/v1/pms/lists",
+        f"/api/v1/workspaces/{slug}/pms/lists",
         headers=_auth_headers(auth["token"]),
         json={
             "key": "AISTRMSC",
@@ -834,7 +834,7 @@ def test_chat_stream_tool_command_scoped_conversation_skips_scope_prompt_lookup(
     task_list = task_list_response.json()
 
     issue_response = client.post(
-        f"/api/v1/pms/lists/{task_list['id']}/issues",
+        f"/api/v1/workspaces/{slug}/pms/lists/{task_list['id']}/issues",
         headers=_auth_headers(auth["token"]),
         json={"title": "Scoped AI stream tool issue", "description": "stream search target"},
     )
@@ -892,7 +892,7 @@ def test_chat_stream_agent_loop_executes_tool_and_keeps_shared_agent_run_id(
     _enable_local_tool_calling(monkeypatch)
 
     task_list_response = client.post(
-        "/api/v1/pms/lists",
+        f"/api/v1/workspaces/{slug}/pms/lists",
         headers=_auth_headers(auth["token"]),
         json={
             "key": "AIACT",
@@ -904,7 +904,7 @@ def test_chat_stream_agent_loop_executes_tool_and_keeps_shared_agent_run_id(
     task_list = task_list_response.json()
 
     issue_response = client.post(
-        f"/api/v1/pms/lists/{task_list['id']}/issues",
+        f"/api/v1/workspaces/{slug}/pms/lists/{task_list['id']}/issues",
         headers=_auth_headers(auth["token"]),
         json={"title": "Agent loop issue", "description": "agent result target"},
     )
@@ -1214,7 +1214,7 @@ def test_chat_stream_agent_loop_uses_filtered_tool_specs_from_mcp_manifest(
     _disable_workspace_app(slug, "planner")
 
     task_list_response = client.post(
-        "/api/v1/pms/lists",
+        f"/api/v1/workspaces/{slug}/pms/lists",
         headers=_auth_headers(auth["token"]),
         json={
             "key": "AIFILTER",
@@ -1226,7 +1226,7 @@ def test_chat_stream_agent_loop_uses_filtered_tool_specs_from_mcp_manifest(
     task_list = task_list_response.json()
 
     issue_response = client.post(
-        f"/api/v1/pms/lists/{task_list['id']}/issues",
+        f"/api/v1/workspaces/{slug}/pms/lists/{task_list['id']}/issues",
         headers=_auth_headers(auth["token"]),
         json={"title": "Filtered loop issue", "description": "visible result"},
     )
@@ -2280,7 +2280,7 @@ def test_chat_stream_graph_schedule_failure_remains_fallback_metadata(
     assert "graph_node_planned" not in event_types
 
 
-def test_chat_stream_mounts_on_legacy_and_slug_paths(
+def test_chat_stream_mounts_on_workspace_path_and_legacy_path_is_removed(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     auth = _seeded_dev_login(client, "hq-admin")
@@ -2292,21 +2292,25 @@ def test_chat_stream_mounts_on_legacy_and_slug_paths(
 
     monkeypatch.setattr(llm_core, "get_async_pool_client", build_pool)
 
-    for path in (
+    legacy_status_code, _legacy_events = _stream_post(
+        client,
         _legacy_ai_path("/chat/stream"),
+        headers=_auth_headers(auth["token"]),
+        json_body={"messages": [{"role": "user", "content": "hi"}]},
+    )
+    assert legacy_status_code in {404, 405}
+
+    status_code, events = _stream_post(
+        client,
         _workspace_ai_path(slug, "/chat/stream"),
-    ):
-        status_code, events = _stream_post(
-            client,
-            path,
-            headers=_auth_headers(auth["token"]),
-            json_body={"messages": [{"role": "user", "content": "hi"}]},
-        )
-        assert status_code == 200, path
-        assert [event["type"] for event in _chat_events(events)] == [
-            "content_delta",
-            "done",
-        ]
+        headers=_auth_headers(auth["token"]),
+        json_body={"messages": [{"role": "user", "content": "hi"}]},
+    )
+    assert status_code == 200
+    assert [event["type"] for event in _chat_events(events)] == [
+        "content_delta",
+        "done",
+    ]
 
 
 def test_chat_sync_persists_user_and_assistant_turns_and_returns_conversation_id(

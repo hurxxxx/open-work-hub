@@ -57,12 +57,12 @@ def test_init_staging_is_idempotent(client, monkeypatch, tmp_path) -> None:
 
     payload = {"idempotency_key": "rec-init-1", "mime_type": "audio/webm"}
     first = client.post(
-        f"/api/v1/meeting/meetings/{meeting['id']}/recordings/staging",
+        f"/api/v1/workspaces/hq/meeting/meetings/{meeting['id']}/recordings/staging",
         headers=_auth_headers(admin["token"]),
         json=payload,
     )
     second = client.post(
-        f"/api/v1/meeting/meetings/{meeting['id']}/recordings/staging",
+        f"/api/v1/workspaces/hq/meeting/meetings/{meeting['id']}/recordings/staging",
         headers=_auth_headers(admin["token"]),
         json=payload,
     )
@@ -81,7 +81,7 @@ def test_chunk_upload_same_seq_same_payload_is_idempotent(client, monkeypatch, t
     admin = _bootstrap_admin_session(client)
     meeting = _create_meeting(client, admin["token"], title="Recording chunk")
     init_response = client.post(
-        f"/api/v1/meeting/meetings/{meeting['id']}/recordings/staging",
+        f"/api/v1/workspaces/hq/meeting/meetings/{meeting['id']}/recordings/staging",
         headers=_auth_headers(admin["token"]),
         json={"idempotency_key": "rec-chunk-1", "mime_type": "audio/webm"},
     )
@@ -90,12 +90,12 @@ def test_chunk_upload_same_seq_same_payload_is_idempotent(client, monkeypatch, t
     digest = hashlib.sha256(chunk).hexdigest()
 
     first = client.put(
-        f"/api/v1/meeting/meetings/{meeting['id']}/recordings/staging/{staging_id}/chunks/0",
+        f"/api/v1/workspaces/hq/meeting/meetings/{meeting['id']}/recordings/staging/{staging_id}/chunks/0",
         headers={**_auth_headers(admin["token"]), "X-Chunk-Sha256": digest},
         files={"file": ("chunk-0.webm", chunk, "audio/webm")},
     )
     second = client.put(
-        f"/api/v1/meeting/meetings/{meeting['id']}/recordings/staging/{staging_id}/chunks/0",
+        f"/api/v1/workspaces/hq/meeting/meetings/{meeting['id']}/recordings/staging/{staging_id}/chunks/0",
         headers={**_auth_headers(admin["token"]), "X-Chunk-Sha256": digest},
         files={"file": ("chunk-0.webm", chunk, "audio/webm")},
     )
@@ -117,7 +117,7 @@ def test_complete_staging_promotes_to_recording(client, monkeypatch, tmp_path) -
     admin = _bootstrap_admin_session(client)
     meeting = _create_meeting(client, admin["token"], title="Recording complete")
     init_response = client.post(
-        f"/api/v1/meeting/meetings/{meeting['id']}/recordings/staging",
+        f"/api/v1/workspaces/hq/meeting/meetings/{meeting['id']}/recordings/staging",
         headers=_auth_headers(admin["token"]),
         json={"idempotency_key": "rec-complete-1", "mime_type": "audio/webm"},
     )
@@ -125,14 +125,14 @@ def test_complete_staging_promotes_to_recording(client, monkeypatch, tmp_path) -
     chunk = b"final recording chunk"
     digest = hashlib.sha256(chunk).hexdigest()
     upload_response = client.put(
-        f"/api/v1/meeting/meetings/{meeting['id']}/recordings/staging/{staging_id}/chunks/0",
+        f"/api/v1/workspaces/hq/meeting/meetings/{meeting['id']}/recordings/staging/{staging_id}/chunks/0",
         headers={**_auth_headers(admin["token"]), "X-Chunk-Sha256": digest},
         files={"file": ("chunk-0.webm", chunk, "audio/webm")},
     )
     assert upload_response.status_code == 200, upload_response.text
 
     complete_response = client.post(
-        f"/api/v1/meeting/meetings/{meeting['id']}/recordings/staging/{staging_id}/complete",
+        f"/api/v1/workspaces/hq/meeting/meetings/{meeting['id']}/recordings/staging/{staging_id}/complete",
         headers=_auth_headers(admin["token"]),
         json={"duration_sec_estimate": 4},
     )
@@ -174,7 +174,7 @@ def test_failed_recording_still_allows_playback(client, monkeypatch, tmp_path) -
         fake_minio.objects[recording.storage_key] = b"abcde"
 
     playback = client.get(
-        f"/api/v1/meeting/meetings/{meeting['id']}/recordings/rec-failed-1/playback",
+        f"/api/v1/workspaces/hq/meeting/meetings/{meeting['id']}/recordings/rec-failed-1/playback",
         headers=_auth_headers(admin["token"]),
     )
     assert playback.status_code == 200, playback.text
@@ -192,7 +192,7 @@ def test_import_recording_keeps_raw_audio_when_enqueue_fails(client, monkeypatch
     meeting = _create_meeting(client, admin["token"], title="Recording import enqueue failure")
 
     response = client.post(
-        f"/api/v1/meeting/meetings/{meeting['id']}/recordings/import",
+        f"/api/v1/workspaces/hq/meeting/meetings/{meeting['id']}/recordings/import",
         headers=_auth_headers(admin["token"]),
         files={"file": ("recording.wav", b"imported-audio", "audio/wav")},
     )
@@ -222,7 +222,7 @@ def test_complete_staging_keeps_recording_when_enqueue_fails(client, monkeypatch
     admin = _bootstrap_admin_session(client)
     meeting = _create_meeting(client, admin["token"], title="Recording complete enqueue failure")
     init_response = client.post(
-        f"/api/v1/meeting/meetings/{meeting['id']}/recordings/staging",
+        f"/api/v1/workspaces/hq/meeting/meetings/{meeting['id']}/recordings/staging",
         headers=_auth_headers(admin["token"]),
         json={"idempotency_key": "rec-complete-fail-1", "mime_type": "audio/webm"},
     )
@@ -231,14 +231,14 @@ def test_complete_staging_keeps_recording_when_enqueue_fails(client, monkeypatch
     digest = hashlib.sha256(chunk).hexdigest()
 
     upload_response = client.put(
-        f"/api/v1/meeting/meetings/{meeting['id']}/recordings/staging/{staging_id}/chunks/0",
+        f"/api/v1/workspaces/hq/meeting/meetings/{meeting['id']}/recordings/staging/{staging_id}/chunks/0",
         headers={**_auth_headers(admin["token"]), "X-Chunk-Sha256": digest},
         files={"file": ("chunk-0.webm", chunk, "audio/webm")},
     )
     assert upload_response.status_code == 200, upload_response.text
 
     complete_response = client.post(
-        f"/api/v1/meeting/meetings/{meeting['id']}/recordings/staging/{staging_id}/complete",
+        f"/api/v1/workspaces/hq/meeting/meetings/{meeting['id']}/recordings/staging/{staging_id}/complete",
         headers=_auth_headers(admin["token"]),
         json={"duration_sec_estimate": 4},
     )
@@ -287,7 +287,7 @@ def test_only_one_user_can_record_at_a_time(client, monkeypatch, tmp_path) -> No
 
     # Admin starts a recording.
     first_init = client.post(
-        f"/api/v1/meeting/meetings/{meeting['id']}/recordings/staging",
+        f"/api/v1/workspaces/hq/meeting/meetings/{meeting['id']}/recordings/staging",
         headers=_auth_headers(admin_token),
         json={"idempotency_key": "lock-test-admin", "mime_type": "audio/webm"},
     )
@@ -296,7 +296,7 @@ def test_only_one_user_can_record_at_a_time(client, monkeypatch, tmp_path) -> No
 
     # Second user tries to start a recording while admin is still active → 409.
     blocked = client.post(
-        f"/api/v1/meeting/meetings/{meeting['id']}/recordings/staging",
+        f"/api/v1/workspaces/hq/meeting/meetings/{meeting['id']}/recordings/staging",
         headers=_auth_headers(second_token),
         json={"idempotency_key": "lock-test-second", "mime_type": "audio/webm"},
     )
@@ -309,7 +309,7 @@ def test_only_one_user_can_record_at_a_time(client, monkeypatch, tmp_path) -> No
 
     # Admin can still resume their own staging (idempotent path).
     same_admin = client.post(
-        f"/api/v1/meeting/meetings/{meeting['id']}/recordings/staging",
+        f"/api/v1/workspaces/hq/meeting/meetings/{meeting['id']}/recordings/staging",
         headers=_auth_headers(admin_token),
         json={"idempotency_key": "lock-test-admin", "mime_type": "audio/webm"},
     )
@@ -319,7 +319,7 @@ def test_only_one_user_can_record_at_a_time(client, monkeypatch, tmp_path) -> No
     # The meeting detail exposes the active recorder so the frontend can disable
     # the start button on other users' UIs.
     detail_response = client.get(
-        f"/api/v1/meeting/meetings/{meeting['id']}",
+        f"/api/v1/workspaces/hq/meeting/meetings/{meeting['id']}",
         headers=_auth_headers(second_token),
     )
     assert detail_response.status_code == 200
@@ -334,13 +334,13 @@ def test_only_one_user_can_record_at_a_time(client, monkeypatch, tmp_path) -> No
     chunk = b"x"
     digest = hashlib.sha256(chunk).hexdigest()
     upload = client.put(
-        f"/api/v1/meeting/meetings/{meeting['id']}/recordings/staging/{admin_staging_id}/chunks/0",
+        f"/api/v1/workspaces/hq/meeting/meetings/{meeting['id']}/recordings/staging/{admin_staging_id}/chunks/0",
         headers={**_auth_headers(admin_token), "X-Chunk-Sha256": digest},
         files={"file": ("0.webm", chunk, "audio/webm")},
     )
     assert upload.status_code == 200, upload.text
     complete = client.post(
-        f"/api/v1/meeting/meetings/{meeting['id']}/recordings/staging/{admin_staging_id}/complete",
+        f"/api/v1/workspaces/hq/meeting/meetings/{meeting['id']}/recordings/staging/{admin_staging_id}/complete",
         headers=_auth_headers(admin_token),
         json={"duration_sec_estimate": 1},
     )
@@ -348,7 +348,7 @@ def test_only_one_user_can_record_at_a_time(client, monkeypatch, tmp_path) -> No
 
     # Second user can now start.
     after_release = client.post(
-        f"/api/v1/meeting/meetings/{meeting['id']}/recordings/staging",
+        f"/api/v1/workspaces/hq/meeting/meetings/{meeting['id']}/recordings/staging",
         headers=_auth_headers(second_token),
         json={"idempotency_key": "lock-test-second", "mime_type": "audio/webm"},
     )
@@ -381,7 +381,7 @@ def test_delete_recording_permission_and_cleanup(client, monkeypatch, tmp_path) 
 
     # Admin uploads + finalizes a recording.
     init = client.post(
-        f"/api/v1/meeting/meetings/{meeting['id']}/recordings/staging",
+        f"/api/v1/workspaces/hq/meeting/meetings/{meeting['id']}/recordings/staging",
         headers=_auth_headers(admin_token),
         json={"idempotency_key": "delete-test", "mime_type": "audio/webm"},
     )
@@ -390,13 +390,13 @@ def test_delete_recording_permission_and_cleanup(client, monkeypatch, tmp_path) 
     chunk = b"y"
     digest = hashlib.sha256(chunk).hexdigest()
     upload = client.put(
-        f"/api/v1/meeting/meetings/{meeting['id']}/recordings/staging/{staging_id}/chunks/0",
+        f"/api/v1/workspaces/hq/meeting/meetings/{meeting['id']}/recordings/staging/{staging_id}/chunks/0",
         headers={**_auth_headers(admin_token), "X-Chunk-Sha256": digest},
         files={"file": ("0.webm", chunk, "audio/webm")},
     )
     assert upload.status_code == 200, upload.text
     complete = client.post(
-        f"/api/v1/meeting/meetings/{meeting['id']}/recordings/staging/{staging_id}/complete",
+        f"/api/v1/workspaces/hq/meeting/meetings/{meeting['id']}/recordings/staging/{staging_id}/complete",
         headers=_auth_headers(admin_token),
         json={"duration_sec_estimate": 1},
     )
@@ -415,14 +415,14 @@ def test_delete_recording_permission_and_cleanup(client, monkeypatch, tmp_path) 
 
     # Non-uploader / non-organizer attendee cannot delete.
     forbidden = client.delete(
-        f"/api/v1/meeting/meetings/{meeting['id']}/recordings/{recording_id}",
+        f"/api/v1/workspaces/hq/meeting/meetings/{meeting['id']}/recordings/{recording_id}",
         headers=_auth_headers(other_token),
     )
     assert forbidden.status_code == 403
 
     # Admin (also the uploader here) deletes successfully.
     deleted = client.delete(
-        f"/api/v1/meeting/meetings/{meeting['id']}/recordings/{recording_id}",
+        f"/api/v1/workspaces/hq/meeting/meetings/{meeting['id']}/recordings/{recording_id}",
         headers=_auth_headers(admin_token),
     )
     assert deleted.status_code == 200, deleted.text
@@ -468,7 +468,7 @@ def test_stale_recording_lock_auto_releases(client, monkeypatch, tmp_path) -> No
     # Admin starts a recording and then "crashes" (we simulate by aging the
     # last_chunk_at back past the stale window).
     init = client.post(
-        f"/api/v1/meeting/meetings/{meeting['id']}/recordings/staging",
+        f"/api/v1/workspaces/hq/meeting/meetings/{meeting['id']}/recordings/staging",
         headers=_auth_headers(admin_token),
         json={"idempotency_key": "stale-test-admin", "mime_type": "audio/webm"},
     )
@@ -477,7 +477,7 @@ def test_stale_recording_lock_auto_releases(client, monkeypatch, tmp_path) -> No
 
     # While the lock is fresh, second user is blocked.
     blocked = client.post(
-        f"/api/v1/meeting/meetings/{meeting['id']}/recordings/staging",
+        f"/api/v1/workspaces/hq/meeting/meetings/{meeting['id']}/recordings/staging",
         headers=_auth_headers(second_token),
         json={"idempotency_key": "stale-test-second-1", "mime_type": "audio/webm"},
     )
@@ -492,7 +492,7 @@ def test_stale_recording_lock_auto_releases(client, monkeypatch, tmp_path) -> No
 
     # Now the meeting detail should report no active lock.
     detail = client.get(
-        f"/api/v1/meeting/meetings/{meeting['id']}",
+        f"/api/v1/workspaces/hq/meeting/meetings/{meeting['id']}",
         headers=_auth_headers(second_token),
     )
     assert detail.status_code == 200
@@ -500,7 +500,7 @@ def test_stale_recording_lock_auto_releases(client, monkeypatch, tmp_path) -> No
 
     # And the second user can start their own recording.
     take_over = client.post(
-        f"/api/v1/meeting/meetings/{meeting['id']}/recordings/staging",
+        f"/api/v1/workspaces/hq/meeting/meetings/{meeting['id']}/recordings/staging",
         headers=_auth_headers(second_token),
         json={"idempotency_key": "stale-test-second-2", "mime_type": "audio/webm"},
     )
