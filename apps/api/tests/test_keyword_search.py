@@ -60,11 +60,17 @@ def search_client(
     monkeypatch: pytest.MonkeyPatch,
     postgres_dsn: str,
     redis_url: str,
+    minio_endpoint: str,
     opensearch_url: str,
 ) -> TestClient:
     monkeypatch.setenv("DOOWON_OPENSEARCH_URL", opensearch_url)
     monkeypatch.setenv("DOOWON_OPENSEARCH_INDEX_PREFIX", f"aidoo_test_{uuid.uuid4().hex[:10]}")
-    test_client = _build_client(monkeypatch, postgres_dsn=postgres_dsn, collab_redis_url=redis_url)
+    test_client = _build_client(
+        monkeypatch,
+        postgres_dsn=postgres_dsn,
+        collab_redis_url=redis_url,
+        minio_endpoint=minio_endpoint,
+    )
     with test_client:
         yield test_client
     _teardown_client_state()

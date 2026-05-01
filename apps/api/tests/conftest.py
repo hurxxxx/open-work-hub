@@ -3,6 +3,7 @@ from __future__ import annotations
 import socket
 import subprocess
 import time
+import urllib.request
 import uuid
 
 from fastapi.testclient import TestClient
@@ -12,6 +13,9 @@ import pytest
 
 POSTGRES_IMAGE = "postgres:18"
 REDIS_IMAGE = "redis:7"
+MINIO_IMAGE = "minio/minio:latest"
+MINIO_ACCESS_KEY = "minioadmin"
+MINIO_SECRET_KEY = "minioadmin"
 
 
 def _clear_cache(func) -> None:
@@ -68,6 +72,20 @@ def _wait_for_tcp(host: str, port: int, timeout_seconds: int = 30) -> None:
             last_error = error
             time.sleep(0.5)
     raise RuntimeError(f"Timed out waiting for TCP service at {host}:{port}: {last_error}")
+
+
+def _wait_for_http_ok(url: str, timeout_seconds: int = 60) -> None:
+    deadline = time.time() + timeout_seconds
+    last_error: Exception | None = None
+    while time.time() < deadline:
+        try:
+            with urllib.request.urlopen(url, timeout=2) as response:
+                if response.status == 200:
+                    return
+        except Exception as error:  # pragma: no cover - exercised in retry loop
+            last_error = error
+            time.sleep(1)
+    raise RuntimeError(f"Timed out waiting for HTTP service at {url}: {last_error}")
 
 
 @pytest.fixture(scope="session")
@@ -134,11 +152,54 @@ def redis_url() -> str:
         subprocess.run(["docker", "rm", "-f", container_name], check=False)
 
 
+@pytest.fixture(scope="session")
+def minio_endpoint() -> str:
+    _ensure_docker_image(MINIO_IMAGE)
+    port = _find_free_port()
+    console_port = _find_free_port()
+    container_name = f"aidoo-api-minio-test-{uuid.uuid4().hex[:10]}"
+    endpoint = f"http://127.0.0.1:{port}"
+
+    subprocess.run(
+        [
+            "docker",
+            "run",
+            "--rm",
+            "-d",
+            "--name",
+            container_name,
+            "-e",
+            f"MINIO_ROOT_USER={MINIO_ACCESS_KEY}",
+            "-e",
+            f"MINIO_ROOT_PASSWORD={MINIO_SECRET_KEY}",
+            "-p",
+            f"{port}:9000",
+            "-p",
+            f"{console_port}:9001",
+            MINIO_IMAGE,
+            "server",
+            "/data",
+            "--address",
+            ":9000",
+            "--console-address",
+            ":9001",
+        ],
+        check=True,
+    )
+
+    try:
+        _wait_for_http_ok(f"{endpoint}/minio/health/ready")
+        yield endpoint
+    finally:
+        subprocess.run(["docker", "rm", "-f", container_name], check=False)
+
+
 def _build_client(
     monkeypatch: pytest.MonkeyPatch,
     *,
     postgres_dsn: str,
     collab_redis_url: str,
+    minio_endpoint: str,
 ) -> TestClient:
     monkeypatch.setenv("DOOWON_POSTGRES_DSN", postgres_dsn)
     monkeypatch.setenv("DOOWON_API_SESSION_TTL_HOURS", "1")
@@ -147,6 +208,10 @@ def _build_client(
     monkeypatch.setenv("DOOWON_API_AUTO_MIGRATE", "1")
     monkeypatch.setenv("DOOWON_API_COLLAB_REDIS_URL", collab_redis_url)
     monkeypatch.setenv("DOOWON_REDIS_URL", collab_redis_url)
+    monkeypatch.setenv("DOOWON_MINIO_ENDPOINT", minio_endpoint)
+    monkeypatch.setenv("DOOWON_MINIO_ACCESS_KEY", MINIO_ACCESS_KEY)
+    monkeypatch.setenv("DOOWON_MINIO_SECRET_KEY", MINIO_SECRET_KEY)
+    monkeypatch.setenv("DOOWON_MINIO_BUCKET", f"aidoo-test-{uuid.uuid4().hex}")
     monkeypatch.setenv("AIDOO_AI_MCP_BRIDGE_ENABLED", "1")
     # Make tests independent of the developer's local `.env`: pin a dummy
     # external pool key so ``LlmPoolConfig.configured`` is True when a test
@@ -159,6 +224,7 @@ def _build_client(
         get_pool_client,
     )
     from aidoo_api.core.settings import get_settings
+    from aidoo_api.core.storage import get_minio_client
     from aidoo_api.domains.auth import models as auth_models  # noqa: F401
     from aidoo_api.domains.meeting import models as meeting_models  # noqa: F401
     from aidoo_api.domains.pms import models as pms_models  # noqa: F401
@@ -166,6 +232,7 @@ def _build_client(
     _clear_cache(get_settings)
     _clear_cache(get_async_pool_client)
     _clear_cache(get_pool_client)
+    _clear_cache(get_minio_client)
     _clear_cache(get_engine)
     _clear_cache(get_session_factory)
 
@@ -187,6 +254,7 @@ def _teardown_client_state() -> None:
         get_pool_client,
     )
     from aidoo_api.core.settings import get_settings
+    from aidoo_api.core.storage import get_minio_client
 
     engine = get_engine()
     Base.metadata.drop_all(bind=engine)
@@ -196,16 +264,23 @@ def _teardown_client_state() -> None:
     _clear_cache(get_settings)
     _clear_cache(get_async_pool_client)
     _clear_cache(get_pool_client)
+    _clear_cache(get_minio_client)
     _clear_cache(get_engine)
     _clear_cache(get_session_factory)
 
 
 @pytest.fixture
-def client(monkeypatch: pytest.MonkeyPatch, postgres_dsn: str, redis_url: str) -> TestClient:
+def client(
+    monkeypatch: pytest.MonkeyPatch,
+    postgres_dsn: str,
+    redis_url: str,
+    minio_endpoint: str,
+) -> TestClient:
     test_client = _build_client(
         monkeypatch,
         postgres_dsn=postgres_dsn,
         collab_redis_url=redis_url,
+        minio_endpoint=minio_endpoint,
     )
     with test_client:
         yield test_client
@@ -213,11 +288,16 @@ def client(monkeypatch: pytest.MonkeyPatch, postgres_dsn: str, redis_url: str) -
 
 
 @pytest.fixture
-def client_without_collab_relay(monkeypatch: pytest.MonkeyPatch, postgres_dsn: str) -> TestClient:
+def client_without_collab_relay(
+    monkeypatch: pytest.MonkeyPatch,
+    postgres_dsn: str,
+    minio_endpoint: str,
+) -> TestClient:
     test_client = _build_client(
         monkeypatch,
         postgres_dsn=postgres_dsn,
         collab_redis_url="redis://127.0.0.1:1/0",
+        minio_endpoint=minio_endpoint,
     )
     with test_client:
         yield test_client
