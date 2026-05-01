@@ -23,6 +23,7 @@ class Settings(BaseSettings):
     app_name: str = "아이두 API"
     environment: str = "development"
     allow_dev_admin_login: bool = True
+    dev_login_allowed_hosts: str = ""
     instance_id: str = Field(
         default="api",
         validation_alias=AliasChoices("DOOWON_API_INSTANCE_ID"),

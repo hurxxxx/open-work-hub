@@ -208,7 +208,27 @@ def _is_local_dev_admin_login_available(request: Request) -> bool:
     client_host = request.client.host if request.client else None
     request_host = request.url.hostname
     local_hosts = {"127.0.0.1", "::1", "localhost", "testclient"}
-    return client_host in local_hosts or request_host in local_hosts
+    if client_host in local_hosts or request_host in local_hosts:
+        return True
+
+    allowed_hosts = {
+        host.strip().lower()
+        for host in settings.dev_login_allowed_hosts.split(",")
+        if host.strip()
+    }
+    if not allowed_hosts:
+        return False
+
+    request_hosts = {
+        host.lower()
+        for host in [
+            request_host,
+            request.headers.get("host", "").split(":", 1)[0],
+            request.headers.get("x-forwarded-host", "").split(",", 1)[0].split(":", 1)[0],
+        ]
+        if host
+    }
+    return bool(request_hosts.intersection(allowed_hosts))
 
 
 def _ensure_local_dev_admin_login_allowed(request: Request) -> None:

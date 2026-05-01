@@ -247,6 +247,58 @@ def test_dev_login_creates_missing_dev_accounts_on_demand(client: TestClient) ->
     assert account_keys == EXPECTED_DEV_LOGIN_ACCOUNT_KEYS
 
 
+def test_dev_login_shortcut_allows_configured_external_host(monkeypatch) -> None:
+    from types import SimpleNamespace
+
+    from starlette.requests import Request
+
+    from aidoo_api.domains.auth import router as auth_router
+
+    def request_for(host: str, *, forwarded_host: str | None = None) -> Request:
+        headers = [(b"host", host.encode("ascii"))]
+        if forwarded_host is not None:
+            headers.append((b"x-forwarded-host", forwarded_host.encode("ascii")))
+        return Request(
+            {
+                "type": "http",
+                "method": "GET",
+                "path": "/api/v1/auth/bootstrap-status",
+                "headers": headers,
+                "client": ("203.0.113.10", 55123),
+                "server": (host.split(":", 1)[0], 443),
+                "scheme": "https",
+                "query_string": b"",
+            }
+        )
+
+    monkeypatch.setattr(
+        auth_router,
+        "get_settings",
+        lambda: SimpleNamespace(
+            environment="development",
+            allow_dev_admin_login=True,
+            dev_login_allowed_hosts="dwdcc.lumejs.com",
+        ),
+    )
+
+    assert auth_router._is_local_dev_admin_login_available(request_for("dwdcc.lumejs.com"))
+    assert auth_router._is_local_dev_admin_login_available(
+        request_for("internal-proxy:8000", forwarded_host="dwdcc.lumejs.com")
+    )
+    assert not auth_router._is_local_dev_admin_login_available(request_for("example.com"))
+
+    monkeypatch.setattr(
+        auth_router,
+        "get_settings",
+        lambda: SimpleNamespace(
+            environment="production",
+            allow_dev_admin_login=True,
+            dev_login_allowed_hosts="dwdcc.lumejs.com",
+        ),
+    )
+    assert not auth_router._is_local_dev_admin_login_available(request_for("dwdcc.lumejs.com"))
+
+
 def test_auth_preferences_password_and_sessions(client: TestClient) -> None:
     token = _bootstrap_admin(client)
 
