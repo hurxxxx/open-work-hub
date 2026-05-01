@@ -10,6 +10,7 @@ export type WorkspaceAppId =
   | 'ai'
   | 'pms'
   | 'docs'
+  | 'whiteboard'
   | 'planner'
   | 'meeting'
   | 'learning';
@@ -19,6 +20,7 @@ export const WORKSPACE_APP_IDS: readonly WorkspaceAppId[] = [
   'ai',
   'pms',
   'docs',
+  'whiteboard',
   'planner',
   'meeting',
   'learning',
@@ -30,6 +32,7 @@ const WORKSPACE_API_PREFIXES = [
   '/api/v1/connectors',
   '/api/v1/pms',
   '/api/v1/docs',
+  '/api/v1/whiteboard',
   '/api/v1/drafts',
   '/api/v1/meeting',
   '/api/v1/planner',
@@ -41,7 +44,7 @@ const WORKSPACE_API_PREFIXES = [
 
 const LAST_WORKSPACE_STORAGE_KEY = 'aidoo:last-workspace-slug';
 const LAST_WORKSPACE_APP_STORAGE_KEY = 'aidoo:last-workspace-app';
-const WORKSPACE_APP_PATH_PATTERN = /^\/w\/[^/]+\/(home|ai|pms|docs|planner|meeting|learning)(?:\/|$)/;
+const WORKSPACE_APP_PATH_PATTERN = /^\/w\/[^/]+\/(home|ai|pms|docs|whiteboard|planner|meeting|learning)(?:\/|$)/;
 
 function isWorkspaceAppId(value: string | null | undefined): value is WorkspaceAppId {
   return (WORKSPACE_APP_IDS as readonly string[]).includes(value ?? '');

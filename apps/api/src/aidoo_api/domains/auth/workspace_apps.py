@@ -265,6 +265,42 @@ WORKSPACE_APP_CATALOG: tuple[WorkspaceAppCatalogItem, ...] = (
         ),
     ),
     WorkspaceAppCatalogItem(
+        app_id="whiteboard",
+        title="WHITEBOARD",
+        route_base="/whiteboard",
+        icon_key="pencil-ruler",
+        nav_items=(
+            WorkspaceNavCatalogItem(
+                id="whiteboard-all",
+                app_id="whiteboard",
+                title="All Whiteboards",
+                category="Library",
+                icon_key="pencil-ruler",
+            ),
+            WorkspaceNavCatalogItem(
+                id="whiteboard-my",
+                app_id="whiteboard",
+                title="My Whiteboards",
+                category="Library",
+                icon_key="user",
+            ),
+            WorkspaceNavCatalogItem(
+                id="whiteboard-recent",
+                app_id="whiteboard",
+                title="Recent",
+                category="Library",
+                icon_key="history",
+            ),
+            WorkspaceNavCatalogItem(
+                id="whiteboard-archived",
+                app_id="whiteboard",
+                title="Archived",
+                category="Library",
+                icon_key="history",
+            ),
+        ),
+    ),
+    WorkspaceAppCatalogItem(
         app_id="planner",
         title="Planner",
         route_base="/planner",

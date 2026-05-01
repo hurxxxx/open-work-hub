@@ -5,6 +5,7 @@ export type AppModuleId =
   | 'ai'
   | 'pms'
   | 'docs'
+  | 'whiteboard'
   | 'planner'
   | 'meeting'
   | 'learning'

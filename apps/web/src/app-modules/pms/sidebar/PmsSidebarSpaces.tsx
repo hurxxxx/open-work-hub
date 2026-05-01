@@ -15,6 +15,7 @@ import {
   withDocsItemPrimaryContainerSortOrder,
   type DocsHubItem,
 } from '@/src/app-modules/docs/public-api';
+import { createWhiteboard } from '@/src/app-modules/whiteboard/public-api';
 import { useAuth } from '@/src/platform/auth/auth-provider';
 import {
   hasWorkspaceMembership,
@@ -267,6 +268,38 @@ export function PmsSidebarSpaces({
       }
     },
     [navigate, prompt, token],
+  );
+
+  const handleCreateWhiteboard = useCallback(
+    async (spaceId: string) => {
+      if (!token) return;
+      const title = await prompt({
+        title: 'New Whiteboard',
+        placeholder: 'Whiteboard name',
+        defaultValue: '',
+      });
+      if (!title) return;
+      try {
+        const board = await createWhiteboard(
+          token,
+          {
+            title,
+            source_app: 'pms',
+            source_kind: 'manual',
+            primary_container: {
+              app: 'pms',
+              type: 'space',
+              id: spaceId,
+            },
+          },
+          currentWorkspaceSlug,
+        );
+        navigate(`/tool/pms-space-${spaceId}-whiteboards-${board.id}`);
+      } catch {
+        /* ignore */
+      }
+    },
+    [currentWorkspaceSlug, navigate, prompt, token],
   );
 
   const handleRenameDoc = useCallback(
@@ -937,6 +970,12 @@ export function PmsSidebarSpaces({
                         onAddFolder={() => openCreateFolder(space.id)}
                         onOpenDocs={() => {
                           void handleCreateDoc(space.id);
+                        }}
+                        onCreateWhiteboard={() => {
+                          void handleCreateWhiteboard(space.id);
+                        }}
+                        onOpenWhiteboards={() => {
+                          navigate(`/tool/pms-space-${space.id}-whiteboards`);
                         }}
                         onMoveFolder={(folderId, direction) => {
                           void handleMoveFolder(space.id, folderId, direction);

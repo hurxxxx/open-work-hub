@@ -3,6 +3,7 @@ const appModuleIds = [
   'ai',
   'pms',
   'docs',
+  'whiteboard',
   'planner',
   'meeting',
   'learning',

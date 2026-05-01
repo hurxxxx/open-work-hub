@@ -295,6 +295,7 @@ def _build_client(
     from aidoo_api.domains.meeting import models as meeting_models  # noqa: F401
     from aidoo_api.domains.pms import models as pms_models  # noqa: F401
     from aidoo_api.domains.rag.runtime import reset_rag_runtime_caches
+    from aidoo_api.domains.whiteboard import models as whiteboard_models  # noqa: F401
 
     _clear_cache(get_settings)
     _clear_cache(get_async_pool_client)

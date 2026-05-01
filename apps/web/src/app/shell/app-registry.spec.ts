@@ -76,6 +76,7 @@ describe('app module registry', () => {
     expect(getAppSidebarConfig('ai')).not.toBeNull();
     expect(getAppSidebarConfig('pms')).not.toBeNull();
     expect(getAppSidebarConfig('docs')).not.toBeNull();
+    expect(getAppSidebarConfig('whiteboard')).not.toBeNull();
     expect(getAppSidebarConfig('learning')).not.toBeNull();
     expect(getAppSidebarConfig('home')).toBeNull();
     expect(getAppSidebarConfig('settings')).toBeNull();

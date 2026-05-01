@@ -267,6 +267,9 @@ describe('rewriteWorkspaceApiPath', () => {
     expect(rewriteWorkspaceApiPath('/api/v1/docs/hub')).toBe(
       '/api/v1/workspaces/hq/docs/hub',
     );
+    expect(rewriteWorkspaceApiPath('/api/v1/whiteboard/hub')).toBe(
+      '/api/v1/workspaces/hq/whiteboard/hub',
+    );
   });
 
   it('preserves intentionally public docs shared-link endpoints', () => {

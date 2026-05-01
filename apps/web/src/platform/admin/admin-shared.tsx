@@ -4,6 +4,7 @@ import {
   CalendarDays,
   FileText,
   ListTodo,
+  PencilRuler,
   Search,
   Shield,
   Video,
@@ -22,6 +23,7 @@ export const PEOPLE_EXPORT_PAGE_SIZE = 100;
 export const APP_LABELS: Record<string, string> = {
   ai: 'AI',
   docs: 'Docs',
+  whiteboard: 'Whiteboard',
   pms: 'PMS',
   planner: 'Planner',
   meeting: 'Meeting',
@@ -31,16 +33,18 @@ export const APP_LABELS: Record<string, string> = {
 export const WORKSPACE_ENABLED_APP_LABELS = {
   ai: APP_LABELS.ai,
   docs: APP_LABELS.docs,
+  whiteboard: APP_LABELS.whiteboard,
   pms: APP_LABELS.pms,
   planner: APP_LABELS.planner,
   meeting: APP_LABELS.meeting,
 } satisfies Record<string, string>;
 
-export const APP_ORDER: string[] = ['ai', 'docs', 'pms', 'planner', 'meeting'];
+export const APP_ORDER: string[] = ['ai', 'docs', 'whiteboard', 'pms', 'planner', 'meeting'];
 
 export const APP_DESCRIPTIONS: Record<string, string> = {
   ai: 'AI 검색과 어시스턴트',
   docs: '문서 작성과 지식 베이스',
+  whiteboard: '화이트보드와 다이어그램',
   pms: '리스트와 이슈 관리',
   planner: '일정과 캘린더',
   meeting: '회의록과 첨부 자료',
@@ -49,6 +53,7 @@ export const APP_DESCRIPTIONS: Record<string, string> = {
 export const APP_ICONS: Record<string, LucideIcon> = {
   ai: Bot,
   docs: FileText,
+  whiteboard: PencilRuler,
   pms: ListTodo,
   planner: CalendarDays,
   meeting: Video,

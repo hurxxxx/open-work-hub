@@ -65,6 +65,7 @@ import { CreateSpaceModal } from './CreateSpaceModal';
 import { FilterBar } from './FilterBar';
 import { BulkActionBar } from './BulkActionBar';
 import { SpaceDocsView } from './SpaceDocsView';
+import { SpaceWhiteboardsView } from './SpaceWhiteboardsView';
 import { SpaceOverviewView } from './SpaceOverviewView';
 import { taskListRoleAllows } from '../api/pms-permissions';
 
@@ -136,7 +137,15 @@ export const PMSView = () => {
   const spaceDocsMatch = toolId?.match(/^pms-space-([0-9a-f-]+)-docs(?:-([0-9a-f-]+))?$/);
   const spaceDocsSpaceId = spaceDocsMatch?.[1] ?? null;
   const spaceDocsDocId = spaceDocsMatch?.[2] ?? null;
-  const spaceOverviewId = (toolId && /^pms-space-.+$/.test(toolId) && !spaceDocsMatch) ? toolId.replace('pms-space-', '') : null;
+  const spaceWhiteboardsMatch = toolId?.match(/^pms-space-([0-9a-f-]+)-whiteboards(?:-([0-9a-f-]+))?$/);
+  const spaceWhiteboardsSpaceId = spaceWhiteboardsMatch?.[1] ?? null;
+  const spaceWhiteboardsWhiteboardId = spaceWhiteboardsMatch?.[2] ?? null;
+  const spaceOverviewId = (
+    toolId
+    && /^pms-space-.+$/.test(toolId)
+    && !spaceDocsMatch
+    && !spaceWhiteboardsMatch
+  ) ? toolId.replace('pms-space-', '') : null;
   const isOverviewRoute = !toolId && !createTaskRequested && !isNewTaskModalOpen;
   const selectedTaskList = taskLists.find((taskList) => taskList.id === selectedTaskListId);
   const taskListName = selectedTaskList?.name || 'List';
@@ -418,6 +427,16 @@ export const PMSView = () => {
   if (spaceDocsSpaceId) {
     const spaceName = taskLists.find((taskList) => taskList.team_id === spaceDocsSpaceId)?.team_name ?? null;
     return <SpaceDocsView spaceId={spaceDocsSpaceId} spaceName={spaceName} docId={spaceDocsDocId} />;
+  }
+  if (spaceWhiteboardsSpaceId) {
+    const spaceName = taskLists.find((taskList) => taskList.team_id === spaceWhiteboardsSpaceId)?.team_name ?? null;
+    return (
+      <SpaceWhiteboardsView
+        spaceId={spaceWhiteboardsSpaceId}
+        spaceName={spaceName}
+        whiteboardId={spaceWhiteboardsWhiteboardId}
+      />
+    );
   }
   if (spaceOverviewId) {
     const spaceName = taskLists.find((taskList) => taskList.team_id === spaceOverviewId)?.team_name ?? null;

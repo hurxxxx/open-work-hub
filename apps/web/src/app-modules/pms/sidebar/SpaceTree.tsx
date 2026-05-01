@@ -31,6 +31,7 @@ import {
   FolderOpen,
   FileText,
   MoreHorizontal,
+  PencilRuler,
   Pencil,
   Plus,
   Trash2,
@@ -79,6 +80,7 @@ const SpaceAddPopover = ({
   onCreateList,
   onCreateFolder,
   onOpenDocs,
+  onCreateWhiteboard,
 }: {
   open: boolean;
   anchorRef: React.RefObject<HTMLButtonElement | null>;
@@ -86,6 +88,7 @@ const SpaceAddPopover = ({
   onCreateList: () => void;
   onCreateFolder: () => void;
   onOpenDocs: () => void;
+  onCreateWhiteboard: () => void;
 }) => {
   const ref = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState({ top: 0, left: 0 });
@@ -144,6 +147,16 @@ const SpaceAddPopover = ({
         <div className="text-left">
           <div className="app-text-control-sm text-app-ink">Doc</div>
           <div className="app-text-micro text-app-ink/40">Write and organize documents</div>
+        </div>
+      </button>
+      <button
+        onClick={() => { onCreateWhiteboard(); onClose(); }}
+        className="w-full flex items-center gap-3 px-3 py-2 hover:bg-app-surface-hover transition-colors"
+      >
+        <PencilRuler size={16} className="text-gray-400" />
+        <div className="text-left">
+          <div className="app-text-control-sm text-app-ink">Whiteboard</div>
+          <div className="app-text-micro text-app-ink/40">Sketch and map ideas</div>
         </div>
       </button>
     </div>,
@@ -587,6 +600,8 @@ export const SpaceItem = ({
   onAddListToFolder,
   onAddFolder,
   onOpenDocs,
+  onCreateWhiteboard,
+  onOpenWhiteboards,
   onMoveFolder,
   onRenameFolder,
   onDeleteFolder,
@@ -616,6 +631,8 @@ export const SpaceItem = ({
   onAddListToFolder: (folderId: string) => void;
   onAddFolder: () => void;
   onOpenDocs: () => void;
+  onCreateWhiteboard: () => void;
+  onOpenWhiteboards: () => void;
   onMoveFolder: (folderId: string, direction: 'up' | 'down') => void;
   onRenameFolder: (folderId: string, currentName: string) => void;
   onDeleteFolder: (folderId: string) => void;
@@ -655,8 +672,11 @@ export const SpaceItem = ({
 
 
   const spaceOverviewToolId = `pms-space-${spaceId}`;
+  const spaceWhiteboardsToolId = `pms-space-${spaceId}-whiteboards`;
   const spaceActive = activeNavItemId === spaceOverviewToolId
     || activeNavItemId.startsWith(`pms-space-${spaceId}-docs-`)
+    || activeNavItemId === spaceWhiteboardsToolId
+    || activeNavItemId.startsWith(`${spaceWhiteboardsToolId}-`)
     || rootLists.some((list) => activeNavItemId === `pms-list-${list.id}`)
     || folders.some(({ lists }) => lists.some((list) => activeNavItemId === `pms-list-${list.id}`));
 
@@ -883,6 +903,7 @@ export const SpaceItem = ({
               onCreateList={onAddList}
               onCreateFolder={onAddFolder}
               onOpenDocs={onOpenDocs}
+              onCreateWhiteboard={onCreateWhiteboard}
             />
           </>
         ) : null}
@@ -1045,6 +1066,20 @@ export const SpaceItem = ({
                   onCloseMenu={() => setDocMenuOpen(null)}
                 />
               ))}
+
+              <button
+                type="button"
+                onClick={onOpenWhiteboards}
+                className={cn(
+                  'sidebar-submenu-item w-full text-left',
+                  (activeNavItemId === spaceWhiteboardsToolId
+                    || activeNavItemId.startsWith(`${spaceWhiteboardsToolId}-`))
+                    && 'sidebar-submenu-item-active',
+                )}
+              >
+                <PencilRuler size={13} className="text-gray-500 shrink-0" />
+                <span className="sidebar-submenu-label">Whiteboards</span>
+              </button>
                 </div>
               </SortableContext>
             </DndContext>

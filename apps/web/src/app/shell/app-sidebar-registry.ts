@@ -4,6 +4,7 @@ import { learningSidebarConfig } from '@/src/app-modules/learning';
 import { meetingSidebarConfig } from '@/src/app-modules/meeting';
 import { plannerSidebarConfig } from '@/src/app-modules/planner';
 import { pmsSidebarConfig } from '@/src/app-modules/pms';
+import { whiteboardSidebarConfig } from '@/src/app-modules/whiteboard';
 import type { AppModuleId } from './navigation-types';
 import type { AppSidebarConfig } from './sidebar-types';
 
@@ -14,6 +15,7 @@ const SIDEBAR_CONFIGS: Partial<Record<AppModuleId, AppSidebarConfig>> = {
   meeting: meetingSidebarConfig,
   planner: plannerSidebarConfig,
   pms: pmsSidebarConfig,
+  whiteboard: whiteboardSidebarConfig,
 };
 
 export function getAppSidebarConfig(

@@ -37,6 +37,7 @@ def test_workspace_bootstrap_returns_entitled_apps_and_nav(client: TestClient) -
         "ai",
         "pms",
         "docs",
+        "whiteboard",
         "planner",
         "meeting",
     }
@@ -114,6 +115,7 @@ def test_workspace_bootstrap_falls_back_to_default_catalog_without_entitlement_t
         "ai",
         "pms",
         "docs",
+        "whiteboard",
         "planner",
         "meeting",
     }

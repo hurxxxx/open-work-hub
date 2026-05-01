@@ -11,6 +11,7 @@ export type ShellAppId =
   | 'ai'
   | 'pms'
   | 'docs'
+  | 'whiteboard'
   | 'planner'
   | 'meeting'
   | 'learning'
@@ -29,7 +30,7 @@ const HOME_SHELL_STATE: ShellState = {
 
 function canShowAppChrome(
   user: AuthUser | null | undefined,
-  appId: 'ai' | 'pms' | 'docs' | 'planner' | 'meeting' | 'learning' | 'settings',
+  appId: 'ai' | 'pms' | 'docs' | 'whiteboard' | 'planner' | 'meeting' | 'learning' | 'settings',
   workspaceSlug?: string | null,
   enabledWorkspaceAppIds?: readonly string[],
 ): boolean {
@@ -118,6 +119,12 @@ export function resolveShellState(
   if (/^\/w\/[^/]+\/docs(?:\/|$)/.test(path)) {
     return canShowAppChrome(user, 'docs', workspaceSlug, enabledWorkspaceAppIds)
       ? { activeAppId: 'docs', activeNavItemId: 'docs-all' }
+      : HOME_SHELL_STATE;
+  }
+
+  if (/^\/w\/[^/]+\/whiteboard(?:\/|$)/.test(path)) {
+    return canShowAppChrome(user, 'whiteboard', workspaceSlug, enabledWorkspaceAppIds)
+      ? { activeAppId: 'whiteboard', activeNavItemId: 'whiteboard-all' }
       : HOME_SHELL_STATE;
   }
 

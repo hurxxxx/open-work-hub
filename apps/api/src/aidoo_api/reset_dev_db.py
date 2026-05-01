@@ -54,6 +54,7 @@ def main() -> None:
     from aidoo_api.domains.media import models as media_models  # noqa: F401
     from aidoo_api.domains.meeting import models as meeting_models  # noqa: F401
     from aidoo_api.domains.pms import models as pms_models  # noqa: F401
+    from aidoo_api.domains.whiteboard import models as whiteboard_models  # noqa: F401
 
     # Drop and recreate the public schema wholesale instead of letting
     # SQLAlchemy walk the metadata graph. drop_all() only knows about

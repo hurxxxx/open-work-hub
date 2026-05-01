@@ -6,6 +6,7 @@ import { meetingManifest } from '@/src/app-modules/meeting';
 import { plannerManifest } from '@/src/app-modules/planner';
 import { pmsManifest } from '@/src/app-modules/pms';
 import { settingsManifest } from '@/src/app-modules/settings';
+import { whiteboardManifest } from '@/src/app-modules/whiteboard';
 import type {
   AppBarItem,
   AppModuleId,
@@ -18,6 +19,7 @@ const DEFAULT_MANIFESTS: AppModuleManifest[] = [
   aiManifest,
   pmsManifest,
   docsManifest,
+  whiteboardManifest,
   plannerManifest,
   meetingManifest,
   learningManifest,

@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   Layout,
   FileText,
+  PencilRuler,
   FolderOpen,
   FolderKanban,
   ChevronRight,
@@ -17,6 +18,11 @@ import {
   listDocsHub,
   type DocsHubItem,
 } from '@/src/app-modules/docs/public-api';
+import {
+  getWhiteboardItemPrimaryContainerSortOrder,
+  listWhiteboardHub,
+  type WhiteboardHubItem,
+} from '@/src/app-modules/whiteboard/public-api';
 import {
   listPmsTaskLists,
   listFolders,
@@ -64,6 +70,14 @@ function sortSpaceDocs(items: DocsHubItem[]): DocsHubItem[] {
   );
 }
 
+function sortSpaceWhiteboards(items: WhiteboardHubItem[]): WhiteboardHubItem[] {
+  return [...items].sort(
+    (left, right) => getWhiteboardItemPrimaryContainerSortOrder(left)
+      - getWhiteboardItemPrimaryContainerSortOrder(right)
+      || left.title.localeCompare(right.title, 'ko'),
+  );
+}
+
 export const SpaceOverviewView = ({
   spaceId,
   spaceName,
@@ -76,6 +90,7 @@ export const SpaceOverviewView = ({
   const [lists, setLists] = useState<PmsTaskList[]>([]);
   const [folders, setFolders] = useState<PmsFolder[]>([]);
   const [spaceDocs, setSpaceDocs] = useState<DocsHubItem[]>([]);
+  const [spaceWhiteboards, setSpaceWhiteboards] = useState<WhiteboardHubItem[]>([]);
   const [members, setMembers] = useState<PmsSpaceMember[]>([]);
   const [spaceMeta, setSpaceMeta] = useState<PmsSpace | null>(null);
   const [loading, setLoading] = useState(true);
@@ -100,6 +115,15 @@ export const SpaceOverviewView = ({
         sort_by: 'container_sort_order',
         sort_dir: 'asc',
       }).catch(() => ({ items: [] as DocsHubItem[], total: 0, page: 1, page_size: 200 })),
+      listWhiteboardHub(token, {
+        view: 'all',
+        container_app: 'pms',
+        container_type: 'space',
+        container_id: spaceId,
+        page_size: 200,
+        sort_by: 'container_sort_order',
+        sort_dir: 'asc',
+      }).catch(() => ({ items: [] as WhiteboardHubItem[], total: 0, page: 1, page_size: 200 })),
       listSpaceMembers(token, spaceId).catch(() => ({
         items: [] as PmsSpaceMember[],
         total: 0,
@@ -108,11 +132,12 @@ export const SpaceOverviewView = ({
       })),
       listSpaces(token).catch(() => [] as PmsSpace[]),
     ])
-      .then(([listRes, folderRes, docsRes, memberRes, spaces]) => {
+      .then(([listRes, folderRes, docsRes, whiteboardRes, memberRes, spaces]) => {
         if (cancelled) return;
         setLists(listRes.items);
         setFolders(folderRes.items);
         setSpaceDocs(sortSpaceDocs(docsRes.items));
+        setSpaceWhiteboards(sortSpaceWhiteboards(whiteboardRes.items));
         setMembers(memberRes.items);
         const me = Array.isArray(spaces)
           ? spaces.find((s) => s.id === spaceId) ?? null
@@ -159,7 +184,7 @@ export const SpaceOverviewView = ({
           <div>
             <h1 className="app-text-title-lg text-app-ink">{spaceName ?? 'Space'}</h1>
             <div className="app-text-micro text-gray-500">
-              {lists.length} lists · {folders.length} folders · {spaceDocs.length} doc collections
+              {lists.length} lists · {folders.length} folders · {spaceDocs.length} docs · {spaceWhiteboards.length} whiteboards
             </div>
           </div>
         </div>
@@ -260,6 +285,37 @@ export const SpaceOverviewView = ({
                   View all collections
                 </button>
               )}
+            </div>
+          </Panel>
+
+          {/* Whiteboards */}
+          <Panel>
+            <h3 className="app-text-title-md mb-4 flex items-center gap-2 text-app-ink">
+              <PencilRuler size={16} className="text-app-accent" />
+              Whiteboards
+            </h3>
+            <div className="space-y-2">
+              {spaceWhiteboards.slice(0, 8).map((board) => (
+                <div
+                  key={board.id}
+                  onClick={() => navigate(`/tool/pms-space-${spaceId}-whiteboards-${board.id}`)}
+                  className="flex items-center gap-3 p-2 hover:bg-app-surface-hover rounded-md cursor-pointer group"
+                >
+                  <PencilRuler size={14} className="text-gray-500 shrink-0" />
+                  <span className="app-text-body-sm flex-1 truncate text-app-ink transition-colors group-hover:text-app-accent">
+                    {board.title}
+                  </span>
+                </div>
+              ))}
+              {spaceWhiteboards.length === 0 && (
+                <p className="app-text-body text-app-ink/40">No whiteboards yet</p>
+              )}
+              <button
+                onClick={() => navigate(`/tool/pms-space-${spaceId}-whiteboards`)}
+                className="app-text-control-sm text-app-accent transition-colors hover:text-app-accent/80"
+              >
+                {spaceWhiteboards.length > 0 ? 'View all whiteboards' : 'Open whiteboards'}
+              </button>
             </div>
           </Panel>
 
