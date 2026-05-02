@@ -178,6 +178,9 @@ RecordingStaging
   last_chunk_at
   completed_at
   promoted_recording_id
+  initial_container_app
+  initial_container_type
+  initial_container_id
 
 RecordingContainer
   id
@@ -194,6 +197,16 @@ RecordingContainer
 `MeetingRecording`과 `MeetingRecordingStaging`은 새 canonical 모델로 마이그레이션한다. 전환 중 호환이 필요하면 schema/API serialization 단계에서 `MeetingRecordingOut` 형태로 변환한다.
 
 Meeting에 연결된 녹음은 사용자가 녹음 순서를 명확히 알아야 하므로 `RecordingContainer.sort_order`를 Meeting별 안정 순번으로 사용한다. 기존 Meeting 호환 레이어에서는 이를 `MeetingRecording.sequence_no`로 노출하고, Recording 도메인 전환 시 backfill 값은 `recording_containers.sort_order`로 이전한다. 신규 object key/다운로드 파일명은 녹음 시작 시각 기반(`YYYYMMDDTHHMMSSZ`)으로 만든다.
+
+원본 음성 저장 상태와 후속 처리 상태는 분리한다. v1에서 사용자가 가장 먼저 신뢰해야 하는 상태는 “원본 음성이 안전하게 저장되었는가”이며, 전사/전사 원문 문서/회의록 문서/Meeting insight 생성은 각각 별도 처리 상태로 표시한다.
+
+```text
+audio_status = local_only | uploading | saved | failed
+transcript_status = pending | transcribing | done | failed
+raw_transcript_doc_status = pending | creating | done | failed
+minutes_doc_status = pending | creating | done | failed
+meeting_insight_status = none | pending | extracting | done | failed
+```
 
 ### API
 
@@ -212,6 +225,7 @@ PATCH  /recording/recordings/{recording_id}
 DELETE /recording/recordings/{recording_id}
 
 GET    /recording/recordings/{recording_id}/playback
+GET    /recording/recordings/{recording_id}/media
 POST   /recording/recordings/{recording_id}/retry
 
 POST   /recording/recordings/{recording_id}/containers
@@ -241,11 +255,26 @@ GET    /meeting/meetings/{meeting_id}/recordings/staging
 DELETE /meeting/meetings/{meeting_id}/recordings/staging/{staging_id}
 POST   /meeting/meetings/{meeting_id}/recordings/import
 GET    /meeting/meetings/{meeting_id}/recordings/{recording_id}/playback
+GET    /meeting/meetings/{meeting_id}/recordings/{recording_id}/media
 POST   /meeting/meetings/{meeting_id}/recordings/{recording_id}/retry
 DELETE /meeting/meetings/{meeting_id}/recordings/{recording_id}
 ```
 
-하지만 내부 구현은 `recording.service`를 호출한다. Meeting별 단일 녹음 lock도 RecordingStaging + meeting container 기준으로 계산한다.
+하지만 내부 구현은 `recording.service`를 호출한다. Meeting별 단일 녹음 lock은 `RecordingStaging.initial_container_app/type/id`가 meeting container를 가리키는 활성 staging 기준으로 계산한다.
+
+### Permission model
+
+Recording 앱 자체는 owner-private 모델을 따른다.
+
+- `/recording/recordings` 목록과 Recording detail은 기본적으로 `recordings.owner_id == current_user.id`인 내 녹음만 보여준다.
+- `/recording/recordings?container_app=...&container_type=...&container_id=...`처럼 특정 object의 첨부 녹음을 조회하는 경우에는 owner가 아니라 해당 container object의 권한을 따른다.
+- owner는 원본 음성 재생, 제목 변경, retry, 삭제, 연결 대상 추가/해제를 수행할 수 있다.
+- 연결 대상 추가는 대상 도메인의 권한 검사를 통과해야 한다. 예를 들어 PMS task에 붙이려면 PMS task attach 권한, Meeting에 붙이려면 Meeting 참가/수정 권한, Docs object에 붙이려면 해당 Docs 권한을 사용한다.
+- 녹음이 다른 앱의 object에 첨부된 뒤에는 그 object 화면에서의 노출/재생/검색 권한은 첨부 대상 object의 권한을 따른다. 즉 Recording 앱에서는 owner만 보지만, PMS task나 Meeting 화면에서는 그 object를 볼 수 있는 사용자가 연결된 녹음을 볼 수 있다.
+- `/playback`과 `/media`는 owner 또는 접근 가능한 container object가 하나 이상 있는 사용자에게 허용한다. 단, 삭제와 영구 archive는 owner만 수행한다.
+- container detach는 owner, attachment를 추가한 사용자, 또는 대상 object에서 attachment 제거 권한이 있는 사용자만 수행한다. 마지막 container가 제거되면 녹음은 다시 owner-private 상태로 남는다.
+- 연결되지 않은 녹음과 연결되지 않은 전사/회의록 문서는 owner private ACL을 유지한다.
+- Search/RAG projection은 source가 Recording 단독이면 owner ACL, container에 첨부된 문서이면 container object ACL을 적용한다.
 
 ## Document Generation
 
@@ -350,7 +379,16 @@ Meeting 연결 후보는 녹음 시작/종료 시간과 겹치는 meeting을 우
 
 ## Migration Plan
 
-### Step 1: Add canonical recording tables
+### Step 0: Preserve current Meeting recording baseline
+
+현재 Meeting 녹음이 이미 사용자 워크플로우에 들어가 있으므로, canonical 전환 전에 다음 동작을 baseline으로 고정한다.
+
+- Meeting 화면에서 녹음 시작/중지 후 원본 음성이 MinIO에 저장된다.
+- playback은 same-origin authenticated `/media` stream을 사용한다.
+- Meeting별 녹음 순번은 안정적으로 유지된다.
+- 원본 음성 저장 상태와 전사/후속 처리 상태는 분리되어 보인다.
+
+### Step 1: Add canonical recording tables and service shell
 
 새 테이블을 추가한다.
 
@@ -358,7 +396,18 @@ Meeting 연결 후보는 녹음 시작/종료 시간과 겹치는 meeting을 우
 - `recording_staging`
 - `recording_containers`
 
-### Step 2: Backfill existing Meeting data
+이 단계에서는 새 테이블과 API/service shell을 추가하되, 기존 Meeting write path를 즉시 제거하지 않는다. `recording.service`에는 권한 helper, owner-private 조회, container ACL 조회, same-origin `/media` stream 계약을 먼저 둔다.
+
+### Step 2: Switch new writes through Recording service
+
+Meeting compatibility route가 `recording.service`를 호출하도록 바꾼다. 이 시점부터 신규 Meeting 녹음은 canonical `recordings` / `recording_staging` / `recording_containers`에 기록한다.
+
+전환 배포 중 누락을 막기 위해 다음 중 하나를 명시적으로 선택한다.
+
+- old table read fallback을 유지하고, canonical에 없는 기존 row만 old table에서 읽는다.
+- 또는 짧은 전환 기간 동안 old/new dual-write를 유지한다.
+
+### Step 3: Backfill existing Meeting data
 
 기존 `meeting_recordings`를 `recordings`로 복사한다.
 
@@ -369,13 +418,12 @@ container_app = "meeting"
 container_type = "meeting"
 container_id = old.meeting_id
 is_primary = true
+sort_order = old.sequence_no
 ```
 
-기존 `meeting_recording_staging`도 `recording_staging`으로 이전한다. 기존 meeting relation은 staging metadata 또는 초기 container context로 보존한다.
+기존 `meeting_recording_staging`도 `recording_staging`으로 이전한다. 기존 meeting relation은 `initial_container_app/type/id`로 보존한다.
 
-### Step 3: Switch code paths
-
-Meeting route와 service가 새 Recording service를 호출하도록 변경한다.
+Backfill은 idempotent하고 재실행 가능해야 한다. Step 2 이후 새로 생성된 canonical row를 덮어쓰지 않으며, old table에만 남은 row를 catch-up 할 수 있어야 한다.
 
 ### Step 4: Remove old write path
 
@@ -383,22 +431,29 @@ Meeting route와 service가 새 Recording service를 호출하도록 변경한�
 
 ## Implementation Stages
 
-### PR 1 - Plan and backend canonical model
+### PR 1 - Baseline and backend canonical model
 
 - 이 문서를 추가한다.
+- 현재 Meeting 녹음의 저장/playback/순번/상태 분리 동작을 회귀 테스트로 고정한다.
 - `domains/recording/models.py`, schema, migration 추가.
-- 기존 meeting recording data backfill migration 작성.
+- `recording.service` shell, owner-private 권한 helper, container ACL helper 추가.
+- `/recording/recordings/{recording_id}/media` 계약과 Meeting wrapper media 계약 추가.
 - API registry에 recording router 등록.
 
 검증:
 
 - migration upgrade
+- same-origin media stream
+- owner-private Recording list
+- container ACL 기반 attached recording 조회
 - 기존 meeting recording tests가 아직 기존 path로 green
 
-### PR 2 - Recording service extraction
+### PR 2 - Recording service extraction and Meeting write cutover
 
 - `meeting/recordings.py`의 공용 로직을 `recording/service.py`로 이동.
 - Meeting route는 wrapper로 유지.
+- 신규 Meeting recording write는 canonical Recording tables로 전환.
+- canonical에 없는 기존 Meeting recording은 read fallback으로 유지하거나, 선택한 dual-write 전략을 적용.
 - 기존 `test_meeting_recordings.py`를 공용 service 경유 기준으로 갱신.
 - 새 `test_recording_service.py` 추가.
 
@@ -412,8 +467,25 @@ Meeting route와 service가 새 Recording service를 호출하도록 변경한�
 - retry
 - delete cleanup
 - meeting wrapper의 녹음 순번(`sequence_no`)과 시작시각 기반 object key
+- Meeting별 single-recorder lock이 `RecordingStaging.initial_container_*` 기준으로 동작
 
-### PR 3 - Worker pipeline commonization
+### PR 3 - Idempotent backfill and old write shutdown
+
+- 기존 `meeting_recordings`를 `recordings`로 backfill.
+- 기존 `MeetingRecording.sequence_no`를 `RecordingContainer.sort_order`로 backfill.
+- 기존 `meeting_recording_staging`을 `recording_staging`으로 backfill.
+- old table 신규 write path 제거.
+- read fallback 제거 가능 여부 확인. 불가능하면 제거 일정을 별도 TODO로 남긴다.
+
+검증:
+
+- backfill 재실행 안전성
+- 기존 Meeting detail 녹음 목록 동일성
+- playback/media 동일성
+- old table에만 있던 row의 catch-up
+- 새 녹음이 old table에 write되지 않음
+
+### PR 4 - Worker pipeline commonization
 
 - `recording.transcribe` 추가.
 - `recording.create_raw_transcript_doc` 추가.
@@ -428,20 +500,22 @@ Meeting route와 service가 새 Recording service를 호출하도록 변경한�
 - failed queue 상태에서도 원본 보존
 - 기존 meeting insight tests green
 
-### PR 4 - Web Recording app shell
+### PR 5 - Web shared recorder boundary
 
 - `apps/web/src/app-modules/recording/` 추가.
 - app registry, manifest, routes, sidebar 추가.
 - `recording-api.ts` 추가.
 - `recording-db.ts`, `useChunkedRecorder`, `useRecordingRecovery`를 Meeting에서 Recording module로 이동.
 - Meeting 화면은 Recording public API를 사용하도록 변경.
+- 기존 Meeting IndexedDB recovery data를 새 module에서 계속 읽을 수 있게 호환 유지.
 
 검증:
 
 - web architecture boundary check
 - Meeting detail에서 기존 녹음 UX 회귀 없음
+- 기존 IndexedDB recovery session 복구
 
-### PR 5 - Recording app UX
+### PR 6 - Recording app UX
 
 - Quick Record 화면 구현.
 - Recording list/detail 구현.
@@ -455,7 +529,7 @@ Meeting route와 service가 새 Recording service를 호출하도록 변경한�
 - reload 후 recovery
 - 회의/태스크 attach
 
-### PR 6 - Search/RAG and polish
+### PR 7 - Search/RAG and polish
 
 - 전사/회의록 docs를 검색/RAG 대상으로 sync.
 - Recording 자체 검색 projection 추가.
@@ -480,10 +554,15 @@ Meeting route와 service가 새 Recording service를 호출하도록 변경한�
 - complete 후 Recording 생성과 MinIO 저장 확인
 - enqueue 실패 시 raw audio 보존
 - playback permission
+- playback/media permission은 owner 또는 accessible container object 기준
 - retry는 failed recording에만 허용
 - delete 시 MinIO object cleanup
 - container attach 권한
+- container detach 권한
+- owner-private Recording list/detail
+- container filter 조회는 target object 권한을 따르는지 확인
 - meeting wrapper endpoint가 Recording service를 호출하는지 확인
+- backfill idempotency와 old-table catch-up
 
 ### Worker
 
