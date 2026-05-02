@@ -11,6 +11,7 @@ import {
   type MeetingInsightItem,
   type MeetingInsightListResult,
 } from '../../api/meeting-insights-api';
+import { formatDateTime } from '@/src/platform/time/time-utils';
 
 import { EmptyRow, Section } from './MeetingSection';
 
@@ -34,6 +35,7 @@ interface MeetingInsightSectionProps {
   meeting: MeetingDetail;
   workspaceSlug: string;
   token: string | null;
+  timeZone: string;
   onOpenInChat: (insight: MeetingInsightItem) => void | Promise<void>;
 }
 
@@ -63,18 +65,23 @@ function formatDueDate(value: unknown): string | null {
   return value;
 }
 
-function renderSlotList(slots: unknown): string[] {
+function renderSlotList(slots: unknown, timeZone: string): string[] {
   if (!Array.isArray(slots)) return [];
   const out: string[] = [];
   for (const raw of slots.slice(0, 3)) {
     if (!raw || typeof raw !== 'object') continue;
     const start = (raw as { start_at?: unknown }).start_at;
     if (typeof start !== 'string') continue;
-    const parsed = new Date(start);
-    if (Number.isNaN(parsed.valueOf())) continue;
-    out.push(
-      `${parsed.getMonth() + 1}/${parsed.getDate()} ${String(parsed.getHours()).padStart(2, '0')}:${String(parsed.getMinutes()).padStart(2, '0')}`,
-    );
+    const formatted = formatDateTime(start, {
+      fallback: '',
+      hour: '2-digit',
+      minute: '2-digit',
+      month: 'numeric',
+      day: 'numeric',
+      locale: 'ko-KR',
+      timeZone,
+    });
+    if (formatted) out.push(formatted);
   }
   return out;
 }
@@ -173,17 +180,19 @@ function FollowupCard({
   insight,
   followupContext,
   openState,
+  timeZone,
 }: {
   insight: MeetingInsightItem;
   followupContext: MeetingFollowupResult | null;
   openState: OpenInChatState;
+  timeZone: string;
 }) {
   const payload = insight.payload;
   const title =
     typeof payload.proposed_title === 'string' ? payload.proposed_title : '';
   const duration =
     typeof payload.duration_minutes === 'number' ? payload.duration_minutes : null;
-  const slots = renderSlotList(payload.proposed_slots);
+  const slots = renderSlotList(payload.proposed_slots, timeZone);
   const attendeeCount = Array.isArray(payload.attendee_user_ids)
     ? payload.attendee_user_ids.length
     : followupContext?.attendee_user_ids.length ?? 0;
@@ -223,6 +232,7 @@ export function MeetingInsightSection({
   meeting,
   workspaceSlug: _workspaceSlug,
   token,
+  timeZone,
   onOpenInChat,
 }: MeetingInsightSectionProps) {
   const [actionsState, setActionsState] = useState<GroupState<MeetingInsightItem>>(
@@ -517,6 +527,7 @@ export function MeetingInsightSection({
                     insight={insight}
                     followupContext={followupState.context}
                     openState={openState}
+                    timeZone={timeZone}
                   />
                 ))}
               </ul>

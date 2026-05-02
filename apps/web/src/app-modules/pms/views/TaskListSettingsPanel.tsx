@@ -3,6 +3,7 @@ import { motion } from 'motion/react';
 import { X, Plus, Pencil, Trash2, Check, Loader2 } from 'lucide-react';
 import { Button, InlineNotice, Select } from '@aidoo/ui';
 import { useAuth } from '@/src/platform/auth/auth-provider';
+import { formatDateTime, normalizeTimeZone } from '@/src/platform/time/time-utils';
 import {
   addSpaceMember,
   listTaskListLabels,
@@ -58,6 +59,7 @@ export function TaskListSettingsPanel({
   onStatusesChanged?: (statuses: PmsTaskListStatus[]) => void;
 }) {
   const { token, user } = useAuth();
+  const timeZone = normalizeTimeZone(user?.time_zone);
   const [members, setMembers] = useState<PmsSpaceMember[]>([]);
   const [availableUsers, setAvailableUsers] = useState<PmsUserSummary[]>([]);
   const [labels, setLabels] = useState<PmsLabel[]>([]);
@@ -368,7 +370,11 @@ export function TaskListSettingsPanel({
                     </div>
                     <div className="mt-2 flex items-center justify-between gap-2">
                       <div className="app-text-micro text-app-ink/35">
-                        Joined {new Date(member.joined_at).toLocaleDateString()}
+                        Joined {formatDateTime(member.joined_at, {
+                          dateStyle: 'medium',
+                          locale: 'en-US',
+                          timeZone,
+                        })}
                       </div>
                       <select
                         disabled={isProtectedManager || isSelf}

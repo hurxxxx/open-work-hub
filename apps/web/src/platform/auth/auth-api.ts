@@ -28,10 +28,11 @@ const TEAM_ROLE_RANK: Record<string, number> = {
 
 export type AuthUser = Omit<
   ApiSchema<'AuthUserResponse'>,
-  'created_at' | 'job_title' | 'last_login_at' | 'primary_org_unit' | 'theme_preference' | 'workspaces'
+  'created_at' | 'job_title' | 'last_login_at' | 'primary_org_unit' | 'theme_preference' | 'time_zone' | 'workspaces'
 > & {
   job_title?: string | null;
   theme_preference: ThemePreference;
+  time_zone: string;
   primary_org_unit: OrgUnitSummary | null;
   workspaces: WorkspaceSummary[];
   workspace_roles?: WorkspaceRole[];
@@ -137,8 +138,9 @@ export type LoginPayload = ApiSchema<'LoginRequest'>;
 
 export type SetupFirstUserPayload = ApiSchema<'SetupFirstUserRequest'>;
 
-export type UpdatePreferencesPayload = Omit<ApiSchema<'UpdatePreferencesRequest'>, 'theme_preference'> & {
+export type UpdatePreferencesPayload = Omit<ApiSchema<'UpdatePreferencesRequest'>, 'theme_preference' | 'time_zone'> & {
   theme_preference?: ThemePreference;
+  time_zone?: string;
 };
 
 export type ChangePasswordPayload = ApiSchema<'ChangePasswordRequest'>;

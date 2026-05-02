@@ -18,6 +18,7 @@ import {
 import { Button, Dialog, useConfirm } from '@aidoo/ui';
 
 import { useAuth } from '@/src/platform/auth/auth-provider';
+import { formatDateTime, normalizeTimeZone } from '@/src/platform/time/time-utils';
 import {
   RAIL_VISIBLE_STATUSES,
   attachDocToMeeting,
@@ -81,16 +82,23 @@ const STATUS_LABELS: Record<string, string> = {
   cancelled: '취소됨',
 };
 
-function formatRange(start: string, end: string): string {
+function formatRange(start: string, end: string, timeZone: string): string {
   const s = parseServerDateTime(start);
   const e = parseServerDateTime(end);
-  return `${s.toLocaleString('ko-KR', {
+  return `${formatDateTime(s, {
+    locale: 'ko-KR',
     month: 'short',
     day: 'numeric',
     weekday: 'short',
     hour: '2-digit',
     minute: '2-digit',
-  })} – ${e.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })}`;
+    timeZone,
+  })} – ${formatDateTime(e, {
+    hour: '2-digit',
+    locale: 'ko-KR',
+    minute: '2-digit',
+    timeZone,
+  })}`;
 }
 
 export function MeetingDetail({
@@ -102,6 +110,7 @@ export function MeetingDetail({
   showCloseButton = true,
 }: MeetingDetailProps) {
   const { token, user } = useAuth();
+  const timeZone = normalizeTimeZone(user?.time_zone);
   const navigate = useNavigate();
   const { confirm, confirmDialog } = useConfirm();
   const [meeting, setMeeting] = useState<MeetingDetailType | null>(null);
@@ -505,7 +514,7 @@ export function MeetingDetail({
             {meeting.title}
           </h2>
           <p className="app-text-caption mt-1 text-app-ink/60 dark:text-app-ink/70">
-            {formatRange(meeting.start_at, meeting.end_at)} · {meeting.organizer_name}
+            {formatRange(meeting.start_at, meeting.end_at, timeZone)} · {meeting.organizer_name}
           </p>
         </div>
         <div className="ml-3 flex shrink-0 items-center gap-1">
@@ -684,7 +693,12 @@ export function MeetingDetail({
                   {meeting.whiteboard_link.whiteboard_title}
                 </p>
                 <p className="app-text-caption text-app-ink/40">
-                  {new Date(meeting.whiteboard_link.updated_at).toLocaleString('ko-KR')}
+                  {formatDateTime(meeting.whiteboard_link.updated_at, {
+                    dateStyle: 'medium',
+                    locale: 'ko-KR',
+                    timeStyle: 'short',
+                    timeZone,
+                  })}
                 </p>
               </button>
               <div className="ml-2 flex shrink-0 items-center gap-1">
@@ -965,6 +979,7 @@ export function MeetingDetail({
             meeting={meeting}
             workspaceSlug={workspaceSlug}
             token={token}
+            timeZone={timeZone}
             onOpenInChat={async (insight) => {
               if (!token) {
                 throw new Error('AI 대화 컨텍스트를 시작하려면 다시 로그인해주세요.');

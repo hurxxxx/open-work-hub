@@ -8,6 +8,7 @@ import {
 } from '../../api/ai-api';
 import type { PendingApproval } from '../../api/agent-events';
 import { useAuth } from '@/src/platform/auth/auth-provider';
+import { formatDateTime, normalizeTimeZone } from '@/src/platform/time/time-utils';
 
 export interface ApprovalModalProps {
   approval: PendingApproval;
@@ -54,7 +55,7 @@ export function ApprovalModal({
   onResolve,
   onClose,
 }: ApprovalModalProps) {
-  const { token } = useAuth();
+  const { token, user } = useAuth();
   const [rejectReason, setRejectReason] = useState('');
   const [details, setDetails] = useState<AiApprovalStatusResponse | null>(null);
   const [detailsError, setDetailsError] = useState<string | null>(null);
@@ -103,13 +104,15 @@ export function ApprovalModal({
 
   const expiresLabel = useMemo(
     () =>
-      new Date(approval.expires_at_ms).toLocaleString('ko-KR', {
+      formatDateTime(approval.expires_at_ms, {
         month: 'numeric',
         day: 'numeric',
         hour: '2-digit',
         minute: '2-digit',
+        locale: 'ko-KR',
+        timeZone: normalizeTimeZone(user?.time_zone),
       }),
-    [approval.expires_at_ms],
+    [approval.expires_at_ms, user?.time_zone],
   );
 
   const argumentsJson = useMemo(

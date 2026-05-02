@@ -1,6 +1,11 @@
 /** PMS status/priority display constants shared across views. */
 
 import type { PmsTaskListStatus } from '../api/pms-api';
+import {
+  formatDateOnly,
+  formatDateTime,
+  parseDateOnlyParts,
+} from '@/src/platform/time/time-utils';
 
 export const ISSUE_STATUSES = ['backlog', 'todo', 'in_progress', 'done', 'canceled'] as const;
 
@@ -81,7 +86,18 @@ export function initials(name: string | null | undefined): string {
 /** Format ISO date string for display, e.g. "2024-04-10" → "Apr 10" */
 export function formatDate(isoDate: string | null | undefined): string {
   if (!isoDate) return '';
-  const d = new Date(isoDate);
-  if (isNaN(d.getTime())) return isoDate;
-  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  if (parseDateOnlyParts(isoDate)) {
+    return formatDateOnly(isoDate, {
+      fallback: isoDate,
+      locale: 'en-US',
+      month: 'short',
+      day: 'numeric',
+    });
+  }
+  return formatDateTime(isoDate, {
+    fallback: isoDate,
+    locale: 'en-US',
+    month: 'short',
+    day: 'numeric',
+  });
 }

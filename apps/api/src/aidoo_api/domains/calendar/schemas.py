@@ -47,7 +47,7 @@ class CalendarEventOut(BaseModel):
 
     ``start`` / ``end`` are ISO 8601 strings. For all-day events they are dates
     (YYYY-MM-DD). For time-ranged events they include a UTC offset and are
-    expected to be interpreted in the calendar component's ``Asia/Seoul`` zone.
+    expected to be interpreted in the calendar component's configured zone.
     """
 
     model_config = _camel_config()

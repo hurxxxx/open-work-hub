@@ -71,9 +71,8 @@ function isoOffset(daysFromToday: number, hour: number, minute = 0): string {
   const d = new Date();
   d.setDate(d.getDate() + daysFromToday);
   d.setHours(hour, minute, 0, 0);
-  // FullCalendar accepts native Date toISOString() and resolves under the
-  // calendar's timeZone option ('Asia/Seoul'). We stay UTC-naive here and let
-  // the calendar component convert.
+  // FullCalendar accepts native Date.toISOString() and resolves it under the
+  // calendar's configured timezone.
   return d.toISOString();
 }
 

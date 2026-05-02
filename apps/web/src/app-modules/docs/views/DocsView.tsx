@@ -47,6 +47,7 @@ import { CSS } from '@dnd-kit/utilities';
 import { useMediaUpload } from '@/src/platform/media/use-media-upload';
 import { useAuth } from '@/src/platform/auth/auth-provider';
 import { hasWorkspaceMembership } from '@/src/platform/auth/auth-api';
+import { formatRelativeTime, normalizeTimeZone } from '@/src/platform/time/time-utils';
 import { cn } from '@/src/lib/utils';
 import {
   createDocPage,
@@ -285,16 +286,8 @@ function LocationPicker({ value, onChange, options, busy }: LocationPickerProps)
   );
 }
 
-function timeAgo(dateStr: string): string {
-  const diff = Date.now() - new Date(dateStr).getTime();
-  const mins = Math.floor(diff / 60000);
-  if (mins < 1) return 'just now';
-  if (mins < 60) return `${mins}m ago`;
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs}h ago`;
-  const days = Math.floor(hrs / 24);
-  if (days < 7) return `${days}d ago`;
-  return new Date(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+function timeAgo(dateStr: string, timeZone: string): string {
+  return formatRelativeTime(dateStr, { locale: 'en', timeZone });
 }
 
 function sharingLabel(item: DocsHubItem): string {
@@ -320,6 +313,7 @@ export const DocsView = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const auth = useAuth();
   const { token } = auth;
+  const timeZone = normalizeTimeZone(auth.user?.time_zone);
   const { uploadFile, createLinkedUploadFile, resolveFileUrl } = useMediaUpload();
   const { confirm, confirmDialog } = useConfirm();
   const { prompt, promptDialog } = usePrompt();
@@ -1317,7 +1311,7 @@ export const DocsView = () => {
                       <span>·</span>
                       <span>{selectedDoc.location_label}</span>
                       <span>·</span>
-                      <span>Updated {timeAgo(activePage.updated_at)}</span>
+                      <span>Updated {timeAgo(activePage.updated_at, timeZone)}</span>
                     </div>
                   </div>
                   <div className="prose dark:prose-invert max-w-none pt-4">
@@ -1807,7 +1801,7 @@ export const DocsView = () => {
                             <span>{sharingLabel(item)}</span>
                           </div>
                         </td>
-                        <td className="px-4 py-3 app-text-body-sm text-gray-400">{timeAgo(item.updated_at)}</td>
+                        <td className="px-4 py-3 app-text-body-sm text-gray-400">{timeAgo(item.updated_at, timeZone)}</td>
                         <td className="px-4 py-3 relative">
                           <button
                             onClick={(event) => {

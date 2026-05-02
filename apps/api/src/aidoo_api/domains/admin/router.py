@@ -26,6 +26,7 @@ from aidoo_api.domains.auth.access import (
     is_valid_workspace_role,
     load_user_graph,
     load_active_workspace_by_id,
+    normalize_time_zone,
     normalize_system_role,
     normalize_workspace_role,
     replace_group_system_roles,
@@ -340,6 +341,7 @@ class AdminUserItemResponse(BaseModel):
     display_name: str
     status: str
     theme_preference: str
+    time_zone: str
     primary_org_unit: dict[str, str | None] | None
     system_roles: list[str]
     workspaces: list[dict[str, object]]
@@ -498,6 +500,14 @@ class AdminUserCreateRequest(BaseModel):
     system_roles: list[str] = Field(default_factory=list)
     temporary_password: str | None = Field(default=None, min_length=8, max_length=128)
     status: Literal["active", "invited", "suspended"] = "active"
+    time_zone: str | None = Field(default=None, min_length=1, max_length=64)
+
+    @field_validator("time_zone")
+    @classmethod
+    def validate_time_zone(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        return normalize_time_zone(value)
 
 
 class AdminUserUpdateRequest(BaseModel):
@@ -510,7 +520,15 @@ class AdminUserUpdateRequest(BaseModel):
     system_roles: list[str] | None = None
     status: Literal["active", "invited", "suspended"] | None = None
     theme_preference: Literal["system", "light", "dark"] | None = None
+    time_zone: str | None = Field(default=None, min_length=1, max_length=64)
     must_change_password: bool | None = None
+
+    @field_validator("time_zone")
+    @classmethod
+    def validate_time_zone(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        return normalize_time_zone(value)
 
 
 class ResetPasswordRequest(BaseModel):
@@ -707,6 +725,7 @@ def _serialize_admin_user_list(db: Session, users: list[User]) -> list[AdminUser
                     "display_name": user.display_name or user.full_name,
                     "status": user.status,
                     "theme_preference": user.theme_preference,
+                    "time_zone": user.time_zone or normalize_time_zone(None),
                     "primary_org_unit": serialize_org_unit(user.primary_org_unit),
                     "system_roles": system_roles,
                     "workspaces": workspace_summaries,
@@ -799,6 +818,7 @@ def create_user(
         primary_org_unit_id=payload.primary_org_unit_id,
         must_change_password=True,
         theme_preference="system",
+        time_zone=payload.time_zone or normalize_time_zone(None),
     )
     db.add(user)
     db.flush()
@@ -922,6 +942,8 @@ def update_user(
         user.status = payload.status
     if payload.theme_preference is not None:
         user.theme_preference = payload.theme_preference
+    if payload.time_zone is not None:
+        user.time_zone = payload.time_zone
     if payload.primary_org_unit_id is not None:
         user.primary_org_unit_id = payload.primary_org_unit_id
     if payload.must_change_password is not None:

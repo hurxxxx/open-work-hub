@@ -19,6 +19,7 @@ from aidoo_api.domains.auth.access import (
     list_dev_login_account_catalog,
     list_dev_login_accounts,
     load_user_graph,
+    normalize_time_zone,
     record_audit_log,
     resolve_group_slugs,
     replace_user_system_roles,
@@ -71,6 +72,7 @@ class AuthUserResponse(BaseModel):
     job_title: str | None
     status: str
     theme_preference: str
+    time_zone: str
     primary_org_unit: OrgUnitSummaryResponse | None
     system_roles: list[str]
     workspaces: list[WorkspaceSummaryResponse]
@@ -142,6 +144,14 @@ class UpdatePreferencesRequest(BaseModel):
     full_name: str | None = Field(default=None, min_length=2, max_length=120)
     job_title: str | None = Field(default=None, max_length=120)
     theme_preference: Literal["system", "light", "dark"] | None = None
+    time_zone: str | None = Field(default=None, min_length=1, max_length=64)
+
+    @field_validator("time_zone")
+    @classmethod
+    def validate_time_zone(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        return normalize_time_zone(value)
 
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -301,6 +311,7 @@ def setup_first_user(
         primary_org_unit_id=root_org_unit.id,
         must_change_password=False,
         theme_preference="system",
+        time_zone=normalize_time_zone(None),
     )
     db.add(user)
     db.flush()
@@ -496,6 +507,8 @@ def update_preferences(
         context.user.job_title = payload.job_title.strip()
     if payload.theme_preference is not None:
         context.user.theme_preference = payload.theme_preference
+    if payload.time_zone is not None:
+        context.user.time_zone = payload.time_zone
 
     db.add(context.user)
     record_audit_log(
@@ -507,6 +520,7 @@ def update_preferences(
         summary=f"Preferences updated for {context.user.email}",
         payload={
             "theme_preference": payload.theme_preference,
+            "time_zone": payload.time_zone,
             "display_name": payload.display_name,
             "job_title": payload.job_title,
         },

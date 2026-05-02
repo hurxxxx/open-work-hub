@@ -11,12 +11,14 @@ import {
   startOfAvailabilityWeek,
   useMeetingAvailabilityQuery,
 } from './meetingAvailability';
+import { DEFAULT_TIME_ZONE, normalizeTimeZone } from '@/src/platform/time/time-utils';
 
 interface MeetingAvailabilityPanelProps {
   workspaceSlug: string;
   attendeeUsers: MeetingUser[];
   meetingStart: Date | null;
   meetingEnd: Date | null;
+  timeZone?: string | null;
 }
 
 function isValidMeetingWindow(start: Date | null, end: Date | null): start is Date {
@@ -28,8 +30,10 @@ export function MeetingAvailabilityPanel({
   attendeeUsers,
   meetingStart,
   meetingEnd,
+  timeZone,
 }: MeetingAvailabilityPanelProps) {
   const [modalOpen, setModalOpen] = useState(false);
+  const resolvedTimeZone = normalizeTimeZone(timeZone ?? DEFAULT_TIME_ZONE);
   const attendeeIds = useMemo(
     () => attendeeUsers.map((user) => user.id),
     [attendeeUsers],
@@ -49,8 +53,8 @@ export function MeetingAvailabilityPanel({
     if (!meetingStart || !meetingEnd || meetingEnd <= meetingStart) {
       return [];
     }
-    return buildAvailabilityConflicts(items, meetingStart, meetingEnd);
-  }, [items, meetingEnd, meetingStart]);
+    return buildAvailabilityConflicts(items, meetingStart, meetingEnd, resolvedTimeZone);
+  }, [items, meetingEnd, meetingStart, resolvedTimeZone]);
 
   return (
     <>
@@ -105,7 +109,7 @@ export function MeetingAvailabilityPanel({
                 >
                   <span className="font-medium">{item.fullName}</span>
                   <span className="truncate text-app-ink/60">
-                    {formatAvailabilityBlockLabel(item.block)}
+                    {formatAvailabilityBlockLabel(item.block, resolvedTimeZone)}
                   </span>
                 </div>
               ))}
@@ -121,6 +125,7 @@ export function MeetingAvailabilityPanel({
         attendeeUsers={attendeeUsers}
         meetingStart={meetingStart}
         meetingEnd={meetingEnd}
+        timeZone={resolvedTimeZone}
       />
     </>
   );

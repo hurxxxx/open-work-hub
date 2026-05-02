@@ -154,6 +154,7 @@ describe('MeetingInsightSection', () => {
         meeting={baseMeeting()}
         workspaceSlug="hq"
         token="test-token"
+        timeZone="Asia/Seoul"
         onOpenInChat={vi.fn()}
       />,
     );
@@ -185,6 +186,7 @@ describe('MeetingInsightSection', () => {
         meeting={baseMeeting()}
         workspaceSlug="hq"
         token="test-token"
+        timeZone="Asia/Seoul"
         onOpenInChat={vi.fn()}
       />,
     );
@@ -209,6 +211,7 @@ describe('MeetingInsightSection', () => {
         meeting={baseMeeting()}
         workspaceSlug="hq"
         token="test-token"
+        timeZone="Asia/Seoul"
         onOpenInChat={vi.fn()}
       />,
     );
@@ -230,6 +233,7 @@ describe('MeetingInsightSection', () => {
         meeting={baseMeeting()}
         workspaceSlug="hq"
         token="test-token"
+        timeZone="Asia/Seoul"
         onOpenInChat={vi.fn()}
       />,
     );
@@ -262,6 +266,7 @@ describe('MeetingInsightSection', () => {
         meeting={baseMeeting()}
         workspaceSlug="hq"
         token="test-token"
+        timeZone="Asia/Seoul"
         onOpenInChat={vi.fn()}
       />,
     );
@@ -295,6 +300,7 @@ describe('MeetingInsightSection', () => {
         meeting={baseMeeting()}
         workspaceSlug="hq"
         token="test-token"
+        timeZone="Asia/Seoul"
         onOpenInChat={onOpenInChat}
       />,
     );
@@ -333,6 +339,7 @@ describe('MeetingInsightSection', () => {
         meeting={baseMeeting()}
         workspaceSlug="hq"
         token="test-token"
+        timeZone="Asia/Seoul"
         onOpenInChat={onOpenInChat}
       />,
     );
@@ -377,6 +384,7 @@ describe('MeetingInsightSection', () => {
         meeting={initialMeeting}
         workspaceSlug="hq"
         token="test-token"
+        timeZone="Asia/Seoul"
         onOpenInChat={vi.fn()}
       />,
     );
@@ -399,6 +407,7 @@ describe('MeetingInsightSection', () => {
         meeting={updatedMeeting}
         workspaceSlug="hq"
         token="test-token"
+        timeZone="Asia/Seoul"
         onOpenInChat={vi.fn()}
       />,
     );
@@ -433,6 +442,7 @@ describe('MeetingInsightSection', () => {
         meeting={meeting}
         workspaceSlug="hq"
         token="test-token"
+        timeZone="Asia/Seoul"
         onOpenInChat={vi.fn()}
       />,
     );

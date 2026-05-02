@@ -1,5 +1,6 @@
 import { ApiRequestError, apiFetchJson } from '@/src/platform/api/client';
 import type { ApiSchema } from '@/src/platform/api/types';
+import { parseApiDateTime } from '@/src/platform/time/time-utils';
 import { rewriteWorkspaceApiPath } from '@/src/platform/workspaces/workspace-utils';
 
 export type MeetingStatus = ApiSchema<'MeetingDetail'>['status'];
@@ -133,10 +134,7 @@ export type MeetingScope = 'mine' | 'upcoming' | 'all';
  * tz-aware serialization, at which point this helper can be removed.
  */
 export function parseServerDateTime(iso: string): Date {
-  if (iso.endsWith('Z') || /[+-]\d{2}:?\d{2}$/.test(iso)) {
-    return new Date(iso);
-  }
-  return new Date(`${iso}Z`);
+  return parseApiDateTime(iso) ?? new Date(Number.NaN);
 }
 
 export class MeetingApiError extends Error {

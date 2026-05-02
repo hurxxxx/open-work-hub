@@ -515,6 +515,7 @@ export function MeetingCreateModal({
           attendeeUsers={availabilityUsers}
           meetingStart={startAt ? new Date(startAt) : null}
           meetingEnd={endAt ? new Date(endAt) : null}
+          timeZone={user?.time_zone}
         />
 
         <div className="space-y-2">

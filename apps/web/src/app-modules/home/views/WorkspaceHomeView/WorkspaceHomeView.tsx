@@ -26,44 +26,56 @@ import {
 } from '@/src/app-modules/meeting/public-api';
 import { buildWorkspaceAppPath } from '@/src/platform/workspaces/workspace-utils';
 import { getKoreanHolidayNames } from '@/src/lib/korean-holidays';
+import {
+  diffDateOnlyDays,
+  formatDateOnly,
+  formatDateTime,
+  getZonedDateParts,
+  isSameDateInTimeZone,
+  normalizeTimeZone,
+  zonedDateKey,
+} from '@/src/platform/time/time-utils';
 
-function getGreeting(): string {
-  const hour = new Date().getHours();
+function getGreeting(timeZone: string): string {
+  const hour = getZonedDateParts(new Date(), timeZone)?.hour ?? new Date().getHours();
   if (hour < 12) return 'Good morning';
   if (hour < 18) return 'Good afternoon';
   return 'Good evening';
 }
 
-function formatWeekday(date: Date): string {
-  return new Intl.DateTimeFormat('ko-KR', {
+function formatWeekday(date: Date, timeZone: string): string {
+  return formatDateTime(date, {
+    locale: 'ko-KR',
     month: 'long',
     day: 'numeric',
     weekday: 'long',
-  }).format(date);
+    timeZone,
+  });
 }
 
-function formatTime(iso: string): string {
-  return new Intl.DateTimeFormat('ko-KR', {
+function formatTime(iso: string, timeZone: string): string {
+  return formatDateTime(iso, {
     hour: 'numeric',
+    locale: 'ko-KR',
     minute: '2-digit',
-  }).format(new Date(iso));
+    timeZone,
+  });
 }
 
-function formatDueDate(due: string | null): string {
+function formatDueDate(due: string | null, timeZone: string): string {
   if (!due) return '';
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const target = new Date(`${due}T00:00:00`);
-  const diffDays = Math.round((target.getTime() - today.getTime()) / 86_400_000);
+  const diffDays = diffDateOnlyDays(due, zonedDateKey(new Date(), timeZone));
+  if (diffDays === null) return '';
   if (diffDays === 0) return '오늘';
   if (diffDays === 1) return '내일';
   if (diffDays === -1) return '어제';
   if (diffDays < 0) return `${-diffDays}일 지연`;
   if (diffDays < 7) return `${diffDays}일 후`;
-  return new Intl.DateTimeFormat('ko-KR', {
+  return formatDateOnly(due, {
+    locale: 'ko-KR',
     month: 'short',
     day: 'numeric',
-  }).format(target);
+  });
 }
 
 const PRIORITY_COLOR: Record<string, string> = {
@@ -97,21 +109,22 @@ function SectionHeader({
   );
 }
 
-function GreetingHeader({ userName }: { userName: string }) {
+function GreetingHeader({ userName, timeZone }: { userName: string; timeZone: string }) {
   const now = new Date();
+  const today = getZonedDateParts(now, timeZone);
   const holidayNames = getKoreanHolidayNames(
-    now.getFullYear(),
-    now.getMonth(),
-    now.getDate(),
+    today?.year ?? now.getFullYear(),
+    today ? today.month - 1 : now.getMonth(),
+    today?.day ?? now.getDate(),
   );
 
   return (
     <div>
       <h1 className="app-text-title-lg text-app-ink">
-        {getGreeting()}, {userName}
+        {getGreeting(timeZone)}, {userName}
       </h1>
       <p className="app-text-body mt-1 text-gray-500">
-        {formatWeekday(now)}
+        {formatWeekday(now, timeZone)}
         {holidayNames && holidayNames.length > 0 ? (
           <span className="ml-2 rounded bg-red-500/10 px-1.5 py-0.5 text-red-500">
             {holidayNames.join(', ')}
@@ -157,28 +170,24 @@ function QuickActionsRow({ workspaceSlug }: { workspaceSlug: string }) {
   );
 }
 
-function isToday(iso: string): boolean {
-  const target = new Date(iso);
-  const now = new Date();
-  return (
-    target.getFullYear() === now.getFullYear()
-    && target.getMonth() === now.getMonth()
-    && target.getDate() === now.getDate()
-  );
+function isToday(iso: string, timeZone: string): boolean {
+  return isSameDateInTimeZone(iso, new Date(), timeZone);
 }
 
 function TodayMeetingsWidget({
   workspaceSlug,
   meetings,
   loading,
+  timeZone,
 }: {
   workspaceSlug: string;
   meetings: MeetingListItem[];
   loading: boolean;
+  timeZone: string;
 }) {
   const todayMeetings = useMemo(
-    () => meetings.filter((meeting) => isToday(meeting.start_at)).slice(0, 5),
-    [meetings],
+    () => meetings.filter((meeting) => isToday(meeting.start_at, timeZone)).slice(0, 5),
+    [meetings, timeZone],
   );
   const meetingRoot = `/w/${encodeURIComponent(workspaceSlug)}/meeting`;
 
@@ -202,7 +211,7 @@ function TodayMeetingsWidget({
               <Calendar size={16} className="shrink-0 text-gray-400 transition-colors group-hover:text-app-accent" />
               <span className="app-text-body flex-1 truncate text-app-ink">{meeting.title}</span>
               <span className="app-text-caption shrink-0 text-gray-500">
-                {formatTime(meeting.start_at)}
+                {formatTime(meeting.start_at, timeZone)}
               </span>
               <ChevronRight size={14} className="shrink-0 text-gray-400 opacity-0 transition-opacity group-hover:opacity-100" />
             </Link>
@@ -217,10 +226,12 @@ function AssignedTasksWidget({
   workspaceSlug,
   issues,
   loading,
+  timeZone,
 }: {
   workspaceSlug: string;
   issues: PmsIssue[];
   loading: boolean;
+  timeZone: string;
 }) {
   const assignedLink = buildWorkspaceAppPath(workspaceSlug, 'pms', '/assigned');
   const topIssues = issues.slice(0, 5);
@@ -246,7 +257,7 @@ function AssignedTasksWidget({
               <span className="app-text-body flex-1 truncate text-app-ink">{issue.title}</span>
               {issue.due_date ? (
                 <span className="app-text-caption shrink-0 text-gray-500">
-                  {formatDueDate(issue.due_date)}
+	                  {formatDueDate(issue.due_date, timeZone)}
                 </span>
               ) : null}
               <Flag
@@ -312,6 +323,7 @@ export const WorkspaceHomeView = () => {
   const { token, user } = useAuth();
   const { workspaceSlug = '' } = useParams();
   const userName = user?.display_name || user?.full_name || 'User';
+  const timeZone = normalizeTimeZone(user?.time_zone);
 
   const [meetings, setMeetings] = useState<MeetingListItem[]>([]);
   const [meetingsLoading, setMeetingsLoading] = useState(true);
@@ -368,18 +380,20 @@ export const WorkspaceHomeView = () => {
   return (
     <div className="custom-scrollbar h-full overflow-y-auto">
       <div className="mx-auto max-w-3xl space-y-10 px-8 py-10">
-        <GreetingHeader userName={userName} />
+        <GreetingHeader userName={userName} timeZone={timeZone} />
         <QuickActionsRow workspaceSlug={workspaceSlug} />
         <TodayMeetingsWidget
-          workspaceSlug={workspaceSlug}
-          meetings={meetings}
-          loading={meetingsLoading}
-        />
-        <AssignedTasksWidget
-          workspaceSlug={workspaceSlug}
-          issues={issues}
-          loading={issuesLoading}
-        />
+	          workspaceSlug={workspaceSlug}
+	          meetings={meetings}
+	          loading={meetingsLoading}
+	          timeZone={timeZone}
+	        />
+	        <AssignedTasksWidget
+	          workspaceSlug={workspaceSlug}
+	          issues={issues}
+	          loading={issuesLoading}
+	          timeZone={timeZone}
+	        />
         <RecentDocsWidget
           workspaceSlug={workspaceSlug}
           pages={recentPages}

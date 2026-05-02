@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import { cn } from '@/src/lib/utils';
+import { parseDateOnlyParts } from '@/src/platform/time/time-utils';
 import type { PmsIssue, PmsTaskListStatus } from '../api/pms-api';
 
 const STATUS_COLORS: Record<string, string> = {
@@ -34,10 +35,9 @@ export const CalendarView = ({ issues, taskListStatuses }: { issues: PmsIssue[];
     const byDate: Record<number, PmsIssue[]> = {};
     for (const issue of issues) {
       if (!issue.due_date) continue;
-      const d = new Date(issue.due_date);
-      if (d.getFullYear() === year && d.getMonth() === month) {
-        const day = d.getDate();
-        (byDate[day] ??= []).push(issue);
+      const due = parseDateOnlyParts(issue.due_date);
+      if (due && due.year === year && due.month === month + 1) {
+        (byDate[due.day] ??= []).push(issue);
       }
     }
 

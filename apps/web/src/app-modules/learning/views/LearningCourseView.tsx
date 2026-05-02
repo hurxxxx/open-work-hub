@@ -21,6 +21,7 @@ import {
 } from '../model/manifest';
 import { loadLessonBody } from '../model/content';
 import { useAuth } from '@/src/platform/auth/auth-provider';
+import { normalizeTimeZone } from '@/src/platform/time/time-utils';
 import { LearningPageNotesPanel } from './learning-notes/LearningPageNotesPanel';
 
 const REMARK_PLUGINS = [remarkGfm];
@@ -106,7 +107,8 @@ function LessonLayout({
   const [body, setBody] = useState<string | null>(null);
   const [isBodyLoading, setIsBodyLoading] = useState(true);
   const rootRef = useRef<HTMLDivElement>(null);
-  const { token } = useAuth();
+  const { token, user } = useAuth();
+  const timeZone = normalizeTimeZone(user?.time_zone);
 
   useEffect(() => {
     let isMounted = true;
@@ -255,10 +257,11 @@ function LessonLayout({
       >
         <LearningPageNotesPanel
           token={token}
-          courseSlug={course.slug}
-          lessonId={lesson.id}
-          lessonTitle={lesson.title}
-        />
+	          courseSlug={course.slug}
+	          lessonId={lesson.id}
+	          lessonTitle={lesson.title}
+	          timeZone={timeZone}
+	        />
       </aside>
     </motion.div>
   );

@@ -3,6 +3,7 @@ import { motion } from 'motion/react';
 import { X, Check, CheckCheck, Loader2 } from 'lucide-react';
 import { Button } from '@aidoo/ui/primitives/button';
 import { useAuth } from '@/src/platform/auth/auth-provider';
+import { formatRelativeTime, normalizeTimeZone } from '@/src/platform/time/time-utils';
 import {
   listNotifications,
   markNotificationRead,
@@ -10,15 +11,8 @@ import {
   type WorkspaceNotification,
 } from '@/src/platform/notifications/notifications-api';
 
-function timeAgo(dateStr: string): string {
-  const diff = Date.now() - new Date(dateStr).getTime();
-  const mins = Math.floor(diff / 60000);
-  if (mins < 1) return 'just now';
-  if (mins < 60) return `${mins}m ago`;
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs}h ago`;
-  const days = Math.floor(hrs / 24);
-  return `${days}d ago`;
+function timeAgo(dateStr: string, timeZone: string): string {
+  return formatRelativeTime(dateStr, { locale: 'en', timeZone });
 }
 
 export function NotificationPanel({
@@ -32,7 +26,8 @@ export function NotificationPanel({
   onCountChange?: (count: number) => void;
   workspaceSlug: string | null;
 }) {
-  const { token } = useAuth();
+  const { token, user } = useAuth();
+  const timeZone = normalizeTimeZone(user?.time_zone);
   const [notifications, setNotifications] = useState<WorkspaceNotification[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -117,7 +112,7 @@ export function NotificationPanel({
                     <div className="flex-1 min-w-0">
                       <p className="app-text-body truncate font-medium text-app-ink">{n.title}</p>
                       <p className="app-text-caption mt-0.5 truncate text-app-ink/50">{n.body}</p>
-                      <span className="app-text-micro text-app-ink/30">{timeAgo(n.created_at)}</span>
+                      <span className="app-text-micro text-app-ink/30">{timeAgo(n.created_at, timeZone)}</span>
                     </div>
                   </button>
                   {!n.is_read && (

@@ -83,7 +83,7 @@ def list_calendar_events(
     """Return unified calendar events for ``user`` in ``[from_at, to_at)``.
 
     The range bounds use UTC-naive datetimes for SQL comparison. The frontend
-    converts to ``Asia/Seoul`` for display.
+    converts timed events using the user's configured calendar timezone.
     """
     source_set: set[CalendarSourceType] = set(sources)
     items: list[CalendarEventOut] = []

@@ -3,6 +3,7 @@ import { Button, Dialog } from '@aidoo/ui';
 import { Loader2, PencilRuler, Search } from 'lucide-react';
 
 import { useAuth } from '@/src/platform/auth/auth-provider';
+import { formatDateTime, normalizeTimeZone } from '@/src/platform/time/time-utils';
 import {
   listWhiteboardHub,
   type WhiteboardHubItem,
@@ -23,7 +24,8 @@ export function WhiteboardPickerModal({
   onClose,
   onPick,
 }: WhiteboardPickerModalProps) {
-  const { token } = useAuth();
+  const { token, user } = useAuth();
+  const timeZone = normalizeTimeZone(user?.time_zone);
   const [items, setItems] = useState<WhiteboardHubItem[]>([]);
   const [query, setQuery] = useState('');
   const [loading, setLoading] = useState(false);
@@ -134,7 +136,12 @@ export function WhiteboardPickerModal({
                       <div className="min-w-0">
                         <p className="app-text-body line-clamp-1 text-app-ink">{item.title}</p>
                         <p className="app-text-caption text-app-ink/45">
-                          {item.location_label} · {new Date(item.updated_at).toLocaleDateString('ko-KR')}
+                          {item.location_label} · {formatDateTime(item.updated_at, {
+                            day: 'numeric',
+                            locale: 'ko-KR',
+                            month: 'short',
+                            timeZone,
+                          })}
                         </p>
                       </div>
                     </div>

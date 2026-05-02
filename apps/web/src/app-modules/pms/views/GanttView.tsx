@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import { cn } from '@/src/lib/utils';
+import { parseDateOnlyParts } from '@/src/platform/time/time-utils';
 import type { PmsIssue, PmsTaskListStatus } from '../api/pms-api';
 import { STATUS_DOT_COLOR } from './pms-constants';
 
@@ -14,6 +15,11 @@ function getGanttDotStyle(slug: string, taskListStatuses?: PmsTaskListStatus[]):
   return ps ? { backgroundColor: ps.color } : { backgroundColor: '#6b7280' };
 }
 
+function dateOnlyToLocalDate(value: string | null | undefined): Date | null {
+  const parts = parseDateOnlyParts(value);
+  return parts ? new Date(parts.year, parts.month - 1, parts.day) : null;
+}
+
 export const GanttView = ({ issues, taskListStatuses }: { issues: PmsIssue[]; taskListStatuses?: PmsTaskListStatus[] }) => {
   const { dates, startDate } = useMemo(() => {
     const now = new Date();
@@ -24,8 +30,8 @@ export const GanttView = ({ issues, taskListStatuses }: { issues: PmsIssue[]; ta
   }, []);
 
   function getBarStyle(issue: PmsIssue) {
-    const start = issue.start_date ? new Date(issue.start_date) : null;
-    const end = issue.due_date ? new Date(issue.due_date) : null;
+    const start = dateOnlyToLocalDate(issue.start_date);
+    const end = dateOnlyToLocalDate(issue.due_date);
     if (!start && !end) return null;
 
     const monthStart = startDate.getTime();
@@ -56,7 +62,7 @@ export const GanttView = ({ issues, taskListStatuses }: { issues: PmsIssue[]; ta
           return (
             <div key={issue.id} className="flex border-b border-app-border hover:bg-app-surface-hover transition-colors">
               <div className="w-64 border-r border-app-border p-4 flex items-center gap-3 shrink-0">
-	                <div className={cn("w-2 h-2 rounded-full shrink-0", getGanttDotColor(issue.status))} style={getGanttDotStyle(issue.status, taskListStatuses)} />
+                <div className={cn("w-2 h-2 rounded-full shrink-0", getGanttDotColor(issue.status))} style={getGanttDotStyle(issue.status, taskListStatuses)} />
                 <span className="app-text-body-sm truncate font-medium text-app-ink">{issue.title}</span>
               </div>
               <div className="flex-1 flex relative" style={{ minWidth: `${dates.length * 40}px` }}>
@@ -64,7 +70,7 @@ export const GanttView = ({ issues, taskListStatuses }: { issues: PmsIssue[]; ta
                   <div
                     className={cn(
                       "app-text-micro absolute top-1/2 flex h-5 items-center rounded-full px-2 font-bold text-white -translate-y-1/2",
-	                      getGanttDotColor(issue.status) || 'bg-gray-500',
+                      getGanttDotColor(issue.status) || 'bg-gray-500',
                     )}
                     style={barStyle}
                   >

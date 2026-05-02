@@ -62,6 +62,7 @@ import type { AuthUser } from '@/src/platform/auth/auth-api';
 import { useAuth } from '@/src/platform/auth/auth-provider';
 import { AccessDeniedView } from '@/src/platform/auth/settings-pages';
 import { addSpaceMember, removeSpaceMember, updateSpaceMemberRole } from '@/src/app-modules/pms/public-api';
+import { formatDateTime, normalizeTimeZone } from '@/src/platform/time/time-utils';
 
 const NONE_OPTION_VALUE = '__none__';
 
@@ -2417,6 +2418,8 @@ function SecuritySection({
 }
 
 function AuditSection({ token }: { token: string }) {
+  const { user } = useAuth();
+  const timeZone = normalizeTimeZone(user?.time_zone);
   const [items, setItems] = useState<AuditLogItem[]>([]);
   const [error, setError] = useState<string | null>(null);
 
@@ -2460,7 +2463,12 @@ function AuditSection({ token }: { token: string }) {
                     </div>
                   </div>
                   <div className="app-text-body text-gray-500">
-                    {new Date(item.created_at).toLocaleString()}
+                    {formatDateTime(item.created_at, {
+                      dateStyle: 'medium',
+                      locale: 'ko-KR',
+                      timeStyle: 'short',
+                      timeZone,
+                    })}
                   </div>
                 </div>
               </div>

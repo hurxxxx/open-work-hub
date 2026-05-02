@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Sequence
 from typing import Any
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from sqlalchemy import inspect, select
 from sqlalchemy.orm import Session, joinedload, selectinload
@@ -32,11 +33,24 @@ logger = logging.getLogger(__name__)
 
 
 SYSTEM_PLATFORM_ADMIN = "platform_admin"
+DEFAULT_TIME_ZONE = "Asia/Seoul"
 
 SYSTEM_ROLE_ORDER = (
     SYSTEM_PLATFORM_ADMIN,
 )
 VALID_SYSTEM_ROLES = frozenset(SYSTEM_ROLE_ORDER)
+
+
+def normalize_time_zone(value: str | None) -> str:
+    if value is None or not value.strip():
+        return DEFAULT_TIME_ZONE
+    normalized = value.strip()
+    try:
+        ZoneInfo(normalized)
+    except ZoneInfoNotFoundError as exc:
+        raise ValueError("Invalid time zone.") from exc
+    return normalized
+
 
 LEGACY_GROUP_ROLE_MAP = {
     "platform-admin": SYSTEM_PLATFORM_ADMIN,
@@ -748,6 +762,7 @@ def ensure_dev_login_seed_data(db: Session) -> None:
                 status="active",
                 must_change_password=False,
                 theme_preference="system",
+                time_zone=DEFAULT_TIME_ZONE,
                 primary_org_unit_id=root_org.id,
                 is_admin=False,
             )
@@ -758,6 +773,7 @@ def ensure_dev_login_seed_data(db: Session) -> None:
             user.status = "active"
             user.must_change_password = False
             user.theme_preference = "system"
+            user.time_zone = normalize_time_zone(getattr(user, "time_zone", None))
             user.primary_org_unit_id = root_org.id
             user.is_admin = False
         db.add(user)
@@ -1170,6 +1186,7 @@ def serialize_auth_user(db: Session, user: User) -> dict[str, Any]:
         "job_title": user.job_title,
         "status": user.status,
         "theme_preference": user.theme_preference,
+        "time_zone": user.time_zone or DEFAULT_TIME_ZONE,
         "primary_org_unit": serialize_org_unit(user.primary_org_unit),
         "system_roles": resolve_system_roles(db, user),
         "workspaces": workspaces,

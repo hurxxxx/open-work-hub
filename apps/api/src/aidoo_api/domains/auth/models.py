@@ -113,6 +113,7 @@ class User(Base):
     is_admin: Mapped[bool] = mapped_column(Boolean, default=False)
     must_change_password: Mapped[bool] = mapped_column(Boolean, default=False)
     theme_preference: Mapped[str] = mapped_column(String(16), default="system")
+    time_zone: Mapped[str] = mapped_column(String(64), default="Asia/Seoul", nullable=False)
     primary_org_unit_id: Mapped[str | None] = mapped_column(
         ForeignKey("org_units.id"),
         nullable=True,

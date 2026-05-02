@@ -4,6 +4,7 @@ import { Loader2 } from 'lucide-react';
 
 import { useAuth } from '@/src/platform/auth/auth-provider';
 import { hasWorkspaceMembership } from '@/src/platform/auth/auth-api';
+import { formatDateTime, normalizeTimeZone } from '@/src/platform/time/time-utils';
 import { NoAccessNotice } from '@/src/components/common/NoAccessNotice';
 import { listDocsHub, type DocsHubItem } from '@/src/app-modules/docs/public-api';
 
@@ -24,6 +25,7 @@ export function DocPickerModal({
 }: DocPickerModalProps) {
   const { token, user } = useAuth();
   const canAccessDocs = hasWorkspaceMembership(user, workspaceSlug);
+  const timeZone = normalizeTimeZone(user?.time_zone);
   const [items, setItems] = useState<DocsHubItem[]>([]);
   const [query, setQuery] = useState('');
   const [loading, setLoading] = useState(false);
@@ -151,7 +153,12 @@ export function DocPickerModal({
                             {item.title}
                           </p>
                           <p className="app-text-caption text-app-ink/40">
-                            {item.created_by_name} · {new Date(item.updated_at).toLocaleDateString('ko-KR')}
+                            {item.created_by_name} · {formatDateTime(item.updated_at, {
+                              day: 'numeric',
+                              locale: 'ko-KR',
+                              month: 'short',
+                              timeZone,
+                            })}
                           </p>
                         </div>
                         {submittingId === item.source_id ? (

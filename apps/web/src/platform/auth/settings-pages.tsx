@@ -14,6 +14,12 @@ import { InlineNotice } from '@aidoo/ui/feedback/inline-notice';
 import { Button } from '@aidoo/ui/primitives/button';
 
 import { cn } from '@/src/lib/utils';
+import {
+  DEFAULT_TIME_ZONE,
+  TIME_ZONE_OPTIONS,
+  formatDateTime,
+  normalizeTimeZone,
+} from '@/src/platform/time/time-utils';
 
 import type { AuthSessionItem, ThemePreference } from './auth-api';
 import { useAuth } from './auth-provider';
@@ -89,9 +95,11 @@ export function NotFoundView({
 
 function SessionCard({
   session,
+  timeZone,
   onRevoke,
 }: {
   session: AuthSessionItem;
+  timeZone: string;
   onRevoke: (sessionId: string) => Promise<void>;
 }) {
   return (
@@ -101,13 +109,28 @@ function SessionCard({
           {session.is_current ? '현재 세션' : '저장된 세션'}
         </span>
         <span className="app-text-caption text-gray-500">
-          생성: {new Date(session.created_at).toLocaleString()}
+          생성: {formatDateTime(session.created_at, {
+            dateStyle: 'medium',
+            fallback: '없음',
+            timeStyle: 'short',
+            timeZone,
+          })}
         </span>
         <span className="app-text-caption text-gray-500">
-          만료: {new Date(session.expires_at).toLocaleString()}
+          만료: {formatDateTime(session.expires_at, {
+            dateStyle: 'medium',
+            fallback: '없음',
+            timeStyle: 'short',
+            timeZone,
+          })}
         </span>
         <span className="app-text-caption text-gray-500">
-          최근 사용: {session.last_seen_at ? new Date(session.last_seen_at).toLocaleString() : '없음'}
+          최근 사용: {formatDateTime(session.last_seen_at, {
+            dateStyle: 'medium',
+            fallback: '없음',
+            timeStyle: 'short',
+            timeZone,
+          })}
         </span>
         <span className="app-text-caption max-w-[360px] truncate text-gray-500">
           {session.user_agent ?? '알 수 없음'}
@@ -173,6 +196,7 @@ export function ProfilePage({ initialTab }: { initialTab: SettingsSection }) {
   const [themePreference, setThemePreference] = useState<ThemePreference>(
     user?.theme_preference ?? 'system',
   );
+  const [timeZone, setTimeZone] = useState(user?.time_zone ?? DEFAULT_TIME_ZONE);
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -190,6 +214,7 @@ export function ProfilePage({ initialTab }: { initialTab: SettingsSection }) {
     setFullName(user.full_name);
     setJobTitle(user.job_title ?? '');
     setThemePreference(user.theme_preference);
+    setTimeZone(normalizeTimeZone(user.time_zone));
   }, [user]);
 
   useEffect(() => {
@@ -225,6 +250,7 @@ export function ProfilePage({ initialTab }: { initialTab: SettingsSection }) {
         full_name: fullName.trim(),
         job_title: jobTitle.trim(),
         theme_preference: themePreference,
+        time_zone: timeZone,
       });
       setMessage('변경사항을 저장했습니다.');
     } catch (caughtError) {
@@ -393,6 +419,7 @@ export function ProfilePage({ initialTab }: { initialTab: SettingsSection }) {
                         setDisplayName(user.display_name);
                         setFullName(user.full_name);
                         setJobTitle(user.job_title ?? '');
+                        setTimeZone(normalizeTimeZone(user.time_zone));
                         setMessage(null);
                         setError(null);
                       }}
@@ -435,6 +462,23 @@ export function ProfilePage({ initialTab }: { initialTab: SettingsSection }) {
                         </button>
                       ))}
                     </div>
+                  </FieldRow>
+                  <FieldRow label="Time Zone" description="Used for dates, relative times, and calendar display.">
+                    <select
+                      className={fieldClassName}
+                      onChange={(event) => {
+                        const nextTimeZone = event.target.value;
+                        setTimeZone(nextTimeZone);
+                        void auth.updatePreferences({ time_zone: nextTimeZone });
+                      }}
+                      value={timeZone}
+                    >
+                      {TIME_ZONE_OPTIONS.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
                   </FieldRow>
                 </div>
               </div>
@@ -500,7 +544,12 @@ export function ProfilePage({ initialTab }: { initialTab: SettingsSection }) {
                     return (
                       <div className="grid gap-2">
                         {shown.map((session) => (
-                          <SessionCard key={session.id} onRevoke={handleRevoke} session={session} />
+                          <SessionCard
+                            key={session.id}
+                            onRevoke={handleRevoke}
+                            session={session}
+                            timeZone={normalizeTimeZone(user.time_zone)}
+                          />
                         ))}
                         {hiddenCount > 0 && (
                           <p className="app-text-caption py-2 text-center text-gray-500">

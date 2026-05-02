@@ -6,7 +6,7 @@
 //
 // Design decisions (per Plan Phase 2 design review):
 //   - headerToolbar disabled — host owns the toolbar (Planner toolbar is preserved)
-//   - timeZone: 'Asia/Seoul', firstDay: 0 (Sun-first per user pref), weekNumbers ISO, locale ko
+//   - user timeZone with KST default, firstDay: 0 (Sun-first per user pref), weekNumbers ISO, locale ko
 //   - Sunday rendered in red (CSS via .fc-day-sun in fullcalendar-theme.css)
 //   - selectable + editable + eventDurationEditable
 //   - dayMaxEvents: 2 with "+N더" expansion (Korean density per D6)
@@ -35,6 +35,7 @@ import type { EventResizeDoneArg } from '@fullcalendar/interaction';
 
 import type { CalendarEvent } from '@/src/platform/calendar/calendar-types';
 import { getKoreanHolidayNames } from '@/src/lib/korean-holidays';
+import { DEFAULT_TIME_ZONE, normalizeTimeZone } from '@/src/platform/time/time-utils';
 
 export type UnifiedCalendarView =
   | 'dayGridMonth'
@@ -106,6 +107,8 @@ export interface UnifiedCalendarProps {
   ) => void;
   /** Whether to inject Korean holidays as background events (red). Default true. */
   showKoreanHolidays?: boolean;
+  /** IANA timezone used by FullCalendar. Defaults to Korea Standard Time. */
+  timeZone?: string;
   /**
    * Calendar height. Maps to FullCalendar's ``height`` option (CssDimValue):
    *   - ``'auto'`` — fit content (week/day expands to full 24h, no internal scroll)
@@ -168,9 +171,11 @@ export const UnifiedCalendar = forwardRef<UnifiedCalendarHandle, UnifiedCalendar
       onEventDrop,
       onEventResize,
       showKoreanHolidays = true,
+      timeZone = DEFAULT_TIME_ZONE,
       height = '100%',
       className,
     } = props;
+    const resolvedTimeZone = normalizeTimeZone(timeZone);
 
     const calendarRef = useRef<FullCalendar | null>(null);
 
@@ -202,7 +207,7 @@ export const UnifiedCalendar = forwardRef<UnifiedCalendarHandle, UnifiedCalendar
           plugins={PLUGINS}
           initialView={initialView}
           initialDate={initialDate}
-          timeZone="Asia/Seoul"
+          timeZone={resolvedTimeZone}
           locale={koLocale}
           firstDay={0}
           weekNumbers

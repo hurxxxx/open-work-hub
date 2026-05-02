@@ -3,9 +3,15 @@ import { useEffect, useMemo, useState } from 'react';
 import { useAuth } from '@/src/platform/auth/auth-provider';
 import {
   getMeetingAvailability,
+  parseServerDateTime,
   type MeetingAvailabilityBlock,
   type MeetingAvailabilityItem,
 } from '../../api/meeting-api';
+import {
+  DEFAULT_TIME_ZONE,
+  formatDateOnly,
+  formatDateTime,
+} from '@/src/platform/time/time-utils';
 
 export const HALF_HOUR_MS = 30 * 60 * 1000;
 /** Legacy fixed-width constants — still referenced by inline previews that
@@ -14,21 +20,6 @@ export const HALF_HOUR_MS = 30 * 60 * 1000;
 export const DAY_WIDTH_PX = 192;
 export const SLOT_WIDTH_PX = DAY_WIDTH_PX / 48;
 export const AVAILABILITY_NAME_COLUMN_PX = 208;
-
-const SHORT_DATE_FORMATTER = new Intl.DateTimeFormat('ko-KR', {
-  month: 'numeric',
-  day: 'numeric',
-});
-const WEEKDAY_FORMATTER = new Intl.DateTimeFormat('ko-KR', {
-  month: 'numeric',
-  day: 'numeric',
-  weekday: 'short',
-});
-const TIME_FORMATTER = new Intl.DateTimeFormat('ko-KR', {
-  hour: '2-digit',
-  minute: '2-digit',
-  hour12: false,
-});
 
 export interface AvailabilityConflictItem {
   userId: string;
@@ -50,9 +41,21 @@ export function addLocalDays(date: Date, days: number): Date {
   return next;
 }
 
-export function formatAvailabilityWeekLabel(weekStart: Date): string {
+function formatShortDate(date: Date, timeZone: string): string {
+  return formatDateTime(date, {
+    day: 'numeric',
+    locale: 'ko-KR',
+    month: 'numeric',
+    timeZone,
+  });
+}
+
+export function formatAvailabilityWeekLabel(
+  weekStart: Date,
+  timeZone = DEFAULT_TIME_ZONE,
+): string {
   const weekEndInclusive = addLocalDays(weekStart, 6);
-  return `${SHORT_DATE_FORMATTER.format(weekStart)} - ${SHORT_DATE_FORMATTER.format(weekEndInclusive)}`;
+  return `${formatShortDate(weekStart, timeZone)} - ${formatShortDate(weekEndInclusive, timeZone)}`;
 }
 
 function parseLocalDateOnly(value: string): Date {
@@ -64,7 +67,7 @@ export function parseAvailabilityBoundary(value: string, allDay: boolean): Date 
   if (allDay || !value.includes('T')) {
     return parseLocalDateOnly(value);
   }
-  return new Date(value);
+  return parseServerDateTime(value);
 }
 
 export function blockOverlapsRange(
@@ -77,26 +80,55 @@ export function blockOverlapsRange(
   return blockEnd > rangeStart && blockStart < rangeEnd;
 }
 
-export function formatAvailabilityBlockLabel(block: MeetingAvailabilityBlock): string {
+export function formatAvailabilityBlockLabel(
+  block: MeetingAvailabilityBlock,
+  timeZone = DEFAULT_TIME_ZONE,
+): string {
   const title = block.masked ? 'Busy' : (block.title ?? '일정');
   if (block.allDay) {
     const start = parseAvailabilityBoundary(block.start, true);
     const endExclusive = parseAvailabilityBoundary(block.end, true);
     const endInclusive = addLocalDays(endExclusive, -1);
+    const startLabel = formatDateOnly(block.start, {
+      day: 'numeric',
+      locale: 'ko-KR',
+      month: 'numeric',
+    });
+    const endLabel = formatDateOnly(
+      `${endInclusive.getFullYear()}-${String(endInclusive.getMonth() + 1).padStart(2, '0')}-${String(endInclusive.getDate()).padStart(2, '0')}`,
+      {
+        day: 'numeric',
+        locale: 'ko-KR',
+        month: 'numeric',
+      },
+    );
     if (start.getTime() === endInclusive.getTime()) {
-      return `${title} · ${SHORT_DATE_FORMATTER.format(start)}`;
+      return `${title} · ${startLabel}`;
     }
-    return `${title} · ${SHORT_DATE_FORMATTER.format(start)} - ${SHORT_DATE_FORMATTER.format(endInclusive)}`;
+    return `${title} · ${startLabel} - ${endLabel}`;
   }
   const start = parseAvailabilityBoundary(block.start, false);
   const end = parseAvailabilityBoundary(block.end, false);
-  return `${title} · ${TIME_FORMATTER.format(start)}-${TIME_FORMATTER.format(end)}`;
+  return `${title} · ${formatDateTime(start, {
+    hour: '2-digit',
+    hour12: false,
+    locale: 'ko-KR',
+    minute: '2-digit',
+    timeZone,
+  })}-${formatDateTime(end, {
+    hour: '2-digit',
+    hour12: false,
+    locale: 'ko-KR',
+    minute: '2-digit',
+    timeZone,
+  })}`;
 }
 
 export function buildAvailabilityConflicts(
   items: MeetingAvailabilityItem[],
   meetingStart: Date,
   meetingEnd: Date,
+  timeZone = DEFAULT_TIME_ZONE,
 ): AvailabilityConflictItem[] {
   return items.flatMap((item) => {
     const matching = item.blocks.filter((block) => blockOverlapsRange(block, meetingStart, meetingEnd));
@@ -108,7 +140,7 @@ export function buildAvailabilityConflicts(
         userId: item.userId,
         fullName: item.fullName,
         block: matching[0],
-        label: formatAvailabilityBlockLabel(matching[0]),
+        label: formatAvailabilityBlockLabel(matching[0], timeZone),
       },
     ];
   });
@@ -194,6 +226,12 @@ export function useMeetingAvailabilityQuery(options: {
   };
 }
 
-export function formatAvailabilityDayLabel(date: Date): string {
-  return WEEKDAY_FORMATTER.format(date);
+export function formatAvailabilityDayLabel(date: Date, timeZone = DEFAULT_TIME_ZONE): string {
+  return formatDateTime(date, {
+    day: 'numeric',
+    locale: 'ko-KR',
+    month: 'numeric',
+    timeZone,
+    weekday: 'short',
+  });
 }

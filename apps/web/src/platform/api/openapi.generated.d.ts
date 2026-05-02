@@ -3323,6 +3323,8 @@ export interface components {
              * @enum {string}
              */
             status: "active" | "invited" | "suspended";
+            /** Time Zone */
+            time_zone?: string | null;
         };
         /** AdminUserItemResponse */
         AdminUserItemResponse: {
@@ -3338,6 +3340,8 @@ export interface components {
             status: string;
             /** Theme Preference */
             theme_preference: string;
+            /** Time Zone */
+            time_zone: string;
             /** Primary Org Unit */
             primary_org_unit: {
                 [key: string]: string | null;
@@ -3386,6 +3390,8 @@ export interface components {
             status?: ("active" | "invited" | "suspended") | null;
             /** Theme Preference */
             theme_preference?: ("system" | "light" | "dark") | null;
+            /** Time Zone */
+            time_zone?: string | null;
             /** Must Change Password */
             must_change_password?: boolean | null;
         };
@@ -3568,6 +3574,8 @@ export interface components {
             status: string;
             /** Theme Preference */
             theme_preference: string;
+            /** Time Zone */
+            time_zone: string;
             primary_org_unit: components["schemas"]["OrgUnitSummaryResponse"] | null;
             /** System Roles */
             system_roles: string[];
@@ -3691,7 +3699,7 @@ export interface components {
          *
          *     ``start`` / ``end`` are ISO 8601 strings. For all-day events they are dates
          *     (YYYY-MM-DD). For time-ranged events they include a UTC offset and are
-         *     expected to be interpreted in the calendar component's ``Asia/Seoul`` zone.
+         *     expected to be interpreted in the calendar component's configured zone.
          */
         CalendarEventOut: {
             /** Id */
@@ -7023,6 +7031,8 @@ export interface components {
             job_title?: string | null;
             /** Theme Preference */
             theme_preference?: ("system" | "light" | "dark") | null;
+            /** Time Zone */
+            time_zone?: string | null;
         };
         /** UpdateWhiteboardContainerRequest */
         UpdateWhiteboardContainerRequest: {

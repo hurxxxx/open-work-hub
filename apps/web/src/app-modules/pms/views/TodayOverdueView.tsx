@@ -2,11 +2,12 @@ import { useState, useEffect } from 'react';
 import { Calendar, AlertCircle, CheckCircle2, Loader2 } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 import { useAuth } from '@/src/platform/auth/auth-provider';
+import { normalizeTimeZone, zonedDateKey } from '@/src/platform/time/time-utils';
 import { listPmsTaskLists, listTaskListIssues, type PmsIssue } from '../api/pms-api';
 import { initials, formatDate } from './pms-constants';
 
 export const TodayOverdueView = () => {
-  const { token } = useAuth();
+  const { token, user } = useAuth();
   const [issues, setIssues] = useState<PmsIssue[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -25,7 +26,7 @@ export const TodayOverdueView = () => {
       .finally(() => setLoading(false));
   }, [token]);
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = zonedDateKey(new Date(), normalizeTimeZone(user?.time_zone));
 
   const overdue = issues.filter(
     i => i.due_date && i.due_date < today && i.status !== 'done' && i.status !== 'canceled',

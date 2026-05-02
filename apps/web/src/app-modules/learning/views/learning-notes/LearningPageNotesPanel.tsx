@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { BlockEditor, BlockViewer, type BlockContent } from '@aidoo/ui';
 
+import { formatRelativeTime, normalizeTimeZone } from '@/src/platform/time/time-utils';
 import {
   useLearningPageNoteDetail,
   useLearningPageNotesList,
@@ -32,6 +33,7 @@ export interface LearningPageNotesPanelProps {
   courseSlug: string;
   lessonId: string;
   lessonTitle: string;
+  timeZone?: string | null;
 }
 
 type MyEditorMode = 'view' | 'edit';
@@ -43,7 +45,9 @@ export function LearningPageNotesPanel({
   courseSlug,
   lessonId,
   lessonTitle,
+  timeZone,
 }: LearningPageNotesPanelProps) {
+  const resolvedTimeZone = normalizeTimeZone(timeZone);
   const list = useLearningPageNotesList(token, courseSlug, lessonId);
   const mine = useMyLearningPageNote(token, courseSlug, lessonId);
 
@@ -182,6 +186,7 @@ export function LearningPageNotesPanel({
         actionError={actionError}
         savedContent={savedContent}
         expanded={expanded}
+        timeZone={resolvedTimeZone}
         onEdit={() => enterEditMode(true)}
         onCreate={() => enterEditMode(false)}
         onArchive={archiveMine}
@@ -205,7 +210,12 @@ export function LearningPageNotesPanel({
           </h3>
           <div className="flex flex-col gap-1.5">
             {list.othersNotes.map((item) => (
-              <OthersNoteCard key={item.doc_id} item={item} token={token} />
+              <OthersNoteCard
+                key={item.doc_id}
+                item={item}
+                timeZone={resolvedTimeZone}
+                token={token}
+              />
             ))}
           </div>
         </div>
@@ -269,6 +279,7 @@ function MyNoteSlot({
   actionError,
   savedContent,
   expanded,
+  timeZone,
   onEdit,
   onCreate,
   onArchive,
@@ -286,6 +297,7 @@ function MyNoteSlot({
   actionError: string | null;
   savedContent: BlockContent;
   expanded: boolean;
+  timeZone: string;
   onEdit: () => void;
   onCreate: () => void;
   onArchive: () => void;
@@ -322,6 +334,7 @@ function MyNoteSlot({
         onEdit={onEdit}
         onArchive={onArchive}
         actionError={actionError}
+        timeZone={timeZone}
       />
     );
   }
@@ -341,6 +354,7 @@ function MyNoteViewer({
   onEdit,
   onArchive,
   actionError,
+  timeZone,
 }: {
   note: LearningPageNoteDetail;
   savedContent: BlockContent;
@@ -348,6 +362,7 @@ function MyNoteViewer({
   onEdit: () => void;
   onArchive: () => void;
   actionError: string | null;
+  timeZone: string;
 }) {
   const [reading, setReading] = useState(false);
   return (
@@ -402,7 +417,7 @@ function MyNoteViewer({
         <FullscreenReadonlyViewer
           content={savedContent}
           title="내 노트"
-          subtitle={`${formatRelative(note.updated_at)} 업데이트`}
+          subtitle={`${formatRelative(note.updated_at, timeZone)} 업데이트`}
           visibility={note.visibility}
           onClose={() => setReading(false)}
         />
@@ -689,9 +704,11 @@ function VisibilityOption({
 
 function OthersNoteCard({
   item,
+  timeZone,
   token,
 }: {
   item: LearningPageNoteListItem;
+  timeZone: string;
   token: string | null;
 }) {
   const [open, setOpen] = useState(false);
@@ -716,7 +733,7 @@ function OthersNoteCard({
             {item.author_name || '학습자'}
           </span>
           <span className="app-text-meta shrink-0 text-app-ink/45">
-            · {formatRelative(item.updated_at)}
+            · {formatRelative(item.updated_at, timeZone)}
           </span>
         </div>
         <span
@@ -775,7 +792,7 @@ function OthersNoteCard({
         <FullscreenReadonlyViewer
           content={readerContent}
           title={item.author_name || '학습자'}
-          subtitle={`${formatRelative(item.updated_at)} 업데이트`}
+          subtitle={`${formatRelative(item.updated_at, timeZone)} 업데이트`}
           visibility={item.visibility}
           onClose={() => setReading(false)}
         />
@@ -913,16 +930,6 @@ function InlineError({ message }: { message: string }) {
   );
 }
 
-function formatRelative(iso: string): string {
-  const then = new Date(iso).getTime();
-  if (Number.isNaN(then)) return '';
-  const diffSeconds = Math.round((Date.now() - then) / 1000);
-  if (diffSeconds < 60) return '방금 전';
-  const diffMinutes = Math.round(diffSeconds / 60);
-  if (diffMinutes < 60) return `${diffMinutes}분 전`;
-  const diffHours = Math.round(diffMinutes / 60);
-  if (diffHours < 24) return `${diffHours}시간 전`;
-  const diffDays = Math.round(diffHours / 24);
-  if (diffDays < 7) return `${diffDays}일 전`;
-  return new Date(iso).toLocaleDateString();
+function formatRelative(iso: string, timeZone: string): string {
+  return formatRelativeTime(iso, { locale: 'ko-KR', timeZone });
 }

@@ -5,10 +5,12 @@ import {
   parseServerDateTime,
   type MeetingListItem,
 } from '../../api/meeting-api';
+import { formatDateTime } from '@/src/platform/time/time-utils';
 
 interface MeetingListProps {
   items: MeetingListItem[];
   activeId: string | null;
+  timeZone: string;
   onSelect: (id: string) => void;
 }
 
@@ -28,26 +30,32 @@ const STATUS_COLORS: Record<string, string> = {
     'bg-[var(--ui-color-danger)]/15 text-[var(--ui-color-danger)]',
 };
 
-function formatTimeRange(start: string, end: string): string {
+function formatTimeRange(start: string, end: string, timeZone: string): string {
   const startDate = parseServerDateTime(start);
   const endDate = parseServerDateTime(end);
-  const dateLabel = startDate.toLocaleDateString('ko-KR', {
+  const dateLabel = formatDateTime(startDate, {
+    locale: 'ko-KR',
     month: 'short',
     day: 'numeric',
     weekday: 'short',
+    timeZone,
   });
-  const startTime = startDate.toLocaleTimeString('ko-KR', {
+  const startTime = formatDateTime(startDate, {
     hour: '2-digit',
+    locale: 'ko-KR',
     minute: '2-digit',
+    timeZone,
   });
-  const endTime = endDate.toLocaleTimeString('ko-KR', {
+  const endTime = formatDateTime(endDate, {
     hour: '2-digit',
+    locale: 'ko-KR',
     minute: '2-digit',
+    timeZone,
   });
   return `${dateLabel} · ${startTime} – ${endTime}`;
 }
 
-export function MeetingList({ items, activeId, onSelect }: MeetingListProps) {
+export function MeetingList({ items, activeId, timeZone, onSelect }: MeetingListProps) {
   const sortedItems = useMemo(() => {
     return [...items].sort((a, b) => a.start_at.localeCompare(b.start_at));
   }, [items]);
@@ -71,7 +79,7 @@ export function MeetingList({ items, activeId, onSelect }: MeetingListProps) {
                     {item.title}
                   </p>
                   <p className="app-text-caption text-app-ink/60 dark:text-app-ink/70">
-                    {formatTimeRange(item.start_at, item.end_at)} · {item.organizer_name}
+                    {formatTimeRange(item.start_at, item.end_at, timeZone)} · {item.organizer_name}
                   </p>
                 </div>
                 <span

@@ -14,6 +14,7 @@ import {
 import { Button, InlineNotice } from '@aidoo/ui';
 
 import type { AuthUser } from '@/src/platform/auth/auth-api';
+import { formatDateTime } from '@/src/platform/time/time-utils';
 
 import { listAdminUsers } from './admin-api';
 
@@ -88,16 +89,9 @@ export function getErrorMessage(error: unknown, fallback: string): string {
 }
 
 export function formatDateLabel(value?: string | null): string {
-  if (!value) {
-    return '-';
-  }
-
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) {
-    return '-';
-  }
-
-  return parsed.toLocaleDateString('en-US', {
+  return formatDateTime(value, {
+    fallback: '-',
+    locale: 'en-US',
     month: '2-digit',
     day: '2-digit',
     year: 'numeric',

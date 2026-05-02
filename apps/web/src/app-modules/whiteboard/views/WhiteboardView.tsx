@@ -15,6 +15,11 @@ import {
 import { cn } from '@/src/lib/utils';
 import { useAuth } from '@/src/platform/auth/auth-provider';
 import {
+  formatDateTime as formatZonedDateTime,
+  formatRelativeTime,
+  normalizeTimeZone,
+} from '@/src/platform/time/time-utils';
+import {
   buildWorkspaceAppPath,
   resolveDefaultWorkspaceAppPath,
 } from '@/src/platform/workspaces/workspace-utils';
@@ -85,35 +90,21 @@ function ownerInitials(name: string): string {
   return parts.map((part) => part[0]?.toUpperCase() ?? '').join('') || '?';
 }
 
-function parseDate(value: string | null | undefined): Date | null {
-  if (!value) return null;
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? null : date;
+function formatRelativeDate(value: string | null | undefined, timeZone: string): string {
+  return formatRelativeTime(value, { fallback: 'Never', locale: 'en', timeZone });
 }
 
-function formatRelativeDate(value: string | null | undefined): string {
-  const date = parseDate(value);
-  if (!date) return 'Never';
-  const diffMs = Date.now() - date.getTime();
-  const absMs = Math.abs(diffMs);
-  const rtf = new Intl.RelativeTimeFormat('en', { numeric: 'auto' });
-  if (absMs < 60_000) return 'Just now';
-  if (absMs < 3_600_000) return rtf.format(-Math.round(diffMs / 60_000), 'minute');
-  if (absMs < 86_400_000) return rtf.format(-Math.round(diffMs / 3_600_000), 'hour');
-  if (absMs < 604_800_000) return rtf.format(-Math.round(diffMs / 86_400_000), 'day');
-  return new Intl.DateTimeFormat('en', { month: 'short', day: 'numeric' }).format(date);
-}
-
-function formatDateTime(value: string | null | undefined): string {
-  const date = parseDate(value);
-  if (!date) return 'Never';
-  return new Intl.DateTimeFormat('en', {
+function formatDateTime(value: string | null | undefined, timeZone: string): string {
+  return formatZonedDateTime(value, {
+    fallback: 'Never',
+    locale: 'en',
     month: 'short',
     day: 'numeric',
-    year: date.getFullYear() === new Date().getFullYear() ? undefined : 'numeric',
+    year: 'numeric',
     hour: 'numeric',
     minute: '2-digit',
-  }).format(date);
+    timeZone,
+  });
 }
 
 async function renderPreviewImage(scene: WhiteboardScene): Promise<string | null> {
@@ -242,11 +233,13 @@ function WhiteboardCard({
   item,
   token,
   workspaceSlug,
+  timeZone,
   onOpen,
 }: {
   item: WhiteboardHubItem;
   token: string | null;
   workspaceSlug?: string | null;
+  timeZone: string;
   onOpen: (item: WhiteboardHubItem) => void;
 }) {
   return (
@@ -269,7 +262,7 @@ function WhiteboardCard({
             ) : null}
           </div>
           <p className="app-text-body-sm mt-2 truncate text-app-ink/55">
-            Edited {formatRelativeDate(item.updated_at)}
+            Edited {formatRelativeDate(item.updated_at, timeZone)}
           </p>
           <p className="app-text-body-sm mt-1 truncate text-app-ink/45">
             {item.location_label || 'Workspace'}
@@ -282,9 +275,11 @@ function WhiteboardCard({
 
 function WhiteboardListTable({
   items,
+  timeZone,
   onOpen,
 }: {
   items: WhiteboardHubItem[];
+  timeZone: string;
   onOpen: (item: WhiteboardHubItem) => void;
 }) {
   return (
@@ -323,14 +318,14 @@ function WhiteboardListTable({
                     <span className="truncate">{item.location_label || 'Workspace'}</span>
                   </span>
                 </td>
-                <td className="app-text-body-sm px-5 py-4 text-app-ink/65" title={formatDateTime(item.updated_at)}>
-                  {formatRelativeDate(item.updated_at)}
+                <td className="app-text-body-sm px-5 py-4 text-app-ink/65" title={formatDateTime(item.updated_at, timeZone)}>
+                  {formatRelativeDate(item.updated_at, timeZone)}
                 </td>
-                <td className="app-text-body-sm px-5 py-4 text-app-ink/65" title={formatDateTime(item.created_at)}>
-                  {formatRelativeDate(item.created_at)}
+                <td className="app-text-body-sm px-5 py-4 text-app-ink/65" title={formatDateTime(item.created_at, timeZone)}>
+                  {formatRelativeDate(item.created_at, timeZone)}
                 </td>
-                <td className="app-text-body-sm px-5 py-4 text-app-ink/65" title={formatDateTime(item.last_viewed_at)}>
-                  {formatRelativeDate(item.last_viewed_at)}
+                <td className="app-text-body-sm px-5 py-4 text-app-ink/65" title={formatDateTime(item.last_viewed_at, timeZone)}>
+                  {formatRelativeDate(item.last_viewed_at, timeZone)}
                 </td>
                 <td className="px-5 py-4">
                   <div className="flex items-center gap-2">
@@ -375,6 +370,7 @@ export function WhiteboardView() {
   const view = viewFromSearch(searchParams.get('view'));
   const sortOption = SORT_OPTIONS[sortValue];
   const currentWorkspace = user?.workspaces.find((workspace) => workspace.slug === workspaceSlug) ?? null;
+  const timeZone = normalizeTimeZone(user?.time_zone);
 
   const containerFilter = useMemo(() => {
     const app = searchParams.get('container_app');
@@ -683,12 +679,13 @@ export function WhiteboardView() {
                 item={item}
                 token={token}
                 workspaceSlug={workspaceSlug}
+                timeZone={timeZone}
                 onOpen={openItem}
               />
             ))}
           </div>
         ) : (
-          <WhiteboardListTable items={items} onOpen={openItem} />
+          <WhiteboardListTable items={items} timeZone={timeZone} onOpen={openItem} />
         )}
       </div>
 

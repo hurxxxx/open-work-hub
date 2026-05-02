@@ -20,6 +20,7 @@ function buildUser(overrides: Partial<AuthUser> = {}): AuthUser {
     job_title: 'Platform Owner',
     status: 'active',
     theme_preference: 'system',
+    time_zone: 'Asia/Seoul',
     primary_org_unit: null,
     workspaces: [],
     workspace_roles: [],
@@ -77,5 +78,21 @@ describe('ProfilePage', () => {
       expect(screen.getByTestId('location').textContent).toBe('/profile');
     });
     expect(mockListSessions).toHaveBeenCalledTimes(1);
+  });
+
+  it('saves the selected time zone from appearance settings', async () => {
+    render(
+      <MemoryRouter initialEntries={['/profile']}>
+        <ProfilePage initialTab="appearance" />
+      </MemoryRouter>,
+    );
+
+    fireEvent.change(screen.getByRole('combobox'), {
+      target: { value: 'America/New_York' },
+    });
+
+    await waitFor(() => {
+      expect(mockUpdatePreferences).toHaveBeenCalledWith({ time_zone: 'America/New_York' });
+    });
   });
 });

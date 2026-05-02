@@ -25,6 +25,7 @@ interface MeetingAvailabilityModalProps {
   attendeeUsers: MeetingUser[];
   meetingStart: Date | null;
   meetingEnd: Date | null;
+  timeZone: string;
 }
 
 const HOURS = ['00', '03', '06', '09', '12', '15', '18', '21'];
@@ -73,6 +74,7 @@ export function MeetingAvailabilityModal({
   attendeeUsers,
   meetingStart,
   meetingEnd,
+  timeZone,
 }: MeetingAvailabilityModalProps) {
   const attendeeIds = useMemo(
     () => attendeeUsers.map((user) => user.id),
@@ -133,7 +135,7 @@ export function MeetingAvailabilityModal({
         <div className="flex items-center justify-between gap-3">
           <div>
             <p className="app-text-control text-app-ink">
-              {weekStart ? formatAvailabilityWeekLabel(weekStart) : '일정 범위를 선택하세요.'}
+              {weekStart ? formatAvailabilityWeekLabel(weekStart, timeZone) : '일정 범위를 선택하세요.'}
             </p>
             <p className="app-text-caption text-app-ink/50">
               private 일정과 미팅은 Busy로만 표시됩니다.
@@ -193,7 +195,7 @@ export function MeetingAvailabilityModal({
                             className="min-w-0 flex-1 border-r border-app-border/60 px-3 py-2 last:border-r-0"
                           >
                             <div className="app-text-control-sm truncate text-app-ink">
-                              {formatAvailabilityDayLabel(date)}
+                              {formatAvailabilityDayLabel(date, timeZone)}
                             </div>
                           </div>
                         );
@@ -277,7 +279,7 @@ export function MeetingAvailabilityModal({
                                 backgroundColor: getBlockColor(block),
                                 borderColor: getBlockBorder(block),
                               }}
-                              title={formatAvailabilityBlockLabel(block)}
+                              title={formatAvailabilityBlockLabel(block, timeZone)}
                             >
                               <div className="truncate text-[12px] font-medium text-app-ink">
                                 {block.masked ? 'Busy' : (block.title ?? '일정')}

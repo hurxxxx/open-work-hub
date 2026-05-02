@@ -31,6 +31,7 @@ import {
   type MeetingDetail as MeetingDetailType,
 } from '../../api/meeting-api';
 import { buildWorkspaceAppPath } from '@/src/platform/workspaces/workspace-utils';
+import { formatDateTime, normalizeTimeZone } from '@/src/platform/time/time-utils';
 
 import { MeetingDetail } from './MeetingDetail';
 
@@ -59,16 +60,23 @@ export interface MeetingWorkspaceLayoutProps {
   backHref?: string;
 }
 
-function formatRange(start: string, end: string): string {
+function formatRange(start: string, end: string, timeZone: string): string {
   const s = parseServerDateTime(start);
   const e = parseServerDateTime(end);
-  return `${s.toLocaleString('ko-KR', {
+  return `${formatDateTime(s, {
+    locale: 'ko-KR',
     month: 'short',
     day: 'numeric',
     weekday: 'short',
     hour: '2-digit',
     minute: '2-digit',
-  })} - ${e.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })}`;
+    timeZone,
+  })} - ${formatDateTime(e, {
+    hour: '2-digit',
+    locale: 'ko-KR',
+    minute: '2-digit',
+    timeZone,
+  })}`;
 }
 
 export function MeetingWorkspaceLayout({
@@ -79,7 +87,8 @@ export function MeetingWorkspaceLayout({
   onClose,
   backHref,
 }: MeetingWorkspaceLayoutProps) {
-  const { token } = useAuth();
+  const { token, user } = useAuth();
+  const timeZone = normalizeTimeZone(user?.time_zone);
   const { uploadFile, createLinkedUploadFile, resolveFileUrl } = useMediaUpload();
 
   const [meeting, setMeeting] = useState<MeetingDetailType | null>(null);
@@ -259,7 +268,7 @@ export function MeetingWorkspaceLayout({
                 {meeting.title}
               </h1>
               <p className="app-text-caption mt-1 text-app-ink/60 dark:text-app-ink/70">
-                {formatRange(meeting.start_at, meeting.end_at)} · {meeting.organizer_name}
+                {formatRange(meeting.start_at, meeting.end_at, timeZone)} · {meeting.organizer_name}
               </p>
             </div>
             {notesDocPath ? (

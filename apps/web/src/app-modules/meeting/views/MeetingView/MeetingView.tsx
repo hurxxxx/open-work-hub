@@ -4,6 +4,7 @@ import { Plus, Loader2, Users, Video, FileText } from 'lucide-react';
 import { Button } from '@aidoo/ui';
 
 import { useAuth } from '@/src/platform/auth/auth-provider';
+import { normalizeTimeZone } from '@/src/platform/time/time-utils';
 import {
   listMeetings,
   type MeetingListItem,
@@ -23,7 +24,8 @@ const TABS: { id: MeetingTab; label: string; scope: MeetingScope }[] = [
 ];
 
 export function MeetingView() {
-  const { token } = useAuth();
+  const { token, user } = useAuth();
+  const timeZone = normalizeTimeZone(user?.time_zone);
   const navigate = useNavigate();
   const { workspaceSlug } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -183,10 +185,11 @@ export function MeetingView() {
           <EmptyState onCreate={() => setCreateOpen(true)} />
         ) : (
           <MeetingList
-            items={items ?? []}
-            activeId={null}
-            onSelect={handleSelect}
-          />
+	            items={items ?? []}
+	            activeId={null}
+	            timeZone={timeZone}
+	            onSelect={handleSelect}
+	          />
         )}
       </div>
 

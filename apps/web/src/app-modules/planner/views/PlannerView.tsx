@@ -7,6 +7,7 @@ import { getKoreanHolidayNames } from '@/src/lib/korean-holidays';
 import { useAuth } from '@/src/platform/auth/auth-provider';
 import { useCalendarEvents } from '@/src/platform/calendar/use-calendar-events';
 import type { CalendarEvent } from '@/src/platform/calendar/calendar-types';
+import { normalizeTimeZone } from '@/src/platform/time/time-utils';
 import { updateMeeting } from '@/src/app-modules/meeting/public-api';
 import { updateIssue } from '@/src/app-modules/pms/public-api';
 import { updatePlannerEvent } from '../api/planner-api';
@@ -261,7 +262,8 @@ function buildDefaultPlannerEventRange(currentDate: Date): PlannerEventDraftRang
 export const PlannerView = () => {
   const today = new Date();
   const navigate = useNavigate();
-  const { token } = useAuth();
+  const { token, user } = useAuth();
+  const timeZone = normalizeTimeZone(user?.time_zone);
   const { workspaceSlug } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
   const [viewMode, setViewMode] = useState<PlannerViewMode>('Month');
@@ -501,9 +503,9 @@ export const PlannerView = () => {
         return;
       }
       try {
-        // FullCalendar already formatted these in the calendar's named timezone
-        // (Asia/Seoul). Backend stores naive UTC — meeting-api accepts the
-        // offset-prefixed string and the request pipeline normalizes it.
+        // FullCalendar already formatted these in the calendar's named timezone.
+        // Backend stores naive UTC; meeting-api accepts the offset-prefixed
+        // string and the request pipeline normalizes it.
         await updateMeeting(token, workspaceSlug, event.sourceId, {
           start_at: newStartIso,
           end_at: newEndIso,
@@ -805,6 +807,7 @@ export const PlannerView = () => {
               onEventClick={handleEventClick}
               onEventDrop={handleEventDrop}
               onEventResize={handleEventResize}
+              timeZone={timeZone}
             />
           </div>
         )}

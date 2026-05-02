@@ -25,6 +25,11 @@ import {
   getWorkspaceBySlug,
   resolveShellWorkspaceSlug,
 } from '@/src/platform/workspaces/workspace-utils';
+import {
+  formatDateOnly,
+  formatDateTime,
+  normalizeTimeZone,
+} from '@/src/platform/time/time-utils';
 import { cn } from '@/src/lib/utils';
 
 const ENTITY_OPTIONS: Array<{ id: KeywordSearchEntityType | 'all'; label: string }> = [
@@ -66,6 +71,7 @@ export function RagSearchView() {
     ?? getWorkspaceBySlug(user, workspaceSlug)?.name
     ?? workspaceSlug
     ?? '';
+  const timeZone = normalizeTimeZone(user?.time_zone);
 
   const [queryInput, setQueryInput] = useState(urlSearch.query);
   const [selectedEntityTypes, setSelectedEntityTypes] = useState<KeywordSearchEntityType[]>(urlSearch.entityTypes);
@@ -402,10 +408,11 @@ export function RagSearchView() {
                       hit={hit}
                       isSelected={isSelected}
                       onSelect={selectHit}
+                      timeZone={timeZone}
                     />
                     {isSelected ? (
                       <div className="border-t border-app-border bg-app-bg/60 px-4 py-4 lg:hidden">
-                        <SearchResultPreview hit={hit} variant="inline" />
+                        <SearchResultPreview hit={hit} timeZone={timeZone} variant="inline" />
                       </div>
                     ) : null}
                   </div>
@@ -418,7 +425,7 @@ export function RagSearchView() {
             >
               <div className="sticky top-5">
                 {selectedHit ? (
-                  <SearchResultPreview hit={selectedHit} variant="side" />
+                  <SearchResultPreview hit={selectedHit} timeZone={timeZone} variant="side" />
                 ) : (
                   <div className="rounded-md border border-app-border bg-app-surface px-4 py-6 text-[0.86rem] text-app-ink/55">
                     선택한 결과가 없습니다.
@@ -448,10 +455,12 @@ function SearchResultRow({
   hit,
   isSelected,
   onSelect,
+  timeZone,
 }: {
   hit: KeywordSearchHit;
   isSelected: boolean;
   onSelect: (hit: KeywordSearchHit) => void;
+  timeZone: string;
 }) {
   const openInNewTab = () => openSearchHitInNewTab(hit);
 
@@ -490,7 +499,7 @@ function SearchResultRow({
             <p className="app-text-body mt-1 line-clamp-2 text-app-ink/65">
               <HighlightedSnippet snippet={hit.snippet} />
             </p>
-            <SearchResultContext hit={hit} />
+            <SearchResultContext hit={hit} timeZone={timeZone} />
           </div>
         </div>
       </button>
@@ -508,13 +517,15 @@ function SearchResultRow({
 
 function SearchResultPreview({
   hit,
+  timeZone,
   variant,
 }: {
   hit: KeywordSearchHit;
+  timeZone: string;
   variant: 'side' | 'inline';
 }) {
   const metadataEntries = getSearchHitMetadataEntries(hit);
-  const dateMarkerEntries = getSearchHitDateMarkerEntries(hit);
+  const dateMarkerEntries = getSearchHitDateMarkerEntries(hit, timeZone);
 
   return (
     <section
@@ -529,7 +540,7 @@ function SearchResultPreview({
           <div className="min-w-0">
             <SearchResultMetaLine hit={hit} />
             <h2 className="app-text-title-md mt-2 text-app-ink">{hit.title}</h2>
-            <p className="app-text-caption mt-2 text-app-ink/50">{formatDate(hit.updated_at)} 업데이트</p>
+            <p className="app-text-caption mt-2 text-app-ink/50">{formatDate(hit.updated_at, timeZone)} 업데이트</p>
           </div>
           <SearchResultIcon entityType={hit.entity_type} active />
         </div>
@@ -614,10 +625,10 @@ function SearchResultMetaLine({ hit }: { hit: KeywordSearchHit }) {
   );
 }
 
-function SearchResultContext({ hit }: { hit: KeywordSearchHit }) {
+function SearchResultContext({ hit, timeZone }: { hit: KeywordSearchHit; timeZone: string }) {
   return (
     <div className="mt-2 flex flex-wrap items-center gap-2 text-[0.76rem] text-app-ink/45">
-      <span>{formatDate(hit.updated_at)}</span>
+      <span>{formatDate(hit.updated_at, timeZone)}</span>
       {hit.people.slice(0, 2).map((person) => (
         <span key={`${person.role}:${person.user_id}`}>{person.label}</span>
       ))}
@@ -721,7 +732,7 @@ function openSearchHitInNewTab(hit: KeywordSearchHit) {
   window.open(hit.deep_link, '_blank', 'noopener,noreferrer');
 }
 
-function getSearchHitDateMarkerEntries(hit: KeywordSearchHit) {
+function getSearchHitDateMarkerEntries(hit: KeywordSearchHit, timeZone: string) {
   const entries: Array<{ label: string; value: string }> = [];
   const labels: Record<string, string> = {
     due_date: '기한',
@@ -731,7 +742,7 @@ function getSearchHitDateMarkerEntries(hit: KeywordSearchHit) {
   for (const key of ['due_date', 'start_date', 'event_start_at']) {
     const value = hit.date_markers[key];
     if (typeof value === 'string' && value) {
-      entries.push({ label: labels[key], value: formatDate(value) });
+      entries.push({ label: labels[key], value: formatDate(value, timeZone) });
     }
   }
   return entries;
@@ -810,12 +821,16 @@ function visibilityLabel(value: string): string {
   return value;
 }
 
-function formatDate(value: string): string {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return value;
+function formatDate(value: string, timeZone: string): string {
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return formatDateOnly(value, { fallback: value, locale: 'ko-KR' });
   }
-  return new Intl.DateTimeFormat('ko-KR', { dateStyle: 'medium' }).format(date);
+  return formatDateTime(value, {
+    dateStyle: 'medium',
+    fallback: value,
+    locale: 'ko-KR',
+    timeZone,
+  });
 }
 
 function isAbortError(error: unknown): boolean {
