@@ -14,6 +14,7 @@
         "{workspaceRoot}/.dependency-cruiser.cjs",
         "{workspaceRoot}/knip.json",
         "{workspaceRoot}/scripts/check-web-app-boundaries.mjs",
+        "{workspaceRoot}/scripts/check-web-i18n-messages.mjs",
         "{workspaceRoot}/tsconfig.web-boundaries.json"
       ],
       "options": {

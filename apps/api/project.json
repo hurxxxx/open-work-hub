@@ -45,6 +45,7 @@
       "cache": true,
       "inputs": [
         "default",
+        "{workspaceRoot}/scripts/check-api-i18n-messages.py",
         "{projectRoot}/.importlinter"
       ],
       "options": {
