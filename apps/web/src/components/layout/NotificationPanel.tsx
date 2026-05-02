@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { motion } from 'motion/react';
 import { X, Check, CheckCheck, Loader2 } from 'lucide-react';
 import { Button } from '@aidoo/ui/primitives/button';
@@ -11,8 +12,8 @@ import {
   type WorkspaceNotification,
 } from '@/src/platform/notifications/notifications-api';
 
-function timeAgo(dateStr: string, timeZone: string): string {
-  return formatRelativeTime(dateStr, { locale: 'en', timeZone });
+function timeAgo(dateStr: string, timeZone: string, locale: string): string {
+  return formatRelativeTime(dateStr, { locale, timeZone });
 }
 
 export function NotificationPanel({
@@ -27,6 +28,7 @@ export function NotificationPanel({
   workspaceSlug: string | null;
 }) {
   const { token, user } = useAuth();
+  const { t, i18n } = useTranslation('shell');
   const timeZone = normalizeTimeZone(user?.time_zone);
   const [notifications, setNotifications] = useState<WorkspaceNotification[]>([]);
   const [loading, setLoading] = useState(true);
@@ -76,9 +78,9 @@ export function NotificationPanel({
         className="fixed left-3 right-3 top-16 z-50 flex max-h-[min(480px,calc(100vh-5rem))] flex-col overflow-hidden rounded-xl border border-app-border bg-app-bg shadow-2xl lg:bottom-16 lg:left-20 lg:right-auto lg:top-auto lg:w-80"
       >
         <div className="flex items-center justify-between px-4 py-3 border-b border-app-border shrink-0">
-          <h3 className="app-text-title-md text-app-ink">Notifications</h3>
+          <h3 className="app-text-title-md text-app-ink">{t('notifications.title')}</h3>
           <div className="flex items-center gap-1">
-            <Button variant="ghost" size="icon" onClick={handleReadAll} title="Mark all as read">
+            <Button variant="ghost" size="icon" onClick={handleReadAll} title={t('notifications.markAllAsRead')}>
               <CheckCheck size={14} />
             </Button>
             <Button variant="ghost" size="icon" onClick={onClose}>
@@ -93,7 +95,7 @@ export function NotificationPanel({
               <Loader2 size={18} className="animate-spin text-app-ink/40" />
             </div>
           ) : notifications.length === 0 ? (
-            <p className="app-text-body text-center text-app-ink/30 py-8">No notifications</p>
+            <p className="app-text-body text-center text-app-ink/30 py-8">{t('notifications.empty')}</p>
           ) : (
             notifications.map(n => (
               <div
@@ -112,14 +114,14 @@ export function NotificationPanel({
                     <div className="flex-1 min-w-0">
                       <p className="app-text-body truncate font-medium text-app-ink">{n.title}</p>
                       <p className="app-text-caption mt-0.5 truncate text-app-ink/50">{n.body}</p>
-                      <span className="app-text-micro text-app-ink/30">{timeAgo(n.created_at, timeZone)}</span>
+                      <span className="app-text-micro text-app-ink/30">{timeAgo(n.created_at, timeZone, i18n.language)}</span>
                     </div>
                   </button>
                   {!n.is_read && (
                     <button
                       onClick={() => void handleRead(n)}
                       className="mt-1 shrink-0 text-app-ink/30 hover:text-app-accent"
-                      title="Mark as read"
+                      title={t('notifications.markAsRead')}
                       type="button"
                     >
                       <Check size={12} />

@@ -1,16 +1,19 @@
+import { useTranslation } from 'react-i18next';
+
 import { Button, MetricInline, Panel } from '@aidoo/ui';
 
 export function DraftPreview() {
+  const { t } = useTranslation('apps');
   return (
     <Panel
-      eyebrow="Drafts"
-      title="초안 큐"
-      actions={<Button variant="secondary">템플릿 보기</Button>}
+      eyebrow={t('drafts.preview.eyebrow')}
+      title={t('drafts.preview.title')}
+      actions={<Button variant="secondary">{t('drafts.preview.viewTemplates')}</Button>}
     >
       <div className="grid gap-3">
-        <MetricInline label="Project A Summary" value="citation blocks ready · review pending" />
-        <MetricInline label="Risk Review Memo" value="2 required fields missing" />
-        <MetricInline label="Export Queue" value="1 waiting · 1 generated" />
+        <MetricInline label={t('drafts.preview.projectSummary')} value={t('drafts.preview.projectSummaryValue')} />
+        <MetricInline label={t('drafts.preview.riskReview')} value={t('drafts.preview.riskReviewValue')} />
+        <MetricInline label={t('drafts.preview.exportQueue')} value={t('drafts.preview.exportQueueValue')} />
       </div>
     </Panel>
   );

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import {
   CalendarDays,
   ExternalLink,
@@ -32,12 +33,12 @@ import {
 } from '@/src/platform/time/time-utils';
 import { cn } from '@/src/lib/utils';
 
-const ENTITY_OPTIONS: Array<{ id: KeywordSearchEntityType | 'all'; label: string }> = [
-  { id: 'all', label: '전체' },
-  { id: 'doc', label: '문서' },
-  { id: 'meeting', label: '회의' },
-  { id: 'pms_issue', label: 'PMS' },
-  { id: 'planner_event', label: '일정' },
+const ENTITY_OPTIONS: Array<{ id: KeywordSearchEntityType | 'all'; labelKey: string }> = [
+  { id: 'all', labelKey: 'search.entityAll' },
+  { id: 'doc', labelKey: 'search.entityDoc' },
+  { id: 'meeting', labelKey: 'search.entityMeeting' },
+  { id: 'pms_issue', labelKey: 'search.entityPms' },
+  { id: 'planner_event', labelKey: 'search.entityPlanner' },
 ];
 
 type SearchSortField = 'relevance' | 'updated_at';
@@ -52,6 +53,7 @@ type UrlSearchState = {
 };
 
 export function RagSearchView() {
+  const { t } = useTranslation('apps');
   const { token, user, logout } = useAuth();
   const workspaceBootstrap = useWorkspaceBootstrapContext();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -120,11 +122,11 @@ export function RagSearchView() {
     syncUrl?: boolean;
   }) => {
     if (!token) {
-      setError('인증 정보가 없어 통합검색을 사용할 수 없습니다.');
+      setError(t('ai.search.authMissing'));
       return;
     }
     if (!workspaceSlug) {
-      setError('검색할 workspace를 찾을 수 없습니다.');
+      setError(t('ai.search.workspaceMissing'));
       return;
     }
     const nextQuery = options?.query ?? queryInputRef.current;
@@ -177,11 +179,11 @@ export function RagSearchView() {
         return;
       }
       if (caughtError instanceof SearchApiError && caughtError.status === 401) {
-        setError('세션이 만료되었습니다. 다시 로그인해주세요.');
+        setError(t('ai.search.sessionExpired'));
         void logout();
         return;
       }
-      setError(caughtError instanceof Error ? caughtError.message : '검색 결과를 불러오지 못했습니다.');
+      setError(caughtError instanceof Error ? caughtError.message : t('ai.search.loadFailed'));
     } finally {
       if (requestSequenceRef.current === sequence) {
         setSearching(false);
@@ -193,6 +195,7 @@ export function RagSearchView() {
     token,
     workspaceId,
     workspaceSlug,
+    t,
   ]);
 
   const searchSignature = [
@@ -263,10 +266,10 @@ export function RagSearchView() {
   }, [searchParams, setSearchParams]);
 
   if (!token) {
-    return <div className="p-8 text-app-ink/60">인증 정보가 없어 통합검색을 사용할 수 없습니다.</div>;
+    return <div className="p-8 text-app-ink/60">{t('ai.search.authMissing')}</div>;
   }
   if (!workspaceSlug) {
-    return <div className="p-8 text-app-ink/60">검색할 workspace를 찾을 수 없습니다.</div>;
+    return <div className="p-8 text-app-ink/60">{t('ai.search.workspaceMissing')}</div>;
   }
 
   const toggleEntityType = (entityType: KeywordSearchEntityType | 'all') => {
@@ -290,14 +293,14 @@ export function RagSearchView() {
         <div className="mx-auto flex max-w-6xl flex-col gap-3">
           <div className="flex items-center justify-between gap-3">
             <div className="min-w-0">
-              <h1 className="app-text-title-lg text-app-ink">아이두 통합검색</h1>
+              <h1 className="app-text-title-lg text-app-ink">{t('ai.search.title')}</h1>
               <p className="app-text-caption mt-1 truncate text-app-ink/55">
-                {workspaceName ? `${workspaceName}의 문서, 회의, PMS, 일정을 검색합니다.` : '업무 데이터를 검색합니다.'}
+                {workspaceName ? t('ai.search.subtitle', { workspace: workspaceName }) : t('ai.search.subtitleFallback')}
               </p>
             </div>
             <div className="hidden items-center gap-1 rounded-md border border-app-border bg-app-bg p-1 sm:flex">
-              <SortButton active={sortField === 'relevance'} label="관련도" onClick={() => changeSort('relevance')} />
-              <SortButton active={sortField === 'updated_at'} label="최신순" onClick={() => changeSort('updated_at')} />
+              <SortButton active={sortField === 'relevance'} label={t('ai.search.sortRelevance')} onClick={() => changeSort('relevance')} />
+              <SortButton active={sortField === 'updated_at'} label={t('ai.search.sortLatest')} onClick={() => changeSort('updated_at')} />
             </div>
           </div>
 
@@ -310,15 +313,15 @@ export function RagSearchView() {
           >
             <Search size={17} className="text-app-ink/35" />
             <input
-              aria-label="통합검색어"
+              aria-label={t('ai.search.title')}
               className="app-text-body min-h-9 flex-1 bg-transparent text-app-ink outline-none"
               onChange={(event) => setQueryInput(event.target.value)}
-              placeholder="문서, 회의, 이슈, 일정 검색"
+              placeholder={t('ai.search.placeholder')}
               value={queryInput}
             />
             {queryInput ? (
               <button
-                aria-label="검색어 지우기"
+                aria-label={t('ai.search.clearQuery')}
                 className="rounded-md p-1 text-app-ink/45 hover:bg-app-surface-hover"
                 onClick={() => setQueryInput('')}
                 type="button"
@@ -332,7 +335,7 @@ export function RagSearchView() {
               type="submit"
             >
               {searching ? <Loader2 size={14} className="animate-spin" /> : null}
-              검색
+              {t('ai.search.search')}
             </button>
           </form>
 
@@ -357,7 +360,7 @@ export function RagSearchView() {
                   type="button"
                 >
                   {renderEntityIcon(option.id)}
-                  <span>{option.label}</span>
+                  <span>{t(`ai.${option.labelKey}`)}</span>
                   {typeof count === 'number' ? <span className="text-app-ink/40">{count}</span> : null}
                 </button>
               );
@@ -375,11 +378,18 @@ export function RagSearchView() {
 
         <div className="mb-3 flex items-center justify-between">
           <p className="app-text-caption text-app-ink/55" role="status" aria-live="polite">
-            {response ? `${response.total}건${response.total > 0 ? ` 중 ${response.hits.length}건 표시` : ''}` : '검색 결과를 준비 중입니다.'}
+            {response
+              ? t('ai.search.resultStatus', {
+                total: response.total,
+                shownPart: response.total > 0
+                  ? t('ai.search.resultStatusShown', { shown: response.hits.length })
+                  : '',
+              })
+              : t('ai.search.ready')}
           </p>
           <div className="flex items-center gap-1 rounded-md border border-app-border bg-app-bg p-1 sm:hidden">
-            <SortButton active={sortField === 'relevance'} label="관련도" onClick={() => changeSort('relevance')} />
-            <SortButton active={sortField === 'updated_at'} label="최신순" onClick={() => changeSort('updated_at')} />
+            <SortButton active={sortField === 'relevance'} label={t('ai.search.sortRelevance')} onClick={() => changeSort('relevance')} />
+            <SortButton active={sortField === 'updated_at'} label={t('ai.search.sortLatest')} onClick={() => changeSort('updated_at')} />
           </div>
         </div>
 
@@ -393,7 +403,7 @@ export function RagSearchView() {
 
         {response && response.hits.length === 0 && !searching ? (
           <div className="flex h-56 items-center justify-center rounded-md border border-app-border bg-app-surface text-app-ink/55">
-            검색 결과가 없습니다.
+            {t('ai.search.empty')}
           </div>
         ) : null}
 
@@ -420,7 +430,7 @@ export function RagSearchView() {
               })}
             </div>
             <aside
-              aria-label="선택한 검색 결과 미리보기"
+              aria-label={t('ai.search.previewPane')}
               className="hidden lg:block"
             >
               <div className="sticky top-5">
@@ -428,7 +438,7 @@ export function RagSearchView() {
                   <SearchResultPreview hit={selectedHit} timeZone={timeZone} variant="side" />
                 ) : (
                   <div className="rounded-md border border-app-border bg-app-surface px-4 py-6 text-[0.86rem] text-app-ink/55">
-                    선택한 결과가 없습니다.
+                    {t('ai.search.noSelectedResult')}
                   </div>
                 )}
               </div>
@@ -443,7 +453,7 @@ export function RagSearchView() {
             onClick={() => void runSearch({ offset: response.next_offset ?? response.hits.length, append: true, syncUrl: false })}
             type="button"
           >
-            더 보기
+            {t('ai.search.more')}
           </button>
         ) : null}
       </main>
@@ -462,6 +472,7 @@ function SearchResultRow({
   onSelect: (hit: KeywordSearchHit) => void;
   timeZone: string;
 }) {
+  const { t } = useTranslation('apps');
   const openInNewTab = () => openSearchHitInNewTab(hit);
 
   return (
@@ -472,7 +483,7 @@ function SearchResultRow({
       )}
     >
       <button
-        aria-label={`검색 결과 선택: ${hit.title}`}
+        aria-label={t('ai.search.selectResult', { title: hit.title })}
         aria-pressed={isSelected}
         className="min-w-0 flex-1 text-left outline-none focus-visible:ring-2 focus-visible:ring-app-accent/50"
         onClick={(event) => {
@@ -504,11 +515,11 @@ function SearchResultRow({
         </div>
       </button>
       <Link
-        aria-label={`결과 열기: ${hit.title}`}
+        aria-label={t('ai.search.openResult', { title: hit.title })}
         className="app-text-control-sm mt-1 inline-flex h-8 shrink-0 items-center gap-1 rounded-md border border-app-border bg-app-bg px-2.5 text-app-ink/65 transition-colors hover:bg-app-surface-hover hover:text-app-ink"
         to={hit.deep_link}
       >
-        <span className="hidden sm:inline">열기</span>
+        <span className="hidden sm:inline">{t('ai.search.open')}</span>
         <ExternalLink size={13} />
       </Link>
     </div>
@@ -524,12 +535,13 @@ function SearchResultPreview({
   timeZone: string;
   variant: 'side' | 'inline';
 }) {
-  const metadataEntries = getSearchHitMetadataEntries(hit);
-  const dateMarkerEntries = getSearchHitDateMarkerEntries(hit, timeZone);
+  const { t, i18n } = useTranslation('apps');
+  const metadataEntries = getSearchHitMetadataEntries(hit, t);
+  const dateMarkerEntries = getSearchHitDateMarkerEntries(hit, timeZone, i18n.language, t);
 
   return (
     <section
-      aria-label={`${hit.title} 미리보기`}
+      aria-label={t('ai.search.preview', { title: hit.title })}
       className={cn(
         'rounded-md border border-app-border bg-app-surface',
         variant === 'inline' && 'bg-app-surface',
@@ -540,23 +552,25 @@ function SearchResultPreview({
           <div className="min-w-0">
             <SearchResultMetaLine hit={hit} />
             <h2 className="app-text-title-md mt-2 text-app-ink">{hit.title}</h2>
-            <p className="app-text-caption mt-2 text-app-ink/50">{formatDate(hit.updated_at, timeZone)} 업데이트</p>
+            <p className="app-text-caption mt-2 text-app-ink/50">
+              {t('ai.search.updated', { date: formatDate(hit.updated_at, timeZone, i18n.language) })}
+            </p>
           </div>
           <SearchResultIcon entityType={hit.entity_type} active />
         </div>
         <Link
-          aria-label={`선택한 결과 열기: ${hit.title}`}
+          aria-label={t('ai.search.openSelectedResult', { title: hit.title })}
           className="app-text-control-sm mt-4 inline-flex min-h-8 items-center gap-1.5 rounded-md bg-app-accent px-3 text-app-accent-fg transition-opacity hover:opacity-90"
           to={hit.deep_link}
         >
-          열기
+          {t('ai.search.open')}
           <ExternalLink size={13} />
         </Link>
       </div>
 
       <div className="space-y-4 px-4 py-4">
         <div>
-          <h3 className="app-text-overline text-app-ink/45">내용</h3>
+          <h3 className="app-text-overline text-app-ink/45">{t('ai.search.content')}</h3>
           <p className="app-text-body mt-2 text-app-ink/70">
             <HighlightedSnippet snippet={hit.snippet} />
           </p>
@@ -566,13 +580,13 @@ function SearchResultPreview({
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
             {hit.people.length > 0 ? (
               <PreviewField
-                label="사람"
-                values={hit.people.slice(0, 4).map((person) => `${personRoleLabel(person.role)} ${person.label}`)}
+                label={t('ai.search.metadataPeople')}
+                values={hit.people.slice(0, 4).map((person) => `${personRoleLabel(person.role, t)} ${person.label}`)}
               />
             ) : null}
             {hit.containers.length > 0 ? (
               <PreviewField
-                label="위치"
+                label={t('ai.search.metadataPosition')}
                 values={hit.containers.slice(0, 4).map((container) => container.label)}
               />
             ) : null}
@@ -616,19 +630,21 @@ function SearchResultIcon({
 }
 
 function SearchResultMetaLine({ hit }: { hit: KeywordSearchHit }) {
+  const { t } = useTranslation('apps');
   return (
     <div className="flex min-w-0 flex-wrap items-center gap-2">
-      <span className="text-[0.72rem] font-semibold text-app-ink/45">{entityLabel(hit.entity_type)}</span>
+      <span className="text-[0.72rem] font-semibold text-app-ink/45">{entityLabel(hit.entity_type, t)}</span>
       {hit.status_label ? <span className="rounded-sm bg-app-bg px-1.5 py-0.5 text-[0.72rem] text-app-ink/55">{hit.status_label}</span> : null}
-      {hit.visibility ? <span className="text-[0.72rem] text-app-ink/40">{visibilityLabel(hit.visibility)}</span> : null}
+      {hit.visibility ? <span className="text-[0.72rem] text-app-ink/40">{visibilityLabel(hit.visibility, t)}</span> : null}
     </div>
   );
 }
 
 function SearchResultContext({ hit, timeZone }: { hit: KeywordSearchHit; timeZone: string }) {
+  const { i18n } = useTranslation('apps');
   return (
     <div className="mt-2 flex flex-wrap items-center gap-2 text-[0.76rem] text-app-ink/45">
-      <span>{formatDate(hit.updated_at, timeZone)}</span>
+      <span>{formatDate(hit.updated_at, timeZone, i18n.language)}</span>
       {hit.people.slice(0, 2).map((person) => (
         <span key={`${person.role}:${person.user_id}`}>{person.label}</span>
       ))}
@@ -732,42 +748,47 @@ function openSearchHitInNewTab(hit: KeywordSearchHit) {
   window.open(hit.deep_link, '_blank', 'noopener,noreferrer');
 }
 
-function getSearchHitDateMarkerEntries(hit: KeywordSearchHit, timeZone: string) {
+function getSearchHitDateMarkerEntries(
+  hit: KeywordSearchHit,
+  timeZone: string,
+  locale: string,
+  t: (key: string) => string,
+) {
   const entries: Array<{ label: string; value: string }> = [];
   const labels: Record<string, string> = {
-    due_date: '기한',
-    start_date: '시작일',
-    event_start_at: '일정',
+    due_date: t('ai.search.metadataDueDate'),
+    start_date: t('ai.search.metadataStartDate'),
+    event_start_at: t('ai.search.metadataEventStart'),
   };
   for (const key of ['due_date', 'start_date', 'event_start_at']) {
     const value = hit.date_markers[key];
     if (typeof value === 'string' && value) {
-      entries.push({ label: labels[key], value: formatDate(value, timeZone) });
+      entries.push({ label: labels[key], value: formatDate(value, timeZone, locale) });
     }
   }
   return entries;
 }
 
-function getSearchHitMetadataEntries(hit: KeywordSearchHit) {
+function getSearchHitMetadataEntries(hit: KeywordSearchHit, t: (key: string) => string) {
   const labels: Record<string, string> = {
-    all_day: '종일',
-    attendee_count: '참석자 수',
-    issue_number: '이슈 번호',
-    location: '장소',
-    priority: '우선순위',
-    source_kind: '문서 유형',
-    source_ref: '출처',
+    all_day: t('ai.search.metadataAllDay'),
+    attendee_count: t('ai.search.metadataAttendeeCount'),
+    issue_number: t('ai.search.metadataIssueNumber'),
+    location: t('ai.search.metadataLocation'),
+    priority: t('ai.search.metadataPriority'),
+    source_kind: t('ai.search.metadataSourceKind'),
+    source_ref: t('ai.search.metadataSourceRef'),
   };
   return Object.entries(labels)
     .map(([key, label]) => {
       const value = hit.metadata[key];
-      const formattedValue = formatMetadataValue(value);
+      const formattedValue = formatMetadataValue(value, t);
       return formattedValue ? { label, value: formattedValue } : null;
     })
     .filter((entry): entry is { label: string; value: string } => Boolean(entry));
 }
 
-function formatMetadataValue(value: unknown): string | null {
+function formatMetadataValue(value: unknown, t: (key: string) => string): string | null {
   if (typeof value === 'string') {
     return value.trim() || null;
   }
@@ -775,15 +796,15 @@ function formatMetadataValue(value: unknown): string | null {
     return String(value);
   }
   if (typeof value === 'boolean') {
-    return value ? '예' : '아니오';
+    return value ? t('ai.search.yes') : t('ai.search.no');
   }
   return null;
 }
 
-function personRoleLabel(role: string): string {
-  if (role === 'owner') return '소유자';
-  if (role === 'assignee') return '담당자';
-  if (role === 'participant') return '참석자';
+function personRoleLabel(role: string, t: (key: string) => string): string {
+  if (role === 'owner') return t('ai.search.metadataOwner');
+  if (role === 'assignee') return t('ai.search.metadataAssignee');
+  if (role === 'participant') return t('ai.search.metadataParticipant');
   return role;
 }
 
@@ -807,28 +828,28 @@ function renderEntityIcon(entityType: KeywordSearchEntityType | 'all') {
   return <Search size={13} />;
 }
 
-function entityLabel(entityType: KeywordSearchEntityType): string {
-  if (entityType === 'doc') return '문서';
-  if (entityType === 'meeting') return '회의';
+function entityLabel(entityType: KeywordSearchEntityType, t: (key: string) => string): string {
+  if (entityType === 'doc') return t('ai.search.entityDoc');
+  if (entityType === 'meeting') return t('ai.search.entityMeeting');
   if (entityType === 'pms_issue') return 'PMS';
-  return '일정';
+  return t('ai.search.entityPlanner');
 }
 
-function visibilityLabel(value: string): string {
-  if (value === 'private') return '비공개';
-  if (value === 'public') return '공개';
-  if (value === 'shared') return '공유됨';
+function visibilityLabel(value: string, t: (key: string) => string): string {
+  if (value === 'private') return t('ai.search.visibilityPrivate');
+  if (value === 'public') return t('ai.search.visibilityPublic');
+  if (value === 'shared') return t('ai.search.visibilityShared');
   return value;
 }
 
-function formatDate(value: string, timeZone: string): string {
+function formatDate(value: string, timeZone: string, locale: string): string {
   if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
-    return formatDateOnly(value, { fallback: value, locale: 'ko-KR' });
+    return formatDateOnly(value, { fallback: value, locale });
   }
   return formatDateTime(value, {
     dateStyle: 'medium',
     fallback: value,
-    locale: 'ko-KR',
+    locale,
     timeZone,
   });
 }

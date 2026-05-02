@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import {
   ChevronDown,
   ChevronRight,
@@ -103,30 +104,30 @@ const CATEGORY_MAP: Record<string, string> = {
   'docs-archived': 'archived',
 };
 
-const CATEGORY_LABELS: Record<string, string> = {
-  'docs-all': 'All Docs',
-  'docs-my': 'My Docs',
-  'docs-shared': 'Shared with me',
-  'docs-private': 'Private',
-  'docs-notes': 'Meeting Notes',
-  'docs-recent': 'Recent Pages',
-  'docs-archived': 'Archived',
+const CATEGORY_LABEL_KEYS: Record<string, string> = {
+  'docs-all': 'docs.category.all',
+  'docs-my': 'docs.category.mine',
+  'docs-shared': 'docs.category.shared',
+  'docs-private': 'docs.category.private',
+  'docs-notes': 'docs.category.meetingNotes',
+  'docs-recent': 'docs.category.recent',
+  'docs-archived': 'docs.category.archived',
 };
 
-const VIEW_LABELS: Record<string, string> = {
-  all: 'All Docs',
-  mine: 'Created by me',
-  shared: 'Shared with me',
-  private: 'Private',
-  meeting_notes: 'Meeting Notes',
-  recent: 'Recent Pages',
-  archived: 'Archived',
+const VIEW_LABEL_KEYS: Record<string, string> = {
+  all: 'docs.category.all',
+  mine: 'docs.category.createdByMe',
+  shared: 'docs.category.shared',
+  private: 'docs.category.private',
+  meeting_notes: 'docs.category.meetingNotes',
+  recent: 'docs.category.recent',
+  archived: 'docs.category.archived',
 };
 
 const TEMPLATES = [
-  { title: 'Project Overview', desc: 'Summarize goals, scope, and milestones', icon: '📋' },
-  { title: 'Meeting Notes', desc: 'Capture an agenda, notes, and action items', icon: '📝' },
-  { title: 'Wiki', desc: 'Organize information in one place', icon: '📚' },
+  { titleKey: 'docs.templates.projectOverview', descKey: 'docs.templates.projectOverviewDesc', icon: '📋' },
+  { titleKey: 'docs.templates.meetingNotes', descKey: 'docs.templates.meetingNotesDesc', icon: '📝' },
+  { titleKey: 'docs.templates.wiki', descKey: 'docs.templates.wikiDesc', icon: '📚' },
 ];
 
 interface DocsPageTreeNodeProps {
@@ -286,28 +287,30 @@ function LocationPicker({ value, onChange, options, busy }: LocationPickerProps)
   );
 }
 
-function timeAgo(dateStr: string, timeZone: string): string {
-  return formatRelativeTime(dateStr, { locale: 'en', timeZone });
+function timeAgo(dateStr: string, timeZone: string, locale: string): string {
+  return formatRelativeTime(dateStr, { locale, timeZone });
 }
 
-function sharingLabel(item: DocsHubItem): string {
+function sharingLabel(item: DocsHubItem, t: (key: string, options?: Record<string, unknown>) => string): string {
   if (item.source_type !== 'native_doc') {
     return item.source_app.toUpperCase();
   }
   if (item.sharing_summary?.visibility === 'private') {
-    return 'Private';
+    return t('apps:docs.category.private');
   }
   const parts = [];
   if ((item.sharing_summary?.user_share_count ?? 0) > 0) {
-    parts.push(`${item.sharing_summary?.user_share_count} users`);
+    parts.push(t('apps:docs.share.userCount', { count: item.sharing_summary?.user_share_count ?? 0 }));
   }
   if (item.sharing_summary?.link_active) {
-    parts.push(`Link (${item.sharing_summary.link_access_level})`);
+    parts.push(t('apps:docs.share.linkAccess', { access: t(`apps:docs.share.access.${item.sharing_summary.link_access_level}`) }));
   }
-  return parts.join(' · ') || 'Shared';
+  return parts.join(' · ') || t('apps:docs.category.shared');
 }
 
 export const DocsView = () => {
+  const { t, i18n } = useTranslation(['apps', 'common']);
+  const locale = i18n.resolvedLanguage ?? i18n.language;
   const { toolId, docId, shareToken, workspaceSlug } = useParams();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -369,7 +372,7 @@ export const DocsView = () => {
   const activeCategory = toolId
     ? (CATEGORY_MAP[toolId] ?? 'all')
     : (searchParams.get('view') ?? 'all');
-  const activeCategoryLabel = (toolId && CATEGORY_LABELS[toolId]) || VIEW_LABELS[activeCategory] || 'All Docs';
+  const activeCategoryLabel = t((toolId && CATEGORY_LABEL_KEYS[toolId]) || VIEW_LABEL_KEYS[activeCategory] || 'docs.category.all');
   const activeSourceApp = searchParams.get('source_app') ?? undefined;
   const activeSourceKind = searchParams.get('source_kind') ?? undefined;
   const activeFilterQuery = searchParams.toString();
@@ -570,22 +573,22 @@ export const DocsView = () => {
     {
       value: 'workspace',
       icon: Globe,
-      title: currentWorkspace ? `Workspace · ${currentWorkspace.name}` : 'Workspace',
-      desc: '워크스페이스 전체 멤버가 볼 수 있어요',
+      title: currentWorkspace ? t('docs.location.workspaceNamed', { name: currentWorkspace.name }) : t('docs.location.workspace'),
+      desc: t('docs.location.workspaceDesc'),
     },
     ...availableSpaces.map((space) => ({
       value: `space:${space.id}`,
       icon: Users,
       title: space.name,
-      desc: '팀스페이스 멤버만 볼 수 있어요',
+      desc: t('docs.location.spaceDesc'),
     })),
     {
       value: 'private',
       icon: Lock,
-      title: 'Private',
-      desc: '나만 볼 수 있어요',
+      title: t('docs.category.private'),
+      desc: t('docs.location.privateDesc'),
     },
-  ], [availableSpaces, currentWorkspace]);
+  ], [availableSpaces, currentWorkspace, t]);
 
   const resolveContainerFromLocationValue = useCallback((locationValue: string) => {
     if (locationValue === 'private') return null;
@@ -643,7 +646,7 @@ export const DocsView = () => {
   const handleRenameDoc = async (item: DocsHubItem) => {
     setMenuOpenId(null);
     if (!token || !item.can_manage) return;
-    const nextTitle = await prompt({ title: 'Rename Document', defaultValue: item.title });
+    const nextTitle = await prompt({ title: t('docs.renameDocument'), defaultValue: item.title });
     if (!nextTitle || nextTitle.trim() === item.title) return;
     try {
       const updated = await updateDocsItem(token, item.id, { title: nextTitle.trim() }, shareToken, workspaceSlug);
@@ -660,11 +663,11 @@ export const DocsView = () => {
     setMenuOpenId(null);
     if (!token || !item.can_manage) return;
     const ok = await confirm({
-      title: `Delete "${item.title}"?`,
+      title: t('docs.deleteDocumentConfirm', { title: item.title }),
       description: item.source_type === 'native_doc'
-        ? 'This document will be moved to trash.'
-        : 'This removes the source document from its origin.',
-      confirmLabel: 'Delete',
+        ? t('docs.deleteDocDescription')
+        : t('docs.removeFromDocsDescription'),
+      confirmLabel: t('common:actions.delete'),
       variant: 'danger',
     });
     if (!ok) return;
@@ -723,7 +726,7 @@ export const DocsView = () => {
 
   const handleAddPage = async (parentId?: string | null) => {
     if (!token || !selectedDoc || !selectedDoc.can_edit) return;
-    const title = await prompt({ title: 'New Page', defaultValue: 'Untitled' });
+    const title = await prompt({ title: t('apps:docs.newPage'), defaultValue: t('apps:docs.untitled') });
     if (!title || !title.trim()) return;
     try {
       const page = await createDocPage(token, selectedDoc.id, {
@@ -743,9 +746,9 @@ export const DocsView = () => {
   const handleDeletePage = async (page: DocsPageItem) => {
     if (!token || !page.can_edit) return;
     const ok = await confirm({
-      title: `Delete "${page.title}"?`,
-      description: 'This page and its child pages will be removed from the document tree.',
-      confirmLabel: 'Delete',
+      title: t('docs.deletePageConfirm', { title: page.title }),
+      description: t('docs.deletePageDescription'),
+      confirmLabel: t('common:actions.delete'),
       variant: 'danger',
     });
     if (!ok) return;
@@ -1079,9 +1082,9 @@ export const DocsView = () => {
         <div className="flex-1 flex items-center justify-center bg-app-bg text-gray-500">
           <div className="text-center">
             <FileText size={48} className="mx-auto mb-4 opacity-20" />
-            <h2 className="app-text-title-md text-app-ink">Document not found</h2>
+            <h2 className="app-text-title-md text-app-ink">{t('apps:docs.documentNotFound')}</h2>
             <button onClick={handleBack} className="app-text-control mt-4 text-app-accent hover:underline">
-              Go back
+              {t('apps:docs.goBack')}
             </button>
           </div>
         </div>
@@ -1093,7 +1096,7 @@ export const DocsView = () => {
         <div className="h-12 border-b border-app-border flex items-center justify-between px-4 bg-app-surface-sidebar">
           <div className="app-text-caption flex items-center gap-2 min-w-0">
             <span className="cursor-pointer text-gray-500 hover:text-gray-300" onClick={handleBack}>
-              Docs
+              {t('apps:docs.docs')}
             </span>
             <span className="text-gray-600">/</span>
             <span className="truncate text-app-ink">{selectedDoc.title}</span>
@@ -1114,18 +1117,18 @@ export const DocsView = () => {
                 className="app-text-control-sm flex items-center gap-1.5 rounded-md px-3 py-1.5 text-app-ink transition-colors hover:bg-app-surface-hover"
               >
                 <Share2 size={14} />
-                <span>Share</span>
+                <span>{t('common:actions.share')}</span>
               </button>
             ) : null}
             <button className="app-text-control-sm flex items-center gap-1.5 rounded-md px-3 py-1.5 text-app-accent transition-colors hover:bg-app-accent/10">
               <Sparkles size={14} />
-              <span>Ask AI</span>
+              <span>{t('apps:docs.askAi')}</span>
             </button>
             <div ref={docMenuRef} className="relative">
               <button
                 onClick={() => setDocMenuOpen((o) => !o)}
                 className="rounded p-1.5 text-gray-500 transition-colors hover:bg-app-surface-hover hover:text-app-ink"
-                title="More actions"
+                title={t('apps:docs.moreActions')}
               >
                 <MoreHorizontal size={18} />
               </button>
@@ -1136,28 +1139,28 @@ export const DocsView = () => {
                     className="app-text-control-sm flex w-full items-center gap-2 px-3 py-2 text-left text-app-ink hover:bg-app-surface-hover"
                   >
                     <Link2 size={14} />
-                    <span>{copiedDocId === selectedDoc.id ? 'Copied!' : 'Copy link'}</span>
+                    <span>{copiedDocId === selectedDoc.id ? t('apps:docs.copied') : t('apps:docs.copyLink')}</span>
                   </button>
                   <button
                     onClick={() => handleOpenInNewTab(selectedDoc)}
                     className="app-text-control-sm flex w-full items-center gap-2 px-3 py-2 text-left text-app-ink hover:bg-app-surface-hover"
                   >
                     <ExternalLink size={14} />
-                    <span>Open in new tab</span>
+                    <span>{t('apps:docs.openInNewTab')}</span>
                   </button>
                   <button
                     onClick={() => void handleDuplicateDoc(selectedDoc)}
                     className="app-text-control-sm flex w-full items-center gap-2 px-3 py-2 text-left text-app-ink hover:bg-app-surface-hover"
                   >
                     <Copy size={14} />
-                    <span>Duplicate</span>
+                    <span>{t('apps:docs.duplicate')}</span>
                   </button>
                   <button
                     onClick={handlePrintDoc}
                     className="app-text-control-sm flex w-full items-center gap-2 px-3 py-2 text-left text-app-ink hover:bg-app-surface-hover"
                   >
                     <Printer size={14} />
-                    <span>Print</span>
+                    <span>{t('apps:docs.print')}</span>
                   </button>
                   {selectedDoc.can_manage ? (
                     <>
@@ -1170,7 +1173,7 @@ export const DocsView = () => {
                         className="app-text-control-sm flex w-full items-center gap-2 px-3 py-2 text-left text-app-ink hover:bg-app-surface-hover"
                       >
                         <Pencil size={14} />
-                        <span>Rename</span>
+                        <span>{t('common:actions.rename')}</span>
                       </button>
                       <button
                         onClick={() => {
@@ -1180,7 +1183,7 @@ export const DocsView = () => {
                         className="app-text-control-sm flex w-full items-center gap-2 px-3 py-2 text-left text-red-400 hover:bg-app-surface-hover"
                       >
                         <Trash2 size={14} />
-                        <span>Delete</span>
+                        <span>{t('common:actions.delete')}</span>
                       </button>
                     </>
                   ) : null}
@@ -1203,7 +1206,7 @@ export const DocsView = () => {
 
               <div>
                 <div className="flex items-center justify-between px-2 mb-2">
-                  <span className="app-text-overline text-gray-500">Pages</span>
+                  <span className="app-text-overline text-gray-500">{t('apps:docs.pages')}</span>
                 </div>
                 <DndContext
                   sensors={dndSensors}
@@ -1249,7 +1252,7 @@ export const DocsView = () => {
                           className="app-text-body-sm flex w-full items-center gap-2 rounded px-3 py-1.5 text-gray-500 transition-all hover:bg-app-surface-hover hover:text-app-accent"
                         >
                           <Plus size={14} />
-                          <span>Add page</span>
+                          <span>{t('apps:docs.addPage')}</span>
                         </button>
                       ) : null}
                     </div>
@@ -1269,7 +1272,7 @@ export const DocsView = () => {
             <div className="mt-auto p-4 border-t border-app-border">
               <div className="app-text-body-sm flex items-center gap-2 rounded px-3 py-1.5 text-gray-500">
                 {selectedDoc.source_type === 'native_doc' ? <Lock size={14} /> : <Globe size={14} />}
-                <span>{sharingLabel(selectedDoc)}</span>
+                <span>{sharingLabel(selectedDoc, t)}</span>
               </div>
             </div>
           </div>
@@ -1284,7 +1287,7 @@ export const DocsView = () => {
                         key={activePage.id}
                         type="text"
                         defaultValue={activePage.title}
-                        placeholder="Untitled"
+                        placeholder={t('apps:docs.untitled')}
                         className="app-text-title-xl w-full bg-transparent text-app-ink placeholder:text-gray-500 focus:outline-none"
                         onBlur={(event) => void handlePageTitleSave(activePage.id, event.target.value)}
                         onKeyDown={(event) => {
@@ -1311,7 +1314,7 @@ export const DocsView = () => {
                       <span>·</span>
                       <span>{selectedDoc.location_label}</span>
                       <span>·</span>
-                      <span>Updated {timeAgo(activePage.updated_at, timeZone)}</span>
+                      <span>{t('apps:docs.updated', { date: timeAgo(activePage.updated_at, timeZone, locale) })}</span>
                     </div>
                   </div>
                   <div className="prose dark:prose-invert max-w-none pt-4">
@@ -1338,7 +1341,7 @@ export const DocsView = () => {
                             yjsState: session.yjs_state,
                           };
                         }}
-                        placeholder="Start writing..."
+                        placeholder={t('apps:docs.startWriting')}
                         uploadFile={activePageUploadFile}
                         resolveFileUrl={resolveFileUrl}
                         onChange={(content) => {
@@ -1352,7 +1355,7 @@ export const DocsView = () => {
                       <BlockEditor
                         key={activePage.id}
                         initialContent={activePage.content_blocks as never}
-                        placeholder="Start writing..."
+                        placeholder={t('apps:docs.startWriting')}
                         uploadFile={activePageUploadFile}
                         resolveFileUrl={resolveFileUrl}
                         onChange={handleEditorChange}
@@ -1369,13 +1372,13 @@ export const DocsView = () => {
               ) : (
                 <div className="text-center py-20">
                   <FileText size={48} className="mx-auto mb-4 text-gray-600 opacity-20" />
-                  <p className="app-text-body text-gray-500 mb-4">No pages yet</p>
+                  <p className="app-text-body text-gray-500 mb-4">{t('apps:docs.noPages')}</p>
                   {selectedDoc.can_edit ? (
                     <button
                       onClick={() => void handleAddPage(null)}
                       className="app-text-control rounded-md bg-app-accent px-4 py-2 text-app-bg hover:opacity-90"
                     >
-                      Add first page
+                      {t('apps:docs.addFirstPage')}
                     </button>
                   ) : null}
                 </div>
@@ -1395,14 +1398,14 @@ export const DocsView = () => {
       {showCreateModal ? (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50" onClick={() => setShowCreateModal(false)}>
           <div className="w-full max-w-md rounded-lg border border-app-border bg-app-surface-sidebar p-6 space-y-4" onClick={(event) => event.stopPropagation()}>
-            <h2 className="app-text-title-md text-app-ink">New Document</h2>
+            <h2 className="app-text-title-md text-app-ink">{t('docs.newDoc')}</h2>
             <div>
-              <label className="app-text-caption text-gray-500 mb-1 block">Title</label>
+              <label className="app-text-caption text-gray-500 mb-1 block">{t('planner.title')}</label>
               <input
                 type="text"
                 value={newDocTitle}
                 onChange={(event) => setNewDocTitle(event.target.value)}
-                placeholder="Document title..."
+                placeholder={t('docs.documentTitlePlaceholder')}
                 className="app-text-body w-full rounded-md border border-app-border bg-app-bg px-3 py-2 text-app-ink focus:border-app-accent focus:outline-none"
                 autoFocus
                 onKeyDown={(event) => {
@@ -1413,7 +1416,7 @@ export const DocsView = () => {
               />
             </div>
             <div>
-              <label className="app-text-caption text-gray-500 mb-1.5 block">Location</label>
+              <label className="app-text-caption text-gray-500 mb-1.5 block">{t('ai.search.metadataLocation')}</label>
               <LocationPicker
                 value={newDocLocation}
                 onChange={setNewDocLocation}
@@ -1425,14 +1428,14 @@ export const DocsView = () => {
                 onClick={() => setShowCreateModal(false)}
                 className="app-text-control rounded-md border border-app-border px-4 py-2 text-app-ink hover:bg-app-surface-hover"
               >
-                Cancel
+                {t('common:actions.cancel')}
               </button>
               <button
                 onClick={() => void handleCreateDoc()}
                 disabled={creating || !newDocTitle.trim()}
                 className="app-text-control rounded-md bg-app-accent px-4 py-2 text-app-bg hover:opacity-90 disabled:opacity-50"
               >
-                {creating ? 'Creating...' : 'Create'}
+                {creating ? t('pms.creating') : t('common:actions.create')}
               </button>
             </div>
           </div>
@@ -1444,7 +1447,7 @@ export const DocsView = () => {
           <div className="w-full max-w-2xl rounded-lg border border-app-border bg-app-surface-sidebar p-6 space-y-5" onClick={(event) => event.stopPropagation()}>
             <div className="flex items-start justify-between gap-4">
               <div>
-                <h2 className="app-text-title-md text-app-ink">Share Document</h2>
+                <h2 className="app-text-title-md text-app-ink">{t('docs.share.title')}</h2>
                 <p className="app-text-caption text-gray-500">{selectedDoc.title}</p>
               </div>
               <button onClick={() => setShowShareModal(false)} className="rounded p-1.5 text-gray-500 hover:bg-app-surface-hover">
@@ -1469,7 +1472,7 @@ export const DocsView = () => {
                         onChange={(event) => setInviteQuery(event.target.value)}
                         onFocus={() => setInviteFocused(true)}
                         onBlur={() => window.setTimeout(() => setInviteFocused(false), 150)}
-                        placeholder="Invite by name or email..."
+                        placeholder={t('docs.share.invitePlaceholder')}
                         className="app-text-body w-full rounded-md border border-app-border bg-app-bg py-2 pl-9 pr-3 text-app-ink focus:border-app-accent focus:outline-none"
                       />
                       {inviteFocused && inviteSuggestions.length > 0 ? (
@@ -1501,14 +1504,14 @@ export const DocsView = () => {
                       onChange={(event) => setShareAccessLevel(event.target.value as 'read' | 'edit')}
                       className="app-text-body rounded-md border border-app-border bg-app-bg px-3 py-2 text-app-ink focus:border-app-accent focus:outline-none"
                     >
-                      <option value="read">Can read</option>
-                      <option value="edit">Can edit</option>
+                      <option value="read">{t('docs.share.access.read')}</option>
+                      <option value="edit">{t('docs.share.access.edit')}</option>
                     </select>
                   </div>
 
                   {sharingState?.users.length ? (
                     <div className="space-y-1.5">
-                      <div className="app-text-overline text-gray-500">People with access</div>
+                      <div className="app-text-overline text-gray-500">{t('docs.share.peopleWithAccess')}</div>
                       {sharingState.users.map((user) => (
                         <div key={user.user_id} className="flex items-center justify-between rounded-md border border-app-border bg-app-bg px-3 py-2">
                           <div className="flex items-center gap-2 min-w-0">
@@ -1526,14 +1529,14 @@ export const DocsView = () => {
                               onChange={(event) => void handleChangeUserAccess(user.user_id, event.target.value as 'read' | 'edit')}
                               className="app-text-caption rounded border border-app-border bg-app-surface-sidebar px-2 py-1 text-app-ink focus:border-app-accent focus:outline-none"
                             >
-                              <option value="read">Can read</option>
-                              <option value="edit">Can edit</option>
+                              <option value="read">{t('docs.share.access.read')}</option>
+                              <option value="edit">{t('docs.share.access.edit')}</option>
                             </select>
                             <button
                               onClick={() => void handleRemoveUserShare(user.user_id)}
                               className="app-text-caption rounded border border-app-border px-2 py-1 text-app-ink hover:bg-app-surface-hover"
                             >
-                              Remove
+                              {t('pms.bulk.remove')}
                             </button>
                           </div>
                         </div>
@@ -1545,9 +1548,9 @@ export const DocsView = () => {
                 {/* 2. Who can access — container visibility */}
                 <div className="rounded-lg border border-app-border bg-app-bg p-4 space-y-3">
                   <div>
-                    <div className="app-text-control text-app-ink">Who can access</div>
+                    <div className="app-text-control text-app-ink">{t('docs.share.whoCanAccess')}</div>
                     <div className="app-text-caption text-gray-500">
-                      이 문서를 기본으로 볼 수 있는 범위예요.
+                      {t('docs.share.visibilityDescription')}
                     </div>
                   </div>
                   <LocationPicker
@@ -1558,7 +1561,7 @@ export const DocsView = () => {
                   />
                   {!selectedDoc.can_manage ? (
                     <div className="app-text-micro text-gray-500">
-                      공개 범위는 문서 소유자나 관리자만 변경할 수 있어요.
+                      {t('docs.share.manageOnlyNotice')}
                     </div>
                   ) : null}
                 </div>
@@ -1577,7 +1580,7 @@ export const DocsView = () => {
                     className="app-text-control-sm flex items-center gap-1 rounded-md border border-app-border px-2.5 py-1 text-app-ink hover:bg-app-surface-hover"
                   >
                     <Copy size={12} />
-                    <span>{linkCopied ? 'Copied!' : 'Copy link'}</span>
+                    <span>{linkCopied ? t('docs.copied') : t('docs.copyLink')}</span>
                   </button>
                 </div>
 
@@ -1585,9 +1588,9 @@ export const DocsView = () => {
                 <div className="rounded-lg border border-app-border bg-app-bg p-4 space-y-3">
                   <div className="flex items-center justify-between gap-4">
                     <div>
-                      <div className="app-text-control text-app-ink">Internal share link</div>
+                      <div className="app-text-control text-app-ink">{t('docs.share.internalLink')}</div>
                       <div className="app-text-caption text-gray-500">
-                        로그인한 모든 내부 사용자가 이 링크로 문서에 접근할 수 있어요.
+                        {t('docs.share.internalLinkDescription')}
                       </div>
                     </div>
                     {sharingState?.link_share?.active ? (
@@ -1595,7 +1598,7 @@ export const DocsView = () => {
                         onClick={() => void handleDisableLinkShare()}
                         className="app-text-control rounded-md border border-app-border px-3 py-2 text-app-ink hover:bg-app-surface-hover"
                       >
-                        Disable
+                        {t('docs.share.disable')}
                       </button>
                     ) : (
                       <div className="flex items-center gap-2">
@@ -1604,14 +1607,14 @@ export const DocsView = () => {
                           onChange={(event) => void handleEnableLinkShare(event.target.value as 'read' | 'edit')}
                           className="app-text-body rounded-md border border-app-border bg-app-surface-sidebar px-3 py-2 text-app-ink focus:border-app-accent focus:outline-none"
                         >
-                          <option value="read">Can read</option>
-                          <option value="edit">Can edit</option>
+                          <option value="read">{t('docs.share.access.read')}</option>
+                          <option value="edit">{t('docs.share.access.edit')}</option>
                         </select>
                         <button
                           onClick={() => void handleEnableLinkShare(sharingState?.link_share?.access_level ?? 'read')}
                           className="app-text-control rounded-md bg-app-accent px-3 py-2 text-app-bg hover:opacity-90"
                         >
-                          Enable link
+                          {t('docs.share.enableLink')}
                         </button>
                       </div>
                     )}
@@ -1630,13 +1633,13 @@ export const DocsView = () => {
                         className="app-text-control flex items-center gap-1 rounded-md border border-app-border px-3 py-2 text-app-ink hover:bg-app-surface-hover"
                       >
                         <Copy size={14} />
-                        <span>{shareLinkCopied ? 'Copied!' : 'Copy'}</span>
+                        <span>{shareLinkCopied ? t('docs.copied') : t('docs.share.copy')}</span>
                       </button>
                       <button
                         onClick={() => void handleEnableLinkShare(sharingState.link_share?.access_level ?? 'read', true)}
                         className="app-text-control rounded-md border border-app-border px-3 py-2 text-app-ink hover:bg-app-surface-hover"
                       >
-                        Regenerate
+                        {t('docs.share.regenerate')}
                       </button>
                     </div>
                   ) : null}
@@ -1653,28 +1656,28 @@ export const DocsView = () => {
             <div className="flex items-center justify-between">
               <div>
                 <h1 className="app-text-title-lg text-app-ink">{activeCategoryLabel}</h1>
-                <p className="app-text-caption text-gray-500">{total} documents</p>
+                <p className="app-text-caption text-gray-500">{t('docs.documentCount', { count: total })}</p>
               </div>
               <button
                 onClick={() => openCreateModal()}
                 className="app-text-control flex items-center gap-2 rounded-md bg-app-accent px-4 py-2 text-app-accent-fg shadow-sm transition-opacity hover:opacity-90"
               >
                 <Plus size={16} />
-                <span>New Doc</span>
+                <span>{t('home.actionNewDoc')}</span>
               </button>
             </div>
 
             <div className="flex gap-3">
               {TEMPLATES.map((template) => (
                 <button
-                  key={template.title}
-                  onClick={() => openCreateModal(template.title)}
+                  key={template.titleKey}
+                  onClick={() => openCreateModal(t(template.titleKey))}
                   className="flex items-center gap-3 rounded-lg border border-app-border bg-app-surface-sidebar px-4 py-3 text-left transition-colors hover:border-app-accent/30 hover:bg-app-surface-hover flex-1"
                 >
                   <span className="text-2xl">{template.icon}</span>
                   <div>
-                    <div className="app-text-control text-app-ink">{template.title}</div>
-                    <div className="app-text-micro text-gray-500">{template.desc}</div>
+                    <div className="app-text-control text-app-ink">{t(template.titleKey)}</div>
+                    <div className="app-text-micro text-gray-500">{t(template.descKey)}</div>
                   </div>
                 </button>
               ))}
@@ -1683,7 +1686,7 @@ export const DocsView = () => {
             <div className="flex items-center gap-4 border-b border-app-border pb-2">
               <button className="app-text-control-sm flex items-center gap-1.5 rounded px-2 py-1 text-gray-500 hover:bg-app-surface-hover hover:text-app-ink">
                 <Filter size={14} />
-                <span>Filters</span>
+                <span>{t('pms.filter.filters')}</span>
               </button>
               <div className="app-text-caption ml-auto flex items-center gap-2 text-gray-500">
                 {searchOpen ? (
@@ -1692,7 +1695,7 @@ export const DocsView = () => {
                     <input
                       type="text"
                       defaultValue={searchQuery}
-                      placeholder="Search docs..."
+                      placeholder={t('docs.searchPlaceholder')}
                       onChange={(event) => handleSearchChange(event.target.value)}
                       className="app-text-body-sm w-64 rounded-md border border-app-border bg-app-surface-sidebar py-1.5 pl-9 pr-4 text-app-ink focus:border-app-accent focus:outline-none"
                       autoFocus
@@ -1723,15 +1726,15 @@ export const DocsView = () => {
                 <div className="w-24 h-24 bg-app-surface-sidebar rounded-full flex items-center justify-center mb-6">
                   <FileText size={48} className="text-gray-600 opacity-20" />
                 </div>
-                <h2 className="app-text-title-md mb-2 text-app-ink">No Docs found</h2>
+                <h2 className="app-text-title-md mb-2 text-app-ink">{t('docs.noDocsFound')}</h2>
                 <p className="app-text-body mb-8 max-w-xs mx-auto text-gray-500">
-                  Create personal docs here, and browse PMS documents with their original permissions.
+                  {t('docs.noDocsDescription')}
                 </p>
                 <button
                   onClick={() => openCreateModal()}
                   className="app-text-control rounded-md bg-app-accent px-6 py-2 font-bold text-app-bg transition-opacity hover:opacity-90"
                 >
-                  New Doc
+                  {t('home.actionNewDoc')}
                 </button>
               </div>
             ) : (
@@ -1749,10 +1752,10 @@ export const DocsView = () => {
                           }
                         }}
                       >
-                        Name
+                        {t('pms.name')}
                       </th>
-                      <th className="app-text-overline text-left px-4 py-2.5 text-gray-500">Location</th>
-                      <th className="app-text-overline text-left px-4 py-2.5 text-gray-500">Sharing</th>
+                      <th className="app-text-overline text-left px-4 py-2.5 text-gray-500">{t('ai.search.metadataLocation')}</th>
+                      <th className="app-text-overline text-left px-4 py-2.5 text-gray-500">{t('docs.share.sharing')}</th>
                       <th
                         className="app-text-overline text-left px-4 py-2.5 text-gray-500 cursor-pointer hover:text-app-ink"
                         onClick={() => {
@@ -1763,7 +1766,7 @@ export const DocsView = () => {
                           }
                         }}
                       >
-                        Updated
+                        {t('docs.updatedHeader')}
                       </th>
                       <th className="w-12" />
                     </tr>
@@ -1781,7 +1784,7 @@ export const DocsView = () => {
                             <div className="min-w-0">
                               <div className="app-text-control text-app-ink truncate">{item.title}</div>
                               <div className="app-text-caption text-gray-500">
-                                {item.page_count} page{item.page_count === 1 ? '' : 's'}
+                                {t('docs.pageCount', { count: item.page_count })}
                               </div>
                             </div>
                             <Star
@@ -1798,10 +1801,10 @@ export const DocsView = () => {
                         <td className="px-4 py-3 app-text-body-sm text-gray-400">
                           <div className="flex items-center gap-2">
                             {item.source_type === 'native_doc' && item.is_private ? <Lock size={14} /> : <Globe size={14} />}
-                            <span>{sharingLabel(item)}</span>
+                            <span>{sharingLabel(item, t)}</span>
                           </div>
                         </td>
-                        <td className="px-4 py-3 app-text-body-sm text-gray-400">{timeAgo(item.updated_at, timeZone)}</td>
+                        <td className="px-4 py-3 app-text-body-sm text-gray-400">{timeAgo(item.updated_at, timeZone, locale)}</td>
                         <td className="px-4 py-3 relative">
                           <button
                             onClick={(event) => {
@@ -1823,7 +1826,7 @@ export const DocsView = () => {
                                 className="flex w-full items-center gap-2 px-3 py-2 text-left text-app-ink hover:bg-app-surface-hover disabled:opacity-40"
                               >
                                 <Pencil size={14} />
-                                <span className="app-text-control-sm">Rename</span>
+                                <span className="app-text-control-sm">{t('common:actions.rename')}</span>
                               </button>
                               <button
                                 onClick={(event) => {
@@ -1834,7 +1837,7 @@ export const DocsView = () => {
                                 className="flex w-full items-center gap-2 px-3 py-2 text-left text-red-400 hover:bg-app-surface-hover disabled:opacity-40"
                               >
                                 <Trash2 size={14} />
-                                <span className="app-text-control-sm">Delete</span>
+                                <span className="app-text-control-sm">{t('common:actions.delete')}</span>
                               </button>
                             </div>
                           ) : null}

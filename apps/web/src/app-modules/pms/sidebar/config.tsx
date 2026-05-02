@@ -94,7 +94,8 @@ export const pmsSidebarConfig: AppSidebarConfig = {
   createActions: () => [
     {
       id: 'pms-create-task',
-      label: 'Task',
+      label: 'pms-create-task',
+      labelKey: 'sidebarActions.pms-create-task',
       icon: CheckSquare,
       run: () => {
         window.dispatchEvent(new CustomEvent('pms:create-task'));
@@ -102,7 +103,8 @@ export const pmsSidebarConfig: AppSidebarConfig = {
     },
     {
       id: 'pms-create-space',
-      label: 'Space',
+      label: 'pms-create-space',
+      labelKey: 'sidebarActions.pms-create-space',
       icon: Layout,
       run: () => {
         window.dispatchEvent(new CustomEvent('pms:create-space'));

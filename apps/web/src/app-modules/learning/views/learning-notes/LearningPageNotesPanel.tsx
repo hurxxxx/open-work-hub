@@ -14,6 +14,7 @@ import {
   X,
 } from 'lucide-react';
 import { BlockEditor, BlockViewer, type BlockContent } from '@aidoo/ui';
+import { useTranslation } from 'react-i18next';
 
 import { formatRelativeTime, normalizeTimeZone } from '@/src/platform/time/time-utils';
 import {
@@ -47,6 +48,7 @@ export function LearningPageNotesPanel({
   lessonTitle,
   timeZone,
 }: LearningPageNotesPanelProps) {
+  const { t } = useTranslation('apps');
   const resolvedTimeZone = normalizeTimeZone(timeZone);
   const list = useLearningPageNotesList(token, courseSlug, lessonId);
   const mine = useMyLearningPageNote(token, courseSlug, lessonId);
@@ -104,7 +106,7 @@ export function LearningPageNotesPanel({
     if (draftDirtyRef.current) {
       const confirmed =
         typeof window !== 'undefined'
-          ? window.confirm('작성 중인 변경 사항이 있습니다. 취소하시겠어요?')
+          ? window.confirm(t('learning.notesPanel.cancelDirtyConfirm'))
           : true;
       if (!confirmed) return;
     }
@@ -133,7 +135,7 @@ export function LearningPageNotesPanel({
       setActionError(
         caught instanceof LearningNotesApiError
           ? caught.message
-          : '저장에 실패했습니다. 잠시 후 다시 시도해 주세요.',
+          : t('learning.notesPanel.saveFailed'),
       );
     }
   };
@@ -142,7 +144,7 @@ export function LearningPageNotesPanel({
     if (!mine.note) return;
     const confirmed =
       typeof window !== 'undefined'
-        ? window.confirm('내 노트를 보관하시겠어요? 언제든 복원할 수 있습니다.')
+        ? window.confirm(t('learning.notesPanel.archiveConfirm'))
         : true;
     if (!confirmed) return;
     try {
@@ -152,7 +154,7 @@ export function LearningPageNotesPanel({
       setActionError(
         caught instanceof LearningNotesApiError
           ? caught.message
-          : '보관에 실패했습니다.',
+          : t('learning.notesPanel.archiveFailed'),
       );
     }
   };
@@ -161,7 +163,7 @@ export function LearningPageNotesPanel({
 
   return (
     <section
-      aria-label="페이지 노트"
+      aria-label={t('learning.notesPanel.pageNotes')}
       data-testid="learning-page-notes-panel"
       className="flex flex-col gap-4"
     >
@@ -174,7 +176,7 @@ export function LearningPageNotesPanel({
       {busy ? (
         <NotesSkeleton />
       ) : list.status === 'error' ? (
-        <InlineError message={list.error ?? '불러오는 중 오류가 발생했습니다.'} />
+        <InlineError message={list.error ?? t('learning.notesPanel.loadFailed')} />
       ) : null}
 
       <MyNoteSlot
@@ -206,7 +208,7 @@ export function LearningPageNotesPanel({
       {list.othersNotes.length > 0 ? (
         <div className="flex flex-col gap-1.5">
           <h3 className="app-text-overline text-app-ink/40">
-            다른 학습자 · {list.othersNotes.length}
+            {t('learning.notesPanel.otherLearners', { count: list.othersNotes.length })}
           </h3>
           <div className="flex flex-col gap-1.5">
             {list.othersNotes.map((item) => (
@@ -241,15 +243,16 @@ function CompactHeader({
 }) {
   // If there are notes, the label is redundant context (the cards speak for
   // themselves). If the slot is empty we keep the hint to seed curiosity.
+  const { t } = useTranslation('apps');
   const showHint = totalCount === 0;
   return (
     <header className="flex min-h-[1rem] items-center justify-between gap-2">
       <span className="app-text-overline text-app-ink/40">
         {showHint
-          ? '페이지 노트'
+          ? t('learning.notesPanel.pageNotes')
           : othersCount > 0
-          ? `페이지 노트 · 공개 ${othersCount}`
-          : '페이지 노트'}
+          ? t('learning.notesPanel.pageNotesPublic', { count: othersCount })
+          : t('learning.notesPanel.pageNotes')}
       </span>
       <AnimatePresence>
         {flash === 'saved' ? (
@@ -260,7 +263,7 @@ function CompactHeader({
             exit={{ opacity: 0, y: -4 }}
             className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-[11px] font-medium text-emerald-600 dark:text-emerald-400"
           >
-            <Check size={11} /> 저장됨
+            <Check size={11} /> {t('learning.notesPanel.saved')}
           </motion.span>
         ) : null}
       </AnimatePresence>
@@ -364,6 +367,7 @@ function MyNoteViewer({
   actionError: string | null;
   timeZone: string;
 }) {
+  const { t, i18n } = useTranslation('apps');
   const [reading, setReading] = useState(false);
   return (
     <div className="flex flex-col gap-2">
@@ -385,7 +389,7 @@ function MyNoteViewer({
         >
           <VisibilityPill visibility={note.visibility} />
           <IconButton
-            label="크게 보기"
+            label={t('learning.notesPanel.viewLarge')}
             onClick={() => setReading(true)}
             testId="learning-page-notes-my-expand-view"
             tone="default"
@@ -393,7 +397,7 @@ function MyNoteViewer({
             <Maximize2 size={12} />
           </IconButton>
           <IconButton
-            label="편집"
+            label={t('learning.notesPanel.edit')}
             onClick={onEdit}
             disabled={saving}
             testId="learning-page-notes-my-edit"
@@ -402,7 +406,7 @@ function MyNoteViewer({
             <Pencil size={12} />
           </IconButton>
           <IconButton
-            label="보관"
+            label={t('learning.notesPanel.archive')}
             onClick={onArchive}
             disabled={saving}
             testId="learning-page-notes-my-archive"
@@ -416,8 +420,10 @@ function MyNoteViewer({
       {reading ? (
         <FullscreenReadonlyViewer
           content={savedContent}
-          title="내 노트"
-          subtitle={`${formatRelative(note.updated_at, timeZone)} 업데이트`}
+          title={t('learning.notesPanel.myNote')}
+          subtitle={t('learning.notesPanel.updated', {
+            time: formatRelative(note.updated_at, timeZone, i18n.language),
+          })}
           visibility={note.visibility}
           onClose={() => setReading(false)}
         />
@@ -460,11 +466,12 @@ function IconButton({
 }
 
 function VisibilityPill({ visibility }: { visibility: LearningPageNoteVisibility }) {
+  const { t } = useTranslation('apps');
   const isPublic = visibility === 'public';
   return (
     <span
-      aria-label={isPublic ? '공개 노트' : '비공개 노트'}
-      title={isPublic ? '공개' : '비공개'}
+      aria-label={isPublic ? t('learning.notesPanel.publicNote') : t('learning.notesPanel.privateNote')}
+      title={isPublic ? t('learning.notesPanel.public') : t('learning.notesPanel.private')}
       className={
         'flex h-6 w-6 items-center justify-center rounded-md border shadow-sm ' +
         (isPublic
@@ -478,6 +485,7 @@ function VisibilityPill({ visibility }: { visibility: LearningPageNoteVisibility
 }
 
 function EmptyMyNotePill({ onCreate }: { onCreate: () => void }) {
+  const { t } = useTranslation('apps');
   return (
     <button
       type="button"
@@ -486,7 +494,7 @@ function EmptyMyNotePill({ onCreate }: { onCreate: () => void }) {
       className="group inline-flex items-center gap-1.5 self-start rounded-full border border-dashed border-app-border px-3 py-1 text-xs text-app-ink/55 transition-colors hover:border-app-accent hover:text-app-accent"
     >
       <Pencil size={11} />
-      <span>내 노트 작성</span>
+      <span>{t('learning.notesPanel.createMyNote')}</span>
     </button>
   );
 }
@@ -518,6 +526,7 @@ function EditForm({
   onToggleExpanded: () => void;
   hasExisting: boolean;
 }) {
+  const { t } = useTranslation('apps');
   // ESC collapses the fullscreen overlay back to inline edit. Cancel is a
   // distinct action (discards the draft).
   useEffect(() => {
@@ -539,17 +548,21 @@ function EditForm({
         <button
           type="button"
           onClick={onToggleExpanded}
-          title={expanded ? '축소' : '크게 보기'}
-          aria-label={expanded ? '축소' : '크게 보기'}
+          title={expanded ? t('learning.notesPanel.collapse') : t('learning.notesPanel.viewLarge')}
+          aria-label={expanded ? t('learning.notesPanel.collapse') : t('learning.notesPanel.viewLarge')}
           data-testid="learning-page-notes-my-expand"
           className="inline-flex items-center gap-1 rounded-full border border-app-border bg-app-surface px-2.5 py-1 text-xs text-app-ink/70 transition-colors hover:border-app-accent hover:text-app-accent"
         >
           {expanded ? <Minimize2 size={12} /> : <Maximize2 size={12} />}
-          <span className="app-text-overline">{expanded ? '축소' : '크게'}</span>
+          <span className="app-text-overline">
+            {expanded ? t('learning.notesPanel.collapse') : t('learning.notesPanel.large')}
+          </span>
         </button>
       </div>
       <span className="app-text-meta text-app-ink/50">
-        {hasExisting ? '기존 노트를 덮어씁니다.' : '첫 저장 시 내 노트로 기록됩니다.'}
+        {hasExisting
+          ? t('learning.notesPanel.overwriteExisting')
+          : t('learning.notesPanel.firstSave')}
       </span>
     </div>
   );
@@ -568,7 +581,7 @@ function EditForm({
         key={expanded ? 'expanded' : 'inline'}
         initialContent={initialContent}
         onChange={onDraftChange}
-        placeholder="이 레슨에 대한 내 생각, 질문, 요약…"
+        placeholder={t('learning.notesPanel.editorPlaceholder')}
       />
     </div>
   );
@@ -584,7 +597,7 @@ function EditForm({
           className="inline-flex items-center gap-1.5 rounded-full border border-app-border bg-app-surface px-3 py-1 text-xs font-medium text-app-ink transition-colors hover:border-app-ink/40 disabled:cursor-not-allowed disabled:opacity-50"
           data-testid="learning-page-notes-my-cancel"
         >
-          <X size={12} /> 취소
+          <X size={12} /> {t('common:actions.cancel')}
         </button>
         <button
           type="button"
@@ -593,7 +606,7 @@ function EditForm({
           className="inline-flex items-center gap-1.5 rounded-full bg-app-accent px-4 py-1 text-xs font-semibold text-app-accent-fg shadow-sm transition-colors hover:bg-app-accent/90 disabled:cursor-not-allowed disabled:opacity-60"
           data-testid="learning-page-notes-my-save"
         >
-          <Check size={12} /> {saving ? '저장 중…' : '저장'}
+          <Check size={12} /> {saving ? t('learning.notesPanel.saving') : t('common:actions.save')}
         </button>
       </div>
     </>
@@ -604,7 +617,7 @@ function EditForm({
       <div
         className="fixed inset-0 z-[9000] flex items-stretch justify-center bg-black/60 backdrop-blur-sm"
         role="dialog"
-        aria-label="노트 전체 편집"
+        aria-label={t('learning.notesPanel.fullscreenEdit')}
       >
         <motion.div
           initial={{ opacity: 0, scale: 0.98 }}
@@ -643,24 +656,25 @@ function VisibilityToggle({
   value: LearningPageNoteVisibility;
   onChange: (visibility: LearningPageNoteVisibility) => void;
 }) {
+  const { t } = useTranslation('apps');
   return (
     <div
       role="radiogroup"
-      aria-label="공개 범위"
+      aria-label={t('learning.notesPanel.visibility')}
       className="inline-flex self-start rounded-full border border-app-border bg-app-surface/80 p-0.5 text-xs"
     >
       <VisibilityOption
         active={value === 'private'}
         onClick={() => onChange('private')}
         icon={<Lock size={12} />}
-        label="비공개"
+        label={t('learning.notesPanel.private')}
         testId="learning-page-notes-visibility-private"
       />
       <VisibilityOption
         active={value === 'public'}
         onClick={() => onChange('public')}
         icon={<Globe2 size={12} />}
-        label="공개"
+        label={t('learning.notesPanel.public')}
         testId="learning-page-notes-visibility-public"
       />
     </div>
@@ -711,6 +725,7 @@ function OthersNoteCard({
   timeZone: string;
   token: string | null;
 }) {
+  const { t, i18n } = useTranslation('apps');
   const [open, setOpen] = useState(false);
   const [reading, setReading] = useState(false);
   const detail = useLearningPageNoteDetail(open ? token : null, open ? item.doc_id : null);
@@ -730,10 +745,10 @@ function OthersNoteCard({
         <div className="flex min-w-0 items-center gap-2">
           <AuthorAvatar name={item.author_name} />
           <span className="app-text-control truncate text-app-ink">
-            {item.author_name || '학습자'}
+            {item.author_name || t('learning.notesPanel.learner')}
           </span>
           <span className="app-text-meta shrink-0 text-app-ink/45">
-            · {formatRelative(item.updated_at, timeZone)}
+            · {formatRelative(item.updated_at, timeZone, i18n.language)}
           </span>
         </div>
         <span
@@ -760,7 +775,7 @@ function OthersNoteCard({
               {detail.status === 'loading' ? (
                 <NotesSkeleton rows={2} />
               ) : detail.status === 'error' ? (
-                <InlineError message={detail.error ?? '불러오지 못했습니다.'} />
+                <InlineError message={detail.error ?? t('learning.notesPanel.loadNoteFailed')} />
               ) : detail.note ? (
                 <div className="flex flex-col gap-2">
                   <div className="learning-note-readable learning-note-dense app-markdown prose prose-sm max-w-none dark:prose-invert">
@@ -774,14 +789,14 @@ function OthersNoteCard({
                       data-testid={`learning-page-notes-other-expand-${item.doc_id}`}
                     >
                       <Maximize2 size={11} />
-                      <span className="app-text-overline">크게</span>
+                      <span className="app-text-overline">{t('learning.notesPanel.large')}</span>
                     </button>
                   </div>
                 </div>
               ) : (
                 <span className="app-text-meta text-app-ink/50">
                   <Eye size={12} className="mr-1 inline" />
-                  이 노트를 더 이상 볼 수 없습니다.
+                  {t('learning.notesPanel.noteUnavailable')}
                 </span>
               )}
             </div>
@@ -791,8 +806,10 @@ function OthersNoteCard({
       {reading && detail.note ? (
         <FullscreenReadonlyViewer
           content={readerContent}
-          title={item.author_name || '학습자'}
-          subtitle={`${formatRelative(item.updated_at, timeZone)} 업데이트`}
+          title={item.author_name || t('learning.notesPanel.learner')}
+          subtitle={t('learning.notesPanel.updated', {
+            time: formatRelative(item.updated_at, timeZone, i18n.language),
+          })}
           visibility={item.visibility}
           onClose={() => setReading(false)}
         />
@@ -839,6 +856,7 @@ function FullscreenReadonlyViewer({
   visibility: LearningPageNoteVisibility;
   onClose: () => void;
 }) {
+  const { t } = useTranslation('apps');
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const onKey = (event: KeyboardEvent) => {
@@ -866,7 +884,7 @@ function FullscreenReadonlyViewer({
     <div
       className="fixed inset-0 z-[9000] flex items-stretch justify-center bg-black/60 backdrop-blur-sm"
       role="dialog"
-      aria-label="노트 크게 보기"
+      aria-label={t('learning.notesPanel.readLarge')}
       onClick={onClose}
     >
       <motion.div
@@ -888,8 +906,8 @@ function FullscreenReadonlyViewer({
           <button
             type="button"
             onClick={onClose}
-            aria-label="닫기"
-            title="닫기"
+            aria-label={t('common:actions.close')}
+            title={t('common:actions.close')}
             className="flex h-8 w-8 items-center justify-center rounded-md border border-app-border bg-app-surface text-app-ink/70 transition-colors hover:border-app-accent hover:text-app-accent"
           >
             <X size={14} />
@@ -905,10 +923,11 @@ function FullscreenReadonlyViewer({
 }
 
 function NotesSkeleton({ rows = 3 }: { rows?: number }) {
+  const { t } = useTranslation('apps');
   return (
     <div
       role="status"
-      aria-label="페이지 노트 불러오는 중"
+      aria-label={t('learning.notesPanel.loading')}
       className="flex flex-col gap-2"
     >
       {Array.from({ length: rows }).map((_, idx) => (
@@ -930,6 +949,6 @@ function InlineError({ message }: { message: string }) {
   );
 }
 
-function formatRelative(iso: string, timeZone: string): string {
-  return formatRelativeTime(iso, { locale: 'ko-KR', timeZone });
+function formatRelative(iso: string, timeZone: string, locale: string): string {
+  return formatRelativeTime(iso, { locale, timeZone });
 }

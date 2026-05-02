@@ -10,6 +10,7 @@ import {
   UserPlus,
 } from 'lucide-react';
 import { createPortal } from 'react-dom';
+import { useTranslation } from 'react-i18next';
 
 import { useAuth } from '@/src/platform/auth/auth-provider';
 import {
@@ -35,36 +36,40 @@ interface SpaceMembersModalProps {
 
 type RoleValue = 'owner' | 'admin' | 'member' | 'viewer';
 
-const ROLE_OPTIONS: { value: RoleValue; label: string; description: string }[] =
+const ROLE_OPTIONS: { value: RoleValue; labelKey: string; descriptionKey: string }[] =
   [
     {
       value: 'admin',
-      label: '관리자',
-      description: '멤버 관리 및 설정 변경 가능',
+      labelKey: 'pms.settings.role.admin',
+      descriptionKey: 'pms.spaceMembers.roleDescription.admin',
     },
     {
       value: 'member',
-      label: '멤버',
-      description: '리스트, 폴더, 문서 생성 및 편집',
+      labelKey: 'pms.settings.role.member',
+      descriptionKey: 'pms.spaceMembers.roleDescription.member',
     },
-    { value: 'viewer', label: '뷰어', description: '읽기 전용' },
+    {
+      value: 'viewer',
+      labelKey: 'pms.settings.role.viewer',
+      descriptionKey: 'pms.spaceMembers.roleDescription.viewer',
+    },
   ];
 
 const OWNER_ROLE_OPTION: {
   value: RoleValue;
-  label: string;
-  description: string;
+  labelKey: string;
+  descriptionKey: string;
 } = {
   value: 'owner',
-  label: '소유자',
-  description: '관리자 지정과 소유권 변경 가능',
+  labelKey: 'pms.settings.role.owner',
+  descriptionKey: 'pms.spaceMembers.roleDescription.owner',
 };
 
-const ROLE_LABELS: Record<string, string> = {
-  owner: '소유자',
-  admin: '관리자',
-  member: '멤버',
-  viewer: '뷰어',
+const ROLE_LABEL_KEYS: Record<string, string> = {
+  owner: 'pms.settings.role.owner',
+  admin: 'pms.settings.role.admin',
+  member: 'pms.settings.role.member',
+  viewer: 'pms.settings.role.viewer',
 };
 
 /**
@@ -107,11 +112,13 @@ function MemberAvatar({ name, seed }: { name: string; seed: string }) {
 }
 
 function RoleBadge({ role }: { role: string }) {
+  const { t } = useTranslation('apps');
+  const label = ROLE_LABEL_KEYS[role] ? t(ROLE_LABEL_KEYS[role]) : role;
   if (role === 'owner') {
     return (
       <span className="inline-flex items-center gap-1 text-app-ink/60 dark:text-app-ink/70 app-text-caption">
         <Crown size={12} className="text-amber-500" />
-        소유자
+        {label}
       </span>
     );
   }
@@ -119,13 +126,13 @@ function RoleBadge({ role }: { role: string }) {
     return (
       <span className="inline-flex items-center gap-1 text-app-ink/60 dark:text-app-ink/70 app-text-caption">
         <Shield size={12} className="text-app-ink/50" />
-        {ROLE_LABELS[role] ?? role}
+        {label}
       </span>
     );
   }
   return (
     <span className="text-app-ink/60 dark:text-app-ink/70 app-text-caption">
-      {ROLE_LABELS[role] ?? role}
+      {label}
     </span>
   );
 }
@@ -149,6 +156,7 @@ function RowMenu({
   onChangeRole,
   onRemove,
 }: RowMenuProps) {
+  const { t } = useTranslation('apps');
   const ref = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState({ top: 0, left: 0 });
 
@@ -176,7 +184,7 @@ function RowMenu({
       className="fixed z-[10000] w-[200px] overflow-hidden rounded-lg border border-app-border bg-app-bg py-1 shadow-xl"
     >
       <div className="px-3 py-1 app-text-overline text-app-ink/40">
-        역할 변경
+        {t('pms.spaceMembers.changeRole')}
       </div>
       {roleOptions.map((role) => (
         <button
@@ -212,7 +220,7 @@ function RowMenu({
       >
         <span className="w-3 shrink-0" />
         <span className="app-text-control-sm text-[var(--ui-color-danger)]">
-          스페이스에서 제거
+          {t('pms.spaceMembers.removeFromSpace')}
         </span>
       </button>
     </div>,
@@ -230,6 +238,8 @@ export function SpaceMembersModal({
   onChanged,
 }: SpaceMembersModalProps) {
   const { token, user } = useAuth();
+  const { t, i18n } = useTranslation('apps');
+  const locale = i18n.resolvedLanguage ?? i18n.language;
   const [members, setMembers] = useState<PmsSpaceMember[]>([]);
   const [allUsers, setAllUsers] = useState<PmsUserSummary[]>([]);
   const [loading, setLoading] = useState(false);
@@ -243,10 +253,18 @@ export function SpaceMembersModal({
     new Map(),
   );
   const canManageAdmins = currentUserRole === 'owner';
-  const roleOptions = useMemo(
+  const roleOptionConfig = useMemo(
     () =>
       canManageAdmins ? [OWNER_ROLE_OPTION, ...ROLE_OPTIONS] : ROLE_OPTIONS,
     [canManageAdmins],
+  );
+  const roleOptions = useMemo(
+    () => roleOptionConfig.map((option) => ({
+      value: option.value,
+      label: t(option.labelKey),
+      description: t(option.descriptionKey),
+    })),
+    [roleOptionConfig, t],
   );
 
   const refresh = useCallback(async () => {
@@ -264,12 +282,12 @@ export function SpaceMembersModal({
       setAllUsers(users);
     } catch (err) {
       setError(
-        err instanceof Error ? err.message : '멤버를 불러올 수 없습니다.',
+        err instanceof Error ? err.message : t('pms.spaceMembers.errors.loadFailed'),
       );
     } finally {
       setLoading(false);
     }
-  }, [token, spaceId, canManage]);
+  }, [token, spaceId, canManage, t]);
 
   useEffect(() => {
     if (!isOpen || !spaceId) return;
@@ -313,7 +331,7 @@ export function SpaceMembersModal({
       const ra = rank[a.role] ?? 4;
       const rb = rank[b.role] ?? 4;
       if (ra !== rb) return ra - rb;
-      return a.full_name.localeCompare(b.full_name, 'ko');
+      return a.full_name.localeCompare(b.full_name, locale);
     });
     if (!trimmed) return sorted;
     return sorted.filter((member) => {
@@ -322,7 +340,7 @@ export function SpaceMembersModal({
         member.email.toLowerCase().includes(trimmed)
       );
     });
-  }, [members, memberSearch]);
+  }, [members, memberSearch, locale]);
 
   async function handleInvite(user: PmsUserSummary) {
     if (!token || !spaceId) return;
@@ -338,7 +356,7 @@ export function SpaceMembersModal({
       setInviteQuery('');
     } catch (err) {
       setError(
-        err instanceof Error ? err.message : '멤버를 추가할 수 없습니다.',
+        err instanceof Error ? err.message : t('pms.spaceMembers.errors.addFailed'),
       );
     } finally {
       setBusyUserId(null);
@@ -355,7 +373,7 @@ export function SpaceMembersModal({
       onChanged?.();
     } catch (err) {
       setError(
-        err instanceof Error ? err.message : '역할을 변경할 수 없습니다.',
+        err instanceof Error ? err.message : t('pms.spaceMembers.errors.changeRoleFailed'),
       );
     } finally {
       setBusyUserId(null);
@@ -364,7 +382,7 @@ export function SpaceMembersModal({
 
   async function handleRemove(userId: string) {
     if (!token || !spaceId) return;
-    if (!window.confirm('이 멤버를 스페이스에서 제거하시겠습니까?')) return;
+    if (!window.confirm(t('pms.spaceMembers.removeConfirm'))) return;
     setBusyUserId(userId);
     setError(null);
     try {
@@ -373,7 +391,7 @@ export function SpaceMembersModal({
       onChanged?.();
     } catch (err) {
       setError(
-        err instanceof Error ? err.message : '멤버를 제거할 수 없습니다.',
+        err instanceof Error ? err.message : t('pms.spaceMembers.errors.removeFailed'),
       );
     } finally {
       setBusyUserId(null);
@@ -390,7 +408,7 @@ export function SpaceMembersModal({
         <span className="inline-flex items-baseline gap-2">
           <span>{spaceName}</span>
           <span className="app-text-caption font-normal text-app-ink/40">
-            멤버 관리
+            {t('pms.spaceMembers.titleSuffix')}
           </span>
         </span>
       }
@@ -399,7 +417,7 @@ export function SpaceMembersModal({
       actions={
         <div className="flex w-full items-center justify-end">
           <Button variant="secondary" onClick={onClose}>
-            닫기
+            {t('common:actions.close')}
           </Button>
         </div>
       }
@@ -407,8 +425,7 @@ export function SpaceMembersModal({
       <div className="space-y-6 text-app-ink">
         {!canManage ? (
           <div className="app-text-caption rounded-md border border-app-border bg-app-surface-sidebar px-3 py-2 text-app-ink/60 dark:text-app-ink/70">
-            이 스페이스의 멤버를 수정할 권한이 없습니다. 현재 멤버만 볼 수
-            있습니다.
+            {t('pms.spaceMembers.readOnlyNotice')}
           </div>
         ) : null}
 
@@ -423,7 +440,7 @@ export function SpaceMembersModal({
 
         {canManage ? (
           <section className="space-y-2">
-            <h3 className="app-text-overline text-app-ink/50">멤버 초대</h3>
+            <h3 className="app-text-overline text-app-ink/50">{t('pms.spaceMembers.inviteTitle')}</h3>
             <div className="relative">
               <div className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-app-ink/40">
                 <UserPlus size={14} />
@@ -436,7 +453,7 @@ export function SpaceMembersModal({
                 onBlur={() => {
                   window.setTimeout(() => setInviteFocused(false), 150);
                 }}
-                placeholder="이름 또는 이메일로 사용자 검색"
+                placeholder={t('pms.searchUser')}
                 className="app-text-body w-full rounded-md border border-app-border bg-app-surface-sidebar py-2 pl-9 pr-3 text-app-ink placeholder:text-app-ink/30 focus:border-app-accent focus:outline-none"
               />
               {inviteFocused &&
@@ -445,8 +462,8 @@ export function SpaceMembersModal({
                   {inviteCandidates.length === 0 ? (
                     <div className="app-text-caption px-3 py-3 text-app-ink/40">
                       {inviteQuery.trim()
-                        ? '일치하는 사용자가 없습니다.'
-                        : '추가할 수 있는 사용자가 없습니다.'}
+                        ? t('pms.noMatchingUsers')
+                        : t('pms.noUsersToAdd')}
                     </div>
                   ) : (
                     <ul>
@@ -486,8 +503,7 @@ export function SpaceMembersModal({
               ) : null}
             </div>
             <p className="app-text-caption text-app-ink/40">
-              초대된 멤버는 기본 "멤버" 역할로 추가됩니다. 역할은 아래
-              리스트에서 변경할 수 있습니다.
+              {t('pms.spaceMembers.inviteHint')}
             </p>
           </section>
         ) : null}
@@ -495,7 +511,7 @@ export function SpaceMembersModal({
         <section className="space-y-3">
           <div className="flex items-center justify-between gap-3">
             <h3 className="app-text-overline text-app-ink/50">
-              멤버 · {members.length}
+              {t('pms.spaceMembers.memberCount', { count: members.length })}
             </h3>
             {members.length > 5 ? (
               <div className="relative">
@@ -506,7 +522,7 @@ export function SpaceMembersModal({
                   type="text"
                   value={memberSearch}
                   onChange={(e) => setMemberSearch(e.target.value)}
-                  placeholder="멤버 검색"
+                  placeholder={t('pms.spaceMembers.memberSearchPlaceholder')}
                   className="app-text-caption w-44 rounded-md border border-app-border bg-app-surface-sidebar py-1 pl-7 pr-2 text-app-ink placeholder:text-app-ink/30 focus:border-app-accent focus:outline-none"
                 />
               </div>
@@ -520,8 +536,8 @@ export function SpaceMembersModal({
           ) : visibleMembers.length === 0 ? (
             <p className="app-text-caption rounded-md border border-dashed border-app-border px-3 py-6 text-center text-app-ink/50">
               {memberSearch.trim()
-                ? '검색 결과가 없습니다.'
-                : '아직 멤버가 없습니다.'}
+                ? t('common:empty.noResults')
+                : t('pms.spaceMembers.noMembers')}
             </p>
           ) : (
             <ul className="divide-y divide-app-border rounded-md border border-app-border bg-app-surface">
@@ -568,7 +584,7 @@ export function SpaceMembersModal({
                             }
                             disabled={isBusy}
                             className="rounded-md p-1 text-app-ink/40 opacity-0 transition-opacity hover:bg-app-surface hover:text-app-ink group-hover:opacity-100 focus:opacity-100 disabled:opacity-40"
-                            aria-label="멤버 작업"
+                            aria-label={t('pms.spaceMembers.memberActions')}
                           >
                             {isBusy ? (
                               <Loader2 size={14} className="animate-spin" />

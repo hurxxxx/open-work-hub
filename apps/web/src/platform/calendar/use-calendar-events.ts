@@ -11,6 +11,7 @@
 import { useEffect, useMemo, useState } from 'react';
 
 import { useAuth } from '@/src/platform/auth/auth-provider';
+import { i18n } from '@/src/platform/i18n';
 
 import {
   buildMockCalendarEvents,
@@ -90,7 +91,7 @@ export function useCalendarEvents(
       })
       .catch((err: Error) => {
         if (cancelled) return;
-        setError(err.message ?? '캘린더 일정을 불러올 수 없습니다.');
+        setError(err.message ?? i18n.t('apps:planner.loadFailed'));
         setEvents([]);
       })
       .finally(() => {

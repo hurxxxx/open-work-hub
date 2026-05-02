@@ -3,6 +3,7 @@ import type { NavigateFunction } from 'react-router-dom';
 import { createConversation } from '@/src/app-modules/ai/public-api';
 import type { MeetingDetail } from '../../api/meeting-api';
 import type { MeetingInsightItem } from '../../api/meeting-insights-api';
+import { i18n } from '@/src/platform/i18n';
 import { buildWorkspaceAppPath } from '@/src/platform/workspaces/workspace-utils';
 
 /**
@@ -36,11 +37,11 @@ function buildPromptDraft(
   const label = extractInsightTitle(insight);
   switch (insight.insight_type) {
     case 'action':
-      return `회의 \`${meetingTitle}\`의 액션 아이템 \`${label}\`을(를) PMS 이슈로 만들고 싶어. 필요하면 회의 제안을 다시 확인한 뒤 승인 가능한 형태로 정리해줘.`;
+      return i18n.t('apps:meeting.insightChat.actionPrompt', { meetingTitle, label });
     case 'decision':
-      return `회의 \`${meetingTitle}\`의 결정사항 \`${label}\`를 바탕으로 후속 문서나 필요한 작업을 제안해줘.`;
+      return i18n.t('apps:meeting.insightChat.decisionPrompt', { meetingTitle, label });
     case 'followup_schedule':
-      return `회의 \`${meetingTitle}\`의 후속 회의 제안 \`${label}\`을(를) 일정으로 만들 수 있게 정리해줘.`;
+      return i18n.t('apps:meeting.insightChat.followupPrompt', { meetingTitle, label });
     default:
       return '';
   }

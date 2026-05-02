@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Loader2, Sparkles } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
 
 import { AiApiError } from '@/src/app-modules/ai/public-api';
 import type { MeetingDetail } from '../../api/meeting-api';
@@ -15,8 +17,6 @@ import { formatDateTime } from '@/src/platform/time/time-utils';
 
 import { EmptyRow, Section } from './MeetingSection';
 
-const SUMMARY_NOT_READY_HINT =
-  '회의 요약이 아직 없어 AI 제안을 다시 만들 수 없습니다.';
 const EXTRACTING_STATUSES = new Set(['extracting_insights', 'generating_doc']);
 
 interface GroupState<T> {
@@ -39,17 +39,17 @@ interface MeetingInsightSectionProps {
   onOpenInChat: (insight: MeetingInsightItem) => void | Promise<void>;
 }
 
-function errorMessage(error: unknown): string {
+function errorMessage(error: unknown, t: TFunction): string {
   if (error instanceof AiApiError) {
     if (error.status === 409) {
-      return SUMMARY_NOT_READY_HINT;
+      return t('meeting.insights.summaryNotReady');
     }
     return error.message;
   }
   if (error instanceof Error) {
     return error.message;
   }
-  return 'AI 제안을 불러오지 못했습니다.';
+  return t('meeting.insights.loadFailed');
 }
 
 function attendeeNameMap(meeting: MeetingDetail): Map<string, string> {
@@ -65,7 +65,7 @@ function formatDueDate(value: unknown): string | null {
   return value;
 }
 
-function renderSlotList(slots: unknown, timeZone: string): string[] {
+function renderSlotList(slots: unknown, timeZone: string, locale: string): string[] {
   if (!Array.isArray(slots)) return [];
   const out: string[] = [];
   for (const raw of slots.slice(0, 3)) {
@@ -78,7 +78,7 @@ function renderSlotList(slots: unknown, timeZone: string): string[] {
       minute: '2-digit',
       month: 'numeric',
       day: 'numeric',
-      locale: 'ko-KR',
+      locale,
       timeZone,
     });
     if (formatted) out.push(formatted);
@@ -98,6 +98,7 @@ function OpenInChatButton({
   insight: MeetingInsightItem;
   state: OpenInChatState;
 }) {
+  const { t } = useTranslation('apps');
   const isOpening = state.openingInsightId === insight.id;
   const isOtherOpening =
     state.openingInsightId !== null && state.openingInsightId !== insight.id;
@@ -112,7 +113,7 @@ function OpenInChatButton({
       {isOpening ? (
         <Loader2 size={12} className="animate-spin" aria-hidden="true" />
       ) : null}
-      챗에서 진행
+      {t('meeting.insights.openInChat')}
     </button>
   );
 }
@@ -126,6 +127,7 @@ function ActionCard({
   assigneeName: string | null;
   openState: OpenInChatState;
 }) {
+  const { t } = useTranslation('apps');
   const payload = insight.payload;
   const title = typeof payload.title === 'string' ? payload.title : '';
   const description =
@@ -133,7 +135,7 @@ function ActionCard({
   const dueDate = formatDueDate(payload.proposed_due_date);
   return (
     <li className="rounded-md border border-app-border bg-app-surface-sidebar px-3 py-3">
-      <p className="app-text-body text-app-ink">{title || '(제목 없음)'}</p>
+      <p className="app-text-body text-app-ink">{title || t('meeting.insights.noTitle')}</p>
       {description ? (
         <p className="app-text-caption mt-1 whitespace-pre-wrap text-app-ink/70">
           {description}
@@ -141,9 +143,9 @@ function ActionCard({
       ) : null}
       <div className="mt-2 flex items-center justify-between gap-3">
         <p className="app-text-caption text-app-ink/50">
-          {[assigneeName ? `담당 ${assigneeName}` : null, dueDate ? `기한 ${dueDate}` : null]
+          {[assigneeName ? t('meeting.insights.assignedTo', { name: assigneeName }) : null, dueDate ? t('meeting.insights.dueDate', { date: dueDate }) : null]
             .filter(Boolean)
-            .join(' · ') || '추가 정보 없음'}
+            .join(' · ') || t('meeting.insights.noDetails')}
         </p>
         <OpenInChatButton insight={insight} state={openState} />
       </div>
@@ -158,12 +160,13 @@ function DecisionCard({
   insight: MeetingInsightItem;
   openState: OpenInChatState;
 }) {
+  const { t } = useTranslation('apps');
   const payload = insight.payload;
   const statement = typeof payload.statement === 'string' ? payload.statement : '';
   const rationale = typeof payload.rationale === 'string' ? payload.rationale : null;
   return (
     <li className="rounded-md border border-app-border bg-app-surface-sidebar px-3 py-3">
-      <p className="app-text-body text-app-ink">{statement || '(내용 없음)'}</p>
+      <p className="app-text-body text-app-ink">{statement || t('meeting.insights.noContent')}</p>
       {rationale ? (
         <p className="app-text-caption mt-1 whitespace-pre-wrap text-app-ink/70">
           {rationale}
@@ -187,12 +190,13 @@ function FollowupCard({
   openState: OpenInChatState;
   timeZone: string;
 }) {
+  const { t, i18n } = useTranslation('apps');
   const payload = insight.payload;
   const title =
     typeof payload.proposed_title === 'string' ? payload.proposed_title : '';
   const duration =
     typeof payload.duration_minutes === 'number' ? payload.duration_minutes : null;
-  const slots = renderSlotList(payload.proposed_slots, timeZone);
+  const slots = renderSlotList(payload.proposed_slots, timeZone, i18n.language);
   const attendeeCount = Array.isArray(payload.attendee_user_ids)
     ? payload.attendee_user_ids.length
     : followupContext?.attendee_user_ids.length ?? 0;
@@ -203,16 +207,16 @@ function FollowupCard({
       )
     : null;
   const summaryParts = [
-    `제안 슬롯 ${slots.length}개`,
-    `참석자 ${attendeeCount}명`,
-    busyBlocks !== null ? `겹치는 일정 ${busyBlocks}건` : null,
+    t('meeting.insights.slotCount', { count: slots.length }),
+    t('meeting.insights.attendeeCount', { count: attendeeCount }),
+    busyBlocks !== null ? t('meeting.insights.busyBlockCount', { count: busyBlocks }) : null,
   ].filter(Boolean);
   return (
     <li className="rounded-md border border-app-border bg-app-surface-sidebar px-3 py-3">
-      <p className="app-text-body text-app-ink">{title || '(제목 없음)'}</p>
+      <p className="app-text-body text-app-ink">{title || t('meeting.insights.noTitle')}</p>
       {duration !== null ? (
         <p className="app-text-caption mt-1 text-app-ink/70">
-          예상 소요 {duration}분
+          {t('meeting.insights.durationMinutes', { count: duration })}
         </p>
       ) : null}
       {slots.length > 0 ? (
@@ -220,7 +224,7 @@ function FollowupCard({
       ) : null}
       <div className="mt-2 flex items-center justify-between gap-3">
         <p className="app-text-caption text-app-ink/50">
-          {summaryParts.join(' · ') || '요약 정보 없음'}
+          {summaryParts.join(' · ') || t('meeting.insights.noSummary')}
         </p>
         <OpenInChatButton insight={insight} state={openState} />
       </div>
@@ -235,6 +239,7 @@ export function MeetingInsightSection({
   timeZone,
   onOpenInChat,
 }: MeetingInsightSectionProps) {
+  const { t } = useTranslation('apps');
   const [actionsState, setActionsState] = useState<GroupState<MeetingInsightItem>>(
     emptyGroup,
   );
@@ -259,14 +264,14 @@ export function MeetingInsightSection({
       void Promise.resolve(onOpenInChat(insight))
         .catch((err: unknown) => {
           setOpenError(
-            err instanceof Error ? err.message : 'AI 대화를 시작할 수 없습니다.',
+            err instanceof Error ? err.message : t('meeting.insights.openFailed'),
           );
         })
         .finally(() => {
           setOpeningInsightId(null);
         });
     },
-    [onOpenInChat, openingInsightId],
+    [onOpenInChat, openingInsightId, t],
   );
 
   const openState: OpenInChatState = useMemo(
@@ -319,7 +324,7 @@ export function MeetingInsightSection({
             : prev.items,
         loading: false,
         error:
-          actions.status === 'rejected' ? errorMessage(actions.reason) : null,
+          actions.status === 'rejected' ? errorMessage(actions.reason, t) : null,
       }));
       setDecisionsState((prev) => ({
         items:
@@ -328,7 +333,7 @@ export function MeetingInsightSection({
             : prev.items,
         loading: false,
         error:
-          decisions.status === 'rejected' ? errorMessage(decisions.reason) : null,
+          decisions.status === 'rejected' ? errorMessage(decisions.reason, t) : null,
       }));
       setFollowupState((prev) => {
         if (followup.status === 'fulfilled') {
@@ -343,12 +348,12 @@ export function MeetingInsightSection({
         return {
           items: prev.items,
           loading: false,
-          error: errorMessage(followup.reason),
+          error: errorMessage(followup.reason, t),
           context: prev.context,
         };
       });
     });
-  }, [token, meeting.id, recordingSignature]);
+  }, [token, meeting.id, recordingSignature, t]);
 
   const refreshAll = useCallback(async () => {
     if (!token || refreshing) return;
@@ -365,7 +370,7 @@ export function MeetingInsightSection({
         setActionsState((prev) => ({
           ...prev,
           loading: false,
-          error: errorMessage(error),
+          error: errorMessage(error, t),
         }));
       }
     }
@@ -380,7 +385,7 @@ export function MeetingInsightSection({
         setDecisionsState((prev) => ({
           ...prev,
           loading: false,
-          error: errorMessage(error),
+          error: errorMessage(error, t),
         }));
       }
     }
@@ -402,14 +407,14 @@ export function MeetingInsightSection({
         setFollowupState((prev) => ({
           ...prev,
           loading: false,
-          error: errorMessage(error),
+          error: errorMessage(error, t),
         }));
       }
     }
     if (latestRequestTokenRef.current === requestToken) {
       setRefreshing(false);
     }
-  }, [token, meeting.id, refreshing]);
+  }, [token, meeting.id, refreshing, t]);
 
   const attendeeNames = useMemo(() => attendeeNameMap(meeting), [meeting]);
   const totalCount =
@@ -430,20 +435,20 @@ export function MeetingInsightSection({
       className="app-text-caption inline-flex items-center gap-1 text-app-accent hover:underline disabled:text-app-ink/40 disabled:hover:no-underline"
     >
       {refreshing ? <Loader2 size={12} className="animate-spin" /> : null}
-      재추출
+      {t('meeting.insights.refresh')}
     </button>
   );
 
   return (
     <Section
       icon={<Sparkles size={14} />}
-      title="AI 제안"
+      title={t('meeting.insights.title')}
       count={totalCount}
       headerAction={refreshButton}
     >
       {isExtracting ? (
         <p className="app-text-caption mb-2 text-app-ink/60">
-          AI 제안을 생성 중입니다.
+          {t('meeting.insights.extracting')}
         </p>
       ) : null}
 
@@ -458,13 +463,15 @@ export function MeetingInsightSection({
 
       {allEmpty ? (
         isExtracting ? null : (
-          <EmptyRow text="이 회의에서 발견된 AI 제안이 없습니다." />
+          <EmptyRow text={t('meeting.insights.empty')} />
         )
       ) : (
         <div className="space-y-4">
           {actionsState.items.length > 0 || actionsState.error ? (
             <div>
-              <p className="app-text-overline mb-1 text-app-ink/60">액션 아이템</p>
+              <p className="app-text-overline mb-1 text-app-ink/60">
+                {t('meeting.insights.actionItems')}
+              </p>
               {actionsState.error ? (
                 <p className="app-text-caption mb-1 text-[var(--ui-color-danger)]">
                   {actionsState.error}
@@ -494,7 +501,9 @@ export function MeetingInsightSection({
 
           {decisionsState.items.length > 0 || decisionsState.error ? (
             <div>
-              <p className="app-text-overline mb-1 text-app-ink/60">결정사항</p>
+              <p className="app-text-overline mb-1 text-app-ink/60">
+                {t('meeting.insights.decisions')}
+              </p>
               {decisionsState.error ? (
                 <p className="app-text-caption mb-1 text-[var(--ui-color-danger)]">
                   {decisionsState.error}
@@ -514,7 +523,9 @@ export function MeetingInsightSection({
 
           {followupState.items.length > 0 || followupState.error ? (
             <div>
-              <p className="app-text-overline mb-1 text-app-ink/60">후속 회의</p>
+              <p className="app-text-overline mb-1 text-app-ink/60">
+                {t('meeting.insights.followupMeetings')}
+              </p>
               {followupState.error ? (
                 <p className="app-text-caption mb-1 text-[var(--ui-color-danger)]">
                   {followupState.error}

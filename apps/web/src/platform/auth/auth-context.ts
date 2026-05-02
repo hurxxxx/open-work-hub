@@ -1,4 +1,5 @@
 import { createContext, useContext } from 'react';
+import { i18n } from '@/src/platform/i18n';
 
 import type {
   AuthSessionItem,
@@ -43,7 +44,7 @@ export function useAuth() {
   const context = useContext(AuthContext);
 
   if (!context) {
-    throw new Error('useAuth must be used within AuthProvider');
+    throw new Error(i18n.t('auth:errors.authProviderMissing'));
   }
 
   return context;

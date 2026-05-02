@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { i18n } from '@/src/platform/i18n';
 
 import {
   archiveLearningPageNote,
@@ -62,7 +63,7 @@ export function useLearningPageNotesList(
         setError(
           caught instanceof LearningNotesApiError
             ? caught.message
-            : '노트 목록을 불러오지 못했습니다.',
+            : i18n.t('apps:learning.errors.listNotesFailed'),
         );
         setStatus('error');
       }
@@ -128,7 +129,7 @@ export function useMyLearningPageNote(
         setError(
           caught instanceof LearningNotesApiError
             ? caught.message
-            : '내 노트를 불러오지 못했습니다.',
+            : i18n.t('apps:learning.errors.loadMineFailed'),
         );
         setStatus('error');
       }
@@ -140,7 +141,7 @@ export function useMyLearningPageNote(
 
   const upsert = useCallback(
     async (payload: LearningPageNoteUpsertPayload) => {
-      if (!token) throw new LearningNotesApiError(401, '로그인이 필요합니다.');
+      if (!token) throw new LearningNotesApiError(401, i18n.t('auth:errors.noActiveSession'));
       setSaving(true);
       try {
         const saved = await upsertMyLearningPageNote(token, payload);
@@ -156,7 +157,7 @@ export function useMyLearningPageNote(
 
   const archive = useCallback(
     async (docId: string) => {
-      if (!token) throw new LearningNotesApiError(401, '로그인이 필요합니다.');
+      if (!token) throw new LearningNotesApiError(401, i18n.t('auth:errors.noActiveSession'));
       setSaving(true);
       try {
         const archived = await archiveLearningPageNote(token, docId);
@@ -171,7 +172,7 @@ export function useMyLearningPageNote(
 
   const restore = useCallback(
     async (docId: string) => {
-      if (!token) throw new LearningNotesApiError(401, '로그인이 필요합니다.');
+      if (!token) throw new LearningNotesApiError(401, i18n.t('auth:errors.noActiveSession'));
       setSaving(true);
       try {
         const restored = await restoreLearningPageNote(token, docId);
@@ -225,7 +226,7 @@ export function useLearningPageNoteDetail(
         setError(
           caught instanceof LearningNotesApiError
             ? caught.message
-            : '노트를 불러오지 못했습니다.',
+            : i18n.t('apps:learning.errors.loadNoteFailed'),
         );
         setStatus('error');
       }

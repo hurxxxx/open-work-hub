@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   Check,
   Copy,
@@ -39,12 +40,12 @@ import {
   FilterChip,
   MemberRoleBadge,
   PeopleDirectoryGrid,
-  WORKSPACE_ROLE_LABELS,
-  WORKSPACE_ROLE_OPTIONS,
   WORKSPACE_ROLE_RANK,
   emptySubjectSelection,
   formatDateLabel,
   getErrorMessage,
+  getWorkspaceRoleLabel,
+  getWorkspaceRoleOptions,
   removeSubject,
   selectionSize,
   toggleSubject,
@@ -90,6 +91,8 @@ export function WorkspaceDetailPanel({
   flashSuccess,
   flashError,
 }: WorkspaceDetailPanelProps) {
+  const { t, i18n } = useTranslation('apps');
+  const locale = i18n.resolvedLanguage ?? i18n.language;
   const [bindings, setBindings] = useState<WorkspaceBindingItem[]>([]);
   const [busy, setBusy] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
@@ -135,7 +138,7 @@ export function WorkspaceDetailPanel({
         }
       } catch (caughtError) {
         if (!cancelled) {
-          flashError(getErrorMessage(caughtError, '워크스페이스 상세를 불러오지 못했습니다.'));
+          flashError(getErrorMessage(caughtError, t('admin.workspace.detailLoadFailed')));
         }
       }
     })();
@@ -154,9 +157,9 @@ export function WorkspaceDetailPanel({
         const rankDiff =
           (WORKSPACE_ROLE_RANK[a.role] ?? 99) - (WORKSPACE_ROLE_RANK[b.role] ?? 99);
         if (rankDiff !== 0) return rankDiff;
-        return a.subject_label.localeCompare(b.subject_label);
+        return a.subject_label.localeCompare(b.subject_label, locale);
       }),
-    [bindings],
+    [bindings, locale],
   );
 
   const groupBindings = useMemo(
@@ -203,9 +206,9 @@ export function WorkspaceDetailPanel({
       });
       onWorkspaceChanged(updated);
       setEditOpen(false);
-      flashSuccess('워크스페이스 정보를 저장했습니다.');
+      flashSuccess(t('admin.workspace.profileSaved'));
     } catch (caughtError) {
-      setEditError(getErrorMessage(caughtError, '워크스페이스를 저장하지 못했습니다.'));
+      setEditError(getErrorMessage(caughtError, t('admin.workspace.profileSaveFailed')));
     } finally {
       setEditBusy(false);
     }
@@ -221,10 +224,10 @@ export function WorkspaceDetailPanel({
       });
       onWorkspaceChanged(updated);
       flashSuccess(
-        nextActive ? '워크스페이스를 다시 활성화했습니다.' : '워크스페이스를 보관함으로 옮겼습니다.',
+        nextActive ? t('admin.workspace.reactivated') : t('admin.workspace.archived'),
       );
     } catch (caughtError) {
-      flashError(getErrorMessage(caughtError, '워크스페이스 상태를 변경하지 못했습니다.'));
+      flashError(getErrorMessage(caughtError, t('admin.workspace.statusChangeFailed')));
     } finally {
       setBusy(false);
     }
@@ -235,9 +238,9 @@ export function WorkspaceDetailPanel({
     try {
       await deleteWorkspace(token, target.id);
       onWorkspaceDeleted?.(target.id);
-      flashSuccess(`워크스페이스 "${target.name}" 를 영구 삭제했습니다.`);
+      flashSuccess(t('admin.workspace.deleted', { name: target.name }));
     } catch (caughtError) {
-      flashError(getErrorMessage(caughtError, '워크스페이스를 삭제하지 못했습니다.'));
+      flashError(getErrorMessage(caughtError, t('admin.workspace.deleteFailed')));
     } finally {
       setBusy(false);
     }
@@ -266,9 +269,9 @@ export function WorkspaceDetailPanel({
         subjects,
       });
       if (result.failed.length > 0) {
-        flashError(`${result.succeeded}명 추가됨, ${result.failed.length}명 실패`);
+        flashError(t('admin.workspace.members.bulkAddPartial', { succeeded: result.succeeded, failed: result.failed.length }));
       } else {
-        flashSuccess(`${result.succeeded}명을 추가했습니다.`);
+        flashSuccess(t('admin.workspace.members.bulkAdded', { count: result.succeeded }));
       }
       await reloadBindings();
       if (workspace) {
@@ -279,7 +282,7 @@ export function WorkspaceDetailPanel({
       }
       resetAddPanel();
     } catch (caughtError) {
-      flashError(getErrorMessage(caughtError, '멤버를 추가하지 못했습니다.'));
+      flashError(getErrorMessage(caughtError, t('admin.workspace.members.addFailed')));
     } finally {
       setAddBusy(false);
     }
@@ -303,9 +306,9 @@ export function WorkspaceDetailPanel({
             : item,
         ),
       );
-      flashSuccess('역할을 변경했습니다.');
+      flashSuccess(t('admin.workspace.members.roleChanged'));
     } catch (caughtError) {
-      flashError(getErrorMessage(caughtError, '역할을 변경하지 못했습니다.'));
+      flashError(getErrorMessage(caughtError, t('admin.workspace.members.roleChangeFailed')));
     } finally {
       setBusy(false);
     }
@@ -335,9 +338,9 @@ export function WorkspaceDetailPanel({
           member_count: Math.max(0, workspace.member_count - 1),
         });
       }
-      flashSuccess('멤버를 제거했습니다.');
+      flashSuccess(t('admin.workspace.members.removed'));
     } catch (caughtError) {
-      flashError(getErrorMessage(caughtError, '멤버를 제거하지 못했습니다.'));
+      flashError(getErrorMessage(caughtError, t('admin.workspace.members.removeFailed')));
     } finally {
       setBusy(false);
     }
@@ -355,14 +358,14 @@ export function WorkspaceDetailPanel({
 
   function getDeleteBlockReason(target: WorkspaceItem): string | null {
     if (target.active) {
-      return '워크스페이스를 먼저 보관함으로 옮겨야 영구 삭제할 수 있습니다.';
+      return t('admin.workspace.deleteBlockActive');
     }
     const blockers: string[] = [];
-    if (target.team_count > 0) blockers.push(`${target.team_count}개 space`);
-    if (target.meeting_count > 0) blockers.push(`${target.meeting_count}개 회의`);
-    if (target.doc_count > 0) blockers.push(`${target.doc_count}개 문서`);
+    if (target.team_count > 0) blockers.push(t('admin.workspace.blockerSpaces', { count: target.team_count }));
+    if (target.meeting_count > 0) blockers.push(t('admin.workspace.blockerMeetings', { count: target.meeting_count }));
+    if (target.doc_count > 0) blockers.push(t('admin.workspace.blockerDocs', { count: target.doc_count }));
     if (blockers.length === 0) return null;
-    return `${blockers.join(', ')} 가 남아있습니다. 먼저 비워주세요.`;
+    return t('admin.workspace.deleteBlockRemaining', { items: blockers.join(', ') });
   }
 
   async function handleDrawerChanged() {
@@ -383,9 +386,9 @@ export function WorkspaceDetailPanel({
     return (
       <div className="flex h-full items-center justify-center px-8 py-16 text-center text-app-ink/60">
         <div className="space-y-2">
-          <p className="app-text-title-md text-app-ink">워크스페이스를 선택하세요</p>
+          <p className="app-text-title-md text-app-ink">{t('admin.workspace.noSelectionTitle')}</p>
           <p className="app-text-body">
-            왼쪽 목록에서 워크스페이스를 선택하면 상세 정보를 볼 수 있습니다.
+            {t('admin.workspace.noSelectionDescription')}
           </p>
         </div>
       </div>
@@ -398,19 +401,19 @@ export function WorkspaceDetailPanel({
       workspace.active
         ? {
             id: 'archive',
-            label: '보관함으로 옮기기',
+            label: t('admin.workspace.archiveAction'),
             onSelect: () =>
               openConfirm({
-                title: '워크스페이스 보관',
-                description: `"${workspace.name}" 을 보관함으로 옮기면 사용자가 더 이상 접근하지 못합니다. 멤버와 데이터는 보존되며 언제든 다시 활성화할 수 있습니다.`,
-                confirmLabel: '보관하기',
+                title: t('admin.workspace.archiveConfirmTitle'),
+                description: t('admin.workspace.archiveConfirmDescription', { name: workspace.name }),
+                confirmLabel: t('admin.workspace.archiveConfirm'),
                 variant: 'default',
                 onConfirm: () => handleToggleActive(workspace, false),
               }),
           }
         : {
             id: 'unarchive',
-            label: '다시 활성화',
+            label: t('admin.workspace.reactivateAction'),
             onSelect: () => handleToggleActive(workspace, true),
           },
     );
@@ -419,15 +422,15 @@ export function WorkspaceDetailPanel({
     const reason = getDeleteBlockReason(workspace);
     dropdownItems.push({
       id: 'delete',
-      label: reason ? `영구 삭제 (${reason})` : '영구 삭제',
+      label: reason ? t('admin.workspace.deleteActionWithReason', { reason }) : t('common:actions.deletePermanently'),
       separatorBefore: dropdownItems.length > 0,
       tone: 'danger' as const,
       disabled: Boolean(reason),
       onSelect: () =>
         openConfirm({
-          title: '워크스페이스 영구 삭제',
-          description: `"${workspace.name}" 을 완전히 삭제하면 되돌릴 수 없습니다. 모든 멤버십과 연관 데이터가 함께 제거됩니다.`,
-          confirmLabel: '영구 삭제',
+          title: t('admin.workspace.deleteConfirmTitle'),
+          description: t('admin.workspace.deleteConfirmDescription', { name: workspace.name }),
+          confirmLabel: t('common:actions.deletePermanently'),
           variant: 'danger',
           onConfirm: () => handleDeleteWorkspace(workspace),
         }),
@@ -444,9 +447,9 @@ export function WorkspaceDetailPanel({
               <div className="flex flex-wrap items-center gap-2">
                 <h2 className="app-text-title-md truncate text-app-ink">{workspace.name}</h2>
                 {workspace.active ? (
-                  <Badge tone="green">활성</Badge>
+                  <Badge tone="green">{t('admin.shared.status.activeShort')}</Badge>
                 ) : (
-                  <Badge tone="amber">보관됨</Badge>
+                  <Badge tone="amber">{t('admin.workspace.archivedStatus')}</Badge>
                 )}
                 <code className="app-text-caption rounded bg-app-surface-sidebar px-1.5 py-0.5 font-mono text-app-ink/70">
                   {workspace.key}
@@ -456,19 +459,18 @@ export function WorkspaceDetailPanel({
                   onClick={() => {
                     try {
                       navigator.clipboard?.writeText(workspace.key);
-                      flashSuccess('Key 를 복사했습니다.');
+                      flashSuccess(t('admin.workspace.keyCopied'));
                     } catch {
-                      flashError('Key 를 복사하지 못했습니다.');
+                      flashError(t('admin.workspace.keyCopyFailed'));
                     }
                   }}
                   className="rounded p-0.5 text-app-ink/50 transition-colors hover:bg-app-surface-sidebar hover:text-app-ink"
-                  aria-label="Key 복사"
+                  aria-label={t('admin.workspace.copyKey')}
                 >
                   <Copy size={11} />
                 </button>
                 <span className="app-text-caption text-app-ink/50">
-                  · 멤버 {workspace.member_count} · 만든 날짜{' '}
-                  {formatDateLabel(workspace.created_at)}
+                  {t('admin.workspace.heroMeta', { count: workspace.member_count, date: formatDateLabel(workspace.created_at, locale) })}
                 </span>
               </div>
               {workspace.description ? (
@@ -484,7 +486,7 @@ export function WorkspaceDetailPanel({
                   }}
                   className="app-text-body-sm mt-1 italic text-app-ink/40 transition-colors hover:text-app-ink/70"
                 >
-                  + 설명 추가
+                  {t('admin.workspace.addDescription')}
                 </button>
               ) : null}
             </div>
@@ -497,7 +499,7 @@ export function WorkspaceDetailPanel({
                     setEditOpen(true);
                   }}
                 >
-                  편집
+                  {t('common:actions.edit')}
                 </Button>
               ) : null}
               {dropdownItems.length > 0 ? (
@@ -506,7 +508,7 @@ export function WorkspaceDetailPanel({
                     <button
                       type="button"
                       className="rounded p-1 text-app-ink/70 transition-colors hover:bg-app-surface-sidebar hover:text-app-ink"
-                      aria-label="워크스페이스 작업"
+                      aria-label={t('admin.workspace.actions')}
                     >
                       <MoreHorizontal size={16} />
                     </button>
@@ -522,9 +524,9 @@ export function WorkspaceDetailPanel({
         {groupBindings.length > 0 ? (
           <section className="border-b border-app-border px-4 py-3">
             <h3 className="app-text-control mb-2 text-app-ink">
-              그룹{' '}
+              {t('admin.shared.directory.group')}{' '}
               <span className="app-text-caption ml-1 text-app-ink/50">
-                {groupBindings.length}개 · 사용자에게 권한 상속
+                {t('admin.workspace.groupBindingMeta', { count: groupBindings.length })}
               </span>
             </h3>
             <div className="divide-y divide-app-border rounded-md border border-app-border bg-app-bg">
@@ -547,31 +549,31 @@ export function WorkspaceDetailPanel({
         <section className="px-4 py-3">
           <div className="mb-2 flex items-center justify-between gap-2">
             <h3 className="app-text-control text-app-ink">
-              멤버{' '}
+              {t('admin.workspace.members.title')}{' '}
               <span className="app-text-caption ml-1 text-app-ink/50">
-                {workspace.member_count}명 · 관리자 미리보기
+                {t('admin.workspace.members.previewMeta', { count: workspace.member_count })}
               </span>
             </h3>
             <div className="flex items-center gap-1.5">
               {capabilities.canManageMembers ? (
                 <Button variant="primary" onClick={() => setAddPanelOpen(true)}>
                   <Plus size={12} className="mr-1" />
-                  멤버 추가
+                  {t('admin.workspace.members.add')}
                 </Button>
               ) : null}
               <Button variant="ghost" onClick={() => setMembersDrawerOpen(true)}>
                 <UsersIcon size={12} className="mr-1" />
-                멤버 관리
+                {t('admin.workspace.members.manage')}
               </Button>
             </div>
           </div>
 
           {previewBindings.length === 0 ? (
             <div className="rounded-md border border-dashed border-app-border bg-app-bg px-3 py-6 text-center">
-              <p className="app-text-body-sm text-app-ink/60">아직 멤버가 없습니다.</p>
+              <p className="app-text-body-sm text-app-ink/60">{t('admin.workspace.members.emptyYet')}</p>
               {capabilities.canManageMembers ? (
                 <p className="app-text-caption mt-0.5 text-app-ink/40">
-                  [멤버 추가] 를 눌러 팀원을 등록하세요.
+                  {t('admin.workspace.members.emptyHint')}
                 </p>
               ) : null}
             </div>
@@ -596,7 +598,7 @@ export function WorkspaceDetailPanel({
                   onClick={() => setMembersDrawerOpen(true)}
                   className="app-text-body-sm w-full px-3 py-1.5 text-left text-app-accent transition-colors hover:bg-app-surface-sidebar"
                 >
-                  전체 {workspace.member_count}명 보기 →
+                  {t('admin.workspace.members.viewAll', { count: workspace.member_count })}
                 </button>
               ) : null}
             </div>
@@ -698,9 +700,11 @@ export function WorkspaceMemberRow({
   onChangeRole: (role: string) => void;
   onRemove: () => void;
 }) {
+  const { t } = useTranslation('apps');
+  const roleOptions = getWorkspaceRoleOptions(t);
   const showMenu = canManage && !isCurrentUser;
   const items: Parameters<typeof DropdownMenu>[0]['items'] = [
-    ...WORKSPACE_ROLE_OPTIONS.map((option) => ({
+    ...roleOptions.map((option) => ({
       id: `role-${option.value}`,
       label: (
         <span className="flex items-center justify-between gap-2">
@@ -720,7 +724,7 @@ export function WorkspaceMemberRow({
     })),
     {
       id: 'remove',
-      label: '워크스페이스에서 제거',
+      label: t('admin.workspace.members.removeFromWorkspace'),
       onSelect: onRemove,
       disabled: busy,
       tone: 'danger' as const,
@@ -731,11 +735,11 @@ export function WorkspaceMemberRow({
   return (
     <div className="flex items-center gap-2 px-3 py-1.5">
       {binding.subject_type === 'group' ? (
-        <UsersIcon size={12} className="shrink-0 text-app-ink/50" aria-label="그룹" />
+        <UsersIcon size={12} className="shrink-0 text-app-ink/50" aria-label={t('admin.shared.directory.group')} />
       ) : (
         <span
           className="inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-app-ink/30"
-          aria-label="사용자"
+          aria-label={t('admin.shared.directory.user')}
         />
       )}
       <div className="min-w-0 flex-1">
@@ -744,7 +748,7 @@ export function WorkspaceMemberRow({
           {binding.subject_secondary ? (
             <span className="ml-2 text-app-ink/50">{binding.subject_secondary}</span>
           ) : null}
-          {isCurrentUser ? <span className="ml-2 text-app-ink/40">(본인)</span> : null}
+          {isCurrentUser ? <span className="ml-2 text-app-ink/40">{t('admin.workspace.members.currentUser')}</span> : null}
         </div>
       </div>
       <MemberRoleBadge role={binding.role} />
@@ -754,7 +758,7 @@ export function WorkspaceMemberRow({
             <button
               type="button"
               className="rounded p-1 text-app-ink/60 transition-colors hover:bg-app-surface-sidebar hover:text-app-ink"
-              aria-label="멤버 작업"
+              aria-label={t('admin.workspace.members.actions')}
             >
               <MoreHorizontal size={14} />
             </button>
@@ -775,12 +779,13 @@ function SelectedSubjectsBar({
   selection: SubjectSelectionState;
   onRemove: (kind: 'user' | 'group', id: string) => void;
 }) {
+  const { t } = useTranslation('apps');
   const all = [
     ...Array.from(selection.groups.values()),
     ...Array.from(selection.users.values()),
   ];
   if (all.length === 0) {
-    return <div className="app-text-caption text-app-ink/40">선택한 사용자가 없습니다.</div>;
+    return <div className="app-text-caption text-app-ink/40">{t('admin.workspace.addMembers.noSelection')}</div>;
   }
   return (
     <div className="flex flex-wrap items-center gap-1.5">
@@ -795,7 +800,7 @@ function SelectedSubjectsBar({
             type="button"
             className="text-app-ink/50 hover:text-app-ink"
             onClick={() => onRemove(subject.kind, subject.id)}
-            aria-label={`${subject.label} 선택 해제`}
+            aria-label={t('admin.workspace.addMembers.removeSelection', { label: subject.label })}
           >
             ×
           </button>
@@ -824,6 +829,8 @@ function SubjectPickerInline({
   canReadGroups: boolean;
   onOpenDirectory: (() => void) | null;
 }) {
+  const { t, i18n } = useTranslation('apps');
+  const locale = i18n.resolvedLanguage ?? i18n.language;
   const [tab, setTab] = useState<'user' | 'group'>('user');
   const [query, setQuery] = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState('');
@@ -869,8 +876,9 @@ function SubjectPickerInline({
         (g) =>
           g.name.toLowerCase().includes(trimmed) || g.slug.toLowerCase().includes(trimmed),
       )
+      .sort((left, right) => left.name.localeCompare(right.name, locale))
       .slice(0, 50);
-  }, [groups, debouncedQuery, excludeIds]);
+  }, [groups, debouncedQuery, excludeIds, locale]);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-2">
@@ -884,7 +892,7 @@ function SubjectPickerInline({
           }`}
           onClick={() => setTab('user')}
         >
-          사용자
+          {t('admin.shared.directory.user')}
         </button>
         <button
           type="button"
@@ -896,7 +904,7 @@ function SubjectPickerInline({
           }`}
           onClick={() => setTab('group')}
         >
-          그룹
+          {t('admin.shared.directory.group')}
         </button>
         {onOpenDirectory ? (
           <button
@@ -904,7 +912,7 @@ function SubjectPickerInline({
             className="app-text-control ml-auto rounded px-2 py-0.5 text-app-accent hover:bg-app-accent/10"
             onClick={onOpenDirectory}
           >
-            임직원 디렉터리 열기
+            {t('admin.workspace.addMembers.openDirectory')}
           </button>
         ) : null}
       </div>
@@ -913,7 +921,7 @@ function SubjectPickerInline({
         <Search size={12} className="text-app-ink/50" />
         <input
           className="app-text-body-sm flex-1 bg-transparent text-app-ink outline-none placeholder:text-app-ink/40"
-          placeholder={tab === 'user' ? '이름 또는 이메일' : '그룹 이름'}
+          placeholder={tab === 'user' ? t('admin.workspace.addMembers.userSearchPlaceholder') : t('admin.workspace.addMembers.groupSearchPlaceholder')}
           value={query}
           onChange={(event) => setQuery(event.target.value)}
           autoFocus
@@ -923,9 +931,9 @@ function SubjectPickerInline({
       <div className="min-h-0 flex-1 overflow-y-auto rounded-md border border-app-border bg-app-bg">
         {tab === 'user' ? (
           loading && candidates.length === 0 ? (
-            <div className="app-text-caption px-3 py-3 text-app-ink/60">불러오는 중...</div>
+            <div className="app-text-caption px-3 py-3 text-app-ink/60">{t('common:feedback.loading')}</div>
           ) : candidates.filter((c) => !excludeIds.has(c.id)).length === 0 ? (
-            <div className="app-text-caption px-3 py-3 text-app-ink/60">결과 없음</div>
+            <div className="app-text-caption px-3 py-3 text-app-ink/60">{t('common:empty.noResults')}</div>
           ) : (
             candidates
               .filter((c) => !excludeIds.has(c.id))
@@ -960,10 +968,10 @@ function SubjectPickerInline({
           )
         ) : !canReadGroups ? (
           <div className="app-text-caption px-3 py-3 text-app-ink/60">
-            그룹 디렉터리 읽기 권한이 없습니다.
+            {t('admin.workspace.addMembers.groupReadDenied')}
           </div>
         ) : filteredGroups.length === 0 ? (
-          <div className="app-text-caption px-3 py-3 text-app-ink/60">결과 없음</div>
+          <div className="app-text-caption px-3 py-3 text-app-ink/60">{t('common:empty.noResults')}</div>
         ) : (
           filteredGroups.map((group) => {
             const checked = selection.groups.has(group.id);
@@ -1033,34 +1041,36 @@ function WorkspaceAddMemberModal({
   onSubmit: () => Promise<void>;
   onCancel: () => void;
 }) {
+  const { t } = useTranslation('apps');
   const count = selectionSize(selection);
+  const roleOptions = getWorkspaceRoleOptions(t);
   return (
     <Dialog
       open={open}
       onOpenChange={onOpenChange}
-      title="새 멤버 추가"
-      description="사용자 또는 그룹을 검색해 여러 명을 한 번에 추가합니다."
+      title={t('admin.workspace.addMembers.title')}
+      description={t('admin.workspace.addMembers.description')}
       fullSize
       dismissOnInteractOutside={false}
       actions={
         <>
-          <span className="app-text-body mr-auto text-app-ink/60">선택 {count}명</span>
+          <span className="app-text-body mr-auto text-app-ink/60">{t('admin.workspace.addMembers.selectedCount', { count })}</span>
           <div className="flex items-center gap-2">
-            <span className="app-text-caption text-app-ink/60">역할</span>
+            <span className="app-text-caption text-app-ink/60">{t('admin.workspace.members.role')}</span>
             <Select
               value={role}
               onValueChange={onRoleChange}
-              options={WORKSPACE_ROLE_OPTIONS.map((option) => ({
+              options={roleOptions.map((option) => ({
                 value: option.value,
                 label: option.label,
               }))}
             />
           </div>
           <Button variant="ghost" onClick={onCancel} disabled={busy}>
-            취소
+            {t('common:actions.cancel')}
           </Button>
           <Button variant="primary" disabled={busy || count === 0} onClick={() => void onSubmit()}>
-            {busy ? '추가 중...' : `${count}명 추가`}
+            {busy ? t('admin.workspace.addMembers.adding') : t('admin.workspace.addMembers.addCount', { count })}
           </Button>
         </>
       }
@@ -1105,23 +1115,24 @@ function PeoplePickerModal({
   onSelectionChange: (next: SubjectSelectionState) => void;
   excludeIds: Set<string>;
 }) {
+  const { t } = useTranslation('apps');
   return (
     <Dialog
       open={open}
       onOpenChange={(next) => {
         if (!next) onClose();
       }}
-      title="임직원 디렉터리"
-      description="검색과 필터로 사용자를 찾아 다중 선택합니다. 여기서 선택한 항목은 추가 모달의 선택 목록에 누적됩니다."
+      title={t('admin.workspace.directory.title')}
+      description={t('admin.workspace.directory.description')}
       fullSize
       dismissOnInteractOutside={false}
       actions={
         <>
           <span className="app-text-body mr-auto text-app-ink/60">
-            현재 선택: {selectionSize(selection)} 명
+            {t('admin.workspace.directory.currentSelection', { count: selectionSize(selection) })}
           </span>
           <Button variant="primary" onClick={onClose}>
-            완료
+            {t('admin.workspace.directory.done')}
           </Button>
         </>
       }
@@ -1153,6 +1164,7 @@ function WorkspaceEditModal({
   busy: boolean;
   error: string | null;
 }) {
+  const { t } = useTranslation('apps');
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
 
@@ -1180,13 +1192,13 @@ function WorkspaceEditModal({
     <Dialog
       open={open}
       onOpenChange={onOpenChange}
-      title="워크스페이스 편집"
-      description="이름과 설명을 수정합니다. key 는 고정 식별자라 변경할 수 없습니다."
+      title={t('admin.workspace.editTitle')}
+      description={t('admin.workspace.editDescription')}
       dismissOnInteractOutside={false}
       actions={
         <>
           <Button variant="ghost" onClick={() => onOpenChange(false)} disabled={busy}>
-            취소
+            {t('common:actions.cancel')}
           </Button>
           <Button
             variant="primary"
@@ -1194,14 +1206,14 @@ function WorkspaceEditModal({
             form="edit-workspace-form"
             disabled={busy || !name.trim()}
           >
-            {busy ? '저장 중...' : '저장'}
+            {busy ? t('common:actions.saving') : t('common:actions.save')}
           </Button>
         </>
       }
     >
       <form id="edit-workspace-form" className="grid gap-4" onSubmit={(e) => void handleSubmit(e)}>
         <label className="grid gap-1.5">
-          <span className="app-text-control text-app-ink">이름</span>
+          <span className="app-text-control text-app-ink">{t('admin.workspace.nameLabel')}</span>
           <input
             className={FORM_FIELD_CLASS}
             value={name}
@@ -1210,7 +1222,7 @@ function WorkspaceEditModal({
           />
         </label>
         <label className="grid gap-1.5">
-          <span className="app-text-control text-app-ink">설명</span>
+          <span className="app-text-control text-app-ink">{t('admin.workspace.descriptionLabel')}</span>
           <textarea
             className={`${FORM_FIELD_CLASS} min-h-[88px] resize-y`}
             value={description}
@@ -1257,6 +1269,9 @@ function WorkspaceMembersDrawer({
   onError: (msg: string) => void;
   onSuccess: (msg: string) => void;
 }) {
+  const { t, i18n } = useTranslation('apps');
+  const locale = i18n.resolvedLanguage ?? i18n.language;
+  const roleOptions = getWorkspaceRoleOptions(t);
   const [data, setData] = useState<WorkspaceMembersResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [page, setPage] = useState(1);
@@ -1297,7 +1312,7 @@ function WorkspaceMembersDrawer({
       });
       setData(response);
     } catch (caughtError) {
-      onError(getErrorMessage(caughtError, '멤버를 불러오지 못했습니다.'));
+      onError(getErrorMessage(caughtError, t('admin.workspace.members.loadFailed')));
     } finally {
       setLoading(false);
     }
@@ -1346,11 +1361,11 @@ function WorkspaceMembersDrawer({
     setBusy(true);
     try {
       await updateWorkspaceMemberRole(token, workspace.id, item.subject_type, item.subject_id, role);
-      onSuccess('역할을 변경했습니다.');
+      onSuccess(t('admin.workspace.members.roleChanged'));
       onChanged();
       await reload();
     } catch (caughtError) {
-      onError(getErrorMessage(caughtError, '역할을 변경하지 못했습니다.'));
+      onError(getErrorMessage(caughtError, t('admin.workspace.members.roleChangeFailed')));
     } finally {
       setBusy(false);
     }
@@ -1361,11 +1376,11 @@ function WorkspaceMembersDrawer({
     setBusy(true);
     try {
       await removeWorkspaceMember(token, workspace.id, item.subject_type, item.subject_id);
-      onSuccess('멤버를 제거했습니다.');
+      onSuccess(t('admin.workspace.members.removed'));
       onChanged();
       await reload();
     } catch (caughtError) {
-      onError(getErrorMessage(caughtError, '멤버를 제거하지 못했습니다.'));
+      onError(getErrorMessage(caughtError, t('admin.workspace.members.removeFailed')));
     } finally {
       setBusy(false);
     }
@@ -1385,15 +1400,15 @@ function WorkspaceMembersDrawer({
         subjects,
       });
       if (result.failed.length > 0) {
-        onError(`${result.succeeded}명 제거됨, ${result.failed.length}명 실패`);
+        onError(t('admin.workspace.members.bulkRemovePartial', { succeeded: result.succeeded, failed: result.failed.length }));
       } else {
-        onSuccess(`${result.succeeded}명을 제거했습니다.`);
+        onSuccess(t('admin.workspace.members.bulkRemoved', { count: result.succeeded }));
       }
       setSelectedKeys(new Set());
       onChanged();
       await reload();
     } catch (caughtError) {
-      onError(getErrorMessage(caughtError, '일괄 제거에 실패했습니다.'));
+      onError(getErrorMessage(caughtError, t('admin.workspace.members.bulkRemoveFailed')));
     } finally {
       setBusy(false);
     }
@@ -1414,15 +1429,15 @@ function WorkspaceMembersDrawer({
         subjects,
       });
       if (result.failed.length > 0) {
-        onError(`${result.succeeded}명 변경됨, ${result.failed.length}명 실패`);
+        onError(t('admin.workspace.members.bulkRolePartial', { succeeded: result.succeeded, failed: result.failed.length }));
       } else {
-        onSuccess(`${result.succeeded}명의 역할을 변경했습니다.`);
+        onSuccess(t('admin.workspace.members.bulkRoleChanged', { count: result.succeeded }));
       }
       setSelectedKeys(new Set());
       onChanged();
       await reload();
     } catch (caughtError) {
-      onError(getErrorMessage(caughtError, '일괄 역할 변경에 실패했습니다.'));
+      onError(getErrorMessage(caughtError, t('admin.workspace.members.bulkRoleFailed')));
     } finally {
       setBusy(false);
     }
@@ -1432,8 +1447,8 @@ function WorkspaceMembersDrawer({
     <Dialog
       open={open}
       onOpenChange={onOpenChange}
-      title={`${workspace.name} 멤버 관리`}
-      description="검색, 필터, 일괄 작업으로 워크스페이스 멤버를 관리합니다."
+      title={t('admin.workspace.members.manageTitle', { name: workspace.name })}
+      description={t('admin.workspace.members.manageDescription')}
       fullSize
       dismissOnInteractOutside={false}
     >
@@ -1444,7 +1459,7 @@ function WorkspaceMembersDrawer({
             <Search size={14} className="text-app-ink/50" />
             <input
               className="app-text-body flex-1 bg-transparent text-app-ink outline-none placeholder:text-app-ink/40"
-              placeholder="이름, 이메일, 그룹 이름"
+              placeholder={t('admin.workspace.members.searchPlaceholder')}
               value={query}
               onChange={(event) => setQuery(event.target.value)}
             />
@@ -1454,7 +1469,7 @@ function WorkspaceMembersDrawer({
         {/* Role chips */}
         <div className="flex flex-wrap items-center gap-2">
           <FilterChip
-            label={`전체 ${data?.total ?? 0}`}
+            label={t('admin.workspace.members.filterAll', { count: data?.total ?? 0 })}
             active={roleFilter === null && !pendingOnly}
             onClick={() => {
               setRoleFilter(null);
@@ -1464,7 +1479,7 @@ function WorkspaceMembersDrawer({
           {(['admin', 'member'] as const).map((role) => (
             <FilterChip
               key={role}
-              label={`${WORKSPACE_ROLE_LABELS[role]} ${data?.role_counts[role] ?? 0}`}
+              label={t('admin.workspace.members.filterRole', { role: getWorkspaceRoleLabel(role, t), count: data?.role_counts[role] ?? 0 })}
               active={roleFilter === role && !pendingOnly}
               onClick={() => {
                 setRoleFilter(role);
@@ -1474,7 +1489,7 @@ function WorkspaceMembersDrawer({
           ))}
           {data && data.pending_count > 0 ? (
             <FilterChip
-              label={`초대 대기 ${data.pending_count}`}
+              label={t('admin.workspace.members.filterPending', { count: data.pending_count })}
               active={pendingOnly}
               tone="warning"
               onClick={() => {
@@ -1488,7 +1503,7 @@ function WorkspaceMembersDrawer({
         {/* Bulk action bar */}
         {selectedKeys.size > 0 ? (
           <div className="flex items-center justify-between gap-2 rounded-lg border border-app-accent/40 bg-app-accent/10 px-3 py-2">
-            <span className="app-text-body text-app-ink">{selectedKeys.size} 명 선택됨</span>
+            <span className="app-text-body text-app-ink">{t('admin.workspace.members.selectedCount', { count: selectedKeys.size })}</span>
             <div className="flex items-center gap-2">
               <div className="relative">
                 <Button
@@ -1496,11 +1511,11 @@ function WorkspaceMembersDrawer({
                   onClick={() => setBulkRoleOpen((current) => !current)}
                   disabled={busy}
                 >
-                  역할 변경
+                  {t('admin.workspace.members.changeRole')}
                 </Button>
                 {bulkRoleOpen ? (
                   <div className="absolute right-0 top-full z-10 mt-1 min-w-[160px] rounded-md border border-app-border bg-app-bg shadow-lg">
-                    {WORKSPACE_ROLE_OPTIONS.map((option) => (
+                    {roleOptions.map((option) => (
                       <button
                         key={option.value}
                         type="button"
@@ -1519,10 +1534,10 @@ function WorkspaceMembersDrawer({
                 disabled={busy}
                 className="text-[var(--ui-color-danger)]"
               >
-                제거
+                {t('common:actions.delete')}
               </Button>
               <Button variant="ghost" onClick={() => setSelectedKeys(new Set())}>
-                해제
+                {t('admin.workspace.members.clearSelection')}
               </Button>
             </div>
           </div>
@@ -1556,10 +1571,10 @@ function WorkspaceMembersDrawer({
                     />
                   ) : null}
                 </th>
-                <th className="app-text-overline px-2 py-1.5 text-left text-app-ink/60">이름</th>
-                <th className="app-text-overline px-2 py-1.5 text-left text-app-ink/60">Role</th>
-                <th className="app-text-overline px-2 py-1.5 text-left text-app-ink/60">상태</th>
-                <th className="app-text-overline px-2 py-1.5 text-left text-app-ink/60">최근</th>
+                <th className="app-text-overline px-2 py-1.5 text-left text-app-ink/60">{t('admin.workspace.members.name')}</th>
+                <th className="app-text-overline px-2 py-1.5 text-left text-app-ink/60">{t('admin.workspace.members.role')}</th>
+                <th className="app-text-overline px-2 py-1.5 text-left text-app-ink/60">{t('admin.shared.directory.status')}</th>
+                <th className="app-text-overline px-2 py-1.5 text-left text-app-ink/60">{t('admin.shared.directory.recent')}</th>
                 <th className="w-10 px-2 py-1.5"></th>
               </tr>
             </thead>
@@ -1567,13 +1582,13 @@ function WorkspaceMembersDrawer({
               {loading && !data ? (
                 <tr>
                   <td colSpan={6} className="px-2 py-8 text-center text-app-ink/60">
-                    불러오는 중...
+                    {t('common:feedback.loading')}
                   </td>
                 </tr>
               ) : (data?.items.length ?? 0) === 0 ? (
                 <tr>
                   <td colSpan={6} className="px-2 py-8 text-center text-app-ink/60">
-                    표시할 멤버가 없습니다.
+                    {t('admin.workspace.members.empty')}
                   </td>
                 </tr>
               ) : (
@@ -1603,24 +1618,24 @@ function WorkspaceMembersDrawer({
                         {item.subject_secondary ? (
                           <span className="ml-2 text-app-ink/50">{item.subject_secondary}</span>
                         ) : null}
-                        {isSelf ? <span className="ml-2 text-app-ink/40">(본인)</span> : null}
+                        {isSelf ? <span className="ml-2 text-app-ink/40">{t('admin.workspace.members.currentUser')}</span> : null}
                       </td>
                       <td className="px-2 py-1">
                         <MemberRoleBadge role={item.role} />
                       </td>
                       <td className="app-text-body-sm px-2 py-1">
                         {item.subject_type === 'group' ? (
-                          <span className="text-app-ink/60">그룹</span>
+                          <span className="text-app-ink/60">{t('admin.shared.directory.group')}</span>
                         ) : item.user_status === 'invited' ? (
-                          <Badge tone="amber">초대</Badge>
+                          <Badge tone="amber">{t('admin.shared.status.invitedShort')}</Badge>
                         ) : item.user_status === 'suspended' ? (
-                          <Badge tone="amber">정지</Badge>
+                          <Badge tone="amber">{t('admin.shared.status.suspendedShort')}</Badge>
                         ) : (
-                          <span className="text-app-ink/60">활성</span>
+                          <span className="text-app-ink/60">{t('admin.shared.status.activeShort')}</span>
                         )}
                       </td>
                       <td className="app-text-caption px-2 py-1 text-app-ink/60">
-                        {formatDateLabel(item.last_login_at)}
+                        {formatDateLabel(item.last_login_at, locale)}
                       </td>
                       <td className="px-2 py-1 text-right">
                         {canManage && !isSelf ? (
@@ -1629,13 +1644,13 @@ function WorkspaceMembersDrawer({
                               <button
                                 type="button"
                                 className="rounded p-1 text-app-ink/60 transition-colors hover:bg-app-surface-sidebar hover:text-app-ink"
-                                aria-label="멤버 작업"
+                                aria-label={t('admin.workspace.members.actions')}
                               >
                                 <MoreHorizontal size={14} />
                               </button>
                             }
                             items={[
-                              ...WORKSPACE_ROLE_OPTIONS.map((option) => ({
+                              ...roleOptions.map((option) => ({
                                 id: `role-${option.value}`,
                                 label: (
                                   <span className="flex items-center justify-between gap-2">
@@ -1654,7 +1669,7 @@ function WorkspaceMembersDrawer({
                               })),
                               {
                                 id: 'remove',
-                                label: '워크스페이스에서 제거',
+                                label: t('admin.workspace.members.removeFromWorkspace'),
                                 onSelect: () => void handleSingleRemove(item),
                                 disabled: busy,
                                 tone: 'danger' as const,
@@ -1685,7 +1700,7 @@ function WorkspaceMembersDrawer({
                 disabled={data.page <= 1 || busy}
                 onClick={() => setPage((p) => Math.max(1, p - 1))}
               >
-                이전
+                {t('admin.shared.pagination.previous')}
               </Button>
               <span className="app-text-caption px-2 text-app-ink/60">
                 {data.page} / {totalPages}
@@ -1695,7 +1710,7 @@ function WorkspaceMembersDrawer({
                 disabled={data.page >= totalPages || busy}
                 onClick={() => setPage((p) => p + 1)}
               >
-                다음
+                {t('admin.shared.pagination.next')}
               </Button>
             </div>
           </div>

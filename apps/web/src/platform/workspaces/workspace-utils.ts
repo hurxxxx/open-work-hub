@@ -4,6 +4,7 @@ import {
 } from '@/src/platform/auth/auth-api';
 import { getDefaultAdminPath } from '@/src/platform/admin/admin-permissions';
 import type { NavItem } from '@/src/app/shell/navigation-types';
+import { i18n } from '@/src/platform/i18n';
 
 export type WorkspaceAppId =
   | 'home'
@@ -262,7 +263,7 @@ export function resolveBootstrapWorkspaceSlug(
 export function requireWorkspaceSlug(workspaceSlug?: string | null): string {
   const resolved = workspaceSlug ?? getCurrentOrLastWorkspaceSlug();
   if (!resolved) {
-    throw new Error('Workspace context is not available.');
+    throw new Error(i18n.t('apps:workspace.contextUnavailable'));
   }
   return resolved;
 }

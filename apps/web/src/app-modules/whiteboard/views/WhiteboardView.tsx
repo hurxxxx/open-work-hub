@@ -1,5 +1,6 @@
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import {
   Clock3,
   Grid3X3,
@@ -41,23 +42,23 @@ const WhiteboardEditorSurface = lazy(() =>
 type WhiteboardHubView = 'all' | 'mine' | 'recent' | 'favorites' | 'archived';
 type WhiteboardLayoutMode = 'cards' | 'list';
 type WhiteboardSortValue = 'updated_desc' | 'viewed_desc' | 'created_desc' | 'title_asc';
-type WhiteboardSortOption = { label: string; sortBy: string; sortDir: 'asc' | 'desc' };
+type WhiteboardSortOption = { labelKey: string; sortBy: string; sortDir: 'asc' | 'desc' };
 
 const VIEW_MODE_STORAGE_KEY = 'aidoo:whiteboard:view-mode';
 
-const VIEW_LABELS: Record<WhiteboardHubView, string> = {
-  all: 'All Whiteboards',
-  mine: 'My Whiteboards',
-  recent: 'Recent',
-  favorites: 'Favorites',
-  archived: 'Archived',
+const VIEW_LABEL_KEYS: Record<WhiteboardHubView, string> = {
+  all: 'shell:nav.whiteboard-all',
+  mine: 'shell:nav.whiteboard-my',
+  recent: 'shell:nav.whiteboard-recent',
+  favorites: 'shell:nav.whiteboard-favorites',
+  archived: 'shell:nav.whiteboard-archived',
 };
 
 const SORT_OPTIONS: Record<WhiteboardSortValue, WhiteboardSortOption> = {
-  updated_desc: { label: 'Recently updated', sortBy: 'updated_at', sortDir: 'desc' },
-  viewed_desc: { label: 'Recently viewed', sortBy: 'last_viewed_at', sortDir: 'desc' },
-  created_desc: { label: 'Recently created', sortBy: 'created_at', sortDir: 'desc' },
-  title_asc: { label: 'Name A-Z', sortBy: 'title', sortDir: 'asc' },
+  updated_desc: { labelKey: 'apps:whiteboard.recentlyUpdated', sortBy: 'updated_at', sortDir: 'desc' },
+  viewed_desc: { labelKey: 'apps:whiteboard.recentlyViewed', sortBy: 'last_viewed_at', sortDir: 'desc' },
+  created_desc: { labelKey: 'apps:whiteboard.recentlyCreated', sortBy: 'created_at', sortDir: 'desc' },
+  title_asc: { labelKey: 'apps:whiteboard.tableName', sortBy: 'title', sortDir: 'asc' },
 };
 
 const previewCache = new Map<string, string | null>();
@@ -90,14 +91,14 @@ function ownerInitials(name: string): string {
   return parts.map((part) => part[0]?.toUpperCase() ?? '').join('') || '?';
 }
 
-function formatRelativeDate(value: string | null | undefined, timeZone: string): string {
-  return formatRelativeTime(value, { fallback: 'Never', locale: 'en', timeZone });
+function formatRelativeDate(value: string | null | undefined, timeZone: string, locale: string): string {
+  return formatRelativeTime(value, { fallback: '-', locale, timeZone });
 }
 
-function formatDateTime(value: string | null | undefined, timeZone: string): string {
+function formatDateTime(value: string | null | undefined, timeZone: string, locale: string): string {
   return formatZonedDateTime(value, {
-    fallback: 'Never',
-    locale: 'en',
+    fallback: '-',
+    locale,
     month: 'short',
     day: 'numeric',
     year: 'numeric',
@@ -160,6 +161,7 @@ function WhiteboardPreview({
   token: string | null;
   workspaceSlug?: string | null;
 }) {
+  const { t } = useTranslation('apps');
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [visible, setVisible] = useState(false);
   const [status, setStatus] = useState<'idle' | 'loading' | 'ready' | 'empty' | 'error'>('idle');
@@ -221,7 +223,7 @@ function WhiteboardPreview({
         <div className="flex flex-col items-center gap-2 text-app-ink/40">
           <PencilRuler size={22} className="text-amber-500" />
           <span className="app-text-body-sm">
-            {status === 'error' ? 'Preview unavailable' : 'Empty whiteboard'}
+            {status === 'error' ? t('whiteboard.previewUnavailable') : t('whiteboard.emptyBoard')}
           </span>
         </div>
       )}
@@ -242,6 +244,7 @@ function WhiteboardCard({
   timeZone: string;
   onOpen: (item: WhiteboardHubItem) => void;
 }) {
+  const { t, i18n } = useTranslation('apps');
   return (
     <button
       type="button"
@@ -262,10 +265,10 @@ function WhiteboardCard({
             ) : null}
           </div>
           <p className="app-text-body-sm mt-2 truncate text-app-ink/55">
-            Edited {formatRelativeDate(item.updated_at, timeZone)}
+            {t('whiteboard.edited', { date: formatRelativeDate(item.updated_at, timeZone, i18n.language) })}
           </p>
           <p className="app-text-body-sm mt-1 truncate text-app-ink/45">
-            {item.location_label || 'Workspace'}
+            {item.location_label || t('whiteboard.fallbackWorkspace')}
           </p>
         </div>
       </div>
@@ -282,18 +285,19 @@ function WhiteboardListTable({
   timeZone: string;
   onOpen: (item: WhiteboardHubItem) => void;
 }) {
+  const { t, i18n } = useTranslation('apps');
   return (
     <div className="overflow-hidden rounded-lg border border-app-border bg-app-surface">
       <div className="overflow-x-auto">
         <table className="min-w-[960px] w-full border-collapse">
           <thead className="bg-app-surface-hover text-left">
             <tr className="app-text-caption text-app-ink/55">
-              <th className="px-5 py-3 font-medium">Name</th>
-              <th className="px-5 py-3 font-medium">Location</th>
-              <th className="px-5 py-3 font-medium">Date updated</th>
-              <th className="px-5 py-3 font-medium">Date created</th>
-              <th className="px-5 py-3 font-medium">Date viewed</th>
-              <th className="px-5 py-3 font-medium">Creator</th>
+              <th className="px-5 py-3 font-medium">{t('whiteboard.tableName')}</th>
+              <th className="px-5 py-3 font-medium">{t('whiteboard.tableLocation')}</th>
+              <th className="px-5 py-3 font-medium">{t('whiteboard.tableUpdated')}</th>
+              <th className="px-5 py-3 font-medium">{t('whiteboard.tableCreated')}</th>
+              <th className="px-5 py-3 font-medium">{t('whiteboard.tableViewed')}</th>
+              <th className="px-5 py-3 font-medium">{t('whiteboard.tableCreator')}</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-app-border">
@@ -315,17 +319,17 @@ function WhiteboardListTable({
                 <td className="app-text-body-sm px-5 py-4 text-app-ink/65">
                   <span className="inline-flex max-w-[220px] items-center gap-2 truncate">
                     <MapPin size={14} className="shrink-0 text-app-ink/35" />
-                    <span className="truncate">{item.location_label || 'Workspace'}</span>
+                    <span className="truncate">{item.location_label || t('whiteboard.fallbackWorkspace')}</span>
                   </span>
                 </td>
-                <td className="app-text-body-sm px-5 py-4 text-app-ink/65" title={formatDateTime(item.updated_at, timeZone)}>
-                  {formatRelativeDate(item.updated_at, timeZone)}
+                <td className="app-text-body-sm px-5 py-4 text-app-ink/65" title={formatDateTime(item.updated_at, timeZone, i18n.language)}>
+                  {formatRelativeDate(item.updated_at, timeZone, i18n.language)}
                 </td>
-                <td className="app-text-body-sm px-5 py-4 text-app-ink/65" title={formatDateTime(item.created_at, timeZone)}>
-                  {formatRelativeDate(item.created_at, timeZone)}
+                <td className="app-text-body-sm px-5 py-4 text-app-ink/65" title={formatDateTime(item.created_at, timeZone, i18n.language)}>
+                  {formatRelativeDate(item.created_at, timeZone, i18n.language)}
                 </td>
-                <td className="app-text-body-sm px-5 py-4 text-app-ink/65" title={formatDateTime(item.last_viewed_at, timeZone)}>
-                  {formatRelativeDate(item.last_viewed_at, timeZone)}
+                <td className="app-text-body-sm px-5 py-4 text-app-ink/65" title={formatDateTime(item.last_viewed_at, timeZone, i18n.language)}>
+                  {formatRelativeDate(item.last_viewed_at, timeZone, i18n.language)}
                 </td>
                 <td className="px-5 py-4">
                   <div className="flex items-center gap-2">
@@ -333,7 +337,7 @@ function WhiteboardListTable({
                       {ownerInitials(item.created_by_name)}
                     </div>
                     <span className="app-text-body-sm max-w-[180px] truncate text-app-ink/65">
-                      {item.created_by_name || 'Unknown'}
+                      {item.created_by_name || t('whiteboard.unknown')}
                     </span>
                   </div>
                 </td>
@@ -355,6 +359,7 @@ function WhiteboardEditorFallback() {
 }
 
 export function WhiteboardView() {
+  const { t } = useTranslation(['apps', 'shell']);
   const { token, user } = useAuth();
   const { workspaceSlug, whiteboardId, shareToken } = useParams();
   const [searchParams] = useSearchParams();
@@ -422,12 +427,12 @@ export function WhiteboardView() {
       );
       setItems(response.items);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load whiteboards.');
+      setError(err instanceof Error ? err.message : t('apps:whiteboard.loadFailed'));
       setItems([]);
     } finally {
       setLoadingList(false);
     }
-  }, [containerFilter, query, shareToken, sortOption.sortBy, sortOption.sortDir, token, view, whiteboardId, workspaceSlug]);
+  }, [containerFilter, query, shareToken, sortOption.sortBy, sortOption.sortDir, t, token, view, whiteboardId, workspaceSlug]);
 
   useEffect(() => {
     void loadList();
@@ -450,7 +455,7 @@ export function WhiteboardView() {
       })
       .catch((err: Error) => {
         if (cancelled) return;
-        setError(err.message || 'Shared whiteboard를 열 수 없습니다.');
+        setError(err.message || t('apps:whiteboard.openSharedFailed'));
         setSharedItem(null);
       })
       .finally(() => {
@@ -459,7 +464,7 @@ export function WhiteboardView() {
     return () => {
       cancelled = true;
     };
-  }, [shareToken, token]);
+  }, [shareToken, t, token]);
 
   const handleCreate = useCallback(async () => {
     if (!token) return;
@@ -477,7 +482,7 @@ export function WhiteboardView() {
       const created = await createWhiteboard(
         token,
         {
-          title: 'Untitled Whiteboard',
+          title: t('apps:whiteboard.untitled'),
           source_app: primaryContainer?.app === 'pms' ? 'pms' : 'whiteboard',
           source_kind: 'manual',
           primary_container: primaryContainer,
@@ -487,9 +492,9 @@ export function WhiteboardView() {
       setItems((current) => [created, ...current]);
       navigate(activePath(created.id));
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to create whiteboard.');
+      setError(err instanceof Error ? err.message : t('apps:whiteboard.createFailed'));
     }
-  }, [activePath, containerFilter, currentWorkspace, items.length, navigate, token, workspaceSlug]);
+  }, [activePath, containerFilter, currentWorkspace, items.length, navigate, t, token, workspaceSlug]);
 
   useEffect(() => {
     const handler = () => {
@@ -534,7 +539,7 @@ export function WhiteboardView() {
           <div className="flex min-h-0 flex-1 items-center justify-center px-8 text-center">
             <div>
               <PencilRuler size={28} className="mx-auto mb-3 text-app-ink/30" />
-              <p className="app-text-title-md text-app-ink/70">Shared whiteboard를 열 수 없습니다.</p>
+              <p className="app-text-title-md text-app-ink/70">{t('apps:whiteboard.openSharedFailed')}</p>
             </div>
           </div>
         )}
@@ -574,10 +579,10 @@ export function WhiteboardView() {
           <div className="min-w-0">
             <div className="flex min-w-0 items-center gap-2">
               <PencilRuler size={20} className="shrink-0 text-amber-500" />
-              <h1 className="app-text-title-lg truncate">{VIEW_LABELS[view]}</h1>
+              <h1 className="app-text-title-lg truncate">{t(VIEW_LABEL_KEYS[view])}</h1>
             </div>
             <p className="app-text-body-sm mt-1 text-app-ink/50">
-              {items.length} whiteboard{items.length === 1 ? '' : 's'}
+              {t('apps:whiteboard.count', { count: items.length })}
             </p>
           </div>
           <button
@@ -586,7 +591,7 @@ export function WhiteboardView() {
             className="inline-flex h-9 items-center gap-2 rounded-md bg-app-ink px-3 text-sm font-medium text-app-bg transition hover:bg-app-ink/90"
           >
             <Plus size={16} />
-            <span>New Whiteboard</span>
+            <span>{t('apps:whiteboard.new')}</span>
           </button>
         </div>
 
@@ -596,7 +601,7 @@ export function WhiteboardView() {
             <input
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              placeholder="Search"
+              placeholder={t('apps:whiteboard.search')}
               className="app-text-body-sm min-w-0 flex-1 bg-transparent text-app-ink outline-none placeholder:text-app-ink/35"
             />
           </label>
@@ -610,7 +615,7 @@ export function WhiteboardView() {
             >
               {(Object.entries(SORT_OPTIONS) as [WhiteboardSortValue, WhiteboardSortOption][]).map(([value, option]) => (
                 <option key={value} value={value}>
-                  {option.label}
+                  {t(option.labelKey)}
                 </option>
               ))}
             </select>
@@ -621,7 +626,7 @@ export function WhiteboardView() {
               type="button"
               onClick={() => setLayoutMode('list')}
               aria-pressed={layoutMode === 'list'}
-              title="List view"
+              title={t('apps:whiteboard.listView')}
               className={cn(
                 'inline-flex h-7 w-8 items-center justify-center rounded text-app-ink/55 transition-colors hover:text-app-ink',
                 layoutMode === 'list' && 'bg-app-bg text-app-ink shadow-sm',
@@ -633,7 +638,7 @@ export function WhiteboardView() {
               type="button"
               onClick={() => setLayoutMode('cards')}
               aria-pressed={layoutMode === 'cards'}
-              title="Card view"
+              title={t('apps:whiteboard.cardView')}
               className={cn(
                 'inline-flex h-7 w-8 items-center justify-center rounded text-app-ink/55 transition-colors hover:text-app-ink',
                 layoutMode === 'cards' && 'bg-app-bg text-app-ink shadow-sm',
@@ -660,14 +665,14 @@ export function WhiteboardView() {
           <div className="flex h-full min-h-[360px] items-center justify-center px-8 text-center">
             <div>
               <PencilRuler size={30} className="mx-auto mb-3 text-app-ink/30" />
-              <p className="app-text-title-md text-app-ink/70">No whiteboards</p>
+              <p className="app-text-title-md text-app-ink/70">{t('apps:whiteboard.noWhiteboards')}</p>
               <button
                 type="button"
                 onClick={() => void handleCreate()}
                 className="mt-4 inline-flex h-9 items-center gap-2 rounded-md bg-app-ink px-3 text-sm font-medium text-app-bg transition hover:bg-app-ink/90"
               >
                 <Plus size={15} />
-                <span>Create</span>
+                <span>{t('apps:whiteboard.create')}</span>
               </button>
             </div>
           </div>

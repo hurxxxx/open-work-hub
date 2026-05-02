@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import {
   completeRecordingStaging,
@@ -63,6 +64,7 @@ export function useChunkedRecorder({
   token,
   onMeetingUpdated,
 }: RecorderOptions) {
+  const { t } = useTranslation('apps');
   const [isRecording, setIsRecording] = useState(false);
   const [isBusy, setIsBusy] = useState(false);
   const [elapsedSec, setElapsedSec] = useState(0);
@@ -103,12 +105,12 @@ export function useChunkedRecorder({
       }
       const persisted = await navigator.storage.persist();
       if (!persisted) {
-        setPersistWarning('브라우저 저장공간 정책에 따라 복구 가능 기간이 짧아질 수 있습니다.');
+        setPersistWarning(t('meeting.recordingErrors.persistMayExpire'));
       } else {
         setPersistWarning(null);
       }
     } catch {
-      setPersistWarning('브라우저 저장공간 보호 상태를 확인하지 못했습니다.');
+      setPersistWarning(t('meeting.recordingErrors.persistCheckFailed'));
     }
   }
 
@@ -148,7 +150,7 @@ export function useChunkedRecorder({
       setUploadedBytes(0);
       onMeetingUpdated(updated);
     } catch (err) {
-      setError(err instanceof Error ? err.message : '녹음 마무리에 실패했습니다.');
+      setError(err instanceof Error ? err.message : t('meeting.recordingErrors.finalizeFailed'));
     } finally {
       setIsBusy(false);
     }
@@ -184,7 +186,7 @@ export function useChunkedRecorder({
       }
       await finalizeIfReady(stagingId);
     } catch (err) {
-      setError(err instanceof Error ? err.message : '녹음 청크 업로드에 실패했습니다.');
+      setError(err instanceof Error ? err.message : t('meeting.recordingErrors.chunkUploadFailed'));
       const timer = window.setTimeout(() => {
         void pumpUploads(stagingId);
       }, 3000);
@@ -232,7 +234,7 @@ export function useChunkedRecorder({
 
   async function startMediaRecorder(session: ContinueSessionInput) {
     if (!browserSupported) {
-      throw new Error('이 브라우저에서는 라이브 녹음을 지원하지 않습니다.');
+      throw new Error(t('meeting.recordingErrors.browserUnsupported'));
     }
     await requestPersistentStorage();
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -281,7 +283,7 @@ export function useChunkedRecorder({
         highestSeq: staging.highest_seq,
       });
     } catch (err) {
-      setError(err instanceof Error ? err.message : '녹음을 시작할 수 없습니다.');
+      setError(err instanceof Error ? err.message : t('meeting.recordingErrors.startFailed'));
     } finally {
       setIsBusy(false);
     }
@@ -293,7 +295,7 @@ export function useChunkedRecorder({
     try {
       await startMediaRecorder(session);
     } catch (err) {
-      setError(err instanceof Error ? err.message : '복구 후 녹음을 시작할 수 없습니다.');
+      setError(err instanceof Error ? err.message : t('meeting.recordingErrors.continueFailed'));
     } finally {
       setIsBusy(false);
     }
@@ -345,7 +347,7 @@ export function useChunkedRecorder({
       await clearSession(stagingId);
       onMeetingUpdated(updated);
     } catch (err) {
-      setError(err instanceof Error ? err.message : '업로드 분량 확정에 실패했습니다.');
+      setError(err instanceof Error ? err.message : t('meeting.recordingErrors.finalizeUploadedFailed'));
     } finally {
       setIsBusy(false);
     }
@@ -357,7 +359,7 @@ export function useChunkedRecorder({
     try {
       const blob = await buildSessionBlob(stagingId);
       if (!blob) {
-        throw new Error('복구할 로컬 녹음이 없습니다.');
+        throw new Error(t('meeting.recordingErrors.noLocalRecordingToRecover'));
       }
       const updated = await importMeetingRecording(
         token,
@@ -369,7 +371,7 @@ export function useChunkedRecorder({
       await clearSession(stagingId);
       onMeetingUpdated(updated);
     } catch (err) {
-      setError(err instanceof Error ? err.message : '원본 파일 업로드에 실패했습니다.');
+      setError(err instanceof Error ? err.message : t('meeting.recordingErrors.originalUploadFailed'));
     } finally {
       setIsBusy(false);
     }
@@ -388,7 +390,7 @@ export function useChunkedRecorder({
       );
       onMeetingUpdated(updated);
     } catch (err) {
-      setError(err instanceof Error ? err.message : '음성 파일 업로드에 실패했습니다.');
+      setError(err instanceof Error ? err.message : t('meeting.recordingErrors.audioUploadFailed'));
     } finally {
       setIsBusy(false);
     }
@@ -409,7 +411,7 @@ export function useChunkedRecorder({
         activeSessionIdRef.current = null;
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : '복구 세션을 폐기할 수 없습니다.');
+      setError(err instanceof Error ? err.message : t('meeting.recordingErrors.discardFailed'));
     } finally {
       setIsBusy(false);
     }
@@ -418,7 +420,7 @@ export function useChunkedRecorder({
   async function downloadRecoveredSession(stagingId: string): Promise<void> {
     const blob = await buildSessionBlob(stagingId);
     if (!blob) {
-      throw new Error('다운로드할 로컬 녹음이 없습니다.');
+      throw new Error(t('meeting.recordingErrors.noLocalRecordingToDownload'));
     }
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement('a');

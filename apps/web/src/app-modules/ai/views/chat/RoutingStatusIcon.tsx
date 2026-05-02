@@ -1,4 +1,5 @@
 import { Shield, ShieldAlert } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { Tooltip } from '@aidoo/ui';
 import type {
   AiBackendMode,
@@ -11,22 +12,22 @@ interface RoutingStatusIconProps {
   healthError: string | null;
 }
 
-function buildTooltip(props: RoutingStatusIconProps): string {
+function buildTooltip(props: RoutingStatusIconProps, t: (key: string) => string): string {
   if (props.healthError) {
     return props.healthError;
   }
   if (!props.health) {
-    return '풀 상태 확인 중';
+    return t('ai.routing.checking');
   }
   const local = props.health.local.ready
-    ? `local: 준비됨 (${props.health.local.canonical_model})`
+    ? `local: ${t('ai.routing.ready')} (${props.health.local.canonical_model})`
     : `local: ${props.health.local.status}`;
   const external = props.health.external
     ? props.health.external.ready
-      ? 'external: 준비됨'
+      ? `external: ${t('ai.routing.ready')}`
       : `external: ${props.health.external.status}`
-    : 'external: 비활성';
-  const mode = props.backendMode === 'local' ? '로컬 고정' : '자동 라우팅';
+    : `external: ${t('ai.routing.inactive')}`;
+  const mode = props.backendMode === 'local' ? t('ai.message.localFixed') : t('ai.message.autoRouting');
   return `${mode}\n${local}\n${external}`;
 }
 
@@ -47,15 +48,16 @@ function isHealthy(
 }
 
 export function RoutingStatusIcon(props: RoutingStatusIconProps) {
+  const { t } = useTranslation('apps');
   const healthy = isHealthy(props.health, props.backendMode) && !props.healthError;
   return (
     <Tooltip
       content={
-        <span className="whitespace-pre-line">{buildTooltip(props)}</span>
+        <span className="whitespace-pre-line">{buildTooltip(props, t)}</span>
       }
     >
       <button
-        aria-label="라우팅 상태"
+        aria-label={t('ai.routing.status')}
         className={`flex h-8 w-8 items-center justify-center rounded-full border transition-colors ${
           healthy
             ? 'border-emerald-200 bg-emerald-50 text-emerald-600 dark:border-emerald-900/40 dark:bg-emerald-950/30 dark:text-emerald-400'

@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { X, Filter, ChevronDown, Save, BookmarkCheck, Search } from 'lucide-react';
 import { DetailDrawer } from '@aidoo/ui';
+import { useTranslation } from 'react-i18next';
 import type { IssueFilterParams, PmsTaskListMember, PmsMilestone, PmsLabel, PmsTaskListStatus } from '../api/pms-api';
 import {
   createDefaultIssueFilterParams,
@@ -8,24 +9,24 @@ import {
 } from '../api/pms-filters';
 
 const DEFAULT_statusOptions = [
-  { value: 'backlog', label: 'Backlog' },
-  { value: 'todo', label: 'Todo' },
-  { value: 'in_progress', label: 'In Progress' },
-  { value: 'done', label: 'Done' },
-  { value: 'canceled', label: 'Canceled' },
+  { value: 'backlog', labelKey: 'pms.filter.status.backlog' },
+  { value: 'todo', labelKey: 'pms.filter.status.todo' },
+  { value: 'in_progress', labelKey: 'pms.filter.status.inProgress' },
+  { value: 'done', labelKey: 'pms.filter.status.done' },
+  { value: 'canceled', labelKey: 'pms.filter.status.canceled' },
 ] as const;
 
 const PRIORITY_OPTIONS = [
-  { value: 'low', label: 'Low' },
-  { value: 'medium', label: 'Medium' },
-  { value: 'high', label: 'High' },
-  { value: 'critical', label: 'Critical' },
+  { value: 'low', labelKey: 'pms.priorityLow' },
+  { value: 'medium', labelKey: 'pms.priorityMedium' },
+  { value: 'high', labelKey: 'pms.priorityHigh' },
+  { value: 'critical', labelKey: 'pms.priorityCritical' },
 ] as const;
 
 const ARCHIVE_OPTIONS = [
-  { value: 'active', label: 'Active' },
-  { value: 'archived', label: 'Archived' },
-  { value: 'all', label: 'All' },
+  { value: 'active', labelKey: 'pms.filter.archive.active' },
+  { value: 'archived', labelKey: 'pms.filter.archive.archived' },
+  { value: 'all', labelKey: 'pms.filter.all' },
 ] as const;
 
 const FILTER_TRIGGER_CLASS = 'app-text-body-sm flex items-center gap-1 rounded-md border px-3 py-2 transition-colors';
@@ -134,9 +135,13 @@ export const FilterBar = ({
   labels: PmsLabel[];
   taskListStatuses?: PmsTaskListStatus[];
 }) => {
+  const { t } = useTranslation('apps');
   const statusOptions = taskListStatuses && taskListStatuses.length > 0
     ? taskListStatuses.map(s => ({ value: s.slug, label: s.name }))
-    : [...DEFAULT_statusOptions];
+    : DEFAULT_statusOptions.map((option) => ({
+        value: option.value,
+        label: t(option.labelKey),
+      }));
   const [savedFilters, setSavedFilters] = useState<SavedFilter[]>(() => loadSavedFilters(taskListId));
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
@@ -181,38 +186,40 @@ export const FilterBar = ({
   const pills: { label: string; clear: () => void }[] = [];
   if (filterParams.status && filterParams.status.length > 0) {
     const statusLabels = filterParams.status.map(s => statusOptions.find(o => o.value === s)?.label ?? s).join(', ');
-    pills.push({ label: `Status: ${statusLabels}`, clear: () => setFilterParams({ ...filterParams, status: undefined }) });
+    pills.push({ label: t('pms.filter.pillStatus', { value: statusLabels }), clear: () => setFilterParams({ ...filterParams, status: undefined }) });
   }
   if (filterParams.priority) {
-    const pl = PRIORITY_OPTIONS.find(o => o.value === filterParams.priority)?.label ?? filterParams.priority;
-    pills.push({ label: `Priority: ${pl}`, clear: () => setFilterParams({ ...filterParams, priority: undefined }) });
+    const priority = PRIORITY_OPTIONS.find(o => o.value === filterParams.priority);
+    const pl = priority ? t(priority.labelKey) : filterParams.priority;
+    pills.push({ label: t('pms.filter.pillPriority', { value: pl }), clear: () => setFilterParams({ ...filterParams, priority: undefined }) });
   }
   if (filterParams.assignee_id) {
-    const name = members.find(m => m.user_id === filterParams.assignee_id)?.full_name ?? 'Unknown';
-    pills.push({ label: `Assignee: ${name}`, clear: () => setFilterParams({ ...filterParams, assignee_id: undefined }) });
+    const name = members.find(m => m.user_id === filterParams.assignee_id)?.full_name ?? t('common:feedback.unknown');
+    pills.push({ label: t('pms.filter.pillAssignee', { value: name }), clear: () => setFilterParams({ ...filterParams, assignee_id: undefined }) });
   }
   if (filterParams.label_id) {
-    const name = labels.find(l => l.id === filterParams.label_id)?.name ?? 'Unknown';
-    pills.push({ label: `Label: ${name}`, clear: () => setFilterParams({ ...filterParams, label_id: undefined }) });
+    const name = labels.find(l => l.id === filterParams.label_id)?.name ?? t('common:feedback.unknown');
+    pills.push({ label: t('pms.filter.pillLabel', { value: name }), clear: () => setFilterParams({ ...filterParams, label_id: undefined }) });
   }
   if (filterParams.milestone_id) {
-    const name = milestones.find(m => m.id === filterParams.milestone_id)?.title ?? 'Unknown';
-    pills.push({ label: `Milestone: ${name}`, clear: () => setFilterParams({ ...filterParams, milestone_id: undefined }) });
+    const name = milestones.find(m => m.id === filterParams.milestone_id)?.title ?? t('common:feedback.unknown');
+    pills.push({ label: t('pms.filter.pillMilestone', { value: name }), clear: () => setFilterParams({ ...filterParams, milestone_id: undefined }) });
   }
   if (filterParams.start_date_from || filterParams.start_date_to) {
     const from = filterParams.start_date_from ?? '...';
     const to = filterParams.start_date_to ?? '...';
-    pills.push({ label: `Start: ${from} ~ ${to}`, clear: () => setFilterParams({ ...filterParams, start_date_from: undefined, start_date_to: undefined }) });
+    pills.push({ label: t('pms.filter.pillStart', { from, to }), clear: () => setFilterParams({ ...filterParams, start_date_from: undefined, start_date_to: undefined }) });
   }
   if (filterParams.due_date_from || filterParams.due_date_to) {
     const from = filterParams.due_date_from ?? '...';
     const to = filterParams.due_date_to ?? '...';
-    pills.push({ label: `Due: ${from} ~ ${to}`, clear: () => setFilterParams({ ...filterParams, due_date_from: undefined, due_date_to: undefined }) });
+    pills.push({ label: t('pms.filter.pillDue', { from, to }), clear: () => setFilterParams({ ...filterParams, due_date_from: undefined, due_date_to: undefined }) });
   }
   if (filterParams.archived_state && filterParams.archived_state !== DEFAULT_ISSUE_ARCHIVED_STATE) {
-    const archiveLabel = ARCHIVE_OPTIONS.find((option) => option.value === filterParams.archived_state)?.label ?? filterParams.archived_state;
+    const archiveOption = ARCHIVE_OPTIONS.find((option) => option.value === filterParams.archived_state);
+    const archiveLabel = archiveOption ? t(archiveOption.labelKey) : filterParams.archived_state;
     pills.push({
-      label: `Archive: ${archiveLabel}`,
+      label: t('pms.filter.pillArchive', { value: archiveLabel }),
       clear: () => setFilterParams({ ...filterParams, archived_state: DEFAULT_ISSUE_ARCHIVED_STATE }),
     });
   }
@@ -225,7 +232,7 @@ export const FilterBar = ({
             <Search size={15} className="shrink-0 text-app-ink/40" />
             <input
               type="text"
-              placeholder="Search tasks..."
+              placeholder={t('pms.filter.searchPlaceholder')}
               value={filterParams.q ?? ''}
               onChange={e => setFilterParams({ ...filterParams, q: e.target.value || undefined })}
               className="min-w-0 flex-1 bg-transparent text-inherit focus:outline-none placeholder:text-app-ink/40"
@@ -235,7 +242,7 @@ export const FilterBar = ({
                 type="button"
                 onClick={() => setFilterParams({ ...filterParams, q: undefined })}
                 className="shrink-0 text-app-ink/40 hover:text-app-ink"
-                aria-label="검색어 지우기"
+                aria-label={t('pms.filter.clearSearch')}
               >
                 <X size={13} />
               </button>
@@ -251,7 +258,7 @@ export const FilterBar = ({
             }`}
           >
             <Filter size={15} />
-            <span>Filter</span>
+            <span>{t('pms.filter.filter')}</span>
             {pills.length > 0 ? (
               <span className="app-text-micro rounded-full bg-app-accent px-1.5 py-0.5 text-app-accent-fg">
                 {pills.length}
@@ -265,7 +272,11 @@ export const FilterBar = ({
             {pills.map((pill, idx) => (
               <span key={idx} className="app-text-caption inline-flex shrink-0 items-center gap-1 rounded-full bg-app-accent/10 px-2 py-1 text-app-accent">
                 {pill.label}
-                <button onClick={pill.clear} className="hover:text-app-ink transition-colors" aria-label={`${pill.label} 필터 제거`}>
+                <button
+                  onClick={pill.clear}
+                  className="hover:text-app-ink transition-colors"
+                  aria-label={t('pms.filter.removeFilter', { label: pill.label })}
+                >
                   <X size={10} />
                 </button>
               </span>
@@ -280,7 +291,7 @@ export const FilterBar = ({
         <Search size={13} className="text-app-ink/40 shrink-0" />
         <input
           type="text"
-          placeholder="Search tasks..."
+          placeholder={t('pms.filter.searchPlaceholder')}
           value={filterParams.q ?? ''}
           onChange={e => setFilterParams({ ...filterParams, q: e.target.value || undefined })}
           className="w-36 bg-transparent text-inherit focus:outline-none placeholder:text-app-ink/40"
@@ -300,7 +311,7 @@ export const FilterBar = ({
       <Filter size={13} className="text-app-ink/40 shrink-0" />
 
       {/* Status (multi-select) */}
-      <Dropdown label="Status" active={!!(filterParams.status && filterParams.status.length > 0)}>
+      <Dropdown label={t('pms.filter.statusLabel')} active={!!(filterParams.status && filterParams.status.length > 0)}>
         {() => (
           <>
             {statusOptions.map(opt => {
@@ -326,14 +337,14 @@ export const FilterBar = ({
       </Dropdown>
 
       {/* Priority */}
-      <Dropdown label="Priority" active={!!filterParams.priority}>
+      <Dropdown label={t('pms.filter.priorityLabel')} active={!!filterParams.priority}>
         {(close) => (
           <>
             <button
               onClick={() => { setFilterParams({ ...filterParams, priority: undefined }); close(); }}
               className={`${FILTER_MENU_ITEM_CLASS} ${!filterParams.priority ? 'font-medium text-app-accent' : 'text-app-ink'}`}
             >
-              All
+              {t('pms.filter.all')}
             </button>
             {PRIORITY_OPTIONS.map(opt => (
               <button
@@ -341,7 +352,7 @@ export const FilterBar = ({
                 onClick={() => { setFilterParams({ ...filterParams, priority: opt.value }); close(); }}
                 className={`${FILTER_MENU_ITEM_CLASS} ${filterParams.priority === opt.value ? 'font-medium text-app-accent' : 'text-app-ink'}`}
               >
-                {opt.label}
+                {t(opt.labelKey)}
               </button>
             ))}
           </>
@@ -349,14 +360,14 @@ export const FilterBar = ({
       </Dropdown>
 
       {/* Assignee */}
-      <Dropdown label="Assignee" active={!!filterParams.assignee_id}>
+      <Dropdown label={t('pms.filter.assigneeLabel')} active={!!filterParams.assignee_id}>
         {(close) => (
           <>
             <button
               onClick={() => { setFilterParams({ ...filterParams, assignee_id: undefined }); close(); }}
               className={`${FILTER_MENU_ITEM_CLASS} ${!filterParams.assignee_id ? 'font-medium text-app-accent' : 'text-app-ink'}`}
             >
-              All
+              {t('pms.filter.all')}
             </button>
             {members.map(m => (
               <button
@@ -372,14 +383,14 @@ export const FilterBar = ({
       </Dropdown>
 
       {/* Label */}
-      <Dropdown label="Label" active={!!filterParams.label_id}>
+      <Dropdown label={t('pms.filter.labelLabel')} active={!!filterParams.label_id}>
         {(close) => (
           <>
             <button
               onClick={() => { setFilterParams({ ...filterParams, label_id: undefined }); close(); }}
               className={`${FILTER_MENU_ITEM_CLASS} ${!filterParams.label_id ? 'font-medium text-app-accent' : 'text-app-ink'}`}
             >
-              All
+              {t('pms.filter.all')}
             </button>
             {labels.map(l => (
               <button
@@ -397,14 +408,14 @@ export const FilterBar = ({
 
       {/* Milestone */}
       {milestones.length > 0 && (
-        <Dropdown label="Milestone" active={!!filterParams.milestone_id}>
+        <Dropdown label={t('pms.filter.milestoneLabel')} active={!!filterParams.milestone_id}>
           {(close) => (
             <>
               <button
                 onClick={() => { setFilterParams({ ...filterParams, milestone_id: undefined }); close(); }}
                 className={`${FILTER_MENU_ITEM_CLASS} ${!filterParams.milestone_id ? 'font-medium text-app-accent' : 'text-app-ink'}`}
               >
-                All
+                {t('pms.filter.all')}
               </button>
               {milestones.map(m => (
                 <button
@@ -421,17 +432,17 @@ export const FilterBar = ({
       )}
 
       {/* Start Date Range */}
-      <Dropdown label="Start Date" active={!!(filterParams.start_date_from || filterParams.start_date_to)}>
+      <Dropdown label={t('pms.filter.startDateLabel')} active={!!(filterParams.start_date_from || filterParams.start_date_to)}>
         {() => (
           <div className="px-3 py-2 space-y-2">
-            <label className={FILTER_META_LABEL_CLASS}>From</label>
+            <label className={FILTER_META_LABEL_CLASS}>{t('pms.filter.from')}</label>
             <input
               type="date"
               value={filterParams.start_date_from ?? ''}
               onChange={e => setFilterParams({ ...filterParams, start_date_from: e.target.value || undefined })}
               className={FILTER_FIELD_CLASS}
             />
-            <label className={FILTER_META_LABEL_CLASS}>To</label>
+            <label className={FILTER_META_LABEL_CLASS}>{t('pms.filter.to')}</label>
             <input
               type="date"
               value={filterParams.start_date_to ?? ''}
@@ -443,17 +454,17 @@ export const FilterBar = ({
       </Dropdown>
 
       {/* Due Date Range */}
-      <Dropdown label="Due Date" active={!!(filterParams.due_date_from || filterParams.due_date_to)}>
+      <Dropdown label={t('pms.filter.dueDateLabel')} active={!!(filterParams.due_date_from || filterParams.due_date_to)}>
         {() => (
           <div className="px-3 py-2 space-y-2">
-            <label className={FILTER_META_LABEL_CLASS}>From</label>
+            <label className={FILTER_META_LABEL_CLASS}>{t('pms.filter.from')}</label>
             <input
               type="date"
               value={filterParams.due_date_from ?? ''}
               onChange={e => setFilterParams({ ...filterParams, due_date_from: e.target.value || undefined })}
               className={FILTER_FIELD_CLASS}
             />
-            <label className={FILTER_META_LABEL_CLASS}>To</label>
+            <label className={FILTER_META_LABEL_CLASS}>{t('pms.filter.to')}</label>
             <input
               type="date"
               value={filterParams.due_date_to ?? ''}
@@ -466,7 +477,7 @@ export const FilterBar = ({
 
       {/* Archived visibility */}
       <Dropdown
-        label="Archive"
+        label={t('pms.filter.archiveLabel')}
         active={!!(filterParams.archived_state && filterParams.archived_state !== DEFAULT_ISSUE_ARCHIVED_STATE)}
       >
         {(close) => (
@@ -484,7 +495,7 @@ export const FilterBar = ({
                     : 'text-app-ink'
                 }`}
               >
-                {option.label}
+                {t(option.labelKey)}
               </button>
             ))}
           </>
@@ -496,21 +507,21 @@ export const FilterBar = ({
         <>
           <div className="h-4 w-px bg-app-border mx-1" />
           <button onClick={clearAll} className={`${FILTER_INLINE_ACTION_CLASS} hover:text-app-ink`}>
-            Clear all
+            {t('pms.filter.clearAll')}
           </button>
           <button
             onClick={() => setSaveDialogOpen(true)}
             className={`${FILTER_INLINE_ACTION_CLASS} flex items-center gap-1 hover:text-app-accent`}
           >
             <Save size={11} />
-            Save
+            {t('common:actions.save')}
           </button>
         </>
       )}
 
       {/* Saved filters */}
       {savedFilters.length > 0 && (
-        <Dropdown label={`Saved (${savedFilters.length})`} active={false}>
+        <Dropdown label={t('pms.filter.savedCount', { count: savedFilters.length })} active={false}>
           {(close) => (
             <>
               {savedFilters.map((sf, idx) => (
@@ -543,15 +554,15 @@ export const FilterBar = ({
             value={filterName}
             onChange={e => setFilterName(e.target.value)}
             onKeyDown={e => { if (e.key === 'Enter') handleSave(); if (e.key === 'Escape') setSaveDialogOpen(false); }}
-            placeholder="Filter name..."
+            placeholder={t('pms.filter.filterNamePlaceholder')}
             autoFocus
             className={`${FILTER_FIELD_CLASS} w-32`}
           />
           <button onClick={handleSave} className="app-text-body-sm font-medium text-app-accent hover:text-app-accent/80">
-            Save
+            {t('common:actions.save')}
           </button>
           <button onClick={() => setSaveDialogOpen(false)} className="app-text-body-sm text-app-ink/40 hover:text-app-ink">
-            Cancel
+            {t('common:actions.cancel')}
           </button>
         </div>
       )}
@@ -562,7 +573,11 @@ export const FilterBar = ({
           {pills.map((pill, idx) => (
             <span key={idx} className="app-text-caption inline-flex items-center gap-1 rounded-full bg-app-accent/10 px-2 py-0.5 text-app-accent">
               {pill.label}
-              <button onClick={pill.clear} className="hover:text-app-ink transition-colors">
+              <button
+                onClick={pill.clear}
+                className="hover:text-app-ink transition-colors"
+                aria-label={t('pms.filter.removeFilter', { label: pill.label })}
+              >
                 <X size={10} />
               </button>
             </span>
@@ -578,23 +593,23 @@ export const FilterBar = ({
               onClick={clearAll}
               className="app-text-control-sm flex-1 rounded-md border border-app-border px-3 py-2 text-app-ink hover:bg-app-surface-hover"
             >
-              Clear
+              {t('pms.filter.clear')}
             </button>
             <button
               type="button"
               onClick={() => setMobileFiltersOpen(false)}
               className="app-text-control-sm flex-1 rounded-md bg-app-accent px-3 py-2 text-app-accent-fg"
             >
-              Done
+              {t('pms.filter.done')}
             </button>
           </div>
         }
-        closeLabel="필터 닫기"
+        closeLabel={t('pms.filter.closeFilters')}
         contentClassName="border-app-border bg-app-bg"
-        description="작업 목록에 적용할 필터를 선택합니다."
+        description={t('pms.filter.drawerDescription')}
         onOpenChange={setMobileFiltersOpen}
         open={mobileFiltersOpen}
-        title="Filters"
+        title={t('pms.filter.filters')}
       >
         <div className="space-y-3">
           {pills.length > 0 ? (
@@ -602,7 +617,11 @@ export const FilterBar = ({
               {pills.map((pill, idx) => (
                 <span key={idx} className="app-text-caption inline-flex items-center gap-1 rounded-full bg-app-accent/10 px-2 py-1 text-app-accent">
                   {pill.label}
-                  <button onClick={pill.clear} className="hover:text-app-ink transition-colors" aria-label={`${pill.label} 필터 제거`}>
+                  <button
+                    onClick={pill.clear}
+                    className="hover:text-app-ink transition-colors"
+                    aria-label={t('pms.filter.removeFilter', { label: pill.label })}
+                  >
                     <X size={10} />
                   </button>
                 </span>
@@ -610,7 +629,7 @@ export const FilterBar = ({
             </div>
           ) : null}
 
-          <Dropdown block label="Status" active={!!(filterParams.status && filterParams.status.length > 0)}>
+          <Dropdown block label={t('pms.filter.statusLabel')} active={!!(filterParams.status && filterParams.status.length > 0)}>
             {() => (
               <>
                 {statusOptions.map(opt => {
@@ -635,14 +654,14 @@ export const FilterBar = ({
             )}
           </Dropdown>
 
-          <Dropdown block label="Priority" active={!!filterParams.priority}>
+          <Dropdown block label={t('pms.filter.priorityLabel')} active={!!filterParams.priority}>
             {(close) => (
               <>
                 <button
                   onClick={() => { setFilterParams({ ...filterParams, priority: undefined }); close(); }}
                   className={`${FILTER_MENU_ITEM_CLASS} ${!filterParams.priority ? 'font-medium text-app-accent' : 'text-app-ink'}`}
                 >
-                  All
+                  {t('pms.filter.all')}
                 </button>
                 {PRIORITY_OPTIONS.map(opt => (
                   <button
@@ -650,21 +669,21 @@ export const FilterBar = ({
                     onClick={() => { setFilterParams({ ...filterParams, priority: opt.value }); close(); }}
                     className={`${FILTER_MENU_ITEM_CLASS} ${filterParams.priority === opt.value ? 'font-medium text-app-accent' : 'text-app-ink'}`}
                   >
-                    {opt.label}
+                    {t(opt.labelKey)}
                   </button>
                 ))}
               </>
             )}
           </Dropdown>
 
-          <Dropdown block label="Assignee" active={!!filterParams.assignee_id}>
+          <Dropdown block label={t('pms.filter.assigneeLabel')} active={!!filterParams.assignee_id}>
             {(close) => (
               <>
                 <button
                   onClick={() => { setFilterParams({ ...filterParams, assignee_id: undefined }); close(); }}
                   className={`${FILTER_MENU_ITEM_CLASS} ${!filterParams.assignee_id ? 'font-medium text-app-accent' : 'text-app-ink'}`}
                 >
-                  All
+                  {t('pms.filter.all')}
                 </button>
                 {members.map(m => (
                   <button
@@ -679,14 +698,14 @@ export const FilterBar = ({
             )}
           </Dropdown>
 
-          <Dropdown block label="Label" active={!!filterParams.label_id}>
+          <Dropdown block label={t('pms.filter.labelLabel')} active={!!filterParams.label_id}>
             {(close) => (
               <>
                 <button
                   onClick={() => { setFilterParams({ ...filterParams, label_id: undefined }); close(); }}
                   className={`${FILTER_MENU_ITEM_CLASS} ${!filterParams.label_id ? 'font-medium text-app-accent' : 'text-app-ink'}`}
                 >
-                  All
+                  {t('pms.filter.all')}
                 </button>
                 {labels.map(l => (
                   <button
@@ -703,14 +722,14 @@ export const FilterBar = ({
           </Dropdown>
 
           {milestones.length > 0 && (
-            <Dropdown block label="Milestone" active={!!filterParams.milestone_id}>
+            <Dropdown block label={t('pms.filter.milestoneLabel')} active={!!filterParams.milestone_id}>
               {(close) => (
                 <>
                   <button
                     onClick={() => { setFilterParams({ ...filterParams, milestone_id: undefined }); close(); }}
                     className={`${FILTER_MENU_ITEM_CLASS} ${!filterParams.milestone_id ? 'font-medium text-app-accent' : 'text-app-ink'}`}
                   >
-                    All
+                    {t('pms.filter.all')}
                   </button>
                   {milestones.map(m => (
                     <button
@@ -726,17 +745,17 @@ export const FilterBar = ({
             </Dropdown>
           )}
 
-          <Dropdown block label="Start Date" active={!!(filterParams.start_date_from || filterParams.start_date_to)}>
+          <Dropdown block label={t('pms.filter.startDateLabel')} active={!!(filterParams.start_date_from || filterParams.start_date_to)}>
             {() => (
               <div className="px-3 py-2 space-y-2">
-                <label className={FILTER_META_LABEL_CLASS}>From</label>
+                <label className={FILTER_META_LABEL_CLASS}>{t('pms.filter.from')}</label>
                 <input
                   type="date"
                   value={filterParams.start_date_from ?? ''}
                   onChange={e => setFilterParams({ ...filterParams, start_date_from: e.target.value || undefined })}
                   className={FILTER_FIELD_CLASS}
                 />
-                <label className={FILTER_META_LABEL_CLASS}>To</label>
+                <label className={FILTER_META_LABEL_CLASS}>{t('pms.filter.to')}</label>
                 <input
                   type="date"
                   value={filterParams.start_date_to ?? ''}
@@ -747,17 +766,17 @@ export const FilterBar = ({
             )}
           </Dropdown>
 
-          <Dropdown block label="Due Date" active={!!(filterParams.due_date_from || filterParams.due_date_to)}>
+          <Dropdown block label={t('pms.filter.dueDateLabel')} active={!!(filterParams.due_date_from || filterParams.due_date_to)}>
             {() => (
               <div className="px-3 py-2 space-y-2">
-                <label className={FILTER_META_LABEL_CLASS}>From</label>
+                <label className={FILTER_META_LABEL_CLASS}>{t('pms.filter.from')}</label>
                 <input
                   type="date"
                   value={filterParams.due_date_from ?? ''}
                   onChange={e => setFilterParams({ ...filterParams, due_date_from: e.target.value || undefined })}
                   className={FILTER_FIELD_CLASS}
                 />
-                <label className={FILTER_META_LABEL_CLASS}>To</label>
+                <label className={FILTER_META_LABEL_CLASS}>{t('pms.filter.to')}</label>
                 <input
                   type="date"
                   value={filterParams.due_date_to ?? ''}
@@ -770,7 +789,7 @@ export const FilterBar = ({
 
           <Dropdown
             block
-            label="Archive"
+            label={t('pms.filter.archiveLabel')}
             active={!!(filterParams.archived_state && filterParams.archived_state !== DEFAULT_ISSUE_ARCHIVED_STATE)}
           >
             {(close) => (
@@ -788,7 +807,7 @@ export const FilterBar = ({
                         : 'text-app-ink'
                     }`}
                   >
-                    {option.label}
+                    {t(option.labelKey)}
                   </button>
                 ))}
               </>
@@ -801,12 +820,12 @@ export const FilterBar = ({
               className={`${FILTER_INLINE_ACTION_CLASS} flex items-center gap-1 hover:text-app-accent`}
             >
               <Save size={11} />
-              Save current filters
+              {t('pms.filter.saveCurrentFilters')}
             </button>
           ) : null}
 
           {savedFilters.length > 0 ? (
-            <Dropdown block label={`Saved (${savedFilters.length})`} active={false}>
+            <Dropdown block label={t('pms.filter.savedCount', { count: savedFilters.length })} active={false}>
               {(close) => (
                 <>
                   {savedFilters.map((sf, idx) => (
@@ -838,16 +857,16 @@ export const FilterBar = ({
                 value={filterName}
                 onChange={e => setFilterName(e.target.value)}
                 onKeyDown={e => { if (e.key === 'Enter') handleSave(); if (e.key === 'Escape') setSaveDialogOpen(false); }}
-                placeholder="Filter name..."
+                placeholder={t('pms.filter.filterNamePlaceholder')}
                 autoFocus
                 className={FILTER_FIELD_CLASS}
               />
               <div className="mt-2 flex gap-2">
                 <button onClick={handleSave} className="app-text-body-sm flex-1 rounded-md bg-app-accent px-3 py-2 font-medium text-app-accent-fg">
-                  Save
+                  {t('common:actions.save')}
                 </button>
                 <button onClick={() => setSaveDialogOpen(false)} className="app-text-body-sm flex-1 rounded-md border border-app-border px-3 py-2 text-app-ink/60 hover:text-app-ink">
-                  Cancel
+                  {t('common:actions.cancel')}
                 </button>
               </div>
             </div>

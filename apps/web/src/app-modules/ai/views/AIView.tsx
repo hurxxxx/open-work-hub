@@ -10,6 +10,7 @@ import {
   useState,
 } from 'react';
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import {
   AiApiError,
   abandonAiApproval,
@@ -49,6 +50,7 @@ import type {
   ToolCallBuffer,
 } from '../api/agent-events';
 import type { NavItem } from '@/src/app/shell/navigation-types';
+import { i18n } from '@/src/platform/i18n';
 
 const ArtifactPanel = lazy(() =>
   import('./chat/ArtifactPanel').then((module) => ({
@@ -152,13 +154,13 @@ function resolveAssistantTurnContent(
     return contentBuffer;
   }
   if (status === 'cancelled') {
-    return '응답이 중단되었습니다.';
+    return i18n.t('apps:ai.message.cancelled');
   }
   if (status === 'error') {
-    return errorMessage ?? '응답 중 오류가 발생했습니다.';
+    return errorMessage ?? i18n.t('apps:ai.message.responseFailed');
   }
   if (finishReason === 'length') {
-    return '응답이 토큰 한도에 도달해 중간에서 잘렸습니다. 질문 범위를 줄이거나 이어서 요청하세요.';
+    return i18n.t('apps:ai.message.lengthLimit');
   }
   // A successful response that streamed only artifacts has no chat-bubble
   // text — render an empty string so the message area shows the artifact
@@ -166,7 +168,7 @@ function resolveAssistantTurnContent(
   if (hasArtifacts) {
     return '';
   }
-  return '응답을 생성하지 못했습니다.';
+  return i18n.t('apps:ai.errors.responseFailed');
 }
 
 interface ScopeInfo {
@@ -184,9 +186,10 @@ function ScopeChip({
   scope: ScopeInfo;
   workspaceSlug: string | undefined;
 }) {
+  const { t } = useTranslation('apps');
   const label = scope.meetingTitle
-    ? `회의 "${scope.meetingTitle}" 컨텍스트`
-    : '회의 컨텍스트';
+    ? t('ai.view.meetingContextTitle', { title: scope.meetingTitle })
+    : t('ai.view.meetingContext');
   const commonClass =
     'app-text-caption inline-flex items-center gap-1 rounded-full border border-app-border bg-app-surface-sidebar px-2 py-1 text-app-ink transition-colors hover:border-app-accent';
   if (!workspaceSlug) {
@@ -201,7 +204,7 @@ function ScopeChip({
     <Link
       to={buildWorkspaceAppPath(workspaceSlug, 'meeting', `/${scope.resourceId}`)}
       role="status"
-      aria-label={`${label} — 회의로 돌아가기`}
+      aria-label={t('ai.view.returnToMeeting', { label })}
       className={`${commonClass} no-underline`}
       data-testid="ai-scope-chip"
     >
@@ -212,6 +215,7 @@ function ScopeChip({
 }
 
 export function AIView({ toolItems = [] }: { toolItems?: NavItem[] }) {
+  const { t } = useTranslation(['apps', 'auth', 'shell']);
   const { status: authStatus, token, user } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
@@ -228,7 +232,7 @@ export function AIView({ toolItems = [] }: { toolItems?: NavItem[] }) {
   // panel clears the param via `handleCloseArtifact`.
   const routeArtifactId = searchParams.get('a');
   // Meeting-insight deep-link `draft` param (Step E.4). Populated when
-  // the user clicks "챗에서 진행" on a meeting AI suggestion card and
+  // the user clicks continue in chat on a meeting AI suggestion card and
   // becomes the composer's starting value on the next fresh-chat mount.
   // The companion params (`context`, `context_id`, `insight_id`,
   // `insight_kind`) are cleared alongside `draft` in the same replace
@@ -364,7 +368,22 @@ export function AIView({ toolItems = [] }: { toolItems?: NavItem[] }) {
   // icons + full metadata). Falls back to the local AI-only list while
   // bootstrap is still loading so the menu stays usable.
   const slashCommandItems = useMemo(() => {
-    const fallbackItems = toolItems.filter((item) => item.appId === 'ai');
+    const localizeItem = (item: NavItem): NavItem => {
+      const description = t(`shell:navDescriptions.${item.id}`, {
+        defaultValue: item.description ?? '',
+      });
+      return {
+        ...item,
+        title: t(`shell:nav.${item.id}`, { defaultValue: item.title }),
+        description: description || undefined,
+        category: t(`shell:categories.${item.category}`, {
+          defaultValue: item.category,
+        }),
+      };
+    };
+    const fallbackItems = toolItems
+      .filter((item) => item.appId === 'ai')
+      .map(localizeItem);
     const registry = new Map(fallbackItems.map((item) => [item.id, item]));
     const bootstrapNav = workspaceBootstrap.data?.nav ?? null;
     if (!bootstrapNav) {
@@ -379,12 +398,14 @@ export function AIView({ toolItems = [] }: { toolItems?: NavItem[] }) {
         }
         return {
           ...localItem,
-          title: entry.title,
-          category: entry.category,
+          title: t(`shell:nav.${entry.id}`, { defaultValue: entry.title }),
+          category: t(`shell:categories.${entry.category}`, {
+            defaultValue: entry.category,
+          }),
         };
       })
       .filter((item): item is NavItem => item !== null);
-  }, [toolItems, workspaceBootstrap.data]);
+  }, [t, toolItems, workspaceBootstrap.data]);
 
   const currentConversationId = activeConversationId ?? routeConversationId;
   const abortHydrateRef = useRef<AbortController | null>(null);
@@ -430,7 +451,7 @@ export function AIView({ toolItems = [] }: { toolItems?: NavItem[] }) {
 
   const resumePendingApproval = useCallback(async (approval: PendingApproval) => {
     if (!token || !currentConversationId) {
-      setApprovalError('대화 컨텍스트를 확인하지 못했습니다.');
+      setApprovalError(t('apps:ai.view.conversationContextMissing'));
       return;
     }
     setApprovalAction({ approvalId: approval.approval_id, kind: 'resume' });
@@ -458,7 +479,7 @@ export function AIView({ toolItems = [] }: { toolItems?: NavItem[] }) {
       setApprovalError(
         error instanceof Error
           ? error.message
-          : '승인된 작업 재개에 실패했습니다.',
+          : t('apps:ai.view.resumeFailed'),
       );
     } finally {
       setApprovalAction((current) =>
@@ -473,7 +494,7 @@ export function AIView({ toolItems = [] }: { toolItems?: NavItem[] }) {
     reason?: string,
   ) => {
     if (!token) {
-      setApprovalError('로그인이 필요합니다.');
+      setApprovalError(t('auth:errors.noActiveSession'));
       return;
     }
     setApprovalAction({
@@ -504,7 +525,7 @@ export function AIView({ toolItems = [] }: { toolItems?: NavItem[] }) {
       setApprovalError(
         error instanceof Error
           ? error.message
-          : '승인 상태를 반영하지 못했습니다.',
+          : t('apps:ai.view.applyApprovalFailed'),
       );
     } finally {
       setApprovalAction((current) =>
@@ -515,7 +536,7 @@ export function AIView({ toolItems = [] }: { toolItems?: NavItem[] }) {
 
   const handleAbandonApproval = useCallback(async (approval: PendingApproval) => {
     if (!token) {
-      setApprovalError('로그인이 필요합니다.');
+      setApprovalError(t('auth:errors.noActiveSession'));
       return;
     }
     setApprovalAction({ approvalId: approval.approval_id, kind: 'abandon' });
@@ -537,7 +558,7 @@ export function AIView({ toolItems = [] }: { toolItems?: NavItem[] }) {
       setApprovalError(
         error instanceof Error
           ? error.message
-          : '요청 취소에 실패했습니다.',
+          : t('apps:ai.view.cancelRequestFailed'),
       );
     } finally {
       setApprovalAction((current) =>
@@ -561,7 +582,7 @@ export function AIView({ toolItems = [] }: { toolItems?: NavItem[] }) {
       setHealthError(
         error instanceof Error
           ? error.message
-          : '모델 상태를 확인하지 못했습니다.',
+          : t('apps:ai.view.modelStatusFailed'),
       );
     } finally {
       setIsCheckingHealth(false);
@@ -591,7 +612,7 @@ export function AIView({ toolItems = [] }: { toolItems?: NavItem[] }) {
           setHealthError(
             error instanceof Error
               ? error.message
-              : '모델 상태를 확인하지 못했습니다.',
+              : t('apps:ai.view.modelStatusFailed'),
           );
         }
       });
@@ -618,13 +639,13 @@ export function AIView({ toolItems = [] }: { toolItems?: NavItem[] }) {
   }, [workspaceSlug]);
 
   // Hydrate turns whenever the URL conversation changes. Clearing `c` (from
-  // the sidebar "+ 새 대화" action, say) resets the thread to an empty state;
+  // the sidebar new conversation action resets the thread to an empty state;
   // setting it to a new id fetches the persisted turns so the thread renders
   // identically to what the user saw live. Guarded by token so we don't fire
   // a fetch before auth bootstrap completes.
   const [showInsightHint, setShowInsightHint] = useState(false);
   const [pendingDraftSearchCleanup, setPendingDraftSearchCleanup] = useState(false);
-  // Clear the "회의 AI 제안에서 시작됨" hint once the composer is empty —
+  // Clear the meeting suggestion hint once the composer is empty —
   // this covers both the submit path (handleSubmit clears input) and
   // the user manually clearing the draft. The hint is pinned to the
   // first turn that originated from the deep-link; once that turn is
@@ -754,7 +775,7 @@ export function AIView({ toolItems = [] }: { toolItems?: NavItem[] }) {
         setChatError(
           error instanceof Error
             ? error.message
-            : '대화 기록을 불러오지 못했습니다.',
+            : t('apps:ai.view.conversationLoadFailed'),
         );
       })
       .finally(() => {
@@ -771,7 +792,7 @@ export function AIView({ toolItems = [] }: { toolItems?: NavItem[] }) {
     // `/w/<old>/ai?c=<id>` → `/w/<new>/ai?c=<id>`). Without it, the old
     // workspace's turns would linger under the new slug.
     // `pendingDraftSourceKey` / `pendingDraft` are part of the deps so a
-    // second "챗에서 진행" click (fresh chat still open) re-runs the
+    // second continue-in-chat click (fresh chat still open) re-runs the
     // consume branch with the new draft source. Using a source key rather
     // than the raw draft text keeps the router-state handoff stable even if
     // the cleanup effect removes the query params immediately after mount.
@@ -967,7 +988,7 @@ export function AIView({ toolItems = [] }: { toolItems?: NavItem[] }) {
         keepPendingApprovals: shouldKeepPendingApprovals,
       });
     } else {
-      setChatError(chat.state.errorMessage ?? 'AI 응답에 실패했습니다.');
+      setChatError(chat.state.errorMessage ?? t('apps:ai.errors.responseFailed'));
       if (pendingUserTurnId) {
         setTurns((current) =>
           current.filter((turn) => turn.id !== pendingUserTurnId),
@@ -1153,11 +1174,11 @@ export function AIView({ toolItems = [] }: { toolItems?: NavItem[] }) {
 
   const composerPlaceholder =
     isLoadingConversation
-      ? '대화를 불러오는 중입니다.'
+      ? t('apps:ai.view.conversationLoading')
       : !isConversationReady
-        ? '이 대화를 열 수 없습니다. 새 대화를 시작하거나 다른 대화를 선택하세요.'
+        ? t('apps:ai.view.conversationUnavailable')
         : blockingApproval
-          ? '현재 승인을 해결해야 다음 요청이 가능합니다.'
+          ? t('apps:ai.view.approvalBlocking')
           : undefined;
 
   const blockingApprovalAction =
@@ -1170,8 +1191,8 @@ export function AIView({ toolItems = [] }: { toolItems?: NavItem[] }) {
       <div>
         <p className="app-text-body-sm text-app-ink">
           {pendingApproval
-            ? '현재 승인을 해결해야 다음 요청이 가능합니다.'
-            : '승인 결과를 적용하는 중입니다. 문제가 생기면 이어가기를 다시 시도하세요.'}
+            ? t('apps:ai.view.approvalBlocking')
+            : t('apps:ai.view.approvalResumeHint')}
         </p>
         <p className="app-text-caption text-app-ink/60">
           {blockingApproval.tool}
@@ -1197,7 +1218,7 @@ export function AIView({ toolItems = [] }: { toolItems?: NavItem[] }) {
           disabled={Boolean(blockingApprovalAction)}
           className="app-text-control rounded-md border border-app-border px-3 py-2 text-app-ink transition-colors hover:border-app-accent disabled:cursor-not-allowed disabled:opacity-60"
         >
-          {blockingApprovalAction === 'abandon' ? '취소 중...' : '요청 취소'}
+          {blockingApprovalAction === 'abandon' ? t('apps:ai.view.abandonPending') : t('apps:ai.approval.cancelRequest')}
         </button>
       ) : resumableApproval ? (
         <button
@@ -1208,7 +1229,7 @@ export function AIView({ toolItems = [] }: { toolItems?: NavItem[] }) {
           disabled={Boolean(blockingApprovalAction)}
           className="app-text-control rounded-md bg-app-accent px-3 py-2 text-app-accent-fg transition-colors hover:bg-app-accent-hover disabled:cursor-not-allowed disabled:opacity-60"
         >
-          {blockingApprovalAction === 'resume' ? '이어가는 중...' : '이어가기'}
+          {blockingApprovalAction === 'resume' ? t('apps:ai.view.resuming') : t('apps:ai.view.resume')}
         </button>
       ) : null}
     </div>
@@ -1222,7 +1243,7 @@ export function AIView({ toolItems = [] }: { toolItems?: NavItem[] }) {
     >
       <section className="flex min-h-[640px] flex-col overflow-hidden rounded-lg border border-app-border bg-app-surface">
         <ChatTopBar
-          title="업무 챗봇"
+          title={t('apps:ai.view.title')}
           backendMode={backendMode}
           health={health}
           healthError={healthError}
@@ -1241,7 +1262,7 @@ export function AIView({ toolItems = [] }: { toolItems?: NavItem[] }) {
                     role="status"
                     className="app-text-caption text-center text-app-ink/60"
                   >
-                    회의 AI 제안에서 시작됨
+                    {t('apps:ai.view.insightStarted')}
                   </p>
                 ) : null}
                 {approvalNotice}
@@ -1264,12 +1285,12 @@ export function AIView({ toolItems = [] }: { toolItems?: NavItem[] }) {
             }
             greeting={
               isLoadingConversation
-                ? '대화를 불러오는 중입니다.'
+                ? t('apps:ai.view.conversationLoading')
                 : undefined
             }
             subline={
               isLoadingConversation
-                ? '잠시만 기다려 주세요.'
+                ? t('apps:ai.view.wait')
                 : undefined
             }
           />
@@ -1366,8 +1387,8 @@ function detailToTurns(detail: ConversationDetail): ChatTurn[] {
  * Rebuild the on-the-wire form of a prior assistant turn for the next LLM
  * request. The bubble's visible text was the short summary; the full document
  * bodies live on ``turn.artifacts``. Serializing only ``turn.content`` would
- * hide the generated document from the model, so revision asks like
- * "두 번째 문단을 고쳐줘" would operate on ghost text. Re-emit each artifact
+ * hide the generated document from the model, so revision asks would operate
+ * on ghost text. Re-emit each artifact
  * using the exact ``<artifact>`` grammar the server parses so the model sees
  * the same canonical form it produced.
  */

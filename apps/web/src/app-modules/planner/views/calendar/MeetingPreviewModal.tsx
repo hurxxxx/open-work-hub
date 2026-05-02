@@ -10,6 +10,7 @@
 // suppresses the built-in header / padding / scroll wrapper so the layout's
 // own chrome fills the surface cleanly.
 import { Dialog } from '@aidoo/ui';
+import { useTranslation } from 'react-i18next';
 
 import { MeetingWorkspaceLayout } from '@/src/app-modules/meeting';
 
@@ -27,6 +28,7 @@ export function MeetingPreviewModal({
   onClose,
   onChanged,
 }: MeetingPreviewModalProps) {
+  const { t } = useTranslation('apps');
   const open = meetingId !== null && Boolean(workspaceSlug);
 
   return (
@@ -35,8 +37,8 @@ export function MeetingPreviewModal({
       onOpenChange={(next) => {
         if (!next) onClose();
       }}
-      title="회의 정보"
-      description="캘린더에서 선택한 회의의 상세 정보입니다."
+      title={t('planner.meetingPreviewTitle')}
+      description={t('planner.meetingPreviewDescription')}
       fullSize
       embedded
       // Recording / form interactions inside MeetingWorkspaceLayout must not

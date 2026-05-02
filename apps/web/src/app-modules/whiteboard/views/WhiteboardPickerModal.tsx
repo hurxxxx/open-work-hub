@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Button, Dialog } from '@aidoo/ui';
 import { Loader2, PencilRuler, Search } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
 import { useAuth } from '@/src/platform/auth/auth-provider';
 import { formatDateTime, normalizeTimeZone } from '@/src/platform/time/time-utils';
@@ -24,6 +25,7 @@ export function WhiteboardPickerModal({
   onClose,
   onPick,
 }: WhiteboardPickerModalProps) {
+  const { t, i18n } = useTranslation(['apps', 'common']);
   const { token, user } = useAuth();
   const timeZone = normalizeTimeZone(user?.time_zone);
   const [items, setItems] = useState<WhiteboardHubItem[]>([]);
@@ -48,7 +50,7 @@ export function WhiteboardPickerModal({
       })
       .catch((err: Error) => {
         if (cancelled) return;
-        setError(err.message || '화이트보드를 불러올 수 없습니다.');
+        setError(err.message || t('apps:whiteboard.loadFailed'));
         setItems([]);
       })
       .finally(() => {
@@ -57,7 +59,7 @@ export function WhiteboardPickerModal({
     return () => {
       cancelled = true;
     };
-  }, [isOpen, token, workspaceSlug]);
+  }, [isOpen, t, token, workspaceSlug]);
 
   const excludeSet = useMemo(() => new Set(excludeWhiteboardIds), [excludeWhiteboardIds]);
   const filteredItems = useMemo(() => {
@@ -75,7 +77,7 @@ export function WhiteboardPickerModal({
       await onPick(item);
       onClose();
     } catch (err) {
-      setError(err instanceof Error ? err.message : '화이트보드를 연결할 수 없습니다.');
+      setError(err instanceof Error ? err.message : t('apps:whiteboard.connectFailed'));
     } finally {
       setSubmittingId(null);
     }
@@ -87,10 +89,10 @@ export function WhiteboardPickerModal({
       onOpenChange={(open) => {
         if (!open) onClose();
       }}
-      title="Whiteboard 선택"
-      description="이미 저장된 Whiteboard를 연결합니다."
+      title={t('apps:whiteboard.pickerTitle')}
+      description={t('apps:whiteboard.pickerDescription')}
       maxWidth="max-w-xl"
-      actions={<Button variant="secondary" onClick={onClose}>닫기</Button>}
+      actions={<Button variant="secondary" onClick={onClose}>{t('common:actions.close')}</Button>}
     >
       <div className="space-y-4 text-app-ink">
         {error ? (
@@ -107,7 +109,7 @@ export function WhiteboardPickerModal({
           <input
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="제목으로 검색"
+            placeholder={t('apps:whiteboard.searchByTitle')}
             className="app-text-body-sm min-w-0 flex-1 bg-transparent text-app-ink outline-none placeholder:text-app-ink/35"
           />
         </label>
@@ -119,7 +121,7 @@ export function WhiteboardPickerModal({
             </div>
           ) : filteredItems.length === 0 ? (
             <div className="px-4 py-8 text-center app-text-caption text-app-ink/50">
-              연결할 Whiteboard가 없습니다.
+              {t('apps:whiteboard.pickerEmpty')}
             </div>
           ) : (
             <ul className="divide-y divide-app-border">
@@ -138,7 +140,7 @@ export function WhiteboardPickerModal({
                         <p className="app-text-caption text-app-ink/45">
                           {item.location_label} · {formatDateTime(item.updated_at, {
                             day: 'numeric',
-                            locale: 'ko-KR',
+                            locale: i18n.language,
                             month: 'short',
                             timeZone,
                           })}

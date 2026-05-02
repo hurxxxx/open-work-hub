@@ -6,6 +6,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Button, Dialog } from '@aidoo/ui';
 import { X, UserPlus } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
 import { useAuth } from '@/src/platform/auth/auth-provider';
 import {
@@ -31,6 +32,7 @@ export function AddAttendeesModal({
   onClose,
   onAdded,
 }: AddAttendeesModalProps) {
+  const { t } = useTranslation('apps');
   const { token } = useAuth();
   const [pending, setPending] = useState<MeetingAttendeeInput[]>([]);
   const [pendingMeta, setPendingMeta] = useState<Record<string, MeetingUser>>({});
@@ -123,7 +125,7 @@ export function AddAttendeesModal({
       );
       onAdded(updated);
     } catch (err) {
-      setError(err instanceof Error ? err.message : '참석자를 추가할 수 없습니다.');
+      setError(err instanceof Error ? err.message : t('meeting.addAttendees.failed'));
     } finally {
       setSubmitting(false);
     }
@@ -135,21 +137,23 @@ export function AddAttendeesModal({
       onOpenChange={(next) => {
         if (!next) onClose();
       }}
-      title="참석자 초대"
-      description="이름이나 이메일로 동료를 검색해 회의에 추가합니다."
+      title={t('meeting.addAttendees.title')}
+      description={t('meeting.addAttendees.description')}
       maxWidth="max-w-md"
       dismissOnInteractOutside={false}
       actions={
         <div className="flex w-full items-center justify-end gap-3">
           <Button variant="secondary" onClick={onClose}>
-            취소
+            {t('common:actions.cancel')}
           </Button>
           <Button
             variant="primary"
             onClick={handleSave}
             disabled={pending.length === 0 || submitting}
           >
-            {submitting ? '추가 중...' : `${pending.length}명 추가`}
+            {submitting
+              ? t('meeting.addAttendees.adding')
+              : t('meeting.addAttendees.addCount', { count: pending.length })}
           </Button>
         </div>
       }
@@ -166,7 +170,7 @@ export function AddAttendeesModal({
 
         <div className="space-y-2">
           <label className="app-text-overline block text-app-ink/60" htmlFor="add-attendee-search">
-            동료 검색
+            {t('meeting.addAttendees.searchLabel')}
           </label>
           <div className="relative">
             <input
@@ -176,7 +180,7 @@ export function AddAttendeesModal({
               onChange={(event) => setQuery(event.target.value)}
               onFocus={() => setQueryFocused(true)}
               onBlur={() => window.setTimeout(() => setQueryFocused(false), 150)}
-              placeholder="이름 또는 이메일"
+              placeholder={t('meeting.addAttendees.searchPlaceholder')}
               className="app-text-body w-full rounded-md border border-app-border bg-app-surface px-3 py-2 text-app-ink placeholder:text-app-ink/30 focus:border-app-accent focus:outline-none"
               autoComplete="off"
             />
@@ -184,11 +188,11 @@ export function AddAttendeesModal({
               <div className="absolute left-0 right-0 top-full z-10 mt-1 max-h-64 overflow-y-auto rounded-md border border-app-border bg-app-surface shadow-lg">
                 {searching ? (
                   <div className="app-text-caption px-3 py-2 text-app-ink/50">
-                    검색 중...
+                    {t('meeting.addAttendees.searching')}
                   </div>
                 ) : candidates.length === 0 ? (
                   <div className="app-text-caption px-3 py-2 text-app-ink/50">
-                    검색 결과가 없습니다.
+                    {t('common:empty.noResults')}
                   </div>
                 ) : (
                   <ul>
@@ -225,11 +229,11 @@ export function AddAttendeesModal({
 
         <div className="space-y-2">
           <div className="app-text-overline text-app-ink/60">
-            추가할 참석자 ({pending.length})
+            {t('meeting.addAttendees.pendingCount', { count: pending.length })}
           </div>
           {pending.length === 0 ? (
             <div className="app-text-caption rounded-md border border-dashed border-app-border px-3 py-3 text-center text-app-ink/40">
-              아직 선택된 사람이 없습니다.
+              {t('meeting.addAttendees.noneSelected')}
             </div>
           ) : (
             <ul className="space-y-1">
@@ -251,7 +255,7 @@ export function AddAttendeesModal({
                     <button
                       type="button"
                       onClick={() => removePending(item.user_id)}
-                      aria-label="제거"
+                      aria-label={t('meeting.addAttendees.remove')}
                       className="rounded p-1 text-app-ink/40 hover:bg-app-surface-hover hover:text-app-ink"
                     >
                       <X size={14} />

@@ -1,5 +1,6 @@
 import { FormEvent, ReactNode, useCallback, useEffect, useState } from 'react';
 import { ArrowUp, Loader2, Square } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
 import type { NavItem } from '@/src/app/shell/navigation-types';
 import {
@@ -36,6 +37,7 @@ export interface ChatComposerProps {
 }
 
 export function ChatComposer(props: ChatComposerProps) {
+  const { t } = useTranslation('apps');
   const slashItems = useSlashCommandItems(
     props.toolItems ?? [],
     props.input,
@@ -51,7 +53,7 @@ export function ChatComposer(props: ChatComposerProps) {
     (event: FormEvent<HTMLFormElement>) => {
       event.preventDefault();
       // Guard mouse/button submit paths so slash mode never leaks into the
-      // chat stream — pressing 전송 while a slash command is being composed
+      // chat stream while a slash command is being composed
       // must not send the raw "/fmea" buffer as a message.
       if (isSlashOpen) {
         return;
@@ -153,7 +155,7 @@ export function ChatComposer(props: ChatComposerProps) {
               }
               event.currentTarget.form?.requestSubmit();
             }}
-            placeholder={props.placeholder ?? '메시지를 입력하세요'}
+            placeholder={props.placeholder ?? t('ai.composerPlaceholder')}
             rows={props.rows ?? 2}
             value={props.input}
           />
@@ -163,7 +165,7 @@ export function ChatComposer(props: ChatComposerProps) {
             </div>
             {props.isSending && props.isStreaming ? (
               <button
-                aria-label="중단"
+                aria-label={t('ai.stop')}
                 className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-app-border bg-app-surface text-app-ink transition-colors hover:border-app-accent"
                 onClick={props.onAbort}
                 type="button"
@@ -172,7 +174,7 @@ export function ChatComposer(props: ChatComposerProps) {
               </button>
             ) : props.isSending ? (
               <button
-                aria-label="처리 중"
+                aria-label={t('ai.processing')}
                 className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-app-border bg-app-surface text-app-ink/70"
                 disabled
                 type="button"
@@ -181,7 +183,7 @@ export function ChatComposer(props: ChatComposerProps) {
               </button>
             ) : (
               <button
-                aria-label="전송"
+                aria-label={t('ai.send')}
                 className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-app-accent text-app-accent-fg transition-colors hover:bg-app-accent-hover disabled:cursor-not-allowed disabled:opacity-40"
                 disabled={sendDisabled}
                 type="submit"

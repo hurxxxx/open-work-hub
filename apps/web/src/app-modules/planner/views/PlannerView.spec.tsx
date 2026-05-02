@@ -231,8 +231,8 @@ describe('PlannerView', () => {
       expect(lastCall.to).toBe('2026-04-01');
     });
 
-    fireEvent.click(screen.getByRole('button', { name: 'Add' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Event' }));
+    fireEvent.click(screen.getByRole('button', { name: '추가' }));
+    fireEvent.click(screen.getByRole('button', { name: '이벤트' }));
 
     expect(screen.getByTestId('mock-planner-event-modal')).toBeTruthy();
   });
@@ -248,22 +248,22 @@ describe('PlannerView', () => {
     renderPlannerView();
 
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: 'March 2026' })).toBeTruthy();
+      expect(screen.getByRole('button', { name: '2026년 3월' })).toBeTruthy();
     });
 
-    fireEvent.click(screen.getByRole('button', { name: 'Next period' }));
+    fireEvent.click(screen.getByRole('button', { name: '다음 기간' }));
     await waitFor(() => {
       const lastCall = getLastCalendarRequest();
       expect(lastCall.from).toBe('2026-03-15');
       expect(lastCall.to).toBe('2026-03-22');
     });
 
-    fireEvent.click(screen.getByRole('button', { name: 'Today' }));
+    fireEvent.click(screen.getByRole('button', { name: '오늘' }));
     await waitFor(() => {
       const lastCall = getLastCalendarRequest();
       expect(lastCall.from).toBe('2026-03-29');
       expect(lastCall.to).toBe('2026-04-05');
-      expect(screen.getByRole('button', { name: 'April 2026' })).toBeTruthy();
+      expect(screen.getByRole('button', { name: '2026년 4월' })).toBeTruthy();
     });
   });
 
@@ -278,17 +278,17 @@ describe('PlannerView', () => {
     renderPlannerView();
 
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: 'March 10, 2026' })).toBeTruthy();
+      expect(screen.getByRole('button', { name: '2026년 3월 10일' })).toBeTruthy();
     });
 
-    fireEvent.click(screen.getByRole('button', { name: 'March 10, 2026' }));
+    fireEvent.click(screen.getByRole('button', { name: '2026년 3월 10일' }));
     fireEvent.click(screen.getByRole('button', { name: '18' }));
 
     await waitFor(() => {
       const lastCall = getLastCalendarRequest();
       expect(lastCall.from).toBe('2026-03-18');
       expect(lastCall.to).toBe('2026-03-19');
-      expect(screen.getByRole('button', { name: 'March 18, 2026' })).toBeTruthy();
+      expect(screen.getByRole('button', { name: '2026년 3월 18일' })).toBeTruthy();
     });
   });
 
@@ -304,7 +304,7 @@ describe('PlannerView', () => {
     });
 
     await waitFor(() => {
-      expect(screen.getByRole('dialog', { name: 'Create event or meeting' })).toBeTruthy();
+      expect(screen.getByRole('dialog', { name: '이벤트 또는 회의 생성' })).toBeTruthy();
     });
 
     fireEvent.click(screen.getByRole('button', { name: '이벤트' }));

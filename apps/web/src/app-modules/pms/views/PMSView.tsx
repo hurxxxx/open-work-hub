@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useParams, Link, useSearchParams, useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   Layout,
@@ -72,6 +73,17 @@ import { SpaceOverviewView } from './SpaceOverviewView';
 import { taskListRoleAllows } from '../api/pms-permissions';
 import { WhiteboardContextSlotPanel } from '@/src/app-modules/whiteboard/public-api';
 
+type PmsViewTab = 'List' | 'Board' | 'Calendar' | 'Gantt' | 'Table' | 'Whiteboard';
+
+const PMS_VIEW_TAB_LABEL_KEYS: Record<PmsViewTab, string> = {
+  List: 'pms.viewTabs.list',
+  Board: 'pms.viewTabs.board',
+  Calendar: 'pms.viewTabs.calendar',
+  Gantt: 'pms.viewTabs.gantt',
+  Table: 'pms.viewTabs.table',
+  Whiteboard: 'pms.viewTabs.whiteboard',
+};
+
 function isSameListCollection(left: PmsTaskList[], right: PmsTaskList[]): boolean {
   if (left.length !== right.length) {
     return false;
@@ -89,6 +101,7 @@ function isSameListCollection(left: PmsTaskList[], right: PmsTaskList[]): boolea
 }
 
 export const PMSView = () => {
+  const { t } = useTranslation('apps');
   const { toolId } = useParams();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -96,7 +109,7 @@ export const PMSView = () => {
   const pmsRoot = resolveDefaultWorkspaceAppPath(user, 'pms');
   const currentWorkspaceSlug = getWorkspaceBySlug(user, searchParams.get('workspace'))?.slug
     ?? getCurrentOrLastWorkspaceSlug();
-  const [activeTab, setActiveTab] = useState<'List' | 'Board' | 'Calendar' | 'Gantt' | 'Table' | 'Whiteboard'>('List');
+  const [activeTab, setActiveTab] = useState<PmsViewTab>('List');
   const [selectedIssue, setSelectedIssue] = useState<PmsIssue | null>(null);
   const [isNewTaskModalOpen, setIsNewTaskModalOpen] = useState(false);
 
@@ -172,9 +185,9 @@ export const PMSView = () => {
     () => (selectedTaskListId ? { app: 'pms', type: 'task_list', id: selectedTaskListId } : null),
     [selectedTaskListId],
   );
-  const viewTabs = ['List', 'Board', 'Calendar', 'Gantt', 'Table', 'Whiteboard'] as const;
-  const mobilePrimaryTabs = ['List', 'Board', 'Calendar'] as const;
-  const mobileMoreTabs = ['Gantt', 'Table', 'Whiteboard'] as const;
+  const viewTabs = ['List', 'Board', 'Calendar', 'Gantt', 'Table', 'Whiteboard'] as const satisfies readonly PmsViewTab[];
+  const mobilePrimaryTabs = ['List', 'Board', 'Calendar'] as const satisfies readonly PmsViewTab[];
+  const mobileMoreTabs = ['Gantt', 'Table', 'Whiteboard'] as const satisfies readonly PmsViewTab[];
   const mobileMoreActive = mobileMoreTabs.includes(activeTab as (typeof mobileMoreTabs)[number]);
 
   const selectViewTab = (tab: typeof activeTab) => {
@@ -299,7 +312,7 @@ export const PMSView = () => {
           return;
         }
         setSelectedTaskListId('');
-        setError(getErrorMessage(err, '리스트를 불러오지 못했습니다.'));
+        setError(getErrorMessage(err, t('pms.errors.listLoadFailed')));
       } finally {
         if (!cancelled) {
           setLoading(false);
@@ -322,7 +335,7 @@ export const PMSView = () => {
       const res = await listTaskListIssues(token, selectedTaskListId, filterParams);
       applyIssueCollection(res.items);
     } catch (err) {
-      setError(getErrorMessage(err, '이슈 목록을 불러오지 못했습니다.'));
+      setError(getErrorMessage(err, t('pms.errors.issueLoadFailed')));
     }
   }, [applyIssueCollection, getErrorMessage, filterParams, selectedTaskListId, token]);
 
@@ -353,7 +366,7 @@ export const PMSView = () => {
       })
       .catch(err => {
         if (cancelled) return;
-        setError(getErrorMessage(err, '리스트 데이터를 불러오지 못했습니다.'));
+        setError(getErrorMessage(err, t('pms.errors.listDataFailed')));
       })
       .finally(() => {
         if (!cancelled) {
@@ -437,7 +450,7 @@ export const PMSView = () => {
           return;
         }
 
-        setError(getErrorMessage(caughtError, '요청한 이슈를 불러오지 못했습니다.'));
+        setError(getErrorMessage(caughtError, t('pms.errors.requestedIssueFailed')));
       });
 
     return () => {
@@ -454,7 +467,7 @@ export const PMSView = () => {
     nextParams.delete('create');
 
     if (!selectedTaskListId || !canEditTaskList) {
-      setError('태스크를 생성할 수 있는 리스트가 없습니다.');
+      setError(t('pms.errors.createTaskNoList'));
       setSearchParams(nextParams, { replace: true });
       return;
     }
@@ -493,9 +506,9 @@ export const PMSView = () => {
               <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-app-accent text-app-bg">
                 <Layout size={22} />
               </div>
-              <h1 className="app-text-title-lg text-app-ink">No Spaces Yet</h1>
+              <h1 className="app-text-title-lg text-app-ink">{t('pms.noSpacesTitle')}</h1>
               <p className="app-text-body mt-3 text-app-ink/60">
-                워크스페이스에는 접근할 수 있지만 아직 속한 스페이스가 없습니다. 새 스페이스를 만들고 바로 리스트와 문서를 운영할 수 있습니다.
+                {t('pms.noSpacesDescription')}
               </p>
               <div className="mt-6 flex justify-center">
                 <button
@@ -503,7 +516,7 @@ export const PMSView = () => {
                   onClick={() => setCreateSpaceOpen(true)}
                   type="button"
                 >
-                  Create Space
+                  {t('pms.createSpace')}
                 </button>
               </div>
             </div>
@@ -527,10 +540,10 @@ export const PMSView = () => {
               <Layout size={20} />
             </div>
             <div>
-              <h1 className="app-text-title-lg text-app-ink">PMS Overview</h1>
+              <h1 className="app-text-title-lg text-app-ink">{t('pms.overview')}</h1>
               <div className="app-text-caption flex items-center gap-2 text-gray-500">
                 <Lock size={10} />
-                <span>Spaces, Lists and Docs</span>
+                <span>{t('pms.spacesListsDocs')}</span>
               </div>
             </div>
           </div>
@@ -595,7 +608,7 @@ export const PMSView = () => {
             <button
               type="button"
               className="shrink-0 text-gray-600 hover:text-yellow-500 transition-colors"
-              title="Favorite"
+              title={t('pms.actions.favorite')}
             >
               <Star size={14} />
             </button>
@@ -605,7 +618,7 @@ export const PMSView = () => {
                   type="button"
                   onClick={() => setTaskListSwitcherOpen((open) => !open)}
                   className="flex h-7 w-7 items-center justify-center rounded text-gray-500 transition-colors hover:bg-app-surface-hover hover:text-app-ink"
-                  title="Switch list"
+                  title={t('pms.actions.switchList')}
                 >
                   <ChevronDown size={14} />
                 </button>
@@ -638,7 +651,7 @@ export const PMSView = () => {
               <button
                 onClick={() => { if (token) void exportTaskListCsv(token, selectedTaskListId); }}
                 className="flex h-8 w-8 items-center justify-center rounded text-gray-500 transition-colors hover:bg-app-surface-hover hover:text-app-ink"
-                title="Export CSV"
+                title={t('pms.actions.exportCsv')}
               >
                 <Download size={15} />
               </button>
@@ -647,7 +660,7 @@ export const PMSView = () => {
               <button
                 onClick={() => setSettingsOpen(true)}
                 className="flex h-8 w-8 items-center justify-center rounded text-gray-500 transition-colors hover:bg-app-surface-hover hover:text-app-ink"
-                title="Settings"
+                title={t('pms.actions.settings')}
               >
                 <Settings size={15} />
               </button>
@@ -658,10 +671,10 @@ export const PMSView = () => {
                 <button
                   onClick={() => setIsNewTaskModalOpen(true)}
                   className="app-text-body-sm flex h-9 w-9 items-center justify-center gap-1.5 rounded-md bg-app-accent font-semibold text-app-accent-fg shadow-sm sm:w-auto sm:px-3 lg:h-8"
-                  aria-label="New Task"
+                  aria-label={t('pms.newTask')}
                 >
                   <Plus size={14} />
-                  <span className="hidden sm:inline">New Task</span>
+                  <span className="hidden sm:inline">{t('pms.newTask')}</span>
                 </button>
               </>
             ) : null}
@@ -685,7 +698,7 @@ export const PMSView = () => {
                 {tab === 'Gantt' && <Activity size={14} />}
                 {tab === 'Table' && <Table size={14} />}
                 {tab === 'Whiteboard' && <PencilRuler size={14} />}
-                {tab}
+                {t(PMS_VIEW_TAB_LABEL_KEYS[tab])}
               </div>
               {activeTab === tab && (
                 <motion.div layoutId="activeTab" className="absolute bottom-0 left-0 right-0 h-0.5 bg-app-accent" />
@@ -713,7 +726,7 @@ export const PMSView = () => {
                 {tab === 'List' && <ListIcon size={14} />}
                 {tab === 'Board' && <Grid size={14} />}
                 {tab === 'Calendar' && <Calendar size={14} />}
-                {tab}
+                {t(PMS_VIEW_TAB_LABEL_KEYS[tab])}
               </button>
             ))}
           </div>
@@ -730,7 +743,7 @@ export const PMSView = () => {
               )}
             >
               <MoreHorizontal size={14} />
-              More
+              {t('pms.actions.more')}
             </button>
             {mobileMoreOpen ? (
               <div className="absolute right-0 top-full z-30 mt-1 w-44 rounded-lg border border-app-border bg-app-bg py-1 shadow-xl">
@@ -747,7 +760,7 @@ export const PMSView = () => {
                     {tab === 'Gantt' && <Activity size={14} />}
                     {tab === 'Table' && <Table size={14} />}
                     {tab === 'Whiteboard' && <PencilRuler size={14} />}
-                    {tab}
+                    {t(PMS_VIEW_TAB_LABEL_KEYS[tab])}
                   </button>
                 ))}
               </div>

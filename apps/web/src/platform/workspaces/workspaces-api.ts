@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 
 import { ApiRequestError, apiFetchJson } from '@/src/platform/api/client';
 import type { ApiSchema } from '@/src/platform/api/types';
+import { i18n } from '@/src/platform/i18n';
 
 export type WorkspaceBootstrapWorkspace = ApiSchema<'WorkspaceBootstrapWorkspaceResponse'>;
 
@@ -44,7 +45,7 @@ export async function getWorkspaceBootstrap(
   } catch (caughtError) {
     if (caughtError instanceof ApiRequestError) {
       throw new Error(
-        caughtError.message || `워크스페이스 bootstrap 요청에 실패했습니다. (${caughtError.status})`,
+        caughtError.message || i18n.t('apps:workspace.bootstrapRequestFailed', { status: caughtError.status }),
       );
     }
     throw caughtError;
@@ -85,7 +86,7 @@ export function useWorkspaceBootstrap(
         setError(
           caughtError instanceof Error
             ? caughtError.message
-            : '워크스페이스 bootstrap을 불러오지 못했습니다.',
+            : i18n.t('apps:workspace.bootstrapLoadFailed'),
         );
       })
       .finally(() => {

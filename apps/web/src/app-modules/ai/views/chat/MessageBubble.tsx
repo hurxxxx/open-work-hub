@@ -1,4 +1,5 @@
 import { Bot, User } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
 import { ArtifactCard } from './ArtifactCard';
 import { ThinkingPanel } from './ThinkingPanel';
@@ -34,12 +35,12 @@ export interface MessageBubbleProps {
   onOpenArtifact?: (artifactId: string) => void;
 }
 
-function poolLabel(pool: ChatTurn['chosenPool']): string {
+function poolLabel(pool: ChatTurn['chosenPool'], t: (key: string) => string): string {
   if (pool === 'external') {
-    return 'external 풀';
+    return t('ai.message.externalPool');
   }
   if (pool === 'local') {
-    return 'local 풀';
+    return t('ai.message.localPool');
   }
   return '';
 }
@@ -49,26 +50,27 @@ export function MessageBubble({
   activeArtifactId = null,
   onOpenArtifact,
 }: MessageBubbleProps) {
+  const { t } = useTranslation('apps');
   const isUser = turn.role === 'user';
   const metaParts: string[] = [];
   if (!isUser) {
     if (turn.finishReason === 'length') {
-      metaParts.push('토큰 한도 도달');
+      metaParts.push(t('ai.message.lengthLimit'));
     }
     if (turn.responseStatus === 'error') {
-      metaParts.push('응답 실패');
+      metaParts.push(t('ai.message.responseFailed'));
     }
     if (turn.responseStatus === 'cancelled') {
-      metaParts.push('응답 중단');
+      metaParts.push(t('ai.message.cancelled'));
     }
     if (turn.chosenPool) {
-      metaParts.push(`${poolLabel(turn.chosenPool)} · ${turn.policy ?? 'policy_unknown'}`);
+      metaParts.push(`${poolLabel(turn.chosenPool, t)} · ${turn.policy ?? 'policy_unknown'}`);
     }
     if (turn.decisionReason) {
       metaParts.push(turn.decisionReason);
     }
     if (turn.forcedLocal) {
-      metaParts.push('local 강제');
+      metaParts.push(t('ai.message.forcedLocal'));
     }
     if (turn.piiHits && turn.piiHits.length > 0) {
       metaParts.push(`PII: ${turn.piiHits.join(', ')}`);

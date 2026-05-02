@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Button } from '@aidoo/ui';
 import { Loader2, PencilRuler, Plus, Search } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
 import { cn } from '@/src/lib/utils';
 import { useAuth } from '@/src/platform/auth/auth-provider';
@@ -38,6 +39,7 @@ export function WhiteboardContextSlotPanel({
   className,
   editorClassName,
 }: WhiteboardContextSlotPanelProps) {
+  const { t } = useTranslation('apps');
   const { token } = useAuth();
   const [item, setItem] = useState<WhiteboardDetail | null>(null);
   const [loading, setLoading] = useState(false);
@@ -53,12 +55,12 @@ export function WhiteboardContextSlotPanel({
       const response = await getWhiteboardContextSlot(token, context, workspaceSlug);
       setItem(response.item);
     } catch (err) {
-      setError(err instanceof Error ? err.message : '화이트보드 연결 상태를 불러올 수 없습니다.');
+      setError(err instanceof Error ? err.message : t('whiteboard.loadSlotFailed'));
       setItem(null);
     } finally {
       setLoading(false);
     }
-  }, [context, token, workspaceSlug]);
+  }, [context, t, token, workspaceSlug]);
 
   useEffect(() => {
     void loadSlot();
@@ -76,7 +78,7 @@ export function WhiteboardContextSlotPanel({
       );
       setItem(created);
     } catch (err) {
-      setError(err instanceof Error ? err.message : '화이트보드를 만들 수 없습니다.');
+      setError(err instanceof Error ? err.message : t('whiteboard.createFailed'));
     } finally {
       setBusy(false);
     }
@@ -100,7 +102,7 @@ export function WhiteboardContextSlotPanel({
       await detachWhiteboardContextSlot(token, context, workspaceSlug);
       setItem(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : '화이트보드 연결을 해제할 수 없습니다.');
+      setError(err instanceof Error ? err.message : t('whiteboard.detachFailed'));
     } finally {
       setBusy(false);
     }
@@ -138,21 +140,21 @@ export function WhiteboardContextSlotPanel({
             <PencilRuler size={30} className="mx-auto mb-3 text-app-ink/30" />
             <p className="app-text-title-md text-app-ink">Whiteboard</p>
             <p className="app-text-body-sm mt-2 text-app-ink/55">
-              이 컨텍스트에는 아직 연결된 Whiteboard가 없습니다.
+              {t('whiteboard.connectedEmpty')}
             </p>
             {canEditContext ? (
               <div className="mt-5 flex flex-wrap justify-center gap-2">
                 <Button onClick={() => void handleCreate()} disabled={busy}>
                   {busy ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
-                  새로 만들기
+                  {t('whiteboard.new')}
                 </Button>
                 <Button variant="secondary" onClick={() => setPickerOpen(true)} disabled={busy}>
                   <Search size={14} />
-                  기존에서 선택
+                  {t('whiteboard.chooseExisting')}
                 </Button>
               </div>
             ) : (
-              <p className="app-text-caption mt-4 text-app-ink/45">편집 권한이 있는 사용자가 연결할 수 있습니다.</p>
+              <p className="app-text-caption mt-4 text-app-ink/45">{t('whiteboard.editPermissionHint')}</p>
             )}
           </div>
         </div>

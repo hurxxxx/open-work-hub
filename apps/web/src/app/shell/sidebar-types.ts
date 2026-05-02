@@ -15,6 +15,7 @@ export interface AppSidebarActionContext {
 export interface AppSidebarCreateAction {
   id: string;
   label: string;
+  labelKey?: string;
   icon: LucideIcon;
   run: (context: AppSidebarActionContext) => void;
 }

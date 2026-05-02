@@ -1,6 +1,7 @@
 import { ApiRequestError, apiFetchJson } from '@/src/platform/api/client';
 import type { ApiSchema } from '@/src/platform/api/types';
 import type { AuthUser } from '@/src/platform/auth/auth-api';
+import { i18n } from '@/src/platform/i18n';
 
 export type OrgUnitItem = ApiSchema<'OrgUnitItemResponse'>;
 
@@ -65,13 +66,13 @@ class AdminApiError extends Error {
 function defaultAdminErrorMessage(path: string, status: number, method: string): string {
   if (method === 'DELETE' && path.startsWith('/api/v1/admin/teams/')) {
     return status >= 500
-      ? '팀 스페이스를 휴지통으로 옮기지 못했습니다. 잠시 후 다시 시도해 주세요.'
-      : '팀 스페이스를 휴지통으로 옮기지 못했습니다.';
+      ? i18n.t('apps:admin.errors.teamDeleteRetry')
+      : i18n.t('apps:admin.errors.teamDelete');
   }
 
   return status >= 500
-    ? '요청을 처리하지 못했습니다. 잠시 후 다시 시도해 주세요.'
-    : `요청에 실패했습니다. (${status})`;
+    ? i18n.t('common:feedback.requestFailedRetry')
+    : i18n.t('common:feedback.requestFailed', { status });
 }
 
 function resolveAdminErrorMessage(path: string, status: number, method: string, payload: unknown): string {
@@ -98,7 +99,7 @@ async function request<T>(token: string, path: string, init: RequestInit = {}): 
     }
     throw new AdminApiError(
       0,
-      '관리자 API 서버에 연결하지 못했습니다. 서버 상태를 확인해 주세요.',
+      i18n.t('apps:admin.errors.connection'),
     );
   }
 }

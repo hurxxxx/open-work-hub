@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import {
   Button,
@@ -42,24 +43,28 @@ const VIEW_PRESETS = {
 
 type SavedViewId = keyof typeof VIEW_PRESETS;
 type ScopeFilterId = 'engineering' | 'project-a' | 'quality' | 'supplier-quality';
+type SearchWorkbenchTranslate = (key: string) => string;
 
-const columns: DataTableColumn<SearchDocumentHit>[] = [
-  {
-    accessorKey: 'title',
-    header: 'Document',
-    cell: ({ row }) => (
-      <span className="block">
-        <strong className="block text-[0.94rem]">{row.original.title}</strong>
-        <small className="mt-1 block text-[0.82rem] text-[var(--ui-color-ink-subtle)]">
-          {row.original.summary}
-        </small>
-      </span>
-    ),
-  },
-  { accessorKey: 'updated', header: 'Updated' },
-  { accessorKey: 'source_type', header: 'Type' },
-  { accessorKey: 'acl', header: 'ACL' },
-];
+function buildColumns(t: SearchWorkbenchTranslate): DataTableColumn<SearchDocumentHit>[] {
+  const searchColumns: DataTableColumn<SearchDocumentHit>[] = [
+    {
+      accessorKey: 'title',
+      header: t('docs.searchWorkbench.columns.document'),
+      cell: ({ row }) => (
+        <span className="block">
+          <strong className="block text-[0.94rem]">{row.original.title}</strong>
+          <small className="mt-1 block text-[0.82rem] text-[var(--ui-color-ink-subtle)]">
+            {row.original.summary}
+          </small>
+        </span>
+      ),
+    },
+    { accessorKey: 'updated', header: t('docs.searchWorkbench.columns.updated') },
+    { accessorKey: 'source_type', header: t('docs.searchWorkbench.columns.type') },
+    { accessorKey: 'acl', header: 'ACL' },
+  ];
+  return searchColumns;
+}
 
 function buildFilters(docType: string, scope: ScopeFilterId): SearchDocumentsFilters {
   const filters: SearchDocumentsFilters = {
@@ -89,6 +94,8 @@ export interface SearchWorkbenchProps {
 }
 
 export function SearchWorkbench({ token }: SearchWorkbenchProps) {
+  const { t } = useTranslation('apps');
+  const columns = useMemo(() => buildColumns(t), [t]);
   const [savedView, setSavedView] = useState<SavedViewId>('engineering-specs');
   const [docType, setDocType] = useState('spec');
   const [scope, setScope] = useState<ScopeFilterId>('engineering');
@@ -130,7 +137,7 @@ export function SearchWorkbench({ token }: SearchWorkbenchProps) {
         setSearchError(
           caughtError instanceof Error
             ? caughtError.message
-            : '문서 검색 결과를 불러오지 못했습니다.',
+            : t('docs.searchWorkbench.loadFailed'),
         );
       } finally {
         if (active) {
@@ -144,7 +151,7 @@ export function SearchWorkbench({ token }: SearchWorkbenchProps) {
     return () => {
       active = false;
     };
-  }, [docType, scope, submittedQuery, token]);
+  }, [docType, scope, submittedQuery, token, t]);
 
   useEffect(() => {
     if (!searchState?.hits.some((hit) => hit.document_id === selectedRow?.document_id)) {
@@ -176,13 +183,13 @@ export function SearchWorkbench({ token }: SearchWorkbenchProps) {
           <div className="flex flex-col gap-2 border-b border-[var(--ui-color-border)] pb-2.5 lg:flex-row lg:items-center lg:justify-between">
             <div className="flex flex-wrap items-center gap-2.5">
               <p className="m-0 text-[0.68rem] font-semibold uppercase tracking-[0.08em] text-[var(--ui-color-ink-subtle)]">
-                Search
+                {t('common:actions.search')}
               </p>
               <h2 className="m-0 text-[0.92rem] font-semibold text-[var(--ui-color-ink)]">
-                아이두 통합검색
+                {t('docs.searchWorkbench.title')}
               </h2>
               <span className="text-[0.76rem] text-[var(--ui-color-ink-subtle)]">
-                citation-required
+                {t('docs.searchWorkbench.citationRequired')}
               </span>
             </div>
             <div className="flex flex-wrap gap-2">
@@ -190,7 +197,7 @@ export function SearchWorkbench({ token }: SearchWorkbenchProps) {
                 variant="secondary"
                 onClick={() => applySavedView('engineering-specs')}
               >
-                기본 뷰
+                {t('docs.searchWorkbench.defaultView')}
               </Button>
               <Button
                 variant="secondary"
@@ -199,10 +206,10 @@ export function SearchWorkbench({ token }: SearchWorkbenchProps) {
                   setScope('engineering');
                   setQueryInput(DEFAULT_QUERY);
                   setSubmittedQuery(DEFAULT_QUERY);
-                  toast.info('Filters reset', '문서 검색 필터를 기본 상태로 되돌렸습니다.');
+                  toast.info(t('docs.searchWorkbench.filtersResetTitle'), t('docs.searchWorkbench.filtersResetDescription'));
                 }}
               >
-                필터 초기화
+                {t('docs.searchWorkbench.resetFilters')}
               </Button>
             </div>
           </div>
@@ -217,7 +224,7 @@ export function SearchWorkbench({ token }: SearchWorkbenchProps) {
                 }}
               >
                 <SearchField
-                  aria-label="Global search"
+                  aria-label={t('docs.searchWorkbench.globalSearch')}
                   className="flex-1"
                   onChange={(event) => setQueryInput(event.target.value)}
                   shortcut="⌘K"
@@ -230,25 +237,25 @@ export function SearchWorkbench({ token }: SearchWorkbenchProps) {
                     type="submit"
                     variant="primary"
                   >
-                    검색
+                    {t('common:actions.search')}
                   </Button>
                   <FilterBar
                     options={[
                       {
                         id: 'engineering-specs',
-                        label: 'Engineering specs',
+                        label: t('docs.searchWorkbench.views.engineeringSpecs'),
                         active: savedView === 'engineering-specs',
                         onSelect: () => applySavedView('engineering-specs'),
                       },
                       {
                         id: 'revision-notices',
-                        label: 'Revision notices',
+                        label: t('docs.searchWorkbench.views.revisionNotices'),
                         active: savedView === 'revision-notices',
                         onSelect: () => applySavedView('revision-notices'),
                       },
                       {
                         id: 'quality-guides',
-                        label: 'Quality guides',
+                        label: t('docs.searchWorkbench.views.qualityGuides'),
                         active: savedView === 'quality-guides',
                         onSelect: () => applySavedView('quality-guides'),
                       },
@@ -261,13 +268,13 @@ export function SearchWorkbench({ token }: SearchWorkbenchProps) {
             <div className="grid gap-2 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
               <div className="grid gap-1.5">
                 <span className="text-[0.68rem] font-semibold uppercase tracking-[0.08em] text-[var(--ui-color-ink-subtle)]">
-                  Type
+                  {t('docs.searchWorkbench.type')}
                 </span>
                 <FilterBar
                   options={[
                     {
                       id: 'spec',
-                      label: 'Spec',
+                      label: t('docs.searchWorkbench.docType.spec'),
                       active: docType === 'spec',
                       onSelect: () => {
                         setDocType('spec');
@@ -276,7 +283,7 @@ export function SearchWorkbench({ token }: SearchWorkbenchProps) {
                     },
                     {
                       id: 'revision-note',
-                      label: 'Revision note',
+                      label: t('docs.searchWorkbench.docType.revisionNote'),
                       active: docType === 'revision-note',
                       onSelect: () => {
                         setDocType('revision-note');
@@ -285,7 +292,7 @@ export function SearchWorkbench({ token }: SearchWorkbenchProps) {
                     },
                     {
                       id: 'memo',
-                      label: 'Memo',
+                      label: t('docs.searchWorkbench.docType.memo'),
                       active: docType === 'memo',
                       onSelect: () => {
                         setDocType('memo');
@@ -294,7 +301,7 @@ export function SearchWorkbench({ token }: SearchWorkbenchProps) {
                     },
                     {
                       id: 'guide',
-                      label: 'Guide',
+                      label: t('docs.searchWorkbench.docType.guide'),
                       active: docType === 'guide',
                       onSelect: () => {
                         setDocType('guide');
@@ -307,13 +314,13 @@ export function SearchWorkbench({ token }: SearchWorkbenchProps) {
 
               <div className="grid gap-1.5">
                 <span className="text-[0.68rem] font-semibold uppercase tracking-[0.08em] text-[var(--ui-color-ink-subtle)]">
-                  Scope
+                  {t('docs.searchWorkbench.scope')}
                 </span>
                 <FilterBar
                   options={[
                     {
                       id: 'engineering',
-                      label: 'Engineering',
+                      label: t('docs.searchWorkbench.scopeOption.engineering'),
                       active: scope === 'engineering',
                       onSelect: () => {
                         setScope('engineering');
@@ -322,7 +329,7 @@ export function SearchWorkbench({ token }: SearchWorkbenchProps) {
                     },
                     {
                       id: 'project-a',
-                      label: 'Project A',
+                      label: t('docs.searchWorkbench.scopeOption.projectA'),
                       active: scope === 'project-a',
                       onSelect: () => {
                         setScope('project-a');
@@ -331,7 +338,7 @@ export function SearchWorkbench({ token }: SearchWorkbenchProps) {
                     },
                     {
                       id: 'quality',
-                      label: 'Quality',
+                      label: t('docs.searchWorkbench.scopeOption.quality'),
                       active: scope === 'quality',
                       onSelect: () => {
                         setScope('quality');
@@ -340,7 +347,7 @@ export function SearchWorkbench({ token }: SearchWorkbenchProps) {
                     },
                     {
                       id: 'supplier-quality',
-                      label: 'Supplier quality',
+                      label: t('docs.searchWorkbench.scopeOption.supplierQuality'),
                       active: scope === 'supplier-quality',
                       onSelect: () => {
                         setScope('supplier-quality');
@@ -361,17 +368,17 @@ export function SearchWorkbench({ token }: SearchWorkbenchProps) {
         ) : null}
 
         {nextActions.length ? (
-          <InlineNotice title="next actions">{nextActions.join(' · ')}</InlineNotice>
+          <InlineNotice title={t('docs.searchWorkbench.nextActions')}>{nextActions.join(' · ')}</InlineNotice>
         ) : null}
 
         <section className="rounded-[var(--ui-radius-md)] border border-[var(--ui-color-border)] bg-[var(--ui-color-surface)]">
           <div className="border-b border-[var(--ui-color-border)] px-3.5 py-2.5">
             <DataTableToolbar
-              title="Top results"
+              title={t('docs.searchWorkbench.topResults')}
               meta={
                 searchState
-                  ? `${hits.length} selected sources · ${searchState.query_profile}`
-                  : '검색 컨텍스트를 준비 중입니다.'
+                  ? t('docs.searchWorkbench.resultsMeta', { count: hits.length, profile: searchState.query_profile })
+                  : t('docs.searchWorkbench.preparingContext')
               }
             />
           </div>
@@ -379,10 +386,10 @@ export function SearchWorkbench({ token }: SearchWorkbenchProps) {
             columns={columns}
             emptyState={
               <EmptyState
-                title="검색 결과가 없습니다."
-                description="질의를 구체화하거나 문서 유형과 부서 필터를 조정해보세요."
+                title={t('docs.searchWorkbench.noResultsTitle')}
+                description={t('docs.searchWorkbench.noResultsDescription')}
                 action={{
-                  label: '기본 검색으로 되돌리기',
+                  label: t('docs.searchWorkbench.returnDefaultSearch'),
                   onClick: () => applySavedView('engineering-specs'),
                 }}
               />
@@ -399,12 +406,12 @@ export function SearchWorkbench({ token }: SearchWorkbenchProps) {
             }}
           />
           <div className="flex flex-wrap items-center justify-between gap-2 border-t border-[var(--ui-color-border)] px-3.5 py-2 text-[0.76rem] text-[var(--ui-color-ink-subtle)]">
-            <span>Query profile: {searchState?.query_profile ?? 'loading'}</span>
+            <span>{t('docs.searchWorkbench.queryProfile', { profile: searchState?.query_profile ?? t('common:feedback.loading') })}</span>
             <span>
-              Filters: {searchState?.filters_applied.doc_type.join(', ') || 'all'} /{' '}
+              {t('docs.searchWorkbench.filters', { filters: searchState?.filters_applied.doc_type.join(', ') || t('docs.searchWorkbench.all') })} /{' '}
               {searchState?.filters_applied.department.join(', ') ||
                 searchState?.filters_applied.project.join(', ') ||
-                'global'}
+                t('docs.searchWorkbench.global')}
             </span>
           </div>
         </section>
@@ -413,8 +420,8 @@ export function SearchWorkbench({ token }: SearchWorkbenchProps) {
       <DetailDrawer
         open={drawerOpen}
         onOpenChange={setDrawerOpen}
-        title={selectedRow?.title ?? 'Selected document'}
-        description="선택 문서의 citation, 권한 범위, 다음 액션을 확인합니다."
+        title={selectedRow?.title ?? t('docs.searchWorkbench.selectedDocument')}
+        description={t('docs.searchWorkbench.drawerDescription')}
         actions={
           <>
             <Button
@@ -423,30 +430,30 @@ export function SearchWorkbench({ token }: SearchWorkbenchProps) {
               size="comfortable"
               onClick={() =>
                 toast.success(
-                  'Citation added',
-                  '선택 근거를 초안 작성 큐에 추가했습니다.',
+                  t('docs.searchWorkbench.citationAddedTitle'),
+                  t('docs.searchWorkbench.citationAddedDescription'),
                 )
               }
             >
-              초안에 근거 추가
+              {t('docs.searchWorkbench.addEvidenceToDraft')}
             </Button>
             <Button
               fullWidth
               variant="secondary"
               size="comfortable"
               onClick={() =>
-                toast.info('Open source', '원문 보기 연결은 문서 상세 라우트와 함께 붙습니다.')
+                toast.info(t('docs.searchWorkbench.openSourceTitle'), t('docs.searchWorkbench.openSourceDescription'))
               }
             >
-              원문 열기
+              {t('docs.searchWorkbench.openSource')}
             </Button>
           </>
         }
       >
         {selectedRow ? (
           <div className="documents-detail">
-            <InlineNotice title="citation required">
-              문서 답변은 citation 없는 자유 생성 응답으로 처리하지 않습니다.
+            <InlineNotice title={t('docs.searchWorkbench.citationRequired')}>
+              {t('docs.searchWorkbench.citationNotice')}
             </InlineNotice>
 
             <div className="rounded-[var(--ui-radius-md)] border border-[var(--ui-color-border)] bg-[var(--ui-color-surface)] p-4">
@@ -454,14 +461,14 @@ export function SearchWorkbench({ token }: SearchWorkbenchProps) {
                 {selectedRow.title} · {selectedRow.page_reference}
               </div>
               <strong className="block text-base text-[var(--ui-color-ink)]">
-                Selected evidence
+                {t('docs.searchWorkbench.selectedEvidence')}
               </strong>
               <p className="documents-detail__quote">{selectedRow.citation}</p>
             </div>
 
             <ul className="documents-summary-list">
               <li>
-                <strong>Owner</strong>
+                <strong>{t('docs.searchWorkbench.owner')}</strong>
                 <span>{selectedRow.owner}</span>
               </li>
               <li>
@@ -469,11 +476,11 @@ export function SearchWorkbench({ token }: SearchWorkbenchProps) {
                 <span>{selectedRow.acl} / {selectedRow.department}</span>
               </li>
               <li>
-                <strong>Project</strong>
+                <strong>{t('docs.searchWorkbench.project')}</strong>
                 <span>{selectedRow.project}</span>
               </li>
               <li>
-                <strong>Next actions</strong>
+                <strong>{t('docs.searchWorkbench.nextActions')}</strong>
                 <span>{selectedRow.next_actions.join(' · ')}</span>
               </li>
             </ul>

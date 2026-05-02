@@ -19,6 +19,7 @@ function buildUser(overrides: Partial<AuthUser> = {}): AuthUser {
     display_name: 'AIDOO Member',
     status: 'active',
     theme_preference: 'system',
+    locale: 'ko-KR',
     time_zone: 'Asia/Seoul',
     primary_org_unit: null,
     workspaces: [

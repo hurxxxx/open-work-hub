@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { Check } from 'lucide-react';
 import { DetailDrawer } from '@aidoo/ui';
 
@@ -44,6 +45,7 @@ import {
   WorkspaceBootstrapProvider,
 } from '@/src/platform/workspaces/workspace-bootstrap-context';
 import { resolveShellState, type ShellAppId } from '@/src/app-shell';
+import { syncLocale } from '@/src/platform/i18n';
 import { cn } from '@/src/lib/utils';
 import {
   AdminLandingRedirect,
@@ -115,6 +117,7 @@ function MobileNavigationDrawer({
   workspaceApps: WorkspaceBootstrapApp[];
 }) {
   const navigate = useNavigate();
+  const { t, i18n } = useTranslation(['common', 'shell']);
   const close = () => onOpenChange(false);
   const appBarItemById = useMemo(
     () => new Map(APP_BAR_ITEMS.map((item) => [item.id, item])),
@@ -129,7 +132,7 @@ function MobileNavigationDrawer({
       }
       return {
         id: item.app_id as WorkspaceAppId,
-        title: item.title,
+        title: t(`shell:apps.${item.app_id}`, { defaultValue: item.title }),
         icon: localItem.icon,
       };
     })
@@ -137,7 +140,7 @@ function MobileNavigationDrawer({
   const currentWorkspace = currentUser.workspaces.find((workspace) => workspace.slug === shellWorkspaceSlug) ?? null;
   const otherWorkspaces = currentUser.workspaces
     .filter((workspace) => workspace.slug !== currentWorkspace?.slug)
-    .sort((left, right) => left.name.localeCompare(right.name, 'ko'));
+    .sort((left, right) => left.name.localeCompare(right.name, i18n.language));
   const settingsItem = appBarItemById.get('settings');
   const canShowSettings = (
     hasAdminConsoleAccess(currentUser)
@@ -155,13 +158,13 @@ function MobileNavigationDrawer({
 
   return (
     <DetailDrawer
-      closeLabel="앱 전환 닫기"
+      closeLabel={t('shell:mobileNavigation.close')}
       contentClassName="border-app-border bg-app-bg"
-      description="앱과 워크스페이스를 전환합니다."
+      description={t('shell:mobileNavigation.description')}
       onOpenChange={onOpenChange}
       open={open}
       side="left"
-      title="앱 전환"
+      title={t('shell:mobileNavigation.title')}
     >
       <div
         onClickCapture={(event) => {
@@ -171,7 +174,7 @@ function MobileNavigationDrawer({
         }}
       >
         <section className="border-b border-app-border px-3 py-4">
-          <div className="app-text-overline px-2 text-app-ink/50">Workspace</div>
+          <div className="app-text-overline px-2 text-app-ink/50">{t('common:labels.workspace')}</div>
           <div className="mt-2 space-y-1">
             {currentWorkspace ? (
               <button
@@ -218,7 +221,7 @@ function MobileNavigationDrawer({
         </section>
 
         <section className="border-b border-app-border px-3 py-4">
-          <div className="app-text-overline px-2 text-app-ink/50">Apps</div>
+          <div className="app-text-overline px-2 text-app-ink/50">{t('common:labels.apps')}</div>
           <div className="mt-2 space-y-1">
             {visibleItems.map((item) => (
               <Link
@@ -247,7 +250,7 @@ function MobileNavigationDrawer({
               >
                 <settingsItem.icon size={18} className="shrink-0" />
                 <span className="app-text-body-sm min-w-0 flex-1 truncate">
-                  Settings
+                  {t('shell:apps.settings')}
                 </span>
                 {activeAppId === 'settings' ? <Check size={15} className="shrink-0" /> : null}
               </Link>
@@ -278,21 +281,24 @@ function MobileAppMenuDrawer({
   workspaceNavItems: WorkspaceBootstrapNavItem[];
 }) {
   const close = () => onOpenChange(false);
+  const { t } = useTranslation('shell');
   const activeAppTitle = activeAppId === 'settings'
-    ? 'Settings'
+    ? t('apps.settings')
     : workspaceApps.find((item) => item.app_id === activeAppId)?.title
-      ?? APP_BAR_ITEMS.find((item) => item.id === activeAppId)?.title
+      ?? t(`apps.${activeAppId}`, {
+        defaultValue: APP_BAR_ITEMS.find((item) => item.id === activeAppId)?.title ?? activeAppId,
+      })
       ?? 'Menu';
 
   return (
     <DetailDrawer
-      closeLabel={`${activeAppTitle} 메뉴 닫기`}
+      closeLabel={t('mobileAppMenu.close', { title: activeAppTitle })}
       contentClassName="border-app-border bg-app-bg"
-      description="현재 앱 안에서 이동합니다."
+      description={t('mobileAppMenu.description')}
       onOpenChange={onOpenChange}
       open={open}
       side="left"
-      title={`${activeAppTitle} 메뉴`}
+      title={t('mobileAppMenu.title', { title: activeAppTitle })}
     >
       <div className="h-[min(680px,78vh)] border-t border-app-border">
         <AppSubSidebar
@@ -341,6 +347,10 @@ function AuthenticatedShell() {
       : null,
     [workspaceBootstrap.data],
   );
+
+  useEffect(() => {
+    syncLocale(currentUser?.locale);
+  }, [currentUser?.locale]);
 
   useEffect(() => {
     const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');

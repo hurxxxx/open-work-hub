@@ -10,7 +10,8 @@ export const meetingSidebarConfig: AppSidebarConfig = {
   createActions: ({ currentPathname, currentWorkspaceSlug, navigate, user }) => [
     {
       id: 'meeting-create',
-      label: 'Meeting',
+      label: 'meeting-create',
+      labelKey: 'sidebarActions.meeting-create',
       icon: Users,
       run: () => {
         if (currentPathname.includes('/meeting')) {

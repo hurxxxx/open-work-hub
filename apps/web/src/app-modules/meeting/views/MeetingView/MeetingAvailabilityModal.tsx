@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Dialog } from '@aidoo/ui';
 import { ChevronLeft, ChevronRight, Loader2 } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
 import type {
   MeetingAvailabilityBlock,
@@ -76,6 +77,7 @@ export function MeetingAvailabilityModal({
   meetingEnd,
   timeZone,
 }: MeetingAvailabilityModalProps) {
+  const { t, i18n } = useTranslation('apps');
   const attendeeIds = useMemo(
     () => attendeeUsers.map((user) => user.id),
     [attendeeUsers],
@@ -114,11 +116,11 @@ export function MeetingAvailabilityModal({
       allDay: false,
       sourceType: 'meeting',
       masked: false,
-      title: '현재 회의',
+      title: t('meeting.availabilityCurrentMeeting'),
       location: null,
     };
     return getBlockPositionPct(highlightBlock, weekStart, weekEnd);
-  }, [meetingEnd, meetingStart, weekEnd, weekStart]);
+  }, [meetingEnd, meetingStart, t, weekEnd, weekStart]);
 
   return (
     <Dialog
@@ -126,8 +128,8 @@ export function MeetingAvailabilityModal({
       onOpenChange={(open) => {
         if (!open) onClose();
       }}
-      title="참석자 스케줄"
-      description="선택된 참석자들의 주간 일정과 현재 회의 시간대를 비교합니다."
+      title={t('meeting.availabilityModalTitle')}
+      description={t('meeting.availabilityModalDescription')}
       fullSize
       dismissOnInteractOutside={false}
     >
@@ -135,10 +137,12 @@ export function MeetingAvailabilityModal({
         <div className="flex items-center justify-between gap-3">
           <div>
             <p className="app-text-control text-app-ink">
-              {weekStart ? formatAvailabilityWeekLabel(weekStart, timeZone) : '일정 범위를 선택하세요.'}
+              {weekStart
+                ? formatAvailabilityWeekLabel(weekStart, timeZone, i18n.language)
+                : t('meeting.availabilitySelectRange')}
             </p>
             <p className="app-text-caption text-app-ink/50">
-              private 일정과 미팅은 Busy로만 표시됩니다.
+              {t('meeting.availabilityPrivateBusy')}
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -147,7 +151,7 @@ export function MeetingAvailabilityModal({
               onClick={() => weekStart && setWeekStart(addLocalDays(weekStart, -7))}
               disabled={!weekStart}
               className="flex h-8 w-8 items-center justify-center rounded-md border border-app-border text-app-ink transition-colors hover:bg-app-surface-hover disabled:cursor-not-allowed disabled:opacity-40"
-              aria-label="Previous availability week"
+              aria-label={t('meeting.availabilityPreviousWeek')}
             >
               <ChevronLeft size={16} />
             </button>
@@ -156,7 +160,7 @@ export function MeetingAvailabilityModal({
               onClick={() => weekStart && setWeekStart(addLocalDays(weekStart, 7))}
               disabled={!weekStart}
               className="flex h-8 w-8 items-center justify-center rounded-md border border-app-border text-app-ink transition-colors hover:bg-app-surface-hover disabled:cursor-not-allowed disabled:opacity-40"
-              aria-label="Next availability week"
+              aria-label={t('meeting.availabilityNextWeek')}
             >
               <ChevronRight size={16} />
             </button>
@@ -165,7 +169,7 @@ export function MeetingAvailabilityModal({
 
         {attendeeUsers.length === 0 ? (
           <div className="rounded-md border border-app-border bg-app-surface px-4 py-6 text-center text-app-ink/50">
-            참석자를 추가하면 스케줄 비교를 볼 수 있습니다.
+            {t('meeting.availabilityNoAttendees')}
           </div>
         ) : error ? (
           <div className="rounded-md border border-[var(--ui-color-warning)]/40 bg-[var(--ui-color-warning)]/10 px-4 py-3 text-[var(--ui-color-warning)]">
@@ -182,7 +186,9 @@ export function MeetingAvailabilityModal({
                 className="shrink-0 border-r border-app-border px-4 py-3"
                 style={{ width: AVAILABILITY_NAME_COLUMN_PX }}
               >
-                <div className="app-text-overline text-app-ink/50">Attendee</div>
+                <div className="app-text-overline text-app-ink/50">
+                  {t('meeting.availabilityAttendee')}
+                </div>
               </div>
               <div className="flex min-w-0 flex-1 flex-col">
                 <div className="flex border-b border-app-border/70">
@@ -195,7 +201,7 @@ export function MeetingAvailabilityModal({
                             className="min-w-0 flex-1 border-r border-app-border/60 px-3 py-2 last:border-r-0"
                           >
                             <div className="app-text-control-sm truncate text-app-ink">
-                              {formatAvailabilityDayLabel(date, timeZone)}
+                              {formatAvailabilityDayLabel(date, timeZone, i18n.language)}
                             </div>
                           </div>
                         );
@@ -261,7 +267,7 @@ export function MeetingAvailabilityModal({
                               left: `${meetingHighlight.leftPct}%`,
                               width: `${meetingHighlight.widthPct}%`,
                             }}
-                            title="현재 회의 시간"
+                            title={t('meeting.availabilityCurrentMeetingTime')}
                           />
                         ) : null}
                         {blocks.map((block) => {
@@ -279,10 +285,15 @@ export function MeetingAvailabilityModal({
                                 backgroundColor: getBlockColor(block),
                                 borderColor: getBlockBorder(block),
                               }}
-                              title={formatAvailabilityBlockLabel(block, timeZone)}
+                              title={formatAvailabilityBlockLabel(
+                                block,
+                                timeZone,
+                                i18n.language,
+                                { busy: t('meeting.busy'), schedule: t('meeting.schedule') },
+                              )}
                             >
                               <div className="truncate text-[12px] font-medium text-app-ink">
-                                {block.masked ? 'Busy' : (block.title ?? '일정')}
+                                {block.masked ? t('meeting.busy') : (block.title ?? t('meeting.schedule'))}
                               </div>
                               {block.location && !block.masked ? (
                                 <div className="truncate text-[11px] text-app-ink/55">

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   Bell,
   LogOut,
@@ -20,8 +21,9 @@ import {
   formatDateTime,
   normalizeTimeZone,
 } from '@/src/platform/time/time-utils';
+import { LOCALE_OPTIONS, normalizeLocale, syncLocale } from '@/src/platform/i18n';
 
-import type { AuthSessionItem, ThemePreference } from './auth-api';
+import type { AuthSessionItem, LocalePreference, ThemePreference } from './auth-api';
 import { useAuth } from './auth-provider';
 
 function getErrorMessage(error: unknown, fallback: string): string {
@@ -36,10 +38,10 @@ function getErrorMessage(error: unknown, fallback: string): string {
   return fallback;
 }
 
-const themeOptions: { value: ThemePreference; label: string; icon: typeof Sun }[] = [
-  { value: 'system', label: '시스템', icon: Monitor },
-  { value: 'light', label: '라이트', icon: Sun },
-  { value: 'dark', label: '다크', icon: Moon },
+const themeOptions: { value: ThemePreference; labelKey: string; icon: typeof Sun }[] = [
+  { value: 'system', labelKey: 'theme.system', icon: Monitor },
+  { value: 'light', labelKey: 'theme.light', icon: Sun },
+  { value: 'dark', labelKey: 'theme.dark', icon: Moon },
 ];
 
 const fieldClassName =
@@ -50,19 +52,20 @@ type SettingsSection = 'profile' | 'appearance' | 'security' | 'notifications';
 /* ── Access Denied ── */
 
 export function AccessDeniedView({
-  title = '접근 권한 없음',
-  description = '현재 계정에는 이 화면을 볼 권한이 없습니다.',
+  title,
+  description,
 }: {
   title?: string;
   description?: string;
 }) {
+  const { t } = useTranslation('auth');
   return (
     <div className="p-6">
       <div className="rounded-xl border border-app-border bg-app-surface-sidebar p-6">
-        <h2 className="app-text-title-md mb-2 text-app-ink">{title}</h2>
-        <p className="app-text-body mb-4 text-gray-500">{description}</p>
+        <h2 className="app-text-title-md mb-2 text-app-ink">{title ?? t('accessDenied.title')}</h2>
+        <p className="app-text-body mb-4 text-gray-500">{description ?? t('accessDenied.description')}</p>
         <InlineNotice tone="warning">
-          관리자에게 필요한 권한과 워크스페이스 바인딩을 요청하세요.
+          {t('accessDenied.requestAccess')}
         </InlineNotice>
       </div>
     </div>
@@ -72,19 +75,20 @@ export function AccessDeniedView({
 /* ── Not Found ── */
 
 export function NotFoundView({
-  title = '페이지를 찾을 수 없습니다',
-  description = '요청한 주소는 존재하지 않거나 이동되었습니다.',
+  title,
+  description,
 }: {
   title?: string;
   description?: string;
 }) {
+  const { t } = useTranslation('auth');
   return (
     <div className="p-6">
       <div className="rounded-xl border border-app-border bg-app-surface-sidebar p-6">
-        <h2 className="app-text-title-md mb-2 text-app-ink">{title}</h2>
-        <p className="app-text-body mb-4 text-gray-500">{description}</p>
+        <h2 className="app-text-title-md mb-2 text-app-ink">{title ?? t('notFound.title')}</h2>
+        <p className="app-text-body mb-4 text-gray-500">{description ?? t('notFound.description')}</p>
         <InlineNotice tone="info">
-          상단 앱바 또는 홈에서 다시 이동하세요.
+          {t('notFound.hint')}
         </InlineNotice>
       </div>
     </div>
@@ -96,46 +100,52 @@ export function NotFoundView({
 function SessionCard({
   session,
   timeZone,
+  locale,
   onRevoke,
 }: {
   session: AuthSessionItem;
   timeZone: string;
+  locale: string;
   onRevoke: (sessionId: string) => Promise<void>;
 }) {
+  const { t } = useTranslation('auth');
   return (
     <div className="flex items-start justify-between gap-4 rounded-md border border-app-border bg-app-bg px-4 py-3">
       <div className="app-text-body grid gap-1">
         <span className="font-medium text-app-ink">
-          {session.is_current ? '현재 세션' : '저장된 세션'}
+          {session.is_current ? t('settings.sessionCurrent') : t('settings.sessionStored')}
         </span>
         <span className="app-text-caption text-gray-500">
-          생성: {formatDateTime(session.created_at, {
+          {t('settings.sessionCreated')}: {formatDateTime(session.created_at, {
             dateStyle: 'medium',
-            fallback: '없음',
+            fallback: t('common:empty.none'),
+            locale,
             timeStyle: 'short',
             timeZone,
           })}
         </span>
         <span className="app-text-caption text-gray-500">
-          만료: {formatDateTime(session.expires_at, {
+          {t('settings.sessionExpires')}: {formatDateTime(session.expires_at, {
             dateStyle: 'medium',
-            fallback: '없음',
+            fallback: t('common:empty.none'),
+            locale,
             timeStyle: 'short',
             timeZone,
           })}
         </span>
         <span className="app-text-caption text-gray-500">
-          최근 사용: {formatDateTime(session.last_seen_at, {
+          {t('settings.sessionLastSeen')}: {formatDateTime(session.last_seen_at, {
             dateStyle: 'medium',
-            fallback: '없음',
+            fallback: t('common:empty.none'),
+            locale,
             timeStyle: 'short',
             timeZone,
           })}
         </span>
         <span className="app-text-caption max-w-[360px] truncate text-gray-500">
-          {session.user_agent ?? '알 수 없음'}
+          {session.user_agent ?? t('common:feedback.unknown')}
         </span>
-        <span className="app-text-caption text-gray-500">IP: {session.ip_address ?? '알 수 없음'}</span>
+        <span className="app-text-caption text-gray-500">IP: {session.ip_address ?? t('common:feedback.unknown')}</span>
       </div>
       {!session.is_current && !session.revoked_at ? (
         <Button
@@ -143,7 +153,7 @@ function SessionCard({
           size="dense"
           variant="secondary"
         >
-          종료
+          {t('settings.sessionRevoke')}
         </Button>
       ) : null}
     </div>
@@ -186,6 +196,7 @@ function SectionHeader({ title, description }: { title: string; description?: st
 /* ── Main ── */
 
 export function ProfilePage({ initialTab }: { initialTab: SettingsSection }) {
+  const { t, i18n } = useTranslation(['auth', 'common']);
   const auth = useAuth();
   const user = auth.user;
 
@@ -197,6 +208,7 @@ export function ProfilePage({ initialTab }: { initialTab: SettingsSection }) {
     user?.theme_preference ?? 'system',
   );
   const [timeZone, setTimeZone] = useState(user?.time_zone ?? DEFAULT_TIME_ZONE);
+  const [locale, setLocale] = useState<LocalePreference>(normalizeLocale(user?.locale));
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -215,6 +227,7 @@ export function ProfilePage({ initialTab }: { initialTab: SettingsSection }) {
     setJobTitle(user.job_title ?? '');
     setThemePreference(user.theme_preference);
     setTimeZone(normalizeTimeZone(user.time_zone));
+    setLocale(normalizeLocale(user.locale));
   }, [user]);
 
   useEffect(() => {
@@ -227,7 +240,7 @@ export function ProfilePage({ initialTab }: { initialTab: SettingsSection }) {
         const items = await listSessions();
         if (!cancelled) setSessions(items);
       } catch (caughtError) {
-        if (!cancelled) setError(getErrorMessage(caughtError, '세션 목록을 불러오지 못했습니다.'));
+        if (!cancelled) setError(getErrorMessage(caughtError, t('auth:settings.sessionsLoadFailed')));
       } finally {
         if (!cancelled) setLoadingSessions(false);
       }
@@ -235,7 +248,7 @@ export function ProfilePage({ initialTab }: { initialTab: SettingsSection }) {
 
     void loadSessions();
     return () => { cancelled = true; };
-  }, [activeSection, listSessions]);
+  }, [activeSection, listSessions, t]);
 
   if (!user) return null;
 
@@ -250,11 +263,12 @@ export function ProfilePage({ initialTab }: { initialTab: SettingsSection }) {
         full_name: fullName.trim(),
         job_title: jobTitle.trim(),
         theme_preference: themePreference,
+        locale,
         time_zone: timeZone,
       });
-      setMessage('변경사항을 저장했습니다.');
+      setMessage(t('auth:settings.saved'));
     } catch (caughtError) {
-      setError(getErrorMessage(caughtError, '저장하지 못했습니다.'));
+      setError(getErrorMessage(caughtError, t('auth:settings.saveFailed')));
     } finally {
       setSubmitting(false);
     }
@@ -268,9 +282,9 @@ export function ProfilePage({ initialTab }: { initialTab: SettingsSection }) {
       await auth.changePassword({ current_password: currentPassword, new_password: newPassword });
       setCurrentPassword('');
       setNewPassword('');
-      setMessage('비밀번호를 변경했습니다.');
+      setMessage(t('auth:settings.passwordChanged'));
     } catch (caughtError) {
-      setError(getErrorMessage(caughtError, '비밀번호를 변경하지 못했습니다.'));
+      setError(getErrorMessage(caughtError, t('auth:settings.passwordChangeFailed')));
     }
   }
 
@@ -281,9 +295,9 @@ export function ProfilePage({ initialTab }: { initialTab: SettingsSection }) {
       await auth.revokeSession(sessionId);
       const items = await auth.listSessions();
       setSessions(items);
-      setMessage('세션을 종료했습니다.');
+      setMessage(t('auth:settings.sessionRevoked'));
     } catch (caughtError) {
-      setError(getErrorMessage(caughtError, '세션을 종료하지 못했습니다.'));
+      setError(getErrorMessage(caughtError, t('auth:settings.sessionRevokeFailed')));
     }
   }
 
@@ -298,10 +312,10 @@ export function ProfilePage({ initialTab }: { initialTab: SettingsSection }) {
   }
 
   const navItems = [
-    { id: 'profile' as const, label: 'Profile', icon: User },
-    { id: 'appearance' as const, label: 'Appearance', icon: Palette },
-    { id: 'security' as const, label: 'Security', icon: Shield },
-    { id: 'notifications' as const, label: 'Notifications', icon: Bell },
+    { id: 'profile' as const, label: t('auth:settings.profile'), icon: User },
+    { id: 'appearance' as const, label: t('auth:settings.appearance'), icon: Palette },
+    { id: 'security' as const, label: t('auth:settings.security'), icon: Shield },
+    { id: 'notifications' as const, label: t('auth:settings.notifications'), icon: Bell },
   ];
 
   return (
@@ -309,14 +323,14 @@ export function ProfilePage({ initialTab }: { initialTab: SettingsSection }) {
       <div className="mx-auto max-w-5xl px-8 py-8">
         {/* Header */}
         <div className="flex items-center justify-between mb-8">
-          <h1 className="app-text-title-lg text-app-ink">My Settings</h1>
+          <h1 className="app-text-title-lg text-app-ink">{t('auth:settings.mySettings')}</h1>
           <button
             className="app-text-control flex items-center gap-2 rounded-md px-3 py-1.5 text-red-500 transition-colors hover:bg-red-500/10"
             onClick={() => { void auth.logout(); }}
             type="button"
           >
             <LogOut size={15} />
-            Sign Out
+            {t('common:actions.signOut')}
           </button>
         </div>
 
@@ -351,11 +365,11 @@ export function ProfilePage({ initialTab }: { initialTab: SettingsSection }) {
             {/* ── Profile ── */}
             {activeSection === 'profile' && (
               <div>
-                <SectionHeader title="Profile" description="Manage your personal information." />
+                <SectionHeader title={t('auth:settings.profile')} description={t('auth:settings.manageProfile')} />
 
                 <form onSubmit={(event) => void handleProfileSubmit(event)}>
                   <div className="border-t border-app-border">
-                    <FieldRow label="Avatar">
+                    <FieldRow label={t('auth:settings.avatar')}>
                       <div className="flex items-center gap-4">
                         <div className="app-text-title-md flex h-12 w-12 items-center justify-center rounded-full bg-orange-500 font-bold text-white">
                           {getUserInitials(user.display_name || user.full_name)}
@@ -367,7 +381,7 @@ export function ProfilePage({ initialTab }: { initialTab: SettingsSection }) {
                       </div>
                     </FieldRow>
 
-                    <FieldRow label="Display Name">
+                    <FieldRow label={t('auth:settings.displayName')}>
                       <input
                         className={fieldClassName}
                         onChange={(e) => setDisplayName(e.target.value)}
@@ -375,7 +389,7 @@ export function ProfilePage({ initialTab }: { initialTab: SettingsSection }) {
                       />
                     </FieldRow>
 
-                    <FieldRow label="Full Name">
+                    <FieldRow label={t('auth:settings.fullName')}>
                       <input
                         className={fieldClassName}
                         onChange={(e) => setFullName(e.target.value)}
@@ -383,31 +397,31 @@ export function ProfilePage({ initialTab }: { initialTab: SettingsSection }) {
                       />
                     </FieldRow>
 
-                    <FieldRow label="Email Address" description="Contact your admin to change.">
+                    <FieldRow label={t('auth:settings.emailAddress')} description={t('auth:settings.emailChangeHint')}>
                       <input className={cn(fieldClassName, 'opacity-60')} disabled value={user.email} />
                     </FieldRow>
 
-                    <FieldRow label="Job Title">
+                    <FieldRow label={t('auth:settings.jobTitle')}>
                       <input
                         className={fieldClassName}
                         onChange={(e) => setJobTitle(e.target.value)}
-                        placeholder="e.g. Platform Owner"
+                        placeholder={t('auth:settings.jobTitlePlaceholder')}
                         value={jobTitle}
                       />
                     </FieldRow>
 
-                    <FieldRow label="Organization">
-                      <input className={cn(fieldClassName, 'opacity-60')} disabled value={user.primary_org_unit?.name ?? '미지정'} />
+                    <FieldRow label={t('auth:settings.organization')}>
+                      <input className={cn(fieldClassName, 'opacity-60')} disabled value={user.primary_org_unit?.name ?? t('common:empty.none')} />
                     </FieldRow>
 
-                    <FieldRow label="Role">
+                    <FieldRow label={t('auth:settings.role')}>
                       <span className="app-text-body text-app-ink">
                         {(user.system_roles ?? []).length > 0 ? user.system_roles.join(', ') : 'Member'}
                       </span>
                     </FieldRow>
 
-                    <FieldRow label="Groups">
-                      <span className="app-text-body text-app-ink">{user.group_slugs.join(', ') || '없음'}</span>
+                    <FieldRow label={t('auth:settings.groups')}>
+                      <span className="app-text-body text-app-ink">{user.group_slugs.join(', ') || t('common:empty.none')}</span>
                     </FieldRow>
                   </div>
 
@@ -420,14 +434,15 @@ export function ProfilePage({ initialTab }: { initialTab: SettingsSection }) {
                         setFullName(user.full_name);
                         setJobTitle(user.job_title ?? '');
                         setTimeZone(normalizeTimeZone(user.time_zone));
+                        setLocale(normalizeLocale(user.locale));
                         setMessage(null);
                         setError(null);
                       }}
                     >
-                      Reset
+                      {t('common:actions.reset')}
                     </Button>
                     <Button variant="primary" type="submit" disabled={submitting}>
-                      {submitting ? 'Saving...' : 'Save Changes'}
+                      {submitting ? t('common:actions.saving') : t('common:actions.saveChanges')}
                     </Button>
                   </div>
                 </form>
@@ -437,10 +452,10 @@ export function ProfilePage({ initialTab }: { initialTab: SettingsSection }) {
             {/* ── Appearance ── */}
             {activeSection === 'appearance' && (
               <div>
-                <SectionHeader title="Appearance" description="Customize how the app looks." />
+                <SectionHeader title={t('auth:settings.appearance')} description={t('auth:settings.customizeAppearance')} />
 
                 <div className="border-t border-app-border">
-                  <FieldRow label="Theme" description="Select your preferred color scheme.">
+                  <FieldRow label={t('auth:settings.theme')} description={t('auth:settings.themeDescription')}>
                     <div className="flex gap-2">
                       {themeOptions.map((opt) => (
                         <button
@@ -458,12 +473,36 @@ export function ProfilePage({ initialTab }: { initialTab: SettingsSection }) {
                           )}
                         >
                           <opt.icon size={15} />
-                          {opt.label}
+                          {t(`auth:${opt.labelKey}`)}
                         </button>
                       ))}
                     </div>
                   </FieldRow>
-                  <FieldRow label="Time Zone" description="Used for dates, relative times, and calendar display.">
+                  <FieldRow label={t('auth:settings.language')} description={t('auth:settings.languageDescription')}>
+                    <select
+                      className={fieldClassName}
+                      onChange={(event) => {
+                        const previousLocale = locale;
+                        const nextLocale = normalizeLocale(event.target.value);
+                        setLocale(nextLocale);
+                        syncLocale(nextLocale);
+                        auth.updatePreferences({ locale: nextLocale })
+                          .catch((caughtError) => {
+                            setLocale(previousLocale);
+                            syncLocale(previousLocale);
+                            setError(getErrorMessage(caughtError, t('auth:settings.saveFailed')));
+                          });
+                      }}
+                      value={locale}
+                    >
+                      {LOCALE_OPTIONS.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  </FieldRow>
+                  <FieldRow label={t('auth:settings.timeZone')} description={t('auth:settings.timeZoneDescription')}>
                     <select
                       className={fieldClassName}
                       onChange={(event) => {
@@ -475,7 +514,7 @@ export function ProfilePage({ initialTab }: { initialTab: SettingsSection }) {
                     >
                       {TIME_ZONE_OPTIONS.map((option) => (
                         <option key={option.value} value={option.value}>
-                          {option.label}
+                          {t(option.labelKey)}
                         </option>
                       ))}
                     </select>
@@ -487,19 +526,19 @@ export function ProfilePage({ initialTab }: { initialTab: SettingsSection }) {
             {/* ── Security ── */}
             {activeSection === 'security' && (
               <div>
-                <SectionHeader title="Security" description="Manage your password and sessions." />
+                <SectionHeader title={t('auth:settings.security')} description={t('auth:settings.managePassword')} />
 
                 <div className="border-t border-app-border">
                   {auth.user?.must_change_password ? (
                     <div className="py-4">
                       <InlineNotice tone="warning">
-                        비밀번호 변경이 필요합니다.
+                        {t('auth:settings.passwordRequired')}
                       </InlineNotice>
                     </div>
                   ) : null}
 
                   <form onSubmit={(event) => void handlePasswordSubmit(event)}>
-                    <FieldRow label="Current Password">
+                    <FieldRow label={t('auth:settings.currentPassword')}>
                       <input
                         className={fieldClassName}
                         onChange={(e) => setCurrentPassword(e.target.value)}
@@ -509,7 +548,7 @@ export function ProfilePage({ initialTab }: { initialTab: SettingsSection }) {
                       />
                     </FieldRow>
 
-                    <FieldRow label="New Password">
+                    <FieldRow label={t('auth:settings.newPassword')}>
                       <input
                         className={fieldClassName}
                         onChange={(e) => setNewPassword(e.target.value)}
@@ -521,19 +560,19 @@ export function ProfilePage({ initialTab }: { initialTab: SettingsSection }) {
 
                     <div className="py-4">
                       <Button variant="primary" type="submit">
-                        Update Password
+                        {t('auth:settings.updatePassword')}
                       </Button>
                     </div>
                   </form>
                 </div>
 
                 <div className="mt-8">
-                  <h3 className="app-text-title-md mb-1 text-app-ink">Active Sessions</h3>
+                  <h3 className="app-text-title-md mb-1 text-app-ink">{t('auth:settings.activeSessions')}</h3>
                   <p className="app-text-caption mb-4 text-gray-500">
-                    Review and revoke browser sessions.
+                    {t('auth:settings.reviewSessions')}
                   </p>
                   {loadingSessions ? (
-                    <p className="app-text-body text-gray-500">불러오는 중...</p>
+                    <p className="app-text-body text-gray-500">{t('common:feedback.loading')}</p>
                   ) : (() => {
                     const active = sessions.filter((s) => !s.revoked_at);
                     const current = active.filter((s) => s.is_current);
@@ -548,12 +587,13 @@ export function ProfilePage({ initialTab }: { initialTab: SettingsSection }) {
                             key={session.id}
                             onRevoke={handleRevoke}
                             session={session}
+                            locale={i18n.language}
                             timeZone={normalizeTimeZone(user.time_zone)}
                           />
                         ))}
                         {hiddenCount > 0 && (
                           <p className="app-text-caption py-2 text-center text-gray-500">
-                            외 {hiddenCount}개 세션
+                            {t('auth:settings.sessionsMore', { count: hiddenCount })}
                           </p>
                         )}
                       </div>
@@ -566,17 +606,32 @@ export function ProfilePage({ initialTab }: { initialTab: SettingsSection }) {
             {/* ── Notifications ── */}
             {activeSection === 'notifications' && (
               <div>
-                <SectionHeader title="Notifications" description="Choose what you get notified about." />
+                <SectionHeader title={t('auth:settings.notifications')} description={t('auth:settings.notificationsDescription')} />
 
                 <div className="border-t border-app-border">
                   <InlineNotice tone="warning" className="mt-4">
-                    알림 설정은 아직 연결되지 않았습니다.
+                    {t('auth:settings.notificationsNotConnected')}
                   </InlineNotice>
 
                   {[
-                    { title: 'Workspace Updates', desc: 'Important changes in your assigned workspaces', email: true, push: true },
-                    { title: 'Security Events', desc: 'Password changes and suspicious login attempts', email: true, push: true },
-                    { title: 'Weekly Digest', desc: 'Summary of your access and workspaces', email: true, push: false },
+                    {
+                      title: t('auth:settings.notificationsWorkspaceTitle'),
+                      desc: t('auth:settings.notificationsWorkspaceDescription'),
+                      email: true,
+                      push: true,
+                    },
+                    {
+                      title: t('auth:settings.notificationsSecurityTitle'),
+                      desc: t('auth:settings.notificationsSecurityDescription'),
+                      email: true,
+                      push: true,
+                    },
+                    {
+                      title: t('auth:settings.notificationsWeeklyTitle'),
+                      desc: t('auth:settings.notificationsWeeklyDescription'),
+                      email: true,
+                      push: false,
+                    },
                   ].map((item) => (
                     <div
                       key={item.title}
@@ -593,7 +648,7 @@ export function ProfilePage({ initialTab }: { initialTab: SettingsSection }) {
                             defaultChecked={item.email}
                             type="checkbox"
                           />
-                          <span className="app-text-caption text-gray-500">Email</span>
+                          <span className="app-text-caption text-gray-500">{t('auth:settings.notificationsChannelEmail')}</span>
                         </label>
                         <label className="flex items-center gap-1.5 cursor-pointer">
                           <input
@@ -601,7 +656,7 @@ export function ProfilePage({ initialTab }: { initialTab: SettingsSection }) {
                             defaultChecked={item.push}
                             type="checkbox"
                           />
-                          <span className="app-text-caption text-gray-500">Push</span>
+                          <span className="app-text-caption text-gray-500">{t('auth:settings.notificationsChannelPush')}</span>
                         </label>
                       </div>
                     </div>

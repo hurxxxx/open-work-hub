@@ -1,10 +1,11 @@
 import { Lock } from 'lucide-react';
 import type { ReactNode } from 'react';
+import { useTranslation } from 'react-i18next';
 
 interface NoAccessNoticeProps {
-  /** e.g. "PMS 워크스페이스" or "Docs 워크스페이스" */
+  /** User-facing workspace label, usually already localized by the caller. */
   workspaceLabel: string;
-  /** What the user was trying to do, e.g. "태스크를 첨부" */
+  /** User-facing action phrase, usually already localized by the caller. */
   action: string;
   /** Optional override for the second-line help text. */
   helpText?: ReactNode;
@@ -23,6 +24,7 @@ export function NoAccessNotice({
   action,
   helpText,
 }: NoAccessNoticeProps) {
+  const { t } = useTranslation('common');
   return (
     <div
       role="alert"
@@ -30,14 +32,10 @@ export function NoAccessNotice({
     >
       <Lock size={22} className="text-app-ink/40" />
       <p className="app-text-body text-app-ink">
-        {workspaceLabel} 접근 권한이 없어 {action}할 수 없습니다.
+        {t('accessNotice.blockedAction', { workspace: workspaceLabel, action })}
       </p>
       <p className="app-text-caption text-app-ink/60 dark:text-app-ink/70">
-        {helpText ?? (
-          <>
-            관리자에게 {workspaceLabel} 권한을 요청하시거나, 권한이 있는 회의 주최자/참석자에게 요청해주세요.
-          </>
-        )}
+        {helpText ?? t('accessNotice.requestHelp', { workspace: workspaceLabel })}
       </p>
     </div>
   );

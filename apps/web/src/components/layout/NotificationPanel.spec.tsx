@@ -56,13 +56,13 @@ describe('NotificationPanel', () => {
       expect(mockListNotifications).toHaveBeenCalledWith('test-token', 1, 'hq');
     });
 
-    fireEvent.click(screen.getByTitle('Mark as read'));
+    fireEvent.click(screen.getByTitle('읽음으로 표시'));
 
     await waitFor(() => {
       expect(mockMarkNotificationRead).toHaveBeenCalledWith('test-token', 'notif-1', 'hq');
     });
 
-    fireEvent.click(screen.getByTitle('Mark all as read'));
+    fireEvent.click(screen.getByTitle('모두 읽음으로 표시'));
 
     await waitFor(() => {
       expect(mockMarkAllNotificationsRead).toHaveBeenCalledWith('test-token', 'hq');
@@ -80,6 +80,6 @@ describe('NotificationPanel', () => {
     await waitFor(() => {
       expect(mockListNotifications).not.toHaveBeenCalled();
     });
-    expect(screen.getByText('No notifications')).toBeTruthy();
+    expect(screen.getByText('알림이 없습니다.')).toBeTruthy();
   });
 });

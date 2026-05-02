@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { Plus, Loader2, Users, Video, FileText } from 'lucide-react';
 import { Button } from '@aidoo/ui';
 
@@ -17,13 +18,14 @@ import { MeetingCreateModal } from './MeetingCreateModal';
 
 type MeetingTab = 'upcoming' | 'mine' | 'recordings';
 
-const TABS: { id: MeetingTab; label: string; scope: MeetingScope }[] = [
-  { id: 'upcoming', label: '예정', scope: 'upcoming' },
-  { id: 'mine', label: '내 회의', scope: 'mine' },
-  { id: 'recordings', label: '녹음', scope: 'mine' },
+const TABS: { id: MeetingTab; labelKey: string; scope: MeetingScope }[] = [
+  { id: 'upcoming', labelKey: 'meeting.scheduled', scope: 'upcoming' },
+  { id: 'mine', labelKey: 'meeting.mine', scope: 'mine' },
+  { id: 'recordings', labelKey: 'meeting.recordings', scope: 'mine' },
 ];
 
 export function MeetingView() {
+  const { t } = useTranslation('apps');
   const { token, user } = useAuth();
   const timeZone = normalizeTimeZone(user?.time_zone);
   const navigate = useNavigate();
@@ -69,7 +71,7 @@ export function MeetingView() {
       })
       .catch((err: Error) => {
         if (cancelled) return;
-        setError(err.message ?? '회의 목록을 불러올 수 없습니다.');
+        setError(err.message ?? t('meeting.listLoadFailed'));
         setItems([]);
       })
       .finally(() => {
@@ -78,7 +80,7 @@ export function MeetingView() {
     return () => {
       cancelled = true;
     };
-  }, [refreshToken, scope, token, workspaceSlug]);
+  }, [refreshToken, scope, t, token, workspaceSlug]);
 
   // Listen for the SubSidebar "+" dropdown event so the New Meeting entry
   // there opens this view's create modal directly, mirroring the planner
@@ -134,7 +136,7 @@ export function MeetingView() {
       <header className="flex items-center justify-between border-b border-app-border bg-app-surface px-6 py-4">
         <div className="flex items-center gap-3">
           <Users size={20} className="text-app-ink/60 dark:text-app-ink/70" />
-          <h1 className="app-text-title-md text-app-ink">Meetings</h1>
+          <h1 className="app-text-title-md text-app-ink">{t('meeting.meetings')}</h1>
         </div>
         <Button
           variant="primary"
@@ -142,7 +144,7 @@ export function MeetingView() {
           className="dark:border-app-border dark:bg-app-surface-raised dark:text-app-ink dark:hover:bg-app-surface-hover"
         >
           <Plus size={14} className="mr-1" />
-          New Meeting
+          {t('meeting.new')}
         </Button>
       </header>
 
@@ -163,7 +165,7 @@ export function MeetingView() {
               <span className="inline-flex items-center gap-1.5">
                 {tab.id === 'recordings' ? <Video size={13} /> : null}
                 {tab.id === 'upcoming' ? <FileText size={13} /> : null}
-                {tab.label}
+                {t(tab.labelKey)}
               </span>
             </button>
           );
@@ -204,25 +206,27 @@ export function MeetingView() {
 }
 
 function EmptyState({ onCreate }: { onCreate: () => void }) {
+  const { t } = useTranslation('apps');
   return (
     <div className="flex h-64 flex-col items-center justify-center gap-3 text-app-ink/60">
       <Users size={28} className="text-app-ink/30" />
-      <p className="app-text-body">예정된 회의가 없습니다.</p>
+      <p className="app-text-body">{t('meeting.empty')}</p>
       <Button variant="secondary" onClick={onCreate}>
         <Plus size={14} className="mr-1" />
-        New Meeting
+        {t('meeting.new')}
       </Button>
     </div>
   );
 }
 
 function RecordingsPlaceholder() {
+  const { t } = useTranslation('apps');
   return (
     <div className="flex h-64 flex-col items-center justify-center gap-2 text-app-ink/60">
       <Video size={28} className="text-app-ink/30" />
-      <p className="app-text-body">회의 녹음은 각 회의 workspace에서 사용할 수 있습니다.</p>
+      <p className="app-text-body">{t('meeting.recordingsPlaceholder')}</p>
       <p className="app-text-caption text-app-ink/40">
-        회의를 열면 notes editor 오른쪽 rail에서 녹음 시작과 음성 파일 업로드를 사용할 수 있습니다.
+        {t('meeting.recordingsDescription')}
       </p>
     </div>
   );

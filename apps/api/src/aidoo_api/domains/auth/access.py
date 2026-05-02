@@ -34,6 +34,8 @@ logger = logging.getLogger(__name__)
 
 SYSTEM_PLATFORM_ADMIN = "platform_admin"
 DEFAULT_TIME_ZONE = "Asia/Seoul"
+DEFAULT_LOCALE = "ko-KR"
+SUPPORTED_LOCALES = frozenset({"ko-KR", "en-US"})
 
 SYSTEM_ROLE_ORDER = (
     SYSTEM_PLATFORM_ADMIN,
@@ -49,6 +51,15 @@ def normalize_time_zone(value: str | None) -> str:
         ZoneInfo(normalized)
     except ZoneInfoNotFoundError as exc:
         raise ValueError("Invalid time zone.") from exc
+    return normalized
+
+
+def normalize_locale(value: str | None) -> str:
+    if value is None or not value.strip():
+        return DEFAULT_LOCALE
+    normalized = value.strip()
+    if normalized not in SUPPORTED_LOCALES:
+        raise ValueError("Invalid locale.")
     return normalized
 
 
@@ -762,6 +773,7 @@ def ensure_dev_login_seed_data(db: Session) -> None:
                 status="active",
                 must_change_password=False,
                 theme_preference="system",
+                locale=DEFAULT_LOCALE,
                 time_zone=DEFAULT_TIME_ZONE,
                 primary_org_unit_id=root_org.id,
                 is_admin=False,
@@ -773,6 +785,7 @@ def ensure_dev_login_seed_data(db: Session) -> None:
             user.status = "active"
             user.must_change_password = False
             user.theme_preference = "system"
+            user.locale = normalize_locale(getattr(user, "locale", None))
             user.time_zone = normalize_time_zone(getattr(user, "time_zone", None))
             user.primary_org_unit_id = root_org.id
             user.is_admin = False
@@ -1186,6 +1199,7 @@ def serialize_auth_user(db: Session, user: User) -> dict[str, Any]:
         "job_title": user.job_title,
         "status": user.status,
         "theme_preference": user.theme_preference,
+        "locale": normalize_locale(getattr(user, "locale", None)),
         "time_zone": user.time_zone or DEFAULT_TIME_ZONE,
         "primary_org_unit": serialize_org_unit(user.primary_org_unit),
         "system_roles": resolve_system_roles(db, user),

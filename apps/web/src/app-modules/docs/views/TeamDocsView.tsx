@@ -9,14 +9,16 @@ import {
   MoreHorizontal
 } from 'lucide-react';
 import { BlockEditor } from '@aidoo/ui';
+import { useTranslation } from 'react-i18next';
 import { useMediaUpload } from '@/src/platform/media/use-media-upload';
 import { cn } from '@/src/lib/utils';
 
 export const TeamDocsView = () => {
+  const { t } = useTranslation('apps');
   const { uploadFile, resolveFileUrl } = useMediaUpload();
-  const [pages] = useState([
-    { id: 'page-1', title: 'Page 1', icon: FileText },
-    { id: 'page-21', title: 'Page 21', icon: FileText },
+  const [pages] = useState(() => [
+    { id: 'page-1', title: t('docs.team.pageOne'), icon: FileText },
+    { id: 'page-21', title: t('docs.team.pageTwentyOne'), icon: FileText },
   ]);
   const [activePageId, setActivePageId] = useState('page-1');
   
@@ -28,7 +30,7 @@ export const TeamDocsView = () => {
         {/* Local Sidebar for Pages */}
         <div className="w-64 border-r border-app-border bg-app-surface-sidebar flex flex-col">
           <div className="p-4 flex items-center justify-between">
-            <h3 className="app-text-overline text-gray-500">Pages</h3>
+            <h3 className="app-text-overline text-gray-500">{t('docs.team.pages')}</h3>
           </div>
           <div className="flex-1 overflow-y-auto px-2 space-y-1">
             {pages.map(page => (
@@ -57,7 +59,7 @@ export const TeamDocsView = () => {
             ))}
             <button className="app-text-body mt-2 flex w-full items-center gap-2 rounded-md px-3 py-2 text-gray-500 transition-colors hover:bg-app-surface-hover hover:text-gray-300">
               <Plus size={16} />
-              <span>Add page</span>
+              <span>{t('docs.addPage')}</span>
             </button>
           </div>
         </div>
@@ -68,16 +70,16 @@ export const TeamDocsView = () => {
           <div className="h-12 border-b border-app-border flex items-center justify-between px-4">
             <div className="app-text-caption flex items-center gap-2 text-gray-500">
               <LinkIcon size={12} />
-              <span>Link Task or Doc</span>
+              <span>{t('docs.team.linkTaskOrDoc')}</span>
             </div>
             <div className="flex items-center gap-4">
               <button className="app-text-control-sm flex items-center gap-1.5 text-app-accent">
                 <Sparkles size={14} />
-                <span>Ask AI</span>
+                <span>{t('docs.askAi')}</span>
               </button>
               <button className="app-text-control-sm flex items-center gap-1.5 text-gray-400 hover:text-white">
                 <Share2 size={14} />
-                <span>Share</span>
+                <span>{t('common:actions.share')}</span>
               </button>
               <button className="text-gray-400 hover:text-white">
                 <Star size={14} />
@@ -95,15 +97,19 @@ export const TeamDocsView = () => {
                 <div className="app-text-caption flex items-center gap-3 text-gray-500">
                   <div className="flex items-center gap-1.5">
                     <div className="app-text-micro flex h-5 w-5 items-center justify-center rounded-full bg-app-accent font-bold text-app-bg">GH</div>
-                    <span>Gunwoo Hur</span>
+                    <span>{t('docs.team.sampleAuthor')}</span>
                   </div>
                   <span>•</span>
-                  <span>Last updated Today at 5:37 pm</span>
+                  <span>{t('docs.team.lastUpdated', { time: t('docs.team.sampleUpdatedTime') })}</span>
                 </div>
               </div>
 
               <div className="prose dark:prose-invert max-w-none">
-                <BlockEditor placeholder="Start writing..." uploadFile={uploadFile} resolveFileUrl={resolveFileUrl} />
+                <BlockEditor
+                  placeholder={t('docs.startWriting')}
+                  uploadFile={uploadFile}
+                  resolveFileUrl={resolveFileUrl}
+                />
               </div>
             </div>
           </div>

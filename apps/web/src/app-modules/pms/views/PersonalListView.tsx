@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Plus, Check, Trash2, Circle } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { cn } from '@/src/lib/utils';
 
 interface Todo {
@@ -9,10 +10,11 @@ interface Todo {
 }
 
 export const PersonalListView = () => {
-  const [todos, setTodos] = useState<Todo[]>([
-    { id: '1', text: 'Review weekly report', completed: false },
-    { id: '2', text: 'Prepare for team meeting', completed: true },
-    { id: '3', text: 'Update sprint timeline', completed: false },
+  const { t } = useTranslation('apps');
+  const [todos, setTodos] = useState<Todo[]>(() => [
+    { id: '1', text: t('pms.personalList.sampleReviewReport'), completed: false },
+    { id: '2', text: t('pms.personalList.sampleTeamMeeting'), completed: true },
+    { id: '3', text: t('pms.personalList.sampleSprintTimeline'), completed: false },
   ]);
   const [newTaskText, setNewTaskText] = useState('');
 
@@ -40,8 +42,8 @@ export const PersonalListView = () => {
   return (
     <div className="h-full flex flex-col relative max-w-3xl mx-auto w-full">
       <header className="px-8 pt-10 pb-6">
-        <h1 className="app-text-title-lg text-app-ink">Personal List</h1>
-        <p className="app-text-body mt-2 text-gray-500">Your private to-do list</p>
+        <h1 className="app-text-title-lg text-app-ink">{t('pms.personalList.title')}</h1>
+        <p className="app-text-body mt-2 text-gray-500">{t('pms.personalList.description')}</p>
       </header>
 
       <main className="flex-1 overflow-y-auto px-8 custom-scrollbar">
@@ -53,7 +55,7 @@ export const PersonalListView = () => {
             type="text"
             value={newTaskText}
             onChange={(e) => setNewTaskText(e.target.value)}
-            placeholder="Add a new task..."
+            placeholder={t('pms.personalList.addPlaceholder')}
             className="w-full bg-app-surface-sidebar border border-app-border rounded-lg py-3 pl-11 pr-4 text-app-ink focus:outline-none focus:border-app-accent transition-colors"
           />
         </form>
@@ -98,7 +100,7 @@ export const PersonalListView = () => {
           ))}
           {todos.length === 0 && (
             <div className="text-center py-12 text-gray-500">
-              No tasks yet. Add one above!
+              {t('pms.personalList.empty')}
             </div>
           )}
         </div>

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Brain, ChevronDown, ChevronRight, Loader2 } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
 import type { ChatStreamStatus } from '../../api/agent-events';
 
@@ -8,21 +9,23 @@ export interface ThinkingPanelProps {
   status: ChatStreamStatus;
 }
 
-function labelFor(status: ChatStreamStatus): string {
+function labelFor(status: ChatStreamStatus, t: (key: string) => string): string {
   switch (status) {
     case 'streaming':
-      return '생각 중…';
+      return t('ai.thinking.streaming');
     case 'error':
-      return '생각 실패';
+      return t('ai.thinking.error');
     case 'cancelled':
+      return t('ai.thinking.cancelled');
     case 'done':
-      return '생각 완료';
+      return t('ai.thinking.done');
     default:
-      return '생각';
+      return t('ai.thinking.idle');
   }
 }
 
 export function ThinkingPanel({ reasoning, status }: ThinkingPanelProps) {
+  const { t } = useTranslation('apps');
   const [open, setOpen] = useState(false);
   if (!reasoning) {
     return null;
@@ -40,7 +43,7 @@ export function ThinkingPanel({ reasoning, status }: ThinkingPanelProps) {
           ) : (
             <Brain size={12} />
           )}
-          <span>{labelFor(status)}</span>
+          <span>{labelFor(status, t)}</span>
         </span>
         {open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
       </button>

@@ -3,6 +3,7 @@ import type * as React from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
+import { useTranslation } from 'react-i18next';
 import {
   DndContext,
   KeyboardSensor,
@@ -66,10 +67,10 @@ export function getSpaceDocSortOrder(doc: DocsHubItem): number {
   return getDocsItemPrimaryContainerSortOrder(doc);
 }
 
-export function sortSpaceDocs(items: DocsHubItem[]): DocsHubItem[] {
+export function sortSpaceDocs(items: DocsHubItem[], locale = 'ko-KR'): DocsHubItem[] {
   return [...items].sort(
     (left, right) => getSpaceDocSortOrder(left) - getSpaceDocSortOrder(right)
-      || left.title.localeCompare(right.title, 'ko'),
+      || left.title.localeCompare(right.title, locale),
   );
 }
 
@@ -90,6 +91,7 @@ const SpaceAddPopover = ({
   onOpenDocs: () => void;
   onCreateWhiteboard: () => void;
 }) => {
+  const { t } = useTranslation('apps');
   const ref = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState({ top: 0, left: 0 });
 
@@ -117,7 +119,7 @@ const SpaceAddPopover = ({
       className="fixed z-[9999] w-52 bg-app-bg border border-app-border rounded-lg shadow-xl py-1"
     >
       <div className="app-text-overline px-3 py-1.5 text-gray-500">
-        Create
+        {t('common:actions.create')}
       </div>
       <button
         onClick={() => { onCreateList(); onClose(); }}
@@ -125,8 +127,8 @@ const SpaceAddPopover = ({
       >
         <ListIcon size={16} className="text-gray-400" />
         <div className="text-left">
-          <div className="app-text-control-sm text-app-ink">List</div>
-          <div className="app-text-micro text-app-ink/40">Track tasks, lists, people & more</div>
+          <div className="app-text-control-sm text-app-ink">{t('pms.spaceTree.list')}</div>
+          <div className="app-text-micro text-app-ink/40">{t('pms.spaceTree.listDescription')}</div>
         </div>
       </button>
       <button
@@ -135,8 +137,8 @@ const SpaceAddPopover = ({
       >
         <FolderOpen size={16} className="text-gray-400" />
         <div className="text-left">
-          <div className="app-text-control-sm text-app-ink">Folder</div>
-          <div className="app-text-micro text-app-ink/40">Group Lists, Docs & more</div>
+          <div className="app-text-control-sm text-app-ink">{t('pms.spaceTree.folder')}</div>
+          <div className="app-text-micro text-app-ink/40">{t('pms.spaceTree.folderDescription')}</div>
         </div>
       </button>
       <button
@@ -145,8 +147,8 @@ const SpaceAddPopover = ({
       >
         <FileText size={16} className="text-gray-400" />
         <div className="text-left">
-          <div className="app-text-control-sm text-app-ink">Doc</div>
-          <div className="app-text-micro text-app-ink/40">Write and organize documents</div>
+          <div className="app-text-control-sm text-app-ink">{t('pms.spaceTree.doc')}</div>
+          <div className="app-text-micro text-app-ink/40">{t('pms.spaceTree.docDescription')}</div>
         </div>
       </button>
       <button
@@ -155,8 +157,8 @@ const SpaceAddPopover = ({
       >
         <PencilRuler size={16} className="text-gray-400" />
         <div className="text-left">
-          <div className="app-text-control-sm text-app-ink">Whiteboard</div>
-          <div className="app-text-micro text-app-ink/40">Sketch and map ideas</div>
+          <div className="app-text-control-sm text-app-ink">{t('pms.spaceTree.whiteboard')}</div>
+          <div className="app-text-micro text-app-ink/40">{t('pms.spaceTree.whiteboardDescription')}</div>
         </div>
       </button>
     </div>,
@@ -177,6 +179,7 @@ const FolderAddPopover = ({
   onCreateList: () => void;
   onCreateDoc: () => void;
 }) => {
+  const { t } = useTranslation('apps');
   const ref = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState({ top: 0, left: 0 });
 
@@ -204,21 +207,21 @@ const FolderAddPopover = ({
       className="fixed z-[9999] w-48 bg-app-bg border border-app-border rounded-lg shadow-xl py-1"
     >
       <div className="app-text-overline px-3 py-1.5 text-gray-500">
-        Create
+        {t('common:actions.create')}
       </div>
       <button
         onClick={() => { onCreateList(); onClose(); }}
         className="w-full flex items-center gap-3 px-3 py-2 hover:bg-app-surface-hover transition-colors"
       >
         <ListIcon size={14} className="text-gray-400" />
-        <div className="app-text-control-sm text-app-ink">List</div>
+        <div className="app-text-control-sm text-app-ink">{t('pms.spaceTree.list')}</div>
       </button>
       <button
         onClick={() => { onCreateDoc(); onClose(); }}
         className="w-full flex items-center gap-3 px-3 py-2 hover:bg-app-surface-hover transition-colors"
       >
         <FileText size={14} className="text-gray-400" />
-        <div className="app-text-control-sm text-app-ink">Doc</div>
+        <div className="app-text-control-sm text-app-ink">{t('pms.spaceTree.doc')}</div>
       </button>
     </div>,
     document.body,
@@ -246,6 +249,7 @@ const FolderContextMenu = ({
   onRename: () => void;
   onDelete: () => void;
 }) => {
+  const { t } = useTranslation('apps');
   const ref = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState({ top: 0, left: 0 });
 
@@ -279,7 +283,7 @@ const FolderContextMenu = ({
           className="w-full flex items-center gap-3 px-3 py-2 hover:bg-app-surface-hover transition-colors disabled:cursor-not-allowed disabled:opacity-40"
         >
           <ArrowUp size={14} className="text-gray-400" />
-          <span className="app-text-control-sm text-app-ink">Move Up</span>
+          <span className="app-text-control-sm text-app-ink">{t('pms.orderEditor.moveUp')}</span>
         </button>
       ) : null}
       {onMoveDown ? (
@@ -289,7 +293,7 @@ const FolderContextMenu = ({
           className="w-full flex items-center gap-3 px-3 py-2 hover:bg-app-surface-hover transition-colors disabled:cursor-not-allowed disabled:opacity-40"
         >
           <ArrowDown size={14} className="text-gray-400" />
-          <span className="app-text-control-sm text-app-ink">Move Down</span>
+          <span className="app-text-control-sm text-app-ink">{t('pms.orderEditor.moveDown')}</span>
         </button>
       ) : null}
       <button
@@ -297,14 +301,14 @@ const FolderContextMenu = ({
         className="w-full flex items-center gap-3 px-3 py-2 hover:bg-app-surface-hover transition-colors"
       >
         <Pencil size={14} className="text-gray-400" />
-        <span className="app-text-control-sm text-app-ink">Rename</span>
+        <span className="app-text-control-sm text-app-ink">{t('common:actions.rename')}</span>
       </button>
       <button
         onClick={() => { onDelete(); onClose(); }}
         className="w-full flex items-center gap-3 px-3 py-2 hover:bg-app-surface-hover transition-colors"
       >
         <Trash2 size={14} className="text-red-400" />
-        <span className="app-text-control-sm text-red-400">Delete</span>
+        <span className="app-text-control-sm text-red-400">{t('common:actions.delete')}</span>
       </button>
     </div>,
     document.body,
@@ -328,6 +332,7 @@ const SpaceContextMenu = ({
   canManage: boolean;
   onDelete: () => void;
 }) => {
+  const { t } = useTranslation('apps');
   const ref = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState({ top: 0, left: 0 });
 
@@ -359,7 +364,7 @@ const SpaceContextMenu = ({
         className="w-full flex items-center gap-3 px-3 py-2 hover:bg-app-surface-hover transition-colors"
       >
         <Pencil size={14} className="text-gray-400" />
-        <span className="app-text-control-sm text-app-ink">Rename</span>
+        <span className="app-text-control-sm text-app-ink">{t('common:actions.rename')}</span>
       </button>
       <button
         onClick={() => { onManageMembers(); onClose(); }}
@@ -367,7 +372,7 @@ const SpaceContextMenu = ({
       >
         <Users size={14} className="text-gray-400" />
         <span className="app-text-control-sm text-app-ink">
-          {canManage ? '멤버 관리' : '멤버 보기'}
+          {canManage ? t('pms.spaceMembers.titleSuffix') : t('pms.spaceMembers.viewMembers')}
         </span>
       </button>
       <button
@@ -375,7 +380,7 @@ const SpaceContextMenu = ({
         className="w-full flex items-center gap-3 px-3 py-2 hover:bg-app-surface-hover transition-colors"
       >
         <Trash2 size={14} className="text-red-400" />
-        <span className="app-text-control-sm text-red-400">Delete</span>
+        <span className="app-text-control-sm text-red-400">{t('common:actions.delete')}</span>
       </button>
     </div>,
     document.body,
@@ -504,6 +509,7 @@ const SortableDocLink = ({
   onToggleMenu: () => void;
   onCloseMenu: () => void;
 }) => {
+  const { t } = useTranslation('apps');
   const navigate = useNavigate();
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: doc.id,
@@ -552,7 +558,7 @@ const SortableDocLink = ({
           className={cn('sidebar-submenu-item flex-1 min-w-0 text-left', activeNavItemId === docNavId && 'sidebar-submenu-item-active')}
         >
           <FileText size={13} className="text-gray-500 shrink-0" />
-          <span className="sidebar-submenu-label">{doc.title || 'Untitled'}</span>
+          <span className="sidebar-submenu-label">{doc.title || t('pms.orderEditor.untitled')}</span>
         </button>
       )}
       {canManageCollections && !isRenaming ? (
@@ -566,7 +572,7 @@ const SortableDocLink = ({
                 onToggleMenu();
               }}
               className="p-0.5 hover:bg-app-surface-hover rounded text-gray-600 dark:text-gray-300 hover:text-app-ink dark:hover:text-white transition-colors"
-              title="Doc options"
+              title={t('pms.spaceTree.docOptions')}
             >
               <MoreHorizontal size={12} />
             </button>
@@ -650,6 +656,8 @@ export const SpaceItem = ({
   canManageSpace: boolean;
   canManageCollections: boolean;
 }) => {
+  const { t, i18n } = useTranslation('apps');
+  const locale = i18n.resolvedLanguage ?? i18n.language;
   const [addPopoverOpen, setAddPopoverOpen] = useState(false);
   const [spaceMenuOpen, setSpaceMenuOpen] = useState(false);
   const [renaming, setRenaming] = useState(false);
@@ -682,13 +690,13 @@ export const SpaceItem = ({
 
   const rootListsOrdered = useMemo(
     () => [...rootLists].sort(
-      (left, right) => left.sort_order - right.sort_order || left.name.localeCompare(right.name, 'ko'),
+      (left, right) => left.sort_order - right.sort_order || left.name.localeCompare(right.name, locale),
     ),
-    [rootLists],
+    [rootLists, locale],
   );
   const rootDocsOrdered = useMemo(
-    () => sortSpaceDocs(spaceDocs),
-    [spaceDocs],
+    () => sortSpaceDocs(spaceDocs, locale),
+    [spaceDocs, locale],
   );
 
   useEffect(() => {
@@ -792,7 +800,7 @@ export const SpaceItem = ({
               'ml-1 flex h-7 w-6 shrink-0 items-center justify-center rounded transition-colors',
               spaceActive ? 'text-app-ink/50' : 'text-gray-600 dark:text-gray-300 hover:text-app-ink dark:hover:text-white',
             )}
-            title={expanded ? 'Collapse Space' : 'Expand Space'}
+            title={expanded ? t('pms.spaceTree.collapseSpace') : t('pms.spaceTree.expandSpace')}
           >
             {expanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
           </button>
@@ -852,7 +860,7 @@ export const SpaceItem = ({
                     onOpenOrderEditor();
                   }}
                   className="p-0.5 hover:bg-app-surface-hover rounded text-gray-600 dark:text-gray-300 hover:text-app-ink dark:hover:text-white transition-colors"
-                  title="순서 편집"
+                  title={t('pms.orderEditor.title', { spaceName: name })}
                 >
                   <ArrowUpDown size={14} />
                 </button>
@@ -866,7 +874,7 @@ export const SpaceItem = ({
                     setSpaceMenuOpen((current) => !current);
                   }}
                   className="p-0.5 hover:bg-app-surface-hover rounded text-gray-600 dark:text-gray-300 hover:text-app-ink dark:hover:text-white transition-colors"
-                  title="More"
+                  title={t('pms.taskDetail.moreOptions')}
                 >
                   <MoreHorizontal size={14} />
                 </button>
@@ -880,7 +888,7 @@ export const SpaceItem = ({
                     setAddPopoverOpen((current) => !current);
                   }}
                   className="p-0.5 hover:bg-app-surface-hover rounded text-gray-600 dark:text-gray-300 hover:text-app-ink dark:hover:text-white transition-colors"
-                  title="Add"
+                  title={t('common:actions.add')}
                 >
                   <Plus size={14} />
                 </button>
@@ -963,7 +971,7 @@ export const SpaceItem = ({
                                   setFolderMenuOpen((current) => (current === folder.id ? null : folder.id));
                                 }}
                                 className="p-0.5 hover:bg-app-surface-hover rounded text-gray-600 dark:text-gray-300 hover:text-app-ink dark:hover:text-white transition-colors"
-                                title="Folder options"
+                                title={t('pms.spaceTree.folderOptions')}
                               >
                                 <MoreHorizontal size={12} />
                               </button>
@@ -976,7 +984,7 @@ export const SpaceItem = ({
                                   setFolderPopoverOpen((current) => (current === folder.id ? null : folder.id));
                                 }}
                                 className="p-0.5 hover:bg-app-surface-hover rounded text-gray-600 dark:text-gray-300 hover:text-app-ink dark:hover:text-white transition-colors"
-                                title="Add to folder"
+                                title={t('pms.spaceTree.addToFolder')}
                               >
                                 <Plus size={12} />
                               </button>
@@ -1078,7 +1086,7 @@ export const SpaceItem = ({
                 )}
               >
                 <PencilRuler size={13} className="text-gray-500 shrink-0" />
-                <span className="sidebar-submenu-label">Whiteboards</span>
+                <span className="sidebar-submenu-label">{t('pms.spaceOverview.whiteboards')}</span>
               </button>
                 </div>
               </SortableContext>

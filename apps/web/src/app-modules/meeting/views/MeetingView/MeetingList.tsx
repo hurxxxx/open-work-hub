@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import { CheckSquare, FileText, Users } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
 import {
   parseServerDateTime,
@@ -14,11 +15,11 @@ interface MeetingListProps {
   onSelect: (id: string) => void;
 }
 
-const STATUS_LABELS: Record<string, string> = {
-  scheduled: '예정',
-  in_progress: '진행 중',
-  completed: '완료',
-  cancelled: '취소됨',
+const STATUS_LABEL_KEYS: Record<string, string> = {
+  scheduled: 'meeting.scheduled',
+  in_progress: 'meeting.inProgress',
+  completed: 'meeting.completed',
+  cancelled: 'meeting.cancelled',
 };
 
 const STATUS_COLORS: Record<string, string> = {
@@ -30,11 +31,11 @@ const STATUS_COLORS: Record<string, string> = {
     'bg-[var(--ui-color-danger)]/15 text-[var(--ui-color-danger)]',
 };
 
-function formatTimeRange(start: string, end: string, timeZone: string): string {
+function formatTimeRange(start: string, end: string, timeZone: string, locale: string): string {
   const startDate = parseServerDateTime(start);
   const endDate = parseServerDateTime(end);
   const dateLabel = formatDateTime(startDate, {
-    locale: 'ko-KR',
+    locale,
     month: 'short',
     day: 'numeric',
     weekday: 'short',
@@ -42,13 +43,13 @@ function formatTimeRange(start: string, end: string, timeZone: string): string {
   });
   const startTime = formatDateTime(startDate, {
     hour: '2-digit',
-    locale: 'ko-KR',
+    locale,
     minute: '2-digit',
     timeZone,
   });
   const endTime = formatDateTime(endDate, {
     hour: '2-digit',
-    locale: 'ko-KR',
+    locale,
     minute: '2-digit',
     timeZone,
   });
@@ -56,6 +57,7 @@ function formatTimeRange(start: string, end: string, timeZone: string): string {
 }
 
 export function MeetingList({ items, activeId, timeZone, onSelect }: MeetingListProps) {
+  const { t, i18n } = useTranslation('apps');
   const sortedItems = useMemo(() => {
     return [...items].sort((a, b) => a.start_at.localeCompare(b.start_at));
   }, [items]);
@@ -79,7 +81,7 @@ export function MeetingList({ items, activeId, timeZone, onSelect }: MeetingList
                     {item.title}
                   </p>
                   <p className="app-text-caption text-app-ink/60 dark:text-app-ink/70">
-                    {formatTimeRange(item.start_at, item.end_at, timeZone)} · {item.organizer_name}
+                    {formatTimeRange(item.start_at, item.end_at, timeZone, i18n.language)} · {item.organizer_name}
                   </p>
                 </div>
                 <span
@@ -87,7 +89,7 @@ export function MeetingList({ items, activeId, timeZone, onSelect }: MeetingList
                     STATUS_COLORS[item.status] ?? 'bg-app-ink/10 text-app-ink/60 dark:text-app-ink/70'
                   }`}
                 >
-                  {STATUS_LABELS[item.status] ?? item.status}
+                  {STATUS_LABEL_KEYS[item.status] ? t(STATUS_LABEL_KEYS[item.status]) : item.status}
                 </span>
               </div>
               <div className="mt-1 flex items-center gap-3 text-app-ink/60 dark:text-app-ink/70">

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Loader2 } from 'lucide-react';
 import { useParams, useSearchParams } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { useAuth } from '@/src/platform/auth/auth-provider';
 import {
   getIssueDetail,
@@ -23,6 +24,7 @@ export const AssignedToMeView = ({
 }: {
   workspaceSlug?: string | null;
 }) => {
+  const { t } = useTranslation('apps');
   const { token, user } = useAuth();
   const { workspaceSlug: routeWorkspaceSlug } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -57,11 +59,11 @@ export const AssignedToMeView = ({
     } catch (error) {
       setTaskLists([]);
       setIssues([]);
-      setLoadError(getErrorMessage(error, '할당된 태스크를 불러오지 못했습니다.'));
+      setLoadError(getErrorMessage(error, t('pms.errors.assignedIssuesLoadFailed')));
     } finally {
       setLoading(false);
     }
-  }, [token, user, workspaceSlug]);
+  }, [t, token, user, workspaceSlug]);
 
   useEffect(() => {
     void reloadAssignedIssues();

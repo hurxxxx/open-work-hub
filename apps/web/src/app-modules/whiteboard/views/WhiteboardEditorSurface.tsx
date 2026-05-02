@@ -34,6 +34,7 @@ import {
   X,
 } from 'lucide-react';
 import { Button, Dialog } from '@aidoo/ui';
+import { useTranslation } from 'react-i18next';
 
 import { cn } from '@/src/lib/utils';
 import { useAuth } from '@/src/platform/auth/auth-provider';
@@ -290,10 +291,10 @@ function toWebSocketUrl(wsPath: string): string {
   return resolved.toString();
 }
 
-function collabLabel(status: CollabStatus): string {
-  if (status === 'connecting') return 'Live connecting';
-  if (status === 'connected') return 'Live';
-  if (status === 'offline' || status === 'error') return 'Live offline';
+function collabLabel(status: CollabStatus, t: (key: string) => string): string {
+  if (status === 'connecting') return t('whiteboard.collabConnecting');
+  if (status === 'connected') return t('whiteboard.collabLive');
+  if (status === 'offline' || status === 'error') return t('whiteboard.collabOffline');
   return '';
 }
 
@@ -313,13 +314,13 @@ function safeFilename(title: string, extension: string): string {
   return `${base}.${extension}`;
 }
 
-function saveLabel(status: SaveStatus): string {
+function saveLabel(status: SaveStatus, t: (key: string) => string): string {
   return {
     idle: '',
-    dirty: 'Saving...',
-    saving: 'Saving...',
-    saved: 'Saved',
-    error: 'Save failed',
+    dirty: t('common:actions.saving'),
+    saving: t('common:actions.saving'),
+    saved: t('whiteboard.saved'),
+    error: t('whiteboard.saveFailed'),
   }[status];
 }
 
@@ -335,6 +336,7 @@ function WhiteboardShareDialog({
   onClose: () => void;
 }) {
   const { token } = useAuth();
+  const { t } = useTranslation('apps');
   const [sharing, setSharing] = useState<WhiteboardSharingResponse | null>(null);
   const [users, setUsers] = useState<ShareableUserItem[]>([]);
   const [query, setQuery] = useState('');
@@ -353,11 +355,11 @@ function WhiteboardShareDialog({
       setSharing(sharingResponse);
       setUsers(usersResponse);
     } catch (err) {
-      setError(err instanceof Error ? err.message : '공유 정보를 불러올 수 없습니다.');
+      setError(err instanceof Error ? err.message : t('whiteboard.shareLoadFailed'));
     } finally {
       setBusy(false);
     }
-  }, [board.id, open, query, token, workspaceSlug]);
+  }, [board.id, open, query, token, workspaceSlug, t]);
 
   useEffect(() => {
     void load();
@@ -369,7 +371,7 @@ function WhiteboardShareDialog({
     try {
       setSharing(await action());
     } catch (err) {
-      setError(err instanceof Error ? err.message : '공유 설정을 저장할 수 없습니다.');
+      setError(err instanceof Error ? err.message : t('whiteboard.shareSaveFailed'));
     } finally {
       setBusy(false);
     }
@@ -386,10 +388,10 @@ function WhiteboardShareDialog({
       onOpenChange={(nextOpen) => {
         if (!nextOpen) onClose();
       }}
-      title="Whiteboard sharing"
-      description="사용자 또는 링크로 화이트보드를 공유합니다."
+      title={t('whiteboard.shareTitle')}
+      description={t('whiteboard.shareDescription')}
       maxWidth="max-w-2xl"
-      actions={<Button variant="secondary" onClick={onClose}>닫기</Button>}
+      actions={<Button variant="secondary" onClick={onClose}>{t('common:actions.close')}</Button>}
     >
       <div className="space-y-5 text-app-ink">
         {error ? (
@@ -400,7 +402,7 @@ function WhiteboardShareDialog({
 
         <section className="space-y-2">
           <div className="flex items-center justify-between">
-            <h3 className="app-text-control-sm text-app-ink">Link share</h3>
+            <h3 className="app-text-control-sm text-app-ink">{t('whiteboard.linkShare')}</h3>
             {sharing?.link_share ? (
               <Button
                 variant="secondary"
@@ -411,7 +413,7 @@ function WhiteboardShareDialog({
                   void run(() => deleteWhiteboardLinkShare(token, board.id, workspaceSlug));
                 }}
               >
-                Disable
+                {t('docs.share.disable')}
               </Button>
             ) : (
               <Button
@@ -423,7 +425,7 @@ function WhiteboardShareDialog({
                   void run(() => upsertWhiteboardLinkShare(token, board.id, { access_level: 'read' }, workspaceSlug));
                 }}
               >
-                Enable read link
+                {t('whiteboard.enableReadLink')}
               </Button>
             )}
           </div>
@@ -449,15 +451,15 @@ function WhiteboardShareDialog({
                 }}
                 className="rounded-md border border-app-border bg-app-bg px-2 py-1 text-sm"
               >
-                <option value="read">read</option>
-                <option value="edit">edit</option>
+                <option value="read">{t('docs.share.access.read')}</option>
+                <option value="edit">{t('docs.share.access.edit')}</option>
               </select>
               <Button
                 variant="secondary"
                 size="dense"
                 onClick={() => void navigator.clipboard.writeText(linkUrl)}
               >
-                Copy
+                {t('docs.share.copy')}
               </Button>
             </div>
           ) : null}
@@ -465,11 +467,11 @@ function WhiteboardShareDialog({
 
         <section className="space-y-3">
           <div className="space-y-1">
-            <label className="app-text-control-sm text-app-ink/70">Users</label>
+            <label className="app-text-control-sm text-app-ink/70">{t('ai.search.metadataPeople')}</label>
             <input
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              placeholder="이름 또는 이메일 검색"
+              placeholder={t('pms.searchUser')}
               className="app-text-body-sm w-full rounded-md border border-app-border bg-app-surface-sidebar px-3 py-2 outline-none focus:border-app-accent"
             />
           </div>
@@ -481,7 +483,7 @@ function WhiteboardShareDialog({
           ) : (
             <div className="max-h-72 overflow-y-auto rounded-md border border-app-border">
               {users.length === 0 ? (
-                <div className="px-4 py-6 text-center text-sm text-app-ink/45">표시할 사용자가 없습니다.</div>
+                <div className="px-4 py-6 text-center text-sm text-app-ink/45">{t('whiteboard.noShareableUsers')}</div>
               ) : (
                 users.map((user) => {
                   const current = sharing?.users.find((item) => item.user_id === user.id);
@@ -508,8 +510,8 @@ function WhiteboardShareDialog({
                             }}
                             className="rounded-md border border-app-border bg-app-bg px-2 py-1 text-sm"
                           >
-                            <option value="read">read</option>
-                            <option value="edit">edit</option>
+                            <option value="read">{t('docs.share.access.read')}</option>
+                            <option value="edit">{t('docs.share.access.edit')}</option>
                           </select>
                           <Button
                             variant="ghost"
@@ -520,7 +522,7 @@ function WhiteboardShareDialog({
                               void run(() => deleteWhiteboardUserShare(token, board.id, user.id, workspaceSlug));
                             }}
                           >
-                            Remove
+                            {t('pms.bulk.remove')}
                           </Button>
                         </div>
                       ) : (
@@ -533,7 +535,7 @@ function WhiteboardShareDialog({
                             void run(() => upsertWhiteboardUserShare(token, board.id, user.id, 'read', workspaceSlug));
                           }}
                         >
-                          Add
+                          {t('common:actions.add')}
                         </Button>
                       )}
                     </div>
@@ -563,6 +565,7 @@ export function WhiteboardEditorSurface({
   onDetach,
 }: WhiteboardEditorSurfaceProps) {
   const { token } = useAuth();
+  const { t } = useTranslation('apps');
   const [activeBoard, setActiveBoard] = useState<WhiteboardDetail | null>(null);
   const [titleDraft, setTitleDraft] = useState('');
   const [loading, setLoading] = useState(false);
@@ -669,13 +672,13 @@ export function WhiteboardEditorSurface({
         void recordWhiteboardView(token, boardId, workspaceSlug);
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load whiteboard.');
+      setError(err instanceof Error ? err.message : t('whiteboard.loadFailed'));
       setActiveBoard(null);
       setGridModeEnabled(false);
     } finally {
       setLoading(false);
     }
-  }, [boardId, onBoardLoaded, shareToken, token, workspaceSlug]);
+  }, [boardId, onBoardLoaded, shareToken, token, workspaceSlug, t]);
 
   useEffect(() => {
     void loadBoard();
@@ -718,7 +721,7 @@ export function WhiteboardEditorSurface({
       saved = true;
     } catch (err) {
       lastSaveFailedRef.current = true;
-      setError(err instanceof Error ? err.message : 'Failed to save whiteboard.');
+      setError(err instanceof Error ? err.message : t('whiteboard.saveFailed'));
       setSaveStatus('error');
     } finally {
       saveInFlightRef.current = false;
@@ -750,7 +753,7 @@ export function WhiteboardEditorSurface({
       }
     }
     return saved;
-  }, [onBoardUpdated, shareToken, token, workspaceSlug]);
+  }, [onBoardUpdated, shareToken, token, workspaceSlug, t]);
 
   const scheduleSceneSave = useCallback((scene: WhiteboardScene, knownSignature?: string) => {
     if (!activeBoard?.id || !activeBoard.can_edit) return;
@@ -1165,7 +1168,7 @@ export function WhiteboardEditorSurface({
       .catch((err) => {
         if (!cancelled) {
           setCollabStatus('error');
-          setError(err instanceof Error ? err.message : '실시간 협업 세션을 시작하지 못했습니다.');
+          setError(err instanceof Error ? err.message : t('whiteboard.collabStartFailed'));
         }
       });
 
@@ -1223,6 +1226,7 @@ export function WhiteboardEditorSurface({
     shareToken,
     token,
     workspaceSlug,
+    t,
   ]);
 
   const saveTitle = useCallback(async (): Promise<boolean> => {
@@ -1237,11 +1241,11 @@ export function WhiteboardEditorSurface({
       onBoardUpdated?.(updated);
       return true;
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to rename whiteboard.');
+      setError(err instanceof Error ? err.message : t('whiteboard.renameFailed'));
       setTitleDraft(activeBoard.title);
       return false;
     }
-  }, [activeBoard, onBoardUpdated, shareToken, titleDraft, token, workspaceSlug]);
+  }, [activeBoard, onBoardUpdated, shareToken, titleDraft, token, workspaceSlug, t]);
 
   const handleArchive = useCallback(async () => {
     if (!token || !activeBoard || !activeBoard.can_manage) return;
@@ -1249,20 +1253,20 @@ export function WhiteboardEditorSurface({
       await deleteWhiteboard(token, activeBoard.id, workspaceSlug);
       onArchived?.(activeBoard.id);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to archive whiteboard.');
+      setError(err instanceof Error ? err.message : t('whiteboard.archiveFailed'));
     }
-  }, [activeBoard, onArchived, token, workspaceSlug]);
+  }, [activeBoard, onArchived, token, workspaceSlug, t]);
 
   const handlePermanentDelete = useCallback(async () => {
     if (!token || !activeBoard || !activeBoard.can_manage || !activeBoard.trashed_at) return;
-    if (!window.confirm(`Delete "${activeBoard.title}" permanently?`)) return;
+    if (!window.confirm(t('whiteboard.deletePermanentConfirm', { title: activeBoard.title }))) return;
     try {
       await permanentlyDeleteWhiteboard(token, activeBoard.id, workspaceSlug);
       onDeleted?.(activeBoard.id);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to delete whiteboard.');
+      setError(err instanceof Error ? err.message : t('whiteboard.deleteFailed'));
     }
-  }, [activeBoard, onDeleted, token, workspaceSlug]);
+  }, [activeBoard, onDeleted, token, workspaceSlug, t]);
 
   const handleFavorite = useCallback(async () => {
     if (!token || !activeBoard || shareToken) return;
@@ -1271,9 +1275,9 @@ export function WhiteboardEditorSurface({
       setActiveBoard((current) => current ? { ...current, is_favorite: response.is_favorite } : current);
       onBoardUpdated?.({ ...activeBoard, is_favorite: response.is_favorite });
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to update favorite.');
+      setError(err instanceof Error ? err.message : t('whiteboard.favoriteFailed'));
     }
-  }, [activeBoard, onBoardUpdated, shareToken, token, workspaceSlug]);
+  }, [activeBoard, onBoardUpdated, shareToken, token, workspaceSlug, t]);
 
   const currentApi = () => {
     const api = apiRef.current;
@@ -1393,9 +1397,9 @@ export function WhiteboardEditorSurface({
       await waitFor(50);
     }
 
-    setError('저장이 완료되지 않아 Whiteboard를 닫지 않았습니다.');
+    setError(t('whiteboard.closeSaveIncomplete'));
     return false;
-  }, [flushQueuedLocalChange, flushSceneSave]);
+  }, [flushQueuedLocalChange, flushSceneSave, t]);
 
   const handleClose = useCallback(async () => {
     if (!onClose || closePending) return;
@@ -1427,8 +1431,8 @@ export function WhiteboardEditorSurface({
     };
   }, [activeBoard]);
 
-  const label = saveLabel(saveStatus);
-  const liveLabel = collabLabel(collabStatus);
+  const label = saveLabel(saveStatus, t);
+  const liveLabel = collabLabel(collabStatus, t);
 
   return (
     <div className={cn('flex min-h-0 flex-1 flex-col bg-app-bg text-app-ink', className)}>
@@ -1443,7 +1447,7 @@ export function WhiteboardEditorSurface({
           {loading ? (
             <Loader2 size={24} className="animate-spin text-app-ink/40" />
           ) : (
-            <p className="app-text-body text-app-ink/45">Whiteboard를 불러올 수 없습니다.</p>
+            <p className="app-text-body text-app-ink/45">{t('whiteboard.loadFailed')}</p>
           )}
         </div>
       ) : (
@@ -1484,7 +1488,7 @@ export function WhiteboardEditorSurface({
                   'inline-flex h-8 w-8 items-center justify-center rounded-md transition-colors hover:bg-app-surface-hover',
                   activeBoard.is_favorite ? 'text-amber-500' : 'text-app-ink/60 hover:text-app-ink',
                 )}
-                title={activeBoard.is_favorite ? 'Unfavorite' : 'Favorite'}
+                title={activeBoard.is_favorite ? t('whiteboard.unfavorite') : t('pms.actions.favorite')}
               >
                 <Star size={15} fill={activeBoard.is_favorite ? 'currentColor' : 'none'} />
               </button>
@@ -1497,39 +1501,39 @@ export function WhiteboardEditorSurface({
                 'inline-flex h-8 w-8 items-center justify-center rounded-md transition-colors hover:bg-app-surface-hover',
                 gridModeEnabled ? 'bg-app-surface-hover text-app-ink' : 'text-app-ink/60 hover:text-app-ink',
               )}
-              title={gridModeEnabled ? 'Hide grid' : 'Show grid'}
+              title={gridModeEnabled ? t('whiteboard.hideGrid') : t('whiteboard.showGrid')}
             >
               <Grid3X3 size={15} />
             </button>
-            <button type="button" onClick={exportPng} className="inline-flex h-8 w-8 items-center justify-center rounded-md text-app-ink/60 hover:bg-app-surface-hover hover:text-app-ink" title="Download PNG">
+            <button type="button" onClick={exportPng} className="inline-flex h-8 w-8 items-center justify-center rounded-md text-app-ink/60 hover:bg-app-surface-hover hover:text-app-ink" title={t('whiteboard.downloadPng')}>
               <Image size={15} />
             </button>
-            <button type="button" onClick={exportSvg} className="inline-flex h-8 w-8 items-center justify-center rounded-md text-app-ink/60 hover:bg-app-surface-hover hover:text-app-ink" title="Download SVG">
+            <button type="button" onClick={exportSvg} className="inline-flex h-8 w-8 items-center justify-center rounded-md text-app-ink/60 hover:bg-app-surface-hover hover:text-app-ink" title={t('whiteboard.downloadSvg')}>
               <Download size={15} />
             </button>
-            <button type="button" onClick={exportJson} className="inline-flex h-8 w-8 items-center justify-center rounded-md text-app-ink/60 hover:bg-app-surface-hover hover:text-app-ink" title="Download Excalidraw JSON">
+            <button type="button" onClick={exportJson} className="inline-flex h-8 w-8 items-center justify-center rounded-md text-app-ink/60 hover:bg-app-surface-hover hover:text-app-ink" title={t('whiteboard.downloadJson')}>
               <FileJson size={15} />
             </button>
             {!shareToken && activeBoard.can_share ? (
-              <button type="button" onClick={() => setShareOpen(true)} className="inline-flex h-8 w-8 items-center justify-center rounded-md text-app-ink/60 hover:bg-app-surface-hover hover:text-app-ink" title="Share">
+              <button type="button" onClick={() => setShareOpen(true)} className="inline-flex h-8 w-8 items-center justify-center rounded-md text-app-ink/60 hover:bg-app-surface-hover hover:text-app-ink" title={t('common:actions.share')}>
                 <Share2 size={15} />
               </button>
             ) : null}
-            <button type="button" onClick={loadBoard} className="inline-flex h-8 w-8 items-center justify-center rounded-md text-app-ink/60 hover:bg-app-surface-hover hover:text-app-ink" title="Reload">
+            <button type="button" onClick={loadBoard} className="inline-flex h-8 w-8 items-center justify-center rounded-md text-app-ink/60 hover:bg-app-surface-hover hover:text-app-ink" title={t('common:actions.reload')}>
               <RefreshCcw size={15} />
             </button>
             {showDetach && onDetach ? (
-              <button type="button" onClick={onDetach} className="inline-flex h-8 w-8 items-center justify-center rounded-md text-app-ink/60 hover:bg-app-surface-hover hover:text-rose-500" title="Detach">
+              <button type="button" onClick={onDetach} className="inline-flex h-8 w-8 items-center justify-center rounded-md text-app-ink/60 hover:bg-app-surface-hover hover:text-rose-500" title={t('whiteboard.detach')}>
                 <Trash2 size={15} />
               </button>
             ) : null}
             {!shareToken && showArchive && activeBoard.can_manage && !activeBoard.trashed_at ? (
-              <button type="button" onClick={handleArchive} className="inline-flex h-8 w-8 items-center justify-center rounded-md text-app-ink/60 hover:bg-app-surface-hover hover:text-rose-500" title="Archive">
+              <button type="button" onClick={handleArchive} className="inline-flex h-8 w-8 items-center justify-center rounded-md text-app-ink/60 hover:bg-app-surface-hover hover:text-rose-500" title={t('common:actions.archive')}>
                 <Archive size={15} />
               </button>
             ) : null}
             {!shareToken && showArchive && activeBoard.can_manage && activeBoard.trashed_at ? (
-              <button type="button" onClick={handlePermanentDelete} className="inline-flex h-8 w-8 items-center justify-center rounded-md text-app-ink/60 hover:bg-app-surface-hover hover:text-rose-500" title="Delete permanently">
+              <button type="button" onClick={handlePermanentDelete} className="inline-flex h-8 w-8 items-center justify-center rounded-md text-app-ink/60 hover:bg-app-surface-hover hover:text-rose-500" title={t('common:actions.deletePermanently')}>
                 <Trash2 size={15} />
               </button>
             ) : null}
@@ -1541,7 +1545,7 @@ export function WhiteboardEditorSurface({
                   onClick={() => void handleClose()}
                   disabled={closePending}
                   className="inline-flex h-8 w-8 items-center justify-center rounded-md text-app-ink/60 hover:bg-app-surface-hover hover:text-app-ink disabled:cursor-wait disabled:opacity-60"
-                  title={closePending ? 'Saving before close' : 'Close whiteboard'}
+                  title={closePending ? t('whiteboard.savingBeforeClose') : t('whiteboard.closeWhiteboard')}
                 >
                   {closePending ? <Loader2 size={15} className="animate-spin" /> : <X size={16} />}
                 </button>

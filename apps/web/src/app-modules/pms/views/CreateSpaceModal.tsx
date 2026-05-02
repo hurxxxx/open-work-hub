@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Layout, UserPlus, X } from 'lucide-react';
 import { Dialog, Button } from '@aidoo/ui';
+import { useTranslation } from 'react-i18next';
 import { useAuth } from '@/src/platform/auth/auth-provider';
 import { hasWorkspaceMembership } from '@/src/platform/auth/auth-api';
 import {
@@ -46,6 +47,7 @@ export const CreateSpaceModal = ({
   onClose: () => void;
   onCreated?: (space: PmsSpace) => void;
 }) => {
+  const { t } = useTranslation(['apps', 'common']);
   const { token, user } = useAuth();
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
@@ -137,14 +139,14 @@ export const CreateSpaceModal = ({
           });
         } catch (err) {
           failures.push(
-            `${member.full_name}: ${err instanceof Error ? err.message : '실패'}`,
+            `${member.full_name}: ${err instanceof Error ? err.message : t('apps:pms.memberInviteFailed')}`,
           );
         }
       }
 
       if (failures.length > 0) {
         setError(
-          `스페이스는 만들어졌지만 일부 멤버 초대에 실패했습니다: ${failures.join(', ')}`,
+          t('apps:pms.createSpacePartialFailure', { failures: failures.join(', ') }),
         );
       }
 
@@ -153,7 +155,7 @@ export const CreateSpaceModal = ({
         onClose();
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : '스페이스 생성에 실패했습니다.');
+      setError(err instanceof Error ? err.message : t('apps:pms.createSpaceFailed'));
     } finally {
       setSubmitting(false);
     }
@@ -163,18 +165,18 @@ export const CreateSpaceModal = ({
     <Dialog
       open={isOpen}
       onOpenChange={(open) => { if (!open) onClose(); }}
-      title="New Space"
+      title={t('apps:pms.createSpace')}
       maxWidth="max-w-xl"
       dismissOnInteractOutside={false}
       actions={
         <div className="flex items-center justify-end gap-3 w-full">
-          <Button variant="secondary" onClick={onClose}>취소</Button>
+          <Button variant="secondary" onClick={onClose}>{t('common:actions.cancel')}</Button>
           <Button
             variant="primary"
             onClick={handleCreate}
             disabled={!name.trim() || !canCreateSpace || submitting}
           >
-            {submitting ? '만드는 중...' : '스페이스 만들기'}
+            {submitting ? t('apps:pms.creating') : t('apps:pms.createSpace')}
           </Button>
         </div>
       }
@@ -185,13 +187,13 @@ export const CreateSpaceModal = ({
             <Layout size={20} className="text-app-accent" />
           </div>
           <div className="app-text-body text-app-ink/60">
-            스페이스는 팀 단위의 작업 공간입니다. 리스트와 멤버를 묶어 관리할 수 있습니다.
+            {t('apps:pms.createSpaceDescription')}
           </div>
         </div>
 
         {!canCreateSpace && (
           <div className="app-text-body rounded-md border border-[var(--ui-color-warning)]/30 bg-[var(--ui-color-warning)]/10 px-3 py-2 text-[var(--ui-color-warning)]">
-            워크스페이스 접근 권한이 없어 스페이스를 생성할 수 없습니다.
+            {t('apps:pms.createSpaceNoAccess')}
           </div>
         )}
 
@@ -206,11 +208,11 @@ export const CreateSpaceModal = ({
 
         <div className="space-y-1">
           <label className="app-text-control-sm text-app-ink/70">
-            스페이스 이름 <span className="text-[var(--ui-color-danger)]">*</span>
+            {t('apps:pms.spaceName')} <span className="text-[var(--ui-color-danger)]">*</span>
           </label>
           <input
             type="text"
-            placeholder="예: Engineering"
+            placeholder={t('apps:pms.spacePlaceholder')}
             value={name}
             onChange={(e) => setName(e.target.value)}
             onKeyDown={(e) => {
@@ -230,10 +232,10 @@ export const CreateSpaceModal = ({
 
         <div className="space-y-1">
           <label className="app-text-control-sm text-app-ink/70">
-            설명 <span className="text-app-ink/30">(선택)</span>
+            {t('apps:pms.description')} <span className="text-app-ink/30">({t('apps:pms.optional')})</span>
           </label>
           <textarea
-            placeholder="스페이스에 대한 간단한 설명"
+            placeholder={t('apps:pms.spaceDescriptionPlaceholder')}
             value={description}
             onChange={(e) => setDescription(e.target.value)}
             rows={3}
@@ -244,10 +246,10 @@ export const CreateSpaceModal = ({
         {canCreateSpace ? (
           <div className="space-y-2">
             <label className="app-text-control-sm text-app-ink/70">
-              멤버 초대 <span className="text-app-ink/30">(선택)</span>
+              {t('apps:pms.inviteMembers')} <span className="text-app-ink/30">({t('apps:pms.optional')})</span>
             </label>
             <p className="app-text-caption text-app-ink/40">
-              본인은 자동으로 소유자로 추가됩니다. 함께할 팀원을 골라주세요.
+              {t('apps:pms.inviteMembersHint')}
             </p>
 
             {picked.length > 0 ? (
@@ -269,7 +271,7 @@ export const CreateSpaceModal = ({
                       type="button"
                       onClick={() => removeMember(member.id)}
                       className="text-app-ink/40 hover:text-app-ink"
-                      aria-label={`${member.full_name} 제외`}
+                      aria-label={t('apps:pms.removeMember', { name: member.full_name })}
                     >
                       <X size={11} />
                     </button>
@@ -290,7 +292,7 @@ export const CreateSpaceModal = ({
                 onBlur={() => {
                   window.setTimeout(() => setQueryFocused(false), 150);
                 }}
-                placeholder="이름 또는 이메일로 사용자 검색"
+                placeholder={t('apps:pms.searchUser')}
                 className="app-text-body w-full rounded-md border border-app-border bg-app-surface-sidebar py-2 pl-9 pr-3 text-app-ink placeholder:text-app-ink/30 focus:border-app-accent focus:outline-none"
               />
               {queryFocused && (query.trim() || candidates.length > 0) ? (
@@ -298,8 +300,8 @@ export const CreateSpaceModal = ({
                   {candidates.length === 0 ? (
                     <div className="app-text-caption px-3 py-3 text-app-ink/40">
                       {query.trim()
-                        ? '일치하는 사용자가 없습니다.'
-                        : '추가할 수 있는 사용자가 없습니다.'}
+                        ? t('apps:pms.noMatchingUsers')
+                        : t('apps:pms.noUsersToAdd')}
                     </div>
                   ) : (
                     <ul>

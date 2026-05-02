@@ -10,6 +10,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowLeft, ExternalLink, Loader2, PanelRightOpen, X } from 'lucide-react';
 import { BlockViewer, Button, CollaborativeBlockEditor, DetailDrawer } from '@aidoo/ui';
+import { useTranslation } from 'react-i18next';
 
 import { useAuth } from '@/src/platform/auth/auth-provider';
 import {
@@ -60,11 +61,11 @@ export interface MeetingWorkspaceLayoutProps {
   backHref?: string;
 }
 
-function formatRange(start: string, end: string, timeZone: string): string {
+function formatRange(start: string, end: string, timeZone: string, locale: string): string {
   const s = parseServerDateTime(start);
   const e = parseServerDateTime(end);
   return `${formatDateTime(s, {
-    locale: 'ko-KR',
+    locale,
     month: 'short',
     day: 'numeric',
     weekday: 'short',
@@ -73,7 +74,7 @@ function formatRange(start: string, end: string, timeZone: string): string {
     timeZone,
   })} - ${formatDateTime(e, {
     hour: '2-digit',
-    locale: 'ko-KR',
+    locale,
     minute: '2-digit',
     timeZone,
   })}`;
@@ -112,6 +113,7 @@ export function MeetingWorkspaceLayout({
   onClose,
   backHref,
 }: MeetingWorkspaceLayoutProps) {
+  const { t, i18n } = useTranslation('apps');
   const { token, user } = useAuth();
   const timeZone = normalizeTimeZone(user?.time_zone);
   const { uploadFile, createLinkedUploadFile, resolveFileUrl } = useMediaUpload();
@@ -145,7 +147,7 @@ export function MeetingWorkspaceLayout({
         const innerNotesDocId = current.notes_doc_id;
         const innerNotesPageId = current.notes_page_id;
         if (!innerNotesDocId || !innerNotesPageId) {
-          throw new Error('회의 메모를 준비할 수 없습니다.');
+          throw new Error(t('meeting.workspace.notesPrepareFailed'));
         }
         const [doc, pages] = await Promise.all([
           getDocsItem(resolvedToken, innerNotesDocId, null, resolvedWorkspaceSlug),
@@ -163,21 +165,21 @@ export function MeetingWorkspaceLayout({
         ({ doc, page } = await loadNotesFor(detail));
       }
       if (!page) {
-        throw new Error('회의 메모 페이지를 불러올 수 없습니다.');
+        throw new Error(t('meeting.workspace.notesPageFailed'));
       }
 
       setMeeting(detail);
       setNotesDoc(doc);
       setNotesPage(page);
     } catch (err) {
-      setError(err instanceof Error ? err.message : '회의 workspace를 불러올 수 없습니다.');
+      setError(err instanceof Error ? err.message : t('meeting.workspace.loadFailed'));
       setMeeting(null);
       setNotesDoc(null);
       setNotesPage(null);
     } finally {
       setLoading(false);
     }
-  }, [meetingId, token, workspaceSlug]);
+  }, [meetingId, t, token, workspaceSlug]);
 
   useEffect(() => {
     void loadWorkspace();
@@ -244,14 +246,14 @@ export function MeetingWorkspaceLayout({
         <p className="app-text-body text-app-ink/70">{error}</p>
         {onClose ? (
           <Button variant="secondary" onClick={onClose}>
-            닫기
+            {t('common:actions.close')}
           </Button>
         ) : (
           <Link
             to={meetingsRoot}
             className="app-text-control-sm rounded-md border border-app-border px-3 py-2 text-app-ink hover:bg-app-surface-hover"
           >
-            회의 목록으로 돌아가기
+            {t('meeting.workspace.backToMeetings')}
           </Link>
         )}
       </div>
@@ -286,7 +288,7 @@ export function MeetingWorkspaceLayout({
                   className="app-text-caption inline-flex items-center gap-1 text-app-ink/50 hover:text-app-accent"
                 >
                   <X size={14} />
-                  닫기
+                  {t('common:actions.close')}
                 </button>
               ) : (
                 <Link
@@ -294,37 +296,37 @@ export function MeetingWorkspaceLayout({
                   className="app-text-caption inline-flex items-center gap-1 text-app-ink/50 hover:text-app-accent"
                 >
                   <ArrowLeft size={14} />
-                  Meetings
+                  {t('meeting.meetings')}
                 </Link>
               )}
               <h1 className="app-text-title-md mt-2 truncate text-app-ink">
                 {meeting.title}
               </h1>
               <p className="app-text-caption mt-1 text-app-ink/60 dark:text-app-ink/70">
-                {formatRange(meeting.start_at, meeting.end_at, timeZone)} · {meeting.organizer_name}
+                {formatRange(meeting.start_at, meeting.end_at, timeZone, i18n.language)} · {meeting.organizer_name}
               </p>
             </div>
             <div className="flex shrink-0 items-center gap-2">
               {!detailPanelDocked ? (
                 <button
-                  aria-label="회의 상세 열기"
+                  aria-label={t('meeting.workspace.openDetails')}
                   className="app-text-control-sm inline-flex h-9 items-center gap-1 rounded-md border border-app-border px-3 text-app-ink transition-colors hover:bg-app-surface-hover"
                   onClick={() => setDetailOpen(true)}
                   type="button"
                 >
                   <PanelRightOpen size={14} />
-                  <span className="hidden sm:inline">상세</span>
+                  <span className="hidden sm:inline">{t('meeting.workspace.detail')}</span>
                 </button>
               ) : null}
               {notesDocPath ? (
                 <Link
-                  aria-label="Docs에서 열기"
+                  aria-label={t('meeting.workspace.openInDocs')}
                   to={notesDocPath}
                   target={onClose ? '_blank' : undefined}
                   rel={onClose ? 'noopener noreferrer' : undefined}
                   className="app-text-control-sm inline-flex h-9 items-center gap-1 rounded-md border border-app-border px-3 text-app-ink transition-colors hover:bg-app-surface-hover"
                 >
-                  <span className="hidden sm:inline">Open in Docs</span>
+                  <span className="hidden sm:inline">{t('meeting.workspace.openInDocsShort')}</span>
                   <ExternalLink size={13} />
                 </Link>
               ) : null}
@@ -350,7 +352,7 @@ export function MeetingWorkspaceLayout({
                     key={notesPage.id}
                     type="text"
                     defaultValue={notesPage.title}
-                    placeholder="회의 메모"
+                    placeholder={t('meeting.workspace.notesPlaceholder')}
                     className="app-text-title-xl w-full bg-transparent text-app-ink placeholder:text-app-ink/30 focus:outline-none"
                     onBlur={(event) => void handleTitleSave(event.target.value)}
                     onKeyDown={(event) => {
@@ -368,7 +370,7 @@ export function MeetingWorkspaceLayout({
                   <h2 className="app-text-title-xl text-app-ink">{notesPage.title}</h2>
                 )}
                 <p className="app-text-caption text-app-ink/50">
-                  단일 notes page가 실시간으로 동기화됩니다.
+                  {t('meeting.workspace.notesSync')}
                 </p>
               </div>
 
@@ -396,7 +398,7 @@ export function MeetingWorkspaceLayout({
                         yjsState: session.yjs_state,
                       };
                     }}
-                    placeholder="회의 메모를 작성하세요..."
+                    placeholder={t('meeting.workspace.editorPlaceholder')}
                     uploadFile={notesUploadFile}
                     resolveFileUrl={resolveFileUrl}
                     onChange={(content) => {
@@ -439,11 +441,11 @@ export function MeetingWorkspaceLayout({
 
       <DetailDrawer
         contentClassName="border-app-border bg-app-surface"
-        description="회의 상태, 참석자, 연결된 문서와 녹음을 확인합니다."
+        description={t('meeting.workspace.detailDrawerDescription')}
         embedded
         onOpenChange={setDetailOpen}
         open={detailOpen && !detailPanelDocked}
-        title="회의 상세"
+        title={t('meeting.workspace.detailDrawerTitle')}
       >
         <MeetingDetail
           workspaceSlug={workspaceSlug}

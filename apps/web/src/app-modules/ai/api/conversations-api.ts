@@ -1,5 +1,6 @@
 import { ApiRequestError, apiFetchJson } from '@/src/platform/api/client';
 import type { ApiSchema } from '@/src/platform/api/types';
+import { i18n } from '@/src/platform/i18n';
 import { rewriteWorkspaceApiPath } from '@/src/platform/workspaces/workspace-utils';
 
 export type ConversationArtifact = ApiSchema<'ArtifactOut'>;
@@ -42,19 +43,19 @@ async function request<T>(
         error.payload && typeof error.payload === 'object' && 'detail' in error.payload &&
         typeof (error.payload as { detail?: unknown }).detail === 'string'
           ? ((error.payload as { detail: string }).detail)
-          : `대화 요청에 실패했습니다. (${error.status})`;
+          : i18n.t('apps:ai.errors.conversationRequestFailed', { status: error.status });
       throw new ConversationsApiError(error.status, message);
     }
     throw new ConversationsApiError(
       0,
-      '대화 내역 서버에 연결하지 못했습니다.',
+      i18n.t('apps:ai.errors.conversationConnect'),
     );
   }
 }
 
 /**
  * Window custom event fired by the chat view whenever a turn finishes
- * persisting. The sidebar listens for it to refresh the "최근 대화" list —
+ * persisting. The sidebar listens for it to refresh the recent conversation list —
  * `updated_at` bumps on follow-up replies don't change the URL, so the
  * sidebar's `location.search` dependency alone won't catch them.
  */

@@ -3323,6 +3323,8 @@ export interface components {
              * @enum {string}
              */
             status: "active" | "invited" | "suspended";
+            /** Locale */
+            locale?: ("ko-KR" | "en-US") | null;
             /** Time Zone */
             time_zone?: string | null;
         };
@@ -3340,6 +3342,8 @@ export interface components {
             status: string;
             /** Theme Preference */
             theme_preference: string;
+            /** Locale */
+            locale: string;
             /** Time Zone */
             time_zone: string;
             /** Primary Org Unit */
@@ -3390,6 +3394,8 @@ export interface components {
             status?: ("active" | "invited" | "suspended") | null;
             /** Theme Preference */
             theme_preference?: ("system" | "light" | "dark") | null;
+            /** Locale */
+            locale?: ("ko-KR" | "en-US") | null;
             /** Time Zone */
             time_zone?: string | null;
             /** Must Change Password */
@@ -3574,6 +3580,8 @@ export interface components {
             status: string;
             /** Theme Preference */
             theme_preference: string;
+            /** Locale */
+            locale: string;
             /** Time Zone */
             time_zone: string;
             primary_org_unit: components["schemas"]["OrgUnitSummaryResponse"] | null;
@@ -7031,6 +7039,8 @@ export interface components {
             job_title?: string | null;
             /** Theme Preference */
             theme_preference?: ("system" | "light" | "dark") | null;
+            /** Locale */
+            locale?: ("ko-KR" | "en-US") | null;
             /** Time Zone */
             time_zone?: string | null;
         };

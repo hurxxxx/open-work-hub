@@ -80,8 +80,8 @@ describe('ModelPill', () => {
     expect(screen.getByRole('dialog')).not.toBeNull();
     expect(screen.getByText('자동')).not.toBeNull();
     expect(screen.getByText('로컬')).not.toBeNull();
-    expect(screen.getByText('Local pool')).not.toBeNull();
-    expect(screen.getByText('External pool')).not.toBeNull();
+    expect(screen.getByText('로컬 풀')).not.toBeNull();
+    expect(screen.getByText('외부 풀')).not.toBeNull();
     expect(screen.getByText('상태 새로고침')).not.toBeNull();
   });
 

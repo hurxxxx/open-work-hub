@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { CalendarDays, Loader2 } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
 import type { MeetingUser } from '../../api/meeting-api';
 
@@ -32,6 +33,7 @@ export function MeetingAvailabilityPanel({
   meetingEnd,
   timeZone,
 }: MeetingAvailabilityPanelProps) {
+  const { t, i18n } = useTranslation('apps');
   const [modalOpen, setModalOpen] = useState(false);
   const resolvedTimeZone = normalizeTimeZone(timeZone ?? DEFAULT_TIME_ZONE);
   const attendeeIds = useMemo(
@@ -53,17 +55,24 @@ export function MeetingAvailabilityPanel({
     if (!meetingStart || !meetingEnd || meetingEnd <= meetingStart) {
       return [];
     }
-    return buildAvailabilityConflicts(items, meetingStart, meetingEnd, resolvedTimeZone);
-  }, [items, meetingEnd, meetingStart, resolvedTimeZone]);
+    return buildAvailabilityConflicts(
+      items,
+      meetingStart,
+      meetingEnd,
+      resolvedTimeZone,
+      i18n.language,
+      { busy: t('meeting.busy'), schedule: t('meeting.schedule') },
+    );
+  }, [i18n.language, items, meetingEnd, meetingStart, resolvedTimeZone, t]);
 
   return (
     <>
       <div className="space-y-2 rounded-md border border-app-border bg-app-surface px-4 py-3">
         <div className="flex items-center justify-between gap-3">
           <div>
-            <p className="app-text-control-sm text-app-ink/70">참석자 일정</p>
+            <p className="app-text-control-sm text-app-ink/70">{t('meeting.attendeeSchedule')}</p>
             <p className="app-text-caption text-app-ink/45">
-              선택된 참석자들의 같은 주 일정을 비교합니다.
+              {t('meeting.attendeeScheduleDescription')}
             </p>
           </div>
           <button
@@ -73,33 +82,33 @@ export function MeetingAvailabilityPanel({
             className="app-text-control-sm inline-flex items-center gap-1.5 rounded-md border border-app-border bg-app-surface-sidebar px-3 py-1.5 text-app-ink transition-colors hover:bg-app-surface-hover disabled:cursor-not-allowed disabled:opacity-45"
           >
             <CalendarDays size={14} />
-            <span>스케줄 보기</span>
+            <span>{t('meeting.scheduleView')}</span>
           </button>
         </div>
 
         {!meetingStart || !meetingEnd || meetingEnd <= meetingStart ? (
           <p className="app-text-caption text-app-ink/50">
-            시작/종료 시각을 먼저 올바르게 입력하세요.
+            {t('meeting.availabilityInvalidWindow')}
           </p>
         ) : attendeeUsers.length === 0 ? (
           <p className="app-text-caption text-app-ink/50">
-            참석자를 추가하면 일정 충돌을 확인할 수 있습니다.
+            {t('meeting.availabilityNoAttendees')}
           </p>
         ) : loading ? (
           <div className="flex items-center gap-2 text-app-ink/50">
             <Loader2 size={14} className="animate-spin" />
-            <span className="app-text-caption">참석자 일정을 확인하는 중...</span>
+            <span className="app-text-caption">{t('meeting.availabilityChecking')}</span>
           </div>
         ) : error ? (
           <p className="app-text-caption text-[var(--ui-color-warning)]">{error}</p>
         ) : conflicts.length === 0 ? (
           <p className="app-text-caption text-emerald-600">
-            현재 선택된 시간과 겹치는 참석자 일정이 없습니다.
+            {t('meeting.availabilityNoConflicts')}
           </p>
         ) : (
           <div className="space-y-2">
             <p className="app-text-caption text-[var(--ui-color-warning)]">
-              일정 충돌 {conflicts.length}건이 감지되었습니다.
+              {t('meeting.availabilityConflict', { count: conflicts.length })}
             </p>
             <div className="space-y-1">
               {conflicts.map((item) => (
@@ -109,7 +118,12 @@ export function MeetingAvailabilityPanel({
                 >
                   <span className="font-medium">{item.fullName}</span>
                   <span className="truncate text-app-ink/60">
-                    {formatAvailabilityBlockLabel(item.block, resolvedTimeZone)}
+                    {formatAvailabilityBlockLabel(
+                      item.block,
+                      resolvedTimeZone,
+                      i18n.language,
+                      { busy: t('meeting.busy'), schedule: t('meeting.schedule') },
+                    )}
                   </span>
                 </div>
               ))}

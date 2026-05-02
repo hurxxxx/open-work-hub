@@ -32,6 +32,7 @@ import type {
   UsageEvent,
 } from './agent-events';
 import { iterSseEvents } from './sse-parser';
+import { i18n } from '@/src/platform/i18n';
 
 export type ChatTransport = 'stream' | 'sync' | null;
 
@@ -139,7 +140,7 @@ export function useChatStream(token: string | null): UseChatStreamApi {
   const send = useCallback(
     async (payload: AiChatStreamRequest) => {
       if (!token) {
-        throw new AiApiError(401, '로그인이 필요합니다.');
+        throw new AiApiError(401, i18n.t('auth:errors.noActiveSession'));
       }
 
       abortRef.current?.abort();
@@ -172,7 +173,7 @@ export function useChatStream(token: string | null): UseChatStreamApi {
           signal: controller.signal,
         });
         if (!response.body) {
-          throw new AiApiError(0, 'SSE 응답 본문이 비어 있습니다.');
+          throw new AiApiError(0, i18n.t('apps:ai.errors.emptySseBody'));
         }
 
         streamOpened = true;
@@ -208,7 +209,7 @@ export function useChatStream(token: string | null): UseChatStreamApi {
             status: 'cancelled',
             // Any artifacts still streaming are implicitly terminal now.
             // Flipping status prevents the card from rendering as
-            // "생성 중…" forever in the finalized turn.
+            // rendering as generating forever in the finalized turn.
             artifacts: prev.artifacts.map((artifact) =>
               artifact.status === 'open'
                 ? { ...artifact, status: 'closed' as const }
@@ -240,11 +241,11 @@ export function useChatStream(token: string | null): UseChatStreamApi {
           errorMessage:
             error instanceof Error
               ? error.message
-              : prev.errorMessage ?? 'AI 스트리밍에 실패했습니다.',
+              : prev.errorMessage ?? i18n.t('apps:ai.errors.streamFailed'),
           // Same rationale as the AbortError branch: any artifact still in
           // the ``open`` state has no more deltas coming, so flip it to
           // closed before AIView finalizes the turn. Otherwise the saved
-          // card sits as "생성 중…" forever.
+          // card stays in the generating state forever.
           artifacts: prev.artifacts.map((artifact) =>
             artifact.status === 'open'
               ? { ...artifact, status: 'closed' as const }
@@ -266,7 +267,7 @@ export function useChatStream(token: string | null): UseChatStreamApi {
       options?: { seedApproval?: PendingApproval | null },
     ) => {
       if (!token) {
-        throw new AiApiError(401, '로그인이 필요합니다.');
+        throw new AiApiError(401, i18n.t('auth:errors.noActiveSession'));
       }
 
       abortRef.current?.abort();
@@ -290,7 +291,7 @@ export function useChatStream(token: string | null): UseChatStreamApi {
           signal: controller.signal,
         });
         if (!response.body) {
-          throw new AiApiError(0, 'SSE 응답 본문이 비어 있습니다.');
+          throw new AiApiError(0, i18n.t('apps:ai.errors.emptySseBody'));
         }
 
         setStateForRun(runId, (prev) => ({
@@ -338,7 +339,7 @@ export function useChatStream(token: string | null): UseChatStreamApi {
           errorMessage:
             error instanceof Error
               ? error.message
-              : prev.errorMessage ?? 'AI 재개 스트리밍에 실패했습니다.',
+              : prev.errorMessage ?? i18n.t('apps:ai.errors.resumeStreamFailed'),
           artifacts: prev.artifacts.map((artifact) =>
             artifact.status === 'open'
               ? { ...artifact, status: 'closed' as const }
@@ -412,7 +413,7 @@ async function sendViaSyncFallback({
       errorMessage:
         resolved instanceof Error
           ? resolved.message
-          : 'AI 응답에 실패했습니다.',
+          : i18n.t('apps:ai.errors.responseFailed'),
     }));
   }
 }

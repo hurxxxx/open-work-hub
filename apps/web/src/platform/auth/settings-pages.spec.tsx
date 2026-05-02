@@ -20,6 +20,7 @@ function buildUser(overrides: Partial<AuthUser> = {}): AuthUser {
     job_title: 'Platform Owner',
     status: 'active',
     theme_preference: 'system',
+    locale: 'ko-KR',
     time_zone: 'Asia/Seoul',
     primary_org_unit: null,
     workspaces: [],
@@ -71,9 +72,9 @@ describe('ProfilePage', () => {
       </MemoryRouter>,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: 'Security' }));
+    fireEvent.click(screen.getByRole('button', { name: '보안' }));
 
-    await screen.findByText('Current Password');
+    await screen.findByText('현재 비밀번호');
     await waitFor(() => {
       expect(screen.getByTestId('location').textContent).toBe('/profile');
     });
@@ -87,12 +88,28 @@ describe('ProfilePage', () => {
       </MemoryRouter>,
     );
 
-    fireEvent.change(screen.getByRole('combobox'), {
+    fireEvent.change(screen.getAllByRole('combobox')[1], {
       target: { value: 'America/New_York' },
     });
 
     await waitFor(() => {
       expect(mockUpdatePreferences).toHaveBeenCalledWith({ time_zone: 'America/New_York' });
+    });
+  });
+
+  it('saves the selected locale from appearance settings', async () => {
+    render(
+      <MemoryRouter initialEntries={['/profile']}>
+        <ProfilePage initialTab="appearance" />
+      </MemoryRouter>,
+    );
+
+    fireEvent.change(screen.getAllByRole('combobox')[0], {
+      target: { value: 'en-US' },
+    });
+
+    await waitFor(() => {
+      expect(mockUpdatePreferences).toHaveBeenCalledWith({ locale: 'en-US' });
     });
   });
 });

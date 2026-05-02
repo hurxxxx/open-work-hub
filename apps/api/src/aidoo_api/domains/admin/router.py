@@ -26,6 +26,7 @@ from aidoo_api.domains.auth.access import (
     is_valid_workspace_role,
     load_user_graph,
     load_active_workspace_by_id,
+    normalize_locale,
     normalize_time_zone,
     normalize_system_role,
     normalize_workspace_role,
@@ -341,6 +342,7 @@ class AdminUserItemResponse(BaseModel):
     display_name: str
     status: str
     theme_preference: str
+    locale: str
     time_zone: str
     primary_org_unit: dict[str, str | None] | None
     system_roles: list[str]
@@ -500,6 +502,7 @@ class AdminUserCreateRequest(BaseModel):
     system_roles: list[str] = Field(default_factory=list)
     temporary_password: str | None = Field(default=None, min_length=8, max_length=128)
     status: Literal["active", "invited", "suspended"] = "active"
+    locale: Literal["ko-KR", "en-US"] | None = None
     time_zone: str | None = Field(default=None, min_length=1, max_length=64)
 
     @field_validator("time_zone")
@@ -508,6 +511,13 @@ class AdminUserCreateRequest(BaseModel):
         if value is None:
             return None
         return normalize_time_zone(value)
+
+    @field_validator("locale")
+    @classmethod
+    def validate_locale(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        return normalize_locale(value)
 
 
 class AdminUserUpdateRequest(BaseModel):
@@ -520,6 +530,7 @@ class AdminUserUpdateRequest(BaseModel):
     system_roles: list[str] | None = None
     status: Literal["active", "invited", "suspended"] | None = None
     theme_preference: Literal["system", "light", "dark"] | None = None
+    locale: Literal["ko-KR", "en-US"] | None = None
     time_zone: str | None = Field(default=None, min_length=1, max_length=64)
     must_change_password: bool | None = None
 
@@ -529,6 +540,13 @@ class AdminUserUpdateRequest(BaseModel):
         if value is None:
             return None
         return normalize_time_zone(value)
+
+    @field_validator("locale")
+    @classmethod
+    def validate_locale(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        return normalize_locale(value)
 
 
 class ResetPasswordRequest(BaseModel):
@@ -725,6 +743,7 @@ def _serialize_admin_user_list(db: Session, users: list[User]) -> list[AdminUser
                     "display_name": user.display_name or user.full_name,
                     "status": user.status,
                     "theme_preference": user.theme_preference,
+                    "locale": normalize_locale(getattr(user, "locale", None)),
                     "time_zone": user.time_zone or normalize_time_zone(None),
                     "primary_org_unit": serialize_org_unit(user.primary_org_unit),
                     "system_roles": system_roles,
@@ -818,6 +837,7 @@ def create_user(
         primary_org_unit_id=payload.primary_org_unit_id,
         must_change_password=True,
         theme_preference="system",
+        locale=payload.locale or normalize_locale(None),
         time_zone=payload.time_zone or normalize_time_zone(None),
     )
     db.add(user)
@@ -942,6 +962,8 @@ def update_user(
         user.status = payload.status
     if payload.theme_preference is not None:
         user.theme_preference = payload.theme_preference
+    if payload.locale is not None:
+        user.locale = payload.locale
     if payload.time_zone is not None:
         user.time_zone = payload.time_zone
     if payload.primary_org_unit_id is not None:

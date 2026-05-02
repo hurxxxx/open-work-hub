@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { CalendarRange, Users } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
 interface PlannerEventChoicePopoverProps {
   anchor: { x: number; y: number } | null;
@@ -18,6 +19,7 @@ export function PlannerEventChoicePopover({
   onPickMeeting,
   onDismiss,
 }: PlannerEventChoicePopoverProps) {
+  const { t } = useTranslation('apps');
   const panelRef = useRef<HTMLDivElement | null>(null);
   const [position, setPosition] = useState<{ top: number; left: number } | null>(null);
   const anchorX = anchor?.x ?? null;
@@ -67,7 +69,7 @@ export function PlannerEventChoicePopover({
     <div
       ref={panelRef}
       role="dialog"
-      aria-label="Create event or meeting"
+      aria-label={t('planner.createEventOrMeeting')}
       style={{
         position: 'fixed',
         top: position.top,
@@ -76,14 +78,14 @@ export function PlannerEventChoicePopover({
       }}
       className="z-50 rounded-lg border border-app-border bg-app-surface py-1 shadow-xl"
     >
-      <div className="app-text-overline px-3 pt-1.5 pb-1 text-app-ink/45">Create</div>
+      <div className="app-text-overline px-3 pt-1.5 pb-1 text-app-ink/45">{t('planner.create')}</div>
       <button
         type="button"
         onClick={onPickEvent}
         className="app-text-control-sm flex w-full items-center gap-2 px-3 py-2 text-left text-app-ink transition-colors hover:bg-app-surface-hover"
       >
         <CalendarRange size={14} className="text-app-ink/55" />
-        <span>이벤트</span>
+        <span>{t('planner.event')}</span>
       </button>
       <button
         type="button"
@@ -91,7 +93,7 @@ export function PlannerEventChoicePopover({
         className="app-text-control-sm flex w-full items-center gap-2 px-3 py-2 text-left text-app-ink transition-colors hover:bg-app-surface-hover"
       >
         <Users size={14} className="text-app-ink/55" />
-        <span>미팅</span>
+        <span>{t('planner.meeting')}</span>
       </button>
     </div>
   );

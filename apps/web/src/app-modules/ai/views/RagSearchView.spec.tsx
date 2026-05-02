@@ -17,6 +17,7 @@ const authHarness = vi.hoisted(() => ({
       display_name: 'AIDOO Member',
       status: 'active',
       theme_preference: 'system',
+    locale: 'ko-KR',
       primary_org_unit: null,
       workspaces: [
         {

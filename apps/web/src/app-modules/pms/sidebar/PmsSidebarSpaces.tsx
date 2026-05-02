@@ -5,6 +5,7 @@ import { ChevronDown, ChevronRight, Loader2, Plus } from 'lucide-react';
 import { useConfirm } from '@aidoo/ui/feedback/confirm-dialog';
 import { InlineNotice } from '@aidoo/ui/feedback/inline-notice';
 import { usePrompt } from '@aidoo/ui/feedback/prompt-dialog';
+import { useTranslation } from 'react-i18next';
 
 import {
   createNativeDoc,
@@ -71,9 +72,9 @@ function upsertList(lists: PmsTaskList[], item: PmsTaskList): PmsTaskList[] {
   );
 }
 
-function upsertSpace(spaces: PmsSpace[], space: PmsSpace): PmsSpace[] {
+function upsertSpace(spaces: PmsSpace[], space: PmsSpace, locale = 'ko-KR'): PmsSpace[] {
   return [space, ...spaces.filter((item) => item.id !== space.id)].sort(
-    (left, right) => left.name.localeCompare(right.name, 'ko'),
+    (left, right) => left.name.localeCompare(right.name, locale),
   );
 }
 
@@ -88,6 +89,8 @@ export function PmsSidebarSpaces({
   onToggle,
 }: PmsSidebarSpacesProps) {
   const navigate = useNavigate();
+  const { t, i18n } = useTranslation('apps');
+  const locale = i18n.resolvedLanguage ?? i18n.language;
   const { token, user } = useAuth();
   const { confirm, confirmDialog } = useConfirm();
   const { prompt, promptDialog } = usePrompt();
@@ -210,12 +213,12 @@ export function PmsSidebarSpaces({
       })
         .then((res) =>
           setSpaceDocsMap((prev) =>
-            new Map(prev).set(team.id, sortSpaceDocs(res.items)),
+            new Map(prev).set(team.id, sortSpaceDocs(res.items, locale)),
           ),
         )
         .catch(() => undefined);
     }
-  }, [token, pmsTeams]);
+  }, [token, pmsTeams, locale]);
 
   const openCreateTaskList = (teamId: string | null) => {
     setCreateTaskListTeamId(teamId);
@@ -241,8 +244,8 @@ export function PmsSidebarSpaces({
     async (spaceId: string) => {
       if (!token) return;
       const title = await prompt({
-        title: 'New Document',
-        placeholder: 'Document name',
+        title: t('pms.sidebar.newDocument'),
+        placeholder: t('pms.sidebar.documentName'),
         defaultValue: '',
       });
       if (!title) return;
@@ -259,7 +262,7 @@ export function PmsSidebarSpaces({
         });
         setSpaceDocsMap((prev) => {
           const next = new Map(prev);
-          next.set(spaceId, sortSpaceDocs([...(next.get(spaceId) ?? []), doc]));
+          next.set(spaceId, sortSpaceDocs([...(next.get(spaceId) ?? []), doc], locale));
           return next;
         });
         navigate(`/tool/pms-space-${spaceId}-docs-${doc.id}`);
@@ -267,15 +270,15 @@ export function PmsSidebarSpaces({
         /* ignore */
       }
     },
-    [navigate, prompt, token],
+    [locale, navigate, prompt, token, t],
   );
 
   const handleCreateWhiteboard = useCallback(
     async (spaceId: string) => {
       if (!token) return;
       const title = await prompt({
-        title: 'New Whiteboard',
-        placeholder: 'Whiteboard name',
+        title: t('pms.sidebar.newWhiteboard'),
+        placeholder: t('pms.sidebar.whiteboardName'),
         defaultValue: '',
       });
       if (!title) return;
@@ -299,7 +302,7 @@ export function PmsSidebarSpaces({
         /* ignore */
       }
     },
-    [currentWorkspaceSlug, navigate, prompt, token],
+    [currentWorkspaceSlug, navigate, prompt, token, t],
   );
 
   const handleRenameDoc = useCallback(
@@ -316,6 +319,7 @@ export function PmsSidebarSpaces({
             teamId,
             sortSpaceDocs(
               docs.map((doc) => (doc.id === updated.id ? updated : doc)),
+              locale,
             ),
           );
           return next;
@@ -324,7 +328,7 @@ export function PmsSidebarSpaces({
         /* ignore */
       }
     },
-    [token],
+    [locale, token],
   );
 
   const handleDeleteDoc = useCallback(
@@ -332,10 +336,9 @@ export function PmsSidebarSpaces({
       if (!token) return;
       if (
         !(await confirm({
-          title: 'Delete Collection',
-          description:
-            'Move this document collection and all its pages to Trash?',
-          confirmLabel: 'Move to Trash',
+          title: t('pms.sidebar.deleteCollection'),
+          description: t('pms.sidebar.deleteCollectionDescription'),
+          confirmLabel: t('pms.sidebar.moveToTrash'),
           variant: 'danger',
         }))
       )
@@ -366,7 +369,7 @@ export function PmsSidebarSpaces({
         /* ignore */
       }
     },
-    [activeNavItemId, confirm, navigate, spaceDocsMap, token],
+    [activeNavItemId, confirm, navigate, spaceDocsMap, token, t],
   );
 
   const handleSaveSpaceOrder = useCallback(
@@ -441,7 +444,7 @@ export function PmsSidebarSpaces({
             ? withDocsItemPrimaryContainerSortOrder(doc, updated.sort_order)
             : doc;
         });
-        next.set(spaceId, sortSpaceDocs(docs));
+        next.set(spaceId, sortSpaceDocs(docs, locale));
         return next;
       });
 
@@ -466,19 +469,19 @@ export function PmsSidebarSpaces({
       } catch (error) {
         setPmsTaskLists(listSnapshot);
         setSpaceDocsMap(docSnapshot);
-        throw new Error(getErrorMessage(error, '순서를 저장하지 못했습니다.'));
+        throw new Error(getErrorMessage(error, t('pms.orderEditor.saveFailed')));
       }
     },
-    [pmsLists, spaceDocsMap, token],
+    [locale, pmsLists, spaceDocsMap, token, t],
   );
 
   const handleRenameFolder = useCallback(
     async (folderId: string, currentName: string) => {
       if (!token) return;
       const newName = await prompt({
-        title: 'Rename Folder',
+        title: t('pms.sidebar.renameFolder'),
         defaultValue: currentName,
-        placeholder: 'Folder name',
+        placeholder: t('pms.folderName'),
       });
       if (!newName || newName === currentName) return;
       try {
@@ -492,7 +495,7 @@ export function PmsSidebarSpaces({
         /* ignore */
       }
     },
-    [prompt, token],
+    [prompt, token, t],
   );
 
   const handleReorderDoc = useCallback(
@@ -527,7 +530,7 @@ export function PmsSidebarSpaces({
             ? withDocsItemPrimaryContainerSortOrder(doc, patch.sort_order)
             : doc;
         });
-        next.set(spaceId, sortSpaceDocs(docs));
+        next.set(spaceId, sortSpaceDocs(docs, locale));
         return next;
       });
       try {
@@ -543,10 +546,10 @@ export function PmsSidebarSpaces({
         );
       } catch (error) {
         setSpaceDocsMap(snapshot);
-        setPmsError(getErrorMessage(error, '문서 순서를 변경하지 못했습니다.'));
+        setPmsError(getErrorMessage(error, t('pms.sidebar.docOrderFailed')));
       }
     },
-    [spaceDocsMap, token],
+    [locale, spaceDocsMap, token, t],
   );
 
   const handleReorderList = useCallback(
@@ -594,11 +597,11 @@ export function PmsSidebarSpaces({
       } catch (error) {
         setPmsTaskLists(snapshot);
         setPmsError(
-          getErrorMessage(error, '리스트 순서를 변경하지 못했습니다.'),
+          getErrorMessage(error, t('pms.sidebar.listOrderFailed')),
         );
       }
     },
-    [pmsLists, token],
+    [pmsLists, token, t],
   );
 
   const handleMoveFolder = useCallback(
@@ -612,7 +615,7 @@ export function PmsSidebarSpaces({
         .sort(
           (left, right) =>
             left.sort_order - right.sort_order ||
-            left.name.localeCompare(right.name, 'ko'),
+            left.name.localeCompare(right.name, locale),
         );
       const currentIndex = orderedFolders.findIndex(
         (folder) => folder.id === folderId,
@@ -643,10 +646,10 @@ export function PmsSidebarSpaces({
           current.map((folder) => updatedFolders.get(folder.id) ?? folder),
         );
       } catch (error) {
-        setPmsError(getErrorMessage(error, '폴더 순서를 변경하지 못했습니다.'));
+        setPmsError(getErrorMessage(error, t('pms.sidebar.folderOrderFailed')));
       }
     },
-    [pmsFolders, token],
+    [locale, pmsFolders, token, t],
   );
 
   const handleDeleteFolder = useCallback(
@@ -654,10 +657,9 @@ export function PmsSidebarSpaces({
       if (!token) return;
       if (
         !(await confirm({
-          title: 'Delete Folder',
-          description:
-            'Delete this folder? Lists inside will be moved to the space root.',
-          confirmLabel: 'Delete',
+          title: t('pms.sidebar.deleteFolder'),
+          description: t('pms.sidebar.deleteFolderDescription'),
+          confirmLabel: t('common:actions.delete'),
           variant: 'danger',
         }))
       )
@@ -674,7 +676,7 @@ export function PmsSidebarSpaces({
         /* ignore */
       }
     },
-    [confirm, token],
+    [confirm, token, t],
   );
 
   const handleRenameSpace = useCallback(
@@ -697,9 +699,9 @@ export function PmsSidebarSpaces({
       if (!token) return;
       if (
         !(await confirm({
-          title: 'Delete Space',
-          description: 'Move this space and its contents to Trash?',
-          confirmLabel: 'Move to Trash',
+          title: t('pms.sidebar.deleteSpace'),
+          description: t('pms.sidebar.deleteSpaceDescription'),
+          confirmLabel: t('pms.sidebar.moveToTrash'),
           variant: 'danger',
         }))
       )
@@ -744,7 +746,7 @@ export function PmsSidebarSpaces({
         }
       } catch (error) {
         setPmsError(
-          getErrorMessage(error, '스페이스를 휴지통으로 옮기지 못했습니다.'),
+          getErrorMessage(error, t('pms.sidebar.deleteSpaceFailed')),
         );
       }
     },
@@ -756,6 +758,7 @@ export function PmsSidebarSpaces({
       pmsLists,
       pmsRootPath,
       token,
+      t,
     ],
   );
 
@@ -808,7 +811,7 @@ export function PmsSidebarSpaces({
 
       const current = ensureGroup(
         list.team_id,
-        list.team_name ?? 'Untitled Space',
+        list.team_name ?? t('pms.sidebar.untitledSpace'),
       );
       if (list.folder_id && folderMap.has(list.folder_id)) {
         const folder = folderMap.get(list.folder_id);
@@ -829,7 +832,7 @@ export function PmsSidebarSpaces({
 
     for (const folder of pmsFolders) {
       if (!folder.team_id) continue;
-      const current = ensureGroup(folder.team_id, 'Untitled Space');
+      const current = ensureGroup(folder.team_id, t('pms.sidebar.untitledSpace'));
       if (!current.folders.has(folder.id)) {
         current.folders.set(folder.id, { folder, lists: [] });
       }
@@ -837,7 +840,7 @@ export function PmsSidebarSpaces({
 
     const sortByOrderThenName = (left: PmsTaskList, right: PmsTaskList) =>
       left.sort_order - right.sort_order ||
-      left.name.localeCompare(right.name, 'ko');
+      left.name.localeCompare(right.name, locale);
 
     return Array.from(spaces.values())
       .map((space) => ({
@@ -851,11 +854,11 @@ export function PmsSidebarSpaces({
           .sort(
             (left, right) =>
               left.folder.sort_order - right.folder.sort_order ||
-              left.folder.name.localeCompare(right.folder.name, 'ko'),
+              left.folder.name.localeCompare(right.folder.name, locale),
           ),
       }))
-      .sort((left, right) => left.name.localeCompare(right.name, 'ko'));
-  }, [pmsFolders, pmsLists, pmsTeams]);
+      .sort((left, right) => left.name.localeCompare(right.name, locale));
+  }, [locale, pmsFolders, pmsLists, pmsTeams, t]);
 
   useEffect(() => {
     setExpandedSpaces((current) => {
@@ -907,13 +910,13 @@ export function PmsSidebarSpaces({
                 className="text-gray-500 dark:text-gray-400 transition-colors group-hover/section:text-app-ink dark:group-hover/section:text-white"
               />
             )}
-            <span>Spaces</span>
+            <span>{t('pms.spaces')}</span>
           </button>
           {canWriteTeams && (
             <button
               onClick={() => setCreateSpaceOpen(true)}
               className="p-1 hover:bg-app-surface-hover rounded text-gray-600 dark:text-gray-300 hover:text-app-ink dark:hover:text-white transition-colors"
-              title="Create Space"
+              title={t('pms.createSpace')}
             >
               <Plus size={12} />
             </button>
@@ -1046,7 +1049,7 @@ export function PmsSidebarSpaces({
                       className="sidebar-submenu-item ml-1 w-full"
                     >
                       <Plus size={13} />
-                      <span className="sidebar-submenu-label">New Space</span>
+                      <span className="sidebar-submenu-label">{t('pms.sidebar.newSpace')}</span>
                     </button>
                   )}
                 </>
@@ -1081,7 +1084,7 @@ export function PmsSidebarSpaces({
         onClose={() => setCreateSpaceOpen(false)}
         onCreated={(space) => {
           knownSpaceIdsRef.current.add(space.id);
-          setPmsTeams((current) => upsertSpace(current, space));
+          setPmsTeams((current) => upsertSpace(current, space, locale));
           setExpandedSpaces((current) => new Set(current).add(space.id));
         }}
       />

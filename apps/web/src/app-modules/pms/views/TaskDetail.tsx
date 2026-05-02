@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import { Badge, Button, BlockEditor, BlockViewer } from '@aidoo/ui';
 import type { BlockContent } from '@aidoo/ui';
+import { useTranslation } from 'react-i18next';
 import { useAuth } from '@/src/platform/auth/auth-provider';
 import { useMediaUpload } from '@/src/platform/media/use-media-upload';
 import { linkMedia, extractMediaIds } from '@/src/platform/media/media-api';
@@ -57,7 +58,25 @@ import { toLocalDateInputValue } from '../api/pms-filters';
 import { getStatusSlugs, getStatusTone, getStatusLabel, initials, formatDate } from './pms-constants';
 
 const PRIORITIES = ['low', 'medium', 'high', 'critical'] as const;
-const PRIORITY_LABELS: Record<string, string> = { low: 'Low', medium: 'Medium', high: 'High', critical: 'Critical' };
+const PRIORITY_LABEL_KEYS: Record<string, string> = {
+  critical: 'pms.priorityCritical',
+  high: 'pms.priorityHigh',
+  low: 'pms.priorityLow',
+  medium: 'pms.priorityMedium',
+};
+const DEFAULT_STATUS_LABEL_KEYS: Record<string, string> = {
+  backlog: 'pms.filter.status.backlog',
+  canceled: 'pms.filter.status.canceled',
+  done: 'pms.filter.status.done',
+  in_progress: 'pms.filter.status.inProgress',
+  todo: 'pms.filter.status.todo',
+};
+const RECURRENCE_OPTIONS = [
+  { value: 'daily', labelKey: 'pms.taskDetail.recurrence.daily' },
+  { value: 'weekly', labelKey: 'pms.taskDetail.recurrence.weekly' },
+  { value: 'biweekly', labelKey: 'pms.taskDetail.recurrence.biweekly' },
+  { value: 'monthly', labelKey: 'pms.taskDetail.recurrence.monthly' },
+] as const;
 
 const selectClass = 'app-text-body w-full min-w-0 bg-transparent text-app-ink border border-app-border rounded-md px-2 py-1 focus:outline-none focus:border-app-accent cursor-pointer hover:border-app-ink/30 transition-colors';
 const disabledFieldClass = `${selectClass} disabled:cursor-not-allowed disabled:opacity-60`;
@@ -88,6 +107,7 @@ export const TaskDetail = ({
   onUpdate?: () => void | Promise<void>;
 }) => {
   const { token } = useAuth();
+  const { t } = useTranslation('apps');
   const { uploadFile, resolveFileUrl } = useMediaUpload();
   const [issueState, setIssueState] = useState(issue);
   const [comments, setComments] = useState<PmsComment[]>([]);
@@ -124,6 +144,15 @@ export const TaskDetail = ({
   const [mobilePanel, setMobilePanel] = useState<'details' | 'activity'>('details');
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const selectedLabelIds = issueState.labels.map((label) => label.id);
+  const statusLabel = useCallback(
+    (slug: string) => {
+      const configuredStatus = taskListStatuses?.find((status) => status.slug === slug);
+      if (configuredStatus) return configuredStatus.name;
+      const labelKey = DEFAULT_STATUS_LABEL_KEYS[slug];
+      return labelKey ? t(labelKey) : getStatusLabel(slug, taskListStatuses);
+    },
+    [taskListStatuses, t],
+  );
 
   useEffect(() => {
     if (canEdit) {
@@ -197,10 +226,10 @@ export const TaskDetail = ({
       void persistIssueUpdate(
         { [field]: value },
         (current) => ({ ...current, [field]: value } as PmsIssue),
-        '이슈 변경사항을 저장하지 못했습니다.',
+        t('pms.taskDetail.errors.saveIssueFailed'),
       );
     },
-    [persistIssueUpdate],
+    [persistIssueUpdate, t],
   );
 
   const handleDescriptionChange = useCallback(
@@ -219,11 +248,11 @@ export const TaskDetail = ({
             }
           })
           .catch((error) => {
-            setSaveError(getErrorMessage(error, '설명을 저장하지 못했습니다.'));
+            setSaveError(getErrorMessage(error, t('pms.taskDetail.errors.saveDescriptionFailed')));
           });
       }, 500);
     },
-    [canEdit, issueState.id, onUpdate, token],
+    [canEdit, issueState.id, onUpdate, token, t],
   );
 
   const handleUnlinkSubtask = useCallback(async (subtaskId: string) => {
@@ -234,9 +263,9 @@ export const TaskDetail = ({
       setSubtasks(prev => prev.filter(s => s.id !== subtaskId));
       await Promise.resolve(onUpdate?.());
     } catch (error) {
-      setSaveError(getErrorMessage(error, '서브태스크 연결을 해제하지 못했습니다.'));
+      setSaveError(getErrorMessage(error, t('pms.taskDetail.errors.unlinkSubtaskFailed')));
     }
-  }, [canEdit, token, onUpdate]);
+  }, [canEdit, token, onUpdate, t]);
 
   const handleArchiveSubtask = useCallback(async (subtaskId: string) => {
     if (!token || !canEdit) return;
@@ -247,9 +276,9 @@ export const TaskDetail = ({
       setSubtaskMenuOpen(null);
       await Promise.resolve(onUpdate?.());
     } catch (error) {
-      setSaveError(getErrorMessage(error, '서브태스크를 보관하지 못했습니다.'));
+      setSaveError(getErrorMessage(error, t('pms.taskDetail.errors.archiveSubtaskFailed')));
     }
-  }, [canEdit, token, onUpdate]);
+  }, [canEdit, token, onUpdate, t]);
 
   const handleDeleteSubtask = useCallback(async (subtaskId: string) => {
     if (!token || !canEdit) return;
@@ -260,9 +289,9 @@ export const TaskDetail = ({
       setSubtaskMenuOpen(null);
       await Promise.resolve(onUpdate?.());
     } catch (error) {
-      setSaveError(getErrorMessage(error, '서브태스크를 삭제하지 못했습니다.'));
+      setSaveError(getErrorMessage(error, t('pms.taskDetail.errors.deleteSubtaskFailed')));
     }
-  }, [canEdit, token, onUpdate]);
+  }, [canEdit, token, onUpdate, t]);
 
   const handleToggleIssueArchive = useCallback(() => {
     if (!canEdit) return;
@@ -270,9 +299,11 @@ export const TaskDetail = ({
     void persistIssueUpdate(
       { archived: nextArchived },
       (current) => ({ ...current, archived: nextArchived }),
-      nextArchived ? '이슈를 보관하지 못했습니다.' : '이슈를 복구하지 못했습니다.',
+      nextArchived
+        ? t('pms.taskDetail.errors.archiveIssueFailed')
+        : t('pms.taskDetail.errors.restoreIssueFailed'),
     );
-  }, [canEdit, issueState.archived, persistIssueUpdate]);
+  }, [canEdit, issueState.archived, persistIssueUpdate, t]);
 
   const handleAddSubtask = useCallback(async () => {
     if (!token || !canEdit || !newSubtaskTitle.trim()) return;
@@ -293,11 +324,11 @@ export const TaskDetail = ({
       setNewSubtaskTitle('');
       await Promise.resolve(onUpdate?.());
     } catch (error) {
-      setSaveError(getErrorMessage(error, '서브태스크를 생성하지 못했습니다.'));
+      setSaveError(getErrorMessage(error, t('pms.taskDetail.errors.createSubtaskFailed')));
     } finally {
       setAddingSubtask(false);
     }
-  }, [canEdit, token, issue.id, issue.list_id, newSubtaskTitle, onUpdate]);
+  }, [canEdit, token, issue.id, issue.list_id, newSubtaskTitle, onUpdate, t]);
 
   // ── Checklist handlers ──────────────────────────────────────────
 
@@ -314,11 +345,11 @@ export const TaskDetail = ({
       setNewChecklistText('');
       await Promise.resolve(onUpdate?.());
     } catch (error) {
-      setSaveError(getErrorMessage(error, '체크리스트 항목을 추가하지 못했습니다.'));
+      setSaveError(getErrorMessage(error, t('pms.taskDetail.errors.addChecklistFailed')));
     } finally {
       setAddingChecklist(false);
     }
-  }, [canEdit, token, issue.id, newChecklistText, checklistItems.length, onUpdate]);
+  }, [canEdit, token, issue.id, newChecklistText, checklistItems.length, onUpdate, t]);
 
   const handleToggleChecklistItem = useCallback(async (item: PmsChecklistItem) => {
     if (!token || !canEdit) return;
@@ -329,9 +360,9 @@ export const TaskDetail = ({
       await Promise.resolve(onUpdate?.());
     } catch (error) {
       setChecklistItems(prev => prev.map(ci => ci.id === item.id ? { ...ci, completed: !newCompleted } : ci));
-      setSaveError(getErrorMessage(error, '체크리스트 항목을 변경하지 못했습니다.'));
+      setSaveError(getErrorMessage(error, t('pms.taskDetail.errors.updateChecklistFailed')));
     }
-  }, [canEdit, token, onUpdate]);
+  }, [canEdit, token, onUpdate, t]);
 
   const handleSaveChecklistEdit = useCallback(async (itemId: string) => {
     if (!token || !canEdit || !editingChecklistText.trim()) return;
@@ -340,9 +371,9 @@ export const TaskDetail = ({
       setChecklistItems(prev => prev.map(ci => ci.id === itemId ? { ...ci, text: editingChecklistText.trim() } : ci));
       setEditingChecklistId(null);
     } catch (error) {
-      setSaveError(getErrorMessage(error, '체크리스트 항목을 수정하지 못했습니다.'));
+      setSaveError(getErrorMessage(error, t('pms.taskDetail.errors.editChecklistFailed')));
     }
-  }, [canEdit, token, editingChecklistText]);
+  }, [canEdit, token, editingChecklistText, t]);
 
   const handleDeleteChecklistItem = useCallback(async (itemId: string) => {
     if (!token || !canEdit) return;
@@ -351,9 +382,9 @@ export const TaskDetail = ({
       setChecklistItems(prev => prev.filter(ci => ci.id !== itemId));
       await Promise.resolve(onUpdate?.());
     } catch (error) {
-      setSaveError(getErrorMessage(error, '체크리스트 항목을 삭제하지 못했습니다.'));
+      setSaveError(getErrorMessage(error, t('pms.taskDetail.errors.deleteChecklistFailed')));
     }
-  }, [canEdit, token, onUpdate]);
+  }, [canEdit, token, onUpdate, t]);
 
   const checklistDone = checklistItems.filter(ci => ci.completed).length;
   const checklistTotal = checklistItems.length;
@@ -387,11 +418,11 @@ export const TaskDetail = ({
       setTimeLogDesc('');
       await Promise.resolve(onUpdate?.());
     } catch (error) {
-      setSaveError(getErrorMessage(error, '시간을 기록하지 못했습니다.'));
+      setSaveError(getErrorMessage(error, t('pms.taskDetail.errors.logTimeFailed')));
     } finally {
       setLoggingTime(false);
     }
-  }, [canEdit, token, issue.id, timeLogMinutes, timeLogDesc, onUpdate]);
+  }, [canEdit, token, issue.id, timeLogMinutes, timeLogDesc, onUpdate, t]);
 
   const handleDeleteTimeEntry = useCallback(async (entryId: string) => {
     if (!token || !canEdit) return;
@@ -400,9 +431,9 @@ export const TaskDetail = ({
       setTimeEntries(prev => prev.filter(te => te.id !== entryId));
       await Promise.resolve(onUpdate?.());
     } catch (error) {
-      setSaveError(getErrorMessage(error, '시간 기록을 삭제하지 못했습니다.'));
+      setSaveError(getErrorMessage(error, t('pms.taskDetail.errors.deleteTimeFailed')));
     }
-  }, [canEdit, token, onUpdate]);
+  }, [canEdit, token, onUpdate, t]);
 
   // ── Dependency handlers ──────────────────────────────────────────
   const handleDepSearch = useCallback(async (query: string) => {
@@ -426,9 +457,9 @@ export const TaskDetail = ({
       setDepSearchResults([]);
       await Promise.resolve(onUpdate?.());
     } catch (error) {
-      setSaveError(getErrorMessage(error, '의존성을 추가하지 못했습니다.'));
+      setSaveError(getErrorMessage(error, t('pms.taskDetail.errors.addDependencyFailed')));
     } finally { setAddingDep(false); }
-  }, [canEdit, token, issue.id, onUpdate]);
+  }, [canEdit, token, issue.id, onUpdate, t]);
 
   const handleToggleLabel = useCallback((labelId: string) => {
     if (!canEdit) return;
@@ -439,9 +470,9 @@ export const TaskDetail = ({
     void persistIssueUpdate(
       { label_ids: nextLabelIds },
       (current) => ({ ...current, labels: nextLabels }),
-      '라벨을 저장하지 못했습니다.',
+      t('pms.taskDetail.errors.saveLabelsFailed'),
     );
-  }, [canEdit, persistIssueUpdate, taskListLabels, selectedLabelIds]);
+  }, [canEdit, persistIssueUpdate, taskListLabels, selectedLabelIds, t]);
 
   const handleCommentSubmit = useCallback(() => {
     if (!token || !canEdit || !commentDraft.trim()) return;
@@ -453,9 +484,9 @@ export const TaskDetail = ({
         await Promise.resolve(onUpdate?.());
       })
       .catch((error) => {
-        setSaveError(getErrorMessage(error, '댓글을 등록하지 못했습니다.'));
+        setSaveError(getErrorMessage(error, t('pms.taskDetail.errors.createCommentFailed')));
       });
-  }, [canEdit, token, issue.id, commentDraft, onUpdate]);
+  }, [canEdit, token, issue.id, commentDraft, onUpdate, t]);
 
   const handleFileUpload = useCallback(async (files: FileList | File[]) => {
     if (!token || !canEdit) return;
@@ -468,12 +499,12 @@ export const TaskDetail = ({
       }
       await Promise.resolve(onUpdate?.());
     } catch (error) {
-      setSaveError(getErrorMessage(error, '파일을 업로드하지 못했습니다.'));
+      setSaveError(getErrorMessage(error, t('pms.taskDetail.errors.uploadFileFailed')));
     } finally {
       setUploading(false);
       setDragOver(false);
     }
-  }, [canEdit, token, issue.id, onUpdate]);
+  }, [canEdit, token, issue.id, onUpdate, t]);
 
   const handleDeleteAttachment = useCallback(async (attachmentId: string) => {
     if (!token || !canEdit) return;
@@ -483,9 +514,9 @@ export const TaskDetail = ({
       setAttachments(prev => prev.filter(a => a.id !== attachmentId));
       await Promise.resolve(onUpdate?.());
     } catch (error) {
-      setSaveError(getErrorMessage(error, '첨부파일을 삭제하지 못했습니다.'));
+      setSaveError(getErrorMessage(error, t('pms.taskDetail.errors.deleteAttachmentFailed')));
     }
-  }, [canEdit, token, onUpdate]);
+  }, [canEdit, token, onUpdate, t]);
 
   // Description fullscreen mode
   if (descFullscreen) {
@@ -496,7 +527,7 @@ export const TaskDetail = ({
             onClick={() => setDescFullscreen(false)}
             className="app-text-body flex items-center gap-2 text-app-ink/60 transition-colors hover:text-app-ink"
           >
-            ← Back to task
+            {t('pms.taskDetail.backToTask')}
           </button>
           <span className="app-text-control text-app-ink">{issueState.title}</span>
           <Button variant="ghost" size="icon" onClick={() => setDescFullscreen(false)}><Minimize2 size={16} /></Button>
@@ -507,7 +538,7 @@ export const TaskDetail = ({
             <BlockEditor
               initialContent={issueState.description_blocks as BlockContent | undefined}
               onChange={handleDescriptionChange}
-              placeholder="Start writing..."
+              placeholder={t('pms.taskDetail.startWritingPlaceholder')}
               className="[&_.bn-editor]:min-h-[400px] [&_.bn-editor]:px-1"
               uploadFile={uploadFile}
               resolveFileUrl={resolveFileUrl}
@@ -528,14 +559,14 @@ export const TaskDetail = ({
       {/* Top bar */}
       <div className="flex items-center justify-between gap-3 border-b border-app-border px-4 py-3 shrink-0 lg:px-5">
         <div className="app-text-caption flex min-w-0 items-center gap-2 text-app-ink/50">
-          <span className="truncate">{spaceName || 'Space'}</span>
+          <span className="truncate">{spaceName || t('pms.spaceOverview.fallbackSpaceName')}</span>
           <ChevronRight size={12} />
           <span className="shrink-0 text-app-ink/70">{issueState.reference}</span>
         </div>
         <div className="flex shrink-0 items-center gap-1">
           {!canEdit ? (
             <span className="app-text-overline rounded-full border border-app-border px-2 py-1 text-app-ink/50">
-              Read only
+              {t('pms.taskDetail.readOnly')}
             </span>
           ) : (
             <button
@@ -543,12 +574,12 @@ export const TaskDetail = ({
               onClick={handleToggleIssueArchive}
               className="app-text-control-sm rounded-md border border-app-border px-2.5 py-1 text-app-ink/60 transition-colors hover:border-app-ink/30 hover:text-app-ink"
             >
-              {issueState.archived ? 'Restore' : 'Archive'}
+              {issueState.archived ? t('pms.bulk.restore') : t('common:actions.archive')}
             </button>
           )}
-          <Button variant="ghost" size="icon"><Share2 size={16} /></Button>
-          <Button variant="ghost" size="icon"><MoreHorizontal size={16} /></Button>
-          <Button variant="ghost" size="icon" onClick={onClose}><X size={16} /></Button>
+          <Button variant="ghost" size="icon" aria-label={t('pms.taskDetail.share')}><Share2 size={16} /></Button>
+          <Button variant="ghost" size="icon" aria-label={t('pms.taskDetail.moreOptions')}><MoreHorizontal size={16} /></Button>
+          <Button variant="ghost" size="icon" onClick={onClose} aria-label={t('common:actions.close')}><X size={16} /></Button>
         </div>
       </div>
 
@@ -562,7 +593,7 @@ export const TaskDetail = ({
               : 'text-app-ink/50 hover:text-app-ink'
           }`}
         >
-          Details
+          {t('pms.taskDetail.details')}
         </button>
         <button
           type="button"
@@ -573,7 +604,7 @@ export const TaskDetail = ({
               : 'text-app-ink/50 hover:text-app-ink'
           }`}
         >
-          Activity
+          {t('pms.taskDetail.activity')}
         </button>
       </div>
 
@@ -590,7 +621,7 @@ export const TaskDetail = ({
               <h1 data-testid="task-detail-title" className="app-text-title-lg min-w-0 flex-1 break-words text-app-ink">{issueState.title}</h1>
               {issueState.archived && (
                 <span className="app-text-overline rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-amber-300">
-                  Archived
+                  {t('pms.filter.archive.archived')}
                 </span>
               )}
             </div>
@@ -602,45 +633,44 @@ export const TaskDetail = ({
               data-testid="task-detail-meta-grid"
               className="grid grid-cols-[88px_minmax(0,1fr)] items-center gap-x-3 gap-y-3 rounded-lg border border-app-border p-3 lg:grid-cols-[auto_1fr_auto_1fr] lg:gap-x-6 lg:rounded-none lg:border-0 lg:p-0"
             >
-              <MetaLabel>Status</MetaLabel>
+              <MetaLabel>{t('pms.filter.statusLabel')}</MetaLabel>
               <select value={issueState.status} onChange={e => patchField('status', e.target.value)} className={disabledFieldClass} disabled={!canEdit}>
-                {getStatusSlugs(taskListStatuses).map(s => <option key={s} value={s}>{getStatusLabel(s, taskListStatuses)}</option>)}
+                {getStatusSlugs(taskListStatuses).map(s => <option key={s} value={s}>{statusLabel(s)}</option>)}
               </select>
-              <MetaLabel>Assignee</MetaLabel>
+              <MetaLabel>{t('pms.filter.assigneeLabel')}</MetaLabel>
               <select value={issueState.assignee_id ?? ''} onChange={e => patchField('assignee_id', e.target.value || null)} className={disabledFieldClass} disabled={!canEdit}>
-                <option value="">Unassigned</option>
+                <option value="">{t('pms.taskDetail.unassigned')}</option>
                 {members.map(m => <option key={m.user_id} value={m.user_id}>{m.full_name}</option>)}
               </select>
 
-              <MetaLabel>Start</MetaLabel>
+              <MetaLabel>{t('planner.start')}</MetaLabel>
               <input type="date" value={issueState.start_date ?? ''} onChange={e => patchField('start_date', e.target.value || null)} className={disabledFieldClass} disabled={!canEdit} />
-              <MetaLabel>Due</MetaLabel>
+              <MetaLabel>{t('pms.taskDetail.due')}</MetaLabel>
               <input type="date" value={issueState.due_date ?? ''} onChange={e => patchField('due_date', e.target.value || null)} className={disabledFieldClass} disabled={!canEdit} />
 
-              <MetaLabel>Priority</MetaLabel>
+              <MetaLabel>{t('pms.filter.priorityLabel')}</MetaLabel>
               <select value={issueState.priority} onChange={e => patchField('priority', e.target.value)} className={disabledFieldClass} disabled={!canEdit}>
-                {PRIORITIES.map(p => <option key={p} value={p}>{PRIORITY_LABELS[p]}</option>)}
+                {PRIORITIES.map(p => <option key={p} value={p}>{t(PRIORITY_LABEL_KEYS[p])}</option>)}
               </select>
-              <MetaLabel>Milestone</MetaLabel>
+              <MetaLabel>{t('pms.filter.milestoneLabel')}</MetaLabel>
               <select value={issueState.milestone_id ?? ''} onChange={e => patchField('milestone_id', e.target.value || null)} className={disabledFieldClass} disabled={!canEdit}>
-                <option value="">None</option>
+                <option value="">{t('common:empty.none')}</option>
                 {milestones.map(m => <option key={m.id} value={m.id}>{m.title}</option>)}
               </select>
 
-              <MetaLabel>Repeat</MetaLabel>
+              <MetaLabel>{t('pms.taskDetail.repeat')}</MetaLabel>
               <select
                 value={issueState.recurrence_rule ?? ''}
                 onChange={e => patchField('recurrence_rule', e.target.value || null)}
                 className={disabledFieldClass}
                 disabled={!canEdit}
               >
-                <option value="">None</option>
-                <option value="daily">Daily</option>
-                <option value="weekly">Weekly</option>
-                <option value="biweekly">Biweekly</option>
-                <option value="monthly">Monthly</option>
+                <option value="">{t('common:empty.none')}</option>
+                {RECURRENCE_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>{t(option.labelKey)}</option>
+                ))}
               </select>
-              <MetaLabel>Labels</MetaLabel>
+              <MetaLabel>{t('pms.bulk.labelsLabel')}</MetaLabel>
               <div className="relative min-w-0 lg:col-span-3">
                 <button
                   type="button"
@@ -669,7 +699,7 @@ export const TaskDetail = ({
                   ) : (
                     <span className="app-text-body flex items-center gap-1 text-app-ink/40">
                       <Tag size={12} />
-                      {canEdit ? 'Add labels...' : 'No labels'}
+                      {canEdit ? t('pms.taskDetail.addLabelsPlaceholder') : t('pms.taskDetail.noLabels')}
                     </span>
                   )}
                 </button>
@@ -678,7 +708,7 @@ export const TaskDetail = ({
                     <div className="fixed inset-0 z-10" onClick={() => setLabelPickerOpen(false)} />
                     <div className="absolute left-0 top-8 z-20 w-48 bg-app-bg border border-app-border rounded-lg shadow-xl py-1">
                       {taskListLabels.length === 0 ? (
-                        <p className="app-text-caption px-3 py-2 text-app-ink/40">No labels in this list</p>
+                        <p className="app-text-caption px-3 py-2 text-app-ink/40">{t('pms.taskDetail.noLabelsInList')}</p>
                       ) : (
                         taskListLabels.map(label => (
                           <button
@@ -706,8 +736,8 @@ export const TaskDetail = ({
             {/* Description with fullscreen button */}
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <h3 className="app-text-title-md text-app-ink">Description</h3>
-                <Button variant="ghost" size="icon" onClick={() => setDescFullscreen(true)} title="Full screen">
+                <h3 className="app-text-title-md text-app-ink">{t('pms.description')}</h3>
+                <Button variant="ghost" size="icon" onClick={() => setDescFullscreen(true)} title={t('pms.taskDetail.fullScreen')}>
                   <Maximize2 size={14} />
                 </Button>
               </div>
@@ -716,7 +746,7 @@ export const TaskDetail = ({
                   <BlockEditor
                     initialContent={issueState.description_blocks as BlockContent | undefined}
                     onChange={handleDescriptionChange}
-                    placeholder="Add a description..."
+                    placeholder={t('pms.descriptionPlaceholder')}
                     className="[&_.bn-editor]:min-h-[120px] [&_.bn-editor]:px-3 [&_.bn-editor]:py-2"
                     uploadFile={uploadFile}
                     resolveFileUrl={resolveFileUrl}
@@ -739,7 +769,7 @@ export const TaskDetail = ({
               <div className="flex items-center gap-2">
                 <CheckSquare size={14} className="text-app-ink/50" />
                 <h3 className="app-text-title-md text-app-ink">
-                  Checklist
+                  {t('pms.taskDetail.checklist')}
                   {checklistTotal > 0 && (
                     <span className="text-app-ink/40 font-normal ml-1">
                       ({checklistDone}/{checklistTotal})
@@ -798,7 +828,7 @@ export const TaskDetail = ({
                           <button
                             onClick={() => { void handleDeleteChecklistItem(ci.id); }}
                             className="opacity-0 group-hover:opacity-100 text-app-ink/30 hover:text-red-400 transition-all p-0.5 rounded"
-                            title="Delete"
+                            title={t('common:actions.delete')}
                           >
                             <X size={13} />
                           </button>
@@ -815,7 +845,7 @@ export const TaskDetail = ({
                   value={newChecklistText}
                   onChange={e => setNewChecklistText(e.target.value)}
                   onKeyDown={e => { if (e.key === 'Enter' && !e.nativeEvent.isComposing && newChecklistText.trim()) { e.preventDefault(); handleAddChecklistItem(); } }}
-                  placeholder={canEdit ? '+ Add checklist item...' : 'Checklist is read-only'}
+                  placeholder={canEdit ? t('pms.taskDetail.addChecklistPlaceholder') : t('pms.taskDetail.checklistReadOnly')}
                   className="app-text-body flex-1 border-b border-transparent bg-transparent py-1 text-app-ink placeholder:text-app-ink/40 transition-colors focus:border-app-accent focus:outline-none"
                   disabled={!canEdit}
                 />
@@ -832,7 +862,7 @@ export const TaskDetail = ({
             {/* Subtasks */}
             <div className="space-y-2">
               <h3 className="app-text-title-md text-app-ink">
-                Subtasks {subtasks.length > 0 && <span className="text-app-ink/40 font-normal">({subtasks.length})</span>}
+                {t('pms.taskDetail.subtasks')} {subtasks.length > 0 && <span className="text-app-ink/40 font-normal">({subtasks.length})</span>}
               </h3>
 
               {subtasks.length > 0 && (
@@ -864,7 +894,7 @@ export const TaskDetail = ({
                           <button
                             onClick={(e) => { e.stopPropagation(); setSubtaskMenuOpen(prev => prev === sub.id ? null : sub.id); }}
                             className="opacity-0 group-hover:opacity-100 text-app-ink/30 hover:text-app-ink transition-all p-0.5 rounded"
-                            title="More options"
+                            title={t('pms.taskDetail.moreOptions')}
                           >
                             <MoreHorizontal size={14} />
                           </button>
@@ -877,14 +907,14 @@ export const TaskDetail = ({
                                   className="flex items-center gap-2 w-full px-3 py-1.5 text-app-ink/70 hover:bg-app-surface-hover hover:text-app-ink transition-colors"
                                 >
                                   <Unlink size={13} />
-                                  Unlink
+                                  {t('pms.taskDetail.unlink')}
                                 </button>
                                 <button
                                   onClick={(e) => { e.stopPropagation(); void handleArchiveSubtask(sub.id); }}
                                   className="flex items-center gap-2 w-full px-3 py-1.5 text-app-ink/70 hover:bg-app-surface-hover hover:text-app-ink transition-colors"
                                 >
                                   <Archive size={13} />
-                                  Archive
+                                  {t('common:actions.archive')}
                                 </button>
                                 <hr className="border-app-border my-1" />
                                 <button
@@ -892,7 +922,7 @@ export const TaskDetail = ({
                                   className="flex items-center gap-2 w-full px-3 py-1.5 text-red-400 hover:bg-app-surface-hover hover:text-red-500 transition-colors"
                                 >
                                   <Trash2 size={13} />
-                                  Delete
+                                  {t('common:actions.delete')}
                                 </button>
                               </div>
                             </>
@@ -910,7 +940,7 @@ export const TaskDetail = ({
                   value={newSubtaskTitle}
                   onChange={e => setNewSubtaskTitle(e.target.value)}
                   onKeyDown={e => { if (e.key === 'Enter' && !e.nativeEvent.isComposing && newSubtaskTitle.trim()) { e.preventDefault(); handleAddSubtask(); } }}
-                  placeholder={canEdit ? '+ Add subtask...' : 'Subtasks are read-only'}
+                  placeholder={canEdit ? t('pms.taskDetail.addSubtaskPlaceholder') : t('pms.taskDetail.subtasksReadOnly')}
                   className="app-text-body flex-1 border-b border-transparent bg-transparent py-1 text-app-ink placeholder:text-app-ink/40 transition-colors focus:border-app-accent focus:outline-none"
                   disabled={!canEdit}
                 />
@@ -928,7 +958,7 @@ export const TaskDetail = ({
             <div className="space-y-2">
               <h3 className="app-text-title-md text-app-ink flex items-center gap-2">
                 <Unlink size={16} className="text-app-ink/50" />
-                Dependencies
+                {t('pms.taskDetail.dependencies')}
                 {dependencies.length > 0 && <span className="text-app-ink/40 font-normal">({dependencies.length})</span>}
               </h3>
               {dependencies.length > 0 && (
@@ -939,7 +969,7 @@ export const TaskDetail = ({
                     return (
                       <div key={dep.id} className="app-text-body flex items-center gap-2 rounded-md px-2 py-1.5 group hover:bg-app-surface-hover">
                         <span className="app-text-overline w-16 shrink-0 text-app-ink/50">
-                          {isBlocking ? 'Blocks' : 'Blocked by'}
+                          {isBlocking ? t('pms.taskDetail.blocks') : t('pms.taskDetail.blockedBy')}
                         </span>
                         <span className="app-text-caption flex-1 truncate font-mono text-app-ink/60">{linkedId.slice(0, 8)}…</span>
                         {canEdit ? (
@@ -951,7 +981,7 @@ export const TaskDetail = ({
                               await Promise.resolve(onUpdate?.());
                             }}
                             className="opacity-0 group-hover:opacity-100 text-app-ink/30 hover:text-red-400 transition-all"
-                            title="Remove dependency"
+                            title={t('pms.taskDetail.removeDependency')}
                           >
                             <X size={13} />
                           </button>
@@ -966,7 +996,7 @@ export const TaskDetail = ({
                   type="text"
                   value={depSearchQuery}
                   onChange={e => handleDepSearch(e.target.value)}
-                  placeholder={canEdit ? '+ Add dependency (search issue)...' : 'Dependencies are read-only'}
+                  placeholder={canEdit ? t('pms.taskDetail.addDependencyPlaceholder') : t('pms.taskDetail.dependenciesReadOnly')}
                   className="app-text-body w-full border-b border-transparent bg-transparent py-1 text-app-ink placeholder:text-app-ink/40 transition-colors focus:border-app-accent focus:outline-none"
                   disabled={!canEdit}
                 />
@@ -996,7 +1026,7 @@ export const TaskDetail = ({
             <div className="space-y-2">
               <div className="flex items-center gap-2">
                 <Paperclip size={14} className="text-app-ink/50" />
-                <h3 className="app-text-title-md text-app-ink">Attachments</h3>
+                <h3 className="app-text-title-md text-app-ink">{t('pms.taskDetail.attachments')}</h3>
                 <span className="app-text-caption text-app-ink/40">{attachments.length}</span>
               </div>
 
@@ -1028,7 +1058,7 @@ export const TaskDetail = ({
                           href={att.download_url}
                           target="_blank"
                           rel="noopener noreferrer"
-                          aria-label={`${att.filename} 다운로드`}
+                          aria-label={t('pms.taskDetail.downloadAttachment', { filename: att.filename })}
                           className="opacity-0 group-hover:opacity-100 text-app-ink/40 hover:text-app-ink transition-all"
                         >
                           <Download size={14} />
@@ -1063,7 +1093,7 @@ export const TaskDetail = ({
                 {uploading ? (
                   <Loader2 size={16} className="animate-spin mx-auto text-app-accent" />
                 ) : (
-                  <span>{canEdit ? (dragOver ? 'Drop to upload' : 'Click or drag files to upload') : 'Attachments are read-only'}</span>
+                  <span>{canEdit ? (dragOver ? t('pms.taskDetail.dropToUpload') : t('pms.taskDetail.clickOrDragToUpload')) : t('pms.taskDetail.attachmentsReadOnly')}</span>
                 )}
                 <input
                   ref={fileInputRef}
@@ -1082,13 +1112,13 @@ export const TaskDetail = ({
             <div className="space-y-2">
               <div className="flex items-center gap-2">
                 <Clock size={14} className="text-app-ink/50" />
-                <h3 className="app-text-title-md text-app-ink">Time Tracking</h3>
+                <h3 className="app-text-title-md text-app-ink">{t('pms.taskDetail.timeTracking')}</h3>
               </div>
 
               {/* Estimate + Progress */}
               <div className="app-text-caption flex items-center gap-3">
                 <div className="flex items-center gap-1.5">
-                  <span className="text-app-ink/50">Estimate:</span>
+                  <span className="text-app-ink/50">{t('pms.taskDetail.estimate')}</span>
                   <input
                     type="number"
                     step="0.5"
@@ -1102,11 +1132,11 @@ export const TaskDetail = ({
                     className="w-14 bg-transparent text-app-ink border-b border-app-border focus:border-app-accent focus:outline-none text-center py-0.5"
                     disabled={!canEdit}
                   />
-                  <span className="text-app-ink/40">h</span>
+                  <span className="text-app-ink/40">{t('pms.taskDetail.hoursUnit')}</span>
                 </div>
                 <span className="text-app-ink/30">|</span>
                 <span className="text-app-ink/60">
-                  Spent: <span className="text-app-ink font-medium">{formatDuration(totalTimeSpent)}</span>
+                  {t('pms.taskDetail.spent')}: <span className="text-app-ink font-medium">{formatDuration(totalTimeSpent)}</span>
                 </span>
               </div>
 
@@ -1148,7 +1178,7 @@ export const TaskDetail = ({
                   min="0"
                   value={timeLogMinutes}
                   onChange={e => setTimeLogMinutes(e.target.value)}
-                  placeholder={canEdit ? 'Hours...' : 'Time tracking is read-only'}
+                  placeholder={canEdit ? t('pms.taskDetail.hoursPlaceholder') : t('pms.taskDetail.timeTrackingReadOnly')}
                   className="app-text-body w-20 border-b border-transparent bg-transparent py-1 text-app-ink placeholder:text-app-ink/40 transition-colors focus:border-app-accent focus:outline-none"
                   disabled={!canEdit}
                 />
@@ -1157,7 +1187,7 @@ export const TaskDetail = ({
                   value={timeLogDesc}
                   onChange={e => setTimeLogDesc(e.target.value)}
                   onKeyDown={e => { if (e.key === 'Enter' && !e.nativeEvent.isComposing && timeLogMinutes) { e.preventDefault(); handleLogTime(); } }}
-                  placeholder={canEdit ? 'Description...' : 'Time tracking is read-only'}
+                  placeholder={canEdit ? t('pms.taskDetail.timeDescriptionPlaceholder') : t('pms.taskDetail.timeTrackingReadOnly')}
                   className="app-text-body flex-1 border-b border-transparent bg-transparent py-1 text-app-ink placeholder:text-app-ink/40 transition-colors focus:border-app-accent focus:outline-none"
                   disabled={!canEdit}
                 />
@@ -1177,7 +1207,7 @@ export const TaskDetail = ({
           className={`${mobilePanel === 'activity' ? 'flex' : 'hidden'} min-h-0 w-full flex-1 flex-col bg-app-bg lg:flex lg:w-[340px] lg:flex-none lg:shrink-0`}
         >
           <div className="px-4 py-3 border-b border-app-border">
-            <h3 className="app-text-title-md text-app-ink">Activity</h3>
+            <h3 className="app-text-title-md text-app-ink">{t('pms.taskDetail.activity')}</h3>
           </div>
 
           {/* Activity list */}
@@ -1216,7 +1246,7 @@ export const TaskDetail = ({
                 ))}
 
                 {activityLogs.length === 0 && comments.length === 0 && (
-                  <p className="app-text-body py-8 text-center text-app-ink/30">No activity yet</p>
+                  <p className="app-text-body py-8 text-center text-app-ink/30">{t('pms.taskDetail.noActivity')}</p>
                 )}
               </>
             )}
@@ -1225,7 +1255,7 @@ export const TaskDetail = ({
           {/* Comment input — sticky bottom */}
           <div className="relative flex items-center gap-2 border-t border-app-border px-4 py-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] shrink-0 lg:pb-3">
             <div className="w-6 h-6 rounded-full bg-app-accent flex items-center justify-center text-[8px] font-bold text-app-bg shrink-0">
-              ME
+              {t('pms.taskDetail.me')}
             </div>
             <div className="flex-1 relative">
               <input
@@ -1248,7 +1278,7 @@ export const TaskDetail = ({
                   }
                 }}
                 onKeyDown={e => { if (e.key === 'Enter' && !e.nativeEvent.isComposing && !mentionOpen) { e.preventDefault(); handleCommentSubmit(); } if (e.key === 'Escape') setMentionOpen(false); }}
-                placeholder={canEdit ? 'Write a comment... (type @ to mention)' : 'Comments are read-only'}
+                placeholder={canEdit ? t('pms.taskDetail.commentPlaceholder') : t('pms.taskDetail.commentsReadOnly')}
                 className="app-text-body w-full rounded-lg border border-app-border bg-transparent px-3 py-1.5 text-app-ink placeholder:text-app-ink/40 transition-colors focus:border-app-accent focus:outline-none"
                 disabled={!canEdit}
               />
@@ -1276,7 +1306,7 @@ export const TaskDetail = ({
                         </button>
                       ))}
                     {members.filter(m => !mentionQuery || m.full_name.toLowerCase().includes(mentionQuery)).length === 0 && (
-                      <p className="app-text-caption px-3 py-2 text-app-ink/40">No matches</p>
+                      <p className="app-text-caption px-3 py-2 text-app-ink/40">{t('pms.taskDetail.noMatches')}</p>
                     )}
                   </div>
                 </>

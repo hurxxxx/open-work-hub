@@ -1,3 +1,6 @@
+import { useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
+
 import { DataTable, Panel, StatusBadge, type DataTableColumn } from '@aidoo/ui';
 
 type PlmRow = {
@@ -6,23 +9,28 @@ type PlmRow = {
   lastRun: string;
 };
 
-const rows: PlmRow[] = [
-  { template: 'ECO by project', scope: 'Project A', lastRun: '3 min ago' },
-  { template: 'BOM status snapshot', scope: 'Engineering', lastRun: '12 min ago' },
-];
-
-const columns: DataTableColumn<PlmRow>[] = [
-  { accessorKey: 'template', header: 'Template' },
-  { accessorKey: 'scope', header: 'Scope' },
-  { accessorKey: 'lastRun', header: 'Last run' },
-];
-
 export function PlmPreview() {
+  const { t } = useTranslation('apps');
+  const rows = useMemo<PlmRow[]>(
+    () => [
+      { template: t('plm.preview.ecoByProject'), scope: 'Project A', lastRun: t('plm.preview.threeMinutesAgo') },
+      { template: t('plm.preview.bomStatusSnapshot'), scope: 'Engineering', lastRun: t('plm.preview.twelveMinutesAgo') },
+    ],
+    [t],
+  );
+  const columns = useMemo<DataTableColumn<PlmRow>[]>(
+    () => [
+      { accessorKey: 'template', header: t('plm.preview.columns.template') },
+      { accessorKey: 'scope', header: t('plm.preview.columns.scope') },
+      { accessorKey: 'lastRun', header: t('plm.preview.columns.lastRun') },
+    ],
+    [t],
+  );
   return (
     <Panel
       eyebrow="PLM"
-      title="승인된 조회 템플릿"
-      status={<StatusBadge>safe preview</StatusBadge>}
+      title={t('plm.preview.title')}
+      status={<StatusBadge>{t('plm.preview.safePreview')}</StatusBadge>}
     >
       <DataTable columns={columns} rows={rows} />
     </Panel>

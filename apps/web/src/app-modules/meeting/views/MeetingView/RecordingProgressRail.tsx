@@ -1,4 +1,5 @@
 import { AlertTriangle, CheckCircle2, Loader2 } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
 import type {
   MeetingRecording,
@@ -6,13 +7,13 @@ import type {
 } from '../../api/meeting-api';
 
 const STAGES = [
-  { key: 'pending', label: '업로드' },
-  { key: 'transcribing', label: '음성인식' },
-  { key: 'summarizing', label: '회의록 정리' },
-  { key: 'extracting_insights', label: 'AI 제안' },
-  { key: 'generating_doc', label: '문서 생성' },
-  { key: 'done', label: '완료' },
-] as const satisfies ReadonlyArray<{ key: MeetingRecordingStatus; label: string }>;
+  { key: 'pending' },
+  { key: 'transcribing' },
+  { key: 'summarizing' },
+  { key: 'extracting_insights' },
+  { key: 'generating_doc' },
+  { key: 'done' },
+] as const satisfies ReadonlyArray<{ key: MeetingRecordingStatus }>;
 
 // Failure rail should freeze at the "generating_doc" marker (final
 // pipeline stage before completion). Deriving from STAGES keeps this
@@ -33,6 +34,7 @@ export function RecordingProgressRail({
   recording: MeetingRecording;
   onRetry?: () => void;
 }) {
+  const { t } = useTranslation('apps');
   const currentIndex = stageIndex(recording.transcription_status);
   const active = recording.transcription_status !== 'failed' && recording.transcription_status !== 'done';
   return (
@@ -64,8 +66,8 @@ export function RecordingProgressRail({
       <div className="flex items-center justify-between gap-3">
         <p className="app-text-caption text-app-ink/60">
           {recording.transcription_status === 'failed'
-            ? '회의록 생성에 실패했습니다. 원본 음성은 그대로 유지됩니다.'
-            : `진행률 ${recording.progress_pct}% · 이 페이지를 닫아도 됩니다.`}
+            ? t('meeting.recordingProgress.failed')
+            : t('meeting.recordingProgress.progress', { progress: recording.progress_pct })}
         </p>
         {recording.transcription_status === 'failed' && onRetry ? (
           <button
@@ -74,7 +76,7 @@ export function RecordingProgressRail({
             className="app-text-caption inline-flex items-center gap-1 text-[var(--ui-color-danger)] hover:underline"
           >
             <AlertTriangle size={12} />
-            다시 시도
+            {t('meeting.recordingProgress.retry')}
           </button>
         ) : null}
       </div>

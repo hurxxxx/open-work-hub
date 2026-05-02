@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { MessageSquare, Plus, Sparkles, Trash2 } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 
 import { useConfirm } from '@aidoo/ui/feedback/confirm-dialog';
 
@@ -18,6 +19,7 @@ import {
   resolveToolInvocationHref,
 } from '@/src/platform/workspaces/workspace-utils';
 import { cn } from '@/src/lib/utils';
+import { i18n } from '@/src/platform/i18n';
 
 interface AiSidebarSectionProps {
   currentWorkspaceSlug: string;
@@ -42,6 +44,7 @@ function AiConversationsSection({
   onNewConversation,
   onDelete,
 }: AiConversationsSectionProps) {
+  const { t } = useTranslation(['apps', 'common']);
   const [expanded, setExpanded] = useState(false);
   const visible = expanded ? conversations : conversations.slice(0, MAX_VISIBLE);
   const hasMore = conversations.length > MAX_VISIBLE;
@@ -54,12 +57,12 @@ function AiConversationsSection({
         className="sidebar-submenu-item group flex w-full items-center gap-2 rounded-lg border border-dashed border-app-border px-3 py-2 text-app-ink transition-colors hover:border-app-accent hover:text-app-accent"
       >
         <Plus size={14} className="text-gray-500 group-hover:text-app-accent" />
-        <span className="sidebar-submenu-label">새 대화</span>
+        <span className="sidebar-submenu-label">{t('apps:ai.sidebar.newConversation')}</span>
       </button>
 
       <div className="pt-1">
         <span className="sidebar-section-label block px-3 py-1 text-gray-500">
-          최근 대화
+          {t('apps:ai.sidebar.recentConversations')}
         </span>
         {error ? (
           <div className="px-3 py-1 app-text-micro text-amber-600 dark:text-amber-400">
@@ -67,7 +70,7 @@ function AiConversationsSection({
           </div>
         ) : conversations.length === 0 ? (
           <div className="px-3 py-1 app-text-micro text-gray-500">
-            아직 저장된 대화가 없습니다.
+            {t('apps:ai.sidebar.noConversations')}
           </div>
         ) : (
           <ul className="space-y-0.5">
@@ -80,7 +83,7 @@ function AiConversationsSection({
                   <button
                     type="button"
                     onClick={() => onSelect(conversation.id)}
-                    title={isScoped ? '회의 컨텍스트에 바인딩된 대화' : undefined}
+                    title={isScoped ? t('apps:ai.sidebar.boundMeetingConversation') : undefined}
                     className={cn(
                       'flex w-full items-center gap-2 rounded-md px-3 py-1.5 pr-8 text-left transition-colors',
                       isActive
@@ -90,7 +93,7 @@ function AiConversationsSection({
                   >
                     <Icon
                       size={13}
-                      aria-label={isScoped ? '회의 컨텍스트' : undefined}
+                      aria-label={isScoped ? t('apps:ai.sidebar.meetingContext') : undefined}
                       className={cn(
                         'shrink-0',
                         isActive || isScoped
@@ -99,12 +102,12 @@ function AiConversationsSection({
                       )}
                     />
                     <span className="sidebar-submenu-label truncate">
-                      {conversation.title || '제목 없는 대화'}
+                      {conversation.title || t('apps:ai.sidebar.untitledConversation')}
                     </span>
                   </button>
                   <button
                     type="button"
-                    aria-label="대화 삭제"
+                    aria-label={t('apps:ai.sidebar.deleteConversation')}
                     onClick={(event) => {
                       event.stopPropagation();
                       void onDelete(conversation.id);
@@ -125,8 +128,8 @@ function AiConversationsSection({
             className="mt-1 w-full rounded-md px-3 py-1 text-left app-text-micro text-gray-500 hover:bg-app-surface-hover hover:text-app-ink"
           >
             {expanded
-              ? '줄이기'
-              : `더 보기 (${conversations.length - MAX_VISIBLE}개 더)`}
+              ? t('apps:ai.sidebar.collapse')
+              : t('apps:ai.sidebar.more', { count: conversations.length - MAX_VISIBLE })}
           </button>
         ) : null}
       </div>
@@ -135,6 +138,7 @@ function AiConversationsSection({
 }
 
 export function AiSidebarSection({ currentWorkspaceSlug }: AiSidebarSectionProps) {
+  const { t } = useTranslation(['apps', 'common']);
   const { token } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
@@ -173,13 +177,13 @@ export function AiSidebarSection({ currentWorkspaceSlug }: AiSidebarSectionProps
         setError(
           caughtError instanceof Error
             ? caughtError.message
-            : '대화 목록을 불러오지 못했습니다.',
+            : t('apps:ai.sidebar.loadConversationsFailed'),
         );
       });
     return () => {
       cancelled = true;
     };
-  }, [currentWorkspaceSlug, location.search, refreshKey, token]);
+  }, [currentWorkspaceSlug, location.search, refreshKey, t, token]);
 
   return (
     <>
@@ -202,10 +206,9 @@ export function AiSidebarSection({ currentWorkspaceSlug }: AiSidebarSectionProps
         onDelete={async (conversationId) => {
           if (!token) return;
           const confirmed = await confirm({
-            title: '대화 삭제',
-            description:
-              '이 대화를 삭제하면 목록에서 숨겨집니다. 복구는 관리자만 가능합니다.',
-            confirmLabel: '삭제',
+            title: t('apps:ai.sidebar.deleteConversation'),
+            description: t('apps:ai.sidebar.deleteConversationDescription'),
+            confirmLabel: t('common:actions.delete'),
             variant: 'danger',
           });
           if (!confirmed) return;
@@ -227,7 +230,7 @@ export const aiSidebarConfig: AppSidebarConfig = {
   createActions: ({ currentWorkspaceSlug, navigate, user }) => [
     {
       id: 'ai-search',
-      label: '아이두 통합검색',
+      label: i18n.t('apps:ai.sidebar.search'),
       icon: Sparkles,
       run: () => {
         const searchItem = aiManifest.navItems.find((item) => item.id === 'search');

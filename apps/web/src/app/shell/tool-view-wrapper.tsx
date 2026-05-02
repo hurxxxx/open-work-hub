@@ -1,4 +1,5 @@
 import { Navigate, useLocation, useParams } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 
 import { getNavItem } from '@/src/app/shell/app-registry';
 import { ragSearchToolElement } from '@/src/app-modules/ai/routes';
@@ -23,6 +24,7 @@ import { ToolView } from './tool-views/ToolView';
 
 export function ToolViewWrapper() {
   const auth = useAuth();
+  const { t } = useTranslation(['apps', 'shell']);
   const location = useLocation();
   const { toolId } = useParams();
   const workspaceBootstrap = useWorkspaceBootstrapContext();
@@ -46,7 +48,7 @@ export function ToolViewWrapper() {
   if (toolId?.startsWith('pms-list-') || /^pms-space-.+/.test(toolId ?? '')) {
     if (!hasWorkspaceMembership(auth.user)) {
       return (
-        <AccessDeniedView description="현재 계정에는 이 도구가 속한 워크스페이스 접근 권한이 없습니다." />
+        <AccessDeniedView description={t('shell:gates.toolWorkspaceDenied')} />
       );
     }
     return pmsToolElement;
@@ -54,25 +56,25 @@ export function ToolViewWrapper() {
 
   const item = toolId ? getNavItem(toolId) : null;
   if (!item) {
-    return <div className="p-8 text-gray-500">Tool not found</div>;
+    return <div className="p-8 text-gray-500">{t('apps:toolView.toolNotFound')}</div>;
   }
 
   if (item.appId !== 'home' && !hasWorkspaceMembership(auth.user)) {
     return (
-      <AccessDeniedView description="현재 계정에는 이 도구가 속한 워크스페이스 접근 권한이 없습니다." />
+      <AccessDeniedView description={t('shell:gates.toolWorkspaceDenied')} />
     );
   }
 
   if (item.appId === 'ai') {
     if (!hasWorkspaceMembership(auth.user, toolWorkspaceSlug)) {
       return (
-        <AccessDeniedView description="현재 계정에는 이 도구가 속한 워크스페이스 접근 권한이 없습니다." />
+        <AccessDeniedView description={t('shell:gates.toolWorkspaceDenied')} />
       );
     }
     if (workspaceBootstrap.loading || enabledBootstrapApps === null) {
       return (
         <div className="p-8 text-gray-500">
-          워크스페이스 구성을 불러오는 중입니다.
+          {t('shell:gates.workspaceLoading')}
         </div>
       );
     }
@@ -81,7 +83,7 @@ export function ToolViewWrapper() {
     }
     if (!isWorkspaceAppEnabled(enabledBootstrapApps, 'ai')) {
       return (
-        <AccessDeniedView description="현재 workspace에서는 AI 앱이 활성화되어 있지 않습니다." />
+        <AccessDeniedView description={t('shell:gates.appDisabled')} />
       );
     }
   }
@@ -101,7 +103,7 @@ export function ToolViewWrapper() {
   if (toolId === 'search') {
     if (!canUseWorkspaceSearchTool(enabledBootstrapApps)) {
       return (
-        <AccessDeniedView description="현재 workspace에서는 통합검색을 사용할 수 없습니다." />
+        <AccessDeniedView description={t('shell:gates.workspaceSearchDisabled')} />
       );
     }
     return ragSearchToolElement;

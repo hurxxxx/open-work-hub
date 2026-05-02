@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import { listRecordingStaging, type RecordingStagingItem } from '../../api/meeting-api';
 import {
@@ -27,6 +28,7 @@ export function useRecordingRecovery(
   meetingId: string,
   token: string | null,
 ) {
+  const { t } = useTranslation('apps');
   const [items, setItems] = useState<RecoverySessionItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -75,11 +77,11 @@ export function useRecordingRecovery(
         return rightTs - leftTs;
       }));
     } catch (err) {
-      setError(err instanceof Error ? err.message : '복구 가능한 녹음을 확인할 수 없습니다.');
+      setError(err instanceof Error ? err.message : t('meeting.recordingErrors.recoveryCheckFailed'));
     } finally {
       setLoading(false);
     }
-  }, [meetingId, token, workspaceSlug]);
+  }, [meetingId, t, token, workspaceSlug]);
 
   useEffect(() => {
     void refresh();

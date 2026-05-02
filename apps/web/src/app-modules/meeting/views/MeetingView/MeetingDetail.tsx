@@ -16,6 +16,7 @@ import {
   X,
 } from 'lucide-react';
 import { Button, Dialog, useConfirm } from '@aidoo/ui';
+import { useTranslation } from 'react-i18next';
 
 import { useAuth } from '@/src/platform/auth/auth-provider';
 import { formatDateTime, normalizeTimeZone } from '@/src/platform/time/time-utils';
@@ -75,18 +76,18 @@ interface MeetingDetailProps {
   showCloseButton?: boolean;
 }
 
-const STATUS_LABELS: Record<string, string> = {
-  scheduled: '예정',
-  in_progress: '진행 중',
-  completed: '완료',
-  cancelled: '취소됨',
+const STATUS_TRANSLATION_KEYS: Record<string, string> = {
+  scheduled: 'meeting.scheduled',
+  in_progress: 'meeting.inProgress',
+  completed: 'meeting.completed',
+  cancelled: 'meeting.cancelled',
 };
 
-function formatRange(start: string, end: string, timeZone: string): string {
+function formatRange(start: string, end: string, timeZone: string, locale: string): string {
   const s = parseServerDateTime(start);
   const e = parseServerDateTime(end);
   return `${formatDateTime(s, {
-    locale: 'ko-KR',
+    locale,
     month: 'short',
     day: 'numeric',
     weekday: 'short',
@@ -95,7 +96,7 @@ function formatRange(start: string, end: string, timeZone: string): string {
     timeZone,
   })} – ${formatDateTime(e, {
     hour: '2-digit',
-    locale: 'ko-KR',
+    locale,
     minute: '2-digit',
     timeZone,
   })}`;
@@ -109,6 +110,7 @@ export function MeetingDetail({
   onDeleted,
   showCloseButton = true,
 }: MeetingDetailProps) {
+  const { t, i18n } = useTranslation('apps');
   const { token, user } = useAuth();
   const timeZone = normalizeTimeZone(user?.time_zone);
   const navigate = useNavigate();
@@ -136,12 +138,12 @@ export function MeetingDetail({
       const detail = await getMeeting(token, workspaceSlug, meetingId);
       setMeeting(detail);
     } catch (err) {
-      setError(err instanceof Error ? err.message : '회의를 불러올 수 없습니다.');
+      setError(err instanceof Error ? err.message : t('meeting.detail.loadFailed'));
       setMeeting(null);
     } finally {
       setLoading(false);
     }
-  }, [meetingId, token, workspaceSlug]);
+  }, [meetingId, t, token, workspaceSlug]);
 
   useEffect(() => {
     refresh();
@@ -227,7 +229,7 @@ export function MeetingDetail({
       setMeeting(updated);
       onChanged();
     } catch (err) {
-      setError(err instanceof Error ? err.message : '이슈 첨부를 해제할 수 없습니다.');
+      setError(err instanceof Error ? err.message : t('meeting.detail.detachTaskFailed'));
     } finally {
       setBusy(false);
     }
@@ -253,7 +255,7 @@ export function MeetingDetail({
       setMeeting(updated);
       onChanged();
     } catch (err) {
-      setError(err instanceof Error ? err.message : '문서 첨부를 해제할 수 없습니다.');
+      setError(err instanceof Error ? err.message : t('meeting.detail.detachDocFailed'));
     } finally {
       setBusy(false);
     }
@@ -268,7 +270,7 @@ export function MeetingDetail({
         token,
         {
           ...meetingWhiteboardContext,
-          title: `${meeting.title} Whiteboard`,
+          title: t('meeting.detail.whiteboardDefaultTitle', { title: meeting.title }),
         },
         workspaceSlug,
       );
@@ -278,7 +280,7 @@ export function MeetingDetail({
       onChanged();
       void refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : '화이트보드를 만들 수 없습니다.');
+      setError(err instanceof Error ? err.message : t('meeting.detail.createWhiteboardFailed'));
     } finally {
       setBusy(false);
     }
@@ -313,7 +315,7 @@ export function MeetingDetail({
       onChanged();
       void refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : '화이트보드 연결을 해제할 수 없습니다.');
+      setError(err instanceof Error ? err.message : t('meeting.detail.detachWhiteboardFailed'));
     } finally {
       setBusy(false);
     }
@@ -331,7 +333,7 @@ export function MeetingDetail({
       setMeeting(updated);
       onChanged();
     } catch (err) {
-      setError(err instanceof Error ? err.message : '파일을 업로드할 수 없습니다.');
+      setError(err instanceof Error ? err.message : t('meeting.detail.uploadFileFailed'));
     } finally {
       setUploading(false);
     }
@@ -346,7 +348,7 @@ export function MeetingDetail({
       setMeeting(updated);
       onChanged();
     } catch (err) {
-      setError(err instanceof Error ? err.message : '파일을 삭제할 수 없습니다.');
+      setError(err instanceof Error ? err.message : t('meeting.detail.deleteFileFailed'));
     } finally {
       setBusy(false);
     }
@@ -369,7 +371,7 @@ export function MeetingDetail({
     try {
       const response = await fetch(file.download_url);
       if (!response.ok) {
-        throw new Error(`다운로드 실패 (${response.status})`);
+        throw new Error(t('meeting.detail.downloadFailedWithStatus', { status: response.status }));
       }
       const blob = await response.blob();
       const objectUrl = URL.createObjectURL(blob);
@@ -382,7 +384,7 @@ export function MeetingDetail({
       URL.revokeObjectURL(objectUrl);
     } catch (err) {
       setError(
-        err instanceof Error ? err.message : '파일 다운로드에 실패했습니다.',
+        err instanceof Error ? err.message : t('meeting.detail.downloadFileFailed'),
       );
     }
   }
@@ -390,10 +392,10 @@ export function MeetingDetail({
   async function handleDelete() {
     if (!token) return;
     const ok = await confirm({
-      title: '회의 삭제',
-      description: '이 회의를 삭제하시겠습니까?',
-      confirmLabel: '삭제',
-      cancelLabel: '취소',
+      title: t('meeting.detail.deleteMeetingTitle'),
+      description: t('meeting.detail.deleteMeetingDescription'),
+      confirmLabel: t('common:actions.delete'),
+      cancelLabel: t('common:actions.cancel'),
       variant: 'danger',
     });
     if (!ok) return;
@@ -402,7 +404,7 @@ export function MeetingDetail({
       await deleteMeeting(token, workspaceSlug, meetingId);
       onDeleted();
     } catch (err) {
-      setError(err instanceof Error ? err.message : '회의를 삭제할 수 없습니다.');
+      setError(err instanceof Error ? err.message : t('meeting.detail.deleteMeetingFailed'));
       setBusy(false);
     }
   }
@@ -421,7 +423,7 @@ export function MeetingDetail({
       );
       setPlaybackUrls((current) => ({ ...current, [recordingId]: playback.url }));
     } catch (err) {
-      setError(err instanceof Error ? err.message : '녹음 재생 링크를 가져올 수 없습니다.');
+      setError(err instanceof Error ? err.message : t('meeting.detail.playbackFailed'));
     }
   }
 
@@ -439,7 +441,7 @@ export function MeetingDetail({
       setMeeting(updated);
       onChanged();
     } catch (err) {
-      setError(err instanceof Error ? err.message : '녹음 재시도에 실패했습니다.');
+      setError(err instanceof Error ? err.message : t('meeting.detail.retryRecordingFailed'));
     } finally {
       setBusy(false);
     }
@@ -448,10 +450,10 @@ export function MeetingDetail({
   async function handleDeleteRecording(recordingId: string) {
     if (!token) return;
     const ok = await confirm({
-      title: '녹음 삭제',
-      description:
-        '이 녹음을 삭제하면 원본 음성 파일과 진행 중인 전사 작업이 함께 제거됩니다. 되돌릴 수 없습니다.',
-      confirmLabel: '삭제',
+      title: t('meeting.detail.deleteRecordingTitle'),
+      description: t('meeting.detail.deleteRecordingDescription'),
+      confirmLabel: t('common:actions.delete'),
+      cancelLabel: t('common:actions.cancel'),
       variant: 'danger',
     });
     if (!ok) return;
@@ -467,7 +469,7 @@ export function MeetingDetail({
       setMeeting(updated);
       onChanged();
     } catch (err) {
-      setError(err instanceof Error ? err.message : '녹음을 삭제할 수 없습니다.');
+      setError(err instanceof Error ? err.message : t('meeting.detail.deleteRecordingFailed'));
     } finally {
       setBusy(false);
     }
@@ -491,7 +493,7 @@ export function MeetingDetail({
               type="button"
               onClick={onClose}
               className="text-app-ink/50 hover:text-app-ink"
-              aria-label="닫기"
+              aria-label={t('common:actions.close')}
             >
               <X size={16} />
             </button>
@@ -508,13 +510,15 @@ export function MeetingDetail({
       <header className="flex items-start justify-between border-b border-app-border px-5 py-4">
         <div className="min-w-0">
           <p className="app-text-overline text-app-accent">
-            {STATUS_LABELS[meeting.status] ?? meeting.status}
+            {STATUS_TRANSLATION_KEYS[meeting.status]
+              ? t(STATUS_TRANSLATION_KEYS[meeting.status])
+              : meeting.status}
           </p>
           <h2 className="app-text-title-md text-app-ink line-clamp-2">
             {meeting.title}
           </h2>
           <p className="app-text-caption mt-1 text-app-ink/60 dark:text-app-ink/70">
-            {formatRange(meeting.start_at, meeting.end_at, timeZone)} · {meeting.organizer_name}
+            {formatRange(meeting.start_at, meeting.end_at, timeZone, i18n.language)} · {meeting.organizer_name}
           </p>
         </div>
         <div className="ml-3 flex shrink-0 items-center gap-1">
@@ -523,8 +527,8 @@ export function MeetingDetail({
               type="button"
               onClick={() => setEditOpen(true)}
               className="rounded-md p-1.5 text-app-ink/50 hover:bg-app-surface-hover hover:text-app-ink"
-              aria-label="회의 수정"
-              title="수정"
+              aria-label={t('meeting.edit')}
+              title={t('common:actions.edit')}
             >
               <Pencil size={14} />
             </button>
@@ -534,7 +538,7 @@ export function MeetingDetail({
               type="button"
               onClick={onClose}
               className="rounded-md p-1.5 text-app-ink/50 hover:bg-app-surface-hover hover:text-app-ink"
-              aria-label="닫기"
+              aria-label={t('common:actions.close')}
             >
               <X size={16} />
             </button>
@@ -554,12 +558,13 @@ export function MeetingDetail({
 
         <Section
           icon={<CheckSquare size={14} />}
-          title="연결된 태스크"
+          title={t('meeting.detail.linkedTasks')}
           count={meeting.task_links.length}
           onAdd={canAttach ? () => setTaskPickerOpen(true) : undefined}
+          addLabel={t('common:actions.add')}
         >
           {meeting.task_links.length === 0 ? (
-            <EmptyRow text="첨부된 태스크가 없습니다." />
+            <EmptyRow text={t('meeting.detail.noLinkedTasks')} />
           ) : (
             <ul className="space-y-1">
               {meeting.task_links.map((link) => (
@@ -573,7 +578,7 @@ export function MeetingDetail({
                         to={buildWorkspaceAppPath(workspaceSlug, 'pms', `?issue=${encodeURIComponent(link.issue_id)}`)}
                         className="hover:text-app-accent hover:underline"
                       >
-                        {link.issue_title || '제목 없음'}
+                        {link.issue_title || t('meeting.detail.untitled')}
                       </Link>
                     </p>
                     <p className="app-text-caption text-app-ink/40">
@@ -588,7 +593,7 @@ export function MeetingDetail({
                       onClick={() => handleDetachTask(link.issue_id)}
                       disabled={busy}
                       className="ml-2 shrink-0 text-app-ink/40 hover:text-[var(--ui-color-danger)] disabled:opacity-40"
-                      aria-label="태스크 첨부 해제"
+                      aria-label={t('meeting.detail.detachTask')}
                     >
                       <Trash2 size={14} />
                     </button>
@@ -601,12 +606,13 @@ export function MeetingDetail({
 
         <Section
           icon={<FileText size={14} />}
-          title="연결된 문서"
+          title={t('meeting.detail.linkedDocs')}
           count={meeting.doc_links.length}
           onAdd={canAttach ? () => setDocPickerOpen(true) : undefined}
+          addLabel={t('common:actions.add')}
         >
           {meeting.doc_links.length === 0 ? (
-            <EmptyRow text="첨부된 문서가 없습니다." />
+            <EmptyRow text={t('meeting.detail.noLinkedDocs')} />
           ) : (
             <ul className="space-y-1">
               {meeting.doc_links.map((link) => (
@@ -619,7 +625,7 @@ export function MeetingDetail({
                       to={buildWorkspaceAppPath(workspaceSlug, 'docs', link.doc_id)}
                       className="hover:text-app-accent hover:underline"
                     >
-                      {link.doc_title || '제목 없음'}
+                      {link.doc_title || t('meeting.detail.untitled')}
                     </Link>
                   </p>
                   {canRemoveAttachment(user, meeting, link) ? (
@@ -628,7 +634,7 @@ export function MeetingDetail({
                       onClick={() => handleDetachDoc(link.doc_id)}
                       disabled={busy}
                       className="ml-2 shrink-0 text-app-ink/40 hover:text-[var(--ui-color-danger)] disabled:opacity-40"
-                      aria-label="문서 첨부 해제"
+                      aria-label={t('meeting.detail.detachDoc')}
                     >
                       <Trash2 size={14} />
                     </button>
@@ -641,7 +647,7 @@ export function MeetingDetail({
 
         <Section
           icon={<PencilRuler size={14} />}
-          title="Whiteboard"
+          title={t('meeting.detail.whiteboard')}
           count={meeting.whiteboard_link ? 1 : 0}
           headerAction={
             canAttach ? (
@@ -652,7 +658,7 @@ export function MeetingDetail({
                   className="app-text-caption inline-flex items-center gap-1 text-app-accent hover:underline"
                 >
                   <Search size={12} />
-                  교체
+                  {t('meeting.detail.replace')}
                 </button>
               ) : (
                 <div className="flex items-center gap-3">
@@ -663,7 +669,7 @@ export function MeetingDetail({
                     className="app-text-caption inline-flex items-center gap-1 text-app-accent hover:underline disabled:opacity-50"
                   >
                     <Plus size={12} />
-                    새로 만들기
+                    {t('meeting.detail.createNew')}
                   </button>
                   <button
                     type="button"
@@ -672,7 +678,7 @@ export function MeetingDetail({
                     className="app-text-caption inline-flex items-center gap-1 text-app-accent hover:underline disabled:opacity-50"
                   >
                     <Search size={12} />
-                    기존 선택
+                    {t('meeting.detail.selectExisting')}
                   </button>
                 </div>
               )
@@ -695,7 +701,7 @@ export function MeetingDetail({
                 <p className="app-text-caption text-app-ink/40">
                   {formatDateTime(meeting.whiteboard_link.updated_at, {
                     dateStyle: 'medium',
-                    locale: 'ko-KR',
+                    locale: i18n.language,
                     timeStyle: 'short',
                     timeZone,
                   })}
@@ -710,7 +716,7 @@ export function MeetingDetail({
                   }}
                   className="app-text-caption text-app-accent hover:underline"
                 >
-                  열기
+                  {t('common:actions.open')}
                 </button>
                 {canAttach ? (
                   <button
@@ -718,8 +724,8 @@ export function MeetingDetail({
                     onClick={() => void handleDetachWhiteboard()}
                     disabled={busy}
                     className="rounded-md p-1.5 text-app-ink/40 hover:bg-app-surface-hover hover:text-[var(--ui-color-danger)] disabled:opacity-40"
-                    aria-label="Whiteboard 연결 해제"
-                    title="연결 해제"
+                    aria-label={t('meeting.detail.detachWhiteboard')}
+                    title={t('meeting.detail.detach')}
                   >
                     <Trash2 size={14} />
                   </button>
@@ -727,20 +733,20 @@ export function MeetingDetail({
               </div>
             </div>
           ) : (
-            <EmptyRow text="연결된 Whiteboard가 없습니다." />
+            <EmptyRow text={t('meeting.detail.noWhiteboard')} />
           )}
         </Section>
 
         <Section
           icon={<Paperclip size={14} />}
-          title="첨부 파일"
+          title={t('meeting.detail.files')}
           count={meeting.file_attachments.length}
           onAdd={
             canAttach
               ? () => fileInputRef.current?.click()
               : undefined
           }
-          addLabel={uploading ? '업로드 중...' : '추가'}
+          addLabel={uploading ? t('meeting.detail.uploading') : t('common:actions.add')}
         >
           <input
             ref={fileInputRef}
@@ -749,7 +755,7 @@ export function MeetingDetail({
             onChange={handleFileChange}
           />
           {meeting.file_attachments.length === 0 ? (
-            <EmptyRow text="첨부된 파일이 없습니다." />
+            <EmptyRow text={t('meeting.detail.noFiles')} />
           ) : (
             <ul className="space-y-1">
               {meeting.file_attachments.map((file) => (
@@ -763,7 +769,7 @@ export function MeetingDetail({
                       target="_blank"
                       rel="noopener noreferrer"
                       className="app-text-body line-clamp-1 text-app-ink hover:text-app-accent"
-                      title="새 탭에서 미리보기"
+                      title={t('meeting.detail.previewNewTab')}
                     >
                       {file.filename}
                     </a>
@@ -776,8 +782,8 @@ export function MeetingDetail({
                       type="button"
                       onClick={() => handleFileDownload(file)}
                       className="rounded-md p-1.5 text-app-ink/40 hover:bg-app-surface-hover hover:text-app-ink"
-                      aria-label="파일 다운로드"
-                      title="다운로드"
+                      aria-label={t('meeting.detail.downloadFile')}
+                      title={t('meeting.detail.download')}
                     >
                       <Download size={14} />
                     </button>
@@ -787,8 +793,8 @@ export function MeetingDetail({
                         onClick={() => handleFileDelete(file.id)}
                         disabled={busy}
                         className="rounded-md p-1.5 text-app-ink/40 hover:bg-app-surface-hover hover:text-[var(--ui-color-danger)] disabled:opacity-40"
-                        aria-label="파일 삭제"
-                        title="삭제"
+                        aria-label={t('meeting.detail.deleteFile')}
+                        title={t('common:actions.delete')}
                       >
                         <Trash2 size={14} />
                       </button>
@@ -800,7 +806,7 @@ export function MeetingDetail({
           )}
         </Section>
 
-        <Section icon={<Mic size={14} />} title="녹음" count={meeting.recordings.length}>
+        <Section icon={<Mic size={14} />} title={t('meeting.recordings')} count={meeting.recordings.length}>
           {canAttach ? (
             <RecordingControls
               browserSupported={recorder.browserSupported}
@@ -891,7 +897,7 @@ export function MeetingDetail({
           ) : null}
 
           {meeting.recordings.length === 0 ? (
-            <EmptyRow text="완료된 녹음이 없습니다." />
+            <EmptyRow text={t('meeting.detail.noRecordings')} />
           ) : (
             <ul className="mt-3 space-y-2">
               {meeting.recordings.map((recording) => (
@@ -907,10 +913,14 @@ export function MeetingDetail({
                             to={buildWorkspaceAppPath(workspaceSlug, 'docs', recording.linked_doc_id)}
                             className="hover:text-app-accent hover:underline"
                           >
-                            {recording.source === 'manual_upload' ? '업로드 음성' : '회의 녹음'}
+                            {recording.source === 'manual_upload'
+                              ? t('meeting.detail.uploadedAudio')
+                              : t('meeting.detail.meetingRecording')}
                           </Link>
                         ) : (
-                          recording.source === 'manual_upload' ? '업로드 음성' : '회의 녹음'
+                          recording.source === 'manual_upload'
+                            ? t('meeting.detail.uploadedAudio')
+                            : t('meeting.detail.meetingRecording')
                         )}
                       </p>
                       <p className="app-text-caption text-app-ink/50">
@@ -923,7 +933,7 @@ export function MeetingDetail({
                         onClick={() => void handleRecordingPlayback(recording.id)}
                         className="app-text-caption text-app-accent hover:underline"
                       >
-                        재생
+                        {t('meeting.detail.play')}
                       </button>
                       {user && (
                         recording.uploaded_by_id === user.id
@@ -935,7 +945,7 @@ export function MeetingDetail({
                           disabled={busy}
                           className="app-text-caption text-[var(--ui-color-danger)] hover:underline disabled:opacity-50"
                         >
-                          삭제
+                          {t('common:actions.delete')}
                         </button>
                       ) : null}
                     </div>
@@ -959,7 +969,7 @@ export function MeetingDetail({
                   ) : null}
                   {recording.transcription_status === 'done' ? (
                     <p className="app-text-caption mt-3 text-app-ink/60">
-                      회의록 생성이 완료되었습니다.
+                      {t('meeting.detail.minutesDone')}
                     </p>
                   ) : null}
                 </li>
@@ -970,7 +980,9 @@ export function MeetingDetail({
             <p className="app-text-caption mt-2 text-[var(--ui-color-danger)]">{recovery.error}</p>
           ) : null}
           {recovery.loading ? (
-            <p className="app-text-caption mt-2 text-app-ink/50">복구 가능한 녹음을 확인하는 중입니다.</p>
+            <p className="app-text-caption mt-2 text-app-ink/50">
+              {t('meeting.detail.recoveryChecking')}
+            </p>
           ) : null}
         </Section>
 
@@ -982,7 +994,7 @@ export function MeetingDetail({
             timeZone={timeZone}
             onOpenInChat={async (insight) => {
               if (!token) {
-                throw new Error('AI 대화 컨텍스트를 시작하려면 다시 로그인해주세요.');
+                throw new Error(t('meeting.detail.chatRequiresLogin'));
               }
               await openMeetingInsightInChat({
                 navigate,
@@ -997,12 +1009,13 @@ export function MeetingDetail({
 
         <Section
           icon={<Users size={14} />}
-          title="참석자"
+          title={t('meeting.form.attendees')}
           count={meeting.attendees.length}
           onAdd={canInvite ? () => setAddAttendeesOpen(true) : undefined}
+          addLabel={t('common:actions.add')}
         >
           {meeting.attendees.length === 0 ? (
-            <EmptyRow text="참석자가 없습니다." />
+            <EmptyRow text={t('meeting.detail.noAttendees')} />
           ) : (
             <ul className="space-y-1">
               {meeting.attendees.map((attendee) => (
@@ -1030,7 +1043,7 @@ export function MeetingDetail({
         {meeting.agenda ? (
           <section>
             <h3 className="app-text-overline mb-2 text-app-ink/60 dark:text-app-ink/70">
-              안건
+              {t('meeting.form.agenda')}
             </h3>
             <p className="app-text-body whitespace-pre-wrap text-app-ink/80">
               {meeting.agenda}
@@ -1048,7 +1061,7 @@ export function MeetingDetail({
             className="w-full"
           >
             <Trash2 size={14} className="mr-1" />
-            회의 삭제
+            {t('meeting.detail.deleteMeeting')}
           </Button>
         </footer>
       ) : null}
@@ -1079,11 +1092,15 @@ export function MeetingDetail({
         onOpenChange={(open) => {
           if (!open) setWhiteboardEditorOpen(false);
         }}
-        title="Meeting Whiteboard"
-        description="회의에 연결된 Whiteboard를 작성하고 수정합니다."
+        title={t('meeting.detail.whiteboardDialogTitle')}
+        description={t('meeting.detail.whiteboardDialogDescription')}
         fullSize
         dismissOnInteractOutside={false}
-        actions={<Button variant="secondary" onClick={() => setWhiteboardEditorOpen(false)}>닫기</Button>}
+        actions={
+          <Button variant="secondary" onClick={() => setWhiteboardEditorOpen(false)}>
+            {t('common:actions.close')}
+          </Button>
+        }
       >
         {activeWhiteboardId ? (
           <div className="flex h-[calc(92vh-8.5rem)] min-h-[520px] min-w-0">

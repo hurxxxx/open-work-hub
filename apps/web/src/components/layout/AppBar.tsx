@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import {
   Bell,
   Check,
@@ -70,6 +71,7 @@ export function AppBar({
   onOpenMobileNavigation: () => void;
 }) {
   const { hasPermission, token } = useAuth();
+  const { t, i18n } = useTranslation(['common', 'shell', 'auth']);
   const navigate = useNavigate();
   const [unreadCount, setUnreadCount] = useState(0);
   const [notifOpen, setNotifOpen] = useState(false);
@@ -93,7 +95,7 @@ export function AppBar({
     : null;
   const otherWorkspaces = matchingWorkspaces
     .filter((workspace) => workspace.id !== currentWorkspace?.id)
-    .sort((left, right) => left.name.localeCompare(right.name, 'ko'));
+    .sort((left, right) => left.name.localeCompare(right.name, i18n.language));
 
   useEffect(() => {
     if (!token || !shellWorkspaceSlug) {
@@ -180,7 +182,7 @@ export function AppBar({
       }
       return {
         id: item.app_id as WorkspaceAppId,
-        title: item.title,
+        title: t(`shell:apps.${item.app_id}`, { defaultValue: item.title }),
         icon: localItem.icon,
       };
     })
@@ -196,8 +198,11 @@ export function AppBar({
     : '/tool/search';
   const activeWorkspaceApp = visibleItems.find((item) => item.id === activeAppId);
   const activeAppTitle = activeAppId === 'settings'
-    ? 'Settings'
-    : activeWorkspaceApp?.title ?? appBarItemById.get(activeAppId as (typeof APP_BAR_ITEMS)[number]['id'])?.title ?? 'AIDOO';
+    ? t('shell:apps.settings')
+    : activeWorkspaceApp?.title
+      ?? t(`shell:apps.${activeAppId}`, {
+        defaultValue: appBarItemById.get(activeAppId as (typeof APP_BAR_ITEMS)[number]['id'])?.title ?? 'AIDOO',
+      });
   const mobileTitle = (
     <>
       <div className="app-text-body-sm truncate font-semibold text-app-ink">
@@ -207,7 +212,7 @@ export function AppBar({
         ) : null}
       </div>
       <div className="app-text-caption truncate text-app-ink/50">
-        {currentWorkspace?.name ?? 'Workspace'}
+        {currentWorkspace?.name ?? t('common:labels.workspace')}
       </div>
     </>
   );
@@ -216,7 +221,7 @@ export function AppBar({
     <>
       <div className="flex h-14 shrink-0 items-center gap-2 border-b border-app-border bg-app-bg-strong px-3 text-app-ink lg:hidden">
         <button
-          aria-label="앱 전환 열기"
+          aria-label={t('shell:mobileNavigation.open')}
           className="flex h-10 w-10 items-center justify-center rounded-xl border border-app-border bg-app-surface text-app-ink shadow-sm transition-colors hover:bg-app-surface-hover"
           onClick={onOpenMobileNavigation}
           type="button"
@@ -226,7 +231,7 @@ export function AppBar({
 
         {canOpenMobileAppMenu ? (
           <button
-            aria-label={`${activeAppTitle} 메뉴 열기`}
+            aria-label={t('shell:mobileAppMenu.title', { title: activeAppTitle })}
             className="min-w-0 flex-1 rounded-lg px-1.5 py-1 text-left transition-colors hover:bg-app-surface-hover focus:outline-none focus:ring-2 focus:ring-app-accent/35"
             onClick={onOpenMobileAppMenu}
             type="button"
@@ -241,10 +246,10 @@ export function AppBar({
 
         {canOpenWorkspaceSearch ? (
           <button
-            aria-label="통합검색 열기"
+            aria-label={t('shell:search.open')}
             className="flex h-10 w-10 items-center justify-center rounded-xl text-app-ink/60 transition-colors hover:bg-app-surface-hover hover:text-app-ink"
             onClick={() => navigate(workspaceSearchHref)}
-            title="통합검색"
+            title={t('shell:search.title')}
             type="button"
           >
             <Search size={19} />
@@ -252,10 +257,10 @@ export function AppBar({
         ) : null}
 
         <button
-          aria-label="알림 열기"
+          aria-label={t('shell:notifications.title')}
           className="relative flex h-10 w-10 items-center justify-center rounded-xl text-app-ink/60 transition-colors hover:bg-app-surface-hover hover:text-app-ink"
           onClick={() => setNotifOpen(prev => !prev)}
-          title="알림"
+          title={t('shell:notifications.title')}
           type="button"
         >
           <Bell size={19} />
@@ -267,10 +272,10 @@ export function AppBar({
         </button>
 
         <button
-          aria-label="마이페이지 열기"
+          aria-label={t('auth:settings.mySettings')}
           className="app-text-body-sm flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-full bg-app-accent font-bold text-app-accent-fg shadow-sm outline-none ring-2 ring-transparent transition-all hover:ring-app-accent/40"
           onClick={onOpenAccount}
-          title={`${currentUser.display_name || currentUser.full_name} · 마이페이지`}
+          title={`${currentUser.display_name || currentUser.full_name} · ${t('auth:settings.mySettings')}`}
           type="button"
         >
           {getInitials(currentUser.display_name || currentUser.full_name, 'ID')}
@@ -282,10 +287,10 @@ export function AppBar({
         <button
           aria-expanded={workspaceSwitcherOpen}
           aria-haspopup="dialog"
-          aria-label="워크스페이스 전환"
+          aria-label={t('shell:workspaceSwitcher.switch')}
           className="group flex h-11 w-11 flex-col items-center justify-center rounded-xl border border-app-border bg-app-surface text-app-ink shadow-sm transition-colors hover:bg-app-surface-hover"
           onClick={() => setWorkspaceSwitcherOpen((open) => !open)}
-          title={currentWorkspace ? `${currentWorkspace.name} workspace` : '워크스페이스 선택'}
+          title={currentWorkspace ? `${currentWorkspace.name} workspace` : t('shell:workspaceSwitcher.switch')}
           type="button"
         >
           <span className="app-text-body-sm font-semibold leading-none">
@@ -306,7 +311,7 @@ export function AppBar({
             role="dialog"
           >
             <div className="px-1 pb-2">
-              <div className="app-text-overline text-gray-500">Workspaces</div>
+              <div className="app-text-overline text-gray-500">{t('common:labels.workspaces')}</div>
             </div>
 
             <div className="relative">
@@ -314,7 +319,7 @@ export function AppBar({
               <input
                 className="app-text-body-sm w-full rounded-xl border border-app-border bg-app-bg py-2 pl-9 pr-3 text-app-ink outline-none transition-colors focus:border-app-accent"
                 onChange={(event) => setWorkspaceQuery(event.currentTarget.value)}
-                placeholder="워크스페이스 검색"
+                placeholder={t('shell:workspaceSwitcher.searchPlaceholder')}
                 type="text"
                 value={workspaceQuery}
               />
@@ -343,8 +348,8 @@ export function AppBar({
 
               {!pinnedWorkspace && otherWorkspaces.length === 0 ? (
                 <div className="rounded-xl border border-dashed border-app-border px-3 py-5 text-center">
-                  <div className="app-text-body-sm text-app-ink">검색 결과가 없습니다.</div>
-                  <div className="app-text-caption mt-1 text-gray-500">이름 또는 slug 로 다시 검색하세요.</div>
+                  <div className="app-text-body-sm text-app-ink">{t('shell:workspaceSwitcher.noResults')}</div>
+                  <div className="app-text-caption mt-1 text-gray-500">{t('shell:workspaceSwitcher.noResultsHint')}</div>
                 </div>
               ) : null}
             </div>
@@ -358,7 +363,7 @@ export function AppBar({
                     type="button"
                   >
                     <Plus size={14} className="text-gray-500" />
-                    <span>새 워크스페이스</span>
+                    <span>{t('shell:workspaceSwitcher.create')}</span>
                   </button>
                 ) : null}
 
@@ -369,7 +374,7 @@ export function AppBar({
                     type="button"
                   >
                     <SettingsIcon size={14} className="text-gray-500" />
-                    <span>워크스페이스 설정</span>
+                    <span>{t('shell:workspaceSwitcher.manage')}</span>
                   </button>
                 ) : null}
               </div>
@@ -380,15 +385,15 @@ export function AppBar({
 
       {canOpenWorkspaceSearch ? (
         <button
-          aria-label="통합검색"
+          aria-label={t('shell:search.title')}
           className="group relative rounded-xl p-3 text-gray-500 transition-all hover:bg-app-surface-hover hover:text-gray-300"
           onClick={() => navigate(workspaceSearchHref)}
-          title="통합검색"
+          title={t('shell:search.title')}
           type="button"
         >
           <Search size={22} />
           <div className="app-text-micro pointer-events-none absolute left-full z-50 ml-2 whitespace-nowrap rounded bg-black px-2 py-1 text-white opacity-0 group-hover:opacity-100">
-            통합검색
+            {t('shell:search.title')}
           </div>
         </button>
       ) : null}
@@ -426,7 +431,7 @@ export function AppBar({
         >
           {settingsItem ? <settingsItem.icon size={22} /> : <SettingsIcon size={22} />}
           <div className="app-text-micro absolute left-full ml-2 rounded bg-black px-2 py-1 text-white opacity-0 pointer-events-none whitespace-nowrap z-50 group-hover:opacity-100">
-            Settings
+            {t('shell:apps.settings')}
           </div>
           {activeAppId === 'settings' ? (
             <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 bg-app-accent rounded-r-full" />
@@ -436,7 +441,7 @@ export function AppBar({
 
       <div className="mt-auto flex flex-col items-center gap-3 relative">
         <button
-          aria-label="알림"
+          aria-label={t('shell:notifications.title')}
           className="relative p-2 rounded-xl text-gray-500 hover:text-gray-300 hover:bg-app-surface-hover transition-all"
           onClick={() => setNotifOpen(prev => !prev)}
           type="button"
@@ -450,10 +455,10 @@ export function AppBar({
         </button>
 
         <button
-          aria-label="마이페이지"
+          aria-label={t('auth:settings.mySettings')}
           className="app-text-body-sm flex h-10 w-10 cursor-pointer items-center justify-center rounded-full bg-app-accent font-bold text-app-accent-fg shadow-sm outline-none ring-2 ring-transparent transition-all hover:ring-app-accent/40"
           onClick={onOpenAccount}
-          title={`${currentUser.display_name || currentUser.full_name} · 마이페이지`}
+          title={`${currentUser.display_name || currentUser.full_name} · ${t('auth:settings.mySettings')}`}
           type="button"
         >
           {getInitials(currentUser.display_name || currentUser.full_name, 'ID')}

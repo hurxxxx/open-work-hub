@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import {
   History,
   FolderKanban,
@@ -25,6 +26,7 @@ function upsertTaskList(taskLists: PmsTaskList[], taskList: PmsTaskList): PmsTas
 }
 
 export const OverviewView = () => {
+  const { t } = useTranslation('apps');
   const { token, user } = useAuth();
   const navigate = useNavigate();
   const [dashboard, setDashboard] = useState<PmsDashboardSummary | null>(null);
@@ -63,12 +65,18 @@ export const OverviewView = () => {
       {/* Welcome Section */}
       <div className="rounded-xl border border-app-border bg-app-surface p-8">
         <h2 className="app-text-title-lg mb-2 text-app-ink">
-          {user?.full_name ? `Hello, ${user.full_name.split(' ')[0]}!` : 'Welcome!'}
+          {user?.full_name
+            ? t('pms.overviewPage.greetingName', { name: user.full_name.split(' ')[0] })
+            : t('pms.overviewPage.greeting')}
         </h2>
         <p className="app-text-body max-w-xl text-app-ink/60">
           {dashboard
-            ? `${dashboard.list_count} lists · ${dashboard.active_issue_count} active issues · ${dashboard.overdue_issue_count} overdue`
-            : 'Loading summary...'}
+            ? t('pms.overviewPage.summary', {
+                lists: dashboard.list_count,
+                active: dashboard.active_issue_count,
+                overdue: dashboard.overdue_issue_count,
+              })
+            : t('pms.overviewPage.loadingSummary')}
         </p>
       </div>
 
@@ -78,14 +86,14 @@ export const OverviewView = () => {
           <h3 className="app-text-title-md mb-4 flex items-center justify-between text-app-ink">
             <div className="flex items-center gap-2">
               <History size={16} className="text-app-accent" />
-              Lists
+              {t('pms.overviewPage.lists')}
             </div>
             <button
               onClick={() => setCreateTaskListOpen(true)}
               className="app-text-control-sm flex items-center gap-1 text-app-accent transition-colors hover:text-app-accent/80"
             >
               <Plus size={14} />
-              <span>New</span>
+              <span>{t('common:actions.create')}</span>
             </button>
           </h3>
           <div className="space-y-3">
@@ -104,7 +112,10 @@ export const OverviewView = () => {
                   </div>
                   <div className="app-text-micro text-app-ink/40">
                     {taskList.team_name && <span>{taskList.team_name} · </span>}
-                    {taskList.issue_count} issues · {Math.round(taskList.progress * 100)}% done
+                    {t('pms.overviewPage.listProgress', {
+                      count: taskList.issue_count,
+                      progress: Math.round(taskList.progress * 100),
+                    })}
                   </div>
                 </div>
                 <ChevronRight
@@ -114,7 +125,7 @@ export const OverviewView = () => {
               </div>
             ))}
             {taskLists.length === 0 && (
-              <p className="app-text-body text-app-ink/40">No lists yet</p>
+              <p className="app-text-body text-app-ink/40">{t('pms.overviewPage.noLists')}</p>
             )}
           </div>
         </Panel>
@@ -125,7 +136,7 @@ export const OverviewView = () => {
             title={
               <span className="app-text-title-md flex items-center gap-2 text-app-ink">
                 <LayoutDashboard size={16} className="text-app-accent" />
-                Status Distribution
+                {t('pms.overviewPage.statusDistribution')}
               </span>
             }
             categories={statusCategories}
@@ -143,7 +154,7 @@ export const OverviewView = () => {
           <h3 className="app-text-title-md mb-4 flex items-center justify-between text-app-ink">
             <div className="flex items-center gap-2">
               <History size={16} className="text-app-accent" />
-              Recent Activity
+              {t('pms.overviewPage.recentActivity')}
             </div>
           </h3>
           <div className="space-y-3">
@@ -162,7 +173,9 @@ export const OverviewView = () => {
               </div>
             ))}
             {(!dashboard?.recent_activity || dashboard.recent_activity.length === 0) && (
-              <p className="app-text-body text-app-ink/40">No recent activity</p>
+              <p className="app-text-body text-app-ink/40">
+                {t('pms.overviewPage.noRecentActivity')}
+              </p>
             )}
           </div>
         </Panel>

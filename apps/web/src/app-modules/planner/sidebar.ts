@@ -6,7 +6,8 @@ export const plannerSidebarConfig: AppSidebarConfig = {
   createActions: () => [
     {
       id: 'planner-create-event',
-      label: 'Event',
+      label: 'planner-create-event',
+      labelKey: 'sidebarActions.planner-create-event',
       icon: Calendar,
       run: () => {
         window.dispatchEvent(new CustomEvent('planner:create-event'));
@@ -14,7 +15,8 @@ export const plannerSidebarConfig: AppSidebarConfig = {
     },
     {
       id: 'planner-create-meeting',
-      label: 'Meeting',
+      label: 'planner-create-meeting',
+      labelKey: 'sidebarActions.planner-create-meeting',
       icon: Users,
       run: () => {
         window.dispatchEvent(new CustomEvent('planner:create-meeting'));

@@ -20,13 +20,13 @@ describe('FilterBar', () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: /Filter/ }));
+    fireEvent.click(screen.getByRole('button', { name: /필터/ }));
 
     const dialog = screen.getByRole('dialog');
-    expect(within(dialog).getByText('Filters')).toBeTruthy();
+    expect(within(dialog).getByText('필터')).toBeTruthy();
 
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Priority' }));
-    fireEvent.click(within(dialog).getByRole('button', { name: 'High' }));
+    fireEvent.click(within(dialog).getByRole('button', { name: '우선순위' }));
+    fireEvent.click(within(dialog).getByRole('button', { name: '높음' }));
 
     expect(setFilterParams).toHaveBeenCalledWith({
       ...filterParams,

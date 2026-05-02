@@ -1,4 +1,5 @@
 import { X } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import 'highlight.js/styles/github.css';
 
 import type { ArtifactBuffer } from '../../api/agent-events';
@@ -23,6 +24,7 @@ export interface ArtifactPanelProps {
 // data tables all need the room, and a maximize toggle was just friction
 // for no real gain since nothing displayed well at 560px anyway.
 export function ArtifactPanel({ artifact, onClose }: ArtifactPanelProps) {
+  const { t } = useTranslation('apps');
   const open = artifact !== null;
 
   return (
@@ -37,7 +39,7 @@ export function ArtifactPanel({ artifact, onClose }: ArtifactPanelProps) {
       />
       <aside
         role="dialog"
-        aria-label={artifact?.title ?? '아티팩트 패널'}
+        aria-label={artifact?.title ?? t('ai.artifacts.panel')}
         aria-hidden={!open}
         className={`fixed right-0 top-0 z-50 flex h-full w-[min(1200px,96vw)] flex-col border-l border-app-border bg-app-surface shadow-xl transition-transform duration-200 ${
           open ? 'translate-x-0' : 'translate-x-full'
@@ -52,12 +54,12 @@ export function ArtifactPanel({ artifact, onClose }: ArtifactPanelProps) {
                   {artifact.language ? ` · ${artifact.language}` : ''}
                 </div>
                 <h2 className="app-text-title-md truncate text-app-ink">
-                  {artifact.title?.trim() || '(제목 없는 문서)'}
+                  {artifact.title?.trim() || t('ai.artifacts.untitledDocument')}
                 </h2>
               </div>
               <button
                 type="button"
-                aria-label="패널 닫기"
+                aria-label={t('ai.artifacts.closePanel')}
                 onClick={onClose}
                 className="shrink-0 rounded-md p-1 text-gray-500 hover:bg-app-surface-hover hover:text-app-ink"
               >
@@ -69,7 +71,7 @@ export function ArtifactPanel({ artifact, onClose }: ArtifactPanelProps) {
                 <ArtifactBody artifact={artifact} />
               ) : (
                 <div className="app-text-body-sm text-gray-500">
-                  아직 내용이 없습니다.
+                  {t('ai.artifacts.empty')}
                 </div>
               )}
             </div>

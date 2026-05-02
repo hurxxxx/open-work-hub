@@ -19,6 +19,7 @@ from aidoo_api.domains.auth.access import (
     list_dev_login_account_catalog,
     list_dev_login_accounts,
     load_user_graph,
+    normalize_locale,
     normalize_time_zone,
     record_audit_log,
     resolve_group_slugs,
@@ -72,6 +73,7 @@ class AuthUserResponse(BaseModel):
     job_title: str | None
     status: str
     theme_preference: str
+    locale: str
     time_zone: str
     primary_org_unit: OrgUnitSummaryResponse | None
     system_roles: list[str]
@@ -144,6 +146,7 @@ class UpdatePreferencesRequest(BaseModel):
     full_name: str | None = Field(default=None, min_length=2, max_length=120)
     job_title: str | None = Field(default=None, max_length=120)
     theme_preference: Literal["system", "light", "dark"] | None = None
+    locale: Literal["ko-KR", "en-US"] | None = None
     time_zone: str | None = Field(default=None, min_length=1, max_length=64)
 
     @field_validator("time_zone")
@@ -152,6 +155,13 @@ class UpdatePreferencesRequest(BaseModel):
         if value is None:
             return None
         return normalize_time_zone(value)
+
+    @field_validator("locale")
+    @classmethod
+    def validate_locale(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        return normalize_locale(value)
 
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -311,6 +321,7 @@ def setup_first_user(
         primary_org_unit_id=root_org_unit.id,
         must_change_password=False,
         theme_preference="system",
+        locale=normalize_locale(None),
         time_zone=normalize_time_zone(None),
     )
     db.add(user)
@@ -507,6 +518,8 @@ def update_preferences(
         context.user.job_title = payload.job_title.strip()
     if payload.theme_preference is not None:
         context.user.theme_preference = payload.theme_preference
+    if payload.locale is not None:
+        context.user.locale = payload.locale
     if payload.time_zone is not None:
         context.user.time_zone = payload.time_zone
 
@@ -520,6 +533,7 @@ def update_preferences(
         summary=f"Preferences updated for {context.user.email}",
         payload={
             "theme_preference": payload.theme_preference,
+            "locale": payload.locale,
             "time_zone": payload.time_zone,
             "display_name": payload.display_name,
             "job_title": payload.job_title,

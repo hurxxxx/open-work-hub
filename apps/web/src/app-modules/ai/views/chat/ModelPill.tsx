@@ -7,6 +7,7 @@ import {
 } from 'react';
 import { createPortal } from 'react-dom';
 import { ChevronDown, RefreshCcw } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import type {
   AiBackendMode,
   LlmHealthResponse,
@@ -25,34 +26,36 @@ interface ModelPillProps {
 
 const BACKEND_OPTIONS: Array<{
   value: AiBackendMode;
-  label: string;
-  description: string;
+  labelKey: string;
+  descriptionKey: string;
 }> = [
-  { value: 'auto', label: '자동', description: '정책 기반 라우팅' },
-  { value: 'local', label: '로컬', description: 'local 풀 고정' },
+  { value: 'auto', labelKey: 'ai.model.auto', descriptionKey: 'ai.model.policyRouting' },
+  { value: 'local', labelKey: 'ai.model.local', descriptionKey: 'ai.model.localPoolFixed' },
 ];
 
 function formatPillLabel(
   health: LlmHealthResponse | null,
   mode: AiBackendMode,
+  t: (key: string) => string,
 ): string {
   if (!health) {
-    return mode === 'local' ? '로컬 · 확인 중' : '자동 · 확인 중';
+    return mode === 'local' ? t('ai.model.localChecking') : t('ai.model.autoChecking');
   }
   if (mode === 'local') {
-    return `${health.local.canonical_model} · 로컬`;
+    return `${health.local.canonical_model} · ${t('ai.model.local')}`;
   }
-  return '자동 라우팅';
+  return t('ai.message.autoRouting');
 }
 
 function formatBackendStatus(
   health: LlmPoolHealthResponse | null | undefined,
+  t: (key: string) => string,
 ): string {
   if (!health) {
-    return '확인 안 됨';
+    return t('ai.model.notChecked');
   }
   if (health.ready) {
-    return '준비됨';
+    return t('ai.routing.ready');
   }
   return health.status;
 }
@@ -81,6 +84,7 @@ export function computePanelPosition(
 }
 
 export function ModelPill(props: ModelPillProps) {
+  const { t } = useTranslation('apps');
   const [open, setOpen] = useState(false);
   const [position, setPosition] = useState<PanelPosition | null>(null);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
@@ -153,9 +157,9 @@ export function ModelPill(props: ModelPillProps) {
             }}
           >
             <div className="space-y-1 pb-1">
-              <div className="app-text-control-sm text-app-ink">라우팅 모드</div>
+              <div className="app-text-control-sm text-app-ink">{t('ai.model.routingMode')}</div>
               <div className="app-text-micro text-gray-500">
-                정책 기반 또는 local 고정 모드를 선택합니다.
+                {t('ai.model.routingModeDescription')}
               </div>
             </div>
             <div className="mt-2 grid grid-cols-2 gap-2">
@@ -170,16 +174,16 @@ export function ModelPill(props: ModelPillProps) {
                   onClick={() => props.onBackendModeChange(option.value)}
                   type="button"
                 >
-                  <span className="block app-text-control-sm">{option.label}</span>
+                  <span className="block app-text-control-sm">{t(option.labelKey)}</span>
                   <span className="block app-text-micro">
-                    {option.description}
+                    {t(option.descriptionKey)}
                   </span>
                 </button>
               ))}
             </div>
             <div className="mt-3 rounded-lg border border-app-border bg-app-bg px-3 py-1">
-              <PoolRow health={props.health?.local} label="Local pool" />
-              <PoolRow health={props.health?.external} label="External pool" />
+              <PoolRow health={props.health?.local} label={t('ai.model.localPool')} />
+              <PoolRow health={props.health?.external} label={t('ai.model.externalPool')} />
             </div>
             {props.healthError ? (
               <div className="mt-2 app-text-micro text-red-600 dark:text-red-400">
@@ -196,7 +200,7 @@ export function ModelPill(props: ModelPillProps) {
                 size={14}
                 className={props.isCheckingHealth ? 'animate-spin' : ''}
               />
-              상태 새로고침
+              {t('ai.model.refreshStatus')}
             </button>
           </div>,
           document.body,
@@ -214,7 +218,7 @@ export function ModelPill(props: ModelPillProps) {
         type="button"
       >
         <span className="truncate">
-          {formatPillLabel(props.health, props.backendMode)}
+          {formatPillLabel(props.health, props.backendMode, t)}
         </span>
         <ChevronDown
           size={14}
@@ -233,13 +237,14 @@ function PoolRow({
   health: LlmPoolHealthResponse | null | undefined;
   label: string;
 }) {
+  const { t } = useTranslation('apps');
   const ready = Boolean(health?.ready);
   return (
     <div className="flex items-start justify-between gap-3 border-b border-app-border py-2 last:border-b-0">
       <div className="min-w-0">
         <div className="app-text-control-sm text-app-ink">{label}</div>
         <div className="app-text-micro truncate text-gray-500">
-          {health?.model ?? '모델 확인 중'}
+          {health?.model ?? t('ai.model.modelChecking')}
         </div>
       </div>
       <div className="flex shrink-0 items-center gap-2">
@@ -247,7 +252,7 @@ function PoolRow({
           className={`h-2 w-2 rounded-full ${ready ? 'bg-emerald-500' : 'bg-amber-500'}`}
         />
         <span className="app-text-micro text-gray-500">
-          {formatBackendStatus(health)}
+          {formatBackendStatus(health, t)}
         </span>
       </div>
     </div>

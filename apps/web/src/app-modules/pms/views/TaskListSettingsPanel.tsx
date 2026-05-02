@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { motion } from 'motion/react';
 import { X, Plus, Pencil, Trash2, Check, Loader2 } from 'lucide-react';
 import { Button, InlineNotice, Select } from '@aidoo/ui';
+import { useTranslation } from 'react-i18next';
 import { useAuth } from '@/src/platform/auth/auth-provider';
 import { formatDateTime, normalizeTimeZone } from '@/src/platform/time/time-utils';
 import {
@@ -29,18 +30,18 @@ const PRESET_COLORS = [
   '#16a34a', '#ca8a04', '#0284c7', '#9333ea', '#e11d48',
 ];
 
-const CATEGORY_OPTIONS: { value: string; label: string }[] = [
-  { value: 'backlog', label: 'Backlog' },
-  { value: 'active', label: 'Active' },
-  { value: 'done', label: 'Done' },
-  { value: 'canceled', label: 'Canceled' },
+const CATEGORY_OPTIONS = [
+  { value: 'backlog', labelKey: 'pms.settings.category.backlog' },
+  { value: 'active', labelKey: 'pms.settings.category.active' },
+  { value: 'done', labelKey: 'pms.settings.category.done' },
+  { value: 'canceled', labelKey: 'pms.settings.category.canceled' },
 ];
 
 const ROLE_OPTIONS = [
-  { value: 'owner', label: 'Owner' },
-  { value: 'admin', label: 'Admin' },
-  { value: 'member', label: 'Member' },
-  { value: 'viewer', label: 'Viewer' },
+  { value: 'owner', labelKey: 'pms.settings.role.owner' },
+  { value: 'admin', labelKey: 'pms.settings.role.admin' },
+  { value: 'member', labelKey: 'pms.settings.role.member' },
+  { value: 'viewer', labelKey: 'pms.settings.role.viewer' },
 ];
 
 export function TaskListSettingsPanel({
@@ -59,6 +60,8 @@ export function TaskListSettingsPanel({
   onStatusesChanged?: (statuses: PmsTaskListStatus[]) => void;
 }) {
   const { token, user } = useAuth();
+  const { t, i18n } = useTranslation('apps');
+  const locale = i18n.resolvedLanguage ?? i18n.language;
   const timeZone = normalizeTimeZone(user?.time_zone);
   const [members, setMembers] = useState<PmsSpaceMember[]>([]);
   const [availableUsers, setAvailableUsers] = useState<PmsUserSummary[]>([]);
@@ -90,6 +93,10 @@ export function TaskListSettingsPanel({
     () => (canManageAdmins ? ROLE_OPTIONS : ROLE_OPTIONS.filter((option) => option.value === 'member' || option.value === 'viewer')),
     [canManageAdmins],
   );
+  const categoryLabels = useMemo(
+    () => new Map(CATEGORY_OPTIONS.map((option) => [option.value, t(option.labelKey)])),
+    [t],
+  );
 
   const notifyParent = useCallback((updated: PmsLabel[]) => {
     onLabelsChanged?.(updated);
@@ -118,11 +125,11 @@ export function TaskListSettingsPanel({
       setStatuses(statusRes.items);
       notifyStatusParent(statusRes.items);
     } catch (caughtError) {
-      setError(caughtError instanceof Error ? caughtError.message : '설정을 불러오지 못했습니다.');
+      setError(caughtError instanceof Error ? caughtError.message : t('pms.settings.errors.loadFailed'));
     } finally {
       setLoading(false);
     }
-  }, [notifyParent, notifyStatusParent, taskListId, teamId, token]);
+  }, [notifyParent, notifyStatusParent, taskListId, teamId, token, t]);
 
   useEffect(() => {
     void loadAll();
@@ -140,11 +147,11 @@ export function TaskListSettingsPanel({
       setNewName('');
       setNewColor(PRESET_COLORS[0]);
     } catch (caughtError) {
-      setError(caughtError instanceof Error ? caughtError.message : '라벨을 생성하지 못했습니다.');
+      setError(caughtError instanceof Error ? caughtError.message : t('pms.settings.errors.createLabelFailed'));
     } finally {
       setCreating(false);
     }
-  }, [token, taskListId, newName, newColor, labels, notifyParent]);
+  }, [token, taskListId, newName, newColor, labels, notifyParent, t]);
 
   const startEdit = (label: PmsLabel) => {
     setEditingId(label.id);
@@ -162,9 +169,9 @@ export function TaskListSettingsPanel({
       notifyParent(updated);
       setEditingId(null);
     } catch (caughtError) {
-      setError(caughtError instanceof Error ? caughtError.message : '라벨을 수정하지 못했습니다.');
+      setError(caughtError instanceof Error ? caughtError.message : t('pms.settings.errors.updateLabelFailed'));
     }
-  }, [token, editingId, editName, editColor, labels, notifyParent]);
+  }, [token, editingId, editName, editColor, labels, notifyParent, t]);
 
   const handleDelete = useCallback(async (labelId: string) => {
     if (!token) return;
@@ -175,9 +182,9 @@ export function TaskListSettingsPanel({
       setLabels(updated);
       notifyParent(updated);
     } catch (caughtError) {
-      setError(caughtError instanceof Error ? caughtError.message : '라벨을 삭제하지 못했습니다.');
+      setError(caughtError instanceof Error ? caughtError.message : t('pms.settings.errors.deleteLabelFailed'));
     }
-  }, [token, labels, notifyParent]);
+  }, [token, labels, notifyParent, t]);
 
   // ── Status handlers ──
   const handleCreateStatus = useCallback(async () => {
@@ -198,11 +205,11 @@ export function TaskListSettingsPanel({
       setNewStatusColor('#3b82f6');
       setNewStatusCategory('active');
     } catch (caughtError) {
-      setError(caughtError instanceof Error ? caughtError.message : '상태를 생성하지 못했습니다.');
+      setError(caughtError instanceof Error ? caughtError.message : t('pms.settings.errors.createStatusFailed'));
     } finally {
       setCreatingStatus(false);
     }
-  }, [token, taskListId, newStatusName, newStatusColor, newStatusCategory, statuses, notifyStatusParent]);
+  }, [token, taskListId, newStatusName, newStatusColor, newStatusCategory, statuses, notifyStatusParent, t]);
 
   const startEditStatus = (ps: PmsTaskListStatus) => {
     setEditingStatusId(ps.id);
@@ -225,9 +232,9 @@ export function TaskListSettingsPanel({
       notifyStatusParent(next);
       setEditingStatusId(null);
     } catch (caughtError) {
-      setError(caughtError instanceof Error ? caughtError.message : '상태를 수정하지 못했습니다.');
+      setError(caughtError instanceof Error ? caughtError.message : t('pms.settings.errors.updateStatusFailed'));
     }
-  }, [token, editingStatusId, editStatusName, editStatusColor, editStatusCategory, statuses, notifyStatusParent]);
+  }, [token, editingStatusId, editStatusName, editStatusColor, editStatusCategory, statuses, notifyStatusParent, t]);
 
   const handleDeleteStatus = useCallback(async (statusId: string) => {
     if (!token) return;
@@ -238,9 +245,9 @@ export function TaskListSettingsPanel({
       setStatuses(updated);
       notifyStatusParent(updated);
     } catch (caughtError) {
-      setError(caughtError instanceof Error ? caughtError.message : '상태를 삭제하지 못했습니다.');
+      setError(caughtError instanceof Error ? caughtError.message : t('pms.settings.errors.deleteStatusFailed'));
     }
-  }, [token, statuses, notifyStatusParent]);
+  }, [token, statuses, notifyStatusParent, t]);
 
   const handleAddMember = useCallback(async () => {
     if (!token || !teamId || selectedUserId === '__none__') return;
@@ -255,11 +262,11 @@ export function TaskListSettingsPanel({
       setSelectedUserId('__none__');
       setSelectedRole('member');
     } catch (caughtError) {
-      setError(caughtError instanceof Error ? caughtError.message : '멤버를 추가하지 못했습니다.');
+      setError(caughtError instanceof Error ? caughtError.message : t('pms.settings.errors.addMemberFailed'));
     } finally {
       setAddingMember(false);
     }
-  }, [selectedRole, selectedUserId, teamId, token]);
+  }, [selectedRole, selectedUserId, teamId, token, t]);
 
   const handleRoleChange = useCallback(async (userId: string, role: string) => {
     if (!token || !teamId) return;
@@ -270,9 +277,9 @@ export function TaskListSettingsPanel({
         member.user_id === userId ? updatedMember : member
       )));
     } catch (caughtError) {
-      setError(caughtError instanceof Error ? caughtError.message : '멤버 역할을 변경하지 못했습니다.');
+      setError(caughtError instanceof Error ? caughtError.message : t('pms.settings.errors.updateMemberRoleFailed'));
     }
-  }, [teamId, token]);
+  }, [teamId, token, t]);
 
   const handleRemoveMember = useCallback(async (userId: string) => {
     if (!token || !teamId) return;
@@ -281,19 +288,19 @@ export function TaskListSettingsPanel({
       await removeSpaceMember(token, teamId, userId);
       setMembers((current) => current.filter((member) => member.user_id !== userId));
     } catch (caughtError) {
-      setError(caughtError instanceof Error ? caughtError.message : '멤버를 제거하지 못했습니다.');
+      setError(caughtError instanceof Error ? caughtError.message : t('pms.settings.errors.removeMemberFailed'));
     }
-  }, [teamId, token]);
+  }, [teamId, token, t]);
 
-  const memberCandidateOptions = [
-    { value: '__none__', label: 'Add member by email' },
+  const memberCandidateOptions = useMemo(() => [
+    { value: '__none__', label: t('pms.settings.addMemberByEmail') },
     ...availableUsers
       .filter((user) => !members.some((member) => member.user_id === user.id))
       .map((user) => ({
         value: user.id,
         label: `${user.full_name} (${user.email})`,
       })),
-  ];
+  ], [availableUsers, members, t]);
 
   return (
     <>
@@ -307,13 +314,13 @@ export function TaskListSettingsPanel({
       >
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-app-border shrink-0">
-          <h2 className="app-text-title-md text-app-ink">List Settings</h2>
-          <Button variant="ghost" size="icon" onClick={onClose}><X size={16} /></Button>
+          <h2 className="app-text-title-md text-app-ink">{t('pms.settings.title')}</h2>
+          <Button variant="ghost" size="icon" onClick={onClose} aria-label={t('common:actions.close')}><X size={16} /></Button>
         </div>
 
         <div className="flex-1 overflow-y-auto custom-scrollbar px-5 py-4 space-y-6">
           <section className="space-y-3">
-            <h3 className="app-text-overline text-app-ink/50">Members</h3>
+            <h3 className="app-text-overline text-app-ink/50">{t('pms.settings.members')}</h3>
 
             {error ? <InlineNotice tone="danger">{error}</InlineNotice> : null}
 
@@ -331,7 +338,7 @@ export function TaskListSettingsPanel({
                     className="app-text-caption flex-1 rounded border border-app-border bg-app-bg px-2 py-2 text-app-ink focus:outline-none"
                   >
                     {availableRoleOptions.map((option) => (
-                      <option key={option.value} value={option.value}>{option.label}</option>
+                      <option key={option.value} value={option.value}>{t(option.labelKey)}</option>
                     ))}
                   </select>
                   <Button
@@ -339,7 +346,7 @@ export function TaskListSettingsPanel({
                     onClick={() => { void handleAddMember(); }}
                     variant="secondary"
                   >
-                    Add
+                    {t('common:actions.add')}
                   </Button>
                 </div>
               </div>
@@ -363,18 +370,18 @@ export function TaskListSettingsPanel({
                         disabled={isProtectedManager || isSelf}
                         onClick={() => { void handleRemoveMember(member.user_id); }}
                         className="text-app-ink/35 hover:text-red-400 transition-colors disabled:cursor-not-allowed disabled:text-app-ink/20"
-                        title="Remove member"
+                        title={t('pms.settings.removeMember')}
                       >
                         <Trash2 size={13} />
                       </button>
                     </div>
                     <div className="mt-2 flex items-center justify-between gap-2">
                       <div className="app-text-micro text-app-ink/35">
-                        Joined {formatDateTime(member.joined_at, {
+                        {t('pms.settings.joined', { date: formatDateTime(member.joined_at, {
                           dateStyle: 'medium',
-                          locale: 'en-US',
+                          locale,
                           timeZone,
-                        })}
+                        }) })}
                       </div>
                       <select
                         disabled={isProtectedManager || isSelf}
@@ -386,7 +393,7 @@ export function TaskListSettingsPanel({
                           ? ROLE_OPTIONS
                           : availableRoleOptions
                         ).map((option) => (
-                          <option key={option.value} value={option.value}>{option.label}</option>
+                          <option key={option.value} value={option.value}>{t(option.labelKey)}</option>
                         ))}
                       </select>
                     </div>
@@ -398,7 +405,7 @@ export function TaskListSettingsPanel({
 
           {/* Labels section */}
           <section className="space-y-3">
-            <h3 className="app-text-overline text-app-ink/50">Labels</h3>
+            <h3 className="app-text-overline text-app-ink/50">{t('pms.settings.labels')}</h3>
 
             {loading ? (
               <div className="flex justify-center py-6"><Loader2 size={18} className="animate-spin text-app-ink/40" /></div>
@@ -417,7 +424,7 @@ export function TaskListSettingsPanel({
                           className="app-text-body flex-1 rounded border border-app-border bg-app-surface-sidebar px-2 py-0.5 text-app-ink focus:border-app-accent focus:outline-none"
                         />
                         <ColorPicker value={editColor} onChange={setEditColor} />
-                        <button onClick={handleSaveEdit} className="text-app-accent hover:opacity-80">
+                        <button onClick={handleSaveEdit} className="text-app-accent hover:opacity-80" aria-label={t('pms.settings.saveLabel')}>
                           <Check size={14} />
                         </button>
                       </>
@@ -428,12 +435,14 @@ export function TaskListSettingsPanel({
                         <button
                           onClick={() => startEdit(label)}
                           className="opacity-0 group-hover:opacity-100 text-app-ink/40 hover:text-app-ink transition-all"
+                          aria-label={t('pms.settings.editLabel', { name: label.name })}
                         >
                           <Pencil size={13} />
                         </button>
                         <button
                           onClick={() => handleDelete(label.id)}
                           className="opacity-0 group-hover:opacity-100 text-app-ink/40 hover:text-red-400 transition-all"
+                          aria-label={t('pms.settings.deleteLabel', { name: label.name })}
                         >
                           <Trash2 size={13} />
                         </button>
@@ -451,7 +460,7 @@ export function TaskListSettingsPanel({
                 value={newName}
                 onChange={e => setNewName(e.target.value)}
                 onKeyDown={e => { if (e.key === 'Enter' && newName.trim()) handleCreate(); }}
-                placeholder="New label name..."
+                placeholder={t('pms.settings.newLabelNamePlaceholder')}
                 className="app-text-body flex-1 border-b border-app-border bg-transparent py-0.5 text-app-ink placeholder:text-app-ink/40 transition-colors focus:border-app-accent focus:outline-none"
               />
               <ColorPicker value={newColor} onChange={setNewColor} />
@@ -460,6 +469,7 @@ export function TaskListSettingsPanel({
                   onClick={handleCreate}
                   disabled={creating}
                   className="text-app-accent hover:opacity-80 disabled:opacity-40"
+                  aria-label={t('pms.settings.addLabel')}
                 >
                   {creating ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
                 </button>
@@ -469,7 +479,7 @@ export function TaskListSettingsPanel({
 
           {/* Statuses section */}
           <section className="space-y-3">
-            <h3 className="app-text-overline text-app-ink/50">Workflow Statuses</h3>
+            <h3 className="app-text-overline text-app-ink/50">{t('pms.settings.workflowStatuses')}</h3>
 
             {!loading && (
               <div className="space-y-1">
@@ -490,10 +500,10 @@ export function TaskListSettingsPanel({
                           onChange={e => setEditStatusCategory(e.target.value)}
                           className="app-text-micro rounded border border-app-border bg-app-surface-sidebar px-1 py-0.5 text-app-ink focus:outline-none"
                         >
-                          {CATEGORY_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                          {CATEGORY_OPTIONS.map(o => <option key={o.value} value={o.value}>{t(o.labelKey)}</option>)}
                         </select>
                         <ColorPicker value={editStatusColor} onChange={setEditStatusColor} />
-                        <button onClick={handleSaveEditStatus} className="text-app-accent hover:opacity-80">
+                        <button onClick={handleSaveEditStatus} className="text-app-accent hover:opacity-80" aria-label={t('pms.settings.saveStatus')}>
                           <Check size={14} />
                         </button>
                       </>
@@ -501,16 +511,18 @@ export function TaskListSettingsPanel({
                       <>
                         <ColorDot color={ps.color} />
                         <span className="app-text-body flex-1 text-app-ink">{ps.name}</span>
-                        <span className="app-text-micro uppercase text-app-ink/30">{ps.category}</span>
+                        <span className="app-text-micro uppercase text-app-ink/30">{categoryLabels.get(ps.category) ?? ps.category}</span>
                         <button
                           onClick={() => startEditStatus(ps)}
                           className="opacity-0 group-hover:opacity-100 text-app-ink/40 hover:text-app-ink transition-all"
+                          aria-label={t('pms.settings.editStatus', { name: ps.name })}
                         >
                           <Pencil size={13} />
                         </button>
                         <button
                           onClick={() => handleDeleteStatus(ps.id)}
                           className="opacity-0 group-hover:opacity-100 text-app-ink/40 hover:text-red-400 transition-all"
+                          aria-label={t('pms.settings.deleteStatus', { name: ps.name })}
                         >
                           <Trash2 size={13} />
                         </button>
@@ -529,7 +541,7 @@ export function TaskListSettingsPanel({
                   value={newStatusName}
                   onChange={e => setNewStatusName(e.target.value)}
                   onKeyDown={e => { if (e.key === 'Enter' && newStatusName.trim()) handleCreateStatus(); }}
-                  placeholder="New status name..."
+                  placeholder={t('pms.settings.newStatusNamePlaceholder')}
                   className="app-text-body flex-1 border-b border-app-border bg-transparent py-0.5 text-app-ink placeholder:text-app-ink/40 transition-colors focus:border-app-accent focus:outline-none"
                 />
                 <select
@@ -537,7 +549,7 @@ export function TaskListSettingsPanel({
                   onChange={e => setNewStatusCategory(e.target.value)}
                   className="app-text-micro rounded border border-app-border bg-app-surface-sidebar px-1 py-0.5 text-app-ink focus:outline-none"
                 >
-                  {CATEGORY_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                  {CATEGORY_OPTIONS.map(o => <option key={o.value} value={o.value}>{t(o.labelKey)}</option>)}
                 </select>
                 <ColorPicker value={newStatusColor} onChange={setNewStatusColor} />
                 {newStatusName.trim() && (
@@ -545,6 +557,7 @@ export function TaskListSettingsPanel({
                     onClick={handleCreateStatus}
                     disabled={creatingStatus}
                     className="text-app-accent hover:opacity-80 disabled:opacity-40"
+                    aria-label={t('pms.settings.addStatus')}
                   >
                     {creatingStatus ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
                   </button>

@@ -145,7 +145,7 @@ describe('MeetingAvailabilityPanel', () => {
     expect(initialOpenCall.rangeStart.getTime()).toBe(expectedWeekStart.getTime());
     expect(initialOpenCall.rangeEnd.getTime()).toBe(expectedWeekEnd.getTime());
 
-    fireEvent.click(screen.getByRole('button', { name: 'Next availability week' }));
+    fireEvent.click(screen.getByRole('button', { name: '다음 참석자 일정 주' }));
 
     await waitFor(() => {
       const nextCall = availabilityHarness.useMeetingAvailabilityQuery.mock.calls.at(-1)?.[0] as {

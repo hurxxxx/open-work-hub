@@ -60,6 +60,7 @@ def test_auth_bootstrap_and_protected_search(client: TestClient) -> None:
     auth_payload = setup_response.json()
     assert "platform_admin" in auth_payload["user"]["system_roles"]
     assert auth_payload["user"]["theme_preference"] == "system"
+    assert auth_payload["user"]["locale"] == "ko-KR"
     assert auth_payload["user"]["time_zone"] == "Asia/Seoul"
     assert auth_payload["user"]["workspaces"]
     assert any(item["role"] == "admin" for item in auth_payload["user"]["workspaces"])
@@ -310,13 +311,22 @@ def test_auth_preferences_password_and_sessions(client: TestClient) -> None:
             "display_name": "Portal Admin",
             "job_title": "Platform Owner",
             "theme_preference": "light",
+            "locale": "en-US",
             "time_zone": "America/New_York",
         },
     )
     assert preferences_response.status_code == 200
     assert preferences_response.json()["display_name"] == "Portal Admin"
     assert preferences_response.json()["theme_preference"] == "light"
+    assert preferences_response.json()["locale"] == "en-US"
     assert preferences_response.json()["time_zone"] == "America/New_York"
+
+    invalid_locale_response = client.patch(
+        "/api/v1/auth/preferences",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"locale": "fr-FR"},
+    )
+    assert invalid_locale_response.status_code == 422
 
     invalid_timezone_response = client.patch(
         "/api/v1/auth/preferences",

@@ -1,5 +1,6 @@
 import { ApiRequestError, apiFetchJson } from '@/src/platform/api/client';
 import type { ApiSchema } from '@/src/platform/api/types';
+import { i18n } from '@/src/platform/i18n';
 import { rewriteWorkspaceApiPath } from '@/src/platform/workspaces/workspace-utils';
 
 export type KeywordSearchEntityType = ApiSchema<'SearchEntityType'>;
@@ -87,7 +88,7 @@ export async function queryWorkspaceKeywordSearch(
 
 function extractErrorMessage(payload: unknown, status: number): string {
   if (status === 401) {
-    return '세션이 만료되었습니다. 다시 로그인해주세요.';
+    return i18n.t('apps:ai.search.sessionExpired');
   }
   if (payload && typeof payload === 'object' && 'detail' in payload) {
     const detail = (payload as { detail?: unknown }).detail;
@@ -95,5 +96,5 @@ function extractErrorMessage(payload: unknown, status: number): string {
       return detail;
     }
   }
-  return `검색 결과를 불러오지 못했습니다. (${status})`;
+  return i18n.t('apps:ai.search.loadFailedWithStatus', { status });
 }

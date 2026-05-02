@@ -6,6 +6,7 @@
 // use-calendar-events.ts can fall back to MOCK_CALENDAR_EVENTS until Phase 2 lands.
 import { ApiRequestError, apiFetchJson } from '@/src/platform/api/client';
 import type { ApiSchema } from '@/src/platform/api/types';
+import { i18n } from '@/src/platform/i18n';
 import { rewriteWorkspaceApiPath } from '@/src/platform/workspaces/workspace-utils';
 
 import {
@@ -86,7 +87,7 @@ export function buildMockCalendarEvents(): CalendarEvent[] {
   return [
     {
       id: 'mock-meeting-1',
-      title: '분기 전략 회의 (mock)',
+      title: i18n.t('apps:planner.mock.strategyMeeting'),
       start: isoOffset(0, 10, 0),
       end: isoOffset(0, 11, 0),
       allDay: false,
@@ -97,7 +98,7 @@ export function buildMockCalendarEvents(): CalendarEvent[] {
     },
     {
       id: 'mock-meeting-2',
-      title: '겹침 테스트 — 제품 리뷰',
+      title: i18n.t('apps:planner.mock.productReviewOverlap'),
       start: isoOffset(0, 10, 30),
       end: isoOffset(0, 11, 30),
       allDay: false,
@@ -108,7 +109,7 @@ export function buildMockCalendarEvents(): CalendarEvent[] {
     },
     {
       id: 'mock-pms-due-1',
-      title: 'INDUSTRIAL-12 디자인 리뷰 마감',
+      title: i18n.t('apps:planner.mock.designReviewDue'),
       start: isoDate(1),
       end: isoDate(2),
       allDay: true,
@@ -119,7 +120,7 @@ export function buildMockCalendarEvents(): CalendarEvent[] {
     },
     {
       id: 'mock-pms-block-1',
-      title: 'INDUSTRIAL-15 워크숍 출장 (3일)',
+      title: i18n.t('apps:planner.mock.workshopTravel'),
       start: isoDate(2),
       end: isoDate(5),
       allDay: true,
@@ -130,7 +131,7 @@ export function buildMockCalendarEvents(): CalendarEvent[] {
     },
     {
       id: 'mock-meeting-3',
-      title: '심야 배포 자정 가로지름',
+      title: i18n.t('apps:planner.mock.midnightDeploy'),
       start: isoOffset(3, 23, 30),
       end: isoOffset(4, 0, 30),
       allDay: false,

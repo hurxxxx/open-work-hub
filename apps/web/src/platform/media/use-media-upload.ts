@@ -1,5 +1,6 @@
 import { useCallback, useRef } from 'react';
 import { useAuth } from '@/src/platform/auth/auth-provider';
+import { i18n } from '@/src/platform/i18n';
 import { linkMedia, uploadMedia, resolveMediaUrls } from './media-api';
 
 const CACHE_TTL_MS = 50 * 60 * 1000; // 50 minutes (presigned URLs expire in 1h)
@@ -24,7 +25,7 @@ export function useMediaUpload() {
 
   const uploadFile = useCallback(
     async (file: File): Promise<string> => {
-      if (!token) throw new Error('Authentication required.');
+      if (!token) throw new Error(i18n.t('auth:errors.noActiveSession'));
       const result = await uploadMedia(token, file);
       return result.url; // "media:{id}"
     },

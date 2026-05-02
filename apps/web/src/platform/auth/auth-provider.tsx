@@ -37,6 +37,7 @@ import {
   readStoredAuthToken,
 } from './auth-storage';
 import { LoginScreen } from './login-screen';
+import { i18n } from '@/src/platform/i18n';
 
 export { useAuth } from './auth-context';
 
@@ -118,11 +119,11 @@ export function AuthLoadingScreen() {
         role="status"
       >
         <p className="m-0 text-[0.72rem] font-semibold uppercase tracking-[0.1em] text-[var(--ui-color-ink-subtle)]">
-          Session
+          {i18n.t('auth:loading.eyebrow')}
         </p>
-        <strong className="text-[1rem] text-[var(--ui-color-ink)]">세션 확인 중</strong>
+        <strong className="text-[1rem] text-[var(--ui-color-ink)]">{i18n.t('auth:loading.title')}</strong>
         <p className="m-0 text-[0.84rem] text-[var(--ui-color-ink-muted)]">
-          저장된 로그인 정보와 초기 설정 상태를 확인하고 있습니다.
+          {i18n.t('auth:loading.description')}
         </p>
       </div>
     </div>
@@ -180,7 +181,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } else {
       bootstrapError = errorMessage(
         bootstrapResult.reason,
-        '초기 인증 상태를 확인하지 못했습니다.',
+        i18n.t('auth:errors.bootstrap'),
       );
     }
 
@@ -326,7 +327,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   async function updatePreferences(payload: UpdatePreferencesPayload) {
     if (!state.token) {
-      throw new Error('No active session.');
+      throw new Error(i18n.t('auth:errors.noActiveSession'));
     }
 
     const user = await updatePreferencesRequest(state.token, payload);
@@ -346,7 +347,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   async function changePassword(payload: ChangePasswordPayload) {
     if (!state.token) {
-      throw new Error('No active session.');
+      throw new Error(i18n.t('auth:errors.noActiveSession'));
     }
 
     await changePasswordRequest(state.token, payload);
@@ -359,7 +360,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   async function listSessions() {
     if (!state.token) {
-      throw new Error('No active session.');
+      throw new Error(i18n.t('auth:errors.noActiveSession'));
     }
 
     const response = await listSessionsRequest(state.token);
@@ -368,7 +369,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   async function revokeSession(sessionId: string) {
     if (!state.token) {
-      throw new Error('No active session.');
+      throw new Error(i18n.t('auth:errors.noActiveSession'));
     }
 
     await revokeSessionRequest(state.token, sessionId);

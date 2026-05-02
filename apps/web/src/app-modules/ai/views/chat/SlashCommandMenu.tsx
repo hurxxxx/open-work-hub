@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import type { NavItem } from '@/src/app/shell/navigation-types';
 
@@ -105,12 +106,27 @@ export function isSlashCommandBuffer(input: string): boolean {
 }
 
 export function useSlashCommandItems(source: NavItem[], rawInput: string) {
+  const { t } = useTranslation('shell');
   return useMemo(() => {
     if (!isSlashCommandBuffer(rawInput)) {
       return null;
     }
     const query = rawInput.slice(1).trim().toLowerCase();
-    const aiItems = source.filter((item) => item.appId === 'ai');
+    const aiItems = source
+      .filter((item) => item.appId === 'ai')
+      .map((item) => {
+        const description = t(`navDescriptions.${item.id}`, {
+          defaultValue: item.description ?? '',
+        });
+        return {
+          ...item,
+          title: t(`nav.${item.id}`, { defaultValue: item.title }),
+          description: description || undefined,
+          category: t(`categories.${item.category}`, {
+            defaultValue: item.category,
+          }),
+        };
+      });
     if (!query) {
       return aiItems;
     }
@@ -118,5 +134,5 @@ export function useSlashCommandItems(source: NavItem[], rawInput: string) {
       const haystack = `${item.title} ${item.description ?? ''} ${item.id}`.toLowerCase();
       return haystack.includes(query);
     });
-  }, [source, rawInput]);
+  }, [source, rawInput, t]);
 }

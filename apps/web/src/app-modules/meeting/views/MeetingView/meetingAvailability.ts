@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import { useAuth } from '@/src/platform/auth/auth-provider';
 import {
@@ -12,6 +13,16 @@ import {
   formatDateOnly,
   formatDateTime,
 } from '@/src/platform/time/time-utils';
+
+interface AvailabilityBlockLabels {
+  busy: string;
+  schedule: string;
+}
+
+const DEFAULT_AVAILABILITY_BLOCK_LABELS: AvailabilityBlockLabels = {
+  busy: 'Busy',
+  schedule: 'Schedule',
+};
 
 export const HALF_HOUR_MS = 30 * 60 * 1000;
 /** Legacy fixed-width constants — still referenced by inline previews that
@@ -53,9 +64,16 @@ function formatShortDate(date: Date, timeZone: string): string {
 export function formatAvailabilityWeekLabel(
   weekStart: Date,
   timeZone = DEFAULT_TIME_ZONE,
+  locale = 'ko-KR',
 ): string {
   const weekEndInclusive = addLocalDays(weekStart, 6);
-  return `${formatShortDate(weekStart, timeZone)} - ${formatShortDate(weekEndInclusive, timeZone)}`;
+  const format = (date: Date) => formatDateTime(date, {
+    day: 'numeric',
+    locale,
+    month: 'numeric',
+    timeZone,
+  });
+  return `${format(weekStart)} - ${format(weekEndInclusive)}`;
 }
 
 function parseLocalDateOnly(value: string): Date {
@@ -83,22 +101,24 @@ export function blockOverlapsRange(
 export function formatAvailabilityBlockLabel(
   block: MeetingAvailabilityBlock,
   timeZone = DEFAULT_TIME_ZONE,
+  locale = 'ko-KR',
+  labels = DEFAULT_AVAILABILITY_BLOCK_LABELS,
 ): string {
-  const title = block.masked ? 'Busy' : (block.title ?? '일정');
+  const title = block.masked ? labels.busy : (block.title ?? labels.schedule);
   if (block.allDay) {
     const start = parseAvailabilityBoundary(block.start, true);
     const endExclusive = parseAvailabilityBoundary(block.end, true);
     const endInclusive = addLocalDays(endExclusive, -1);
     const startLabel = formatDateOnly(block.start, {
       day: 'numeric',
-      locale: 'ko-KR',
+      locale,
       month: 'numeric',
     });
     const endLabel = formatDateOnly(
       `${endInclusive.getFullYear()}-${String(endInclusive.getMonth() + 1).padStart(2, '0')}-${String(endInclusive.getDate()).padStart(2, '0')}`,
       {
         day: 'numeric',
-        locale: 'ko-KR',
+        locale,
         month: 'numeric',
       },
     );
@@ -112,13 +132,13 @@ export function formatAvailabilityBlockLabel(
   return `${title} · ${formatDateTime(start, {
     hour: '2-digit',
     hour12: false,
-    locale: 'ko-KR',
+    locale,
     minute: '2-digit',
     timeZone,
   })}-${formatDateTime(end, {
     hour: '2-digit',
     hour12: false,
-    locale: 'ko-KR',
+    locale,
     minute: '2-digit',
     timeZone,
   })}`;
@@ -129,6 +149,8 @@ export function buildAvailabilityConflicts(
   meetingStart: Date,
   meetingEnd: Date,
   timeZone = DEFAULT_TIME_ZONE,
+  locale = 'ko-KR',
+  labels = DEFAULT_AVAILABILITY_BLOCK_LABELS,
 ): AvailabilityConflictItem[] {
   return items.flatMap((item) => {
     const matching = item.blocks.filter((block) => blockOverlapsRange(block, meetingStart, meetingEnd));
@@ -140,7 +162,7 @@ export function buildAvailabilityConflicts(
         userId: item.userId,
         fullName: item.fullName,
         block: matching[0],
-        label: formatAvailabilityBlockLabel(matching[0], timeZone),
+        label: formatAvailabilityBlockLabel(matching[0], timeZone, locale, labels),
       },
     ];
   });
@@ -154,6 +176,7 @@ export function useMeetingAvailabilityQuery(options: {
   enabled?: boolean;
 }) {
   const { token } = useAuth();
+  const { t } = useTranslation('apps');
   const {
     workspaceSlug,
     userIds,
@@ -207,7 +230,7 @@ export function useMeetingAvailabilityQuery(options: {
       })
       .catch((err: Error) => {
         if (cancelled) return;
-        setError(err.message ?? '참석자 일정을 불러올 수 없습니다.');
+        setError(err.message ?? t('meeting.availabilityLoadFailed'));
         setItems([]);
       })
       .finally(() => {
@@ -217,7 +240,7 @@ export function useMeetingAvailabilityQuery(options: {
     return () => {
       cancelled = true;
     };
-  }, [enabled, token, workspaceSlug, uniqueUserIds, userIdsKey, rangeStartMs, rangeEndMs]);
+  }, [enabled, token, workspaceSlug, uniqueUserIds, userIdsKey, rangeStartMs, rangeEndMs, t]);
 
   return {
     items,
@@ -226,10 +249,14 @@ export function useMeetingAvailabilityQuery(options: {
   };
 }
 
-export function formatAvailabilityDayLabel(date: Date, timeZone = DEFAULT_TIME_ZONE): string {
+export function formatAvailabilityDayLabel(
+  date: Date,
+  timeZone = DEFAULT_TIME_ZONE,
+  locale = 'ko-KR',
+): string {
   return formatDateTime(date, {
     day: 'numeric',
-    locale: 'ko-KR',
+    locale,
     month: 'numeric',
     timeZone,
     weekday: 'short',

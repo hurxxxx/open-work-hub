@@ -6,7 +6,8 @@ export const whiteboardSidebarConfig: AppSidebarConfig = {
   createActions: () => [
     {
       id: 'whiteboard-create',
-      label: 'Whiteboard',
+      label: 'whiteboard-create',
+      labelKey: 'sidebarActions.whiteboard-create',
       icon: PencilRuler,
       run: () => {
         window.dispatchEvent(new CustomEvent('whiteboard:create'));
@@ -14,4 +15,3 @@ export const whiteboardSidebarConfig: AppSidebarConfig = {
     },
   ],
 };
-

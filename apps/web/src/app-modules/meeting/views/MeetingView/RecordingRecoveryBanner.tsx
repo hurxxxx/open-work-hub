@@ -1,3 +1,5 @@
+import { useTranslation } from 'react-i18next';
+
 import type { RecoverySessionItem } from './useRecordingRecovery';
 
 function formatBytes(bytes: number): string {
@@ -23,35 +25,40 @@ export function RecordingRecoveryBanner({
   onDiscard?: () => void;
   onFinalizeUploadedOnly?: () => void;
 }) {
+  const { t } = useTranslation('apps');
   const hasLocal = item.localSession != null;
   const hasRemote = item.remoteStaging != null;
   return (
     <div className="rounded-md border border-amber-300/50 bg-amber-50 px-3 py-3 text-amber-900">
-      <p className="app-text-body font-medium">미완료 녹음이 발견되었습니다.</p>
+      <p className="app-text-body font-medium">{t('meeting.recordingRecovery.title')}</p>
       <p className="app-text-caption mt-1 text-amber-900/80">
         {hasLocal
-          ? `이 기기에 ${formatBytes(item.localBytes)} 분량의 복구본이 남아 있습니다.`
-          : '이 기기에는 복구본이 없지만 서버에 업로드된 분량이 남아 있습니다.'}
-        {hasRemote ? ` 서버 업로드 분량은 ${formatBytes(item.remoteStaging?.bytes_received ?? 0)} 입니다.` : ''}
+          ? t('meeting.recordingRecovery.localCopy', { bytes: formatBytes(item.localBytes) })
+          : t('meeting.recordingRecovery.remoteOnly')}
+        {hasRemote
+          ? ` ${t('meeting.recordingRecovery.remoteBytes', {
+              bytes: formatBytes(item.remoteStaging?.bytes_received ?? 0),
+            })}`
+          : ''}
       </p>
       <div className="mt-3 flex flex-wrap gap-2">
         {hasLocal && hasRemote && onResumeUpload ? (
-          <ActionButton label="업로드 이어서 하기" onClick={onResumeUpload} />
+          <ActionButton label={t('meeting.recordingRecovery.resumeUpload')} onClick={onResumeUpload} />
         ) : null}
         {hasLocal && hasRemote && onContinueRecording ? (
-          <ActionButton label="복구 후 추가 녹음" onClick={onContinueRecording} />
+          <ActionButton label={t('meeting.recordingRecovery.continueRecording')} onClick={onContinueRecording} />
         ) : null}
         {hasLocal && item.previewUrl ? (
           <audio controls src={item.previewUrl} className="h-8 max-w-full" />
         ) : null}
-        {hasLocal && onDownload ? <ActionButton label="원본 다운로드" onClick={onDownload} /> : null}
+        {hasLocal && onDownload ? <ActionButton label={t('meeting.recordingRecovery.downloadOriginal')} onClick={onDownload} /> : null}
         {hasLocal && !hasRemote && onImport ? (
-          <ActionButton label="원본 파일로 다시 업로드" onClick={onImport} />
+          <ActionButton label={t('meeting.recordingRecovery.importOriginal')} onClick={onImport} />
         ) : null}
         {!hasLocal && hasRemote && onFinalizeUploadedOnly ? (
-          <ActionButton label="업로드된 분량으로 확정" onClick={onFinalizeUploadedOnly} />
+          <ActionButton label={t('meeting.recordingRecovery.finalizeUploaded')} onClick={onFinalizeUploadedOnly} />
         ) : null}
-        {onDiscard ? <ActionButton label="폐기" onClick={onDiscard} danger /> : null}
+        {onDiscard ? <ActionButton label={t('meeting.recordingRecovery.discard')} onClick={onDiscard} danger /> : null}
       </div>
     </div>
   );

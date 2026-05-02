@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { motion } from 'motion/react';
 import { ArrowRight, Lock, Mail, ShieldCheck, User } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
 import { InlineNotice } from '@aidoo/ui/feedback/inline-notice';
 
@@ -28,14 +29,16 @@ function DevAccountsPanel({
   submitting: boolean;
   onLogin: (accountKey: string) => void;
 }) {
+  const { t } = useTranslation('auth');
+
   return (
     <div className="order-2 rounded-2xl border border-[#3d3e40] bg-[#242527]/95 p-4 shadow-xl lg:order-1">
       <div className="mb-4">
         <div className="text-[0.68rem] font-semibold uppercase tracking-[0.12em] text-gray-500">
-          Seed Accounts
+          {t('login.seedAccounts')}
         </div>
         <p className="mt-2 text-xs leading-5 text-gray-400">
-          시드 계정을 바로 로그인할 수 있습니다.
+          {t('login.devAccountsDescription')}
         </p>
       </div>
 
@@ -82,6 +85,7 @@ function DevAccountsPanel({
 
 export function LoginScreen() {
   const auth = useAuth();
+  const { t } = useTranslation('auth');
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -127,7 +131,7 @@ export function LoginScreen() {
       setFormError(
         getMessage(
           caughtError,
-          isSetupMode ? '최초 관리자 계정을 만들지 못했습니다.' : '로그인하지 못했습니다.',
+          isSetupMode ? t('errors.setup') : t('errors.login'),
         ),
       );
     } finally {
@@ -162,7 +166,7 @@ export function LoginScreen() {
                     setFormError(
                       getMessage(
                         caughtError,
-                        '개발용 계정 바로 로그인을 실행하지 못했습니다.',
+                        t('errors.devLogin'),
                       ),
                     );
                   })
@@ -180,16 +184,16 @@ export function LoginScreen() {
                 ID
               </div>
               <h1 className="mb-2 text-2xl font-bold text-[#d5d6d7]">
-                {isSetupMode ? '최초 관리자 설정' : '로그인'}
+                {isSetupMode ? t('login.setupTitle') : t('login.signIn')}
               </h1>
               <p className="text-sm text-gray-400">
                 {isSetupMode
-                  ? '첫 관리자 계정을 생성해 워크스페이스를 시작합니다.'
+                  ? t('login.setupDescription')
                   : hasDevAccountButtons
-                    ? '시드 계정을 한 번에 바로 로그인할 수 있습니다.'
+                    ? t('login.devAccountsDescription')
                     : auth.devAdminLoginAvailable
-                      ? '원격 dev DB 기준 관리자 빠른 로그인을 지원합니다.'
-                      : '로컬 계정으로 로그인합니다.'}
+                      ? t('login.devAdminHint')
+                      : t('login.localLoginHint')}
               </p>
             </div>
 
@@ -202,7 +206,7 @@ export function LoginScreen() {
               {isSetupMode ? (
                 <div className="space-y-1">
                   <label className="ml-1 text-xs font-medium text-gray-400" htmlFor="auth-full-name">
-                    이름
+                    {t('login.name')}
                   </label>
                   <div className="relative">
                     <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
@@ -214,7 +218,7 @@ export function LoginScreen() {
                       id="auth-full-name"
                       minLength={2}
                       onChange={(event) => setFullName(event.target.value)}
-                      placeholder="홍길동"
+                      placeholder={t('login.namePlaceholder')}
                       required
                       value={fullName}
                     />
@@ -224,7 +228,7 @@ export function LoginScreen() {
 
               <div className="space-y-1">
                 <label className="ml-1 text-xs font-medium text-gray-400" htmlFor="auth-email">
-                  이메일
+                  {t('login.email')}
                 </label>
                 <div className="relative">
                   <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
@@ -235,7 +239,7 @@ export function LoginScreen() {
                     className={`${fieldClassName} pl-10`}
                     id="auth-email"
                     onChange={(event) => setEmail(event.target.value)}
-                    placeholder="name@company.com"
+                    placeholder={t('login.emailPlaceholder')}
                     required
                     type="email"
                     value={email}
@@ -246,7 +250,7 @@ export function LoginScreen() {
               <div className="space-y-1">
                 <div className="ml-1 flex items-center justify-between">
                   <label className="text-xs font-medium text-gray-400" htmlFor="auth-password">
-                    비밀번호
+                    {t('login.password')}
                   </label>
                   {!isSetupMode ? (
                     <span className="text-xs text-app-accent">Local ID/PW</span>
@@ -279,7 +283,7 @@ export function LoginScreen() {
                   <div className="h-5 w-5 animate-spin rounded-full border-2 border-app-bg/30 border-t-app-bg" />
                 ) : (
                   <>
-                    {isSetupMode ? '관리자 계정 만들기' : '로그인'}
+                    {isSetupMode ? t('login.createAdmin') : t('login.signIn')}
                     <ArrowRight size={16} />
                   </>
                 )}
@@ -294,7 +298,7 @@ export function LoginScreen() {
                       <div className="w-full border-t border-[#3d3e40]" />
                     </div>
                     <div className="relative flex justify-center text-xs">
-                      <span className="bg-[#2a2b2d] px-2 text-gray-500">빠른 실행</span>
+                      <span className="bg-[#2a2b2d] px-2 text-gray-500">{t('login.quickStart')}</span>
                     </div>
                   </div>
 
@@ -311,7 +315,7 @@ export function LoginScreen() {
                             setFormError(
                               getMessage(
                                 caughtError,
-                                '개발용 관리자 바로 로그인을 실행하지 못했습니다.',
+                                t('errors.devAdminLogin'),
                               ),
                             );
                           })
@@ -322,13 +326,13 @@ export function LoginScreen() {
                       type="button"
                     >
                       <ShieldCheck size={16} />
-                      개발용 관리자 바로 로그인
+                      {t('login.devAdminButton')}
                     </button>
                   </div>
                 </div>
 
                 <p className="mt-8 text-center text-xs text-gray-500">
-                  원격 dev DB에서는 이 버튼이 첫 활성 관리자 세션을 바로 발급합니다.
+                  {t('login.devAdminDescription')}
                 </p>
               </>
             ) : null}

@@ -5,6 +5,7 @@ import {
   Image as ImageIcon,
   Loader2,
 } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
 import type { ArtifactBuffer } from '../../api/agent-events';
 import { cn } from '@/src/lib/utils';
@@ -20,9 +21,10 @@ export interface ArtifactCardProps {
 // Clicking routes to the artifact panel — the full body never lives in the
 // chat flow itself.
 export function ArtifactCard({ artifact, isActive, onOpen }: ArtifactCardProps) {
+  const { t } = useTranslation('apps');
   const streaming = artifact.status === 'open';
-  const label = artifact.title?.trim() || typeFallbackLabel(artifact.type);
-  const preview = buildTypedPreview(artifact);
+  const label = artifact.title?.trim() || typeFallbackLabel(artifact.type, t);
+  const preview = buildTypedPreview(artifact, t);
   const Icon = streaming ? Loader2 : iconForType(artifact.type);
 
   return (
@@ -45,12 +47,12 @@ export function ArtifactCard({ artifact, isActive, onOpen }: ArtifactCardProps) 
         <div className="app-text-control-sm truncate text-app-ink">{label}</div>
         <div className="app-text-micro truncate text-gray-500">
           {streaming
-            ? '생성 중…'
-            : preview || `${artifact.type} · ${artifact.content.length}자`}
+            ? t('ai.artifacts.streaming')
+            : preview || t('ai.artifacts.contentLength', { type: artifact.type, count: artifact.content.length })}
         </div>
       </div>
       <div className="app-text-micro shrink-0 self-center text-gray-500">
-        {isActive ? '열림' : '열기'}
+        {isActive ? t('ai.artifacts.opened') : t('ai.artifacts.open')}
       </div>
     </button>
   );
@@ -70,45 +72,47 @@ function iconForType(type: string) {
   }
 }
 
-function typeFallbackLabel(type: string): string {
+function typeFallbackLabel(type: string, t: (key: string) => string): string {
   switch (type) {
     case 'html':
-      return '(제목 없는 HTML)';
+      return t('ai.artifacts.untitledHtml');
     case 'code':
-      return '(제목 없는 코드)';
+      return t('ai.artifacts.untitledCode');
     case 'svg':
-      return '(제목 없는 SVG)';
+      return t('ai.artifacts.untitledSvg');
     case 'document':
     default:
-      return '(제목 없는 문서)';
+      return t('ai.artifacts.untitledDocument');
   }
 }
 
-function buildTypedPreview(artifact: ArtifactBuffer): string {
+function buildTypedPreview(artifact: ArtifactBuffer, t: (key: string, options?: Record<string, unknown>) => string): string {
   switch (artifact.type) {
     case 'html':
-      return htmlPreview(artifact.content);
+      return htmlPreview(artifact.content, t);
     case 'code': {
       const lines = artifact.content.split('\n').length;
       const lang = artifact.language?.trim();
-      return lang ? `${lang} · ${lines}줄` : `코드 · ${lines}줄`;
+      return lang
+        ? t('ai.artifacts.codeLanguageLines', { language: lang, count: lines })
+        : t('ai.artifacts.codeLines', { count: lines });
     }
     case 'svg':
-      return `SVG · ${artifact.content.length}자`;
+      return t('ai.artifacts.contentLength', { type: 'SVG', count: artifact.content.length });
     case 'document':
     default:
       return buildPreview(artifact.content);
   }
 }
 
-function htmlPreview(content: string): string {
+function htmlPreview(content: string, t: (key: string) => string): string {
   // Try the <title> tag first — matches what the browser tab would show.
   const titleMatch = /<title>([\s\S]*?)<\/title>/i.exec(content);
   const title = titleMatch?.[1]?.trim();
   if (title) {
     return `HTML · ${title.slice(0, 60)}`;
   }
-  return 'HTML 프리뷰';
+  return t('ai.artifacts.htmlPreview');
 }
 
 function buildPreview(content: string): string {

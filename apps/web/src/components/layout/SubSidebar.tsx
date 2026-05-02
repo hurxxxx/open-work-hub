@@ -7,6 +7,7 @@ import {
   useRef,
 } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   ChevronDown,
@@ -59,6 +60,7 @@ export const SubSidebar = ({
 }) => {
   const location = useLocation();
   const navigate = useNavigate();
+  const { t } = useTranslation('shell');
   const { user } = useAuth();
   const isMobile = variant === 'mobile';
   const canReadTeams = hasWorkspaceMembership(user, currentWorkspaceSlug);
@@ -171,8 +173,8 @@ export const SubSidebar = ({
           }
           const nextItem: NavItem = {
             ...localItem,
-            title: item.title,
-            category: item.category,
+            title: t(`nav.${item.id}`, { defaultValue: item.title }),
+            category: t(`categories.${item.category}`, { defaultValue: item.category }),
           };
           if (item.path_suffix !== undefined && item.path_suffix !== null) {
             nextItem.pathSuffix = item.path_suffix;
@@ -191,7 +193,11 @@ export const SubSidebar = ({
         .filter(isDefined);
     }
 
-    const items = NAV_ITEMS.filter((item) => item.appId === activeAppId);
+    const items = NAV_ITEMS.filter((item) => item.appId === activeAppId).map((item) => ({
+      ...item,
+      title: t(`nav.${item.id}`, { defaultValue: item.title }),
+      category: t(`categories.${item.category}`, { defaultValue: item.category }),
+    }));
     const sectionByItemId: Partial<Record<string, AdminSection>> = {
       'settings-general': 'general',
       'settings-people': 'people',
@@ -206,7 +212,7 @@ export const SubSidebar = ({
         ? hasAdminSectionAccess(user?.system_roles ?? [], section)
         : false;
     });
-  }, [activeAppId, navItemRegistry, user?.system_roles, workspaceNavItems]);
+  }, [activeAppId, navItemRegistry, t, user?.system_roles, workspaceNavItems]);
   const toggleCategory = useCallback((category: string) => {
     setExpandedCategories((prev) =>
       prev.includes(category)
@@ -277,8 +283,8 @@ export const SubSidebar = ({
       <button
         type="button"
         onClick={() => setIsCollapsed(false)}
-        title="서브 메뉴 펼치기"
-        aria-label="서브 메뉴 펼치기"
+        title={t('sidebar.expand')}
+        aria-label={t('sidebar.expand')}
         className="flex h-9 w-9 items-center justify-center rounded-lg border border-app-border bg-app-surface text-app-ink shadow-sm transition-colors hover:bg-app-accent/15 hover:text-app-accent hover:border-app-accent/40"
       >
         <PanelLeftOpen size={18} />
@@ -295,9 +301,11 @@ export const SubSidebar = ({
       <div className="flex items-center justify-between p-4 border-b border-app-border">
         <h2 className="app-text-overline text-gray-600 dark:text-gray-300">
           {activeAppId === 'settings'
-            ? 'All settings'
-            : (workspaceAppRegistry.get(activeAppId)?.title ??
-              APP_BAR_ITEMS.find((item) => item.id === activeAppId)?.title)}
+            ? t('sidebar.allSettings')
+            : t(`apps.${activeAppId}`, {
+              defaultValue: workspaceAppRegistry.get(activeAppId)?.title ??
+                APP_BAR_ITEMS.find((item) => item.id === activeAppId)?.title,
+            })}
         </h2>
         <div className="flex items-center gap-1.5">
           {createActions.length > 0 ? (
@@ -305,7 +313,7 @@ export const SubSidebar = ({
               <button
                 type="button"
                 onClick={() => setCreateMenuOpen((open) => !open)}
-                title="Create"
+                title={t('sidebar.create')}
                 className="flex h-8 w-8 items-center justify-center rounded-md border border-app-border bg-app-surface text-app-ink shadow-sm transition-colors hover:bg-app-surface-hover"
               >
                 <Plus size={16} />
@@ -313,7 +321,7 @@ export const SubSidebar = ({
               {createMenuOpen ? (
                 <div className="absolute right-0 top-full mt-1 z-30 w-52 rounded-lg border border-app-border bg-app-surface py-1 shadow-xl">
                   <div className="app-text-overline px-3 pt-1.5 pb-1 text-gray-500">
-                    Create
+                    {t('sidebar.create')}
                   </div>
                   {createActions.map((action) => {
                     const Icon = action.icon;
@@ -329,7 +337,11 @@ export const SubSidebar = ({
                         className="app-text-control-sm flex w-full items-center gap-2 px-3 py-2 text-left text-app-ink hover:bg-app-surface-hover"
                       >
                         <Icon size={14} className="text-gray-500" />
-                        <span>{action.label}</span>
+                        <span>
+                          {t(action.labelKey ?? `sidebarActions.${action.id}`, {
+                            defaultValue: action.label,
+                          })}
+                        </span>
                       </button>
                     );
                   })}
@@ -341,8 +353,8 @@ export const SubSidebar = ({
             <button
               type="button"
               onClick={() => setIsCollapsed(true)}
-              title="서브 메뉴 접기"
-              aria-label="서브 메뉴 접기"
+              title={t('sidebar.collapse')}
+              aria-label={t('sidebar.collapse')}
               className="flex h-8 w-8 items-center justify-center rounded-md border border-app-border bg-app-surface text-app-ink shadow-sm transition-colors hover:bg-app-accent/15 hover:text-app-accent hover:border-app-accent/40"
             >
               <PanelLeftClose size={16} />
@@ -418,7 +430,7 @@ export const SubSidebar = ({
                             </span>
                             {item.comingSoon ? (
                               <span className="ml-auto rounded border border-app-border bg-app-bg px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-gray-500">
-                                준비중
+                                {t('sidebar.comingSoon')}
                               </span>
                             ) : null}
                           </Link>
@@ -443,7 +455,7 @@ export const SubSidebar = ({
             'absolute right-0 top-0 h-full w-1 cursor-col-resize transition-colors hover:bg-app-accent/30',
             isResizing && 'bg-app-accent/50',
           )}
-          title="Drag to resize"
+          title={t('sidebar.resize')}
         />
       ) : null}
     </div>

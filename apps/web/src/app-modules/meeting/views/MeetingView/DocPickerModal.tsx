@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Button, Dialog } from '@aidoo/ui';
 import { Loader2 } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
 import { useAuth } from '@/src/platform/auth/auth-provider';
 import { hasWorkspaceMembership } from '@/src/platform/auth/auth-api';
@@ -23,6 +24,7 @@ export function DocPickerModal({
   excludeDocIds = [],
   workspaceSlug,
 }: DocPickerModalProps) {
+  const { t, i18n } = useTranslation('apps');
   const { token, user } = useAuth();
   const canAccessDocs = hasWorkspaceMembership(user, workspaceSlug);
   const timeZone = normalizeTimeZone(user?.time_zone);
@@ -50,7 +52,7 @@ export function DocPickerModal({
       })
       .catch((err: Error) => {
         if (cancelled) return;
-        setError(err.message ?? '문서를 불러올 수 없습니다.');
+        setError(err.message ?? t('meeting.docPicker.loadFailed'));
         setItems([]);
       })
       .finally(() => {
@@ -78,7 +80,7 @@ export function DocPickerModal({
       await onPick(doc);
       onClose();
     } catch (err) {
-      setError(err instanceof Error ? err.message : '문서를 첨부할 수 없습니다.');
+      setError(err instanceof Error ? err.message : t('meeting.docPicker.attachFailed'));
     } finally {
       setSubmittingId(null);
     }
@@ -90,20 +92,20 @@ export function DocPickerModal({
       onOpenChange={(open) => {
         if (!open) onClose();
       }}
-      title="문서 첨부"
-      description="회의에 연결할 NativeDoc 문서를 선택합니다."
+      title={t('meeting.docPicker.title')}
+      description={t('meeting.docPicker.description')}
       maxWidth="max-w-xl"
       actions={
         <div className="flex w-full items-center justify-end">
-          <Button variant="secondary" onClick={onClose}>닫기</Button>
+          <Button variant="secondary" onClick={onClose}>{t('common:actions.close')}</Button>
         </div>
       }
     >
       <div className="space-y-4 text-app-ink">
         {!canAccessDocs ? (
           <NoAccessNotice
-            workspaceLabel="Docs 워크스페이스"
-            action="문서를 첨부"
+            workspaceLabel={t('meeting.docPicker.docsWorkspace')}
+            action={t('meeting.docPicker.attachAction')}
           />
         ) : null}
 
@@ -119,12 +121,12 @@ export function DocPickerModal({
         {canAccessDocs ? (
           <>
             <div className="space-y-1">
-              <label className="app-text-control-sm text-app-ink/70">검색</label>
+              <label className="app-text-control-sm text-app-ink/70">{t('common:actions.search')}</label>
               <input
                 type="text"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="문서 제목으로 검색"
+                placeholder={t('meeting.docPicker.searchPlaceholder')}
                 className="app-text-body w-full rounded-md border border-app-border bg-app-surface-sidebar px-3 py-2 text-app-ink placeholder:text-app-ink/30 focus:border-app-accent focus:outline-none"
               />
             </div>
@@ -136,7 +138,7 @@ export function DocPickerModal({
                 </div>
               ) : filteredItems.length === 0 ? (
                 <div className="px-4 py-6 text-center app-text-caption text-app-ink/50">
-                  표시할 문서가 없습니다. PR1 은 NativeDoc 만 첨부할 수 있습니다.
+                  {t('meeting.docPicker.empty')}
                 </div>
               ) : (
                 <ul className="divide-y divide-app-border">
@@ -155,7 +157,7 @@ export function DocPickerModal({
                           <p className="app-text-caption text-app-ink/40">
                             {item.created_by_name} · {formatDateTime(item.updated_at, {
                               day: 'numeric',
-                              locale: 'ko-KR',
+                              locale: i18n.language,
                               month: 'short',
                               timeZone,
                             })}

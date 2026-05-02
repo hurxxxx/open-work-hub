@@ -1,5 +1,6 @@
 import { Loader2, Lock, Mic, Square, Upload } from 'lucide-react';
 import { useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import type { ActiveRecordingLock, MeetingTaskLink } from '../../api/meeting-api';
 
@@ -49,6 +50,7 @@ export function RecordingControls({
   onStop: () => void;
   onImportFile: (file: File, linkedTaskId: string | null) => Promise<void> | void;
 }) {
+  const { t } = useTranslation('apps');
   const [linkedTaskId, setLinkedTaskId] = useState<string | null>(taskLinks[0]?.issue_id ?? null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -63,11 +65,11 @@ export function RecordingControls({
     <div className="space-y-3 rounded-md border border-app-border bg-app-surface-sidebar px-3 py-3">
       <div className="flex items-center justify-between gap-3">
         <div>
-          <p className="app-text-body text-app-ink">회의 녹음</p>
+          <p className="app-text-body text-app-ink">{t('meeting.recordingControls.title')}</p>
           <p className="app-text-caption text-app-ink/60">
             {browserSupported
-              ? '브라우저에 먼저 저장한 뒤 안전하게 업로드합니다.'
-              : '이 브라우저에서는 라이브 녹음을 지원하지 않습니다. 음성 파일 업로드를 사용하세요.'}
+              ? t('meeting.recordingControls.browserSupported')
+              : t('meeting.recordingControls.browserUnsupported')}
           </p>
         </div>
         {isBusy ? <Loader2 size={16} className="animate-spin text-app-ink/40" /> : null}
@@ -75,13 +77,15 @@ export function RecordingControls({
 
       {taskLinks.length > 0 ? (
         <label className="block">
-          <span className="app-text-caption mb-1 block text-app-ink/60">연결할 태스크</span>
+          <span className="app-text-caption mb-1 block text-app-ink/60">
+            {t('meeting.recordingControls.linkedTask')}
+          </span>
           <select
             className="w-full rounded-md border border-app-border bg-white px-2 py-2 text-sm text-app-ink"
             value={linkedTaskId ?? ''}
             onChange={(event) => setLinkedTaskId(event.target.value || null)}
           >
-            <option value="">선택 안 함</option>
+            <option value="">{t('meeting.recordingControls.noSelection')}</option>
             {taskLinks.map((link) => (
               <option key={link.id} value={link.issue_id}>
                 {link.list_key ? `${link.list_key}-${link.issue_number}` : link.issue_title}
@@ -103,10 +107,10 @@ export function RecordingControls({
           <Lock size={14} className="mt-0.5 shrink-0 text-app-ink/50" />
           <div className="min-w-0">
             <p className="app-text-caption font-medium text-app-ink">
-              {lockedByOther.user_name} 님이 녹음 중입니다.
+              {t('meeting.recordingControls.lockedByUser', { name: lockedByOther.user_name })}
             </p>
             <p className="app-text-caption text-app-ink/60">
-              녹음이 끝나면 자동으로 다시 시작할 수 있게 됩니다. (응답 없는 녹음은 약 1분 후 자동 해제됩니다.)
+              {t('meeting.recordingControls.lockedDescription')}
             </p>
           </div>
         </div>
@@ -116,11 +120,16 @@ export function RecordingControls({
         <div className="rounded-md border border-app-accent/20 bg-app-accent/5 px-3 py-2">
           <div className="flex items-center gap-2 text-app-accent">
             <span className="h-2 w-2 rounded-full bg-[var(--ui-color-danger)]" />
-            <span className="app-text-caption font-medium">녹음 중</span>
+            <span className="app-text-caption font-medium">
+              {t('meeting.recordingControls.recording')}
+            </span>
           </div>
           <p className="app-text-body mt-1 text-app-ink">{formatElapsed(elapsedSec)}</p>
           <p className="app-text-caption text-app-ink/60">
-            로컬 {formatBytes(queuedBytes)} · 업로드 완료 {formatBytes(uploadedBytes)}
+            {t('meeting.recordingControls.localUploadProgress', {
+              queued: formatBytes(queuedBytes),
+              uploaded: formatBytes(uploadedBytes),
+            })}
           </p>
         </div>
       ) : null}
@@ -134,7 +143,7 @@ export function RecordingControls({
             className="inline-flex items-center gap-1 rounded-md bg-app-accent px-3 py-2 text-sm font-medium text-app-accent-fg transition-colors hover:bg-app-accent-hover disabled:opacity-60"
           >
             {isRecording ? <Square size={14} /> : <Mic size={14} />}
-            {isRecording ? '녹음 중지' : '녹음 시작'}
+            {isRecording ? t('meeting.recordingControls.stop') : t('meeting.recordingControls.start')}
           </button>
         ) : null}
         <button
@@ -144,7 +153,7 @@ export function RecordingControls({
           className="inline-flex items-center gap-1 rounded-md border border-app-border bg-app-surface-raised px-3 py-2 text-sm text-app-ink transition-colors hover:bg-app-surface-hover disabled:opacity-60"
         >
           <Upload size={14} />
-          음성 파일 업로드
+          {t('meeting.recordingControls.uploadAudio')}
         </button>
         <input
           ref={fileInputRef}

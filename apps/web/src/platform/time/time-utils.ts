@@ -1,16 +1,16 @@
 export const DEFAULT_TIME_ZONE = 'Asia/Seoul';
 
 export const TIME_ZONE_OPTIONS = [
-  { value: 'Asia/Seoul', label: 'Korea Standard Time (Seoul)' },
-  { value: 'UTC', label: 'UTC' },
-  { value: 'America/Los_Angeles', label: 'Pacific Time (US)' },
-  { value: 'America/Denver', label: 'Mountain Time (US)' },
-  { value: 'America/Chicago', label: 'Central Time (US)' },
-  { value: 'America/New_York', label: 'Eastern Time (US)' },
-  { value: 'Europe/London', label: 'London' },
-  { value: 'Europe/Berlin', label: 'Central Europe' },
-  { value: 'Asia/Tokyo', label: 'Japan Standard Time (Tokyo)' },
-  { value: 'Asia/Singapore', label: 'Singapore Time' },
+  { value: 'Asia/Seoul', labelKey: 'auth:settings.timeZones.asiaSeoul' },
+  { value: 'UTC', labelKey: 'auth:settings.timeZones.utc' },
+  { value: 'America/Los_Angeles', labelKey: 'auth:settings.timeZones.pacific' },
+  { value: 'America/Denver', labelKey: 'auth:settings.timeZones.mountain' },
+  { value: 'America/Chicago', labelKey: 'auth:settings.timeZones.central' },
+  { value: 'America/New_York', labelKey: 'auth:settings.timeZones.eastern' },
+  { value: 'Europe/London', labelKey: 'auth:settings.timeZones.london' },
+  { value: 'Europe/Berlin', labelKey: 'auth:settings.timeZones.centralEurope' },
+  { value: 'Asia/Tokyo', labelKey: 'auth:settings.timeZones.asiaTokyo' },
+  { value: 'Asia/Singapore', labelKey: 'auth:settings.timeZones.asiaSingapore' },
 ] as const;
 
 type TemporalInput = Date | number | string | null | undefined;
@@ -175,7 +175,7 @@ export function formatRelativeTime(value: TemporalInput, options: RelativeTimeOp
   const diffMs = date.getTime() - nowMs;
   const absMs = Math.abs(diffMs);
   if (absMs < 60_000) {
-    return locale.startsWith('ko') ? '방금 전' : 'just now';
+    return locale.startsWith('ko') ? '\ubc29\uae08 \uc804' : 'just now';
   }
 
   const rtf = new Intl.RelativeTimeFormat(locale, { numeric: 'auto' });

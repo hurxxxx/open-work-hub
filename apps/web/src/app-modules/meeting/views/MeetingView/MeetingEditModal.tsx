@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Button, Dialog } from '@aidoo/ui';
 import { X } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
 import { useAuth } from '@/src/platform/auth/auth-provider';
 import {
@@ -42,6 +43,7 @@ export function MeetingEditModal({
   onSaved,
   workspaceSlug,
 }: MeetingEditModalProps) {
+  const { t } = useTranslation('apps');
   const { token, user } = useAuth();
   const [title, setTitle] = useState(meeting.title);
   const [agenda, setAgenda] = useState(meeting.agenda);
@@ -185,7 +187,7 @@ export function MeetingEditModal({
   async function handleSave() {
     if (!token || !title.trim()) return;
     if (new Date(endAt) <= new Date(startAt)) {
-      setError('종료 시각은 시작 시각보다 늦어야 합니다.');
+      setError(t('meeting.form.endAfterStart'));
       return;
     }
     setSubmitting(true);
@@ -200,7 +202,7 @@ export function MeetingEditModal({
       });
       onSaved(updated);
     } catch (err) {
-      setError(err instanceof Error ? err.message : '회의를 수정할 수 없습니다.');
+      setError(err instanceof Error ? err.message : t('meeting.editMeeting.failed'));
     } finally {
       setSubmitting(false);
     }
@@ -212,19 +214,19 @@ export function MeetingEditModal({
       onOpenChange={(open) => {
         if (!open) onClose();
       }}
-      title="Edit Meeting"
-      description="회의 제목, 시간, 참석자를 수정합니다."
+      title={t('meeting.editMeeting.title')}
+      description={t('meeting.editMeeting.description')}
       maxWidth="max-w-xl"
       dismissOnInteractOutside={false}
       actions={
         <div className="flex w-full items-center justify-end gap-3">
-          <Button variant="secondary" onClick={onClose}>취소</Button>
+          <Button variant="secondary" onClick={onClose}>{t('common:actions.cancel')}</Button>
           <Button
             variant="primary"
             onClick={handleSave}
             disabled={!title.trim() || submitting}
           >
-            {submitting ? '저장 중...' : '변경 저장'}
+            {submitting ? t('meeting.editMeeting.saving') : t('meeting.editMeeting.saveChanges')}
           </Button>
         </div>
       }
@@ -241,7 +243,7 @@ export function MeetingEditModal({
 
         <div className="space-y-1">
           <label className="app-text-control-sm text-app-ink/70">
-            제목 <span className="text-[var(--ui-color-danger)]">*</span>
+            {t('meeting.form.title')} <span className="text-[var(--ui-color-danger)]">*</span>
           </label>
           <input
             type="text"
@@ -255,7 +257,9 @@ export function MeetingEditModal({
 
         <div className="grid grid-cols-2 gap-3">
           <div className="space-y-1">
-            <label className="app-text-control-sm text-app-ink/70">시작</label>
+            <label className="app-text-control-sm text-app-ink/70">
+              {t('meeting.form.start')}
+            </label>
             <input
               type="datetime-local"
               value={startAt}
@@ -264,7 +268,9 @@ export function MeetingEditModal({
             />
           </div>
           <div className="space-y-1">
-            <label className="app-text-control-sm text-app-ink/70">종료</label>
+            <label className="app-text-control-sm text-app-ink/70">
+              {t('meeting.form.end')}
+            </label>
             <input
               type="datetime-local"
               value={endAt}
@@ -283,10 +289,12 @@ export function MeetingEditModal({
         />
 
         <div className="space-y-2">
-          <label className="app-text-control-sm text-app-ink/70">참석자</label>
+          <label className="app-text-control-sm text-app-ink/70">
+            {t('meeting.form.attendees')}
+          </label>
           {user?.id === meeting.organizer_id ? (
             <p className="app-text-caption text-app-ink/40">
-              본인은 자동 참석자로 포함됩니다.
+              {t('meeting.form.attendeeAutoIncluded')}
             </p>
           ) : null}
           {visibleAttendees.length > 0 ? (
@@ -301,13 +309,15 @@ export function MeetingEditModal({
                   >
                     {user?.full_name ?? attendee.user_id}
                     {isOrganizer ? (
-                      <span className="text-app-ink/40">· 주최자</span>
+                      <span className="text-app-ink/40">· {t('meeting.form.organizer')}</span>
                     ) : (
                       <button
                         type="button"
                         onClick={() => removeAttendee(attendee.user_id)}
                         className="text-app-ink/40 hover:text-app-ink"
-                        aria-label={`${user?.full_name ?? attendee.user_id} 제거`}
+                        aria-label={t('meeting.form.removeItem', {
+                          name: user?.full_name ?? attendee.user_id,
+                        })}
                       >
                         <X size={12} />
                       </button>
@@ -325,20 +335,20 @@ export function MeetingEditModal({
             onBlur={() => {
               window.setTimeout(() => setUserQueryFocused(false), 150);
             }}
-            placeholder="이름 또는 이메일로 검색"
+            placeholder={t('meeting.form.searchUsersPlaceholder')}
             className="app-text-body w-full rounded-md border border-app-border bg-app-surface-sidebar px-3 py-2 text-app-ink placeholder:text-app-ink/30 focus:border-app-accent focus:outline-none"
           />
           {userQueryFocused ? (
             <div className="max-h-44 overflow-y-auto rounded-md border border-app-border bg-app-surface">
               {usersLoading && filteredUsers.length === 0 ? (
                 <div className="app-text-caption px-3 py-2 text-app-ink/40">
-                  검색 중...
+                  {t('meeting.form.searchingUsers')}
                 </div>
               ) : filteredUsers.length === 0 ? (
                 <div className="app-text-caption px-3 py-2 text-app-ink/40">
                   {userQuery.trim()
-                    ? '일치하는 사용자가 없습니다.'
-                    : '이름 또는 이메일을 입력하세요.'}
+                    ? t('meeting.form.noUserMatch')
+                    : t('meeting.form.searchUsersPrompt')}
                 </div>
               ) : (
                 <ul>
@@ -365,13 +375,14 @@ export function MeetingEditModal({
 
         <div className="space-y-1">
           <label className="app-text-control-sm text-app-ink/70">
-            안건 <span className="text-app-ink/30">(선택)</span>
+            {t('meeting.form.agenda')}{' '}
+            <span className="text-app-ink/30">({t('meeting.form.optional')})</span>
           </label>
           <textarea
             value={agenda}
             onChange={(e) => setAgenda(e.target.value)}
             rows={4}
-            placeholder="회의에서 다룰 안건을 적어주세요."
+            placeholder={t('meeting.form.agendaPlaceholder')}
             className="app-text-body w-full resize-none rounded-md border border-app-border bg-app-surface-sidebar px-3 py-2 text-app-ink placeholder:text-app-ink/30 focus:border-app-accent focus:outline-none"
           />
         </div>

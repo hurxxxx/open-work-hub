@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   Bot,
   CalendarDays,
@@ -14,6 +15,7 @@ import {
 import { Button, InlineNotice } from '@aidoo/ui';
 
 import type { AuthUser } from '@/src/platform/auth/auth-api';
+import { i18n } from '@/src/platform/i18n';
 import { formatDateTime } from '@/src/platform/time/time-utils';
 
 import { listAdminUsers } from './admin-api';
@@ -42,13 +44,17 @@ export const WORKSPACE_ENABLED_APP_LABELS = {
 
 export const APP_ORDER: string[] = ['ai', 'docs', 'whiteboard', 'pms', 'planner', 'meeting'];
 
-export const APP_DESCRIPTIONS: Record<string, string> = {
-  ai: 'AI 검색과 어시스턴트',
-  docs: '문서 작성과 지식 베이스',
-  whiteboard: '화이트보드와 다이어그램',
-  pms: '리스트와 이슈 관리',
-  planner: '일정과 캘린더',
-  meeting: '회의록과 첨부 자료',
+type Translate = (key: string, options?: Record<string, unknown>) => string;
+
+const defaultTranslate: Translate = (key, options) => String(i18n.t(key, options));
+
+export const APP_DESCRIPTION_KEYS: Record<string, string> = {
+  ai: 'apps:admin.shared.appDescriptions.ai',
+  docs: 'apps:admin.shared.appDescriptions.docs',
+  whiteboard: 'apps:admin.shared.appDescriptions.whiteboard',
+  pms: 'apps:admin.shared.appDescriptions.pms',
+  planner: 'apps:admin.shared.appDescriptions.planner',
+  meeting: 'apps:admin.shared.appDescriptions.meeting',
 };
 
 export const APP_ICONS: Record<string, LucideIcon> = {
@@ -60,14 +66,22 @@ export const APP_ICONS: Record<string, LucideIcon> = {
   meeting: Video,
 };
 
-export const WORKSPACE_ROLE_OPTIONS: { value: string; label: string; description: string }[] = [
-  { value: 'admin', label: '관리자', description: '멤버와 설정 관리' },
-  { value: 'member', label: '멤버', description: '워크스페이스 앱 사용' },
+export const WORKSPACE_ROLE_OPTIONS: { value: string; labelKey: string; descriptionKey: string }[] = [
+  {
+    value: 'admin',
+    labelKey: 'apps:admin.shared.roles.admin.label',
+    descriptionKey: 'apps:admin.shared.roles.admin.description',
+  },
+  {
+    value: 'member',
+    labelKey: 'apps:admin.shared.roles.member.label',
+    descriptionKey: 'apps:admin.shared.roles.member.description',
+  },
 ];
 
-export const WORKSPACE_ROLE_LABELS: Record<string, string> = WORKSPACE_ROLE_OPTIONS.reduce(
+export const WORKSPACE_ROLE_LABEL_KEYS: Record<string, string> = WORKSPACE_ROLE_OPTIONS.reduce(
   (acc, option) => {
-    acc[option.value] = option.label;
+    acc[option.value] = option.labelKey;
     return acc;
   },
   {} as Record<string, string>,
@@ -88,10 +102,28 @@ export function getErrorMessage(error: unknown, fallback: string): string {
   return fallback;
 }
 
-export function formatDateLabel(value?: string | null): string {
+export function getAppDescription(code: string, t: Translate = defaultTranslate): string {
+  const key = APP_DESCRIPTION_KEYS[code];
+  return key ? t(key) : code;
+}
+
+export function getWorkspaceRoleOptions(t: Translate = defaultTranslate): { value: string; label: string; description: string }[] {
+  return WORKSPACE_ROLE_OPTIONS.map((option) => ({
+    value: option.value,
+    label: t(option.labelKey),
+    description: t(option.descriptionKey),
+  }));
+}
+
+export function getWorkspaceRoleLabel(role: string, t: Translate = defaultTranslate): string {
+  const key = WORKSPACE_ROLE_LABEL_KEYS[role];
+  return key ? t(key) : role;
+}
+
+export function formatDateLabel(value?: string | null, locale = i18n.resolvedLanguage || i18n.language): string {
   return formatDateTime(value, {
     fallback: '-',
-    locale: 'en-US',
+    locale,
     month: '2-digit',
     day: '2-digit',
     year: 'numeric',
@@ -131,10 +163,10 @@ export function formatUserGroups(user: Pick<AuthUser, 'group_slugs'>): string {
   return user.group_slugs.join(', ') || '-';
 }
 
-export function formatStatusLabel(status: string): string {
-  if (status === 'active') return 'Active';
-  if (status === 'invited') return 'Invited';
-  if (status === 'suspended') return 'Suspended';
+export function formatStatusLabel(status: string, t: Translate = defaultTranslate): string {
+  if (status === 'active') return t('apps:admin.shared.status.active');
+  if (status === 'invited') return t('apps:admin.shared.status.invited');
+  if (status === 'suspended') return t('apps:admin.shared.status.suspended');
   return status || '-';
 }
 
@@ -144,6 +176,8 @@ const WORKSPACE_ROLE_RANK_DISPLAY: Record<string, number> = {
 };
 
 export function UserWorkspaceChips({ user }: { user: Pick<AuthUser, 'workspaces'> }) {
+  const { t, i18n: i18next } = useTranslation('apps');
+  const locale = i18next.resolvedLanguage ?? i18next.language;
   if (user.workspaces.length === 0) {
     return <span className="text-app-ink/40">-</span>;
   }
@@ -151,7 +185,7 @@ export function UserWorkspaceChips({ user }: { user: Pick<AuthUser, 'workspaces'
     const rankDiff =
       (WORKSPACE_ROLE_RANK_DISPLAY[a.role] ?? 99) - (WORKSPACE_ROLE_RANK_DISPLAY[b.role] ?? 99);
     if (rankDiff !== 0) return rankDiff;
-    return a.name.localeCompare(b.name);
+    return a.name.localeCompare(b.name, locale);
   });
   const visible = sorted.slice(0, 3);
   const hiddenCount = sorted.length - visible.length;
@@ -167,7 +201,7 @@ export function UserWorkspaceChips({ user }: { user: Pick<AuthUser, 'workspaces'
                 ? 'border-app-accent/30 bg-app-accent/10 text-app-accent'
                 : 'border-app-border bg-app-surface-sidebar text-app-ink/70'
             }`}
-            title={`${workspace.name} · ${workspace.role}`}
+            title={`${workspace.name} · ${getWorkspaceRoleLabel(workspace.role, t)}`}
           >
             <span>{workspace.name}</span>
             {isElevated ? <span className="opacity-70">🛡</span> : null}
@@ -287,17 +321,18 @@ export function FilterChip({
 }
 
 export function MemberRoleBadge({ role }: { role: string }) {
+  const { t } = useTranslation('apps');
   if (role === 'admin') {
     return (
       <span className="app-text-caption inline-flex items-center gap-1 text-app-ink/70">
         <Shield className="text-app-ink/50" size={12} />
-        관리자
+        {getWorkspaceRoleLabel(role, t)}
       </span>
     );
   }
   return (
     <span className="app-text-caption text-app-ink/70">
-      {WORKSPACE_ROLE_LABELS[role] ?? role}
+      {getWorkspaceRoleLabel(role, t)}
     </span>
   );
 }
@@ -362,7 +397,7 @@ export function PeopleDirectoryGrid({
   selection,
   onToggleSelect,
   excludeIds,
-  membershipLabel = '이미 멤버',
+  membershipLabel,
   className,
 }: {
   token: string;
@@ -372,6 +407,9 @@ export function PeopleDirectoryGrid({
   membershipLabel?: string;
   className?: string;
 }) {
+  const { t, i18n: i18next } = useTranslation('apps');
+  const locale = i18next.resolvedLanguage ?? i18next.language;
+  const resolvedMembershipLabel = membershipLabel ?? t('admin.shared.directory.alreadyMember');
   const [users, setUsers] = useState<AuthUser[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -427,13 +465,13 @@ export function PeopleDirectoryGrid({
           <Search size={12} className="text-app-ink/50" />
           <input
             className="app-text-body-sm flex-1 bg-transparent text-app-ink outline-none placeholder:text-app-ink/40"
-            placeholder="이름 또는 이메일로 검색"
+            placeholder={t('admin.shared.directory.searchPlaceholder')}
             value={search}
             onChange={(event) => setSearch(event.target.value)}
             autoFocus
           />
         </div>
-        <span className="app-text-caption text-app-ink/50">총 {total} 명</span>
+        <span className="app-text-caption text-app-ink/50">{t('admin.shared.directory.total', { total })}</span>
       </div>
 
       <div className="min-h-0 flex-1 overflow-auto">
@@ -441,19 +479,19 @@ export function PeopleDirectoryGrid({
           <thead className="sticky top-0 bg-app-bg">
             <tr className="border-b border-app-border">
               <th className="w-8 px-2 py-1.5 text-left"></th>
-              <th className="app-text-overline px-2 py-1.5 text-left text-app-ink/60">사용자</th>
-              <th className="app-text-overline px-2 py-1.5 text-left text-app-ink/60">조직</th>
-              <th className="app-text-overline px-2 py-1.5 text-left text-app-ink/60">그룹</th>
-              <th className="app-text-overline px-2 py-1.5 text-left text-app-ink/60">워크스페이스</th>
-              <th className="app-text-overline px-2 py-1.5 text-left text-app-ink/60">상태</th>
-              <th className="app-text-overline px-2 py-1.5 text-left text-app-ink/60">최근</th>
+              <th className="app-text-overline px-2 py-1.5 text-left text-app-ink/60">{t('admin.shared.directory.user')}</th>
+              <th className="app-text-overline px-2 py-1.5 text-left text-app-ink/60">{t('admin.shared.directory.org')}</th>
+              <th className="app-text-overline px-2 py-1.5 text-left text-app-ink/60">{t('admin.shared.directory.group')}</th>
+              <th className="app-text-overline px-2 py-1.5 text-left text-app-ink/60">{t('admin.shared.directory.workspace')}</th>
+              <th className="app-text-overline px-2 py-1.5 text-left text-app-ink/60">{t('admin.shared.directory.status')}</th>
+              <th className="app-text-overline px-2 py-1.5 text-left text-app-ink/60">{t('admin.shared.directory.recent')}</th>
             </tr>
           </thead>
           <tbody>
             {users.length === 0 && !loading ? (
               <tr>
                 <td colSpan={7} className="px-2 py-8 text-center text-app-ink/60">
-                  결과 없음
+                  {t('common:empty.noResults')}
                 </td>
               </tr>
             ) : (
@@ -501,17 +539,17 @@ export function PeopleDirectoryGrid({
                     </td>
                     <td className="px-2 py-1">
                       {isExcluded ? (
-                        <Badge tone="green">{membershipLabel}</Badge>
+                        <Badge tone="green">{resolvedMembershipLabel}</Badge>
                       ) : user.status === 'invited' ? (
-                        <Badge tone="amber">초대</Badge>
+                        <Badge tone="amber">{t('admin.shared.status.invitedShort')}</Badge>
                       ) : user.status === 'suspended' ? (
-                        <Badge tone="amber">정지</Badge>
+                        <Badge tone="amber">{t('admin.shared.status.suspendedShort')}</Badge>
                       ) : (
-                        <span className="text-app-ink/60">활성</span>
+                        <span className="text-app-ink/60">{t('admin.shared.status.activeShort')}</span>
                       )}
                     </td>
                     <td className="px-2 py-1 text-app-ink/60">
-                      {formatDateLabel(user.last_login_at)}
+                      {formatDateLabel(user.last_login_at, locale)}
                     </td>
                   </tr>
                 );
@@ -533,7 +571,7 @@ export function PeopleDirectoryGrid({
             disabled={page <= 1 || loading}
             onClick={() => setPage((p) => Math.max(1, p - 1))}
           >
-            이전
+            {t('admin.shared.pagination.previous')}
           </Button>
           <span className="app-text-caption px-2 text-app-ink/60">
             {page} / {totalPages}
@@ -543,7 +581,7 @@ export function PeopleDirectoryGrid({
             disabled={page >= totalPages || loading}
             onClick={() => setPage((p) => p + 1)}
           >
-            다음
+            {t('admin.shared.pagination.next')}
           </Button>
         </div>
       </div>

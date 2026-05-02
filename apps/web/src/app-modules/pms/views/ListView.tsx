@@ -1,5 +1,6 @@
 import { Activity, Plus, Layout, ChevronDown, Circle, User2, CheckSquare, Clock } from 'lucide-react';
 import { Badge, Button } from '@aidoo/ui';
+import { useTranslation } from 'react-i18next';
 import type { PmsIssue, PmsTaskListStatus } from '../api/pms-api';
 import { getStatusSlugs, getStatusTone, PRIORITY_COLOR, initials, formatDate } from './pms-constants';
 import { TaskIssueCard } from './TaskIssueCard';
@@ -17,20 +18,21 @@ export const ListView = ({
   onToggleSelect?: (issueId: string) => void;
   taskListStatuses?: PmsTaskListStatus[];
 }) => {
+  const { t } = useTranslation('apps');
   return (
     <div className="space-y-5 lg:space-y-8">
       <div className="app-text-body-sm hidden items-center gap-4 rounded-md border border-app-border bg-app-surface-sidebar/30 p-2 text-app-ink/60 lg:flex">
         <Button variant="subtle" size="dense" className="app-text-body-sm gap-1 font-medium">
           <Activity size={14} />
-          Group: Status
+          {t('pms.list.groupStatus')}
         </Button>
         <Button variant="ghost" size="dense" className="app-text-body-sm gap-1 font-medium">
           <Plus size={14} />
-          Subtasks
+          {t('pms.list.subtasks')}
         </Button>
         <Button variant="ghost" size="dense" className="app-text-body-sm gap-1 font-medium">
           <Layout size={14} />
-          Columns
+          {t('pms.list.columns')}
         </Button>
       </div>
 
@@ -66,12 +68,12 @@ export const ListView = ({
                 <thead>
                   <tr className="app-text-overline border-b border-app-border bg-app-surface-sidebar/50 text-app-ink/50">
                     <th className="w-10 py-2 px-4"></th>
-                    <th className="w-1/3 px-4 py-2">Name</th>
-                    <th className="px-4 py-2">Assignee</th>
-                    <th className="px-4 py-2">Due Date</th>
-                    <th className="px-4 py-2">Priority</th>
-                    <th className="px-4 py-2">Status</th>
-                    <th className="px-4 py-2">Comments</th>
+                    <th className="w-1/3 px-4 py-2">{t('pms.list.name')}</th>
+                    <th className="px-4 py-2">{t('pms.list.assignee')}</th>
+                    <th className="px-4 py-2">{t('pms.list.dueDate')}</th>
+                    <th className="px-4 py-2">{t('pms.list.priority')}</th>
+                    <th className="px-4 py-2">{t('pms.list.status')}</th>
+                    <th className="px-4 py-2">{t('pms.list.comments')}</th>
                     <th className="px-4 py-2 text-right">
                       <Plus size={14} className="inline cursor-pointer" />
                     </th>
@@ -113,7 +115,9 @@ export const ListView = ({
                         )}
                       </td>
                       <td className="py-2 px-4">
-                        <span className="text-app-ink/50">{formatDate(issue.due_date) || 'Not set'}</span>
+                        <span className="text-app-ink/50">
+                          {formatDate(issue.due_date) || t('pms.list.notSet')}
+                        </span>
                       </td>
                       <td className="py-2 px-4">
                         <span className={`app-text-caption font-semibold ${PRIORITY_COLOR[issue.priority] ?? ''}`}>

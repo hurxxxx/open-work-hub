@@ -83,14 +83,6 @@ export function ToolCallCard({ call }: ToolCallCardProps) {
 }
 
 function StatusPill({ status }: { status: ToolCallBuffer['status'] }) {
-  const label =
-    status === 'running'
-      ? 'running'
-      : status === 'ok'
-        ? 'ok'
-        : status === 'rejected'
-          ? 'rejected'
-          : 'error';
   const className =
     status === 'running'
       ? 'border-amber-200 bg-amber-50 text-amber-700'
@@ -104,7 +96,7 @@ function StatusPill({ status }: { status: ToolCallBuffer['status'] }) {
     <span
       className={`rounded-full border px-2 py-0.5 text-[11px] font-medium uppercase tracking-wide ${className}`}
     >
-      {label}
+      {status}
     </span>
   );
 }

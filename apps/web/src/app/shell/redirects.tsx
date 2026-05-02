@@ -1,4 +1,5 @@
 import { Navigate, useParams } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 
 import { getDefaultAdminPath } from '@/src/platform/admin/admin-permissions';
 import {
@@ -24,6 +25,7 @@ export function AdminLandingRedirect() {
 
 export function HomeRootRedirect() {
   const auth = useAuth();
+  const { t } = useTranslation('shell');
 
   if (!auth.user) {
     return <Navigate replace to="/login" />;
@@ -32,7 +34,7 @@ export function HomeRootRedirect() {
   const targetPath = resolveRootEntryPath(auth.user);
   if (!targetPath) {
     return (
-      <AccessDeniedView description="접근 가능한 워크스페이스가 없습니다. 관리자에게 문의해주세요." />
+      <AccessDeniedView description={t('gates.noAccessibleWorkspace')} />
     );
   }
 
@@ -41,6 +43,7 @@ export function HomeRootRedirect() {
 
 export function WorkspaceRootRedirect() {
   const auth = useAuth();
+  const { t } = useTranslation('shell');
   const { workspaceSlug } = useParams();
 
   if (!auth.user) {
@@ -49,13 +52,13 @@ export function WorkspaceRootRedirect() {
 
   if (!workspaceSlug || !getWorkspaceBySlug(auth.user, workspaceSlug)) {
     return (
-      <AccessDeniedView description="현재 계정은 이 workspace에 접근할 수 없습니다." />
+      <AccessDeniedView description={t('gates.workspaceDenied')} />
     );
   }
 
   if (!hasWorkspaceMembership(auth.user, workspaceSlug)) {
     return (
-      <AccessDeniedView description="현재 계정은 이 workspace에 접근할 수 없습니다." />
+      <AccessDeniedView description={t('gates.workspaceDenied')} />
     );
   }
 

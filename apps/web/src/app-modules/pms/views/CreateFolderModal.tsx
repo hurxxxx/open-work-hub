@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { FolderOpen } from 'lucide-react';
 import { Dialog, Button } from '@aidoo/ui';
+import { useTranslation } from 'react-i18next';
 import { useAuth } from '@/src/platform/auth/auth-provider';
 import { createFolder, type PmsFolder } from '../api/pms-api';
 
@@ -15,6 +16,7 @@ export const CreateFolderModal = ({
   teamId: string;
   onCreated?: (folder: PmsFolder) => void;
 }) => {
+  const { t } = useTranslation(['apps', 'common']);
   const { token } = useAuth();
   const [name, setName] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -37,7 +39,7 @@ export const CreateFolderModal = ({
       onCreated?.(folder);
       onClose();
     } catch (err) {
-      setError(err instanceof Error ? err.message : '폴더 생성에 실패했습니다.');
+      setError(err instanceof Error ? err.message : t('apps:pms.createFolderFailed'));
     } finally {
       setSubmitting(false);
     }
@@ -47,17 +49,17 @@ export const CreateFolderModal = ({
     <Dialog
       open={isOpen}
       onOpenChange={(open) => { if (!open) onClose(); }}
-      title="New Folder"
+      title={t('apps:pms.createFolder')}
       maxWidth="max-w-lg"
       actions={
         <div className="flex items-center justify-end gap-3 w-full">
-          <Button variant="secondary" onClick={onClose}>Cancel</Button>
+          <Button variant="secondary" onClick={onClose}>{t('common:actions.cancel')}</Button>
           <Button
             variant="primary"
             onClick={handleCreate}
             disabled={!name.trim() || submitting}
           >
-            {submitting ? 'Creating...' : 'Create Folder'}
+            {submitting ? t('apps:pms.creating') : t('apps:pms.createFolder')}
           </Button>
         </div>
       }
@@ -68,7 +70,7 @@ export const CreateFolderModal = ({
             <FolderOpen size={20} className="text-amber-400" />
           </div>
           <div className="app-text-body text-app-ink/60">
-            폴더를 생성하면 리스트와 문서를 그룹으로 묶어 관리할 수 있습니다.
+            {t('apps:pms.createFolderDescription')}
           </div>
         </div>
 
@@ -79,10 +81,10 @@ export const CreateFolderModal = ({
         )}
 
         <div className="space-y-1">
-          <label className="app-text-control-sm text-app-ink/70">Folder Name</label>
+          <label className="app-text-control-sm text-app-ink/70">{t('apps:pms.folderName')}</label>
           <input
             type="text"
-            placeholder="e.g. Sprint 1"
+            placeholder={t('apps:pms.folderPlaceholder')}
             value={name}
             onChange={e => setName(e.target.value)}
             onKeyDown={e => { if (e.key === 'Enter' && !e.nativeEvent.isComposing && name.trim() && !submitting) handleCreate(); }}

@@ -1,7 +1,9 @@
 import { ApiRequestError, apiFetchJson } from '@/src/platform/api/client';
 import type { ApiSchema } from '@/src/platform/api/types';
+import { i18n } from '@/src/platform/i18n';
 
 export type ThemePreference = 'system' | 'light' | 'dark';
+export type LocalePreference = 'ko-KR' | 'en-US';
 
 export type OrgUnitSummary = ApiSchema<'OrgUnitSummaryResponse'>;
 
@@ -28,10 +30,11 @@ const TEAM_ROLE_RANK: Record<string, number> = {
 
 export type AuthUser = Omit<
   ApiSchema<'AuthUserResponse'>,
-  'created_at' | 'job_title' | 'last_login_at' | 'primary_org_unit' | 'theme_preference' | 'time_zone' | 'workspaces'
+  'created_at' | 'job_title' | 'last_login_at' | 'primary_org_unit' | 'theme_preference' | 'locale' | 'time_zone' | 'workspaces'
 > & {
   job_title?: string | null;
   theme_preference: ThemePreference;
+  locale: LocalePreference;
   time_zone: string;
   primary_org_unit: OrgUnitSummary | null;
   workspaces: WorkspaceSummary[];
@@ -138,8 +141,9 @@ export type LoginPayload = ApiSchema<'LoginRequest'>;
 
 export type SetupFirstUserPayload = ApiSchema<'SetupFirstUserRequest'>;
 
-export type UpdatePreferencesPayload = Omit<ApiSchema<'UpdatePreferencesRequest'>, 'theme_preference' | 'time_zone'> & {
+export type UpdatePreferencesPayload = Omit<ApiSchema<'UpdatePreferencesRequest'>, 'theme_preference' | 'locale' | 'time_zone'> & {
   theme_preference?: ThemePreference;
+  locale?: LocalePreference;
   time_zone?: string;
 };
 
@@ -161,37 +165,37 @@ export class AuthApiError extends Error {
 function defaultAuthErrorMessage(path: string, status: number): string {
   if (path === '/api/v1/auth/bootstrap-status') {
     return status >= 500
-      ? '인증 서비스를 확인하지 못했습니다. API 서버 상태를 확인해 주세요.'
-      : '초기 인증 상태를 확인하지 못했습니다.';
+      ? i18n.t('auth:errors.bootstrapServer')
+      : i18n.t('auth:errors.bootstrap');
   }
 
   if (path === '/api/v1/auth/login') {
     return status >= 500
-      ? '로그인 요청을 처리하지 못했습니다. 잠시 후 다시 시도해 주세요.'
-      : '로그인하지 못했습니다.';
+      ? i18n.t('auth:errors.loginServer')
+      : i18n.t('auth:errors.login');
   }
 
   if (path === '/api/v1/auth/dev-admin-login') {
     return status >= 500
-      ? '개발용 관리자 로그인을 처리하지 못했습니다. API 서버 상태를 확인해 주세요.'
-      : '개발용 관리자 바로 로그인을 실행하지 못했습니다.';
+      ? i18n.t('auth:errors.devAdminLoginServer')
+      : i18n.t('auth:errors.devAdminLogin');
   }
 
   if (path === '/api/v1/auth/dev-login') {
     return status >= 500
-      ? '개발용 계정 로그인을 처리하지 못했습니다. API 서버 상태를 확인해 주세요.'
-      : '개발용 계정 바로 로그인을 실행하지 못했습니다.';
+      ? i18n.t('auth:errors.devLoginServer')
+      : i18n.t('auth:errors.devLogin');
   }
 
   if (path === '/api/v1/auth/setup') {
     return status >= 500
-      ? '최초 관리자 계정 생성을 처리하지 못했습니다. 잠시 후 다시 시도해 주세요.'
-      : '최초 관리자 계정을 만들지 못했습니다.';
+      ? i18n.t('auth:errors.setupServer')
+      : i18n.t('auth:errors.setup');
   }
 
   return status >= 500
-    ? '요청을 처리하지 못했습니다. 잠시 후 다시 시도해 주세요.'
-    : `요청에 실패했습니다. (${status})`;
+    ? i18n.t('common:feedback.requestFailedRetry')
+    : i18n.t('common:feedback.requestFailed', { status });
 }
 
 function resolveAuthErrorMessage(path: string, status: number, payload: unknown): string {
@@ -240,7 +244,7 @@ async function request<T>(
     }
     throw new AuthApiError(
       0,
-      '인증 서버에 연결하지 못했습니다. API 서버가 실행 중인지 확인해 주세요.',
+      i18n.t('auth:errors.connection'),
     );
   }
 }

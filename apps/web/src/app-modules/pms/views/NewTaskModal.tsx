@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { Dialog, Button, BlockEditor } from '@aidoo/ui';
 import type { BlockContent } from '@aidoo/ui';
+import { useTranslation } from 'react-i18next';
 import { useAuth } from '@/src/platform/auth/auth-provider';
 import { useMediaUpload } from '@/src/platform/media/use-media-upload';
 import { createTaskListIssue, listTaskTemplates, type PmsTaskListStatus, type PmsTaskTemplate } from '../api/pms-api';
@@ -28,6 +29,7 @@ export const NewTaskModal = ({
   taskListStatuses?: PmsTaskListStatus[];
   canCreate?: boolean;
 }) => {
+  const { t } = useTranslation('apps');
   const { token } = useAuth();
   const { uploadFile, resolveFileUrl } = useMediaUpload();
   const [title, setTitle] = useState('');
@@ -86,21 +88,21 @@ export const NewTaskModal = ({
     <Dialog
       open={isOpen}
       onOpenChange={(open) => { if (!open) onClose(); }}
-      title="New Task"
+      title={t('pms.newTask')}
       maxWidth="max-w-3xl"
       actions={
         <div className="flex items-center justify-between w-full">
           <div className="relative">
             <Button variant="secondary" className="gap-2" onClick={openTemplateMenu}>
               <LayoutTemplate size={16} className="text-app-ink/50" />
-              Templates
+              {t('pms.templates')}
             </Button>
             {templateMenuOpen && (
               <>
                 <div className="fixed inset-0 z-10" onClick={() => setTemplateMenuOpen(false)} />
                 <div className="absolute bottom-full left-0 mb-1 z-20 w-56 bg-app-bg border border-app-border rounded-lg shadow-xl py-1 max-h-48 overflow-y-auto">
                   {templates.length === 0 ? (
-                    <p className="app-text-caption px-3 py-2 text-app-ink/40">No templates yet</p>
+                    <p className="app-text-caption px-3 py-2 text-app-ink/40">{t('pms.noTemplates')}</p>
                   ) : (
                     templates.map(t => (
                       <button
@@ -130,7 +132,7 @@ export const NewTaskModal = ({
                 disabled={!title.trim() || submitting || !canCreate}
                 className="rounded-r-none"
               >
-                {submitting ? 'Creating...' : 'Create Task'}
+                {submitting ? t('pms.creating') : t('pms.createTask')}
               </Button>
               <Button variant="primary" size="icon" className="rounded-l-none border-l border-white/20">
                 <ChevronDown size={20} />
@@ -144,7 +146,7 @@ export const NewTaskModal = ({
         {/* Task Name Input */}
         <input
           type="text"
-          placeholder="Task Name"
+          placeholder={t('pms.taskName')}
           value={title}
           onChange={e => setTitle(e.target.value)}
           onKeyDown={e => { if (e.key === 'Enter' && !e.nativeEvent.isComposing && title.trim() && !submitting && canCreate) handleCreate(); }}
@@ -160,7 +162,7 @@ export const NewTaskModal = ({
               <BlockEditor
                 initialContent={descriptionBlocks}
                 onChange={setDescriptionBlocks}
-                placeholder="Add a description..."
+                placeholder={t('pms.descriptionPlaceholder')}
                 className="[&_.bn-editor]:min-h-[80px] [&_.bn-editor]:px-2"
                 uploadFile={uploadFile}
                 resolveFileUrl={resolveFileUrl}
@@ -173,7 +175,7 @@ export const NewTaskModal = ({
               disabled={!canCreate}
             >
               <FileText size={18} />
-              <span>Add description</span>
+              <span>{t('pms.addDescription')}</span>
             </button>
           )}
         </div>
@@ -197,10 +199,10 @@ export const NewTaskModal = ({
             className="app-text-body-sm rounded-md border border-app-border bg-app-surface-sidebar px-2 py-1 text-app-ink focus:outline-none"
             disabled={!canCreate}
           >
-            <option value="low">Low</option>
-            <option value="medium">Medium</option>
-            <option value="high">High</option>
-            <option value="critical">Critical</option>
+            <option value="low">{t('pms.priorityLow')}</option>
+            <option value="medium">{t('pms.priorityMedium')}</option>
+            <option value="high">{t('pms.priorityHigh')}</option>
+            <option value="critical">{t('pms.priorityCritical')}</option>
           </select>
 
           <input

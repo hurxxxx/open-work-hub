@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { motion } from 'motion/react';
+import { useTranslation } from 'react-i18next';
 import { Link, Navigate, useParams } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
 import rehypeHighlight from 'rehype-highlight';
@@ -103,6 +104,7 @@ function LessonLayout({
   prev: LearningLesson | null;
   next: LearningLesson | null;
 }) {
+  const { t } = useTranslation('apps');
   const [wide, setWide] = useWideMode();
   const [body, setBody] = useState<string | null>(null);
   const [isBodyLoading, setIsBodyLoading] = useState(true);
@@ -167,7 +169,7 @@ function LessonLayout({
           <div className="mb-6 flex items-center justify-between gap-3">
             <div className="inline-flex items-center gap-2 rounded-full border border-app-border bg-app-surface px-3 py-1">
               <span className="app-text-overline text-app-ink/60">
-                레슨 {index + 1} / {total}
+                {t('learning.lessonIndex', { index: index + 1, total })}
               </span>
             </div>
             <button
@@ -175,12 +177,12 @@ function LessonLayout({
               onClick={() => setWide((v) => !v)}
               className="hidden items-center gap-1.5 rounded-md border border-app-border px-2.5 py-1 text-app-ink/60 transition-colors hover:border-app-accent hover:text-app-accent xl:inline-flex"
               aria-pressed={wide}
-              title={wide ? '좁게 보기' : '넓게 보기'}
+              title={wide ? t('learning.viewNarrowTitle') : t('learning.viewWideTitle')}
               data-testid="learning-width-toggle"
             >
               {wide ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
               <span className="app-text-overline">
-                {wide ? '좁게' : '넓게'}
+                {wide ? t('learning.viewNarrow') : t('learning.viewWide')}
               </span>
             </button>
           </div>
@@ -191,7 +193,7 @@ function LessonLayout({
 
           {isBodyLoading ? (
             <p className="app-text-body text-app-ink/60">
-              레슨 본문을 불러오는 중입니다.
+              {t('learning.lessonLoading')}
             </p>
           ) : body ? (
             <div
@@ -204,12 +206,12 @@ function LessonLayout({
             </div>
           ) : (
             <p className="app-text-body text-app-ink/60">
-              이 레슨 본문을 불러오지 못했습니다. 파일이 정상적으로 배포되었는지 확인하세요.
+              {t('learning.lessonLoadFailed')}
             </p>
           )}
 
           <nav
-            aria-label="레슨 이동"
+            aria-label={t('learning.lessonNav')}
             className="mt-16 grid grid-cols-1 gap-3 border-t border-app-border pt-6 sm:grid-cols-2"
           >
             {prev ? (
@@ -220,7 +222,7 @@ function LessonLayout({
               >
                 <span className="flex items-center gap-1 app-text-overline text-app-ink/50">
                   <ChevronLeft size={12} />
-                  이전 레슨
+                  {t('learning.previousLesson')}
                 </span>
                 <span className="app-text-control text-app-ink group-hover:text-app-accent">
                   {prev.title}
@@ -236,7 +238,7 @@ function LessonLayout({
                 data-testid="learning-lesson-next"
               >
                 <span className="flex items-center justify-end gap-1 app-text-overline text-app-ink/50">
-                  다음 레슨
+                  {t('learning.nextLesson')}
                   <ChevronRight size={12} />
                 </span>
                 <span className="app-text-control text-app-ink group-hover:text-app-accent">
@@ -251,7 +253,7 @@ function LessonLayout({
       </article>
 
       <aside
-        aria-label="페이지 노트"
+        aria-label={t('learning.notes')}
         className={notesPlacementClass}
         data-testid="learning-page-notes-slot"
       >
@@ -274,15 +276,16 @@ function CourseWithoutLessons({
   courseTitle: string;
   basePath: string;
 }) {
+  const { t } = useTranslation('apps');
   return (
     <div className="mx-auto flex w-full max-w-3xl flex-col items-center gap-3 p-10 text-center">
       <GraduationCap size={28} className="text-app-ink/40" />
       <h1 className="app-text-title text-app-ink">{courseTitle}</h1>
       <p className="app-text-body text-app-ink/60">
-        이 코스에는 아직 레슨이 없습니다.
+        {t('learning.noLessons')}
       </p>
       <Link to={basePath} className="app-text-control text-app-accent hover:underline">
-        ← 전체 코스로 돌아가기
+        {t('learning.backToCourses')}
       </Link>
     </div>
   );

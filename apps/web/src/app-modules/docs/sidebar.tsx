@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { FileText } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
 import type { AppSidebarConfig } from '@/src/app/shell/sidebar-types';
 import { useAuth } from '@/src/platform/auth/auth-provider';
@@ -21,6 +22,7 @@ interface DocsSidebarExtrasProps {
 }
 
 export function DocsSidebarExtras({ currentWorkspaceSlug }: DocsSidebarExtrasProps) {
+  const { t } = useTranslation('apps');
   const { token, user } = useAuth();
   const location = useLocation();
   const [favorites, setFavorites] = useState<FavoriteDocItem[]>([]);
@@ -51,7 +53,9 @@ export function DocsSidebarExtras({ currentWorkspaceSlug }: DocsSidebarExtrasPro
   return (
     <>
       <div className="space-y-1 pt-2 border-t border-app-border mt-2">
-        <span className="sidebar-section-label block px-3 py-1 text-gray-500">Favorites</span>
+        <span className="sidebar-section-label block px-3 py-1 text-gray-500">
+          {t('docs.sidebar.favorites')}
+        </span>
         {favorites.length > 0 ? (
           favorites.map((favorite) => {
             const docPath = currentWorkspaceSlug
@@ -73,13 +77,17 @@ export function DocsSidebarExtras({ currentWorkspaceSlug }: DocsSidebarExtrasPro
           })
         ) : (
           <div className="px-3 py-2 text-center">
-            <span className="app-text-micro text-gray-600">Star a Doc to see it here</span>
+            <span className="app-text-micro text-gray-600">
+              {t('docs.sidebar.noFavorites')}
+            </span>
           </div>
         )}
       </div>
 
       <div className="space-y-1 pt-2 border-t border-app-border mt-2">
-        <span className="sidebar-section-label block px-3 py-1 text-gray-500">Recent Pages</span>
+        <span className="sidebar-section-label block px-3 py-1 text-gray-500">
+          {t('docs.sidebar.recentPages')}
+        </span>
         {recentPages.length > 0 ? (
           recentPages.map((recentPage) => {
             const docPath = currentWorkspaceSlug
@@ -100,7 +108,9 @@ export function DocsSidebarExtras({ currentWorkspaceSlug }: DocsSidebarExtrasPro
           })
         ) : (
           <div className="px-3 py-2 text-center">
-            <span className="app-text-micro text-gray-600">No recent pages</span>
+            <span className="app-text-micro text-gray-600">
+              {t('docs.sidebar.noRecentPages')}
+            </span>
           </div>
         )}
       </div>
@@ -112,7 +122,8 @@ export const docsSidebarConfig: AppSidebarConfig = {
   createActions: () => [
     {
       id: 'docs-create-doc',
-      label: 'Doc',
+      label: 'docs-create-doc',
+      labelKey: 'sidebarActions.docs-create-doc',
       icon: FileText,
       run: () => {
         window.dispatchEvent(new CustomEvent('docs:create'));

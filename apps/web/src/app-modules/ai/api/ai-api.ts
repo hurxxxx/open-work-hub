@@ -1,5 +1,6 @@
 import { ApiRequestError, apiFetchJson } from '@/src/platform/api/client';
 import type { ApiSchema } from '@/src/platform/api/types';
+import { i18n } from '@/src/platform/i18n';
 import { rewriteWorkspaceApiPath } from '@/src/platform/workspaces/workspace-utils';
 
 export type AiChatRole = ApiSchema<'ChatMessage'>['role'];
@@ -80,13 +81,13 @@ async function aiRequest<T>(
         error.status,
         resolveErrorMessage(
           error.payload,
-          `AI 요청에 실패했습니다. (${error.status})`,
+          i18n.t('apps:ai.errors.requestFailed', { status: error.status }),
         ),
       );
     }
     throw new AiApiError(
       0,
-      'AI 서버에 연결하지 못했습니다. API 서버가 실행 중인지 확인해 주세요.',
+      i18n.t('apps:ai.errors.connect'),
     );
   }
 }
@@ -244,7 +245,7 @@ async function streamAiRequest(
     }
     throw new AiApiError(
       0,
-      'AI 서버에 연결하지 못했습니다. API 서버가 실행 중인지 확인해 주세요.',
+      i18n.t('apps:ai.errors.connect'),
     );
   }
 
@@ -254,12 +255,12 @@ async function streamAiRequest(
       response.status,
       resolveErrorMessage(
         errPayload,
-        `AI 스트리밍을 시작하지 못했습니다. (${response.status})`,
+        i18n.t('apps:ai.errors.streamStartFailed', { status: response.status }),
       ),
     );
   }
   if (!response.body) {
-    throw new AiApiError(0, 'SSE 응답 본문이 비어 있습니다.');
+    throw new AiApiError(0, i18n.t('apps:ai.errors.emptySseBody'));
   }
   return response;
 }

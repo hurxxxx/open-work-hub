@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useParams } from 'react-router-dom';
 import { InlineNotice } from '@aidoo/ui';
 
@@ -15,6 +16,7 @@ import { getErrorMessage } from '@/src/platform/admin/admin-shared';
 import { WorkspaceDetailPanel } from '@/src/platform/admin/workspace-detail-panel';
 
 export function WorkspaceSettingsView() {
+  const { t } = useTranslation('apps');
   const { workspaceSlug } = useParams();
   const { token, user, hasPermission } = useAuth();
   const [workspace, setWorkspace] = useState<WorkspaceItem | null>(null);
@@ -63,7 +65,7 @@ export function WorkspaceSettingsView() {
         setGroups(groupItems);
       } catch (caughtError) {
         if (!cancelled) {
-          setError(getErrorMessage(caughtError, '워크스페이스 설정을 불러오지 못했습니다.'));
+          setError(getErrorMessage(caughtError, t('workspace.settingsLoadFailed')));
         }
       } finally {
         if (!cancelled) setLoading(false);
@@ -72,33 +74,33 @@ export function WorkspaceSettingsView() {
     return () => {
       cancelled = true;
     };
-  }, [token, workspaceSlug, canManageWorkspace, canReadGroups]);
+  }, [token, workspaceSlug, canManageWorkspace, canReadGroups, t]);
 
   if (!workspaceSlug) {
-    return <AccessDeniedView description="현재 계정은 이 workspace 설정에 접근할 수 없습니다." />;
+    return <AccessDeniedView description={t('workspace.settingsAccessDenied')} />;
   }
 
   if (!canManageWorkspace) {
-    return <AccessDeniedView description="이 workspace 설정은 admin 이상만 접근할 수 있습니다." />;
+    return <AccessDeniedView description={t('workspace.settingsAdminRequired')} />;
   }
 
   return (
     <div className="custom-scrollbar h-full overflow-y-auto p-8">
       <div className="mx-auto max-w-6xl space-y-6">
         <header className="space-y-2 border-b border-app-border pb-6">
-          <div className="app-text-overline text-app-ink/50">Workspace Settings</div>
+          <div className="app-text-overline text-app-ink/50">{t('workspace.settingsTitle')}</div>
           <h1 className="app-text-title-lg text-app-ink">
             {workspace?.name ?? currentWorkspaceSummary?.name ?? workspaceSlug}
           </h1>
           <p className="app-text-body text-app-ink/60">
-            이 협업 공간의 프로필과 멤버십을 관리합니다.
+            {t('workspace.settingsDescription')}
           </p>
         </header>
 
         {error ? <InlineNotice tone="danger">{error}</InlineNotice> : null}
         {message ? <InlineNotice tone="success">{message}</InlineNotice> : null}
         {loading ? (
-          <InlineNotice tone="info">Workspace settings 를 불러오는 중입니다.</InlineNotice>
+          <InlineNotice tone="info">{t('workspace.settingsLoading')}</InlineNotice>
         ) : null}
 
         <section className="flex min-h-[560px] flex-col overflow-hidden rounded-md border border-app-border bg-app-bg">

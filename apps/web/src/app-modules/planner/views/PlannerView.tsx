@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { motion } from 'motion/react';
 import { ChevronLeft, ChevronRight, Plus } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { cn } from '@/src/lib/utils';
 import { getKoreanHolidayNames } from '@/src/lib/korean-holidays';
 import { useAuth } from '@/src/platform/auth/auth-provider';
@@ -21,10 +22,14 @@ import { MeetingPreviewModal } from './calendar/MeetingPreviewModal';
 import { PlannerEventModal } from './PlannerEventModal';
 import { PlannerEventChoicePopover } from './PlannerEventChoicePopover';
 
-const MONTH_NAMES_LONG = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
-const PICKER_DAYS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
-
 type PlannerViewMode = 'Month' | 'Week' | 'Day' | 'Agenda';
+
+const VIEW_MODE_LABEL_KEYS: Record<PlannerViewMode, string> = {
+  Month: 'planner.viewModes.month',
+  Week: 'planner.viewModes.week',
+  Day: 'planner.viewModes.day',
+  Agenda: 'planner.viewModes.agenda',
+};
 
 const VIEW_MODE_TO_FC: Record<PlannerViewMode, UnifiedCalendarView> = {
   Month: 'dayGridMonth',
@@ -101,11 +106,18 @@ function buildInitialPlannerRange(
   };
 }
 
-function formatPlannerHeading(viewMode: PlannerViewMode, currentDate: Date): string {
+function formatPlannerHeading(viewMode: PlannerViewMode, currentDate: Date, locale: string): string {
   if (viewMode === 'Day') {
-    return `${MONTH_NAMES_LONG[currentDate.getMonth()]} ${currentDate.getDate()}, ${currentDate.getFullYear()}`;
+    return new Intl.DateTimeFormat(locale, {
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric',
+    }).format(currentDate);
   }
-  return `${MONTH_NAMES_LONG[currentDate.getMonth()]} ${currentDate.getFullYear()}`;
+  return new Intl.DateTimeFormat(locale, {
+    month: 'long',
+    year: 'numeric',
+  }).format(currentDate);
 }
 
 interface DatePickerPopoverProps {
@@ -133,6 +145,7 @@ function DatePickerPopover({
   onPickToday,
   onPickDate,
 }: DatePickerPopoverProps) {
+  const { t, i18n } = useTranslation('apps');
   // 6×7 grid: leading blanks for the days before the 1st (Sun-start, per user
   // pref). Always render 42 cells so popover height never jumps as the user
   // browses across months.
@@ -146,25 +159,28 @@ function DatePickerPopover({
   return (
     <div
       role="dialog"
-      aria-label="Choose a date"
+      aria-label={t('planner.datePicker.chooseDate')}
       className="absolute right-0 top-full mt-2 z-40 w-72 rounded-lg border border-app-border bg-app-surface p-3 shadow-xl"
     >
       <div className="flex items-center justify-between mb-2">
         <button
           type="button"
           onClick={onPrev}
-          aria-label="Previous month"
+          aria-label={t('planner.datePicker.previousMonth')}
           className="flex h-7 w-7 items-center justify-center rounded text-gray-500 hover:bg-app-surface-hover hover:text-app-ink"
         >
           <ChevronLeft size={14} />
         </button>
         <div className="app-text-control text-app-ink tabular-nums">
-          {MONTH_NAMES_LONG[pickerMonth]} {pickerYear}
+          {new Intl.DateTimeFormat(i18n.language, {
+            month: 'long',
+            year: 'numeric',
+          }).format(new Date(pickerYear, pickerMonth, 1))}
         </div>
         <button
           type="button"
           onClick={onNext}
-          aria-label="Next month"
+          aria-label={t('planner.datePicker.nextMonth')}
           className="flex h-7 w-7 items-center justify-center rounded text-gray-500 hover:bg-app-surface-hover hover:text-app-ink"
         >
           <ChevronRight size={14} />
@@ -172,7 +188,7 @@ function DatePickerPopover({
       </div>
 
       <div className="grid grid-cols-7 mb-1">
-        {PICKER_DAYS.map((day, i) => (
+        {Array.from({ length: 7 }, (_, i) => (
           <div
             key={i}
             className={cn(
@@ -181,7 +197,9 @@ function DatePickerPopover({
               i === 0 ? 'text-red-500' : 'text-gray-500',
             )}
           >
-            {day}
+            {new Intl.DateTimeFormat(i18n.language, { weekday: 'narrow' }).format(
+              new Date(2026, 1, i + 1),
+            )}
           </div>
         ))}
       </div>
@@ -231,7 +249,7 @@ function DatePickerPopover({
           onClick={onPickToday}
           className="app-text-control-sm rounded px-2 py-1 text-app-accent hover:bg-app-surface-hover"
         >
-          Today
+          {t('planner.today')}
         </button>
       </div>
     </div>
@@ -260,6 +278,7 @@ function buildDefaultPlannerEventRange(currentDate: Date): PlannerEventDraftRang
 }
 
 export const PlannerView = () => {
+  const { t, i18n } = useTranslation('apps');
   const today = new Date();
   const navigate = useNavigate();
   const { token, user } = useAuth();
@@ -463,7 +482,7 @@ export const PlannerView = () => {
     // pms_due / pms_block — both navigate to the task list with the issue panel open.
     const listId = event.metadata.taskListId;
     if (!listId) {
-      setActionError('태스크 위치를 찾을 수 없습니다.');
+      setActionError(t('planner.taskLocationMissing'));
       return;
     }
     navigate(`/tool/pms-list-${listId}?issue=${encodeURIComponent(event.sourceId)}`);
@@ -491,7 +510,7 @@ export const PlannerView = () => {
       } catch (err) {
         revert();
         setActionError(
-          err instanceof Error ? err.message : '일정을 변경할 수 없습니다.',
+          err instanceof Error ? err.message : t('planner.eventMoveFailed'),
         );
       }
       return;
@@ -499,7 +518,7 @@ export const PlannerView = () => {
     if (event.sourceType === 'meeting') {
       if (newAllDay) {
         revert();
-        setActionError('미팅은 종일 일정으로 변경할 수 없습니다.');
+        setActionError(t('planner.meetingAllDayDisallowed'));
         return;
       }
       try {
@@ -514,14 +533,14 @@ export const PlannerView = () => {
       } catch (err) {
         revert();
         setActionError(
-          err instanceof Error ? err.message : '미팅 시간을 변경할 수 없습니다.',
+          err instanceof Error ? err.message : t('planner.meetingMoveFailed'),
         );
       }
       return;
     }
     if (!newAllDay) {
       revert();
-      setActionError('태스크 일정은 종일 일정으로만 이동할 수 있습니다.');
+      setActionError(t('planner.taskAllDayOnly'));
       return;
     }
     // PMS issues — extract date portion only (all-day, no time component).
@@ -541,7 +560,7 @@ export const PlannerView = () => {
     } catch (err) {
       revert();
       setActionError(
-        err instanceof Error ? err.message : '태스크 일정을 변경할 수 없습니다.',
+        err instanceof Error ? err.message : t('planner.taskScheduleMoveFailed'),
       );
     }
   };
@@ -564,7 +583,7 @@ export const PlannerView = () => {
       } catch (err) {
         revert();
         setActionError(
-          err instanceof Error ? err.message : '미팅 시간을 변경할 수 없습니다.',
+          err instanceof Error ? err.message : t('planner.meetingMoveFailed'),
         );
       }
       return;
@@ -580,7 +599,7 @@ export const PlannerView = () => {
       } catch (err) {
         revert();
         setActionError(
-          err instanceof Error ? err.message : '일정을 변경할 수 없습니다.',
+          err instanceof Error ? err.message : t('planner.eventMoveFailed'),
         );
       }
       return;
@@ -593,7 +612,7 @@ export const PlannerView = () => {
       } catch (err) {
         revert();
         setActionError(
-          err instanceof Error ? err.message : '태스크 일정을 변경할 수 없습니다.',
+          err instanceof Error ? err.message : t('planner.taskScheduleMoveFailed'),
         );
       }
       return;
@@ -652,7 +671,7 @@ export const PlannerView = () => {
     >
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
-          <h1 className="app-text-title-lg text-app-ink">Planner</h1>
+          <h1 className="app-text-title-lg text-app-ink">{t('planner.planner')}</h1>
           <div className="flex items-center bg-app-surface-sidebar border border-app-border rounded-md p-1">
             {(['Month', 'Week', 'Day', 'Agenda'] as const).map((mode) => (
               <button
@@ -665,7 +684,7 @@ export const PlannerView = () => {
                     : 'text-gray-500 hover:text-app-ink',
                 )}
               >
-                {mode}
+                {t(VIEW_MODE_LABEL_KEYS[mode])}
               </button>
             ))}
           </div>
@@ -674,7 +693,7 @@ export const PlannerView = () => {
             onClick={goToToday}
             className="app-text-control-sm rounded-md border border-app-border px-3 py-1 text-gray-500 transition-colors hover:text-app-ink"
           >
-            Today
+            {t('planner.today')}
           </button>
         </div>
         <div className="flex items-center gap-3">
@@ -682,7 +701,7 @@ export const PlannerView = () => {
             <button
               type="button"
               onClick={goToPreviousPeriod}
-              aria-label="Previous period"
+              aria-label={t('planner.previousPeriod')}
               className="flex h-8 w-8 items-center justify-center rounded-md text-gray-500 transition-colors hover:bg-app-surface-hover hover:text-app-ink"
             >
               <ChevronLeft size={16} />
@@ -694,12 +713,12 @@ export const PlannerView = () => {
               aria-expanded={pickerOpen}
               className="app-text-control flex h-8 min-w-[180px] items-center justify-center rounded-md text-app-ink tabular-nums transition-colors hover:bg-app-surface-hover"
             >
-              {formatPlannerHeading(viewMode, calendarState.currentDate)}
+              {formatPlannerHeading(viewMode, calendarState.currentDate, i18n.language)}
             </button>
             <button
               type="button"
               onClick={goToNextPeriod}
-              aria-label="Next period"
+              aria-label={t('planner.nextPeriod')}
               className="flex h-8 w-8 items-center justify-center rounded-md text-gray-500 transition-colors hover:bg-app-surface-hover hover:text-app-ink"
             >
               <ChevronRight size={16} />
@@ -740,18 +759,20 @@ export const PlannerView = () => {
               className="app-text-control flex items-center gap-2 rounded-md border border-app-border bg-app-surface-sidebar px-4 py-2 text-app-ink transition-colors hover:bg-app-surface-hover"
             >
               <Plus size={16} />
-              <span>Add</span>
+              <span>{t('common:actions.add')}</span>
             </button>
             {createMenuOpen ? (
               <div className="absolute right-0 top-full z-30 mt-2 w-48 rounded-lg border border-app-border bg-app-surface py-1 shadow-xl">
-                <div className="app-text-overline px-3 pt-1.5 pb-1 text-app-ink/45">Create</div>
+                <div className="app-text-overline px-3 pt-1.5 pb-1 text-app-ink/45">
+                  {t('planner.create')}
+                </div>
                 <button
                   type="button"
                   onClick={() => openPlannerEventCreate()}
                   className="app-text-control-sm flex w-full items-center gap-2 px-3 py-2 text-left text-app-ink transition-colors hover:bg-app-surface-hover"
                 >
                   <Plus size={14} className="text-app-ink/45" />
-                  <span>Event</span>
+                  <span>{t('planner.event')}</span>
                 </button>
                 <button
                   type="button"
@@ -763,7 +784,7 @@ export const PlannerView = () => {
                   className="app-text-control-sm flex w-full items-center gap-2 px-3 py-2 text-left text-app-ink transition-colors hover:bg-app-surface-hover"
                 >
                   <Plus size={14} className="text-app-ink/45" />
-                  <span>Meeting</span>
+                  <span>{t('planner.meeting')}</span>
                 </button>
               </div>
             ) : null}
@@ -786,7 +807,7 @@ export const PlannerView = () => {
             <div className="text-center space-y-2">
               <p className="text-red-500 app-text-body">{error}</p>
               <p className="text-gray-500 app-text-caption">
-                일정을 불러올 수 없습니다. 새로고침 후 다시 시도하세요.
+                {t('planner.loadRetry')}
               </p>
             </div>
           </div>
@@ -794,7 +815,9 @@ export const PlannerView = () => {
           <div className="flex-1 relative">
             {loading ? (
               <div className="absolute inset-0 z-10 flex items-center justify-center bg-app-bg/40 pointer-events-none">
-                <div className="text-gray-500 app-text-caption">불러오는 중...</div>
+                <div className="text-gray-500 app-text-caption">
+                  {t('common:feedback.loading')}
+                </div>
               </div>
             ) : null}
             <UnifiedCalendar

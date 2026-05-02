@@ -12,6 +12,7 @@ import {
   Users,
 } from 'lucide-react';
 import { Panel } from '@aidoo/ui';
+import { useTranslation } from 'react-i18next';
 import { useAuth } from '@/src/platform/auth/auth-provider';
 import {
   getDocsItemPrimaryContainerSortOrder,
@@ -62,19 +63,19 @@ function avatarColor(seed: string): string {
   return AVATAR_COLORS[hash % AVATAR_COLORS.length];
 }
 
-function sortSpaceDocs(items: DocsHubItem[]): DocsHubItem[] {
+function sortSpaceDocs(items: DocsHubItem[], locale: string): DocsHubItem[] {
   return [...items].sort(
     (left, right) => getDocsItemPrimaryContainerSortOrder(left)
       - getDocsItemPrimaryContainerSortOrder(right)
-      || left.title.localeCompare(right.title, 'ko'),
+      || left.title.localeCompare(right.title, locale),
   );
 }
 
-function sortSpaceWhiteboards(items: WhiteboardHubItem[]): WhiteboardHubItem[] {
+function sortSpaceWhiteboards(items: WhiteboardHubItem[], locale: string): WhiteboardHubItem[] {
   return [...items].sort(
     (left, right) => getWhiteboardItemPrimaryContainerSortOrder(left)
       - getWhiteboardItemPrimaryContainerSortOrder(right)
-      || left.title.localeCompare(right.title, 'ko'),
+      || left.title.localeCompare(right.title, locale),
   );
 }
 
@@ -86,6 +87,8 @@ export const SpaceOverviewView = ({
   spaceName?: string | null;
 }) => {
   const { token } = useAuth();
+  const { t, i18n } = useTranslation('apps');
+  const locale = i18n.resolvedLanguage ?? i18n.language;
   const navigate = useNavigate();
   const [lists, setLists] = useState<PmsTaskList[]>([]);
   const [folders, setFolders] = useState<PmsFolder[]>([]);
@@ -136,8 +139,8 @@ export const SpaceOverviewView = ({
         if (cancelled) return;
         setLists(listRes.items);
         setFolders(folderRes.items);
-        setSpaceDocs(sortSpaceDocs(docsRes.items));
-        setSpaceWhiteboards(sortSpaceWhiteboards(whiteboardRes.items));
+        setSpaceDocs(sortSpaceDocs(docsRes.items, locale));
+        setSpaceWhiteboards(sortSpaceWhiteboards(whiteboardRes.items, locale));
         setMembers(memberRes.items);
         const me = Array.isArray(spaces)
           ? spaces.find((s) => s.id === spaceId) ?? null
@@ -149,7 +152,7 @@ export const SpaceOverviewView = ({
       });
 
     return () => { cancelled = true; };
-  }, [spaceId, token, membersRefreshToken]);
+  }, [spaceId, token, membersRefreshToken, locale]);
 
   const canManageMembers =
     spaceMeta?.current_user_role === 'owner' ||
@@ -182,9 +185,14 @@ export const SpaceOverviewView = ({
             <Layout size={20} />
           </div>
           <div>
-            <h1 className="app-text-title-lg text-app-ink">{spaceName ?? 'Space'}</h1>
+            <h1 className="app-text-title-lg text-app-ink">{spaceName ?? t('pms.spaceOverview.fallbackSpaceName')}</h1>
             <div className="app-text-micro text-gray-500">
-              {lists.length} lists · {folders.length} folders · {spaceDocs.length} docs · {spaceWhiteboards.length} whiteboards
+              {t('pms.spaceOverview.summary', {
+                docs: spaceDocs.length,
+                folders: folders.length,
+                lists: lists.length,
+                whiteboards: spaceWhiteboards.length,
+              })}
             </div>
           </div>
         </div>
@@ -197,7 +205,7 @@ export const SpaceOverviewView = ({
             <h3 className="app-text-title-md mb-4 flex items-center justify-between text-app-ink">
               <div className="flex items-center gap-2">
                 <Users size={16} className="text-app-accent" />
-                멤버 ({members.length})
+                {t('pms.spaceOverview.membersCount', { count: members.length })}
               </div>
               <button
                 onClick={() => setMembersModalOpen(true)}
@@ -206,15 +214,15 @@ export const SpaceOverviewView = ({
                 {canManageMembers ? (
                   <>
                     <Plus size={14} />
-                    <span>멤버 관리</span>
+                    <span>{t('pms.spaceMembers.titleSuffix')}</span>
                   </>
                 ) : (
-                  <span>전체 보기</span>
+                  <span>{t('pms.spaceOverview.viewAll')}</span>
                 )}
               </button>
             </h3>
             {members.length === 0 ? (
-              <p className="app-text-body text-app-ink/40">아직 멤버가 없습니다.</p>
+              <p className="app-text-body text-app-ink/40">{t('pms.spaceMembers.noMembers')}</p>
             ) : (
               <div className="flex flex-wrap gap-2">
                 {members.slice(0, 12).map((member) => (
@@ -233,11 +241,11 @@ export const SpaceOverviewView = ({
                     </span>
                     {member.role === 'owner' ? (
                       <span className="app-text-overline text-amber-500">
-                        Owner
+                        {t('pms.settings.role.owner')}
                       </span>
                     ) : member.role !== 'member' ? (
                       <span className="app-text-overline text-app-ink/40">
-                        {member.role}
+                        {t(`pms.settings.role.${member.role}`, { defaultValue: member.role })}
                       </span>
                     ) : null}
                   </div>
@@ -248,7 +256,7 @@ export const SpaceOverviewView = ({
                     onClick={() => setMembersModalOpen(true)}
                     className="app-text-caption inline-flex items-center rounded-full border border-dashed border-app-border px-3 py-1 text-app-ink/60 hover:border-app-accent hover:text-app-accent"
                   >
-                    +{members.length - 12} 더 보기
+                    {t('pms.spaceOverview.moreMembers', { count: members.length - 12 })}
                   </button>
                 ) : null}
               </div>
@@ -259,7 +267,7 @@ export const SpaceOverviewView = ({
           <Panel>
             <h3 className="app-text-title-md mb-4 flex items-center gap-2 text-app-ink">
               <FileText size={16} className="text-app-accent" />
-              Docs
+              {t('pms.spaceOverview.docs')}
             </h3>
             <div className="space-y-2">
               {spaceDocs.slice(0, 8).map((doc) => (
@@ -275,14 +283,14 @@ export const SpaceOverviewView = ({
                 </div>
               ))}
               {spaceDocs.length === 0 && (
-                <p className="app-text-body text-app-ink/40">No doc collections yet</p>
+                <p className="app-text-body text-app-ink/40">{t('pms.spaceOverview.noDocCollections')}</p>
               )}
               {spaceDocs.length > 0 && (
                 <button
                   onClick={() => navigate(`/tool/pms-space-${spaceId}-docs`)}
                   className="app-text-control-sm text-app-accent transition-colors hover:text-app-accent/80"
                 >
-                  View all collections
+                  {t('pms.spaceOverview.viewAllCollections')}
                 </button>
               )}
             </div>
@@ -292,7 +300,7 @@ export const SpaceOverviewView = ({
           <Panel>
             <h3 className="app-text-title-md mb-4 flex items-center gap-2 text-app-ink">
               <PencilRuler size={16} className="text-app-accent" />
-              Whiteboards
+              {t('pms.spaceOverview.whiteboards')}
             </h3>
             <div className="space-y-2">
               {spaceWhiteboards.slice(0, 8).map((board) => (
@@ -308,13 +316,13 @@ export const SpaceOverviewView = ({
                 </div>
               ))}
               {spaceWhiteboards.length === 0 && (
-                <p className="app-text-body text-app-ink/40">No whiteboards yet</p>
+                <p className="app-text-body text-app-ink/40">{t('pms.spaceOverview.noWhiteboards')}</p>
               )}
               <button
                 onClick={() => navigate(`/tool/pms-space-${spaceId}-whiteboards`)}
                 className="app-text-control-sm text-app-accent transition-colors hover:text-app-accent/80"
               >
-                {spaceWhiteboards.length > 0 ? 'View all whiteboards' : 'Open whiteboards'}
+                {spaceWhiteboards.length > 0 ? t('pms.spaceOverview.viewAllWhiteboards') : t('pms.spaceOverview.openWhiteboards')}
               </button>
             </div>
           </Panel>
@@ -324,7 +332,7 @@ export const SpaceOverviewView = ({
             <Panel>
               <h3 className="app-text-title-md mb-4 flex items-center gap-2 text-app-ink">
                 <FolderOpen size={16} className="text-app-accent" />
-                Folders
+                {t('pms.spaceOverview.folders')}
               </h3>
               <div className="space-y-3">
                 {folders.map((folder) => {
@@ -346,7 +354,7 @@ export const SpaceOverviewView = ({
                             {list.name}
                           </span>
                           <span className="app-text-micro text-app-ink/30">
-                            {list.issue_count} issues
+                            {t('pms.spaceOverview.issueCount', { count: list.issue_count })}
                           </span>
                           <ChevronRight size={12} className="text-app-ink/30 opacity-0 group-hover:opacity-100 transition-opacity" />
                         </div>
@@ -363,14 +371,14 @@ export const SpaceOverviewView = ({
             <h3 className="app-text-title-md mb-4 flex items-center justify-between text-app-ink">
               <div className="flex items-center gap-2">
                 <FolderKanban size={16} className="text-app-accent" />
-                Lists
+                {t('pms.spaceOverview.lists')}
               </div>
               <button
                 onClick={() => setCreateListOpen(true)}
                 className="app-text-control-sm flex items-center gap-1 text-app-accent transition-colors hover:text-app-accent/80"
               >
                 <Plus size={14} />
-                <span>New List</span>
+                <span>{t('pms.spaceOverview.newList')}</span>
               </button>
             </h3>
             <div className="space-y-2">
@@ -386,14 +394,17 @@ export const SpaceOverviewView = ({
                       {list.name}
                     </div>
                     <div className="app-text-micro text-app-ink/40">
-                      {list.issue_count} issues · {Math.round(list.progress * 100)}% done
+                      {t('pms.spaceOverview.listProgress', {
+                        count: list.issue_count,
+                        progress: Math.round(list.progress * 100),
+                      })}
                     </div>
                   </div>
                   <ChevronRight size={14} className="text-app-ink/30 opacity-0 group-hover:opacity-100 transition-opacity" />
                 </div>
               ))}
               {rootLists.length === 0 && (
-                <p className="app-text-body text-app-ink/40">No lists yet</p>
+                <p className="app-text-body text-app-ink/40">{t('pms.overviewPage.noLists')}</p>
               )}
             </div>
           </Panel>
@@ -414,7 +425,7 @@ export const SpaceOverviewView = ({
         isOpen={membersModalOpen}
         onClose={() => setMembersModalOpen(false)}
         spaceId={spaceId}
-        spaceName={spaceName ?? 'Space'}
+        spaceName={spaceName ?? t('pms.spaceOverview.fallbackSpaceName')}
         canManage={canManageMembers}
         currentUserRole={spaceMeta?.current_user_role ?? null}
         onChanged={() => setMembersRefreshToken((v) => v + 1)}

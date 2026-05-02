@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Button, Dialog } from '@aidoo/ui';
 import { CheckSquare, FileText, Paperclip, Plus, X } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
 import { useAuth } from '@/src/platform/auth/auth-provider';
 import {
@@ -96,6 +97,7 @@ export function MeetingCreateModal({
   workspaceSlug,
   initialRange,
 }: MeetingCreateModalProps) {
+  const { t } = useTranslation('apps');
   const { token, user } = useAuth();
   const [title, setTitle] = useState('');
   const [agenda, setAgenda] = useState('');
@@ -152,8 +154,7 @@ export function MeetingCreateModal({
 
   // Server-side user search. Only fires when there's an actual query so an
   // empty focus doesn't surface a misleading "first 8 alphabetical users"
-  // dropdown — that was the original confusion behind "왜 delivery-hub-member 가
-  // 검색이 안되지?".
+  // dropdown.
   useEffect(() => {
     if (!isOpen || !token || !userQueryFocused) return;
     const trimmed = userQuery.trim();
@@ -259,7 +260,7 @@ export function MeetingCreateModal({
   async function handleCreate() {
     if (!token || !title.trim()) return;
     if (new Date(endAt) <= new Date(startAt)) {
-      setError('종료 시각은 시작 시각보다 늦어야 합니다.');
+      setError(t('meeting.form.endAfterStart'));
       return;
     }
     setSubmitting(true);
@@ -284,7 +285,12 @@ export function MeetingCreateModal({
           succeededFileNames.add(file.name);
         } catch (err) {
           failures.push(
-            `파일 "${file.name}": ${err instanceof Error ? err.message : '실패'}`,
+            t('meeting.create.fileFailure', {
+              name: file.name,
+              message: err instanceof Error
+                ? err.message
+                : t('meeting.create.fileFailureDefault'),
+            }),
           );
         }
       }
@@ -299,15 +305,13 @@ export function MeetingCreateModal({
         );
         setCreatedMeetingId(meeting.id);
         setPartialFailures(failures);
-        setError(
-          `회의는 만들어졌지만 일부 첨부에 실패했습니다. 남은 항목을 확인하세요.`,
-        );
+        setError(t('meeting.create.partialFailed'));
         return;
       }
 
       onCreated(meeting.id);
     } catch (err) {
-      setError(err instanceof Error ? err.message : '회의 생성에 실패했습니다.');
+      setError(err instanceof Error ? err.message : t('meeting.create.failed'));
     } finally {
       setSubmitting(false);
     }
@@ -324,18 +328,18 @@ export function MeetingCreateModal({
       onOpenChange={(open) => {
         if (!open) onClose();
       }}
-      title="New Meeting"
-      description="참석자와 연결된 업무를 포함해 새 회의를 만듭니다."
+      title={t('meeting.create.title')}
+      description={t('meeting.create.description')}
       maxWidth="max-w-xl"
       dismissOnInteractOutside={false}
       actions={
         <div className="flex w-full items-center justify-end gap-3">
           <Button variant="secondary" onClick={onClose}>
-            {createdMeetingId ? '닫기' : '취소'}
+            {createdMeetingId ? t('common:actions.close') : t('common:actions.cancel')}
           </Button>
           {createdMeetingId ? (
             <Button variant="primary" onClick={handleOpenCreatedMeeting}>
-              회의 보러 가기
+              {t('meeting.create.openCreated')}
             </Button>
           ) : (
             <Button
@@ -343,7 +347,7 @@ export function MeetingCreateModal({
               onClick={handleCreate}
               disabled={!title.trim() || submitting}
             >
-              {submitting ? '만드는 중...' : '회의 만들기'}
+              {submitting ? t('meeting.create.creating') : t('meeting.create.createButton')}
             </Button>
           )}
         </div>
@@ -368,13 +372,13 @@ export function MeetingCreateModal({
 
         <div className="space-y-1">
           <label className="app-text-control-sm text-app-ink/70">
-            제목 <span className="text-[var(--ui-color-danger)]">*</span>
+            {t('meeting.form.title')} <span className="text-[var(--ui-color-danger)]">*</span>
           </label>
           <input
             type="text"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
-            placeholder="예: Q2 로드맵 검토"
+            placeholder={t('meeting.form.titlePlaceholder')}
             maxLength={200}
             autoFocus
             className="app-text-body w-full rounded-md border border-app-border bg-app-surface-sidebar px-3 py-2 text-app-ink placeholder:text-app-ink/30 focus:border-app-accent focus:outline-none"
@@ -382,9 +386,11 @@ export function MeetingCreateModal({
         </div>
 
         <div className="space-y-2">
-          <label className="app-text-control-sm text-app-ink/70">연결된 업무</label>
+          <label className="app-text-control-sm text-app-ink/70">
+            {t('meeting.form.linkedWork')}
+          </label>
           <p className="app-text-caption text-app-ink/40">
-            이 회의에서 다룰 PMS 태스크, 문서, 첨부 파일을 미리 연결합니다.
+            {t('meeting.form.linkedWorkDescription')}
           </p>
           {pickedTasks.length > 0 ||
           pickedDocs.length > 0 ||
@@ -404,7 +410,7 @@ export function MeetingCreateModal({
                     type="button"
                     onClick={() => removePickedTask(task.id)}
                     className="text-app-ink/40 hover:text-app-ink"
-                    aria-label={`${task.title} 제거`}
+                    aria-label={t('meeting.form.removeItem', { name: task.title })}
                   >
                     <X size={11} />
                   </button>
@@ -421,7 +427,7 @@ export function MeetingCreateModal({
                     type="button"
                     onClick={() => removePickedDoc(doc.id)}
                     className="text-app-ink/40 hover:text-app-ink"
-                    aria-label={`${doc.title} 제거`}
+                    aria-label={t('meeting.form.removeItem', { name: doc.title })}
                   >
                     <X size={11} />
                   </button>
@@ -443,7 +449,7 @@ export function MeetingCreateModal({
                     type="button"
                     onClick={() => removePickedFile(index)}
                     className="text-app-ink/40 hover:text-app-ink"
-                    aria-label={`${file.name} 제거`}
+                    aria-label={t('meeting.form.removeItem', { name: file.name })}
                   >
                     <X size={11} />
                   </button>
@@ -459,7 +465,7 @@ export function MeetingCreateModal({
             >
               <Plus size={12} />
               <CheckSquare size={12} />
-              태스크
+              {t('meeting.attachments.addTask')}
             </button>
             <button
               type="button"
@@ -468,7 +474,7 @@ export function MeetingCreateModal({
             >
               <Plus size={12} />
               <FileText size={12} />
-              문서
+              {t('meeting.attachments.addDoc')}
             </button>
             <button
               type="button"
@@ -477,7 +483,7 @@ export function MeetingCreateModal({
             >
               <Plus size={12} />
               <Paperclip size={12} />
-              파일
+              {t('meeting.attachments.addFile')}
             </button>
             <input
               ref={fileInputRef}
@@ -491,7 +497,9 @@ export function MeetingCreateModal({
 
         <div className="grid grid-cols-2 gap-3">
           <div className="space-y-1">
-            <label className="app-text-control-sm text-app-ink/70">시작</label>
+            <label className="app-text-control-sm text-app-ink/70">
+              {t('meeting.form.start')}
+            </label>
             <input
               type="datetime-local"
               value={startAt}
@@ -500,7 +508,9 @@ export function MeetingCreateModal({
             />
           </div>
           <div className="space-y-1">
-            <label className="app-text-control-sm text-app-ink/70">종료</label>
+            <label className="app-text-control-sm text-app-ink/70">
+              {t('meeting.form.end')}
+            </label>
             <input
               type="datetime-local"
               value={endAt}
@@ -519,9 +529,11 @@ export function MeetingCreateModal({
         />
 
         <div className="space-y-2">
-          <label className="app-text-control-sm text-app-ink/70">참석자</label>
+          <label className="app-text-control-sm text-app-ink/70">
+            {t('meeting.form.attendees')}
+          </label>
           <p className="app-text-caption text-app-ink/40">
-            본인은 자동 참석자로 포함됩니다.
+            {t('meeting.form.attendeeAutoIncluded')}
           </p>
           {visibleAttendees.length > 0 ? (
             <div className="flex flex-wrap gap-1.5">
@@ -537,7 +549,9 @@ export function MeetingCreateModal({
                       type="button"
                       onClick={() => removeAttendee(attendee.user_id)}
                       className="text-app-ink/40 hover:text-app-ink"
-                      aria-label={`${user?.full_name ?? attendee.user_id} 제거`}
+                      aria-label={t('meeting.form.removeItem', {
+                        name: user?.full_name ?? attendee.user_id,
+                      })}
                     >
                       <X size={12} />
                     </button>
@@ -555,20 +569,20 @@ export function MeetingCreateModal({
               // Delay so a click on the suggestion list still registers.
               window.setTimeout(() => setUserQueryFocused(false), 150);
             }}
-            placeholder="이름 또는 이메일로 검색"
+            placeholder={t('meeting.form.searchUsersPlaceholder')}
             className="app-text-body w-full rounded-md border border-app-border bg-app-surface-sidebar px-3 py-2 text-app-ink placeholder:text-app-ink/30 focus:border-app-accent focus:outline-none"
           />
           {userQueryFocused ? (
             <div className="max-h-44 overflow-y-auto rounded-md border border-app-border bg-app-surface">
               {usersLoading && filteredUsers.length === 0 ? (
                 <div className="app-text-caption px-3 py-2 text-app-ink/40">
-                  검색 중...
+                  {t('meeting.form.searchingUsers')}
                 </div>
               ) : filteredUsers.length === 0 ? (
                 <div className="app-text-caption px-3 py-2 text-app-ink/40">
                   {userQuery.trim()
-                    ? '일치하는 사용자가 없습니다.'
-                    : '이름 또는 이메일을 입력하세요.'}
+                    ? t('meeting.form.noUserMatch')
+                    : t('meeting.form.searchUsersPrompt')}
                 </div>
               ) : (
                 <ul>
@@ -595,13 +609,14 @@ export function MeetingCreateModal({
 
         <div className="space-y-1">
           <label className="app-text-control-sm text-app-ink/70">
-            안건 <span className="text-app-ink/30">(선택)</span>
+            {t('meeting.form.agenda')}{' '}
+            <span className="text-app-ink/30">({t('meeting.form.optional')})</span>
           </label>
           <textarea
             value={agenda}
             onChange={(e) => setAgenda(e.target.value)}
             rows={4}
-            placeholder="회의에서 다룰 안건을 적어주세요."
+            placeholder={t('meeting.form.agendaPlaceholder')}
             className="app-text-body w-full resize-none rounded-md border border-app-border bg-app-surface-sidebar px-3 py-2 text-app-ink placeholder:text-app-ink/30 focus:border-app-accent focus:outline-none"
           />
         </div>

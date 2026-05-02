@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Button, Dialog } from '@aidoo/ui';
 import { Loader2 } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
 import { useAuth } from '@/src/platform/auth/auth-provider';
 import { hasWorkspaceMembership } from '@/src/platform/auth/auth-api';
@@ -27,6 +28,7 @@ export function TaskPickerModal({
   excludeIssueIds = [],
   workspaceSlug,
 }: TaskPickerModalProps) {
+  const { t } = useTranslation('apps');
   const { token, user } = useAuth();
   const canAccessPms = hasWorkspaceMembership(user, workspaceSlug);
   const [taskLists, setTaskLists] = useState<PmsTaskList[]>([]);
@@ -49,7 +51,7 @@ export function TaskPickerModal({
           setSelectedTaskListId(response.items[0].id);
         }
       })
-      .catch((err: Error) => setError(err.message ?? '리스트 목록을 불러올 수 없습니다.'));
+      .catch((err: Error) => setError(err.message ?? t('meeting.taskPicker.listLoadFailed')));
   }, [isOpen, token, canAccessPms, workspaceSlug]);
 
   useEffect(() => {
@@ -66,7 +68,7 @@ export function TaskPickerModal({
       })
       .catch((err: Error) => {
         if (cancelled) return;
-        setError(err.message ?? '이슈를 불러올 수 없습니다.');
+        setError(err.message ?? t('meeting.taskPicker.issueLoadFailed'));
         setIssues([]);
       })
       .finally(() => {
@@ -97,7 +99,7 @@ export function TaskPickerModal({
       await onPick(issue);
       onClose();
     } catch (err) {
-      setError(err instanceof Error ? err.message : '이슈를 첨부할 수 없습니다.');
+      setError(err instanceof Error ? err.message : t('meeting.taskPicker.attachFailed'));
     } finally {
       setSubmittingId(null);
     }
@@ -109,20 +111,20 @@ export function TaskPickerModal({
       onOpenChange={(open) => {
         if (!open) onClose();
       }}
-      title="태스크 첨부"
-      description="회의에 연결할 PMS 태스크를 선택합니다."
+      title={t('meeting.taskPicker.title')}
+      description={t('meeting.taskPicker.description')}
       maxWidth="max-w-xl"
       actions={
         <div className="flex w-full items-center justify-end">
-          <Button variant="secondary" onClick={onClose}>닫기</Button>
+          <Button variant="secondary" onClick={onClose}>{t('common:actions.close')}</Button>
         </div>
       }
     >
       <div className="space-y-4 text-app-ink">
         {!canAccessPms ? (
           <NoAccessNotice
-            workspaceLabel="PMS 워크스페이스"
-            action="태스크를 첨부"
+            workspaceLabel={t('meeting.taskPicker.pmsWorkspace')}
+            action={t('meeting.taskPicker.attachAction')}
           />
         ) : null}
 
@@ -138,13 +140,13 @@ export function TaskPickerModal({
         {canAccessPms ? (
           <>
             <div className="space-y-1">
-              <label className="app-text-control-sm text-app-ink/70">리스트</label>
+              <label className="app-text-control-sm text-app-ink/70">{t('meeting.taskPicker.list')}</label>
               <select
                 value={selectedTaskListId ?? ''}
                 onChange={(e) => setSelectedTaskListId(e.target.value || null)}
                 className="app-text-body w-full rounded-md border border-app-border bg-app-surface-sidebar px-3 py-2 text-app-ink focus:border-app-accent focus:outline-none"
               >
-                {taskLists.length === 0 ? <option value="">리스트 없음</option> : null}
+                {taskLists.length === 0 ? <option value="">{t('meeting.taskPicker.noLists')}</option> : null}
                 {taskLists.map((taskList) => (
                   <option key={taskList.id} value={taskList.id}>
                     {taskList.key} · {taskList.name}
@@ -154,12 +156,12 @@ export function TaskPickerModal({
             </div>
 
             <div className="space-y-1">
-              <label className="app-text-control-sm text-app-ink/70">검색</label>
+              <label className="app-text-control-sm text-app-ink/70">{t('common:actions.search')}</label>
               <input
                 type="text"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="이슈 제목으로 검색"
+                placeholder={t('meeting.taskPicker.searchPlaceholder')}
                 className="app-text-body w-full rounded-md border border-app-border bg-app-surface-sidebar px-3 py-2 text-app-ink placeholder:text-app-ink/30 focus:border-app-accent focus:outline-none"
               />
             </div>
@@ -171,7 +173,7 @@ export function TaskPickerModal({
                 </div>
               ) : filteredIssues.length === 0 ? (
                 <div className="px-4 py-6 text-center app-text-caption text-app-ink/50">
-                  표시할 이슈가 없습니다.
+                  {t('meeting.taskPicker.empty')}
                 </div>
               ) : (
                 <ul className="divide-y divide-app-border">

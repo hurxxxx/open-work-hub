@@ -242,8 +242,8 @@ describe('TaskDetail', () => {
       expect(mockGetIssueDetail).toHaveBeenCalled();
     });
 
-    expect(screen.getByRole('button', { name: 'Restore' })).toBeTruthy();
-    expect(screen.getByText('Archived')).toBeTruthy();
+    expect(screen.getByRole('button', { name: '복원' })).toBeTruthy();
+    expect(screen.getByText('보관됨')).toBeTruthy();
   });
 
   it('renders task detail in read-only mode when editing is disabled', async () => {
@@ -262,11 +262,11 @@ describe('TaskDetail', () => {
       expect(mockGetIssueDetail).toHaveBeenCalled();
     });
 
-    expect(screen.getByText('Read only')).toBeTruthy();
-    expect(screen.queryByRole('button', { name: 'Archive' })).toBeNull();
+    expect(screen.getByText('읽기 전용')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: '보관' })).toBeNull();
     expect(screen.getAllByRole('combobox')[0].hasAttribute('disabled')).toBe(true);
-    expect(screen.getByPlaceholderText('Comments are read-only').hasAttribute('disabled')).toBe(true);
-    expect(screen.queryByText('Click or drag files to upload')).toBeNull();
+    expect(screen.getByPlaceholderText('댓글은 읽기 전용입니다.').hasAttribute('disabled')).toBe(true);
+    expect(screen.queryByText('클릭하거나 파일을 끌어 업로드')).toBeNull();
   });
 
   it('uses mobile tabs and wrapping-safe detail layout', async () => {
@@ -284,14 +284,14 @@ describe('TaskDetail', () => {
       expect(mockGetIssueDetail).toHaveBeenCalled();
     });
 
-    expect(screen.getByRole('button', { name: 'Details' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Activity' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: '상세' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: '활동' })).toBeTruthy();
     expect(screen.getByTestId('task-detail-title').className).toContain('break-words');
     expect(screen.getByTestId('task-detail-meta-grid').className).toContain('grid-cols-[88px_minmax(0,1fr)]');
     expect(screen.getByTestId('task-detail-details-panel').className).toContain('flex');
     expect(screen.getByTestId('task-detail-activity-panel').className).toContain('hidden');
 
-    fireEvent.click(screen.getByRole('button', { name: 'Activity' }));
+    fireEvent.click(screen.getByRole('button', { name: '활동' }));
 
     expect(screen.getByTestId('task-detail-details-panel').className).toContain('hidden');
     expect(screen.getByTestId('task-detail-activity-panel').className).toContain('flex');

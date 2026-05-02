@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Plus, Search } from 'lucide-react';
 
 import {
@@ -68,28 +69,27 @@ const NONE_OPTION_VALUE = '__none__';
 
 const sectionMeta: Record<
   AdminSection,
-  { title: string; description: string; learnMoreLabel?: string }
+  { titleKey: string; descriptionKey?: string; learnMoreLabelKey?: string }
 > = {
   general: {
-    title: 'General settings',
-    description: '공통 사용자, 공간, 워크스페이스 운영 현황을 한곳에서 확인합니다.',
+    titleKey: 'admin.console.sections.general.title',
+    descriptionKey: 'admin.console.sections.general.description',
   },
   people: {
-    title: 'Manage people',
-    description: '',
-    learnMoreLabel: 'Learn more',
+    titleKey: 'admin.console.sections.people.title',
+    learnMoreLabelKey: 'admin.console.sections.people.learnMore',
   },
   workspaces: {
-    title: 'Workspaces',
-    description: '협업 공간을 만들고 멤버 구성을 관리합니다.',
+    titleKey: 'admin.console.sections.workspaces.title',
+    descriptionKey: 'admin.console.sections.workspaces.description',
   },
   security: {
-    title: 'Security & permissions',
-    description: '권한 그룹과 관리자 역할을 운영합니다.',
+    titleKey: 'admin.console.sections.security.title',
+    descriptionKey: 'admin.console.sections.security.description',
   },
   audit: {
-    title: 'Audit logs',
-    description: '관리 작업과 인증 이벤트를 시간순으로 추적합니다.',
+    titleKey: 'admin.console.sections.audit.title',
+    descriptionKey: 'admin.console.sections.audit.description',
   },
 };
 
@@ -106,7 +106,9 @@ function SettingsShell({
   children: React.ReactNode;
   actions?: React.ReactNode;
 }) {
+  const { t } = useTranslation('apps');
   const meta = sectionMeta[section];
+  const description = meta.descriptionKey ? t(meta.descriptionKey) : '';
 
   return (
     <div className="custom-scrollbar h-full overflow-y-auto p-8">
@@ -114,14 +116,14 @@ function SettingsShell({
         <header className="flex flex-col gap-4 border-b border-app-border pb-6 lg:flex-row lg:items-start lg:justify-between">
           <div className="space-y-3">
             <div className="flex flex-wrap items-center gap-3">
-              <h1 className="app-text-title-lg text-app-ink">{meta.title}</h1>
-              {meta.learnMoreLabel ? (
+              <h1 className="app-text-title-lg text-app-ink">{t(meta.titleKey)}</h1>
+              {meta.learnMoreLabelKey ? (
                 <button className="app-text-control-sm text-app-accent hover:underline" type="button">
-                  {meta.learnMoreLabel}
+                  {t(meta.learnMoreLabelKey)}
                 </button>
               ) : null}
             </div>
-            {meta.description ? <p className="app-text-body max-w-3xl text-gray-500">{meta.description}</p> : null}
+            {description ? <p className="app-text-body max-w-3xl text-gray-500">{description}</p> : null}
           </div>
           {actions ? <div className="flex shrink-0 items-center gap-3">{actions}</div> : null}
         </header>
@@ -205,6 +207,7 @@ function EmptyRow({
 }
 
 function GeneralSection({ token }: { token: string }) {
+  const { t } = useTranslation('apps');
   const auth = useAuth();
   const [summary, setSummary] = useState({
     userCount: null as number | null,
@@ -222,7 +225,7 @@ function GeneralSection({ token }: { token: string }) {
   const canReadAudit = auth.hasPermission('audit.read');
 
   function formatCount(value: number | null) {
-    return value ?? 'Restricted';
+    return value ?? t('admin.console.general.restricted');
   }
 
   useEffect(() => {
@@ -250,7 +253,7 @@ function GeneralSection({ token }: { token: string }) {
         });
       } catch (caughtError) {
         if (!cancelled) {
-          setError(getErrorMessage(caughtError, '관리자 요약 정보를 불러오지 못했습니다.'));
+          setError(getErrorMessage(caughtError, t('admin.console.general.summaryLoadFailed')));
         }
       }
     }
@@ -277,41 +280,41 @@ function GeneralSection({ token }: { token: string }) {
 
       <div className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
         <SurfaceCard
-          title="Current operating model"
-          description="현재 공통 계정 체계와 작업 영역 운영 방식을 한 번에 확인할 수 있는 요약입니다."
+	          title={t('admin.console.general.operatingModelTitle')}
+	          description={t('admin.console.general.operatingModelDescription')}
         >
           <div className="grid gap-4 md:grid-cols-2">
             <div className="rounded-xl border border-app-border bg-app-surface-sidebar p-4">
-              <div className="app-text-title-md text-app-ink">Identity</div>
-                <div className="app-text-body mt-3 space-y-2 text-gray-500">
-                <div>사용자 계정 {formatCount(summary.userCount)}{summary.userCount !== null ? '개' : ''}</div>
-                <div>관리자 {formatCount(summary.adminCount)}{summary.adminCount !== null ? '명' : ''}</div>
-                <div>권한 그룹 {formatCount(summary.groupCount)}{summary.groupCount !== null ? '개' : ''}</div>
-              </div>
-            </div>
-            <div className="rounded-xl border border-app-border bg-app-surface-sidebar p-4">
-              <div className="app-text-title-md text-app-ink">Work model</div>
-              <div className="app-text-body mt-3 space-y-2 text-gray-500">
-                <div>워크스페이스 {formatCount(summary.workspaceCount)}{summary.workspaceCount !== null ? '개' : ''}</div>
-                <div>PMS 공간 {formatCount(summary.teamCount)}{summary.teamCount !== null ? '개' : ''}</div>
-              </div>
-            </div>
+	              <div className="app-text-title-md text-app-ink">{t('admin.console.general.identityTitle')}</div>
+	                <div className="app-text-body mt-3 space-y-2 text-gray-500">
+	                <div>{t('admin.console.general.userCount', { count: formatCount(summary.userCount), suffix: summary.userCount !== null ? t('admin.console.units.count') : '' })}</div>
+	                <div>{t('admin.console.general.adminCount', { count: formatCount(summary.adminCount), suffix: summary.adminCount !== null ? t('admin.console.units.people') : '' })}</div>
+	                <div>{t('admin.console.general.groupCount', { count: formatCount(summary.groupCount), suffix: summary.groupCount !== null ? t('admin.console.units.count') : '' })}</div>
+	              </div>
+	            </div>
+	            <div className="rounded-xl border border-app-border bg-app-surface-sidebar p-4">
+	              <div className="app-text-title-md text-app-ink">{t('admin.console.general.workModelTitle')}</div>
+	              <div className="app-text-body mt-3 space-y-2 text-gray-500">
+	                <div>{t('admin.console.general.workspaceCount', { count: formatCount(summary.workspaceCount), suffix: summary.workspaceCount !== null ? t('admin.console.units.count') : '' })}</div>
+	                <div>{t('admin.console.general.teamCount', { count: formatCount(summary.teamCount), suffix: summary.teamCount !== null ? t('admin.console.units.count') : '' })}</div>
+	              </div>
+	            </div>
           </div>
         </SurfaceCard>
 
         <SurfaceCard
-          title="Admin notes"
-          description="설정 앱과 마이페이지의 역할을 분리한 현재 UX 원칙입니다."
+	          title={t('admin.console.general.notesTitle')}
+	          description={t('admin.console.general.notesDescription')}
         >
           <div className="app-text-body space-y-3 text-gray-500">
             <div className="rounded-xl border border-app-border bg-app-surface-sidebar p-4">
-              프로필 아바타는 개인 설정으로만 이동하고, 조직 운영 기능은 모두 Settings 앱 안에서 다룹니다.
+	              {t('admin.console.general.noteProfile')}
             </div>
             <div className="rounded-xl border border-app-border bg-app-surface-sidebar p-4">
-              사용자, PMS 공간, 워크스페이스, 관리자 보안 설정은 좌측 서브사이드바를 기준으로 분리합니다.
+	              {t('admin.console.general.noteNavigation')}
             </div>
             <div className="rounded-xl border border-app-border bg-app-surface-sidebar p-4">
-              관리자 이벤트와 인증 이벤트는 Audit 섹션에서 시간순으로 확인합니다.
+	              {t('admin.console.general.noteAudit')}
             </div>
           </div>
         </SurfaceCard>
@@ -321,6 +324,8 @@ function GeneralSection({ token }: { token: string }) {
 }
 
 function PeopleSection({ token }: { token: string }) {
+  const { t, i18n } = useTranslation('apps');
+  const locale = i18n.resolvedLanguage ?? i18n.language;
   const [users, setUsers] = useState<AuthUser[]>([]);
   const [totalUsers, setTotalUsers] = useState(0);
   const [page, setPage] = useState(1);
@@ -392,11 +397,11 @@ function PeopleSection({ token }: { token: string }) {
           const leftWorkspaceName = workspaceById.get(left.workspace_id)?.name ?? left.workspace_key;
           const rightWorkspaceName = workspaceById.get(right.workspace_id)?.name ?? right.workspace_key;
           if (leftWorkspaceName !== rightWorkspaceName) {
-            return leftWorkspaceName.localeCompare(rightWorkspaceName, 'ko');
+            return leftWorkspaceName.localeCompare(rightWorkspaceName, locale);
           }
-          return left.name.localeCompare(right.name, 'ko');
+          return left.name.localeCompare(right.name, locale);
         }),
-    [allSpaces, editPmsSpaces, workspaceById],
+    [allSpaces, editPmsSpaces, workspaceById, locale],
   );
   const totalPages = Math.max(1, Math.ceil(totalUsers / PEOPLE_PAGE_SIZE));
   const firstVisibleUser = totalUsers === 0 ? 0 : (page - 1) * PEOPLE_PAGE_SIZE + 1;
@@ -467,7 +472,7 @@ function PeopleSection({ token }: { token: string }) {
       setSelectedGroupIds((current) => current.filter((groupId) => groupItems.some((item) => item.id === groupId)));
       setEditGroupIds((current) => current.filter((groupId) => groupItems.some((item) => item.id === groupId)));
     } catch (caughtError) {
-      setError(getErrorMessage(caughtError, '사용자 정보를 불러오지 못했습니다.'));
+      setError(getErrorMessage(caughtError, t('admin.console.people.directoryLoadFailed')));
     }
   }
 
@@ -494,7 +499,7 @@ function PeopleSection({ token }: { token: string }) {
         setEditGroupIds((current) => current.filter((groupId) => groupItems.some((item) => item.id === groupId)));
       } catch (caughtError) {
         if (!cancelled) {
-          setError(getErrorMessage(caughtError, '사용자 정보를 불러오지 못했습니다.'));
+          setError(getErrorMessage(caughtError, t('admin.console.people.directoryLoadFailed')));
         }
       }
     }
@@ -504,7 +509,7 @@ function PeopleSection({ token }: { token: string }) {
     return () => {
       cancelled = true;
     };
-  }, [token]);
+  }, [token, t]);
 
   useEffect(() => {
     let cancelled = false;
@@ -524,7 +529,7 @@ function PeopleSection({ token }: { token: string }) {
           setTotalUsers(userResponse.total);
         } catch (caughtError) {
           if (!cancelled) {
-            setError(getErrorMessage(caughtError, '사용자 목록을 불러오지 못했습니다.'));
+            setError(getErrorMessage(caughtError, t('admin.console.people.userListLoadFailed')));
           }
         } finally {
           if (!cancelled) {
@@ -540,7 +545,7 @@ function PeopleSection({ token }: { token: string }) {
       cancelled = true;
       window.clearTimeout(handle);
     };
-  }, [page, search, token]);
+  }, [page, search, token, t]);
 
   const filteredUsers = useMemo(() => {
     return users.filter((user) => {
@@ -609,9 +614,9 @@ function PeopleSection({ token }: { token: string }) {
   ) {
     return [...spaces].sort((left, right) => {
       if (left.workspace_name !== right.workspace_name) {
-        return left.workspace_name.localeCompare(right.workspace_name, 'ko');
+        return left.workspace_name.localeCompare(right.workspace_name, locale);
       }
-      return left.name.localeCompare(right.name, 'ko');
+      return left.name.localeCompare(right.name, locale);
     });
   }
 
@@ -718,7 +723,7 @@ function PeopleSection({ token }: { token: string }) {
       setEditPmsSpaces(nextPmsSpaces);
       setInitialEditPmsSpaces(nextPmsSpaces);
     } catch (caughtError) {
-      setError(getErrorMessage(caughtError, '사용자 접근 정보를 불러오지 못했습니다.'));
+      setError(getErrorMessage(caughtError, t('admin.console.people.accessLoadFailed')));
     } finally {
       setIsLoadingEditAccessContext(false);
     }
@@ -736,7 +741,7 @@ function PeopleSection({ token }: { token: string }) {
       setTotalUsers(userResponse.total);
       setPage(userResponse.page);
     } catch (caughtError) {
-      setError(getErrorMessage(caughtError, '사용자 목록을 불러오지 못했습니다.'));
+      setError(getErrorMessage(caughtError, t('admin.console.people.userListLoadFailed')));
     } finally {
       setIsLoadingUsers(false);
     }
@@ -790,11 +795,11 @@ function PeopleSection({ token }: { token: string }) {
       setSelectedWorkspaceIds([]);
       setSelectedGroupIds([]);
       setInviteOpen(false);
-      setMessage(`사용자를 생성했습니다. 임시 비밀번호: ${response.temporary_password}`);
+      setMessage(t('admin.console.people.userCreated', { password: response.temporary_password }));
       await loadDirectoryOptions();
       await reloadUsers(1);
     } catch (caughtError) {
-      setError(getErrorMessage(caughtError, '사용자를 생성하지 못했습니다.'));
+      setError(getErrorMessage(caughtError, t('admin.console.people.userCreateFailed')));
     } finally {
       setIsCreatingUser(false);
     }
@@ -806,9 +811,9 @@ function PeopleSection({ token }: { token: string }) {
 
     try {
       const response = await resetUserPassword(token, userId);
-      setMessage(`임시 비밀번호를 재발급했습니다. 새 비밀번호: ${response.temporary_password}`);
+      setMessage(t('admin.console.people.passwordReset', { password: response.temporary_password }));
     } catch (caughtError) {
-      setError(getErrorMessage(caughtError, '비밀번호를 재발급하지 못했습니다.'));
+      setError(getErrorMessage(caughtError, t('admin.console.people.passwordResetFailed')));
     }
   }
 
@@ -866,17 +871,17 @@ function PeopleSection({ token }: { token: string }) {
       await syncUserWorkspaceMemberships(editingUserId, nextDirectWorkspaceIds);
       await syncUserPmsSpaces(editingUserId);
       setEditingUserId(null);
-      setMessage('사용자 정보를 저장했습니다.');
+      setMessage(t('admin.console.people.userSaved'));
       await reloadUsers(page);
     } catch (caughtError) {
-      setError(getErrorMessage(caughtError, '사용자 정보를 저장하지 못했습니다.'));
+      setError(getErrorMessage(caughtError, t('admin.console.people.userSaveFailed')));
     } finally {
       setIsSavingUser(false);
     }
   }
 
   async function handleDeleteUser(user: AuthUser) {
-    if (!window.confirm(`${user.email} 사용자를 삭제할까요?`)) {
+    if (!window.confirm(t('admin.console.people.deleteConfirm', { email: user.email }))) {
       return;
     }
 
@@ -887,12 +892,12 @@ function PeopleSection({ token }: { token: string }) {
     try {
       await deleteAdminUser(token, user.id);
       setEditingUserId((current) => (current === user.id ? null : current));
-      setMessage(`${user.email} 사용자를 삭제했습니다.`);
+      setMessage(t('admin.console.people.userDeleted', { email: user.email }));
       const nextTotal = Math.max(0, totalUsers - 1);
       const nextPage = Math.min(page, Math.max(1, Math.ceil(nextTotal / PEOPLE_PAGE_SIZE)));
       await reloadUsers(nextPage);
     } catch (caughtError) {
-      setError(getErrorMessage(caughtError, '사용자를 삭제하지 못했습니다.'));
+      setError(getErrorMessage(caughtError, t('admin.console.people.userDeleteFailed')));
     } finally {
       setDeletingUserId(null);
     }
@@ -929,14 +934,25 @@ function PeopleSection({ token }: { token: string }) {
           user.primary_org_unit?.name ?? '-',
           formatUserGroups(user),
           formatUserWorkspaces(user),
-          isAdminUser(user) ? 'Admin' : 'Member',
-          formatStatusLabel(user.status),
-          formatDateLabel(user.last_login_at),
-          formatDateLabel(user.created_at),
+          isAdminUser(user) ? t('admin.shared.roles.admin.label') : t('admin.shared.roles.member.label'),
+          formatStatusLabel(user.status, t),
+          formatDateLabel(user.last_login_at, locale),
+          formatDateLabel(user.created_at, locale),
           formatUserApps(user),
         ]);
 
-      const header = ['Name', 'Email', 'Org', 'Groups', 'Workspaces', 'Role', 'Status', 'Last active', 'Created on', 'Enabled apps'];
+      const header = [
+        t('admin.console.people.columns.name'),
+        t('admin.console.people.columns.email'),
+        t('admin.console.people.columns.org'),
+        t('admin.console.people.columns.groups'),
+        t('admin.console.people.columns.workspaces'),
+        t('admin.console.people.columns.role'),
+        t('admin.console.people.columns.status'),
+        t('admin.console.people.columns.lastActive'),
+        t('admin.console.people.columns.created'),
+        t('admin.console.people.columns.enabledApps'),
+      ];
       const csv = [header, ...rows]
         .map((row) =>
           row
@@ -952,7 +968,7 @@ function PeopleSection({ token }: { token: string }) {
       anchor.click();
       URL.revokeObjectURL(url);
     } catch (caughtError) {
-      setError(getErrorMessage(caughtError, '사용자 목록을 내보내지 못했습니다.'));
+      setError(getErrorMessage(caughtError, t('admin.console.people.exportFailed')));
     } finally {
       setIsExporting(false);
     }
@@ -972,7 +988,7 @@ function PeopleSection({ token }: { token: string }) {
                 setSearch(event.target.value);
                 setPage(1);
               }}
-              placeholder="Search by name or email"
+              placeholder={t('admin.console.people.searchPlaceholder')}
               value={search}
             />
           </label>
@@ -986,7 +1002,7 @@ function PeopleSection({ token }: { token: string }) {
             }}
             type="button"
           >
-            {isExporting ? 'Exporting' : 'Export'}
+            {isExporting ? t('admin.console.people.exporting') : t('admin.console.people.export')}
           </button>
           <button
             className="app-text-control inline-flex items-center gap-1.5 rounded-md bg-app-ink px-3 py-1.5 text-app-bg transition-opacity hover:opacity-90 dark:bg-white dark:text-black"
@@ -994,7 +1010,7 @@ function PeopleSection({ token }: { token: string }) {
             type="button"
           >
             <span>+</span>
-            <span>Create user</span>
+            <span>{t('admin.console.people.createUser')}</span>
           </button>
         </div>
       </div>
@@ -1004,26 +1020,26 @@ function PeopleSection({ token }: { token: string }) {
           className="app-text-control inline-flex items-center gap-1.5 rounded p-1 text-app-ink hover:bg-app-surface-hover"
           type="button"
         >
-          <span>All Users ({totalUsers})</span>
+          <span>{t('admin.console.people.allUsers', { count: totalUsers })}</span>
           <span className="app-text-micro text-gray-500">▾</span>
         </button>
-        {isLoadingUsers ? <span className="app-text-body text-gray-500">Loading</span> : null}
+        {isLoadingUsers ? <span className="app-text-body text-gray-500">{t('common:feedback.loading')}</span> : null}
       </div>
 
       <div className="w-full overflow-x-auto">
         <table className="app-text-body-sm min-w-[1380px] w-full border-collapse">
           <thead>
             <tr className="bg-app-surface-sidebar/40">
-              <HeadCell className="w-[270px]" dense>User</HeadCell>
-              <HeadCell className="w-[150px]" dense>Org</HeadCell>
-              <HeadCell className="w-[150px]" dense>Groups</HeadCell>
-              <HeadCell className="w-[220px]" dense>Workspaces</HeadCell>
-              <HeadCell className="w-[90px]" dense>Role</HeadCell>
-              <HeadCell className="w-[100px]" dense>Status</HeadCell>
-              <HeadCell className="w-[220px]" dense>Enabled apps</HeadCell>
-              <HeadCell className="w-[110px]" dense>Last active</HeadCell>
-              <HeadCell className="w-[110px]" dense>Created</HeadCell>
-              <HeadCell className="w-[72px] text-right" dense>Actions</HeadCell>
+              <HeadCell className="w-[270px]" dense>{t('admin.console.people.columns.user')}</HeadCell>
+              <HeadCell className="w-[150px]" dense>{t('admin.console.people.columns.org')}</HeadCell>
+              <HeadCell className="w-[150px]" dense>{t('admin.console.people.columns.groups')}</HeadCell>
+              <HeadCell className="w-[220px]" dense>{t('admin.console.people.columns.workspaces')}</HeadCell>
+              <HeadCell className="w-[90px]" dense>{t('admin.console.people.columns.role')}</HeadCell>
+              <HeadCell className="w-[100px]" dense>{t('admin.console.people.columns.status')}</HeadCell>
+              <HeadCell className="w-[220px]" dense>{t('admin.console.people.columns.enabledApps')}</HeadCell>
+              <HeadCell className="w-[110px]" dense>{t('admin.console.people.columns.lastActive')}</HeadCell>
+              <HeadCell className="w-[110px]" dense>{t('admin.console.people.columns.created')}</HeadCell>
+              <HeadCell className="w-[72px] text-right" dense>{t('admin.console.people.columns.actions')}</HeadCell>
             </tr>
           </thead>
           <tbody>
@@ -1034,21 +1050,21 @@ function PeopleSection({ token }: { token: string }) {
                   onClick={openCreateUserDialog}
                   type="button"
                 >
-                  + Create user
+	                  {t('admin.console.people.createUserPrefix')}
                 </button>
               </td>
             </tr>
             {isLoadingUsers && users.length === 0 ? (
               <EmptyRow
                 colSpan={10}
-                description="잠시만 기다려 주세요."
-                title="사용자 목록을 불러오는 중입니다."
+	                description={t('admin.console.people.loadingDescription')}
+	                title={t('admin.console.people.loadingTitle')}
               />
             ) : filteredUsers.length === 0 ? (
               <EmptyRow
                 colSpan={10}
-                description="검색어를 바꾸거나 생성 버튼으로 사용자를 추가하세요."
-                title="조건에 맞는 사용자가 없습니다."
+	                description={t('admin.console.people.emptyDescription')}
+	                title={t('admin.console.people.emptyTitle')}
               />
             ) : (
               filteredUsers.map((user) => (
@@ -1070,35 +1086,35 @@ function PeopleSection({ token }: { token: string }) {
                   <BodyCell className="max-w-[260px]" dense>
                     <UserWorkspaceChips user={user} />
                   </BodyCell>
-                  <BodyCell dense>{isAdminUser(user) ? 'Admin' : 'Member'}</BodyCell>
+	                  <BodyCell dense>{isAdminUser(user) ? t('admin.shared.roles.admin.label') : t('admin.shared.roles.member.label')}</BodyCell>
                   <BodyCell dense>
                     <span className="rounded border border-app-border px-1.5 py-0.5 text-gray-500">
-                      {formatStatusLabel(user.status)}
+	                      {formatStatusLabel(user.status, t)}
                     </span>
                   </BodyCell>
                   <BodyCell className="max-w-[220px] truncate text-gray-500" dense>
                     {formatUserApps(user)}
                   </BodyCell>
-                  <BodyCell className="text-gray-500" dense>{formatDateLabel(user.last_login_at)}</BodyCell>
-                  <BodyCell className="text-gray-500" dense>{formatDateLabel(user.created_at)}</BodyCell>
+	                  <BodyCell className="text-gray-500" dense>{formatDateLabel(user.last_login_at, locale)}</BodyCell>
+	                  <BodyCell className="text-gray-500" dense>{formatDateLabel(user.created_at, locale)}</BodyCell>
                   <BodyCell className="text-right" dense>
                     <DropdownMenu
                       items={[
                         {
                           id: 'edit',
-                          label: 'Edit user',
+	                          label: t('admin.console.people.editUser'),
                           onSelect: () => startEditUser(user),
                         },
                         {
                           id: 'reset',
-                          label: 'Reset password',
+	                          label: t('admin.console.people.resetPassword'),
                           onSelect: () => {
                             void handleResetPassword(user.id);
                           },
                         },
                         {
                           id: 'delete',
-                          label: deletingUserId === user.id ? 'Deleting user' : 'Delete user',
+	                          label: deletingUserId === user.id ? t('admin.console.people.deletingUser') : t('admin.console.people.deleteUser'),
                           disabled: deletingUserId === user.id,
                           separatorBefore: true,
                           tone: 'danger',
@@ -1109,11 +1125,11 @@ function PeopleSection({ token }: { token: string }) {
                       ]}
                       trigger={
                         <button
-                          aria-label={`${user.email} actions`}
+	                          aria-label={t('admin.console.people.userActions', { email: user.email })}
                           className="app-text-control rounded-md border border-app-border px-2 py-1 text-gray-500 transition-colors hover:bg-app-surface-hover hover:text-app-ink"
                           type="button"
                         >
-                          More
+	                          {t('admin.console.people.more')}
                         </button>
                       }
                     />
@@ -1127,7 +1143,7 @@ function PeopleSection({ token }: { token: string }) {
 
       <div className="flex flex-col gap-3 border-t border-app-border pt-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="app-text-body text-gray-500">
-          {firstVisibleUser}-{lastVisibleUser} of {totalUsers}
+	          {t('admin.console.people.range', { from: firstVisibleUser, to: lastVisibleUser, total: totalUsers })}
         </div>
         <div className="flex items-center gap-2">
           <button
@@ -1136,7 +1152,7 @@ function PeopleSection({ token }: { token: string }) {
             onClick={() => setPage((current) => Math.max(1, current - 1))}
             type="button"
           >
-            Previous
+	            {t('admin.shared.pagination.previous')}
           </button>
           <span className="app-text-body min-w-20 text-center text-gray-500">
             {page} / {totalPages}
@@ -1147,7 +1163,7 @@ function PeopleSection({ token }: { token: string }) {
             onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
             type="button"
           >
-            Next
+	            {t('admin.shared.pagination.next')}
           </button>
         </div>
       </div>
@@ -1156,57 +1172,57 @@ function PeopleSection({ token }: { token: string }) {
         actions={
           <div className="flex w-full items-center justify-end gap-2">
             <Button disabled={isCreatingUser} onClick={closeCreateUserDialog} variant="secondary">
-              Cancel
+	              {t('common:actions.cancel')}
             </Button>
             <Button disabled={isCreatingUser} form="admin-user-create-form" type="submit" variant="primary">
-              {isCreatingUser ? 'Creating' : 'Create'}
+	              {isCreatingUser ? t('admin.console.people.creating') : t('common:actions.create')}
             </Button>
           </div>
         }
-        description="계정을 만들고 조직, 그룹, workspace memberships 를 함께 배정합니다."
+	        description={t('admin.console.people.createDescription')}
         dismissOnInteractOutside={false}
         maxWidth="max-w-2xl"
         onOpenChange={(open) => {
           if (!open) closeCreateUserDialog();
         }}
         open={inviteOpen}
-        title="Create user"
+	        title={t('admin.console.people.createUser')}
       >
         <form className="grid gap-4" id="admin-user-create-form" onSubmit={(event) => void handleCreateUser(event)}>
           <div className="grid gap-3 md:grid-cols-2">
             <label className="grid gap-1">
-              <span className="app-text-caption text-gray-500">Email</span>
+	              <span className="app-text-caption text-gray-500">{t('admin.console.people.email')}</span>
               <input
                 className={fieldClassName}
                 id="admin-user-email"
                 onChange={(event) => setEmail(event.target.value)}
-                placeholder="name@company.com"
+	                placeholder={t('admin.console.people.emailPlaceholder')}
                 required
                 type="email"
                 value={email}
               />
             </label>
             <label className="grid gap-1">
-              <span className="app-text-caption text-gray-500">Full name</span>
+	              <span className="app-text-caption text-gray-500">{t('admin.console.people.fullName')}</span>
               <input
                 className={fieldClassName}
                 onChange={(event) => setFullName(event.target.value)}
-                placeholder="Full name"
+	                placeholder={t('admin.console.people.fullName')}
                 required
                 value={fullName}
               />
             </label>
             <label className="grid gap-1">
-              <span className="app-text-caption text-gray-500">Display name</span>
+	              <span className="app-text-caption text-gray-500">{t('admin.console.people.displayName')}</span>
               <input
                 className={fieldClassName}
                 onChange={(event) => setDisplayName(event.target.value)}
-                placeholder="Display name"
+	                placeholder={t('admin.console.people.displayName')}
                 value={displayName}
               />
             </label>
             <div className="grid gap-1">
-              <span className="app-text-caption text-gray-500">Org unit</span>
+	              <span className="app-text-caption text-gray-500">{t('admin.console.people.orgUnit')}</span>
               <Select
                 onValueChange={setSelectedOrgUnitId}
                 options={orgUnits.map((item) => ({ value: item.id, label: item.name }))}
@@ -1214,10 +1230,10 @@ function PeopleSection({ token }: { token: string }) {
               />
             </div>
             <div className="grid gap-2 md:col-span-2">
-              <span className="app-text-caption text-gray-500">Groups</span>
+	              <span className="app-text-caption text-gray-500">{t('admin.console.people.columns.groups')}</span>
               {groups.length === 0 ? (
                 <div className="app-text-caption rounded-md border border-dashed border-app-border px-3 py-3 text-gray-500">
-                  선택 가능한 그룹이 없습니다.
+	                  {t('admin.console.people.noGroups')}
                 </div>
               ) : (
                 <div className="grid gap-2 sm:grid-cols-2">
@@ -1242,10 +1258,10 @@ function PeopleSection({ token }: { token: string }) {
             </div>
           </div>
           <div className="grid gap-2">
-            <div className="app-text-caption text-gray-500">Direct workspace memberships</div>
+	            <div className="app-text-caption text-gray-500">{t('admin.console.people.directWorkspaces')}</div>
             {availableWorkspaces.length === 0 ? (
               <div className="app-text-caption rounded-md border border-dashed border-app-border px-3 py-3 text-gray-500">
-                생성 가능한 workspace 가 없습니다.
+	                {t('admin.console.people.noCreatableWorkspaces')}
               </div>
             ) : (
               <div className="grid gap-2 sm:grid-cols-2">
@@ -1268,9 +1284,9 @@ function PeopleSection({ token }: { token: string }) {
               </div>
             )}
             <div className="app-text-caption rounded-md border border-app-border bg-app-surface-sidebar px-3 py-3 text-gray-500">
-              Selected workspaces: {selectedWorkspaceAppSummary}
-              <br />
-              그룹으로 상속되는 workspace memberships 도 함께 반영됩니다.
+	              {t('admin.console.people.selectedWorkspaces', { workspaces: selectedWorkspaceAppSummary })}
+	              <br />
+	              {t('admin.console.people.groupInheritanceHint')}
             </div>
           </div>
         </form>
@@ -1280,7 +1296,7 @@ function PeopleSection({ token }: { token: string }) {
         actions={
           <div className="flex w-full items-center justify-end gap-2">
             <Button disabled={isSavingUser} onClick={closeEditUserDialog} variant="secondary">
-              Cancel
+	              {t('common:actions.cancel')}
             </Button>
             <Button
               disabled={isSavingUser || isLoadingEditAccessContext}
@@ -1288,7 +1304,7 @@ function PeopleSection({ token }: { token: string }) {
               type="submit"
               variant="primary"
             >
-              {isSavingUser ? 'Saving' : 'Save'}
+	              {isSavingUser ? t('common:actions.saving') : t('common:actions.save')}
             </Button>
           </div>
         }
@@ -1299,44 +1315,44 @@ function PeopleSection({ token }: { token: string }) {
           if (!open) closeEditUserDialog();
         }}
         open={editingUserId !== null}
-        title="Edit user"
+	        title={t('admin.console.people.editUser')}
       >
         <form className="grid gap-4" id="admin-user-edit-form" onSubmit={(event) => void handleUpdateUser(event)}>
           <div className="grid gap-3 md:grid-cols-2">
             <label className="grid gap-1">
-              <span className="app-text-caption text-gray-500">Full name</span>
+	              <span className="app-text-caption text-gray-500">{t('admin.console.people.fullName')}</span>
               <input
                 className={fieldClassName}
                 id="admin-user-edit-full-name"
                 onChange={(event) => setEditFullName(event.target.value)}
-                placeholder="Full name"
+	                placeholder={t('admin.console.people.fullName')}
                 required
                 value={editFullName}
               />
             </label>
             <label className="grid gap-1">
-              <span className="app-text-caption text-gray-500">Display name</span>
+	              <span className="app-text-caption text-gray-500">{t('admin.console.people.displayName')}</span>
               <input
                 className={fieldClassName}
                 onChange={(event) => setEditDisplayName(event.target.value)}
-                placeholder="Display name"
+	                placeholder={t('admin.console.people.displayName')}
                 value={editDisplayName}
               />
             </label>
             <label className="grid gap-1">
-              <span className="app-text-caption text-gray-500">Status</span>
+	              <span className="app-text-caption text-gray-500">{t('admin.console.people.columns.status')}</span>
               <select
                 className={fieldClassName}
                 onChange={(event) => setEditStatus(event.target.value as typeof editStatus)}
                 value={editStatus}
               >
-                <option value="active">Active</option>
-                <option value="invited">Invited</option>
-                <option value="suspended">Suspended</option>
+	                <option value="active">{t('admin.shared.status.active')}</option>
+	                <option value="invited">{t('admin.shared.status.invited')}</option>
+	                <option value="suspended">{t('admin.shared.status.suspended')}</option>
               </select>
             </label>
             <div className="grid gap-1">
-              <span className="app-text-caption text-gray-500">Org unit</span>
+	              <span className="app-text-caption text-gray-500">{t('admin.console.people.orgUnit')}</span>
               <Select
                 onValueChange={setEditOrgUnitId}
                 options={orgUnits.map((item) => ({ value: item.id, label: item.name }))}
@@ -1344,10 +1360,10 @@ function PeopleSection({ token }: { token: string }) {
               />
             </div>
             <div className="grid gap-2 md:col-span-2">
-              <span className="app-text-caption text-gray-500">Groups</span>
+	              <span className="app-text-caption text-gray-500">{t('admin.console.people.columns.groups')}</span>
               {groups.length === 0 ? (
                 <div className="app-text-caption rounded-md border border-dashed border-app-border px-3 py-3 text-gray-500">
-                  선택 가능한 그룹이 없습니다.
+	                  {t('admin.console.people.noGroups')}
                 </div>
               ) : (
                 <div className="grid gap-2 sm:grid-cols-2">
@@ -1373,10 +1389,10 @@ function PeopleSection({ token }: { token: string }) {
             </div>
           </div>
           <div className="grid gap-2">
-            <div className="app-text-caption text-gray-500">Direct workspace memberships</div>
+	            <div className="app-text-caption text-gray-500">{t('admin.console.people.directWorkspaces')}</div>
             {availableWorkspaces.length === 0 ? (
               <div className="app-text-caption rounded-md border border-dashed border-app-border px-3 py-3 text-gray-500">
-                생성된 workspace 가 없습니다.
+	                {t('admin.console.people.noWorkspaces')}
               </div>
             ) : (
               <div className="grid gap-2 sm:grid-cols-2">
@@ -1400,17 +1416,17 @@ function PeopleSection({ token }: { token: string }) {
               </div>
             )}
             <div className="app-text-caption rounded-md border border-app-border bg-app-surface-sidebar px-3 py-3 text-gray-500">
-              Effective workspaces: {editWorkspaceAppSummary}
+	              {t('admin.console.people.effectiveWorkspaces', { workspaces: editWorkspaceAppSummary })}
             </div>
             <div className="grid gap-2">
-              <div className="app-text-caption text-gray-500">Inherited workspace access</div>
+	              <div className="app-text-caption text-gray-500">{t('admin.console.people.inheritedWorkspaceAccess')}</div>
               {isLoadingEditAccessContext ? (
                 <div className="app-text-caption rounded-md border border-dashed border-app-border px-3 py-3 text-gray-500">
-                  사용자의 workspace access 를 확인하는 중입니다.
+	                  {t('admin.console.people.checkingWorkspaceAccess')}
                 </div>
               ) : editInheritedWorkspaceIds.length === 0 ? (
                 <div className="app-text-caption rounded-md border border-dashed border-app-border px-3 py-3 text-gray-500">
-                  그룹을 통해 상속된 workspace access 가 없습니다.
+	                  {t('admin.console.people.noInheritedWorkspaceAccess')}
                 </div>
               ) : (
                 <div className="grid gap-2 sm:grid-cols-2">
@@ -1426,10 +1442,10 @@ function PeopleSection({ token }: { token: string }) {
               )}
             </div>
             <div className="grid gap-2">
-              <div className="app-text-caption text-gray-500">PMS spaces</div>
+	              <div className="app-text-caption text-gray-500">{t('admin.console.people.pmsSpaces')}</div>
               {isLoadingEditAccessContext ? (
                 <div className="app-text-caption rounded-md border border-dashed border-app-border px-3 py-3 text-gray-500">
-                  PMS space membership 을 불러오는 중입니다.
+	                  {t('admin.console.people.loadingPmsSpaces')}
                 </div>
               ) : (
                 <div className="grid gap-3">
@@ -1440,7 +1456,7 @@ function PeopleSection({ token }: { token: string }) {
                       onChange={(event) => setSelectedPmsSpaceId(event.target.value)}
                       value={selectedPmsSpaceId}
                     >
-                      <option value="">추가할 PMS space 를 선택하세요</option>
+	                      <option value="">{t('admin.console.people.selectPmsSpace')}</option>
                       {availablePmsSpaces.map((space) => (
                         <option key={space.id} value={space.id}>
                           {(workspaceById.get(space.workspace_id)?.name ?? space.workspace_key)} / {space.name}
@@ -1453,23 +1469,23 @@ function PeopleSection({ token }: { token: string }) {
                       onChange={(event) => setSelectedPmsSpaceRole(event.target.value)}
                       value={selectedPmsSpaceRole}
                     >
-                      <option value="member">Member</option>
-                      <option value="admin">Admin</option>
+	                      <option value="member">{t('admin.shared.roles.member.label')}</option>
+	                      <option value="admin">{t('admin.shared.roles.admin.label')}</option>
                     </select>
                     <Button
                       disabled={isSavingUser || !selectedPmsSpaceId}
                       onClick={() => stageAddPmsSpace()}
                       variant="secondary"
                     >
-                      Add space
+	                      {t('admin.console.people.addSpace')}
                     </Button>
                   </div>
                   <div className="app-text-caption rounded-md border border-app-border bg-app-surface-sidebar px-3 py-3 text-gray-500">
-                    새 space 를 추가할 때 필요한 workspace membership 이 없으면 direct membership 에 자동으로 포함됩니다.
+	                    {t('admin.console.people.pmsSpaceHint')}
                   </div>
                   {editPmsSpaces.length === 0 ? (
                     <div className="app-text-caption rounded-md border border-dashed border-app-border px-3 py-3 text-gray-500">
-                      소속된 PMS space 가 없습니다.
+	                      {t('admin.console.people.noPmsSpaces')}
                     </div>
                   ) : (
                     <div className="grid gap-2">
@@ -1491,10 +1507,10 @@ function PeopleSection({ token }: { token: string }) {
                             onChange={(event) => stageUpdatePmsSpaceRole(space.id, event.target.value)}
                             value={space.role}
                           >
-                            <option value="viewer">Viewer</option>
-                            <option value="member">Member</option>
-                            <option value="admin">Admin</option>
-                            <option value="owner">Owner</option>
+	                            <option value="viewer">{t('pms.settings.role.viewer')}</option>
+	                            <option value="member">{t('pms.settings.role.member')}</option>
+	                            <option value="admin">{t('pms.settings.role.admin')}</option>
+	                            <option value="owner">{t('pms.settings.role.owner')}</option>
                           </select>
                           <div className="flex justify-end">
                             <Button
@@ -1502,7 +1518,7 @@ function PeopleSection({ token }: { token: string }) {
                               onClick={() => stageRemovePmsSpace(space.id)}
                               variant="secondary"
                             >
-                              Remove
+	                              {t('common:actions.delete')}
                             </Button>
                           </div>
                         </div>
@@ -1534,6 +1550,7 @@ function CreateWorkspaceModal({
   busy: boolean;
   error: string | null;
 }) {
+  const { t } = useTranslation('apps');
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
 
@@ -1557,13 +1574,13 @@ function CreateWorkspaceModal({
     <Dialog
       open={open}
       onOpenChange={onOpenChange}
-      title="새 워크스페이스 만들기"
-      description="협업 공간을 생성합니다. 생성 직후 본인이 자동으로 admin 으로 등록되고 기본 Team Space 가 함께 만들어집니다."
+      title={t('admin.console.workspaces.createTitle')}
+      description={t('admin.console.workspaces.createDescription')}
       dismissOnInteractOutside={false}
       actions={
         <>
           <Button variant="ghost" onClick={() => onOpenChange(false)} disabled={busy}>
-            취소
+            {t('common:actions.cancel')}
           </Button>
           <Button
             variant="primary"
@@ -1571,36 +1588,36 @@ function CreateWorkspaceModal({
             form="create-workspace-form"
             disabled={busy || !name.trim()}
           >
-            {busy ? '만드는 중...' : '워크스페이스 만들기'}
+            {busy ? t('admin.console.workspaces.creating') : t('admin.console.workspaces.createAction')}
           </Button>
         </>
       }
     >
       <form id="create-workspace-form" className="grid gap-4" onSubmit={(e) => void handleSubmit(e)}>
         <label className="grid gap-1.5">
-          <span className="app-text-control text-app-ink">이름</span>
+          <span className="app-text-control text-app-ink">{t('admin.workspace.nameLabel')}</span>
           <input
             autoFocus
             className={fieldClassName}
             value={name}
             onChange={(event) => setName(event.target.value)}
-            placeholder="예: Delivery Hub"
+            placeholder={t('admin.console.workspaces.namePlaceholder')}
             maxLength={120}
           />
         </label>
         <label className="grid gap-1.5">
-          <span className="app-text-control text-app-ink">설명 (선택)</span>
+          <span className="app-text-control text-app-ink">{t('admin.console.workspaces.descriptionOptional')}</span>
           <textarea
             className={`${fieldClassName} min-h-[88px] resize-y`}
             value={description}
             onChange={(event) => setDescription(event.target.value)}
-            placeholder="이 워크스페이스에서 어떤 일을 하나요?"
+            placeholder={t('admin.console.workspaces.descriptionPlaceholder')}
             maxLength={1000}
           />
         </label>
         {error ? <InlineNotice tone="danger">{error}</InlineNotice> : null}
         <p className="app-text-caption text-app-ink/60">
-          앱(AI/Docs/PMS/Planner/Meeting)은 생성 후 워크스페이스 detail 의 Apps 탭에서 토글할 수 있습니다.
+          {t('admin.console.workspaces.appToggleHint')}
         </p>
       </form>
     </Dialog>
@@ -1608,6 +1625,8 @@ function CreateWorkspaceModal({
 }
 
 function WorkspacesSection({ token }: { token: string }) {
+  const { t, i18n } = useTranslation('apps');
+  const locale = i18n.resolvedLanguage ?? i18n.language;
   const auth = useAuth();
   const currentUserId = auth.user?.id ?? '';
   const canCreateWorkspaces = auth.hasPermission('workspace.write');
@@ -1653,10 +1672,10 @@ function WorkspacesSection({ token }: { token: string }) {
           });
         }
       } catch (caughtError) {
-        flashError(getErrorMessage(caughtError, '워크스페이스 목록을 불러오지 못했습니다.'));
+        flashError(getErrorMessage(caughtError, t('admin.console.workspaces.listLoadFailed')));
       }
     },
-    [token, flashError],
+    [token, flashError, t],
   );
 
   useEffect(() => {
@@ -1671,10 +1690,10 @@ function WorkspacesSection({ token }: { token: string }) {
         const fallback = workspaceItems.find((item) => item.active) ?? workspaceItems[0] ?? null;
         setSelectedWorkspaceId(fallback?.id ?? null);
       } catch (caughtError) {
-        flashError(getErrorMessage(caughtError, '워크스페이스 정보를 불러오지 못했습니다.'));
+        flashError(getErrorMessage(caughtError, t('admin.console.workspaces.infoLoadFailed')));
       }
     })();
-  }, [token, canReadGroups, flashError]);
+  }, [token, canReadGroups, flashError, t]);
 
   const selectedWorkspace = useMemo(
     () => workspaces.find((item) => item.id === selectedWorkspaceId) ?? null,
@@ -1699,9 +1718,9 @@ function WorkspacesSection({ token }: { token: string }) {
       })
       .sort((a, b) => {
         if (a.active !== b.active) return a.active ? -1 : 1;
-        return a.name.localeCompare(b.name);
-      });
-  }, [workspaces, filter, searchQuery]);
+	        return a.name.localeCompare(b.name, locale);
+	      });
+	  }, [workspaces, filter, searchQuery, locale]);
 
   async function handleCreateWorkspace(payload: { name: string; description: string }) {
     setCreateBusy(true);
@@ -1710,9 +1729,9 @@ function WorkspacesSection({ token }: { token: string }) {
       const created = await createWorkspace(token, payload);
       setCreateOpen(false);
       await reloadWorkspaces(created.id);
-      flashSuccess(`워크스페이스 "${created.name}" 를 만들었습니다.`);
+      flashSuccess(t('admin.console.workspaces.created', { name: created.name }));
     } catch (caughtError) {
-      setCreateError(getErrorMessage(caughtError, '워크스페이스를 만들지 못했습니다.'));
+      setCreateError(getErrorMessage(caughtError, t('admin.console.workspaces.createFailed')));
     } finally {
       setCreateBusy(false);
     }
@@ -1742,14 +1761,14 @@ function WorkspacesSection({ token }: { token: string }) {
         <aside className="overflow-hidden rounded-md border border-app-border bg-app-bg">
           <div className="flex items-center justify-between gap-2 border-b border-app-border px-3 py-2">
             <h2 className="app-text-overline uppercase tracking-wide text-app-ink/60">
-              Workspaces · {workspaces.length}
+	              {t('admin.console.sections.workspaces.title')} · {workspaces.length}
             </h2>
             {canCreateWorkspaces ? (
               <button
                 type="button"
                 onClick={() => setCreateOpen(true)}
                 className="rounded p-1 text-app-ink/60 transition-colors hover:bg-app-surface-sidebar hover:text-app-ink"
-                aria-label="새 워크스페이스 만들기"
+	                aria-label={t('admin.console.workspaces.createTitle')}
               >
                 <Plus size={14} />
               </button>
@@ -1760,7 +1779,7 @@ function WorkspacesSection({ token }: { token: string }) {
               <Search size={12} className="text-app-ink/50" />
               <input
                 className="app-text-body-sm flex-1 bg-transparent text-app-ink outline-none placeholder:text-app-ink/40"
-                placeholder="이름, key 검색"
+	                placeholder={t('admin.console.workspaces.searchPlaceholder')}
                 value={searchQuery}
                 onChange={(event) => setSearchQuery(event.target.value)}
               />
@@ -1768,13 +1787,13 @@ function WorkspacesSection({ token }: { token: string }) {
             <Tabs value={filter} onValueChange={(value) => setFilter(value as WorkspaceFilter)}>
               <TabsList className="w-full">
                 <TabsTrigger className="flex-1" value="active">
-                  활성
+	                  {t('admin.console.workspaces.filterActive')}
                 </TabsTrigger>
                 <TabsTrigger className="flex-1" value="archived">
-                  보관
+	                  {t('admin.console.workspaces.filterArchived')}
                 </TabsTrigger>
                 <TabsTrigger className="flex-1" value="all">
-                  전체
+	                  {t('admin.console.workspaces.filterAll')}
                 </TabsTrigger>
               </TabsList>
             </Tabs>
@@ -1782,7 +1801,7 @@ function WorkspacesSection({ token }: { token: string }) {
           <div className="max-h-[640px] overflow-y-auto pb-1">
             {filteredWorkspaces.length === 0 ? (
               <div className="px-3 py-8 text-center text-app-ink/60">
-                <p className="app-text-body-sm">표시할 워크스페이스가 없습니다.</p>
+	                <p className="app-text-body-sm">{t('admin.console.workspaces.empty')}</p>
               </div>
             ) : (
               filteredWorkspaces.map((workspace) => {
@@ -1811,7 +1830,7 @@ function WorkspacesSection({ token }: { token: string }) {
                         {workspace.name}
                       </div>
                       <div className="app-text-caption truncate text-app-ink/50">
-                        {workspace.key} · {workspace.member_count}명
+	                        {t('admin.console.workspaces.itemMeta', { key: workspace.key, count: workspace.member_count })}
                       </div>
                     </div>
                   </button>
@@ -1866,6 +1885,8 @@ function SecuritySection({
   canReadGroups: boolean;
   canWriteGroups: boolean;
 }) {
+  const { t, i18n } = useTranslation('apps');
+  const locale = i18n.resolvedLanguage ?? i18n.language;
   const [users, setUsers] = useState<AuthUser[]>([]);
   const [groups, setGroups] = useState<AccessGroupItem[]>([]);
   const [workspaces, setWorkspaces] = useState<WorkspaceItem[]>([]);
@@ -1918,22 +1939,22 @@ function SecuritySection({
       if (userResult.status === 'fulfilled') {
         setUsers(userResult.value);
       } else if (canReadUsers) {
-        setError(getErrorMessage(userResult.reason, '사용자 디렉터리를 불러오지 못했습니다.'));
+        setError(getErrorMessage(userResult.reason, t('admin.console.security.usersLoadFailed')));
       }
 
       if (groupResult.status === 'fulfilled') {
         setGroups(groupResult.value);
       } else if (canReadGroups) {
-        setError(getErrorMessage(groupResult.reason, '권한 그룹을 불러오지 못했습니다.'));
+        setError(getErrorMessage(groupResult.reason, t('admin.console.security.groupsLoadFailed')));
       }
 
       if (workspaceResult.status === 'fulfilled') {
         setWorkspaces(workspaceResult.value.filter((workspace) => workspace.active));
       } else if (canReadGroups) {
-        setError((current) => current ?? getErrorMessage(workspaceResult.reason, '워크스페이스를 불러오지 못했습니다.'));
+        setError((current) => current ?? getErrorMessage(workspaceResult.reason, t('admin.console.security.workspacesLoadFailed')));
       }
     } catch (caughtError) {
-      setError(getErrorMessage(caughtError, '권한 설정을 불러오지 못했습니다.'));
+      setError(getErrorMessage(caughtError, t('admin.console.security.settingsLoadFailed')));
     }
   }
 
@@ -2003,11 +2024,11 @@ function SecuritySection({
       setName('');
       setDescription('');
       setSystemRoles('');
-      setMessage('그룹을 생성했습니다.');
+      setMessage(t('admin.console.security.groupCreated'));
       await load();
       setSelectedTemplateGroupId(created.id);
     } catch (caughtError) {
-      setError(getErrorMessage(caughtError, '그룹을 생성하지 못했습니다.'));
+      setError(getErrorMessage(caughtError, t('admin.console.security.groupCreateFailed')));
     }
   }
 
@@ -2022,9 +2043,9 @@ function SecuritySection({
       setGroups((current) =>
         current.map((group) => (group.id === response.id ? response : group)),
       );
-      setMessage('그룹 workspace templates 를 저장했습니다.');
+      setMessage(t('admin.console.security.templatesSaved'));
     } catch (caughtError) {
-      setError(getErrorMessage(caughtError, '그룹 workspace templates 를 저장하지 못했습니다.'));
+      setError(getErrorMessage(caughtError, t('admin.console.security.templatesSaveFailed')));
     } finally {
       setIsSavingGroupTemplates(false);
     }
@@ -2051,9 +2072,9 @@ function SecuritySection({
       setGroups((current) =>
         current.map((group) => (group.id === response.id ? response : group)),
       );
-      setMessage('그룹 정보를 저장했습니다.');
+      setMessage(t('admin.console.security.groupSaved'));
     } catch (caughtError) {
-      setError(getErrorMessage(caughtError, '그룹 정보를 저장하지 못했습니다.'));
+      setError(getErrorMessage(caughtError, t('admin.console.security.groupSaveFailed')));
     } finally {
       setIsSavingGroupDetails(false);
     }
@@ -2071,9 +2092,9 @@ function SecuritySection({
         current.map((group) => (group.id === response.id ? response : group)),
       );
       await load();
-      setMessage('그룹 멤버를 저장했습니다.');
+      setMessage(t('admin.console.security.membersSaved'));
     } catch (caughtError) {
-      setError(getErrorMessage(caughtError, '그룹 멤버를 저장하지 못했습니다.'));
+      setError(getErrorMessage(caughtError, t('admin.console.security.membersSaveFailed')));
     } finally {
       setIsSavingGroupMembers(false);
     }
@@ -2085,14 +2106,14 @@ function SecuritySection({
     .sort((left, right) => {
       const leftName = left.display_name || left.full_name;
       const rightName = right.display_name || right.full_name;
-      return leftName.localeCompare(rightName, 'ko');
+      return leftName.localeCompare(rightName, locale);
     });
   const groupMemberCandidates = users
     .filter((user) => !selectedGroupMemberIds.includes(user.id))
     .sort((left, right) => {
       const leftName = left.display_name || left.full_name;
       const rightName = right.display_name || right.full_name;
-      return leftName.localeCompare(rightName, 'ko');
+      return leftName.localeCompare(rightName, locale);
     });
 
   return (
@@ -2103,68 +2124,68 @@ function SecuritySection({
 
       <div className="grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
         <SurfaceCard
-          description="그룹은 사용자 묶음이며, 필요하면 시스템 역할을 함께 연결할 수 있습니다."
-          title="Create principal group"
+	          description={t('admin.console.security.createDescription')}
+	          title={t('admin.console.security.createTitle')}
         >
           {canWriteGroups ? (
             <form className="grid gap-3" onSubmit={(event) => void handleCreateGroup(event)}>
               <input
                 className={fieldClassName}
                 onChange={(event) => setName(event.target.value)}
-                placeholder="Group name"
+	                placeholder={t('admin.console.security.groupName')}
                 value={name}
               />
               <input
                 className={fieldClassName}
                 onChange={(event) => setDescription(event.target.value)}
-                placeholder="Description"
+	                placeholder={t('admin.workspace.descriptionLabel')}
                 value={description}
               />
               <input
                 className={fieldClassName}
                 onChange={(event) => setSystemRoles(event.target.value)}
-                placeholder="platform_admin"
+	                placeholder={t('admin.console.security.systemRolePlaceholder')}
                 value={systemRoles}
               />
               <div className="flex justify-end">
-                <Button type="submit" variant="primary">Create group</Button>
+	                <Button type="submit" variant="primary">{t('admin.console.security.createGroup')}</Button>
               </div>
             </form>
           ) : (
             <InlineNotice tone="warning">
-              그룹 생성 권한이 없어 이 섹션은 읽기 전용입니다.
+	              {t('admin.console.security.createReadOnly')}
             </InlineNotice>
           )}
         </SurfaceCard>
 
         <SurfaceCard
-          description="그룹에 연결된 시스템 역할과 현재 멤버 수를 확인합니다."
-          title="Principal groups"
+	          description={t('admin.console.security.groupsDescription')}
+	          title={t('admin.console.security.groupsTitle')}
         >
           {canReadGroups ? (
             <TableShell>
               <thead>
                 <tr>
-                  <HeadCell>Name</HeadCell>
-                  <HeadCell>Slug</HeadCell>
-                  <HeadCell>System roles</HeadCell>
-                  <HeadCell>Workspace templates</HeadCell>
-                  <HeadCell>Members</HeadCell>
+	                  <HeadCell>{t('admin.console.security.columns.name')}</HeadCell>
+	                  <HeadCell>{t('admin.console.security.columns.slug')}</HeadCell>
+	                  <HeadCell>{t('admin.console.security.columns.systemRoles')}</HeadCell>
+	                  <HeadCell>{t('admin.console.security.columns.workspaceTemplates')}</HeadCell>
+	                  <HeadCell>{t('admin.console.security.columns.members')}</HeadCell>
                 </tr>
               </thead>
               <tbody>
                 {groups.length === 0 ? (
                   <EmptyRow
                     colSpan={5}
-                    description="새 권한 그룹을 만들어 시작하세요."
-                    title="등록된 권한 그룹이 없습니다."
+	                    description={t('admin.console.security.emptyGroupsDescription')}
+	                    title={t('admin.console.security.emptyGroupsTitle')}
                   />
                 ) : (
                   groups.map((group) => (
                     <tr key={group.id}>
                       <BodyCell>
                         <div className="font-medium text-app-ink">{group.name}</div>
-                        <div className="app-text-caption mt-1 text-gray-500">{group.description || '설명 없음'}</div>
+	                        <div className="app-text-caption mt-1 text-gray-500">{group.description || t('common:empty.none')}</div>
                       </BodyCell>
                       <BodyCell>{group.slug}</BodyCell>
                       <BodyCell>{group.system_roles.join(', ') || 'None'}</BodyCell>
@@ -2177,7 +2198,7 @@ function SecuritySection({
             </TableShell>
           ) : (
             <InlineNotice tone="warning">
-              그룹 조회 권한이 없어 권한 그룹 목록을 볼 수 없습니다.
+	              {t('admin.console.security.groupsReadDenied')}
             </InlineNotice>
           )}
         </SurfaceCard>
@@ -2185,22 +2206,22 @@ function SecuritySection({
 
       <div className="grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
         <SurfaceCard
-          actions={canReadGroups && canWriteGroups ? <Button disabled={isSavingGroupDetails || !selectedTemplateGroup} onClick={() => { void handleSaveGroupDetails(); }} variant="primary">{isSavingGroupDetails ? 'Saving group' : 'Save group'}</Button> : undefined}
-          description="선택한 그룹의 기본 정보와 시스템 역할을 수정합니다."
-          title="Group details"
+	          actions={canReadGroups && canWriteGroups ? <Button disabled={isSavingGroupDetails || !selectedTemplateGroup} onClick={() => { void handleSaveGroupDetails(); }} variant="primary">{isSavingGroupDetails ? t('admin.console.security.savingGroup') : t('admin.console.security.saveGroup')}</Button> : undefined}
+	          description={t('admin.console.security.detailsDescription')}
+	          title={t('admin.console.security.detailsTitle')}
         >
           {!canReadGroups ? (
             <InlineNotice tone="warning">
-              그룹 조회 권한이 없어 상세 정보를 편집할 수 없습니다.
+	              {t('admin.console.security.detailsReadDenied')}
             </InlineNotice>
           ) : groups.length === 0 ? (
             <InlineNotice tone="info">
-              먼저 그룹을 만들어야 상세 정보를 편집할 수 있습니다.
+	              {t('admin.console.security.detailsCreateFirst')}
             </InlineNotice>
           ) : (
             <div className="grid gap-3">
               <div className="grid gap-1">
-                <span className="app-text-caption text-gray-500">Group</span>
+	                <span className="app-text-caption text-gray-500">{t('admin.shared.directory.group')}</span>
                 <Select
                   disabled={!canWriteGroups}
                   onValueChange={setSelectedTemplateGroupId}
@@ -2209,7 +2230,7 @@ function SecuritySection({
                 />
               </div>
               <div className="grid gap-1">
-                <span className="app-text-caption text-gray-500">Slug</span>
+	                <span className="app-text-caption text-gray-500">{t('admin.console.security.columns.slug')}</span>
                 <div className="rounded-md border border-app-border bg-app-surface-sidebar px-3 py-2 text-app-ink">
                   {selectedTemplateGroup?.slug ?? '-'}
                 </div>
@@ -2218,21 +2239,21 @@ function SecuritySection({
                 className={fieldClassName}
                 disabled={!canWriteGroups || !selectedTemplateGroup}
                 onChange={(event) => setGroupName(event.target.value)}
-                placeholder="Group name"
+	                placeholder={t('admin.console.security.groupName')}
                 value={groupName}
               />
               <input
                 className={fieldClassName}
                 disabled={!canWriteGroups || !selectedTemplateGroup}
                 onChange={(event) => setGroupDescription(event.target.value)}
-                placeholder="Description"
+	                placeholder={t('admin.workspace.descriptionLabel')}
                 value={groupDescription}
               />
               <input
                 className={fieldClassName}
                 disabled={!canWriteGroups || !selectedTemplateGroup}
                 onChange={(event) => setGroupSystemRoles(event.target.value)}
-                placeholder="platform_admin"
+	                placeholder={t('admin.console.security.systemRolePlaceholder')}
                 value={groupSystemRoles}
               />
               <label className="app-text-control inline-flex items-center gap-2 rounded-md border border-app-border bg-app-surface-sidebar px-3 py-2 text-app-ink">
@@ -2242,24 +2263,24 @@ function SecuritySection({
                   onChange={(event) => setGroupActive(event.target.checked)}
                   type="checkbox"
                 />
-                <span>Group is active</span>
+	                <span>{t('admin.console.security.groupIsActive')}</span>
               </label>
             </div>
           )}
         </SurfaceCard>
 
         <SurfaceCard
-          actions={canReadGroups && canReadUsers && canWriteGroups ? <Button disabled={isSavingGroupMembers || !selectedTemplateGroupId} onClick={() => { void handleSaveGroupMembers(); }} variant="primary">{isSavingGroupMembers ? 'Saving members' : 'Save members'}</Button> : undefined}
-          description="선택한 그룹의 현재 멤버를 관리합니다."
-          title="Group members"
+	          actions={canReadGroups && canReadUsers && canWriteGroups ? <Button disabled={isSavingGroupMembers || !selectedTemplateGroupId} onClick={() => { void handleSaveGroupMembers(); }} variant="primary">{isSavingGroupMembers ? t('admin.console.security.savingMembers') : t('admin.console.security.saveMembers')}</Button> : undefined}
+	          description={t('admin.console.security.membersDescription')}
+	          title={t('admin.console.security.membersTitle')}
         >
           {!canReadGroups || !canReadUsers ? (
             <InlineNotice tone="warning">
-              그룹 또는 사용자 디렉터리 조회 권한이 없어 멤버를 편집할 수 없습니다.
+	              {t('admin.console.security.membersReadDenied')}
             </InlineNotice>
           ) : groups.length === 0 ? (
             <InlineNotice tone="info">
-              먼저 그룹을 만들어야 멤버를 연결할 수 있습니다.
+	              {t('admin.console.security.membersCreateFirst')}
             </InlineNotice>
           ) : (
             <div className="grid gap-4">
@@ -2268,7 +2289,7 @@ function SecuritySection({
                   disabled={!canWriteGroups || groupMemberCandidates.length === 0}
                   onValueChange={setSelectedMemberCandidateId}
                   options={[
-                    { value: NONE_OPTION_VALUE, label: 'Add a member' },
+	                    { value: NONE_OPTION_VALUE, label: t('admin.console.security.addMember') },
                     ...groupMemberCandidates.map((user) => ({
                       value: user.id,
                       label: `${user.display_name || user.full_name} (${user.email})`,
@@ -2285,12 +2306,12 @@ function SecuritySection({
                   }}
                   variant="secondary"
                 >
-                  Add member
+	                  {t('admin.console.security.addMember')}
                 </Button>
               </div>
               {selectedGroupMembers.length === 0 ? (
                 <div className="app-text-caption rounded-md border border-dashed border-app-border px-3 py-3 text-gray-500">
-                  아직 이 그룹의 멤버가 없습니다.
+	                  {t('admin.console.security.noGroupMembers')}
                 </div>
               ) : (
                 <div className="grid gap-2">
@@ -2314,7 +2335,7 @@ function SecuritySection({
                         }}
                         variant="secondary"
                       >
-                        Remove
+	                        {t('common:actions.delete')}
                       </Button>
                     </div>
                   ))}
@@ -2326,26 +2347,26 @@ function SecuritySection({
       </div>
 
       <SurfaceCard
-        actions={canReadGroups && canWriteGroups ? <Button disabled={isSavingGroupTemplates || !selectedTemplateGroupId} onClick={() => { void handleSaveGroupTemplates(); }} variant="primary">{isSavingGroupTemplates ? 'Saving templates' : 'Save templates'}</Button> : undefined}
-        description="그룹에 사용자를 넣었을 때 상속되는 workspace memberships 를 정의합니다."
-        title="Group workspace templates"
+	        actions={canReadGroups && canWriteGroups ? <Button disabled={isSavingGroupTemplates || !selectedTemplateGroupId} onClick={() => { void handleSaveGroupTemplates(); }} variant="primary">{isSavingGroupTemplates ? t('admin.console.security.savingTemplates') : t('admin.console.security.saveTemplates')}</Button> : undefined}
+	        description={t('admin.console.security.templatesDescription')}
+	        title={t('admin.console.security.templatesTitle')}
       >
         {!canReadGroups ? (
           <InlineNotice tone="warning">
-            그룹 조회 권한이 없어 workspace template 을 편집할 수 없습니다.
+	            {t('admin.console.security.templatesReadDenied')}
           </InlineNotice>
         ) : groups.length === 0 ? (
           <InlineNotice tone="info">
-            먼저 그룹을 만들어야 workspace template 을 연결할 수 있습니다.
+	            {t('admin.console.security.templatesCreateFirst')}
           </InlineNotice>
         ) : workspaces.length === 0 ? (
           <InlineNotice tone="info">
-            연결 가능한 active workspace 가 없습니다.
+	            {t('admin.console.security.noActiveWorkspaces')}
           </InlineNotice>
         ) : (
           <div className="grid gap-4">
             <div className="grid gap-1 md:max-w-sm">
-              <span className="app-text-caption text-gray-500">Group</span>
+	              <span className="app-text-caption text-gray-500">{t('admin.shared.directory.group')}</span>
               <Select
                 disabled={!canWriteGroups}
                 onValueChange={setSelectedTemplateGroupId}
@@ -2355,9 +2376,9 @@ function SecuritySection({
             </div>
             {selectedTemplateGroup ? (
               <div className="app-text-caption rounded-md border border-app-border bg-app-surface-sidebar px-3 py-3 text-gray-500">
-                선택한 그룹: {selectedTemplateGroup.name}
-                <br />
-                이 그룹에 사용자를 넣으면 아래 workspace memberships 가 상속됩니다.
+	                {t('admin.console.security.selectedGroup', { name: selectedTemplateGroup.name })}
+	                <br />
+	                {t('admin.console.security.templateInheritanceHint')}
               </div>
             ) : null}
             <div className="grid gap-3">
@@ -2384,7 +2405,7 @@ function SecuritySection({
                       <div>
                         <div className="font-medium text-app-ink">{workspace.name}</div>
                         <div className="app-text-caption mt-1 text-gray-500">
-                          {workspace.description || '설명 없음'}
+	                          {workspace.description || t('common:empty.none')}
                         </div>
                       </div>
                     </label>
@@ -2402,8 +2423,8 @@ function SecuritySection({
                       }}
                       value={binding?.role ?? 'member'}
                     >
-                      <option value="member">Member</option>
-                      <option value="admin">Admin</option>
+	                      <option value="member">{t('admin.shared.roles.member.label')}</option>
+	                      <option value="admin">{t('admin.shared.roles.admin.label')}</option>
                     </select>
                   </div>
                 );
@@ -2418,6 +2439,8 @@ function SecuritySection({
 }
 
 function AuditSection({ token }: { token: string }) {
+  const { t, i18n } = useTranslation('apps');
+  const locale = i18n.resolvedLanguage ?? i18n.language;
   const { user } = useAuth();
   const timeZone = normalizeTimeZone(user?.time_zone);
   const [items, setItems] = useState<AuditLogItem[]>([]);
@@ -2427,9 +2450,9 @@ function AuditSection({ token }: { token: string }) {
     void listAuditLogs(token)
       .then(setItems)
       .catch((caughtError) => {
-        setError(getErrorMessage(caughtError, '감사로그를 불러오지 못했습니다.'));
+        setError(getErrorMessage(caughtError, t('admin.console.audit.loadFailed')));
       });
-  }, [token]);
+  }, [token, t]);
 
   return (
     <div className="space-y-6">
@@ -2438,13 +2461,13 @@ function AuditSection({ token }: { token: string }) {
 
 
       <SurfaceCard
-        description="최신 순으로 정렬된 운영 로그입니다."
-        title="Recent activity"
+	        description={t('admin.console.audit.description')}
+	        title={t('admin.console.audit.title')}
       >
         <div className="space-y-3">
           {items.length === 0 ? (
             <div className="app-text-body rounded-xl border border-dashed border-app-border bg-app-surface-sidebar px-4 py-8 text-center text-gray-500">
-              표시할 감사 이벤트가 없습니다.
+	              {t('admin.console.audit.empty')}
             </div>
           ) : (
             items.map((item) => (
@@ -2459,13 +2482,13 @@ function AuditSection({ token }: { token: string }) {
                       <Badge tone="purple">{item.action}</Badge>
                     </div>
                     <div className="app-text-body text-gray-500">
-                      {item.entity_kind} / {item.entity_id ?? 'n/a'} / {item.actor_name ?? 'system'}
+	                      {item.entity_kind} / {item.entity_id ?? t('common:empty.none')} / {item.actor_name ?? t('admin.console.audit.systemActor')}
                     </div>
                   </div>
                   <div className="app-text-body text-gray-500">
                     {formatDateTime(item.created_at, {
                       dateStyle: 'medium',
-                      locale: 'ko-KR',
+	                      locale,
                       timeStyle: 'short',
                       timeZone,
                     })}
@@ -2481,6 +2504,7 @@ function AuditSection({ token }: { token: string }) {
 }
 
 export function AdminConsoleView({ section }: { section: AdminSection }) {
+  const { t } = useTranslation('apps');
   const auth = useAuth();
   const token = auth.token;
   const hasAdminReadPermission = useMemo(
@@ -2493,7 +2517,7 @@ export function AdminConsoleView({ section }: { section: AdminSection }) {
   }
 
   if (!hasAdminReadPermission) {
-    return <AccessDeniedView description="관리 콘솔 접근 권한이 없습니다." />;
+    return <AccessDeniedView description={t('admin.console.accessDenied')} />;
   }
 
   let content: React.ReactNode;
@@ -2505,7 +2529,7 @@ export function AdminConsoleView({ section }: { section: AdminSection }) {
       break;
     case 'people':
       content = <PeopleSection token={token} />;
-      actions = <Badge tone="purple">Admin only</Badge>;
+      actions = <Badge tone="purple">{t('admin.console.badges.adminOnly')}</Badge>;
       break;
     case 'workspaces':
       content = <WorkspacesSection token={token} />;
@@ -2519,7 +2543,7 @@ export function AdminConsoleView({ section }: { section: AdminSection }) {
           token={token}
         />
       );
-      actions = <Badge tone="purple">Restricted</Badge>;
+      actions = <Badge tone="purple">{t('admin.console.badges.restricted')}</Badge>;
       break;
     case 'audit':
       content = <AuditSection token={token} />;

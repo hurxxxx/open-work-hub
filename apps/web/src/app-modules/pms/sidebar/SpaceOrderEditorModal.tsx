@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Dialog } from '@aidoo/ui/primitives/dialog';
 import { Button } from '@aidoo/ui/primitives/button';
 import { ArrowDown, ArrowUp, FileText, FolderOpen, List as ListIcon } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
 import {
   getDocsItemPrimaryContainerSortOrder,
@@ -34,9 +35,9 @@ interface SpaceOrderEditorModalProps {
 
 const ROOT_VALUE = '__root__';
 
-function compareByOrderThenName(left: { sort_order: number; name: string }, right: { sort_order: number; name: string }) {
+function compareByOrderThenName(left: { sort_order: number; name: string }, right: { sort_order: number; name: string }, locale: string) {
   if (left.sort_order !== right.sort_order) return left.sort_order - right.sort_order;
-  return left.name.localeCompare(right.name, 'ko');
+  return left.name.localeCompare(right.name, locale);
 }
 
 function toListItems(lists: DraftList[]): ReorderableItem[] {
@@ -66,9 +67,11 @@ export function SpaceOrderEditorModal({
   docs,
   onSave,
 }: SpaceOrderEditorModalProps) {
+  const { t, i18n } = useTranslation('apps');
+  const locale = i18n.resolvedLanguage ?? i18n.language;
   const orderedFolders = useMemo(
-    () => [...folders].sort((left, right) => left.sort_order - right.sort_order || left.name.localeCompare(right.name, 'ko')),
-    [folders],
+    () => [...folders].sort((left, right) => left.sort_order - right.sort_order || left.name.localeCompare(right.name, locale)),
+    [folders, locale],
   );
   const [draftLists, setDraftLists] = useState<DraftList[]>([]);
   const [draftDocs, setDraftDocs] = useState<DraftDoc[]>([]);
@@ -127,7 +130,7 @@ export function SpaceOrderEditorModal({
 
   function requestClose() {
     if (saving) return;
-    if (isDirty && !window.confirm('저장하지 않은 순서 변경이 있습니다. 닫을까요?')) {
+    if (isDirty && !window.confirm(t('pms.orderEditor.closeDirtyConfirm'))) {
       return;
     }
     onClose();
@@ -218,39 +221,39 @@ export function SpaceOrderEditorModal({
       await onSave({ lists: draftLists, docs: draftDocs });
       onClose();
     } catch (saveError) {
-      setError(saveError instanceof Error ? saveError.message : '순서를 저장하지 못했습니다.');
+      setError(saveError instanceof Error ? saveError.message : t('pms.orderEditor.saveFailed'));
     } finally {
       setSaving(false);
     }
   }
 
   const rootLists = useMemo(
-    () => draftLists.filter((list) => !list.folder_id).sort((left, right) => compareByOrderThenName(left, right)),
-    [draftLists],
+    () => draftLists.filter((list) => !list.folder_id).sort((left, right) => compareByOrderThenName(left, right, locale)),
+    [draftLists, locale],
   );
   const docsOrdered = useMemo(
-    () => [...draftDocs].sort((left, right) => left.sort_order - right.sort_order || left.title.localeCompare(right.title, 'ko')),
-    [draftDocs],
+    () => [...draftDocs].sort((left, right) => left.sort_order - right.sort_order || left.title.localeCompare(right.title, locale)),
+    [draftDocs, locale],
   );
 
   return (
     <Dialog
       open={isOpen}
       onOpenChange={(open) => { if (!open) requestClose(); }}
-      title={`${spaceName} 순서 편집`}
+      title={t('pms.orderEditor.title', { spaceName })}
       maxWidth="max-w-5xl"
       dismissOnInteractOutside={false}
       actions={
         <div className="flex w-full items-center justify-between gap-3">
           <div className="app-text-caption text-app-ink/50">
-            {isDirty ? `${changedListCount + changedDocCount}개의 변경사항이 있습니다.` : '변경사항이 없습니다.'}
+            {isDirty ? t('pms.orderEditor.changedCount', { count: changedListCount + changedDocCount }) : t('pms.orderEditor.noChanges')}
           </div>
           <div className="flex items-center gap-3">
             <Button variant="secondary" onClick={requestClose} disabled={saving}>
-              취소
+              {t('common:actions.cancel')}
             </Button>
             <Button variant="primary" onClick={handleSave} disabled={saving}>
-              {saving ? '저장 중...' : '저장'}
+              {saving ? t('common:actions.saving') : t('common:actions.save')}
             </Button>
           </div>
         </div>
@@ -258,9 +261,9 @@ export function SpaceOrderEditorModal({
     >
       <div className="space-y-6 text-app-ink">
         <div className="rounded-lg border border-app-border bg-app-surface-sidebar px-4 py-3">
-          <div className="app-text-control-sm text-app-ink">전용 편집 화면</div>
+          <div className="app-text-control-sm text-app-ink">{t('pms.orderEditor.dedicatedEditor')}</div>
           <div className="app-text-body mt-1 text-app-ink/60">
-            여기서는 순서만 조정합니다. 사이드바의 이동, 메뉴, 이름 변경과 분리해 draft로 편집한 뒤 저장 시 한 번에 반영합니다.
+            {t('pms.orderEditor.description')}
           </div>
         </div>
 
@@ -273,29 +276,29 @@ export function SpaceOrderEditorModal({
         <div className="grid gap-6 lg:grid-cols-[minmax(0,1.4fr)_minmax(280px,0.8fr)]">
           <section className="rounded-lg border border-app-border bg-app-bg">
             <div className="border-b border-app-border px-4 py-3">
-              <div className="app-text-control-sm text-app-ink">Lists</div>
-              <div className="app-text-caption text-app-ink/50">위/아래 이동과 폴더 이동을 draft로 편집합니다.</div>
+              <div className="app-text-control-sm text-app-ink">{t('pms.spaceOverview.lists')}</div>
+              <div className="app-text-caption text-app-ink/50">{t('pms.orderEditor.listsDescription')}</div>
             </div>
             <div className="space-y-5 px-4 py-4">
               <div className="space-y-2">
-                <div className="app-text-overline text-app-ink/40">Root Lists</div>
+                <div className="app-text-overline text-app-ink/40">{t('pms.orderEditor.rootLists')}</div>
                 {rootLists.length === 0 ? (
                   <div className="app-text-body rounded-md border border-dashed border-app-border px-3 py-4 text-app-ink/40">
-                    루트에 있는 리스트가 없습니다.
+                    {t('pms.orderEditor.noRootLists')}
                   </div>
                 ) : rootLists.map((list, index) => (
                   <div key={list.id} className="flex items-center gap-3 rounded-md border border-app-border bg-app-surface-sidebar px-3 py-2">
                     <ListIcon size={14} className="shrink-0 text-gray-500" />
                     <div className="min-w-0 flex-1">
                       <div className="app-text-control-sm truncate text-app-ink">{list.name}</div>
-                      <div className="app-text-caption text-app-ink/40">이슈 {list.issue_count}개</div>
+                      <div className="app-text-caption text-app-ink/40">{t('pms.spaceOverview.issueCount', { count: list.issue_count })}</div>
                     </div>
                     <select
                       value={list.folder_id ?? ROOT_VALUE}
                       onChange={(event) => moveListParent(list.id, event.target.value === ROOT_VALUE ? null : event.target.value)}
                       className="app-text-caption rounded-md border border-app-border bg-app-bg px-2 py-1 text-app-ink outline-none"
                     >
-                      <option value={ROOT_VALUE}>루트</option>
+                      <option value={ROOT_VALUE}>{t('pms.orderEditor.root')}</option>
                       {orderedFolders.map((folder) => (
                         <option key={folder.id} value={folder.id}>{folder.name}</option>
                       ))}
@@ -306,7 +309,7 @@ export function SpaceOrderEditorModal({
                         onClick={() => moveListStep(list.id, 'up')}
                         disabled={index === 0}
                         className="rounded-md border border-app-border p-1 text-app-ink transition-colors hover:bg-app-surface-hover disabled:cursor-not-allowed disabled:opacity-30"
-                        title="위로"
+                        title={t('pms.orderEditor.moveUp')}
                       >
                         <ArrowUp size={14} />
                       </button>
@@ -315,7 +318,7 @@ export function SpaceOrderEditorModal({
                         onClick={() => moveListStep(list.id, 'down')}
                         disabled={index === rootLists.length - 1}
                         className="rounded-md border border-app-border p-1 text-app-ink transition-colors hover:bg-app-surface-hover disabled:cursor-not-allowed disabled:opacity-30"
-                        title="아래로"
+                        title={t('pms.orderEditor.moveDown')}
                       >
                         <ArrowDown size={14} />
                       </button>
@@ -327,7 +330,7 @@ export function SpaceOrderEditorModal({
               {orderedFolders.map((folder) => {
                 const folderLists = draftLists
                   .filter((list) => list.folder_id === folder.id)
-                  .sort((left, right) => compareByOrderThenName(left, right));
+                  .sort((left, right) => compareByOrderThenName(left, right, locale));
                 return (
                   <div key={folder.id} className="space-y-2">
                     <div className="flex items-center gap-2">
@@ -336,21 +339,21 @@ export function SpaceOrderEditorModal({
                     </div>
                     {folderLists.length === 0 ? (
                       <div className="app-text-body rounded-md border border-dashed border-app-border px-3 py-4 text-app-ink/40">
-                        이 폴더에는 리스트가 없습니다.
+                        {t('pms.orderEditor.noFolderLists')}
                       </div>
                     ) : folderLists.map((list, index) => (
                       <div key={list.id} className="flex items-center gap-3 rounded-md border border-app-border bg-app-surface-sidebar px-3 py-2">
                         <ListIcon size={14} className="shrink-0 text-gray-500" />
                         <div className="min-w-0 flex-1">
                           <div className="app-text-control-sm truncate text-app-ink">{list.name}</div>
-                          <div className="app-text-caption text-app-ink/40">이슈 {list.issue_count}개</div>
+                          <div className="app-text-caption text-app-ink/40">{t('pms.spaceOverview.issueCount', { count: list.issue_count })}</div>
                         </div>
                         <select
                           value={list.folder_id ?? ROOT_VALUE}
                           onChange={(event) => moveListParent(list.id, event.target.value === ROOT_VALUE ? null : event.target.value)}
                           className="app-text-caption rounded-md border border-app-border bg-app-bg px-2 py-1 text-app-ink outline-none"
                         >
-                          <option value={ROOT_VALUE}>루트</option>
+                          <option value={ROOT_VALUE}>{t('pms.orderEditor.root')}</option>
                           {orderedFolders.map((option) => (
                             <option key={option.id} value={option.id}>{option.name}</option>
                           ))}
@@ -361,7 +364,7 @@ export function SpaceOrderEditorModal({
                             onClick={() => moveListStep(list.id, 'up')}
                             disabled={index === 0}
                             className="rounded-md border border-app-border p-1 text-app-ink transition-colors hover:bg-app-surface-hover disabled:cursor-not-allowed disabled:opacity-30"
-                            title="위로"
+                            title={t('pms.orderEditor.moveUp')}
                           >
                             <ArrowUp size={14} />
                           </button>
@@ -370,7 +373,7 @@ export function SpaceOrderEditorModal({
                             onClick={() => moveListStep(list.id, 'down')}
                             disabled={index === folderLists.length - 1}
                             className="rounded-md border border-app-border p-1 text-app-ink transition-colors hover:bg-app-surface-hover disabled:cursor-not-allowed disabled:opacity-30"
-                            title="아래로"
+                            title={t('pms.orderEditor.moveDown')}
                           >
                             <ArrowDown size={14} />
                           </button>
@@ -385,19 +388,19 @@ export function SpaceOrderEditorModal({
 
           <section className="rounded-lg border border-app-border bg-app-bg">
             <div className="border-b border-app-border px-4 py-3">
-              <div className="app-text-control-sm text-app-ink">Docs</div>
-              <div className="app-text-caption text-app-ink/50">스페이스 문서 컬렉션 순서를 조정합니다.</div>
+              <div className="app-text-control-sm text-app-ink">{t('pms.spaceOverview.docs')}</div>
+              <div className="app-text-caption text-app-ink/50">{t('pms.orderEditor.docsDescription')}</div>
             </div>
             <div className="space-y-2 px-4 py-4">
               {docsOrdered.length === 0 ? (
                 <div className="app-text-body rounded-md border border-dashed border-app-border px-3 py-4 text-app-ink/40">
-                  문서 컬렉션이 없습니다.
+                  {t('pms.spaceOverview.noDocCollections')}
                 </div>
               ) : docsOrdered.map((doc, index) => (
                 <div key={doc.id} className="flex items-center gap-3 rounded-md border border-app-border bg-app-surface-sidebar px-3 py-2">
                   <FileText size={14} className="shrink-0 text-gray-500" />
                   <div className="min-w-0 flex-1">
-                    <div className="app-text-control-sm truncate text-app-ink">{doc.title || 'Untitled'}</div>
+                    <div className="app-text-control-sm truncate text-app-ink">{doc.title || t('pms.orderEditor.untitled')}</div>
                   </div>
                   <div className="flex items-center gap-1">
                     <button
@@ -405,7 +408,7 @@ export function SpaceOrderEditorModal({
                       onClick={() => moveDocStep(doc.id, 'up')}
                       disabled={index === 0}
                       className="rounded-md border border-app-border p-1 text-app-ink transition-colors hover:bg-app-surface-hover disabled:cursor-not-allowed disabled:opacity-30"
-                      title="위로"
+                      title={t('pms.orderEditor.moveUp')}
                     >
                       <ArrowUp size={14} />
                     </button>
@@ -414,7 +417,7 @@ export function SpaceOrderEditorModal({
                       onClick={() => moveDocStep(doc.id, 'down')}
                       disabled={index === docsOrdered.length - 1}
                       className="rounded-md border border-app-border p-1 text-app-ink transition-colors hover:bg-app-surface-hover disabled:cursor-not-allowed disabled:opacity-30"
-                      title="아래로"
+                      title={t('pms.orderEditor.moveDown')}
                     >
                       <ArrowDown size={14} />
                     </button>

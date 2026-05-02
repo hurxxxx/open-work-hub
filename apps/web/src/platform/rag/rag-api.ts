@@ -1,5 +1,6 @@
 import { ApiRequestError, apiFetchJson } from '@/src/platform/api/client';
 import type { ApiSchema } from '@/src/platform/api/types';
+import { i18n } from '@/src/platform/i18n';
 import { rewriteWorkspaceApiPath } from '@/src/platform/workspaces/workspace-utils';
 
 export const RAG_QUERY_DEFAULT_ANSWER_MODE = 'grounded-answer' as const;
@@ -48,7 +49,7 @@ export async function listWorkspaceRagSources(
     if (error instanceof ApiRequestError) {
       throw new RagApiError(
         error.status,
-        extractErrorMessage(error.payload, error.status, '검색 source 목록을 불러오지 못했습니다.'),
+        extractErrorMessage(error.payload, error.status, i18n.t('apps:ai.search.sourcesLoadFailed')),
       );
     }
     throw error;
@@ -82,7 +83,7 @@ export async function queryWorkspaceRag(
     if (error instanceof ApiRequestError) {
       throw new RagApiError(
         error.status,
-        extractErrorMessage(error.payload, error.status, '검색 결과를 불러오지 못했습니다.'),
+        extractErrorMessage(error.payload, error.status, i18n.t('apps:ai.search.loadFailed')),
       );
     }
     throw error;
@@ -95,7 +96,7 @@ function extractErrorMessage(
   fallback: string,
 ): string {
   if (status === 401) {
-    return '세션이 만료되었습니다. 다시 로그인해주세요.';
+    return i18n.t('apps:ai.search.sessionExpired');
   }
   if (
     payload

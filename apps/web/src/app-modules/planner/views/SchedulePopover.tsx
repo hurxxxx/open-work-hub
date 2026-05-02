@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { motion } from 'motion/react';
 import { X, Video, Users, Link as LinkIcon, MapPin, AlignLeft, Calendar as CalendarIcon, Clock, Coffee } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { cn } from '@/src/lib/utils';
 
 interface SchedulePopoverProps {
@@ -11,8 +12,18 @@ interface SchedulePopoverProps {
   initialEndTime?: string;
 }
 
+type ScheduleTab = 'Event' | 'Task' | 'Focus time' | 'OOO';
+
+const SCHEDULE_TAB_LABEL_KEYS: Record<ScheduleTab, string> = {
+  Event: 'planner.schedulePopover.tabs.event',
+  Task: 'planner.schedulePopover.tabs.task',
+  'Focus time': 'planner.schedulePopover.tabs.focusTime',
+  OOO: 'planner.schedulePopover.tabs.ooo',
+};
+
 export const SchedulePopover = ({ isOpen, onClose, initialDate, initialStartTime, initialEndTime }: SchedulePopoverProps) => {
-  const [activeTab, setActiveTab] = useState<'Event' | 'Task' | 'Focus time' | 'OOO'>('Event');
+  const { t } = useTranslation('apps');
+  const [activeTab, setActiveTab] = useState<ScheduleTab>('Event');
 
   if (!isOpen) return null;
 
@@ -34,11 +45,15 @@ export const SchedulePopover = ({ isOpen, onClose, initialDate, initialStartTime
                 activeTab === tab ? "bg-app-bg text-app-ink shadow-sm" : "text-gray-500 hover:text-app-ink hover:bg-app-surface-hover"
               )}
             >
-              {tab}
+              {t(SCHEDULE_TAB_LABEL_KEYS[tab])}
             </button>
           ))}
         </div>
-        <button onClick={onClose} className="p-1.5 text-gray-500 hover:text-app-ink hover:bg-app-surface-hover rounded-md">
+        <button
+          onClick={onClose}
+          aria-label={t('common:actions.close')}
+          className="p-1.5 text-gray-500 hover:text-app-ink hover:bg-app-surface-hover rounded-md"
+        >
           <X size={14} />
         </button>
       </div>
@@ -46,7 +61,7 @@ export const SchedulePopover = ({ isOpen, onClose, initialDate, initialStartTime
       <div className="p-4 space-y-4">
         <input
           type="text"
-          placeholder="Add title, @ for people, @@ for tasks"
+          placeholder={t('planner.schedulePopover.titlePlaceholder')}
           className="app-text-body w-full rounded-md border border-app-border bg-transparent px-3 py-2 text-app-ink transition-colors focus:border-app-accent focus:outline-none"
           autoFocus
         />
@@ -60,25 +75,25 @@ export const SchedulePopover = ({ isOpen, onClose, initialDate, initialStartTime
 
         <button className="app-text-control flex w-full items-center justify-center gap-2 rounded-md border border-app-border bg-app-surface-sidebar py-2 text-app-ink transition-colors hover:bg-app-surface-hover">
           <Video size={16} />
-          <span>Add video call</span>
+          <span>{t('planner.schedulePopover.addVideoCall')}</span>
         </button>
 
         <div className="space-y-3">
           <button className="app-text-body flex w-full items-center gap-3 text-left text-gray-500 transition-colors hover:text-app-ink">
             <Users size={16} />
-            <span>Add participants</span>
+            <span>{t('planner.schedulePopover.addParticipants')}</span>
           </button>
           <button className="app-text-body flex w-full items-center gap-3 text-left text-gray-500 transition-colors hover:text-app-ink">
             <LinkIcon size={16} />
-            <span>Add ClickUp tasks and docs</span>
+            <span>{t('planner.schedulePopover.addTasksDocs')}</span>
           </button>
           <button className="app-text-body flex w-full items-center gap-3 text-left text-gray-500 transition-colors hover:text-app-ink">
             <MapPin size={16} />
-            <span>Add location or room</span>
+            <span>{t('planner.schedulePopover.addLocation')}</span>
           </button>
           <button className="app-text-body flex w-full items-center gap-3 text-left text-gray-500 transition-colors hover:text-app-ink">
             <AlignLeft size={16} />
-            <span>Add description</span>
+            <span>{t('planner.schedulePopover.addDescription')}</span>
           </button>
         </div>
       </div>
@@ -90,11 +105,11 @@ export const SchedulePopover = ({ isOpen, onClose, initialDate, initialStartTime
         <div className="app-text-caption flex items-center gap-3 text-gray-500">
           <button className="flex items-center gap-1.5 hover:text-app-ink">
             <div className="w-2 h-2 rounded-full bg-blue-500"></div>
-            Default
+            {t('planner.schedulePopover.defaultCalendar')}
           </button>
           <button className="flex items-center gap-1.5 hover:text-app-ink">
             <Clock size={14} />
-            Busy
+            {t('planner.schedulePopover.busy')}
           </button>
           <button className="flex items-center gap-1.5 hover:text-app-ink">
             <Coffee size={14} />
@@ -102,7 +117,7 @@ export const SchedulePopover = ({ isOpen, onClose, initialDate, initialStartTime
         </div>
         <div className="flex-1"></div>
         <button className="app-text-control-sm rounded-md bg-app-accent px-4 py-1.5 text-app-bg transition-colors hover:bg-opacity-90">
-          Save
+          {t('common:actions.save')}
         </button>
       </div>
     </motion.div>

@@ -1,6 +1,7 @@
 import { Button, Dialog } from '@aidoo/ui';
 import { Check, Loader2, ShieldAlert, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import {
   getAiApprovalStatus,
@@ -21,20 +22,20 @@ export interface ApprovalModalProps {
   onClose: () => Promise<void> | void;
 }
 
-function approvalToolLabel(toolName: string): string {
+function approvalToolLabel(toolName: string, t: (key: string) => string): string {
   if (toolName.startsWith('pms.')) {
-    return 'PMS 변경';
+    return t('ai.approval.toolPms');
   }
   if (toolName.startsWith('planner.')) {
-    return '일정 변경';
+    return t('ai.approval.toolPlanner');
   }
   if (toolName.startsWith('docs.')) {
-    return '문서 변경';
+    return t('ai.approval.toolDocs');
   }
   if (toolName.startsWith('meeting.')) {
-    return '회의 변경';
+    return t('ai.approval.toolMeeting');
   }
-  return '승인 필요 작업';
+  return t('ai.approval.toolDefault');
 }
 
 function prettifyArgumentsJson(raw: string | null | undefined): string {
@@ -56,6 +57,7 @@ export function ApprovalModal({
   onClose,
 }: ApprovalModalProps) {
   const { token, user } = useAuth();
+  const { t, i18n } = useTranslation(['apps', 'auth', 'common']);
   const [rejectReason, setRejectReason] = useState('');
   const [details, setDetails] = useState<AiApprovalStatusResponse | null>(null);
   const [detailsError, setDetailsError] = useState<string | null>(null);
@@ -64,7 +66,7 @@ export function ApprovalModal({
   useEffect(() => {
     if (!token) {
       setDetails(null);
-      setDetailsError('로그인이 필요합니다.');
+      setDetailsError(t('auth:errors.noActiveSession'));
       return;
     }
 
@@ -83,7 +85,7 @@ export function ApprovalModal({
           setDetailsError(
             error instanceof Error
               ? error.message
-              : '승인 상세를 불러오지 못했습니다.',
+              : t('ai.approval.loadDetailsFailed'),
           );
         }
       })
@@ -96,7 +98,7 @@ export function ApprovalModal({
     return () => {
       cancelled = true;
     };
-  }, [approval.approval_id, token]);
+  }, [approval.approval_id, t, token]);
 
   useEffect(() => {
     setRejectReason('');
@@ -109,10 +111,10 @@ export function ApprovalModal({
         day: 'numeric',
         hour: '2-digit',
         minute: '2-digit',
-        locale: 'ko-KR',
+        locale: i18n.language,
         timeZone: normalizeTimeZone(user?.time_zone),
       }),
-    [approval.expires_at_ms, user?.time_zone],
+    [approval.expires_at_ms, i18n.language, user?.time_zone],
   );
 
   const argumentsJson = useMemo(
@@ -124,8 +126,8 @@ export function ApprovalModal({
     <Dialog
       open
       onOpenChange={() => undefined}
-      title="작업 승인 필요"
-      description="이 변경은 실제 워크스페이스 데이터를 수정합니다. 내용을 확인한 뒤 승인하거나 취소하세요."
+      title={t('ai.approval.title')}
+      description={t('ai.approval.description')}
       maxWidth="max-w-2xl"
       dismissOnInteractOutside={false}
       actions={
@@ -137,7 +139,7 @@ export function ApprovalModal({
             }}
             disabled={isSubmitting}
           >
-            {isSubmitting ? '처리 중...' : '요청 취소'}
+            {isSubmitting ? t('common:actions.saving') : t('ai.approval.cancelRequest')}
           </Button>
           <div className="flex items-center gap-2">
             <Button
@@ -148,7 +150,7 @@ export function ApprovalModal({
               disabled={isSubmitting}
             >
               <X size={14} />
-              {isSubmitting ? '거절 중...' : '거절'}
+              {isSubmitting ? t('ai.approval.rejecting') : t('ai.approval.reject')}
             </Button>
             <Button
               variant="primary"
@@ -162,7 +164,7 @@ export function ApprovalModal({
               ) : (
                 <Check size={14} />
               )}
-              {isSubmitting ? '승인 중...' : '승인'}
+              {isSubmitting ? t('ai.approval.approving') : t('ai.approval.approve')}
             </Button>
           </div>
         </div>
@@ -176,13 +178,13 @@ export function ApprovalModal({
             </div>
             <div className="min-w-0 flex-1">
               <p className="app-text-overline text-app-ink/60">
-                {approvalToolLabel(approval.tool)}
+                {approvalToolLabel(approval.tool, t)}
               </p>
               <p className="app-text-body font-medium text-app-ink">
                 {approval.tool}
               </p>
               <p className="app-text-caption mt-1 text-app-ink/60">
-                만료 예정: {expiresLabel}
+                {t('ai.approval.expires', { date: expiresLabel })}
               </p>
             </div>
           </div>
@@ -190,7 +192,7 @@ export function ApprovalModal({
 
         {approval.resource_preview ? (
           <div className="space-y-2">
-            <p className="app-text-overline text-app-ink/60">대상 미리보기</p>
+            <p className="app-text-overline text-app-ink/60">{t('ai.approval.preview')}</p>
             <div className="rounded-md border border-app-border bg-app-surface px-3 py-3">
               <p className="app-text-body-sm whitespace-pre-wrap break-words text-app-ink">
                 {approval.resource_preview}
@@ -201,16 +203,16 @@ export function ApprovalModal({
 
         <div className="space-y-2">
           <div className="flex items-center justify-between gap-3">
-            <p className="app-text-overline text-app-ink/60">전달 인자</p>
+            <p className="app-text-overline text-app-ink/60">{t('ai.approval.args')}</p>
             {loadingDetails ? (
               <span className="app-text-caption text-app-ink/50">
-                상세 불러오는 중...
+                {t('ai.approval.detailsLoading')}
               </span>
             ) : null}
           </div>
           <details className="rounded-md border border-app-border bg-app-surface px-3 py-3" open>
             <summary className="app-text-body-sm cursor-pointer font-medium text-app-ink">
-              JSON 보기
+              {t('ai.approval.showJson')}
             </summary>
             <pre className="mt-3 overflow-x-auto whitespace-pre-wrap break-words rounded-md bg-app-bg px-3 py-3 text-xs leading-6 text-app-ink">
               {argumentsJson}
@@ -229,7 +231,7 @@ export function ApprovalModal({
               htmlFor={`approval-reason-${approval.approval_id}`}
               className="app-text-overline text-app-ink/60"
             >
-              거절 사유
+              {t('ai.approval.reason')}
             </label>
             <span className="app-text-caption text-app-ink/50">
               {rejectReason.length}/140
@@ -239,7 +241,7 @@ export function ApprovalModal({
             id={`approval-reason-${approval.approval_id}`}
             value={rejectReason}
             onChange={(event) => setRejectReason(event.target.value.slice(0, 140))}
-            placeholder="필요하면 거절 사유를 남기세요. 비워도 됩니다."
+            placeholder={t('ai.approval.reasonPlaceholder')}
             disabled={isSubmitting}
             rows={3}
             className="app-text-body-sm w-full resize-none rounded-md border border-app-border bg-app-surface px-3 py-2 text-app-ink placeholder:text-app-ink/30 focus:border-app-accent focus:outline-none disabled:cursor-not-allowed disabled:opacity-60"

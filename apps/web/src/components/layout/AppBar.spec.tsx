@@ -42,6 +42,7 @@ function buildUser(overrides: Partial<AuthUser> = {}): AuthUser {
     display_name: 'AIDOO Member',
     status: 'active',
     theme_preference: 'system',
+    locale: 'ko-KR',
     primary_org_unit: null,
     workspaces: [
       {
@@ -183,7 +184,7 @@ describe('AppBar', () => {
       onOpenMobileAppMenu,
     });
 
-    fireEvent.click(screen.getByRole('button', { name: 'Planner 메뉴 열기' }));
+    fireEvent.click(screen.getByRole('button', { name: '플래너 메뉴' }));
 
     expect(onOpenMobileAppMenu).toHaveBeenCalledTimes(1);
   });
@@ -223,7 +224,7 @@ describe('AppBar', () => {
       shellWorkspaceSlug: 'hq',
     });
 
-    fireEvent.click(screen.getByRole('button', { name: '알림' }));
+    fireEvent.click(screen.getAllByRole('button', { name: '알림' })[0]);
     fireEvent.click(screen.getByRole('button', { name: 'Open issue notification' }));
 
     await waitFor(() => {

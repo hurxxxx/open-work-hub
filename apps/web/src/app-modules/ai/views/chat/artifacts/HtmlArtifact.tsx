@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import { CodeArtifact } from './CodeArtifact';
 
@@ -15,22 +16,23 @@ export interface HtmlArtifactProps {
 // without `allow-same-origin` — that combination prevents the guest from
 // reading the parent's cookies, localStorage, or DOM even if it tries.
 export function HtmlArtifact({ content, title }: HtmlArtifactProps) {
+  const { t } = useTranslation('apps');
   const [tab, setTab] = useState<Tab>('preview');
 
   return (
     <div className="flex h-full flex-col">
       <div
         role="tablist"
-        aria-label="HTML 아티팩트 보기"
+        aria-label={t('ai.htmlArtifact.tabList')}
         className="mb-3 inline-flex shrink-0 self-start rounded-md border border-app-border bg-app-surface p-0.5"
       >
         <TabButton
-          label="프리뷰"
+          label={t('ai.htmlArtifact.preview')}
           active={tab === 'preview'}
           onClick={() => setTab('preview')}
         />
         <TabButton
-          label="소스"
+          label={t('ai.htmlArtifact.source')}
           active={tab === 'source'}
           onClick={() => setTab('source')}
         />
@@ -38,7 +40,7 @@ export function HtmlArtifact({ content, title }: HtmlArtifactProps) {
       <div className="min-h-0 flex-1">
         {tab === 'preview' ? (
           <iframe
-            title={title ?? 'HTML 아티팩트 프리뷰'}
+            title={title ?? t('ai.htmlArtifact.title')}
             srcDoc={content}
             // `allow-scripts` lets the guest page run its own JS (needed
             // for any interactive HTML). We intentionally do NOT include

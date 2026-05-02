@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import {
   Calendar,
   ChevronRight,
@@ -36,16 +37,16 @@ import {
   zonedDateKey,
 } from '@/src/platform/time/time-utils';
 
-function getGreeting(timeZone: string): string {
+function getGreeting(timeZone: string, t: (key: string) => string): string {
   const hour = getZonedDateParts(new Date(), timeZone)?.hour ?? new Date().getHours();
-  if (hour < 12) return 'Good morning';
-  if (hour < 18) return 'Good afternoon';
-  return 'Good evening';
+  if (hour < 12) return t('home.greetingMorning');
+  if (hour < 18) return t('home.greetingAfternoon');
+  return t('home.greetingEvening');
 }
 
-function formatWeekday(date: Date, timeZone: string): string {
+function formatWeekday(date: Date, timeZone: string, locale: string): string {
   return formatDateTime(date, {
-    locale: 'ko-KR',
+    locale,
     month: 'long',
     day: 'numeric',
     weekday: 'long',
@@ -53,26 +54,26 @@ function formatWeekday(date: Date, timeZone: string): string {
   });
 }
 
-function formatTime(iso: string, timeZone: string): string {
+function formatTime(iso: string, timeZone: string, locale: string): string {
   return formatDateTime(iso, {
     hour: 'numeric',
-    locale: 'ko-KR',
+    locale,
     minute: '2-digit',
     timeZone,
   });
 }
 
-function formatDueDate(due: string | null, timeZone: string): string {
+function formatDueDate(due: string | null, timeZone: string, locale: string, t: (key: string, options?: Record<string, unknown>) => string): string {
   if (!due) return '';
   const diffDays = diffDateOnlyDays(due, zonedDateKey(new Date(), timeZone));
   if (diffDays === null) return '';
-  if (diffDays === 0) return '오늘';
-  if (diffDays === 1) return '내일';
-  if (diffDays === -1) return '어제';
-  if (diffDays < 0) return `${-diffDays}일 지연`;
-  if (diffDays < 7) return `${diffDays}일 후`;
+  if (diffDays === 0) return t('home.dueToday');
+  if (diffDays === 1) return t('home.dueTomorrow');
+  if (diffDays === -1) return t('home.dueYesterday');
+  if (diffDays < 0) return t('home.dueOverdue', { count: -diffDays });
+  if (diffDays < 7) return t('home.dueInDays', { count: diffDays });
   return formatDateOnly(due, {
-    locale: 'ko-KR',
+    locale,
     month: 'short',
     day: 'numeric',
   });
@@ -110,6 +111,7 @@ function SectionHeader({
 }
 
 function GreetingHeader({ userName, timeZone }: { userName: string; timeZone: string }) {
+  const { t, i18n } = useTranslation('apps');
   const now = new Date();
   const today = getZonedDateParts(now, timeZone);
   const holidayNames = getKoreanHolidayNames(
@@ -121,10 +123,10 @@ function GreetingHeader({ userName, timeZone }: { userName: string; timeZone: st
   return (
     <div>
       <h1 className="app-text-title-lg text-app-ink">
-        {getGreeting(timeZone)}, {userName}
+        {getGreeting(timeZone, t)}, {userName}
       </h1>
       <p className="app-text-body mt-1 text-gray-500">
-        {formatWeekday(now, timeZone)}
+        {formatWeekday(now, timeZone, i18n.language)}
         {holidayNames && holidayNames.length > 0 ? (
           <span className="ml-2 rounded bg-red-500/10 px-1.5 py-0.5 text-red-500">
             {holidayNames.join(', ')}
@@ -136,19 +138,20 @@ function GreetingHeader({ userName, timeZone }: { userName: string; timeZone: st
 }
 
 function QuickActionsRow({ workspaceSlug }: { workspaceSlug: string }) {
+  const { t } = useTranslation('apps');
   const actions = [
     {
-      label: '새 회의',
+      label: t('home.actionNewMeeting'),
       to: buildWorkspaceAppPath(workspaceSlug, 'meeting', '?create=1'),
       icon: Video,
     },
     {
-      label: '새 태스크',
+      label: t('home.actionNewTask'),
       to: buildWorkspaceAppPath(workspaceSlug, 'pms', '?create=1'),
       icon: ListTodo,
     },
     {
-      label: '새 Doc',
+      label: t('home.actionNewDoc'),
       to: buildWorkspaceAppPath(workspaceSlug, 'docs', '?create=1'),
       icon: FileText,
     },
@@ -185,6 +188,7 @@ function TodayMeetingsWidget({
   loading: boolean;
   timeZone: string;
 }) {
+  const { t, i18n } = useTranslation('apps');
   const todayMeetings = useMemo(
     () => meetings.filter((meeting) => isToday(meeting.start_at, timeZone)).slice(0, 5),
     [meetings, timeZone],
@@ -193,14 +197,14 @@ function TodayMeetingsWidget({
 
   return (
     <section>
-      <SectionHeader title="오늘의 회의" actionLabel="See all" actionTo={meetingRoot} />
+      <SectionHeader title={t('home.todayMeetings')} actionLabel={t('home.seeAll')} actionTo={meetingRoot} />
       <div className="border-t border-app-border">
         {loading ? (
           <div className="flex justify-center py-6">
             <Loader2 size={16} className="animate-spin text-gray-400" />
           </div>
         ) : todayMeetings.length === 0 ? (
-          <p className="app-text-body py-6 text-center text-gray-500">오늘 예정된 회의가 없습니다.</p>
+          <p className="app-text-body py-6 text-center text-gray-500">{t('home.meetingsEmpty')}</p>
         ) : (
           todayMeetings.map((meeting) => (
             <Link
@@ -211,7 +215,7 @@ function TodayMeetingsWidget({
               <Calendar size={16} className="shrink-0 text-gray-400 transition-colors group-hover:text-app-accent" />
               <span className="app-text-body flex-1 truncate text-app-ink">{meeting.title}</span>
               <span className="app-text-caption shrink-0 text-gray-500">
-                {formatTime(meeting.start_at, timeZone)}
+                {formatTime(meeting.start_at, timeZone, i18n.language)}
               </span>
               <ChevronRight size={14} className="shrink-0 text-gray-400 opacity-0 transition-opacity group-hover:opacity-100" />
             </Link>
@@ -233,19 +237,20 @@ function AssignedTasksWidget({
   loading: boolean;
   timeZone: string;
 }) {
+  const { t, i18n } = useTranslation('apps');
   const assignedLink = buildWorkspaceAppPath(workspaceSlug, 'pms', '/assigned');
   const topIssues = issues.slice(0, 5);
 
   return (
     <section>
-      <SectionHeader title="내 태스크" actionLabel="See all" actionTo={assignedLink} />
+      <SectionHeader title={t('home.myTasks')} actionLabel={t('home.seeAll')} actionTo={assignedLink} />
       <div className="border-t border-app-border">
         {loading ? (
           <div className="flex justify-center py-6">
             <Loader2 size={16} className="animate-spin text-gray-400" />
           </div>
         ) : topIssues.length === 0 ? (
-          <p className="app-text-body py-6 text-center text-gray-500">할당된 작업이 없습니다.</p>
+          <p className="app-text-body py-6 text-center text-gray-500">{t('home.tasksEmpty')}</p>
         ) : (
           topIssues.map((issue) => (
             <Link
@@ -257,7 +262,7 @@ function AssignedTasksWidget({
               <span className="app-text-body flex-1 truncate text-app-ink">{issue.title}</span>
               {issue.due_date ? (
                 <span className="app-text-caption shrink-0 text-gray-500">
-	                  {formatDueDate(issue.due_date, timeZone)}
+	                  {formatDueDate(issue.due_date, timeZone, i18n.language, t)}
                 </span>
               ) : null}
               <Flag
@@ -281,19 +286,20 @@ function RecentDocsWidget({
   pages: RecentPageItem[];
   loading: boolean;
 }) {
+  const { t } = useTranslation('apps');
   const docsRoot = `/w/${encodeURIComponent(workspaceSlug)}/docs`;
   const topPages = pages.slice(0, 5);
 
   return (
     <section>
-      <SectionHeader title="최근 Docs" actionLabel="See all" actionTo={docsRoot} />
+      <SectionHeader title={t('home.recentDocs')} actionLabel={t('home.seeAll')} actionTo={docsRoot} />
       <div className="border-t border-app-border">
         {loading ? (
           <div className="flex justify-center py-6">
             <Loader2 size={16} className="animate-spin text-gray-400" />
           </div>
         ) : topPages.length === 0 ? (
-          <p className="app-text-body py-6 text-center text-gray-500">최근 열어본 페이지가 없습니다.</p>
+          <p className="app-text-body py-6 text-center text-gray-500">{t('home.docsEmpty')}</p>
         ) : (
           topPages.map((page) => (
             <Link
@@ -304,7 +310,7 @@ function RecentDocsWidget({
               <FileText size={16} className="shrink-0 text-gray-400 transition-colors group-hover:text-app-accent" />
               <div className="min-w-0 flex-1">
                 <span className="app-text-body block truncate text-app-ink">
-                  {page.page_title || 'Untitled'}
+                  {page.page_title || t('home.untitled')}
                 </span>
                 <span className="app-text-caption block truncate text-gray-500">
                   {page.doc_title}

@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import { useParams } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 
 import {
   hasAdminSectionAccess,
@@ -26,24 +27,25 @@ export function WorkspaceGate({
   bootstrapLoading: boolean;
 }) {
   const auth = useAuth();
+  const { t } = useTranslation('shell');
   const { workspaceSlug } = useParams();
 
   if (!hasWorkspaceMembership(auth.user, workspaceSlug)) {
     return (
-      <AccessDeniedView description="현재 계정은 이 workspace에서 해당 앱을 사용할 수 없습니다." />
+      <AccessDeniedView description={t('gates.workspaceAppDenied')} />
     );
   }
 
   if (workspaceSlug) {
     if (bootstrapLoading || bootstrapAppIds === null) {
-      return <div className="p-8 text-gray-500">워크스페이스 구성을 불러오는 중입니다.</div>;
+      return <div className="p-8 text-gray-500">{t('gates.workspaceLoading')}</div>;
     }
     if (bootstrapError) {
       return <AccessDeniedView description={bootstrapError} />;
     }
     if (!bootstrapAppIds.includes(appId)) {
       return (
-        <AccessDeniedView description="현재 workspace에서는 이 앱이 활성화되어 있지 않습니다." />
+        <AccessDeniedView description={t('gates.appDisabled')} />
       );
     }
   }
@@ -59,8 +61,9 @@ export function AdminGate({
   children: ReactNode;
 }) {
   const auth = useAuth();
+  const { t } = useTranslation('shell');
   if (!hasAdminConsoleAccess(auth.user) || !hasAdminSectionAccess(auth.user?.system_roles ?? [], section)) {
-    return <AccessDeniedView description="현재 계정에는 이 관리자 섹션을 볼 권한이 없습니다." />;
+    return <AccessDeniedView description={t('gates.adminSectionDenied')} />;
   }
 
   return children;
