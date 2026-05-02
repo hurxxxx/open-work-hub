@@ -4,6 +4,7 @@ import {
   Bell,
   Check,
   ChevronDown,
+  Menu,
   Plus,
   Search,
   Settings as SettingsIcon,
@@ -53,6 +54,7 @@ export function AppBar({
   shellWorkspaceSlug,
   workspaceApps,
   onOpenAccount,
+  onOpenMobileNavigation,
 }: {
   activeAppId: string;
   currentPathname: string;
@@ -61,6 +63,7 @@ export function AppBar({
   shellWorkspaceSlug: string | null;
   workspaceApps: WorkspaceBootstrapApp[];
   onOpenAccount: () => void;
+  onOpenMobileNavigation: () => void;
 }) {
   const { hasPermission, token } = useAuth();
   const navigate = useNavigate();
@@ -187,9 +190,71 @@ export function AppBar({
   const workspaceSearchHref = shellWorkspaceSlug
     ? `/tool/search?workspace=${encodeURIComponent(shellWorkspaceSlug)}`
     : '/tool/search';
+  const activeWorkspaceApp = visibleItems.find((item) => item.id === activeAppId);
+  const activeAppTitle = activeAppId === 'settings'
+    ? 'Settings'
+    : activeWorkspaceApp?.title ?? appBarItemById.get(activeAppId as (typeof APP_BAR_ITEMS)[number]['id'])?.title ?? 'AIDOO';
 
   return (
-    <div className="w-16 h-full bg-app-bg-strong border-r border-app-border flex flex-col items-center py-4 gap-4 z-20">
+    <>
+      <div className="flex h-14 shrink-0 items-center gap-2 border-b border-app-border bg-app-bg-strong px-3 text-app-ink lg:hidden">
+        <button
+          aria-label="메뉴 열기"
+          className="flex h-10 w-10 items-center justify-center rounded-xl border border-app-border bg-app-surface text-app-ink shadow-sm transition-colors hover:bg-app-surface-hover"
+          onClick={onOpenMobileNavigation}
+          type="button"
+        >
+          <Menu size={20} />
+        </button>
+
+        <div className="min-w-0 flex-1">
+          <div className="app-text-body-sm truncate font-semibold text-app-ink">
+            {activeAppTitle}
+          </div>
+          <div className="app-text-caption truncate text-app-ink/50">
+            {currentWorkspace?.name ?? 'Workspace'}
+          </div>
+        </div>
+
+        {canOpenWorkspaceSearch ? (
+          <button
+            aria-label="통합검색 열기"
+            className="flex h-10 w-10 items-center justify-center rounded-xl text-app-ink/60 transition-colors hover:bg-app-surface-hover hover:text-app-ink"
+            onClick={() => navigate(workspaceSearchHref)}
+            title="통합검색"
+            type="button"
+          >
+            <Search size={19} />
+          </button>
+        ) : null}
+
+        <button
+          aria-label="알림 열기"
+          className="relative flex h-10 w-10 items-center justify-center rounded-xl text-app-ink/60 transition-colors hover:bg-app-surface-hover hover:text-app-ink"
+          onClick={() => setNotifOpen(prev => !prev)}
+          title="알림"
+          type="button"
+        >
+          <Bell size={19} />
+          {unreadCount > 0 && (
+            <span className="app-text-micro absolute right-1.5 top-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 font-bold text-white">
+              {unreadCount > 9 ? '9+' : unreadCount}
+            </span>
+          )}
+        </button>
+
+        <button
+          aria-label="마이페이지 열기"
+          className="app-text-body-sm flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-full bg-app-accent font-bold text-app-accent-fg shadow-sm outline-none ring-2 ring-transparent transition-all hover:ring-app-accent/40"
+          onClick={onOpenAccount}
+          title={`${currentUser.display_name || currentUser.full_name} · 마이페이지`}
+          type="button"
+        >
+          {getInitials(currentUser.display_name || currentUser.full_name, 'ID')}
+        </button>
+      </div>
+
+      <div className="z-20 hidden h-full w-16 flex-col items-center gap-4 border-r border-app-border bg-app-bg-strong py-4 lg:flex">
       <div ref={workspaceSwitcherRef} className="relative mb-2">
         <button
           aria-expanded={workspaceSwitcherOpen}
@@ -361,17 +426,6 @@ export function AppBar({
           )}
         </button>
 
-        <AnimatePresence>
-          {notifOpen && (
-            <NotificationPanel
-              onClose={() => setNotifOpen(false)}
-              onNavigateToIssue={handleNavigateToIssue}
-              onCountChange={handleCountChange}
-              workspaceSlug={shellWorkspaceSlug}
-            />
-          )}
-        </AnimatePresence>
-
         <button
           aria-label="마이페이지"
           className="app-text-body-sm flex h-10 w-10 cursor-pointer items-center justify-center rounded-full bg-app-accent font-bold text-app-accent-fg shadow-sm outline-none ring-2 ring-transparent transition-all hover:ring-app-accent/40"
@@ -382,7 +436,19 @@ export function AppBar({
           {getInitials(currentUser.display_name || currentUser.full_name, 'ID')}
         </button>
       </div>
-    </div>
+      </div>
+
+      <AnimatePresence>
+        {notifOpen && (
+          <NotificationPanel
+            onClose={() => setNotifOpen(false)}
+            onNavigateToIssue={handleNavigateToIssue}
+            onCountChange={handleCountChange}
+            workspaceSlug={shellWorkspaceSlug}
+          />
+        )}
+      </AnimatePresence>
+    </>
   );
 }
 

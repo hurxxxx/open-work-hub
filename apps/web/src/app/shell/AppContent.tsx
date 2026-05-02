@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
+import { Link, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
+import { Check } from 'lucide-react';
+import { DetailDrawer } from '@aidoo/ui';
 
 import { AppBar } from '@/src/components/layout/AppBar';
 import {
@@ -8,24 +10,41 @@ import {
   RequireAuth,
   useAuth,
 } from '@/src/platform/auth/auth-provider';
-import type { ThemePreference } from '@/src/platform/auth/auth-api';
+import {
+  hasAdminConsoleAccess,
+  type AuthUser,
+  type ThemePreference,
+} from '@/src/platform/auth/auth-api';
+import {
+  getDefaultAdminPath,
+  hasAnyAdminReadPermission,
+} from '@/src/platform/admin/admin-permissions';
 import {
   NotFoundView,
   ProfilePage,
 } from '@/src/platform/auth/settings-pages';
 import {
+  buildWorkspaceAppPath,
+  getPreferredWorkspace,
   getWorkspaceAppIdFromPath,
   getWorkspaceSlugFromPath,
   persistLastWorkspaceAppId,
   persistLastWorkspaceSlug,
   resolveBootstrapWorkspaceSlug,
   resolveShellWorkspaceSlug,
+  resolveWorkspaceSwitchPath,
+  type WorkspaceAppId,
 } from '@/src/platform/workspaces/workspace-utils';
-import { useWorkspaceBootstrap } from '@/src/platform/workspaces/workspaces-api';
+import {
+  useWorkspaceBootstrap,
+  type WorkspaceBootstrapApp,
+  type WorkspaceBootstrapNavItem,
+} from '@/src/platform/workspaces/workspaces-api';
 import {
   WorkspaceBootstrapProvider,
 } from '@/src/platform/workspaces/workspace-bootstrap-context';
 import { resolveShellState, type ShellAppId } from '@/src/app-shell';
+import { cn } from '@/src/lib/utils';
 import {
   AdminLandingRedirect,
   HomeRootRedirect,
@@ -37,6 +56,7 @@ import {
 } from './workspace-route-registry';
 import { ToolViewWrapper } from './tool-view-wrapper';
 import { AppSubSidebar } from './AppSubSidebar';
+import { APP_BAR_ITEMS } from './app-registry';
 
 function resolveThemePreference(themePreference: ThemePreference, systemDarkMode: boolean) {
   if (themePreference === 'system') {
@@ -50,6 +70,217 @@ function isWhiteboardDetailPath(pathname: string): boolean {
   return /^\/w\/[^/]+\/whiteboard\/[^/]+\/?$/.test(pathname);
 }
 
+function getInitials(label: string, fallback: string): string {
+  const initials = label
+    .trim()
+    .split(/[\s-]+/)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() ?? '')
+    .join('');
+
+  return initials || fallback;
+}
+
+function buildMobileAppLink(
+  appId: WorkspaceAppId,
+  currentUser: AuthUser,
+  shellWorkspaceSlug: string | null,
+): string {
+  const selectedWorkspace = (
+    shellWorkspaceSlug
+      ? currentUser.workspaces.find((workspace) => workspace.slug === shellWorkspaceSlug) ?? null
+      : null
+  ) ?? getPreferredWorkspace(currentUser, appId);
+
+  return selectedWorkspace ? buildWorkspaceAppPath(selectedWorkspace.slug, appId) : '/';
+}
+
+function MobileNavigationDrawer({
+  activeAppId,
+  activeNavItemId,
+  currentPathname,
+  currentUser,
+  currentWorkspaceSlug,
+  hideSubSidebar,
+  onOpenChange,
+  onShellWorkspaceChange,
+  open,
+  shellWorkspaceSlug,
+  workspaceApps,
+  workspaceNavItems,
+}: {
+  activeAppId: ShellAppId;
+  activeNavItemId: string;
+  currentPathname: string;
+  currentUser: AuthUser;
+  currentWorkspaceSlug: string | null;
+  hideSubSidebar: boolean;
+  onOpenChange: (open: boolean) => void;
+  onShellWorkspaceChange: (workspaceSlug: string | null) => void;
+  open: boolean;
+  shellWorkspaceSlug: string | null;
+  workspaceApps: WorkspaceBootstrapApp[];
+  workspaceNavItems: WorkspaceBootstrapNavItem[];
+}) {
+  const navigate = useNavigate();
+  const close = () => onOpenChange(false);
+  const appBarItemById = useMemo(
+    () => new Map(APP_BAR_ITEMS.map((item) => [item.id, item])),
+    [],
+  );
+  const visibleItems = workspaceApps
+    .filter((item) => item.enabled)
+    .map((item) => {
+      const localItem = appBarItemById.get(item.app_id as WorkspaceAppId);
+      if (!localItem) {
+        return null;
+      }
+      return {
+        id: item.app_id as WorkspaceAppId,
+        title: item.title,
+        icon: localItem.icon,
+      };
+    })
+    .filter((item): item is { id: WorkspaceAppId; title: string; icon: (typeof APP_BAR_ITEMS)[number]['icon'] } => Boolean(item));
+  const currentWorkspace = currentUser.workspaces.find((workspace) => workspace.slug === shellWorkspaceSlug) ?? null;
+  const otherWorkspaces = currentUser.workspaces
+    .filter((workspace) => workspace.slug !== currentWorkspace?.slug)
+    .sort((left, right) => left.name.localeCompare(right.name, 'ko'));
+  const settingsItem = appBarItemById.get('settings');
+  const canShowSettings = (
+    hasAdminConsoleAccess(currentUser)
+    || hasAnyAdminReadPermission(currentUser.system_roles)
+  );
+
+  const handleWorkspaceSelect = (nextWorkspaceSlug: string) => {
+    if (nextWorkspaceSlug !== shellWorkspaceSlug) {
+      persistLastWorkspaceSlug(nextWorkspaceSlug);
+      onShellWorkspaceChange(nextWorkspaceSlug);
+      navigate(resolveWorkspaceSwitchPath(currentUser, currentPathname, nextWorkspaceSlug));
+    }
+    close();
+  };
+
+  return (
+    <DetailDrawer
+      closeLabel="메뉴 닫기"
+      contentClassName="border-app-border bg-app-bg"
+      description="앱과 워크스페이스를 전환합니다."
+      onOpenChange={onOpenChange}
+      open={open}
+      side="left"
+      title="메뉴"
+    >
+      <div
+        onClickCapture={(event) => {
+          if (event.target instanceof Element && event.target.closest('a')) {
+            close();
+          }
+        }}
+      >
+        <section className="border-b border-app-border px-3 py-4">
+          <div className="app-text-overline px-2 text-app-ink/50">Workspace</div>
+          <div className="mt-2 space-y-1">
+            {currentWorkspace ? (
+              <button
+                className="flex w-full items-center gap-3 rounded-xl bg-app-surface px-3 py-2 text-left text-app-ink"
+                onClick={() => handleWorkspaceSelect(currentWorkspace.slug)}
+                type="button"
+              >
+                <span className="app-text-body-sm flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-app-border bg-app-bg font-semibold">
+                  {getInitials(currentWorkspace.name, 'WS')}
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="app-text-body-sm block truncate font-semibold">
+                    {currentWorkspace.name}
+                  </span>
+                  <span className="app-text-caption block truncate text-app-ink/50">
+                    {currentWorkspace.slug}
+                  </span>
+                </span>
+                <Check size={15} className="text-app-accent" />
+              </button>
+            ) : null}
+
+            {otherWorkspaces.map((workspace) => (
+              <button
+                key={workspace.id}
+                className="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-app-ink transition-colors hover:bg-app-surface-hover"
+                onClick={() => handleWorkspaceSelect(workspace.slug)}
+                type="button"
+              >
+                <span className="app-text-body-sm flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-app-border bg-app-bg font-semibold">
+                  {getInitials(workspace.name, 'WS')}
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="app-text-body-sm block truncate">
+                    {workspace.name}
+                  </span>
+                  <span className="app-text-caption block truncate text-app-ink/50">
+                    {workspace.slug}
+                  </span>
+                </span>
+              </button>
+            ))}
+          </div>
+        </section>
+
+        <section className="border-b border-app-border px-3 py-4">
+          <div className="app-text-overline px-2 text-app-ink/50">Apps</div>
+          <div className="mt-2 space-y-1">
+            {visibleItems.map((item) => (
+              <Link
+                key={item.id}
+                to={buildMobileAppLink(item.id, currentUser, shellWorkspaceSlug)}
+                className={cn(
+                  'flex items-center gap-3 rounded-xl px-3 py-2 text-app-ink transition-colors hover:bg-app-surface-hover',
+                  activeAppId === item.id && 'bg-app-surface text-app-accent',
+                )}
+              >
+                <item.icon size={18} className="shrink-0" />
+                <span className="app-text-body-sm min-w-0 flex-1 truncate">
+                  {item.title}
+                </span>
+                {activeAppId === item.id ? <Check size={15} className="shrink-0" /> : null}
+              </Link>
+            ))}
+
+            {canShowSettings && settingsItem ? (
+              <Link
+                to={getDefaultAdminPath(currentUser.system_roles)}
+                className={cn(
+                  'flex items-center gap-3 rounded-xl px-3 py-2 text-app-ink transition-colors hover:bg-app-surface-hover',
+                  activeAppId === 'settings' && 'bg-app-surface text-app-accent',
+                )}
+              >
+                <settingsItem.icon size={18} className="shrink-0" />
+                <span className="app-text-body-sm min-w-0 flex-1 truncate">
+                  Settings
+                </span>
+                {activeAppId === 'settings' ? <Check size={15} className="shrink-0" /> : null}
+              </Link>
+            ) : null}
+          </div>
+        </section>
+
+        {!hideSubSidebar && activeAppId !== 'home' && activeAppId !== 'profile' ? (
+          <div className="h-[min(520px,60vh)] border-b border-app-border">
+            <AppSubSidebar
+              activeAppId={activeAppId}
+              activeNavItemId={activeNavItemId}
+              currentWorkspaceSlug={currentWorkspaceSlug}
+              onNavigate={close}
+              variant="mobile"
+              workspaceApps={workspaceApps}
+              workspaceNavItems={workspaceNavItems}
+            />
+          </div>
+        ) : null}
+      </div>
+    </DetailDrawer>
+  );
+}
+
 function AuthenticatedShell() {
   const auth = useAuth();
   const location = useLocation();
@@ -57,6 +288,7 @@ function AuthenticatedShell() {
   const [activeNavItemId, setActiveNavItemId] = useState('');
   const [systemDarkMode, setSystemDarkMode] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const currentUser = auth.user;
   const routeWorkspaceSlug = getWorkspaceSlugFromPath(location.pathname);
   const routeWorkspaceAppId = getWorkspaceAppIdFromPath(location.pathname);
@@ -138,17 +370,22 @@ function AuthenticatedShell() {
     persistLastWorkspaceAppId(routeWorkspaceAppId);
   }, [routeWorkspaceAppId, routeWorkspaceSlug]);
 
+  useEffect(() => {
+    setMobileNavOpen(false);
+  }, [location.pathname, location.search]);
+
   if (!currentUser) {
     return <Navigate replace to="/login" />;
   }
 
   return (
     <WorkspaceBootstrapProvider value={workspaceBootstrap}>
-      <div className="flex h-screen bg-app-surface-sidebar text-app-ink overflow-hidden transition-colors">
+      <div className="flex h-screen flex-col overflow-hidden bg-app-surface-sidebar text-app-ink transition-colors lg:flex-row">
         <AppBar
           activeAppId={activeAppId}
           currentUser={currentUser}
           currentPathname={location.pathname}
+          onOpenMobileNavigation={() => setMobileNavOpen(true)}
           onShellWorkspaceChange={setShellWorkspaceSlug}
           shellWorkspaceSlug={shellWorkspaceSlug}
           workspaceApps={workspaceBootstrap.data?.apps ?? []}
@@ -161,6 +398,7 @@ function AuthenticatedShell() {
               activeAppId={activeAppId}
               activeNavItemId={activeNavItemId}
               currentWorkspaceSlug={bootstrapWorkspaceSlug}
+              variant="desktop"
               workspaceApps={workspaceBootstrap.data?.apps ?? []}
               workspaceNavItems={workspaceBootstrap.data?.nav ?? []}
             />
@@ -186,13 +424,28 @@ function AuthenticatedShell() {
           </div>
         </div>
 
+        <MobileNavigationDrawer
+          activeAppId={activeAppId}
+          activeNavItemId={activeNavItemId}
+          currentPathname={location.pathname}
+          currentUser={currentUser}
+          currentWorkspaceSlug={bootstrapWorkspaceSlug}
+          hideSubSidebar={hideSubSidebar}
+          onOpenChange={setMobileNavOpen}
+          onShellWorkspaceChange={setShellWorkspaceSlug}
+          open={mobileNavOpen}
+          shellWorkspaceSlug={shellWorkspaceSlug}
+          workspaceApps={workspaceBootstrap.data?.apps ?? []}
+          workspaceNavItems={workspaceBootstrap.data?.nav ?? []}
+        />
+
         {profileOpen && (
           <div className="fixed inset-0 z-50 flex items-center justify-center">
             <div
               className="absolute inset-0 bg-black/50 backdrop-blur-[2px]"
               onClick={() => setProfileOpen(false)}
             />
-            <div className="relative z-10 w-full max-w-4xl h-[85vh] bg-app-bg border border-app-border rounded-2xl shadow-2xl overflow-hidden">
+            <div className="relative z-10 h-[calc(100vh-1rem)] w-[calc(100vw-1rem)] overflow-hidden rounded-xl border border-app-border bg-app-bg shadow-2xl sm:h-[85vh] sm:max-w-4xl sm:rounded-2xl">
               <button
                 onClick={() => setProfileOpen(false)}
                 className="absolute top-4 right-4 z-20 w-8 h-8 flex items-center justify-center rounded-lg text-app-ink/50 hover:text-app-ink hover:bg-app-surface-hover transition-colors"

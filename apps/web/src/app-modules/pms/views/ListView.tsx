@@ -2,6 +2,7 @@ import { Activity, Plus, Layout, ChevronDown, Circle, User2, CheckSquare, Clock 
 import { Badge, Button } from '@aidoo/ui';
 import type { PmsIssue, PmsTaskListStatus } from '../api/pms-api';
 import { getStatusSlugs, getStatusTone, PRIORITY_COLOR, initials, formatDate } from './pms-constants';
+import { TaskIssueCard } from './TaskIssueCard';
 
 export const ListView = ({
   issues,
@@ -17,8 +18,8 @@ export const ListView = ({
   taskListStatuses?: PmsTaskListStatus[];
 }) => {
   return (
-    <div className="space-y-8">
-      <div className="app-text-body-sm flex items-center gap-4 rounded-md border border-app-border bg-app-surface-sidebar/30 p-2 text-app-ink/60">
+    <div className="space-y-5 lg:space-y-8">
+      <div className="app-text-body-sm hidden items-center gap-4 rounded-md border border-app-border bg-app-surface-sidebar/30 p-2 text-app-ink/60 lg:flex">
         <Button variant="subtle" size="dense" className="app-text-body-sm gap-1 font-medium">
           <Activity size={14} />
           Group: Status
@@ -47,8 +48,21 @@ export const ListView = ({
               </span>
             </div>
 
-            <div className="border border-app-border rounded-lg overflow-hidden bg-app-surface-sidebar/20">
-              <table className="app-text-body-sm w-full text-left">
+            <div className="space-y-2 lg:hidden">
+              {statusIssues.map((issue) => (
+                <TaskIssueCard
+                  key={issue.id}
+                  issue={issue}
+                  onSelectIssue={onSelectIssue}
+                  onToggleSelect={onToggleSelect}
+                  selected={selectedIds?.has(issue.id) ?? false}
+                  taskListStatuses={taskListStatuses}
+                />
+              ))}
+            </div>
+
+            <div className="hidden overflow-hidden rounded-lg border border-app-border bg-app-surface-sidebar/20 lg:block">
+              <table className="app-text-body-sm w-full text-left" data-testid="desktop-task-table">
                 <thead>
                   <tr className="app-text-overline border-b border-app-border bg-app-surface-sidebar/50 text-app-ink/50">
                     <th className="w-10 py-2 px-4"></th>

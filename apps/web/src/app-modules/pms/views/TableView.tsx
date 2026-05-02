@@ -2,6 +2,7 @@ import { MessageSquare, Flag, MoreHorizontal, CheckSquare, Clock } from 'lucide-
 import { Badge, Button } from '@aidoo/ui';
 import type { PmsIssue, PmsTaskListStatus } from '../api/pms-api';
 import { getStatusTone, PRIORITY_COLOR, initials, formatDate } from './pms-constants';
+import { TaskIssueCard } from './TaskIssueCard';
 
 export const TableView = ({
   issues,
@@ -17,7 +18,21 @@ export const TableView = ({
   taskListStatuses?: PmsTaskListStatus[];
 }) => {
   return (
-    <div className="overflow-hidden rounded-lg border border-app-border bg-app-surface">
+    <>
+      <div className="space-y-2 lg:hidden">
+        {issues.map((issue) => (
+          <TaskIssueCard
+            key={issue.id}
+            issue={issue}
+            onSelectIssue={onSelectIssue}
+            onToggleSelect={onToggleSelect}
+            selected={selectedIds?.has(issue.id) ?? false}
+            taskListStatuses={taskListStatuses}
+          />
+        ))}
+      </div>
+
+      <div className="hidden overflow-hidden rounded-lg border border-app-border bg-app-surface lg:block">
       <div className="overflow-x-auto custom-scrollbar">
         <table className="app-text-body-sm w-full text-left">
           <thead>
@@ -121,5 +136,6 @@ export const TableView = ({
         </table>
       </div>
     </div>
+    </>
   );
 };

@@ -268,4 +268,32 @@ describe('TaskDetail', () => {
     expect(screen.getByPlaceholderText('Comments are read-only').hasAttribute('disabled')).toBe(true);
     expect(screen.queryByText('Click or drag files to upload')).toBeNull();
   });
+
+  it('uses mobile tabs and wrapping-safe detail layout', async () => {
+    render(
+      <TaskDetail
+        issue={buildIssue({ title: '[검색 검증] 예산 리스크 코멘트 검색 검증' })}
+        members={[]}
+        milestones={[]}
+        taskListLabels={[]}
+        onClose={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(mockGetIssueDetail).toHaveBeenCalled();
+    });
+
+    expect(screen.getByRole('button', { name: 'Details' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Activity' })).toBeTruthy();
+    expect(screen.getByTestId('task-detail-title').className).toContain('break-words');
+    expect(screen.getByTestId('task-detail-meta-grid').className).toContain('grid-cols-[88px_minmax(0,1fr)]');
+    expect(screen.getByTestId('task-detail-details-panel').className).toContain('flex');
+    expect(screen.getByTestId('task-detail-activity-panel').className).toContain('hidden');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Activity' }));
+
+    expect(screen.getByTestId('task-detail-details-panel').className).toContain('hidden');
+    expect(screen.getByTestId('task-detail-activity-panel').className).toContain('flex');
+  });
 });

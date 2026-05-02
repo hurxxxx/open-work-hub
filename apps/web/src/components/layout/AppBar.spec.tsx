@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, useLocation } from 'react-router-dom';
 import { vi } from 'vitest';
 
@@ -94,12 +94,14 @@ function renderAppBar({
   activeAppId = 'home',
   currentPathname = '/',
   currentUser = buildUser(),
+  onOpenMobileNavigation = vi.fn(),
   shellWorkspaceSlug = 'hq',
   workspaceApps = buildWorkspaceApps(),
 }: {
   activeAppId?: string;
   currentPathname?: string;
   currentUser?: AuthUser;
+  onOpenMobileNavigation?: () => void;
   shellWorkspaceSlug?: string | null;
   workspaceApps?: WorkspaceBootstrapApp[];
 } = {}) {
@@ -113,6 +115,7 @@ function renderAppBar({
           currentPathname={currentPathname}
           currentUser={currentUser}
           onOpenAccount={vi.fn()}
+          onOpenMobileNavigation={onOpenMobileNavigation}
           onShellWorkspaceChange={setSelectedShellWorkspaceSlug}
           shellWorkspaceSlug={selectedShellWorkspaceSlug}
           workspaceApps={workspaceApps}
@@ -154,6 +157,15 @@ describe('AppBar', () => {
     await waitFor(() => {
       expect(mockGetUnreadNotificationCount).toHaveBeenCalledWith('test-token', 'hq');
     });
+  });
+
+  it('opens the mobile navigation from the compact app bar', () => {
+    const onOpenMobileNavigation = vi.fn();
+    renderAppBar({ onOpenMobileNavigation });
+
+    fireEvent.click(screen.getByRole('button', { name: '메뉴 열기' }));
+
+    expect(onOpenMobileNavigation).toHaveBeenCalledTimes(1);
   });
 
   it('polls notifications using the shell workspace slug instead of the current URL workspace slug', async () => {
@@ -228,7 +240,7 @@ describe('AppBar', () => {
     expect(container.querySelector('a[href="/w/innovation-lab/ai"]')).toBeTruthy();
 
     fireEvent.click(screen.getByRole('button', { name: '워크스페이스 전환' }));
-    expect(screen.getByText('Innovation Lab')).toBeTruthy();
+    expect(within(screen.getByRole('dialog')).getByText('Innovation Lab')).toBeTruthy();
   });
 
   it('updates the selected workspace on home even when the route stays on home', async () => {

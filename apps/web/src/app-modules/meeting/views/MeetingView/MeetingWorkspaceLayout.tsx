@@ -8,8 +8,8 @@
 // onDeleted callbacks back to the host so it can refetch its own data.
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowLeft, ExternalLink, Loader2, X } from 'lucide-react';
-import { BlockViewer, Button, CollaborativeBlockEditor } from '@aidoo/ui';
+import { ArrowLeft, ExternalLink, Loader2, PanelRightOpen, X } from 'lucide-react';
+import { BlockViewer, Button, CollaborativeBlockEditor, DetailDrawer } from '@aidoo/ui';
 
 import { useAuth } from '@/src/platform/auth/auth-provider';
 import {
@@ -79,6 +79,31 @@ function formatRange(start: string, end: string, timeZone: string): string {
   })}`;
 }
 
+function useMediaQuery(query: string): boolean {
+  const [matches, setMatches] = useState(() => (
+    typeof window !== 'undefined' && typeof window.matchMedia === 'function'
+      ? window.matchMedia(query).matches
+      : false
+  ));
+
+  useEffect(() => {
+    if (typeof window.matchMedia !== 'function') {
+      return undefined;
+    }
+
+    const mediaQuery = window.matchMedia(query);
+    const apply = () => setMatches(mediaQuery.matches);
+    apply();
+    mediaQuery.addEventListener('change', apply);
+
+    return () => {
+      mediaQuery.removeEventListener('change', apply);
+    };
+  }, [query]);
+
+  return matches;
+}
+
 export function MeetingWorkspaceLayout({
   workspaceSlug,
   meetingId,
@@ -96,6 +121,8 @@ export function MeetingWorkspaceLayout({
   const [notesPage, setNotesPage] = useState<DocsPageItem | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [detailOpen, setDetailOpen] = useState(false);
+  const detailPanelDocked = useMediaQuery('(min-width: 1280px)');
 
   const meetingsRoot = backHref ?? buildWorkspaceAppPath(workspaceSlug, 'meeting');
   const notesDocId = notesDoc?.id ?? null;
@@ -155,6 +182,12 @@ export function MeetingWorkspaceLayout({
   useEffect(() => {
     void loadWorkspace();
   }, [loadWorkspace]);
+
+  useEffect(() => {
+    if (detailPanelDocked) {
+      setDetailOpen(false);
+    }
+  }, [detailPanelDocked]);
 
   useEffect(() => {
     if (!token || !notesDocId || !notesPageId || !workspaceSlug) {
@@ -243,8 +276,8 @@ export function MeetingWorkspaceLayout({
   return (
     <div className="flex h-full min-w-0 bg-app-bg">
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="border-b border-app-border bg-app-surface px-6 py-4">
-          <div className="flex items-center justify-between gap-4">
+        <header className="border-b border-app-border bg-app-surface px-4 py-3 sm:px-6 sm:py-4">
+          <div className="flex items-start justify-between gap-3 sm:items-center sm:gap-4">
             <div className="min-w-0">
               {onClose ? (
                 <button
@@ -271,22 +304,36 @@ export function MeetingWorkspaceLayout({
                 {formatRange(meeting.start_at, meeting.end_at, timeZone)} · {meeting.organizer_name}
               </p>
             </div>
-            {notesDocPath ? (
-              <Link
-                to={notesDocPath}
-                target={onClose ? '_blank' : undefined}
-                rel={onClose ? 'noopener noreferrer' : undefined}
-                className="app-text-control-sm inline-flex items-center gap-1 rounded-md border border-app-border px-3 py-2 text-app-ink transition-colors hover:bg-app-surface-hover"
-              >
-                Open in Docs
-                <ExternalLink size={13} />
-              </Link>
-            ) : null}
+            <div className="flex shrink-0 items-center gap-2">
+              {!detailPanelDocked ? (
+                <button
+                  aria-label="회의 상세 열기"
+                  className="app-text-control-sm inline-flex h-9 items-center gap-1 rounded-md border border-app-border px-3 text-app-ink transition-colors hover:bg-app-surface-hover"
+                  onClick={() => setDetailOpen(true)}
+                  type="button"
+                >
+                  <PanelRightOpen size={14} />
+                  <span className="hidden sm:inline">상세</span>
+                </button>
+              ) : null}
+              {notesDocPath ? (
+                <Link
+                  aria-label="Docs에서 열기"
+                  to={notesDocPath}
+                  target={onClose ? '_blank' : undefined}
+                  rel={onClose ? 'noopener noreferrer' : undefined}
+                  className="app-text-control-sm inline-flex h-9 items-center gap-1 rounded-md border border-app-border px-3 text-app-ink transition-colors hover:bg-app-surface-hover"
+                >
+                  <span className="hidden sm:inline">Open in Docs</span>
+                  <ExternalLink size={13} />
+                </Link>
+              ) : null}
+            </div>
           </div>
         </header>
 
         <div className="flex-1 overflow-y-auto bg-white dark:bg-[#1e1e24]">
-          <div className="mx-auto w-full max-w-4xl px-10 py-12">
+          <div className="mx-auto w-full max-w-4xl px-4 py-8 sm:px-6 lg:px-10 lg:py-12">
             {error ? (
               <div
                 role="alert"
@@ -376,17 +423,40 @@ export function MeetingWorkspaceLayout({
         </div>
       </div>
 
-      <aside className="w-[420px] shrink-0 border-l border-app-border bg-app-surface">
+      {detailPanelDocked ? (
+        <aside className="w-[420px] shrink-0 border-l border-app-border bg-app-surface">
+          <MeetingDetail
+            workspaceSlug={workspaceSlug}
+            meetingId={meetingId}
+            onChanged={handleChanged}
+            onDeleted={() => {
+              onDeleted?.();
+            }}
+            showCloseButton={false}
+          />
+        </aside>
+      ) : null}
+
+      <DetailDrawer
+        contentClassName="border-app-border bg-app-surface"
+        description="회의 상태, 참석자, 연결된 문서와 녹음을 확인합니다."
+        embedded
+        onOpenChange={setDetailOpen}
+        open={detailOpen && !detailPanelDocked}
+        title="회의 상세"
+      >
         <MeetingDetail
           workspaceSlug={workspaceSlug}
           meetingId={meetingId}
+          onClose={() => setDetailOpen(false)}
           onChanged={handleChanged}
           onDeleted={() => {
+            setDetailOpen(false);
             onDeleted?.();
           }}
-          showCloseButton={false}
+          showCloseButton
         />
-      </aside>
+      </DetailDrawer>
     </div>
   );
 }

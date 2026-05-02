@@ -14,12 +14,16 @@ export function AppSubSidebar({
   activeAppId,
   activeNavItemId,
   currentWorkspaceSlug,
+  onNavigate,
+  variant,
   workspaceApps,
   workspaceNavItems,
 }: {
   activeAppId: string;
   activeNavItemId: string;
   currentWorkspaceSlug: string | null;
+  onNavigate?: () => void;
+  variant?: 'desktop' | 'mobile';
   workspaceApps: WorkspaceBootstrapApp[];
   workspaceNavItems: WorkspaceBootstrapNavItem[];
 }) {
@@ -32,6 +36,8 @@ export function AppSubSidebar({
       activeAppId={activeAppId}
       activeNavItemId={activeNavItemId}
       currentWorkspaceSlug={currentWorkspaceSlug}
+      onNavigate={onNavigate}
+      variant={variant}
       workspaceApps={workspaceApps}
       workspaceNavItems={workspaceNavItems}
     />

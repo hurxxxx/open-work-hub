@@ -73,7 +73,7 @@ export function NotificationPanel({
         initial={{ opacity: 0, y: -8 }}
         animate={{ opacity: 1, y: 0 }}
         exit={{ opacity: 0, y: -8 }}
-        className="absolute left-16 bottom-16 z-50 w-80 max-h-[480px] bg-app-bg border border-app-border rounded-xl shadow-2xl flex flex-col overflow-hidden"
+        className="fixed left-3 right-3 top-16 z-50 flex max-h-[min(480px,calc(100vh-5rem))] flex-col overflow-hidden rounded-xl border border-app-border bg-app-bg shadow-2xl lg:bottom-16 lg:left-20 lg:right-auto lg:top-auto lg:w-80"
       >
         <div className="flex items-center justify-between px-4 py-3 border-b border-app-border shrink-0">
           <h3 className="app-text-title-md text-app-ink">Notifications</h3>

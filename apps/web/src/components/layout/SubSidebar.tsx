@@ -44,18 +44,23 @@ export const SubSidebar = ({
   activeAppId,
   activeNavItemId,
   currentWorkspaceSlug,
+  onNavigate,
+  variant = 'desktop',
   workspaceApps,
   workspaceNavItems,
 }: {
   activeAppId: string;
   activeNavItemId: string;
   currentWorkspaceSlug: string | null;
+  onNavigate?: () => void;
+  variant?: 'desktop' | 'mobile';
   workspaceApps: WorkspaceBootstrapApp[];
   workspaceNavItems: WorkspaceBootstrapNavItem[];
 }) => {
   const location = useLocation();
   const navigate = useNavigate();
   const { user } = useAuth();
+  const isMobile = variant === 'mobile';
   const canReadTeams = hasWorkspaceMembership(user, currentWorkspaceSlug);
 
   const [expandedCategories, setExpandedCategories] = useState<string[]>([]);
@@ -267,8 +272,8 @@ export const SubSidebar = ({
     return null;
   }
 
-  return isCollapsed ? (
-    <div className="relative h-full w-10 shrink-0 border-r border-app-border bg-app-surface-sidebar flex flex-col items-center pt-4">
+  return !isMobile && isCollapsed ? (
+    <div className="relative hidden h-full w-10 shrink-0 flex-col items-center border-r border-app-border bg-app-surface-sidebar pt-4 lg:flex">
       <button
         type="button"
         onClick={() => setIsCollapsed(false)}
@@ -281,8 +286,11 @@ export const SubSidebar = ({
     </div>
   ) : (
     <div
-      className="relative h-full bg-app-surface-sidebar border-r border-app-border flex flex-col overflow-hidden shrink-0"
-      style={{ width: `${sidebarWidth}px` }}
+      className={cn(
+        'relative h-full flex-col overflow-hidden bg-app-surface-sidebar',
+        isMobile ? 'flex w-full' : 'hidden shrink-0 border-r border-app-border lg:flex',
+      )}
+      style={isMobile ? undefined : { width: `${sidebarWidth}px` }}
     >
       <div className="flex items-center justify-between p-4 border-b border-app-border">
         <h2 className="app-text-overline text-gray-600 dark:text-gray-300">
@@ -316,6 +324,7 @@ export const SubSidebar = ({
                         onClick={() => {
                           setCreateMenuOpen(false);
                           action.run(sidebarActionContext);
+                          onNavigate?.();
                         }}
                         className="app-text-control-sm flex w-full items-center gap-2 px-3 py-2 text-left text-app-ink hover:bg-app-surface-hover"
                       >
@@ -328,15 +337,17 @@ export const SubSidebar = ({
               ) : null}
             </div>
           ) : null}
-          <button
-            type="button"
-            onClick={() => setIsCollapsed(true)}
-            title="서브 메뉴 접기"
-            aria-label="서브 메뉴 접기"
-            className="flex h-8 w-8 items-center justify-center rounded-md border border-app-border bg-app-surface text-app-ink shadow-sm transition-colors hover:bg-app-accent/15 hover:text-app-accent hover:border-app-accent/40"
-          >
-            <PanelLeftClose size={16} />
-          </button>
+          {!isMobile ? (
+            <button
+              type="button"
+              onClick={() => setIsCollapsed(true)}
+              title="서브 메뉴 접기"
+              aria-label="서브 메뉴 접기"
+              className="flex h-8 w-8 items-center justify-center rounded-md border border-app-border bg-app-surface text-app-ink shadow-sm transition-colors hover:bg-app-accent/15 hover:text-app-accent hover:border-app-accent/40"
+            >
+              <PanelLeftClose size={16} />
+            </button>
+          ) : null}
         </div>
       </div>
 
@@ -396,6 +407,7 @@ export const SubSidebar = ({
                                 'sidebar-submenu-item-active',
                               item.comingSoon && 'opacity-60',
                             )}
+                            onClick={onNavigate}
                           >
                             <item.icon
                               size={16}
@@ -421,18 +433,19 @@ export const SubSidebar = ({
         {sidebarConfig?.afterCategories?.(sidebarContext)}
       </div>
 
-      {/* Resize handle */}
-      <div
-        onMouseDown={(e) => {
-          e.preventDefault();
-          setIsResizing(true);
-        }}
-        className={cn(
-          'absolute right-0 top-0 h-full w-1 cursor-col-resize transition-colors hover:bg-app-accent/30',
-          isResizing && 'bg-app-accent/50',
-        )}
-        title="Drag to resize"
-      />
+      {!isMobile ? (
+        <div
+          onMouseDown={(e) => {
+            e.preventDefault();
+            setIsResizing(true);
+          }}
+          className={cn(
+            'absolute right-0 top-0 h-full w-1 cursor-col-resize transition-colors hover:bg-app-accent/30',
+            isResizing && 'bg-app-accent/50',
+          )}
+          title="Drag to resize"
+        />
+      ) : null}
     </div>
   );
 };

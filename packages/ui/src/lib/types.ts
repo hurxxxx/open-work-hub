@@ -40,4 +40,8 @@ export type DetailDrawerProps = {
   description?: ReactNode;
   children: ReactNode;
   actions?: ReactNode;
+  closeLabel?: string;
+  contentClassName?: string;
+  embedded?: boolean;
+  side?: 'left' | 'right';
 };

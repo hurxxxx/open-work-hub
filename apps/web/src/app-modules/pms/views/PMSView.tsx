@@ -16,6 +16,7 @@ import {
   Loader2,
   Download,
   ChevronDown,
+  MoreHorizontal,
 } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 import { useAuth } from '@/src/platform/auth/auth-provider';
@@ -114,9 +115,11 @@ export const PMSView = () => {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [createSpaceOpen, setCreateSpaceOpen] = useState(false);
   const [taskListSwitcherOpen, setTaskListSwitcherOpen] = useState(false);
+  const [mobileMoreOpen, setMobileMoreOpen] = useState(false);
 
 
   const taskListSwitcherRef = useRef<HTMLDivElement>(null);
+  const mobileMoreRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!taskListSwitcherOpen) return;
@@ -128,6 +131,17 @@ export const PMSView = () => {
     document.addEventListener('mousedown', onClick);
     return () => document.removeEventListener('mousedown', onClick);
   }, [taskListSwitcherOpen]);
+
+  useEffect(() => {
+    if (!mobileMoreOpen) return;
+    function onClick(e: MouseEvent) {
+      if (mobileMoreRef.current && !mobileMoreRef.current.contains(e.target as Node)) {
+        setMobileMoreOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', onClick);
+    return () => document.removeEventListener('mousedown', onClick);
+  }, [mobileMoreOpen]);
 
   const createTaskRequested = searchParams.get('create') === '1';
   const isAssignedTasksView = toolId === 'pms-tasks' || toolId === 'pms-tasks-assigned';
@@ -158,6 +172,22 @@ export const PMSView = () => {
     () => (selectedTaskListId ? { app: 'pms', type: 'task_list', id: selectedTaskListId } : null),
     [selectedTaskListId],
   );
+  const viewTabs = ['List', 'Board', 'Calendar', 'Gantt', 'Table', 'Whiteboard'] as const;
+  const mobilePrimaryTabs = ['List', 'Board', 'Calendar'] as const;
+  const mobileMoreTabs = ['Gantt', 'Table', 'Whiteboard'] as const;
+  const mobileMoreActive = mobileMoreTabs.includes(activeTab as (typeof mobileMoreTabs)[number]);
+
+  const selectViewTab = (tab: typeof activeTab) => {
+    setActiveTab(tab);
+    setMobileMoreOpen(false);
+    const nextParams = new URLSearchParams(searchParams);
+    if (tab === 'Whiteboard') {
+      nextParams.set('tab', 'whiteboard');
+    } else {
+      nextParams.delete('tab');
+    }
+    setSearchParams(nextParams, { replace: true });
+  };
 
   useEffect(() => {
     if (searchParams.get('tab') === 'whiteboard') {
@@ -527,10 +557,10 @@ export const PMSView = () => {
   }
 
   return (
-    <div className="h-full flex flex-col relative">
-      <header className="bg-app-bg border-b border-app-border px-6 pt-3 transition-colors">
+    <div className="relative flex h-full min-w-0 flex-col">
+      <header className="border-b border-app-border bg-app-bg px-4 pt-4 transition-colors lg:px-6 lg:pt-3">
         {/* Row 1: breadcrumb */}
-        <nav className="app-text-caption flex items-center gap-1.5 text-gray-500 mb-1.5 min-w-0">
+        <nav className="app-text-caption mb-1.5 hidden min-w-0 items-center gap-1.5 text-gray-500 lg:flex">
           <Link to={currentWorkspaceSlug ? `/w/${encodeURIComponent(currentWorkspaceSlug)}/pms` : pmsRoot} className="hover:text-app-ink transition-colors shrink-0">PMS</Link>
           {selectedTaskList?.team_name ? (
             <>
@@ -547,14 +577,21 @@ export const PMSView = () => {
         </nav>
 
         {/* Row 2: title + actions */}
-        <div className="flex items-center justify-between gap-4 mb-3 min-w-0">
-          <div className="flex items-center gap-2.5 flex-1 min-w-0">
-            <div className="w-7 h-7 bg-app-accent rounded flex items-center justify-center text-app-bg shrink-0">
+        <div className="mb-3 flex min-w-0 items-start justify-between gap-3 lg:items-center lg:gap-4">
+          <div className="flex min-w-0 flex-1 items-center gap-2.5">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded bg-app-accent text-app-bg lg:h-7 lg:w-7">
               <Layout size={16} />
             </div>
-            <h1 className="app-text-title-md text-app-ink truncate min-w-0">
-              {selectedTaskList?.name || taskListName}
-            </h1>
+            <div className="min-w-0">
+              <h1 className="app-text-title-md min-w-0 truncate text-app-ink">
+                {selectedTaskList?.name || taskListName}
+              </h1>
+              {selectedTaskList?.team_name ? (
+                <p className="app-text-caption mt-0.5 truncate text-app-ink/45 lg:hidden">
+                  {selectedTaskList.team_name}
+                </p>
+              ) : null}
+            </div>
             <button
               type="button"
               className="shrink-0 text-gray-600 hover:text-yellow-500 transition-colors"
@@ -596,7 +633,7 @@ export const PMSView = () => {
               </div>
             )}
           </div>
-          <div className="flex items-center gap-1 shrink-0">
+          <div className="flex shrink-0 items-center gap-1">
             {selectedTaskListId && (
               <button
                 onClick={() => { if (token) void exportTaskListCsv(token, selectedTaskListId); }}
@@ -620,30 +657,22 @@ export const PMSView = () => {
                 <div className="w-px h-5 bg-app-border mx-1" />
                 <button
                   onClick={() => setIsNewTaskModalOpen(true)}
-                  className="app-text-body-sm flex h-8 items-center gap-1.5 rounded-md bg-app-accent px-3 font-semibold text-app-accent-fg shadow-sm"
+                  className="app-text-body-sm flex h-9 w-9 items-center justify-center gap-1.5 rounded-md bg-app-accent font-semibold text-app-accent-fg shadow-sm sm:w-auto sm:px-3 lg:h-8"
+                  aria-label="New Task"
                 >
                   <Plus size={14} />
-                  <span>New Task</span>
+                  <span className="hidden sm:inline">New Task</span>
                 </button>
               </>
             ) : null}
           </div>
         </div>
 
-        <div className="flex items-center gap-6">
-          {(['List', 'Board', 'Calendar', 'Gantt', 'Table', 'Whiteboard'] as const).map(tab => (
+        <div className="hidden items-center gap-6 lg:flex">
+          {viewTabs.map(tab => (
             <button
               key={tab}
-              onClick={() => {
-                setActiveTab(tab as typeof activeTab);
-                const nextParams = new URLSearchParams(searchParams);
-                if (tab === 'Whiteboard') {
-                  nextParams.set('tab', 'whiteboard');
-                } else {
-                  nextParams.delete('tab');
-                }
-                setSearchParams(nextParams, { replace: true });
-              }}
+              onClick={() => selectViewTab(tab)}
               className={cn(
                 'app-text-body-sm relative pb-3 font-medium transition-all',
                 activeTab === tab ? 'text-app-ink' : 'text-gray-500 hover:text-app-ink'
@@ -667,6 +696,64 @@ export const PMSView = () => {
             <Plus size={14} />
           </button>
         </div>
+
+        <div className="flex items-center gap-1 pb-3 lg:hidden">
+          <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
+            {mobilePrimaryTabs.map(tab => (
+              <button
+                key={tab}
+                onClick={() => selectViewTab(tab)}
+                className={cn(
+                  'app-text-control-sm flex shrink-0 items-center gap-1.5 rounded-md border px-3 py-2 transition-colors',
+                  activeTab === tab
+                    ? 'border-app-accent bg-app-accent/10 text-app-accent'
+                    : 'border-app-border text-app-ink/65 hover:bg-app-surface-hover hover:text-app-ink',
+                )}
+              >
+                {tab === 'List' && <ListIcon size={14} />}
+                {tab === 'Board' && <Grid size={14} />}
+                {tab === 'Calendar' && <Calendar size={14} />}
+                {tab}
+              </button>
+            ))}
+          </div>
+
+          <div ref={mobileMoreRef} className="relative shrink-0">
+            <button
+              type="button"
+              onClick={() => setMobileMoreOpen((open) => !open)}
+              className={cn(
+                'app-text-control-sm flex items-center gap-1.5 rounded-md border px-3 py-2 transition-colors',
+                mobileMoreActive
+                  ? 'border-app-accent bg-app-accent/10 text-app-accent'
+                  : 'border-app-border text-app-ink/65 hover:bg-app-surface-hover hover:text-app-ink',
+              )}
+            >
+              <MoreHorizontal size={14} />
+              More
+            </button>
+            {mobileMoreOpen ? (
+              <div className="absolute right-0 top-full z-30 mt-1 w-44 rounded-lg border border-app-border bg-app-bg py-1 shadow-xl">
+                {mobileMoreTabs.map(tab => (
+                  <button
+                    key={tab}
+                    type="button"
+                    onClick={() => selectViewTab(tab)}
+                    className={cn(
+                      'app-text-body-sm flex w-full items-center gap-2 px-3 py-2 text-left hover:bg-app-surface-hover',
+                      activeTab === tab ? 'text-app-accent' : 'text-app-ink',
+                    )}
+                  >
+                    {tab === 'Gantt' && <Activity size={14} />}
+                    {tab === 'Table' && <Table size={14} />}
+                    {tab === 'Whiteboard' && <PencilRuler size={14} />}
+                    {tab}
+                  </button>
+                ))}
+              </div>
+            ) : null}
+          </div>
+        </div>
       </header>
 
       {selectedTaskListId && activeTab !== 'Whiteboard' && (
@@ -683,7 +770,7 @@ export const PMSView = () => {
 
       <main className={cn(
         'flex-1 custom-scrollbar',
-        activeTab === 'Whiteboard' ? 'overflow-hidden p-4' : 'overflow-y-auto p-8',
+        activeTab === 'Whiteboard' ? 'overflow-hidden p-2 lg:p-4' : 'overflow-y-auto p-4 lg:p-8',
       )}>
         {loading && issues.length === 0 ? (
           <div className="flex items-center justify-center h-64">
@@ -750,7 +837,7 @@ export const PMSView = () => {
               animate={{ y: 0, opacity: 1 }}
               exit={{ y: 30, opacity: 0 }}
               transition={{ type: 'spring', damping: 28, stiffness: 350 }}
-              className="relative z-10 my-6 mx-auto w-[80%] bg-app-bg border border-app-border rounded-xl shadow-2xl overflow-hidden flex flex-col"
+              className="relative z-10 flex h-full w-full flex-col overflow-hidden border-app-border bg-app-bg shadow-2xl lg:my-6 lg:mx-auto lg:h-auto lg:w-[80%] lg:rounded-xl lg:border"
             >
               <TaskDetail
                 issue={selectedIssue}

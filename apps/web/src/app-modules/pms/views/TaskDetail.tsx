@@ -59,7 +59,7 @@ import { getStatusSlugs, getStatusTone, getStatusLabel, initials, formatDate } f
 const PRIORITIES = ['low', 'medium', 'high', 'critical'] as const;
 const PRIORITY_LABELS: Record<string, string> = { low: 'Low', medium: 'Medium', high: 'High', critical: 'Critical' };
 
-const selectClass = 'app-text-body bg-transparent text-app-ink border border-app-border rounded-md px-2 py-1 focus:outline-none focus:border-app-accent cursor-pointer hover:border-app-ink/30 transition-colors';
+const selectClass = 'app-text-body w-full min-w-0 bg-transparent text-app-ink border border-app-border rounded-md px-2 py-1 focus:outline-none focus:border-app-accent cursor-pointer hover:border-app-ink/30 transition-colors';
 const disabledFieldClass = `${selectClass} disabled:cursor-not-allowed disabled:opacity-60`;
 
 function getErrorMessage(error: unknown, fallback: string): string {
@@ -121,6 +121,7 @@ export const TaskDetail = ({
   const [labelPickerOpen, setLabelPickerOpen] = useState(false);
   const [mentionOpen, setMentionOpen] = useState(false);
   const [mentionQuery, setMentionQuery] = useState('');
+  const [mobilePanel, setMobilePanel] = useState<'details' | 'activity'>('details');
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const selectedLabelIds = issueState.labels.map((label) => label.id);
 
@@ -523,15 +524,15 @@ export const TaskDetail = ({
   }
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex h-full min-w-0 flex-col overflow-hidden">
       {/* Top bar */}
-      <div className="flex items-center justify-between px-5 py-3 border-b border-app-border shrink-0">
-        <div className="app-text-caption flex items-center gap-2 text-app-ink/50">
-          <span>{spaceName || 'Space'}</span>
+      <div className="flex items-center justify-between gap-3 border-b border-app-border px-4 py-3 shrink-0 lg:px-5">
+        <div className="app-text-caption flex min-w-0 items-center gap-2 text-app-ink/50">
+          <span className="truncate">{spaceName || 'Space'}</span>
           <ChevronRight size={12} />
-          <span className="text-app-ink/70">{issueState.reference}</span>
+          <span className="shrink-0 text-app-ink/70">{issueState.reference}</span>
         </div>
-        <div className="flex items-center gap-1">
+        <div className="flex shrink-0 items-center gap-1">
           {!canEdit ? (
             <span className="app-text-overline rounded-full border border-app-border px-2 py-1 text-app-ink/50">
               Read only
@@ -551,14 +552,42 @@ export const TaskDetail = ({
         </div>
       </div>
 
-      {/* Two-column layout: left content + right activity */}
-      <div className="flex-1 flex min-h-0">
+      <div className="grid grid-cols-2 gap-1 border-b border-app-border bg-app-bg px-4 py-2 lg:hidden">
+        <button
+          type="button"
+          onClick={() => setMobilePanel('details')}
+          className={`app-text-control-sm rounded-md px-3 py-2 transition-colors ${
+            mobilePanel === 'details'
+              ? 'bg-app-surface-hover text-app-ink'
+              : 'text-app-ink/50 hover:text-app-ink'
+          }`}
+        >
+          Details
+        </button>
+        <button
+          type="button"
+          onClick={() => setMobilePanel('activity')}
+          className={`app-text-control-sm rounded-md px-3 py-2 transition-colors ${
+            mobilePanel === 'activity'
+              ? 'bg-app-surface-hover text-app-ink'
+              : 'text-app-ink/50 hover:text-app-ink'
+          }`}
+        >
+          Activity
+        </button>
+      </div>
+
+      {/* Responsive layout: mobile tabs, desktop split view */}
+      <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
         {/* Left: main content */}
-        <div className="flex-1 overflow-y-auto custom-scrollbar border-r border-app-border">
-          <div className="px-8 py-6 max-w-3xl mx-auto space-y-6">
+        <div
+          data-testid="task-detail-details-panel"
+          className={`${mobilePanel === 'details' ? 'flex' : 'hidden'} min-h-0 flex-1 flex-col overflow-y-auto custom-scrollbar lg:flex lg:border-r lg:border-app-border`}
+        >
+          <div className="mx-auto w-full max-w-3xl space-y-6 px-4 py-4 pb-[calc(1rem+env(safe-area-inset-bottom))] lg:px-8 lg:py-6">
             {/* Title */}
-            <div className="flex items-center gap-2">
-              <h1 className="app-text-title-lg text-app-ink">{issueState.title}</h1>
+            <div className="flex min-w-0 flex-wrap items-start gap-2">
+              <h1 data-testid="task-detail-title" className="app-text-title-lg min-w-0 flex-1 break-words text-app-ink">{issueState.title}</h1>
               {issueState.archived && (
                 <span className="app-text-overline rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-amber-300">
                   Archived
@@ -568,8 +597,11 @@ export const TaskDetail = ({
 
             {saveError ? <InlineSaveError message={saveError} /> : null}
 
-            {/* Meta fields — 2-column grid like ClickUp */}
-            <div className="grid grid-cols-[auto_1fr_auto_1fr] items-center gap-x-6 gap-y-3">
+            {/* Meta fields */}
+            <div
+              data-testid="task-detail-meta-grid"
+              className="grid grid-cols-[88px_minmax(0,1fr)] items-center gap-x-3 gap-y-3 rounded-lg border border-app-border p-3 lg:grid-cols-[auto_1fr_auto_1fr] lg:gap-x-6 lg:rounded-none lg:border-0 lg:p-0"
+            >
               <MetaLabel>Status</MetaLabel>
               <select value={issueState.status} onChange={e => patchField('status', e.target.value)} className={disabledFieldClass} disabled={!canEdit}>
                 {getStatusSlugs(taskListStatuses).map(s => <option key={s} value={s}>{getStatusLabel(s, taskListStatuses)}</option>)}
@@ -609,7 +641,7 @@ export const TaskDetail = ({
                 <option value="monthly">Monthly</option>
               </select>
               <MetaLabel>Labels</MetaLabel>
-              <div className="col-span-3 relative">
+              <div className="relative min-w-0 lg:col-span-3">
                 <button
                   type="button"
                   onClick={() => {
@@ -1140,7 +1172,10 @@ export const TaskDetail = ({
         </div>
 
         {/* Right: Activity sidebar */}
-        <div className="w-[340px] shrink-0 flex flex-col bg-app-bg">
+        <div
+          data-testid="task-detail-activity-panel"
+          className={`${mobilePanel === 'activity' ? 'flex' : 'hidden'} min-h-0 w-full flex-1 flex-col bg-app-bg lg:flex lg:w-[340px] lg:flex-none lg:shrink-0`}
+        >
           <div className="px-4 py-3 border-b border-app-border">
             <h3 className="app-text-title-md text-app-ink">Activity</h3>
           </div>
@@ -1188,7 +1223,7 @@ export const TaskDetail = ({
           </div>
 
           {/* Comment input — sticky bottom */}
-          <div className="relative flex items-center gap-2 px-4 py-3 border-t border-app-border shrink-0">
+          <div className="relative flex items-center gap-2 border-t border-app-border px-4 py-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] shrink-0 lg:pb-3">
             <div className="w-6 h-6 rounded-full bg-app-accent flex items-center justify-center text-[8px] font-bold text-app-bg shrink-0">
               ME
             </div>
