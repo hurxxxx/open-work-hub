@@ -1079,6 +1079,7 @@ export function MeetingDetail({
               showArchive={false}
               showDetach={canAttach}
               onDetach={handleDetachWhiteboard}
+              onClose={() => setWhiteboardEditorOpen(false)}
               onBoardUpdated={updateWhiteboardLinkFromBoard}
               className="min-w-0"
             />

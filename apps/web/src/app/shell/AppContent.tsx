@@ -46,6 +46,10 @@ function resolveThemePreference(themePreference: ThemePreference, systemDarkMode
   return themePreference;
 }
 
+function isWhiteboardDetailPath(pathname: string): boolean {
+  return /^\/w\/[^/]+\/whiteboard\/[^/]+\/?$/.test(pathname);
+}
+
 function AuthenticatedShell() {
   const auth = useAuth();
   const location = useLocation();
@@ -66,6 +70,7 @@ function AuthenticatedShell() {
     shellWorkspaceSlug,
   );
   const workspaceBootstrap = useWorkspaceBootstrap(auth.token, bootstrapWorkspaceSlug);
+  const hideSubSidebar = isWhiteboardDetailPath(location.pathname);
   const enabledWorkspaceAppIds = useMemo(
     () => workspaceBootstrap.data
       ? workspaceBootstrap.data.apps
@@ -151,16 +156,18 @@ function AuthenticatedShell() {
         />
 
         <div className="flex-1 flex overflow-hidden">
-          <AppSubSidebar
-            activeAppId={activeAppId}
-            activeNavItemId={activeNavItemId}
-            currentWorkspaceSlug={bootstrapWorkspaceSlug}
-            workspaceApps={workspaceBootstrap.data?.apps ?? []}
-            workspaceNavItems={workspaceBootstrap.data?.nav ?? []}
-          />
+          {!hideSubSidebar ? (
+            <AppSubSidebar
+              activeAppId={activeAppId}
+              activeNavItemId={activeNavItemId}
+              currentWorkspaceSlug={bootstrapWorkspaceSlug}
+              workspaceApps={workspaceBootstrap.data?.apps ?? []}
+              workspaceNavItems={workspaceBootstrap.data?.nav ?? []}
+            />
+          ) : null}
 
           <div className="flex-1 flex flex-col overflow-hidden bg-app-bg transition-colors">
-            <main className="flex-1 overflow-y-auto relative">
+            <main className={hideSubSidebar ? 'flex-1 overflow-hidden relative' : 'flex-1 overflow-y-auto relative'}>
               <Routes>
                 <Route path="/" element={<HomeRootRedirect />} />
                 <Route path="/w/:workspaceSlug" element={<WorkspaceRootRedirect />} />

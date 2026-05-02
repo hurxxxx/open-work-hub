@@ -23,6 +23,7 @@ import {
   Archive,
   Download,
   FileJson,
+  Grid3X3,
   Image,
   Link as LinkIcon,
   Loader2,
@@ -30,6 +31,7 @@ import {
   Share2,
   Star,
   Trash2,
+  X,
 } from 'lucide-react';
 import { Button, Dialog } from '@aidoo/ui';
 
@@ -123,6 +125,7 @@ interface WhiteboardEditorSurfaceProps {
   onBoardUpdated?: (board: WhiteboardDetail) => void;
   onArchived?: (boardId: string) => void;
   onDeleted?: (boardId: string) => void;
+  onClose?: () => void;
   onDetach?: () => void;
 }
 
@@ -130,6 +133,12 @@ function readExcalidrawTheme() {
   return typeof document !== 'undefined' && document.documentElement.classList.contains('dark')
     ? THEME.DARK
     : THEME.LIGHT;
+}
+
+function waitFor(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    window.setTimeout(resolve, ms);
+  });
 }
 
 function sceneFromExcalidraw(
@@ -550,6 +559,7 @@ export function WhiteboardEditorSurface({
   onBoardUpdated,
   onArchived,
   onDeleted,
+  onClose,
   onDetach,
 }: WhiteboardEditorSurfaceProps) {
   const { token } = useAuth();
@@ -561,6 +571,8 @@ export function WhiteboardEditorSurface({
   const [collabStatus, setCollabStatus] = useState<CollabStatus>(null);
   const [shareOpen, setShareOpen] = useState(false);
   const [excalidrawTheme, setExcalidrawTheme] = useState(readExcalidrawTheme);
+  const [gridModeEnabled, setGridModeEnabled] = useState(false);
+  const [closePending, setClosePending] = useState(false);
   const apiRef = useRef<ExcalidrawImperativeAPI | null>(null);
   const activeBoardRef = useRef<WhiteboardDetail | null>(null);
   const saveTimerRef = useRef<number | null>(null);
@@ -587,6 +599,7 @@ export function WhiteboardEditorSurface({
   const collabPublishRetryTimerRef = useRef<number | null>(null);
   const schedulePendingCollabPublishRef = useRef<(() => void) | null>(null);
   const saveSettledTimerRef = useRef<number | null>(null);
+  const lastSaveFailedRef = useRef(false);
 
   useEffect(() => {
     if (typeof document === 'undefined') return undefined;
@@ -647,6 +660,7 @@ export function WhiteboardEditorSurface({
       }
       setActiveBoard(normalized);
       setTitleDraft(normalized.title);
+      setGridModeEnabled(Boolean(normalized.scene.appState.gridModeEnabled));
       setSaveStatus('idle');
       onBoardLoaded?.(normalized);
       if (shareToken) {
@@ -657,6 +671,7 @@ export function WhiteboardEditorSurface({
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load whiteboard.');
       setActiveBoard(null);
+      setGridModeEnabled(false);
     } finally {
       setLoading(false);
     }
@@ -666,14 +681,15 @@ export function WhiteboardEditorSurface({
     void loadBoard();
   }, [loadBoard]);
 
-  const flushSceneSave = useCallback(async (resolvedBoardId: string) => {
-    if (!token || saveInFlightRef.current) return;
+  const flushSceneSave = useCallback(async (resolvedBoardId: string): Promise<boolean> => {
+    if (!token || saveInFlightRef.current) return false;
     const scene = pendingSceneRef.current;
     const signature = pendingSceneSignatureRef.current;
-    if (!scene || !signature) return;
+    if (!scene || !signature) return true;
     pendingSceneRef.current = null;
     pendingSceneSignatureRef.current = null;
     saveInFlightRef.current = true;
+    lastSaveFailedRef.current = false;
     setSaveStatus('saving');
     let saved = false;
     try {
@@ -701,6 +717,7 @@ export function WhiteboardEditorSurface({
       }
       saved = true;
     } catch (err) {
+      lastSaveFailedRef.current = true;
       setError(err instanceof Error ? err.message : 'Failed to save whiteboard.');
       setSaveStatus('error');
     } finally {
@@ -732,6 +749,7 @@ export function WhiteboardEditorSurface({
         }, LOCAL_CHANGE_FLUSH_MS + 80);
       }
     }
+    return saved;
   }, [onBoardUpdated, shareToken, token, workspaceSlug]);
 
   const scheduleSceneSave = useCallback((scene: WhiteboardScene, knownSignature?: string) => {
@@ -772,6 +790,7 @@ export function WhiteboardEditorSurface({
     if (files.length > 0) {
       api.addFiles(files as never);
     }
+    setGridModeEnabled(Boolean(normalized.appState.gridModeEnabled));
     const localElements = api.getSceneElementsIncludingDeleted();
     const remoteElements = normalized.elements as Parameters<ExcalidrawOnChange>[0];
     const elements = localElements.length > 0
@@ -1206,19 +1225,21 @@ export function WhiteboardEditorSurface({
     workspaceSlug,
   ]);
 
-  const saveTitle = useCallback(async () => {
-    if (!token || !activeBoard || !activeBoard.can_manage) return;
+  const saveTitle = useCallback(async (): Promise<boolean> => {
+    if (!token || !activeBoard || !activeBoard.can_manage) return true;
     const nextTitle = titleDraft.trim();
-    if (!nextTitle || nextTitle === activeBoard.title) return;
+    if (!nextTitle || nextTitle === activeBoard.title) return true;
     try {
       const updated = shareToken
         ? await updateSharedWhiteboard(token, shareToken, { title: nextTitle })
         : await updateWhiteboard(token, activeBoard.id, { title: nextTitle }, workspaceSlug);
       setActiveBoard((current) => current ? { ...current, ...updated } : updated);
       onBoardUpdated?.(updated);
+      return true;
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to rename whiteboard.');
       setTitleDraft(activeBoard.title);
+      return false;
     }
   }, [activeBoard, onBoardUpdated, shareToken, titleDraft, token, workspaceSlug]);
 
@@ -1297,6 +1318,102 @@ export function WhiteboardEditorSurface({
     downloadBlob(new Blob([json], { type: 'application/json' }), safeFilename(activeBoard.title, 'excalidraw'));
   }
 
+  const toggleGridMode = useCallback(() => {
+    const api = apiRef.current;
+    if (!api || !activeBoard) return;
+    const appState = api.getAppState();
+    const nextGridMode = !appState.gridModeEnabled;
+    const nextAppState = {
+      ...appState,
+      gridModeEnabled: nextGridMode,
+    } as Parameters<ExcalidrawOnChange>[1];
+    api.updateScene({
+      appState: nextAppState as never,
+      captureUpdate: CaptureUpdateAction.IMMEDIATELY,
+    });
+    setGridModeEnabled(nextGridMode);
+    if (activeBoard.can_edit) {
+      queueLocalChange({
+        elements: api.getSceneElementsIncludingDeleted() as Parameters<ExcalidrawOnChange>[0],
+        appState: nextAppState,
+        files: api.getFiles(),
+      });
+    }
+  }, [activeBoard, queueLocalChange]);
+
+  const flushPendingSceneBeforeClose = useCallback(async (): Promise<boolean> => {
+    const boardId = activeBoardIdRef.current;
+    if (!boardId) return true;
+
+    const flushQueuedLocalChangeNow = () => {
+      if (localChangeFlushTimerRef.current !== null) {
+        window.clearTimeout(localChangeFlushTimerRef.current);
+        localChangeFlushTimerRef.current = null;
+      }
+      if (pendingLocalChangeRef.current !== null) {
+        flushQueuedLocalChange();
+      }
+    };
+
+    const clearScheduledSave = () => {
+      if (saveTimerRef.current !== null) {
+        window.clearTimeout(saveTimerRef.current);
+        saveTimerRef.current = null;
+      }
+    };
+
+    lastSaveFailedRef.current = false;
+    flushQueuedLocalChangeNow();
+    clearScheduledSave();
+
+    for (let attempt = 0; attempt < 80; attempt += 1) {
+      if (pendingLocalChangeRef.current !== null || localChangeFlushTimerRef.current !== null) {
+        flushQueuedLocalChangeNow();
+      }
+
+      clearScheduledSave();
+
+      if (pendingSceneRef.current !== null && !saveInFlightRef.current) {
+        const saved = await flushSceneSave(boardId);
+        if (!saved && pendingSceneRef.current === null) {
+          return false;
+        }
+        continue;
+      }
+
+      if (
+        !saveInFlightRef.current
+        && pendingSceneRef.current === null
+        && pendingLocalChangeRef.current === null
+        && localChangeFlushTimerRef.current === null
+      ) {
+        return !lastSaveFailedRef.current;
+      }
+
+      await waitFor(50);
+    }
+
+    setError('저장이 완료되지 않아 Whiteboard를 닫지 않았습니다.');
+    return false;
+  }, [flushQueuedLocalChange, flushSceneSave]);
+
+  const handleClose = useCallback(async () => {
+    if (!onClose || closePending) return;
+    if (!activeBoard?.can_edit && !activeBoard?.can_manage) {
+      onClose();
+      return;
+    }
+
+    setClosePending(true);
+    const titleSaved = await saveTitle();
+    const sceneSaved = titleSaved ? await flushPendingSceneBeforeClose() : false;
+    if (titleSaved && sceneSaved) {
+      onClose();
+      return;
+    }
+    setClosePending(false);
+  }, [activeBoard?.can_edit, activeBoard?.can_manage, closePending, flushPendingSceneBeforeClose, onClose, saveTitle]);
+
   const initialData = useMemo<ExcalidrawInitialDataState | null>(() => {
     if (!activeBoard) return null;
     const scene = normalizeWhiteboardScene(activeBoard.scene);
@@ -1372,6 +1489,18 @@ export function WhiteboardEditorSurface({
                 <Star size={15} fill={activeBoard.is_favorite ? 'currentColor' : 'none'} />
               </button>
             ) : null}
+            <button
+              type="button"
+              onClick={toggleGridMode}
+              aria-pressed={gridModeEnabled}
+              className={cn(
+                'inline-flex h-8 w-8 items-center justify-center rounded-md transition-colors hover:bg-app-surface-hover',
+                gridModeEnabled ? 'bg-app-surface-hover text-app-ink' : 'text-app-ink/60 hover:text-app-ink',
+              )}
+              title={gridModeEnabled ? 'Hide grid' : 'Show grid'}
+            >
+              <Grid3X3 size={15} />
+            </button>
             <button type="button" onClick={exportPng} className="inline-flex h-8 w-8 items-center justify-center rounded-md text-app-ink/60 hover:bg-app-surface-hover hover:text-app-ink" title="Download PNG">
               <Image size={15} />
             </button>
@@ -1404,6 +1533,20 @@ export function WhiteboardEditorSurface({
                 <Trash2 size={15} />
               </button>
             ) : null}
+            {onClose ? (
+              <>
+                <div className="mx-1 h-6 w-px bg-app-border" />
+                <button
+                  type="button"
+                  onClick={() => void handleClose()}
+                  disabled={closePending}
+                  className="inline-flex h-8 w-8 items-center justify-center rounded-md text-app-ink/60 hover:bg-app-surface-hover hover:text-app-ink disabled:cursor-wait disabled:opacity-60"
+                  title={closePending ? 'Saving before close' : 'Close whiteboard'}
+                >
+                  {closePending ? <Loader2 size={15} className="animate-spin" /> : <X size={16} />}
+                </button>
+              </>
+            ) : null}
           </div>
 
           <div className="relative min-h-0 flex-1 bg-white">
@@ -1425,6 +1568,7 @@ export function WhiteboardEditorSurface({
                 }}
                 initialData={initialData}
                 onChange={(elements, appState, files) => {
+                  setGridModeEnabled(Boolean(appState.gridModeEnabled));
                   if (!activeBoard.can_edit) return;
                   updateAwarenessSelection(appState.selectedElementIds);
                   queueLocalChange({

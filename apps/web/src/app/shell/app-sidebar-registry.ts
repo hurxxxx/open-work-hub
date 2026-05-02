@@ -1,10 +1,10 @@
-import { aiSidebarConfig } from '@/src/app-modules/ai';
-import { docsSidebarConfig } from '@/src/app-modules/docs';
-import { learningSidebarConfig } from '@/src/app-modules/learning';
-import { meetingSidebarConfig } from '@/src/app-modules/meeting';
-import { plannerSidebarConfig } from '@/src/app-modules/planner';
-import { pmsSidebarConfig } from '@/src/app-modules/pms';
-import { whiteboardSidebarConfig } from '@/src/app-modules/whiteboard';
+import { aiSidebarConfig } from '@/src/app-modules/ai/sidebar';
+import { docsSidebarConfig } from '@/src/app-modules/docs/sidebar';
+import { learningSidebarConfig } from '@/src/app-modules/learning/sidebar';
+import { meetingSidebarConfig } from '@/src/app-modules/meeting/sidebar';
+import { plannerSidebarConfig } from '@/src/app-modules/planner/sidebar';
+import { pmsSidebarConfig } from '@/src/app-modules/pms/sidebar/config';
+import { whiteboardSidebarConfig } from '@/src/app-modules/whiteboard/sidebar';
 import type { AppModuleId } from './navigation-types';
 import type { AppSidebarConfig } from './sidebar-types';
 

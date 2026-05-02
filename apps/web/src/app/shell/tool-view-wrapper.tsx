@@ -1,10 +1,10 @@
 import { Navigate, useLocation, useParams } from 'react-router-dom';
 
 import { getNavItem } from '@/src/app/shell/app-registry';
-import { ragSearchToolElement } from '@/src/app-modules/ai';
-import { docsToolElement } from '@/src/app-modules/docs';
-import { pmsToolElement } from '@/src/app-modules/pms';
-import { whiteboardToolElement } from '@/src/app-modules/whiteboard';
+import { ragSearchToolElement } from '@/src/app-modules/ai/routes';
+import { docsToolElement } from '@/src/app-modules/docs/routes';
+import { pmsToolElement } from '@/src/app-modules/pms/routes';
+import { whiteboardToolElement } from '@/src/app-modules/whiteboard/routes';
 import { hasWorkspaceMembership } from '@/src/platform/auth/auth-api';
 import { useAuth } from '@/src/platform/auth/auth-provider';
 import { AccessDeniedView } from '@/src/platform/auth/settings-pages';

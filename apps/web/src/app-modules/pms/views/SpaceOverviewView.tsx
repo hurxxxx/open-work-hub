@@ -22,7 +22,7 @@ import {
   getWhiteboardItemPrimaryContainerSortOrder,
   listWhiteboardHub,
   type WhiteboardHubItem,
-} from '@/src/app-modules/whiteboard/public-api';
+} from '@/src/app-modules/whiteboard/api/whiteboard-api';
 import {
   listPmsTaskLists,
   listFolders,

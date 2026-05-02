@@ -15,7 +15,7 @@ import {
   withDocsItemPrimaryContainerSortOrder,
   type DocsHubItem,
 } from '@/src/app-modules/docs/public-api';
-import { createWhiteboard } from '@/src/app-modules/whiteboard/public-api';
+import { createWhiteboard } from '@/src/app-modules/whiteboard/api/whiteboard-api';
 import { useAuth } from '@/src/platform/auth/auth-provider';
 import {
   hasWorkspaceMembership,

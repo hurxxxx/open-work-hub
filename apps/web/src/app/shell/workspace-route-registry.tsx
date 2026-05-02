@@ -1,18 +1,18 @@
 import { Route } from 'react-router-dom';
 
-import { aiWorkspaceRoutes } from '@/src/app-modules/ai';
-import { docsGlobalRoutes, docsWorkspaceRoutes } from '@/src/app-modules/docs';
-import { homeWorkspaceRoutes } from '@/src/app-modules/home';
-import { learningWorkspaceRoutes } from '@/src/app-modules/learning';
-import { meetingWorkspaceRoutes } from '@/src/app-modules/meeting';
-import { plannerWorkspaceRoutes } from '@/src/app-modules/planner';
-import { pmsWorkspaceRoutes } from '@/src/app-modules/pms';
-import { whiteboardGlobalRoutes, whiteboardWorkspaceRoutes } from '@/src/app-modules/whiteboard';
+import { aiWorkspaceRoutes } from '@/src/app-modules/ai/routes';
+import { docsGlobalRoutes, docsWorkspaceRoutes } from '@/src/app-modules/docs/routes';
+import { homeWorkspaceRoutes } from '@/src/app-modules/home/routes';
+import { learningWorkspaceRoutes } from '@/src/app-modules/learning/routes';
+import { meetingWorkspaceRoutes } from '@/src/app-modules/meeting/routes';
+import { plannerWorkspaceRoutes } from '@/src/app-modules/planner/routes';
+import { pmsWorkspaceRoutes } from '@/src/app-modules/pms/routes';
+import { whiteboardGlobalRoutes, whiteboardWorkspaceRoutes } from '@/src/app-modules/whiteboard/routes';
 import {
   adminRedirectRoutes,
   adminSectionRoutes,
   workspaceSettingsRoute,
-} from '@/src/app-modules/settings';
+} from '@/src/app-modules/settings/routes';
 import { AdminGate, WorkspaceGate } from './gates';
 
 export const workspaceRouteDefinitions = [
