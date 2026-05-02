@@ -119,6 +119,90 @@ MESSAGES: dict[str, dict[str, str]] = {
         "ko-KR": "time zone이 올바르지 않습니다.",
         "en-US": "Invalid time zone.",
     },
+    "validation.request_invalid": {
+        "ko-KR": "요청 값이 올바르지 않습니다.",
+        "en-US": "Request validation failed.",
+    },
+    "validation.field_required": {
+        "ko-KR": "필수 값입니다.",
+        "en-US": "Field is required.",
+    },
+    "validation.value_invalid": {
+        "ko-KR": "값이 올바르지 않습니다.",
+        "en-US": "Value is invalid.",
+    },
+    "validation.string_type": {
+        "ko-KR": "문자열이어야 합니다.",
+        "en-US": "Value must be a string.",
+    },
+    "validation.integer_type": {
+        "ko-KR": "정수여야 합니다.",
+        "en-US": "Value must be an integer.",
+    },
+    "validation.float_type": {
+        "ko-KR": "숫자여야 합니다.",
+        "en-US": "Value must be a number.",
+    },
+    "validation.bool_type": {
+        "ko-KR": "참/거짓 값이어야 합니다.",
+        "en-US": "Value must be a boolean.",
+    },
+    "validation.array_type": {
+        "ko-KR": "배열이어야 합니다.",
+        "en-US": "Value must be an array.",
+    },
+    "validation.object_type": {
+        "ko-KR": "객체여야 합니다.",
+        "en-US": "Value must be an object.",
+    },
+    "validation.date_type": {
+        "ko-KR": "날짜 형식이어야 합니다.",
+        "en-US": "Value must be a valid date.",
+    },
+    "validation.datetime_type": {
+        "ko-KR": "일시 형식이어야 합니다.",
+        "en-US": "Value must be a valid datetime.",
+    },
+    "validation.string_too_short": {
+        "ko-KR": "값이 너무 짧습니다. 최소 길이: {min_length}",
+        "en-US": "Value is too short. Minimum length: {min_length}",
+    },
+    "validation.string_too_long": {
+        "ko-KR": "값이 너무 깁니다. 최대 길이: {max_length}",
+        "en-US": "Value is too long. Maximum length: {max_length}",
+    },
+    "validation.too_short": {
+        "ko-KR": "항목이 너무 적습니다. 최소 개수: {min_length}",
+        "en-US": "Too few items. Minimum count: {min_length}",
+    },
+    "validation.too_long": {
+        "ko-KR": "항목이 너무 많습니다. 최대 개수: {max_length}",
+        "en-US": "Too many items. Maximum count: {max_length}",
+    },
+    "validation.greater_than": {
+        "ko-KR": "값은 {gt}보다 커야 합니다.",
+        "en-US": "Value must be greater than {gt}.",
+    },
+    "validation.greater_than_equal": {
+        "ko-KR": "값은 {ge} 이상이어야 합니다.",
+        "en-US": "Value must be greater than or equal to {ge}.",
+    },
+    "validation.less_than": {
+        "ko-KR": "값은 {lt}보다 작아야 합니다.",
+        "en-US": "Value must be less than {lt}.",
+    },
+    "validation.less_than_equal": {
+        "ko-KR": "값은 {le} 이하여야 합니다.",
+        "en-US": "Value must be less than or equal to {le}.",
+    },
+    "validation.literal_error": {
+        "ko-KR": "허용된 값이어야 합니다: {expected}",
+        "en-US": "Value must be one of: {expected}",
+    },
+    "validation.extra_forbidden": {
+        "ko-KR": "허용되지 않는 필드입니다.",
+        "en-US": "Extra fields are not allowed.",
+    },
     "llm.pool_disabled": {
         "ko-KR": "{pool} LLM pool이 비활성화되어 있습니다.",
         "en-US": "{pool} LLM pool is disabled.",

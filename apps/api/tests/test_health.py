@@ -196,6 +196,44 @@ def test_auth_validation_error_is_localized(client: TestClient) -> None:
     assert body["validation"][0]["loc"] == ["body", "email"]
 
 
+def test_generic_request_validation_error_is_localized(client: TestClient) -> None:
+    response = client.post(
+        "/api/v1/auth/login",
+        headers={"Accept-Language": "ko-KR"},
+        json={"email": "admin@aidoo.local"},
+    )
+
+    assert response.status_code == 422, response.text
+    body = response.json()
+    assert body["detail"] == "요청 값이 올바르지 않습니다."
+    assert body["code"] == "validation.request_invalid"
+    assert body["validation"] == [
+        {
+            "loc": ["body", "password"],
+            "type": "missing",
+            "message": "필수 값입니다.",
+        }
+    ]
+
+
+def test_generic_request_validation_error_preserves_dynamic_constraints(
+    client: TestClient,
+) -> None:
+    response = client.post(
+        "/api/v1/auth/login",
+        headers={"Accept-Language": "en-US"},
+        json={"email": "admin@aidoo.local", "password": "short"},
+    )
+
+    assert response.status_code == 422, response.text
+    body = response.json()
+    assert body["detail"] == "Request validation failed."
+    assert body["code"] == "validation.request_invalid"
+    assert body["validation"][0]["loc"] == ["body", "password"]
+    assert body["validation"][0]["type"] == "string_too_short"
+    assert body["validation"][0]["message"] == "Value is too short. Minimum length: 8"
+
+
 def test_dev_admin_login_shortcut(client: TestClient) -> None:
     setup_response = client.post(
         "/api/v1/auth/setup",

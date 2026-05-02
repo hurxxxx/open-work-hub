@@ -39,6 +39,25 @@ def test_translate_auth_and_admin_validation_messages() -> None:
     assert translate_message(role_message, "ko-KR") == "워크스페이스 역할이 올바르지 않습니다."
 
 
+def test_translate_generic_validation_messages() -> None:
+    missing = LocalizedApiMessage(code="validation.field_required")
+    too_short = LocalizedApiMessage(
+        code="validation.string_too_short",
+        params={"min_length": 8},
+    )
+
+    assert translate_message(LocalizedApiMessage(code="validation.request_invalid"), "en-US") == (
+        "Request validation failed."
+    )
+    assert translate_message(LocalizedApiMessage(code="validation.request_invalid"), "ko-KR") == (
+        "요청 값이 올바르지 않습니다."
+    )
+    assert translate_message(missing, "en-US") == "Field is required."
+    assert translate_message(missing, "ko-KR") == "필수 값입니다."
+    assert translate_message(too_short, "en-US") == "Value is too short. Minimum length: 8"
+    assert translate_message(too_short, "ko-KR") == "값이 너무 짧습니다. 최소 길이: 8"
+
+
 def test_translate_llm_health_messages() -> None:
     disabled = LocalizedApiMessage(code="llm.pool_disabled", params={"pool": "local"})
     missing = LocalizedApiMessage(
