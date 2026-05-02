@@ -84,9 +84,19 @@ def test_translate_conversation_cursor_message_preserves_dynamic_error() -> None
         code="conversations.cursor_invalid_timestamp",
         params={"error": "bad month"},
     )
+    unsupported_scope = LocalizedApiMessage(
+        code="conversations.unsupported_scope",
+        params={"scope_ref": "docs_page"},
+    )
 
     assert translate_message(message, "en-US") == "Invalid cursor timestamp: bad month"
     assert translate_message(message, "ko-KR") == "cursor timestamp가 올바르지 않습니다: bad month"
+    assert translate_message(unsupported_scope, "en-US") == (
+        "Unsupported conversation scope: docs_page"
+    )
+    assert translate_message(unsupported_scope, "ko-KR") == (
+        "지원하지 않는 대화 범위입니다: docs_page"
+    )
 
 
 def test_translate_rag_unavailable_message_preserves_dynamic_reason() -> None:

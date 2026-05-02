@@ -6,11 +6,16 @@ from datetime import datetime
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic_core import PydanticCustomError
 
 
 def _camel(name: str) -> str:
     parts = name.split("_")
     return parts[0] + "".join(p.capitalize() for p in parts[1:])
+
+
+def _lookup_alias_value(data: dict[str, Any], field_name: str) -> Any:
+    return data.get(field_name, data.get(_camel(field_name)))
 
 
 class _CamelModel(BaseModel):
@@ -113,10 +118,35 @@ class ConversationCreateRequest(_CamelModel):
     scope_ref: Literal["meeting"] | None = None
     scope_resource_id: str | None = None
 
+    @model_validator(mode="before")
+    @classmethod
+    def validate_scope_before_field_types(cls, data: Any) -> Any:
+        if not isinstance(data, dict):
+            return data
+        scope_ref = _lookup_alias_value(data, "scope_ref")
+        scope_resource_id = _lookup_alias_value(data, "scope_resource_id")
+        if scope_ref is not None and scope_ref != "meeting":
+            raise PydanticCustomError(
+                "conversations.unsupported_scope",
+                "Unsupported conversation scope: {scope_ref}",
+                {"scope_ref": scope_ref},
+            )
+        if (scope_ref is None) != (scope_resource_id is None):
+            raise PydanticCustomError(
+                "conversations.scope_pair_required",
+                "scope_ref and scope_resource_id must be provided together.",
+                {},
+            )
+        return data
+
     @model_validator(mode="after")
     def validate_scope_pair(self) -> "ConversationCreateRequest":
         if (self.scope_ref is None) != (self.scope_resource_id is None):
-            raise ValueError("scope_ref and scope_resource_id must be provided together.")
+            raise PydanticCustomError(
+                "conversations.scope_pair_required",
+                "scope_ref and scope_resource_id must be provided together.",
+                {},
+            )
         return self
 
 

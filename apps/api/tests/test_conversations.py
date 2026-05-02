@@ -148,6 +148,27 @@ def test_legacy_create_rejects_unsupported_scope(client: TestClient) -> None:
     )
 
     assert response.status_code == 422
+    assert response.json()["code"] == "conversations.unsupported_scope"
+    assert response.json()["params"]["scope_ref"] == "docs_page"
+
+
+def test_legacy_create_rejects_incomplete_scope_pair(client: TestClient) -> None:
+    session = _bootstrap_admin_session(client)
+    token = session["token"]
+    slug = _workspace_slug(client, token)
+
+    response = client.post(
+        f"/api/v1/workspaces/{slug}/conversations",
+        headers={**_auth_headers(token), "Accept-Language": "ko-KR"},
+        json={
+            "title": "",
+            "scopeRef": "meeting",
+        },
+    )
+
+    assert response.status_code == 422
+    assert response.json()["code"] == "conversations.scope_pair_required"
+    assert response.json()["detail"] == "scope_ref와 scope_resource_id는 함께 제공해야 합니다."
 
 
 def test_legacy_create_rejects_meeting_scope_for_non_participant(client: TestClient) -> None:

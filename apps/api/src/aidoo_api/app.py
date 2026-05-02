@@ -48,6 +48,8 @@ LOCALIZED_VALIDATION_ERROR_TYPES = frozenset(
         "auth.invalid_locale",
         "auth.invalid_time_zone",
         "auth.valid_email_required",
+        "conversations.scope_pair_required",
+        "conversations.unsupported_scope",
         "rag.metadata_filter_key_invalid",
         "rag.metadata_filter_key_length",
         "rag.metadata_filter_key_reserved",
