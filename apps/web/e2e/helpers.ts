@@ -10,6 +10,8 @@ type E2EUser = {
   display_name: string;
   status: string;
   theme_preference: string;
+  locale: 'ko-KR' | 'en-US';
+  time_zone: string;
   primary_org_unit: null;
   workspaces: Array<{
     id: string;
@@ -45,6 +47,8 @@ export const FAKE_WORKSPACE_USER: E2EUser = {
   display_name: 'E2E Tester',
   status: 'active',
   theme_preference: 'system',
+  locale: 'ko-KR',
+  time_zone: 'Asia/Seoul',
   primary_org_unit: null,
   workspaces: [
     { id: 'workspace-hq', slug: 'hq', name: 'Aidoo HQ', role: 'admin' },
@@ -503,6 +507,7 @@ export async function stubWorkspaceAppDataBackend(page: Page): Promise<void> {
 interface ShellBackendOptions {
   enabledAppIds?: readonly string[];
   user?: E2EUser;
+  onUpdatePreferences?: (payload: Record<string, unknown>, user: E2EUser) => void;
 }
 
 // Legacy constant retained for compatibility with older helper consumers.
@@ -532,7 +537,14 @@ export async function stubShellBackend(
   page: Page,
   options: ShellBackendOptions = {},
 ): Promise<void> {
-  const user = options.user ?? FAKE_USER;
+  let user: E2EUser = {
+    ...(options.user ?? FAKE_USER),
+    workspaces: [...(options.user ?? FAKE_USER).workspaces],
+    workspace_roles: [...(options.user ?? FAKE_USER).workspace_roles],
+    system_roles: [...(options.user ?? FAKE_USER).system_roles],
+    group_ids: [...(options.user ?? FAKE_USER).group_ids],
+    group_slugs: [...(options.user ?? FAKE_USER).group_slugs],
+  };
   const workspaceBootstrap = buildWorkspaceBootstrap(options.enabledAppIds);
 
   // Auth bootstrap: hit on every mount to check setup status.
@@ -543,6 +555,16 @@ export async function stubShellBackend(
   await page.route('**/api/v1/auth/me', (route: Route) =>
     route.fulfill({ json: user }),
   );
+  await page.route('**/api/v1/auth/preferences', async (route: Route) => {
+    if (route.request().method() !== 'PATCH') {
+      await route.fallback();
+      return;
+    }
+    const payload = route.request().postDataJSON() as Partial<E2EUser>;
+    user = { ...user, ...payload };
+    options.onUpdatePreferences?.(payload, user);
+    await route.fulfill({ json: user });
+  });
 
   // Workspace bootstrap: gates routes + feeds the slash command palette.
   await page.route('**/api/v1/workspaces/*/bootstrap', (route: Route) =>

@@ -28,6 +28,20 @@ describe('time-utils', () => {
     })).toBe('12:00');
   });
 
+  it('formats relative times with the requested locale', () => {
+    expect(formatRelativeTime('2026-05-02T02:55:00Z', {
+      locale: 'ko-KR',
+      now: '2026-05-02T03:00:00Z',
+      timeZone: 'Asia/Seoul',
+    })).toBe('5분 전');
+
+    expect(formatRelativeTime('2026-05-02T02:55:00Z', {
+      locale: 'en-US',
+      now: '2026-05-02T03:00:00Z',
+      timeZone: 'Asia/Seoul',
+    })).toBe('5 minutes ago');
+  });
+
   it('keeps date-only values on their calendar date', () => {
     expect(formatDateOnly('2026-05-02', {
       day: 'numeric',
