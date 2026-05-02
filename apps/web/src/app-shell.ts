@@ -116,6 +116,12 @@ export function resolveShellState(
       : HOME_SHELL_STATE;
   }
 
+  if (path.startsWith('/whiteboard/shared/')) {
+    return canShowAppChrome(user, 'whiteboard')
+      ? { activeAppId: 'whiteboard', activeNavItemId: '' }
+      : HOME_SHELL_STATE;
+  }
+
   if (/^\/w\/[^/]+\/docs(?:\/|$)/.test(path)) {
     return canShowAppChrome(user, 'docs', workspaceSlug, enabledWorkspaceAppIds)
       ? { activeAppId: 'docs', activeNavItemId: 'docs-all' }

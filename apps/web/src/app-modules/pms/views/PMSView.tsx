@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useParams, Link, useSearchParams, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import {
@@ -7,6 +7,7 @@ import {
   Lock,
   Settings,
   Plus,
+  PencilRuler,
   List as ListIcon,
   Grid,
   Calendar,
@@ -68,6 +69,7 @@ import { SpaceDocsView } from './SpaceDocsView';
 import { SpaceWhiteboardsView } from './SpaceWhiteboardsView';
 import { SpaceOverviewView } from './SpaceOverviewView';
 import { taskListRoleAllows } from '../api/pms-permissions';
+import { WhiteboardContextSlotPanel } from '@/src/app-modules/whiteboard/public-api';
 
 function isSameListCollection(left: PmsTaskList[], right: PmsTaskList[]): boolean {
   if (left.length !== right.length) {
@@ -93,7 +95,7 @@ export const PMSView = () => {
   const pmsRoot = resolveDefaultWorkspaceAppPath(user, 'pms');
   const currentWorkspaceSlug = getWorkspaceBySlug(user, searchParams.get('workspace'))?.slug
     ?? getCurrentOrLastWorkspaceSlug();
-  const [activeTab, setActiveTab] = useState<'List' | 'Board' | 'Calendar' | 'Gantt' | 'Table'>('List');
+  const [activeTab, setActiveTab] = useState<'List' | 'Board' | 'Calendar' | 'Gantt' | 'Table' | 'Whiteboard'>('List');
   const [selectedIssue, setSelectedIssue] = useState<PmsIssue | null>(null);
   const [isNewTaskModalOpen, setIsNewTaskModalOpen] = useState(false);
 
@@ -152,6 +154,16 @@ export const PMSView = () => {
   const canEditTaskList = taskListRoleAllows(selectedTaskList?.role, 'member');
   const canManageTaskList = taskListRoleAllows(selectedTaskList?.role, 'admin');
   const requestedIssueId = searchParams.get('issue');
+  const selectedTaskListWhiteboardContext = useMemo(
+    () => (selectedTaskListId ? { app: 'pms', type: 'task_list', id: selectedTaskListId } : null),
+    [selectedTaskListId],
+  );
+
+  useEffect(() => {
+    if (searchParams.get('tab') === 'whiteboard') {
+      setActiveTab('Whiteboard');
+    }
+  }, [searchParams]);
 
   // Listen for the SubSidebar header "+" button (and any future quick-create
   // entry points) so they can pop the New Task modal without needing a
@@ -619,10 +631,19 @@ export const PMSView = () => {
         </div>
 
         <div className="flex items-center gap-6">
-          {(['List', 'Board', 'Calendar', 'Gantt', 'Table'] as const).map(tab => (
+          {(['List', 'Board', 'Calendar', 'Gantt', 'Table', 'Whiteboard'] as const).map(tab => (
             <button
               key={tab}
-              onClick={() => setActiveTab(tab as typeof activeTab)}
+              onClick={() => {
+                setActiveTab(tab as typeof activeTab);
+                const nextParams = new URLSearchParams(searchParams);
+                if (tab === 'Whiteboard') {
+                  nextParams.set('tab', 'whiteboard');
+                } else {
+                  nextParams.delete('tab');
+                }
+                setSearchParams(nextParams, { replace: true });
+              }}
               className={cn(
                 'app-text-body-sm relative pb-3 font-medium transition-all',
                 activeTab === tab ? 'text-app-ink' : 'text-gray-500 hover:text-app-ink'
@@ -634,6 +655,7 @@ export const PMSView = () => {
                 {tab === 'Calendar' && <Calendar size={14} />}
                 {tab === 'Gantt' && <Activity size={14} />}
                 {tab === 'Table' && <Table size={14} />}
+                {tab === 'Whiteboard' && <PencilRuler size={14} />}
                 {tab}
               </div>
               {activeTab === tab && (
@@ -647,7 +669,7 @@ export const PMSView = () => {
         </div>
       </header>
 
-      {selectedTaskListId && (
+      {selectedTaskListId && activeTab !== 'Whiteboard' && (
         <FilterBar
           taskListId={selectedTaskListId}
           filterParams={filterParams}
@@ -660,8 +682,8 @@ export const PMSView = () => {
       )}
 
       <main className={cn(
-        "flex-1 custom-scrollbar",
-        "overflow-y-auto p-8"
+        'flex-1 custom-scrollbar',
+        activeTab === 'Whiteboard' ? 'overflow-hidden p-4' : 'overflow-y-auto p-8',
       )}>
         {loading && issues.length === 0 ? (
           <div className="flex items-center justify-center h-64">
@@ -694,6 +716,18 @@ export const PMSView = () => {
             {activeTab === 'Table' && (
               <motion.div key="table" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="h-full">
                 <TableView issues={issues} onSelectIssue={setSelectedIssue} selectedIds={selectedIssueIds} onToggleSelect={toggleIssueSelection} taskListStatuses={taskListStatuses} />
+              </motion.div>
+            )}
+            {activeTab === 'Whiteboard' && selectedTaskListWhiteboardContext && (
+              <motion.div key="whiteboard" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="flex h-full min-h-0">
+                <WhiteboardContextSlotPanel
+                  context={selectedTaskListWhiteboardContext}
+                  workspaceSlug={currentWorkspaceSlug}
+                  defaultTitle={`${taskListName} Whiteboard`}
+                  canEditContext={canEditTaskList}
+                  className="min-h-[calc(100vh-220px)] w-full overflow-hidden"
+                  editorClassName="min-h-[calc(100vh-220px)]"
+                />
               </motion.div>
             )}
           </AnimatePresence>

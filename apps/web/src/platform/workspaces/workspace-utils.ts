@@ -344,6 +344,7 @@ export function rewriteWorkspaceApiPath(
     !rawPath.startsWith('/api/v1/')
     || rawPath.startsWith('/api/v1/workspaces/')
     || rawPath.startsWith('/api/v1/docs/shared-links/')
+    || rawPath.startsWith('/api/v1/whiteboard/shared-links/')
     || rawPath.includes('share_token=')
     || !WORKSPACE_API_PREFIXES.some((prefix) => rawPath.startsWith(prefix))
   ) {

@@ -227,7 +227,7 @@ status_stack() {
 
   echo
   echo "[dev] docker compose"
-  (cd "$ROOT_DIR" && docker compose -f compose.dev.yml ps) || failures=$((failures + 1))
+  (cd "$ROOT_DIR" && dev_docker compose -f compose.dev.yml ps) || failures=$((failures + 1))
 
   echo
   echo "[dev] nginx"
@@ -297,7 +297,7 @@ logs_stack() {
       trap '[[ -n "$infra_pid" ]] && kill "$infra_pid" 2>/dev/null || true; [[ -n "$api_pid" ]] && kill "$api_pid" 2>/dev/null || true' EXIT INT TERM
       (
         cd "$ROOT_DIR"
-        docker compose -f compose.dev.yml logs -f postgres redis minio nginx
+        dev_docker compose -f compose.dev.yml logs -f postgres redis minio nginx
       ) &
       infra_pid=$!
       local api_logs=()
@@ -322,7 +322,7 @@ logs_stack() {
     nginx|postgres|redis|minio)
       (
         cd "$ROOT_DIR"
-        docker compose -f compose.dev.yml logs -f "$TARGET"
+        dev_docker compose -f compose.dev.yml logs -f "$TARGET"
       )
       ;;
     *)

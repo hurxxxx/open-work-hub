@@ -35,12 +35,14 @@ export interface WhiteboardScene {
 }
 
 export type WhiteboardPrimaryContainer = ApiSchema<'WhiteboardPrimaryContainer'>;
+export type WhiteboardContainerItem = ApiSchema<'WhiteboardContainerItem'>;
 export type WhiteboardHubItem = Omit<
   ApiSchema<'WhiteboardHubItem'>,
-  'last_viewed_at' | 'primary_container' | 'source_deeplink' | 'source_ref' | 'trashed_at'
+  'containers' | 'last_viewed_at' | 'primary_container' | 'source_deeplink' | 'source_ref' | 'trashed_at'
 > & {
   source_ref: string | null;
   primary_container: WhiteboardPrimaryContainer | null;
+  containers: WhiteboardContainerItem[];
   source_deeplink: string | null;
   trashed_at: string | null;
   last_viewed_at: string | null;
@@ -51,6 +53,25 @@ export type WhiteboardDetail = WhiteboardHubItem & Omit<ApiSchema<'WhiteboardDet
 export type WhiteboardHubResponse = Omit<ApiSchema<'WhiteboardHubResponse'>, 'items'> & {
   items: WhiteboardHubItem[];
 };
+export type WhiteboardContextSlotResponse = Omit<ApiSchema<'WhiteboardContextSlotResponse'>, 'item'> & {
+  item: WhiteboardDetail | null;
+};
+export type ShareableUserItem = ApiSchema<'ShareableUserItem'>;
+export type WhiteboardUserShareItem = ApiSchema<'WhiteboardUserShareItem'>;
+export type WhiteboardLinkShareItem = ApiSchema<'WhiteboardLinkShareItem'>;
+export type WhiteboardSharingResponse = ApiSchema<'WhiteboardSharingResponse'>;
+export type ResolveWhiteboardSharedLinkResponse = Omit<ApiSchema<'ResolveWhiteboardSharedLinkResponse'>, 'item'> & {
+  item: WhiteboardHubItem;
+};
+export type WhiteboardCollabSession = Omit<
+  ApiSchema<'WhiteboardCollabSessionResponse'>,
+  'read_only_reason' | 'snapshot_scene' | 'yjs_state'
+> & {
+  read_only_reason: 'relay_unavailable' | 'permission_revoked' | null;
+  snapshot_scene: WhiteboardScene | null;
+  yjs_state: string | null;
+};
+export type WhiteboardCollabSnapshotResponse = ApiSchema<'WhiteboardCollabSnapshotResponse'>;
 
 export function normalizeWhiteboardScene(value: unknown): WhiteboardScene {
   if (!value || typeof value !== 'object') {
@@ -82,9 +103,9 @@ export function getWhiteboardItemPrimaryContainerId(
 }
 
 export function getWhiteboardItemPrimaryContainerSortOrder(
-  item: Pick<WhiteboardHubItem, 'primary_container'>,
+  item: Pick<WhiteboardHubItem, 'containers' | 'primary_container'>,
 ): number {
-  return item.primary_container?.sort_order ?? 0;
+  return item.primary_container?.sort_order ?? item.containers[0]?.sort_order ?? 0;
 }
 
 export function listWhiteboardHub(
@@ -161,6 +182,16 @@ export function getWhiteboard(
   );
 }
 
+export function getSharedWhiteboard(
+  token: string,
+  shareToken: string,
+): Promise<WhiteboardDetail> {
+  return request<WhiteboardDetail>(
+    `/api/v1/whiteboard/shared-links/${shareToken}/item`,
+    token,
+  );
+}
+
 export function updateWhiteboard(
   token: string,
   itemId: string,
@@ -181,6 +212,57 @@ export function updateWhiteboard(
   );
 }
 
+export function updateSharedWhiteboard(
+  token: string,
+  shareToken: string,
+  payload: {
+    title?: string;
+    scene?: WhiteboardScene | null;
+  },
+): Promise<WhiteboardDetail> {
+  return request<WhiteboardDetail>(
+    `/api/v1/whiteboard/shared-links/${shareToken}/item`,
+    token,
+    {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    },
+  );
+}
+
+export function getWhiteboardCollabSession(
+  token: string,
+  itemId: string,
+  workspaceSlug?: string | null,
+): Promise<WhiteboardCollabSession> {
+  return request<WhiteboardCollabSession>(
+    `/api/v1/whiteboard/collab/items/${itemId}/session`,
+    token,
+    {},
+    workspaceSlug,
+  );
+}
+
+export function saveWhiteboardCollabSnapshot(
+  token: string,
+  itemId: string,
+  payload: {
+    scene?: WhiteboardScene | null;
+    yjs_state?: string | null;
+  },
+  workspaceSlug?: string | null,
+): Promise<WhiteboardCollabSnapshotResponse> {
+  return request<WhiteboardCollabSnapshotResponse>(
+    `/api/v1/whiteboard/collab/items/${itemId}/snapshot`,
+    token,
+    {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    },
+    workspaceSlug,
+  );
+}
+
 export function deleteWhiteboard(
   token: string,
   itemId: string,
@@ -190,6 +272,32 @@ export function deleteWhiteboard(
     `/api/v1/whiteboard/items/${itemId}`,
     token,
     { method: 'DELETE' },
+    workspaceSlug,
+  );
+}
+
+export function permanentlyDeleteWhiteboard(
+  token: string,
+  itemId: string,
+  workspaceSlug?: string | null,
+): Promise<void> {
+  return request<void>(
+    `/api/v1/whiteboard/items/${itemId}/permanent`,
+    token,
+    { method: 'DELETE' },
+    workspaceSlug,
+  );
+}
+
+export function toggleWhiteboardFavorite(
+  token: string,
+  itemId: string,
+  workspaceSlug?: string | null,
+): Promise<{ is_favorite: boolean }> {
+  return request<{ is_favorite: boolean }>(
+    `/api/v1/whiteboard/items/${itemId}/favorite`,
+    token,
+    { method: 'PATCH' },
     workspaceSlug,
   );
 }
@@ -204,5 +312,176 @@ export function recordWhiteboardView(
     token,
     { method: 'POST' },
     workspaceSlug,
+  );
+}
+
+export function recordSharedWhiteboardView(
+  token: string,
+  shareToken: string,
+): Promise<void> {
+  return request<void>(
+    `/api/v1/whiteboard/shared-links/${shareToken}/view`,
+    token,
+    { method: 'POST' },
+  );
+}
+
+export function getWhiteboardContextSlot(
+  token: string,
+  context: { app: string; type: string; id: string },
+  workspaceSlug?: string | null,
+): Promise<WhiteboardContextSlotResponse> {
+  const qs = new URLSearchParams(context);
+  return request<WhiteboardContextSlotResponse>(
+    `/api/v1/whiteboard/contexts/slot?${qs}`,
+    token,
+    {},
+    workspaceSlug,
+  );
+}
+
+export function createWhiteboardContextSlot(
+  token: string,
+  payload: { app: string; type: string; id: string; title?: string },
+  workspaceSlug?: string | null,
+): Promise<WhiteboardDetail> {
+  return request<WhiteboardDetail>(
+    '/api/v1/whiteboard/contexts/slot',
+    token,
+    {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    },
+    workspaceSlug,
+  );
+}
+
+export function attachWhiteboardContextSlot(
+  token: string,
+  payload: { app: string; type: string; id: string; whiteboard_id: string },
+  workspaceSlug?: string | null,
+): Promise<WhiteboardDetail> {
+  return request<WhiteboardDetail>(
+    '/api/v1/whiteboard/contexts/slot',
+    token,
+    {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    },
+    workspaceSlug,
+  );
+}
+
+export function detachWhiteboardContextSlot(
+  token: string,
+  context: { app: string; type: string; id: string },
+  workspaceSlug?: string | null,
+): Promise<void> {
+  const qs = new URLSearchParams(context);
+  return request<void>(
+    `/api/v1/whiteboard/contexts/slot?${qs}`,
+    token,
+    { method: 'DELETE' },
+    workspaceSlug,
+  );
+}
+
+export function listWhiteboardShareableUsers(
+  token: string,
+  q = '',
+  workspaceSlug?: string | null,
+): Promise<ShareableUserItem[]> {
+  const qs = new URLSearchParams();
+  if (q) qs.set('q', q);
+  return request<ShareableUserItem[]>(
+    `/api/v1/whiteboard/shareable-users?${qs}`,
+    token,
+    {},
+    workspaceSlug,
+  );
+}
+
+export function getWhiteboardSharing(
+  token: string,
+  itemId: string,
+  workspaceSlug?: string | null,
+): Promise<WhiteboardSharingResponse> {
+  return request<WhiteboardSharingResponse>(
+    `/api/v1/whiteboard/items/${itemId}/sharing`,
+    token,
+    {},
+    workspaceSlug,
+  );
+}
+
+export function upsertWhiteboardUserShare(
+  token: string,
+  itemId: string,
+  userId: string,
+  accessLevel: 'read' | 'edit',
+  workspaceSlug?: string | null,
+): Promise<WhiteboardSharingResponse> {
+  return request<WhiteboardSharingResponse>(
+    `/api/v1/whiteboard/items/${itemId}/sharing/users/${userId}`,
+    token,
+    {
+      method: 'PUT',
+      body: JSON.stringify({ access_level: accessLevel }),
+    },
+    workspaceSlug,
+  );
+}
+
+export function deleteWhiteboardUserShare(
+  token: string,
+  itemId: string,
+  userId: string,
+  workspaceSlug?: string | null,
+): Promise<WhiteboardSharingResponse> {
+  return request<WhiteboardSharingResponse>(
+    `/api/v1/whiteboard/items/${itemId}/sharing/users/${userId}`,
+    token,
+    { method: 'DELETE' },
+    workspaceSlug,
+  );
+}
+
+export function upsertWhiteboardLinkShare(
+  token: string,
+  itemId: string,
+  payload: { access_level: 'read' | 'edit'; active?: boolean; regenerate_token?: boolean },
+  workspaceSlug?: string | null,
+): Promise<WhiteboardSharingResponse> {
+  return request<WhiteboardSharingResponse>(
+    `/api/v1/whiteboard/items/${itemId}/sharing/link`,
+    token,
+    {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    },
+    workspaceSlug,
+  );
+}
+
+export function deleteWhiteboardLinkShare(
+  token: string,
+  itemId: string,
+  workspaceSlug?: string | null,
+): Promise<WhiteboardSharingResponse> {
+  return request<WhiteboardSharingResponse>(
+    `/api/v1/whiteboard/items/${itemId}/sharing/link`,
+    token,
+    { method: 'DELETE' },
+    workspaceSlug,
+  );
+}
+
+export function resolveWhiteboardSharedLink(
+  token: string,
+  shareToken: string,
+): Promise<ResolveWhiteboardSharedLinkResponse> {
+  return request<ResolveWhiteboardSharedLinkResponse>(
+    `/api/v1/whiteboard/shared-links/${shareToken}`,
+    token,
   );
 }

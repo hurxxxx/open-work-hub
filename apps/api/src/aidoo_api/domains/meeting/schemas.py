@@ -111,6 +111,15 @@ class MeetingDocLinkOut(BaseModel):
     created_at: datetime
 
 
+class MeetingWhiteboardLinkOut(BaseModel):
+    id: str
+    whiteboard_id: str
+    whiteboard_title: str
+    added_by_id: str | None = None
+    updated_at: datetime
+    created_at: datetime
+
+
 class MeetingFileAttachmentOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -226,6 +235,7 @@ class MeetingDetail(BaseModel):
     attendees: list[MeetingAttendeeOut]
     task_links: list[MeetingTaskLinkOut]
     doc_links: list[MeetingDocLinkOut]
+    whiteboard_link: MeetingWhiteboardLinkOut | None = None
     file_attachments: list[MeetingFileAttachmentOut]
     recordings: list[MeetingRecordingOut]
     active_recording_lock: ActiveRecordingLockOut | None = None

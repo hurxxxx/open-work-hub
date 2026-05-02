@@ -61,6 +61,56 @@ def test_private_whiteboard_is_owner_only(client: TestClient) -> None:
     assert blocked_response.status_code == 404
 
 
+def test_whiteboard_user_and_link_shares_grant_access(client: TestClient) -> None:
+    owner = _dev_login(client, "delivery-hub-admin")
+    recipient = _dev_login(client, "delivery-hub-member")
+
+    create_response = client.post(
+        "/api/v1/workspaces/delivery-hub/whiteboard/items",
+        headers=_auth_headers(owner["token"]),
+        json={"title": "Shared Board"},
+    )
+    assert create_response.status_code == 201, create_response.text
+    whiteboard = create_response.json()
+
+    share_response = client.put(
+        f"/api/v1/workspaces/delivery-hub/whiteboard/items/{whiteboard['id']}/sharing/users/{recipient['user']['id']}",
+        headers=_auth_headers(owner["token"]),
+        json={"access_level": "read"},
+    )
+    assert share_response.status_code == 200, share_response.text
+
+    recipient_get = client.get(
+        f"/api/v1/workspaces/delivery-hub/whiteboard/items/{whiteboard['id']}",
+        headers=_auth_headers(recipient["token"]),
+    )
+    assert recipient_get.status_code == 200, recipient_get.text
+    assert recipient_get.json()["can_edit"] is False
+
+    link_response = client.put(
+        f"/api/v1/workspaces/delivery-hub/whiteboard/items/{whiteboard['id']}/sharing/link",
+        headers=_auth_headers(owner["token"]),
+        json={"access_level": "edit"},
+    )
+    assert link_response.status_code == 200, link_response.text
+    share_token = link_response.json()["link_share"]["token"]
+
+    resolve_response = client.get(
+        f"/api/v1/whiteboard/shared-links/{share_token}",
+        headers=_auth_headers(recipient["token"]),
+    )
+    assert resolve_response.status_code == 200, resolve_response.text
+    assert resolve_response.json()["item"]["id"] == whiteboard["id"]
+
+    shared_patch = client.patch(
+        f"/api/v1/whiteboard/shared-links/{share_token}/item",
+        headers=_auth_headers(recipient["token"]),
+        json={"scene": {"elements": [{"id": "via-link"}], "appState": {}, "files": {}}},
+    )
+    assert shared_patch.status_code == 200, shared_patch.text
+    assert shared_patch.json()["scene"]["elements"][0]["id"] == "via-link"
+
+
 def _create_space_whiteboard(client: TestClient, token: str, space_id: str) -> dict:
     response = client.post(
         "/api/v1/workspaces/delivery-hub/whiteboard/items",

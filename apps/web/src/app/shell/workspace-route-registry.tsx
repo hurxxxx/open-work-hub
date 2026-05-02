@@ -7,7 +7,7 @@ import { learningWorkspaceRoutes } from '@/src/app-modules/learning';
 import { meetingWorkspaceRoutes } from '@/src/app-modules/meeting';
 import { plannerWorkspaceRoutes } from '@/src/app-modules/planner';
 import { pmsWorkspaceRoutes } from '@/src/app-modules/pms';
-import { whiteboardWorkspaceRoutes } from '@/src/app-modules/whiteboard';
+import { whiteboardGlobalRoutes, whiteboardWorkspaceRoutes } from '@/src/app-modules/whiteboard';
 import {
   adminRedirectRoutes,
   adminSectionRoutes,
@@ -28,6 +28,7 @@ export const workspaceRouteDefinitions = [
 
 export const globalRouteDefinitions = [
   ...docsGlobalRoutes,
+  ...whiteboardGlobalRoutes,
   workspaceSettingsRoute,
   ...adminRedirectRoutes,
   ...adminSectionRoutes,
@@ -86,6 +87,9 @@ export function StaticRouteElements() {
   return (
     <>
       {docsGlobalRoutes.map((route) => (
+        <Route key={route.path} path={route.path} element={route.element} />
+      ))}
+      {whiteboardGlobalRoutes.map((route) => (
         <Route key={route.path} path={route.path} element={route.element} />
       ))}
       <Route path={workspaceSettingsRoute.path} element={workspaceSettingsRoute.element} />

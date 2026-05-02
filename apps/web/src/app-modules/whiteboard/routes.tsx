@@ -22,3 +22,9 @@ export const whiteboardWorkspaceRoutes: WorkspaceRouteDefinition[] = [
   },
 ];
 
+export const whiteboardGlobalRoutes = [
+  {
+    path: '/whiteboard/shared/:shareToken',
+    element: whiteboardToolElement,
+  },
+];

@@ -12,6 +12,8 @@ export type MeetingTaskLink = ApiSchema<'MeetingTaskLinkOut'>;
 
 export type MeetingDocLink = ApiSchema<'MeetingDocLinkOut'>;
 
+export type MeetingWhiteboardLink = ApiSchema<'MeetingWhiteboardLinkOut'>;
+
 export type MeetingFileAttachment = ApiSchema<'MeetingFileAttachmentOut'>;
 
 export type MeetingRecordingStatus =
@@ -68,11 +70,18 @@ export type ActiveRecordingLock = ApiSchema<'ActiveRecordingLockOut'>;
 
 export type MeetingDetail = Omit<
   ApiSchema<'MeetingDetail'>,
-  'active_recording_lock' | 'attendees' | 'doc_links' | 'file_attachments' | 'recordings' | 'task_links'
+  | 'active_recording_lock'
+  | 'attendees'
+  | 'doc_links'
+  | 'file_attachments'
+  | 'recordings'
+  | 'task_links'
+  | 'whiteboard_link'
 > & {
   attendees: MeetingAttendee[];
   task_links: MeetingTaskLink[];
   doc_links: MeetingDocLink[];
+  whiteboard_link: MeetingWhiteboardLink | null;
   file_attachments: MeetingFileAttachment[];
   recordings: MeetingRecording[];
   /**

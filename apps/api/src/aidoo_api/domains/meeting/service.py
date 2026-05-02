@@ -66,6 +66,7 @@ from aidoo_api.domains.meeting.schemas import (
     MeetingRecordingOut,
     MeetingTaskLinkOut,
     MeetingUpdateRequest,
+    MeetingWhiteboardLinkOut,
 )
 from aidoo_api.domains.pms.access import ensure_issue_attachable, has_list_access
 from aidoo_api.domains.pms.access_grants import (
@@ -78,6 +79,7 @@ from aidoo_api.domains.pms.access_grants import (
 from aidoo_api.domains.pms.models import Issue, IssueUserAccess
 from aidoo_api.domains.planner.models import PlannerEvent
 from aidoo_api.domains.rag.contracts import RagSyncOperation
+from aidoo_api.domains.whiteboard.models import Whiteboard, WhiteboardContainer
 
 
 MAX_FILE_UPLOAD_SIZE = 100 * 1024 * 1024  # 100 MB
@@ -533,6 +535,44 @@ def _serialize_file_attachment(
     )
 
 
+def _load_whiteboard_link(db: Session, meeting: Meeting) -> tuple[WhiteboardContainer, Whiteboard] | None:
+    row = db.execute(
+        select(WhiteboardContainer, Whiteboard)
+        .join(Whiteboard, Whiteboard.id == WhiteboardContainer.whiteboard_id)
+        .where(
+            WhiteboardContainer.container_app == "meeting",
+            WhiteboardContainer.container_type == "meeting",
+            WhiteboardContainer.container_id == meeting.id,
+            Whiteboard.workspace_id == meeting.workspace_id,
+            Whiteboard.trashed_at.is_(None),
+        )
+        .order_by(WhiteboardContainer.created_at.asc())
+        .limit(1)
+    ).first()
+    if row is None:
+        return None
+    container, whiteboard = row
+    return container, whiteboard
+
+
+def _serialize_whiteboard_link(
+    db: Session,
+    meeting: Meeting,
+) -> MeetingWhiteboardLinkOut | None:
+    loaded = _load_whiteboard_link(db, meeting)
+    if loaded is None:
+        return None
+    container, whiteboard = loaded
+    return MeetingWhiteboardLinkOut(
+        id=container.id,
+        whiteboard_id=whiteboard.id,
+        whiteboard_title=whiteboard.title,
+        added_by_id=container.created_by_id,
+        updated_at=whiteboard.updated_at,
+        created_at=container.created_at,
+    )
+
+
 def _serialize_recording(recording) -> MeetingRecordingOut:
     return MeetingRecordingOut.model_validate(recording)
 
@@ -572,6 +612,7 @@ def _serialize_meeting(db: Session, meeting: Meeting) -> MeetingDetail:
             _serialize_doc_link(link, docs_by_id=docs_by_id)
             for link in meeting.doc_links
         ],
+        whiteboard_link=_serialize_whiteboard_link(db, meeting),
         file_attachments=[
             _serialize_file_attachment(att)
             for att in sorted(meeting.file_attachments, key=lambda a: a.created_at)
@@ -1026,6 +1067,14 @@ def delete_meeting(db: Session, *, workspace: Workspace, user: User, meeting_id:
             meeting_id=meeting.id,
             doc_ids=affected_doc_ids,
         )
+    for container in db.scalars(
+        select(WhiteboardContainer).where(
+            WhiteboardContainer.container_app == "meeting",
+            WhiteboardContainer.container_type == "meeting",
+            WhiteboardContainer.container_id == meeting.id,
+        )
+    ):
+        db.delete(container)
     enqueue_meeting_rag_sync(
         db,
         meeting=meeting,

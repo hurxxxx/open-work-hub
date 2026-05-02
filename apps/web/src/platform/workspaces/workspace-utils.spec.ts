@@ -272,11 +272,14 @@ describe('rewriteWorkspaceApiPath', () => {
     );
   });
 
-  it('preserves intentionally public docs shared-link endpoints', () => {
+  it('preserves intentionally public shared-link endpoints', () => {
     window.localStorage.setItem('aidoo:last-workspace-slug', 'hq');
 
     expect(rewriteWorkspaceApiPath('/api/v1/docs/shared-links/share-1')).toBe(
       '/api/v1/docs/shared-links/share-1',
+    );
+    expect(rewriteWorkspaceApiPath('/api/v1/whiteboard/shared-links/share-1')).toBe(
+      '/api/v1/whiteboard/shared-links/share-1',
     );
     expect(rewriteWorkspaceApiPath('/api/v1/docs/pages/page-1?share_token=share-1')).toBe(
       '/api/v1/docs/pages/page-1?share_token=share-1',

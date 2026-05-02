@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
   CheckSquare,
@@ -8,11 +8,14 @@ import {
   Mic,
   Paperclip,
   Pencil,
+  PencilRuler,
+  Plus,
+  Search,
   Trash2,
   Users,
   X,
 } from 'lucide-react';
-import { Button, useConfirm } from '@aidoo/ui';
+import { Button, Dialog, useConfirm } from '@aidoo/ui';
 
 import { useAuth } from '@/src/platform/auth/auth-provider';
 import {
@@ -52,6 +55,15 @@ import { openMeetingInsightInChat } from './openMeetingInsightInChat';
 import { useChunkedRecorder } from './useChunkedRecorder';
 import { useRecordingPoll } from './useRecordingPoll';
 import { useRecordingRecovery } from './useRecordingRecovery';
+import {
+  WhiteboardEditorSurface,
+  WhiteboardPickerModal,
+  attachWhiteboardContextSlot,
+  createWhiteboardContextSlot,
+  detachWhiteboardContextSlot,
+  type WhiteboardDetail,
+  type WhiteboardHubItem,
+} from '@/src/app-modules/whiteboard/public-api';
 
 interface MeetingDetailProps {
   workspaceSlug: string;
@@ -99,6 +111,9 @@ export function MeetingDetail({
   const [docPickerOpen, setDocPickerOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [addAttendeesOpen, setAddAttendeesOpen] = useState(false);
+  const [whiteboardPickerOpen, setWhiteboardPickerOpen] = useState(false);
+  const [whiteboardEditorOpen, setWhiteboardEditorOpen] = useState(false);
+  const [whiteboardEditorBoardId, setWhiteboardEditorBoardId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [playbackUrls, setPlaybackUrls] = useState<Record<string, string>>({});
@@ -160,6 +175,28 @@ export function MeetingDetail({
   const editable = canEditMeeting(user, meeting);
   const canAttach = canAttachToMeeting(user, meeting);
   const canInvite = canInviteAttendees(user, meeting);
+  const meetingWhiteboardContext = useMemo(
+    () => ({ app: 'meeting', type: 'meeting', id: meetingId }),
+    [meetingId],
+  );
+  const activeWhiteboardId = whiteboardEditorBoardId ?? meeting?.whiteboard_link?.whiteboard_id ?? null;
+
+  const updateWhiteboardLinkFromBoard = useCallback((board: WhiteboardDetail) => {
+    setMeeting((current) => {
+      if (!current) return current;
+      return {
+        ...current,
+        whiteboard_link: {
+          id: current.whiteboard_link?.id ?? '',
+          whiteboard_id: board.id,
+          whiteboard_title: board.title,
+          added_by_id: current.whiteboard_link?.added_by_id ?? user?.id ?? null,
+          created_at: current.whiteboard_link?.created_at ?? board.created_at,
+          updated_at: board.updated_at,
+        },
+      };
+    });
+  }, [user?.id]);
 
   async function handleAttachTask(issue: { id: string }) {
     if (!token) return;
@@ -208,6 +245,66 @@ export function MeetingDetail({
       onChanged();
     } catch (err) {
       setError(err instanceof Error ? err.message : '문서 첨부를 해제할 수 없습니다.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleCreateWhiteboard() {
+    if (!token || !meeting) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const board = await createWhiteboardContextSlot(
+        token,
+        {
+          ...meetingWhiteboardContext,
+          title: `${meeting.title} Whiteboard`,
+        },
+        workspaceSlug,
+      );
+      updateWhiteboardLinkFromBoard(board);
+      setWhiteboardEditorBoardId(board.id);
+      setWhiteboardEditorOpen(true);
+      onChanged();
+      void refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '화이트보드를 만들 수 없습니다.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleAttachWhiteboard(item: WhiteboardHubItem) {
+    if (!token) return;
+    const board = await attachWhiteboardContextSlot(
+      token,
+      {
+        ...meetingWhiteboardContext,
+        whiteboard_id: item.id,
+      },
+      workspaceSlug,
+    );
+    updateWhiteboardLinkFromBoard(board);
+    setWhiteboardEditorBoardId(board.id);
+    setWhiteboardEditorOpen(true);
+    onChanged();
+    void refresh();
+  }
+
+  async function handleDetachWhiteboard() {
+    if (!token) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await detachWhiteboardContextSlot(token, meetingWhiteboardContext, workspaceSlug);
+      setMeeting((current) => (current ? { ...current, whiteboard_link: null } : current));
+      setWhiteboardEditorBoardId(null);
+      setWhiteboardEditorOpen(false);
+      onChanged();
+      void refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '화이트보드 연결을 해제할 수 없습니다.');
     } finally {
       setBusy(false);
     }
@@ -530,6 +627,93 @@ export function MeetingDetail({
                 </li>
               ))}
             </ul>
+          )}
+        </Section>
+
+        <Section
+          icon={<PencilRuler size={14} />}
+          title="Whiteboard"
+          count={meeting.whiteboard_link ? 1 : 0}
+          headerAction={
+            canAttach ? (
+              meeting.whiteboard_link ? (
+                <button
+                  type="button"
+                  onClick={() => setWhiteboardPickerOpen(true)}
+                  className="app-text-caption inline-flex items-center gap-1 text-app-accent hover:underline"
+                >
+                  <Search size={12} />
+                  교체
+                </button>
+              ) : (
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => void handleCreateWhiteboard()}
+                    disabled={busy}
+                    className="app-text-caption inline-flex items-center gap-1 text-app-accent hover:underline disabled:opacity-50"
+                  >
+                    <Plus size={12} />
+                    새로 만들기
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setWhiteboardPickerOpen(true)}
+                    disabled={busy}
+                    className="app-text-caption inline-flex items-center gap-1 text-app-accent hover:underline disabled:opacity-50"
+                  >
+                    <Search size={12} />
+                    기존 선택
+                  </button>
+                </div>
+              )
+            ) : undefined
+          }
+        >
+          {meeting.whiteboard_link ? (
+            <div className="flex items-start justify-between rounded-md border border-app-border bg-app-surface-sidebar px-3 py-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setWhiteboardEditorBoardId(meeting.whiteboard_link?.whiteboard_id ?? null);
+                  setWhiteboardEditorOpen(true);
+                }}
+                className="min-w-0 flex-1 text-left"
+              >
+                <p className="app-text-body line-clamp-1 text-app-ink hover:text-app-accent">
+                  {meeting.whiteboard_link.whiteboard_title}
+                </p>
+                <p className="app-text-caption text-app-ink/40">
+                  {new Date(meeting.whiteboard_link.updated_at).toLocaleString('ko-KR')}
+                </p>
+              </button>
+              <div className="ml-2 flex shrink-0 items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setWhiteboardEditorBoardId(meeting.whiteboard_link?.whiteboard_id ?? null);
+                    setWhiteboardEditorOpen(true);
+                  }}
+                  className="app-text-caption text-app-accent hover:underline"
+                >
+                  열기
+                </button>
+                {canAttach ? (
+                  <button
+                    type="button"
+                    onClick={() => void handleDetachWhiteboard()}
+                    disabled={busy}
+                    className="rounded-md p-1.5 text-app-ink/40 hover:bg-app-surface-hover hover:text-[var(--ui-color-danger)] disabled:opacity-40"
+                    aria-label="Whiteboard 연결 해제"
+                    title="연결 해제"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                ) : null}
+              </div>
+            </div>
+          ) : (
+            <EmptyRow text="연결된 Whiteboard가 없습니다." />
           )}
         </Section>
 
@@ -868,6 +1052,39 @@ export function MeetingDetail({
         excludeDocIds={meeting.doc_links.map((link) => link.doc_id)}
         workspaceSlug={workspaceSlug}
       />
+      <WhiteboardPickerModal
+        isOpen={whiteboardPickerOpen}
+        onClose={() => setWhiteboardPickerOpen(false)}
+        onPick={handleAttachWhiteboard}
+        excludeWhiteboardIds={meeting.whiteboard_link ? [meeting.whiteboard_link.whiteboard_id] : []}
+        workspaceSlug={workspaceSlug}
+      />
+      <Dialog
+        open={whiteboardEditorOpen && activeWhiteboardId !== null}
+        onOpenChange={(open) => {
+          if (!open) setWhiteboardEditorOpen(false);
+        }}
+        title="Meeting Whiteboard"
+        description="회의에 연결된 Whiteboard를 작성하고 수정합니다."
+        fullSize
+        dismissOnInteractOutside={false}
+        actions={<Button variant="secondary" onClick={() => setWhiteboardEditorOpen(false)}>닫기</Button>}
+      >
+        {activeWhiteboardId ? (
+          <div className="flex h-[calc(92vh-8.5rem)] min-h-[520px] min-w-0">
+            <WhiteboardEditorSurface
+              key={activeWhiteboardId}
+              boardId={activeWhiteboardId}
+              workspaceSlug={workspaceSlug}
+              showArchive={false}
+              showDetach={canAttach}
+              onDetach={handleDetachWhiteboard}
+              onBoardUpdated={updateWhiteboardLinkFromBoard}
+              className="min-w-0"
+            />
+          </div>
+        ) : null}
+      </Dialog>
       <MeetingEditModal
         isOpen={editOpen}
         meeting={meeting}

@@ -8,6 +8,7 @@ from datetime import UTC, datetime
 import hashlib
 import json
 import logging
+from typing import Any
 
 from fastapi import HTTPException, WebSocket
 from redis import asyncio as redis_asyncio
@@ -488,6 +489,35 @@ def materialize_collab_room_state(
     )
 
 
+def _persist_docs_runtime_state_sync(
+    session_factory: Any,
+    *,
+    source_type: str,
+    source_page_id: str,
+    room_key: str,
+    fallback_actor_user_id: str,
+    yjs_state: bytes,
+    actor_user_id: str,
+) -> None:
+    db = session_factory()
+    try:
+        materialize_collab_room_state(
+            db,
+            source_type=source_type,
+            source_page_id=source_page_id,
+            room_key=room_key,
+            yjs_state=yjs_state,
+            actor_user_id=actor_user_id,
+            fallback_actor_user_id=fallback_actor_user_id,
+        )
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    finally:
+        db.close()
+
+
 class FastAPIYjsWebsocket:
     def __init__(
         self,
@@ -778,7 +808,8 @@ class DocsCollabHub:
             actor_user_id = runtime.last_editor_user_id or runtime.default_actor_user_id
             try:
                 await asyncio.to_thread(
-                    self._persist_runtime_state_sync,
+                    _persist_docs_runtime_state_sync,
+                    self._session_factory,
                     source_type=runtime.source_type,
                     source_page_id=runtime.source_page_id,
                     room_key=runtime.room_key,
@@ -788,34 +819,6 @@ class DocsCollabHub:
                 )
             except Exception as exc:
                 logger.exception("Failed to persist docs collaboration room %s: %s", runtime.room_key, exc)
-
-    def _persist_runtime_state_sync(
-        self,
-        *,
-        source_type: str,
-        source_page_id: str,
-        room_key: str,
-        fallback_actor_user_id: str,
-        yjs_state: bytes,
-        actor_user_id: str,
-    ) -> None:
-        db = self._session_factory()
-        try:
-            materialize_collab_room_state(
-                db,
-                source_type=source_type,
-                source_page_id=source_page_id,
-                room_key=room_key,
-                yjs_state=yjs_state,
-                actor_user_id=actor_user_id,
-                fallback_actor_user_id=fallback_actor_user_id,
-            )
-            db.commit()
-        except Exception:
-            db.rollback()
-            raise
-        finally:
-            db.close()
 
     async def _handle_relay_failure(self, exc: Exception) -> None:
         if not self._bus.available:

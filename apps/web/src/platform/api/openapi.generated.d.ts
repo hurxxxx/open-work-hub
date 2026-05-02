@@ -1336,6 +1336,58 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/whiteboard/shared-links/{share_token}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Resolve Whiteboard Shared Link */
+        get: operations["whiteboard_resolve_whiteboard_shared_link_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/whiteboard/shared-links/{share_token}/item": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Shared Whiteboard Item */
+        get: operations["whiteboard_get_shared_whiteboard_item_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Update Shared Whiteboard Item */
+        patch: operations["whiteboard_update_shared_whiteboard_item_patch"];
+        trace?: never;
+    };
+    "/api/v1/whiteboard/shared-links/{share_token}/view": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Record Shared Whiteboard View */
+        post: operations["whiteboard_record_shared_whiteboard_view_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/workspaces/{workspace_slug}/whiteboard/hub": {
         parameters: {
             query?: never;
@@ -1348,6 +1400,26 @@ export interface paths {
         put?: never;
         post?: never;
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_slug}/whiteboard/contexts/slot": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Whiteboard Context Slot */
+        get: operations["whiteboard_get_whiteboard_context_slot_get"];
+        /** Attach Whiteboard Context Slot */
+        put: operations["whiteboard_attach_whiteboard_context_slot_put"];
+        /** Create Whiteboard Context Slot */
+        post: operations["whiteboard_create_whiteboard_context_slot_post"];
+        /** Detach Whiteboard Context Slot */
+        delete: operations["whiteboard_detach_whiteboard_context_slot_delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -1389,6 +1461,23 @@ export interface paths {
         patch: operations["whiteboard_update_whiteboard_item_patch"];
         trace?: never;
     };
+    "/api/v1/workspaces/{workspace_slug}/whiteboard/items/{item_id}/permanent": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Permanently Delete Whiteboard Item */
+        delete: operations["whiteboard_permanently_delete_whiteboard_item_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/workspaces/{workspace_slug}/whiteboard/items/{item_id}/container": {
         parameters: {
             query?: never;
@@ -1402,6 +1491,110 @@ export interface paths {
         post?: never;
         /** Delete Whiteboard Container */
         delete: operations["whiteboard_delete_whiteboard_container_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_slug}/whiteboard/shareable-users": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Whiteboard Shareable Users */
+        get: operations["whiteboard_list_whiteboard_shareable_users_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_slug}/whiteboard/items/{item_id}/sharing": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Whiteboard Sharing */
+        get: operations["whiteboard_get_whiteboard_sharing_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_slug}/whiteboard/items/{item_id}/sharing/users/{user_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Upsert Whiteboard User Share */
+        put: operations["whiteboard_upsert_whiteboard_user_share_put"];
+        post?: never;
+        /** Delete Whiteboard User Share */
+        delete: operations["whiteboard_delete_whiteboard_user_share_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_slug}/whiteboard/items/{item_id}/sharing/link": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Upsert Whiteboard Link Share */
+        put: operations["whiteboard_upsert_whiteboard_link_share_put"];
+        post?: never;
+        /** Disable Whiteboard Link Share */
+        delete: operations["whiteboard_disable_whiteboard_link_share_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_slug}/whiteboard/collab/items/{item_id}/session": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Whiteboard Collab Session */
+        get: operations["whiteboard_get_whiteboard_collab_session_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_slug}/whiteboard/collab/items/{item_id}/snapshot": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Save Whiteboard Collab Snapshot */
+        put: operations["whiteboard_save_whiteboard_collab_snapshot_put"];
+        post?: never;
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -3295,6 +3488,17 @@ export interface components {
             /** Status */
             status?: string | null;
         };
+        /** AttachWhiteboardContextSlotRequest */
+        AttachWhiteboardContextSlotRequest: {
+            /** App */
+            app: string;
+            /** Type */
+            type: string;
+            /** Id */
+            id: string;
+            /** Whiteboard Id */
+            whiteboard_id: string;
+        };
         /** AttachmentItem */
         AttachmentItem: {
             /** Id */
@@ -3925,6 +4129,20 @@ export interface components {
             }[] | null;
             /** Sort Order */
             sort_order?: number | null;
+        };
+        /** CreateWhiteboardContextSlotRequest */
+        CreateWhiteboardContextSlotRequest: {
+            /** App */
+            app: string;
+            /** Type */
+            type: string;
+            /** Id */
+            id: string;
+            /**
+             * Title
+             * @default Untitled Whiteboard
+             */
+            title: string;
         };
         /** CreateWhiteboardRequest */
         CreateWhiteboardRequest: {
@@ -5099,6 +5317,7 @@ export interface components {
             task_links: components["schemas"]["MeetingTaskLinkOut"][];
             /** Doc Links */
             doc_links: components["schemas"]["MeetingDocLinkOut"][];
+            whiteboard_link?: components["schemas"]["MeetingWhiteboardLinkOut"] | null;
             /** File Attachments */
             file_attachments: components["schemas"]["MeetingFileAttachmentOut"][];
             /** Recordings */
@@ -5283,6 +5502,27 @@ export interface components {
             email: string;
             /** Full Name */
             full_name: string;
+        };
+        /** MeetingWhiteboardLinkOut */
+        MeetingWhiteboardLinkOut: {
+            /** Id */
+            id: string;
+            /** Whiteboard Id */
+            whiteboard_id: string;
+            /** Whiteboard Title */
+            whiteboard_title: string;
+            /** Added By Id */
+            added_by_id?: string | null;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
         };
         /** MilestoneCreateRequest */
         MilestoneCreateRequest: {
@@ -5876,6 +6116,10 @@ export interface components {
         /** ResolveSharedLinkResponse */
         ResolveSharedLinkResponse: {
             item: components["schemas"]["DocsHubItem"];
+        };
+        /** ResolveWhiteboardSharedLinkResponse */
+        ResolveWhiteboardSharedLinkResponse: {
+            item: components["schemas"]["WhiteboardHubItem"];
         };
         /** RuntimeInvocationResponse */
         RuntimeInvocationResponse: {
@@ -6861,6 +7105,74 @@ export interface components {
             /** Context */
             ctx?: Record<string, never>;
         };
+        /** WhiteboardCollabSessionResponse */
+        WhiteboardCollabSessionResponse: {
+            /** Whiteboard Id */
+            whiteboard_id: string;
+            /** Room Key */
+            room_key: string;
+            /** Ws Path */
+            ws_path: string;
+            /** Can Edit */
+            can_edit: boolean;
+            /**
+             * Realtime Status
+             * @default enabled
+             * @enum {string}
+             */
+            realtime_status: "enabled" | "degraded";
+            /** Read Only Reason */
+            read_only_reason?: ("relay_unavailable" | "permission_revoked") | null;
+            user: components["schemas"]["WhiteboardCollabSessionUser"];
+            /** Snapshot Scene */
+            snapshot_scene?: {
+                [key: string]: unknown;
+            } | null;
+            /** Yjs State */
+            yjs_state?: string | null;
+        };
+        /** WhiteboardCollabSessionUser */
+        WhiteboardCollabSessionUser: {
+            /** Id */
+            id: string;
+            /** Full Name */
+            full_name: string;
+        };
+        /** WhiteboardCollabSnapshotRequest */
+        WhiteboardCollabSnapshotRequest: {
+            /** Scene */
+            scene?: {
+                [key: string]: unknown;
+            } | null;
+            /** Yjs State */
+            yjs_state?: string | null;
+        };
+        /** WhiteboardCollabSnapshotResponse */
+        WhiteboardCollabSnapshotResponse: {
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /**
+             * Last Snapshot At
+             * Format: date-time
+             */
+            last_snapshot_at: string;
+        };
+        /** WhiteboardContainerItem */
+        WhiteboardContainerItem: {
+            /** App */
+            app: string;
+            /** Type */
+            type: string;
+            /** Id */
+            id: string;
+            /** Sort Order */
+            sort_order: number;
+            /** Is Primary */
+            is_primary: boolean;
+        };
         /** WhiteboardContainerPayload */
         WhiteboardContainerPayload: {
             /** App */
@@ -6874,6 +7186,10 @@ export interface components {
              * @default 0
              */
             sort_order: number;
+        };
+        /** WhiteboardContextSlotResponse */
+        WhiteboardContextSlotResponse: {
+            item?: components["schemas"]["WhiteboardDetail"] | null;
         };
         /** WhiteboardDetail */
         WhiteboardDetail: {
@@ -6900,6 +7216,8 @@ export interface components {
             /** Container Label */
             container_label: string;
             primary_container?: components["schemas"]["WhiteboardPrimaryContainer"] | null;
+            /** Containers */
+            containers?: components["schemas"]["WhiteboardContainerItem"][];
             /** Source Badge */
             source_badge: string;
             /** Source Deeplink */
@@ -6966,6 +7284,8 @@ export interface components {
             /** Container Label */
             container_label: string;
             primary_container?: components["schemas"]["WhiteboardPrimaryContainer"] | null;
+            /** Containers */
+            containers?: components["schemas"]["WhiteboardContainerItem"][];
             /** Source Badge */
             source_badge: string;
             /** Source Deeplink */
@@ -7014,6 +7334,20 @@ export interface components {
             /** Page Size */
             page_size: number;
         };
+        /** WhiteboardLinkShareItem */
+        WhiteboardLinkShareItem: {
+            /** Token */
+            token: string;
+            /**
+             * Access Level
+             * @enum {string}
+             */
+            access_level: "read" | "edit";
+            /** Active */
+            active: boolean;
+            /** Share Path */
+            share_path: string;
+        };
         /** WhiteboardPrimaryContainer */
         WhiteboardPrimaryContainer: {
             /** App */
@@ -7024,6 +7358,30 @@ export interface components {
             id: string;
             /** Sort Order */
             sort_order: number;
+        };
+        /** WhiteboardSharingResponse */
+        WhiteboardSharingResponse: {
+            /** Whiteboard Id */
+            whiteboard_id: string;
+            /** Owner Id */
+            owner_id: string;
+            /** Users */
+            users: components["schemas"]["WhiteboardUserShareItem"][];
+            link_share?: components["schemas"]["WhiteboardLinkShareItem"] | null;
+        };
+        /** WhiteboardUserShareItem */
+        WhiteboardUserShareItem: {
+            /** User Id */
+            user_id: string;
+            /** Email */
+            email: string;
+            /** Full Name */
+            full_name: string;
+            /**
+             * Access Level
+             * @enum {string}
+             */
+            access_level: "read" | "edit";
         };
         /** WikiPage */
         WikiPage: {
@@ -12171,10 +12529,208 @@ export interface operations {
             };
         };
     };
+    whiteboard_resolve_whiteboard_shared_link_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                share_token: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResolveWhiteboardSharedLinkResponse"];
+                };
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Access denied. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    whiteboard_get_shared_whiteboard_item_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                share_token: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WhiteboardDetail"];
+                };
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Access denied. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    whiteboard_update_shared_whiteboard_item_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                share_token: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateWhiteboardRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WhiteboardDetail"];
+                };
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Access denied. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    whiteboard_record_shared_whiteboard_view_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                share_token: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Access denied. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     whiteboard_list_whiteboard_hub_get: {
         parameters: {
             query?: {
-                view?: ("all" | "mine" | "recent" | "archived") | null;
+                view?: ("all" | "mine" | "recent" | "favorites" | "archived") | null;
                 category?: string | null;
                 q?: string;
                 sort_by?: string;
@@ -12201,6 +12757,208 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["WhiteboardHubResponse"];
                 };
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Access denied. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    whiteboard_get_whiteboard_context_slot_get: {
+        parameters: {
+            query: {
+                app: string;
+                type: string;
+                id: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WhiteboardContextSlotResponse"];
+                };
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Access denied. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    whiteboard_attach_whiteboard_context_slot_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AttachWhiteboardContextSlotRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WhiteboardDetail"];
+                };
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Access denied. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    whiteboard_create_whiteboard_context_slot_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateWhiteboardContextSlotRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WhiteboardDetail"];
+                };
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Access denied. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    whiteboard_detach_whiteboard_context_slot_delete: {
+        parameters: {
+            query: {
+                app: string;
+                type: string;
+                id: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Authentication required. */
             401: {
@@ -12431,6 +13189,53 @@ export interface operations {
             };
         };
     };
+    whiteboard_permanently_delete_whiteboard_item_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Access denied. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     whiteboard_update_whiteboard_container_put: {
         parameters: {
             query?: never;
@@ -12502,6 +13307,412 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["WhiteboardDetail"];
+                };
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Access denied. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    whiteboard_list_whiteboard_shareable_users_get: {
+        parameters: {
+            query?: {
+                q?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShareableUserItem"][];
+                };
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Access denied. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    whiteboard_get_whiteboard_sharing_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WhiteboardSharingResponse"];
+                };
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Access denied. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    whiteboard_upsert_whiteboard_user_share_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                item_id: string;
+                user_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpsertUserShareRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WhiteboardSharingResponse"];
+                };
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Access denied. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    whiteboard_delete_whiteboard_user_share_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                item_id: string;
+                user_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WhiteboardSharingResponse"];
+                };
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Access denied. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    whiteboard_upsert_whiteboard_link_share_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpsertLinkShareRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WhiteboardSharingResponse"];
+                };
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Access denied. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    whiteboard_disable_whiteboard_link_share_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WhiteboardSharingResponse"];
+                };
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Access denied. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    whiteboard_get_whiteboard_collab_session_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WhiteboardCollabSessionResponse"];
+                };
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Access denied. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    whiteboard_save_whiteboard_collab_snapshot_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WhiteboardCollabSnapshotRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WhiteboardCollabSnapshotResponse"];
                 };
             };
             /** @description Authentication required. */

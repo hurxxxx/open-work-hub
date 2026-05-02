@@ -21,6 +21,34 @@
 - `./prod.sh restart`
 - `./prod.sh smoke`
 
+## Current VM Public Preview
+
+`https://dwdcc.lumejs.com` currently points at a VM app preview stack, not the
+`prod.sh` nginx/static stack.
+
+- Infra containers use host networking and listen on local ports:
+  - Postgres: `127.0.0.1:55432`
+  - Redis: `127.0.0.1:56379`
+  - MinIO: `127.0.0.1:59000`
+- API listens on `127.0.0.1:8000` with `DOOWON_API_INSTANCE_ID=remote-api`.
+- Web listens on `0.0.0.0:4200` through Vite and proxies `/api` to `127.0.0.1:8000`.
+
+Use this runner for the current public preview:
+
+- `pnpm vm:app:deploy` builds web, restarts API/web, and prints route checks.
+- `pnpm vm:app:restart` restarts only API/web.
+- `pnpm vm:app:status` checks the local API/web ports and public collab route.
+
+For the unauthenticated whiteboard collaboration session probe, `401` is expected.
+`404` means the backend route is not deployed:
+
+```bash
+curl -i https://dwdcc.lumejs.com/api/v1/workspaces/hq/whiteboard/collab/items/probe/session
+```
+
+Do not run `prod.sh restart` while the VM app preview owns port `4200`; the
+`prod.sh` nginx stack also wants that port.
+
 ## Notes
 
 - `nginx` 는 `dist/apps/web` 를 정적으로 서빙하고 `/api` 는 `8001..8008` 로 round-robin proxy 한다.

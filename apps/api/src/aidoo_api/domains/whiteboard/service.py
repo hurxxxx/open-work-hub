@@ -44,8 +44,8 @@ def create_whiteboard_for_user(
                 container_id=container_id,
                 is_primary=True,
                 sort_order=sort_order,
+                created_by_id=owner_id,
             )
         )
     db.flush()
     return whiteboard
-

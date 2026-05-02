@@ -28,7 +28,9 @@ from aidoo_api.domains.plm.router import router as plm_router
 from aidoo_api.domains.pms.router import router as pms_router
 from aidoo_api.domains.rag.router import router as rag_router
 from aidoo_api.domains.search.router import router as search_router
+from aidoo_api.domains.whiteboard.router import public_router as whiteboard_public_router
 from aidoo_api.domains.whiteboard.router import router as whiteboard_router
+from aidoo_api.domains.whiteboard.router import ws_router as whiteboard_ws_router
 from aidoo_api.domains.wiki_pms.router import router as wiki_pms_router
 from aidoo_api.openapi_contract import PROTECTED_ERROR_RESPONSES
 
@@ -95,11 +97,18 @@ def register_api_routers(app: FastAPI, settings: Settings) -> None:
     )
     _include_protected_router(
         app,
+        whiteboard_public_router,
+        prefix=settings.api_prefix,
+        dependencies=protected_dependencies,
+    )
+    _include_protected_router(
+        app,
         whiteboard_router,
         prefix=workspace_prefix,
         dependencies=workspace_dependencies,
     )
     app.include_router(docs_ws_router, prefix=workspace_prefix)
+    app.include_router(whiteboard_ws_router, prefix=workspace_prefix)
     _include_protected_router(
         app,
         plm_router,

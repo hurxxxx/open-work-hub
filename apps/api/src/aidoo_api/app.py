@@ -25,6 +25,7 @@ from aidoo_api.domains.ai.registry import initialize_ai_capability_registry
 from aidoo_api.domains.ai.runtime.registry_validation import RuntimeRegistryValidationError
 from aidoo_api.domains.docs.collab import DocsCollabHub
 from aidoo_api.domains.rag.runtime import close_rag_runtime_resources, get_rag_runtime_health
+from aidoo_api.domains.whiteboard.collab import WhiteboardCollabHub
 from aidoo_api.openapi_contract import stable_operation_id
 
 
@@ -62,6 +63,8 @@ def create_app(*, initialize_runtime: bool = True) -> FastAPI:
             return
         app.state.docs_collab = DocsCollabHub()
         await app.state.docs_collab.startup()
+        app.state.whiteboard_collab = WhiteboardCollabHub()
+        await app.state.whiteboard_collab.startup()
         if settings.llm_healthcheck_on_startup:
             dual = check_all_pools_health(settings)
             with get_session_factory()() as session:
@@ -73,6 +76,7 @@ def create_app(*, initialize_runtime: bool = True) -> FastAPI:
                     "LLM effective readiness check failed: %s", effective.public_dict()
                 )
         yield
+        await app.state.whiteboard_collab.shutdown()
         await app.state.docs_collab.shutdown()
         close_rag_runtime_resources()
 
