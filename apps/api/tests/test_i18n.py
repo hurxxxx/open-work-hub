@@ -103,6 +103,30 @@ def test_translate_rag_unavailable_message_preserves_dynamic_reason() -> None:
     )
 
 
+def test_translate_rag_filter_validation_messages() -> None:
+    reserved = LocalizedApiMessage(
+        code="rag.metadata_filter_key_reserved",
+        params={"key": "workspace_id"},
+    )
+    invalid = LocalizedApiMessage(
+        code="rag.metadata_filter_key_invalid",
+        params={"key": "metadata.owner"},
+    )
+
+    assert translate_message(reserved, "en-US") == (
+        "Metadata filter key is reserved: workspace_id"
+    )
+    assert translate_message(reserved, "ko-KR") == (
+        "예약된 메타데이터 필터 key입니다: workspace_id"
+    )
+    assert translate_message(invalid, "en-US") == (
+        "Invalid metadata filter key: metadata.owner"
+    )
+    assert translate_message(invalid, "ko-KR") == (
+        "메타데이터 필터 key가 올바르지 않습니다: metadata.owner"
+    )
+
+
 def test_translate_whiteboard_access_message() -> None:
     message = LocalizedApiMessage(code="whiteboard.edit_access_required")
 

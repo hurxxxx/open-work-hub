@@ -475,6 +475,20 @@ def test_workspace_rag_query_validates_payload(
     )
     assert invalid_top_k.status_code == 422, invalid_top_k.text
 
+    invalid_metadata = client.post(
+        "/api/v1/workspaces/delivery-hub/rag/query",
+        headers={**_auth_headers(session["token"]), "Accept-Language": "ko-KR"},
+        json={
+            "query": "phase 5",
+            "filters": {"metadata": {"workspace_id": "foreign"}},
+        },
+    )
+    assert invalid_metadata.status_code == 422, invalid_metadata.text
+    body = invalid_metadata.json()
+    assert body["code"] == "rag.metadata_filter_key_reserved"
+    assert body["params"]["key"] == "workspace_id"
+    assert body["detail"] == "예약된 메타데이터 필터 key입니다: workspace_id"
+
 
 def test_workspace_rag_query_rejects_non_member(
     client: TestClient,

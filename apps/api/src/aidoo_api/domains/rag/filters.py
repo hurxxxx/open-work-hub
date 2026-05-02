@@ -4,6 +4,7 @@ import re
 from typing import TypeAlias
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic_core import PydanticCustomError
 
 
 FilterScalar: TypeAlias = str | int | bool
@@ -31,11 +32,23 @@ class RagQueryFilters(BaseModel):
     def _validate_metadata(cls, value: dict[str, FilterValue]) -> dict[str, FilterValue]:
         for key, item in value.items():
             if not key or len(key) > 64:
-                raise ValueError("Metadata filter keys must be between 1 and 64 characters.")
+                raise PydanticCustomError(
+                    "rag.metadata_filter_key_length",
+                    "Metadata filter keys must be between 1 and 64 characters.",
+                    {},
+                )
             if key in _RESERVED_FILTER_KEYS:
-                raise ValueError(f"Metadata filter key is reserved: {key}")
+                raise PydanticCustomError(
+                    "rag.metadata_filter_key_reserved",
+                    "Metadata filter key is reserved: {key}",
+                    {"key": key},
+                )
             if key.startswith("metadata.") or not _METADATA_KEY_PATTERN.fullmatch(key):
-                raise ValueError(f"Invalid metadata filter key: {key}")
+                raise PydanticCustomError(
+                    "rag.metadata_filter_key_invalid",
+                    "Invalid metadata filter key: {key}",
+                    {"key": key},
+                )
             _validate_filter_value(item)
         return value
 
@@ -56,8 +69,20 @@ def _validate_filter_value(value: FilterValue) -> None:
         return
     if isinstance(value, list):
         if not value:
-            raise ValueError("Metadata filter lists must not be empty.")
+            raise PydanticCustomError(
+                "rag.metadata_filter_list_empty",
+                "Metadata filter lists must not be empty.",
+                {},
+            )
         if not all(isinstance(item, bool | int | str) for item in value):
-            raise ValueError("Metadata filter lists must contain only string/int/bool values.")
+            raise PydanticCustomError(
+                "rag.metadata_filter_list_scalar_required",
+                "Metadata filter lists must contain only string/int/bool values.",
+                {},
+            )
         return
-    raise ValueError("Metadata filter values must be string/int/bool or a list of those values.")
+    raise PydanticCustomError(
+        "rag.metadata_filter_value_invalid",
+        "Metadata filter values must be string/int/bool or a list of those values.",
+        {},
+    )

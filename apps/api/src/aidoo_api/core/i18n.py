@@ -487,6 +487,30 @@ MESSAGES: dict[str, dict[str, str]] = {
         "ko-KR": "RAG 재색인이 최근에 실행되었습니다. 몇 분 후 다시 시도하세요.",
         "en-US": "Workspace RAG reindex was triggered recently. Wait a few minutes before retrying.",
     },
+    "rag.metadata_filter_key_length": {
+        "ko-KR": "메타데이터 필터 key는 1~64자여야 합니다.",
+        "en-US": "Metadata filter keys must be between 1 and 64 characters.",
+    },
+    "rag.metadata_filter_key_reserved": {
+        "ko-KR": "예약된 메타데이터 필터 key입니다: {key}",
+        "en-US": "Metadata filter key is reserved: {key}",
+    },
+    "rag.metadata_filter_key_invalid": {
+        "ko-KR": "메타데이터 필터 key가 올바르지 않습니다: {key}",
+        "en-US": "Invalid metadata filter key: {key}",
+    },
+    "rag.metadata_filter_list_empty": {
+        "ko-KR": "메타데이터 필터 list는 비워둘 수 없습니다.",
+        "en-US": "Metadata filter lists must not be empty.",
+    },
+    "rag.metadata_filter_list_scalar_required": {
+        "ko-KR": "메타데이터 필터 list에는 문자열, 정수, boolean 값만 사용할 수 있습니다.",
+        "en-US": "Metadata filter lists must contain only string/int/bool values.",
+    },
+    "rag.metadata_filter_value_invalid": {
+        "ko-KR": "메타데이터 필터 값은 문자열, 정수, boolean 또는 해당 값의 list여야 합니다.",
+        "en-US": "Metadata filter values must be string/int/bool or a list of those values.",
+    },
     "whiteboard.workspace_slug_required": {
         "ko-KR": "워크스페이스 범위 화이트보드 협업 경로에는 워크스페이스 slug가 필요합니다.",
         "en-US": "Workspace-scoped whiteboard collaboration routes require a workspace slug.",
