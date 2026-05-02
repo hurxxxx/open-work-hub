@@ -203,7 +203,8 @@ def test_issue_assignees_reject_non_members(client: TestClient) -> None:
         json={"user_ids": [outsider["user"]["id"]]},
     )
     assert response.status_code == 400
-    assert response.json()["detail"] == "Assignees must be task list members."
+    assert response.json()["code"] == "pms.assignees_task_list_members_required"
+    assert response.json()["detail"] == "담당자들은 태스크 리스트 멤버여야 합니다."
 
 
 def test_list_alias_space_docs_and_status_rename_behave_as_expected(client: TestClient) -> None:

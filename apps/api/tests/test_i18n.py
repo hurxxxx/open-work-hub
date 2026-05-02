@@ -21,3 +21,13 @@ def test_translate_message_interpolates_params() -> None:
 
     assert translate_message(message, "en-US") == "Workspace membership required: hq"
     assert translate_message(message, "ko-KR") == "워크스페이스 멤버십이 필요합니다: hq"
+
+
+def test_translate_domain_message_interpolates_dynamic_values() -> None:
+    message = LocalizedApiMessage(
+        code="pms.status_in_use",
+        params={"count": 3},
+    )
+
+    assert translate_message(message, "en-US") == "Cannot delete status: 3 issue(s) are using it."
+    assert translate_message(message, "ko-KR") == "상태를 삭제할 수 없습니다. 3개의 이슈가 사용 중입니다."

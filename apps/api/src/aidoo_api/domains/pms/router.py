@@ -5,13 +5,14 @@ from io import BytesIO, StringIO
 from datetime import UTC, date, datetime, timedelta
 from typing import Annotated, Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Response, UploadFile, status
+from fastapi import APIRouter, Depends, Query, Response, UploadFile, status
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, joinedload, selectinload
 
 from aidoo_api.core.db import get_db_session
+from aidoo_api.core.i18n import localized_http_exception
 from aidoo_api.core.principal import user_principal
 from aidoo_api.domains.auth.access import (
     get_current_workspace,
@@ -768,13 +769,13 @@ def _is_active_space_id(db: Session, space_id: str) -> bool:
 def _ensure_space_access(db: Session, user: User, space_id: str) -> tuple[Team, str]:
     team = _load_active_space(db, space_id, include_members=True)
     if team is None:
-        raise HTTPException(status_code=404, detail="Space not found.")
+        raise localized_http_exception(status_code=404, code="pms.space_not_found")
 
     role = resolve_team_role(db, user, team)
     if role is not None:
         return team, role
 
-    raise HTTPException(status_code=403, detail="Space access required.")
+    raise localized_http_exception(status_code=403, code="pms.space_access_required")
 
 
 def _ensure_space_editor(db: Session, user: User, space_id: str) -> tuple[Team, str]:
@@ -783,7 +784,7 @@ def _ensure_space_editor(db: Session, user: User, space_id: str) -> tuple[Team, 
     if role in SPACE_TEAM_EDITOR_ROLES:
         return team, role
 
-    raise HTTPException(status_code=403, detail="Viewer role cannot modify space data.")
+    raise localized_http_exception(status_code=403, code="pms.space_viewer_modify_denied")
 
 
 def _ensure_space_manager(db: Session, user: User, space_id: str) -> tuple[Team, str]:
@@ -792,14 +793,14 @@ def _ensure_space_manager(db: Session, user: User, space_id: str) -> tuple[Team,
     if role in SPACE_TEAM_MANAGER_ROLES:
         return team, role
 
-    raise HTTPException(status_code=403, detail="Space owner/admin access required.")
+    raise localized_http_exception(status_code=403, code="pms.space_owner_admin_required")
 
 
 def _ensure_space_owner(db: Session, user: User, space_id: str) -> tuple[Team, str]:
     team, role = _ensure_space_access(db, user, space_id)
     if role == "owner":
         return team, role
-    raise HTTPException(status_code=403, detail="Space owner access required.")
+    raise localized_http_exception(status_code=403, code="pms.space_owner_required")
 
 
 def _accessible_space_ids(db: Session, user: User) -> set[str]:
@@ -851,9 +852,9 @@ def _ensure_space_owner_survives(
             remaining += 1
 
     if remaining < 1:
-        raise HTTPException(
+        raise localized_http_exception(
             status_code=409,
-            detail="At least one owner must remain in the space.",
+            code="pms.space_owner_must_remain",
         )
 
 
@@ -869,9 +870,9 @@ def _ensure_space_admin_change_allowed(
     if actor_role != "owner" and (
         current_role in SPACE_TEAM_MANAGER_ROLES or next_role in SPACE_TEAM_MANAGER_ROLES
     ):
-        raise HTTPException(
+        raise localized_http_exception(
             status_code=403,
-            detail="Only the space owner can manage owners or admins.",
+            code="pms.space_owner_admin_manage_required",
         )
     return team, actor_role
 
@@ -879,7 +880,7 @@ def _ensure_space_admin_change_allowed(
 def _get_pms_workspace(db: Session) -> Workspace:
     workspace = get_current_workspace(db)
     if workspace is None:
-        raise HTTPException(status_code=500, detail="PMS workspace context is not available.")
+        raise localized_http_exception(status_code=500, code="pms.workspace_context_unavailable")
     return workspace
 
 
@@ -932,9 +933,9 @@ def _get_space_membership(
 def _validate_space_member_user(db: Session, space_id: str, user_id: str) -> User:
     user = db.scalar(select(User).where(User.id == user_id, User.status == "active"))
     if user is None:
-        raise HTTPException(status_code=404, detail="User not found.")
+        raise localized_http_exception(status_code=404, code="auth.user_not_found")
     if user_id in _space_member_ids(db, space_id):
-        raise HTTPException(status_code=409, detail="User is already a space member.")
+        raise localized_http_exception(status_code=409, code="pms.user_already_space_member")
     return user
 
 
@@ -944,9 +945,9 @@ def _validate_folder_membership(db: Session, team_id: str, folder_id: str | None
 
     folder = db.scalar(select(Folder).where(Folder.id == folder_id))
     if folder is None:
-        raise HTTPException(status_code=404, detail="Folder not found.")
+        raise localized_http_exception(status_code=404, code="pms.folder_not_found")
     if folder.team_id != team_id:
-        raise HTTPException(status_code=400, detail="Folder must belong to the same space.")
+        raise localized_http_exception(status_code=400, code="pms.folder_same_space_required")
 
 
 def _accessible_task_lists_query(db: Session, user: User):
@@ -1283,11 +1284,11 @@ def _next_issue_board_position(db: Session, list_id: str, status_value: str) -> 
 def _validate_member_user(db: Session, task_list: TaskList, user_id: str) -> User:
     user = db.scalar(select(User).where(User.id == user_id))
     if user is None:
-        raise HTTPException(status_code=404, detail="User not found.")
+        raise localized_http_exception(status_code=404, code="auth.user_not_found")
     if task_list.team_id is None:
-        raise HTTPException(status_code=409, detail="Task list space is not set.")
+        raise localized_http_exception(status_code=409, code="pms.task_list_space_missing")
     if user_id in _space_member_ids(db, task_list.team_id):
-        raise HTTPException(status_code=409, detail="User is already a task list member.")
+        raise localized_http_exception(status_code=409, code="pms.user_already_task_list_member")
     return user
 
 
@@ -1490,7 +1491,7 @@ def update_space_member(
 ) -> SpaceMemberItem:
     membership = _get_space_membership(db, space_id, user_id)
     if membership is None:
-        raise HTTPException(status_code=404, detail="Member not found.")
+        raise localized_http_exception(status_code=404, code="pms.member_not_found")
     _ensure_space_admin_change_allowed(
         db,
         current_user,
@@ -1517,7 +1518,7 @@ def remove_space_member(
 ) -> Response:
     membership = _get_space_membership(db, space_id, user_id)
     if membership is None:
-        raise HTTPException(status_code=404, detail="Member not found.")
+        raise localized_http_exception(status_code=404, code="pms.member_not_found")
     _ensure_space_admin_change_allowed(
         db,
         current_user,
@@ -1722,7 +1723,7 @@ def reorder_space_lists(
     _ensure_space_editor(db, current_user, space_id)
     item_ids = [item.id for item in payload.items]
     if len(set(item_ids)) != len(item_ids):
-        raise HTTPException(status_code=400, detail="Duplicate task list ids are not allowed.")
+        raise localized_http_exception(status_code=400, code="pms.duplicate_task_list_ids")
 
     task_lists = list(
         db.scalars(
@@ -1734,7 +1735,7 @@ def reorder_space_lists(
     )
     task_list_map = {task_list.id: task_list for task_list in task_lists}
     if len(task_list_map) != len(item_ids):
-        raise HTTPException(status_code=404, detail="TaskList not found.")
+        raise localized_http_exception(status_code=404, code="pms.task_list_not_found")
 
     for item in payload.items:
         _validate_folder_membership(db, space_id, item.folder_id)
@@ -1811,7 +1812,7 @@ def update_milestone(
         .where(Milestone.id == milestone_id)
     )
     if milestone is None:
-        raise HTTPException(status_code=404, detail="Milestone not found.")
+        raise localized_http_exception(status_code=404, code="pms.milestone_not_found")
     _ensure_list_owner(db, current_user, milestone.list_id)
     for field_name in ["title", "description", "status", "start_date", "due_date", "sort_order"]:
         value = getattr(payload, field_name)
@@ -1853,7 +1854,7 @@ def create_task_list_label(
         select(Label).where(Label.list_id == list_id, func.lower(Label.name) == payload.name.strip().lower())
     )
     if existing is not None:
-        raise HTTPException(status_code=409, detail="Label name already exists in this list.")
+        raise localized_http_exception(status_code=409, code="pms.label_name_exists")
     label = Label(id=new_id(), list_id=list_id, name=payload.name.strip(), color=payload.color)
     db.add(label)
     db.commit()
@@ -1870,7 +1871,7 @@ def update_label(
 ) -> LabelItem:
     label = db.scalar(select(Label).where(Label.id == label_id))
     if label is None:
-        raise HTTPException(status_code=404, detail="Label not found.")
+        raise localized_http_exception(status_code=404, code="pms.label_not_found")
     _ensure_list_owner(db, current_user, label.list_id)
     if payload.name is not None:
         normalized_name = payload.name.strip()
@@ -1882,7 +1883,7 @@ def update_label(
             )
         )
         if existing is not None:
-            raise HTTPException(status_code=409, detail="Label name already exists in this list.")
+            raise localized_http_exception(status_code=409, code="pms.label_name_exists")
         label.name = normalized_name
     if payload.color is not None:
         label.color = payload.color
@@ -1900,7 +1901,7 @@ def delete_label(
 ) -> None:
     label = db.scalar(select(Label).where(Label.id == label_id))
     if label is None:
-        raise HTTPException(status_code=404, detail="Label not found.")
+        raise localized_http_exception(status_code=404, code="pms.label_not_found")
     _ensure_list_owner(db, current_user, label.list_id)
     affected_issue_ids = collect_label_issue_ids(db, label_id=label.id)
     enqueue_label_issue_recompute(
@@ -2099,7 +2100,7 @@ def bulk_update_issues(
     }
     ordered_issues = [issue_map[issue_id] for issue_id in payload.issue_ids if issue_id in issue_map]
     if not ordered_issues:
-        raise HTTPException(status_code=404, detail="No matching issues found.")
+        raise localized_http_exception(status_code=404, code="pms.no_matching_issues")
 
     if payload.delete:
         media_keys: list[str] = []
@@ -2265,7 +2266,7 @@ def create_dependency(
         db, current_user, payload.successor_id, require_editor=True
     )
     if predecessor_task_list.id != successor_task_list.id:
-        raise HTTPException(status_code=400, detail="Dependencies must stay within the same list.")
+        raise localized_http_exception(status_code=400, code="pms.dependencies_same_list_required")
 
     dependency = ScheduleDependency(
         id=new_id(),
@@ -2303,7 +2304,7 @@ def delete_dependency(
 ) -> Response:
     dependency = db.scalar(select(ScheduleDependency).where(ScheduleDependency.id == dependency_id))
     if dependency is None:
-        raise HTTPException(status_code=404, detail="Dependency not found.")
+        raise localized_http_exception(status_code=404, code="pms.dependency_not_found")
     _ensure_list_editor(db, current_user, dependency.list_id)
     db.delete(dependency)
     db.commit()
@@ -2442,7 +2443,7 @@ async def upload_attachment(
     issue, task_list = _get_issue_for_user(db, current_user, issue_id, require_editor=True)
     data = await file.read()
     if len(data) > MAX_UPLOAD_SIZE:
-        raise HTTPException(status_code=413, detail="File size exceeds 50 MB limit.")
+        raise localized_http_exception(status_code=413, code="pms.file_size_limit_exceeded", limit_mb=50)
 
     settings = get_settings()
     client = get_minio_client()
@@ -2495,7 +2496,7 @@ def download_attachment(
 ) -> RedirectResponse:
     attachment = db.scalar(select(Attachment).where(Attachment.id == attachment_id))
     if attachment is None:
-        raise HTTPException(status_code=404, detail="Attachment not found.")
+        raise localized_http_exception(status_code=404, code="pms.attachment_not_found")
     _ensure_issue_readable(db, current_user, attachment.issue_id)
 
     url = _build_attachment_download_url(attachment.storage_key)
@@ -2512,7 +2513,7 @@ def delete_attachment(
         select(Attachment).options(selectinload(Attachment.issue).selectinload(Issue.task_list)).where(Attachment.id == attachment_id)
     )
     if attachment is None:
-        raise HTTPException(status_code=404, detail="Attachment not found.")
+        raise localized_http_exception(status_code=404, code="pms.attachment_not_found")
     _ensure_list_editor(db, current_user, attachment.issue.list_id)
 
     settings = get_settings()
@@ -2592,7 +2593,7 @@ def mark_notification_read(
         select(Notification).where(Notification.id == notification_id, Notification.user_id == current_user.id)
     )
     if notification is None:
-        raise HTTPException(status_code=404, detail="Notification not found.")
+        raise localized_http_exception(status_code=404, code="pms.notification_not_found")
     notification.is_read = True
     db.commit()
     return NotificationItem(
@@ -2672,7 +2673,7 @@ def update_checklist_item(
         .where(ChecklistItem.id == item_id)
     )
     if item is None:
-        raise HTTPException(status_code=404, detail="Checklist item not found.")
+        raise localized_http_exception(status_code=404, code="pms.checklist_item_not_found")
     _ensure_list_editor(db, current_user, item.issue.list_id)
 
     if payload.text is not None:
@@ -2713,7 +2714,7 @@ def delete_checklist_item(
         .where(ChecklistItem.id == item_id)
     )
     if item is None:
-        raise HTTPException(status_code=404, detail="Checklist item not found.")
+        raise localized_http_exception(status_code=404, code="pms.checklist_item_not_found")
     _ensure_list_editor(db, current_user, item.issue.list_id)
     _log_issue_activity(
         db,
@@ -2802,7 +2803,7 @@ def update_time_entry(
         .where(TimeEntry.id == entry_id)
     )
     if entry is None:
-        raise HTTPException(status_code=404, detail="Time entry not found.")
+        raise localized_http_exception(status_code=404, code="pms.time_entry_not_found")
     _ensure_list_editor(db, current_user, entry.issue.list_id)
 
     if payload.duration_minutes is not None:
@@ -2837,7 +2838,7 @@ def delete_time_entry(
         .where(TimeEntry.id == entry_id)
     )
     if entry is None:
-        raise HTTPException(status_code=404, detail="Time entry not found.")
+        raise localized_http_exception(status_code=404, code="pms.time_entry_not_found")
     _ensure_list_editor(db, current_user, entry.issue.list_id)
     _log_issue_activity(
         db,
@@ -2917,7 +2918,7 @@ def create_task_list_status(
         )
     )
     if existing is not None:
-        raise HTTPException(status_code=409, detail="Status with this name already exists.")
+        raise localized_http_exception(status_code=409, code="pms.status_name_exists")
 
     ps = TaskListStatus(
         id=new_id(),
@@ -2944,7 +2945,7 @@ def update_task_list_status(
 ) -> TaskListStatusItem:
     ps = db.scalar(select(TaskListStatus).where(TaskListStatus.id == status_id))
     if ps is None:
-        raise HTTPException(status_code=404, detail="Status not found.")
+        raise localized_http_exception(status_code=404, code="pms.status_not_found")
     _ensure_list_owner(db, current_user, ps.list_id)
 
     if payload.name is not None:
@@ -2957,7 +2958,7 @@ def update_task_list_status(
             )
         )
         if existing is not None:
-            raise HTTPException(status_code=409, detail="Status with this name already exists.")
+            raise localized_http_exception(status_code=409, code="pms.status_name_exists")
         ps.name = normalized_name
     if payload.color is not None:
         ps.color = payload.color
@@ -2980,7 +2981,7 @@ def delete_task_list_status(
 ) -> Response:
     ps = db.scalar(select(TaskListStatus).where(TaskListStatus.id == status_id))
     if ps is None:
-        raise HTTPException(status_code=404, detail="Status not found.")
+        raise localized_http_exception(status_code=404, code="pms.status_not_found")
     _ensure_list_owner(db, current_user, ps.list_id)
 
     # Prevent deleting if issues use this status
@@ -2990,9 +2991,10 @@ def delete_task_list_status(
         .where(Issue.list_id == ps.list_id, Issue.status == ps.slug)
     )
     if count and count > 0:
-        raise HTTPException(
+        raise localized_http_exception(
             status_code=409,
-            detail=f"Cannot delete status: {count} issue(s) are using it.",
+            code="pms.status_in_use",
+            count=count,
         )
 
     db.delete(ps)
@@ -3143,7 +3145,7 @@ def update_template(
 ) -> TaskTemplateItem:
     t = db.scalar(select(TaskTemplate).where(TaskTemplate.id == template_id))
     if t is None:
-        raise HTTPException(status_code=404, detail="Template not found.")
+        raise localized_http_exception(status_code=404, code="pms.template_not_found")
     _ensure_list_editor(db, current_user, t.list_id)
 
     if payload.name is not None:
@@ -3170,7 +3172,7 @@ def delete_template(
 ) -> Response:
     t = db.scalar(select(TaskTemplate).where(TaskTemplate.id == template_id))
     if t is None:
-        raise HTTPException(status_code=404, detail="Template not found.")
+        raise localized_http_exception(status_code=404, code="pms.template_not_found")
     _ensure_list_editor(db, current_user, t.list_id)
     db.delete(t)
     db.commit()
@@ -3246,7 +3248,7 @@ def delete_custom_field(
 ) -> Response:
     f = db.scalar(select(CustomField).where(CustomField.id == field_id))
     if f is None:
-        raise HTTPException(status_code=404, detail="Custom field not found.")
+        raise localized_http_exception(status_code=404, code="pms.custom_field_not_found")
     _ensure_list_owner(db, current_user, f.list_id)
     # Delete all values for this field
     for v in db.scalars(select(CustomFieldValue).where(CustomFieldValue.field_id == field_id)):
@@ -3264,7 +3266,7 @@ def list_issue_custom_field_values(
 ) -> list[CustomFieldValueItem]:
     issue = db.scalar(select(Issue).where(Issue.id == issue_id))
     if issue is None:
-        raise HTTPException(status_code=404, detail="Issue not found.")
+        raise localized_http_exception(status_code=404, code="pms.issue_not_found")
     _ensure_issue_readable(db, current_user, issue)
     values = list(
         db.scalars(select(CustomFieldValue).where(CustomFieldValue.issue_id == issue_id))
@@ -3281,13 +3283,13 @@ def set_issue_custom_field_value(
 ) -> CustomFieldValueItem:
     issue = db.scalar(select(Issue).where(Issue.id == issue_id))
     if issue is None:
-        raise HTTPException(status_code=404, detail="Issue not found.")
+        raise localized_http_exception(status_code=404, code="pms.issue_not_found")
     _ensure_list_editor(db, current_user, issue.list_id)
 
     # Validate field belongs to the same task list.
     field = db.scalar(select(CustomField).where(CustomField.id == payload.field_id))
     if field is None or field.list_id != issue.list_id:
-        raise HTTPException(status_code=400, detail="Custom field does not belong to this list.")
+        raise localized_http_exception(status_code=400, code="pms.custom_field_wrong_list")
 
     existing = db.scalar(
         select(CustomFieldValue).where(
@@ -3324,7 +3326,7 @@ def set_issue_assignees(
 ) -> list[IssueAssigneeItem]:
     issue, task_list = _get_issue_for_user(db, current_user, issue_id, require_editor=True)
     if task_list.team_id is None:
-        raise HTTPException(status_code=409, detail="Task list space is not set.")
+        raise localized_http_exception(status_code=409, code="pms.task_list_space_missing")
     member_ids = _space_member_ids(db, task_list.team_id)
 
     # Clear existing assignee links
@@ -3337,10 +3339,10 @@ def set_issue_assignees(
     validated_user_ids: list[str] = []
     for uid in payload.user_ids:
         if uid not in member_ids:
-            raise HTTPException(status_code=400, detail="Assignees must be task list members.")
+            raise localized_http_exception(status_code=400, code="pms.assignees_task_list_members_required")
         user = db.scalar(select(User).where(User.id == uid))
         if user is None:
-            raise HTTPException(status_code=404, detail="User not found.")
+            raise localized_http_exception(status_code=404, code="auth.user_not_found")
         db.add(IssueAssignee(id=new_id(), issue_id=issue_id, user_id=uid))
         result.append(IssueAssigneeItem(user_id=uid, full_name=user.full_name))
         validated_user_ids.append(uid)
@@ -3481,9 +3483,9 @@ def update_folder(
 ) -> FolderItem:
     folder = db.scalar(select(Folder).where(Folder.id == folder_id))
     if folder is None:
-        raise HTTPException(status_code=404, detail="Folder not found.")
+        raise localized_http_exception(status_code=404, code="pms.folder_not_found")
     if folder.team_id is None:
-        raise HTTPException(status_code=409, detail="Folder space is not set.")
+        raise localized_http_exception(status_code=409, code="pms.folder_space_missing")
     _ensure_space_manager(db, current_user, folder.team_id)
     if payload.name is not None:
         folder.name = payload.name.strip()
@@ -3506,9 +3508,9 @@ def delete_folder(
 ) -> Response:
     folder = db.scalar(select(Folder).where(Folder.id == folder_id))
     if folder is None:
-        raise HTTPException(status_code=404, detail="Folder not found.")
+        raise localized_http_exception(status_code=404, code="pms.folder_not_found")
     if folder.team_id is None:
-        raise HTTPException(status_code=409, detail="Folder space is not set.")
+        raise localized_http_exception(status_code=409, code="pms.folder_space_missing")
     _ensure_space_manager(db, current_user, folder.team_id)
     # Unlink task lists from this folder without deleting them.
     for p in db.scalars(select(TaskList).where(TaskList.folder_id == folder_id)):

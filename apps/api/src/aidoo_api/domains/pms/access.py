@@ -2,10 +2,11 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from fastapi import HTTPException, status
+from fastapi import status
 from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload, selectinload
 
+from aidoo_api.core.i18n import localized_http_exception
 from aidoo_api.domains.auth.access import (
     get_current_workspace,
     resolve_team_role,
@@ -21,9 +22,9 @@ def _utcnow() -> datetime:
 def _get_pms_workspace(db: Session) -> Workspace:
     workspace = get_current_workspace(db)
     if workspace is None:
-        raise HTTPException(
+        raise localized_http_exception(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="PMS workspace context is not available.",
+            code="pms.workspace_context_unavailable",
         )
     return workspace
 
@@ -64,9 +65,9 @@ def _load_issue(db: Session, issue_or_id: Issue | str) -> Issue:
         return issue_or_id
     issue = db.scalar(select(Issue).options(selectinload(Issue.task_list)).where(Issue.id == issue_or_id))
     if issue is None:
-        raise HTTPException(
+        raise localized_http_exception(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Issue not found.",
+            code="pms.issue_not_found",
         )
     return issue
 
@@ -86,30 +87,30 @@ def has_list_access(db: Session, user: User, list_id: str) -> bool:
 def _ensure_list_member(db: Session, user: User, list_id: str) -> tuple[TaskList, str]:
     task_list = _load_list(db, list_id)
     if task_list is None:
-        raise HTTPException(status_code=404, detail="TaskList not found.")
+        raise localized_http_exception(status_code=404, code="pms.task_list_not_found")
     if task_list.team_id is None:
-        raise HTTPException(status_code=409, detail="Task list space is not set.")
+        raise localized_http_exception(status_code=409, code="pms.task_list_space_missing")
 
     team = _load_active_team(db, task_list.team_id)
     if team is None:
-        raise HTTPException(status_code=404, detail="TaskList not found.")
+        raise localized_http_exception(status_code=404, code="pms.task_list_not_found")
     role = resolve_team_role(db, user, team)
     if role is None:
-        raise HTTPException(status_code=403, detail="TaskList access required.")
+        raise localized_http_exception(status_code=403, code="pms.task_list_access_required")
     return task_list, role
 
 
 def _ensure_list_owner(db: Session, user: User, list_id: str) -> tuple[TaskList, str]:
     task_list, role = _ensure_list_member(db, user, list_id)
     if role not in {"owner", "admin"}:
-        raise HTTPException(status_code=403, detail="TaskList owner/admin access required.")
+        raise localized_http_exception(status_code=403, code="pms.task_list_owner_admin_required")
     return task_list, role
 
 
 def _ensure_list_editor(db: Session, user: User, list_id: str) -> tuple[TaskList, str]:
     task_list, role = _ensure_list_member(db, user, list_id)
     if role == "viewer":
-        raise HTTPException(status_code=403, detail="Viewer role cannot modify task list data.")
+        raise localized_http_exception(status_code=403, code="pms.task_list_viewer_modify_denied")
     return task_list, role
 
 
@@ -131,9 +132,9 @@ def _ensure_issue_readable(db: Session, user: User, issue_or_id: Issue | str) ->
         return issue
     if _active_issue_grant(db, issue_id=issue.id, user_id=user.id) is not None:
         return issue
-    raise HTTPException(
+    raise localized_http_exception(
         status_code=status.HTTP_403_FORBIDDEN,
-        detail="You do not have access to this issue.",
+        code="pms.issue_access_required",
     )
 
 

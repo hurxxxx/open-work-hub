@@ -335,7 +335,7 @@ def test_pms_create_issue_service_rejects_mismatched_user_principal(client: Test
         assert user is not None
         assert workspace is not None
 
-        with pytest.raises(HTTPException, match="PMS principal user mismatch"):
+        with pytest.raises(HTTPException) as exc_info:
             pms_service.create_issue(
                 db,
                 workspace=workspace,
@@ -348,6 +348,7 @@ def test_pms_create_issue_service_rejects_mismatched_user_principal(client: Test
                 list_id=task_list["id"],
                 title="Should fail",
             )
+        assert exc_info.value.detail.code == "pms.principal_user_mismatch"
 
 
 def test_pms_create_issue_service_rejects_non_user_principal(client: TestClient) -> None:
@@ -368,7 +369,7 @@ def test_pms_create_issue_service_rejects_non_user_principal(client: TestClient)
         assert user is not None
         assert workspace is not None
 
-        with pytest.raises(HTTPException, match="PMS write operations require a user principal"):
+        with pytest.raises(HTTPException) as exc_info:
             pms_service.create_issue(
                 db,
                 workspace=workspace,
@@ -382,3 +383,4 @@ def test_pms_create_issue_service_rejects_non_user_principal(client: TestClient)
                 list_id=task_list["id"],
                 title="Should also fail",
             )
+        assert exc_info.value.detail.code == "pms.write_user_principal_required"

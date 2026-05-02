@@ -8,6 +8,7 @@ from fastapi import HTTPException, status
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session, joinedload, selectinload
 
+from aidoo_api.core.i18n import localized_http_exception
 from aidoo_api.core.principal import CallerPrincipal
 from aidoo_api.core.settings import get_settings
 from aidoo_api.core.storage import get_minio_client
@@ -73,22 +74,22 @@ def _bind_workspace_context(
 ) -> None:
     bind_current_workspace(db, workspace)
     if principal.workspace_id != workspace.id:
-        raise HTTPException(
+        raise localized_http_exception(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="PMS principal workspace mismatch.",
+            code="pms.principal_workspace_mismatch",
         )
     if principal.kind == "user" and principal.user_id not in {None, user.id}:
-        raise HTTPException(
+        raise localized_http_exception(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="PMS principal user mismatch.",
+            code="pms.principal_user_mismatch",
         )
 
 
 def _require_user_write_principal(principal: CallerPrincipal) -> None:
     if principal.kind != "user":
-        raise HTTPException(
+        raise localized_http_exception(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="PMS write operations require a user principal.",
+            code="pms.write_user_principal_required",
         )
 
 
@@ -106,7 +107,7 @@ def _paginate[T](items: list[T], page: int, page_size: int) -> tuple[list[T], in
 def _get_pms_workspace(db: Session) -> Workspace:
     workspace = get_current_workspace(db)
     if workspace is None:
-        raise HTTPException(status_code=500, detail="PMS workspace context is not available.")
+        raise localized_http_exception(status_code=500, code="pms.workspace_context_unavailable")
     return workspace
 
 
@@ -142,10 +143,10 @@ def _serialize_space(team: Team, current_user_role: str | None) -> dict[str, Any
 def _ensure_space_access(db: Session, user: User, space_id: str) -> tuple[Team, str]:
     team = _load_active_space(db, space_id, include_members=True)
     if team is None:
-        raise HTTPException(status_code=404, detail="Space not found.")
+        raise localized_http_exception(status_code=404, code="pms.space_not_found")
     role = resolve_team_role(db, user, team)
     if role is None:
-        raise HTTPException(status_code=403, detail="Space access required.")
+        raise localized_http_exception(status_code=403, code="pms.space_access_required")
     return team, role
 
 
@@ -452,7 +453,10 @@ def _validate_issue_assignee(db: Session, task_list: TaskList, assignee_id: str 
     if assignee_id is None:
         return
     if task_list.team_id is None or assignee_id not in _space_member_ids(db, task_list.team_id):
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Assignee must be a task list member.")
+        raise localized_http_exception(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            code="pms.assignee_task_list_member_required",
+        )
 
 
 def _validate_issue_assignees(
@@ -463,7 +467,10 @@ def _validate_issue_assignees(
     if not assignee_ids:
         return []
     if task_list.team_id is None:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Task list space is not set.")
+        raise localized_http_exception(
+            status_code=status.HTTP_409_CONFLICT,
+            code="pms.task_list_space_missing",
+        )
 
     member_ids = _space_member_ids(db, task_list.team_id)
     validated_users: list[User] = []
@@ -473,13 +480,13 @@ def _validate_issue_assignees(
             continue
         seen_user_ids.add(assignee_id)
         if assignee_id not in member_ids:
-            raise HTTPException(
+            raise localized_http_exception(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Assignees must be task list members.",
+                code="pms.assignees_task_list_members_required",
             )
         assignee = db.scalar(select(User).where(User.id == assignee_id))
         if assignee is None:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found.")
+            raise localized_http_exception(status_code=status.HTTP_404_NOT_FOUND, code="auth.user_not_found")
         validated_users.append(assignee)
     return validated_users
 
@@ -488,7 +495,7 @@ def _validate_milestone(task_list: TaskList, milestone_id: str | None) -> None:
     if milestone_id is None:
         return
     if milestone_id not in {milestone.id for milestone in task_list.milestones}:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Milestone does not belong to this list.")
+        raise localized_http_exception(status_code=status.HTTP_400_BAD_REQUEST, code="pms.milestone_wrong_list")
 
 
 def _validate_parent_issue(
@@ -503,31 +510,31 @@ def _validate_parent_issue(
 
     parent = db.scalar(select(Issue).where(Issue.id == parent_id))
     if parent is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Parent issue not found.")
+        raise localized_http_exception(status_code=status.HTTP_404_NOT_FOUND, code="pms.parent_issue_not_found")
     if parent.list_id != task_list.id:
-        raise HTTPException(
+        raise localized_http_exception(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Parent issue must belong to the same list.",
+            code="pms.parent_issue_same_list_required",
         )
     if issue_id is not None and parent.id == issue_id:
-        raise HTTPException(
+        raise localized_http_exception(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Issue cannot be its own parent.",
+            code="pms.issue_cannot_be_own_parent",
         )
 
     visited: set[str] = set()
     ancestor: Issue | None = parent
     while ancestor is not None:
         if ancestor.id in visited:
-            raise HTTPException(
+            raise localized_http_exception(
                 status_code=status.HTTP_409_CONFLICT,
-                detail="Issue parent relationship cannot contain a cycle.",
+                code="pms.issue_parent_cycle",
             )
         visited.add(ancestor.id)
         if issue_id is not None and ancestor.parent_id == issue_id:
-            raise HTTPException(
+            raise localized_http_exception(
                 status_code=status.HTTP_409_CONFLICT,
-                detail="Issue parent relationship cannot contain a cycle.",
+                code="pms.issue_parent_cycle",
             )
         if ancestor.parent_id is None:
             break
@@ -541,9 +548,9 @@ def _set_issue_labels(db: Session, issue: Issue, label_ids: list[str], task_list
 
     allowed_labels = {label.id: label for label in task_list.labels}
     if any(label_id not in allowed_labels for label_id in label_ids):
-        raise HTTPException(
+        raise localized_http_exception(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="One or more labels are invalid for this list.",
+            code="pms.labels_invalid_for_list",
         )
 
     issue.label_links.clear()
@@ -594,7 +601,7 @@ def _get_issue_for_user(
         .where(Issue.id == issue_id)
     )
     if issue is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Issue not found.")
+        raise localized_http_exception(status_code=status.HTTP_404_NOT_FOUND, code="pms.issue_not_found")
 
     if require_editor:
         task_list, _ = _ensure_list_editor(db, user, issue.list_id)

@@ -195,6 +195,206 @@ MESSAGES: dict[str, dict[str, str]] = {
         "ko-KR": "협업 작성자를 찾을 수 없습니다.",
         "en-US": "Collaboration actor not found.",
     },
+    "pms.principal_workspace_mismatch": {
+        "ko-KR": "PMS principal의 워크스페이스가 일치하지 않습니다.",
+        "en-US": "PMS principal workspace mismatch.",
+    },
+    "pms.principal_user_mismatch": {
+        "ko-KR": "PMS principal의 사용자가 일치하지 않습니다.",
+        "en-US": "PMS principal user mismatch.",
+    },
+    "pms.write_user_principal_required": {
+        "ko-KR": "PMS 쓰기 작업에는 사용자 principal이 필요합니다.",
+        "en-US": "PMS write operations require a user principal.",
+    },
+    "pms.workspace_context_unavailable": {
+        "ko-KR": "PMS 워크스페이스 컨텍스트를 사용할 수 없습니다.",
+        "en-US": "PMS workspace context is not available.",
+    },
+    "pms.space_not_found": {
+        "ko-KR": "스페이스를 찾을 수 없습니다.",
+        "en-US": "Space not found.",
+    },
+    "pms.space_access_required": {
+        "ko-KR": "스페이스 접근 권한이 필요합니다.",
+        "en-US": "Space access required.",
+    },
+    "pms.space_viewer_modify_denied": {
+        "ko-KR": "뷰어 역할은 스페이스 데이터를 수정할 수 없습니다.",
+        "en-US": "Viewer role cannot modify space data.",
+    },
+    "pms.space_owner_admin_required": {
+        "ko-KR": "스페이스 소유자 또는 관리자 권한이 필요합니다.",
+        "en-US": "Space owner/admin access required.",
+    },
+    "pms.space_owner_required": {
+        "ko-KR": "스페이스 소유자 권한이 필요합니다.",
+        "en-US": "Space owner access required.",
+    },
+    "pms.space_owner_must_remain": {
+        "ko-KR": "스페이스에는 최소 한 명의 소유자가 남아 있어야 합니다.",
+        "en-US": "At least one owner must remain in the space.",
+    },
+    "pms.space_owner_admin_manage_required": {
+        "ko-KR": "소유자 또는 관리자 관리는 스페이스 소유자만 할 수 있습니다.",
+        "en-US": "Only the space owner can manage owners or admins.",
+    },
+    "pms.user_already_space_member": {
+        "ko-KR": "사용자가 이미 스페이스 멤버입니다.",
+        "en-US": "User is already a space member.",
+    },
+    "pms.folder_not_found": {
+        "ko-KR": "폴더를 찾을 수 없습니다.",
+        "en-US": "Folder not found.",
+    },
+    "pms.folder_same_space_required": {
+        "ko-KR": "폴더는 같은 스페이스에 속해야 합니다.",
+        "en-US": "Folder must belong to the same space.",
+    },
+    "pms.folder_space_missing": {
+        "ko-KR": "폴더 스페이스가 설정되어 있지 않습니다.",
+        "en-US": "Folder space is not set.",
+    },
+    "pms.task_list_not_found": {
+        "ko-KR": "태스크 리스트를 찾을 수 없습니다.",
+        "en-US": "TaskList not found.",
+    },
+    "pms.task_list_space_missing": {
+        "ko-KR": "태스크 리스트 스페이스가 설정되어 있지 않습니다.",
+        "en-US": "Task list space is not set.",
+    },
+    "pms.task_list_access_required": {
+        "ko-KR": "태스크 리스트 접근 권한이 필요합니다.",
+        "en-US": "TaskList access required.",
+    },
+    "pms.task_list_owner_admin_required": {
+        "ko-KR": "태스크 리스트 소유자 또는 관리자 권한이 필요합니다.",
+        "en-US": "TaskList owner/admin access required.",
+    },
+    "pms.task_list_viewer_modify_denied": {
+        "ko-KR": "뷰어 역할은 태스크 리스트 데이터를 수정할 수 없습니다.",
+        "en-US": "Viewer role cannot modify task list data.",
+    },
+    "pms.user_already_task_list_member": {
+        "ko-KR": "사용자가 이미 태스크 리스트 멤버입니다.",
+        "en-US": "User is already a task list member.",
+    },
+    "pms.member_not_found": {
+        "ko-KR": "멤버를 찾을 수 없습니다.",
+        "en-US": "Member not found.",
+    },
+    "pms.duplicate_task_list_ids": {
+        "ko-KR": "중복된 태스크 리스트 ID는 허용되지 않습니다.",
+        "en-US": "Duplicate task list ids are not allowed.",
+    },
+    "pms.assignee_task_list_member_required": {
+        "ko-KR": "담당자는 태스크 리스트 멤버여야 합니다.",
+        "en-US": "Assignee must be a task list member.",
+    },
+    "pms.assignees_task_list_members_required": {
+        "ko-KR": "담당자들은 태스크 리스트 멤버여야 합니다.",
+        "en-US": "Assignees must be task list members.",
+    },
+    "pms.milestone_wrong_list": {
+        "ko-KR": "마일스톤이 이 리스트에 속하지 않습니다.",
+        "en-US": "Milestone does not belong to this list.",
+    },
+    "pms.milestone_not_found": {
+        "ko-KR": "마일스톤을 찾을 수 없습니다.",
+        "en-US": "Milestone not found.",
+    },
+    "pms.parent_issue_not_found": {
+        "ko-KR": "부모 이슈를 찾을 수 없습니다.",
+        "en-US": "Parent issue not found.",
+    },
+    "pms.parent_issue_same_list_required": {
+        "ko-KR": "부모 이슈는 같은 리스트에 속해야 합니다.",
+        "en-US": "Parent issue must belong to the same list.",
+    },
+    "pms.issue_cannot_be_own_parent": {
+        "ko-KR": "이슈를 자기 자신의 부모로 지정할 수 없습니다.",
+        "en-US": "Issue cannot be its own parent.",
+    },
+    "pms.issue_parent_cycle": {
+        "ko-KR": "이슈 부모 관계에 순환이 포함될 수 없습니다.",
+        "en-US": "Issue parent relationship cannot contain a cycle.",
+    },
+    "pms.labels_invalid_for_list": {
+        "ko-KR": "하나 이상의 라벨이 이 리스트에 유효하지 않습니다.",
+        "en-US": "One or more labels are invalid for this list.",
+    },
+    "pms.issue_not_found": {
+        "ko-KR": "이슈를 찾을 수 없습니다.",
+        "en-US": "Issue not found.",
+    },
+    "pms.issue_access_required": {
+        "ko-KR": "이 이슈에 접근할 권한이 없습니다.",
+        "en-US": "You do not have access to this issue.",
+    },
+    "pms.label_name_exists": {
+        "ko-KR": "이 리스트에 같은 이름의 라벨이 이미 있습니다.",
+        "en-US": "Label name already exists in this list.",
+    },
+    "pms.label_not_found": {
+        "ko-KR": "라벨을 찾을 수 없습니다.",
+        "en-US": "Label not found.",
+    },
+    "pms.no_matching_issues": {
+        "ko-KR": "일치하는 이슈를 찾을 수 없습니다.",
+        "en-US": "No matching issues found.",
+    },
+    "pms.dependencies_same_list_required": {
+        "ko-KR": "의존성은 같은 리스트 안에 있어야 합니다.",
+        "en-US": "Dependencies must stay within the same list.",
+    },
+    "pms.dependency_not_found": {
+        "ko-KR": "의존성을 찾을 수 없습니다.",
+        "en-US": "Dependency not found.",
+    },
+    "pms.file_size_limit_exceeded": {
+        "ko-KR": "파일 크기가 {limit_mb} MB 제한을 초과했습니다.",
+        "en-US": "File size exceeds {limit_mb} MB limit.",
+    },
+    "pms.attachment_not_found": {
+        "ko-KR": "첨부파일을 찾을 수 없습니다.",
+        "en-US": "Attachment not found.",
+    },
+    "pms.notification_not_found": {
+        "ko-KR": "알림을 찾을 수 없습니다.",
+        "en-US": "Notification not found.",
+    },
+    "pms.checklist_item_not_found": {
+        "ko-KR": "체크리스트 항목을 찾을 수 없습니다.",
+        "en-US": "Checklist item not found.",
+    },
+    "pms.time_entry_not_found": {
+        "ko-KR": "시간 기록을 찾을 수 없습니다.",
+        "en-US": "Time entry not found.",
+    },
+    "pms.status_name_exists": {
+        "ko-KR": "같은 이름의 상태가 이미 있습니다.",
+        "en-US": "Status with this name already exists.",
+    },
+    "pms.status_not_found": {
+        "ko-KR": "상태를 찾을 수 없습니다.",
+        "en-US": "Status not found.",
+    },
+    "pms.status_in_use": {
+        "ko-KR": "상태를 삭제할 수 없습니다. {count}개의 이슈가 사용 중입니다.",
+        "en-US": "Cannot delete status: {count} issue(s) are using it.",
+    },
+    "pms.template_not_found": {
+        "ko-KR": "템플릿을 찾을 수 없습니다.",
+        "en-US": "Template not found.",
+    },
+    "pms.custom_field_not_found": {
+        "ko-KR": "커스텀 필드를 찾을 수 없습니다.",
+        "en-US": "Custom field not found.",
+    },
+    "pms.custom_field_wrong_list": {
+        "ko-KR": "커스텀 필드가 이 리스트에 속하지 않습니다.",
+        "en-US": "Custom field does not belong to this list.",
+    },
 }
 
 
