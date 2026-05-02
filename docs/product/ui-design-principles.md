@@ -12,6 +12,12 @@ The administrative and settings interfaces must strictly avoid looking like an "
 - **Flat Tables:** Tables must not be wrapped in large bordered cards. They should run fully flat, relying on clean `<tr className="border-b">` lines. 
 - **Subtle Toolbars:** Search bars and action buttons (`Invite`, `Create`) should sit organically above the lists/tables on a single row, taking up minimal vertical space.
 
+## Mobile App Shell
+- **Separate global and local navigation:** The mobile hamburger opens only the global app/workspace switcher. It must not also render the current app's submenu.
+- **Current app menu from title:** When an app has internal navigation, the compact mobile app title opens a dedicated current-app menu drawer. Screens without internal navigation render the title as static text.
+- **No three-pane mobile workflows:** Dense desktop layouts may use app bar + sub-sidebar + content, but mobile task workflows should collapse into a single primary flow with explicit drawers or full-width detail panels.
+- **Route changes close transient chrome:** Mobile app switcher and current-app menu drawers should close on pathname/search changes so stale navigation chrome does not follow the user into a new view.
+
 ## Typography and Spacing
 - Use compact, high-density typography for standard rows.
 - Use distinct sizing and font-weight for main headers to immediately orient the user, without adding excessive paddings below them.

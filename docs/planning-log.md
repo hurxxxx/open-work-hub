@@ -23,6 +23,13 @@
 
 ## 엔트리
 
+## 2026-05-02 · 사용자 시간대 기본값 + 모바일 워크플로우 정리
+
+- **요약**: 사용자 프로필에 `time_zone` 설정을 추가하고 기본 표시 기준을 `Asia/Seoul`로 고정했다. PMS/Meeting 모바일 표면은 3단 가로 분할 대신 단일 흐름으로 재배치했고, 모바일 셸은 `앱 전환` 드로어와 현재 앱 내부 메뉴 드로어를 분리했다.
+- **PR/커밋**: eb3f0c9, 1e0630e, 6920752
+- **영향 파일**: `apps/api/src/aidoo_api/domains/auth/`, `apps/web/src/platform/time/`, `apps/web/src/platform/auth/settings-pages.tsx`, `apps/web/src/app/shell/AppContent.tsx`, `apps/web/src/components/layout/AppBar.tsx`, `apps/web/src/app-modules/{pms,meeting}/`
+- **남은 후속 작업**: 모바일 셸/업무 화면의 Playwright 실기기형 visual regression을 별도 E2E로 보강.
+
 ## 2026-04-26 · 통합검색 결과 미리보기 UX 적용
 
 - **요약**: `/tool/search` 결과 클릭을 즉시 라우팅에서 선택/미리보기로 전환하고, 명시적 `열기` 액션과 `selected_type`/`selected_id` URL 상태를 추가했다. Vitest, typecheck, Playwright 검색 E2E 8건 통과.

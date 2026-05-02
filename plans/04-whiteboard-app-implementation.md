@@ -23,6 +23,15 @@
 - 도메인/엔티티 이름: `Whiteboard` (단수). 사용자 UI 라벨도 "Whiteboard / 화이트보드".
 - "캔버스(scene)"는 화이트보드 내부의 그리기 영역을 가리키는 기술 용어로만 사용 (Excalidraw scene JSON과 매칭).
 
+## 2026-05-02 Current Status
+
+최근 구현 커밋 기준으로 Whiteboard는 first-class workspace app, hub/editor UX, 기본 협업 흐름까지 반영되어 있다.
+
+- 완료/대부분 완료: backend whiteboard 도메인 skeleton/CRUD/container/access, web app shell 등록, Whiteboard hub/editor, Excalidraw scene 저장/로드, Yjs 기반 협업 경로, 기본 share/export/item preference 표면.
+- 부분 완료: PMS와의 컨테이너 연결은 기반이 있으나, PMS 태스크 상세의 명시적 `Whiteboard` 탭과 태스크 컨텍스트 복귀 UX는 아직 완료 기준으로 보지 않는다.
+- 남은 핵심 작업: RAG/search sync, 비로그인 link share read-only 진입, PMS task detail Whiteboard tab, 서버 측 export/thumbnail, Playwright E2E.
+- 검증 주의: `uv run python -m pytest tests/test_whiteboard_*.py`는 로컬 Docker daemon 권한 문제로 `postgres:18` pull 단계에서 막힐 수 있다. 코드 실패로 단정하지 말고 Docker 접근 권한을 먼저 확인한다.
+
 ## Architecture / Principles
 
 ### 1. Docs 도메인과 평행 구조 (parallel mirror)
