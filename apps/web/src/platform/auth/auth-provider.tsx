@@ -37,7 +37,7 @@ import {
   readStoredAuthToken,
 } from './auth-storage';
 import { LoginScreen } from './login-screen';
-import { i18n } from '@/src/platform/i18n';
+import { i18n, syncLocale } from '@/src/platform/i18n';
 
 export { useAuth } from './auth-context';
 
@@ -190,6 +190,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       currentUserResult.status === 'fulfilled' &&
       currentUserResult.value
     ) {
+      syncLocale(currentUserResult.value.locale);
       setState({
         status: 'authenticated',
         user: currentUserResult.value,
@@ -230,6 +231,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     persistAuthToken(session.token);
+    syncLocale(session.user.locale);
     setState(
       nextAuthenticatedState(
         session.user,
@@ -249,6 +251,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     persistAuthToken(session.token);
+    syncLocale(session.user.locale);
     setState(
       nextAuthenticatedState(
         session.user,
@@ -268,6 +271,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     persistAuthToken(session.token);
+    syncLocale(session.user.locale);
     setState(
       nextAuthenticatedState(
         session.user,
@@ -287,6 +291,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     persistAuthToken(session.token);
+    syncLocale(session.user.locale);
     setState(
       nextAuthenticatedState(
         session.user,
@@ -335,6 +340,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return;
     }
 
+    syncLocale(user.locale);
     setState((current) => (
       nextAuthenticatedState(
         user,

@@ -307,6 +307,52 @@ export function ProfilePage({ initialTab }: { initialTab: SettingsSection }) {
     setError(null);
   }
 
+  async function saveThemePreference(nextThemePreference: ThemePreference) {
+    if (nextThemePreference === themePreference) return;
+    const previousThemePreference = themePreference;
+    setMessage(null);
+    setError(null);
+    setThemePreference(nextThemePreference);
+    try {
+      await auth.updatePreferences({ theme_preference: nextThemePreference });
+    } catch (caughtError) {
+      setThemePreference(previousThemePreference);
+      setError(getErrorMessage(caughtError, t('auth:settings.saveFailed')));
+    }
+  }
+
+  async function saveLocalePreference(nextLocaleValue: string) {
+    const previousLocale = locale;
+    const nextLocale = normalizeLocale(nextLocaleValue);
+    if (nextLocale === previousLocale) return;
+    setMessage(null);
+    setError(null);
+    setLocale(nextLocale);
+    syncLocale(nextLocale);
+    try {
+      await auth.updatePreferences({ locale: nextLocale });
+    } catch (caughtError) {
+      setLocale(previousLocale);
+      syncLocale(previousLocale);
+      setError(getErrorMessage(caughtError, t('auth:settings.saveFailed')));
+    }
+  }
+
+  async function saveTimeZonePreference(nextTimeZoneValue: string) {
+    const previousTimeZone = timeZone;
+    const nextTimeZone = normalizeTimeZone(nextTimeZoneValue);
+    if (nextTimeZone === previousTimeZone) return;
+    setMessage(null);
+    setError(null);
+    setTimeZone(nextTimeZone);
+    try {
+      await auth.updatePreferences({ time_zone: nextTimeZone });
+    } catch (caughtError) {
+      setTimeZone(previousTimeZone);
+      setError(getErrorMessage(caughtError, t('auth:settings.saveFailed')));
+    }
+  }
+
   function getUserInitials(name: string) {
     return name.trim().split(/\s+/).slice(0, 2).map((p) => p[0]?.toUpperCase() ?? '').join('') || 'ID';
   }
@@ -461,10 +507,7 @@ export function ProfilePage({ initialTab }: { initialTab: SettingsSection }) {
                         <button
                           key={opt.value}
                           type="button"
-                          onClick={() => {
-                            setThemePreference(opt.value);
-                            void auth.updatePreferences({ theme_preference: opt.value });
-                          }}
+                          onClick={() => { void saveThemePreference(opt.value); }}
                           className={cn(
                             'app-text-control flex items-center gap-2 rounded-md border px-4 py-2.5 transition-colors',
                             themePreference === opt.value
@@ -481,18 +524,7 @@ export function ProfilePage({ initialTab }: { initialTab: SettingsSection }) {
                   <FieldRow label={t('auth:settings.language')} description={t('auth:settings.languageDescription')}>
                     <select
                       className={fieldClassName}
-                      onChange={(event) => {
-                        const previousLocale = locale;
-                        const nextLocale = normalizeLocale(event.target.value);
-                        setLocale(nextLocale);
-                        syncLocale(nextLocale);
-                        auth.updatePreferences({ locale: nextLocale })
-                          .catch((caughtError) => {
-                            setLocale(previousLocale);
-                            syncLocale(previousLocale);
-                            setError(getErrorMessage(caughtError, t('auth:settings.saveFailed')));
-                          });
-                      }}
+                      onChange={(event) => { void saveLocalePreference(event.target.value); }}
                       value={locale}
                     >
                       {LOCALE_OPTIONS.map((option) => (
@@ -505,11 +537,7 @@ export function ProfilePage({ initialTab }: { initialTab: SettingsSection }) {
                   <FieldRow label={t('auth:settings.timeZone')} description={t('auth:settings.timeZoneDescription')}>
                     <select
                       className={fieldClassName}
-                      onChange={(event) => {
-                        const nextTimeZone = event.target.value;
-                        setTimeZone(nextTimeZone);
-                        void auth.updatePreferences({ time_zone: nextTimeZone });
-                      }}
+                      onChange={(event) => { void saveTimeZonePreference(event.target.value); }}
                       value={timeZone}
                     >
                       {TIME_ZONE_OPTIONS.map((option) => (

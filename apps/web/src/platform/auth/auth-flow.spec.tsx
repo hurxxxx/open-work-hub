@@ -9,6 +9,7 @@ import {
   useAuth,
 } from './auth-provider';
 import { AUTH_TOKEN_STORAGE_KEY } from './auth-storage';
+import { LOCALE_STORAGE_KEY, syncLocale } from '@/src/platform/i18n';
 import type { AuthUser } from './auth-api';
 
 function buildUser(overrides: Partial<AuthUser> = {}): AuthUser {
@@ -92,6 +93,7 @@ function renderAuthFlow(initialEntries: string[]) {
 describe('auth flow', () => {
   beforeEach(() => {
     window.localStorage.clear();
+    syncLocale('ko-KR');
     vi.restoreAllMocks();
   });
 
@@ -164,7 +166,7 @@ describe('auth flow', () => {
         return new Response(
           JSON.stringify({
             token: 'login-token',
-            user: buildUser(),
+            user: buildUser({ locale: 'en-US' }),
           }),
           {
             headers: { 'Content-Type': 'application/json' },
@@ -191,6 +193,8 @@ describe('auth flow', () => {
     expect(screen.getByText('member@aidoo.local')).toBeTruthy();
     expect(screen.getByTestId('location').textContent).toBe('/docs');
     expect(window.localStorage.getItem(AUTH_TOKEN_STORAGE_KEY)).toBe('login-token');
+    expect(window.localStorage.getItem(LOCALE_STORAGE_KEY)).toBe('en-US');
+    expect(document.documentElement.lang).toBe('en-US');
   });
 
   it('logs in through the development admin shortcut button', async () => {

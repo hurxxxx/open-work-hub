@@ -3,6 +3,7 @@ import { MemoryRouter, useLocation } from 'react-router-dom';
 import { vi } from 'vitest';
 
 import { ProfilePage } from './settings-pages';
+import { i18n, syncLocale } from '@/src/platform/i18n';
 import type { AuthUser } from './auth-api';
 
 const mockListSessions = vi.fn();
@@ -53,6 +54,7 @@ function LocationDisplay() {
 
 describe('ProfilePage', () => {
   beforeEach(() => {
+    syncLocale('ko-KR');
     mockListSessions.mockResolvedValue([]);
     mockLogout.mockResolvedValue(undefined);
     mockUpdatePreferences.mockResolvedValue(undefined);
@@ -110,6 +112,47 @@ describe('ProfilePage', () => {
 
     await waitFor(() => {
       expect(mockUpdatePreferences).toHaveBeenCalledWith({ locale: 'en-US' });
+    });
+  });
+
+  it('rolls back locale changes when saving fails', async () => {
+    mockUpdatePreferences.mockRejectedValueOnce(new Error('locale save failed'));
+
+    render(
+      <MemoryRouter initialEntries={['/profile']}>
+        <ProfilePage initialTab="appearance" />
+      </MemoryRouter>,
+    );
+
+    const languageSelect = screen.getAllByRole('combobox')[0] as HTMLSelectElement;
+    fireEvent.change(languageSelect, {
+      target: { value: 'en-US' },
+    });
+
+    await screen.findByText('locale save failed');
+    await waitFor(() => {
+      expect(languageSelect.value).toBe('ko-KR');
+      expect(i18n.language).toBe('ko-KR');
+    });
+  });
+
+  it('rolls back time zone changes when saving fails', async () => {
+    mockUpdatePreferences.mockRejectedValueOnce(new Error('time zone save failed'));
+
+    render(
+      <MemoryRouter initialEntries={['/profile']}>
+        <ProfilePage initialTab="appearance" />
+      </MemoryRouter>,
+    );
+
+    const timeZoneSelect = screen.getAllByRole('combobox')[1] as HTMLSelectElement;
+    fireEvent.change(timeZoneSelect, {
+      target: { value: 'America/New_York' },
+    });
+
+    await screen.findByText('time zone save failed');
+    await waitFor(() => {
+      expect(timeZoneSelect.value).toBe('Asia/Seoul');
     });
   });
 });
