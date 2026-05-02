@@ -10,7 +10,7 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 from celery import Celery, chain
-from fastapi import HTTPException, UploadFile, status
+from fastapi import UploadFile, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -321,15 +321,13 @@ def init_staging(
             if other_active.uploaded_by is not None
             else "다른 사용자"
         )
-        raise HTTPException(
+        raise localized_http_exception(
             status_code=status.HTTP_409_CONFLICT,
-            detail={
-                "code": "recording_in_progress",
-                "message": f"이미 {recorder_name} 님이 녹음 중입니다.",
-                "active_recorder_id": other_active.uploaded_by_id,
-                "active_recorder_name": recorder_name,
-                "active_staging_id": other_active.id,
-            },
+            code="meeting.recording_in_progress",
+            recorder_name=recorder_name,
+            active_recorder_id=other_active.uploaded_by_id,
+            active_recorder_name=recorder_name,
+            active_staging_id=other_active.id,
         )
 
     staging_id = new_id()

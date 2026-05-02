@@ -100,6 +100,18 @@ def test_translate_whiteboard_access_message() -> None:
     assert translate_message(message, "ko-KR") == "화이트보드 편집 권한이 필요합니다."
 
 
+def test_translate_meeting_recording_in_progress_message() -> None:
+    message = LocalizedApiMessage(
+        code="meeting.recording_in_progress",
+        params={"recorder_name": "Admin User"},
+    )
+
+    assert translate_message(message, "en-US") == (
+        "A recording is already in progress by Admin User."
+    )
+    assert translate_message(message, "ko-KR") == "이미 Admin User 님이 녹음 중입니다."
+
+
 def test_translate_admin_workspace_delete_blockers_preserves_counts() -> None:
     message = LocalizedApiMessage(
         code="admin.workspace_contains_content",

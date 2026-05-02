@@ -1047,6 +1047,10 @@ MESSAGES: dict[str, dict[str, str]] = {
         "ko-KR": "회의 녹화를 찾을 수 없습니다.",
         "en-US": "Meeting recording not found.",
     },
+    "meeting.recording_in_progress": {
+        "ko-KR": "이미 {recorder_name} 님이 녹음 중입니다.",
+        "en-US": "A recording is already in progress by {recorder_name}.",
+    },
     "meeting.recording_summary_unavailable": {
         "ko-KR": "회의 녹화 요약을 아직 사용할 수 없습니다.",
         "en-US": "Meeting recording summary is not available yet.",

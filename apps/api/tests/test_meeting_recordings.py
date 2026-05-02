@@ -301,11 +301,11 @@ def test_only_one_user_can_record_at_a_time(client, monkeypatch, tmp_path) -> No
         json={"idempotency_key": "lock-test-second", "mime_type": "audio/webm"},
     )
     assert blocked.status_code == 409, blocked.text
-    detail = blocked.json()["detail"]
-    assert detail["code"] == "recording_in_progress"
-    assert detail["active_recorder_id"] == admin["user"]["id"]
-    assert detail["active_recorder_name"] == admin["user"]["full_name"]
-    assert detail["active_staging_id"] == admin_staging_id
+    body = blocked.json()
+    assert body["code"] == "meeting.recording_in_progress"
+    assert body["params"]["active_recorder_id"] == admin["user"]["id"]
+    assert body["params"]["active_recorder_name"] == admin["user"]["full_name"]
+    assert body["params"]["active_staging_id"] == admin_staging_id
 
     # Admin can still resume their own staging (idempotent path).
     same_admin = client.post(
