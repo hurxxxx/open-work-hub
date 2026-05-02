@@ -107,6 +107,34 @@ MESSAGES: dict[str, dict[str, str]] = {
         "ko-KR": "인증이 필요합니다.",
         "en-US": "Authentication required.",
     },
+    "llm.pool_disabled": {
+        "ko-KR": "{pool} LLM pool이 비활성화되어 있습니다.",
+        "en-US": "{pool} LLM pool is disabled.",
+    },
+    "llm.missing_settings": {
+        "ko-KR": "{pool} LLM 설정이 누락되었습니다: {settings}",
+        "en-US": "Missing LLM {pool} setting(s): {settings}",
+    },
+    "llm.provider_unavailable": {
+        "ko-KR": "LLM provider를 사용할 수 없습니다: {reason}",
+        "en-US": "LLM provider is unavailable: {reason}",
+    },
+    "llm.provider_status_error": {
+        "ko-KR": "LLM provider 요청이 실패했습니다: {status_code}: {message}",
+        "en-US": "LLM provider request failed: {status_code}: {message}",
+    },
+    "llm.configured_model_missing": {
+        "ko-KR": "설정된 LLM model을 찾을 수 없습니다. 사용 가능한 model: {models}",
+        "en-US": "Configured LLM model was not found. Available models: {models}",
+    },
+    "llm.policy_lookup_failed": {
+        "ko-KR": "LLM 정책 조회에 실패했습니다: {reason}",
+        "en-US": "LLM policy lookup failed: {reason}",
+    },
+    "llm.external_pool_disabled": {
+        "ko-KR": "external LLM pool이 비활성화되어 있습니다.",
+        "en-US": "External LLM pool is disabled.",
+    },
     "auth.system_role_required": {
         "ko-KR": "시스템 역할이 필요합니다: {roles}",
         "en-US": "System role required: {roles}",

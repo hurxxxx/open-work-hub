@@ -211,10 +211,11 @@ def create_app(*, initialize_runtime: bool = True) -> FastAPI:
         }
 
     @app.get("/readyz", tags=["system"])
-    def readyz(response: Response) -> dict[str, object]:
+    def readyz(request: Request, response: Response) -> dict[str, object]:
         dual = check_all_pools_health(settings)
         with get_session_factory()() as session:
             effective = check_effective_llm_readiness(session, settings)
+        locale = _request_locale(request)
         ready = effective.ready or not settings.llm_required
         rag = get_rag_runtime_health()
         if rag.get("enabled") and not rag.get("ready", False):
@@ -226,8 +227,8 @@ def create_app(*, initialize_runtime: bool = True) -> FastAPI:
             "status": "ok" if ready else "degraded",
             "environment": settings.environment,
             "instance_id": settings.instance_id,
-            "llm": dual.public_dict(),
-            "llm_effective": effective.public_dict(),
+            "llm": dual.public_dict(locale=locale),
+            "llm_effective": effective.public_dict(locale=locale),
             "rag": rag,
         }
 

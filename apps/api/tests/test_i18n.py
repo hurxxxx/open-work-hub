@@ -23,6 +23,23 @@ def test_translate_message_interpolates_params() -> None:
     assert translate_message(message, "ko-KR") == "워크스페이스 멤버십이 필요합니다: hq"
 
 
+def test_translate_llm_health_messages() -> None:
+    disabled = LocalizedApiMessage(code="llm.pool_disabled", params={"pool": "local"})
+    missing = LocalizedApiMessage(
+        code="llm.missing_settings",
+        params={"pool": "external", "settings": "api_key, default_model"},
+    )
+
+    assert translate_message(disabled, "en-US") == "local LLM pool is disabled."
+    assert translate_message(disabled, "ko-KR") == "local LLM pool이 비활성화되어 있습니다."
+    assert translate_message(missing, "en-US") == (
+        "Missing LLM external setting(s): api_key, default_model"
+    )
+    assert translate_message(missing, "ko-KR") == (
+        "external LLM 설정이 누락되었습니다: api_key, default_model"
+    )
+
+
 def test_translate_domain_message_interpolates_dynamic_values() -> None:
     message = LocalizedApiMessage(
         code="pms.status_in_use",

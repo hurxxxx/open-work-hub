@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 from sse_starlette.sse import EventSourceResponse
 
 from aidoo_api.core.db import get_db_session
-from aidoo_api.core.i18n import LocalizedApiMessage, localized_http_exception
+from aidoo_api.core.i18n import LocalizedApiMessage, localized_http_exception, select_locale
 from aidoo_api.core.principal import CallerPrincipal, user_principal
 from aidoo_api.core.llm import (
     LlmPoolConfig,
@@ -390,12 +390,18 @@ def app_capability_openapi_export(
 
 
 @router.get("/health", response_model=LlmDualHealthResponse)
-def ai_health() -> LlmDualHealthResponse:
+def ai_health(request: Request) -> LlmDualHealthResponse:
     """Pool-scoped AI readiness. Each pool's status is reported independently;
     overall ``ready`` is true if at least one pool is usable. Routing decisions
     are still policy-driven, not fallback-driven.
     """
-    return LlmDualHealthResponse.model_validate(check_all_pools_health().public_dict())
+    locale = select_locale(
+        explicit_locale=request.headers.get("x-aidoo-locale"),
+        accept_language=request.headers.get("accept-language"),
+    )
+    return LlmDualHealthResponse.model_validate(
+        check_all_pools_health().public_dict(locale=locale)
+    )
 
 
 @router.post("/chat", response_model=ChatResponse)

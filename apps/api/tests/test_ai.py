@@ -528,10 +528,11 @@ def test_readyz_uses_effective_readiness_while_ai_health_stays_raw(
 
     health_response = client.get(
         _workspace_ai_path(workspace_slug, "/health"),
-        headers=_auth_headers(auth["token"]),
+        headers={**_auth_headers(auth["token"]), "x-aidoo-locale": "en-US"},
     )
     assert health_response.status_code == 200, health_response.text
     health_payload = health_response.json()
     assert health_payload["ready"] is True
     assert health_payload["local"]["status"] == "model_missing"
+    assert health_payload["local"]["detail"].startswith("Configured LLM model was not found.")
     assert health_payload["external"]["ready"] is True

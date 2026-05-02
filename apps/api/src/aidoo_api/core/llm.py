@@ -22,7 +22,7 @@ from __future__ import annotations
 import logging
 import time
 from collections.abc import Iterable
-from dataclasses import asdict, dataclass, field
+from dataclasses import dataclass, field
 from functools import lru_cache
 from typing import Any, Literal, Mapping
 
@@ -36,6 +36,7 @@ from openai import (
 )
 from sqlalchemy.orm import Session
 
+from aidoo_api.core.i18n import DEFAULT_LOCALE, LocalizedApiMessage, translate_message
 from aidoo_api.core.pii import scan_pii
 from aidoo_api.core.settings import Settings, get_settings
 from aidoo_api.domains.ai.registry import RegisteredLlmTask, get_ai_capability_registry
@@ -50,6 +51,7 @@ LlmPoolHint = Literal["local"]
 LlmHealthStatus = Literal[
     "ready", "unavailable", "model_missing", "not_configured", "disabled"
 ]
+LlmHealthDetail = str | LocalizedApiMessage | None
 
 LOCAL_DEFAULT_MAX_TOKENS = 30_000
 EXTERNAL_DEFAULT_MAX_TOKENS = 262_144
@@ -171,14 +173,23 @@ class LlmPoolHealth:
     model: str
     canonical_model: str
     status: LlmHealthStatus
-    detail: str | None = None
+    detail: LlmHealthDetail = None
 
     @property
     def ready(self) -> bool:
         return self.status == "ready"
 
-    def public_dict(self) -> dict[str, Any]:
-        return {**asdict(self), "ready": self.ready}
+    def public_dict(self, *, locale: str = DEFAULT_LOCALE) -> dict[str, Any]:
+        return {
+            "pool": self.pool,
+            "provider": self.provider,
+            "base_url": self.base_url,
+            "model": self.model,
+            "canonical_model": self.canonical_model,
+            "status": self.status,
+            "detail": _render_health_detail(self.detail, locale),
+            "ready": self.ready,
+        }
 
 
 @dataclass(frozen=True)
@@ -195,11 +206,11 @@ class LlmDualHealth:
         """
         return self.local.ready or bool(self.external and self.external.ready)
 
-    def public_dict(self) -> dict[str, Any]:
+    def public_dict(self, *, locale: str = DEFAULT_LOCALE) -> dict[str, Any]:
         return {
             "ready": self.ready,
-            "local": self.local.public_dict(),
-            "external": self.external.public_dict() if self.external else None,
+            "local": self.local.public_dict(locale=locale),
+            "external": self.external.public_dict(locale=locale) if self.external else None,
         }
 
 
@@ -210,10 +221,17 @@ class LlmTaskReadiness:
     policy: LlmPolicyMode
     chosen_pool: LlmPoolName | None
     ready: bool
-    detail: str | None = None
+    detail: LlmHealthDetail = None
 
-    def public_dict(self) -> dict[str, Any]:
-        return asdict(self)
+    def public_dict(self, *, locale: str = DEFAULT_LOCALE) -> dict[str, Any]:
+        return {
+            "task_kind": self.task_kind,
+            "description": self.description,
+            "policy": self.policy,
+            "chosen_pool": self.chosen_pool,
+            "ready": self.ready,
+            "detail": _render_health_detail(self.detail, locale),
+        }
 
 
 @dataclass(frozen=True)
@@ -224,11 +242,17 @@ class LlmEffectiveReadiness:
     def ready(self) -> bool:
         return all(task.ready for task in self.tasks)
 
-    def public_dict(self) -> dict[str, Any]:
+    def public_dict(self, *, locale: str = DEFAULT_LOCALE) -> dict[str, Any]:
         return {
             "ready": self.ready,
-            "tasks": [task.public_dict() for task in self.tasks],
+            "tasks": [task.public_dict(locale=locale) for task in self.tasks],
         }
+
+
+def _render_health_detail(detail: LlmHealthDetail, locale: str) -> str | None:
+    if isinstance(detail, LocalizedApiMessage):
+        return translate_message(detail, locale)
+    return detail
 
 
 # ---------------------------------------------------------------------------
@@ -329,7 +353,7 @@ def check_pool_health(
             model=config.default_model,
             canonical_model=config.canonical_model,
             status="disabled",
-            detail=f"{config.pool} pool is disabled.",
+            detail=LocalizedApiMessage(code="llm.pool_disabled", params={"pool": config.pool}),
         )
 
     if not config.configured:
@@ -349,7 +373,10 @@ def check_pool_health(
             model=config.default_model,
             canonical_model=config.canonical_model,
             status="not_configured",
-            detail=f"Missing LLM {config.pool} setting(s): {', '.join(missing)}",
+            detail=LocalizedApiMessage(
+                code="llm.missing_settings",
+                params={"pool": config.pool, "settings": ", ".join(missing)},
+            ),
         )
 
     try:
@@ -362,7 +389,10 @@ def check_pool_health(
             model=config.default_model,
             canonical_model=config.canonical_model,
             status="unavailable",
-            detail=str(error),
+            detail=LocalizedApiMessage(
+                code="llm.provider_unavailable",
+                params={"reason": str(error)},
+            ),
         )
     except APIStatusError as error:
         return LlmPoolHealth(
@@ -372,7 +402,10 @@ def check_pool_health(
             model=config.default_model,
             canonical_model=config.canonical_model,
             status="unavailable",
-            detail=f"{error.status_code}: {error.message}",
+            detail=LocalizedApiMessage(
+                code="llm.provider_status_error",
+                params={"status_code": error.status_code, "message": error.message},
+            ),
         )
     except OpenAIError as error:
         return LlmPoolHealth(
@@ -382,7 +415,10 @@ def check_pool_health(
             model=config.default_model,
             canonical_model=config.canonical_model,
             status="unavailable",
-            detail=str(error),
+            detail=LocalizedApiMessage(
+                code="llm.provider_unavailable",
+                params={"reason": str(error)},
+            ),
         )
 
     model_ids = {model.id for model in models.data}
@@ -394,9 +430,9 @@ def check_pool_health(
             model=config.default_model,
             canonical_model=config.canonical_model,
             status="model_missing",
-            detail=(
-                f"Configured model was not found. Available models: "
-                f"{', '.join(sorted(model_ids))}"
+            detail=LocalizedApiMessage(
+                code="llm.configured_model_missing",
+                params={"models": ", ".join(sorted(model_ids))},
             ),
         )
 
@@ -439,7 +475,10 @@ def check_effective_llm_readiness(
                     policy=task.default_policy,
                     chosen_pool=None,
                     ready=False,
-                    detail=f"policy_lookup_failed: {error}",
+                    detail=LocalizedApiMessage(
+                        code="llm.policy_lookup_failed",
+                        params={"reason": str(error)},
+                    ),
                 )
             )
             continue
@@ -454,7 +493,7 @@ def check_effective_llm_readiness(
                     policy=policy,
                     chosen_pool=chosen_pool,
                     ready=False,
-                    detail="external pool is disabled",
+                    detail=LocalizedApiMessage(code="llm.external_pool_disabled"),
                 )
             )
             continue
