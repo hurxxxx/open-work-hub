@@ -188,6 +188,31 @@ def test_translate_ai_dynamic_tool_and_status_messages() -> None:
     assert translate_message(status_message, "ko-KR") == "승인이 이미 승인됨 상태입니다."
 
 
+def test_translate_ai_tool_domain_validation_messages() -> None:
+    planner_pair = LocalizedApiMessage(code="planner.update_start_at_end_at_required")
+    planner_mutation = LocalizedApiMessage(code="planner.update_mutable_field_required")
+    pms_mutation = LocalizedApiMessage(code="pms.update_mutable_field_required")
+
+    assert translate_message(planner_pair, "en-US") == (
+        "Planner event updates must provide both start_at and end_at together."
+    )
+    assert translate_message(planner_pair, "ko-KR") == (
+        "Planner 이벤트 업데이트에는 start_at과 end_at을 함께 제공해야 합니다."
+    )
+    assert translate_message(planner_mutation, "en-US") == (
+        "Planner event updates must provide at least one mutable field."
+    )
+    assert translate_message(planner_mutation, "ko-KR") == (
+        "Planner 이벤트 업데이트에는 변경할 필드를 하나 이상 제공해야 합니다."
+    )
+    assert translate_message(pms_mutation, "en-US") == (
+        "PMS issue updates must provide at least one mutable field."
+    )
+    assert translate_message(pms_mutation, "ko-KR") == (
+        "PMS 이슈 업데이트에는 변경할 필드를 하나 이상 제공해야 합니다."
+    )
+
+
 def test_translate_ai_router_dynamic_messages() -> None:
     workspace_app_message = LocalizedApiMessage(
         code="ai.unknown_workspace_app",

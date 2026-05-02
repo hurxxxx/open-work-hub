@@ -701,6 +701,67 @@ def test_ai_tool_invoke_pms_write_tool_requires_approval_when_enabled(
         _reset_settings_and_registry()
 
 
+def test_ai_tool_invoke_planner_update_validation_returns_localized_code(
+    client: TestClient,
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv("AIDOO_AI_WRITE_TOOLS_ENABLED", "1")
+    _reset_settings_and_registry()
+    try:
+        session = _dev_login(client, "delivery-hub-admin")
+        token = session["token"]
+
+        response = client.post(
+            _workspace_tool_path("delivery-hub", "planner.update_event"),
+            headers={**_auth_headers(token), "x-aidoo-locale": "ko-KR"},
+            json={
+                "arguments": {
+                    "event_id": "event-validation-target",
+                    "start_at": "2026-05-10T01:00:00+00:00",
+                }
+            },
+        )
+
+        assert response.status_code == 400, response.text
+        body = response.json()
+        assert body["code"] == "planner.update_start_at_end_at_required"
+        assert body["detail"] == "Planner 이벤트 업데이트에는 start_at과 end_at을 함께 제공해야 합니다."
+        audit_payload = _tool_audit_rows()[-1].payload
+        assert audit_payload["tool_name"] == "planner.update_event"
+        assert audit_payload["status"] == "error"
+    finally:
+        monkeypatch.delenv("AIDOO_AI_WRITE_TOOLS_ENABLED", raising=False)
+        _reset_settings_and_registry()
+
+
+def test_ai_tool_invoke_pms_update_validation_returns_localized_code(
+    client: TestClient,
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv("AIDOO_AI_WRITE_TOOLS_ENABLED", "1")
+    _reset_settings_and_registry()
+    try:
+        session = _dev_login(client, "delivery-hub-admin")
+        token = session["token"]
+
+        response = client.post(
+            _workspace_tool_path("delivery-hub", "pms.update_issue"),
+            headers={**_auth_headers(token), "x-aidoo-locale": "ko-KR"},
+            json={"arguments": {"issue_id": "issue-validation-target"}},
+        )
+
+        assert response.status_code == 400, response.text
+        body = response.json()
+        assert body["code"] == "pms.update_mutable_field_required"
+        assert body["detail"] == "PMS 이슈 업데이트에는 변경할 필드를 하나 이상 제공해야 합니다."
+        audit_payload = _tool_audit_rows()[-1].payload
+        assert audit_payload["tool_name"] == "pms.update_issue"
+        assert audit_payload["status"] == "error"
+    finally:
+        monkeypatch.delenv("AIDOO_AI_WRITE_TOOLS_ENABLED", raising=False)
+        _reset_settings_and_registry()
+
+
 def test_ai_tool_invoke_meeting_and_planner_write_tools_require_approval_when_enabled(
     client: TestClient,
     monkeypatch,

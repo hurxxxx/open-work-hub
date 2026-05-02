@@ -26,6 +26,15 @@ from aidoo_api.domains.ai.registry import (
 from aidoo_api.domains.auth.models import User, Workspace
 
 
+_LOCALIZED_TOOL_VALIDATION_ERROR_TYPES = frozenset(
+    {
+        "planner.update_mutable_field_required",
+        "planner.update_start_at_end_at_required",
+        "pms.update_mutable_field_required",
+    }
+)
+
+
 class ToolRequiresApproval(Exception):
     def __init__(
         self,
@@ -184,6 +193,14 @@ def execute_tool(
                 agent_run_id=agent_run_id,
                 conversation_id=conversation_id,
             )
+            localized_validation = _localized_tool_validation_error(error)
+            if localized_validation is not None:
+                code, params = localized_validation
+                raise localized_http_exception(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    code=code,
+                    **params,
+                ) from error
             raise localized_http_exception(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 code="ai.invalid_tool_arguments",
@@ -604,6 +621,18 @@ def _validation_error_message(error: ValidationError) -> str:
     if not parts:
         return "Invalid tool arguments."
     return "Invalid tool arguments: " + "; ".join(parts)
+
+
+def _localized_tool_validation_error(error: ValidationError) -> tuple[str, dict[str, Any]] | None:
+    errors = error.errors()
+    if len(errors) != 1:
+        return None
+    item = errors[0]
+    error_type = item.get("type")
+    if not isinstance(error_type, str) or error_type not in _LOCALIZED_TOOL_VALIDATION_ERROR_TYPES:
+        return None
+    params = item.get("ctx") if isinstance(item.get("ctx"), dict) else {}
+    return error_type, dict(params)
 
 
 def _error_message(error: HTTPException) -> str:

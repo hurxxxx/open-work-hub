@@ -739,6 +739,10 @@ MESSAGES: dict[str, dict[str, str]] = {
         "ko-KR": "PMS 워크스페이스 컨텍스트를 사용할 수 없습니다.",
         "en-US": "PMS workspace context is not available.",
     },
+    "pms.update_mutable_field_required": {
+        "ko-KR": "PMS 이슈 업데이트에는 변경할 필드를 하나 이상 제공해야 합니다.",
+        "en-US": "PMS issue updates must provide at least one mutable field.",
+    },
     "pms.space_not_found": {
         "ko-KR": "스페이스를 찾을 수 없습니다.",
         "en-US": "Space not found.",
@@ -982,6 +986,10 @@ MESSAGES: dict[str, dict[str, str]] = {
     "planner.update_start_at_end_at_required": {
         "ko-KR": "Planner 이벤트 업데이트에는 start_at과 end_at을 함께 제공해야 합니다.",
         "en-US": "Planner event updates must provide both start_at and end_at together.",
+    },
+    "planner.update_mutable_field_required": {
+        "ko-KR": "Planner 이벤트 업데이트에는 변경할 필드를 하나 이상 제공해야 합니다.",
+        "en-US": "Planner event updates must provide at least one mutable field.",
     },
     "planner.list_range_required": {
         "ko-KR": "Planner 이벤트 목록에는 'from'과 'to'를 함께 제공해야 합니다.",

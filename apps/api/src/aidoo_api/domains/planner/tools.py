@@ -6,6 +6,7 @@ from typing import Any, Literal
 
 from fastapi import status
 from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic_core import PydanticCustomError
 from sqlalchemy.orm import Session
 
 from aidoo_api.core.i18n import localized_http_exception
@@ -51,12 +52,20 @@ class UpdateEventArgs(_ToolArgsModel):
     @model_validator(mode="after")
     def _validate_mutation(self) -> "UpdateEventArgs":
         if (self.start_at is None) != (self.end_at is None):
-            raise ValueError("start_at and end_at must be provided together.")
+            raise PydanticCustomError(
+                "planner.update_start_at_end_at_required",
+                "Planner event updates must provide both start_at and end_at together.",
+                {},
+            )
         if self.model_fields_set.intersection(
             {"title", "start_at", "end_at", "description", "visibility", "location"}
         ):
             return self
-        raise ValueError("At least one mutable field must be provided.")
+        raise PydanticCustomError(
+            "planner.update_mutable_field_required",
+            "Planner event updates must provide at least one mutable field.",
+            {},
+        )
 
 
 class DeleteEventArgs(_ToolArgsModel):

@@ -5,6 +5,7 @@ from datetime import date
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic_core import PydanticCustomError
 from sqlalchemy.orm import Session
 
 from aidoo_api.core.principal import CallerPrincipal
@@ -70,7 +71,11 @@ class PmsUpdateIssueAiInput(_ToolArgsModel):
     def _validate_has_mutation(self) -> "PmsUpdateIssueAiInput":
         if self.model_fields_set.intersection({"title", "body", "status", "assignee_ids", "due_date"}):
             return self
-        raise ValueError("At least one mutable field must be provided.")
+        raise PydanticCustomError(
+            "pms.update_mutable_field_required",
+            "PMS issue updates must provide at least one mutable field.",
+            {},
+        )
 
 
 class PmsAddCommentAiInput(_ToolArgsModel):
