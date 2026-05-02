@@ -107,6 +107,10 @@ MESSAGES: dict[str, dict[str, str]] = {
         "ko-KR": "인증이 필요합니다.",
         "en-US": "Authentication required.",
     },
+    "auth.valid_email_required": {
+        "ko-KR": "올바른 이메일 주소가 필요합니다.",
+        "en-US": "A valid email address is required.",
+    },
     "llm.pool_disabled": {
         "ko-KR": "{pool} LLM pool이 비활성화되어 있습니다.",
         "en-US": "{pool} LLM pool is disabled.",

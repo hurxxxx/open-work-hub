@@ -179,6 +179,23 @@ def test_auth_error_messages_are_localized(client: TestClient) -> None:
     assert explicit_locale_response.json()["code"] == "auth.required"
 
 
+def test_auth_validation_error_is_localized(client: TestClient) -> None:
+    response = client.post(
+        "/api/v1/auth/login",
+        headers={"Accept-Language": "ko-KR"},
+        json={
+            "email": "not-email",
+            "password": "wrongpass123",
+        },
+    )
+
+    assert response.status_code == 422, response.text
+    body = response.json()
+    assert body["detail"] == "올바른 이메일 주소가 필요합니다."
+    assert body["code"] == "auth.valid_email_required"
+    assert body["validation"][0]["loc"] == ["body", "email"]
+
+
 def test_dev_admin_login_shortcut(client: TestClient) -> None:
     setup_response = client.post(
         "/api/v1/auth/setup",

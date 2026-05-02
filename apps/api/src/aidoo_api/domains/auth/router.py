@@ -5,6 +5,7 @@ from typing import Literal
 
 from fastapi import APIRouter, Depends, Request, status
 from pydantic import BaseModel, Field, field_validator
+from pydantic_core import PydanticCustomError
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -36,6 +37,14 @@ from aidoo_api.domains.auth.security import (
     normalize_email,
     verify_password,
 )
+
+
+def _valid_email_required_error() -> PydanticCustomError:
+    return PydanticCustomError(
+        "auth.valid_email_required",
+        "A valid email address is required.",
+        {},
+    )
 
 
 class BootstrapStatusResponse(BaseModel):
@@ -116,7 +125,7 @@ class SetupFirstUserRequest(BaseModel):
     def validate_email(cls, value: str) -> str:
         normalized = normalize_email(value)
         if "@" not in normalized:
-            raise ValueError("A valid email address is required.")
+            raise _valid_email_required_error()
         return normalized
 
 
@@ -129,7 +138,7 @@ class LoginRequest(BaseModel):
     def validate_email(cls, value: str) -> str:
         normalized = normalize_email(value)
         if "@" not in normalized:
-            raise ValueError("A valid email address is required.")
+            raise _valid_email_required_error()
         return normalized
 
 

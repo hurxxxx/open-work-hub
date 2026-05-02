@@ -6,6 +6,7 @@ from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel, Field, field_validator
+from pydantic_core import PydanticCustomError
 from sqlalchemy import case as sa_case
 from sqlalchemy import delete as sa_delete
 from sqlalchemy import func, or_, select
@@ -64,6 +65,14 @@ from aidoo_api.domains.auth.models import (
 )
 from aidoo_api.domains.auth.security import hash_password, new_id, normalize_email
 from aidoo_api.domains.ai.runtime.persistence import scrub_completed_runtime_records
+
+
+def _invalid_workspace_role_error() -> PydanticCustomError:
+    return PydanticCustomError(
+        "admin.invalid_workspace_role",
+        "Invalid workspace role.",
+        {},
+    )
 
 
 class OrgUnitItemResponse(BaseModel):
@@ -411,7 +420,7 @@ class WorkspaceBindingInput(BaseModel):
     @classmethod
     def validate_role(cls, value: str) -> str:
         if not is_valid_workspace_role(value):
-            raise ValueError("Invalid workspace role.")
+            raise _invalid_workspace_role_error()
         normalized = normalize_workspace_role(value)
         assert normalized is not None
         return normalized
@@ -431,7 +440,7 @@ class WorkspaceMemberUpsertRequest(BaseModel):
     @classmethod
     def validate_role(cls, value: str) -> str:
         if not is_valid_workspace_role(value):
-            raise ValueError("Invalid workspace role.")
+            raise _invalid_workspace_role_error()
         normalized = normalize_workspace_role(value)
         assert normalized is not None
         return normalized
@@ -444,7 +453,7 @@ class WorkspaceMemberRoleUpdateRequest(BaseModel):
     @classmethod
     def validate_role(cls, value: str) -> str:
         if not is_valid_workspace_role(value):
-            raise ValueError("Invalid workspace role.")
+            raise _invalid_workspace_role_error()
         normalized = normalize_workspace_role(value)
         assert normalized is not None
         return normalized
@@ -461,7 +470,7 @@ class WorkspaceMemberBulkSubject(BaseModel):
         if value is None:
             return None
         if not is_valid_workspace_role(value):
-            raise ValueError("Invalid workspace role.")
+            raise _invalid_workspace_role_error()
         return normalize_workspace_role(value)
 
 
@@ -483,7 +492,7 @@ class GroupWorkspaceBindingInput(BaseModel):
     @classmethod
     def validate_role(cls, value: str) -> str:
         if not is_valid_workspace_role(value):
-            raise ValueError("Invalid workspace role.")
+            raise _invalid_workspace_role_error()
         normalized = normalize_workspace_role(value)
         assert normalized is not None
         return normalized

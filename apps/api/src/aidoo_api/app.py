@@ -41,7 +41,13 @@ from aidoo_api.openapi_contract import stable_operation_id
 
 
 logger = logging.getLogger(__name__)
-LOCALIZED_VALIDATION_ERROR_TYPES = frozenset({"ai.unknown_workspace_app"})
+LOCALIZED_VALIDATION_ERROR_TYPES = frozenset(
+    {
+        "admin.invalid_workspace_role",
+        "ai.unknown_workspace_app",
+        "auth.valid_email_required",
+    }
+)
 
 
 def _request_locale(request: Request) -> str:
