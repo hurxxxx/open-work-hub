@@ -3136,7 +3136,10 @@ def test_chat_stream_allowed_app_ids_rejects_unknown_app(
         },
     )
     assert response.status_code == 422
-    assert "shadow-app" in response.text
+    body = response.json()
+    assert body["code"] == "ai.unknown_workspace_app"
+    assert body["params"]["app_id"] == "shadow-app"
+    assert body["validation"][0]["loc"] == ["body", "allowed_app_ids"]
 
 
 def test_chat_stream_allowed_app_ids_cannot_widen_beyond_entitlements(

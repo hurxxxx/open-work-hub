@@ -8,6 +8,7 @@ from typing import Any, Literal, cast
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from openai import OpenAIError
 from pydantic import BaseModel, Field, field_validator
+from pydantic_core import PydanticCustomError
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 from sse_starlette.sse import EventSourceResponse
@@ -155,6 +156,14 @@ EMPTY_CANCELLED_RESPONSE_MESSAGE = "응답이 중단되었습니다."
 EMPTY_ERROR_RESPONSE_MESSAGE = "응답 중 오류가 발생했습니다."
 
 
+def _unknown_workspace_app_validation_error(unknown_app_ids: list[str]) -> PydanticCustomError:
+    return PydanticCustomError(
+        "ai.unknown_workspace_app",
+        "Unknown workspace app: {app_id}",
+        {"app_id": ", ".join(sorted(set(unknown_app_ids)))},
+    )
+
+
 class LlmPoolHealthResponse(BaseModel):
     pool: str
     provider: str
@@ -201,9 +210,7 @@ class ChatRequest(BaseModel):
             return None
         unknown = [item for item in value if item not in WORKSPACE_APP_IDS]
         if unknown:
-            raise ValueError(
-                f"unknown app id(s): {sorted(set(unknown))}; allowed: {sorted(WORKSPACE_APP_IDS)}"
-            )
+            raise _unknown_workspace_app_validation_error(unknown)
         # Preserve order while deduping so downstream filters see a stable set.
         seen: set[str] = set()
         out: list[str] = []
@@ -600,9 +607,7 @@ class ChatResumeRequest(BaseModel):
             return None
         unknown = [item for item in value if item not in WORKSPACE_APP_IDS]
         if unknown:
-            raise ValueError(
-                f"unknown app id(s): {sorted(set(unknown))}; allowed: {sorted(WORKSPACE_APP_IDS)}"
-            )
+            raise _unknown_workspace_app_validation_error(unknown)
         seen: set[str] = set()
         out: list[str] = []
         for item in value:

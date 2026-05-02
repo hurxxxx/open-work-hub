@@ -3,7 +3,11 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, Request, Response, status
-from fastapi.exception_handlers import http_exception_handler
+from fastapi.exception_handlers import (
+    http_exception_handler,
+    request_validation_exception_handler,
+)
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, Response as FastAPIResponse
 from opentelemetry.trace import SpanKind
 from starlette.exceptions import HTTPException as StarletteHTTPException
@@ -11,6 +15,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from aidoo_api.api_registry import register_api_routers
 from aidoo_api.core.db import get_session_factory, init_db
 from aidoo_api.core.i18n import (
+    ERROR_CODE_HEADER,
     LocalizedApiMessage,
     select_locale,
     translate_message,
@@ -36,6 +41,14 @@ from aidoo_api.openapi_contract import stable_operation_id
 
 
 logger = logging.getLogger(__name__)
+LOCALIZED_VALIDATION_ERROR_TYPES = frozenset({"ai.unknown_workspace_app"})
+
+
+def _request_locale(request: Request) -> str:
+    return select_locale(
+        explicit_locale=request.headers.get("x-aidoo-locale"),
+        accept_language=request.headers.get("accept-language"),
+    )
 
 
 async def runtime_registry_validation_exception_handler(
@@ -53,10 +66,7 @@ async def localized_http_exception_handler(
     if not isinstance(exc.detail, LocalizedApiMessage):
         return await http_exception_handler(request, exc)
 
-    locale = select_locale(
-        explicit_locale=request.headers.get("x-aidoo-locale"),
-        accept_language=request.headers.get("accept-language"),
-    )
+    locale = _request_locale(request)
     body: dict[str, object] = {
         "detail": translate_message(exc.detail, locale),
         "code": exc.detail.code,
@@ -68,6 +78,36 @@ async def localized_http_exception_handler(
         content=body,
         headers=exc.headers,
     )
+
+
+async def localized_request_validation_exception_handler(
+    request: Request,
+    exc: RequestValidationError,
+) -> JSONResponse:
+    for error in exc.errors():
+        error_type = error.get("type")
+        if not isinstance(error_type, str) or error_type not in LOCALIZED_VALIDATION_ERROR_TYPES:
+            continue
+        params = error.get("ctx") if isinstance(error.get("ctx"), dict) else {}
+        message = LocalizedApiMessage(code=error_type, params=dict(params))
+        body: dict[str, object] = {
+            "detail": translate_message(message, _request_locale(request)),
+            "code": error_type,
+            "params": message.params,
+            "validation": [
+                {
+                    "loc": list(error.get("loc", ())),
+                    "type": error_type,
+                }
+            ],
+        }
+        return JSONResponse(
+            status_code=422,
+            content=body,
+            headers={ERROR_CODE_HEADER: error_type},
+        )
+
+    return await request_validation_exception_handler(request, exc)
 
 
 def create_app(*, initialize_runtime: bool = True) -> FastAPI:
@@ -124,6 +164,10 @@ def create_app(*, initialize_runtime: bool = True) -> FastAPI:
         runtime_registry_validation_exception_handler,
     )
     app.add_exception_handler(StarletteHTTPException, localized_http_exception_handler)
+    app.add_exception_handler(
+        RequestValidationError,
+        localized_request_validation_exception_handler,
+    )
 
     @app.middleware("http")
     async def add_instance_headers(request, call_next) -> FastAPIResponse:
