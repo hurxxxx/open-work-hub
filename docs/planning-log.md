@@ -23,6 +23,13 @@
 
 ## 엔트리
 
+## 2026-05-02 · 다국어 지원 및 하드코드 메시지 정리
+
+- **요약**: API/Web 다국어 기반을 정리하고 사용자 노출 validation/error/UI 메시지를 `ko-KR`/`en-US` 리소스로 전환했다. Web i18n 가드는 `packages/ui`까지 검사하도록 확장했고, 최종 하드코드 UI 메시지 검색은 0건이다.
+- **PR/커밋**: 0b0e546, 59c82aa, 10a4795, 44686a8, c3ce2d9, eb3f9f2, dad54ea, 377dcd6, 6f195fc, 9013918, 9267494
+- **영향 파일**: `apps/api/src/aidoo_api/core/i18n.py`, `apps/api/src/aidoo_api/domains/`, `apps/web/src/platform/i18n/`, `apps/web/src/app-modules/`, `packages/ui/src/`, `scripts/check-*-i18n-*`
+- **남은 후속 작업**: 다국어 작업은 종료. 신규 UI/API 메시지는 `pnpm check:i18n`을 필수 가드로 유지.
+
 ## 2026-05-02 · 사용자 시간대 기본값 + 모바일 워크플로우 정리
 
 - **요약**: 사용자 프로필에 `time_zone` 설정을 추가하고 기본 표시 기준을 `Asia/Seoul`로 고정했다. PMS/Meeting 모바일 표면은 3단 가로 분할 대신 단일 흐름으로 재배치했고, 모바일 셸은 `앱 전환` 드로어와 현재 앱 내부 메뉴 드로어를 분리했다.
