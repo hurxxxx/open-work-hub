@@ -5,12 +5,13 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from io import BytesIO
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Response, UploadFile, status
+from fastapi import APIRouter, Depends, Query, Response, UploadFile, status
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload
 
 from aidoo_api.core.db import get_db_session
+from aidoo_api.core.i18n import localized_http_exception
 from aidoo_api.core.settings import get_settings
 from aidoo_api.core.storage import get_minio_client
 from aidoo_api.domains.auth.access import resolve_team_role
@@ -42,14 +43,20 @@ async def upload_media(
     current_user: User = Depends(require_current_user),
 ) -> MediaUploadResponse:
     if file.content_type not in ALLOWED_IMAGE_TYPES:
-        raise HTTPException(
+        raise localized_http_exception(
             status_code=400,
-            detail=f"Unsupported file type: {file.content_type}. Allowed: {', '.join(sorted(ALLOWED_IMAGE_TYPES))}",
+            code="media.unsupported_file_type",
+            content_type=file.content_type,
+            allowed_types=", ".join(sorted(ALLOWED_IMAGE_TYPES)),
         )
 
     data = await file.read()
     if len(data) > MAX_MEDIA_UPLOAD_SIZE:
-        raise HTTPException(status_code=413, detail="File size exceeds 10 MB limit.")
+        raise localized_http_exception(
+            status_code=413,
+            code="media.file_size_limit_exceeded",
+            limit_mb=10,
+        )
 
     settings = get_settings()
     client = get_minio_client()
@@ -71,7 +78,10 @@ async def upload_media(
         db.flush()
     except Exception:
         db.rollback()
-        raise HTTPException(status_code=500, detail="Failed to create media record.")
+        raise localized_http_exception(
+            status_code=500,
+            code="media.create_record_failed",
+        )
 
     try:
         client.put_object(
@@ -83,7 +93,10 @@ async def upload_media(
         )
     except Exception:
         db.rollback()
-        raise HTTPException(status_code=502, detail="Storage upload failed.")
+        raise localized_http_exception(
+            status_code=502,
+            code="media.storage_upload_failed",
+        )
 
     try:
         db.commit()
@@ -93,7 +106,10 @@ async def upload_media(
             client.remove_object(settings.minio_bucket, storage_key)
         except Exception:
             pass
-        raise HTTPException(status_code=500, detail="Failed to save media metadata.")
+        raise localized_http_exception(
+            status_code=500,
+            code="media.save_metadata_failed",
+        )
     return MediaUploadResponse(id=media_id, url=f"media:{media_id}")
 
 
@@ -207,7 +223,10 @@ def link_media(
     elif payload.resource_type == "docs_native_page":
         _ensure_docs_native_page_access(db, current_user, payload.resource_id)
     else:
-        raise HTTPException(status_code=400, detail="Unsupported media resource type.")
+        raise localized_http_exception(
+            status_code=400,
+            code="media.unsupported_resource_type",
+        )
 
     media_files = db.scalars(
         select(MediaFile).where(
@@ -232,10 +251,13 @@ def _ensure_issue_access(db: Session, user: User, issue_id: str) -> None:
 
     issue = db.scalar(select(Issue).where(Issue.id == issue_id))
     if issue is None:
-        raise HTTPException(status_code=404, detail="Issue not found.")
+        raise localized_http_exception(status_code=404, code="pms.issue_not_found")
     task_list = db.scalar(select(TaskList).where(TaskList.id == issue.list_id))
     if not _has_space_access(db, user, task_list.team_id if task_list else None):
-        raise HTTPException(status_code=403, detail="Task list space access required.")
+        raise localized_http_exception(
+            status_code=403,
+            code="media.task_list_space_access_required",
+        )
 
 
 def _can_access_docs_native_page(
@@ -312,7 +334,10 @@ def _can_access_docs_native_page(
 
 def _ensure_docs_native_page_access(db: Session, user: User, page_id: str) -> None:
     if not _can_access_docs_native_page(db, user, page_id, require_edit=True):
-        raise HTTPException(status_code=403, detail="Doc edit access required.")
+        raise localized_http_exception(
+            status_code=403,
+            code="docs.doc_edit_access_required",
+        )
 
 
 # ── Cleanup ───────────────────────────────────────────────────────────

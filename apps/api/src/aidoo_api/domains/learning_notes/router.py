@@ -1,10 +1,11 @@
 """HTTP router for personal learning notes."""
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.orm import Session
 
 from aidoo_api.core.db import get_db_session
+from aidoo_api.core.i18n import localized_http_exception
 from aidoo_api.domains.auth.dependencies import require_current_user
 from aidoo_api.domains.auth.models import User
 
@@ -50,9 +51,9 @@ def get_my_note(
         db, user=current_user, course_slug=course_slug, lesson_id=lesson_id
     )
     if note is None:
-        raise HTTPException(
+        raise localized_http_exception(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="My learning note not found.",
+            code="learning.my_note_not_found",
         )
     return LearningPageNoteDetail(**note)
 
@@ -82,7 +83,7 @@ def get_note_detail(
     current_user: User = Depends(require_current_user),
 ) -> LearningPageNoteDetail:
     if not doc_id:
-        raise HTTPException(status_code=404, detail="Learning note not found.")
+        raise localized_http_exception(status_code=404, code="learning.note_not_found")
     note = get_page_note_detail(db, viewer=current_user, doc_id=doc_id)
     return LearningPageNoteDetail(**note)
 
@@ -94,7 +95,7 @@ def archive_note(
     current_user: User = Depends(require_current_user),
 ) -> LearningPageNoteDetail:
     if not doc_id:
-        raise HTTPException(status_code=404, detail="Learning note not found.")
+        raise localized_http_exception(status_code=404, code="learning.note_not_found")
     note = archive_my_page_note(db, user=current_user, doc_id=doc_id)
     return LearningPageNoteDetail(**note)
 
@@ -106,6 +107,6 @@ def restore_note(
     current_user: User = Depends(require_current_user),
 ) -> LearningPageNoteDetail:
     if not doc_id:
-        raise HTTPException(status_code=404, detail="Learning note not found.")
+        raise localized_http_exception(status_code=404, code="learning.note_not_found")
     note = restore_my_page_note(db, user=current_user, doc_id=doc_id)
     return LearningPageNoteDetail(**note)

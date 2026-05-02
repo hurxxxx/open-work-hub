@@ -4,10 +4,11 @@ from collections import Counter
 from datetime import datetime, time
 from typing import Any
 
-from fastapi import HTTPException, status
+from fastapi import status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from aidoo_api.core.i18n import localized_http_exception
 from aidoo_api.core.settings import get_settings
 from aidoo_api.core.telemetry import current_trace_id
 from aidoo_api.domains.auth.models import Team, TeamMember, User, Workspace
@@ -62,7 +63,11 @@ def query_workspace_keyword_search(
             request=request,
         )
     except OpenSearchError as error:
-        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(error)) from error
+        raise localized_http_exception(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            code="search.keyword_backend_unavailable",
+            reason=str(error),
+        ) from error
     accessible_rows = [
         row
         for row in candidate_rows

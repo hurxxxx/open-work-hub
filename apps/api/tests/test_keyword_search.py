@@ -277,7 +277,7 @@ def test_keyword_search_does_not_refresh_workspace_index_on_query(client: TestCl
 
 
 @pytest.mark.parametrize(
-    ("index_exists", "workspace_count", "expected_detail"),
+    ("index_exists", "workspace_count", "expected_reason"),
     [
         (False, 0, "Keyword search index is not initialized. Run keyword search backfill first."),
         (True, 0, "Keyword search index is empty for this workspace. Run keyword search backfill first."),
@@ -288,7 +288,7 @@ def test_keyword_search_returns_503_when_index_requires_backfill(
     monkeypatch: pytest.MonkeyPatch,
     index_exists: bool,
     workspace_count: int,
-    expected_detail: str,
+    expected_reason: str,
 ) -> None:
     from aidoo_api.domains.search import service as search_service
 
@@ -325,7 +325,10 @@ def test_keyword_search_returns_503_when_index_requires_backfill(
     )
 
     assert response.status_code == 503, response.text
-    assert response.json()["detail"] == expected_detail
+    body = response.json()
+    assert body["code"] == "search.keyword_backend_unavailable"
+    assert body["params"]["reason"] == expected_reason
+    assert expected_reason in body["detail"]
 
 
 def test_keyword_search_returns_contract_facets_snippets_and_deep_links(search_client: TestClient) -> None:

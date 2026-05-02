@@ -31,3 +31,16 @@ def test_translate_domain_message_interpolates_dynamic_values() -> None:
 
     assert translate_message(message, "en-US") == "Cannot delete status: 3 issue(s) are using it."
     assert translate_message(message, "ko-KR") == "상태를 삭제할 수 없습니다. 3개의 이슈가 사용 중입니다."
+
+
+def test_translate_search_backend_message_preserves_dynamic_reason() -> None:
+    message = LocalizedApiMessage(
+        code="search.keyword_backend_unavailable",
+        params={"reason": "index missing"},
+    )
+
+    assert (
+        translate_message(message, "en-US")
+        == "Keyword search is unavailable: index missing"
+    )
+    assert translate_message(message, "ko-KR") == "키워드 검색을 사용할 수 없습니다: index missing"

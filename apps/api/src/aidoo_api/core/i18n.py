@@ -195,6 +195,78 @@ MESSAGES: dict[str, dict[str, str]] = {
         "ko-KR": "협업 작성자를 찾을 수 없습니다.",
         "en-US": "Collaboration actor not found.",
     },
+    "learning.note_not_found": {
+        "ko-KR": "학습 노트를 찾을 수 없습니다.",
+        "en-US": "Learning note not found.",
+    },
+    "learning.my_note_not_found": {
+        "ko-KR": "내 학습 노트를 찾을 수 없습니다.",
+        "en-US": "My learning note not found.",
+    },
+    "learning.unknown_visibility": {
+        "ko-KR": "알 수 없는 공개 범위입니다.",
+        "en-US": "Unknown visibility.",
+    },
+    "learning.content_blocks_list_required": {
+        "ko-KR": "content_blocks는 리스트여야 합니다.",
+        "en-US": "content_blocks must be a list.",
+    },
+    "learning.content_block_object_required": {
+        "ko-KR": "content_blocks[{index}]는 JSON 객체여야 합니다.",
+        "en-US": "content_blocks[{index}] must be a JSON object.",
+    },
+    "learning.content_block_type_required": {
+        "ko-KR": "content_blocks[{index}].type이 필요합니다.",
+        "en-US": "content_blocks[{index}].type is required.",
+    },
+    "learning.content_blocks_not_serializable": {
+        "ko-KR": "content_blocks를 JSON으로 직렬화할 수 없습니다.",
+        "en-US": "content_blocks is not JSON-serializable.",
+    },
+    "learning.content_blocks_too_large": {
+        "ko-KR": "content_blocks payload가 허용된 최대 크기를 초과했습니다.",
+        "en-US": "content_blocks payload exceeds the maximum allowed size.",
+    },
+    "learning.note_page_missing": {
+        "ko-KR": "노트에 페이지가 없습니다.",
+        "en-US": "Note has no page.",
+    },
+    "learning.note_active_page_missing": {
+        "ko-KR": "노트에 활성 페이지가 없습니다.",
+        "en-US": "Note has no active page.",
+    },
+    "media.unsupported_file_type": {
+        "ko-KR": "지원하지 않는 파일 형식입니다: {content_type}. 허용: {allowed_types}",
+        "en-US": "Unsupported file type: {content_type}. Allowed: {allowed_types}",
+    },
+    "media.file_size_limit_exceeded": {
+        "ko-KR": "파일 크기가 {limit_mb} MB 제한을 초과했습니다.",
+        "en-US": "File size exceeds {limit_mb} MB limit.",
+    },
+    "media.create_record_failed": {
+        "ko-KR": "미디어 레코드를 생성하지 못했습니다.",
+        "en-US": "Failed to create media record.",
+    },
+    "media.storage_upload_failed": {
+        "ko-KR": "스토리지 업로드에 실패했습니다.",
+        "en-US": "Storage upload failed.",
+    },
+    "media.save_metadata_failed": {
+        "ko-KR": "미디어 메타데이터를 저장하지 못했습니다.",
+        "en-US": "Failed to save media metadata.",
+    },
+    "media.unsupported_resource_type": {
+        "ko-KR": "지원하지 않는 미디어 리소스 유형입니다.",
+        "en-US": "Unsupported media resource type.",
+    },
+    "media.task_list_space_access_required": {
+        "ko-KR": "태스크 리스트 스페이스 접근 권한이 필요합니다.",
+        "en-US": "Task list space access required.",
+    },
+    "search.keyword_backend_unavailable": {
+        "ko-KR": "키워드 검색을 사용할 수 없습니다: {reason}",
+        "en-US": "Keyword search is unavailable: {reason}",
+    },
     "pms.principal_workspace_mismatch": {
         "ko-KR": "PMS principal의 워크스페이스가 일치하지 않습니다.",
         "en-US": "PMS principal workspace mismatch.",

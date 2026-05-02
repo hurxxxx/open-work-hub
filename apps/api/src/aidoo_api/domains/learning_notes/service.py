@@ -16,10 +16,10 @@ import json
 from datetime import UTC, datetime
 from typing import Any
 
-from fastapi import HTTPException
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session, selectinload
 
+from aidoo_api.core.i18n import localized_http_exception
 from aidoo_api.domains.auth.models import User, Workspace
 from aidoo_api.domains.auth.security import new_id
 from aidoo_api.domains.docs.collab import sync_collab_record_from_rest_patch
@@ -50,7 +50,7 @@ def _kind_for_visibility(visibility: Visibility) -> str:
         return SOURCE_KIND_PUBLIC
     if visibility == "private":
         return SOURCE_KIND_PRIVATE
-    raise HTTPException(status_code=422, detail="Unknown visibility.")
+    raise localized_http_exception(status_code=422, code="learning.unknown_visibility")
 
 
 def _visibility_from_kind(kind: str) -> Visibility:
@@ -89,29 +89,34 @@ def _utcnow_naive() -> datetime:
 
 def _validate_content_blocks(content_blocks: list[dict]) -> list[dict]:
     if not isinstance(content_blocks, list):
-        raise HTTPException(status_code=422, detail="content_blocks must be a list.")
+        raise localized_http_exception(
+            status_code=422,
+            code="learning.content_blocks_list_required",
+        )
     for index, block in enumerate(content_blocks):
         if not isinstance(block, dict):
-            raise HTTPException(
+            raise localized_http_exception(
                 status_code=422,
-                detail=f"content_blocks[{index}] must be a JSON object.",
+                code="learning.content_block_object_required",
+                index=index,
             )
         if "type" not in block or not isinstance(block["type"], str):
-            raise HTTPException(
+            raise localized_http_exception(
                 status_code=422,
-                detail=f"content_blocks[{index}].type is required.",
+                code="learning.content_block_type_required",
+                index=index,
             )
     try:
         payload_size = len(json.dumps(content_blocks).encode("utf-8"))
     except (TypeError, ValueError) as exc:
-        raise HTTPException(
+        raise localized_http_exception(
             status_code=422,
-            detail="content_blocks is not JSON-serializable.",
+            code="learning.content_blocks_not_serializable",
         ) from exc
     if payload_size > MAX_CONTENT_BLOCKS_BYTES:
-        raise HTTPException(
+        raise localized_http_exception(
             status_code=413,
-            detail="content_blocks payload exceeds the maximum allowed size.",
+            code="learning.content_blocks_too_large",
         )
     return content_blocks
 
@@ -244,7 +249,7 @@ def list_page_notes(
 
 
 def _raise_not_found() -> None:
-    raise HTTPException(status_code=404, detail="Learning note not found.")
+    raise localized_http_exception(status_code=404, code="learning.note_not_found")
 
 
 def get_my_page_note(
@@ -384,7 +389,10 @@ def archive_my_page_note(
     page = _active_page(doc) or doc.pages[0] if doc.pages else None
     if page is None:
         # Should be unreachable because upsert always creates a page.
-        raise HTTPException(status_code=500, detail="Note has no page.")
+        raise localized_http_exception(
+            status_code=500,
+            code="learning.note_page_missing",
+        )
     return _serialize_detail(doc, page, viewer_id=user.id)
 
 
@@ -405,7 +413,10 @@ def restore_my_page_note(
     db.refresh(doc)
     page = _active_page(doc)
     if page is None:
-        raise HTTPException(status_code=409, detail="Note has no active page.")
+        raise localized_http_exception(
+            status_code=409,
+            code="learning.note_active_page_missing",
+        )
     return _serialize_detail(doc, page, viewer_id=user.id)
 
 
