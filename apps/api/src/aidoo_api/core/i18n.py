@@ -431,9 +431,29 @@ MESSAGES: dict[str, dict[str, str]] = {
         "ko-KR": "RAG를 사용할 수 없습니다: {reason}",
         "en-US": "RAG is unavailable: {reason}",
     },
+    "rag.disabled": {
+        "ko-KR": "RAG가 비활성화되어 있습니다.",
+        "en-US": "RAG is disabled.",
+    },
+    "rag.runtime_unavailable": {
+        "ko-KR": "RAG 런타임을 사용할 수 없습니다: {reason}",
+        "en-US": "RAG runtime is unavailable: {reason}",
+    },
+    "rag.query_unavailable": {
+        "ko-KR": "RAG 조회를 사용할 수 없습니다: {reason}",
+        "en-US": "RAG query is unavailable: {reason}",
+    },
+    "rag.access_denied_not_enabled": {
+        "ko-KR": "이 워크스페이스에서 RAG가 활성화되어 있지 않습니다.",
+        "en-US": "Workspace RAG is not enabled for this workspace.",
+    },
     "rag.reindex_cooldown": {
         "ko-KR": "RAG 재색인을 지금 다시 실행할 수 없습니다: {reason}",
         "en-US": "RAG reindex cannot be retried yet: {reason}",
+    },
+    "rag.reindex_cooldown_recent": {
+        "ko-KR": "RAG 재색인이 최근에 실행되었습니다. 몇 분 후 다시 시도하세요.",
+        "en-US": "Workspace RAG reindex was triggered recently. Wait a few minutes before retrying.",
     },
     "whiteboard.workspace_slug_required": {
         "ko-KR": "워크스페이스 범위 화이트보드 협업 경로에는 워크스페이스 slug가 필요합니다.",

@@ -61,16 +61,18 @@ def _query(
             conversation_id=tool_context.conversation_id if tool_context is not None else None,
         )
     except rag_application.RagAccessDeniedError as error:
+        code, params = rag_application.rag_error_payload(error, default_code="rag.access_denied")
         raise localized_http_exception(
             status_code=status.HTTP_403_FORBIDDEN,
-            code="rag.access_denied",
-            reason=str(error),
+            code=code,
+            **params,
         ) from error
     except rag_application.RagUnavailableError as error:
+        code, params = rag_application.rag_error_payload(error, default_code="rag.unavailable")
         raise localized_http_exception(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            code="rag.unavailable",
-            reason=str(error),
+            code=code,
+            **params,
         ) from error
     return response.model_dump(mode="json")
 
@@ -92,16 +94,18 @@ def _list_sources(
             user=user,
         )
     except rag_application.RagAccessDeniedError as error:
+        code, params = rag_application.rag_error_payload(error, default_code="rag.access_denied")
         raise localized_http_exception(
             status_code=status.HTTP_403_FORBIDDEN,
-            code="rag.access_denied",
-            reason=str(error),
+            code=code,
+            **params,
         ) from error
     except rag_application.RagUnavailableError as error:
+        code, params = rag_application.rag_error_payload(error, default_code="rag.unavailable")
         raise localized_http_exception(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            code="rag.unavailable",
-            reason=str(error),
+            code=code,
+            **params,
         ) from error
     return {"sources": sources}
 

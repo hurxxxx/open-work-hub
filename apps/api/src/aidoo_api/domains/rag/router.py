@@ -76,16 +76,18 @@ def query_workspace_rag(
             include_binary_hits=payload.include_binary_hits,
         )
     except rag_application.RagAccessDeniedError as error:
+        code, params = rag_application.rag_error_payload(error, default_code="rag.access_denied")
         raise localized_http_exception(
             status_code=status.HTTP_403_FORBIDDEN,
-            code="rag.access_denied",
-            reason=str(error),
+            code=code,
+            **params,
         ) from error
     except rag_application.RagUnavailableError as error:
+        code, params = rag_application.rag_error_payload(error, default_code="rag.unavailable")
         raise localized_http_exception(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            code="rag.unavailable",
-            reason=str(error),
+            code=code,
+            **params,
         ) from error
 
 
@@ -104,16 +106,18 @@ def list_workspace_rag_sources(
             )
         )
     except rag_application.RagAccessDeniedError as error:
+        code, params = rag_application.rag_error_payload(error, default_code="rag.access_denied")
         raise localized_http_exception(
             status_code=status.HTTP_403_FORBIDDEN,
-            code="rag.access_denied",
-            reason=str(error),
+            code=code,
+            **params,
         ) from error
     except rag_application.RagUnavailableError as error:
+        code, params = rag_application.rag_error_payload(error, default_code="rag.unavailable")
         raise localized_http_exception(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            code="rag.unavailable",
-            reason=str(error),
+            code=code,
+            **params,
         ) from error
 
 
@@ -129,22 +133,25 @@ def reindex_workspace_rag(
             workspace=current_workspace,
         )
     except rag_application.RagAccessDeniedError as error:
+        code, params = rag_application.rag_error_payload(error, default_code="rag.access_denied")
         raise localized_http_exception(
             status_code=status.HTTP_403_FORBIDDEN,
-            code="rag.access_denied",
-            reason=str(error),
+            code=code,
+            **params,
         ) from error
     except rag_application.RagReindexCooldownError as error:
+        code, params = rag_application.rag_error_payload(error, default_code="rag.reindex_cooldown")
         raise localized_http_exception(
             status_code=status.HTTP_409_CONFLICT,
-            code="rag.reindex_cooldown",
-            reason=str(error),
+            code=code,
+            **params,
         ) from error
     except rag_application.RagUnavailableError as error:
+        code, params = rag_application.rag_error_payload(error, default_code="rag.unavailable")
         raise localized_http_exception(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            code="rag.unavailable",
-            reason=str(error),
+            code=code,
+            **params,
         ) from error
     db.commit()
     return RagReindexResponse.model_validate(response)

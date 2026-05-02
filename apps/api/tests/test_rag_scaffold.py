@@ -78,8 +78,9 @@ def test_ensure_rag_enabled_raises_domain_error(monkeypatch) -> None:
         AIDOO_RAG_ENABLED=False,
     )
 
-    with pytest.raises(rag_application.RagUnavailableError, match="RAG is disabled"):
+    with pytest.raises(rag_application.RagUnavailableError) as exc_info:
         rag_application.ensure_rag_enabled(settings=settings)
+    assert exc_info.value.code == "rag.disabled"
 
 
 def test_workspace_rag_sources_require_ai_app_enablement(monkeypatch) -> None:
@@ -89,13 +90,14 @@ def test_workspace_rag_sources_require_ai_app_enablement(monkeypatch) -> None:
         lambda db, workspace_id: {"docs"},
     )
 
-    with pytest.raises(rag_application.RagAccessDeniedError, match="Workspace RAG is not enabled"):
+    with pytest.raises(rag_application.RagAccessDeniedError) as exc_info:
         rag_application.list_workspace_rag_sources(
             db=object(),
             workspace=SimpleNamespace(id="ws-1"),
             user=SimpleNamespace(id="user-1"),
             settings=SimpleNamespace(rag_enabled=True),
         )
+    assert exc_info.value.code == "rag.access_denied_not_enabled"
 
 
 def test_workspace_rag_query_requires_searchable_app_enablement(monkeypatch) -> None:
@@ -105,7 +107,7 @@ def test_workspace_rag_query_requires_searchable_app_enablement(monkeypatch) -> 
         lambda db, workspace_id: {"ai"},
     )
 
-    with pytest.raises(rag_application.RagAccessDeniedError, match="Workspace RAG is not enabled"):
+    with pytest.raises(rag_application.RagAccessDeniedError) as exc_info:
         rag_application.query_workspace_rag(
             db=object(),
             workspace=SimpleNamespace(id="ws-1"),
@@ -118,6 +120,7 @@ def test_workspace_rag_query_requires_searchable_app_enablement(monkeypatch) -> 
             include_binary_hits=False,
             settings=SimpleNamespace(rag_enabled=True),
         )
+    assert exc_info.value.code == "rag.access_denied_not_enabled"
 
 
 def test_workspace_rag_reindex_requires_ai_enablement(monkeypatch) -> None:
@@ -127,12 +130,13 @@ def test_workspace_rag_reindex_requires_ai_enablement(monkeypatch) -> None:
         lambda db, workspace_id: {"planner"},
     )
 
-    with pytest.raises(rag_application.RagAccessDeniedError, match="Workspace RAG is not enabled"):
+    with pytest.raises(rag_application.RagAccessDeniedError) as exc_info:
         rag_application.enqueue_workspace_rag_reindex(
             db=object(),
             workspace=SimpleNamespace(id="ws-1"),
             settings=SimpleNamespace(rag_enabled=True),
         )
+    assert exc_info.value.code == "rag.access_denied_not_enabled"
 
 
 def test_workspace_rag_query_defaults_to_text_hits_when_binary_hits_not_requested(monkeypatch) -> None:

@@ -223,7 +223,7 @@ def test_workspace_rag_query_wraps_provider_failures_as_unavailable(monkeypatch)
     monkeypatch.setattr(rag_application, "resolve_default_collection_name", lambda settings: "rag-test")
     monkeypatch.setattr(rag_application, "build_user_rag_post_filter", lambda db, user: lambda hit: True)
 
-    with pytest.raises(rag_application.RagUnavailableError, match="RAG query is unavailable"):
+    with pytest.raises(rag_application.RagUnavailableError) as exc_info:
         rag_application.query_workspace_rag(
             db=object(),
             workspace=SimpleNamespace(id="ws-1"),
@@ -237,6 +237,8 @@ def test_workspace_rag_query_wraps_provider_failures_as_unavailable(monkeypatch)
             settings=SimpleNamespace(rag_enabled=True),
             query_service=_FailingQueryService(),
         )
+    assert exc_info.value.code == "rag.query_unavailable"
+    assert exc_info.value.params["reason"] == "provider unavailable"
 
 
 def test_query_service_marks_grounded_answer_as_degraded_when_synthesizer_returns_none() -> None:

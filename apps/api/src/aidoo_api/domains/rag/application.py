@@ -78,16 +78,43 @@ SOURCE_KIND_DEFINITIONS = (
 SEARCHABLE_RAG_APP_IDS = frozenset({"docs", "meeting", "pms", "planner"})
 
 
-class RagUnavailableError(RuntimeError):
-    pass
+class RagApplicationError(RuntimeError):
+    default_code = "rag.unavailable"
+
+    def __init__(
+        self,
+        reason: str | None = None,
+        *,
+        code: str | None = None,
+        **params: Any,
+    ) -> None:
+        self.code = code or self.default_code
+        self.params = dict(params)
+        if reason is not None:
+            self.params.setdefault("reason", reason)
+        super().__init__(reason or self.code)
 
 
-class RagAccessDeniedError(RuntimeError):
-    pass
+class RagUnavailableError(RagApplicationError):
+    default_code = "rag.unavailable"
 
 
-class RagReindexCooldownError(RuntimeError):
-    pass
+class RagAccessDeniedError(RagApplicationError):
+    default_code = "rag.access_denied"
+
+
+class RagReindexCooldownError(RagApplicationError):
+    default_code = "rag.reindex_cooldown"
+
+
+def rag_error_payload(
+    error: RuntimeError,
+    *,
+    default_code: str,
+) -> tuple[str, dict[str, Any]]:
+    if isinstance(error, RagApplicationError):
+        return error.code, dict(error.params)
+    return default_code, {"reason": str(error)}
 
 
 RAG_REINDEX_COOLDOWN = timedelta(minutes=5)
@@ -96,7 +123,7 @@ RAG_REINDEX_COOLDOWN = timedelta(minutes=5)
 def ensure_rag_enabled(settings: Settings | None = None) -> Settings:
     resolved = settings or get_settings()
     if not resolved.rag_enabled:
-        raise RagUnavailableError("RAG is disabled.")
+        raise RagUnavailableError(code="rag.disabled")
     return resolved
 
 
@@ -154,7 +181,7 @@ def query_workspace_rag(
             dense_dimensions=get_default_embedding_dimensions() if settings is None else None,
         )
     except Exception as error:
-        raise RagUnavailableError(f"RAG runtime is unavailable: {error}") from error
+        raise RagUnavailableError(str(error), code="rag.runtime_unavailable") from error
     effective_filters = _resolve_query_filters(
         filters=filters,
         include_binary_hits=include_binary_hits,
@@ -195,7 +222,7 @@ def query_workspace_rag(
         RagProviderTimeoutError,
         TimeoutError,
     ) as error:
-        raise RagUnavailableError(f"RAG query is unavailable: {error}") from error
+        raise RagUnavailableError(str(error), code="rag.query_unavailable") from error
 
 
 def list_workspace_rag_sources(
@@ -252,7 +279,7 @@ def enqueue_workspace_rag_reindex(
             dense_dimensions=get_default_embedding_dimensions() if settings is None else None,
         )
     except Exception as error:
-        raise RagUnavailableError(f"RAG runtime is unavailable: {error}") from error
+        raise RagUnavailableError(str(error), code="rag.runtime_unavailable") from error
     resource_counts = {
         NATIVE_DOC_RESOURCE_TYPE: 0,
         MEETING_RESOURCE_TYPE: 0,
@@ -309,9 +336,9 @@ def enqueue_workspace_rag_reindex(
 def _resolve_workspace_rag_enabled_app_ids(db: Session, workspace_id: str) -> set[str]:
     enabled_app_ids = set(resolve_workspace_enabled_app_ids(db, workspace_id))
     if "ai" not in enabled_app_ids:
-        raise RagAccessDeniedError("Workspace RAG is not enabled for this workspace.")
+        raise RagAccessDeniedError(code="rag.access_denied_not_enabled")
     if not SEARCHABLE_RAG_APP_IDS.intersection(enabled_app_ids):
-        raise RagAccessDeniedError("Workspace RAG is not enabled for this workspace.")
+        raise RagAccessDeniedError(code="rag.access_denied_not_enabled")
     return enabled_app_ids
 
 
@@ -553,9 +580,7 @@ def _ensure_workspace_reindex_available(
         .limit(1)
     )
     if existing is not None:
-        raise RagReindexCooldownError(
-            "Workspace RAG reindex was triggered recently. Wait a few minutes before retrying."
-        )
+        raise RagReindexCooldownError(code="rag.reindex_cooldown_recent")
 
 
 def _accessible_team_ids_query(

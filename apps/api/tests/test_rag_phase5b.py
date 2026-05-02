@@ -450,7 +450,7 @@ def test_workspace_rag_reindex_enforces_cooldown(
 
     assert first.status_code == 200, first.text
     assert second.status_code == 409, second.text
-    assert second.json()["code"] == "rag.reindex_cooldown"
+    assert second.json()["code"] == "rag.reindex_cooldown_recent"
 
 
 def test_workspace_rag_query_validates_payload(

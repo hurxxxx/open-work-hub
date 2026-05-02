@@ -61,9 +61,19 @@ def test_translate_rag_unavailable_message_preserves_dynamic_reason() -> None:
         code="rag.unavailable",
         params={"reason": "provider timeout"},
     )
+    query_message = LocalizedApiMessage(
+        code="rag.query_unavailable",
+        params={"reason": "provider timeout"},
+    )
 
     assert translate_message(message, "en-US") == "RAG is unavailable: provider timeout"
     assert translate_message(message, "ko-KR") == "RAG를 사용할 수 없습니다: provider timeout"
+    assert translate_message(query_message, "en-US") == (
+        "RAG query is unavailable: provider timeout"
+    )
+    assert translate_message(query_message, "ko-KR") == (
+        "RAG 조회를 사용할 수 없습니다: provider timeout"
+    )
 
 
 def test_translate_whiteboard_access_message() -> None:
