@@ -580,6 +580,14 @@ def _serialize_recording(recording) -> MeetingRecordingOut:
     return MeetingRecordingOut.model_validate(recording)
 
 
+def _recording_sort_key(recording: MeetingRecording) -> tuple[int, datetime, str]:
+    return (
+        recording.sequence_no or 0,
+        recording.created_at,
+        recording.id,
+    )
+
+
 def _utc_iso(value: datetime) -> str:
     if value.tzinfo is None:
         return value.replace(tzinfo=UTC).isoformat()
@@ -620,7 +628,7 @@ def _serialize_meeting(db: Session, meeting: Meeting) -> MeetingDetail:
             _serialize_file_attachment(att)
             for att in sorted(meeting.file_attachments, key=lambda a: a.created_at)
         ],
-        recordings=[_serialize_recording(r) for r in meeting.recordings],
+        recordings=[_serialize_recording(r) for r in sorted(meeting.recordings, key=_recording_sort_key)],
         active_recording_lock=_resolve_active_recording_lock(meeting),
         created_at=meeting.created_at,
         updated_at=meeting.updated_at,
@@ -1136,7 +1144,7 @@ def build_meeting_scope_prompt(
             MeetingRecording.summary_text.is_not(None),
             MeetingRecording.transcript_text.is_not(None),
         )
-        .order_by(MeetingRecording.created_at.desc())
+        .order_by(MeetingRecording.sequence_no.desc(), MeetingRecording.created_at.desc())
     )
     summary = ""
     transcript_excerpt = ""

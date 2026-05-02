@@ -94,6 +94,15 @@ def _init_worker_db(
                     ),
                     (
                         "6",
+                        "rag_grounded_answer",
+                        "local_only",
+                        "Grounded RAG answer synthesis",
+                        None,
+                        "2026-04-18T00:00:00",
+                        "2026-04-18T00:00:00",
+                    ),
+                    (
+                        "7",
                         "batch_generation",
                         "local_only",
                         "Long-form batch generation (reports etc.)",

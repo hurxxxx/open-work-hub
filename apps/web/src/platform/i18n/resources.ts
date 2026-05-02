@@ -1177,6 +1177,7 @@ export const resources = {
           playbackFailed: '녹음 재생 링크를 가져올 수 없습니다.',
           previewNewTab: '새 탭에서 미리보기',
           recoveryChecking: '복구 가능한 녹음을 확인하는 중입니다.',
+          recordingWithSequence: '{{label}} #{{sequence}}',
           replace: '교체',
           retryRecordingFailed: '녹음 재시도에 실패했습니다.',
           selectExisting: '기존 선택',
@@ -1259,9 +1260,16 @@ export const resources = {
           uploadAudio: '음성 파일 업로드',
         },
         recordingProgress: {
-          failed: '회의록 생성에 실패했습니다. 원본 음성은 그대로 유지됩니다.',
+          failed: '스크립트 추출 또는 후속 처리에 실패했습니다. 원본 음성은 그대로 유지됩니다.',
           progress: '진행률 {{progress}}% · 이 페이지를 닫아도 됩니다.',
           retry: '다시 시도',
+        },
+        recordingStatus: {
+          audioSaved: '음성 저장됨',
+          transcriptQueued: '스크립트 추출 대기',
+          transcriptExtracting: '스크립트 추출 중',
+          transcriptExtracted: '스크립트 추출 완료',
+          transcriptFailed: '스크립트 추출 실패',
         },
         recordingRecovery: {
           continueRecording: '복구 후 추가 녹음',
@@ -3157,6 +3165,7 @@ export const resources = {
           playbackFailed: 'Could not get the recording playback link.',
           previewNewTab: 'Preview in new tab',
           recoveryChecking: 'Checking for recoverable recordings.',
+          recordingWithSequence: '{{label}} #{{sequence}}',
           replace: 'Replace',
           retryRecordingFailed: 'Could not retry the recording.',
           selectExisting: 'Select existing',
@@ -3243,9 +3252,16 @@ export const resources = {
           uploadAudio: 'Upload audio file',
         },
         recordingProgress: {
-          failed: 'Meeting minutes generation failed. The original audio is preserved.',
+          failed: 'Transcript extraction or follow-up processing failed. The original audio is preserved.',
           progress: 'Progress {{progress}}% · You can close this page.',
           retry: 'Retry',
+        },
+        recordingStatus: {
+          audioSaved: 'Audio saved',
+          transcriptQueued: 'Transcript extraction pending',
+          transcriptExtracting: 'Extracting transcript',
+          transcriptExtracted: 'Transcript extracted',
+          transcriptFailed: 'Transcript extraction failed',
         },
         recordingRecovery: {
           continueRecording: 'Recover and continue recording',

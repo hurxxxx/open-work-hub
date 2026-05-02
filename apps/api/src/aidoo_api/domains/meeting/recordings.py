@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+import re
 import socket
 import shutil
 from datetime import UTC, datetime, timedelta
@@ -11,7 +12,8 @@ from urllib.parse import urlparse
 
 from celery import Celery, chain
 from fastapi import UploadFile, status
-from sqlalchemy import select
+from fastapi.responses import StreamingResponse
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from aidoo_api.core.i18n import localized_http_exception
@@ -254,8 +256,35 @@ def _load_recording_or_404(db: Session, *, meeting_id: str, recording_id: str) -
     return recording
 
 
-def _storage_key_for_recording(meeting_id: str, recording_id: str, mime_type: str) -> str:
-    return f"meeting-recordings/{meeting_id}/{recording_id}/recording{_extension_for_mime(mime_type)}"
+def _recording_started_at_token(started_at: datetime | None = None) -> str:
+    value = started_at or _utcnow()
+    return value.strftime("%Y%m%dT%H%M%SZ")
+
+
+def _storage_key_for_recording(
+    meeting_id: str,
+    recording_id: str,
+    mime_type: str,
+    *,
+    started_at: datetime | None = None,
+) -> str:
+    filename = f"{_recording_started_at_token(started_at)}{_extension_for_mime(mime_type)}"
+    return f"meeting-recordings/{meeting_id}/{recording_id}/{filename}"
+
+
+def _download_filename_for_recording(recording: MeetingRecording) -> str:
+    filename = Path(recording.storage_key).name
+    if not filename or re.fullmatch(r"\d{8}T\d{6}Z\.[A-Za-z0-9]+", filename) is None:
+        filename = f"{_recording_started_at_token(recording.created_at)}{_extension_for_mime(recording.mime_type)}"
+    return filename.replace('"', "")
+
+
+def _next_recording_sequence_no(db: Session, *, meeting_id: str) -> int:
+    db.execute(select(Meeting.id).where(Meeting.id == meeting_id).with_for_update())
+    current_max = db.scalar(
+        select(func.max(MeetingRecording.sequence_no)).where(MeetingRecording.meeting_id == meeting_id)
+    )
+    return int(current_max or 0) + 1
 
 
 def _validate_linked_task_id(db: Session, *, meeting: Meeting, user: User, linked_task_id: str | None) -> None:
@@ -331,6 +360,7 @@ def init_staging(
         )
 
     staging_id = new_id()
+    started_at = _utcnow()
     spool_dir = _spool_dir_for_recording(staging_id)
     spool_dir.mkdir(parents=True, exist_ok=True)
     staging = MeetingRecordingStaging(
@@ -340,10 +370,12 @@ def init_staging(
         idempotency_key=payload.idempotency_key,
         status="recording",
         spool_path=str(spool_dir),
-        storage_key=_storage_key_for_recording(meeting.id, staging_id, mime_type),
+        storage_key=_storage_key_for_recording(meeting.id, staging_id, mime_type, started_at=started_at),
         mime_type=mime_type,
         linked_task_id=payload.linked_task_id,
         chunks_meta={},
+        started_at=started_at,
+        last_chunk_at=started_at,
     )
     db.add(staging)
     db.commit()
@@ -522,6 +554,7 @@ def complete_staging(
 
     recording = db.get(MeetingRecording, staging.id)
     if recording is None:
+        sequence_no = _next_recording_sequence_no(db, meeting_id=meeting.id)
         recording = MeetingRecording(
             id=staging.id,
             meeting_id=meeting.id,
@@ -533,6 +566,7 @@ def complete_staging(
             uploaded_by_id=user.id,
             source="live_recording",
             transcription_status="pending",
+            sequence_no=sequence_no,
             progress_pct=10,
             linked_task_id=staging.linked_task_id,
         )
@@ -575,7 +609,9 @@ def import_recording(
         )
 
     recording_id = new_id()
-    storage_key = _storage_key_for_recording(meeting.id, recording_id, mime_type)
+    started_at = _utcnow()
+    sequence_no = _next_recording_sequence_no(db, meeting_id=meeting.id)
+    storage_key = _storage_key_for_recording(meeting.id, recording_id, mime_type, started_at=started_at)
     from io import BytesIO
 
     get_minio_client().put_object(
@@ -597,8 +633,10 @@ def import_recording(
         uploaded_by_id=user.id,
         source="manual_upload",
         transcription_status="pending",
+        sequence_no=sequence_no,
         progress_pct=10,
         linked_task_id=linked_task_id,
+        created_at=started_at,
     )
     db.add(recording)
     db.commit()
@@ -621,12 +659,46 @@ def get_recording_playback(
     if recording.transcription_status == "cancelled":
         raise localized_http_exception(status_code=status.HTTP_404_NOT_FOUND, code="meeting.recording_unavailable")
     expires_at = _utcnow() + timedelta(hours=1)
-    url = get_minio_client().presigned_get_object(
-        get_settings().minio_bucket,
-        recording.storage_key,
-        expires=timedelta(hours=1),
+    url = (
+        f"/api/v1/workspaces/{workspace.key}/meeting/meetings/{meeting.id}"
+        f"/recordings/{recording.id}/media"
     )
     return RecordingPlaybackResponse(url=url, expires_at=expires_at)
+
+
+def stream_recording_media(
+    db: Session,
+    *,
+    workspace: Workspace,
+    user: User,
+    meeting_id: str,
+    recording_id: str,
+) -> StreamingResponse:
+    meeting = meeting_service._load_meeting(db, workspace, meeting_id)
+    ensure_meeting_participant(db, user, meeting)
+    recording = _load_recording_or_404(db, meeting_id=meeting.id, recording_id=recording_id)
+    if recording.transcription_status == "cancelled":
+        raise localized_http_exception(status_code=status.HTTP_404_NOT_FOUND, code="meeting.recording_unavailable")
+
+    settings = get_settings()
+    client = get_minio_client()
+    obj = client.get_object(settings.minio_bucket, recording.storage_key)
+
+    def body():
+        try:
+            yield from obj.stream(1024 * 1024)
+        finally:
+            obj.close()
+            obj.release_conn()
+
+    return StreamingResponse(
+        body(),
+        media_type=recording.mime_type,
+        headers={
+            "Content-Disposition": f'inline; filename="{_download_filename_for_recording(recording)}"',
+            "Cache-Control": "private, max-age=3600",
+        },
+    )
 
 
 def retry_recording(

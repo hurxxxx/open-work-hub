@@ -1,4 +1,4 @@
-import { ApiRequestError, apiFetchJson } from '@/src/platform/api/client';
+import { ApiRequestError, apiFetchJson, jsonHeaders } from '@/src/platform/api/client';
 import type { ApiSchema } from '@/src/platform/api/types';
 import { parseApiDateTime } from '@/src/platform/time/time-utils';
 import { rewriteWorkspaceApiPath } from '@/src/platform/workspaces/workspace-utils';
@@ -42,10 +42,10 @@ export const ACTIVE_RECORDING_STATUSES: ReadonlySet<MeetingRecordingStatus> = ne
 /**
  * States where the progress rail should be rendered. ``done`` is shown
  * with a separate completion message; rail is hidden because the
- * pipeline is finished.
+ * pipeline is finished. ``pending`` only means the audio is saved and queued,
+ * so it is represented by the transcript status line instead of a progress rail.
  */
 export const RAIL_VISIBLE_STATUSES: ReadonlySet<MeetingRecordingStatus> = new Set([
-  'pending',
   'transcribing',
   'summarizing',
   'extracting_insights',
@@ -55,6 +55,8 @@ export const RAIL_VISIBLE_STATUSES: ReadonlySet<MeetingRecordingStatus> = new Se
 
 export type MeetingRecording = Omit<ApiSchema<'MeetingRecordingOut'>, 'transcription_status'> & {
   transcription_status: MeetingRecordingStatus;
+  transcript_extracted?: boolean;
+  summary_generated?: boolean;
 };
 
 export type RecordingStagingItem = ApiSchema<'RecordingStagingItem'>;
@@ -511,6 +513,20 @@ export function getRecordingPlaybackUrl(
     token,
     workspaceSlug,
   );
+}
+
+export async function fetchRecordingPlaybackBlobUrl(
+  token: string,
+  playbackUrl: string,
+): Promise<string> {
+  const response = await fetch(playbackUrl, {
+    headers: jsonHeaders(token),
+    cache: 'no-store',
+  });
+  if (!response.ok) {
+    throw new MeetingApiError(response.status, `Request failed with ${response.status}.`);
+  }
+  return URL.createObjectURL(await response.blob());
 }
 
 export function retryMeetingRecording(

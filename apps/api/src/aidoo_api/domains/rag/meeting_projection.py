@@ -34,7 +34,7 @@ def load_meeting_projection(
         .where(
             MeetingRecording.meeting_id == meeting.id,
         )
-        .order_by(MeetingRecording.created_at.desc())
+        .order_by(MeetingRecording.sequence_no.desc(), MeetingRecording.created_at.desc())
     )
     return build_meeting_projection(meeting, latest_recording=latest_recording)
 

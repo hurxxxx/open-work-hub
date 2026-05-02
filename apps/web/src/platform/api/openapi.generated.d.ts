@@ -2805,6 +2805,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/workspaces/{workspace_slug}/meeting/meetings/{meeting_id}/recordings/{recording_id}/media": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Stream Recording Media */
+        get: operations["meeting_stream_recording_media_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/workspaces/{workspace_slug}/meeting/meetings/{meeting_id}/recordings/{recording_id}/retry": {
         parameters: {
             query?: never;
@@ -5460,6 +5477,8 @@ export interface components {
             source: string;
             /** Transcription Status */
             transcription_status: string;
+            /** Sequence No */
+            sequence_no: number;
             /** Progress Pct */
             progress_pct: number;
             /** File Size */
@@ -5472,6 +5491,10 @@ export interface components {
             linked_doc_id: string | null;
             /** Linked Task Id */
             linked_task_id: string | null;
+            /** Transcript Extracted */
+            transcript_extracted: boolean;
+            /** Summary Generated */
+            summary_generated: boolean;
             /** Transcribe Started At */
             transcribe_started_at: string | null;
             /** Transcribe Completed At */
@@ -18514,6 +18537,56 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RecordingPlaybackResponse"];
+                };
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Access denied. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    meeting_stream_recording_media_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                meeting_id: string;
+                recording_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
             /** @description Authentication required. */

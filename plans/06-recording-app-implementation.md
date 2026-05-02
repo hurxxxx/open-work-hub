@@ -193,6 +193,8 @@ RecordingContainer
 
 `MeetingRecording`과 `MeetingRecordingStaging`은 새 canonical 모델로 마이그레이션한다. 전환 중 호환이 필요하면 schema/API serialization 단계에서 `MeetingRecordingOut` 형태로 변환한다.
 
+Meeting에 연결된 녹음은 사용자가 녹음 순서를 명확히 알아야 하므로 `RecordingContainer.sort_order`를 Meeting별 안정 순번으로 사용한다. 기존 Meeting 호환 레이어에서는 이를 `MeetingRecording.sequence_no`로 노출하고, Recording 도메인 전환 시 backfill 값은 `recording_containers.sort_order`로 이전한다. 신규 object key/다운로드 파일명은 녹음 시작 시각 기반(`YYYYMMDDTHHMMSSZ`)으로 만든다.
+
 ### API
 
 `domains/recording/router.py`
@@ -409,6 +411,7 @@ Meeting route와 service가 새 Recording service를 호출하도록 변경한�
 - playback
 - retry
 - delete cleanup
+- meeting wrapper의 녹음 순번(`sequence_no`)과 시작시각 기반 object key
 
 ### PR 3 - Worker pipeline commonization
 

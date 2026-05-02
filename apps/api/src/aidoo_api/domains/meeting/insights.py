@@ -200,7 +200,7 @@ def _load_latest_ready_recording(db: Session, *, meeting_id: str) -> MeetingReco
             MeetingRecording.summary_text.is_not(None),
             MeetingRecording.transcript_text.is_not(None),
         )
-        .order_by(MeetingRecording.created_at.desc())
+        .order_by(MeetingRecording.sequence_no.desc(), MeetingRecording.created_at.desc())
     )
 
 

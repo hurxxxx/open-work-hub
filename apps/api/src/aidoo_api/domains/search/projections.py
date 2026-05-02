@@ -202,7 +202,7 @@ def _meeting_row(db: Session, *, workspace: Workspace, meeting: Meeting) -> dict
     recording = db.scalar(
         select(MeetingRecording)
         .where(MeetingRecording.meeting_id == meeting.id)
-        .order_by(MeetingRecording.created_at.desc())
+        .order_by(MeetingRecording.sequence_no.desc(), MeetingRecording.created_at.desc())
     )
     attendees = [
         _person("participant", attendee.user_id, getattr(attendee.user, "full_name", None))

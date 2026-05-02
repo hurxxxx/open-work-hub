@@ -143,12 +143,15 @@ class MeetingRecordingOut(BaseModel):
     duration_sec: int | None
     source: str
     transcription_status: str
+    sequence_no: int
     progress_pct: int
     file_size: int
     mime_type: str
     failure_reason: str | None
     linked_doc_id: str | None
     linked_task_id: str | None
+    transcript_extracted: bool
+    summary_generated: bool
     transcribe_started_at: datetime | None
     transcribe_completed_at: datetime | None
     created_at: datetime

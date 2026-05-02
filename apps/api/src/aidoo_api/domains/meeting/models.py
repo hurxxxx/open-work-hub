@@ -193,6 +193,8 @@ class MeetingRecording(Base):
     __tablename__ = "meeting_recordings"
     __table_args__ = (
         UniqueConstraint("meeting_id", "idempotency_key", name="uq_recording_idempotency"),
+        UniqueConstraint("meeting_id", "sequence_no", name="uq_meeting_recordings_meeting_sequence"),
+        Index("ix_meeting_recordings_meeting_sequence", "meeting_id", "sequence_no"),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
@@ -211,6 +213,7 @@ class MeetingRecording(Base):
     transcription_status: Mapped[str] = mapped_column(
         String(24), default="pending", index=True, nullable=False
     )
+    sequence_no: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
     progress_pct: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     transcript_text: Mapped[str | None] = mapped_column(Text, nullable=True)
     summary_text: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -231,6 +234,14 @@ class MeetingRecording(Base):
     meeting: Mapped["Meeting"] = relationship(back_populates="recordings")
     insights: Mapped[list["MeetingInsight"]] = relationship(back_populates="recording")
     uploaded_by = relationship("User")
+
+    @property
+    def transcript_extracted(self) -> bool:
+        return bool((self.transcript_text or "").strip())
+
+    @property
+    def summary_generated(self) -> bool:
+        return bool((self.summary_text or "").strip())
 
 
 class MeetingInsight(Base):

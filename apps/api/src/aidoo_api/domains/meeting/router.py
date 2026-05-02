@@ -425,6 +425,23 @@ def get_recording_playback(
     )
 
 
+@router.get("/meetings/{meeting_id}/recordings/{recording_id}/media")
+def stream_recording_media(
+    meeting_id: str,
+    recording_id: str,
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+    workspace: Workspace = Depends(require_current_workspace),
+):
+    return recording_service.stream_recording_media(
+        db,
+        workspace=workspace,
+        user=current_user,
+        meeting_id=meeting_id,
+        recording_id=recording_id,
+    )
+
+
 @router.post(
     "/meetings/{meeting_id}/recordings/{recording_id}/retry",
     response_model=MeetingDetail,

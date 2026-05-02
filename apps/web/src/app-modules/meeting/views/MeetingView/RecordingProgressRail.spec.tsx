@@ -18,6 +18,7 @@ function makeRecording(status: MeetingRecordingStatus, progress_pct = 50): Meeti
     duration_sec: 120,
     source: 'manual_upload',
     transcription_status: status,
+    sequence_no: 1,
     progress_pct,
     file_size: 1024,
     mime_type: 'audio/webm',
@@ -61,7 +62,7 @@ describe('RecordingProgressRail', () => {
     // done — a stable invariant even when new stages are inserted.
     const doneMarkers = container.querySelectorAll('div.bg-app-accent');
     expect(doneMarkers.length).toBeGreaterThanOrEqual(4);
-    expect(screen.getByText(/회의록 생성에 실패했습니다/)).toBeTruthy();
+    expect(screen.getByText(/스크립트 추출 또는 후속 처리에 실패했습니다/)).toBeTruthy();
   });
 });
 

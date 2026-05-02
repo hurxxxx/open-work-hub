@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import re
 from pathlib import Path
 
 from sqlalchemy.orm import Session
@@ -146,7 +147,43 @@ def test_complete_staging_promotes_to_recording(client, monkeypatch, tmp_path) -
         recording = session.get(MeetingRecording, staging_id)
         assert recording is not None
         assert recording.celery_task_id == f"task-{staging_id}"
+        assert recording.sequence_no == 1
         assert fake_minio.objects[recording.storage_key] == chunk
+        assert re.fullmatch(r"\d{8}T\d{6}Z\.webm", Path(recording.storage_key).name)
+
+
+def test_recording_sequence_numbers_are_assigned_per_meeting(client, monkeypatch, tmp_path) -> None:
+    fake_minio = _install_fake_recording_storage(monkeypatch, tmp_path)
+    admin = _bootstrap_admin_session(client)
+    meeting = _create_meeting(client, admin["token"], title="Recording sequence")
+
+    first = client.post(
+        f"/api/v1/workspaces/hq/meeting/meetings/{meeting['id']}/recordings/import",
+        headers=_auth_headers(admin["token"]),
+        files={"file": ("first.wav", b"first-audio", "audio/wav")},
+    )
+    second = client.post(
+        f"/api/v1/workspaces/hq/meeting/meetings/{meeting['id']}/recordings/import",
+        headers=_auth_headers(admin["token"]),
+        files={"file": ("second.wav", b"second-audio", "audio/wav")},
+    )
+
+    assert first.status_code == 200, first.text
+    assert second.status_code == 200, second.text
+    recordings = second.json()["recordings"]
+    assert [item["sequence_no"] for item in recordings] == [1, 2]
+
+    with Session(get_engine()) as session:
+        rows = (
+            session.query(MeetingRecording)
+            .filter(MeetingRecording.meeting_id == meeting["id"])
+            .order_by(MeetingRecording.sequence_no.asc())
+            .all()
+        )
+
+    assert [row.sequence_no for row in rows] == [1, 2]
+    assert [fake_minio.objects[row.storage_key] for row in rows] == [b"first-audio", b"second-audio"]
+    assert all(re.fullmatch(r"\d{8}T\d{6}Z\.wav", Path(row.storage_key).name) for row in rows)
 
 
 def test_failed_recording_still_allows_playback(client, monkeypatch, tmp_path) -> None:
