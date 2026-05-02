@@ -1,3 +1,12 @@
 """Background tasks for the worker app."""
 
-from aidoo_worker.tasks import documents, drafts, media, meeting, ocr, rag_sync, search_index  # noqa: F401
+from aidoo_worker.tasks import (  # noqa: F401
+    documents,
+    drafts,
+    media,
+    meeting,
+    ocr,
+    rag_sync,
+    recording,
+    search_index,
+)

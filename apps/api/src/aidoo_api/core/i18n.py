@@ -1299,6 +1299,14 @@ MESSAGES: dict[str, dict[str, str]] = {
         "ko-KR": "원본 음성을 사용할 수 없습니다.",
         "en-US": "Original audio is not available.",
     },
+    "recording.processing_in_progress": {
+        "ko-KR": "녹음 후속 처리가 이미 진행 중입니다.",
+        "en-US": "Recording background processing is already in progress.",
+    },
+    "recording.processing_already_done": {
+        "ko-KR": "녹음 후속 처리가 이미 완료되었습니다.",
+        "en-US": "Recording background processing is already complete.",
+    },
     "recording.unsupported_audio_format": {
         "ko-KR": "지원하지 않는 녹음 오디오 형식입니다.",
         "en-US": "Unsupported recording audio format.",

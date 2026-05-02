@@ -31,8 +31,11 @@
 2026-05-02 결정:
 
 - 기존 Meeting 녹음 row/object는 canonical Recording으로 backfill하지 않는다. 필요하면 기존 녹음은 삭제해도 된다.
-- Qwen/Qwen3-ASR-1.7B 검토와 ASR 파이프라인 연결은 저장/관리 UX 이후로 미룬다.
-- 현 단계의 닫힘 기준은 Recording 앱에서 새 녹음을 만들고, 원본 음성을 안전하게 저장하고, 내 녹음 목록에서 재생/삭제까지 관리하는 것이다.
+- ASR은 임시로 DeepInfra native inference의 `openai/whisper-large-v3`를 사용한다. DeepInfra 공식 API는 `POST /v1/inference/{model}`에 `audio` multipart를 보내는 방식이다.
+- Qwen/Qwen3-ASR-1.7B와 Cohere Transcribe (03-2026)는 후속 후보로 문서화만 한다. 현재 구현 범위에는 넣지 않는다.
+- 전사 요약/회의록 생성은 기존 AI 아키텍처의 local-first specialist agent 흐름을 따른다. 원문 요약은 `domain.meeting`/`meeting.transcript_summarizer`, 근거 검증은 `verifier.grounding`, 문서 렌더링은 `writer.template` 역할로 분리한다.
+- 요약 모델은 코드에서 고정하지 않고 `meeting_summary` LLM policy를 따른다. 현재 운영 설정의 canonical 모델은 `qwen/qwen3.6-35b-a3b`이다.
+- 현 단계의 닫힘 기준은 Recording 앱에서 새 녹음을 만들고, 원본 음성을 안전하게 저장하고, 내 녹음 목록에서 재생/삭제/재시도까지 관리하며, 배치로 전사 원문 문서와 녹음 정리 문서를 생성하는 것이다.
 
 ## Product Goal
 
@@ -125,8 +128,9 @@ Meeting 화면은 `recording/public-api`에서 필요한 hook/component를 가�
 ```text
 recording.transcribe
 recording.create_raw_transcript_doc
+recording.analyze_transcript
+recording.verify_transcript_summary
 recording.create_minutes_doc
-recording.finalize
 ```
 
 Meeting 전용 insight/action extraction은 기본 pipeline에서 분리한다. Recording이 meeting container에 연결되어 있으면 후속 job으로 실행한다.
@@ -136,6 +140,47 @@ recording.meeting.extract_insights
 ```
 
 이렇게 나누면 Recording 앱에서 만든 일반 음성 메모와 Meeting에 연결된 녹음을 같은 저장/전사/문서화 경로로 처리하면서, Meeting 전용 action item/decision/follow-up 추출은 별도 관심사로 유지할 수 있다.
+
+### 5. ASR backend selection
+
+현 단계 기본값:
+
+```text
+DOOWON_API_ASR_BACKEND=deepinfra
+DOOWON_API_ASR_DEEPINFRA_MODEL=openai/whisper-large-v3
+DOOWON_API_ASR_DEEPINFRA_BASE_URL=https://api.deepinfra.com/v1/inference
+```
+
+DeepInfra는 임시 연결이다. 모델 교체 가능성을 남기기 위해 `ASRBackend` 인터페이스 뒤에 둔다.
+
+후속 후보:
+
+- `Qwen/Qwen3-ASR-1.7B`: 한국어 성능 후보. GPU 없는 CPU 실행은 장시간/고메모리 위험이 있어 운영 기본값으로 두지 않는다.
+- Cohere Transcribe (03-2026): 출시/성능/가격/API 안정성 검토 후 후보로 재평가한다.
+
+### 6. Transcript summary agent flow
+
+전사 후 요약/회의록 생성은 단일 `complete_chat()` 호출로 끝내지 않는다. worker pipeline 안에서 다음 역할을 분리한다.
+
+```text
+recording.analyze_transcript
+  agent role: domain.meeting + meeting.transcript_summarizer
+  policy: meeting_summary
+  pool: local
+  output: Korean grounded markdown summary
+
+recording.verify_transcript_summary
+  agent role: verifier.grounding
+  policy: meeting_summary
+  pool: local
+  output: grounding verdict / correction note
+
+recording.create_minutes_doc
+  agent role: writer.template
+  output: NativeDoc blocks, deterministic DB write
+```
+
+이 흐름은 `plans/02-evidence-first-agent-runtime.md`와 `plans/05-meeting-work-intelligence.md`의 원칙을 따른다. 원문 데이터는 기본적으로 local boundary 안에 두고, 외부 모델을 직접 호출하지 않는다. 외부 리뷰/고급 ASR은 명시적인 후속 옵션으로 둔다.
 
 ## Backend Design
 
@@ -407,9 +452,23 @@ Meeting 연결 후보는 녹음 시작/종료 시간과 겹치는 meeting을 우
 
 이 단계에서는 새 테이블과 API/service shell을 추가하되, 기존 Meeting write path를 즉시 제거하지 않는다. `recording.service`에는 권한 helper, owner-private 조회, container ACL 조회, same-origin `/media` stream 계약을 먼저 둔다.
 
-### Step 2: Switch new writes through Recording service
+### Step 2: Switch Recording app writes through Recording service
 
 Recording 앱의 신규 저장은 `recording.service`를 호출한다. 가장 먼저 direct import endpoint로 원본 음성 저장, owner-private 목록, playback을 닫는다.
+
+이 단계에서 Recording 앱 신규 녹음은 canonical `recordings` row와 MinIO object를 만든다. 저장 직후 `recording.*` worker pipeline을 enqueue하고, 큐가 내려가 있으면 원본 음성은 보존한 채 후속 처리 상태만 failed로 둔다.
+
+### Step 2A: Add temporary ASR and local-first document pipeline
+
+Meeting write cutover 전에 Recording 앱의 독립 저장/관리/전사 경로를 먼저 닫는다.
+
+- `recording.transcribe`: DeepInfra `openai/whisper-large-v3`
+- `recording.create_raw_transcript_doc`: 원문 전사 NativeDoc 생성
+- `recording.analyze_transcript`: local `meeting_summary` specialist summary
+- `recording.verify_transcript_summary`: local grounding verification
+- `recording.create_minutes_doc`: NativeDoc writer
+
+이 순서가 먼저인 이유는 Meeting cutover가 실패해도 Recording 앱 자체의 저장물과 후속 상태 모델을 독립적으로 검증할 수 있기 때문이다.
 
 Meeting compatibility route가 `recording.service`를 호출하도록 바꾸는 작업은 그 다음 단계로 진행한다. 이 시점부터 신규 Meeting 녹음은 canonical `recordings` / `recording_staging` / `recording_containers`에 기록한다.
 
@@ -451,7 +510,8 @@ Meeting compatibility route가 `recording.service`를 호출하도록 바꾸는 
 - direct import 저장 API 추가.
 - Quick Record 화면 구현.
 - 내 녹음 목록, playback, 삭제 관리 구현.
-- transcript/raw transcript doc/minutes doc 상태는 pending으로 표시하고 worker enqueue는 하지 않는다.
+- transcript/raw transcript doc/minutes doc 상태를 표시한다.
+- 저장 후 worker enqueue를 시도하고, 큐 실패 시 원본 음성은 보존한 채 retry 가능한 failed 상태로 둔다.
 
 검증:
 
@@ -461,7 +521,27 @@ Meeting compatibility route가 `recording.service`를 호출하도록 바꾸는 
 - delete 후 목록에서 제거
 - OpenAPI client regenerated
 
-### PR 3 - Meeting write cutover without backfill
+### PR 3 - Temporary ASR and Recording document pipeline
+
+- DeepInfra ASR backend 추가.
+- 기본 ASR backend를 `deepinfra`로 설정.
+- `recording.transcribe` 추가.
+- `recording.create_raw_transcript_doc` 추가.
+- `recording.analyze_transcript` 추가.
+- `recording.verify_transcript_summary` 추가.
+- `recording.create_minutes_doc` 추가.
+- Recording retry endpoint 추가.
+- Qwen3-ASR/Cohere Transcribe는 후보로 문서화만 한다.
+
+검증:
+
+- DeepInfra multipart request shape
+- transcript doc 생성
+- minutes doc 생성
+- failed queue 상태에서도 원본 보존
+- local `meeting_summary` policy 경유 확인
+
+### PR 4 - Meeting write cutover without backfill
 
 - `meeting/recordings.py`의 공용 로직을 `recording/service.py`로 이동.
 - Meeting route는 wrapper로 유지.
@@ -483,7 +563,7 @@ Meeting compatibility route가 `recording.service`를 호출하도록 바꾸는 
 - meeting wrapper의 녹음 순번(`sequence_no`)과 시작시각 기반 object key
 - Meeting별 single-recorder lock이 `RecordingStaging.initial_container_*` 기준으로 동작
 
-### PR 4 - Web shared recorder boundary and recovery
+### PR 5 - Web shared recorder boundary and recovery
 
 - `apps/web/src/app-modules/recording/` 추가.
 - app registry, manifest, routes, sidebar 추가.
@@ -497,22 +577,6 @@ Meeting compatibility route가 `recording.service`를 호출하도록 바꾸는 
 - web architecture boundary check
 - Meeting detail에서 기존 녹음 UX 회귀 없음
 - 신규 Recording IndexedDB recovery session 복구
-
-### PR 5 - Worker pipeline commonization
-
-- `recording.transcribe` 추가.
-- `recording.create_raw_transcript_doc` 추가.
-- `recording.create_minutes_doc` 추가.
-- Meeting insight extraction은 meeting container 후속 job으로 분리.
-- 기존 `meeting.*` task는 compatibility wrapper 또는 transition task로 유지한다.
-- ASR 모델은 이 단계에서 최종 선택한다. Qwen/Qwen3-ASR-1.7B는 후보로 두되, DeepInfra 제공 여부와 API 계약을 확인한 뒤 연결한다.
-
-검증:
-
-- transcript doc 생성
-- minutes doc 생성
-- failed queue 상태에서도 원본 보존
-- 기존 meeting insight tests green
 
 ### PR 6 - Recording detail and attach UX
 

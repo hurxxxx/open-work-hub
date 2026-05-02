@@ -119,6 +119,21 @@ def delete_recording(
     )
 
 
+@router.post("/recordings/{recording_id}/retry", response_model=RecordingOut)
+def retry_recording(
+    recording_id: str,
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+    workspace: Workspace = Depends(require_current_workspace),
+) -> RecordingOut:
+    return recording_service.retry_recording(
+        db,
+        workspace=workspace,
+        user=current_user,
+        recording_id=recording_id,
+    )
+
+
 @router.get("/recordings/{recording_id}/playback", response_model=RecordingPlaybackResponse)
 def get_recording_playback(
     recording_id: str,

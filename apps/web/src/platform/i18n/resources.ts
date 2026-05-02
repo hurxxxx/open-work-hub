@@ -1116,6 +1116,7 @@ export const resources = {
       recording: {
         actions: {
           play: '재생',
+          retry: '재시도',
         },
         delete: {
           description: '"{{title}}" 녹음을 삭제하시겠습니까?',
@@ -1127,6 +1128,7 @@ export const resources = {
           loadFailed: '녹음 목록을 불러올 수 없습니다.',
           playbackFailed: '녹음 재생 링크를 가져올 수 없습니다.',
           recordingFailed: '녹음 중 오류가 발생했습니다.',
+          retryFailed: '녹음 후속 처리를 재시도할 수 없습니다.',
           saveFailed: '녹음을 저장할 수 없습니다.',
           startFailed: '녹음을 시작할 수 없습니다.',
         },
@@ -1156,10 +1158,25 @@ export const resources = {
         status: {
           audioSaved: '음성 저장됨',
           transcript: {
+            creating: '스크립트 추출 중',
             done: '스크립트 추출 완료',
             failed: '스크립트 추출 실패',
             pending: '스크립트 추출 대기',
             transcribing: '스크립트 추출 중',
+          },
+          rawTranscriptDoc: {
+            creating: '전사 원문 문서 생성 중',
+            done: '전사 원문 문서 완료',
+            failed: '전사 원문 문서 실패',
+            pending: '전사 원문 문서 대기',
+            transcribing: '전사 원문 문서 대기',
+          },
+          minutesDoc: {
+            creating: '녹음 정리 문서 생성 중',
+            done: '녹음 정리 문서 완료',
+            failed: '녹음 정리 문서 실패',
+            pending: '녹음 정리 문서 대기',
+            transcribing: '녹음 정리 문서 대기',
           },
         },
         title: '녹음',
@@ -3161,6 +3178,7 @@ export const resources = {
       recording: {
         actions: {
           play: 'Play',
+          retry: 'Retry',
         },
         delete: {
           description: 'Delete recording "{{title}}"?',
@@ -3172,6 +3190,7 @@ export const resources = {
           loadFailed: 'Could not load recordings.',
           playbackFailed: 'Could not get the recording playback link.',
           recordingFailed: 'Recording failed.',
+          retryFailed: 'Could not retry recording background processing.',
           saveFailed: 'Could not save the recording.',
           startFailed: 'Could not start recording.',
         },
@@ -3202,10 +3221,25 @@ export const resources = {
         status: {
           audioSaved: 'Audio saved',
           transcript: {
+            creating: 'Extracting transcript',
             done: 'Transcript extracted',
             failed: 'Transcript extraction failed',
             pending: 'Transcript extraction pending',
             transcribing: 'Extracting transcript',
+          },
+          rawTranscriptDoc: {
+            creating: 'Creating transcript doc',
+            done: 'Transcript doc ready',
+            failed: 'Transcript doc failed',
+            pending: 'Transcript doc pending',
+            transcribing: 'Transcript doc pending',
+          },
+          minutesDoc: {
+            creating: 'Creating notes doc',
+            done: 'Notes doc ready',
+            failed: 'Notes doc failed',
+            pending: 'Notes doc pending',
+            transcribing: 'Notes doc pending',
           },
         },
         title: 'Recording',

@@ -131,8 +131,32 @@ class Settings(BaseSettings):
         validation_alias=AliasChoices("DOOWON_API_RECORDING_CHUNK_SECONDS"),
     )
     asr_backend: str = Field(
-        default="cohere",
+        default="deepinfra",
         validation_alias=AliasChoices("DOOWON_API_ASR_BACKEND", "DOOWON_ASR_BACKEND"),
+    )
+    asr_deepinfra_api_key: str = Field(
+        default="",
+        validation_alias=AliasChoices(
+            "DOOWON_API_ASR_DEEPINFRA_API_KEY",
+            "DOOWON_AIDOO_DEEPINFRA_API_KEY",
+            "DOOWON_WORKER_AIDOO_DEEPINFRA_API_KEY",
+            "AIDOO_DEEPINFRA_API_KEY",
+            "DEEPINFRA_API_KEY",
+        ),
+    )
+    asr_deepinfra_model: str = Field(
+        default="openai/whisper-large-v3",
+        validation_alias=AliasChoices("DOOWON_API_ASR_DEEPINFRA_MODEL"),
+    )
+    asr_deepinfra_base_url: str = Field(
+        default="https://api.deepinfra.com/v1/inference",
+        validation_alias=AliasChoices(
+            "DOOWON_API_ASR_DEEPINFRA_BASE_URL",
+            "DOOWON_AIDOO_DEEPINFRA_INFERENCE_BASE_URL",
+            "DOOWON_WORKER_AIDOO_DEEPINFRA_INFERENCE_BASE_URL",
+            "AIDOO_DEEPINFRA_INFERENCE_BASE_URL",
+            "DEEPINFRA_INFERENCE_BASE_URL",
+        ),
     )
     asr_cohere_api_key: str = Field(
         default="",

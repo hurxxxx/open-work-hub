@@ -62,6 +62,19 @@ export function deleteRecording(
   );
 }
 
+export function retryRecording(
+  token: string,
+  workspaceSlug: string,
+  recordingId: string,
+): Promise<Recording> {
+  return request<Recording>(
+    `/api/v1/recording/recordings/${recordingId}/retry`,
+    token,
+    workspaceSlug,
+    { method: 'POST' },
+  );
+}
+
 export async function importRecording(
   token: string,
   workspaceSlug: string,

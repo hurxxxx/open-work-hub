@@ -33,6 +33,7 @@ import {
   getRecordingPlaybackUrl,
   importRecording,
   listRecordings,
+  retryRecording,
   type Recording,
 } from '../api/recording-api';
 
@@ -79,6 +80,25 @@ function formatDateTime(value: string, timeZone: string, locale: string): string
 
 function titleFor(recording: Recording, fallback: string): string {
   return recording.title?.trim() || fallback;
+}
+
+function processingStatusKey(value: string): 'done' | 'failed' | 'creating' | 'transcribing' | 'pending' {
+  if (value === 'done' || value === 'failed' || value === 'creating' || value === 'transcribing') {
+    return value;
+  }
+  return 'pending';
+}
+
+function statusTone(key: 'done' | 'failed' | 'creating' | 'transcribing' | 'pending'): 'saved' | 'pending' | 'failed' {
+  if (key === 'done') return 'saved';
+  if (key === 'failed') return 'failed';
+  return 'pending';
+}
+
+function statusIcon(key: 'done' | 'failed' | 'creating' | 'transcribing' | 'pending'): ReactNode {
+  if (key === 'done') return <CheckCircle2 size={13} />;
+  if (key === 'failed') return <AlertCircle size={13} />;
+  return <PauseCircle size={13} />;
 }
 
 export function RecordingView() {
@@ -314,6 +334,20 @@ export function RecordingView() {
     }
   }
 
+  async function handleRetry(recording: Recording) {
+    if (!token || !workspaceSlug) return;
+    setBusyId(recording.id);
+    setError(null);
+    try {
+      await retryRecording(token, workspaceSlug, recording.id);
+      await refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t('apps:recording.errors.retryFailed'));
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   if (!workspaceSlug) {
     return null;
   }
@@ -438,6 +472,7 @@ export function RecordingView() {
                   timeZone={timeZone}
                   onDelete={() => void handleDelete(recording)}
                   onPlay={() => void handlePlayback(recording)}
+                  onRetry={() => void handleRetry(recording)}
                 />
               ))}
             </div>
@@ -458,6 +493,7 @@ function RecordingListItem({
   timeZone,
   onDelete,
   onPlay,
+  onRetry,
 }: {
   busy: boolean;
   locale: string;
@@ -466,15 +502,13 @@ function RecordingListItem({
   timeZone: string;
   onDelete: () => void;
   onPlay: () => void;
+  onRetry: () => void;
 }) {
   const { t } = useTranslation(['apps', 'common']);
-  const transcriptKey = recording.transcript_status === 'done'
-    ? 'done'
-    : recording.transcript_status === 'failed'
-      ? 'failed'
-      : recording.transcript_status === 'transcribing'
-        ? 'transcribing'
-        : 'pending';
+  const transcriptKey = processingStatusKey(recording.transcript_status);
+  const rawDocKey = processingStatusKey(recording.raw_transcript_doc_status);
+  const minutesDocKey = processingStatusKey(recording.minutes_doc_status);
+  const retryable = transcriptKey === 'failed' || rawDocKey === 'failed' || minutesDocKey === 'failed';
 
   return (
     <article className="rounded-md border border-app-border bg-app-surface px-4 py-3">
@@ -501,14 +535,35 @@ function RecordingListItem({
           <div className="mt-2 flex flex-wrap gap-2">
             <StatusPill icon={<CheckCircle2 size={13} />} label={t('apps:recording.status.audioSaved')} tone="saved" />
             <StatusPill
-              icon={transcriptKey === 'failed' ? <AlertCircle size={13} /> : <PauseCircle size={13} />}
+              icon={statusIcon(transcriptKey)}
               label={t(`apps:recording.status.transcript.${transcriptKey}`)}
-              tone={transcriptKey === 'failed' ? 'failed' : 'pending'}
+              tone={statusTone(transcriptKey)}
+            />
+            <StatusPill
+              icon={statusIcon(rawDocKey)}
+              label={t(`apps:recording.status.rawTranscriptDoc.${rawDocKey}`)}
+              tone={statusTone(rawDocKey)}
+            />
+            <StatusPill
+              icon={statusIcon(minutesDocKey)}
+              label={t(`apps:recording.status.minutesDoc.${minutesDocKey}`)}
+              tone={statusTone(minutesDocKey)}
             />
           </div>
+          {recording.failure_reason ? (
+            <p className="app-text-caption mt-2 max-w-2xl text-[var(--ui-color-danger)]">
+              {recording.failure_reason}
+            </p>
+          ) : null}
         </div>
 
         <div className="flex shrink-0 flex-wrap gap-2">
+          {retryable ? (
+            <Button variant="secondary" onClick={onRetry} disabled={busy}>
+              {busy ? <Loader2 size={14} className="mr-1 animate-spin" /> : <RefreshCw size={14} className="mr-1" />}
+              {t('apps:recording.actions.retry')}
+            </Button>
+          ) : null}
           <Button variant="secondary" onClick={onPlay} disabled={busy || Boolean(playbackUrl)}>
             {busy && !playbackUrl ? <Loader2 size={14} className="mr-1 animate-spin" /> : <Play size={14} className="mr-1" />}
             {t('apps:recording.actions.play')}

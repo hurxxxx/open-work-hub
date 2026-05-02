@@ -1,9 +1,13 @@
 from __future__ import annotations
 
+import socket
 from datetime import UTC, datetime, timedelta
+from functools import lru_cache
 from io import BytesIO
 from pathlib import Path
+from urllib.parse import urlparse
 
+from celery import Celery, chain
 from fastapi import HTTPException, Response, UploadFile, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy import or_, select
@@ -44,6 +48,7 @@ _AUDIO_EXTENSIONS = {
     "audio/ogg": ".ogg",
     "audio/flac": ".flac",
 }
+ENQUEUE_FAILURE_REASON = "Background processing queue is unavailable. Raw audio was saved; retry later."
 
 
 def _utcnow() -> datetime:
@@ -306,6 +311,100 @@ def _storage_key_for_recording(
     )
 
 
+@lru_cache(maxsize=1)
+def _get_celery_client() -> Celery:
+    settings = get_settings()
+    celery_client = Celery(
+        "aidoo_api_recording_app",
+        broker=settings.worker_broker_url,
+        backend=settings.worker_result_backend,
+    )
+    celery_client.conf.update(
+        broker_connection_retry=False,
+        broker_connection_retry_on_startup=False,
+        broker_connection_max_retries=0,
+        task_publish_retry=False,
+        broker_transport_options={
+            "socket_connect_timeout": 1,
+            "socket_timeout": 1,
+            "retry_on_timeout": False,
+        },
+    )
+    return celery_client
+
+
+def _broker_is_reachable() -> bool:
+    parsed = urlparse(get_settings().worker_broker_url)
+    host = parsed.hostname
+    if not host:
+        return True
+    port = parsed.port
+    if port is None:
+        if parsed.scheme in {"redis", "rediss"}:
+            port = 6379
+        elif parsed.scheme in {"amqp", "amqps"}:
+            port = 5672
+        else:
+            return True
+    try:
+        with socket.create_connection((host, port), timeout=1):
+            return True
+    except OSError:
+        return False
+
+
+def enqueue_recording_pipeline(recording_id: str) -> str:
+    celery_client = _get_celery_client()
+    result = chain(
+        celery_client.signature("recording.transcribe", args=[recording_id], immutable=True),
+        celery_client.signature("recording.create_raw_transcript_doc"),
+        celery_client.signature("recording.analyze_transcript"),
+        celery_client.signature("recording.verify_transcript_summary"),
+        celery_client.signature("recording.create_minutes_doc"),
+    ).apply_async(queue="meeting_transcribe", retry=False)
+    return str(result.id)
+
+
+def revoke_recording_task(task_id: str) -> None:
+    if not task_id:
+        return
+    try:
+        _get_celery_client().control.revoke(task_id, terminate=True, signal="SIGKILL")
+    except Exception:
+        pass
+
+
+def _recording_has_meeting_container(recording: Recording) -> bool:
+    return any(
+        container.container_app == "meeting" and container.container_type == "meeting"
+        for container in recording.containers
+    )
+
+
+def _enqueue_pipeline_or_mark_failed(db: Session, *, recording: Recording) -> None:
+    if recording.celery_task_id:
+        return
+    if not _broker_is_reachable():
+        recording.transcript_status = "failed"
+        recording.failure_reason = ENQUEUE_FAILURE_REASON
+        recording.updated_at = _utcnow()
+        db.add(recording)
+        db.commit()
+        db.refresh(recording)
+        return
+    try:
+        recording.celery_task_id = enqueue_recording_pipeline(recording.id)
+        recording.transcript_status = "pending"
+        recording.failure_reason = None
+    except Exception:
+        recording.transcript_status = "failed"
+        recording.failure_reason = ENQUEUE_FAILURE_REASON
+    recording.updated_at = _utcnow()
+    db.add(recording)
+    db.commit()
+    db.refresh(recording)
+
+
 def _failed_filter():
     return or_(
         Recording.audio_status == "failed",
@@ -443,6 +542,8 @@ def delete_recording(
             status_code=status.HTTP_404_NOT_FOUND, code="recording.not_found"
         )
     _ensure_recording_owner(user=user, recording=recording)
+    if recording.celery_task_id:
+        revoke_recording_task(recording.celery_task_id)
     recording.trashed_at = _utcnow()
     recording.updated_at = recording.trashed_at
     db.add(recording)
@@ -526,6 +627,69 @@ def import_recording(
     db.add(recording)
     db.commit()
     fresh = _load_recording_or_404(db, recording_id)
+    _enqueue_pipeline_or_mark_failed(db, recording=fresh)
+    fresh = _load_recording_or_404(db, recording_id)
+    return RecordingOut.model_validate(fresh)
+
+
+def retry_recording(
+    db: Session,
+    *,
+    workspace: Workspace,
+    user: User,
+    recording_id: str,
+) -> RecordingOut:
+    recording = _load_recording_or_404(db, recording_id)
+    if recording.workspace_id != workspace.id:
+        raise localized_http_exception(
+            status_code=status.HTTP_404_NOT_FOUND, code="recording.not_found"
+        )
+    _ensure_recording_owner(user=user, recording=recording)
+    if recording.audio_status != "saved" or not recording.storage_key:
+        raise localized_http_exception(
+            status_code=status.HTTP_409_CONFLICT, code="recording.audio_unavailable"
+        )
+    if (
+        recording.transcript_status == "transcribing"
+        or recording.raw_transcript_doc_status == "creating"
+        or recording.minutes_doc_status == "creating"
+    ):
+        raise localized_http_exception(
+            status_code=status.HTTP_409_CONFLICT, code="recording.processing_in_progress"
+        )
+    if (
+        recording.transcript_status == "done"
+        and recording.raw_transcript_doc_status == "done"
+        and recording.minutes_doc_status == "done"
+    ):
+        raise localized_http_exception(
+            status_code=status.HTTP_409_CONFLICT, code="recording.processing_already_done"
+        )
+
+    if recording.celery_task_id:
+        revoke_recording_task(recording.celery_task_id)
+    recording.celery_task_id = None
+    recording.failure_reason = None
+    if recording.transcript_status != "done":
+        recording.transcript_status = "pending"
+        recording.transcribe_started_at = None
+        recording.transcribe_completed_at = None
+        recording.progress_pct = 0
+    else:
+        recording.progress_pct = max(recording.progress_pct, 60)
+    if recording.raw_transcript_doc_status != "done":
+        recording.raw_transcript_doc_status = "pending"
+        recording.raw_transcript_doc_id = None
+    if recording.minutes_doc_status != "done":
+        recording.minutes_doc_status = "pending"
+        recording.minutes_doc_id = None
+    recording.meeting_insight_status = "none"
+    recording.updated_at = _utcnow()
+    db.add(recording)
+    db.commit()
+    fresh = _load_recording_or_404(db, recording.id)
+    _enqueue_pipeline_or_mark_failed(db, recording=fresh)
+    fresh = _load_recording_or_404(db, recording.id)
     return RecordingOut.model_validate(fresh)
 
 

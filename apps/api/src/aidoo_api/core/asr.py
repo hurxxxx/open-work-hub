@@ -3,14 +3,14 @@ from __future__ import annotations
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
-from typing import Callable, Literal, Protocol
+from typing import Any, Callable, Literal, Protocol, cast
 
 import httpx
 
 from aidoo_api.core.settings import get_settings
 
 
-ASRBackendName = Literal["cohere", "qwen_asr", "whisper"]
+ASRBackendName = Literal["cohere", "qwen_asr", "whisper", "deepinfra"]
 
 
 class TransientError(Exception):
@@ -127,6 +127,79 @@ class CohereASRBackend:
             segments=segments,
             language=payload.get("language"),
             duration_sec=payload.get("duration") or payload.get("duration_sec"),
+        )
+
+
+class DeepInfraASRBackend:
+    name: ASRBackendName = "deepinfra"
+
+    def __init__(self, *, api_key: str, model: str, base_url: str, timeout_seconds: float) -> None:
+        self.api_key = api_key.strip()
+        self.model = model.strip().strip("/")
+        self.base_url = base_url.rstrip("/")
+        self.timeout_seconds = timeout_seconds
+
+    def healthcheck(self) -> ASRHealth:
+        if not self.api_key:
+            return ASRHealth(backend="deepinfra", ready=False, detail="Missing DeepInfra API key.")
+        if not self.model:
+            return ASRHealth(backend="deepinfra", ready=False, detail="Missing DeepInfra ASR model.")
+        return ASRHealth(backend="deepinfra", ready=True)
+
+    def transcribe(
+        self,
+        audio_path: Path,
+        *,
+        language_hint: str | None = None,
+        on_progress: Callable[[float], None] | None = None,
+    ) -> TranscriptResult:
+        if not self.api_key:
+            raise PermanentError("DeepInfra API key is not configured.")
+        if not self.model:
+            raise PermanentError("DeepInfra ASR model is not configured.")
+        if on_progress is not None:
+            on_progress(0.1)
+
+        data: dict[str, str] = {}
+        if language_hint:
+            data["language"] = language_hint
+        try:
+            with audio_path.open("rb") as audio_file:
+                response = httpx.post(
+                    f"{self.base_url}/{self.model}",
+                    headers={"Authorization": f"Bearer {self.api_key}"},
+                    files={"audio": (audio_path.name, audio_file, "application/octet-stream")},
+                    data=data or None,
+                    timeout=self.timeout_seconds,
+                )
+        except (httpx.TimeoutException, httpx.NetworkError) as exc:
+            raise TransientError(str(exc)) from exc
+        except httpx.HTTPError as exc:
+            raise PermanentError(str(exc)) from exc
+
+        if response.status_code in {408, 409, 425, 429} or response.status_code >= 500:
+            raise TransientError(f"DeepInfra transcription failed: {response.status_code}")
+        if response.status_code >= 400:
+            raise PermanentError(
+                f"DeepInfra transcription failed: {response.status_code} {response.text}"
+            )
+
+        try:
+            payload = response.json()
+        except ValueError as exc:
+            raise PermanentError("DeepInfra transcription returned invalid JSON.") from exc
+        if not isinstance(payload, dict):
+            raise PermanentError("DeepInfra transcription returned an unexpected payload.")
+
+        text = _payload_text(payload)
+        segments = _payload_segments(payload)
+        if on_progress is not None:
+            on_progress(1.0)
+        return TranscriptResult(
+            text=text.strip(),
+            segments=segments,
+            language=_payload_string(payload, "language") or language_hint,
+            duration_sec=_payload_float(payload, "duration") or _payload_float(payload, "duration_sec"),
         )
 
 
@@ -251,6 +324,13 @@ class WhisperASRBackend:
 @lru_cache(maxsize=1)
 def get_asr_backend() -> ASRBackend:
     settings = get_settings()
+    if settings.asr_backend == "deepinfra":
+        return DeepInfraASRBackend(
+            api_key=settings.asr_deepinfra_api_key,
+            model=settings.asr_deepinfra_model,
+            base_url=settings.asr_deepinfra_base_url,
+            timeout_seconds=settings.asr_request_timeout_seconds,
+        )
     if settings.asr_backend == "cohere":
         return CohereASRBackend(
             api_key=settings.asr_cohere_api_key,
@@ -276,4 +356,72 @@ def check_asr_health() -> ASRHealth:
     try:
         return get_asr_backend().healthcheck()
     except Exception as exc:
-        return ASRHealth(backend="cohere", ready=False, detail=str(exc))
+        configured_backend = cast(ASRBackendName, get_settings().asr_backend)
+        return ASRHealth(backend=configured_backend, ready=False, detail=str(exc))
+
+
+def _payload_text(payload: dict[str, Any]) -> str:
+    result = payload.get("results")
+    candidates = [
+        payload.get("text"),
+        payload.get("transcript"),
+        result.get("text") if isinstance(result, dict) else None,
+    ]
+    for candidate in candidates:
+        if isinstance(candidate, str) and candidate.strip():
+            return candidate
+    segments = _payload_segments(payload)
+    return " ".join(segment.text for segment in segments if segment.text).strip()
+
+
+def _payload_segments(payload: dict[str, Any]) -> list[TranscriptSegment]:
+    result = payload.get("results")
+    raw_segments = payload.get("segments")
+    if raw_segments is None and isinstance(result, dict):
+        raw_segments = result.get("segments") or result.get("chunks")
+    if raw_segments is None:
+        raw_segments = payload.get("chunks")
+    if not isinstance(raw_segments, list):
+        return []
+
+    segments: list[TranscriptSegment] = []
+    for item in raw_segments:
+        if not isinstance(item, dict):
+            continue
+        timestamp = item.get("timestamp")
+        start = _segment_time(item, "start", timestamp, 0)
+        end = _segment_time(item, "end", timestamp, 1)
+        segments.append(
+            TranscriptSegment(
+                start=start,
+                end=max(start, end),
+                text=str(item.get("text") or item.get("sentence") or "").strip(),
+            )
+        )
+    return segments
+
+
+def _segment_time(item: dict[str, Any], key: str, timestamp: Any, index: int) -> float:
+    if key in item:
+        return _coerce_float(item.get(key))
+    if isinstance(timestamp, (list, tuple)) and len(timestamp) > index:
+        return _coerce_float(timestamp[index])
+    return 0.0
+
+
+def _payload_string(payload: dict[str, Any], key: str) -> str | None:
+    value = payload.get(key)
+    return value if isinstance(value, str) and value else None
+
+
+def _payload_float(payload: dict[str, Any], key: str) -> float | None:
+    if key not in payload:
+        return None
+    return _coerce_float(payload.get(key))
+
+
+def _coerce_float(value: Any) -> float:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return 0.0
