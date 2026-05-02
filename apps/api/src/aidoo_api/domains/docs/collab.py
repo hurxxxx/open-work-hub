@@ -804,7 +804,7 @@ class DocsCollabHub:
 
     async def _flush_runtime(self, runtime: RoomRuntime) -> None:
         async with runtime.flush_lock:
-            yjs_state = Y.encode_state_as_update(runtime.room.ydoc)
+            yjs_state = bytes(Y.encode_state_as_update(runtime.room.ydoc))
             actor_user_id = runtime.last_editor_user_id or runtime.default_actor_user_id
             try:
                 await asyncio.to_thread(

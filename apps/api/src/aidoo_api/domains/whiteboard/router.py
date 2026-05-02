@@ -29,7 +29,6 @@ from aidoo_api.domains.whiteboard.collab import (
     WhiteboardCollabContext,
     WhiteboardCollabHub,
     ensure_collab_document_state,
-    make_whiteboard_room_key,
     sync_collab_record_from_rest_patch,
     update_collab_snapshot_record,
 )
@@ -353,9 +352,10 @@ def _resolve_whiteboard_collab_context(
 ) -> WhiteboardCollabContext:
     _ensure_whiteboard_workspace_access(db, user)
     whiteboard, access = _whiteboard_from_item_or_404(db, item_id, user)
+    collab = ensure_collab_document_state(db, whiteboard=whiteboard)
     return WhiteboardCollabContext(
         whiteboard_id=whiteboard.id,
-        room_key=make_whiteboard_room_key(whiteboard.id),
+        room_key=collab.room_key,
         can_edit=access.can_edit,
         scene=whiteboard.scene or empty_scene(),
         default_actor_user_id=whiteboard.owner_id,
@@ -1459,14 +1459,14 @@ def get_whiteboard_collab_session(
     _require_workspace_slug(request)
     _ensure_whiteboard_workspace_access(db, current_user)
     whiteboard, access = _whiteboard_from_item_or_404(db, item_id, current_user)
+    collab = ensure_collab_document_state(db, whiteboard=whiteboard)
     context = WhiteboardCollabContext(
         whiteboard_id=whiteboard.id,
-        room_key=make_whiteboard_room_key(whiteboard.id),
+        room_key=collab.room_key,
         can_edit=access.can_edit,
         scene=whiteboard.scene or empty_scene(),
         default_actor_user_id=whiteboard.owner_id,
     )
-    collab = ensure_collab_document_state(db, whiteboard=whiteboard)
     db.commit()
     ws_path = request.url.path.removesuffix("/session") + "/ws"
     hub: WhiteboardCollabHub = request.app.state.whiteboard_collab

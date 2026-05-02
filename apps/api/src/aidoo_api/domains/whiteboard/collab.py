@@ -46,6 +46,10 @@ def make_whiteboard_room_key(whiteboard_id: str) -> str:
     return f"whiteboard:{whiteboard_id}"
 
 
+def make_fresh_whiteboard_room_key(whiteboard_id: str) -> str:
+    return f"whiteboard:{whiteboard_id}:{new_id()}"
+
+
 @dataclass(frozen=True)
 class WhiteboardCollabContext:
     whiteboard_id: str
@@ -109,6 +113,7 @@ def ensure_collab_document_state(
         db.add(collab)
         db.flush()
     elif reset_stale_yjs_state and collab.updated_at < whiteboard.updated_at:
+        collab.room_key = make_fresh_whiteboard_room_key(whiteboard.id)
         collab.yjs_state = None
         collab.snapshot_scene = snapshot_scene
         collab.last_snapshot_at = whiteboard.updated_at
@@ -141,6 +146,7 @@ def sync_collab_record_from_rest_patch(db: Session, *, whiteboard: Whiteboard) -
     collab = get_collab_document(db, whiteboard_id=whiteboard.id)
     if collab is None:
         return
+    collab.room_key = make_fresh_whiteboard_room_key(whiteboard.id)
     collab.yjs_state = None
     collab.snapshot_scene = whiteboard.scene or empty_scene()
     collab.last_snapshot_at = _utcnow()
@@ -398,7 +404,7 @@ class WhiteboardCollabHub:
 
     async def _flush_runtime(self, runtime: WhiteboardRoomRuntime) -> None:
         async with runtime.flush_lock:
-            yjs_state = Y.encode_state_as_update(runtime.room.ydoc)
+            yjs_state = bytes(Y.encode_state_as_update(runtime.room.ydoc))
             try:
                 await asyncio.to_thread(
                     _persist_whiteboard_runtime_state_sync,

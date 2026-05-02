@@ -73,6 +73,35 @@ export type WhiteboardCollabSession = Omit<
 };
 export type WhiteboardCollabSnapshotResponse = ApiSchema<'WhiteboardCollabSnapshotResponse'>;
 
+function sceneElementId(element: unknown): string | null {
+  if (!element || typeof element !== 'object') return null;
+  const id = (element as { id?: unknown }).id;
+  return typeof id === 'string' && id ? id : null;
+}
+
+function compactSceneElements(elements: unknown[]): unknown[] {
+  const orderedIds: string[] = [];
+  const byId = new Map<string, unknown>();
+  const anonymous: unknown[] = [];
+
+  for (const element of elements) {
+    const id = sceneElementId(element);
+    if (!id) {
+      anonymous.push(element);
+      continue;
+    }
+    if (!byId.has(id)) {
+      orderedIds.push(id);
+    }
+    byId.set(id, element);
+  }
+
+  return [
+    ...orderedIds.map((id) => byId.get(id)).filter((element): element is unknown => element !== undefined),
+    ...anonymous,
+  ];
+}
+
 export function normalizeWhiteboardScene(value: unknown): WhiteboardScene {
   if (!value || typeof value !== 'object') {
     return { elements: [], appState: {}, files: {} };
@@ -80,7 +109,7 @@ export function normalizeWhiteboardScene(value: unknown): WhiteboardScene {
   const scene = value as Record<string, unknown>;
   return {
     ...scene,
-    elements: Array.isArray(scene.elements) ? scene.elements : [],
+    elements: compactSceneElements(Array.isArray(scene.elements) ? scene.elements : []),
     appState: scene.appState && typeof scene.appState === 'object'
       ? scene.appState as Record<string, unknown>
       : {},

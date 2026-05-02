@@ -4,6 +4,8 @@ import {
   Excalidraw,
   exportToBlob,
   exportToSvg,
+  getSceneVersion,
+  reconcileElements,
   serializeAsJSON,
   THEME,
 } from '@excalidraw/excalidraw';
@@ -62,6 +64,19 @@ type SaveStatus = 'idle' | 'dirty' | 'saving' | 'saved' | 'error';
 type CollabStatus = 'connecting' | 'connected' | 'offline' | 'error' | null;
 type ExcalidrawOnChange = NonNullable<ExcalidrawProps['onChange']>;
 const LOCAL_COLLAB_ORIGIN = 'whiteboard-local-scene';
+const LOCAL_CHANGE_FLUSH_MS = 160;
+const REMOTE_APPLY_GUARD_MS = 32;
+
+type PendingExcalidrawChange = {
+  elements: Parameters<ExcalidrawOnChange>[0];
+  appState: Parameters<ExcalidrawOnChange>[1];
+  files: Parameters<ExcalidrawOnChange>[2];
+};
+
+type PendingCollabPublish = {
+  scene: WhiteboardScene;
+  signature: string;
+};
 
 type WhiteboardElement = Record<string, unknown> & {
   id?: string;
@@ -122,19 +137,42 @@ function sceneFromExcalidraw(
   appState: Parameters<ExcalidrawOnChange>[1],
   files: Parameters<ExcalidrawOnChange>[2],
 ): WhiteboardScene {
-  return normalizeWhiteboardScene(JSON.parse(serializeAsJSON(elements, appState, files, 'local')));
-}
-
-function sceneFromEditorAPI(api: ExcalidrawImperativeAPI): WhiteboardScene {
-  return sceneFromExcalidraw(
-    api.getSceneElementsIncludingDeleted() as Parameters<ExcalidrawOnChange>[0],
-    api.getAppState(),
-    api.getFiles(),
-  );
+  const serialized = normalizeWhiteboardScene(JSON.parse(serializeAsJSON(elements, appState, files, 'local')));
+  return {
+    ...serialized,
+    elements: cloneCollabValue([...elements]),
+  };
 }
 
 function sceneSignature(scene: WhiteboardScene): string {
   return JSON.stringify(scene);
+}
+
+function cloneCollabValue<T>(value: T): T {
+  if (value === undefined || value === null) {
+    return value;
+  }
+  return JSON.parse(JSON.stringify(value)) as T;
+}
+
+function cloneCollabElement(element: WhiteboardElement): WhiteboardElement {
+  return cloneCollabValue(element);
+}
+
+function uniqueElementOrder(elements: readonly unknown[]): string[] {
+  const order: string[] = [];
+  const seen = new Set<string>();
+  for (const element of elements) {
+    const id = elementId(element);
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    order.push(id);
+  }
+  return order;
+}
+
+function elementsVersion(elements: readonly unknown[]): number {
+  return getSceneVersion(elements as never);
 }
 
 function hashString(value: string): number {
@@ -187,7 +225,7 @@ function shouldAcceptElementUpdate(
 function objectFromYMap(map: Y.Map<unknown>): Record<string, unknown> {
   const result: Record<string, unknown> = {};
   map.forEach((value, key) => {
-    result[key] = value;
+    result[key] = cloneCollabValue(value);
   });
   return result;
 }
@@ -201,15 +239,16 @@ function sceneFromCollabMaps(
   const elements: unknown[] = [];
   const seen = new Set<string>();
   for (const id of elementOrder.toArray()) {
+    if (seen.has(id)) continue;
     const element = elementsMap.get(id);
     if (element) {
-      elements.push(element);
+      elements.push(cloneCollabValue(element));
       seen.add(id);
     }
   }
   elementsMap.forEach((element, id) => {
     if (!seen.has(id)) {
-      elements.push(element);
+      elements.push(cloneCollabValue(element));
     }
   });
   return normalizeWhiteboardScene({
@@ -539,6 +578,15 @@ export function WhiteboardEditorSurface({
   const applyingRemoteSceneRef = useRef(false);
   const pendingRemoteSceneRef = useRef<WhiteboardScene | null>(null);
   const lastPublishedCollabSignatureRef = useRef<string | null>(null);
+  const lastAppliedRemoteSceneSignatureRef = useRef<string | null>(null);
+  const remoteApplyGuardTimerRef = useRef<number | null>(null);
+  const pendingLocalChangeRef = useRef<PendingExcalidrawChange | null>(null);
+  const localChangeFlushTimerRef = useRef<number | null>(null);
+  const queuedLocalElementsVersionRef = useRef<number | null>(null);
+  const pendingCollabPublishRef = useRef<PendingCollabPublish | null>(null);
+  const collabPublishRetryTimerRef = useRef<number | null>(null);
+  const schedulePendingCollabPublishRef = useRef<(() => void) | null>(null);
+  const saveSettledTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
     if (typeof document === 'undefined') return undefined;
@@ -553,6 +601,18 @@ export function WhiteboardEditorSurface({
   useEffect(() => () => {
     if (saveTimerRef.current !== null) {
       window.clearTimeout(saveTimerRef.current);
+    }
+    if (remoteApplyGuardTimerRef.current !== null) {
+      window.clearTimeout(remoteApplyGuardTimerRef.current);
+    }
+    if (localChangeFlushTimerRef.current !== null) {
+      window.clearTimeout(localChangeFlushTimerRef.current);
+    }
+    if (collabPublishRetryTimerRef.current !== null) {
+      window.clearTimeout(collabPublishRetryTimerRef.current);
+    }
+    if (saveSettledTimerRef.current !== null) {
+      window.clearTimeout(saveSettledTimerRef.current);
     }
   }, []);
 
@@ -571,8 +631,20 @@ export function WhiteboardEditorSurface({
         : await getWhiteboard(token, boardId, workspaceSlug);
       const normalized = { ...board, scene: normalizeWhiteboardScene(board.scene) };
       lastSavedSceneSignatureRef.current = sceneSignature(normalized.scene);
+      lastAppliedRemoteSceneSignatureRef.current = null;
       pendingSceneRef.current = null;
       pendingSceneSignatureRef.current = null;
+      pendingLocalChangeRef.current = null;
+      queuedLocalElementsVersionRef.current = null;
+      pendingCollabPublishRef.current = null;
+      if (localChangeFlushTimerRef.current !== null) {
+        window.clearTimeout(localChangeFlushTimerRef.current);
+        localChangeFlushTimerRef.current = null;
+      }
+      if (collabPublishRetryTimerRef.current !== null) {
+        window.clearTimeout(collabPublishRetryTimerRef.current);
+        collabPublishRetryTimerRef.current = null;
+      }
       setActiveBoard(normalized);
       setTitleDraft(normalized.title);
       setSaveStatus('idle');
@@ -603,6 +675,7 @@ export function WhiteboardEditorSurface({
     pendingSceneSignatureRef.current = null;
     saveInFlightRef.current = true;
     setSaveStatus('saving');
+    let saved = false;
     try {
       const collabDoc = collabDocRef.current;
       const updated = collabDoc && !shareToken
@@ -626,9 +699,7 @@ export function WhiteboardEditorSurface({
       if (currentBoard) {
         onBoardUpdated?.({ ...currentBoard, ...updated, scene });
       }
-      if (pendingSceneRef.current === null) {
-        setSaveStatus('saved');
-      }
+      saved = true;
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save whiteboard.');
       setSaveStatus('error');
@@ -639,13 +710,33 @@ export function WhiteboardEditorSurface({
           saveTimerRef.current = null;
           void flushSceneSave(resolvedBoardId);
         }, 250);
+      } else if (saved) {
+        if (!shareToken) {
+          pendingCollabPublishRef.current = { scene, signature };
+          schedulePendingCollabPublishRef.current?.();
+        }
+        setSaveStatus('saved');
+        if (saveSettledTimerRef.current !== null) {
+          window.clearTimeout(saveSettledTimerRef.current);
+        }
+        saveSettledTimerRef.current = window.setTimeout(() => {
+          saveSettledTimerRef.current = null;
+          if (
+            !saveInFlightRef.current
+            && pendingSceneRef.current === null
+            && pendingLocalChangeRef.current === null
+            && localChangeFlushTimerRef.current === null
+          ) {
+            setSaveStatus('saved');
+          }
+        }, LOCAL_CHANGE_FLUSH_MS + 80);
       }
     }
   }, [onBoardUpdated, shareToken, token, workspaceSlug]);
 
-  const scheduleSceneSave = useCallback((scene: WhiteboardScene) => {
+  const scheduleSceneSave = useCallback((scene: WhiteboardScene, knownSignature?: string) => {
     if (!activeBoard?.id || !activeBoard.can_edit) return;
-    const signature = sceneSignature(scene);
+    const signature = knownSignature ?? sceneSignature(scene);
     if (
       signature === lastSavedSceneSignatureRef.current
       || signature === pendingSceneSignatureRef.current
@@ -673,24 +764,35 @@ export function WhiteboardEditorSurface({
     }
     applyingRemoteSceneRef.current = true;
     const normalized = normalizeWhiteboardScene(scene);
+    lastAppliedRemoteSceneSignatureRef.current = sceneSignature(normalized);
+    if (remoteApplyGuardTimerRef.current !== null) {
+      window.clearTimeout(remoteApplyGuardTimerRef.current);
+    }
     const files = Object.values(normalized.files);
     if (files.length > 0) {
       api.addFiles(files as never);
     }
+    const localElements = api.getSceneElementsIncludingDeleted();
+    const remoteElements = normalized.elements as Parameters<ExcalidrawOnChange>[0];
+    const elements = localElements.length > 0
+      ? reconcileElements(localElements, remoteElements as never, api.getAppState())
+      : remoteElements;
     api.updateScene({
-      elements: normalized.elements as never,
+      elements: elements as never,
       appState: {
         ...normalized.appState,
         name: board.title,
       } as never,
       captureUpdate: CaptureUpdateAction.NEVER,
     });
-    window.setTimeout(() => {
+    remoteApplyGuardTimerRef.current = window.setTimeout(() => {
+      remoteApplyGuardTimerRef.current = null;
       applyingRemoteSceneRef.current = false;
-    }, 0);
+      schedulePendingCollabPublishRef.current?.();
+    }, REMOTE_APPLY_GUARD_MS);
   }, []);
 
-  const publishSceneToCollab = useCallback((scene: WhiteboardScene) => {
+  const publishSceneToCollab = useCallback((scene: WhiteboardScene, knownSignature?: string) => {
     const doc = collabDocRef.current;
     const elementsMap = collabElementsMapRef.current;
     const elementOrder = collabElementOrderRef.current;
@@ -704,38 +806,134 @@ export function WhiteboardEditorSurface({
       || !appStateMap
       || applyingRemoteSceneRef.current
     ) {
-      return;
+      return false;
     }
-    const signature = sceneSignature(scene);
+    const normalized = normalizeWhiteboardScene(scene);
+    const signature = knownSignature ?? sceneSignature(normalized);
     if (signature === lastPublishedCollabSignatureRef.current) {
-      return;
+      return true;
     }
-    lastPublishedCollabSignatureRef.current = signature;
-    const elements = scene.elements as WhiteboardElement[];
-    const order = elements.map((element) => elementId(element)).filter((id): id is string => Boolean(id));
+    const elements = normalized.elements as WhiteboardElement[];
+    const order = uniqueElementOrder(elements);
     doc.transact(() => {
       for (const element of elements) {
         const id = elementId(element);
         if (!id) continue;
         const current = elementsMap.get(id) as WhiteboardElement | undefined;
         if (shouldAcceptElementUpdate(element, current)) {
-          elementsMap.set(id, element);
+          elementsMap.set(id, cloneCollabElement(element));
         }
       }
       elementOrder.delete(0, elementOrder.length);
       elementOrder.insert(0, order);
 
       filesMap.clear();
-      Object.entries(scene.files).forEach(([key, value]) => {
-        filesMap.set(key, value);
+      Object.entries(normalized.files).forEach(([key, value]) => {
+        filesMap.set(key, cloneCollabValue(value));
       });
 
       appStateMap.clear();
-      Object.entries(scene.appState).forEach(([key, value]) => {
-        appStateMap.set(key, value);
+      Object.entries(normalized.appState).forEach(([key, value]) => {
+        appStateMap.set(key, cloneCollabValue(value));
       });
     }, LOCAL_COLLAB_ORIGIN);
+    lastPublishedCollabSignatureRef.current = signature;
+    return true;
   }, []);
+
+  const flushPendingCollabPublish = useCallback(() => {
+    collabPublishRetryTimerRef.current = null;
+    const pending = pendingCollabPublishRef.current;
+    if (!pending || shareToken || !activeBoardRef.current?.can_edit) {
+      return;
+    }
+
+    if (publishSceneToCollab(pending.scene, pending.signature)) {
+      if (pendingCollabPublishRef.current?.signature === pending.signature) {
+        pendingCollabPublishRef.current = null;
+      }
+      return;
+    }
+
+    collabPublishRetryTimerRef.current = window.setTimeout(
+      flushPendingCollabPublish,
+      250,
+    );
+  }, [publishSceneToCollab, shareToken]);
+
+  const schedulePendingCollabPublish = useCallback(() => {
+    if (collabPublishRetryTimerRef.current !== null) return;
+    collabPublishRetryTimerRef.current = window.setTimeout(
+      flushPendingCollabPublish,
+      0,
+    );
+  }, [flushPendingCollabPublish]);
+
+  schedulePendingCollabPublishRef.current = schedulePendingCollabPublish;
+
+  const flushQueuedLocalChange = useCallback(() => {
+    localChangeFlushTimerRef.current = null;
+    const pending = pendingLocalChangeRef.current;
+    pendingLocalChangeRef.current = null;
+    queuedLocalElementsVersionRef.current = null;
+    if (!pending) {
+      return;
+    }
+    if (applyingRemoteSceneRef.current) {
+      pendingLocalChangeRef.current = pending;
+      queuedLocalElementsVersionRef.current = elementsVersion(pending.elements);
+      localChangeFlushTimerRef.current = window.setTimeout(
+        flushQueuedLocalChange,
+        REMOTE_APPLY_GUARD_MS + 16,
+      );
+      return;
+    }
+
+    const scene = sceneFromExcalidraw(pending.elements, pending.appState, pending.files);
+    const signature = sceneSignature(scene);
+    if (signature === lastAppliedRemoteSceneSignatureRef.current) {
+      if (pendingSceneRef.current === null) {
+        setSaveStatus((current) => current === 'dirty' ? 'idle' : current);
+      }
+      return;
+    }
+    if (signature === lastSavedSceneSignatureRef.current) {
+      setSaveStatus((current) => current === 'dirty' ? 'idle' : current);
+      return;
+    }
+    if (signature === lastPublishedCollabSignatureRef.current) {
+      if (pendingSceneRef.current === null && !saveInFlightRef.current) {
+        setSaveStatus('saved');
+      }
+      return;
+    }
+    if (signature === pendingSceneSignatureRef.current) {
+      return;
+    }
+    if (!publishSceneToCollab(scene, signature)) {
+      pendingCollabPublishRef.current = { scene, signature };
+      schedulePendingCollabPublish();
+    }
+    scheduleSceneSave(scene, signature);
+  }, [publishSceneToCollab, schedulePendingCollabPublish, scheduleSceneSave]);
+
+  const queueLocalChange = useCallback((change: PendingExcalidrawChange) => {
+    const nextVersion = elementsVersion(change.elements);
+    if (
+      localChangeFlushTimerRef.current !== null
+      && queuedLocalElementsVersionRef.current === nextVersion
+    ) {
+      pendingLocalChangeRef.current = change;
+      return;
+    }
+    queuedLocalElementsVersionRef.current = nextVersion;
+    pendingLocalChangeRef.current = change;
+    if (localChangeFlushTimerRef.current !== null) return;
+    localChangeFlushTimerRef.current = window.setTimeout(
+      flushQueuedLocalChange,
+      LOCAL_CHANGE_FLUSH_MS,
+    );
+  }, [flushQueuedLocalChange]);
 
   const updateAwarenessSelection = useCallback((selectedElementIds: unknown) => {
     const provider = collabProviderRef.current;
@@ -813,22 +1011,20 @@ export function WhiteboardEditorSurface({
           );
         if (!hasElementState) {
           const initialElements = initialScene.elements as WhiteboardElement[];
-          const initialOrder = initialElements
-            .map((element) => elementId(element))
-            .filter((id): id is string => Boolean(id));
+          const initialOrder = uniqueElementOrder(initialElements);
           doc.transact(() => {
             for (const element of initialElements) {
               const id = elementId(element);
               if (id) {
-                elementsMap?.set(id, element);
+                elementsMap?.set(id, cloneCollabElement(element));
               }
             }
             elementOrder?.insert(0, initialOrder);
             Object.entries(initialScene.files).forEach(([key, value]) => {
-              filesMap?.set(key, value);
+              filesMap?.set(key, cloneCollabValue(value));
             });
             Object.entries(initialScene.appState).forEach(([key, value]) => {
-              appStateMap?.set(key, value);
+              appStateMap?.set(key, cloneCollabValue(value));
             });
           }, LOCAL_COLLAB_ORIGIN);
         }
@@ -874,7 +1070,6 @@ export function WhiteboardEditorSurface({
               ? { ...current, scene: normalized }
               : current);
             applySceneToEditor(normalized);
-            scheduleSceneSave(normalized);
           }, 0);
         };
         elementsMap.observe(observer);
@@ -946,6 +1141,7 @@ export function WhiteboardEditorSurface({
         provider.on('status', handleProviderStatus);
         provider.on('connection-close', handleConnectionClose);
         provider.connect();
+        schedulePendingCollabPublish();
       })
       .catch((err) => {
         if (!cancelled) {
@@ -1004,7 +1200,7 @@ export function WhiteboardEditorSurface({
     activeBoard?.can_edit,
     activeBoard?.id,
     applySceneToEditor,
-    scheduleSceneSave,
+    schedulePendingCollabPublish,
     shareToken,
     token,
     workspaceSlug,
@@ -1231,11 +1427,11 @@ export function WhiteboardEditorSurface({
                 onChange={(elements, appState, files) => {
                   if (!activeBoard.can_edit) return;
                   updateAwarenessSelection(appState.selectedElementIds);
-                  const scene = apiRef.current
-                    ? sceneFromEditorAPI(apiRef.current)
-                    : sceneFromExcalidraw(elements, appState, files);
-                  publishSceneToCollab(scene);
-                  scheduleSceneSave(scene);
+                  queueLocalChange({
+                    elements: (apiRef.current?.getSceneElementsIncludingDeleted() ?? elements) as Parameters<ExcalidrawOnChange>[0],
+                    appState,
+                    files,
+                  });
                 }}
                 onPointerUpdate={publishPointerToCollab}
                 isCollaborating={collabStatus === 'connected'}

@@ -77,15 +77,26 @@ start_web() {
   if [[ -n "$existing" ]]; then
     local existing_cmd
     existing_cmd="$(ps -o args= -p "$existing" 2>/dev/null || true)"
-    if [[ "$existing_cmd" == *"vite"* ]]; then
+    if [[ "${DOOWON_VM_REUSE_WEB:-1}" != "0" && "$existing_cmd" == *"vite"* ]]; then
       echo "[vm] reusing web:$WEB_PORT pid=$existing"
       echo "$existing" >"$PID_DIR/web-$WEB_PORT.pid"
       wait_for_url "http://127.0.0.1:$WEB_PORT/" "web"
       return 0
     fi
 
-    echo "[vm] web port $WEB_PORT already in use by pid $existing" >&2
-    return 1
+    if [[ "$existing_cmd" == *"vite"* ]]; then
+      stop_group_for_pid "$existing" "web"
+      existing="$(listening_pid "$WEB_PORT")"
+      if [[ -z "$existing" ]]; then
+        sleep 0.5
+      fi
+    fi
+
+    existing="$(listening_pid "$WEB_PORT")"
+    if [[ -n "$existing" ]]; then
+      echo "[vm] web port $WEB_PORT already in use by pid $existing" >&2
+      return 1
+    fi
   fi
 
   : >"$LOG_DIR/web-$WEB_PORT.log"
@@ -141,12 +152,12 @@ case "$COMMAND" in
     ;;
   restart)
     stop_stack
-    start_stack
+    DOOWON_VM_REUSE_WEB=0 start_stack
     ;;
   deploy)
     (cd "$ROOT_DIR" && pnpm nx build web)
     stop_stack
-    start_stack
+    DOOWON_VM_REUSE_WEB=0 start_stack
     status_stack
     ;;
   status)
