@@ -388,17 +388,21 @@ def test_auth_preferences_password_and_sessions(client: TestClient) -> None:
 
     invalid_locale_response = client.patch(
         "/api/v1/auth/preferences",
-        headers={"Authorization": f"Bearer {token}"},
+        headers={"Authorization": f"Bearer {token}", "Accept-Language": "ko-KR"},
         json={"locale": "fr-FR"},
     )
     assert invalid_locale_response.status_code == 422
+    assert invalid_locale_response.json()["code"] == "auth.invalid_locale"
+    assert invalid_locale_response.json()["detail"] == "locale이 올바르지 않습니다."
 
     invalid_timezone_response = client.patch(
         "/api/v1/auth/preferences",
-        headers={"Authorization": f"Bearer {token}"},
+        headers={"Authorization": f"Bearer {token}", "Accept-Language": "en-US"},
         json={"time_zone": "Not/AZone"},
     )
     assert invalid_timezone_response.status_code == 422
+    assert invalid_timezone_response.json()["code"] == "auth.invalid_time_zone"
+    assert invalid_timezone_response.json()["detail"] == "Invalid time zone."
 
     sessions_response = client.get(
         "/api/v1/auth/sessions",

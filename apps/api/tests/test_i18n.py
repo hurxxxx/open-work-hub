@@ -25,10 +25,16 @@ def test_translate_message_interpolates_params() -> None:
 
 def test_translate_auth_and_admin_validation_messages() -> None:
     email_message = LocalizedApiMessage(code="auth.valid_email_required")
+    locale_message = LocalizedApiMessage(code="auth.invalid_locale")
+    time_zone_message = LocalizedApiMessage(code="auth.invalid_time_zone")
     role_message = LocalizedApiMessage(code="admin.invalid_workspace_role")
 
     assert translate_message(email_message, "en-US") == "A valid email address is required."
     assert translate_message(email_message, "ko-KR") == "올바른 이메일 주소가 필요합니다."
+    assert translate_message(locale_message, "en-US") == "Invalid locale."
+    assert translate_message(locale_message, "ko-KR") == "locale이 올바르지 않습니다."
+    assert translate_message(time_zone_message, "en-US") == "Invalid time zone."
+    assert translate_message(time_zone_message, "ko-KR") == "time zone이 올바르지 않습니다."
     assert translate_message(role_message, "en-US") == "Invalid workspace role."
     assert translate_message(role_message, "ko-KR") == "워크스페이스 역할이 올바르지 않습니다."
 

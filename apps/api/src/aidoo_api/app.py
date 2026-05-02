@@ -45,6 +45,8 @@ LOCALIZED_VALIDATION_ERROR_TYPES = frozenset(
     {
         "admin.invalid_workspace_role",
         "ai.unknown_workspace_app",
+        "auth.invalid_locale",
+        "auth.invalid_time_zone",
         "auth.valid_email_required",
         "rag.metadata_filter_key_invalid",
         "rag.metadata_filter_key_length",

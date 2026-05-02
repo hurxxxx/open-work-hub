@@ -4,7 +4,7 @@ from datetime import UTC, datetime
 from typing import Literal
 
 from fastapi import APIRouter, Depends, Request, status
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 from pydantic_core import PydanticCustomError
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -43,6 +43,22 @@ def _valid_email_required_error() -> PydanticCustomError:
     return PydanticCustomError(
         "auth.valid_email_required",
         "A valid email address is required.",
+        {},
+    )
+
+
+def _invalid_locale_error() -> PydanticCustomError:
+    return PydanticCustomError(
+        "auth.invalid_locale",
+        "Invalid locale.",
+        {},
+    )
+
+
+def _invalid_time_zone_error() -> PydanticCustomError:
+    return PydanticCustomError(
+        "auth.invalid_time_zone",
+        "Invalid time zone.",
         {},
     )
 
@@ -159,19 +175,39 @@ class UpdatePreferencesRequest(BaseModel):
     locale: Literal["ko-KR", "en-US"] | None = None
     time_zone: str | None = Field(default=None, min_length=1, max_length=64)
 
+    @model_validator(mode="before")
+    @classmethod
+    def validate_locale_before_field_types(cls, data):
+        if not isinstance(data, dict) or data.get("locale") is None:
+            return data
+        value = data.get("locale")
+        if not isinstance(value, str):
+            raise _invalid_locale_error()
+        try:
+            normalized = normalize_locale(value)
+        except ValueError as exc:
+            raise _invalid_locale_error() from exc
+        return {**data, "locale": normalized}
+
     @field_validator("time_zone")
     @classmethod
     def validate_time_zone(cls, value: str | None) -> str | None:
         if value is None:
             return None
-        return normalize_time_zone(value)
+        try:
+            return normalize_time_zone(value)
+        except ValueError as exc:
+            raise _invalid_time_zone_error() from exc
 
     @field_validator("locale")
     @classmethod
     def validate_locale(cls, value: str | None) -> str | None:
         if value is None:
             return None
-        return normalize_locale(value)
+        try:
+            return normalize_locale(value)
+        except ValueError as exc:
+            raise _invalid_locale_error() from exc
 
 
 router = APIRouter(prefix="/auth", tags=["auth"])

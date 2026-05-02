@@ -111,6 +111,14 @@ MESSAGES: dict[str, dict[str, str]] = {
         "ko-KR": "올바른 이메일 주소가 필요합니다.",
         "en-US": "A valid email address is required.",
     },
+    "auth.invalid_locale": {
+        "ko-KR": "locale이 올바르지 않습니다.",
+        "en-US": "Invalid locale.",
+    },
+    "auth.invalid_time_zone": {
+        "ko-KR": "time zone이 올바르지 않습니다.",
+        "en-US": "Invalid time zone.",
+    },
     "llm.pool_disabled": {
         "ko-KR": "{pool} LLM pool이 비활성화되어 있습니다.",
         "en-US": "{pool} LLM pool is disabled.",
