@@ -1263,6 +1263,42 @@ MESSAGES: dict[str, dict[str, str]] = {
         "ko-KR": "업로더만 이 staging을 읽을 수 있습니다.",
         "en-US": "Only the uploader can read this staging.",
     },
+    "recording.not_found": {
+        "ko-KR": "녹음을 찾을 수 없습니다.",
+        "en-US": "Recording not found.",
+    },
+    "recording.access_required": {
+        "ko-KR": "이 녹음에 접근할 권한이 없습니다.",
+        "en-US": "You do not have access to this recording.",
+    },
+    "recording.owner_required": {
+        "ko-KR": "녹음 소유자만 이 작업을 수행할 수 있습니다.",
+        "en-US": "Only the recording owner can perform this action.",
+    },
+    "recording.container_filter_required": {
+        "ko-KR": "첨부 대상 필터에는 app, type, id가 모두 필요합니다.",
+        "en-US": "Container filters require app, type, and id.",
+    },
+    "recording.container_access_required": {
+        "ko-KR": "첨부 대상에 접근할 권한이 없습니다.",
+        "en-US": "You do not have access to the attached object.",
+    },
+    "recording.container_attach_required": {
+        "ko-KR": "이 대상에 녹음을 첨부할 권한이 없습니다.",
+        "en-US": "You do not have permission to attach a recording to this object.",
+    },
+    "recording.container_detach_required": {
+        "ko-KR": "이 대상에서 녹음을 해제할 권한이 없습니다.",
+        "en-US": "You do not have permission to detach the recording from this object.",
+    },
+    "recording.container_not_found": {
+        "ko-KR": "녹음 첨부 대상을 찾을 수 없습니다.",
+        "en-US": "Recording container not found.",
+    },
+    "recording.audio_unavailable": {
+        "ko-KR": "원본 음성을 사용할 수 없습니다.",
+        "en-US": "Original audio is not available.",
+    },
 }
 
 

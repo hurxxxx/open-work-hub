@@ -27,6 +27,7 @@ from aidoo_api.domains.planner.router import router as planner_router
 from aidoo_api.domains.plm.router import router as plm_router
 from aidoo_api.domains.pms.router import router as pms_router
 from aidoo_api.domains.rag.router import router as rag_router
+from aidoo_api.domains.recording.router import router as recording_router
 from aidoo_api.domains.search.router import router as search_router
 from aidoo_api.domains.whiteboard.router import public_router as whiteboard_public_router
 from aidoo_api.domains.whiteboard.router import router as whiteboard_router
@@ -142,6 +143,12 @@ def register_api_routers(app: FastAPI, settings: Settings) -> None:
     _include_protected_router(
         app,
         meeting_router,
+        prefix=workspace_prefix,
+        dependencies=workspace_dependencies,
+    )
+    _include_protected_router(
+        app,
+        recording_router,
         prefix=workspace_prefix,
         dependencies=workspace_dependencies,
     )
