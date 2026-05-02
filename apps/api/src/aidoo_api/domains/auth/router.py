@@ -3,12 +3,13 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, Request, status
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from aidoo_api.core.db import get_db_session
+from aidoo_api.core.i18n import localized_http_exception
 from aidoo_api.core.settings import get_settings
 from aidoo_api.domains.auth.access import (
     SYSTEM_PLATFORM_ADMIN,
@@ -170,7 +171,7 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 def _serialize_user(db: Session, user: User) -> AuthUserResponse:
     loaded_user = load_user_graph(db, user.id)
     if loaded_user is None:
-        raise HTTPException(status_code=404, detail="User not found.")
+        raise localized_http_exception(status_code=404, code="auth.user_not_found")
     return AuthUserResponse.model_validate(serialize_auth_user(db, loaded_user))
 
 
@@ -205,18 +206,18 @@ def _issue_auth_response(db: Session, user: User, request: Request) -> AuthSessi
 
 def _ensure_active_user(user: User) -> None:
     if user.status != "active":
-        raise HTTPException(
+        raise localized_http_exception(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="User account is inactive.",
+            code="auth.user_inactive",
         )
 
 
 def _ensure_development_environment() -> None:
     settings = get_settings()
     if settings.environment.lower() == "production":
-        raise HTTPException(
+        raise localized_http_exception(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Not found.",
+            code="auth.not_found",
         )
 
 
@@ -253,9 +254,9 @@ def _is_local_dev_admin_login_available(request: Request) -> bool:
 
 def _ensure_local_dev_admin_login_allowed(request: Request) -> None:
     if not _is_local_dev_admin_login_available(request):
-        raise HTTPException(
+        raise localized_http_exception(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Not found.",
+            code="auth.not_found",
         )
 
 
@@ -302,14 +303,17 @@ def setup_first_user(
     ensure_seed_data(db)
     has_users = db.scalar(select(func.count()).select_from(User)) > 0
     if has_users:
-        raise HTTPException(
+        raise localized_http_exception(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Initial setup is already complete.",
+            code="auth.setup_already_complete",
         )
 
     root_org_unit = db.scalar(select(OrgUnit).where(OrgUnit.slug == "hq"))
     if root_org_unit is None:
-        raise HTTPException(status_code=500, detail="Default identity seed is incomplete.")
+        raise localized_http_exception(
+            status_code=500,
+            code="auth.default_identity_seed_incomplete",
+        )
 
     user = User(
         id=new_id(),
@@ -359,9 +363,9 @@ def login(
 ) -> AuthSessionResponse:
     user = db.scalar(select(User).where(User.email == payload.email))
     if user is None or not verify_password(payload.password, user.password_hash):
-        raise HTTPException(
+        raise localized_http_exception(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Email or password is invalid.",
+            code="auth.invalid_credentials",
         )
     _ensure_active_user(user)
     record_audit_log(
@@ -401,9 +405,9 @@ def dev_admin_login(
         None,
     )
     if user is None:
-        raise HTTPException(
+        raise localized_http_exception(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="No active administrator account is available.",
+            code="auth.no_active_admin",
         )
 
     _ensure_active_user(user)
@@ -433,9 +437,9 @@ def dev_login(
 
     user = get_dev_login_user(db, payload.account_key)
     if user is None:
-        raise HTTPException(
+        raise localized_http_exception(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Requested development account is not available.",
+            code="auth.dev_account_unavailable",
         )
 
     _ensure_active_user(user)
@@ -485,9 +489,9 @@ def change_password(
     db: Session = Depends(get_db_session),
 ) -> None:
     if not verify_password(payload.current_password, context.user.password_hash):
-        raise HTTPException(
+        raise localized_http_exception(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Current password is invalid.",
+            code="auth.current_password_invalid",
         )
 
     context.user.password_hash = hash_password(payload.new_password)
@@ -583,7 +587,7 @@ def revoke_session(
         )
     )
     if session is None:
-        raise HTTPException(status_code=404, detail="Session not found.")
+        raise localized_http_exception(status_code=404, code="auth.session_not_found")
 
     session.revoked_at = datetime.now(UTC).replace(tzinfo=None)
     db.add(session)

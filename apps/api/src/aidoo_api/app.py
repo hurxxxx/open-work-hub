@@ -2,13 +2,19 @@ import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, Request
-from fastapi import Response, status
+from fastapi import FastAPI, Request, Response, status
+from fastapi.exception_handlers import http_exception_handler
 from fastapi.responses import JSONResponse, Response as FastAPIResponse
 from opentelemetry.trace import SpanKind
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from aidoo_api.api_registry import register_api_routers
 from aidoo_api.core.db import get_session_factory, init_db
+from aidoo_api.core.i18n import (
+    LocalizedApiMessage,
+    select_locale,
+    translate_message,
+)
 from aidoo_api.core.llm import (
     check_all_pools_health,
     check_effective_llm_readiness,
@@ -38,6 +44,30 @@ async def runtime_registry_validation_exception_handler(
 ) -> JSONResponse:
     del request
     return JSONResponse(status_code=422, content={"detail": str(exc)})
+
+
+async def localized_http_exception_handler(
+    request: Request,
+    exc: StarletteHTTPException,
+) -> JSONResponse:
+    if not isinstance(exc.detail, LocalizedApiMessage):
+        return await http_exception_handler(request, exc)
+
+    locale = select_locale(
+        explicit_locale=request.headers.get("x-aidoo-locale"),
+        accept_language=request.headers.get("accept-language"),
+    )
+    body: dict[str, object] = {
+        "detail": translate_message(exc.detail, locale),
+        "code": exc.detail.code,
+    }
+    if exc.detail.params:
+        body["params"] = exc.detail.params
+    return JSONResponse(
+        status_code=exc.status_code,
+        content=body,
+        headers=exc.headers,
+    )
 
 
 def create_app(*, initialize_runtime: bool = True) -> FastAPI:
@@ -93,6 +123,7 @@ def create_app(*, initialize_runtime: bool = True) -> FastAPI:
         RuntimeRegistryValidationError,
         runtime_registry_validation_exception_handler,
     )
+    app.add_exception_handler(StarletteHTTPException, localized_http_exception_handler)
 
     @app.middleware("http")
     async def add_instance_headers(request, call_next) -> FastAPIResponse:

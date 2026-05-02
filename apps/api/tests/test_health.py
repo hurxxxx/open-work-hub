@@ -131,6 +131,54 @@ def test_auth_login_success_and_invalid_password(client: TestClient) -> None:
     assert invalid_password_response.status_code == 401
 
 
+def test_auth_error_messages_are_localized(client: TestClient) -> None:
+    setup_response = client.post(
+        "/api/v1/auth/setup",
+        json={
+            "full_name": "AIDOO Admin",
+            "email": "admin@aidoo.local",
+            "password": "supersecret123",
+        },
+    )
+    assert setup_response.status_code == 201
+
+    english_response = client.post(
+        "/api/v1/auth/login",
+        headers={"Accept-Language": "en-US"},
+        json={
+            "email": "admin@aidoo.local",
+            "password": "wrongpass123",
+        },
+    )
+    assert english_response.status_code == 401
+    assert english_response.json()["detail"] == "Email or password is invalid."
+    assert english_response.json()["code"] == "auth.invalid_credentials"
+    assert english_response.headers["X-Aidoo-Error-Code"] == "auth.invalid_credentials"
+
+    korean_response = client.post(
+        "/api/v1/auth/login",
+        headers={"Accept-Language": "ko-KR"},
+        json={
+            "email": "admin@aidoo.local",
+            "password": "wrongpass123",
+        },
+    )
+    assert korean_response.status_code == 401
+    assert korean_response.json()["detail"] == "이메일 또는 비밀번호가 올바르지 않습니다."
+    assert korean_response.json()["code"] == "auth.invalid_credentials"
+
+    explicit_locale_response = client.get(
+        "/api/v1/auth/me",
+        headers={
+            "Accept-Language": "en-US",
+            "X-Aidoo-Locale": "ko-KR",
+        },
+    )
+    assert explicit_locale_response.status_code == 401
+    assert explicit_locale_response.json()["detail"] == "인증이 필요합니다."
+    assert explicit_locale_response.json()["code"] == "auth.required"
+
+
 def test_dev_admin_login_shortcut(client: TestClient) -> None:
     setup_response = client.post(
         "/api/v1/auth/setup",

@@ -3,12 +3,13 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
-from fastapi import Depends, HTTPException, Request, status
+from fastapi import Depends, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload
 
 from aidoo_api.core.db import get_db_session
+from aidoo_api.core.i18n import localized_http_exception
 from aidoo_api.domains.auth.access import (
     bind_current_workspace,
     get_current_workspace,
@@ -65,21 +66,21 @@ def resolve_auth_context_from_token(
         )
     )
     if auth_session is None:
-        raise HTTPException(
+        raise localized_http_exception(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Session is invalid or expired.",
+            code="auth.session_invalid_or_expired",
         )
 
     user = load_user_graph(db, auth_session.user_id)
     if user is None:
-        raise HTTPException(
+        raise localized_http_exception(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="User not found.",
+            code="auth.user_not_found",
         )
     if user.status != "active":
-        raise HTTPException(
+        raise localized_http_exception(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="User account is inactive.",
+            code="auth.user_inactive",
         )
 
     if update_last_seen:
@@ -101,9 +102,9 @@ def require_auth_context(
     db: Session = Depends(get_db_session),
 ) -> AuthContext:
     if credentials is None or credentials.scheme.lower() != "bearer":
-        raise HTTPException(
+        raise localized_http_exception(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Authentication required.",
+            code="auth.required",
         )
     context = resolve_auth_context_from_token(
         db,
@@ -121,9 +122,10 @@ def require_any_system_role(*roles: str):
     def dependency(context: AuthContext = Depends(require_auth_context)) -> AuthContext:
         role_set = set(context.system_roles)
         if not any(role in role_set for role in roles):
-            raise HTTPException(
+            raise localized_http_exception(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail=f"System role required: {', '.join(roles)}",
+                code="auth.system_role_required",
+                roles=", ".join(roles),
             )
         return context
 
@@ -190,9 +192,9 @@ def _select_legacy_workspace_for_request(
         if workspace is not None:
             return workspace, summary["role"]
 
-    raise HTTPException(
+    raise localized_http_exception(
         status_code=status.HTTP_403_FORBIDDEN,
-        detail="Workspace access required.",
+        code="workspace.access_required",
     )
 
 
@@ -209,9 +211,9 @@ def require_current_workspace(
         return request_workspace
     workspace = get_current_workspace(db)
     if workspace is None:
-        raise HTTPException(
+        raise localized_http_exception(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Workspace context is not available.",
+            code="workspace.context_unavailable",
         )
     _store_request_workspace(request, workspace)
     return workspace
@@ -224,13 +226,16 @@ async def require_workspace_context(
 ):
     workspace_slug = request.path_params.get("workspace_slug")
     if not workspace_slug:
-        raise HTTPException(
+        raise localized_http_exception(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Missing workspace slug.",
+            code="workspace.slug_missing",
         )
     workspace = load_active_workspace_by_key(db, workspace_slug)
     if workspace is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Workspace not found.")
+        raise localized_http_exception(
+            status_code=status.HTTP_404_NOT_FOUND,
+            code="workspace.not_found",
+        )
 
     role = _resolve_workspace_role_for_request(db, auth, workspace)
     bind_current_workspace(db, workspace)
@@ -243,9 +248,10 @@ def require_workspace_membership(min_role: str = "member"):
         workspace_context: WorkspaceAccessContext = Depends(require_workspace_context),
     ) -> WorkspaceAccessContext:
         if not workspace_role_allows(workspace_context.role, min_role):
-            raise HTTPException(
+            raise localized_http_exception(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail=f"Workspace membership required: {workspace_context.workspace.key}",
+                code="workspace.membership_required",
+                workspace=workspace_context.workspace.key,
             )
         return workspace_context
 
@@ -260,15 +266,16 @@ def require_workspace_access(workspace_key: str, min_role: str = "member"):
     ) -> WorkspaceAccessContext:
         workspace = load_active_workspace_by_key(db, workspace_key)
         if workspace is None:
-            raise HTTPException(
+            raise localized_http_exception(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="Workspace not found.",
+                code="workspace.not_found",
             )
         role = _resolve_workspace_role_for_request(db, auth, workspace)
         if not workspace_role_allows(role, min_role):
-            raise HTTPException(
+            raise localized_http_exception(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail=f"Workspace access required: {workspace.key}",
+                code="workspace.access_required_named",
+                workspace=workspace.key,
             )
         bind_current_workspace(db, workspace)
         _store_request_workspace(request, workspace)
@@ -307,9 +314,10 @@ def require_team_access(min_role: str = "member", team_param: str = "team_id"):
     ) -> TeamAccessContext:
         team_id = request.path_params.get(team_param)
         if not team_id:
-            raise HTTPException(
+            raise localized_http_exception(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Missing team path parameter: {team_param}",
+                code="team.path_parameter_missing",
+                team_param=team_param,
             )
 
         team = db.scalar(
@@ -323,18 +331,27 @@ def require_team_access(min_role: str = "member", team_param: str = "team_id"):
             )
         )
         if team is None:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Team not found.")
+            raise localized_http_exception(
+                status_code=status.HTTP_404_NOT_FOUND,
+                code="team.not_found",
+            )
 
         request_workspace = getattr(request.state, "current_workspace", None)
         bound_workspace = (
             request_workspace if isinstance(request_workspace, Workspace) else get_current_workspace(db)
         )
         if bound_workspace is not None and team.workspace_id != bound_workspace.id:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Team not found.")
+            raise localized_http_exception(
+                status_code=status.HTTP_404_NOT_FOUND,
+                code="team.not_found",
+            )
 
         role = resolve_team_role(db, context.user, team)
         if not team_role_allows(role, min_role):
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Team access required.")
+            raise localized_http_exception(
+                status_code=status.HTTP_403_FORBIDDEN,
+                code="team.access_required",
+            )
         assert role is not None
         return TeamAccessContext(auth=context, team=team, role=role)
 

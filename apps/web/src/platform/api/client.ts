@@ -1,5 +1,6 @@
 import createClient from 'openapi-fetch';
 import type { paths } from './openapi.generated';
+import { i18n } from '@/src/platform/i18n';
 
 export const apiClient = createClient<paths>({ baseUrl: '' });
 
@@ -14,8 +15,10 @@ export class ApiRequestError extends Error {
 }
 
 export function jsonHeaders(token?: string | null, headers?: HeadersInit): HeadersInit {
+  const locale = i18n.resolvedLanguage || i18n.language;
   return {
     Accept: 'application/json',
+    ...(locale ? { 'Accept-Language': locale, 'X-Aidoo-Locale': locale } : {}),
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
     ...(headers ?? {}),
   };

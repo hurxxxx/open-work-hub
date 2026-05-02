@@ -4606,6 +4606,18 @@ export interface components {
             detail: string | {
                 [key: string]: unknown;
             }[];
+            /**
+             * Code
+             * @description Stable application error code.
+             */
+            code?: string | null;
+            /**
+             * Params
+             * @description Error interpolation parameters.
+             */
+            params?: {
+                [key: string]: unknown;
+            } | null;
         };
         /** FavoriteDocItem */
         FavoriteDocItem: {

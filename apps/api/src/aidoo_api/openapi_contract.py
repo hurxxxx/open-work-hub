@@ -15,6 +15,8 @@ PATH_DERIVED_MARKERS = ("_api_v1_", "__workspace_slug__", "__")
 
 class ErrorResponse(BaseModel):
     detail: str | list[dict[str, Any]] = Field(..., description="Error detail.")
+    code: str | None = Field(default=None, description="Stable application error code.")
+    params: dict[str, Any] | None = Field(default=None, description="Error interpolation parameters.")
 
 
 PROTECTED_ERROR_RESPONSES: dict[int, dict[str, Any]] = {
