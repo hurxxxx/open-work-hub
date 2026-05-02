@@ -14,6 +14,12 @@ from sqlalchemy import delete, select
 from sqlalchemy.orm import Session, selectinload
 
 from aidoo_api.core.db import get_db_session, get_session_factory
+from aidoo_api.core.i18n import (
+    LocalizedApiMessage,
+    localized_http_exception,
+    select_locale,
+    translate_message,
+)
 from aidoo_api.core.settings import get_settings
 from aidoo_api.domains.auth.access import (
     bind_current_workspace,
@@ -268,9 +274,9 @@ class WhiteboardCollabSnapshotResponse(BaseModel):
 def _require_workspace_slug(request: Request) -> str:
     workspace_slug = request.path_params.get("workspace_slug")
     if not workspace_slug:
-        raise HTTPException(
+        raise localized_http_exception(
             status_code=400,
-            detail="Workspace-scoped collaboration routes require a workspace slug.",
+            code="whiteboard.workspace_slug_required",
         )
     return workspace_slug
 
@@ -283,9 +289,9 @@ def _bind_workspace_slug_for_collab(db: Session, user: User, workspace_slug: str
         )
     )
     if workspace is None:
-        raise HTTPException(status_code=404, detail="Workspace not found.")
+        raise localized_http_exception(status_code=404, code="workspace.not_found")
     if resolve_workspace_role(db, user, workspace.id) is None:
-        raise HTTPException(status_code=403, detail="Workspace access required.")
+        raise localized_http_exception(status_code=403, code="workspace.access_required")
     bind_current_workspace(db, workspace)
     return workspace
 
@@ -296,7 +302,10 @@ def _decode_collab_yjs_state(value: str | None) -> bytes | None:
     try:
         return base64.b64decode(value.encode("ascii"), validate=True)
     except Exception as exc:  # pragma: no cover - defensive validation
-        raise HTTPException(status_code=400, detail="Invalid yjs_state payload.") from exc
+        raise localized_http_exception(
+            status_code=400,
+            code="whiteboard.invalid_yjs_state",
+        ) from exc
 
 
 def _collab_ws_close_code_for_status(status_code: int) -> int:
@@ -309,20 +318,31 @@ def _collab_ws_close_code_for_status(status_code: int) -> int:
     return 1011
 
 
+def _websocket_locale(websocket: WebSocket) -> str:
+    return select_locale(
+        explicit_locale=websocket.headers.get("x-aidoo-locale"),
+        accept_language=websocket.headers.get("accept-language"),
+    )
+
+
+def _websocket_message(websocket: WebSocket, code: str) -> str:
+    return translate_message(LocalizedApiMessage(code=code), _websocket_locale(websocket))
+
+
 async def _receive_collab_auth_frame(websocket: WebSocket) -> str:
     message = await websocket.receive()
     if message["type"] == "websocket.disconnect":
-        raise HTTPException(status_code=401, detail="Authentication required.")
+        raise localized_http_exception(status_code=401, code="auth.required")
     payload = message.get("text")
     if payload is None:
-        raise HTTPException(status_code=401, detail="Authentication required.")
+        raise localized_http_exception(status_code=401, code="auth.required")
     try:
         parsed = json.loads(payload)
     except json.JSONDecodeError as exc:
-        raise HTTPException(status_code=401, detail="Authentication required.") from exc
+        raise localized_http_exception(status_code=401, code="auth.required") from exc
     token = parsed.get("token")
     if parsed.get("type") != "auth" or not isinstance(token, str) or not token:
-        raise HTTPException(status_code=401, detail="Authentication required.")
+        raise localized_http_exception(status_code=401, code="auth.required")
     return token
 
 
@@ -334,10 +354,15 @@ async def _resolve_collab_ws_token(websocket: WebSocket) -> str:
 
 
 async def _close_websocket_for_http_error(websocket: WebSocket, exc: HTTPException) -> None:
+    reason = (
+        translate_message(exc.detail, _websocket_locale(websocket))
+        if isinstance(exc.detail, LocalizedApiMessage)
+        else str(exc.detail)
+    )
     try:
         await websocket.close(
             code=_collab_ws_close_code_for_status(exc.status_code),
-            reason=str(exc.detail),
+            reason=reason,
         )
     except RuntimeError as close_error:
         if "after sending 'websocket.close'" in str(close_error):
@@ -379,7 +404,13 @@ async def _monitor_whiteboard_collab_access(
             _bind_workspace_slug_for_collab(db, auth_context.user, workspace_slug)
             context = _resolve_whiteboard_collab_context(db, auth_context.user, item_id)
             if not context.can_edit:
-                await websocket.close(code=4403, reason="Whiteboard edit access required.")
+                await websocket.close(
+                    code=4403,
+                    reason=_websocket_message(
+                        websocket,
+                        "whiteboard.edit_access_required",
+                    ),
+                )
                 return
         except HTTPException as exc:
             await _close_websocket_for_http_error(websocket, exc)
@@ -404,9 +435,9 @@ def _ensure_whiteboard_workspace_access(db: Session, user: User) -> Workspace:
             bind_current_workspace(db, current_workspace)
             break
     if current_workspace is None:
-        raise HTTPException(
+        raise localized_http_exception(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Whiteboard requests require a workspace context.",
+            code="whiteboard.workspace_context_required",
         )
     return current_workspace
 
@@ -422,7 +453,7 @@ def _workspace_for_whiteboard(db: Session, whiteboard: Whiteboard) -> Workspace:
         )
     )
     if workspace is None:
-        raise HTTPException(status_code=404, detail="Workspace not found.")
+        raise localized_http_exception(status_code=404, code="workspace.not_found")
     return workspace
 
 
@@ -681,10 +712,10 @@ def _whiteboard_from_item_or_404(
 ) -> tuple[Whiteboard, WhiteboardAccess]:
     whiteboard = _load_whiteboard_for_access(db, item_id)
     if whiteboard is None:
-        raise HTTPException(status_code=404, detail="Whiteboard not found.")
+        raise localized_http_exception(status_code=404, code="whiteboard.not_found")
     access = _resolve_whiteboard_access(db, whiteboard, current_user, share_token=share_token)
     if not access.can_view or (whiteboard.trashed_at is not None and not access.can_manage):
-        raise HTTPException(status_code=404, detail="Whiteboard not found.")
+        raise localized_http_exception(status_code=404, code="whiteboard.not_found")
     return whiteboard, access
 
 
@@ -702,10 +733,10 @@ def _whiteboard_from_share_token_or_404(
         )
     )
     if whiteboard is None or whiteboard.trashed_at is not None:
-        raise HTTPException(status_code=404, detail="Shared link not found.")
+        raise localized_http_exception(status_code=404, code="whiteboard.shared_link_not_found")
     access = _resolve_whiteboard_access(db, whiteboard, current_user, share_token=share_token)
     if not access.can_view:
-        raise HTTPException(status_code=404, detail="Shared link not found.")
+        raise localized_http_exception(status_code=404, code="whiteboard.shared_link_not_found")
     return whiteboard, access
 
 
@@ -824,7 +855,10 @@ def _upsert_primary_container(
         workspace=workspace,
         ref=ref,
     ):
-        raise HTTPException(status_code=403, detail="Container edit access required.")
+        raise localized_http_exception(
+            status_code=403,
+            code="whiteboard.container_edit_access_required",
+        )
     if _is_singleton_context(ref):
         _delete_context_slot(db, ref=ref, except_whiteboard_id=whiteboard.id)
 
@@ -884,7 +918,10 @@ def _require_context_write(
     ref: ContainerRef,
 ) -> None:
     if not container_write_allowed(db=db, user=user, workspace=workspace, ref=ref):
-        raise HTTPException(status_code=403, detail="Container edit access required.")
+        raise localized_http_exception(
+            status_code=403,
+            code="whiteboard.container_edit_access_required",
+        )
 
 
 def _find_context_slot(db: Session, ref: ContainerRef) -> WhiteboardContainer | None:
@@ -1039,7 +1076,10 @@ def get_whiteboard_context_slot(
     ref = ContainerRef(app=app, type=type, id=id)
     projection = project_container_access(db=db, user=current_user, workspace=workspace, ref=ref)
     if not projection.can_view:
-        raise HTTPException(status_code=403, detail="Container access required.")
+        raise localized_http_exception(
+            status_code=403,
+            code="whiteboard.container_access_required",
+        )
     slot = _find_context_slot(db, ref)
     if slot is None:
         return WhiteboardContextSlotResponse(item=None)
@@ -1179,10 +1219,16 @@ def update_whiteboard_item(
     _ensure_whiteboard_workspace_access(db, current_user)
     whiteboard, access = _whiteboard_from_item_or_404(db, item_id, current_user)
     if not access.can_edit:
-        raise HTTPException(status_code=403, detail="Whiteboard edit access required.")
+        raise localized_http_exception(
+            status_code=403,
+            code="whiteboard.edit_access_required",
+        )
     if payload.title is not None:
         if not access.can_manage:
-            raise HTTPException(status_code=403, detail="Whiteboard manage access required.")
+            raise localized_http_exception(
+                status_code=403,
+                code="whiteboard.manage_access_required",
+            )
         whiteboard.title = payload.title.strip()
     if "scene" in payload.model_fields_set:
         whiteboard.scene = payload.scene or empty_scene()
@@ -1203,7 +1249,10 @@ def delete_whiteboard_item(
     _ensure_whiteboard_workspace_access(db, current_user)
     whiteboard, access = _whiteboard_from_item_or_404(db, item_id, current_user)
     if not access.can_manage:
-        raise HTTPException(status_code=403, detail="Whiteboard manage access required.")
+        raise localized_http_exception(
+            status_code=403,
+            code="whiteboard.manage_access_required",
+        )
     whiteboard.trashed_at = _utcnow()
     db.add(whiteboard)
     db.commit()
@@ -1219,9 +1268,15 @@ def permanently_delete_whiteboard_item(
     _ensure_whiteboard_workspace_access(db, current_user)
     whiteboard, access = _whiteboard_from_item_or_404(db, item_id, current_user)
     if not access.can_manage:
-        raise HTTPException(status_code=403, detail="Whiteboard manage access required.")
+        raise localized_http_exception(
+            status_code=403,
+            code="whiteboard.manage_access_required",
+        )
     if whiteboard.trashed_at is None:
-        raise HTTPException(status_code=409, detail="Archive the whiteboard before permanent deletion.")
+        raise localized_http_exception(
+            status_code=409,
+            code="whiteboard.archive_before_permanent_delete",
+        )
 
     db.execute(delete(WhiteboardCollabDocument).where(WhiteboardCollabDocument.whiteboard_id == whiteboard.id))
     db.execute(delete(WhiteboardUserItemPref).where(WhiteboardUserItemPref.whiteboard_id == whiteboard.id))
@@ -1243,7 +1298,10 @@ def update_whiteboard_container(
     _ensure_whiteboard_workspace_access(db, current_user)
     whiteboard, access = _whiteboard_from_item_or_404(db, item_id, current_user)
     if not access.can_edit:
-        raise HTTPException(status_code=403, detail="Whiteboard edit access required.")
+        raise localized_http_exception(
+            status_code=403,
+            code="whiteboard.edit_access_required",
+        )
     _upsert_primary_container(db, whiteboard=whiteboard, payload=payload, current_user=current_user)
     whiteboard.updated_at = _utcnow()
     db.add(whiteboard)
@@ -1260,7 +1318,10 @@ def delete_whiteboard_container(
     _ensure_whiteboard_workspace_access(db, current_user)
     whiteboard, access = _whiteboard_from_item_or_404(db, item_id, current_user)
     if not access.can_edit:
-        raise HTTPException(status_code=403, detail="Whiteboard edit access required.")
+        raise localized_http_exception(
+            status_code=403,
+            code="whiteboard.edit_access_required",
+        )
     _delete_primary_container(db, whiteboard)
     whiteboard.updated_at = _utcnow()
     db.add(whiteboard)
@@ -1327,7 +1388,10 @@ def _load_whiteboard_for_share_or_403(
 ) -> Whiteboard:
     whiteboard, access = _whiteboard_from_item_or_404(db, item_id, current_user)
     if not access.can_share:
-        raise HTTPException(status_code=403, detail="Whiteboard share access required.")
+        raise localized_http_exception(
+            status_code=403,
+            code="whiteboard.share_access_required",
+        )
     return whiteboard
 
 
@@ -1353,14 +1417,17 @@ def upsert_whiteboard_user_share(
     _ensure_whiteboard_workspace_access(db, current_user)
     whiteboard = _load_whiteboard_for_share_or_403(db, item_id, current_user)
     if user_id == current_user.id:
-        raise HTTPException(status_code=409, detail="Owner already has full access.")
+        raise localized_http_exception(
+            status_code=409,
+            code="whiteboard.owner_already_has_full_access",
+        )
     target_user = db.scalar(select(User).where(User.id == user_id, User.status == "active"))
     if target_user is None:
-        raise HTTPException(status_code=404, detail="User not found.")
+        raise localized_http_exception(status_code=404, code="auth.user_not_found")
     if resolve_workspace_role(db, target_user, whiteboard.workspace_id) is None:
-        raise HTTPException(
+        raise localized_http_exception(
             status_code=409,
-            detail="Shared users must be members of the same workspace.",
+            code="whiteboard.shared_users_workspace_required",
         )
     share = next((item for item in whiteboard.user_shares if item.user_id == user_id), None)
     if share is None:
@@ -1499,7 +1566,10 @@ def save_whiteboard_collab_snapshot(
     _ensure_whiteboard_workspace_access(db, current_user)
     whiteboard, access = _whiteboard_from_item_or_404(db, item_id, current_user)
     if not access.can_edit:
-        raise HTTPException(status_code=403, detail="Whiteboard edit access required.")
+        raise localized_http_exception(
+            status_code=403,
+            code="whiteboard.edit_access_required",
+        )
 
     scene = payload.scene or empty_scene()
     whiteboard.scene = scene
@@ -1537,9 +1607,9 @@ async def whiteboard_collab_websocket(
         token = await _resolve_collab_ws_token(websocket)
         workspace_slug = websocket.path_params.get("workspace_slug")
         if not workspace_slug:
-            raise HTTPException(
+            raise localized_http_exception(
                 status_code=400,
-                detail="Workspace-scoped collaboration routes require a workspace slug.",
+                code="whiteboard.workspace_slug_required",
             )
 
         session_factory = get_session_factory()
@@ -1552,10 +1622,16 @@ async def whiteboard_collab_websocket(
             _bind_workspace_slug_for_collab(db, auth_context.user, workspace_slug)
             context = _resolve_whiteboard_collab_context(db, auth_context.user, item_id)
             if not context.can_edit:
-                raise HTTPException(status_code=403, detail="Whiteboard edit access required.")
+                raise localized_http_exception(
+                    status_code=403,
+                    code="whiteboard.edit_access_required",
+                )
             whiteboard = _load_whiteboard_for_access(db, context.whiteboard_id)
             if whiteboard is None:
-                raise HTTPException(status_code=404, detail="Whiteboard not found.")
+                raise localized_http_exception(
+                    status_code=404,
+                    code="whiteboard.not_found",
+                )
             collab = ensure_collab_document_state(db, whiteboard=whiteboard)
             db.commit()
             collab_yjs_state = collab.yjs_state
@@ -1563,13 +1639,19 @@ async def whiteboard_collab_websocket(
             db.close()
 
         if context is None:
-            raise HTTPException(status_code=404, detail="Whiteboard not found.")
+            raise localized_http_exception(status_code=404, code="whiteboard.not_found")
 
         room_key = context.room_key
         if room_name and room_name != room_key:
-            raise HTTPException(status_code=404, detail="Room not found.")
+            raise localized_http_exception(status_code=404, code="whiteboard.room_not_found")
         if not hub.relay_available:
-            await websocket.close(code=1013, reason="Collaboration relay unavailable.")
+            await websocket.close(
+                code=1013,
+                reason=_websocket_message(
+                    websocket,
+                    "whiteboard.collab_relay_unavailable",
+                ),
+            )
             return
 
         runtime = await hub.get_room(context, collab_yjs_state)
@@ -1639,10 +1721,16 @@ def update_shared_whiteboard_item(
 ) -> WhiteboardDetail:
     whiteboard, access = _whiteboard_from_share_token_or_404(db, share_token, current_user)
     if not access.can_edit:
-        raise HTTPException(status_code=403, detail="Whiteboard edit access required.")
+        raise localized_http_exception(
+            status_code=403,
+            code="whiteboard.edit_access_required",
+        )
     if payload.title is not None:
         if not access.can_manage:
-            raise HTTPException(status_code=403, detail="Whiteboard manage access required.")
+            raise localized_http_exception(
+                status_code=403,
+                code="whiteboard.manage_access_required",
+            )
         whiteboard.title = payload.title.strip()
     if "scene" in payload.model_fields_set:
         whiteboard.scene = payload.scene or empty_scene()

@@ -30,6 +30,7 @@ def test_whiteboard_reuses_pms_space_acl(client: TestClient) -> None:
         json={"scene": {"elements": [{"id": "blocked"}], "appState": {}, "files": {}}},
     )
     assert viewer_patch.status_code == 403
+    assert viewer_patch.json()["code"] == "whiteboard.edit_access_required"
 
     _add_space_member(client, admin_token, space_id, viewer["user"]["id"], "member")
     member_patch = client.patch(
@@ -59,6 +60,7 @@ def test_private_whiteboard_is_owner_only(client: TestClient) -> None:
         headers=_auth_headers(recipient["token"]),
     )
     assert blocked_response.status_code == 404
+    assert blocked_response.json()["code"] == "whiteboard.not_found"
 
 
 def test_whiteboard_user_and_link_shares_grant_access(client: TestClient) -> None:

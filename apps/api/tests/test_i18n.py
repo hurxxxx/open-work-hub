@@ -64,3 +64,10 @@ def test_translate_rag_unavailable_message_preserves_dynamic_reason() -> None:
 
     assert translate_message(message, "en-US") == "RAG is unavailable: provider timeout"
     assert translate_message(message, "ko-KR") == "RAG를 사용할 수 없습니다: provider timeout"
+
+
+def test_translate_whiteboard_access_message() -> None:
+    message = LocalizedApiMessage(code="whiteboard.edit_access_required")
+
+    assert translate_message(message, "en-US") == "Whiteboard edit access required."
+    assert translate_message(message, "ko-KR") == "화이트보드 편집 권한이 필요합니다."

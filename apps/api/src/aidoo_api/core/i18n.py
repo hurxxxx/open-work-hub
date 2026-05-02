@@ -307,6 +307,66 @@ MESSAGES: dict[str, dict[str, str]] = {
         "ko-KR": "RAG 재색인을 지금 다시 실행할 수 없습니다: {reason}",
         "en-US": "RAG reindex cannot be retried yet: {reason}",
     },
+    "whiteboard.workspace_slug_required": {
+        "ko-KR": "워크스페이스 범위 화이트보드 협업 경로에는 워크스페이스 slug가 필요합니다.",
+        "en-US": "Workspace-scoped whiteboard collaboration routes require a workspace slug.",
+    },
+    "whiteboard.invalid_yjs_state": {
+        "ko-KR": "yjs_state payload가 올바르지 않습니다.",
+        "en-US": "Invalid yjs_state payload.",
+    },
+    "whiteboard.workspace_context_required": {
+        "ko-KR": "화이트보드 요청에는 워크스페이스 컨텍스트가 필요합니다.",
+        "en-US": "Whiteboard requests require a workspace context.",
+    },
+    "whiteboard.not_found": {
+        "ko-KR": "화이트보드를 찾을 수 없습니다.",
+        "en-US": "Whiteboard not found.",
+    },
+    "whiteboard.shared_link_not_found": {
+        "ko-KR": "공유 링크를 찾을 수 없습니다.",
+        "en-US": "Shared link not found.",
+    },
+    "whiteboard.container_edit_access_required": {
+        "ko-KR": "컨테이너 편집 권한이 필요합니다.",
+        "en-US": "Container edit access required.",
+    },
+    "whiteboard.container_access_required": {
+        "ko-KR": "컨테이너 접근 권한이 필요합니다.",
+        "en-US": "Container access required.",
+    },
+    "whiteboard.edit_access_required": {
+        "ko-KR": "화이트보드 편집 권한이 필요합니다.",
+        "en-US": "Whiteboard edit access required.",
+    },
+    "whiteboard.manage_access_required": {
+        "ko-KR": "화이트보드 관리 권한이 필요합니다.",
+        "en-US": "Whiteboard manage access required.",
+    },
+    "whiteboard.archive_before_permanent_delete": {
+        "ko-KR": "영구 삭제 전에 화이트보드를 먼저 보관 처리해야 합니다.",
+        "en-US": "Archive the whiteboard before permanent deletion.",
+    },
+    "whiteboard.share_access_required": {
+        "ko-KR": "화이트보드 공유 권한이 필요합니다.",
+        "en-US": "Whiteboard share access required.",
+    },
+    "whiteboard.owner_already_has_full_access": {
+        "ko-KR": "소유자는 이미 전체 권한을 가지고 있습니다.",
+        "en-US": "Owner already has full access.",
+    },
+    "whiteboard.shared_users_workspace_required": {
+        "ko-KR": "공유 대상 사용자는 같은 워크스페이스의 멤버여야 합니다.",
+        "en-US": "Shared users must be members of the same workspace.",
+    },
+    "whiteboard.room_not_found": {
+        "ko-KR": "방을 찾을 수 없습니다.",
+        "en-US": "Room not found.",
+    },
+    "whiteboard.collab_relay_unavailable": {
+        "ko-KR": "협업 relay를 사용할 수 없습니다.",
+        "en-US": "Collaboration relay unavailable.",
+    },
     "pms.principal_workspace_mismatch": {
         "ko-KR": "PMS principal의 워크스페이스가 일치하지 않습니다.",
         "en-US": "PMS principal workspace mismatch.",

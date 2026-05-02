@@ -111,6 +111,7 @@ def test_whiteboard_create_update_reload_and_archive(client: TestClient) -> None
         headers=_auth_headers(token),
     )
     assert deleted_item_response.status_code == 404
+    assert deleted_item_response.json()["code"] == "whiteboard.not_found"
 
     archived_after_delete_response = client.get(
         "/api/v1/workspaces/delivery-hub/whiteboard/hub",
