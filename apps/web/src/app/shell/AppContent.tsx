@@ -97,30 +97,22 @@ function buildMobileAppLink(
 
 function MobileNavigationDrawer({
   activeAppId,
-  activeNavItemId,
   currentPathname,
   currentUser,
-  currentWorkspaceSlug,
-  hideSubSidebar,
   onOpenChange,
   onShellWorkspaceChange,
   open,
   shellWorkspaceSlug,
   workspaceApps,
-  workspaceNavItems,
 }: {
   activeAppId: ShellAppId;
-  activeNavItemId: string;
   currentPathname: string;
   currentUser: AuthUser;
-  currentWorkspaceSlug: string | null;
-  hideSubSidebar: boolean;
   onOpenChange: (open: boolean) => void;
   onShellWorkspaceChange: (workspaceSlug: string | null) => void;
   open: boolean;
   shellWorkspaceSlug: string | null;
   workspaceApps: WorkspaceBootstrapApp[];
-  workspaceNavItems: WorkspaceBootstrapNavItem[];
 }) {
   const navigate = useNavigate();
   const close = () => onOpenChange(false);
@@ -163,13 +155,13 @@ function MobileNavigationDrawer({
 
   return (
     <DetailDrawer
-      closeLabel="메뉴 닫기"
+      closeLabel="앱 전환 닫기"
       contentClassName="border-app-border bg-app-bg"
       description="앱과 워크스페이스를 전환합니다."
       onOpenChange={onOpenChange}
       open={open}
       side="left"
-      title="메뉴"
+      title="앱 전환"
     >
       <div
         onClickCapture={(event) => {
@@ -263,19 +255,55 @@ function MobileNavigationDrawer({
           </div>
         </section>
 
-        {!hideSubSidebar && activeAppId !== 'home' && activeAppId !== 'profile' ? (
-          <div className="h-[min(520px,60vh)] border-b border-app-border">
-            <AppSubSidebar
-              activeAppId={activeAppId}
-              activeNavItemId={activeNavItemId}
-              currentWorkspaceSlug={currentWorkspaceSlug}
-              onNavigate={close}
-              variant="mobile"
-              workspaceApps={workspaceApps}
-              workspaceNavItems={workspaceNavItems}
-            />
-          </div>
-        ) : null}
+      </div>
+    </DetailDrawer>
+  );
+}
+
+function MobileAppMenuDrawer({
+  activeAppId,
+  activeNavItemId,
+  currentWorkspaceSlug,
+  onOpenChange,
+  open,
+  workspaceApps,
+  workspaceNavItems,
+}: {
+  activeAppId: ShellAppId;
+  activeNavItemId: string;
+  currentWorkspaceSlug: string | null;
+  onOpenChange: (open: boolean) => void;
+  open: boolean;
+  workspaceApps: WorkspaceBootstrapApp[];
+  workspaceNavItems: WorkspaceBootstrapNavItem[];
+}) {
+  const close = () => onOpenChange(false);
+  const activeAppTitle = activeAppId === 'settings'
+    ? 'Settings'
+    : workspaceApps.find((item) => item.app_id === activeAppId)?.title
+      ?? APP_BAR_ITEMS.find((item) => item.id === activeAppId)?.title
+      ?? 'Menu';
+
+  return (
+    <DetailDrawer
+      closeLabel={`${activeAppTitle} 메뉴 닫기`}
+      contentClassName="border-app-border bg-app-bg"
+      description="현재 앱 안에서 이동합니다."
+      onOpenChange={onOpenChange}
+      open={open}
+      side="left"
+      title={`${activeAppTitle} 메뉴`}
+    >
+      <div className="h-[min(680px,78vh)] border-t border-app-border">
+        <AppSubSidebar
+          activeAppId={activeAppId}
+          activeNavItemId={activeNavItemId}
+          currentWorkspaceSlug={currentWorkspaceSlug}
+          onNavigate={close}
+          variant="mobile"
+          workspaceApps={workspaceApps}
+          workspaceNavItems={workspaceNavItems}
+        />
       </div>
     </DetailDrawer>
   );
@@ -289,6 +317,7 @@ function AuthenticatedShell() {
   const [systemDarkMode, setSystemDarkMode] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [mobileAppMenuOpen, setMobileAppMenuOpen] = useState(false);
   const currentUser = auth.user;
   const routeWorkspaceSlug = getWorkspaceSlugFromPath(location.pathname);
   const routeWorkspaceAppId = getWorkspaceAppIdFromPath(location.pathname);
@@ -303,6 +332,7 @@ function AuthenticatedShell() {
   );
   const workspaceBootstrap = useWorkspaceBootstrap(auth.token, bootstrapWorkspaceSlug);
   const hideSubSidebar = isWhiteboardDetailPath(location.pathname);
+  const canOpenMobileAppMenu = !hideSubSidebar && activeAppId !== 'home' && activeAppId !== 'profile';
   const enabledWorkspaceAppIds = useMemo(
     () => workspaceBootstrap.data
       ? workspaceBootstrap.data.apps
@@ -372,6 +402,7 @@ function AuthenticatedShell() {
 
   useEffect(() => {
     setMobileNavOpen(false);
+    setMobileAppMenuOpen(false);
   }, [location.pathname, location.search]);
 
   if (!currentUser) {
@@ -383,8 +414,10 @@ function AuthenticatedShell() {
       <div className="flex h-screen flex-col overflow-hidden bg-app-surface-sidebar text-app-ink transition-colors lg:flex-row">
         <AppBar
           activeAppId={activeAppId}
+          canOpenMobileAppMenu={canOpenMobileAppMenu}
           currentUser={currentUser}
           currentPathname={location.pathname}
+          onOpenMobileAppMenu={() => setMobileAppMenuOpen(true)}
           onOpenMobileNavigation={() => setMobileNavOpen(true)}
           onShellWorkspaceChange={setShellWorkspaceSlug}
           shellWorkspaceSlug={shellWorkspaceSlug}
@@ -426,18 +459,26 @@ function AuthenticatedShell() {
 
         <MobileNavigationDrawer
           activeAppId={activeAppId}
-          activeNavItemId={activeNavItemId}
           currentPathname={location.pathname}
           currentUser={currentUser}
-          currentWorkspaceSlug={bootstrapWorkspaceSlug}
-          hideSubSidebar={hideSubSidebar}
           onOpenChange={setMobileNavOpen}
           onShellWorkspaceChange={setShellWorkspaceSlug}
           open={mobileNavOpen}
           shellWorkspaceSlug={shellWorkspaceSlug}
           workspaceApps={workspaceBootstrap.data?.apps ?? []}
-          workspaceNavItems={workspaceBootstrap.data?.nav ?? []}
         />
+
+        {canOpenMobileAppMenu ? (
+          <MobileAppMenuDrawer
+            activeAppId={activeAppId}
+            activeNavItemId={activeNavItemId}
+            currentWorkspaceSlug={bootstrapWorkspaceSlug}
+            onOpenChange={setMobileAppMenuOpen}
+            open={mobileAppMenuOpen}
+            workspaceApps={workspaceBootstrap.data?.apps ?? []}
+            workspaceNavItems={workspaceBootstrap.data?.nav ?? []}
+          />
+        ) : null}
 
         {profileOpen && (
           <div className="fixed inset-0 z-50 flex items-center justify-center">

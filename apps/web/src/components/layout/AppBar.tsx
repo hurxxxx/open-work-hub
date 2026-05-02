@@ -48,8 +48,10 @@ function getInitials(label: string, fallback: string): string {
 
 export function AppBar({
   activeAppId,
+  canOpenMobileAppMenu,
   currentPathname,
   currentUser,
+  onOpenMobileAppMenu,
   onShellWorkspaceChange,
   shellWorkspaceSlug,
   workspaceApps,
@@ -57,8 +59,10 @@ export function AppBar({
   onOpenMobileNavigation,
 }: {
   activeAppId: string;
+  canOpenMobileAppMenu?: boolean;
   currentPathname: string;
   currentUser: AuthUser;
+  onOpenMobileAppMenu?: () => void;
   onShellWorkspaceChange: (workspaceSlug: string | null) => void;
   shellWorkspaceSlug: string | null;
   workspaceApps: WorkspaceBootstrapApp[];
@@ -194,12 +198,25 @@ export function AppBar({
   const activeAppTitle = activeAppId === 'settings'
     ? 'Settings'
     : activeWorkspaceApp?.title ?? appBarItemById.get(activeAppId as (typeof APP_BAR_ITEMS)[number]['id'])?.title ?? 'AIDOO';
+  const mobileTitle = (
+    <>
+      <div className="app-text-body-sm truncate font-semibold text-app-ink">
+        <span>{activeAppTitle}</span>
+        {canOpenMobileAppMenu ? (
+          <ChevronDown size={13} className="ml-1 inline-block align-[-2px] text-app-ink/45" />
+        ) : null}
+      </div>
+      <div className="app-text-caption truncate text-app-ink/50">
+        {currentWorkspace?.name ?? 'Workspace'}
+      </div>
+    </>
+  );
 
   return (
     <>
       <div className="flex h-14 shrink-0 items-center gap-2 border-b border-app-border bg-app-bg-strong px-3 text-app-ink lg:hidden">
         <button
-          aria-label="메뉴 열기"
+          aria-label="앱 전환 열기"
           className="flex h-10 w-10 items-center justify-center rounded-xl border border-app-border bg-app-surface text-app-ink shadow-sm transition-colors hover:bg-app-surface-hover"
           onClick={onOpenMobileNavigation}
           type="button"
@@ -207,14 +224,20 @@ export function AppBar({
           <Menu size={20} />
         </button>
 
-        <div className="min-w-0 flex-1">
-          <div className="app-text-body-sm truncate font-semibold text-app-ink">
-            {activeAppTitle}
+        {canOpenMobileAppMenu ? (
+          <button
+            aria-label={`${activeAppTitle} 메뉴 열기`}
+            className="min-w-0 flex-1 rounded-lg px-1.5 py-1 text-left transition-colors hover:bg-app-surface-hover focus:outline-none focus:ring-2 focus:ring-app-accent/35"
+            onClick={onOpenMobileAppMenu}
+            type="button"
+          >
+            {mobileTitle}
+          </button>
+        ) : (
+          <div className="min-w-0 flex-1 px-1.5 py-1">
+            {mobileTitle}
           </div>
-          <div className="app-text-caption truncate text-app-ink/50">
-            {currentWorkspace?.name ?? 'Workspace'}
-          </div>
-        </div>
+        )}
 
         {canOpenWorkspaceSearch ? (
           <button

@@ -92,15 +92,19 @@ function buildWorkspaceApps(): WorkspaceBootstrapApp[] {
 
 function renderAppBar({
   activeAppId = 'home',
+  canOpenMobileAppMenu,
   currentPathname = '/',
   currentUser = buildUser(),
+  onOpenMobileAppMenu = vi.fn(),
   onOpenMobileNavigation = vi.fn(),
   shellWorkspaceSlug = 'hq',
   workspaceApps = buildWorkspaceApps(),
 }: {
   activeAppId?: string;
+  canOpenMobileAppMenu?: boolean;
   currentPathname?: string;
   currentUser?: AuthUser;
+  onOpenMobileAppMenu?: () => void;
   onOpenMobileNavigation?: () => void;
   shellWorkspaceSlug?: string | null;
   workspaceApps?: WorkspaceBootstrapApp[];
@@ -112,9 +116,11 @@ function renderAppBar({
       <>
         <AppBar
           activeAppId={activeAppId}
+          canOpenMobileAppMenu={canOpenMobileAppMenu}
           currentPathname={currentPathname}
           currentUser={currentUser}
           onOpenAccount={vi.fn()}
+          onOpenMobileAppMenu={onOpenMobileAppMenu}
           onOpenMobileNavigation={onOpenMobileNavigation}
           onShellWorkspaceChange={setSelectedShellWorkspaceSlug}
           shellWorkspaceSlug={selectedShellWorkspaceSlug}
@@ -163,9 +169,23 @@ describe('AppBar', () => {
     const onOpenMobileNavigation = vi.fn();
     renderAppBar({ onOpenMobileNavigation });
 
-    fireEvent.click(screen.getByRole('button', { name: '메뉴 열기' }));
+    fireEvent.click(screen.getByRole('button', { name: '앱 전환 열기' }));
 
     expect(onOpenMobileNavigation).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole('button', { name: 'HOME 메뉴 열기' })).toBeNull();
+  });
+
+  it('opens the current app menu from the mobile title button when available', () => {
+    const onOpenMobileAppMenu = vi.fn();
+    renderAppBar({
+      activeAppId: 'planner',
+      canOpenMobileAppMenu: true,
+      onOpenMobileAppMenu,
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Planner 메뉴 열기' }));
+
+    expect(onOpenMobileAppMenu).toHaveBeenCalledTimes(1);
   });
 
   it('polls notifications using the shell workspace slug instead of the current URL workspace slug', async () => {
