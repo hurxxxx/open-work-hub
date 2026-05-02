@@ -14,6 +14,7 @@ from fastapi import HTTPException, UploadFile, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from aidoo_api.core.i18n import localized_http_exception
 from aidoo_api.core.settings import get_settings
 from aidoo_api.core.storage import get_minio_client
 from aidoo_api.domains.auth.models import User, Workspace
@@ -80,9 +81,9 @@ def _utcnow() -> datetime:
 def _require_allowed_mime(mime_type: str | None) -> str:
     normalized = (mime_type or "").strip().lower()
     if normalized not in ALLOWED_RECORDING_MIME_TYPES:
-        raise HTTPException(
+        raise localized_http_exception(
             status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
-            detail="Unsupported recording audio format.",
+            code="meeting.unsupported_recording_audio_format",
         )
     return normalized
 
@@ -237,7 +238,7 @@ def _load_staging_or_404(db: Session, *, meeting_id: str, staging_id: str) -> Me
         )
     )
     if staging is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Recording staging not found.")
+        raise localized_http_exception(status_code=status.HTTP_404_NOT_FOUND, code="meeting.recording_staging_not_found")
     return staging
 
 
@@ -249,7 +250,7 @@ def _load_recording_or_404(db: Session, *, meeting_id: str, recording_id: str) -
         )
     )
     if recording is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Recording not found.")
+        raise localized_http_exception(status_code=status.HTTP_404_NOT_FOUND, code="meeting.recording_not_found")
     return recording
 
 
@@ -262,9 +263,9 @@ def _validate_linked_task_id(db: Session, *, meeting: Meeting, user: User, linke
         return
     ensure_issue_readable(db, user, linked_task_id)
     if not _meeting_task_link_exists(db, meeting_id=meeting.id, issue_id=linked_task_id):
-        raise HTTPException(
+        raise localized_http_exception(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Linked task must already be attached to the meeting.",
+            code="meeting.linked_task_attached_required",
         )
 
 
@@ -364,36 +365,36 @@ async def upload_chunk(
     chunk_sha256: str | None,
 ) -> RecordingChunkAck:
     if seq < 0:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Chunk sequence must be non-negative.")
+        raise localized_http_exception(status_code=status.HTTP_400_BAD_REQUEST, code="meeting.chunk_sequence_non_negative")
 
     meeting = meeting_service._load_meeting(db, workspace, meeting_id)
     ensure_meeting_participant(db, user, meeting)
     staging = _load_staging_or_404(db, meeting_id=meeting.id, staging_id=staging_id)
     if staging.uploaded_by_id != user.id:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only the uploader can resume this staging.")
+        raise localized_http_exception(status_code=status.HTTP_403_FORBIDDEN, code="meeting.uploader_resume_required")
     if staging.completed_at is not None or staging.status == "promoted":
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Recording staging is already finalized.")
+        raise localized_http_exception(status_code=status.HTTP_409_CONFLICT, code="meeting.recording_staging_finalized")
 
     data = await upload.read()
     if not data:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Empty recording chunk.")
+        raise localized_http_exception(status_code=status.HTTP_400_BAD_REQUEST, code="meeting.empty_recording_chunk")
 
     digest = hashlib.sha256(data).hexdigest()
     if chunk_sha256 and chunk_sha256 != digest:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Chunk checksum mismatch.")
+        raise localized_http_exception(status_code=status.HTTP_409_CONFLICT, code="meeting.chunk_checksum_mismatch")
 
     settings = get_settings()
     if staging.bytes_received + len(data) > settings.recording_max_size_bytes:
-        raise HTTPException(
+        raise localized_http_exception(
             status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-            detail="Recording exceeds the configured size limit.",
+            code="meeting.recording_size_limit_exceeded",
         )
 
     meta = dict(staging.chunks_meta or {})
     existing = meta.get(str(seq))
     if existing is not None:
         if existing.get("sha256") != digest or int(existing.get("size", -1)) != len(data):
-            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Chunk payload conflicts with existing sequence.")
+            raise localized_http_exception(status_code=status.HTTP_409_CONFLICT, code="meeting.chunk_payload_conflict")
         return RecordingChunkAck(seq=seq, bytes_received=staging.bytes_received, highest_seq=staging.highest_seq)
 
     _fsync_path(_chunk_path(staging.spool_path, seq), data)
@@ -447,9 +448,9 @@ def discard_staging(
     ensure_meeting_participant(db, user, meeting)
     staging = _load_staging_or_404(db, meeting_id=meeting.id, staging_id=staging_id)
     if staging.uploaded_by_id != user.id:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only the uploader can discard this staging.")
+        raise localized_http_exception(status_code=status.HTTP_403_FORBIDDEN, code="meeting.uploader_discard_required")
     if staging.promoted_recording_id:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Finalized recording staging cannot be discarded.")
+        raise localized_http_exception(status_code=status.HTTP_409_CONFLICT, code="meeting.finalized_staging_discard_denied")
     _cleanup_spool_dir(staging.spool_path)
     db.delete(staging)
     db.commit()
@@ -457,11 +458,11 @@ def discard_staging(
 
 def _assert_contiguous_chunks(staging: MeetingRecordingStaging) -> list[int]:
     if staging.highest_seq < 0:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="No uploaded chunks to finalize.")
+        raise localized_http_exception(status_code=status.HTTP_409_CONFLICT, code="meeting.no_recording_chunks_to_finalize")
     seqs = sorted(int(seq) for seq in (staging.chunks_meta or {}).keys())
     expected = list(range(seqs[0], seqs[-1] + 1))
     if seqs != expected:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Recording chunks are incomplete.")
+        raise localized_http_exception(status_code=status.HTTP_409_CONFLICT, code="meeting.recording_chunks_incomplete")
     return seqs
 
 
@@ -490,7 +491,7 @@ def complete_staging(
     ensure_meeting_participant(db, user, meeting)
     staging = _load_staging_or_404(db, meeting_id=meeting.id, staging_id=staging_id)
     if staging.uploaded_by_id != user.id:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only the uploader can finalize this recording.")
+        raise localized_http_exception(status_code=status.HTTP_403_FORBIDDEN, code="meeting.uploader_finalize_required")
 
     if staging.promoted_recording_id:
         fresh = meeting_service._load_meeting(db, workspace, meeting.id)
@@ -567,12 +568,12 @@ def import_recording(
     _validate_linked_task_id(db, meeting=meeting, user=user, linked_task_id=linked_task_id)
     data = upload.file.read()
     if not data:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Uploaded recording file is empty.")
+        raise localized_http_exception(status_code=status.HTTP_400_BAD_REQUEST, code="meeting.uploaded_recording_empty")
     settings = get_settings()
     if len(data) > settings.recording_max_size_bytes:
-        raise HTTPException(
+        raise localized_http_exception(
             status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-            detail="Recording exceeds the configured size limit.",
+            code="meeting.recording_size_limit_exceeded",
         )
 
     recording_id = new_id()
@@ -620,7 +621,7 @@ def get_recording_playback(
     ensure_meeting_participant(db, user, meeting)
     recording = _load_recording_or_404(db, meeting_id=meeting.id, recording_id=recording_id)
     if recording.transcription_status == "cancelled":
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Recording is not available.")
+        raise localized_http_exception(status_code=status.HTTP_404_NOT_FOUND, code="meeting.recording_unavailable")
     expires_at = _utcnow() + timedelta(hours=1)
     url = get_minio_client().presigned_get_object(
         get_settings().minio_bucket,
@@ -642,7 +643,7 @@ def retry_recording(
     ensure_meeting_participant(db, user, meeting)
     recording = _load_recording_or_404(db, meeting_id=meeting.id, recording_id=recording_id)
     if recording.transcription_status != "failed":
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Only failed recordings can be retried.")
+        raise localized_http_exception(status_code=status.HTTP_409_CONFLICT, code="meeting.only_failed_recordings_retry")
     recording.transcription_status = "pending"
     recording.progress_pct = 10
     recording.failure_reason = None
@@ -682,15 +683,15 @@ def delete_recording(
         )
     )
     if recording is None:
-        raise HTTPException(
+        raise localized_http_exception(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Recording not found.",
+            code="meeting.recording_not_found",
         )
 
     if recording.uploaded_by_id != user.id and meeting.organizer_id != user.id:
-        raise HTTPException(
+        raise localized_http_exception(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only the meeting organizer or the recording uploader can delete this recording.",
+            code="meeting.recording_delete_permission",
         )
 
     if recording.celery_task_id:
@@ -790,6 +791,6 @@ def fetch_local_recording_blob(
     ensure_meeting_participant(db, user, meeting)
     staging = _load_staging_or_404(db, meeting_id=meeting.id, staging_id=staging_id)
     if staging.uploaded_by_id != user.id:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only the uploader can read this staging.")
+        raise localized_http_exception(status_code=status.HTTP_403_FORBIDDEN, code="meeting.uploader_read_staging_required")
     assembled_path = _assemble_chunks(staging)
     return assembled_path.read_bytes()

@@ -5,10 +5,11 @@ from io import BytesIO
 from typing import Iterable
 from zoneinfo import ZoneInfo
 
-from fastapi import HTTPException, UploadFile, status
+from fastapi import UploadFile, status
 from sqlalchemy import or_, select, union
 from sqlalchemy.orm import Session, selectinload
 
+from aidoo_api.core.i18n import localized_http_exception
 from aidoo_api.core.principal import CallerPrincipal
 from aidoo_api.core.settings import get_settings
 from aidoo_api.core.storage import get_minio_client
@@ -95,14 +96,14 @@ def _bind_workspace_context(
 ) -> None:
     bind_current_workspace(db, workspace)
     if principal.workspace_id != workspace.id:
-        raise HTTPException(
+        raise localized_http_exception(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Meeting principal workspace mismatch.",
+            code="meeting.principal_workspace_mismatch",
         )
     if principal.kind == "user" and principal.user_id not in {None, user.id}:
-        raise HTTPException(
+        raise localized_http_exception(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Meeting principal user mismatch.",
+            code="meeting.principal_user_mismatch",
         )
 
 
@@ -134,17 +135,17 @@ def workspace_meeting_user_ids_subquery(workspace_id: str):
 
 def _validate_time_range(start_at: datetime, end_at: datetime) -> None:
     if end_at <= start_at:
-        raise HTTPException(
+        raise localized_http_exception(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="end_at must be after start_at.",
+            code="meeting.end_after_start",
         )
 
 
 def _require_user_write_principal(principal: CallerPrincipal) -> None:
     if principal.kind != "user":
-        raise HTTPException(
+        raise localized_http_exception(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Meeting write operations require a user principal.",
+            code="meeting.write_user_principal_required",
         )
 
 
@@ -167,17 +168,19 @@ def _validate_attendee_users(
     found = {user.id: user for user in users}
     missing = set(unique_ids) - set(found.keys())
     if missing:
-        raise HTTPException(
+        raise localized_http_exception(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Unknown or inactive attendee user(s): {sorted(missing)}",
+            code="meeting.unknown_attendees",
+            user_ids=", ".join(sorted(missing)),
         )
     non_members = sorted(
         user.id for user in users if resolve_workspace_role(db, user, workspace_id) is None
     )
     if non_members:
-        raise HTTPException(
+        raise localized_http_exception(
             status_code=422,
-            detail=f"Attendees must belong to the meeting workspace: {non_members}",
+            code="meeting.attendees_workspace_required",
+            user_ids=", ".join(non_members),
         )
     return found
 
@@ -685,9 +688,9 @@ def _load_meeting(db: Session, workspace: Workspace, meeting_id: str) -> Meeting
         )
     )
     if meeting is None:
-        raise HTTPException(
+        raise localized_http_exception(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Meeting not found.",
+            code="meeting.not_found",
         )
     return meeting
 
@@ -697,9 +700,9 @@ def _ensure_user_can_view(user: User, meeting: Meeting) -> None:
         return
     if any(att.user_id == user.id for att in meeting.attendees):
         return
-    raise HTTPException(
+    raise localized_http_exception(
         status_code=status.HTTP_403_FORBIDDEN,
-        detail="You do not have access to this meeting.",
+        code="meeting.access_required",
     )
 
 
@@ -941,9 +944,9 @@ def create_meeting_for_ai(
     _require_user_write_principal(principal)
     _bind_workspace_context(db, workspace=workspace, principal=principal, user=user)
     if location is not None and location.strip():
-        raise HTTPException(
+        raise localized_http_exception(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Meeting location is not supported yet.",
+            code="meeting.location_unsupported",
         )
     payload = MeetingCreateRequest(
         title=title,
@@ -1233,9 +1236,10 @@ def list_meetings(
     elif scope == "all":
         pass
     else:
-        raise HTTPException(
+        raise localized_http_exception(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Unsupported scope: {scope}",
+            code="meeting.unsupported_scope",
+            scope=scope,
         )
 
     if from_at is not None:
@@ -1294,9 +1298,10 @@ def list_meeting_availability(
     users_by_id = {member.id: member for member in users}
     missing = [user_id for user_id in unique_user_ids if user_id not in users_by_id]
     if missing:
-        raise HTTPException(
+        raise localized_http_exception(
             status_code=422,
-            detail=f"Requested users must belong to the meeting workspace: {missing}",
+            code="meeting.requested_users_workspace_required",
+            user_ids=", ".join(missing),
         )
 
     blocks_by_user_id: dict[str, list[MeetingAvailabilityBlock]] = {
@@ -1551,9 +1556,10 @@ async def attach_file(
 
     data = await upload.read()
     if len(data) > MAX_FILE_UPLOAD_SIZE:
-        raise HTTPException(
+        raise localized_http_exception(
             status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-            detail=f"File size exceeds {MAX_FILE_UPLOAD_SIZE // (1024 * 1024)} MB limit.",
+            code="meeting.file_size_limit_exceeded",
+            limit_mb=MAX_FILE_UPLOAD_SIZE // (1024 * 1024),
         )
 
     settings = get_settings()
@@ -1599,9 +1605,9 @@ def detach_file(
         )
     )
     if attachment is None:
-        raise HTTPException(
+        raise localized_http_exception(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="File attachment not found.",
+            code="meeting.file_attachment_not_found",
         )
 
     ensure_link_remover(db, user, meeting, attachment.added_by_id)

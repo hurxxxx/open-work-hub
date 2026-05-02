@@ -3,10 +3,11 @@ from __future__ import annotations
 
 from datetime import timedelta
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.orm import Session
 
 from aidoo_api.core.db import get_db_session
+from aidoo_api.core.i18n import localized_http_exception
 from aidoo_api.domains.auth.dependencies import (
     require_current_user,
     require_current_workspace,
@@ -45,30 +46,33 @@ def list_events(
         from_at = parse_iso_or_date(from_param)
         to_at = parse_iso_or_date(to_param)
     except ValueError as exc:
-        raise HTTPException(
+        raise localized_http_exception(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid ISO date/datetime: {exc}",
+            code="calendar.invalid_iso_datetime",
+            error=str(exc),
         ) from exc
 
     if to_at <= from_at:
-        raise HTTPException(
+        raise localized_http_exception(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Range 'to' must be strictly after 'from'.",
+            code="calendar.range_to_after_from",
         )
 
     # ENG-HIGH-4: bound the range to prevent unbounded queries (e.g. 1970→2099).
     if (to_at - from_at) > timedelta(days=_MAX_RANGE_DAYS):
-        raise HTTPException(
+        raise localized_http_exception(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Range exceeds maximum {_MAX_RANGE_DAYS} days.",
+            code="calendar.range_too_large",
+            days=_MAX_RANGE_DAYS,
         )
 
     requested_sources = {s.strip() for s in sources.split(",") if s.strip()}
     invalid = requested_sources - _VALID_SOURCES
     if invalid:
-        raise HTTPException(
+        raise localized_http_exception(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Unknown source types: {sorted(invalid)}",
+            code="calendar.unknown_source_types",
+            source_types=", ".join(sorted(invalid)),
         )
     if not requested_sources:
         # Empty filter → return empty result (per Phase 2 design D1: explicit empty).

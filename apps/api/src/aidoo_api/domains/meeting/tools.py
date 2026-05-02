@@ -4,10 +4,11 @@ from collections.abc import Mapping
 from datetime import datetime, timedelta
 from typing import Any, Literal
 
-from fastapi import HTTPException, status
+from fastapi import status
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 
+from aidoo_api.core.i18n import localized_http_exception
 from aidoo_api.core.principal import CallerPrincipal
 from aidoo_api.core.settings import get_settings
 from aidoo_api.domains.ai.registry import (
@@ -79,9 +80,11 @@ def _parse_range_arg(arguments: Mapping[str, Any], key: str):
     try:
         return parse_iso_or_date(value)
     except ValueError as exc:
-        raise HTTPException(
+        raise localized_http_exception(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid ISO date/datetime for '{key}': {exc}",
+            code="meeting.invalid_iso_datetime_for_field",
+            field=key,
+            error=str(exc),
         ) from exc
 
 
@@ -92,9 +95,11 @@ def _parse_optional_range_arg(arguments: Mapping[str, Any], key: str):
     try:
         return parse_iso_or_date(str(value))
     except ValueError as exc:
-        raise HTTPException(
+        raise localized_http_exception(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid ISO date/datetime for '{key}': {exc}",
+            code="meeting.invalid_iso_datetime_for_field",
+            field=key,
+            error=str(exc),
         ) from exc
 
 
@@ -170,14 +175,15 @@ def _find_availability(
     from_at = _parse_range_arg(arguments, "from")
     to_at = _parse_range_arg(arguments, "to")
     if to_at <= from_at:
-        raise HTTPException(
+        raise localized_http_exception(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Range 'to' must be strictly after 'from'.",
+            code="meeting.range_to_after_from",
         )
     if (to_at - from_at) > timedelta(days=31):
-        raise HTTPException(
+        raise localized_http_exception(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Availability range exceeds maximum 31 days.",
+            code="meeting.availability_range_too_large",
+            days=31,
         )
     result = _meeting_service().list_meeting_availability(
         db,

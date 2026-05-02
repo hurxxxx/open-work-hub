@@ -3,11 +3,12 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 from typing import Literal
 
-from fastapi import APIRouter, Depends, Form, Header, HTTPException, Query, Response, UploadFile, status
+from fastapi import APIRouter, Depends, Form, Header, Query, Response, UploadFile, status
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from aidoo_api.core.db import get_db_session
+from aidoo_api.core.i18n import localized_http_exception
 from aidoo_api.core.principal import user_principal
 from aidoo_api.domains.auth.dependencies import (
     require_current_user,
@@ -490,19 +491,21 @@ def get_meeting_availability(
         from_at = parse_iso_or_date(from_param)
         to_at = parse_iso_or_date(to_param)
     except ValueError as exc:
-        raise HTTPException(
+        raise localized_http_exception(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid ISO date/datetime: {exc}",
+            code="meeting.invalid_iso_datetime",
+            error=str(exc),
         ) from exc
     if to_at <= from_at:
-        raise HTTPException(
+        raise localized_http_exception(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Range 'to' must be strictly after 'from'.",
+            code="meeting.range_to_after_from",
         )
     if (to_at - from_at) > timedelta(days=31):
-        raise HTTPException(
+        raise localized_http_exception(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Availability range exceeds maximum 31 days.",
+            code="meeting.availability_range_too_large",
+            days=31,
         )
     return meeting_service.list_meeting_availability(
         db,

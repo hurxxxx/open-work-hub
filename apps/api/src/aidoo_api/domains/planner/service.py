@@ -3,10 +3,11 @@ from __future__ import annotations
 from datetime import UTC, date, datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
-from fastapi import HTTPException, status
+from fastapi import status
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
+from aidoo_api.core.i18n import localized_http_exception
 from aidoo_api.core.principal import CallerPrincipal
 from aidoo_api.domains.auth.access import bind_current_workspace, resolve_workspace_role
 from aidoo_api.domains.auth.models import User, Workspace
@@ -34,22 +35,22 @@ def _bind_workspace_context(
 ) -> None:
     bind_current_workspace(db, workspace)
     if principal.workspace_id != workspace.id:
-        raise HTTPException(
+        raise localized_http_exception(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Planner principal workspace mismatch.",
+            code="planner.principal_workspace_mismatch",
         )
     if principal.kind == "user" and principal.user_id not in {None, user.id}:
-        raise HTTPException(
+        raise localized_http_exception(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Planner principal user mismatch.",
+            code="planner.principal_user_mismatch",
         )
 
 
 def _require_user_write_principal(principal: CallerPrincipal) -> None:
     if principal.kind != "user":
-        raise HTTPException(
+        raise localized_http_exception(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Planner write operations require a user principal.",
+            code="planner.write_user_principal_required",
         )
 
 
@@ -89,14 +90,14 @@ def _parse_event_bounds(
             start_date = date.fromisoformat(start)
             end_date = date.fromisoformat(end)
         except ValueError as exc:
-            raise HTTPException(
+            raise localized_http_exception(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="All-day planner events require YYYY-MM-DD start/end.",
+                code="planner.all_day_date_required",
             ) from exc
         if end_date <= start_date:
-            raise HTTPException(
+            raise localized_http_exception(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Planner event end must be after start.",
+                code="planner.event_end_after_start",
             )
         start_local = datetime.combine(start_date, time.min, tzinfo=LOCAL_TIMEZONE)
         end_local = datetime.combine(end_date, time.min, tzinfo=LOCAL_TIMEZONE)
@@ -106,16 +107,16 @@ def _parse_event_bounds(
         )
 
     if "T" not in start or "T" not in end:
-        raise HTTPException(
+        raise localized_http_exception(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Timed planner events require ISO datetime start/end.",
+            code="planner.timed_datetime_required",
         )
     start_at = parse_iso_or_date(start)
     end_at = parse_iso_or_date(end)
     if end_at <= start_at:
-        raise HTTPException(
+        raise localized_http_exception(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Planner event end must be after start.",
+            code="planner.event_end_after_start",
         )
     return start_at, end_at
 
@@ -153,18 +154,18 @@ def _load_event(
         .options(selectinload(PlannerEvent.owner))
     )
     if event is None:
-        raise HTTPException(
+        raise localized_http_exception(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Planner event not found.",
+            code="planner.event_not_found",
         )
     return event
 
 
 def _ensure_owner(user: User, event: PlannerEvent) -> None:
     if event.owner_id != user.id:
-        raise HTTPException(
+        raise localized_http_exception(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only the event owner can modify this planner event.",
+            code="planner.owner_modify_required",
         )
 
 
@@ -258,14 +259,14 @@ def create_event_for_ai(
     _bind_workspace_context(db, workspace=workspace, principal=principal, user=user)
     normalized_scope = scope.strip().lower()
     if normalized_scope != "personal":
-        raise HTTPException(
+        raise localized_http_exception(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Team-scoped planner events are not supported yet.",
+            code="planner.team_scope_unsupported",
         )
     if team_id is not None:
-        raise HTTPException(
+        raise localized_http_exception(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Planner team_id is not supported yet.",
+            code="planner.team_id_unsupported",
         )
     payload = PlannerEventCreateRequest(
         title=title,
@@ -319,9 +320,9 @@ def update_event_for_ai(
     _require_user_write_principal(principal)
     _bind_workspace_context(db, workspace=workspace, principal=principal, user=user)
     if (start_at is None) != (end_at is None):
-        raise HTTPException(
+        raise localized_http_exception(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Planner event updates must provide both start_at and end_at together.",
+            code="planner.update_start_at_end_at_required",
         )
     payload = PlannerEventUpdateRequest(
         title=title,
@@ -374,9 +375,9 @@ def list_events(
 ) -> PlannerEventsResponse:
     _bind_workspace_context(db, workspace=workspace, principal=principal, user=user)
     if (from_at is None) != (to_at is None):
-        raise HTTPException(
+        raise localized_http_exception(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Planner event list requires both 'from' and 'to' together.",
+            code="planner.list_range_required",
         )
     query = (
         select(PlannerEvent)
@@ -389,14 +390,15 @@ def list_events(
     )
     if from_at is not None and to_at is not None:
         if to_at <= from_at:
-            raise HTTPException(
+            raise localized_http_exception(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Range 'to' must be strictly after 'from'.",
+                code="calendar.range_to_after_from",
             )
         if (to_at - from_at) > timedelta(days=MAX_LIST_RANGE_DAYS):
-            raise HTTPException(
+            raise localized_http_exception(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Range exceeds maximum {MAX_LIST_RANGE_DAYS} days.",
+                code="calendar.range_too_large",
+                days=MAX_LIST_RANGE_DAYS,
             )
         query = query.where(PlannerEvent.end_at > from_at, PlannerEvent.start_at < to_at)
     events = db.scalars(query).all()
@@ -422,9 +424,9 @@ def update_event(
     next_start = payload.start
     next_end = payload.end
     if (next_start is None) != (next_end is None):
-        raise HTTPException(
+        raise localized_http_exception(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Planner event updates must provide both start and end together.",
+            code="planner.update_start_end_required",
         )
     if payload.all_day is not None and next_start is None:
         next_start = _to_local_date_string(event.start_at) if next_all_day else _utc_iso(event.start_at)

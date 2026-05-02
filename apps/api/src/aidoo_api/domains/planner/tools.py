@@ -4,10 +4,11 @@ from collections.abc import Mapping
 from datetime import datetime
 from typing import Any, Literal
 
-from fastapi import HTTPException, status
+from fastapi import status
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from sqlalchemy.orm import Session
 
+from aidoo_api.core.i18n import localized_http_exception
 from aidoo_api.core.principal import CallerPrincipal
 from aidoo_api.core.settings import get_settings
 from aidoo_api.domains.ai.registry import (
@@ -69,9 +70,11 @@ def _parse_optional_range_arg(arguments: Mapping[str, Any], key: str):
     try:
         return planner_service.parse_iso_or_date(str(value))
     except ValueError as exc:
-        raise HTTPException(
+        raise localized_http_exception(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid ISO date/datetime for '{key}': {exc}",
+            code="meeting.invalid_iso_datetime_for_field",
+            field=key,
+            error=str(exc),
         ) from exc
 
 

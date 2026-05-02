@@ -613,7 +613,8 @@ def test_ai_tool_invoke_meeting_draft_followup_schedule_rejects_range_over_31_da
     )
 
     assert response.status_code == 400, response.text
-    assert response.json()["detail"] == "Availability range exceeds maximum 31 days."
+    assert response.json()["code"] == "meeting.availability_range_too_large"
+    assert response.json()["params"]["days"] == 31
 
 
 def test_ai_tool_invoke_rejects_unknown_tool(client: TestClient) -> None:

@@ -711,7 +711,7 @@ def test_meeting_create_rejects_attendees_outside_meeting_workspace(
         },
     )
     assert response.status_code == 422
-    assert "meeting workspace" in response.json()["detail"]
+    assert response.json()["code"] == "meeting.attendees_workspace_required"
 
 
 def test_user_without_meeting_workspace_access_is_blocked(
@@ -1674,7 +1674,12 @@ def test_upcoming_scope_does_not_leak_other_users_meetings(
     )
 
     # Admin organizes a private meeting and does NOT invite the outsider.
-    private = _create_meeting(client, admin_token, title="Admin only")
+    private = _create_meeting(
+        client,
+        admin_token,
+        title="Admin only",
+        start_at=datetime(2026, 6, 1, 10, 0, 0),
+    )
 
     # Outsider sees nothing in any scope, even though they have meeting
     # workspace access.

@@ -1,10 +1,11 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from fastapi import APIRouter, Depends, Query, Response, status
 from sqlalchemy.orm import Session
 
-from aidoo_api.core.principal import user_principal
 from aidoo_api.core.db import get_db_session
+from aidoo_api.core.i18n import localized_http_exception
+from aidoo_api.core.principal import user_principal
 from aidoo_api.domains.auth.dependencies import (
     require_current_user,
     require_current_workspace,
@@ -42,9 +43,10 @@ def list_planner_events(
         from_at = parse_iso_or_date(from_param) if from_param is not None else None
         to_at = parse_iso_or_date(to_param) if to_param is not None else None
     except ValueError as exc:
-        raise HTTPException(
+        raise localized_http_exception(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid ISO date/datetime: {exc}",
+            code="calendar.invalid_iso_datetime",
+            error=str(exc),
         ) from exc
     return list_events(
         db,

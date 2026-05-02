@@ -395,6 +395,250 @@ MESSAGES: dict[str, dict[str, str]] = {
         "ko-KR": "커스텀 필드가 이 리스트에 속하지 않습니다.",
         "en-US": "Custom field does not belong to this list.",
     },
+    "calendar.invalid_iso_datetime": {
+        "ko-KR": "ISO 날짜/시간이 올바르지 않습니다: {error}",
+        "en-US": "Invalid ISO date/datetime: {error}",
+    },
+    "calendar.range_to_after_from": {
+        "ko-KR": "범위의 'to'는 'from'보다 이후여야 합니다.",
+        "en-US": "Range 'to' must be strictly after 'from'.",
+    },
+    "calendar.range_too_large": {
+        "ko-KR": "범위가 최대 {days}일을 초과했습니다.",
+        "en-US": "Range exceeds maximum {days} days.",
+    },
+    "calendar.unknown_source_types": {
+        "ko-KR": "알 수 없는 소스 유형입니다: {source_types}",
+        "en-US": "Unknown source types: {source_types}",
+    },
+    "planner.principal_workspace_mismatch": {
+        "ko-KR": "Planner principal의 워크스페이스가 일치하지 않습니다.",
+        "en-US": "Planner principal workspace mismatch.",
+    },
+    "planner.principal_user_mismatch": {
+        "ko-KR": "Planner principal의 사용자가 일치하지 않습니다.",
+        "en-US": "Planner principal user mismatch.",
+    },
+    "planner.write_user_principal_required": {
+        "ko-KR": "Planner 쓰기 작업에는 사용자 principal이 필요합니다.",
+        "en-US": "Planner write operations require a user principal.",
+    },
+    "planner.all_day_date_required": {
+        "ko-KR": "종일 Planner 이벤트에는 YYYY-MM-DD 형식의 시작/종료일이 필요합니다.",
+        "en-US": "All-day planner events require YYYY-MM-DD start/end.",
+    },
+    "planner.event_end_after_start": {
+        "ko-KR": "Planner 이벤트 종료 시각은 시작 시각보다 이후여야 합니다.",
+        "en-US": "Planner event end must be after start.",
+    },
+    "planner.timed_datetime_required": {
+        "ko-KR": "시간 지정 Planner 이벤트에는 ISO datetime 시작/종료 시각이 필요합니다.",
+        "en-US": "Timed planner events require ISO datetime start/end.",
+    },
+    "planner.event_not_found": {
+        "ko-KR": "Planner 이벤트를 찾을 수 없습니다.",
+        "en-US": "Planner event not found.",
+    },
+    "planner.owner_modify_required": {
+        "ko-KR": "이 Planner 이벤트는 이벤트 소유자만 수정할 수 있습니다.",
+        "en-US": "Only the event owner can modify this planner event.",
+    },
+    "planner.team_scope_unsupported": {
+        "ko-KR": "팀 범위 Planner 이벤트는 아직 지원하지 않습니다.",
+        "en-US": "Team-scoped planner events are not supported yet.",
+    },
+    "planner.team_id_unsupported": {
+        "ko-KR": "Planner team_id는 아직 지원하지 않습니다.",
+        "en-US": "Planner team_id is not supported yet.",
+    },
+    "planner.update_start_at_end_at_required": {
+        "ko-KR": "Planner 이벤트 업데이트에는 start_at과 end_at을 함께 제공해야 합니다.",
+        "en-US": "Planner event updates must provide both start_at and end_at together.",
+    },
+    "planner.list_range_required": {
+        "ko-KR": "Planner 이벤트 목록에는 'from'과 'to'를 함께 제공해야 합니다.",
+        "en-US": "Planner event list requires both 'from' and 'to' together.",
+    },
+    "planner.update_start_end_required": {
+        "ko-KR": "Planner 이벤트 업데이트에는 start와 end를 함께 제공해야 합니다.",
+        "en-US": "Planner event updates must provide both start and end together.",
+    },
+    "meeting.invalid_iso_datetime": {
+        "ko-KR": "ISO 날짜/시간이 올바르지 않습니다: {error}",
+        "en-US": "Invalid ISO date/datetime: {error}",
+    },
+    "meeting.invalid_iso_datetime_for_field": {
+        "ko-KR": "'{field}'의 ISO 날짜/시간이 올바르지 않습니다: {error}",
+        "en-US": "Invalid ISO date/datetime for '{field}': {error}",
+    },
+    "meeting.range_to_after_from": {
+        "ko-KR": "범위의 'to'는 'from'보다 이후여야 합니다.",
+        "en-US": "Range 'to' must be strictly after 'from'.",
+    },
+    "meeting.availability_range_too_large": {
+        "ko-KR": "가능 시간 조회 범위는 최대 {days}일을 초과할 수 없습니다.",
+        "en-US": "Availability range exceeds maximum {days} days.",
+    },
+    "meeting.principal_workspace_mismatch": {
+        "ko-KR": "Meeting principal의 워크스페이스가 일치하지 않습니다.",
+        "en-US": "Meeting principal workspace mismatch.",
+    },
+    "meeting.principal_user_mismatch": {
+        "ko-KR": "Meeting principal의 사용자가 일치하지 않습니다.",
+        "en-US": "Meeting principal user mismatch.",
+    },
+    "meeting.end_after_start": {
+        "ko-KR": "end_at은 start_at보다 이후여야 합니다.",
+        "en-US": "end_at must be after start_at.",
+    },
+    "meeting.write_user_principal_required": {
+        "ko-KR": "Meeting 쓰기 작업에는 사용자 principal이 필요합니다.",
+        "en-US": "Meeting write operations require a user principal.",
+    },
+    "meeting.unknown_attendees": {
+        "ko-KR": "알 수 없거나 비활성인 참석자 사용자입니다: {user_ids}",
+        "en-US": "Unknown or inactive attendee user(s): {user_ids}",
+    },
+    "meeting.attendees_workspace_required": {
+        "ko-KR": "참석자는 회의 워크스페이스에 속해야 합니다: {user_ids}",
+        "en-US": "Attendees must belong to the meeting workspace: {user_ids}",
+    },
+    "meeting.not_found": {
+        "ko-KR": "회의를 찾을 수 없습니다.",
+        "en-US": "Meeting not found.",
+    },
+    "meeting.access_required": {
+        "ko-KR": "이 회의에 접근할 권한이 없습니다.",
+        "en-US": "You do not have access to this meeting.",
+    },
+    "meeting.location_unsupported": {
+        "ko-KR": "회의 위치는 아직 지원하지 않습니다.",
+        "en-US": "Meeting location is not supported yet.",
+    },
+    "meeting.unsupported_scope": {
+        "ko-KR": "지원하지 않는 범위입니다: {scope}",
+        "en-US": "Unsupported scope: {scope}",
+    },
+    "meeting.requested_users_workspace_required": {
+        "ko-KR": "요청한 사용자는 회의 워크스페이스에 속해야 합니다: {user_ids}",
+        "en-US": "Requested users must belong to the meeting workspace: {user_ids}",
+    },
+    "meeting.file_size_limit_exceeded": {
+        "ko-KR": "파일 크기가 {limit_mb} MB 제한을 초과했습니다.",
+        "en-US": "File size exceeds {limit_mb} MB limit.",
+    },
+    "meeting.file_attachment_not_found": {
+        "ko-KR": "파일 첨부를 찾을 수 없습니다.",
+        "en-US": "File attachment not found.",
+    },
+    "meeting.only_organizer": {
+        "ko-KR": "회의 주최자만 이 작업을 수행할 수 있습니다.",
+        "en-US": "Only the meeting organizer can perform this action.",
+    },
+    "meeting.only_participants": {
+        "ko-KR": "회의 참가자만 이 작업을 수행할 수 있습니다.",
+        "en-US": "Only meeting participants can perform this action.",
+    },
+    "meeting.attachment_remove_permission": {
+        "ko-KR": "회의 주최자 또는 첨부를 추가한 사용자만 삭제할 수 있습니다.",
+        "en-US": "Only the meeting organizer or the user who added the attachment can remove it.",
+    },
+    "meeting.document_not_found": {
+        "ko-KR": "문서를 찾을 수 없습니다.",
+        "en-US": "Document not found.",
+    },
+    "meeting.document_access_required": {
+        "ko-KR": "이 문서에 접근할 권한이 없습니다.",
+        "en-US": "You do not have access to this document.",
+    },
+    "meeting.recording_not_found": {
+        "ko-KR": "회의 녹화를 찾을 수 없습니다.",
+        "en-US": "Meeting recording not found.",
+    },
+    "meeting.recording_summary_unavailable": {
+        "ko-KR": "회의 녹화 요약을 아직 사용할 수 없습니다.",
+        "en-US": "Meeting recording summary is not available yet.",
+    },
+    "meeting.unsupported_recording_audio_format": {
+        "ko-KR": "지원하지 않는 녹화 오디오 형식입니다.",
+        "en-US": "Unsupported recording audio format.",
+    },
+    "meeting.recording_staging_not_found": {
+        "ko-KR": "녹화 staging을 찾을 수 없습니다.",
+        "en-US": "Recording staging not found.",
+    },
+    "meeting.linked_task_attached_required": {
+        "ko-KR": "연결할 태스크는 먼저 회의에 첨부되어 있어야 합니다.",
+        "en-US": "Linked task must already be attached to the meeting.",
+    },
+    "meeting.chunk_sequence_non_negative": {
+        "ko-KR": "청크 순서는 0 이상이어야 합니다.",
+        "en-US": "Chunk sequence must be non-negative.",
+    },
+    "meeting.uploader_resume_required": {
+        "ko-KR": "업로더만 이 staging을 재개할 수 있습니다.",
+        "en-US": "Only the uploader can resume this staging.",
+    },
+    "meeting.recording_staging_finalized": {
+        "ko-KR": "녹화 staging이 이미 완료되었습니다.",
+        "en-US": "Recording staging is already finalized.",
+    },
+    "meeting.empty_recording_chunk": {
+        "ko-KR": "녹화 청크가 비어 있습니다.",
+        "en-US": "Empty recording chunk.",
+    },
+    "meeting.chunk_checksum_mismatch": {
+        "ko-KR": "청크 체크섬이 일치하지 않습니다.",
+        "en-US": "Chunk checksum mismatch.",
+    },
+    "meeting.recording_size_limit_exceeded": {
+        "ko-KR": "녹화가 설정된 크기 제한을 초과했습니다.",
+        "en-US": "Recording exceeds the configured size limit.",
+    },
+    "meeting.chunk_payload_conflict": {
+        "ko-KR": "청크 payload가 기존 순서와 충돌합니다.",
+        "en-US": "Chunk payload conflicts with existing sequence.",
+    },
+    "meeting.uploader_discard_required": {
+        "ko-KR": "업로더만 이 staging을 폐기할 수 있습니다.",
+        "en-US": "Only the uploader can discard this staging.",
+    },
+    "meeting.finalized_staging_discard_denied": {
+        "ko-KR": "완료된 녹화 staging은 폐기할 수 없습니다.",
+        "en-US": "Finalized recording staging cannot be discarded.",
+    },
+    "meeting.no_recording_chunks_to_finalize": {
+        "ko-KR": "완료할 업로드 청크가 없습니다.",
+        "en-US": "No uploaded chunks to finalize.",
+    },
+    "meeting.recording_chunks_incomplete": {
+        "ko-KR": "녹화 청크가 완전하지 않습니다.",
+        "en-US": "Recording chunks are incomplete.",
+    },
+    "meeting.uploader_finalize_required": {
+        "ko-KR": "업로더만 이 녹화를 완료할 수 있습니다.",
+        "en-US": "Only the uploader can finalize this recording.",
+    },
+    "meeting.uploaded_recording_empty": {
+        "ko-KR": "업로드한 녹화 파일이 비어 있습니다.",
+        "en-US": "Uploaded recording file is empty.",
+    },
+    "meeting.recording_unavailable": {
+        "ko-KR": "녹화를 사용할 수 없습니다.",
+        "en-US": "Recording is not available.",
+    },
+    "meeting.only_failed_recordings_retry": {
+        "ko-KR": "실패한 녹화만 다시 시도할 수 있습니다.",
+        "en-US": "Only failed recordings can be retried.",
+    },
+    "meeting.recording_delete_permission": {
+        "ko-KR": "회의 주최자 또는 녹화 업로더만 이 녹화를 삭제할 수 있습니다.",
+        "en-US": "Only the meeting organizer or the recording uploader can delete this recording.",
+    },
+    "meeting.uploader_read_staging_required": {
+        "ko-KR": "업로더만 이 staging을 읽을 수 있습니다.",
+        "en-US": "Only the uploader can read this staging.",
+    },
 }
 
 

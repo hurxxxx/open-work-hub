@@ -336,4 +336,4 @@ def test_meeting_availability_rejects_users_outside_workspace(client: TestClient
         ],
     )
     assert response.status_code == 422
-    assert "meeting workspace" in response.json()["detail"]
+    assert response.json()["code"] == "meeting.requested_users_workspace_required"

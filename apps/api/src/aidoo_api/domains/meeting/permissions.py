@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-from fastapi import HTTPException, status
+from fastapi import status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from aidoo_api.core.i18n import localized_http_exception
 from aidoo_api.domains.auth.models import User, Workspace
 from aidoo_api.domains.docs.models import NativeDoc
 from aidoo_api.domains.meeting.models import Meeting
@@ -22,9 +23,9 @@ def is_participant(user: User, meeting: Meeting) -> bool:
 
 def ensure_meeting_organizer(db: Session, user: User, meeting: Meeting) -> None:
     if not is_organizer(user, meeting):
-        raise HTTPException(
+        raise localized_http_exception(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only the meeting organizer can perform this action.",
+            code="meeting.only_organizer",
         )
 
 
@@ -34,9 +35,9 @@ def ensure_meeting_participant(db: Session, user: User, meeting: Meeting) -> Non
     meeting participant should be able to upload prep material before the
     meeting starts."""
     if not is_participant(user, meeting):
-        raise HTTPException(
+        raise localized_http_exception(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only meeting participants can perform this action.",
+            code="meeting.only_participants",
         )
 
 
@@ -50,9 +51,9 @@ def ensure_link_remover(
         return
     if added_by_id == user.id:
         return
-    raise HTTPException(
+    raise localized_http_exception(
         status_code=status.HTTP_403_FORBIDDEN,
-        detail="Only the meeting organizer or the user who added the attachment can remove it.",
+        code="meeting.attachment_remove_permission",
     )
 
 
@@ -75,19 +76,19 @@ def ensure_doc_attachable(
         )
     )
     if doc is None:
-        raise HTTPException(
+        raise localized_http_exception(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Document not found.",
+            code="meeting.document_not_found",
         )
 
     if doc.workspace_id != workspace.id:
-        raise HTTPException(
+        raise localized_http_exception(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="You do not have access to this document.",
+            code="meeting.document_access_required",
         )
     if doc.owner_id != user.id:
-        raise HTTPException(
+        raise localized_http_exception(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="You do not have access to this document.",
+            code="meeting.document_access_required",
         )
     return doc

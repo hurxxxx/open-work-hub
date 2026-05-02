@@ -6,11 +6,12 @@ from datetime import timedelta
 from datetime import date, datetime
 from typing import Any, Literal
 
-from fastapi import HTTPException, status
+from fastapi import status
 from pydantic import BaseModel, Field, ValidationError
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
+from aidoo_api.core.i18n import localized_http_exception
 from aidoo_api.core.llm import LlmTaskContext, complete_chat
 from aidoo_api.core.principal import CallerPrincipal
 from aidoo_api.domains.auth.access import record_audit_log
@@ -299,11 +300,11 @@ def extract_and_persist_meeting_insights(
         select(MeetingRecording).where(MeetingRecording.id == recording_id)
     )
     if recording is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Meeting recording not found.")
+        raise localized_http_exception(status_code=status.HTTP_404_NOT_FOUND, code="meeting.recording_not_found")
     if not recording.summary_text or not recording.transcript_text:
-        raise HTTPException(
+        raise localized_http_exception(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Meeting recording summary is not available yet.",
+            code="meeting.recording_summary_unavailable",
         )
 
     meeting = db.scalar(
@@ -312,7 +313,7 @@ def extract_and_persist_meeting_insights(
         .options(selectinload(Meeting.attendees).selectinload(MeetingAttendee.user))
     )
     if meeting is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Meeting not found.")
+        raise localized_http_exception(status_code=status.HTTP_404_NOT_FOUND, code="meeting.not_found")
 
     created_counts: dict[str, int] = {}
     results: dict[InsightType, list[MeetingInsight]] = {}
@@ -449,9 +450,9 @@ def _ensure_insights_available(
     recording = _load_latest_ready_recording(db, meeting_id=meeting.id)
     if recording is None:
         if refresh:
-            raise HTTPException(
+            raise localized_http_exception(
                 status_code=status.HTTP_409_CONFLICT,
-                detail="Meeting recording summary is not available yet.",
+                code="meeting.recording_summary_unavailable",
             )
         return existing
 
@@ -544,14 +545,15 @@ def _validate_followup_availability_range(
     if slot_range is None:
         return None
     if slot_range[1] <= slot_range[0]:
-        raise HTTPException(
+        raise localized_http_exception(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Range 'to' must be strictly after 'from'.",
+            code="meeting.range_to_after_from",
         )
     if (slot_range[1] - slot_range[0]) > MAX_FOLLOWUP_AVAILABILITY_RANGE:
-        raise HTTPException(
+        raise localized_http_exception(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Availability range exceeds maximum 31 days.",
+            code="meeting.availability_range_too_large",
+            days=31,
         )
     return slot_range
 
