@@ -65,17 +65,37 @@ wait_for_tcp() {
   return 1
 }
 
+tcp_port_is_open() {
+  local host="$1"
+  local port="$2"
+  timeout 1 bash -c "cat < /dev/null > /dev/tcp/${host}/${port}" >/dev/null 2>&1
+}
+
+url_is_ready() {
+  local url="$1"
+  curl -fsS "$url" >/dev/null 2>&1
+}
+
 start_infra() {
-  local services=(redis)
-  if dev_use_local_postgres; then
+  local services=()
+  if dev_use_local_postgres && ! tcp_port_is_open "127.0.0.1" "$DOOWON_DEV_POSTGRES_PORT"; then
     services=(postgres "${services[@]}")
   fi
-  if dev_use_local_minio; then
+  if ! tcp_port_is_open "127.0.0.1" "$DOOWON_DEV_REDIS_PORT"; then
+    services=(redis "${services[@]}")
+  fi
+  if dev_use_local_minio && ! url_is_ready "http://127.0.0.1:${DOOWON_DEV_MINIO_PORT}/minio/health/ready"; then
     services=(minio "${services[@]}")
   fi
 
-  echo "[vm] starting host-network infra: ${services[*]}"
-  (cd "$ROOT_DIR" && dev_render_nginx_conf && dev_docker compose -f "$(dev_compose_file)" up -d "${services[@]}")
+  if ((${#services[@]} > 0)); then
+    echo "[vm] starting host-network infra: ${services[*]}"
+    (cd "$ROOT_DIR" && dev_render_nginx_conf && dev_docker compose -f "$(dev_compose_file)" up -d "${services[@]}")
+  else
+    echo "[vm] reusing existing host-network infra ports"
+    (cd "$ROOT_DIR" && dev_render_nginx_conf)
+  fi
+
   if dev_use_local_postgres; then
     wait_for_tcp "127.0.0.1" "$DOOWON_DEV_POSTGRES_PORT" "postgres"
   fi
