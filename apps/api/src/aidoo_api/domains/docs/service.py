@@ -4,10 +4,11 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 
-from fastapi import HTTPException, status
+from fastapi import status
 from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload, selectinload
 
+from aidoo_api.core.i18n import localized_http_exception
 from aidoo_api.core.principal import CallerPrincipal
 from aidoo_api.domains.auth.access import bind_current_workspace, get_current_workspace, resolve_workspaces
 from aidoo_api.domains.auth.models import User, Workspace
@@ -111,14 +112,14 @@ def _split_prefixed_id(value: str) -> tuple[str | None, str]:
 def _normalize_doc_id(value: str) -> str:
     prefix, raw_id = _split_prefixed_id(value)
     if prefix not in {None, "native_doc"}:
-        raise HTTPException(status_code=404, detail="Doc not found.")
+        raise localized_http_exception(status_code=404, code="docs.doc_not_found")
     return raw_id
 
 
 def _normalize_page_id(value: str) -> str:
     prefix, raw_id = _split_prefixed_id(value)
     if prefix not in {None, "native_doc_page"}:
-        raise HTTPException(status_code=404, detail="Page not found.")
+        raise localized_http_exception(status_code=404, code="docs.page_not_found")
     return raw_id
 
 
@@ -148,22 +149,22 @@ def _bind_workspace_context(
 ) -> None:
     bind_current_workspace(db, workspace)
     if principal.workspace_id != workspace.id:
-        raise HTTPException(
+        raise localized_http_exception(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Docs principal workspace mismatch.",
+            code="docs.principal_workspace_mismatch",
         )
     if principal.kind == "user" and principal.user_id not in {None, user.id}:
-        raise HTTPException(
+        raise localized_http_exception(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Docs principal user mismatch.",
+            code="docs.principal_user_mismatch",
         )
 
 
 def _require_user_write_principal(principal: CallerPrincipal) -> None:
     if principal.kind != "user":
-        raise HTTPException(
+        raise localized_http_exception(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Docs write operations require a user principal.",
+            code="docs.write_user_principal_required",
         )
 
 
@@ -215,7 +216,7 @@ def _workspace_for_doc(db: Session, doc: NativeDoc) -> Workspace:
         )
     )
     if workspace is None:
-        raise HTTPException(status_code=404, detail="Workspace not found.")
+        raise localized_http_exception(status_code=404, code="workspace.not_found")
     return workspace
 
 
@@ -387,23 +388,23 @@ def _validate_native_parent(
     }
     parent = active_pages.get(parent_id)
     if parent is None:
-        raise HTTPException(status_code=404, detail="Parent page not found.")
+        raise localized_http_exception(status_code=404, code="docs.parent_page_not_found")
     if page_id is not None and parent.id == page_id:
-        raise HTTPException(status_code=409, detail="Page cannot be its own parent.")
+        raise localized_http_exception(status_code=409, code="docs.page_cannot_be_own_parent")
 
     ancestor = parent
     visited: set[str] = set()
     while ancestor is not None:
         if ancestor.id in visited:
-            raise HTTPException(
+            raise localized_http_exception(
                 status_code=409,
-                detail="Page parent relationship cannot contain a cycle.",
+                code="docs.page_parent_cycle",
             )
         visited.add(ancestor.id)
         if page_id is not None and ancestor.parent_id == page_id:
-            raise HTTPException(
+            raise localized_http_exception(
                 status_code=409,
-                detail="Page parent relationship cannot contain a cycle.",
+                code="docs.page_parent_cycle",
             )
         if ancestor.parent_id is None:
             break
@@ -419,10 +420,10 @@ def _native_doc_from_item_or_404(
 ) -> tuple[NativeDoc, NativeAccess]:
     doc = _load_native_doc_for_access(db, _normalize_doc_id(item_id))
     if doc is None:
-        raise HTTPException(status_code=404, detail="Doc not found.")
+        raise localized_http_exception(status_code=404, code="docs.doc_not_found")
     access = _resolve_native_doc_access(db, doc, current_user, share_token=share_token)
     if not access.can_view or (doc.trashed_at is not None and not access.can_manage):
-        raise HTTPException(status_code=404, detail="Doc not found.")
+        raise localized_http_exception(status_code=404, code="docs.doc_not_found")
     return doc, access
 
 
@@ -453,9 +454,9 @@ def _ensure_docs_workspace_access(db: Session, user: User) -> Workspace:
         bind_current_workspace(db, workspace)
         return workspace
 
-    raise HTTPException(
+    raise localized_http_exception(
         status_code=status.HTTP_403_FORBIDDEN,
-        detail="Docs requests require a workspace context.",
+        code="docs.requests_workspace_context_required",
     )
 
 
@@ -731,7 +732,10 @@ def create_page(
         share_token=None,
     )
     if not access.can_edit:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Doc edit access required.")
+        raise localized_http_exception(
+            status_code=status.HTTP_403_FORBIDDEN,
+            code="docs.doc_edit_access_required",
+        )
 
     normalized_parent_id = _normalize_page_id(parent_id) if parent_id else None
     _validate_native_parent(doc, normalized_parent_id)
@@ -873,11 +877,11 @@ def read_page(
         _ensure_docs_workspace_access(db, user)
     page = _load_native_page(db, _normalize_page_id(page_id))
     if page is None or page.doc is None:
-        raise HTTPException(status_code=404, detail="Page not found.")
+        raise localized_http_exception(status_code=404, code="docs.page_not_found")
     doc = _load_native_doc_for_access(db, page.doc_id)
     if doc is None:
-        raise HTTPException(status_code=404, detail="Page not found.")
+        raise localized_http_exception(status_code=404, code="docs.page_not_found")
     access = _resolve_native_doc_access(db, doc, user, share_token=share_token)
     if not access.can_view or page.trashed_at is not None or doc.trashed_at is not None:
-        raise HTTPException(status_code=403, detail="Page access required.")
+        raise localized_http_exception(status_code=403, code="docs.page_access_required")
     return _serialize_native_page(page, can_edit=access.can_edit)

@@ -444,7 +444,17 @@ def test_native_doc_page_patch_rejects_cycle(client: TestClient) -> None:
         json={"parent_id": child["id"]},
     )
     assert reject.status_code == 409
-    assert "cycle" in reject.json()["detail"].lower()
+    assert reject.json()["code"] == "docs.page_parent_cycle"
+    assert reject.json()["detail"] == "페이지 부모 관계에 순환이 포함될 수 없습니다."
+
+    missing_parent = client.post(
+        f"/api/v1/workspaces/hq/docs/items/{doc['id']}/pages",
+        headers={**_auth_headers(owner_token), "Accept-Language": "en-US"},
+        json={"title": "Invalid child", "parent_id": "missing-parent"},
+    )
+    assert missing_parent.status_code == 404
+    assert missing_parent.json()["code"] == "docs.parent_page_not_found"
+    assert missing_parent.json()["detail"] == "Parent page not found."
 
 
 def test_duplicate_doc_via_read_share_creates_private_copy_for_recipient(client: TestClient) -> None:

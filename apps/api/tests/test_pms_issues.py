@@ -481,7 +481,7 @@ def test_space_docs_collection_permissions_and_soft_delete(client: TestClient) -
         },
     )
     assert cross_collection_parent_response.status_code == 404
-    assert cross_collection_parent_response.json()["detail"] == "Parent page not found."
+    assert cross_collection_parent_response.json()["code"] == "docs.parent_page_not_found"
 
     delete_collection_response = client.delete(
         f"/api/v1/workspaces/hq/docs/items/{collection['id']}",

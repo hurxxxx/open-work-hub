@@ -107,6 +107,94 @@ MESSAGES: dict[str, dict[str, str]] = {
         "ko-KR": "팀 접근 권한이 필요합니다.",
         "en-US": "Team access required.",
     },
+    "docs.doc_not_found": {
+        "ko-KR": "문서를 찾을 수 없습니다.",
+        "en-US": "Doc not found.",
+    },
+    "docs.page_not_found": {
+        "ko-KR": "페이지를 찾을 수 없습니다.",
+        "en-US": "Page not found.",
+    },
+    "docs.workspace_slug_required": {
+        "ko-KR": "워크스페이스 범위 협업 경로에는 워크스페이스 slug가 필요합니다.",
+        "en-US": "Workspace-scoped collaboration routes require a workspace slug.",
+    },
+    "docs.invalid_yjs_state": {
+        "ko-KR": "yjs_state payload가 올바르지 않습니다.",
+        "en-US": "Invalid yjs_state payload.",
+    },
+    "docs.requests_workspace_context_required": {
+        "ko-KR": "문서 요청에는 워크스페이스 컨텍스트가 필요합니다.",
+        "en-US": "Docs requests require a workspace context.",
+    },
+    "docs.principal_workspace_mismatch": {
+        "ko-KR": "문서 principal의 워크스페이스가 일치하지 않습니다.",
+        "en-US": "Docs principal workspace mismatch.",
+    },
+    "docs.principal_user_mismatch": {
+        "ko-KR": "문서 principal의 사용자가 일치하지 않습니다.",
+        "en-US": "Docs principal user mismatch.",
+    },
+    "docs.write_user_principal_required": {
+        "ko-KR": "문서 쓰기 작업에는 사용자 principal이 필요합니다.",
+        "en-US": "Docs write operations require a user principal.",
+    },
+    "docs.parent_page_not_found": {
+        "ko-KR": "부모 페이지를 찾을 수 없습니다.",
+        "en-US": "Parent page not found.",
+    },
+    "docs.page_cannot_be_own_parent": {
+        "ko-KR": "페이지를 자기 자신의 부모로 지정할 수 없습니다.",
+        "en-US": "Page cannot be its own parent.",
+    },
+    "docs.page_parent_cycle": {
+        "ko-KR": "페이지 부모 관계에 순환이 포함될 수 없습니다.",
+        "en-US": "Page parent relationship cannot contain a cycle.",
+    },
+    "docs.container_edit_access_required": {
+        "ko-KR": "컨테이너 편집 권한이 필요합니다.",
+        "en-US": "Container edit access required.",
+    },
+    "docs.page_access_required": {
+        "ko-KR": "페이지 접근 권한이 필요합니다.",
+        "en-US": "Page access required.",
+    },
+    "docs.doc_manage_access_required": {
+        "ko-KR": "문서 관리 권한이 필요합니다.",
+        "en-US": "Doc manage access required.",
+    },
+    "docs.doc_access_required": {
+        "ko-KR": "문서 접근 권한이 필요합니다.",
+        "en-US": "Doc access required.",
+    },
+    "docs.doc_edit_access_required": {
+        "ko-KR": "문서 편집 권한이 필요합니다.",
+        "en-US": "Doc edit access required.",
+    },
+    "docs.doc_share_access_required": {
+        "ko-KR": "문서 공유 권한이 필요합니다.",
+        "en-US": "Doc share access required.",
+    },
+    "docs.owner_already_has_full_access": {
+        "ko-KR": "소유자는 이미 전체 권한을 가지고 있습니다.",
+        "en-US": "Owner already has full access.",
+    },
+    "docs.shared_users_workspace_required": {
+        "ko-KR": "공유 대상 사용자는 같은 워크스페이스의 멤버여야 합니다.",
+        "en-US": "Shared users must be members of the same workspace.",
+    },
+    "docs.shared_link_not_found": {
+        "ko-KR": "공유 링크를 찾을 수 없습니다.",
+        "en-US": "Shared link not found.",
+    },
+    "docs.room_not_found": {
+        "ko-KR": "방을 찾을 수 없습니다.",
+        "en-US": "Room not found.",
+    },
+    "docs.collaboration_actor_not_found": {
+        "ko-KR": "협업 작성자를 찾을 수 없습니다.",
+        "en-US": "Collaboration actor not found.",
+    },
 }
 
 

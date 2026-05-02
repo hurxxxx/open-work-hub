@@ -14,6 +14,12 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload, selectinload
 
 from aidoo_api.core.db import get_db_session, get_session_factory
+from aidoo_api.core.i18n import (
+    DEFAULT_LOCALE,
+    LocalizedApiMessage,
+    localized_http_exception,
+    translate_message,
+)
 from aidoo_api.core.settings import get_settings
 from aidoo_api.core.storage import get_minio_client
 from aidoo_api.domains.auth.access import (
@@ -85,14 +91,14 @@ def _split_prefixed_id(value: str) -> tuple[str | None, str]:
 def _normalize_doc_id(value: str) -> str:
     prefix, raw_id = _split_prefixed_id(value)
     if prefix not in {None, SOURCE_NATIVE_DOC}:
-        raise HTTPException(status_code=404, detail="Doc not found.")
+        raise localized_http_exception(status_code=404, code="docs.doc_not_found")
     return raw_id
 
 
 def _normalize_page_id(value: str) -> str:
     prefix, raw_id = _split_prefixed_id(value)
     if prefix not in {None, PAGE_SOURCE_NATIVE_DOC}:
-        raise HTTPException(status_code=404, detail="Page not found.")
+        raise localized_http_exception(status_code=404, code="docs.page_not_found")
     return raw_id
 
 
@@ -116,9 +122,9 @@ def _max_access_level(*levels: str | None) -> str | None:
 def _require_workspace_slug(request: Request) -> str:
     workspace_slug = request.path_params.get("workspace_slug")
     if not workspace_slug:
-        raise HTTPException(
+        raise localized_http_exception(
             status_code=400,
-            detail="Workspace-scoped collaboration routes require a workspace slug.",
+            code="docs.workspace_slug_required",
         )
     return workspace_slug
 
@@ -129,7 +135,7 @@ def _decode_collab_yjs_state(value: str | None) -> bytes | None:
     try:
         return base64.b64decode(value.encode("ascii"), validate=True)
     except Exception as exc:  # pragma: no cover - defensive validation
-        raise HTTPException(status_code=400, detail="Invalid yjs_state payload.") from exc
+        raise localized_http_exception(status_code=400, code="docs.invalid_yjs_state") from exc
 
 
 def _collab_ws_close_code_for_status(status_code: int) -> int:
@@ -142,20 +148,26 @@ def _collab_ws_close_code_for_status(status_code: int) -> int:
     return 1011
 
 
+def _collab_ws_reason_for_http_error(exc: HTTPException) -> str:
+    if isinstance(exc.detail, LocalizedApiMessage):
+        return translate_message(exc.detail, DEFAULT_LOCALE)
+    return str(exc.detail)
+
+
 async def _receive_collab_auth_frame(websocket: WebSocket) -> str:
     message = await websocket.receive()
     if message["type"] == "websocket.disconnect":
-        raise HTTPException(status_code=401, detail="Authentication required.")
+        raise localized_http_exception(status_code=401, code="auth.required")
     payload = message.get("text")
     if payload is None:
-        raise HTTPException(status_code=401, detail="Authentication required.")
+        raise localized_http_exception(status_code=401, code="auth.required")
     try:
         parsed = json.loads(payload)
     except json.JSONDecodeError as exc:
-        raise HTTPException(status_code=401, detail="Authentication required.") from exc
+        raise localized_http_exception(status_code=401, code="auth.required") from exc
     token = parsed.get("token")
     if parsed.get("type") != "auth" or not isinstance(token, str) or not token:
-        raise HTTPException(status_code=401, detail="Authentication required.")
+        raise localized_http_exception(status_code=401, code="auth.required")
     return token
 
 
@@ -170,7 +182,7 @@ async def _close_websocket_for_http_error(websocket: WebSocket, exc: HTTPExcepti
     try:
         await websocket.close(
             code=_collab_ws_close_code_for_status(exc.status_code),
-            reason=str(exc.detail),
+            reason=_collab_ws_reason_for_http_error(exc),
         )
     except RuntimeError as close_error:
         if "after sending 'websocket.close'" in str(close_error):
@@ -194,7 +206,13 @@ async def _monitor_collab_access(
             auth_context = resolve_auth_context_from_token(db, token, update_last_seen=False)
             context = resolve_collab_page_context(db, auth_context.user, workspace_slug, page_ref)
             if not context.can_edit:
-                await websocket.close(code=4403, reason="Doc edit access required.")
+                await websocket.close(
+                    code=4403,
+                    reason=translate_message(
+                        LocalizedApiMessage(code="docs.doc_edit_access_required"),
+                        DEFAULT_LOCALE,
+                    ),
+                )
                 return
         except HTTPException as exc:
             await _close_websocket_for_http_error(websocket, exc)
@@ -448,7 +466,7 @@ def _workspace_for_doc(db: Session, doc: NativeDoc) -> Workspace:
         )
     )
     if workspace is None:
-        raise HTTPException(status_code=404, detail="Workspace not found.")
+        raise localized_http_exception(status_code=404, code="workspace.not_found")
     return workspace
 
 
@@ -468,9 +486,9 @@ def _ensure_docs_workspace_access(db: Session, user: User) -> Workspace:
             bind_current_workspace(db, current_workspace)
             break
         if current_workspace is None:
-            raise HTTPException(
+            raise localized_http_exception(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="Docs requests require a workspace context.",
+                code="docs.requests_workspace_context_required",
             )
     return current_workspace
 
@@ -799,18 +817,18 @@ def _validate_native_parent(
     }
     parent = active_pages.get(parent_id)
     if parent is None:
-        raise HTTPException(status_code=404, detail="Parent page not found.")
+        raise localized_http_exception(status_code=404, code="docs.parent_page_not_found")
     if page_id is not None and parent.id == page_id:
-        raise HTTPException(status_code=409, detail="Page cannot be its own parent.")
+        raise localized_http_exception(status_code=409, code="docs.page_cannot_be_own_parent")
 
     ancestor = parent
     visited: set[str] = set()
     while ancestor is not None:
         if ancestor.id in visited:
-            raise HTTPException(status_code=409, detail="Page parent relationship cannot contain a cycle.")
+            raise localized_http_exception(status_code=409, code="docs.page_parent_cycle")
         visited.add(ancestor.id)
         if page_id is not None and ancestor.parent_id == page_id:
-            raise HTTPException(status_code=409, detail="Page parent relationship cannot contain a cycle.")
+            raise localized_http_exception(status_code=409, code="docs.page_parent_cycle")
         if ancestor.parent_id is None:
             break
         ancestor = active_pages.get(ancestor.parent_id)
@@ -825,10 +843,10 @@ def _native_doc_from_item_or_404(
 ) -> tuple[NativeDoc, NativeAccess]:
     doc = _load_native_doc_for_access(db, _normalize_doc_id(item_id))
     if doc is None:
-        raise HTTPException(status_code=404, detail="Doc not found.")
+        raise localized_http_exception(status_code=404, code="docs.doc_not_found")
     access = _resolve_native_doc_access(db, doc, current_user, share_token=share_token)
     if not access.can_view or (doc.trashed_at is not None and not access.can_manage):
-        raise HTTPException(status_code=404, detail="Doc not found.")
+        raise localized_http_exception(status_code=404, code="docs.doc_not_found")
     return doc, access
 
 
@@ -990,7 +1008,7 @@ def _upsert_primary_container(
         workspace=workspace,
         ref=ref,
     ):
-        raise HTTPException(status_code=403, detail="Container edit access required.")
+        raise localized_http_exception(status_code=403, code="docs.container_edit_access_required")
 
     for container in doc.containers:
         container.is_primary = False
@@ -1148,13 +1166,13 @@ def read_page_internal(
         _ensure_docs_workspace_access(db, user)
     page = _load_native_page(db, _normalize_page_id(page_id))
     if page is None or page.doc is None:
-        raise HTTPException(status_code=404, detail="Page not found.")
+        raise localized_http_exception(status_code=404, code="docs.page_not_found")
     doc = _load_native_doc_for_access(db, page.doc_id)
     if doc is None:
-        raise HTTPException(status_code=404, detail="Page not found.")
+        raise localized_http_exception(status_code=404, code="docs.page_not_found")
     access = _resolve_native_doc_access(db, doc, user, share_token=share_token)
     if not access.can_view or page.trashed_at is not None or doc.trashed_at is not None:
-        raise HTTPException(status_code=403, detail="Page access required.")
+        raise localized_http_exception(status_code=403, code="docs.page_access_required")
     return _serialize_native_page(page, can_edit=access.can_edit)
 
 
@@ -1215,7 +1233,7 @@ def create_doc_item(
         workspace=workspace,
         ref=ContainerRef(app=container_payload.app, type=container_payload.type, id=container_payload.id),
     ):
-        raise HTTPException(status_code=403, detail="Container edit access required.")
+        raise localized_http_exception(status_code=403, code="docs.container_edit_access_required")
 
     doc = NativeDoc(
         id=new_id(),
@@ -1282,7 +1300,7 @@ def update_doc_item(
         _ensure_docs_workspace_access(db, current_user)
     doc, access = _native_doc_from_item_or_404(db, item_id, current_user, share_token=share_token)
     if not access.can_manage:
-        raise HTTPException(status_code=403, detail="Doc manage access required.")
+        raise localized_http_exception(status_code=403, code="docs.doc_manage_access_required")
     if payload.title is not None:
         doc.title = payload.title.strip()
         db.add(doc)
@@ -1306,7 +1324,7 @@ def delete_doc_item(
         _ensure_docs_workspace_access(db, current_user)
     doc, access = _native_doc_from_item_or_404(db, item_id, current_user, share_token=share_token)
     if not access.can_manage:
-        raise HTTPException(status_code=403, detail="Doc manage access required.")
+        raise localized_http_exception(status_code=403, code="docs.doc_manage_access_required")
 
     deleted_at = _utcnow()
     doc.trashed_at = deleted_at
@@ -1351,7 +1369,7 @@ def duplicate_doc_item(
         _ensure_docs_workspace_access(db, current_user)
     source_doc, access = _native_doc_from_item_or_404(db, item_id, current_user, share_token=share_token)
     if not access.can_view:
-        raise HTTPException(status_code=403, detail="Doc access required.")
+        raise localized_http_exception(status_code=403, code="docs.doc_access_required")
 
     duplicate = NativeDoc(
         id=new_id(),
@@ -1419,7 +1437,7 @@ def create_doc_page(
         _ensure_docs_workspace_access(db, current_user)
     doc, access = _native_doc_from_item_or_404(db, item_id, current_user, share_token=share_token)
     if not access.can_edit:
-        raise HTTPException(status_code=403, detail="Doc edit access required.")
+        raise localized_http_exception(status_code=403, code="docs.doc_edit_access_required")
 
     parent_id = _normalize_page_id(payload.parent_id) if payload.parent_id else None
     _validate_native_parent(doc, parent_id)
@@ -1485,13 +1503,13 @@ def update_doc_page(
         _ensure_docs_workspace_access(db, current_user)
     page = _load_native_page(db, _normalize_page_id(page_id))
     if page is None or page.doc is None:
-        raise HTTPException(status_code=404, detail="Page not found.")
+        raise localized_http_exception(status_code=404, code="docs.page_not_found")
     doc = _load_native_doc_for_access(db, page.doc_id)
     if doc is None:
-        raise HTTPException(status_code=404, detail="Page not found.")
+        raise localized_http_exception(status_code=404, code="docs.page_not_found")
     access = _resolve_native_doc_access(db, doc, current_user, share_token=share_token)
     if not access.can_edit or page.trashed_at is not None or doc.trashed_at is not None:
-        raise HTTPException(status_code=403, detail="Doc edit access required.")
+        raise localized_http_exception(status_code=403, code="docs.doc_edit_access_required")
 
     if "parent_id" in payload.model_fields_set:
         next_parent_id = _normalize_page_id(payload.parent_id) if payload.parent_id else None
@@ -1533,13 +1551,13 @@ def delete_doc_page(
         _ensure_docs_workspace_access(db, current_user)
     page = _load_native_page(db, _normalize_page_id(page_id))
     if page is None or page.doc is None:
-        raise HTTPException(status_code=404, detail="Page not found.")
+        raise localized_http_exception(status_code=404, code="docs.page_not_found")
     doc = _load_native_doc_for_access(db, page.doc_id)
     if doc is None:
-        raise HTTPException(status_code=404, detail="Page not found.")
+        raise localized_http_exception(status_code=404, code="docs.page_not_found")
     access = _resolve_native_doc_access(db, doc, current_user, share_token=share_token)
     if not access.can_edit or page.trashed_at is not None or doc.trashed_at is not None:
-        raise HTTPException(status_code=403, detail="Doc edit access required.")
+        raise localized_http_exception(status_code=403, code="docs.doc_edit_access_required")
 
     deleted_at = _utcnow()
     media_keys: list[str] = []
@@ -1579,7 +1597,7 @@ def update_doc_container(
     _ensure_docs_workspace_access(db, current_user)
     doc, access = _native_doc_from_item_or_404(db, item_id, current_user, share_token=None)
     if not access.can_edit:
-        raise HTTPException(status_code=403, detail="Doc edit access required.")
+        raise localized_http_exception(status_code=403, code="docs.doc_edit_access_required")
     _upsert_primary_container(db, doc=doc, payload=payload, current_user=current_user)
     enqueue_native_doc_rag_sync(
         db,
@@ -1599,7 +1617,7 @@ def delete_doc_container(
     _ensure_docs_workspace_access(db, current_user)
     doc, access = _native_doc_from_item_or_404(db, item_id, current_user, share_token=None)
     if not access.can_edit:
-        raise HTTPException(status_code=403, detail="Doc edit access required.")
+        raise localized_http_exception(status_code=403, code="docs.doc_edit_access_required")
     _delete_primary_container(db, doc)
     enqueue_native_doc_rag_sync(
         db,
@@ -1896,7 +1914,7 @@ def _load_native_doc_for_share_or_403(
 ) -> NativeDoc:
     doc, access = _native_doc_from_item_or_404(db, item_id, current_user, share_token=None)
     if not access.can_share:
-        raise HTTPException(status_code=403, detail="Doc share access required.")
+        raise localized_http_exception(status_code=403, code="docs.doc_share_access_required")
     return doc
 
 
@@ -1922,14 +1940,14 @@ def upsert_native_doc_user_share(
     _ensure_docs_workspace_access(db, current_user)
     doc = _load_native_doc_for_share_or_403(db, item_id, current_user)
     if user_id == current_user.id:
-        raise HTTPException(status_code=409, detail="Owner already has full access.")
+        raise localized_http_exception(status_code=409, code="docs.owner_already_has_full_access")
     target_user = db.scalar(select(User).where(User.id == user_id, User.status == "active"))
     if target_user is None:
-        raise HTTPException(status_code=404, detail="User not found.")
+        raise localized_http_exception(status_code=404, code="auth.user_not_found")
     if resolve_workspace_role(db, target_user, doc.workspace_id) is None:
-        raise HTTPException(
+        raise localized_http_exception(
             status_code=409,
-            detail="Shared users must be members of the same workspace.",
+            code="docs.shared_users_workspace_required",
         )
     share = next((item for item in doc.user_shares if item.user_id == user_id), None)
     if share is None:
@@ -2053,7 +2071,7 @@ def resolve_shared_link(
         )
     )
     if doc is None:
-        raise HTTPException(status_code=404, detail="Shared link not found.")
+        raise localized_http_exception(status_code=404, code="docs.shared_link_not_found")
     item = _lookup_item(db, doc.id, current_user, share_token=share_token)
     return ResolveSharedLinkResponse(item=item)
 
@@ -2106,7 +2124,7 @@ def save_docs_collab_snapshot(
     workspace_slug = _require_workspace_slug(request)
     context = resolve_collab_page_context(db, current_user, workspace_slug, page_ref)
     if not context.can_edit:
-        raise HTTPException(status_code=403, detail="Doc edit access required.")
+        raise localized_http_exception(status_code=403, code="docs.doc_edit_access_required")
 
     yjs_state = _decode_collab_yjs_state(payload.yjs_state)
     persist_collab_snapshot_to_page(
@@ -2149,9 +2167,9 @@ async def docs_collab_websocket(
         token = await _resolve_collab_ws_token(websocket)
         workspace_slug = websocket.path_params.get("workspace_slug")
         if not workspace_slug:
-            raise HTTPException(
+            raise localized_http_exception(
                 status_code=400,
-                detail="Workspace-scoped collaboration routes require a workspace slug.",
+                code="docs.workspace_slug_required",
             )
 
         session_factory = get_session_factory()
@@ -2163,7 +2181,7 @@ async def docs_collab_websocket(
             auth_user_id = auth_context.user.id
             context = resolve_collab_page_context(db, auth_context.user, workspace_slug, page_ref)
             if not context.can_edit:
-                raise HTTPException(status_code=403, detail="Doc edit access required.")
+                raise localized_http_exception(status_code=403, code="docs.doc_edit_access_required")
             collab = ensure_collab_document_state(
                 db,
                 source_type=context.source_type,
@@ -2178,7 +2196,7 @@ async def docs_collab_websocket(
 
         room_key = context.room_key
         if room_name and room_name != room_key:
-            raise HTTPException(status_code=404, detail="Room not found.")
+            raise localized_http_exception(status_code=404, code="docs.room_not_found")
         if not hub.relay_available:
             await websocket.close(code=1013, reason="Collaboration relay unavailable.")
             return

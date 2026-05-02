@@ -10,7 +10,7 @@ import json
 import logging
 from typing import Any
 
-from fastapi import HTTPException, WebSocket
+from fastapi import WebSocket
 from redis import asyncio as redis_asyncio
 from redis.asyncio.client import PubSub
 from sqlalchemy import delete, select
@@ -23,6 +23,7 @@ from ypy_websocket.yroom import YRoom
 from ypy_websocket.yutils import YMessageType
 
 from aidoo_api.core.db import get_session_factory
+from aidoo_api.core.i18n import localized_http_exception
 from aidoo_api.core.settings import get_settings
 from aidoo_api.domains.auth.access import (
     load_active_workspace_by_key,
@@ -183,15 +184,15 @@ def _resolve_native_page_context(
 ) -> CollabPageContext:
     workspace = load_active_workspace_by_key(db, workspace_slug)
     if workspace is None:
-        raise HTTPException(status_code=404, detail="Workspace not found.")
+        raise localized_http_exception(status_code=404, code="workspace.not_found")
     if not workspace_role_allows(resolve_workspace_role(db, user, workspace.id), "member"):
-        raise HTTPException(status_code=403, detail="Workspace access required.")
+        raise localized_http_exception(status_code=403, code="workspace.access_required")
 
     page = _load_native_page_for_collab(db, page_id)
     if page is None or page.doc is None or page.trashed_at is not None or page.doc.trashed_at is not None:
-        raise HTTPException(status_code=404, detail="Page not found.")
+        raise localized_http_exception(status_code=404, code="docs.page_not_found")
     if page.doc.workspace_id != workspace.id:
-        raise HTTPException(status_code=404, detail="Page not found.")
+        raise localized_http_exception(status_code=404, code="docs.page_not_found")
 
     if page.doc.owner_id == user.id:
         can_view = True
@@ -246,7 +247,7 @@ def _resolve_native_page_context(
         can_edit = access_level == "edit"
 
     if not can_view:
-        raise HTTPException(status_code=404, detail="Page not found.")
+        raise localized_http_exception(status_code=404, code="docs.page_not_found")
 
     return CollabPageContext(
         page_ref=make_page_ref(PAGE_SOURCE_NATIVE_DOC, page.id),
@@ -268,7 +269,7 @@ def resolve_collab_page_context(
     source_type, source_page_id = split_page_ref(page_ref)
     if source_type == PAGE_SOURCE_NATIVE_DOC:
         return _resolve_native_page_context(db, user, workspace_slug, source_page_id)
-    raise HTTPException(status_code=404, detail="Page not found.")
+    raise localized_http_exception(status_code=404, code="docs.page_not_found")
 
 
 def get_collab_document(
@@ -444,7 +445,7 @@ def persist_collab_snapshot_to_page(
     if source_type == PAGE_SOURCE_NATIVE_DOC:
         page = _load_native_page_for_collab(db, source_page_id)
         if page is None or page.doc is None or page.trashed_at is not None or page.doc.trashed_at is not None:
-            raise HTTPException(status_code=404, detail="Page not found.")
+            raise localized_http_exception(status_code=404, code="docs.page_not_found")
         page.content_blocks = content_blocks
         sync_embedded_media(db, content_blocks, "docs_native_page", page.id, current_user)
         db.add(page)
@@ -452,7 +453,7 @@ def persist_collab_snapshot_to_page(
         enqueue_doc_search_index(db, doc=page.doc, operation="upsert")
         return
 
-    raise HTTPException(status_code=404, detail="Page not found.")
+    raise localized_http_exception(status_code=404, code="docs.page_not_found")
 
 
 def materialize_collab_room_state(
@@ -470,7 +471,7 @@ def materialize_collab_room_state(
     if actor is None:
         actor = db.scalar(select(User).where(User.id == fallback_actor_user_id))
     if actor is None:
-        raise HTTPException(status_code=404, detail="Collaboration actor not found.")
+        raise localized_http_exception(status_code=404, code="docs.collaboration_actor_not_found")
 
     persist_collab_snapshot_to_page(
         db,
