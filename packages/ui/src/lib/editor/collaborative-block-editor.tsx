@@ -33,12 +33,20 @@ export interface CollaborativeBlockEditorProps {
   sessionKey: string;
   authToken: string;
   loadSession: () => Promise<CollaborativeSession>;
+  messages: CollaborativeBlockEditorMessages;
   placeholder?: string;
   className?: string;
   uploadFile?: (file: File) => Promise<string>;
   resolveFileUrl?: (url: string) => Promise<string>;
   onChange?: (content: BlockContent) => void;
 }
+
+export type CollaborativeBlockEditorMessages = {
+  permissionRevoked: string;
+  relayUnavailable: string;
+  startFailed: string;
+  preparing: string;
+};
 
 const USER_COLORS = [
   '#0ea5e9',
@@ -79,26 +87,31 @@ function toWebSocketUrl(wsPath: string): string {
   return resolved.toString();
 }
 
-function resolveReadOnlyMessage(reason: 'relay_unavailable' | 'permission_revoked' | null): string {
+function resolveReadOnlyMessage(
+  reason: 'relay_unavailable' | 'permission_revoked' | null,
+  messages: CollaborativeBlockEditorMessages,
+): string {
   if (reason === 'permission_revoked') {
-    return '문서 편집 권한이 회수되어 읽기 전용으로 전환되었습니다.';
+    return messages.permissionRevoked;
   }
-  return '실시간 협업 relay를 사용할 수 없어 읽기 전용으로 전환되었습니다.';
+  return messages.relayUnavailable;
 }
 
 function ReadOnlyCollabState({
   content,
   reason,
+  messages,
   resolveFileUrl,
 }: {
   content: BlockContent;
   reason: 'relay_unavailable' | 'permission_revoked' | null;
+  messages: CollaborativeBlockEditorMessages;
   resolveFileUrl?: (url: string) => Promise<string>;
 }) {
   return (
     <div className="space-y-4">
       <div className="rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-600 dark:text-amber-300">
-        {resolveReadOnlyMessage(reason)}
+        {resolveReadOnlyMessage(reason, messages)}
       </div>
       <BlockViewer content={content} resolveFileUrl={resolveFileUrl} />
     </div>
@@ -108,6 +121,7 @@ function ReadOnlyCollabState({
 function CollaborativeBlockEditorInner({
   session,
   authToken,
+  messages,
   placeholder,
   className,
   uploadFile,
@@ -116,6 +130,7 @@ function CollaborativeBlockEditorInner({
 }: {
   session: CollaborativeSession;
   authToken: string;
+  messages: CollaborativeBlockEditorMessages;
   placeholder?: string;
   className?: string;
   uploadFile?: (file: File) => Promise<string>;
@@ -228,6 +243,7 @@ function CollaborativeBlockEditorInner({
       <ReadOnlyCollabState
         content={fallbackContent}
         reason={readOnlyReason}
+        messages={messages}
         resolveFileUrl={resolveFileUrl}
       />
     );
@@ -250,6 +266,7 @@ export function CollaborativeBlockEditor({
   sessionKey,
   authToken,
   loadSession,
+  messages,
   placeholder,
   className,
   uploadFile,
@@ -276,13 +293,13 @@ export function CollaborativeBlockEditor({
       })
       .catch((caughtError) => {
         if (!cancelled) {
-          setError(caughtError instanceof Error ? caughtError.message : '협업 세션을 시작하지 못했습니다.');
+          setError(caughtError instanceof Error ? caughtError.message : messages.startFailed);
         }
       });
     return () => {
       cancelled = true;
     };
-  }, [sessionKey]);
+  }, [messages.startFailed, sessionKey]);
 
   if (error) {
     return (
@@ -296,7 +313,7 @@ export function CollaborativeBlockEditor({
     return (
       <div className="flex items-center gap-2 px-1 py-2 text-sm text-[var(--ui-color-ink-subtle)]">
         <Loader2 size={16} className="animate-spin" />
-        <span>실시간 협업 세션을 준비하는 중입니다.</span>
+        <span>{messages.preparing}</span>
       </div>
     );
   }
@@ -306,6 +323,7 @@ export function CollaborativeBlockEditor({
       <ReadOnlyCollabState
         content={session.snapshotContent ?? []}
         reason={session.readOnlyReason}
+        messages={messages}
         resolveFileUrl={resolveFileUrl}
       />
     );
@@ -316,6 +334,7 @@ export function CollaborativeBlockEditor({
       key={sessionKey}
       session={session}
       authToken={authToken}
+      messages={messages}
       placeholder={placeholder}
       className={className}
       uploadFile={uploadFile}

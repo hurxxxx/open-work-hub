@@ -238,6 +238,7 @@ export function SpaceOrderEditorModal({
 
   return (
     <Dialog
+        closeLabel={t('common:actions.close')}
       open={isOpen}
       onOpenChange={(open) => { if (!open) requestClose(); }}
       title={t('pms.orderEditor.title', { spaceName })}

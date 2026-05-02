@@ -9,7 +9,6 @@ import { useState, type ReactNode } from 'react';
 
 import type { DataTableColumn, Density } from '../types';
 import { cn } from '../utils/cn';
-import { EmptyState } from './empty-state';
 import { Skeleton } from './skeleton';
 
 export interface DataTableProps<TData extends object> {
@@ -87,12 +86,7 @@ export function DataTable<TData extends object>({
   if (!rows.length) {
     return (
       <div className="rounded-[var(--ui-radius-md)] border border-[var(--ui-color-border)] bg-ui-surface-raised p-4">
-        {emptyState ?? (
-          <EmptyState
-            title="No results"
-            description="검색 조건을 조정하거나 다른 저장된 뷰를 선택해보세요."
-          />
-        )}
+        {emptyState ?? null}
       </div>
     );
   }

@@ -33,6 +33,7 @@ export function MeetingPreviewModal({
 
   return (
     <Dialog
+        closeLabel={t('common:actions.close')}
       open={open}
       onOpenChange={(next) => {
         if (!next) onClose();

@@ -646,7 +646,12 @@ export const DocsView = () => {
   const handleRenameDoc = async (item: DocsHubItem) => {
     setMenuOpenId(null);
     if (!token || !item.can_manage) return;
-    const nextTitle = await prompt({ title: t('docs.renameDocument'), defaultValue: item.title });
+    const nextTitle = await prompt({
+      title: t('docs.renameDocument'),
+      defaultValue: item.title,
+      submitLabel: t('common:actions.save'),
+      cancelLabel: t('common:actions.cancel'),
+    });
     if (!nextTitle || nextTitle.trim() === item.title) return;
     try {
       const updated = await updateDocsItem(token, item.id, { title: nextTitle.trim() }, shareToken, workspaceSlug);
@@ -668,6 +673,7 @@ export const DocsView = () => {
         ? t('docs.deleteDocDescription')
         : t('docs.removeFromDocsDescription'),
       confirmLabel: t('common:actions.delete'),
+      cancelLabel: t('common:actions.cancel'),
       variant: 'danger',
     });
     if (!ok) return;
@@ -726,7 +732,12 @@ export const DocsView = () => {
 
   const handleAddPage = async (parentId?: string | null) => {
     if (!token || !selectedDoc || !selectedDoc.can_edit) return;
-    const title = await prompt({ title: t('apps:docs.newPage'), defaultValue: t('apps:docs.untitled') });
+    const title = await prompt({
+      title: t('apps:docs.newPage'),
+      defaultValue: t('apps:docs.untitled'),
+      submitLabel: t('common:actions.create'),
+      cancelLabel: t('common:actions.cancel'),
+    });
     if (!title || !title.trim()) return;
     try {
       const page = await createDocPage(token, selectedDoc.id, {
@@ -749,6 +760,7 @@ export const DocsView = () => {
       title: t('docs.deletePageConfirm', { title: page.title }),
       description: t('docs.deletePageDescription'),
       confirmLabel: t('common:actions.delete'),
+      cancelLabel: t('common:actions.cancel'),
       variant: 'danger',
     });
     if (!ok) return;
@@ -1340,6 +1352,12 @@ export const DocsView = () => {
                             snapshotContent: (session.snapshot_content_blocks ?? []) as never,
                             yjsState: session.yjs_state,
                           };
+                        }}
+                        messages={{
+                          permissionRevoked: t('apps:docs.collab.permissionRevoked'),
+                          relayUnavailable: t('apps:docs.collab.relayUnavailable'),
+                          startFailed: t('apps:docs.collab.startFailed'),
+                          preparing: t('apps:docs.collab.preparing'),
                         }}
                         placeholder={t('apps:docs.startWriting')}
                         uploadFile={activePageUploadFile}

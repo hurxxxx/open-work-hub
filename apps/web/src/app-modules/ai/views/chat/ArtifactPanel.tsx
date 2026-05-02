@@ -68,7 +68,7 @@ export function ArtifactPanel({ artifact, onClose }: ArtifactPanelProps) {
             </header>
             <div className="custom-scrollbar flex-1 overflow-y-auto px-5 py-4">
               {artifact.content.trim() ? (
-                <ArtifactBody artifact={artifact} />
+                <ArtifactBody artifact={artifact} svgAriaLabel={t('ai.artifacts.svgAriaLabel')} />
               ) : (
                 <div className="app-text-body-sm text-gray-500">
                   {t('ai.artifacts.empty')}
@@ -82,7 +82,13 @@ export function ArtifactPanel({ artifact, onClose }: ArtifactPanelProps) {
   );
 }
 
-function ArtifactBody({ artifact }: { artifact: ArtifactBuffer }) {
+function ArtifactBody({
+  artifact,
+  svgAriaLabel,
+}: {
+  artifact: ArtifactBuffer;
+  svgAriaLabel: string;
+}) {
   switch (artifact.type) {
     case 'html':
       return (
@@ -100,7 +106,7 @@ function ArtifactBody({ artifact }: { artifact: ArtifactBuffer }) {
         />
       );
     case 'svg':
-      return <SvgArtifact content={artifact.content} />;
+      return <SvgArtifact content={artifact.content} ariaLabel={svgAriaLabel} />;
     case 'document':
     default:
       // Unknown/future types fall back to the document renderer —

@@ -3,6 +3,7 @@ import DOMPurify from 'dompurify';
 
 export interface SvgArtifactProps {
   content: string;
+  ariaLabel: string;
 }
 
 // Inline SVG renderer with DOMPurify sanitation. The `svg` + `svgFilters`
@@ -11,7 +12,7 @@ export interface SvgArtifactProps {
 // `on*` event handler, `javascript:` URLs, and foreignObject HTML
 // injection. react-markdown doesn't see SVG bodies at all — the artifact
 // body IS the graphic markup.
-export function SvgArtifact({ content }: SvgArtifactProps) {
+export function SvgArtifact({ content, ariaLabel }: SvgArtifactProps) {
   const safeHtml = useMemo(
     () =>
       DOMPurify.sanitize(content, {
@@ -23,7 +24,7 @@ export function SvgArtifact({ content }: SvgArtifactProps) {
     <div
       className="artifact-svg"
       role="img"
-      aria-label="SVG 아티팩트"
+      aria-label={ariaLabel}
       // DOMPurify's output is already sanitized by the svg profile, so
       // injecting it is safe. We rely on the profile rather than a hand-
       // rolled allowlist because hand-rolled tends to miss mutation XSS.

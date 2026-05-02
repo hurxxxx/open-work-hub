@@ -253,7 +253,7 @@ export function LoginScreen() {
                     {t('login.password')}
                   </label>
                   {!isSetupMode ? (
-                    <span className="text-xs text-app-accent">Local ID/PW</span>
+                    <span className="text-xs text-app-accent">{t('login.localCredentialBadge')}</span>
                   ) : null}
                 </div>
                 <div className="relative">

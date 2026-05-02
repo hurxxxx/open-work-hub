@@ -1088,6 +1088,7 @@ export function MeetingDetail({
         workspaceSlug={workspaceSlug}
       />
       <Dialog
+        closeLabel={t('common:actions.close')}
         open={whiteboardEditorOpen && activeWhiteboardId !== null}
         onOpenChange={(open) => {
           if (!open) setWhiteboardEditorOpen(false);

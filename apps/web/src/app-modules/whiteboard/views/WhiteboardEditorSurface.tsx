@@ -384,6 +384,7 @@ function WhiteboardShareDialog({
 
   return (
     <Dialog
+        closeLabel={t('common:actions.close')}
       open={open}
       onOpenChange={(nextOpen) => {
         if (!nextOpen) onClose();

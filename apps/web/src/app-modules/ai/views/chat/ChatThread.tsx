@@ -22,6 +22,7 @@ export interface LiveAssistant {
 export interface ChatThreadProps {
   turns: ChatTurn[];
   liveAssistant: LiveAssistant | null;
+  typingLabel: string;
   activeArtifactId?: string | null;
   onOpenArtifact?: (artifactId: string) => void;
 }
@@ -29,6 +30,7 @@ export interface ChatThreadProps {
 export function ChatThread({
   turns,
   liveAssistant,
+  typingLabel,
   activeArtifactId = null,
   onOpenArtifact,
 }: ChatThreadProps) {
@@ -101,7 +103,7 @@ export function ChatThread({
           <div className="flex h-8 w-8 items-center justify-center rounded-md border border-app-border bg-app-surface text-app-accent">
             <Loader2 size={16} className="animate-spin" />
           </div>
-          <span className="app-text-body-sm">답변 작성 중</span>
+          <span className="app-text-body-sm">{typingLabel}</span>
         </div>
       )}
     </div>

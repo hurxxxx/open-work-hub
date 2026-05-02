@@ -133,6 +133,7 @@ export function AddAttendeesModal({
 
   return (
     <Dialog
+        closeLabel={t('common:actions.close')}
       open={isOpen}
       onOpenChange={(next) => {
         if (!next) onClose();

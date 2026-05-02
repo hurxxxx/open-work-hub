@@ -47,6 +47,7 @@ export const CreateFolderModal = ({
 
   return (
     <Dialog
+        closeLabel={t('common:actions.close')}
       open={isOpen}
       onOpenChange={(open) => { if (!open) onClose(); }}
       title={t('apps:pms.createFolder')}

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Calendar, AlertCircle, CheckCircle2, Loader2 } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { cn } from '@/src/lib/utils';
 import { useAuth } from '@/src/platform/auth/auth-provider';
 import { normalizeTimeZone, zonedDateKey } from '@/src/platform/time/time-utils';
@@ -7,6 +8,7 @@ import { listPmsTaskLists, listTaskListIssues, type PmsIssue } from '../api/pms-
 import { initials, formatDate } from './pms-constants';
 
 export const TodayOverdueView = () => {
+  const { t } = useTranslation('apps');
   const { token, user } = useAuth();
   const [issues, setIssues] = useState<PmsIssue[]>([]);
   const [loading, setLoading] = useState(true);
@@ -38,8 +40,8 @@ export const TodayOverdueView = () => {
   return (
     <div className="h-full flex flex-col relative">
       <header className="bg-app-bg border-b border-app-border px-8 pt-6 pb-4">
-        <h1 className="app-text-title-lg text-app-ink">Today & Overdue</h1>
-        <p className="app-text-body mt-1 text-gray-500">Focus on what's important right now</p>
+        <h1 className="app-text-title-lg text-app-ink">{t('pms.todayOverdue.title')}</h1>
+        <p className="app-text-body mt-1 text-gray-500">{t('pms.todayOverdue.description')}</p>
       </header>
 
       <main className="flex-1 overflow-y-auto p-8 custom-scrollbar">
@@ -51,14 +53,16 @@ export const TodayOverdueView = () => {
             <section>
               <div className="flex items-center gap-2 mb-4 text-red-500">
                 <AlertCircle size={18} />
-                <h2 className="app-text-title-md">Overdue</h2>
+                <h2 className="app-text-title-md">{t('pms.todayOverdue.overdue')}</h2>
                 <span className="app-text-label rounded-full bg-red-500/10 px-2 py-0.5 text-red-500">{overdue.length}</span>
               </div>
               <div className="space-y-2">
                 {overdue.map(issue => (
                   <IssueAgendaItem key={issue.id} issue={issue} isOverdue />
                 ))}
-                {overdue.length === 0 && <p className="app-text-body text-app-ink/40">No overdue tasks</p>}
+                {overdue.length === 0 && (
+                  <p className="app-text-body text-app-ink/40">{t('pms.todayOverdue.noOverdue')}</p>
+                )}
               </div>
             </section>
 
@@ -66,14 +70,16 @@ export const TodayOverdueView = () => {
             <section>
               <div className="flex items-center gap-2 mb-4 text-blue-400">
                 <Calendar size={18} />
-                <h2 className="app-text-title-md">Today</h2>
+                <h2 className="app-text-title-md">{t('pms.todayOverdue.today')}</h2>
                 <span className="app-text-label rounded-full bg-blue-400/10 px-2 py-0.5 text-blue-400">{todayIssues.length}</span>
               </div>
               <div className="space-y-2">
                 {todayIssues.map(issue => (
                   <IssueAgendaItem key={issue.id} issue={issue} />
                 ))}
-                {todayIssues.length === 0 && <p className="app-text-body text-app-ink/40">No tasks due today</p>}
+                {todayIssues.length === 0 && (
+                  <p className="app-text-body text-app-ink/40">{t('pms.todayOverdue.noToday')}</p>
+                )}
               </div>
             </section>
           </div>

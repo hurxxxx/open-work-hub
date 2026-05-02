@@ -11,24 +11,24 @@ import { cn } from '../utils/cn';
 
 export interface PromptDialogProps {
   open: boolean;
-  title?: string;
+  title: string;
   description?: string;
   placeholder?: string;
   defaultValue?: string;
-  submitLabel?: string;
-  cancelLabel?: string;
+  submitLabel: string;
+  cancelLabel: string;
   onSubmit: (value: string) => void;
   onCancel: () => void;
 }
 
 export function PromptDialog({
   open,
-  title = 'Input',
+  title,
   description,
   placeholder,
   defaultValue = '',
-  submitLabel = 'Save',
-  cancelLabel = 'Cancel',
+  submitLabel,
+  cancelLabel,
   onSubmit,
   onCancel,
 }: PromptDialogProps) {
@@ -97,12 +97,12 @@ export function PromptDialog({
 /* ------------------------------------------------------------------ */
 
 type PromptOptions = {
-  title?: string;
+  title: string;
   description?: string;
   placeholder?: string;
   defaultValue?: string;
-  submitLabel?: string;
-  cancelLabel?: string;
+  submitLabel: string;
+  cancelLabel: string;
 };
 
 type PromptState = PromptOptions & { resolve: (value: string | null) => void };
@@ -125,7 +125,7 @@ export function usePrompt() {
   const stateRef = useRef(state);
   stateRef.current = state;
 
-  const prompt = useCallback((options: PromptOptions = {}) => {
+  const prompt = useCallback((options: PromptOptions) => {
     if (stateRef.current) stateRef.current.resolve(null);
     return new Promise<string | null>((resolve) => {
       setState({ ...options, resolve });

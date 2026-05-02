@@ -6,6 +6,7 @@ export interface SidebarNavProps {
   brand: { eyebrow: string; title: string };
   launcher?: { label: string; hint?: string; onSelect?: () => void };
   sections: SidebarNavSection[];
+  ariaLabel?: string;
   footerBadges?: string[];
   className?: string;
 }
@@ -14,6 +15,7 @@ export function SidebarNav({
   brand,
   launcher,
   sections,
+  ariaLabel,
   footerBadges,
   className,
 }: SidebarNavProps) {
@@ -44,7 +46,7 @@ export function SidebarNav({
         <div />
       )}
 
-      <nav aria-label="Primary" className="flex flex-col gap-2.5 self-start">
+      <nav aria-label={ariaLabel} className="flex flex-col gap-2.5 self-start">
         {sections.map((section) => (
           <div key={section.id} className="grid content-start gap-1">
             <p className="m-0 px-2 text-[0.64rem] font-semibold uppercase tracking-[0.08em] text-white/42">

@@ -124,6 +124,7 @@ export function MeetingAvailabilityModal({
 
   return (
     <Dialog
+        closeLabel={t('common:actions.close')}
       open={isOpen}
       onOpenChange={(open) => {
         if (!open) onClose();

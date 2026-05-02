@@ -1,5 +1,6 @@
 import { MessageSquare, Flag, MoreHorizontal, CheckSquare, Clock } from 'lucide-react';
 import { Badge, Button } from '@aidoo/ui';
+import { useTranslation } from 'react-i18next';
 import type { PmsIssue, PmsTaskListStatus } from '../api/pms-api';
 import { getStatusTone, PRIORITY_COLOR, initials, formatDate } from './pms-constants';
 import { TaskIssueCard } from './TaskIssueCard';
@@ -17,6 +18,7 @@ export const TableView = ({
   onToggleSelect?: (issueId: string) => void;
   taskListStatuses?: PmsTaskListStatus[];
 }) => {
+  const { t } = useTranslation('apps');
   return (
     <>
       <div className="space-y-2 lg:hidden">
@@ -26,8 +28,10 @@ export const TableView = ({
             issue={issue}
             onSelectIssue={onSelectIssue}
             onToggleSelect={onToggleSelect}
+            selectIssueLabel={(reference) => t('pms.list.selectIssue', { reference })}
             selected={selectedIds?.has(issue.id) ?? false}
             taskListStatuses={taskListStatuses}
+            unassignedLabel={t('pms.taskDetail.unassigned')}
           />
         ))}
       </div>
@@ -39,13 +43,13 @@ export const TableView = ({
             <tr className="app-text-overline border-b border-app-border bg-app-surface-sidebar/50 text-app-ink/50">
               {onToggleSelect && <th className="py-3 px-4 w-10"></th>}
               <th className="py-3 px-4 w-12">#</th>
-              <th className="py-3 px-4 min-w-[250px]">Task Name</th>
-              <th className="py-3 px-4">Status</th>
-              <th className="py-3 px-4">Assignee</th>
-              <th className="py-3 px-4">Due Date</th>
-              <th className="py-3 px-4">Priority</th>
-              <th className="py-3 px-4">Labels</th>
-              <th className="py-3 px-4 text-right">Actions</th>
+              <th className="py-3 px-4 min-w-[250px]">{t('pms.taskName')}</th>
+              <th className="py-3 px-4">{t('pms.list.status')}</th>
+              <th className="py-3 px-4">{t('pms.list.assignee')}</th>
+              <th className="py-3 px-4">{t('pms.list.dueDate')}</th>
+              <th className="py-3 px-4">{t('pms.list.priority')}</th>
+              <th className="py-3 px-4">{t('pms.bulk.labelsLabel')}</th>
+              <th className="py-3 px-4 text-right">{t('pms.table.actions')}</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-app-border">
@@ -58,6 +62,7 @@ export const TableView = ({
                 {onToggleSelect && (
                   <td className="py-3 px-4">
                     <input
+                      aria-label={t('pms.list.selectIssue', { reference: issue.reference })}
                       type="checkbox"
                       checked={selectedIds?.has(issue.id) ?? false}
                       onChange={(e) => { e.stopPropagation(); onToggleSelect(issue.id); }}

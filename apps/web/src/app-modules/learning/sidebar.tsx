@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { motion, AnimatePresence } from 'motion/react';
 import { ChevronDown, ChevronRight, GraduationCap } from 'lucide-react';
 
@@ -29,6 +30,7 @@ function parseLearningPathname(pathname: string): LearningPathState {
 }
 
 export function LearningSidebarTree({ currentPathname }: LearningSidebarTreeProps) {
+  const { t } = useTranslation('apps');
   const {
     workspaceSlug: activeWorkspaceSlug,
     courseSlug: activeCourseSlug,
@@ -65,7 +67,7 @@ export function LearningSidebarTree({ currentPathname }: LearningSidebarTreeProp
   return (
     <div className="mt-2 space-y-1 border-t border-app-border pt-2">
       <span className="sidebar-section-label block px-3 py-1 text-gray-500">
-        목차
+        {t('learning.tableOfContents')}
       </span>
       <div className="space-y-2">
         {LEARNING_COURSES.map((course) => {

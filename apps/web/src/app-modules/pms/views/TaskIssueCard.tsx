@@ -13,14 +13,18 @@ export function TaskIssueCard({
   issue,
   onSelectIssue,
   onToggleSelect,
+  selectIssueLabel,
   selected,
   taskListStatuses,
+  unassignedLabel,
 }: {
   issue: PmsIssue;
   onSelectIssue: (issue: PmsIssue) => void;
   onToggleSelect?: (issueId: string) => void;
+  selectIssueLabel: (reference: string) => string;
   selected?: boolean;
   taskListStatuses?: PmsTaskListStatus[];
+  unassignedLabel: string;
 }) {
   const hasProgress = issue.checklist_total > 0 || (issue.estimate_hours != null && issue.estimate_hours > 0);
   const dueDate = formatDate(issue.due_date);
@@ -34,7 +38,7 @@ export function TaskIssueCard({
         <div className="pt-1">
           {onToggleSelect ? (
             <input
-              aria-label={`${issue.reference} 선택`}
+              aria-label={selectIssueLabel(issue.reference)}
               checked={selected ?? false}
               className="h-4 w-4 cursor-pointer rounded accent-app-accent"
               onChange={(event) => {
@@ -77,7 +81,7 @@ export function TaskIssueCard({
                 <User2 size={14} className="shrink-0 text-app-ink/35" />
               )}
               <span className="max-w-[9rem] truncate">
-                {issue.assignee_name ?? 'Unassigned'}
+                {issue.assignee_name ?? unassignedLabel}
               </span>
             </span>
 

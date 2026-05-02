@@ -16,6 +16,7 @@ describe('ChatThread', () => {
     render(
       <ChatThread
         turns={[]}
+        typingLabel="답변 작성 중"
         liveAssistant={{
           content: '',
           reasoning: '',
@@ -32,6 +33,7 @@ describe('ChatThread', () => {
     render(
       <ChatThread
         turns={[]}
+        typingLabel="답변 작성 중"
         liveAssistant={{
           content: '',
           reasoning: '',

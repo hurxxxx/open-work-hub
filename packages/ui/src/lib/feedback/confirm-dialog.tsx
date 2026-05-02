@@ -10,10 +10,10 @@ import { cn } from '../utils/cn';
 
 export interface ConfirmDialogProps {
   open: boolean;
-  title?: string;
+  title: string;
   description: string;
-  confirmLabel?: string;
-  cancelLabel?: string;
+  confirmLabel: string;
+  cancelLabel: string;
   /** "danger" renders the confirm button in red. */
   variant?: 'default' | 'danger';
   onConfirm: () => void;
@@ -22,10 +22,10 @@ export interface ConfirmDialogProps {
 
 export function ConfirmDialog({
   open,
-  title = 'Confirm',
+  title,
   description,
-  confirmLabel = 'Confirm',
-  cancelLabel = 'Cancel',
+  confirmLabel,
+  cancelLabel,
   variant = 'default',
   onConfirm,
   onCancel,
@@ -72,10 +72,10 @@ export function ConfirmDialog({
 /* ------------------------------------------------------------------ */
 
 type ConfirmOptions = {
-  title?: string;
+  title: string;
   description: string;
-  confirmLabel?: string;
-  cancelLabel?: string;
+  confirmLabel: string;
+  cancelLabel: string;
   variant?: 'default' | 'danger';
 };
 

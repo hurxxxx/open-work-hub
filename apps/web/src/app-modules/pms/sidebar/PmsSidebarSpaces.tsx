@@ -247,6 +247,8 @@ export function PmsSidebarSpaces({
         title: t('pms.sidebar.newDocument'),
         placeholder: t('pms.sidebar.documentName'),
         defaultValue: '',
+        submitLabel: t('common:actions.create'),
+        cancelLabel: t('common:actions.cancel'),
       });
       if (!title) return;
       try {
@@ -280,6 +282,8 @@ export function PmsSidebarSpaces({
         title: t('pms.sidebar.newWhiteboard'),
         placeholder: t('pms.sidebar.whiteboardName'),
         defaultValue: '',
+        submitLabel: t('common:actions.create'),
+        cancelLabel: t('common:actions.cancel'),
       });
       if (!title) return;
       try {
@@ -339,6 +343,7 @@ export function PmsSidebarSpaces({
           title: t('pms.sidebar.deleteCollection'),
           description: t('pms.sidebar.deleteCollectionDescription'),
           confirmLabel: t('pms.sidebar.moveToTrash'),
+          cancelLabel: t('common:actions.cancel'),
           variant: 'danger',
         }))
       )
@@ -482,6 +487,8 @@ export function PmsSidebarSpaces({
         title: t('pms.sidebar.renameFolder'),
         defaultValue: currentName,
         placeholder: t('pms.folderName'),
+        submitLabel: t('common:actions.save'),
+        cancelLabel: t('common:actions.cancel'),
       });
       if (!newName || newName === currentName) return;
       try {
@@ -660,6 +667,7 @@ export function PmsSidebarSpaces({
           title: t('pms.sidebar.deleteFolder'),
           description: t('pms.sidebar.deleteFolderDescription'),
           confirmLabel: t('common:actions.delete'),
+          cancelLabel: t('common:actions.cancel'),
           variant: 'danger',
         }))
       )
@@ -702,6 +710,7 @@ export function PmsSidebarSpaces({
           title: t('pms.sidebar.deleteSpace'),
           description: t('pms.sidebar.deleteSpaceDescription'),
           confirmLabel: t('pms.sidebar.moveToTrash'),
+          cancelLabel: t('common:actions.cancel'),
           variant: 'danger',
         }))
       )

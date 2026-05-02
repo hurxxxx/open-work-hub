@@ -324,6 +324,7 @@ export function MeetingCreateModal({
 
   return (
     <Dialog
+        closeLabel={t('common:actions.close')}
       open={isOpen}
       onOpenChange={(open) => {
         if (!open) onClose();

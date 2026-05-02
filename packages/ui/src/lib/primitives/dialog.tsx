@@ -11,6 +11,7 @@ export interface DialogProps {
   description?: ReactNode;
   children: ReactNode;
   actions?: ReactNode;
+  closeLabel?: string;
   /** Maximum width class, e.g. "max-w-lg" or "max-w-3xl". Defaults to "max-w-lg". Ignored when ``fullSize`` is true. */
   maxWidth?: string;
   /**
@@ -49,6 +50,7 @@ export function Dialog({
   description,
   children,
   actions,
+  closeLabel,
   maxWidth = 'max-w-lg',
   fullSize = false,
   embedded = false,
@@ -106,7 +108,7 @@ export function Dialog({
                   ) : null}
                 </div>
                 <DialogPrimitive.Close asChild>
-                  <Button aria-label="Close dialog" variant="ghost" size="icon">
+                  <Button aria-label={closeLabel} variant="ghost" size="icon">
                     <span aria-hidden="true">×</span>
                   </Button>
                 </DialogPrimitive.Close>

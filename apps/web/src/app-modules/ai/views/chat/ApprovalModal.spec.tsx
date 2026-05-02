@@ -74,7 +74,7 @@ describe('ApprovalModal', () => {
       );
     });
 
-    fireEvent.click(screen.getByRole('button', { name: /close dialog/i }));
+    fireEvent.click(screen.getByRole('button', { name: '닫기' }));
     expect(onClose).not.toHaveBeenCalled();
   });
 

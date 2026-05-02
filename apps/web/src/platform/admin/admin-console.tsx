@@ -1169,6 +1169,7 @@ function PeopleSection({ token }: { token: string }) {
       </div>
 
       <Dialog
+        closeLabel={t('common:actions.close')}
         actions={
           <div className="flex w-full items-center justify-end gap-2">
             <Button disabled={isCreatingUser} onClick={closeCreateUserDialog} variant="secondary">
@@ -1293,6 +1294,7 @@ function PeopleSection({ token }: { token: string }) {
       </Dialog>
 
       <Dialog
+        closeLabel={t('common:actions.close')}
         actions={
           <div className="flex w-full items-center justify-end gap-2">
             <Button disabled={isSavingUser} onClick={closeEditUserDialog} variant="secondary">
@@ -1572,6 +1574,7 @@ function CreateWorkspaceModal({
 
   return (
     <Dialog
+        closeLabel={t('common:actions.close')}
       open={open}
       onOpenChange={onOpenChange}
       title={t('admin.console.workspaces.createTitle')}

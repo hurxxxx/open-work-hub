@@ -420,6 +420,7 @@ export function SearchWorkbench({ token }: SearchWorkbenchProps) {
       <DetailDrawer
         open={drawerOpen}
         onOpenChange={setDrawerOpen}
+        closeLabel={t('common:actions.close')}
         title={selectedRow?.title ?? t('docs.searchWorkbench.selectedDocument')}
         description={t('docs.searchWorkbench.drawerDescription')}
         actions={

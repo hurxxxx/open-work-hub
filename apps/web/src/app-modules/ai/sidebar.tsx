@@ -209,6 +209,7 @@ export function AiSidebarSection({ currentWorkspaceSlug }: AiSidebarSectionProps
             title: t('apps:ai.sidebar.deleteConversation'),
             description: t('apps:ai.sidebar.deleteConversationDescription'),
             confirmLabel: t('common:actions.delete'),
+            cancelLabel: t('common:actions.cancel'),
             variant: 'danger',
           });
           if (!confirmed) return;

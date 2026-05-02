@@ -124,6 +124,7 @@ export function ApprovalModal({
 
   return (
     <Dialog
+        closeLabel={t('common:actions.close')}
       open
       onOpenChange={() => undefined}
       title={t('ai.approval.title')}

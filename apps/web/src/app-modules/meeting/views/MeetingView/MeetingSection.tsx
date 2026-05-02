@@ -6,7 +6,7 @@ export function Section({
   title,
   count,
   onAdd,
-  addLabel = '추가',
+  addLabel,
   headerAction,
   children,
 }: {

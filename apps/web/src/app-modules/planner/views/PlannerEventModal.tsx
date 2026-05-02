@@ -245,6 +245,7 @@ export function PlannerEventModal({
 
   return (
     <Dialog
+        closeLabel={t('common:actions.close')}
       open={isOpen}
       onOpenChange={(open) => {
         if (!open) onClose();

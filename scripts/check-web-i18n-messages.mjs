@@ -3,7 +3,10 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 const ROOT = process.cwd();
-const SRC_DIR = path.join(ROOT, 'apps/web/src');
+const SRC_DIRS = [
+  path.join(ROOT, 'apps/web/src'),
+  path.join(ROOT, 'packages/ui/src'),
+];
 const FAIL = process.argv.includes('--fail-on-findings');
 
 const SKIP_DIRS = new Set(['node_modules', 'dist', 'coverage']);
@@ -48,6 +51,7 @@ const ALLOW_RE = [
   /Promise</,
   /new Promise/,
   /console\./,
+  /must be used within/,
   /CustomEvent\(/,
   /localStorage/,
   /sessionStorage/,
@@ -88,7 +92,7 @@ function lineForOffset(text, offset) {
 }
 
 const findings = [];
-for (const file of walk(SRC_DIR)) {
+for (const file of SRC_DIRS.flatMap((dir) => (fs.existsSync(dir) ? walk(dir) : []))) {
   const text = fs.readFileSync(file, 'utf8');
   for (const pattern of PATTERNS) {
     pattern.re.lastIndex = 0;

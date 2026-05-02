@@ -120,8 +120,8 @@ export const AssignedToMeView = ({
   return (
     <div className="h-full flex flex-col relative">
       <header className="bg-app-bg border-b border-app-border px-8 pt-6 pb-4">
-        <h1 className="app-text-title-lg text-app-ink">Assigned to me</h1>
-        <p className="app-text-body mt-1 text-gray-500">Tasks assigned to you inside this workspace</p>
+        <h1 className="app-text-title-lg text-app-ink">{t('pms.assignedToMe')}</h1>
+        <p className="app-text-body mt-1 text-gray-500">{t('pms.assignedToMeDescription')}</p>
       </header>
 
       <main className="flex-1 overflow-y-auto p-8 custom-scrollbar">

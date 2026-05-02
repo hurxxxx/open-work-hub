@@ -57,8 +57,10 @@ export const ListView = ({
                   issue={issue}
                   onSelectIssue={onSelectIssue}
                   onToggleSelect={onToggleSelect}
+                  selectIssueLabel={(reference) => t('pms.list.selectIssue', { reference })}
                   selected={selectedIds?.has(issue.id) ?? false}
                   taskListStatuses={taskListStatuses}
+                  unassignedLabel={t('pms.taskDetail.unassigned')}
                 />
               ))}
             </div>
@@ -89,6 +91,7 @@ export const ListView = ({
                       <td className="py-2 px-4">
                         {onToggleSelect ? (
                           <input
+                            aria-label={t('pms.list.selectIssue', { reference: issue.reference })}
                             type="checkbox"
                             checked={selectedIds?.has(issue.id) ?? false}
                             onChange={(e) => { e.stopPropagation(); onToggleSelect(issue.id); }}

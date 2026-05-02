@@ -398,6 +398,12 @@ export function MeetingWorkspaceLayout({
                         yjsState: session.yjs_state,
                       };
                     }}
+                    messages={{
+                      permissionRevoked: t('docs.collab.permissionRevoked'),
+                      relayUnavailable: t('docs.collab.relayUnavailable'),
+                      startFailed: t('docs.collab.startFailed'),
+                      preparing: t('docs.collab.preparing'),
+                    }}
                     placeholder={t('meeting.workspace.editorPlaceholder')}
                     uploadFile={notesUploadFile}
                     resolveFileUrl={resolveFileUrl}

@@ -7,6 +7,9 @@ interface MobileSidebarConfig {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   label?: string;
+  closeLabel?: string;
+  brandEyebrow?: string;
+  brandTitle?: string;
 }
 
 export interface AppShellProps {
@@ -78,7 +81,9 @@ export function AppShell({
                 type="button"
               >
                 <span aria-hidden="true">×</span>
-                <span className="sr-only">메뉴 닫기</span>
+                {mobileSidebar.closeLabel ? (
+                  <span className="sr-only">{mobileSidebar.closeLabel}</span>
+                ) : null}
               </button>
               <div className="h-full overflow-hidden shadow-[var(--ui-shadow-lg)]">
                 {sidebar}
@@ -91,12 +96,16 @@ export function AppShell({
         {mobileSidebar ? (
           <div className="sticky top-0 z-30 -mx-4 hidden items-center justify-between border-b border-[var(--ui-color-border)] bg-ui-bg/94 px-4 py-2.5 backdrop-blur max-[980px]:flex">
             <div>
-              <div className="text-[0.68rem] font-semibold uppercase tracking-[0.08em] text-[var(--ui-color-ink-subtle)]">
-                두원공조
-              </div>
-              <div className="text-[0.98rem] font-semibold text-[var(--ui-color-ink)]">
-                아이두
-              </div>
+              {mobileSidebar.brandEyebrow ? (
+                <div className="text-[0.68rem] font-semibold uppercase tracking-[0.08em] text-[var(--ui-color-ink-subtle)]">
+                  {mobileSidebar.brandEyebrow}
+                </div>
+              ) : null}
+              {mobileSidebar.brandTitle ? (
+                <div className="text-[0.98rem] font-semibold text-[var(--ui-color-ink)]">
+                  {mobileSidebar.brandTitle}
+                </div>
+              ) : null}
             </div>
             <button
               className="inline-flex items-center gap-2 rounded-[var(--ui-radius-sm)] border border-[var(--ui-color-border)] bg-ui-surface px-2.5 py-1.5 text-sm font-semibold text-[var(--ui-color-ink)]"
@@ -104,7 +113,7 @@ export function AppShell({
               type="button"
             >
               <span aria-hidden="true">☰</span>
-              <span>메뉴</span>
+              {mobileSidebar.label ? <span>{mobileSidebar.label}</span> : null}
             </button>
           </div>
         ) : null}

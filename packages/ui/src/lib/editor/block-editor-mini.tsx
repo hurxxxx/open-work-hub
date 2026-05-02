@@ -24,14 +24,14 @@ export interface BlockEditorMiniProps {
 export function BlockEditorMini({
   onChange,
   onSubmit,
-  placeholder = 'Write a comment...',
+  placeholder,
   className,
 }: BlockEditorMiniProps) {
   const theme = useResolvedTheme();
 
   const editor = useCreateBlockNote({
     schema: compactSchema,
-    placeholders: { default: placeholder },
+    ...(placeholder ? { placeholders: { default: placeholder } } : {}),
   });
 
   useEffect(() => {

@@ -646,7 +646,7 @@ export function WorkspaceDetailPanel({
           title={confirmState.title}
           description={confirmState.description}
           confirmLabel={confirmState.confirmLabel}
-          cancelLabel="취소"
+          cancelLabel={t('common:actions.cancel')}
           variant={confirmState.variant}
           onConfirm={() => {
             const action = confirmState.onConfirm;
@@ -1046,6 +1046,7 @@ function WorkspaceAddMemberModal({
   const roleOptions = getWorkspaceRoleOptions(t);
   return (
     <Dialog
+        closeLabel={t('common:actions.close')}
       open={open}
       onOpenChange={onOpenChange}
       title={t('admin.workspace.addMembers.title')}
@@ -1087,7 +1088,9 @@ function WorkspaceAddMemberModal({
           onOpenDirectory={canBrowseDirectory ? onOpenDirectory : null}
         />
         <div className="shrink-0">
-          <div className="app-text-caption mb-1 text-app-ink/60">선택 ({count})</div>
+          <div className="app-text-caption mb-1 text-app-ink/60">
+            {t('admin.workspace.addMembers.selectedCount', { count })}
+          </div>
           <SelectedSubjectsBar
             selection={selection}
             onRemove={(kind, id) =>
@@ -1118,6 +1121,7 @@ function PeoplePickerModal({
   const { t } = useTranslation('apps');
   return (
     <Dialog
+        closeLabel={t('common:actions.close')}
       open={open}
       onOpenChange={(next) => {
         if (!next) onClose();
@@ -1190,6 +1194,7 @@ function WorkspaceEditModal({
 
   return (
     <Dialog
+        closeLabel={t('common:actions.close')}
       open={open}
       onOpenChange={onOpenChange}
       title={t('admin.workspace.editTitle')}
@@ -1231,7 +1236,7 @@ function WorkspaceEditModal({
           />
         </label>
         <label className="grid gap-1.5">
-          <span className="app-text-control text-app-ink">Key</span>
+          <span className="app-text-control text-app-ink">{t('admin.workspace.keyLabel')}</span>
           <input
             className={`${FORM_FIELD_CLASS} cursor-not-allowed bg-app-surface-sidebar text-app-ink/60`}
             value={workspace.key}
@@ -1445,6 +1450,7 @@ function WorkspaceMembersDrawer({
 
   return (
     <Dialog
+        closeLabel={t('common:actions.close')}
       open={open}
       onOpenChange={onOpenChange}
       title={t('admin.workspace.members.manageTitle', { name: workspace.name })}

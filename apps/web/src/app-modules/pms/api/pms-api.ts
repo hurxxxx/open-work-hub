@@ -1,5 +1,6 @@
 import { ApiRequestError, apiFetchJson } from '@/src/platform/api/client';
 import type { ApiSchema } from '@/src/platform/api/types';
+import { i18n } from '@/src/platform/i18n';
 import { rewriteWorkspaceApiPath } from '@/src/platform/workspaces/workspace-utils';
 
 export type PmsTaskList = Omit<ApiSchema<'TaskListItem'>, 'folder_id' | 'folder_name'> & {
@@ -754,7 +755,7 @@ export async function exportTaskListCsv(token: string, taskListId: string): Prom
   const response = await fetch(resolvePmsPath(`/api/v1/pms/lists/${taskListId}/export?format=csv`), {
     headers: { Authorization: `Bearer ${token}` },
   });
-  if (!response.ok) throw new PmsApiError(response.status, 'Export failed.');
+  if (!response.ok) throw new PmsApiError(response.status, i18n.t('apps:pms.errors.exportFailed'));
   const blob = await response.blob();
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');

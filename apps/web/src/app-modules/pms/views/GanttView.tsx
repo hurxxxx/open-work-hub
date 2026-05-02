@@ -1,4 +1,5 @@
 import { useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { cn } from '@/src/lib/utils';
 import { parseDateOnlyParts } from '@/src/platform/time/time-utils';
 import type { PmsIssue, PmsTaskListStatus } from '../api/pms-api';
@@ -21,6 +22,7 @@ function dateOnlyToLocalDate(value: string | null | undefined): Date | null {
 }
 
 export const GanttView = ({ issues, taskListStatuses }: { issues: PmsIssue[]; taskListStatuses?: PmsTaskListStatus[] }) => {
+  const { t } = useTranslation('apps');
   const { dates, startDate } = useMemo(() => {
     const now = new Date();
     const start = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -46,7 +48,9 @@ export const GanttView = ({ issues, taskListStatuses }: { issues: PmsIssue[]; ta
   return (
     <div className="h-full flex flex-col card p-0 overflow-hidden">
       <div className="flex border-b border-app-border bg-app-surface-sidebar/30">
-        <div className="app-text-overline w-64 shrink-0 border-r border-app-border p-4 text-gray-500">Task Name</div>
+        <div className="app-text-overline w-64 shrink-0 border-r border-app-border p-4 text-gray-500">
+          {t('pms.taskName')}
+        </div>
         <div className="flex-1 flex overflow-x-auto custom-scrollbar">
           {dates.map(date => (
             <div key={date} className="flex-shrink-0 w-10 py-3 text-center border-r border-app-border last:border-r-0">

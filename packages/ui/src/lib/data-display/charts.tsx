@@ -14,7 +14,6 @@ import {
 } from 'recharts';
 
 import type { ChartSeries } from '../types';
-import { EmptyState } from './empty-state';
 
 type ChartStatus = 'ready' | 'loading' | 'empty' | 'error';
 
@@ -47,12 +46,7 @@ export function ChartFrame({
 }: ChartFrameProps) {
   const body =
     status === 'empty' || status === 'error' ? (
-      emptyState ?? (
-        <EmptyState
-          title="No chart data"
-          description="이 영역은 실제 메트릭 연결 후 시각화를 표시합니다."
-        />
-      )
+      emptyState ?? null
     ) : (
       children
     );

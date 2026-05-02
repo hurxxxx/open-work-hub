@@ -1298,6 +1298,7 @@ export function AIView({ toolItems = [] }: { toolItems?: NavItem[] }) {
           <>
             <ChatThread
               turns={turns}
+              typingLabel={t('ai.message.typing')}
               activeArtifactId={routeArtifactId}
               onOpenArtifact={handleOpenArtifact}
               liveAssistant={
