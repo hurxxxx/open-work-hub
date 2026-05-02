@@ -44,3 +44,23 @@ def test_translate_search_backend_message_preserves_dynamic_reason() -> None:
         == "Keyword search is unavailable: index missing"
     )
     assert translate_message(message, "ko-KR") == "키워드 검색을 사용할 수 없습니다: index missing"
+
+
+def test_translate_conversation_cursor_message_preserves_dynamic_error() -> None:
+    message = LocalizedApiMessage(
+        code="conversations.cursor_invalid_timestamp",
+        params={"error": "bad month"},
+    )
+
+    assert translate_message(message, "en-US") == "Invalid cursor timestamp: bad month"
+    assert translate_message(message, "ko-KR") == "cursor timestamp가 올바르지 않습니다: bad month"
+
+
+def test_translate_rag_unavailable_message_preserves_dynamic_reason() -> None:
+    message = LocalizedApiMessage(
+        code="rag.unavailable",
+        params={"reason": "provider timeout"},
+    )
+
+    assert translate_message(message, "en-US") == "RAG is unavailable: provider timeout"
+    assert translate_message(message, "ko-KR") == "RAG를 사용할 수 없습니다: provider timeout"

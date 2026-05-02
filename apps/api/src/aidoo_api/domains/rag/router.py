@@ -2,11 +2,12 @@ from __future__ import annotations
 
 from typing import Literal
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, status
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 
 from aidoo_api.core.db import get_db_session
+from aidoo_api.core.i18n import localized_http_exception
 from aidoo_api.domains.auth.dependencies import (
     require_current_user,
     require_current_workspace,
@@ -61,7 +62,7 @@ def query_workspace_rag(
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
     current_workspace: Workspace = Depends(require_current_workspace),
-    ) -> RagQueryResponse:
+) -> RagQueryResponse:
     try:
         return rag_application.query_workspace_rag(
             db,
@@ -75,14 +76,16 @@ def query_workspace_rag(
             include_binary_hits=payload.include_binary_hits,
         )
     except rag_application.RagAccessDeniedError as error:
-        raise HTTPException(
+        raise localized_http_exception(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail=str(error),
+            code="rag.access_denied",
+            reason=str(error),
         ) from error
     except rag_application.RagUnavailableError as error:
-        raise HTTPException(
+        raise localized_http_exception(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=str(error),
+            code="rag.unavailable",
+            reason=str(error),
         ) from error
 
 
@@ -101,14 +104,16 @@ def list_workspace_rag_sources(
             )
         )
     except rag_application.RagAccessDeniedError as error:
-        raise HTTPException(
+        raise localized_http_exception(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail=str(error),
+            code="rag.access_denied",
+            reason=str(error),
         ) from error
     except rag_application.RagUnavailableError as error:
-        raise HTTPException(
+        raise localized_http_exception(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=str(error),
+            code="rag.unavailable",
+            reason=str(error),
         ) from error
 
 
@@ -124,19 +129,22 @@ def reindex_workspace_rag(
             workspace=current_workspace,
         )
     except rag_application.RagAccessDeniedError as error:
-        raise HTTPException(
+        raise localized_http_exception(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail=str(error),
+            code="rag.access_denied",
+            reason=str(error),
         ) from error
     except rag_application.RagReindexCooldownError as error:
-        raise HTTPException(
+        raise localized_http_exception(
             status_code=status.HTTP_409_CONFLICT,
-            detail=str(error),
+            code="rag.reindex_cooldown",
+            reason=str(error),
         ) from error
     except rag_application.RagUnavailableError as error:
-        raise HTTPException(
+        raise localized_http_exception(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=str(error),
+            code="rag.unavailable",
+            reason=str(error),
         ) from error
     db.commit()
     return RagReindexResponse.model_validate(response)

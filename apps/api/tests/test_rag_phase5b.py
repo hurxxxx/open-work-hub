@@ -450,6 +450,7 @@ def test_workspace_rag_reindex_enforces_cooldown(
 
     assert first.status_code == 200, first.text
     assert second.status_code == 409, second.text
+    assert second.json()["code"] == "rag.reindex_cooldown"
 
 
 def test_workspace_rag_query_validates_payload(
@@ -490,6 +491,7 @@ def test_workspace_rag_query_rejects_non_member(
     )
 
     assert response.status_code == 403, response.text
+    assert response.json()["code"] == "workspace.membership_required"
 
 
 def test_rag_ai_manifest_hides_tools_when_no_searchable_apps_enabled(
@@ -510,3 +512,11 @@ def test_rag_ai_manifest_hides_tools_when_no_searchable_apps_enabled(
     assert manifest_response.status_code == 200, manifest_response.text
     manifest_tools = {item["name"] for item in manifest_response.json()["tools"]}
     assert "rag.query" not in manifest_tools
+
+    query_response = client.post(
+        "/api/v1/workspaces/delivery-hub/rag/query",
+        headers=_auth_headers(session["token"]),
+        json={"query": "phase 5"},
+    )
+    assert query_response.status_code == 403, query_response.text
+    assert query_response.json()["code"] == "rag.access_denied"

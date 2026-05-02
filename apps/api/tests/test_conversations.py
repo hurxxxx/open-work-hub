@@ -129,6 +129,7 @@ def test_patch_empty_title_rejected(client: TestClient) -> None:
         json={"title": "   "},
     )
     assert response.status_code == 400
+    assert response.json()["code"] == "conversations.title_empty"
 
 
 def test_legacy_create_rejects_unsupported_scope(client: TestClient) -> None:
@@ -380,3 +381,4 @@ def test_get_requires_ownership(client: TestClient) -> None:
         headers=_auth_headers(token),
     )
     assert response.status_code == 404
+    assert response.json()["code"] == "conversations.not_found"

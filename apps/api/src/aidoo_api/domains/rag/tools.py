@@ -3,9 +3,10 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from typing import Any
 
-from fastapi import HTTPException, status
+from fastapi import status
 from pydantic import BaseModel, ConfigDict, Field
 
+from aidoo_api.core.i18n import localized_http_exception
 from aidoo_api.core.settings import get_settings
 from aidoo_api.domains.ai.tool_context import current_tool_execution_context
 from aidoo_api.domains.ai.registry import AiCapabilityRegistry
@@ -60,14 +61,16 @@ def _query(
             conversation_id=tool_context.conversation_id if tool_context is not None else None,
         )
     except rag_application.RagAccessDeniedError as error:
-        raise HTTPException(
+        raise localized_http_exception(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail=str(error),
+            code="rag.access_denied",
+            reason=str(error),
         ) from error
     except rag_application.RagUnavailableError as error:
-        raise HTTPException(
+        raise localized_http_exception(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=str(error),
+            code="rag.unavailable",
+            reason=str(error),
         ) from error
     return response.model_dump(mode="json")
 
@@ -89,14 +92,16 @@ def _list_sources(
             user=user,
         )
     except rag_application.RagAccessDeniedError as error:
-        raise HTTPException(
+        raise localized_http_exception(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail=str(error),
+            code="rag.access_denied",
+            reason=str(error),
         ) from error
     except rag_application.RagUnavailableError as error:
-        raise HTTPException(
+        raise localized_http_exception(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=str(error),
+            code="rag.unavailable",
+            reason=str(error),
         ) from error
     return {"sources": sources}
 

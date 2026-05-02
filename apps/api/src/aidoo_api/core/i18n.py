@@ -267,6 +267,46 @@ MESSAGES: dict[str, dict[str, str]] = {
         "ko-KR": "키워드 검색을 사용할 수 없습니다: {reason}",
         "en-US": "Keyword search is unavailable: {reason}",
     },
+    "conversations.scope_pair_required": {
+        "ko-KR": "scope_ref와 scope_resource_id는 함께 제공해야 합니다.",
+        "en-US": "scope_ref and scope_resource_id must be provided together.",
+    },
+    "conversations.unsupported_scope": {
+        "ko-KR": "지원하지 않는 대화 범위입니다: {scope_ref}",
+        "en-US": "Unsupported conversation scope: {scope_ref}",
+    },
+    "conversations.cursor_missing_id": {
+        "ko-KR": "cursor가 올바르지 않습니다: id 구성 요소가 없습니다.",
+        "en-US": "Invalid cursor: missing id component.",
+    },
+    "conversations.cursor_empty_component": {
+        "ko-KR": "cursor가 올바르지 않습니다: 비어 있는 구성 요소가 있습니다.",
+        "en-US": "Invalid cursor: empty component.",
+    },
+    "conversations.cursor_invalid_timestamp": {
+        "ko-KR": "cursor timestamp가 올바르지 않습니다: {error}",
+        "en-US": "Invalid cursor timestamp: {error}",
+    },
+    "conversations.not_found": {
+        "ko-KR": "대화를 찾을 수 없습니다.",
+        "en-US": "Conversation not found.",
+    },
+    "conversations.title_empty": {
+        "ko-KR": "제목은 비워둘 수 없습니다.",
+        "en-US": "Title must not be empty.",
+    },
+    "rag.access_denied": {
+        "ko-KR": "워크스페이스 RAG 접근이 거부되었습니다: {reason}",
+        "en-US": "Workspace RAG access denied: {reason}",
+    },
+    "rag.unavailable": {
+        "ko-KR": "RAG를 사용할 수 없습니다: {reason}",
+        "en-US": "RAG is unavailable: {reason}",
+    },
+    "rag.reindex_cooldown": {
+        "ko-KR": "RAG 재색인을 지금 다시 실행할 수 없습니다: {reason}",
+        "en-US": "RAG reindex cannot be retried yet: {reason}",
+    },
     "pms.principal_workspace_mismatch": {
         "ko-KR": "PMS principal의 워크스페이스가 일치하지 않습니다.",
         "en-US": "PMS principal workspace mismatch.",

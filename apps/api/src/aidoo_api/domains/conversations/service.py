@@ -12,11 +12,12 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from fastapi import HTTPException, status
+from fastapi import status
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from aidoo_api.core.i18n import localized_http_exception
 from aidoo_api.domains.auth.models import User, Workspace
 from aidoo_api.domains.meeting.models import utcnow_naive
 
@@ -49,17 +50,18 @@ def create_conversation(
     normalized_scope_ref = (scope_ref or "").strip() or None
     normalized_scope_resource_id = (scope_resource_id or "").strip() or None
     if (normalized_scope_ref is None) != (normalized_scope_resource_id is None):
-        raise HTTPException(
+        raise localized_http_exception(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="scope_ref and scope_resource_id must be provided together.",
+            code="conversations.scope_pair_required",
         )
     if (
         normalized_scope_ref is not None
         and normalized_scope_ref not in SUPPORTED_SCOPE_REFS
     ):
-        raise HTTPException(
+        raise localized_http_exception(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Unsupported conversation scope: {normalized_scope_ref}",
+            code="conversations.unsupported_scope",
+            scope_ref=normalized_scope_ref,
         )
     if normalized_scope_ref is not None and not normalized_title:
         reusable = db.scalar(
@@ -111,22 +113,23 @@ def _decode_cursor(cursor: str) -> tuple[datetime, str]:
     # don't silently drop rows. The ordering below must stay in lockstep with
     # ``ORDER BY updated_at DESC, id DESC``.
     if _CURSOR_SEPARATOR not in cursor:
-        raise HTTPException(
+        raise localized_http_exception(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid cursor: missing id component.",
+            code="conversations.cursor_missing_id",
         )
     ts_part, id_part = cursor.split(_CURSOR_SEPARATOR, 1)
     if not ts_part or not id_part:
-        raise HTTPException(
+        raise localized_http_exception(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid cursor: empty component.",
+            code="conversations.cursor_empty_component",
         )
     try:
         ts = datetime.fromisoformat(ts_part)
     except ValueError as exc:
-        raise HTTPException(
+        raise localized_http_exception(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid cursor timestamp: {exc}",
+            code="conversations.cursor_invalid_timestamp",
+            error=str(exc),
         ) from exc
     return ts, id_part
 
@@ -196,8 +199,9 @@ def get_conversation(
         or conversation.user_id != user.id
         or conversation.deleted_at is not None
     ):
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found"
+        raise localized_http_exception(
+            status_code=status.HTTP_404_NOT_FOUND,
+            code="conversations.not_found",
         )
     return conversation
 
@@ -215,9 +219,9 @@ def rename_conversation(
     )
     normalized = (title or "").strip()[:TITLE_MAX_LEN]
     if not normalized:
-        raise HTTPException(
+        raise localized_http_exception(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Title must not be empty.",
+            code="conversations.title_empty",
         )
     conversation.title = normalized
     db.commit()
