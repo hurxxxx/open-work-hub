@@ -468,7 +468,7 @@ def test_chat_stream_rejects_openrouter_backend_mode(client: TestClient) -> None
         },
     )
     assert response.status_code == 400
-    assert "no longer supported" in response.json()["detail"]
+    assert response.json()["code"] == "ai.openrouter_backend_mode_unsupported"
     assert len(_llm_audit_rows()) == before
 
 

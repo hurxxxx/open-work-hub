@@ -591,6 +591,54 @@ MESSAGES: dict[str, dict[str, str]] = {
         "ko-KR": "Agent run snapshot을 더 이상 resume할 수 없습니다.",
         "en-US": "Agent run snapshot is no longer resumable.",
     },
+    "ai.runtime_run_not_found": {
+        "ko-KR": "Runtime run을 찾을 수 없습니다.",
+        "en-US": "Runtime run not found.",
+    },
+    "ai.workspace_context_missing": {
+        "ko-KR": "요청의 워크스페이스 컨텍스트가 누락되었습니다.",
+        "en-US": "Workspace context is missing on the request.",
+    },
+    "ai.mcp_bridge_inspection_disabled": {
+        "ko-KR": "AI MCP bridge inspection endpoint가 비활성화되어 있습니다.",
+        "en-US": "AI MCP bridge inspection endpoints are disabled.",
+    },
+    "ai.unknown_workspace_app": {
+        "ko-KR": "알 수 없는 워크스페이스 앱입니다: {app_id}",
+        "en-US": "Unknown workspace app: {app_id}",
+    },
+    "ai.tool_command_syntax": {
+        "ko-KR": "AI 도구 명령 형식: /tool <tool_name> {{\"arg\":\"value\"}}",
+        "en-US": "Tool command syntax: /tool <tool_name> {{\"arg\":\"value\"}}",
+    },
+    "ai.invalid_tool_argument_json": {
+        "ko-KR": "AI 도구 인자 JSON이 올바르지 않습니다: {error}",
+        "en-US": "Invalid tool argument JSON: {error}",
+    },
+    "ai.tool_arguments_object_required": {
+        "ko-KR": "AI 도구 인자는 JSON 객체로 해석되어야 합니다.",
+        "en-US": "Tool arguments must decode to a JSON object.",
+    },
+    "ai.local_llm_pool_unavailable_override": {
+        "ko-KR": "요청한 override에 사용할 로컬 LLM pool이 없습니다: {error}",
+        "en-US": "Local LLM pool unavailable for the requested override: {error}",
+    },
+    "ai.llm_pool_unavailable_policy": {
+        "ko-KR": "정책으로 결정된 LLM pool을 사용할 수 없습니다: {error}",
+        "en-US": "LLM pool unavailable for the resolved policy: {error}",
+    },
+    "ai.configured_llm_model_required": {
+        "ko-KR": "설정된 LLM model만 사용할 수 있습니다. 품질 관리를 위해 {canonical_model}을 사용하세요.",
+        "en-US": "Only the configured LLM model is allowed. Use {canonical_model} for quality control.",
+    },
+    "ai.openrouter_backend_mode_unsupported": {
+        "ko-KR": "backend_mode=openrouter는 더 이상 지원하지 않습니다. 정책 기반 라우팅에는 auto를, 로컬 pool 고정에는 local을 사용하세요.",
+        "en-US": "backend_mode=openrouter is no longer supported. Use auto for policy-based routing or local to pin the local pool.",
+    },
+    "ai.unsupported_conversation_scope": {
+        "ko-KR": "지원하지 않는 AI 대화 scope입니다: {scope_ref}",
+        "en-US": "Unsupported AI conversation scope: {scope_ref}",
+    },
     "pms.principal_workspace_mismatch": {
         "ko-KR": "PMS principal의 워크스페이스가 일치하지 않습니다.",
         "en-US": "PMS principal workspace mismatch.",

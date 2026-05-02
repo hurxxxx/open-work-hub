@@ -118,7 +118,7 @@ def test_ai_chat_rejects_deprecated_openrouter_override(client: TestClient) -> N
     )
 
     assert response.status_code == 400
-    assert "no longer supported" in response.json()["detail"]
+    assert response.json()["code"] == "ai.openrouter_backend_mode_unsupported"
 
 
 def test_ai_chat_local_mode_uses_policy_path_and_persists_audit(

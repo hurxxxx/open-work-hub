@@ -591,8 +591,10 @@ def test_resume_allowed_app_ids_rejects_wider_scope() -> None:
         model_meta={"scope": {"allowed_app_ids": ["pms"]}},
     )
 
-    with pytest.raises(HTTPException, match="wider"):
+    with pytest.raises(HTTPException) as exc_info:
         ai_approvals.resolve_resume_allowed_app_ids(snapshot, ["pms", "docs"])
+    assert isinstance(exc_info.value.detail, LocalizedApiMessage)
+    assert exc_info.value.detail.code == "ai.resume_scope_wider"
 
 
 def test_resume_allowed_app_ids_keeps_text_only_scope() -> None:
@@ -606,8 +608,10 @@ def test_resume_allowed_app_ids_keeps_text_only_scope() -> None:
     )
 
     assert ai_approvals.resolve_resume_allowed_app_ids(snapshot, None) == []
-    with pytest.raises(HTTPException, match="wider"):
+    with pytest.raises(HTTPException) as exc_info:
         ai_approvals.resolve_resume_allowed_app_ids(snapshot, ["pms"])
+    assert isinstance(exc_info.value.detail, LocalizedApiMessage)
+    assert exc_info.value.detail.code == "ai.resume_scope_wider"
 
 
 def test_rehydrate_model_meta_preserves_graph_schedule_summary() -> None:
@@ -819,7 +823,7 @@ def test_chat_resume_rejects_pending_approval(client: TestClient) -> None:
     )
 
     assert response.status_code == 400
-    assert "resolved before resume" in response.json()["detail"]
+    assert response.json()["code"] == "ai.approval_resume_requires_resolution"
 
 
 def test_chat_resume_rejects_narrower_scope_that_excludes_approved_tool(
@@ -853,7 +857,7 @@ def test_chat_resume_rejects_narrower_scope_that_excludes_approved_tool(
     )
 
     assert response.status_code == 400, response.text
-    assert "approved tool" in response.json()["detail"]
+    assert response.json()["code"] == "ai.resume_scope_excludes_approved_tool"
 
 
 def test_chat_resume_accepts_frozen_scope_when_scope_is_omitted(

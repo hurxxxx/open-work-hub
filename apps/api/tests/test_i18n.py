@@ -97,3 +97,37 @@ def test_translate_ai_dynamic_tool_and_status_messages() -> None:
     assert translate_message(tool_message, "ko-KR") == "알 수 없는 AI 도구입니다: missing.tool"
     assert translate_message(status_message, "en-US") == "Approval is already approved."
     assert translate_message(status_message, "ko-KR") == "승인이 이미 승인됨 상태입니다."
+
+
+def test_translate_ai_router_dynamic_messages() -> None:
+    workspace_app_message = LocalizedApiMessage(
+        code="ai.unknown_workspace_app",
+        params={"app_id": "shadow-app"},
+    )
+    json_message = LocalizedApiMessage(
+        code="ai.invalid_tool_argument_json",
+        params={"error": "Expecting value"},
+    )
+    model_message = LocalizedApiMessage(
+        code="ai.configured_llm_model_required",
+        params={"canonical_model": "local/model"},
+    )
+
+    assert translate_message(workspace_app_message, "en-US") == (
+        "Unknown workspace app: shadow-app"
+    )
+    assert translate_message(workspace_app_message, "ko-KR") == (
+        "알 수 없는 워크스페이스 앱입니다: shadow-app"
+    )
+    assert translate_message(json_message, "en-US") == (
+        "Invalid tool argument JSON: Expecting value"
+    )
+    assert translate_message(json_message, "ko-KR") == (
+        "AI 도구 인자 JSON이 올바르지 않습니다: Expecting value"
+    )
+    assert "local/model" in translate_message(model_message, "en-US")
+    assert "local/model" in translate_message(model_message, "ko-KR")
+    assert '{"arg":"value"}' in translate_message(
+        LocalizedApiMessage(code="ai.tool_command_syntax"),
+        "en-US",
+    )

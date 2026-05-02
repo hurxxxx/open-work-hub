@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 from sse_starlette.sse import EventSourceResponse
 
 from aidoo_api.core.db import get_db_session
+from aidoo_api.core.i18n import LocalizedApiMessage, localized_http_exception
 from aidoo_api.core.principal import CallerPrincipal, user_principal
 from aidoo_api.core.llm import (
     LlmPoolConfig,
@@ -879,7 +880,10 @@ def inspect_runtime_run(
     )
     if runtime_run is None:
         record_inspection_request(result="not_found")
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Runtime run not found.")
+        raise localized_http_exception(
+            status_code=status.HTTP_404_NOT_FOUND,
+            code="ai.runtime_run_not_found",
+        )
 
     invocations = db.scalars(
         select(AgentInvocation)
@@ -1052,12 +1056,9 @@ def invoke_tool(
 def _require_request_workspace(request: Request) -> Workspace:
     workspace = getattr(request.state, "current_workspace", None)
     if workspace is None:
-        raise HTTPException(
+        raise localized_http_exception(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=(
-                "Workspace context missing on request.state; the AI router "
-                "must be mounted behind a workspace membership dependency."
-            ),
+            code="ai.workspace_context_missing",
         )
     return workspace
 
@@ -1066,18 +1067,19 @@ def _ensure_mcp_bridge_enabled() -> None:
     settings = get_settings()
     if settings.ai_mcp_bridge_enabled:
         return
-    raise HTTPException(
+    raise localized_http_exception(
         status_code=status.HTTP_404_NOT_FOUND,
-        detail="AI MCP bridge inspection endpoints are disabled.",
+        code="ai.mcp_bridge_inspection_disabled",
     )
 
 
 def _ensure_known_workspace_app(app_id: str) -> None:
     if app_id in WORKSPACE_APP_IDS:
         return
-    raise HTTPException(
+    raise localized_http_exception(
         status_code=status.HTTP_404_NOT_FOUND,
-        detail=f"Unknown workspace app: {app_id}",
+        code="ai.unknown_workspace_app",
+        app_id=app_id,
     )
 
 
@@ -1354,9 +1356,9 @@ def _parse_tool_chat_command(messages: list[ChatMessage]) -> ToolChatCommand | N
 
     parts = last_user_message.split(maxsplit=2)
     if len(parts) < 2 or parts[0] != "/tool":
-        raise HTTPException(
+        raise localized_http_exception(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail='Tool command syntax: /tool <tool_name> {"arg":"value"}',
+            code="ai.tool_command_syntax",
         )
 
     arguments: dict[str, Any] = {}
@@ -1364,14 +1366,15 @@ def _parse_tool_chat_command(messages: list[ChatMessage]) -> ToolChatCommand | N
         try:
             parsed = json.loads(parts[2])
         except json.JSONDecodeError as error:
-            raise HTTPException(
+            raise localized_http_exception(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Invalid tool argument JSON: {error.msg}",
+                code="ai.invalid_tool_argument_json",
+                error=error.msg,
             ) from error
         if not isinstance(parsed, dict):
-            raise HTTPException(
+            raise localized_http_exception(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Tool arguments must decode to a JSON object.",
+                code="ai.tool_arguments_object_required",
             )
         arguments = parsed
 
@@ -1458,16 +1461,14 @@ def _complete_via_policy(
             conversation_id=getattr(payload, "conversation_id", None),
         )
     except OpenAIError as error:
-        raise HTTPException(
+        raise localized_http_exception(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail={
-                "message": (
-                    "Local LLM pool unavailable for the requested override."
-                    if pool_hint == "local"
-                    else "LLM pool unavailable for the resolved policy."
-                ),
-                "error": str(error),
-            },
+            code=(
+                "ai.local_llm_pool_unavailable_override"
+                if pool_hint == "local"
+                else "ai.llm_pool_unavailable_policy"
+            ),
+            error=str(error),
         ) from error
 
     return _build_response(
@@ -1538,24 +1539,19 @@ def _ensure_configured_model(requested_model: str | None) -> None:
     if requested_model in allowed_models:
         return
 
-    raise HTTPException(
+    raise localized_http_exception(
         status_code=status.HTTP_400_BAD_REQUEST,
-        detail=(
-            "Only the configured LLM model is allowed. "
-            f"Use {settings.llm_local_canonical_model} for quality control."
-        ),
+        code="ai.configured_llm_model_required",
+        canonical_model=settings.llm_local_canonical_model,
     )
 
 
 def _ensure_supported_backend_mode(mode: LlmRequestBackendMode) -> None:
     if mode != "openrouter":
         return
-    raise HTTPException(
+    raise localized_http_exception(
         status_code=status.HTTP_400_BAD_REQUEST,
-        detail=(
-            "backend_mode=openrouter is no longer supported. "
-            "Use auto for policy-based routing or local to pin the local pool."
-        ),
+        code="ai.openrouter_backend_mode_unsupported",
     )
 
 
@@ -3261,6 +3257,8 @@ def _error_message(error: Exception) -> str:
         detail = error.detail
         if isinstance(detail, str):
             return detail
+        if isinstance(detail, LocalizedApiMessage):
+            return detail.code
         if isinstance(detail, dict):
             message = detail.get("message")
             if isinstance(message, str) and message.strip():
@@ -3402,9 +3400,10 @@ def _validate_requested_conversation_scope(
             meeting_id=scope_resource_id,
         )
         return
-    raise HTTPException(
+    raise localized_http_exception(
         status_code=status.HTTP_400_BAD_REQUEST,
-        detail=f"Unsupported AI conversation scope: {scope_ref}",
+        code="ai.unsupported_conversation_scope",
+        scope_ref=scope_ref,
     )
 
 
@@ -3430,9 +3429,10 @@ def _conversation_scope_system_prompt(
             user=user,
             meeting_id=conversation.scope_resource_id,
         )
-    raise HTTPException(
+    raise localized_http_exception(
         status_code=status.HTTP_400_BAD_REQUEST,
-        detail=f"Unsupported AI conversation scope: {conversation.scope_ref}",
+        code="ai.unsupported_conversation_scope",
+        scope_ref=conversation.scope_ref,
     )
 
 
