@@ -203,9 +203,9 @@ RecordingContainer
   created_at
 ```
 
-`MeetingRecording`과 `MeetingRecordingStaging`은 새 canonical 모델로 마이그레이션한다. 전환 중 호환이 필요하면 schema/API serialization 단계에서 `MeetingRecordingOut` 형태로 변환한다.
+`MeetingRecording`과 `MeetingRecordingStaging`은 새 canonical 모델로 backfill하지 않는다. 기존 row/object를 유지해야 하는 요구가 없으므로, canonical 전환 이후 legacy data는 운영 결정에 따라 삭제하거나 old Meeting 화면에서만 임시로 남긴다.
 
-Meeting에 연결된 녹음은 사용자가 녹음 순서를 명확히 알아야 하므로 `RecordingContainer.sort_order`를 Meeting별 안정 순번으로 사용한다. 기존 Meeting 호환 레이어에서는 이를 `MeetingRecording.sequence_no`로 노출하고, Recording 도메인 전환 시 backfill 값은 `recording_containers.sort_order`로 이전한다. 신규 object key/다운로드 파일명은 녹음 시작 시각 기반(`YYYYMMDDTHHMMSSZ`)으로 만든다.
+Meeting에 연결된 신규 canonical 녹음은 사용자가 녹음 순서를 명확히 알아야 하므로 `RecordingContainer.sort_order`를 Meeting별 안정 순번으로 사용한다. 기존 Meeting 호환 레이어에서는 canonical recording을 `MeetingRecordingOut.sequence_no` 형태로 serialize한다. 신규 object key/다운로드 파일명은 녹음 시작 시각 기반(`YYYYMMDDTHHMMSSZ`)으로 만든다.
 
 원본 음성 저장 상태와 후속 처리 상태는 분리한다. v1에서 사용자가 가장 먼저 신뢰해야 하는 상태는 “원본 음성이 안전하게 저장되었는가”이며, 전사/전사 원문 문서/회의록 문서/Meeting insight 생성은 각각 별도 처리 상태로 표시한다.
 
@@ -386,7 +386,7 @@ v1 대상:
 
 Meeting 연결 후보는 녹음 시작/종료 시간과 겹치는 meeting을 우선 제안한다. 자동 attach는 하지 않는다.
 
-## Migration Plan
+## Cutover Plan
 
 ### Step 0: Preserve current Meeting recording baseline
 
@@ -413,22 +413,18 @@ Recording 앱의 신규 저장은 `recording.service`를 호출한다. 가장 �
 
 Meeting compatibility route가 `recording.service`를 호출하도록 바꾸는 작업은 그 다음 단계로 진행한다. 이 시점부터 신규 Meeting 녹음은 canonical `recordings` / `recording_staging` / `recording_containers`에 기록한다.
 
-전환 배포 중 누락을 막기 위해 다음 중 하나를 명시적으로 선택한다.
-
-- old table read fallback을 유지하고, canonical에 없는 기존 row만 old table에서 읽는다.
-- 또는 짧은 전환 기간 동안 old/new dual-write를 유지한다.
-
 ### Step 3: Legacy Meeting recording cleanup, no backfill
 
 기존 `meeting_recordings`를 `recordings`로 복사하지 않는다. 기존 녹음을 유지해야 하는 요구가 없으므로 backfill/migration 복잡도를 제거한다.
 
-- old Meeting recording data는 운영 결정에 따라 삭제하거나 archived legacy data로 남긴다.
+- old Meeting recording data는 운영 결정에 따라 삭제하거나 old Meeting 화면의 archived legacy data로만 남긴다.
 - 신규 canonical recording과 old Meeting recording을 섞어 보여주는 read fallback을 만들지 않는다.
+- old/new dual-write를 만들지 않는다.
 - Meeting write cutover 이후 old write path가 더 이상 호출되지 않는지 확인한다.
 
 ### Step 4: Remove old write path
 
-기존 `MeetingRecording` / `MeetingRecordingStaging`에 대한 신규 write를 중단한다. 필요하면 read compatibility만 임시 유지한다.
+기존 `MeetingRecording` / `MeetingRecordingStaging`에 대한 신규 write를 중단한다. 필요하면 삭제 전 운영 확인용 조회만 임시 유지한다.
 
 ## Implementation Stages
 
@@ -449,28 +445,7 @@ Meeting compatibility route가 `recording.service`를 호출하도록 바꾸는 
 - container ACL 기반 attached recording 조회
 - 기존 meeting recording tests가 아직 기존 path로 green
 
-### PR 2 - Recording service extraction and Meeting write cutover
-
-- `meeting/recordings.py`의 공용 로직을 `recording/service.py`로 이동.
-- Meeting route는 wrapper로 유지.
-- 신규 Meeting recording write는 canonical Recording tables로 전환.
-- canonical에 없는 기존 Meeting recording은 read fallback으로 유지하거나, 선택한 dual-write 전략을 적용.
-- 기존 `test_meeting_recordings.py`를 공용 service 경유 기준으로 갱신.
-- 새 `test_recording_service.py` 추가.
-
-검증:
-
-- staging idempotency
-- chunk idempotency/checksum
-- complete promotion
-- raw audio preservation on enqueue failure
-- playback
-- retry
-- delete cleanup
-- meeting wrapper의 녹음 순번(`sequence_no`)과 시작시각 기반 object key
-- Meeting별 single-recorder lock이 `RecordingStaging.initial_container_*` 기준으로 동작
-
-### PR 3 - Recording app save management
+### PR 2 - Recording app save management
 
 - Recording app module 추가.
 - direct import 저장 API 추가.
@@ -486,7 +461,44 @@ Meeting compatibility route가 `recording.service`를 호출하도록 바꾸는 
 - delete 후 목록에서 제거
 - OpenAPI client regenerated
 
-### PR 4 - Worker pipeline commonization
+### PR 3 - Meeting write cutover without backfill
+
+- `meeting/recordings.py`의 공용 로직을 `recording/service.py`로 이동.
+- Meeting route는 wrapper로 유지.
+- 신규 Meeting recording write는 canonical Recording tables로 전환.
+- 기존 Meeting recording backfill, read fallback, dual-write는 구현하지 않는다.
+- legacy Meeting recording 삭제 또는 old write shutdown 절차를 별도 운영 task로 둔다.
+- 기존 `test_meeting_recordings.py`를 공용 service 경유 기준으로 갱신.
+- 새 `test_recording_service.py` 추가.
+
+검증:
+
+- staging idempotency
+- chunk idempotency/checksum
+- complete promotion
+- raw audio preservation on enqueue failure
+- playback
+- retry
+- delete cleanup
+- meeting wrapper의 녹음 순번(`sequence_no`)과 시작시각 기반 object key
+- Meeting별 single-recorder lock이 `RecordingStaging.initial_container_*` 기준으로 동작
+
+### PR 4 - Web shared recorder boundary and recovery
+
+- `apps/web/src/app-modules/recording/` 추가.
+- app registry, manifest, routes, sidebar 추가.
+- `recording-api.ts` 추가.
+- `recording-db.ts`, `useChunkedRecorder`, `useRecordingRecovery`를 Meeting에서 Recording module로 이동.
+- Meeting 화면은 Recording public API를 사용하도록 변경.
+- 기존 Meeting IndexedDB recovery data는 유지하지 않는다. 필요하면 기존 미완료 녹음은 폐기한다.
+
+검증:
+
+- web architecture boundary check
+- Meeting detail에서 기존 녹음 UX 회귀 없음
+- 신규 Recording IndexedDB recovery session 복구
+
+### PR 5 - Worker pipeline commonization
 
 - `recording.transcribe` 추가.
 - `recording.create_raw_transcript_doc` 추가.
@@ -502,22 +514,7 @@ Meeting compatibility route가 `recording.service`를 호출하도록 바꾸는 
 - failed queue 상태에서도 원본 보존
 - 기존 meeting insight tests green
 
-### PR 5 - Web shared recorder boundary
-
-- `apps/web/src/app-modules/recording/` 추가.
-- app registry, manifest, routes, sidebar 추가.
-- `recording-api.ts` 추가.
-- `recording-db.ts`, `useChunkedRecorder`, `useRecordingRecovery`를 Meeting에서 Recording module로 이동.
-- Meeting 화면은 Recording public API를 사용하도록 변경.
-- 기존 Meeting IndexedDB recovery data를 새 module에서 계속 읽을 수 있게 호환 유지.
-
-검증:
-
-- web architecture boundary check
-- Meeting detail에서 기존 녹음 UX 회귀 없음
-- 기존 IndexedDB recovery session 복구
-
-### PR 6 - Recording app UX
+### PR 6 - Recording detail and attach UX
 
 - Recording detail 구현.
 - IndexedDB chunk 저장 및 recovery panel 구현.
@@ -564,7 +561,7 @@ Meeting compatibility route가 `recording.service`를 호출하도록 바꾸는 
 - owner-private Recording list/detail
 - container filter 조회는 target object 권한을 따르는지 확인
 - meeting wrapper endpoint가 Recording service를 호출하는지 확인
-- backfill idempotency와 old-table catch-up
+- old Meeting recording write path가 더 이상 호출되지 않는지 확인
 
 ### Worker
 
