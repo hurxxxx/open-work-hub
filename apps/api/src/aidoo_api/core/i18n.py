@@ -1299,6 +1299,22 @@ MESSAGES: dict[str, dict[str, str]] = {
         "ko-KR": "원본 음성을 사용할 수 없습니다.",
         "en-US": "Original audio is not available.",
     },
+    "recording.unsupported_audio_format": {
+        "ko-KR": "지원하지 않는 녹음 오디오 형식입니다.",
+        "en-US": "Unsupported recording audio format.",
+    },
+    "recording.uploaded_audio_empty": {
+        "ko-KR": "업로드한 녹음 파일이 비어 있습니다.",
+        "en-US": "Uploaded recording file is empty.",
+    },
+    "recording.size_limit_exceeded": {
+        "ko-KR": "녹음이 설정된 크기 제한을 초과했습니다.",
+        "en-US": "Recording exceeds the configured size limit.",
+    },
+    "recording.invalid_duration": {
+        "ko-KR": "녹음 길이는 0 이상이어야 합니다.",
+        "en-US": "Recording duration must be non-negative.",
+    },
 }
 
 

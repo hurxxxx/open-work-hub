@@ -14,6 +14,7 @@ export type ShellAppId =
   | 'whiteboard'
   | 'planner'
   | 'meeting'
+  | 'recording'
   | 'learning'
   | 'settings'
   | 'profile';
@@ -30,7 +31,7 @@ const HOME_SHELL_STATE: ShellState = {
 
 function canShowAppChrome(
   user: AuthUser | null | undefined,
-  appId: 'ai' | 'pms' | 'docs' | 'whiteboard' | 'planner' | 'meeting' | 'learning' | 'settings',
+  appId: 'ai' | 'pms' | 'docs' | 'whiteboard' | 'planner' | 'meeting' | 'recording' | 'learning' | 'settings',
   workspaceSlug?: string | null,
   enabledWorkspaceAppIds?: readonly string[],
 ): boolean {
@@ -143,6 +144,12 @@ export function resolveShellState(
   if (/^\/w\/[^/]+\/meeting(?:\/|$)/.test(path)) {
     return canShowAppChrome(user, 'meeting', workspaceSlug, enabledWorkspaceAppIds)
       ? { activeAppId: 'meeting', activeNavItemId: 'meeting-upcoming' }
+      : HOME_SHELL_STATE;
+  }
+
+  if (/^\/w\/[^/]+\/recording(?:\/|$)/.test(path)) {
+    return canShowAppChrome(user, 'recording', workspaceSlug, enabledWorkspaceAppIds)
+      ? { activeAppId: 'recording', activeNavItemId: 'recording-quick' }
       : HOME_SHELL_STATE;
   }
 

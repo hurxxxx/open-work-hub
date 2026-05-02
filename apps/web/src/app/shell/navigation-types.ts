@@ -8,6 +8,7 @@ export type AppModuleId =
   | 'whiteboard'
   | 'planner'
   | 'meeting'
+  | 'recording'
   | 'learning'
   | 'settings';
 

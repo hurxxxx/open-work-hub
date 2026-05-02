@@ -2893,6 +2893,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/workspaces/{workspace_slug}/recording/recordings/import": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Import Recording */
+        post: operations["recording_import_recording_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/workspaces/{workspace_slug}/recording/recordings/{recording_id}": {
         parameters: {
             query?: never;
@@ -3750,6 +3767,25 @@ export interface components {
         Body_pms_upload_attachment_post: {
             /** File */
             file: string;
+        };
+        /** Body_recording_import_recording_post */
+        Body_recording_import_recording_post: {
+            /** File */
+            file: string;
+            /** Title */
+            title?: string | null;
+            /** Started At */
+            started_at?: string | null;
+            /** Ended At */
+            ended_at?: string | null;
+            /** Duration Sec */
+            duration_sec?: number | null;
+            /**
+             * Source
+             * @default quick_record
+             * @enum {string}
+             */
+            source: "quick_record" | "manual_upload";
         };
         /** BootstrapStatusResponse */
         BootstrapStatusResponse: {
@@ -19015,6 +19051,57 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RecordingListResponse"];
+                };
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Access denied. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    recording_import_recording_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_recording_import_recording_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecordingOut"];
                 };
             };
             /** @description Authentication required. */

@@ -354,6 +354,29 @@ WORKSPACE_APP_CATALOG: tuple[WorkspaceAppCatalogItem, ...] = (
         ),
     ),
     WorkspaceAppCatalogItem(
+        app_id="recording",
+        title="RECORDING",
+        route_base="/recording",
+        icon_key="mic",
+        nav_items=(
+            WorkspaceNavCatalogItem(
+                id="recording-quick",
+                app_id="recording",
+                title="Quick Record",
+                category="Recordings",
+                icon_key="mic",
+            ),
+            WorkspaceNavCatalogItem(
+                id="recording-mine",
+                app_id="recording",
+                title="My Recordings",
+                category="Recordings",
+                icon_key="list-music",
+                path_suffix="?view=mine",
+            ),
+        ),
+    ),
+    WorkspaceAppCatalogItem(
         app_id="learning",
         title="학습",
         route_base="/learning",

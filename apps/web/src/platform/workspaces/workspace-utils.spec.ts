@@ -265,6 +265,9 @@ describe('rewriteWorkspaceApiPath', () => {
     expect(rewriteWorkspaceApiPath('/api/v1/planner/events')).toBe(
       '/api/v1/workspaces/hq/planner/events',
     );
+    expect(rewriteWorkspaceApiPath('/api/v1/recording/recordings')).toBe(
+      '/api/v1/workspaces/hq/recording/recordings',
+    );
     expect(rewriteWorkspaceApiPath('/api/v1/docs/hub')).toBe(
       '/api/v1/workspaces/hq/docs/hub',
     );

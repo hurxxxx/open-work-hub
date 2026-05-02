@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Literal
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, Form, Query, UploadFile, status
 from sqlalchemy.orm import Session
 
 from aidoo_api.core.db import get_db_session
@@ -44,6 +44,31 @@ def list_recordings(
         container_app=container_app,
         container_type=container_type,
         container_id=container_id,
+    )
+
+
+@router.post("/recordings/import", response_model=RecordingOut, status_code=status.HTTP_201_CREATED)
+def import_recording(
+    file: UploadFile,
+    title: str | None = Form(default=None, max_length=200),
+    started_at: datetime | None = Form(default=None),
+    ended_at: datetime | None = Form(default=None),
+    duration_sec: int | None = Form(default=None),
+    source: Literal["quick_record", "manual_upload"] = Form(default="quick_record"),
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+    workspace: Workspace = Depends(require_current_workspace),
+) -> RecordingOut:
+    return recording_service.import_recording(
+        db,
+        workspace=workspace,
+        user=current_user,
+        upload=file,
+        title=title,
+        started_at=started_at,
+        ended_at=ended_at,
+        duration_sec=duration_sec,
+        source=source,
     )
 
 

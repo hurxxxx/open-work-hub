@@ -28,12 +28,21 @@
 
 새 요구는 Meeting 화면 안의 보조 기능이 아니라, 모바일/웹에서 빠르게 녹음을 시작하고 나중에 정리할 수 있는 first-class Recording 앱이다. 따라서 기존 구현을 복제하지 않고, Meeting에 갇힌 녹음 구현을 공용 Recording 도메인으로 승격한다.
 
+2026-05-02 결정:
+
+- 기존 Meeting 녹음 row/object는 canonical Recording으로 backfill하지 않는다. 필요하면 기존 녹음은 삭제해도 된다.
+- Qwen/Qwen3-ASR-1.7B 검토와 ASR 파이프라인 연결은 저장/관리 UX 이후로 미룬다.
+- 현 단계의 닫힘 기준은 Recording 앱에서 새 녹음을 만들고, 원본 음성을 안전하게 저장하고, 내 녹음 목록에서 재생/삭제까지 관리하는 것이다.
+
 ## Product Goal
 
 Recording 앱의 목적은 사용자가 회의나 현장에서 앱을 열고 한 번의 동작으로 녹음을 시작한 뒤, 나중에 녹음 목록에서 회의/태스크/문서에 연결해 정리할 수 있게 하는 것이다.
 
 v1의 성공 기준:
 
+- 새 Recording 앱에서 녹음 종료 후 원본 음성이 canonical `recordings` row와 MinIO object로 저장된다.
+- Recording 앱은 owner-private 목록, 재생, 삭제 관리를 제공한다.
+- 전사/전사 원문 문서/회의록 문서 상태는 별도 pending 상태로 남겨서 백엔드 파이프라인 미완성 상태를 명확히 보여준다.
 - 모바일 웹/PWA와 데스크톱 웹에서 Recording 앱 첫 화면의 Mic 버튼으로 즉시 녹음을 시작한다.
 - 녹음 시작 전에 제목, 회의, 태스크, 참석자 같은 입력을 요구하지 않는다.
 - 녹음 중 생성된 chunk는 먼저 로컬 IndexedDB에 저장하고, 가능한 즉시 서버 staging으로 업로드한다.
@@ -400,30 +409,22 @@ Meeting 연결 후보는 녹음 시작/종료 시간과 겹치는 meeting을 우
 
 ### Step 2: Switch new writes through Recording service
 
-Meeting compatibility route가 `recording.service`를 호출하도록 바꾼다. 이 시점부터 신규 Meeting 녹음은 canonical `recordings` / `recording_staging` / `recording_containers`에 기록한다.
+Recording 앱의 신규 저장은 `recording.service`를 호출한다. 가장 먼저 direct import endpoint로 원본 음성 저장, owner-private 목록, playback을 닫는다.
+
+Meeting compatibility route가 `recording.service`를 호출하도록 바꾸는 작업은 그 다음 단계로 진행한다. 이 시점부터 신규 Meeting 녹음은 canonical `recordings` / `recording_staging` / `recording_containers`에 기록한다.
 
 전환 배포 중 누락을 막기 위해 다음 중 하나를 명시적으로 선택한다.
 
 - old table read fallback을 유지하고, canonical에 없는 기존 row만 old table에서 읽는다.
 - 또는 짧은 전환 기간 동안 old/new dual-write를 유지한다.
 
-### Step 3: Backfill existing Meeting data
+### Step 3: Legacy Meeting recording cleanup, no backfill
 
-기존 `meeting_recordings`를 `recordings`로 복사한다.
+기존 `meeting_recordings`를 `recordings`로 복사하지 않는다. 기존 녹음을 유지해야 하는 요구가 없으므로 backfill/migration 복잡도를 제거한다.
 
-각 row마다 `recording_containers`를 생성한다.
-
-```text
-container_app = "meeting"
-container_type = "meeting"
-container_id = old.meeting_id
-is_primary = true
-sort_order = old.sequence_no
-```
-
-기존 `meeting_recording_staging`도 `recording_staging`으로 이전한다. 기존 meeting relation은 `initial_container_app/type/id`로 보존한다.
-
-Backfill은 idempotent하고 재실행 가능해야 한다. Step 2 이후 새로 생성된 canonical row를 덮어쓰지 않으며, old table에만 남은 row를 catch-up 할 수 있어야 한다.
+- old Meeting recording data는 운영 결정에 따라 삭제하거나 archived legacy data로 남긴다.
+- 신규 canonical recording과 old Meeting recording을 섞어 보여주는 read fallback을 만들지 않는다.
+- Meeting write cutover 이후 old write path가 더 이상 호출되지 않는지 확인한다.
 
 ### Step 4: Remove old write path
 
@@ -469,21 +470,21 @@ Backfill은 idempotent하고 재실행 가능해야 한다. Step 2 이후 새로
 - meeting wrapper의 녹음 순번(`sequence_no`)과 시작시각 기반 object key
 - Meeting별 single-recorder lock이 `RecordingStaging.initial_container_*` 기준으로 동작
 
-### PR 3 - Idempotent backfill and old write shutdown
+### PR 3 - Recording app save management
 
-- 기존 `meeting_recordings`를 `recordings`로 backfill.
-- 기존 `MeetingRecording.sequence_no`를 `RecordingContainer.sort_order`로 backfill.
-- 기존 `meeting_recording_staging`을 `recording_staging`으로 backfill.
-- old table 신규 write path 제거.
-- read fallback 제거 가능 여부 확인. 불가능하면 제거 일정을 별도 TODO로 남긴다.
+- Recording app module 추가.
+- direct import 저장 API 추가.
+- Quick Record 화면 구현.
+- 내 녹음 목록, playback, 삭제 관리 구현.
+- transcript/raw transcript doc/minutes doc 상태는 pending으로 표시하고 worker enqueue는 하지 않는다.
 
 검증:
 
-- backfill 재실행 안전성
-- 기존 Meeting detail 녹음 목록 동일성
-- playback/media 동일성
-- old table에만 있던 row의 catch-up
-- 새 녹음이 old table에 write되지 않음
+- Recording 앱에서 녹음 시작/중지 후 canonical row와 MinIO object 생성
+- owner-private list
+- same-origin media playback
+- delete 후 목록에서 제거
+- OpenAPI client regenerated
 
 ### PR 4 - Worker pipeline commonization
 
@@ -492,6 +493,7 @@ Backfill은 idempotent하고 재실행 가능해야 한다. Step 2 이후 새로
 - `recording.create_minutes_doc` 추가.
 - Meeting insight extraction은 meeting container 후속 job으로 분리.
 - 기존 `meeting.*` task는 compatibility wrapper 또는 transition task로 유지한다.
+- ASR 모델은 이 단계에서 최종 선택한다. Qwen/Qwen3-ASR-1.7B는 후보로 두되, DeepInfra 제공 여부와 API 계약을 확인한 뒤 연결한다.
 
 검증:
 
@@ -517,10 +519,10 @@ Backfill은 idempotent하고 재실행 가능해야 한다. Step 2 이후 새로
 
 ### PR 6 - Recording app UX
 
-- Quick Record 화면 구현.
-- Recording list/detail 구현.
-- Recovery panel 구현.
+- Recording detail 구현.
+- IndexedDB chunk 저장 및 recovery panel 구현.
 - Attach flow 구현.
+- Meeting 화면 recorder를 Recording public API로 이동.
 
 검증:
 
@@ -588,6 +590,7 @@ Backfill은 idempotent하고 재실행 가능해야 한다. Step 2 이후 새로
 - 원문 전사 doc과 회의록 doc을 Recording detail에서 항상 자동 생성할지, 또는 전사 완료 후 사용자가 생성 버튼을 누르게 할지 여부. 기본값은 자동 생성.
 - Meeting에 연결되지 않은 일반 녹음의 minutes doc 제목 규칙. 기본값은 `회의록: {YYYY-MM-DD HH:mm 녹음}`.
 - 장시간 녹음의 size limit과 chunk retention 정책. 기본값은 기존 meeting recording 설정을 그대로 사용한다.
+- ASR 후보 모델. Qwen/Qwen3-ASR-1.7B는 후보지만, DeepInfra 제공 여부와 운영 비용/latency를 확인한 뒤 결정한다.
 
 ## Explicit Non-goals for v1
 
@@ -596,3 +599,5 @@ Backfill은 idempotent하고 재실행 가능해야 한다. Step 2 이후 새로
 - 자동 회의 attach.
 - 화자 diarization 정확도 보장.
 - 법적 녹음 동의 워크플로 자동화.
+- 기존 Meeting 녹음 backfill.
+- 저장/관리 단계에서 Qwen3-ASR 또는 다른 ASR 파이프라인을 즉시 연결.

@@ -5,6 +5,7 @@ import { learningManifest } from '@/src/app-modules/learning/manifest';
 import { meetingManifest } from '@/src/app-modules/meeting/manifest';
 import { plannerManifest } from '@/src/app-modules/planner/manifest';
 import { pmsManifest } from '@/src/app-modules/pms/manifest';
+import { recordingManifest } from '@/src/app-modules/recording/manifest';
 import { settingsManifest } from '@/src/app-modules/settings/manifest';
 import { whiteboardManifest } from '@/src/app-modules/whiteboard/manifest';
 import type {
@@ -22,6 +23,7 @@ const DEFAULT_MANIFESTS: AppModuleManifest[] = [
   whiteboardManifest,
   plannerManifest,
   meetingManifest,
+  recordingManifest,
   learningManifest,
   settingsManifest,
 ];

@@ -7,6 +7,7 @@ import { learningWorkspaceRoutes } from '@/src/app-modules/learning/routes';
 import { meetingWorkspaceRoutes } from '@/src/app-modules/meeting/routes';
 import { plannerWorkspaceRoutes } from '@/src/app-modules/planner/routes';
 import { pmsWorkspaceRoutes } from '@/src/app-modules/pms/routes';
+import { recordingWorkspaceRoutes } from '@/src/app-modules/recording';
 import { whiteboardGlobalRoutes, whiteboardWorkspaceRoutes } from '@/src/app-modules/whiteboard/routes';
 import {
   adminRedirectRoutes,
@@ -23,6 +24,7 @@ export const workspaceRouteDefinitions = [
   ...whiteboardWorkspaceRoutes,
   ...plannerWorkspaceRoutes,
   ...meetingWorkspaceRoutes,
+  ...recordingWorkspaceRoutes,
   ...learningWorkspaceRoutes,
 ];
 

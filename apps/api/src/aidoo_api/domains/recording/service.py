@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
+from io import BytesIO
 from pathlib import Path
 
-from fastapi import HTTPException, Response, status
+from fastapi import HTTPException, Response, UploadFile, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session, selectinload
@@ -47,6 +48,12 @@ _AUDIO_EXTENSIONS = {
 
 def _utcnow() -> datetime:
     return datetime.now(UTC).replace(tzinfo=None)
+
+
+def _as_utc_naive(value: datetime) -> datetime:
+    if value.tzinfo is None:
+        return value
+    return value.astimezone(UTC).replace(tzinfo=None)
 
 
 def _load_recording(db: Session, recording_id: str) -> Recording | None:
@@ -262,6 +269,43 @@ def _ensure_recording_owner(*, user: User, recording: Recording) -> None:
         )
 
 
+def _require_allowed_mime(mime_type: str | None) -> str:
+    raw = (mime_type or "").strip().lower()
+    if raw in _AUDIO_EXTENSIONS:
+        return raw
+    base = raw.split(";", 1)[0].strip()
+    if base in _AUDIO_EXTENSIONS:
+        return base
+    raise localized_http_exception(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        code="recording.unsupported_audio_format",
+    )
+
+
+def _extension_for_mime(mime_type: str) -> str:
+    return _AUDIO_EXTENSIONS.get(mime_type, Path(mime_type.split("/", 1)[-1]).suffix or ".bin")
+
+
+def _default_title(started_at: datetime) -> str:
+    return f"Recording {started_at:%Y-%m-%d %H:%M:%S UTC}"
+
+
+def _storage_key_for_recording(
+    *,
+    workspace: Workspace,
+    user: User,
+    recording_id: str,
+    mime_type: str,
+    started_at: datetime,
+) -> str:
+    timestamp = f"{started_at:%Y%m%dT%H%M%SZ}"
+    extension = _extension_for_mime(mime_type)
+    return (
+        f"recordings/{workspace.id}/{user.id}/{started_at:%Y/%m/%d}/"
+        f"{timestamp}-{recording_id}{extension}"
+    )
+
+
 def _failed_filter():
     return or_(
         Recording.audio_status == "failed",
@@ -406,6 +450,85 @@ def delete_recording(
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
+def import_recording(
+    db: Session,
+    *,
+    workspace: Workspace,
+    user: User,
+    upload: UploadFile,
+    title: str | None,
+    started_at: datetime | None,
+    ended_at: datetime | None,
+    duration_sec: int | None,
+    source: str = "quick_record",
+) -> RecordingOut:
+    mime_type = _require_allowed_mime(upload.content_type)
+    resolved_started_at = _as_utc_naive(started_at) if started_at else _utcnow()
+    resolved_ended_at = _as_utc_naive(ended_at) if ended_at else None
+    if duration_sec is not None and duration_sec < 0:
+        raise localized_http_exception(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            code="recording.invalid_duration",
+        )
+    if resolved_ended_at is not None and resolved_ended_at < resolved_started_at:
+        resolved_ended_at = resolved_started_at
+
+    data = upload.file.read()
+    if not data:
+        raise localized_http_exception(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            code="recording.uploaded_audio_empty",
+        )
+    settings = get_settings()
+    if len(data) > settings.recording_max_size_bytes:
+        raise localized_http_exception(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            code="recording.size_limit_exceeded",
+        )
+
+    recording_id = new_id()
+    storage_key = _storage_key_for_recording(
+        workspace=workspace,
+        user=user,
+        recording_id=recording_id,
+        mime_type=mime_type,
+        started_at=resolved_started_at,
+    )
+    get_minio_client().put_object(
+        settings.minio_bucket,
+        storage_key,
+        BytesIO(data),
+        length=len(data),
+        content_type=mime_type,
+    )
+
+    normalized_source = source if source in {"quick_record", "manual_upload"} else "quick_record"
+    trimmed_title = title.strip() if title else ""
+    recording = Recording(
+        id=recording_id,
+        workspace_id=workspace.id,
+        owner_id=user.id,
+        title=trimmed_title or _default_title(resolved_started_at),
+        started_at=resolved_started_at,
+        ended_at=resolved_ended_at,
+        duration_sec=duration_sec,
+        source=normalized_source,
+        storage_key=storage_key,
+        file_size=len(data),
+        mime_type=mime_type,
+        audio_status="saved",
+        transcript_status="pending",
+        raw_transcript_doc_status="pending",
+        minutes_doc_status="pending",
+        meeting_insight_status="none",
+        progress_pct=0,
+    )
+    db.add(recording)
+    db.commit()
+    fresh = _load_recording_or_404(db, recording_id)
+    return RecordingOut.model_validate(fresh)
+
+
 def create_container(
     db: Session,
     *,
@@ -525,10 +648,6 @@ def get_recording_playback(
         f"/recordings/{recording.id}/media"
     )
     return RecordingPlaybackResponse(url=url, expires_at=expires_at)
-
-
-def _extension_for_mime(mime_type: str) -> str:
-    return _AUDIO_EXTENSIONS.get(mime_type, Path(mime_type.split("/", 1)[-1]).suffix or ".bin")
 
 
 def _download_filename(recording: Recording) -> str:
