@@ -81,3 +81,19 @@ def test_translate_admin_workspace_delete_blockers_preserves_counts() -> None:
 
     assert "2 space(s), 1 meeting(s), 3 document(s)" in translate_message(message, "en-US")
     assert "스페이스 2개, 회의 1개, 문서 3개" in translate_message(message, "ko-KR")
+
+
+def test_translate_ai_dynamic_tool_and_status_messages() -> None:
+    tool_message = LocalizedApiMessage(
+        code="ai.unknown_tool",
+        params={"tool_name": "missing.tool"},
+    )
+    status_message = LocalizedApiMessage(
+        code="ai.approval_already_status",
+        params={"status": "approved"},
+    )
+
+    assert translate_message(tool_message, "en-US") == "Unknown AI tool: missing.tool"
+    assert translate_message(tool_message, "ko-KR") == "알 수 없는 AI 도구입니다: missing.tool"
+    assert translate_message(status_message, "en-US") == "Approval is already approved."
+    assert translate_message(status_message, "ko-KR") == "승인이 이미 승인됨 상태입니다."

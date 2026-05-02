@@ -13,6 +13,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 
 from aidoo_api.core.db import get_session_factory
+from aidoo_api.core.i18n import LocalizedApiMessage
 from aidoo_api.core.principal import user_principal
 from aidoo_api.domains.ai import agent as ai_agent
 from aidoo_api.domains.ai import approvals as ai_approvals
@@ -727,7 +728,7 @@ def test_resolve_approval_expired_transition_persists_before_410(client: TestCli
     )
 
     assert response.status_code == 410, response.text
-    assert response.json()["detail"] == "Approval has expired."
+    assert response.json()["code"] == "ai.approval_expired"
 
     status_response = client.get(
         _workspace_ai_path(seed["workspace_slug"], f"/approvals/{seed['approval_id']}"),
@@ -761,7 +762,8 @@ def test_resolve_approval_rejects_second_resolution(client: TestClient) -> None:
         json={"decision": "approved"},
     )
     assert second.status_code == 409, second.text
-    assert second.json()["detail"] == "Approval is already approved."
+    assert second.json()["code"] == "ai.approval_already_status"
+    assert second.json()["params"]["status"] == "approved"
 
 
 def test_resolve_approval_forbidden_for_different_user(client: TestClient) -> None:
@@ -776,7 +778,7 @@ def test_resolve_approval_forbidden_for_different_user(client: TestClient) -> No
     )
 
     assert response.status_code == 403, response.text
-    assert response.json()["detail"] == "Approval belongs to a different user."
+    assert response.json()["code"] == "ai.approval_different_user"
 
 
 def test_chat_resume_rejects_mismatched_conversation_id(client: TestClient) -> None:
@@ -800,7 +802,7 @@ def test_chat_resume_rejects_mismatched_conversation_id(client: TestClient) -> N
     )
 
     assert response.status_code == 400, response.text
-    assert response.json()["detail"] == "Approval does not belong to the requested conversation."
+    assert response.json()["code"] == "ai.approval_conversation_mismatch"
 
 
 def test_chat_resume_rejects_pending_approval(client: TestClient) -> None:
@@ -1359,9 +1361,8 @@ def test_ai_tool_invoke_returns_409_for_approval_required_tool(
     )
 
     assert response.status_code == 409, response.text
-    assert response.json()["detail"] == (
-        f"AI tool requires approval before execution: {_APPROVAL_TOOL_NAME}"
-    )
+    assert response.json()["code"] == "ai.tool_requires_approval"
+    assert response.json()["params"]["tool_name"] == _APPROVAL_TOOL_NAME
 
 
 def test_mcp_call_tool_returns_409_for_approval_required_tool(
@@ -1398,6 +1399,6 @@ def test_mcp_call_tool_returns_409_for_approval_required_tool(
             )
 
     assert exc_info.value.status_code == 409
-    assert exc_info.value.detail == (
-        f"AI tool requires approval before execution: {_APPROVAL_TOOL_NAME}"
-    )
+    assert isinstance(exc_info.value.detail, LocalizedApiMessage)
+    assert exc_info.value.detail.code == "ai.tool_requires_approval"
+    assert exc_info.value.detail.params["tool_name"] == _APPROVAL_TOOL_NAME

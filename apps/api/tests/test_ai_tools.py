@@ -627,7 +627,9 @@ def test_ai_tool_invoke_rejects_unknown_tool(client: TestClient) -> None:
         json={"arguments": {}},
     )
     assert response.status_code == 404
-    assert "Unknown AI tool" in response.json()["detail"]
+    body = response.json()
+    assert body["code"] == "ai.unknown_tool"
+    assert body["params"]["tool_name"] == "unknown.tool"
     audit_payload = _tool_audit_rows()[-1].payload
     assert audit_payload["tool_name"] == "unknown.tool"
     assert audit_payload["status"] == "error"
@@ -645,7 +647,9 @@ def test_ai_tool_invoke_blocks_hidden_tool_and_audits_blocked(client: TestClient
     )
 
     assert response.status_code == 403, response.text
-    assert "not available in this workspace" in response.json()["detail"]
+    body = response.json()
+    assert body["code"] == "ai.tool_unavailable_in_workspace"
+    assert body["params"]["tool_name"] == "planner.list_events"
     audit_payload = _tool_audit_rows()[-1].payload
     assert audit_payload["tool_name"] == "planner.list_events"
     assert audit_payload["status"] == "blocked"
@@ -676,7 +680,9 @@ def test_ai_tool_invoke_pms_write_tool_requires_approval_when_enabled(
         )
 
         assert response.status_code == 409, response.text
-        assert "requires approval before execution" in response.json()["detail"]
+        body = response.json()
+        assert body["code"] == "ai.tool_requires_approval"
+        assert body["params"]["tool_name"] == "pms.create_issue"
         audit_payload = _tool_audit_rows()[-1].payload
         assert audit_payload["tool_name"] == "pms.create_issue"
         assert audit_payload["status"] == "blocked"

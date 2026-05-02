@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any, Callable, Literal
 
-from fastapi import HTTPException, status
+from fastapi import status
 from sqlalchemy import (
     CheckConstraint,
     DateTime,
@@ -22,8 +22,9 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, Session, mapped_column
 
-from aidoo_api.core.settings import get_settings
 from aidoo_api.core.db import Base
+from aidoo_api.core.i18n import localized_http_exception
+from aidoo_api.core.settings import get_settings
 from aidoo_api.domains.ai.audit import log_llm_tool_approval_resolved
 from aidoo_api.domains.ai.runtime.models import AgentInvocation, AgentRun
 from aidoo_api.domains.ai.runtime.persistence import (
@@ -224,11 +225,14 @@ def _require_user_scope(
     workspace: Workspace, user: User, row_workspace_id: str, row_user_id: str
 ) -> None:
     if row_workspace_id != workspace.id:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Approval not found.")
+        raise localized_http_exception(
+            status_code=status.HTTP_404_NOT_FOUND,
+            code="ai.approval_not_found",
+        )
     if row_user_id != user.id:
-        raise HTTPException(
+        raise localized_http_exception(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Approval belongs to a different user.",
+            code="ai.approval_different_user",
         )
 
 
@@ -279,7 +283,10 @@ def _load_approval_row(
         stmt = stmt.with_for_update()
     approval = db.scalar(stmt)
     if approval is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Approval not found.")
+        raise localized_http_exception(
+            status_code=status.HTTP_404_NOT_FOUND,
+            code="ai.approval_not_found",
+        )
     return approval
 
 
@@ -427,8 +434,9 @@ def load_snapshot(
         stmt = stmt.with_for_update()
     snapshot = db.scalar(stmt)
     if snapshot is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Agent run snapshot not found."
+        raise localized_http_exception(
+            status_code=status.HTTP_404_NOT_FOUND,
+            code="ai.agent_run_snapshot_not_found",
         )
     return snapshot
 
@@ -468,9 +476,9 @@ def mark_snapshot_completed(db: Session, snapshot: AgentRunSnapshot) -> None:
 
 def mark_snapshot_resumed(db: Session, snapshot: AgentRunSnapshot) -> None:
     if snapshot.status != "awaiting_approval":
-        raise HTTPException(
+        raise localized_http_exception(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Agent run snapshot is not awaiting approval.",
+            code="ai.agent_run_snapshot_not_awaiting_approval",
         )
     snapshot.status = "resumed"
     db.add(snapshot)
@@ -527,7 +535,10 @@ def _commit_expired_approval_and_raise(
 ) -> None:
     _expire_pending_approval(db, approval, snapshot=snapshot)
     db.commit()
-    raise HTTPException(status_code=status.HTTP_410_GONE, detail="Approval has expired.")
+    raise localized_http_exception(
+        status_code=status.HTTP_410_GONE,
+        code="ai.approval_expired",
+    )
 
 
 def resolve_approval(
@@ -548,9 +559,10 @@ def resolve_approval(
     )
     snapshot = load_snapshot(db, agent_run_id=approval.agent_run_id, for_update=True)
     if approval.status != "pending":
-        raise HTTPException(
+        raise localized_http_exception(
             status_code=status.HTTP_409_CONFLICT,
-            detail=f"Approval is already {approval.status}.",
+            code="ai.approval_already_status",
+            status=approval.status,
         )
     if approval.expires_at <= utcnow_naive():
         _commit_expired_approval_and_raise(db, approval=approval, snapshot=snapshot)
@@ -581,9 +593,10 @@ def abandon_approval(
     )
     snapshot = load_snapshot(db, agent_run_id=approval.agent_run_id, for_update=True)
     if approval.status != "pending":
-        raise HTTPException(
+        raise localized_http_exception(
             status_code=status.HTTP_409_CONFLICT,
-            detail=f"Approval is already {approval.status}.",
+            code="ai.approval_already_status",
+            status=approval.status,
         )
     if approval.expires_at <= utcnow_naive():
         _commit_expired_approval_and_raise(db, approval=approval, snapshot=snapshot)
@@ -678,9 +691,9 @@ def resolve_resume_allowed_app_ids(
 
     requested_scope = _normalize_scope_list(requested_allowed_app_ids)
     if not set(requested_scope).issubset(set(stored_scope)):
-        raise HTTPException(
+        raise localized_http_exception(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Resume scope cannot be wider than the approved agent run scope.",
+            code="ai.resume_scope_wider",
         )
     return requested_scope
 
@@ -695,9 +708,9 @@ def ensure_resume_approved_tool_scope(
         return
     if approved_tool_app_id in set(allowed_app_ids):
         return
-    raise HTTPException(
+    raise localized_http_exception(
         status_code=status.HTTP_400_BAD_REQUEST,
-        detail="Resume scope cannot exclude the approved tool.",
+        code="ai.resume_scope_excludes_approved_tool",
     )
 
 
@@ -732,9 +745,9 @@ def get_resume_context(
         for_update=for_update,
     )
     if approval.conversation_id != conversation_id:
-        raise HTTPException(
+        raise localized_http_exception(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Approval does not belong to the requested conversation.",
+            code="ai.approval_conversation_mismatch",
         )
     snapshot = load_snapshot(
         db,
@@ -742,27 +755,29 @@ def get_resume_context(
         for_update=for_update,
     )
     if snapshot.workspace_id != workspace.id or snapshot.requested_by_user_id != user.id:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Agent run snapshot not found."
+        raise localized_http_exception(
+            status_code=status.HTTP_404_NOT_FOUND,
+            code="ai.agent_run_snapshot_not_found",
         )
     if approval.status == "pending":
-        raise HTTPException(
+        raise localized_http_exception(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Approval must be resolved before resume.",
+            code="ai.approval_resume_requires_resolution",
         )
     if approval.status in {"cancelled", "expired"}:
-        raise HTTPException(
-            status_code=status.HTTP_410_GONE, detail="Approval can no longer be resumed."
+        raise localized_http_exception(
+            status_code=status.HTTP_410_GONE,
+            code="ai.approval_resume_unavailable",
         )
     if snapshot.status == "resumed":
-        raise HTTPException(
+        raise localized_http_exception(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Agent run is already being resumed.",
+            code="ai.agent_run_already_resuming",
         )
     if snapshot.status in {"completed", "abandoned"}:
-        raise HTTPException(
+        raise localized_http_exception(
             status_code=status.HTTP_410_GONE,
-            detail="Agent run snapshot is no longer resumable.",
+            code="ai.agent_run_snapshot_not_resumable",
         )
     return approval, snapshot
 

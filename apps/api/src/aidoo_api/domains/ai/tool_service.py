@@ -11,6 +11,7 @@ from fastapi.encoders import jsonable_encoder
 from pydantic import BaseModel, ValidationError
 from sqlalchemy.orm import Session
 
+from aidoo_api.core.i18n import LocalizedApiMessage, localized_http_exception
 from aidoo_api.core.telemetry import get_tracer
 from aidoo_api.core.principal import CallerPrincipal
 from aidoo_api.domains.ai import approvals as ai_approvals
@@ -42,9 +43,10 @@ class ToolRequiresApproval(Exception):
 
 
 def approval_required_http_exception(error: ToolRequiresApproval) -> HTTPException:
-    return HTTPException(
+    return localized_http_exception(
         status_code=status.HTTP_409_CONFLICT,
-        detail=str(error),
+        code="ai.tool_requires_approval",
+        tool_name=error.tool_name,
     )
 
 
@@ -85,9 +87,10 @@ def execute_tool(
             agent_run_id=agent_run_id,
             conversation_id=conversation_id,
         )
-        raise HTTPException(
+        raise localized_http_exception(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Unknown AI tool: {tool_name}",
+            code="ai.unknown_tool",
+            tool_name=tool_name,
         )
     handler = definition.handler
     if descriptor is not None:
@@ -114,9 +117,10 @@ def execute_tool(
                 agent_run_id=agent_run_id,
                 conversation_id=conversation_id,
             )
-            raise HTTPException(
+            raise localized_http_exception(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"AI tool discoverability predicate is not registered: {tool_name}",
+                code="ai.tool_discoverability_predicate_missing",
+                tool_name=tool_name,
             )
         workspace_context = build_workspace_context(workspace)
         entitlements = resolve_workspace_entitlement_view(db, workspace=workspace)
@@ -134,9 +138,10 @@ def execute_tool(
                 agent_run_id=agent_run_id,
                 conversation_id=conversation_id,
             )
-            raise HTTPException(
+            raise localized_http_exception(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail=f"AI tool is not available in this workspace: {tool_name}",
+                code="ai.tool_unavailable_in_workspace",
+                tool_name=tool_name,
             )
 
     if handler is None:
@@ -153,9 +158,10 @@ def execute_tool(
             agent_run_id=agent_run_id,
             conversation_id=conversation_id,
         )
-        raise HTTPException(
+        raise localized_http_exception(
             status_code=status.HTTP_501_NOT_IMPLEMENTED,
-            detail=f"AI tool is registered but not executable yet: {tool_name}",
+            code="ai.tool_not_executable",
+            tool_name=tool_name,
         )
     validated_arguments = dict(arguments)
     validated: BaseModel | None = None
@@ -178,9 +184,10 @@ def execute_tool(
                 agent_run_id=agent_run_id,
                 conversation_id=conversation_id,
             )
-            raise HTTPException(
+            raise localized_http_exception(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=message,
+                code="ai.invalid_tool_arguments",
+                reason=message.removeprefix("Invalid tool arguments: "),
             ) from error
         assert validated is not None
         validated_arguments = validated.model_dump(
@@ -209,9 +216,9 @@ def execute_tool(
                 agent_run_id=agent_run_id,
                 conversation_id=conversation_id,
             )
-            raise HTTPException(
+            raise localized_http_exception(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="Only user principals can resolve approval-gated AI tools.",
+                code="ai.only_user_principal_approval_tools",
             )
         if approved_call_id is None:
             _log_tool_call(
@@ -288,14 +295,16 @@ def execute_tool(
             )
             return payload
         elif approval.status in {"cancelled", "expired"}:
-            raise HTTPException(
+            raise localized_http_exception(
                 status_code=status.HTTP_410_GONE,
-                detail=f"AI tool approval can no longer be used: {approval.status}.",
+                code="ai.tool_approval_no_longer_usable",
+                status=approval.status,
             )
         else:
-            raise HTTPException(
+            raise localized_http_exception(
                 status_code=status.HTTP_409_CONFLICT,
-                detail=f"AI tool approval is already {approval.status}.",
+                code="ai.tool_approval_already_status",
+                status=approval.status,
             )
 
     tracer = get_tracer("aidoo_api.ai.tools")
@@ -572,14 +581,14 @@ def _validate_replayed_approval(
     call_id: str | None,
 ) -> None:
     if approval.tool_name != tool_name:
-        raise HTTPException(
+        raise localized_http_exception(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Approval does not match the requested tool.",
+            code="ai.approval_tool_mismatch",
         )
     if call_id is not None and approval.tool_call_id != call_id:
-        raise HTTPException(
+        raise localized_http_exception(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Approval does not match the requested tool call.",
+            code="ai.approval_tool_call_mismatch",
         )
 
 
@@ -601,6 +610,8 @@ def _error_message(error: HTTPException) -> str:
     detail = error.detail
     if isinstance(detail, str):
         return detail
+    if isinstance(detail, LocalizedApiMessage):
+        return detail.code
     return "AI tool execution failed."
 
 

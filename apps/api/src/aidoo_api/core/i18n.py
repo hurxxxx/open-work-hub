@@ -18,6 +18,46 @@ class LocalizedApiMessage:
     params: dict[str, Any] = field(default_factory=dict)
 
 
+PARAM_VALUE_TRANSLATIONS: dict[str, dict[str, dict[str, str]]] = {
+    "ai.approval.status": {
+        "pending": {
+            "ko-KR": "대기 중",
+            "en-US": "pending",
+        },
+        "approved": {
+            "ko-KR": "승인됨",
+            "en-US": "approved",
+        },
+        "rejected": {
+            "ko-KR": "거부됨",
+            "en-US": "rejected",
+        },
+        "cancelled": {
+            "ko-KR": "취소됨",
+            "en-US": "cancelled",
+        },
+        "expired": {
+            "ko-KR": "만료됨",
+            "en-US": "expired",
+        },
+        "executed": {
+            "ko-KR": "실행됨",
+            "en-US": "executed",
+        },
+        "failed": {
+            "ko-KR": "실패",
+            "en-US": "failed",
+        },
+    },
+}
+
+MESSAGE_PARAM_VALUE_TRANSLATIONS: dict[tuple[str, str], str] = {
+    ("ai.approval_already_status", "status"): "ai.approval.status",
+    ("ai.tool_approval_already_status", "status"): "ai.approval.status",
+    ("ai.tool_approval_no_longer_usable", "status"): "ai.approval.status",
+}
+
+
 MESSAGES: dict[str, dict[str, str]] = {
     "auth.user_not_found": {
         "ko-KR": "사용자를 찾을 수 없습니다.",
@@ -454,6 +494,102 @@ MESSAGES: dict[str, dict[str, str]] = {
     "whiteboard.collab_relay_unavailable": {
         "ko-KR": "협업 relay를 사용할 수 없습니다.",
         "en-US": "Collaboration relay unavailable.",
+    },
+    "ai.tool_requires_approval": {
+        "ko-KR": "AI 도구 실행 전에 승인이 필요합니다: {tool_name}",
+        "en-US": "AI tool requires approval before execution: {tool_name}",
+    },
+    "ai.unknown_tool": {
+        "ko-KR": "알 수 없는 AI 도구입니다: {tool_name}",
+        "en-US": "Unknown AI tool: {tool_name}",
+    },
+    "ai.tool_discoverability_predicate_missing": {
+        "ko-KR": "AI 도구 discoverability predicate가 등록되어 있지 않습니다: {tool_name}",
+        "en-US": "AI tool discoverability predicate is not registered: {tool_name}",
+    },
+    "ai.tool_unavailable_in_workspace": {
+        "ko-KR": "이 워크스페이스에서 AI 도구를 사용할 수 없습니다: {tool_name}",
+        "en-US": "AI tool is not available in this workspace: {tool_name}",
+    },
+    "ai.tool_not_executable": {
+        "ko-KR": "AI 도구가 등록되어 있지만 아직 실행할 수 없습니다: {tool_name}",
+        "en-US": "AI tool is registered but not executable yet: {tool_name}",
+    },
+    "ai.invalid_tool_arguments": {
+        "ko-KR": "AI 도구 인자가 올바르지 않습니다: {reason}",
+        "en-US": "Invalid tool arguments: {reason}",
+    },
+    "ai.only_user_principal_approval_tools": {
+        "ko-KR": "승인이 필요한 AI 도구는 사용자 principal만 resolve할 수 있습니다.",
+        "en-US": "Only user principals can resolve approval-gated AI tools.",
+    },
+    "ai.tool_approval_no_longer_usable": {
+        "ko-KR": "AI 도구 승인을 더 이상 사용할 수 없습니다: {status}",
+        "en-US": "AI tool approval can no longer be used: {status}.",
+    },
+    "ai.tool_approval_already_status": {
+        "ko-KR": "AI 도구 승인이 이미 {status} 상태입니다.",
+        "en-US": "AI tool approval is already {status}.",
+    },
+    "ai.approval_tool_mismatch": {
+        "ko-KR": "승인이 요청한 도구와 일치하지 않습니다.",
+        "en-US": "Approval does not match the requested tool.",
+    },
+    "ai.approval_tool_call_mismatch": {
+        "ko-KR": "승인이 요청한 도구 호출과 일치하지 않습니다.",
+        "en-US": "Approval does not match the requested tool call.",
+    },
+    "ai.approval_not_found": {
+        "ko-KR": "승인을 찾을 수 없습니다.",
+        "en-US": "Approval not found.",
+    },
+    "ai.approval_different_user": {
+        "ko-KR": "승인이 다른 사용자에게 속해 있습니다.",
+        "en-US": "Approval belongs to a different user.",
+    },
+    "ai.agent_run_snapshot_not_found": {
+        "ko-KR": "Agent run snapshot을 찾을 수 없습니다.",
+        "en-US": "Agent run snapshot not found.",
+    },
+    "ai.agent_run_snapshot_not_awaiting_approval": {
+        "ko-KR": "Agent run snapshot이 승인 대기 상태가 아닙니다.",
+        "en-US": "Agent run snapshot is not awaiting approval.",
+    },
+    "ai.approval_expired": {
+        "ko-KR": "승인이 만료되었습니다.",
+        "en-US": "Approval has expired.",
+    },
+    "ai.approval_already_status": {
+        "ko-KR": "승인이 이미 {status} 상태입니다.",
+        "en-US": "Approval is already {status}.",
+    },
+    "ai.resume_scope_wider": {
+        "ko-KR": "resume 범위는 승인된 agent run 범위보다 넓을 수 없습니다.",
+        "en-US": "Resume scope cannot be wider than the approved agent run scope.",
+    },
+    "ai.resume_scope_excludes_approved_tool": {
+        "ko-KR": "resume 범위에서 승인된 도구를 제외할 수 없습니다.",
+        "en-US": "Resume scope cannot exclude the approved tool.",
+    },
+    "ai.approval_conversation_mismatch": {
+        "ko-KR": "승인이 요청한 대화에 속하지 않습니다.",
+        "en-US": "Approval does not belong to the requested conversation.",
+    },
+    "ai.approval_resume_requires_resolution": {
+        "ko-KR": "resume 전에 승인을 먼저 resolve해야 합니다.",
+        "en-US": "Approval must be resolved before resume.",
+    },
+    "ai.approval_resume_unavailable": {
+        "ko-KR": "승인을 더 이상 resume할 수 없습니다.",
+        "en-US": "Approval can no longer be resumed.",
+    },
+    "ai.agent_run_already_resuming": {
+        "ko-KR": "Agent run이 이미 resume 중입니다.",
+        "en-US": "Agent run is already being resumed.",
+    },
+    "ai.agent_run_snapshot_not_resumable": {
+        "ko-KR": "Agent run snapshot을 더 이상 resume할 수 없습니다.",
+        "en-US": "Agent run snapshot is no longer resumable.",
     },
     "pms.principal_workspace_mismatch": {
         "ko-KR": "PMS principal의 워크스페이스가 일치하지 않습니다.",
@@ -948,13 +1084,34 @@ def translate_message(message: LocalizedApiMessage, locale: str) -> str:
     translations = MESSAGES.get(message.code)
     if translations is None:
         return message.code
-    template = translations.get(normalize_locale(locale)) or translations[DEFAULT_LOCALE]
+    normalized_locale = normalize_locale(locale)
+    template = translations.get(normalized_locale) or translations[DEFAULT_LOCALE]
     safe_params = {
-        field_name: message.params.get(field_name, "{" + field_name + "}")
+        field_name: translate_param_value(
+            message.code,
+            field_name,
+            message.params.get(field_name, "{" + field_name + "}"),
+            normalized_locale,
+        )
         for _, field_name, _, _ in Formatter().parse(template)
         if field_name
     }
     return template.format(**safe_params)
+
+
+def translate_param_value(
+    message_code: str,
+    field_name: str,
+    value: Any,
+    locale: str,
+) -> Any:
+    translation_key = MESSAGE_PARAM_VALUE_TRANSLATIONS.get((message_code, field_name))
+    if translation_key is None or not isinstance(value, str):
+        return value
+    translations = PARAM_VALUE_TRANSLATIONS.get(translation_key, {}).get(value)
+    if translations is None:
+        return value
+    return translations.get(normalize_locale(locale)) or translations[DEFAULT_LOCALE]
 
 
 def localized_http_exception(
