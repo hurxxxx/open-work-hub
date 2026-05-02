@@ -107,6 +107,94 @@ MESSAGES: dict[str, dict[str, str]] = {
         "ko-KR": "팀 접근 권한이 필요합니다.",
         "en-US": "Team access required.",
     },
+    "admin.invalid_workspace_role": {
+        "ko-KR": "워크스페이스 역할이 올바르지 않습니다.",
+        "en-US": "Invalid workspace role.",
+    },
+    "admin.user_already_exists": {
+        "ko-KR": "사용자가 이미 존재합니다.",
+        "en-US": "User already exists.",
+    },
+    "admin.self_delete_denied": {
+        "ko-KR": "자기 자신의 사용자 계정은 삭제할 수 없습니다.",
+        "en-US": "You cannot delete your own user account.",
+    },
+    "admin.user_linked_records_delete_denied": {
+        "ko-KR": "사용자에 연결된 레코드가 있어 삭제할 수 없습니다.",
+        "en-US": "User has linked records and cannot be deleted.",
+    },
+    "admin.org_unit_slug_exists": {
+        "ko-KR": "조직 단위 slug가 이미 존재합니다.",
+        "en-US": "Org unit slug already exists.",
+    },
+    "admin.org_unit_not_found": {
+        "ko-KR": "조직 단위를 찾을 수 없습니다.",
+        "en-US": "Org unit not found.",
+    },
+    "admin.group_slug_exists": {
+        "ko-KR": "그룹 slug가 이미 존재합니다.",
+        "en-US": "Group slug already exists.",
+    },
+    "admin.group_not_found": {
+        "ko-KR": "그룹을 찾을 수 없습니다.",
+        "en-US": "Group not found.",
+    },
+    "admin.workspace_key_exists": {
+        "ko-KR": "워크스페이스 key가 이미 존재합니다.",
+        "en-US": "Workspace key already exists.",
+    },
+    "admin.workspace_archive_before_delete": {
+        "ko-KR": "영구 삭제 전에 워크스페이스를 먼저 보관 처리해야 합니다.",
+        "en-US": "Workspace must be archived before it can be permanently deleted.",
+    },
+    "admin.workspace_contains_content": {
+        "ko-KR": "워크스페이스에 콘텐츠가 남아 있습니다. 스페이스 {space_count}개, 회의 {meeting_count}개, 문서 {doc_count}개를 먼저 비워 주세요.",
+        "en-US": "Workspace still contains content: {space_count} space(s), {meeting_count} meeting(s), {doc_count} document(s). Empty its content first.",
+    },
+    "admin.user_already_workspace_member": {
+        "ko-KR": "사용자가 이미 이 워크스페이스의 멤버입니다.",
+        "en-US": "User is already a member of this workspace.",
+    },
+    "admin.group_already_workspace_member": {
+        "ko-KR": "그룹이 이미 이 워크스페이스의 멤버입니다.",
+        "en-US": "Group is already a member of this workspace.",
+    },
+    "admin.workspace_member_not_found": {
+        "ko-KR": "워크스페이스 멤버를 찾을 수 없습니다.",
+        "en-US": "Workspace member not found.",
+    },
+    "admin.self_role_change_denied": {
+        "ko-KR": "자기 자신의 역할은 직접 변경할 수 없습니다. 다른 관리자에게 요청해 주세요.",
+        "en-US": "You cannot change your own role. Ask another admin to do it.",
+    },
+    "admin.self_workspace_remove_denied": {
+        "ko-KR": "자기 자신은 워크스페이스에서 제거할 수 없습니다.",
+        "en-US": "You cannot remove yourself from the workspace.",
+    },
+    "admin.invalid_workspace_role_filter": {
+        "ko-KR": "워크스페이스 역할 필터가 올바르지 않습니다.",
+        "en-US": "Invalid workspace role filter.",
+    },
+    "admin.role_required_for_add": {
+        "ko-KR": "추가 작업에는 role이 필요합니다.",
+        "en-US": "role is required for add.",
+    },
+    "admin.role_required_for_update_role": {
+        "ko-KR": "역할 변경 작업에는 role이 필요합니다.",
+        "en-US": "role is required for update_role.",
+    },
+    "admin.subject_already_member": {
+        "ko-KR": "이미 멤버입니다.",
+        "en-US": "Already a member.",
+    },
+    "admin.team_key_exists": {
+        "ko-KR": "팀 key가 워크스페이스에 이미 존재합니다.",
+        "en-US": "Team key already exists in workspace.",
+    },
+    "admin.platform_admin_required": {
+        "ko-KR": "플랫폼 관리자 권한이 필요합니다.",
+        "en-US": "Platform admin access required.",
+    },
     "docs.doc_not_found": {
         "ko-KR": "문서를 찾을 수 없습니다.",
         "en-US": "Doc not found.",

@@ -4,7 +4,7 @@ from datetime import UTC, datetime
 import secrets
 from typing import Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import case as sa_case
 from sqlalchemy import delete as sa_delete
@@ -14,6 +14,12 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload, selectinload
 
 from aidoo_api.core.db import get_db_session
+from aidoo_api.core.i18n import (
+    LocalizedApiMessage,
+    localized_http_exception,
+    select_locale,
+    translate_message,
+)
 from aidoo_api.core.settings import get_settings
 from aidoo_api.domains.auth.access import (
     SYSTEM_PLATFORM_ADMIN,
@@ -265,13 +271,13 @@ def _ensure_workspace_scope(
 ) -> Workspace:
     workspace = load_active_workspace_by_id(db, workspace_id)
     if workspace is None:
-        raise HTTPException(status_code=404, detail="Workspace not found.")
+        raise localized_http_exception(status_code=404, code="workspace.not_found")
     if is_platform_admin_user(user, db):
         return workspace
 
     role = resolve_workspace_role(db, user, workspace.id)
     if not workspace_role_allows(role, min_role):
-        raise HTTPException(status_code=403, detail="Workspace access required.")
+        raise localized_http_exception(status_code=403, code="workspace.access_required")
     return workspace
 
 
@@ -289,12 +295,12 @@ def _ensure_admin_workspace_scope(
         select(Workspace).options(selectinload(Workspace.teams)).where(Workspace.id == workspace_id)
     )
     if workspace is None:
-        raise HTTPException(status_code=404, detail="Workspace not found.")
+        raise localized_http_exception(status_code=404, code="workspace.not_found")
     if is_platform_admin_user(user, db):
         return workspace
     role = resolve_workspace_role(db, user, workspace.id)
     if not workspace_role_allows(role, "admin"):
-        raise HTTPException(status_code=403, detail="Workspace access required.")
+        raise localized_http_exception(status_code=403, code="workspace.access_required")
     return workspace
 
 
@@ -314,12 +320,12 @@ def _ensure_team_scope(
         include_members=include_members,
     )
     if team is None or not team.active or not team.workspace.active:
-        raise HTTPException(status_code=404, detail="Team not found.")
+        raise localized_http_exception(status_code=404, code="team.not_found")
     if is_platform_admin_user(user, db):
         return team
     role = resolve_team_role(db, user, team)
     if not team_role_allows(role, min_role):
-        raise HTTPException(status_code=403, detail="Team access required.")
+        raise localized_http_exception(status_code=403, code="team.access_required")
     return team
 
 
@@ -573,6 +579,25 @@ ADMIN_USER_LIST_OPTIONS = (
 )
 
 
+def _request_locale(request: Request) -> str:
+    return select_locale(
+        explicit_locale=request.headers.get("x-aidoo-locale"),
+        accept_language=request.headers.get("accept-language"),
+    )
+
+
+def _exception_code(exc: HTTPException) -> str | None:
+    if isinstance(exc.detail, LocalizedApiMessage):
+        return exc.detail.code
+    return None
+
+
+def _exception_detail(exc: HTTPException, request: Request) -> str:
+    if isinstance(exc.detail, LocalizedApiMessage):
+        return translate_message(exc.detail, _request_locale(request))
+    return str(exc.detail)
+
+
 def _generate_temporary_password() -> str:
     return f"Aidoo!{secrets.token_urlsafe(10)}"
 
@@ -606,7 +631,7 @@ def _serialize_access_group(group: AccessGroup) -> AccessGroupItemResponse:
 def _serialize_admin_user(db: Session, user: User) -> AdminUserItemResponse:
     loaded = load_user_graph(db, user.id)
     if loaded is None:
-        raise HTTPException(status_code=404, detail="User not found.")
+        raise localized_http_exception(status_code=404, code="auth.user_not_found")
     return AdminUserItemResponse.model_validate(serialize_auth_user(db, loaded))
 
 
@@ -822,7 +847,7 @@ def create_user(
 ) -> CreatedUserResponse:
     email = normalize_email(payload.email)
     if db.scalar(select(User).where(User.email == email)) is not None:
-        raise HTTPException(status_code=409, detail="User already exists.")
+        raise localized_http_exception(status_code=409, code="admin.user_already_exists")
 
     temporary_password = payload.temporary_password or _generate_temporary_password()
     user = User(
@@ -870,7 +895,7 @@ def get_user(
 ) -> AdminUserItemResponse:
     user = db.scalar(select(User).where(User.id == user_id))
     if user is None:
-        raise HTTPException(status_code=404, detail="User not found.")
+        raise localized_http_exception(status_code=404, code="auth.user_not_found")
     return _serialize_admin_user(db, user)
 
 
@@ -882,7 +907,7 @@ def list_user_team_memberships(
 ) -> list[UserTeamMembershipItemResponse]:
     user = db.scalar(select(User.id).where(User.id == user_id))
     if user is None:
-        raise HTTPException(status_code=404, detail="User not found.")
+        raise localized_http_exception(status_code=404, code="auth.user_not_found")
 
     memberships = list(
         db.scalars(
@@ -948,7 +973,7 @@ def update_user(
 ) -> AdminUserItemResponse:
     user = db.scalar(select(User).options(selectinload(User.group_links)).where(User.id == user_id))
     if user is None:
-        raise HTTPException(status_code=404, detail="User not found.")
+        raise localized_http_exception(status_code=404, code="auth.user_not_found")
 
     if payload.full_name is not None:
         user.full_name = payload.full_name.strip()
@@ -999,7 +1024,7 @@ def reset_user_password(
 ) -> ResetPasswordResponse:
     user = db.scalar(select(User).where(User.id == user_id))
     if user is None:
-        raise HTTPException(status_code=404, detail="User not found.")
+        raise localized_http_exception(status_code=404, code="auth.user_not_found")
 
     temporary_password = payload.temporary_password or _generate_temporary_password()
     user.password_hash = hash_password(temporary_password)
@@ -1024,11 +1049,11 @@ def delete_user(
     db: Session = Depends(get_db_session),
 ) -> None:
     if user_id == context.user.id:
-        raise HTTPException(status_code=400, detail="You cannot delete your own user account.")
+        raise localized_http_exception(status_code=400, code="admin.self_delete_denied")
 
     user = db.scalar(select(User).where(User.id == user_id))
     if user is None:
-        raise HTTPException(status_code=404, detail="User not found.")
+        raise localized_http_exception(status_code=404, code="auth.user_not_found")
 
     email = user.email
     db.execute(sa_update(AuditLog).where(AuditLog.actor_user_id == user_id).values(actor_user_id=None))
@@ -1052,9 +1077,9 @@ def delete_user(
         db.commit()
     except IntegrityError as exc:
         db.rollback()
-        raise HTTPException(
+        raise localized_http_exception(
             status_code=409,
-            detail="User has linked records and cannot be deleted.",
+            code="admin.user_linked_records_delete_denied",
         ) from exc
 
 
@@ -1084,7 +1109,7 @@ def create_org_unit(
 ) -> OrgUnitItemResponse:
     slug = payload.slug or slugify(payload.name)
     if db.scalar(select(OrgUnit).where(OrgUnit.slug == slug)) is not None:
-        raise HTTPException(status_code=409, detail="Org unit slug already exists.")
+        raise localized_http_exception(status_code=409, code="admin.org_unit_slug_exists")
 
     org_unit = OrgUnit(
         id=new_id(),
@@ -1121,7 +1146,7 @@ def update_org_unit(
 ) -> OrgUnitItemResponse:
     org_unit = db.scalar(select(OrgUnit).where(OrgUnit.id == org_unit_id))
     if org_unit is None:
-        raise HTTPException(status_code=404, detail="Org unit not found.")
+        raise localized_http_exception(status_code=404, code="admin.org_unit_not_found")
 
     org_unit.name = payload.name.strip()
     org_unit.slug = payload.slug or slugify(payload.name)
@@ -1169,7 +1194,7 @@ def create_group(
 ) -> AccessGroupItemResponse:
     slug = payload.slug or slugify(payload.name)
     if db.scalar(select(AccessGroup).where(AccessGroup.slug == slug)) is not None:
-        raise HTTPException(status_code=409, detail="Group slug already exists.")
+        raise localized_http_exception(status_code=409, code="admin.group_slug_exists")
 
     group = AccessGroup(
         id=new_id(),
@@ -1225,7 +1250,7 @@ def update_group(
         .where(AccessGroup.id == group_id)
     )
     if group is None:
-        raise HTTPException(status_code=404, detail="Group not found.")
+        raise localized_http_exception(status_code=404, code="admin.group_not_found")
 
     group.name = payload.name.strip()
     group.slug = payload.slug or slugify(payload.name)
@@ -1265,7 +1290,7 @@ def replace_group_members(
         .where(AccessGroup.id == group_id)
     )
     if group is None:
-        raise HTTPException(status_code=404, detail="Group not found.")
+        raise localized_http_exception(status_code=404, code="admin.group_not_found")
 
     requested_ids = set(payload.user_ids)
     current_ids = {link.user_id for link in group.members}
@@ -1316,7 +1341,7 @@ def replace_group_workspace_bindings(
         .where(AccessGroup.id == group_id)
     )
     if group is None:
-        raise HTTPException(status_code=404, detail="Group not found.")
+        raise localized_http_exception(status_code=404, code="admin.group_not_found")
 
     requested_workspace_ids = {item.workspace_id for item in payload.items}
     role_map = {item.workspace_id: item.role for item in payload.items}
@@ -1397,7 +1422,7 @@ def create_workspace(
 ) -> WorkspaceItemResponse:
     key = payload.key or slugify(payload.name)
     if db.scalar(select(Workspace).where(Workspace.key == key)) is not None:
-        raise HTTPException(status_code=409, detail="Workspace key already exists.")
+        raise localized_http_exception(status_code=409, code="admin.workspace_key_exists")
 
     workspace = Workspace(
         id=new_id(),
@@ -1467,25 +1492,21 @@ def delete_workspace(
     workspace = _ensure_admin_workspace_scope(db, context.user, workspace_id)
 
     if workspace.active:
-        raise HTTPException(
+        raise localized_http_exception(
             status_code=409,
-            detail="Workspace must be archived before it can be permanently deleted.",
+            code="admin.workspace_archive_before_delete",
         )
 
     team_count = _visible_team_count(workspace)
     meeting_count = _workspace_meeting_count(db, workspace.id)
     doc_count = _workspace_doc_count(db, workspace.id)
-    blockers: list[str] = []
-    if team_count > 0:
-        blockers.append(f"{team_count} space(s)")
-    if meeting_count > 0:
-        blockers.append(f"{meeting_count} meeting(s)")
-    if doc_count > 0:
-        blockers.append(f"{doc_count} document(s)")
-    if blockers:
-        raise HTTPException(
+    if team_count > 0 or meeting_count > 0 or doc_count > 0:
+        raise localized_http_exception(
             status_code=409,
-            detail=f"Workspace still contains {', '.join(blockers)}. Empty its content first.",
+            code="admin.workspace_contains_content",
+            space_count=team_count,
+            meeting_count=meeting_count,
+            doc_count=doc_count,
         )
 
     workspace_name = workspace.name
@@ -1527,7 +1548,7 @@ def list_workspace_bindings(
         .where(Workspace.id == workspace_id)
     )
     if workspace is None:
-        raise HTTPException(status_code=404, detail="Workspace not found.")
+        raise localized_http_exception(status_code=404, code="workspace.not_found")
 
     items = [
         WorkspaceBindingItemResponse(
@@ -1569,7 +1590,7 @@ def replace_workspace_bindings(
         .where(Workspace.id == workspace_id)
     )
     if workspace is None:
-        raise HTTPException(status_code=404, detail="Workspace not found.")
+        raise localized_http_exception(status_code=404, code="workspace.not_found")
 
     requested_user_ids = {item.subject_id for item in payload.users}
     requested_group_ids = {item.subject_id for item in payload.groups}
@@ -1659,7 +1680,7 @@ def add_workspace_member(
 
     if payload.subject_type == "user":
         if db.scalar(select(User.id).where(User.id == payload.subject_id)) is None:
-            raise HTTPException(status_code=404, detail="User not found.")
+            raise localized_http_exception(status_code=404, code="auth.user_not_found")
         existing = db.scalar(
             select(WorkspaceUserBinding).where(
                 WorkspaceUserBinding.workspace_id == workspace.id,
@@ -1667,8 +1688,9 @@ def add_workspace_member(
             )
         )
         if existing is not None:
-            raise HTTPException(
-                status_code=409, detail="User is already a member of this workspace."
+            raise localized_http_exception(
+                status_code=409,
+                code="admin.user_already_workspace_member",
             )
         binding = WorkspaceUserBinding(
             id=new_id(),
@@ -1696,7 +1718,7 @@ def add_workspace_member(
         return _serialize_user_binding(loaded)
 
     if db.scalar(select(AccessGroup.id).where(AccessGroup.id == payload.subject_id)) is None:
-        raise HTTPException(status_code=404, detail="Group not found.")
+        raise localized_http_exception(status_code=404, code="admin.group_not_found")
     existing_group = db.scalar(
         select(WorkspaceGroupBinding).where(
             WorkspaceGroupBinding.workspace_id == workspace.id,
@@ -1704,8 +1726,9 @@ def add_workspace_member(
         )
     )
     if existing_group is not None:
-        raise HTTPException(
-            status_code=409, detail="Group is already a member of this workspace."
+        raise localized_http_exception(
+            status_code=409,
+            code="admin.group_already_workspace_member",
         )
     group_binding = WorkspaceGroupBinding(
         id=new_id(),
@@ -1757,11 +1780,14 @@ def update_workspace_member_role(
             )
         )
         if binding is None:
-            raise HTTPException(status_code=404, detail="Workspace member not found.")
+            raise localized_http_exception(
+                status_code=404,
+                code="admin.workspace_member_not_found",
+            )
         if subject_id == context.user.id and binding.role != payload.role:
-            raise HTTPException(
+            raise localized_http_exception(
                 status_code=409,
-                detail="자기 자신의 role 은 직접 변경할 수 없습니다. 다른 admin 에게 요청해 주세요.",
+                code="admin.self_role_change_denied",
             )
         binding.role = payload.role
         db.add(binding)
@@ -1786,7 +1812,10 @@ def update_workspace_member_role(
         )
     )
     if group_binding is None:
-        raise HTTPException(status_code=404, detail="Workspace member not found.")
+        raise localized_http_exception(
+            status_code=404,
+            code="admin.workspace_member_not_found",
+        )
     group_binding.role = payload.role
     db.add(group_binding)
     record_audit_log(
@@ -1823,11 +1852,14 @@ def remove_workspace_member(
             )
         )
         if binding is None:
-            raise HTTPException(status_code=404, detail="Workspace member not found.")
+            raise localized_http_exception(
+                status_code=404,
+                code="admin.workspace_member_not_found",
+            )
         if subject_id == context.user.id:
-            raise HTTPException(
+            raise localized_http_exception(
                 status_code=409,
-                detail="자기 자신은 워크스페이스에서 제거할 수 없습니다.",
+                code="admin.self_workspace_remove_denied",
             )
         db.delete(binding)
     else:
@@ -1838,7 +1870,10 @@ def remove_workspace_member(
             )
         )
         if group_binding is None:
-            raise HTTPException(status_code=404, detail="Workspace member not found.")
+            raise localized_http_exception(
+                status_code=404,
+                code="admin.workspace_member_not_found",
+            )
         db.delete(group_binding)
 
     record_audit_log(
@@ -1875,7 +1910,10 @@ def list_workspace_members(
     if role:
         for value in role:
             if not is_valid_workspace_role(value):
-                raise HTTPException(status_code=422, detail="Invalid workspace role filter.")
+                raise localized_http_exception(
+                    status_code=422,
+                    code="admin.invalid_workspace_role_filter",
+                )
             normalized = normalize_workspace_role(value)
             if normalized:
                 requested_role_values.update(_workspace_role_storage_values(normalized))
@@ -2034,6 +2072,7 @@ def list_workspace_members(
 def bulk_workspace_members(
     workspace_id: str,
     payload: WorkspaceMemberBulkRequest,
+    request: Request,
     context: AuthContext = Depends(require_auth_context),
     db: Session = Depends(get_db_session),
 ) -> WorkspaceMemberBulkResponse:
@@ -2047,10 +2086,16 @@ def bulk_workspace_members(
         try:
             if payload.action == "add":
                 if entry.role is None:
-                    raise HTTPException(status_code=422, detail="role is required for add.")
+                    raise localized_http_exception(
+                        status_code=422,
+                        code="admin.role_required_for_add",
+                    )
                 if entry.subject_type == "user":
                     if db.scalar(select(User.id).where(User.id == entry.subject_id)) is None:
-                        raise HTTPException(status_code=404, detail="User not found.")
+                        raise localized_http_exception(
+                            status_code=404,
+                            code="auth.user_not_found",
+                        )
                     existing = db.scalar(
                         select(WorkspaceUserBinding).where(
                             WorkspaceUserBinding.workspace_id == workspace.id,
@@ -2058,7 +2103,10 @@ def bulk_workspace_members(
                         )
                     )
                     if existing is not None:
-                        raise HTTPException(status_code=409, detail="이미 멤버입니다.")
+                        raise localized_http_exception(
+                            status_code=409,
+                            code="admin.subject_already_member",
+                        )
                     db.add(
                         WorkspaceUserBinding(
                             id=new_id(),
@@ -2069,7 +2117,10 @@ def bulk_workspace_members(
                     )
                 else:
                     if db.scalar(select(AccessGroup.id).where(AccessGroup.id == entry.subject_id)) is None:
-                        raise HTTPException(status_code=404, detail="Group not found.")
+                        raise localized_http_exception(
+                            status_code=404,
+                            code="admin.group_not_found",
+                        )
                     existing_group = db.scalar(
                         select(WorkspaceGroupBinding).where(
                             WorkspaceGroupBinding.workspace_id == workspace.id,
@@ -2077,7 +2128,10 @@ def bulk_workspace_members(
                         )
                     )
                     if existing_group is not None:
-                        raise HTTPException(status_code=409, detail="이미 멤버입니다.")
+                        raise localized_http_exception(
+                            status_code=409,
+                            code="admin.subject_already_member",
+                        )
                     db.add(
                         WorkspaceGroupBinding(
                             id=new_id(),
@@ -2095,11 +2149,14 @@ def bulk_workspace_members(
                         )
                     )
                     if binding is None:
-                        raise HTTPException(status_code=404, detail="Workspace member not found.")
+                        raise localized_http_exception(
+                            status_code=404,
+                            code="admin.workspace_member_not_found",
+                        )
                     if entry.subject_id == context.user.id:
-                        raise HTTPException(
+                        raise localized_http_exception(
                             status_code=409,
-                            detail="자기 자신은 워크스페이스에서 제거할 수 없습니다.",
+                            code="admin.self_workspace_remove_denied",
                         )
                     db.delete(binding)
                 else:
@@ -2110,11 +2167,17 @@ def bulk_workspace_members(
                         )
                     )
                     if group_binding is None:
-                        raise HTTPException(status_code=404, detail="Workspace member not found.")
+                        raise localized_http_exception(
+                            status_code=404,
+                            code="admin.workspace_member_not_found",
+                        )
                     db.delete(group_binding)
             elif payload.action == "update_role":
                 if entry.role is None:
-                    raise HTTPException(status_code=422, detail="role is required for update_role.")
+                    raise localized_http_exception(
+                        status_code=422,
+                        code="admin.role_required_for_update_role",
+                    )
                 if entry.subject_type == "user":
                     binding = db.scalar(
                         select(WorkspaceUserBinding).where(
@@ -2123,11 +2186,14 @@ def bulk_workspace_members(
                         )
                     )
                     if binding is None:
-                        raise HTTPException(status_code=404, detail="Workspace member not found.")
+                        raise localized_http_exception(
+                            status_code=404,
+                            code="admin.workspace_member_not_found",
+                        )
                     if entry.subject_id == context.user.id and binding.role != entry.role:
-                        raise HTTPException(
+                        raise localized_http_exception(
                             status_code=409,
-                            detail="자기 자신의 role 은 직접 변경할 수 없습니다.",
+                            code="admin.self_role_change_denied",
                         )
                     binding.role = entry.role
                     db.add(binding)
@@ -2139,7 +2205,10 @@ def bulk_workspace_members(
                         )
                     )
                     if group_binding is None:
-                        raise HTTPException(status_code=404, detail="Workspace member not found.")
+                        raise localized_http_exception(
+                            status_code=404,
+                            code="admin.workspace_member_not_found",
+                        )
                     group_binding.role = entry.role
                     db.add(group_binding)
             db.flush()
@@ -2147,13 +2216,14 @@ def bulk_workspace_members(
             succeeded += 1
         except HTTPException as exc:
             savepoint.rollback()
-            failed.append(
-                {
-                    "subject_type": entry.subject_type,
-                    "subject_id": entry.subject_id,
-                    "detail": str(exc.detail),
-                }
-            )
+            failure = {
+                "subject_type": entry.subject_type,
+                "subject_id": entry.subject_id,
+                "detail": _exception_detail(exc, request),
+            }
+            if code := _exception_code(exc):
+                failure["code"] = code
+            failed.append(failure)
 
     record_audit_log(
         db,
@@ -2253,7 +2323,7 @@ def create_team(
 
     key = payload.key or slugify(payload.name)
     if db.scalar(select(Team).where(Team.workspace_id == workspace.id, Team.key == key)) is not None:
-        raise HTTPException(status_code=409, detail="Team key already exists in workspace.")
+        raise localized_http_exception(status_code=409, code="admin.team_key_exists")
 
     team = Team(
         id=new_id(),
@@ -2454,7 +2524,7 @@ def scrub_ai_runtime_retention_payloads(
     db: Session = Depends(get_db_session),
 ) -> AiRuntimeRetentionScrubResponse:
     if not is_platform_admin_user(context.user, db):
-        raise HTTPException(status_code=403, detail="Platform admin access required.")
+        raise localized_http_exception(status_code=403, code="admin.platform_admin_required")
 
     retention_days = older_than_days or get_settings().ai_runtime_retention_days
     scrubbed_count = scrub_completed_runtime_records(db, older_than_days=retention_days)

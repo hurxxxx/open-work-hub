@@ -71,3 +71,13 @@ def test_translate_whiteboard_access_message() -> None:
 
     assert translate_message(message, "en-US") == "Whiteboard edit access required."
     assert translate_message(message, "ko-KR") == "화이트보드 편집 권한이 필요합니다."
+
+
+def test_translate_admin_workspace_delete_blockers_preserves_counts() -> None:
+    message = LocalizedApiMessage(
+        code="admin.workspace_contains_content",
+        params={"space_count": 2, "meeting_count": 1, "doc_count": 3},
+    )
+
+    assert "2 space(s), 1 meeting(s), 3 document(s)" in translate_message(message, "en-US")
+    assert "스페이스 2개, 회의 1개, 문서 3개" in translate_message(message, "ko-KR")

@@ -109,6 +109,7 @@ def test_add_remove_member_endpoints(client: TestClient) -> None:
         json={"subject_id": other_user["id"], "subject_type": "user", "role": "member"},
     )
     assert duplicate.status_code == 409
+    assert duplicate.json()["code"] == "admin.user_already_workspace_member"
 
     role_response = client.patch(
         f"/api/v1/admin/workspaces/{workspace['id']}/members/user/{other_user['id']}",
@@ -136,6 +137,7 @@ def test_add_remove_member_endpoints(client: TestClient) -> None:
         headers=_auth_headers(token),
     )
     assert missing_remove.status_code == 404
+    assert missing_remove.json()["code"] == "admin.workspace_member_not_found"
 
 
 def test_add_member_rejects_unknown_user(client: TestClient) -> None:
@@ -152,6 +154,7 @@ def test_add_member_rejects_unknown_user(client: TestClient) -> None:
         },
     )
     assert response.status_code == 404
+    assert response.json()["code"] == "auth.user_not_found"
 
 
 def test_member_endpoints_require_workspace_admin(client: TestClient) -> None:
@@ -193,6 +196,7 @@ def test_delete_workspace_requires_archive_first(client: TestClient) -> None:
         headers=_auth_headers(token),
     )
     assert blocked.status_code == 409
+    assert blocked.json()["code"] == "admin.workspace_archive_before_delete"
 
 
 def test_delete_workspace_blocked_when_team_present(client: TestClient) -> None:
@@ -217,7 +221,8 @@ def test_delete_workspace_blocked_when_team_present(client: TestClient) -> None:
         headers=_auth_headers(token),
     )
     assert blocked.status_code == 409
-    assert "space" in blocked.json()["detail"]
+    assert blocked.json()["code"] == "admin.workspace_contains_content"
+    assert blocked.json()["params"]["space_count"] >= 1
 
 
 def test_paginated_members_endpoint_filter_search_and_role_counts(client: TestClient) -> None:
@@ -306,6 +311,7 @@ def test_bulk_member_endpoint_partial_failure(client: TestClient) -> None:
     payload = response.json()
     assert payload["succeeded"] == 2
     assert len(payload["failed"]) == 1
+    assert payload["failed"][0]["code"] == "auth.user_not_found"
 
     listing = client.get(
         f"/api/v1/admin/workspaces/{workspace['id']}/members",
@@ -388,12 +394,14 @@ def test_self_role_change_and_self_remove_blocked(client: TestClient) -> None:
     )
     # Self role change is blocked even without the old workspace-owner model.
     assert self_demote.status_code == 409
+    assert self_demote.json()["code"] == "admin.self_role_change_denied"
 
     self_remove = client.delete(
         f"/api/v1/admin/workspaces/{workspace['id']}/members/user/{admin_user_id}",
         headers=_auth_headers(token),
     )
     assert self_remove.status_code == 409
+    assert self_remove.json()["code"] == "admin.self_workspace_remove_denied"
 
 
 def test_list_workspaces_includes_archived_with_query_param(client: TestClient) -> None:
