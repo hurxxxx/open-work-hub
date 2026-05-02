@@ -30,6 +30,9 @@
   - Postgres: `127.0.0.1:55432`
   - Redis: `127.0.0.1:56379`
   - MinIO: `127.0.0.1:59000`
+- VM profile uses `compose.dev.host.yml` for those infra containers. The VM
+  preview runner starts only infra services, not the nginx service, because the
+  preview web process owns port `4200`.
 - API listens on `127.0.0.1:8000` with `DOOWON_API_INSTANCE_ID=remote-api`.
 - Web listens on `0.0.0.0:4200` through Vite and proxies `/api` to `127.0.0.1:8000`.
 

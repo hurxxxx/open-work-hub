@@ -51,6 +51,40 @@ wait_for_url() {
   return 1
 }
 
+wait_for_tcp() {
+  local host="$1"
+  local port="$2"
+  local label="$3"
+  for _ in $(seq 1 60); do
+    if timeout 1 bash -c "cat < /dev/null > /dev/tcp/${host}/${port}" >/dev/null 2>&1; then
+      return 0
+    fi
+    sleep 1
+  done
+  echo "[vm] timed out waiting for $label" >&2
+  return 1
+}
+
+start_infra() {
+  local services=(redis)
+  if dev_use_local_postgres; then
+    services=(postgres "${services[@]}")
+  fi
+  if dev_use_local_minio; then
+    services=(minio "${services[@]}")
+  fi
+
+  echo "[vm] starting host-network infra: ${services[*]}"
+  (cd "$ROOT_DIR" && dev_render_nginx_conf && dev_docker compose -f "$(dev_compose_file)" up -d "${services[@]}")
+  if dev_use_local_postgres; then
+    wait_for_tcp "127.0.0.1" "$DOOWON_DEV_POSTGRES_PORT" "postgres"
+  fi
+  wait_for_tcp "127.0.0.1" "$DOOWON_DEV_REDIS_PORT" "redis"
+  if dev_use_local_minio; then
+    wait_for_url "http://127.0.0.1:${DOOWON_DEV_MINIO_PORT}/minio/health/ready" "minio"
+  fi
+}
+
 start_api() {
   local existing
   existing="$(listening_pid "$API_PORT")"
@@ -119,6 +153,7 @@ stop_stack() {
 }
 
 start_stack() {
+  start_infra
   start_api
   start_web
 }
@@ -132,6 +167,9 @@ status_stack() {
   echo "  root: $ROOT_DIR"
   echo "  profile: $AIDOO_ENV_PROFILE"
   echo "  public_url: $PUBLIC_URL"
+  echo
+  echo "[vm] docker compose"
+  (cd "$ROOT_DIR" && dev_docker compose -f "$(dev_compose_file)" ps postgres redis minio 2>/dev/null || true)
   echo
   echo "[vm] ports"
   echo "  api:$API_PORT pid=$(listening_pid "$API_PORT")"

@@ -15,7 +15,7 @@ upstream doowon_api_cluster {
 }
 
 server {
-  listen 80;
+  listen __DOOWON_DEV_NGINX_LISTEN_PORT__;
   server_name _;
 
   root /usr/share/nginx/html;

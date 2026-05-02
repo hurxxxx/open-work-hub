@@ -107,6 +107,17 @@ dev_docker_available() {
   dev_docker info >/dev/null 2>&1
 }
 
+dev_compose_file() {
+  case "$AIDOO_ENV_PROFILE" in
+    vm)
+      printf '%s/compose.dev.host.yml\n' "$ROOT_DIR"
+      ;;
+    *)
+      printf '%s/compose.dev.yml\n' "$ROOT_DIR"
+      ;;
+  esac
+}
+
 dev_api_port() {
   local index="${1:?instance index is required}"
   printf '%s\n' "$((8000 + index))"
@@ -129,21 +140,33 @@ dev_detect_api_upstream_host() {
 dev_render_nginx_conf() {
   dev_ensure_runtime_dirs
   local upstream_host
-  upstream_host="$(dev_detect_api_upstream_host)"
-  if [[ -z "$upstream_host" ]]; then
-    echo "[dev] failed to detect Docker host gateway IPv4 for nginx upstream" >&2
-    return 1
+  local listen_port
+  if [[ "$AIDOO_ENV_PROFILE" == "vm" ]]; then
+    upstream_host="127.0.0.1"
+    listen_port="$DOOWON_DEV_NGINX_PORT"
+  else
+    upstream_host="$(dev_detect_api_upstream_host)"
+    listen_port="80"
+    if [[ -z "$upstream_host" ]]; then
+      echo "[dev] failed to detect Docker host gateway IPv4 for nginx upstream" >&2
+      return 1
+    fi
   fi
 
   DEV_NGINX_TEMPLATE="$DOOWON_DEV_NGINX_CONF_TEMPLATE_PATH" \
   DEV_NGINX_OUTPUT="$DOOWON_DEV_NGINX_CONF_PATH" \
   DEV_API_UPSTREAM_HOST="$upstream_host" \
+  DEV_NGINX_LISTEN_PORT="$listen_port" \
   python3 - <<'PY'
 import os
 from pathlib import Path
 
 template = Path(os.environ["DEV_NGINX_TEMPLATE"]).read_text(encoding="utf-8")
-rendered = template.replace("__DOOWON_DEV_API_UPSTREAM_HOST__", os.environ["DEV_API_UPSTREAM_HOST"])
+rendered = (
+    template
+    .replace("__DOOWON_DEV_API_UPSTREAM_HOST__", os.environ["DEV_API_UPSTREAM_HOST"])
+    .replace("__DOOWON_DEV_NGINX_LISTEN_PORT__", os.environ["DEV_NGINX_LISTEN_PORT"])
+)
 Path(os.environ["DEV_NGINX_OUTPUT"]).write_text(rendered, encoding="utf-8")
 PY
 }
