@@ -1,24 +1,26 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
   AlertCircle,
   ArrowLeft,
-  CheckCircle2,
-  Clock3,
+  CalendarDays,
+  CheckSquare,
+  Database,
   FileText,
-  Link2,
   Loader2,
   Play,
+  Plus,
   RefreshCw,
-  Save,
   Trash2,
 } from 'lucide-react';
-import { Button } from '@aidoo/ui';
+import { Button, useConfirm } from '@aidoo/ui';
 
 import { useAuth } from '@/src/platform/auth/auth-provider';
 import { normalizeTimeZone } from '@/src/platform/time/time-utils';
 import { buildWorkspaceAppPath } from '@/src/platform/workspaces/workspace-utils';
+import type { MeetingListItem } from '@/src/app-modules/meeting/public-api';
+import type { PmsIssue } from '@/src/app-modules/pms/public-api';
 import {
   attachRecordingContainer,
   detachRecordingContainer,
@@ -30,28 +32,9 @@ import {
   type Recording,
   type RecordingContainer,
 } from '../api/recording-api';
-
-type StatusKey = 'done' | 'failed' | 'creating' | 'transcribing' | 'pending';
-type ContainerApp = 'meeting' | 'pms' | 'docs';
-
-function processingStatusKey(value: string): StatusKey {
-  if (value === 'done' || value === 'failed' || value === 'creating' || value === 'transcribing') {
-    return value;
-  }
-  return 'pending';
-}
-
-function statusTone(key: StatusKey): 'saved' | 'pending' | 'failed' {
-  if (key === 'done') return 'saved';
-  if (key === 'failed') return 'failed';
-  return 'pending';
-}
-
-function statusIcon(key: StatusKey): ReactNode {
-  if (key === 'done') return <CheckCircle2 size={13} />;
-  if (key === 'failed') return <AlertCircle size={13} />;
-  return <Clock3 size={13} />;
-}
+import { MeetingPickerModal } from './MeetingPickerModal';
+import { RecordingStageRail } from './RecordingStageRail';
+import { TaskPickerModal } from './TaskPickerModal';
 
 function formatDateTime(value: string, timeZone: string, locale: string): string {
   const date = new Date(value.endsWith('Z') ? value : `${value}Z`);
@@ -63,18 +46,12 @@ function formatDateTime(value: string, timeZone: string, locale: string): string
   }).format(date);
 }
 
-function defaultContainerType(app: ContainerApp): string {
-  if (app === 'meeting') return 'meeting';
-  if (app === 'pms') return 'issue';
-  return 'native_doc';
-}
-
 function containerHref(workspaceSlug: string, container: RecordingContainer): string | null {
   if (container.container_app === 'meeting') {
     return buildWorkspaceAppPath(workspaceSlug, 'meeting', container.container_id);
   }
   if (container.container_app === 'pms') {
-    return buildWorkspaceAppPath(workspaceSlug, 'pms', container.container_id);
+    return buildWorkspaceAppPath(workspaceSlug, 'pms', `?issue=${encodeURIComponent(container.container_id)}`);
   }
   if (container.container_app === 'docs') {
     return buildWorkspaceAppPath(workspaceSlug, 'docs', container.container_id);
@@ -88,19 +65,32 @@ export function RecordingDetailView() {
   const { workspaceSlug, recordingId } = useParams();
   const navigate = useNavigate();
   const timeZone = normalizeTimeZone(user?.time_zone);
+  const { confirm, confirmDialog } = useConfirm();
 
   const [recording, setRecording] = useState<Recording | null>(null);
   const [titleDraft, setTitleDraft] = useState('');
-  const [containerApp, setContainerApp] = useState<ContainerApp>('meeting');
-  const [containerId, setContainerId] = useState('');
-  const [primaryAttach, setPrimaryAttach] = useState(false);
+  const [savedTitle, setSavedTitle] = useState('');
   const [playbackUrl, setPlaybackUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [titleStatus, setTitleStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
+  const [meetingPickerOpen, setMeetingPickerOpen] = useState(false);
+  const [taskPickerOpen, setTaskPickerOpen] = useState(false);
 
-  const containerType = useMemo(() => defaultContainerType(containerApp), [containerApp]);
-  const containers = recording?.containers ?? [];
+  const containers = useMemo(() => recording?.containers ?? [], [recording?.containers]);
+  const meetingContainers = useMemo(
+    () => containers.filter((container) => container.container_app === 'meeting'),
+    [containers],
+  );
+  const taskContainers = useMemo(
+    () => containers.filter((container) => container.container_app === 'pms'),
+    [containers],
+  );
+  const otherContainers = useMemo(
+    () => containers.filter((container) => container.container_app !== 'meeting' && container.container_app !== 'pms'),
+    [containers],
+  );
 
   const refresh = useCallback(async () => {
     if (!token || !workspaceSlug || !recordingId) return;
@@ -110,6 +100,7 @@ export function RecordingDetailView() {
       const next = await getRecording(token, workspaceSlug, recordingId);
       setRecording(next);
       setTitleDraft(next.title ?? '');
+      setSavedTitle(next.title ?? '');
     } catch (err) {
       setError(err instanceof Error ? err.message : t('apps:recording.errors.loadDetailFailed'));
     } finally {
@@ -130,18 +121,22 @@ export function RecordingDetailView() {
 
   async function handleSaveTitle() {
     if (!token || !workspaceSlug || !recording) return;
-    setBusy('title');
+    const trimmed = titleDraft.trim();
+    if (trimmed === savedTitle.trim()) return;
+    setTitleStatus('saving');
     setError(null);
     try {
       const next = await updateRecording(token, workspaceSlug, recording.id, {
-        title: titleDraft.trim() || null,
+        title: trimmed || null,
       });
       setRecording(next);
+      setSavedTitle(next.title ?? '');
       setTitleDraft(next.title ?? '');
+      setTitleStatus('saved');
+      window.setTimeout(() => setTitleStatus('idle'), 1500);
     } catch (err) {
+      setTitleStatus('idle');
       setError(err instanceof Error ? err.message : t('apps:recording.errors.updateFailed'));
-    } finally {
-      setBusy(null);
     }
   }
 
@@ -173,29 +168,36 @@ export function RecordingDetailView() {
     }
   }
 
-  async function handleAttach() {
-    if (!token || !workspaceSlug || !recording || !containerId.trim()) return;
-    setBusy('attach');
-    setError(null);
-    try {
-      const next = await attachRecordingContainer(token, workspaceSlug, recording.id, {
-        container_app: containerApp,
-        container_type: containerType,
-        container_id: containerId.trim(),
-        is_primary: primaryAttach,
-      });
-      setRecording(next);
-      setContainerId('');
-      setPrimaryAttach(false);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : t('apps:recording.errors.attachFailed'));
-    } finally {
-      setBusy(null);
-    }
+  async function handleAttachMeeting(meeting: MeetingListItem) {
+    if (!token || !workspaceSlug || !recording) return;
+    const next = await attachRecordingContainer(token, workspaceSlug, recording.id, {
+      container_app: 'meeting',
+      container_type: 'meeting',
+      container_id: meeting.id,
+    });
+    setRecording(next);
+  }
+
+  async function handleAttachTask(issue: PmsIssue) {
+    if (!token || !workspaceSlug || !recording) return;
+    const next = await attachRecordingContainer(token, workspaceSlug, recording.id, {
+      container_app: 'pms',
+      container_type: 'issue',
+      container_id: issue.id,
+    });
+    setRecording(next);
   }
 
   async function handleDetach(container: RecordingContainer) {
     if (!token || !workspaceSlug || !recording) return;
+    const ok = await confirm({
+      title: t('apps:recording.detail.detachConfirmTitle'),
+      description: t('apps:recording.detail.detachConfirmDescription'),
+      confirmLabel: t('apps:recording.detail.detach'),
+      cancelLabel: t('common:actions.cancel'),
+      variant: 'danger',
+    });
+    if (!ok) return;
     setBusy(container.id);
     setError(null);
     try {
@@ -210,10 +212,10 @@ export function RecordingDetailView() {
 
   if (!workspaceSlug) return null;
 
-  const transcriptKey = processingStatusKey(recording?.transcript_status ?? 'pending');
-  const rawDocKey = processingStatusKey(recording?.raw_transcript_doc_status ?? 'pending');
-  const minutesDocKey = processingStatusKey(recording?.minutes_doc_status ?? 'pending');
-  const retryable = transcriptKey === 'failed' || rawDocKey === 'failed' || minutesDocKey === 'failed';
+  const failureStatuses = recording
+    ? [recording.transcript_status, recording.raw_transcript_doc_status, recording.minutes_doc_status]
+    : [];
+  const retryable = failureStatuses.some((status) => status === 'failed');
 
   return (
     <div className="flex h-full flex-col bg-app-bg">
@@ -245,55 +247,82 @@ export function RecordingDetailView() {
       </header>
 
       <main className="min-h-0 flex-1 overflow-y-auto px-6 py-6">
-        {error ? (
-          <div className="mb-4 flex items-start gap-2 rounded-md border border-[var(--ui-color-danger)]/30 bg-[var(--ui-color-danger)]/5 px-3 py-2 text-sm text-[var(--ui-color-danger)]">
-            <AlertCircle size={16} className="mt-0.5 shrink-0" />
-            <span>{error}</span>
-          </div>
-        ) : null}
+        <div className="mx-auto w-full max-w-3xl space-y-5">
+          {error ? (
+            <div className="flex items-start gap-2 rounded-md border border-[var(--ui-color-danger)]/30 bg-[var(--ui-color-danger)]/5 px-3 py-2 text-sm text-[var(--ui-color-danger)]">
+              <AlertCircle size={16} className="mt-0.5 shrink-0" />
+              <span>{error}</span>
+            </div>
+          ) : null}
 
-        {!recording && loading ? (
-          <div className="flex h-64 items-center justify-center text-app-ink/50">
-            <Loader2 size={22} className="animate-spin" />
-          </div>
-        ) : null}
+          {!recording && loading ? (
+            <div className="flex h-64 items-center justify-center text-app-ink/50">
+              <Loader2 size={22} className="animate-spin" />
+            </div>
+          ) : null}
 
-        {recording ? (
-          <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_360px]">
-            <section className="space-y-5">
-              <div className="rounded-md border border-app-border bg-app-surface p-4">
-                <div className="flex flex-col gap-3 md:flex-row md:items-end">
-                  <label className="min-w-0 flex-1">
-                    <span className="app-text-caption mb-1 block text-app-ink/60">
-                      {t('apps:recording.detail.titleLabel')}
-                    </span>
-                    <input
-                      value={titleDraft}
-                      onChange={(event) => setTitleDraft(event.target.value)}
-                      className="w-full rounded-md border border-app-border bg-app-surface-raised px-3 py-2 text-sm text-app-ink outline-none transition-colors focus:border-app-accent"
-                    />
-                  </label>
-                  <Button onClick={() => void handleSaveTitle()} disabled={busy === 'title'}>
-                    {busy === 'title' ? <Loader2 size={14} className="mr-1 animate-spin" /> : <Save size={14} className="mr-1" />}
-                    {t('common:actions.save')}
-                  </Button>
-                </div>
+          {recording ? (
+            <>
+              <section className="rounded-md border border-app-border bg-app-surface p-4">
+                <label className="block">
+                  <span className="app-text-caption mb-1 flex items-center justify-between text-app-ink/60">
+                    <span>{t('apps:recording.detail.titleLabel')}</span>
+                    {titleStatus === 'saving' ? (
+                      <span className="inline-flex items-center gap-1 text-app-ink/45">
+                        <Loader2 size={11} className="animate-spin" />
+                        {t('common:actions.saving')}
+                      </span>
+                    ) : titleStatus === 'saved' ? (
+                      <span className="text-emerald-600 dark:text-emerald-400">
+                        {t('apps:recording.detail.titleSaved')}
+                      </span>
+                    ) : null}
+                  </span>
+                  <input
+                    value={titleDraft}
+                    onChange={(event) => setTitleDraft(event.target.value)}
+                    onBlur={() => void handleSaveTitle()}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter') {
+                        event.preventDefault();
+                        (event.currentTarget as HTMLInputElement).blur();
+                      }
+                    }}
+                    className="w-full rounded-md border border-app-border bg-app-surface-raised px-3 py-2 text-sm text-app-ink outline-none transition-colors focus:border-app-accent"
+                  />
+                </label>
 
-                <div className="mt-4 flex flex-wrap gap-2">
-                  <StatusPill icon={<CheckCircle2 size={13} />} label={t('apps:recording.status.audioSaved')} tone="saved" />
-                  <StatusPill icon={statusIcon(transcriptKey)} label={t(`apps:recording.status.transcript.${transcriptKey}`)} tone={statusTone(transcriptKey)} />
-                  <StatusPill icon={statusIcon(rawDocKey)} label={t(`apps:recording.status.rawTranscriptDoc.${rawDocKey}`)} tone={statusTone(rawDocKey)} />
-                  <StatusPill icon={statusIcon(minutesDocKey)} label={t(`apps:recording.status.minutesDoc.${minutesDocKey}`)} tone={statusTone(minutesDocKey)} />
+                <div className="mt-4">
+                  <RecordingStageRail
+                    recording={recording}
+                    onRetry={retryable ? () => void handleRetry() : undefined}
+                  />
                 </div>
 
                 <div className="mt-4 flex flex-wrap items-center gap-2">
-                  <Button variant="secondary" onClick={() => void handlePlayback()} disabled={busy === 'playback' || Boolean(playbackUrl)}>
-                    {busy === 'playback' ? <Loader2 size={14} className="mr-1 animate-spin" /> : <Play size={14} className="mr-1" />}
+                  <Button
+                    variant="secondary"
+                    onClick={() => void handlePlayback()}
+                    disabled={busy === 'playback' || Boolean(playbackUrl)}
+                  >
+                    {busy === 'playback' ? (
+                      <Loader2 size={14} className="mr-1 animate-spin" />
+                    ) : (
+                      <Play size={14} className="mr-1" />
+                    )}
                     {t('apps:recording.actions.play')}
                   </Button>
                   {retryable ? (
-                    <Button variant="secondary" onClick={() => void handleRetry()} disabled={busy === 'retry'}>
-                      {busy === 'retry' ? <Loader2 size={14} className="mr-1 animate-spin" /> : <RefreshCw size={14} className="mr-1" />}
+                    <Button
+                      variant="secondary"
+                      onClick={() => void handleRetry()}
+                      disabled={busy === 'retry'}
+                    >
+                      {busy === 'retry' ? (
+                        <Loader2 size={14} className="mr-1 animate-spin" />
+                      ) : (
+                        <RefreshCw size={14} className="mr-1" />
+                      )}
                       {t('apps:recording.actions.retry')}
                     </Button>
                   ) : null}
@@ -305,103 +334,185 @@ export function RecordingDetailView() {
                     {recording.failure_reason}
                   </p>
                 ) : null}
-              </div>
+              </section>
 
-              <div className="rounded-md border border-app-border bg-app-surface p-4">
-                <h2 className="app-text-title-sm text-app-ink">{t('apps:recording.detail.generatedDocs')}</h2>
+              <section className="rounded-md border border-app-border bg-app-surface p-4">
+                <h2 className="app-text-title-sm text-app-ink">
+                  {t('apps:recording.detail.generatedDocsTitle')}
+                </h2>
                 <div className="mt-3 grid gap-2">
                   <DocLink
                     docId={recording.raw_transcript_doc_id}
                     label={t('apps:recording.detail.rawTranscriptDoc')}
                     workspaceSlug={workspaceSlug}
+                    notReadyLabel={t('apps:recording.detail.notReady')}
                   />
                   <DocLink
                     docId={recording.minutes_doc_id}
                     label={t('apps:recording.detail.minutesDoc')}
                     workspaceSlug={workspaceSlug}
+                    notReadyLabel={t('apps:recording.detail.notReady')}
                   />
                 </div>
-              </div>
-            </section>
+              </section>
 
-            <aside className="space-y-5">
-              <div className="rounded-md border border-app-border bg-app-surface p-4">
-                <h2 className="app-text-title-sm text-app-ink">{t('apps:recording.detail.attachTitle')}</h2>
-                <div className="mt-3 grid gap-3">
-                  <label className="block">
-                    <span className="app-text-caption mb-1 block text-app-ink/60">
-                      {t('apps:recording.detail.attachApp')}
-                    </span>
-                    <select
-                      value={containerApp}
-                      onChange={(event) => setContainerApp(event.target.value as ContainerApp)}
-                      className="w-full rounded-md border border-app-border bg-app-surface-raised px-3 py-2 text-sm text-app-ink"
-                    >
-                      <option value="meeting">{t('apps:recording.detail.containerApps.meeting')}</option>
-                      <option value="pms">{t('apps:recording.detail.containerApps.pms')}</option>
-                      <option value="docs">{t('apps:recording.detail.containerApps.docs')}</option>
-                    </select>
-                  </label>
-                  <label className="block">
-                    <span className="app-text-caption mb-1 block text-app-ink/60">
-                      {t('apps:recording.detail.attachObjectId')}
-                    </span>
-                    <input
-                      value={containerId}
-                      onChange={(event) => setContainerId(event.target.value)}
-                      placeholder={t('apps:recording.detail.attachObjectIdPlaceholder')}
-                      className="w-full rounded-md border border-app-border bg-app-surface-raised px-3 py-2 text-sm text-app-ink outline-none transition-colors focus:border-app-accent"
-                    />
-                  </label>
-                  <label className="app-text-caption inline-flex items-center gap-2 text-app-ink/70">
-                    <input
-                      type="checkbox"
-                      checked={primaryAttach}
-                      onChange={(event) => setPrimaryAttach(event.target.checked)}
-                    />
-                    {t('apps:recording.detail.primaryAttach')}
-                  </label>
-                  <Button onClick={() => void handleAttach()} disabled={busy === 'attach' || !containerId.trim()}>
-                    {busy === 'attach' ? <Loader2 size={14} className="mr-1 animate-spin" /> : <Link2 size={14} className="mr-1" />}
-                    {t('apps:recording.detail.attach')}
-                  </Button>
-                </div>
-              </div>
+              <section className="rounded-md border border-app-border bg-app-surface p-4">
+                <h2 className="app-text-title-sm text-app-ink">
+                  {t('apps:recording.detail.linkedItems')}
+                </h2>
 
-              <div className="rounded-md border border-app-border bg-app-surface p-4">
-                <h2 className="app-text-title-sm text-app-ink">{t('apps:recording.detail.connectedObjects')}</h2>
-                <div className="mt-3 grid gap-2">
-                  {containers.length === 0 ? (
-                    <p className="app-text-caption text-app-ink/60">{t('apps:recording.detail.noContainers')}</p>
-                  ) : (
-                    containers.map((container) => (
-                      <ContainerRow
-                        key={container.id}
-                        busy={busy === container.id}
-                        container={container}
-                        href={containerHref(workspaceSlug, container)}
-                        onDetach={() => void handleDetach(container)}
-                      />
-                    ))
-                  )}
+                <div className="mt-4 space-y-5">
+                  <LinkedSubsection
+                    icon={<CalendarDays size={14} />}
+                    title={t('apps:recording.detail.linkedMeetings')}
+                    count={meetingContainers.length}
+                    onAdd={() => setMeetingPickerOpen(true)}
+                    addLabel={t('apps:recording.detail.addMeeting')}
+                    emptyLabel={t('apps:recording.detail.noLinkedMeetings')}
+                    items={meetingContainers}
+                    busyId={busy}
+                    workspaceSlug={workspaceSlug}
+                    onDetach={handleDetach}
+                    detachLabel={t('apps:recording.detail.detach')}
+                  />
+
+                  <LinkedSubsection
+                    icon={<CheckSquare size={14} />}
+                    title={t('apps:recording.detail.linkedTasks')}
+                    count={taskContainers.length}
+                    onAdd={() => setTaskPickerOpen(true)}
+                    addLabel={t('apps:recording.detail.addTask')}
+                    emptyLabel={t('apps:recording.detail.noLinkedTasks')}
+                    items={taskContainers}
+                    busyId={busy}
+                    workspaceSlug={workspaceSlug}
+                    onDetach={handleDetach}
+                    detachLabel={t('apps:recording.detail.detach')}
+                  />
+
+                  <LinkedSubsection
+                    icon={<Database size={14} />}
+                    title={t('apps:recording.detail.otherConnections')}
+                    count={otherContainers.length}
+                    emptyLabel={t('apps:recording.detail.noOtherConnections')}
+                    items={otherContainers}
+                    busyId={busy}
+                    workspaceSlug={workspaceSlug}
+                    onDetach={handleDetach}
+                    detachLabel={t('apps:recording.detail.detach')}
+                  />
                 </div>
-              </div>
-            </aside>
-          </div>
-        ) : null}
+              </section>
+            </>
+          ) : null}
+        </div>
       </main>
+
+      {recording ? (
+        <>
+          <MeetingPickerModal
+            isOpen={meetingPickerOpen}
+            onClose={() => setMeetingPickerOpen(false)}
+            workspaceSlug={workspaceSlug}
+            excludeMeetingIds={meetingContainers.map((container) => container.container_id)}
+            onPick={handleAttachMeeting}
+          />
+          <TaskPickerModal
+            isOpen={taskPickerOpen}
+            onClose={() => setTaskPickerOpen(false)}
+            workspaceSlug={workspaceSlug}
+            excludeIssueIds={taskContainers.map((container) => container.container_id)}
+            onPick={handleAttachTask}
+          />
+        </>
+      ) : null}
+
+      {confirmDialog}
     </div>
   );
 }
 
-function DocLink({ docId, label, workspaceSlug }: { docId: string | null; label: string; workspaceSlug: string }) {
-  const { t } = useTranslation('apps');
+function LinkedSubsection({
+  icon,
+  title,
+  count,
+  onAdd,
+  addLabel,
+  emptyLabel,
+  items,
+  busyId,
+  workspaceSlug,
+  onDetach,
+  detachLabel,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  count: number;
+  onAdd?: () => void;
+  addLabel?: string;
+  emptyLabel: string;
+  items: RecordingContainer[];
+  busyId: string | null;
+  workspaceSlug: string;
+  onDetach: (container: RecordingContainer) => void;
+  detachLabel: string;
+}) {
+  return (
+    <div>
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2 text-app-ink">
+          <span className="text-app-ink/50">{icon}</span>
+          <span className="app-text-body font-medium">{title}</span>
+          <span className="app-text-caption text-app-ink/45">{count}</span>
+        </div>
+        {onAdd && addLabel ? (
+          <button
+            type="button"
+            onClick={onAdd}
+            className="app-text-caption inline-flex items-center gap-1 rounded-md border border-app-border bg-app-surface-raised px-2 py-1 text-app-ink hover:bg-app-surface-subtle"
+          >
+            <Plus size={12} />
+            {addLabel}
+          </button>
+        ) : null}
+      </div>
+      {items.length === 0 ? (
+        <p className="app-text-caption text-app-ink/50">{emptyLabel}</p>
+      ) : (
+        <ul className="space-y-1">
+          {items.map((container) => (
+            <ContainerRow
+              key={container.id}
+              busy={busyId === container.id}
+              container={container}
+              href={containerHref(workspaceSlug, container)}
+              onDetach={() => onDetach(container)}
+              detachLabel={detachLabel}
+            />
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+function DocLink({
+  docId,
+  label,
+  workspaceSlug,
+  notReadyLabel,
+}: {
+  docId: string | null | undefined;
+  label: string;
+  workspaceSlug: string;
+  notReadyLabel: string;
+}) {
   if (!docId) {
     return (
       <div className="flex items-center gap-2 rounded border border-app-border bg-app-surface-raised px-3 py-2 text-sm text-app-ink/55">
         <FileText size={14} />
         <span>{label}</span>
-        <span className="ml-auto app-text-caption">{t('recording.detail.notReady')}</span>
+        <span className="ml-auto app-text-caption">{notReadyLabel}</span>
       </div>
     );
   }
@@ -412,7 +523,6 @@ function DocLink({ docId, label, workspaceSlug }: { docId: string | null; label:
     >
       <FileText size={14} />
       <span>{label}</span>
-      <span className="ml-auto app-text-caption text-app-ink/55">{docId}</span>
     </Link>
   );
 }
@@ -422,29 +532,37 @@ function ContainerRow({
   container,
   href,
   onDetach,
+  detachLabel,
 }: {
   busy: boolean;
   container: RecordingContainer;
   href: string | null;
   onDetach: () => void;
+  detachLabel: string;
 }) {
-  const { t } = useTranslation(['apps', 'common']);
-  const label = `${container.container_app}/${container.container_type}`;
+  const { t } = useTranslation('apps');
+  const appLabel = t(`recording.detail.containerApps.${container.container_app}`, {
+    defaultValue: container.container_app,
+  });
+  const typeLabel = t(`recording.detail.containerTypes.${container.container_type}`, {
+    defaultValue: container.container_type,
+  });
+  const shortId = container.container_id.length > 12
+    ? `${container.container_id.slice(0, 8)}...${container.container_id.slice(-4)}`
+    : container.container_id;
+  const detachAriaLabel = t('recording.detail.detachItemLabel', {
+    item: `${appLabel} ${shortId}`,
+  });
   const content = (
-    <>
-      <div className="min-w-0">
-        <p className="truncate text-sm font-medium text-app-ink">{label}</p>
-        <p className="app-text-caption truncate text-app-ink/55">{container.container_id}</p>
-      </div>
-      {container.is_primary ? (
-        <span className="app-text-caption rounded border border-app-border px-1.5 py-0.5 text-app-ink/55">
-          {t('apps:recording.detail.primary')}
-        </span>
-      ) : null}
-    </>
+    <div className="min-w-0">
+      <p className="app-text-body line-clamp-1 text-app-ink" title={container.container_id}>
+        {appLabel} · {shortId}
+      </p>
+      <p className="app-text-caption line-clamp-1 text-app-ink/45">{typeLabel}</p>
+    </div>
   );
   return (
-    <div className="flex items-center gap-2 rounded border border-app-border bg-app-surface-raised px-3 py-2">
+    <li className="flex items-center gap-2 rounded-md border border-app-border bg-app-surface-raised px-3 py-2">
       {href ? (
         <Link to={href} className="flex min-w-0 flex-1 items-center gap-2 hover:underline">
           {content}
@@ -456,34 +574,12 @@ function ContainerRow({
         type="button"
         onClick={onDetach}
         disabled={busy}
-        className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded border border-app-border bg-app-surface text-app-ink hover:bg-app-surface-subtle disabled:opacity-50"
-        aria-label={t('apps:recording.detail.detach')}
+        className="ml-2 shrink-0 rounded p-1 text-app-ink/40 hover:text-[var(--ui-color-danger)] disabled:opacity-40"
+        aria-label={detachAriaLabel || detachLabel}
       >
         {busy ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
       </button>
-    </div>
-  );
-}
-
-function StatusPill({
-  icon,
-  label,
-  tone,
-}: {
-  icon: ReactNode;
-  label: string;
-  tone: 'saved' | 'pending' | 'failed';
-}) {
-  const toneClass = tone === 'saved'
-    ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
-    : tone === 'failed'
-      ? 'border-[var(--ui-color-danger)]/30 bg-[var(--ui-color-danger)]/10 text-[var(--ui-color-danger)]'
-      : 'border-app-border bg-app-surface-raised text-app-ink/65';
-  return (
-    <span className={`app-text-caption inline-flex items-center gap-1 rounded border px-2 py-0.5 ${toneClass}`}>
-      {icon}
-      {label}
-    </span>
+    </li>
   );
 }
 

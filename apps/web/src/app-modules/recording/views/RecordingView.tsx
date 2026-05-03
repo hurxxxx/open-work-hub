@@ -5,25 +5,22 @@ import {
   useRef,
   useState,
   type ChangeEvent,
-  type ReactNode,
 } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
   AlertCircle,
   AudioWaveform,
-  CheckCircle2,
   Clock3,
   Loader2,
   Mic,
-  PauseCircle,
+  MoreHorizontal,
   Play,
   RefreshCw,
   Square,
-  Trash2,
   Upload,
 } from 'lucide-react';
-import { Button, useConfirm } from '@aidoo/ui';
+import { Button, DropdownMenu, useConfirm } from '@aidoo/ui';
 
 import { useAuth } from '@/src/platform/auth/auth-provider';
 import { normalizeTimeZone } from '@/src/platform/time/time-utils';
@@ -37,6 +34,7 @@ import {
   retryRecording,
   type Recording,
 } from '../api/recording-api';
+import { RecordingStageRail } from './RecordingStageRail';
 
 type RecorderState = 'idle' | 'requesting' | 'recording' | 'stopping' | 'uploading' | 'saved';
 
@@ -83,23 +81,12 @@ function titleFor(recording: Recording, fallback: string): string {
   return recording.title?.trim() || fallback;
 }
 
-function processingStatusKey(value: string): 'done' | 'failed' | 'creating' | 'transcribing' | 'pending' {
-  if (value === 'done' || value === 'failed' || value === 'creating' || value === 'transcribing') {
-    return value;
-  }
-  return 'pending';
-}
-
-function statusTone(key: 'done' | 'failed' | 'creating' | 'transcribing' | 'pending'): 'saved' | 'pending' | 'failed' {
-  if (key === 'done') return 'saved';
-  if (key === 'failed') return 'failed';
-  return 'pending';
-}
-
-function statusIcon(key: 'done' | 'failed' | 'creating' | 'transcribing' | 'pending'): ReactNode {
-  if (key === 'done') return <CheckCircle2 size={13} />;
-  if (key === 'failed') return <AlertCircle size={13} />;
-  return <PauseCircle size={13} />;
+function hasFailedStage(recording: Recording): boolean {
+  return [
+    recording.transcript_status,
+    recording.raw_transcript_doc_status,
+    recording.minutes_doc_status,
+  ].some((status) => status === 'failed');
 }
 
 export function RecordingView() {
@@ -126,6 +113,7 @@ export function RecordingView() {
   const chunksRef = useRef<Blob[]>([]);
   const startedAtRef = useRef<Date | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const micButtonRef = useRef<HTMLButtonElement | null>(null);
 
   const browserSupported = useMemo(
     () => typeof MediaRecorder !== 'undefined' && typeof navigator.mediaDevices?.getUserMedia === 'function',
@@ -133,6 +121,7 @@ export function RecordingView() {
   );
   const isRecording = recorderState === 'recording';
   const isWorking = ['requesting', 'stopping', 'uploading'].includes(recorderState);
+  const showRecorderState = recorderState !== 'idle' || elapsedSec > 0;
 
   const refresh = useCallback(async () => {
     if (!token || !workspaceSlug) return;
@@ -349,6 +338,11 @@ export function RecordingView() {
     }
   }
 
+  function focusRecorder() {
+    micButtonRef.current?.focus();
+    micButtonRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+
   if (!workspaceSlug) {
     return null;
   }
@@ -367,20 +361,51 @@ export function RecordingView() {
       </header>
 
       <main className="min-h-0 flex-1 overflow-y-auto px-6 py-6">
-        <div className="mx-auto w-full max-w-6xl space-y-6">
-          <section className="border-b border-app-border pb-6">
-            <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_220px] lg:items-end">
-              <div className="space-y-4">
-                <div>
-                  <p className="app-text-title-sm text-app-ink">{t('apps:recording.quick.title')}</p>
-                  <p className="app-text-caption mt-1 text-app-ink/60">
-                    {browserSupported
-                      ? t('apps:recording.quick.browserSupported')
-                      : t('apps:recording.quick.browserUnsupported')}
+        <div className="mx-auto w-full max-w-4xl space-y-8">
+          <section className="border-b border-app-border pb-8">
+            <div className="mx-auto flex w-full max-w-xl flex-col items-center gap-4">
+              <p className="app-text-title-sm self-start text-app-ink">{t('apps:recording.quick.title')}</p>
+
+              <button
+                ref={micButtonRef}
+                type="button"
+                onClick={() => (isRecording ? handleStop() : void handleStart())}
+                disabled={!browserSupported || isWorking}
+                aria-label={isRecording ? t('apps:recording.quick.stop') : t('apps:recording.quick.start')}
+                className={`flex h-32 w-32 shrink-0 items-center justify-center rounded-full border shadow-sm transition-all hover:scale-[1.02] disabled:scale-100 disabled:opacity-60 ${
+                  isRecording
+                    ? 'border-[var(--ui-color-danger)]/40 bg-[var(--ui-color-danger)]/10 text-[var(--ui-color-danger)]'
+                    : 'border-app-accent/30 bg-app-accent text-app-accent-fg hover:bg-app-accent-hover'
+                }`}
+              >
+                {isWorking ? (
+                  <Loader2 size={36} className="animate-spin" />
+                ) : isRecording ? (
+                  <Square size={36} />
+                ) : (
+                  <Mic size={42} />
+                )}
+              </button>
+
+              {showRecorderState ? (
+                <div className="text-center">
+                  <p className="app-text-title-md tabular-nums text-app-ink">
+                    {formatElapsed(elapsedSec)}
+                  </p>
+                  <p className="app-text-caption text-app-ink/60">
+                    {t(`apps:recording.quick.state.${recorderState}`)}
                   </p>
                 </div>
+              ) : (
+                <p className="app-text-caption text-center text-app-ink/55">
+                  {browserSupported
+                    ? t('apps:recording.quick.browserSupported')
+                    : t('apps:recording.quick.browserUnsupported')}
+                </p>
+              )}
 
-                <label className="block max-w-2xl">
+              <div className="mt-2 w-full border-t border-app-border pt-4">
+                <label className="block">
                   <span className="app-text-caption mb-1 block text-app-ink/60">
                     {t('apps:recording.quick.titleLabel')}
                   </span>
@@ -389,54 +414,27 @@ export function RecordingView() {
                     onChange={(event) => setTitleDraft(event.target.value)}
                     disabled={isRecording || isWorking}
                     placeholder={t('apps:recording.quick.titlePlaceholder')}
-                    className="w-full rounded-md border border-app-border bg-app-surface-raised px-3 py-2 text-sm text-app-ink outline-none transition-colors placeholder:text-app-ink/35 focus:border-app-accent"
+                    className="w-full rounded-md border border-app-border bg-app-surface-raised px-3 py-2 text-sm text-app-ink outline-none transition-colors placeholder:text-app-ink/35 focus:border-app-accent disabled:opacity-60"
                   />
                 </label>
-
-                <div className="flex flex-wrap gap-2">
-                  <Button
-                    variant="secondary"
-                    onClick={() => fileInputRef.current?.click()}
-                    disabled={isRecording || isWorking}
-                  >
-                    <Upload size={14} className="mr-1" />
-                    {t('apps:recording.quick.uploadAudio')}
-                  </Button>
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept="audio/*"
-                    className="hidden"
-                    onChange={handleFileSelect}
-                  />
-                </div>
               </div>
 
-              <div className="flex items-center gap-4 lg:flex-col lg:items-center">
-                <button
-                  type="button"
-                  onClick={() => (isRecording ? handleStop() : void handleStart())}
-                  disabled={!browserSupported || isWorking}
-                  aria-label={isRecording ? t('apps:recording.quick.stop') : t('apps:recording.quick.start')}
-                  className="flex h-28 w-28 shrink-0 items-center justify-center rounded-full border border-app-accent/30 bg-app-accent text-app-accent-fg shadow-sm transition-transform hover:scale-[1.02] hover:bg-app-accent-hover disabled:scale-100 disabled:opacity-60"
+              <div className="self-start">
+                <Button
+                  variant="secondary"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={isRecording || isWorking}
                 >
-                  {isWorking ? (
-                    <Loader2 size={30} className="animate-spin" />
-                  ) : isRecording ? (
-                    <Square size={30} />
-                  ) : (
-                    <Mic size={34} />
-                  )}
-                </button>
-
-                <div className="min-w-0 lg:text-center">
-                  <p className="app-text-title-md tabular-nums text-app-ink">
-                    {formatElapsed(elapsedSec)}
-                  </p>
-                  <p className="app-text-caption text-app-ink/60">
-                    {t(`apps:recording.quick.state.${recorderState}`)}
-                  </p>
-                </div>
+                  <Upload size={14} className="mr-1" />
+                  {t('apps:recording.quick.uploadAudio')}
+                </Button>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="audio/*"
+                  className="hidden"
+                  onChange={handleFileSelect}
+                />
               </div>
             </div>
           </section>
@@ -460,9 +458,18 @@ export function RecordingView() {
             ) : null}
 
             {items.length === 0 && !loading ? (
-              <div className="flex h-64 flex-col items-center justify-center gap-2 text-app-ink/60">
-                <AudioWaveform size={30} className="text-app-ink/30" />
-                <p className="app-text-body">{t('apps:recording.list.empty')}</p>
+              <div className="flex h-72 flex-col items-center justify-center gap-3 rounded-md border border-dashed border-app-border bg-app-surface/40 px-6 text-center">
+                <AudioWaveform size={40} className="text-app-ink/25" />
+                <div>
+                  <p className="app-text-title-sm text-app-ink">{t('apps:recording.list.emptyTitle')}</p>
+                  <p className="app-text-caption mt-1 text-app-ink/55">
+                    {t('apps:recording.list.emptyBody')}
+                  </p>
+                </div>
+                <Button variant="secondary" onClick={focusRecorder}>
+                  <Mic size={14} className="mr-1" />
+                  {t('apps:recording.quick.start')}
+                </Button>
               </div>
             ) : (
               <div className="grid gap-3">
@@ -513,22 +520,45 @@ function RecordingListItem({
   onRetry: () => void;
 }) {
   const { t } = useTranslation(['apps', 'common']);
-  const transcriptKey = processingStatusKey(recording.transcript_status);
-  const rawDocKey = processingStatusKey(recording.raw_transcript_doc_status);
-  const minutesDocKey = processingStatusKey(recording.minutes_doc_status);
-  const retryable = transcriptKey === 'failed' || rawDocKey === 'failed' || minutesDocKey === 'failed';
+  const retryable = hasFailedStage(recording);
+
+  const overflowItems = [
+    ...(retryable
+      ? [
+          {
+            id: 'retry',
+            label: (
+              <span className="inline-flex items-center gap-2">
+                <RefreshCw size={14} />
+                {t('apps:recording.actions.retry')}
+              </span>
+            ),
+            onSelect: onRetry,
+            disabled: busy,
+          },
+        ]
+      : []),
+    {
+      id: 'delete',
+      label: t('common:actions.delete'),
+      onSelect: onDelete,
+      disabled: busy,
+      tone: 'danger' as const,
+      separatorBefore: retryable,
+    },
+  ];
 
   return (
     <article className="rounded-md border border-app-border bg-app-surface px-4 py-3">
       <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1">
           <div className="flex min-w-0 items-center gap-2">
             <AudioWaveform size={16} className="shrink-0 text-app-accent" />
             <h2 className="app-text-body truncate text-app-ink">
               {titleFor(recording, t('apps:recording.untitled'))}
             </h2>
           </div>
-          <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-app-ink/60">
+          <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-app-ink/55">
             <span className="app-text-caption inline-flex items-center gap-1">
               <Clock3 size={13} />
               {formatDateTime(recording.started_at, timeZone, locale)}
@@ -540,23 +570,8 @@ function RecordingListItem({
             ) : null}
             <span className="app-text-caption">{formatBytes(recording.file_size)}</span>
           </div>
-          <div className="mt-2 flex flex-wrap gap-2">
-            <StatusPill icon={<CheckCircle2 size={13} />} label={t('apps:recording.status.audioSaved')} tone="saved" />
-            <StatusPill
-              icon={statusIcon(transcriptKey)}
-              label={t(`apps:recording.status.transcript.${transcriptKey}`)}
-              tone={statusTone(transcriptKey)}
-            />
-            <StatusPill
-              icon={statusIcon(rawDocKey)}
-              label={t(`apps:recording.status.rawTranscriptDoc.${rawDocKey}`)}
-              tone={statusTone(rawDocKey)}
-            />
-            <StatusPill
-              icon={statusIcon(minutesDocKey)}
-              label={t(`apps:recording.status.minutesDoc.${minutesDocKey}`)}
-              tone={statusTone(minutesDocKey)}
-            />
+          <div className="mt-3">
+            <RecordingStageRail recording={recording} compact />
           </div>
           {recording.failure_reason ? (
             <p className="app-text-caption mt-2 max-w-2xl text-[var(--ui-color-danger)]">
@@ -565,56 +580,39 @@ function RecordingListItem({
           ) : null}
         </div>
 
-        <div className="flex shrink-0 flex-wrap gap-2">
-          {retryable ? (
-            <Button variant="secondary" onClick={onRetry} disabled={busy}>
-              {busy ? <Loader2 size={14} className="mr-1 animate-spin" /> : <RefreshCw size={14} className="mr-1" />}
-              {t('apps:recording.actions.retry')}
-            </Button>
-          ) : null}
+        <div className="flex shrink-0 items-center gap-2">
           <Button variant="secondary" onClick={onPlay} disabled={busy || Boolean(playbackUrl)}>
-            {busy && !playbackUrl ? <Loader2 size={14} className="mr-1 animate-spin" /> : <Play size={14} className="mr-1" />}
+            {busy && !playbackUrl ? (
+              <Loader2 size={14} className="mr-1 animate-spin" />
+            ) : (
+              <Play size={14} className="mr-1" />
+            )}
             {t('apps:recording.actions.play')}
           </Button>
           <Link
             to={detailHref}
-            className="inline-flex h-[var(--ui-density-dense)] items-center justify-center rounded-[var(--ui-radius-sm)] border border-[var(--ui-color-border)] bg-ui-surface-raised px-2.5 text-[0.84rem] font-semibold text-[var(--ui-color-ink)] transition-colors hover:bg-ui-surface-subtle"
+            className="inline-flex h-[var(--ui-density-dense)] items-center justify-center rounded-[var(--ui-radius-sm)] border border-app-accent bg-app-accent px-2.5 text-[0.84rem] font-semibold text-app-accent-fg transition-colors hover:bg-app-accent-hover"
           >
             {t('apps:recording.actions.openDetail')}
           </Link>
-          <Button variant="secondary" onClick={onDelete} disabled={busy}>
-            <Trash2 size={14} className="mr-1" />
-            {t('common:actions.delete')}
-          </Button>
+          <DropdownMenu
+            trigger={
+              <button
+                type="button"
+                className="inline-flex h-[var(--ui-density-dense)] w-8 items-center justify-center rounded-[var(--ui-radius-sm)] border border-app-border bg-app-surface-raised text-app-ink hover:bg-app-surface-subtle disabled:opacity-50"
+                disabled={busy}
+                aria-label={t('common:actions.open')}
+              >
+                <MoreHorizontal size={14} />
+              </button>
+            }
+            items={overflowItems}
+          />
         </div>
       </div>
 
-      {playbackUrl ? (
-        <audio controls src={playbackUrl} className="mt-3 w-full" />
-      ) : null}
+      {playbackUrl ? <audio controls src={playbackUrl} className="mt-3 w-full" /> : null}
     </article>
-  );
-}
-
-function StatusPill({
-  icon,
-  label,
-  tone,
-}: {
-  icon: ReactNode;
-  label: string;
-  tone: 'saved' | 'pending' | 'failed';
-}) {
-  const toneClass = tone === 'saved'
-    ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
-    : tone === 'failed'
-      ? 'border-[var(--ui-color-danger)]/30 bg-[var(--ui-color-danger)]/10 text-[var(--ui-color-danger)]'
-      : 'border-app-border bg-app-surface-raised text-app-ink/65';
-  return (
-    <span className={`app-text-caption inline-flex items-center gap-1 rounded border px-2 py-0.5 ${toneClass}`}>
-      {icon}
-      {label}
-    </span>
   );
 }
 
