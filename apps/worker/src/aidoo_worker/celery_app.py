@@ -112,6 +112,7 @@ celery_app.conf.task_routes = {
     "rag.sync_backfill_resource": {"queue": "rag_sync_backfill"},
     "rag.recompute_visibility": {"queue": "rag_visibility_recompute"},
     "search.index_resource": {"queue": "search_index_realtime"},
+    "images.generate_image": {"queue": "image_generation"},
 }
 celery_app.conf.task_reject_on_worker_lost = True
 celery_app.conf.worker_graceful_shutdown_timeout = 1200

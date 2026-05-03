@@ -83,6 +83,7 @@ def init_db() -> None:
         models as conversations_models,
     )
     from aidoo_api.domains.docs import models as docs_models  # noqa: F401
+    from aidoo_api.domains.images import models as images_models  # noqa: F401
     from aidoo_api.domains.media import models as media_models  # noqa: F401
     from aidoo_api.domains.meeting import models as meeting_models  # noqa: F401
     from aidoo_api.domains.pms import models as pms_models  # noqa: F401

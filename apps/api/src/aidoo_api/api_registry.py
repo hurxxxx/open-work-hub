@@ -19,6 +19,7 @@ from aidoo_api.domains.docs.router import router as docs_router
 from aidoo_api.domains.docs.router import ws_router as docs_ws_router
 from aidoo_api.domains.documents.router import router as documents_router
 from aidoo_api.domains.drafts.router import router as drafts_router
+from aidoo_api.domains.images.router import router as images_router
 from aidoo_api.domains.learning_notes.router import router as learning_notes_router
 from aidoo_api.domains.media.router import router as media_router
 from aidoo_api.domains.meeting.router import router as meeting_router
@@ -149,6 +150,12 @@ def register_api_routers(app: FastAPI, settings: Settings) -> None:
     _include_protected_router(
         app,
         recording_router,
+        prefix=workspace_prefix,
+        dependencies=workspace_dependencies,
+    )
+    _include_protected_router(
+        app,
+        images_router,
         prefix=workspace_prefix,
         dependencies=workspace_dependencies,
     )

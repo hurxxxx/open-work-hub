@@ -15,6 +15,7 @@ from aidoo_api.domains.ai.runtime import models as ai_runtime_models  # noqa: F4
 from aidoo_api.domains.auth import models as auth_models  # noqa: F401
 from aidoo_api.domains.conversations import models as conversations_models  # noqa: F401
 from aidoo_api.domains.docs import models as docs_models  # noqa: F401
+from aidoo_api.domains.images import models as images_models  # noqa: F401
 from aidoo_api.domains.media import models as media_models  # noqa: F401
 from aidoo_api.domains.meeting import models as meeting_models  # noqa: F401
 from aidoo_api.domains.planner import models as planner_models  # noqa: F401
