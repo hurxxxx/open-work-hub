@@ -3120,6 +3120,41 @@ export interface paths {
         patch: operations["images_patch_generation_patch"];
         trace?: never;
     };
+    "/api/v1/workspaces/{workspace_slug}/images/generations/{generation_id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Cancel Generation */
+        post: operations["images_cancel_generation_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_slug}/images/generations/{generation_id}/template": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Mark Generation Template */
+        put: operations["images_mark_generation_template_put"];
+        post?: never;
+        /** Unmark Generation Template */
+        delete: operations["images_unmark_generation_template_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/workspaces/{workspace_slug}/images/generations/{generation_id}/reference-images": {
         parameters: {
             query?: never;
@@ -3181,6 +3216,23 @@ export interface paths {
         };
         /** Get Download Url */
         get: operations["images_get_download_url_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_slug}/images/generations/{generation_id}/download/content": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Download Image Content */
+        get: operations["images_download_image_content_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -4734,6 +4786,21 @@ export interface components {
              * @default
              */
             notes: string;
+            /**
+             * Source Generation Id
+             * @default
+             */
+            source_generation_id: string;
+            /**
+             * Source Image Edit Instruction
+             * @default
+             */
+            source_image_edit_instruction: string;
+            /**
+             * Source Image Requires Plan
+             * @default false
+             */
+            source_image_requires_plan: boolean;
         };
         /** DevLoginAccountResponse */
         DevLoginAccountResponse: {
@@ -5148,6 +5215,11 @@ export interface components {
             /** Template Id */
             template_id?: string | null;
             /**
+             * Is Template
+             * @default false
+             */
+            is_template: boolean;
+            /**
              * Use Case
              * @default
              */
@@ -5180,6 +5252,11 @@ export interface components {
             owner_id: string;
             /** Template Id */
             template_id?: string | null;
+            /**
+             * Is Template
+             * @default false
+             */
+            is_template: boolean;
             /** Use Case */
             use_case: string;
             /** Use Case Other */
@@ -5217,7 +5294,7 @@ export interface components {
              * Image Status
              * @enum {string}
              */
-            image_status: "idle" | "queued" | "running" | "succeeded" | "failed";
+            image_status: "idle" | "queued" | "running" | "succeeded" | "failed" | "cancelled";
             /** Image Storage Key */
             image_storage_key: string | null;
             /** Image Model */
@@ -5245,6 +5322,8 @@ export interface components {
         ImageGenerationPatchRequest: {
             /** Template Id */
             template_id?: string | null;
+            /** Is Template */
+            is_template?: boolean | null;
             /** Use Case */
             use_case?: string | null;
             /** Use Case Other */
@@ -6245,6 +6324,8 @@ export interface components {
             reference_type: string;
             /** Reference Id */
             reference_id: string | null;
+            /** Action Url */
+            action_url?: string | null;
             /** Is Read */
             is_read: boolean;
             /**
@@ -20307,8 +20388,10 @@ export interface operations {
         parameters: {
             query?: {
                 limit?: number;
-                image_status?: ("idle" | "queued" | "running" | "succeeded" | "failed") | null;
+                image_status?: ("idle" | "queued" | "running" | "succeeded" | "failed" | "cancelled") | null;
                 use_case?: string | null;
+                is_template?: boolean | null;
+                has_image_activity?: boolean | null;
             };
             header?: never;
             path?: never;
@@ -20515,6 +20598,153 @@ export interface operations {
                 "application/json": components["schemas"]["ImageGenerationPatchRequest"];
             };
         };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageGenerationOut"];
+                };
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Access denied. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    images_cancel_generation_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                generation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageGenerationOut"];
+                };
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Access denied. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    images_mark_generation_template_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                generation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageGenerationOut"];
+                };
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Access denied. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    images_unmark_generation_template_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                generation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
         responses: {
             /** @description Successful Response */
             200: {
@@ -20776,6 +21006,55 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ImageDownloadResponse"];
+                };
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Access denied. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    images_download_image_content_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                generation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
             /** @description Authentication required. */

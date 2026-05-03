@@ -16,7 +16,8 @@ import sys
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlparse
+from urllib.parse import urlencode, urlparse
+from uuid import NAMESPACE_URL, uuid5
 
 from celery.exceptions import Ignore
 from sqlalchemy import select
@@ -49,6 +50,12 @@ from aidoo_api.domains.images.prompt import (  # noqa: E402
     build_agent_prompt,
     sanitize_image_plan_text,
 )
+from aidoo_api.domains.images.template_catalog import (  # noqa: E402
+    get_builtin_template,
+    get_user_template_source_id,
+)
+from aidoo_api.domains.auth.models import User, Workspace  # noqa: E402
+from aidoo_api.domains.pms.models import Notification  # noqa: E402
 
 
 logger = logging.getLogger(__name__)
@@ -124,13 +131,94 @@ def _load(session: Session, generation_id: str) -> ImageGeneration | None:
     return row
 
 
+def _load_fresh(session: Session, generation_id: str) -> ImageGeneration | None:
+    row = session.get(ImageGeneration, generation_id, populate_existing=True)
+    if row is None or row.trashed_at is not None:
+        return None
+    return row
+
+
 def _is_owned_ref_key(row: ImageGeneration, key: str) -> bool:
     return key.startswith(f"images/refs/{row.id}/")
 
 
+def _is_owned_result_key(row: ImageGeneration, key: str) -> bool:
+    return key == f"images/results/{row.workspace_id}/{row.id}.png"
+
+
+def _remove_object(key: str) -> None:
+    settings = get_settings()
+    try:
+        _minio_client().remove_object(settings.minio_bucket, key)
+    except Exception:
+        logger.warning("images.generate: failed to remove object %s", key, exc_info=True)
+
+
+def _generation_action_url(session: Session, row: ImageGeneration) -> str:
+    workspace = session.get(Workspace, row.workspace_id)
+    params = {
+        "gen": row.id,
+        "step": "4",
+    }
+    if workspace is not None and workspace.key:
+        params["workspace"] = workspace.key
+    return f"/tool/image-wizard?{urlencode(params)}"
+
+
+def _notification_copy(
+    *,
+    locale: str,
+    outcome: str,
+    reason: str | None = None,
+) -> tuple[str, str]:
+    if locale == "en-US":
+        if outcome == "succeeded":
+            return "Image generation finished", "Your generated image is ready."
+        return (
+            "Image generation failed",
+            reason or "The image generation did not finish.",
+        )
+    if outcome == "succeeded":
+        return "이미지 생성이 완료되었습니다", "생성된 이미지를 확인할 수 있습니다."
+    return (
+        "이미지 생성에 실패했습니다",
+        reason or "이미지 생성이 완료되지 않았습니다.",
+    )
+
+
+def _notify_generation_finished(
+    session: Session,
+    row: ImageGeneration,
+    *,
+    outcome: str,
+    reason: str | None = None,
+) -> None:
+    notification_id = str(uuid5(NAMESPACE_URL, f"aidoo:image-generation:{row.id}:{outcome}"))
+    if session.get(Notification, notification_id) is not None:
+        return
+    user = session.get(User, row.owner_id)
+    locale = str(getattr(user, "locale", None) or "ko-KR")
+    title, body = _notification_copy(locale=locale, outcome=outcome, reason=reason)
+    session.add(
+        Notification(
+            id=notification_id,
+            user_id=row.owner_id,
+            type=f"image_generation_{outcome}",
+            title=title,
+            body=body,
+            reference_type="image_generation",
+            reference_id=row.id,
+            action_url=_generation_action_url(session, row),
+        )
+    )
+    session.commit()
+
+
 def _mark_failed(session: Session, generation_id: str, reason: str) -> None:
-    row = session.get(ImageGeneration, generation_id)
+    row = _load_fresh(session, generation_id)
     if row is None:
+        return
+    if row.image_status == "cancelled":
         return
     row.image_status = "failed"
     row.failure_reason = (reason or "unknown error")[:500]
@@ -138,11 +226,14 @@ def _mark_failed(session: Session, generation_id: str, reason: str) -> None:
     row.updated_at = _utcnow()
     session.add(row)
     session.commit()
+    _notify_generation_finished(session, row, outcome="failed", reason=row.failure_reason)
 
 
 def _mark_retrying(session: Session, generation_id: str, reason: str) -> None:
-    row = session.get(ImageGeneration, generation_id)
+    row = _load_fresh(session, generation_id)
     if row is None:
+        return
+    if row.image_status == "cancelled":
         return
     row.image_status = "queued"
     row.failure_reason = (reason or "retrying")[:500]
@@ -234,6 +325,81 @@ def _download_reference_images(
         if len(out) >= settings.image_max_reference_uploads:
             break
     return out
+
+
+def _download_result_image(row: ImageGeneration) -> bytes | None:
+    if row.image_status != "succeeded" or not row.image_storage_key:
+        return None
+    if not _is_owned_result_key(row, row.image_storage_key):
+        logger.warning(
+            "images.generate: skipping unexpected template result key generation=%s key=%s",
+            row.id,
+            row.image_storage_key,
+        )
+        return None
+
+    settings = get_settings()
+    try:
+        response = _minio_client().get_object(settings.minio_bucket, row.image_storage_key)
+        try:
+            return response.read(settings.image_reference_max_bytes + 1)
+        finally:
+            try:
+                response.close()
+                response.release_conn()
+            except Exception:
+                pass
+    except Exception as exc:
+        logger.warning(
+            "images.generate: failed to fetch template result %s: %s",
+            row.id,
+            exc,
+        )
+        return None
+
+
+def _load_template_reference_images(
+    session: Session,
+    row: ImageGeneration,
+) -> list[tuple[str, str, bytes]]:
+    template_id = str(row.template_id or "").strip()
+    if not template_id:
+        return []
+
+    builtin = get_builtin_template(template_id)
+    if builtin is not None:
+        asset_path = (
+            _workspace_root()
+            / "apps"
+            / "web"
+            / "public"
+            / builtin.asset_path.lstrip("/")
+        )
+        try:
+            data = asset_path.read_bytes()
+        except FileNotFoundError:
+            logger.warning("images.generate: template sample missing: %s", asset_path)
+            return []
+        if len(data) > get_settings().image_reference_max_bytes:
+            logger.warning("images.generate: template sample too large: %s", asset_path)
+            return []
+        return [("template composition", "image/png", data)]
+
+    source_id = get_user_template_source_id(template_id)
+    if source_id is None:
+        return []
+    source = session.get(ImageGeneration, source_id)
+    if (
+        source is None
+        or source.trashed_at is not None
+        or source.workspace_id != row.workspace_id
+        or source.owner_id != row.owner_id
+    ):
+        return []
+    data = _download_result_image(source)
+    if not data or len(data) > get_settings().image_reference_max_bytes:
+        return []
+    return [("template composition", "image/png", data)]
 
 
 def _build_agent_input_items(
@@ -397,7 +563,10 @@ def generate_image(self, generation_id: str) -> str:
             _mark_failed(session, generation_id, "Image plan is empty")
             raise Ignore()
 
-        reference_images = _download_reference_images(row)
+        reference_images = [
+            *_load_template_reference_images(session, row),
+            *_download_reference_images(row),
+        ][: settings.image_max_reference_uploads]
 
         result = asyncio.run(
             asyncio.wait_for(
@@ -421,8 +590,10 @@ def generate_image(self, generation_id: str) -> str:
             _mark_failed(session, generation_id, "Agent did not return an image")
             raise Ignore()
 
-        row = session.get(ImageGeneration, generation_id)
-        if row is None or row.trashed_at is not None:
+        row = _load_fresh(session, generation_id)
+        if row is None:
+            raise Ignore()
+        if row.image_status == "cancelled":
             raise Ignore()
         if task_id and row.celery_task_id and row.celery_task_id != task_id:
             raise Ignore()
@@ -441,8 +612,11 @@ def generate_image(self, generation_id: str) -> str:
             _mark_failed(session, generation_id, "Storage upload failed")
             raise Ignore()
 
-        row = session.get(ImageGeneration, generation_id)
-        if row is None or row.trashed_at is not None:
+        row = _load_fresh(session, generation_id)
+        if row is None:
+            raise Ignore()
+        if row.image_status == "cancelled":
+            _remove_object(storage_key)
             raise Ignore()
         row.image_storage_key = storage_key
         row.image_model = settings.image_model
@@ -454,6 +628,7 @@ def generate_image(self, generation_id: str) -> str:
         row.celery_task_id = None
         session.add(row)
         session.commit()
+        _notify_generation_finished(session, row, outcome="succeeded")
         return row.id
     except Ignore:
         raise

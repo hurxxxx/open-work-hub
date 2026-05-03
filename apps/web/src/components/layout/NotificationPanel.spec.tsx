@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { MemoryRouter, useLocation } from 'react-router-dom';
 import { vi } from 'vitest';
 
 import { NotificationPanel } from './NotificationPanel';
@@ -18,6 +19,11 @@ vi.mock('@/src/platform/notifications/notifications-api', () => ({
   markNotificationRead: (...args: unknown[]) => mockMarkNotificationRead(...args),
   markAllNotificationsRead: (...args: unknown[]) => mockMarkAllNotificationsRead(...args),
 }));
+
+function LocationProbe() {
+  const location = useLocation();
+  return <span data-testid="location">{location.pathname + location.search}</span>;
+}
 
 describe('NotificationPanel', () => {
   beforeEach(() => {
@@ -45,11 +51,13 @@ describe('NotificationPanel', () => {
 
   it('uses the explicit workspace slug for notification fetch and read actions', async () => {
     render(
-      <NotificationPanel
-        onClose={vi.fn()}
-        onCountChange={vi.fn()}
-        workspaceSlug="hq"
-      />,
+      <MemoryRouter>
+        <NotificationPanel
+          onClose={vi.fn()}
+          onCountChange={vi.fn()}
+          workspaceSlug="hq"
+        />
+      </MemoryRouter>,
     );
 
     await waitFor(() => {
@@ -71,15 +79,56 @@ describe('NotificationPanel', () => {
 
   it('does not request notifications when no shell workspace is available', async () => {
     render(
-      <NotificationPanel
-        onClose={vi.fn()}
-        workspaceSlug={null}
-      />,
+      <MemoryRouter>
+        <NotificationPanel
+          onClose={vi.fn()}
+          workspaceSlug={null}
+        />
+      </MemoryRouter>,
     );
 
     await waitFor(() => {
       expect(mockListNotifications).not.toHaveBeenCalled();
     });
     expect(screen.getByText('알림이 없습니다.')).toBeTruthy();
+  });
+
+  it('navigates to notification action URLs', async () => {
+    mockListNotifications.mockResolvedValueOnce({
+      items: [
+        {
+          id: 'notif-2',
+          type: 'image_generation_succeeded',
+          title: 'Image done',
+          body: 'Your generated image is ready.',
+          reference_type: 'image_generation',
+          reference_id: 'gen-1',
+          action_url: '/tool/image-wizard?workspace=hq&gen=gen-1&step=4',
+          is_read: false,
+          created_at: '2026-04-17T00:00:00Z',
+        },
+      ],
+    });
+    const onClose = vi.fn();
+
+    render(
+      <MemoryRouter initialEntries={['/w/hq/pms']}>
+        <NotificationPanel
+          onClose={onClose}
+          workspaceSlug="hq"
+        />
+        <LocationProbe />
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(await screen.findByText('Image done'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('location').textContent).toBe(
+        '/tool/image-wizard?workspace=hq&gen=gen-1&step=4',
+      );
+    });
+    expect(mockMarkNotificationRead).toHaveBeenCalledWith('test-token', 'notif-2', 'hq');
+    expect(onClose).toHaveBeenCalled();
   });
 });

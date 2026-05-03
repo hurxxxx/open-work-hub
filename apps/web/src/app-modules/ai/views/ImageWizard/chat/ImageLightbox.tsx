@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { Download, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
@@ -27,7 +28,9 @@ export function ImageLightbox({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [onClose]);
 
-  return (
+  if (typeof document === 'undefined') return null;
+
+  return createPortal(
     <div
       role="dialog"
       aria-modal="true"
@@ -58,7 +61,8 @@ export function ImageLightbox({
       <div className="flex min-h-0 flex-1 items-center justify-center">
         <img src={imageUrl} alt={alt} className="max-h-full max-w-full object-contain" />
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 

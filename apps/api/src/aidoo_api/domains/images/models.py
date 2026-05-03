@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 from sqlalchemy import (
+    Boolean,
     DateTime,
     ForeignKey,
     Index,
@@ -33,6 +34,13 @@ class ImageGeneration(Base):
             "workspace_id",
             "image_status",
         ),
+        Index(
+            "ix_image_generations_workspace_owner_template_created",
+            "workspace_id",
+            "owner_id",
+            "is_template",
+            "created_at",
+        ),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
@@ -42,6 +50,7 @@ class ImageGeneration(Base):
     owner_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True, nullable=False)
 
     template_id: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    is_template: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     use_case: Mapped[str] = mapped_column(String(64), default="", nullable=False)
     use_case_other: Mapped[str] = mapped_column(String(200), default="", nullable=False)
 

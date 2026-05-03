@@ -590,6 +590,7 @@ class NotificationItem(BaseModel):
     body: str
     reference_type: str
     reference_id: str | None
+    action_url: str | None = None
     is_read: bool
     created_at: datetime
 
@@ -1247,6 +1248,7 @@ def _create_notification(
     body: str,
     reference_type: str = "issue",
     reference_id: str | None = None,
+    action_url: str | None = None,
 ) -> None:
     pms_service._create_notification(
         db,
@@ -1256,6 +1258,7 @@ def _create_notification(
         body,
         reference_type=reference_type,
         reference_id=reference_id,
+        action_url=action_url,
     )
 
 
@@ -2558,6 +2561,7 @@ def list_notifications(
                 body=n.body,
                 reference_type=n.reference_type,
                 reference_id=n.reference_id,
+                action_url=n.action_url,
                 is_read=n.is_read,
                 created_at=n.created_at,
             )
@@ -2603,6 +2607,7 @@ def mark_notification_read(
         body=notification.body,
         reference_type=notification.reference_type,
         reference_id=notification.reference_id,
+        action_url=notification.action_url,
         is_read=notification.is_read,
         created_at=notification.created_at,
     )

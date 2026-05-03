@@ -7,7 +7,9 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 ImageBriefStatus = Literal["drafting", "ready", "approved"]
-ImageGenerationStatus = Literal["idle", "queued", "running", "succeeded", "failed"]
+ImageGenerationStatus = Literal[
+    "idle", "queued", "running", "succeeded", "failed", "cancelled"
+]
 ReferenceImageRole = Literal["style", "composition", "content"]
 ContextRefKind = Literal["meeting", "task", "doc"]
 
@@ -78,6 +80,7 @@ class ImageGenerationOut(BaseModel):
     workspace_id: str
     owner_id: str
     template_id: str | None = None
+    is_template: bool = False
     use_case: str
     use_case_other: str
     style: dict
@@ -107,6 +110,7 @@ class ImageGenerationCreateRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     template_id: str | None = Field(default=None, max_length=80)
+    is_template: bool = False
     use_case: str = Field(default="", max_length=64)
     use_case_other: str = Field(default="", max_length=200)
     style: StylePayload = Field(default_factory=StylePayload)
@@ -119,6 +123,7 @@ class ImageGenerationPatchRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     template_id: str | None = Field(default=None, max_length=80)
+    is_template: bool | None = None
     use_case: str | None = Field(default=None, max_length=64)
     use_case_other: str | None = Field(default=None, max_length=200)
     style: StylePayload | None = None

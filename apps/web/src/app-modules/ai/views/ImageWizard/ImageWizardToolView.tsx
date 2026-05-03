@@ -15,6 +15,7 @@ import {
   downloadGeneratedImageBlob,
   getImageGeneration,
   listImageGenerations,
+  setImageGenerationTemplate,
   type ImageGeneration,
   uploadReferenceImage,
 } from '../../api/image-wizard-api';
@@ -27,9 +28,17 @@ import { StepSummary } from './StepSummary';
 import { WizardFooter } from './WizardFooter';
 import { WizardLayout } from './WizardLayout';
 import { useWizardState, type StepId } from './wizard-state';
-import { LAYOUT_OPTIONS, type AspectId, type LayoutId } from './layout-wireframes';
+import {
+  ASPECT_OPTIONS,
+  LAYOUT_OPTIONS,
+  type AspectId,
+  type LayoutId,
+} from './layout-wireframes';
+import { STYLE_IDS, type StyleShape } from './style-presets';
 import {
   getTemplate,
+  getUserTemplateSourceId,
+  makeUserTemplateId,
   TEMPLATE_PRESETS,
   type TemplatePreset,
 } from './templates/template-presets';
@@ -90,6 +99,33 @@ const LARGE_EDIT_PATTERNS = [
   /\uC804\uCCB4\s*(\uC2A4\uD0C0\uC77C|\uAD6C\uB3C4|\uB808\uC774\uC544\uC6C3|\uCEE8\uC149)/,
 ];
 
+function normalizeUserTemplateStyle(style: ImageGeneration['style']): TemplatePreset['preset']['style'] {
+  const chips = (style.chips ?? []).filter((chip): chip is StyleShape =>
+    STYLE_IDS.includes(chip as StyleShape),
+  );
+  return {
+    chips,
+    palette: style.palette || 'auto',
+    background: style.background || 'auto',
+    quality: style.quality || 'high',
+  };
+}
+
+function normalizeUserTemplateLayout(layout: ImageGeneration['layout']): TemplatePreset['preset']['layout'] {
+  const layoutId = LAYOUT_OPTIONS.includes(layout.layout_id as LayoutId)
+    ? (layout.layout_id as LayoutId)
+    : (LAYOUT_OPTIONS[0] as LayoutId);
+  const aspect = ASPECT_OPTIONS.includes(layout.aspect as AspectId)
+    ? (layout.aspect as AspectId)
+    : '1024x1024';
+  return { layout_id: layoutId, aspect };
+}
+
+function resolveUserTemplateSourceId(template: TemplatePreset): string | null {
+  const direct = template.sourceGenerationId?.trim() || null;
+  return getUserTemplateSourceId(direct) ?? direct ?? getUserTemplateSourceId(template.id);
+}
+
 function buildImageEditNotes(sourceNotes: string | undefined, editBlock: string): string {
   if (editBlock.length >= IMAGE_EDIT_NOTES_MAX) {
     return editBlock.slice(0, IMAGE_EDIT_NOTES_MAX);
@@ -124,6 +160,12 @@ export function ImageWizardToolView() {
 
   const [myImagesOpen, setMyImagesOpen] = useState(false);
   const [myImagesCount, setMyImagesCount] = useState(0);
+  const [userTemplates, setUserTemplates] = useState<TemplatePreset[]>([]);
+  const [userTemplatesRefreshKey, setUserTemplatesRefreshKey] = useState(0);
+  const [removingUserTemplateIds, setRemovingUserTemplateIds] = useState<Set<string>>(
+    () => new Set(),
+  );
+  const [templateActionError, setTemplateActionError] = useState<string | null>(null);
   const [transitioningStep, setTransitioningStep] = useState(false);
 
   const updateUrl = useCallback(
@@ -160,7 +202,7 @@ export function ImageWizardToolView() {
   useEffect(() => {
     if (!token || !workspaceSlug) return;
     let cancelled = false;
-    listImageGenerations(token, workspaceSlug, { limit: 50 })
+    listImageGenerations(token, workspaceSlug, { limit: 50, has_image_activity: true })
       .then((response) => {
         if (cancelled) return;
         setMyImagesCount(response.items.length);
@@ -171,7 +213,66 @@ export function ImageWizardToolView() {
     return () => {
       cancelled = true;
     };
-  }, [token, workspaceSlug, generationId]);
+  }, [token, workspaceSlug, generationId, wizard.row?.image_status]);
+
+  useEffect(() => {
+    if (!token || !workspaceSlug) {
+      setUserTemplates([]);
+      return;
+    }
+    let cancelled = false;
+    const objectUrls: string[] = [];
+    listImageGenerations(token, workspaceSlug, {
+      limit: 100,
+      image_status: 'succeeded',
+      is_template: true,
+    })
+      .then(async (response) => {
+        const templates = await Promise.all(
+          response.items
+            .filter((item) => Boolean(item.image_storage_key))
+            .map(async (item): Promise<TemplatePreset | null> => {
+              let previewUrl: string | undefined;
+              try {
+                const blob = await downloadGeneratedImageBlob(token, workspaceSlug, item.id);
+                if (cancelled) return null;
+                previewUrl = URL.createObjectURL(blob);
+                objectUrls.push(previewUrl);
+              } catch {
+                previewUrl = undefined;
+              }
+              const sourcePreset = getTemplate(item.template_id);
+              const createdAt = new Date(item.created_at).toLocaleDateString();
+              return {
+                id: makeUserTemplateId(item.id),
+                category: sourcePreset?.category ?? 'card',
+                mockupId: sourcePreset?.mockupId ?? 'blank_canvas',
+                name: t('ai.imageWizard.gallery.userTemplateName', { date: createdAt }),
+                hint: t('ai.imageWizard.gallery.userTemplateHint'),
+                previewUrl,
+                sourceGenerationId: item.id,
+                preset: {
+                  use_case: item.use_case,
+                  style: normalizeUserTemplateStyle(item.style),
+                  layout: normalizeUserTemplateLayout(item.layout),
+                },
+              };
+            }),
+        );
+        if (!cancelled) {
+          setUserTemplates(
+            templates.filter((template): template is TemplatePreset => template !== null),
+          );
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setUserTemplates([]);
+      });
+    return () => {
+      cancelled = true;
+      for (const objectUrl of objectUrls) URL.revokeObjectURL(objectUrl);
+    };
+  }, [token, workspaceSlug, userTemplatesRefreshKey, t]);
 
   // After the wizard creates a row mid-flow, advance step 1 → 2 once row exists.
   // For Step1's pick handlers, advancement is explicit.
@@ -246,6 +347,36 @@ export function ImageWizardToolView() {
       return;
     }
     updateUrl({ step: 2 });
+  }
+
+  async function handleRemoveUserTemplate(template: TemplatePreset) {
+    if (!token) return;
+    const sourceId = resolveUserTemplateSourceId(template);
+    if (!sourceId) return;
+    setTemplateActionError(null);
+    setRemovingUserTemplateIds((prev) => {
+      const next = new Set(prev);
+      next.add(template.id);
+      return next;
+    });
+    try {
+      const updated = await setImageGenerationTemplate(token, workspaceSlug, sourceId, false);
+      if (wizard.row?.id === sourceId) {
+        wizard.applyServer(updated);
+      }
+      setUserTemplates((prev) => prev.filter((item) => item.id !== template.id));
+      setUserTemplatesRefreshKey((value) => value + 1);
+    } catch (error) {
+      setTemplateActionError(
+        error instanceof Error ? error.message : t('ai.imageWizard.errors.saveFailed'),
+      );
+    } finally {
+      setRemovingUserTemplateIds((prev) => {
+        const next = new Set(prev);
+        next.delete(template.id);
+        return next;
+      });
+    }
   }
 
   async function handleClone() {
@@ -328,7 +459,11 @@ export function ImageWizardToolView() {
   }
 
   async function handleNewImage() {
-    await flushWizard();
+    if (token && wizard.row?.image_status === 'idle') {
+      await deleteImageGeneration(token, workspaceSlug, wizard.row.id).catch(() => undefined);
+    } else {
+      await flushWizard();
+    }
     setSearchParams(
       (current) => {
         const params = new URLSearchParams(current);
@@ -341,6 +476,9 @@ export function ImageWizardToolView() {
   }
 
   function handleDiscard() {
+    if (token && wizard.row?.image_status === 'idle') {
+      void deleteImageGeneration(token, workspaceSlug, wizard.row.id).catch(() => undefined);
+    }
     updateUrl({ gen: null, step: 1 });
   }
 
@@ -361,7 +499,11 @@ export function ImageWizardToolView() {
 
   const row = wizard.row;
   const templateName = row?.template_id
-    ? t(`ai.imageWizard.templates.${row.template_id}.name`, { defaultValue: row.template_id })
+    ? userTemplates.find((template) => template.id === row.template_id)?.name
+      ?? (getUserTemplateSourceId(row.template_id)
+        ? t('ai.imageWizard.gallery.userTemplateFallback')
+        : null)
+      ?? t(`ai.imageWizard.templates.${row.template_id}.name`, { defaultValue: row.template_id })
     : null;
 
   const summaries = (
@@ -430,7 +572,11 @@ export function ImageWizardToolView() {
       return (
         <Step1Templates
           selectedTemplateId={row?.template_id ?? null}
+          userTemplates={userTemplates}
+          removingUserTemplateIds={removingUserTemplateIds}
+          templateActionError={templateActionError}
           onPickTemplate={(template) => void handleTemplatePick(template)}
+          onRemoveUserTemplate={(template) => void handleRemoveUserTemplate(template)}
           onPickBlank={() => void handleBlankPick()}
         />
       );
@@ -469,6 +615,7 @@ export function ImageWizardToolView() {
           onClone={() => void handleClone()}
           onDiscard={handleDiscard}
           onImageEdit={handleImageEdit}
+          onTemplateChanged={() => setUserTemplatesRefreshKey((value) => value + 1)}
         />
       );
     }

@@ -1,5 +1,14 @@
 import { useState } from 'react';
-import { Copy, Download, Expand, Loader2, Send, Trash2 } from 'lucide-react';
+import {
+  BookmarkCheck,
+  BookmarkPlus,
+  Copy,
+  Download,
+  Expand,
+  Loader2,
+  Send,
+  Trash2,
+} from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { ImageLightbox } from './ImageLightbox';
 
@@ -11,9 +20,12 @@ interface ImageResultTurnProps {
   sourceImageUrl: string | null;
   sourceImageLoadError: string | null;
   editingImage: boolean;
+  isTemplate: boolean;
+  templateBusy: boolean;
   onClone: () => void;
   onDiscard: () => void;
   onEditImage: (instruction: string) => Promise<void>;
+  onTemplateToggle: (nextIsTemplate: boolean) => Promise<void>;
 }
 
 export function ImageResultTurn({
@@ -24,9 +36,12 @@ export function ImageResultTurn({
   sourceImageUrl,
   sourceImageLoadError,
   editingImage,
+  isTemplate,
+  templateBusy,
   onClone,
   onDiscard,
   onEditImage,
+  onTemplateToggle,
 }: ImageResultTurnProps) {
   const { t } = useTranslation('apps');
   const [editText, setEditText] = useState('');
@@ -89,6 +104,9 @@ export function ImageResultTurn({
     );
   }
   if (!imageUrl) return null;
+  const templateLabel = isTemplate
+    ? t('ai.imageWizard.step4.removeFromTemplates')
+    : t('ai.imageWizard.step4.saveCurrentAsTemplate');
   return (
     <article className="space-y-3 rounded-lg border border-app-border bg-app-surface p-4 shadow-sm">
       {preview ? (
@@ -133,53 +151,69 @@ export function ImageResultTurn({
             <figcaption className="app-text-caption font-medium text-app-ink/60">
               {t('ai.imageWizard.step4.editedImageLabel')}
             </figcaption>
-            <button
-              type="button"
-              onClick={() =>
-                setPreview({
-                  imageUrl,
-                  alt: t('ai.imageWizard.step4.altText'),
-                  title: t('ai.imageWizard.step4.editedImageLabel'),
-                  downloadName: 'generated-image.png',
-                })
-              }
-              className="group relative block w-full"
-              aria-label={t('ai.imageWizard.step4.openLargePreview')}
-            >
-              <img
-                src={imageUrl}
-                alt={t('ai.imageWizard.step4.altText')}
-                className="max-h-[420px] w-full rounded-md border border-app-border object-contain"
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() =>
+                  setPreview({
+                    imageUrl,
+                    alt: t('ai.imageWizard.step4.altText'),
+                    title: t('ai.imageWizard.step4.editedImageLabel'),
+                    downloadName: 'generated-image.png',
+                  })
+                }
+                className="group block w-full"
+                aria-label={t('ai.imageWizard.step4.openLargePreview')}
+              >
+                <img
+                  src={imageUrl}
+                  alt={t('ai.imageWizard.step4.altText')}
+                  className="max-h-[420px] w-full rounded-md border border-app-border object-contain"
+                />
+                <span className="absolute right-2 top-2 inline-flex h-8 w-8 items-center justify-center rounded-md bg-black/45 text-white opacity-0 transition-opacity group-hover:opacity-100">
+                  <Expand size={15} />
+                </span>
+              </button>
+              <TemplateToggleButton
+                label={templateLabel}
+                isTemplate={isTemplate}
+                busy={templateBusy}
+                onToggle={onTemplateToggle}
               />
-              <span className="absolute right-2 top-2 inline-flex h-8 w-8 items-center justify-center rounded-md bg-black/45 text-white opacity-0 transition-opacity group-hover:opacity-100">
-                <Expand size={15} />
-              </span>
-            </button>
+            </div>
           </figure>
         </div>
       ) : (
-        <button
-          type="button"
-          onClick={() =>
-            setPreview({
-              imageUrl,
-              alt: t('ai.imageWizard.step4.altText'),
-              title: t('ai.imageWizard.step4.altText'),
-              downloadName: 'generated-image.png',
-            })
-          }
-          className="group relative block w-full"
-          aria-label={t('ai.imageWizard.step4.openLargePreview')}
-        >
-          <img
-            src={imageUrl}
-            alt={t('ai.imageWizard.step4.altText')}
-            className="max-h-[480px] w-full rounded-md border border-app-border object-contain"
+        <div className="relative">
+          <button
+            type="button"
+            onClick={() =>
+              setPreview({
+                imageUrl,
+                alt: t('ai.imageWizard.step4.altText'),
+                title: t('ai.imageWizard.step4.altText'),
+                downloadName: 'generated-image.png',
+              })
+            }
+            className="group block w-full"
+            aria-label={t('ai.imageWizard.step4.openLargePreview')}
+          >
+            <img
+              src={imageUrl}
+              alt={t('ai.imageWizard.step4.altText')}
+              className="max-h-[480px] w-full rounded-md border border-app-border object-contain"
+            />
+            <span className="absolute right-2 top-2 inline-flex h-8 w-8 items-center justify-center rounded-md bg-black/45 text-white opacity-0 transition-opacity group-hover:opacity-100">
+              <Expand size={15} />
+            </span>
+          </button>
+          <TemplateToggleButton
+            label={templateLabel}
+            isTemplate={isTemplate}
+            busy={templateBusy}
+            onToggle={onTemplateToggle}
           />
-          <span className="absolute right-2 top-2 inline-flex h-8 w-8 items-center justify-center rounded-md bg-black/45 text-white opacity-0 transition-opacity group-hover:opacity-100">
-            <Expand size={15} />
-          </span>
-        </button>
+        </div>
       )}
       {sourceImageLoadError ? (
         <p className="app-text-caption text-[var(--ui-color-danger)]">
@@ -247,6 +281,39 @@ export function ImageResultTurn({
         </div>
       </div>
     </article>
+  );
+}
+
+interface TemplateToggleButtonProps {
+  label: string;
+  isTemplate: boolean;
+  busy: boolean;
+  onToggle: (nextIsTemplate: boolean) => Promise<void>;
+}
+
+function TemplateToggleButton({
+  label,
+  isTemplate,
+  busy,
+  onToggle,
+}: TemplateToggleButtonProps) {
+  return (
+    <button
+      type="button"
+      onClick={() => void onToggle(!isTemplate)}
+      disabled={busy}
+      aria-pressed={isTemplate}
+      className="absolute bottom-3 left-3 inline-flex max-w-[calc(100%-1.5rem)] items-center gap-1.5 rounded-md border border-app-border bg-app-surface/95 px-3 py-2 app-text-control-sm font-medium text-app-ink shadow-sm hover:border-app-accent hover:text-app-accent disabled:opacity-70"
+    >
+      {busy ? (
+        <Loader2 size={14} className="shrink-0 animate-spin" />
+      ) : isTemplate ? (
+        <BookmarkCheck size={14} className="shrink-0" />
+      ) : (
+        <BookmarkPlus size={14} className="shrink-0" />
+      )}
+      <span className="truncate">{label}</span>
+    </button>
   );
 }
 

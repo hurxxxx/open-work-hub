@@ -8,6 +8,8 @@ from __future__ import annotations
 import re
 from typing import Any
 
+from aidoo_api.domains.images.template_catalog import describe_template_for_prompt
+
 
 # --- Plan generation (OpenAI Agents SDK) -----------------------------------
 
@@ -208,8 +210,9 @@ def build_brief_messages(
     audience = str((details or {}).get("audience") or "").strip()
     notes = str((details or {}).get("notes") or "").strip()
     blocks: list[str] = []
-    if template_name and template_name.strip():
-        blocks.append(f"템플릿: {template_name.strip()}")
+    template_summary = describe_template_for_prompt(template_name)
+    if template_summary:
+        blocks.append(f"[Template]\n{template_summary}")
     blocks.extend(
         [
             f"사용처: {_format_use_case(use_case, use_case_other)}",
@@ -275,7 +278,10 @@ ILLUSTRATOR_SYSTEM_PROMPT = (
     "tool to produce the final image. Honor the approved plan's goal, "
     "composition, visible text, style, and cautions. Reference images are "
     "guidance only - do not copy them literally unless their role is "
-    "'composition'. Never render placeholder tokens, angle-bracket labels, or "
+    "'composition'. If a template sample reference image is present, use it for "
+    "layout, polish, hierarchy, and visual style only; do not copy its filler "
+    "text, numbers, logos, or sample facts. Never render placeholder tokens, "
+    "angle-bracket labels, or "
     "raw template words for metrics, statuses, priorities, description text, "
     "or internal template IDs. If a value is missing, omit the text or use "
     "unlabeled visual structure. Output exactly one image. Do not write "
@@ -295,10 +301,19 @@ def build_agent_prompt(
     plan_text = sanitize_image_plan_text(brief_text)
     style_summary = _format_style(style or {})
     layout_summary = _format_layout(layout or {})
+    has_template_sample = any("template" in role.lower() for role in reference_roles)
     refs = (
         ", ".join(reference_roles)
         if reference_roles
         else "(참고 이미지 없음)"
+    )
+    template_sample_note = (
+        "\n[템플릿 샘플 이미지]\n"
+        "참고 이미지 역할 순서에 template composition이 있으면 그 이미지는 선택된 템플릿의 "
+        "고품질 샘플입니다. 구도, 위계, 완성도, 스타일만 참고하고 샘플 안의 임시 문구, "
+        "숫자, 로고, 사실관계는 복사하지 마세요.\n\n"
+        if has_template_sample
+        else ""
     )
     body = (
         "[승인된 이미지 계획]\n"
@@ -308,6 +323,7 @@ def build_agent_prompt(
         "[레이아웃 메타]\n"
         f"{layout_summary}\n\n"
         f"[참고 이미지 역할 순서] {refs}\n\n"
+        f"{template_sample_note}"
         "[금지 규칙]\n"
         "꺾쇠괄호로 감싼 텍스트, 누락값 표기, 내부 템플릿 ID/코드명, "
         "임시 라벨은 이미지 안에 렌더링하지 마세요.\n\n"

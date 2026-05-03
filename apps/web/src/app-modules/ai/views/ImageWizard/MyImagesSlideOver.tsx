@@ -11,6 +11,7 @@ import {
   listImageGenerations,
   type ImageGeneration,
 } from '../../api/image-wizard-api';
+import { getUserTemplateSourceId } from './templates/template-presets';
 
 const STATUS_TONE: Record<string, string> = {
   succeeded: 'text-[var(--ui-color-success,green)]',
@@ -29,6 +30,21 @@ function getGallerySummary(item: ImageGeneration): string {
   const latestBrief = item.brief_versions[item.brief_versions.length - 1];
   if (!latestBrief || latestBrief.internal) return '';
   return latestBrief.text;
+}
+
+function getGalleryTitle(
+  item: ImageGeneration,
+  t: (key: string, options?: Record<string, unknown>) => string,
+): string {
+  if (getUserTemplateSourceId(item.template_id)) {
+    return t('ai.imageWizard.gallery.userTemplateBasedTitle');
+  }
+  if (item.template_id) {
+    return t(`ai.imageWizard.templates.${item.template_id}.name`, {
+      defaultValue: item.template_id,
+    });
+  }
+  return t('ai.imageWizard.gallery.untitled');
 }
 
 interface MyImagesSlideOverProps {
@@ -58,7 +74,7 @@ export function MyImagesSlideOver({
     if (!open || !token) return;
     let cancelled = false;
     setLoading(true);
-    listImageGenerations(token, workspaceSlug, { limit: 100 })
+    listImageGenerations(token, workspaceSlug, { limit: 100, has_image_activity: true })
       .then((response) => {
         if (cancelled) return;
         setItems(response.items);
@@ -199,11 +215,7 @@ export function MyImagesSlideOver({
                     className="min-w-0 flex-1 text-left"
                   >
                     <p className="app-text-body line-clamp-1 font-medium text-app-ink">
-                      {item.template_id
-                        ? t(`ai.imageWizard.templates.${item.template_id}.name`, {
-                            defaultValue: item.template_id,
-                          })
-                        : t('ai.imageWizard.gallery.untitled')}
+                      {getGalleryTitle(item, t)}
                     </p>
                     <p className={`app-text-caption ${tone}`}>
                       {t(`ai.imageWizard.gallery.status.${item.image_status}`, {

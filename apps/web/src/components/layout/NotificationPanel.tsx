@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useNavigate } from 'react-router-dom';
 import { motion } from 'motion/react';
 import { X, Check, CheckCheck, Loader2 } from 'lucide-react';
 import { Button } from '@aidoo/ui/primitives/button';
@@ -29,6 +30,7 @@ export function NotificationPanel({
 }) {
   const { token, user } = useAuth();
   const { t, i18n } = useTranslation('shell');
+  const navigate = useNavigate();
   const timeZone = normalizeTimeZone(user?.time_zone);
   const [notifications, setNotifications] = useState<WorkspaceNotification[]>([]);
   const [loading, setLoading] = useState(true);
@@ -54,11 +56,16 @@ export function NotificationPanel({
 
   const handleClick = useCallback((n: WorkspaceNotification) => {
     void handleRead(n);
+    if (n.action_url && n.action_url.startsWith('/')) {
+      navigate(n.action_url);
+      onClose();
+      return;
+    }
     if (n.reference_id && onNavigateToIssue) {
       onNavigateToIssue(n.reference_id);
       onClose();
     }
-  }, [handleRead, onNavigateToIssue, onClose]);
+  }, [handleRead, navigate, onNavigateToIssue, onClose]);
 
   const handleReadAll = useCallback(async () => {
     if (!token || !workspaceSlug) return;

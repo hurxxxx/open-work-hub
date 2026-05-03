@@ -5,14 +5,15 @@ import { useTranslation } from 'react-i18next';
 import { useAuth } from '@/src/platform/auth/auth-provider';
 import {
   approveImageGeneration,
+  cancelImageGeneration,
   downloadGeneratedImageBlob,
   generateBrief,
   getImageGeneration,
   listImageGenerations,
+  setImageGenerationTemplate,
   type ImageGeneration,
 } from '../../../api/image-wizard-api';
 import { BriefTurn } from '../chat/BriefTurn';
-import { BriefRefineComposer } from '../chat/BriefRefineComposer';
 import { ImageResultTurn } from '../chat/ImageResultTurn';
 import {
   ImageRevisionGallery,
@@ -63,6 +64,7 @@ interface Step4BriefProps {
   onClone: () => void;
   onDiscard: () => void;
   onImageEdit: (instruction: string) => Promise<void>;
+  onTemplateChanged?: (next: ImageGeneration) => void;
 }
 
 export function Step4Brief({
@@ -72,10 +74,12 @@ export function Step4Brief({
   onClone,
   onDiscard,
   onImageEdit,
+  onTemplateChanged,
 }: Step4BriefProps) {
   const { t } = useTranslation('apps');
   const { token } = useAuth();
-  const [busy, setBusy] = useState<'brief' | 'approve' | 'image-edit' | null>(null);
+  const [busy, setBusy] = useState<'brief' | 'approve' | 'cancel' | 'image-edit' | null>(null);
+  const [templateBusy, setTemplateBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
   const [imageLoadError, setImageLoadError] = useState<string | null>(null);
@@ -301,6 +305,20 @@ export function Step4Brief({
     }
   }
 
+  async function runCancel() {
+    if (!token) return;
+    setBusy('cancel');
+    setError(null);
+    try {
+      const cancelled = await cancelImageGeneration(token, workspaceSlug, row.id);
+      onRowReplaced(cancelled);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t('ai.imageWizard.errors.cancelFailed'));
+    } finally {
+      setBusy(null);
+    }
+  }
+
   async function runImageEdit(instruction: string) {
     setBusy('image-edit');
     setError(null);
@@ -313,10 +331,35 @@ export function Step4Brief({
     }
   }
 
+  async function runTemplateToggle(nextIsTemplate: boolean) {
+    if (!token) return;
+    setTemplateBusy(true);
+    setError(null);
+    try {
+      const updated = await setImageGenerationTemplate(
+        token,
+        workspaceSlug,
+        row.id,
+        nextIsTemplate,
+      );
+      onRowReplaced(updated);
+      onTemplateChanged?.(updated);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t('ai.imageWizard.errors.saveFailed'));
+    } finally {
+      setTemplateBusy(false);
+    }
+  }
+
   const isGeneratingImage = row.image_status === 'queued' || row.image_status === 'running';
-  const isFinished = row.image_status === 'succeeded' || row.image_status === 'failed';
+  const isFinished =
+    row.image_status === 'succeeded'
+    || row.image_status === 'failed'
+    || row.image_status === 'cancelled';
   const showBriefPlan = !shouldSkipPlanForImageEdit;
   const composerDisabled = row.brief_status === 'approved' || isGeneratingImage || isFinished;
+  const latestBrief = row.brief_versions.at(-1);
+  const latestBriefIndex = Math.max(0, row.brief_versions.length - 1);
 
   return (
     <div className="space-y-4">
@@ -364,17 +407,17 @@ export function Step4Brief({
 
       {showBriefPlan ? (
         <div className="space-y-3">
-          {row.brief_versions.map((version, idx) => (
+          {latestBrief ? (
             <BriefTurn
-              key={`${version.created_at}-${idx}`}
-              version={version}
-              index={idx}
-              isLatest={idx === row.brief_versions.length - 1}
-              approving={busy === 'approve' && idx === row.brief_versions.length - 1}
+              key={`${latestBrief.created_at}-${latestBriefIndex}`}
+              version={latestBrief}
+              index={latestBriefIndex}
+              isLatest
+              approving={busy === 'approve'}
               approveDisabled={composerDisabled}
               onApprove={runApprove}
             />
-          ))}
+          ) : null}
         </div>
       ) : null}
 
@@ -418,9 +461,26 @@ export function Step4Brief({
         </div>
       ) : null}
 
-      {isGeneratingImage ? <PendingTurn status={row.image_status as 'queued' | 'running'} /> : null}
+      {isGeneratingImage ? (
+        <PendingTurn
+          status={row.image_status as 'queued' | 'running'}
+          cancelling={busy === 'cancel'}
+          onCancel={runCancel}
+        />
+      ) : null}
 
-      {isFinished ? (
+      {row.image_status === 'cancelled' ? (
+        <article className="rounded-lg border border-app-border bg-app-surface-sidebar p-4 text-app-ink/65">
+          <p className="app-text-body font-medium text-app-ink">
+            {t('ai.imageWizard.step4.cancelled')}
+          </p>
+          <p className="app-text-caption mt-1">
+            {t('ai.imageWizard.step4.cancelledDescription')}
+          </p>
+        </article>
+      ) : null}
+
+      {row.image_status === 'succeeded' || row.image_status === 'failed' ? (
         <ImageResultTurn
           imageUrl={downloadUrl}
           loading={!downloadUrl && !imageLoadError && row.image_status === 'succeeded'}
@@ -429,21 +489,16 @@ export function Step4Brief({
           sourceImageUrl={sourceImageUrl}
           sourceImageLoadError={sourceImageLoadError}
           editingImage={busy === 'image-edit'}
+          isTemplate={row.is_template}
+          templateBusy={templateBusy}
           onClone={onClone}
           onDiscard={onDiscard}
           onEditImage={runImageEdit}
+          onTemplateToggle={runTemplateToggle}
         />
       ) : null}
 
       <ImageRevisionGallery items={revisionItems} loadError={revisionGalleryError} />
-
-      {showBriefPlan && !isGeneratingImage && !isFinished && row.brief_versions.length > 0 ? (
-        <BriefRefineComposer
-          disabled={composerDisabled}
-          busy={busy === 'brief'}
-          onSend={runGenerateBrief}
-        />
-      ) : null}
     </div>
   );
 }

@@ -399,11 +399,14 @@ def create_generation(
     payload: ImageGenerationCreateRequest,
 ) -> ImageGenerationOut:
     _require_enabled()
+    if payload.is_template:
+        raise localized_http_exception(status_code=409, code="images.not_ready")
     row = ImageGeneration(
         id=new_id(),
         workspace_id=workspace.id,
         owner_id=user.id,
         template_id=payload.template_id,
+        is_template=payload.is_template,
         use_case=payload.use_case,
         use_case_other=payload.use_case_other,
         style=payload.style.model_dump(),
@@ -427,8 +430,15 @@ def patch_generation(
 ) -> ImageGenerationOut:
     _require_enabled()
     row = _load(db, workspace=workspace, user=user, generation_id=generation_id)
-    if row.brief_status == "approved":
+    mutable_prompt_fields = set(payload.model_fields_set) - {"is_template"}
+    if row.brief_status == "approved" and mutable_prompt_fields:
         raise localized_http_exception(status_code=409, code="images.locked_after_approval")
+    if "is_template" in payload.model_fields_set and payload.is_template is not None:
+        if payload.is_template and (
+            row.image_status != "succeeded" or not row.image_storage_key
+        ):
+            raise localized_http_exception(status_code=409, code="images.not_ready")
+        row.is_template = payload.is_template
     if "template_id" in payload.model_fields_set:
         row.template_id = payload.template_id or None
         _mark_brief_drafting(row)
@@ -457,6 +467,26 @@ def patch_generation(
     return _serialize(row)
 
 
+def set_generation_template(
+    db: Session,
+    *,
+    workspace: Workspace,
+    user: User,
+    generation_id: str,
+    is_template: bool,
+) -> ImageGenerationOut:
+    _require_enabled()
+    row = _load(db, workspace=workspace, user=user, generation_id=generation_id)
+    if is_template and (row.image_status != "succeeded" or not row.image_storage_key):
+        raise localized_http_exception(status_code=409, code="images.not_ready")
+    row.is_template = is_template
+    row.updated_at = utcnow_naive()
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return _serialize(row)
+
+
 def get_generation(
     db: Session,
     *,
@@ -476,6 +506,8 @@ def list_generations(
     limit: int = 20,
     image_status: str | None = None,
     use_case: str | None = None,
+    is_template: bool | None = None,
+    has_image_activity: bool | None = None,
 ) -> ImageGenerationListResponse:
     _require_enabled()
     limit = max(1, min(100, limit))
@@ -493,6 +525,14 @@ def list_generations(
         stmt = stmt.where(ImageGeneration.image_status == image_status)
     if use_case:
         stmt = stmt.where(ImageGeneration.use_case == use_case)
+    if is_template is not None:
+        stmt = stmt.where(ImageGeneration.is_template.is_(is_template))
+    if has_image_activity is not None:
+        active_statuses = ("queued", "running", "succeeded", "failed", "cancelled")
+        if has_image_activity:
+            stmt = stmt.where(ImageGeneration.image_status.in_(active_statuses))
+        else:
+            stmt = stmt.where(ImageGeneration.image_status == "idle")
     rows = list(db.scalars(stmt))
     has_more = len(rows) > limit
     items = rows[:limit]
@@ -529,6 +569,44 @@ def delete_generation(
     row.trashed_at = utcnow_naive()
     db.add(row)
     db.commit()
+
+
+def cancel_generation(
+    db: Session,
+    *,
+    workspace: Workspace,
+    user: User,
+    generation_id: str,
+) -> ImageGenerationOut:
+    _require_enabled()
+    row = _load(db, workspace=workspace, user=user, generation_id=generation_id)
+    if row.image_status == "cancelled":
+        return _serialize(row)
+    if row.image_status not in {"queued", "running"}:
+        raise localized_http_exception(status_code=409, code="images.not_running")
+
+    celery_task_id = row.celery_task_id
+    row.image_status = "cancelled"
+    row.failure_reason = "Cancelled by user"
+    row.celery_task_id = None
+    row.completed_at = utcnow_naive()
+    row.updated_at = utcnow_naive()
+    db.add(row)
+    db.commit()
+
+    if celery_task_id:
+        try:
+            _get_celery_client().control.revoke(celery_task_id, terminate=False)
+        except Exception:
+            logger.warning(
+                "images.cancel: failed to revoke celery task generation=%s task=%s",
+                row.id,
+                celery_task_id,
+                exc_info=True,
+            )
+
+    db.refresh(row)
+    return _serialize(row)
 
 
 # --- Reference images ------------------------------------------------------

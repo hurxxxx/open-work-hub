@@ -3,7 +3,6 @@ import { useTranslation } from 'react-i18next';
 
 import { TemplateGrid } from '../templates/TemplateGrid';
 import {
-  FEATURED_TEMPLATES,
   TEMPLATES_BY_CATEGORY,
   TEMPLATE_CATEGORIES,
   TEMPLATE_PRESETS,
@@ -13,13 +12,21 @@ import {
 
 interface Step1TemplatesProps {
   selectedTemplateId: string | null;
+  userTemplates?: TemplatePreset[];
+  removingUserTemplateIds?: ReadonlySet<string>;
+  templateActionError?: string | null;
   onPickTemplate: (template: TemplatePreset) => void;
+  onRemoveUserTemplate?: (template: TemplatePreset) => void;
   onPickBlank: () => void;
 }
 
 export function Step1Templates({
   selectedTemplateId,
+  userTemplates = [],
+  removingUserTemplateIds,
+  templateActionError,
   onPickTemplate,
+  onRemoveUserTemplate,
   onPickBlank,
 }: Step1TemplatesProps) {
   const { t } = useTranslation('apps');
@@ -59,16 +66,27 @@ export function Step1Templates({
         ))}
       </div>
 
-      {category === 'all' && FEATURED_TEMPLATES.length > 0 ? (
+      {templateActionError ? (
+        <div
+          role="alert"
+          className="app-text-body rounded-md border border-[var(--ui-color-danger)]/30 bg-[var(--ui-color-danger)]/10 px-3 py-2 text-[var(--ui-color-danger)]"
+        >
+          {templateActionError}
+        </div>
+      ) : null}
+
+      {category === 'all' && userTemplates.length > 0 ? (
         <section className="space-y-3">
-          <h3 className="flex items-center gap-2 app-text-control-sm text-app-ink/70">
-            <span role="img" aria-label="featured">⭐</span>
-            <span>{t('ai.imageWizard.gallery.featured')}</span>
+          <h3 className="app-text-control-sm text-app-ink/70">
+            {t('ai.imageWizard.gallery.myTemplates')}
           </h3>
           <TemplateGrid
-            templates={FEATURED_TEMPLATES}
+            templates={userTemplates}
             selectedId={selectedTemplateId}
             onPick={onPickTemplate}
+            onRemove={onRemoveUserTemplate}
+            removingIds={removingUserTemplateIds}
+            removeLabel={t('ai.imageWizard.gallery.removeTemplate')}
           />
         </section>
       ) : null}

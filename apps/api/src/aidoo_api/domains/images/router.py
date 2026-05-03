@@ -68,10 +68,12 @@ def create_generation(
 def list_generations(
     limit: int = Query(default=20, ge=1, le=100),
     image_status: Literal[
-        "idle", "queued", "running", "succeeded", "failed"
+        "idle", "queued", "running", "succeeded", "failed", "cancelled"
     ]
     | None = Query(default=None),
     use_case: str | None = Query(default=None, max_length=64),
+    is_template: bool | None = Query(default=None),
+    has_image_activity: bool | None = Query(default=None),
     db: Session = Depends(get_db_session),
     current_user: User = Depends(require_current_user),
     workspace: Workspace = Depends(require_current_workspace),
@@ -83,6 +85,8 @@ def list_generations(
         limit=limit,
         image_status=image_status,
         use_case=use_case,
+        is_template=is_template,
+        has_image_activity=has_image_activity,
     )
 
 
@@ -115,6 +119,53 @@ def patch_generation(
         user=current_user,
         generation_id=generation_id,
         payload=payload,
+    )
+
+
+@router.post("/generations/{generation_id}/cancel", response_model=ImageGenerationOut)
+def cancel_generation(
+    generation_id: str,
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+    workspace: Workspace = Depends(require_current_workspace),
+) -> ImageGenerationOut:
+    return images_service.cancel_generation(
+        db,
+        workspace=workspace,
+        user=current_user,
+        generation_id=generation_id,
+    )
+
+
+@router.put("/generations/{generation_id}/template", response_model=ImageGenerationOut)
+def mark_generation_template(
+    generation_id: str,
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+    workspace: Workspace = Depends(require_current_workspace),
+) -> ImageGenerationOut:
+    return images_service.set_generation_template(
+        db,
+        workspace=workspace,
+        user=current_user,
+        generation_id=generation_id,
+        is_template=True,
+    )
+
+
+@router.delete("/generations/{generation_id}/template", response_model=ImageGenerationOut)
+def unmark_generation_template(
+    generation_id: str,
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+    workspace: Workspace = Depends(require_current_workspace),
+) -> ImageGenerationOut:
+    return images_service.set_generation_template(
+        db,
+        workspace=workspace,
+        user=current_user,
+        generation_id=generation_id,
+        is_template=False,
     )
 
 

@@ -4,12 +4,16 @@ import { TEMPLATE_MOCKUPS, type TemplateMockupId } from './mockups';
 
 export const TEMPLATE_CATEGORIES = ['deck', 'report', 'diagram', 'card', 'social'] as const;
 export type TemplateCategoryId = (typeof TEMPLATE_CATEGORIES)[number];
+export const USER_TEMPLATE_PREFIX = 'user_template:';
 
 export interface TemplatePreset {
   id: string;
   category: TemplateCategoryId;
   mockupId: TemplateMockupId;
-  featured?: boolean;
+  name?: string;
+  hint?: string;
+  previewUrl?: string;
+  sourceGenerationId?: string;
   preset: {
     use_case: string;
     style: {
@@ -20,6 +24,19 @@ export interface TemplatePreset {
     };
     layout: { layout_id: LayoutId; aspect: AspectId };
   };
+}
+
+export function getBuiltinTemplatePreviewUrl(templateId: string): string {
+  return `/image-wizard/templates/${templateId}.png`;
+}
+
+export function makeUserTemplateId(generationId: string): string {
+  return `${USER_TEMPLATE_PREFIX}${generationId}`;
+}
+
+export function getUserTemplateSourceId(templateId: string | null | undefined): string | null {
+  if (!templateId?.startsWith(USER_TEMPLATE_PREFIX)) return null;
+  return templateId.slice(USER_TEMPLATE_PREFIX.length) || null;
 }
 
 export const TEMPLATE_PRESETS: TemplatePreset[] = [
@@ -38,7 +55,6 @@ export const TEMPLATE_PRESETS: TemplatePreset[] = [
     id: 'meeting_deck_kpi',
     category: 'deck',
     mockupId: 'meeting_deck_kpi',
-    featured: true,
     preset: {
       use_case: 'status_report',
       style: { chips: ['corporate', 'dataviz'], palette: 'brand', background: 'white', quality: 'high' },
@@ -81,7 +97,6 @@ export const TEMPLATE_PRESETS: TemplatePreset[] = [
     id: 'status_report',
     category: 'report',
     mockupId: 'status_report',
-    featured: true,
     preset: {
       use_case: 'status_report',
       style: { chips: ['corporate', 'dataviz'], palette: 'brand', background: 'white', quality: 'high' },
@@ -92,7 +107,6 @@ export const TEMPLATE_PRESETS: TemplatePreset[] = [
     id: 'kpi_dashboard',
     category: 'report',
     mockupId: 'kpi_dashboard',
-    featured: true,
     preset: {
       use_case: 'status_report',
       style: { chips: ['dataviz', 'corporate'], palette: 'vivid', background: 'white', quality: 'high' },
@@ -125,7 +139,6 @@ export const TEMPLATE_PRESETS: TemplatePreset[] = [
     id: 'process_flow',
     category: 'diagram',
     mockupId: 'process_flow',
-    featured: true,
     preset: {
       use_case: 'process_flow',
       style: { chips: ['flow', 'wireframe'], palette: 'cool', background: 'white', quality: 'high' },
@@ -278,5 +291,3 @@ export const TEMPLATES_BY_CATEGORY: Record<TemplateCategoryId, TemplatePreset[]>
     },
     {} as Record<TemplateCategoryId, TemplatePreset[]>,
   );
-
-export const FEATURED_TEMPLATES = TEMPLATE_PRESETS.filter((preset) => preset.featured);

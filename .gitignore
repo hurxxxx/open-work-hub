@@ -28,6 +28,7 @@ vitest.config.*.timestamp*
 .dev/
 data/
 *.png
+!apps/web/public/image-wizard/templates/*.png
 
 # Playwright E2E run artifacts
 test-results/

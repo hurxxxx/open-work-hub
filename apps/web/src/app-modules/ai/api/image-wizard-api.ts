@@ -2,7 +2,13 @@ import { ApiRequestError, apiFetchJson, jsonHeaders } from '@/src/platform/api/c
 import { rewriteWorkspaceApiPath } from '@/src/platform/workspaces/workspace-utils';
 
 export type ImageBriefStatus = 'drafting' | 'ready' | 'approved';
-export type ImageGenerationStatus = 'idle' | 'queued' | 'running' | 'succeeded' | 'failed';
+export type ImageGenerationStatus =
+  | 'idle'
+  | 'queued'
+  | 'running'
+  | 'succeeded'
+  | 'failed'
+  | 'cancelled';
 export type ReferenceImageRole = 'style' | 'composition' | 'content';
 export type ContextRefKind = 'meeting' | 'task' | 'doc';
 
@@ -58,6 +64,7 @@ export interface ImageGeneration {
   workspace_id: string;
   owner_id: string;
   template_id: string | null;
+  is_template: boolean;
   use_case: string;
   use_case_other: string;
   style: StylePayload;
@@ -85,6 +92,7 @@ export interface ImageGenerationListResponse {
 
 export interface ImageGenerationCreatePayload {
   template_id?: string | null;
+  is_template?: boolean;
   use_case?: string;
   use_case_other?: string;
   style?: Partial<StylePayload>;
@@ -95,6 +103,7 @@ export interface ImageGenerationCreatePayload {
 
 export interface ImageGenerationPatchPayload {
   template_id?: string | null;
+  is_template?: boolean;
   use_case?: string;
   use_case_other?: string;
   style?: Partial<StylePayload>;
@@ -161,6 +170,36 @@ export function patchImageGeneration(
   );
 }
 
+export function setImageGenerationTemplate(
+  token: string,
+  workspaceSlug: string,
+  generationId: string,
+  isTemplate: boolean,
+): Promise<ImageGeneration> {
+  return request<ImageGeneration>(
+    `/api/v1/images/generations/${generationId}/template`,
+    token,
+    workspaceSlug,
+    { method: isTemplate ? 'PUT' : 'DELETE' },
+  );
+}
+
+export function cancelImageGeneration(
+  token: string,
+  workspaceSlug: string,
+  generationId: string,
+): Promise<ImageGeneration> {
+  return request<ImageGeneration>(
+    `/api/v1/images/generations/${generationId}/cancel`,
+    token,
+    workspaceSlug,
+    {
+      method: 'POST',
+      body: JSON.stringify({}),
+    },
+  );
+}
+
 export function getImageGeneration(
   token: string,
   workspaceSlug: string,
@@ -180,12 +219,18 @@ export function listImageGenerations(
     limit?: number;
     image_status?: ImageGenerationStatus;
     use_case?: string;
+    is_template?: boolean;
+    has_image_activity?: boolean;
   } = {},
 ): Promise<ImageGenerationListResponse> {
   const params = new URLSearchParams();
   if (options.limit) params.set('limit', String(options.limit));
   if (options.image_status) params.set('image_status', options.image_status);
   if (options.use_case) params.set('use_case', options.use_case);
+  if (options.is_template !== undefined) params.set('is_template', String(options.is_template));
+  if (options.has_image_activity !== undefined) {
+    params.set('has_image_activity', String(options.has_image_activity));
+  }
   const query = params.toString();
   return request<ImageGenerationListResponse>(
     `/api/v1/images/generations${query ? `?${query}` : ''}`,

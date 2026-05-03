@@ -1,14 +1,26 @@
 from __future__ import annotations
 
+from pathlib import Path
 from types import SimpleNamespace
 
 from aidoo_api.domains.images import service
+from aidoo_api.domains.images.template_catalog import BUILTIN_IMAGE_TEMPLATES
 from aidoo_api.domains.images.prompt import (
     BRIEF_SYSTEM_PROMPT,
     build_direct_edit_prompt,
     build_agent_prompt,
+    build_brief_messages,
     sanitize_image_plan_text,
 )
+
+
+def test_builtin_template_catalog_assets_exist() -> None:
+    repo_root = Path(__file__).resolve().parents[3]
+    assert len(BUILTIN_IMAGE_TEMPLATES) == 22
+    for template in BUILTIN_IMAGE_TEMPLATES.values():
+        asset_path = repo_root / "apps" / "web" / "public" / template.asset_path.lstrip("/")
+        assert asset_path.exists(), template.id
+        assert asset_path.stat().st_size > 1024, template.id
 
 
 def test_brief_input_skips_system_message() -> None:
@@ -60,6 +72,24 @@ def test_image_plan_prompt_forbids_placeholder_tokens() -> None:
     assert "Never output placeholder tokens" in BRIEF_SYSTEM_PROMPT
 
 
+def test_brief_messages_describe_template_without_raw_id() -> None:
+    messages = build_brief_messages(
+        use_case="status_report",
+        use_case_other="",
+        style={"chips": ["dataviz"], "palette": "brand", "background": "white"},
+        layout={"layout_id": "top_title_grid", "aspect": "1536x1024"},
+        details={"audience": "", "notes": ""},
+        context_refs=[],
+        reference_image_count=0,
+        template_name="meeting_deck_kpi",
+    )
+
+    user_message = messages[1]["content"]
+    assert "KPI slide" in user_message
+    assert "template sample image" in user_message
+    assert "meeting_deck_kpi" not in user_message
+
+
 def test_sanitize_image_plan_text_removes_placeholder_tokens() -> None:
     text = sanitize_image_plan_text(
         "제목: <title>\n"
@@ -90,6 +120,19 @@ def test_build_agent_prompt_sanitizes_approved_plan() -> None:
     assert "<metric>" not in approved_block
     assert "metric" not in approved_block
     assert "클라이언트" in approved_block
+
+
+def test_build_agent_prompt_calls_out_template_sample_reference() -> None:
+    prompt = build_agent_prompt(
+        brief_text="구성: 4개 KPI 카드를 보여준다\n화면에 넣을 텍스트: 없음",
+        style={"chips": ["dataviz"], "palette": "brand", "background": "white"},
+        layout={"layout_id": "top_title_grid", "aspect": "1536x1024"},
+        reference_roles=["template composition"],
+    )
+
+    assert "[템플릿 샘플 이미지]" in prompt
+    assert "임시 문구" in prompt
+    assert "template composition" in prompt
 
 
 def test_build_direct_edit_prompt_uses_instruction_without_placeholders() -> None:

@@ -396,6 +396,7 @@ def _create_notification(
     *,
     reference_type: str = "issue",
     reference_id: str | None = None,
+    action_url: str | None = None,
     stable_key: str | None = None,
 ) -> None:
     if stable_key is not None and db.get(Notification, stable_key) is not None:
@@ -409,6 +410,7 @@ def _create_notification(
             body=body,
             reference_type=reference_type,
             reference_id=reference_id,
+            action_url=action_url,
         )
     )
 

@@ -5,6 +5,7 @@ import { Check } from 'lucide-react';
 import { DetailDrawer } from '@aidoo/ui';
 
 import { AppBar } from '@/src/components/layout/AppBar';
+import { imageWizardBackgroundWorkSource } from '@/src/app-modules/ai/background-work';
 import {
   AuthProvider,
   LoginRoute,
@@ -44,6 +45,7 @@ import {
 import {
   WorkspaceBootstrapProvider,
 } from '@/src/platform/workspaces/workspace-bootstrap-context';
+import { BackgroundWorkProvider } from '@/src/platform/background-work/background-work-provider';
 import { resolveShellState, type ShellAppId } from '@/src/app-shell';
 import { syncLocale } from '@/src/platform/i18n';
 import { cn } from '@/src/lib/utils';
@@ -347,6 +349,10 @@ function AuthenticatedShell() {
       : null,
     [workspaceBootstrap.data],
   );
+  const backgroundWorkSources = useMemo(
+    () => [imageWizardBackgroundWorkSource],
+    [],
+  );
 
   useEffect(() => {
     syncLocale(currentUser?.locale);
@@ -509,6 +515,10 @@ function AuthenticatedShell() {
             </div>
           </div>
         )}
+        <BackgroundWorkProvider
+          sources={backgroundWorkSources}
+          workspaceSlug={bootstrapWorkspaceSlug}
+        />
       </div>
     </WorkspaceBootstrapProvider>
   );

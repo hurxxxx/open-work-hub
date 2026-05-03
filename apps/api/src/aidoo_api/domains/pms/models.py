@@ -393,6 +393,7 @@ class Notification(Base):
     body: Mapped[str] = mapped_column(Text, default="")
     reference_type: Mapped[str] = mapped_column(String(24), default="issue")
     reference_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
+    action_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     is_read: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime,
@@ -527,4 +528,3 @@ class IssueUserAccess(Base):
     user = relationship("User", foreign_keys=[user_id])
     granted_by_user = relationship("User", foreign_keys=[granted_by_user_id])
     revoked_by_user = relationship("User", foreign_keys=[revoked_by_user_id])
-

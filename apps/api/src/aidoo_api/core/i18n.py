@@ -1431,6 +1431,10 @@ MESSAGES: dict[str, dict[str, str]] = {
         "ko-KR": "이미지 생성이 이미 진행 중입니다.",
         "en-US": "Image generation is already in progress.",
     },
+    "images.not_running": {
+        "ko-KR": "진행 중인 이미지 생성이 없습니다.",
+        "en-US": "No image generation is in progress.",
+    },
     "images.dispatch_failed": {
         "ko-KR": "이미지 생성을 큐에 전달하지 못했습니다.",
         "en-US": "Failed to dispatch the image generation task.",
