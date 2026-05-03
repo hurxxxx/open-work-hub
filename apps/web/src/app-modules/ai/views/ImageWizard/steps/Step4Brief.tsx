@@ -8,14 +8,53 @@ import {
   downloadGeneratedImageBlob,
   generateBrief,
   getImageGeneration,
+  listImageGenerations,
   type ImageGeneration,
 } from '../../../api/image-wizard-api';
 import { BriefTurn } from '../chat/BriefTurn';
 import { BriefRefineComposer } from '../chat/BriefRefineComposer';
 import { ImageResultTurn } from '../chat/ImageResultTurn';
+import {
+  ImageRevisionGallery,
+  type ImageRevisionGalleryItem,
+} from '../chat/ImageRevisionGallery';
 import { PendingTurn } from '../chat/PendingTurn';
 
 const POLL_INTERVAL_MS = 2000;
+
+function getSourceGenerationId(item: ImageGeneration): string {
+  return typeof item.details?.source_generation_id === 'string'
+    ? item.details.source_generation_id
+    : '';
+}
+
+function getRootGenerationId(item: ImageGeneration, byId: Map<string, ImageGeneration>): string {
+  let currentId = item.id;
+  const seen = new Set<string>();
+  while (currentId && !seen.has(currentId)) {
+    seen.add(currentId);
+    const current = byId.get(currentId);
+    if (!current) return currentId;
+    const sourceId = getSourceGenerationId(current);
+    if (!sourceId) return currentId;
+    if (!byId.has(sourceId)) return sourceId;
+    currentId = sourceId;
+  }
+  return item.id;
+}
+
+function collectRevisionRows(
+  current: ImageGeneration,
+  candidates: ImageGeneration[],
+): ImageGeneration[] {
+  const byId = new Map(candidates.map((item) => [item.id, item]));
+  byId.set(current.id, current);
+  const rootId = getRootGenerationId(current, byId);
+  return Array.from(byId.values())
+    .filter((item) => getRootGenerationId(item, byId) === rootId)
+    .filter((item) => item.image_status === 'succeeded' && Boolean(item.image_storage_key))
+    .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+}
 
 interface Step4BriefProps {
   workspaceSlug: string;
@@ -44,6 +83,8 @@ export function Step4Brief({
   const [imageLoadError, setImageLoadError] = useState<string | null>(null);
   const [sourceImageUrl, setSourceImageUrl] = useState<string | null>(null);
   const [sourceImageLoadError, setSourceImageLoadError] = useState<string | null>(null);
+  const [revisionItems, setRevisionItems] = useState<ImageRevisionGalleryItem[]>([]);
+  const [revisionGalleryError, setRevisionGalleryError] = useState<string | null>(null);
   const requestedInitialBriefFor = useRef<string | null>(null);
   const requestedDirectEditFor = useRef<string | null>(null);
   const pollTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -169,6 +210,69 @@ export function Step4Brief({
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
   }, [token, workspaceSlug, sourceGenerationId, t]);
+
+  useEffect(() => {
+    if (!token || !isImageEdit) {
+      setRevisionItems([]);
+      setRevisionGalleryError(null);
+      return;
+    }
+    let cancelled = false;
+    const objectUrls: string[] = [];
+    setRevisionGalleryError(null);
+    listImageGenerations(token, workspaceSlug, { limit: 100 })
+      .then(async (response) => {
+        const revisions = collectRevisionRows(row, response.items);
+        const loaded = await Promise.all(
+          revisions.map(async (item): Promise<ImageRevisionGalleryItem> => {
+            try {
+              const blob = await downloadGeneratedImageBlob(token, workspaceSlug, item.id);
+              if (cancelled) {
+                return {
+                  id: item.id,
+                  imageUrl: null,
+                  loadError: null,
+                  createdAt: item.created_at,
+                  isCurrent: item.id === row.id,
+                };
+              }
+              const objectUrl = URL.createObjectURL(blob);
+              objectUrls.push(objectUrl);
+              return {
+                id: item.id,
+                imageUrl: objectUrl,
+                loadError: null,
+                createdAt: item.created_at,
+                isCurrent: item.id === row.id,
+              };
+            } catch (err) {
+              return {
+                id: item.id,
+                imageUrl: null,
+                loadError:
+                  err instanceof Error
+                    ? err.message
+                    : t('ai.imageWizard.step4.revisionImageLoadFailed'),
+                createdAt: item.created_at,
+                isCurrent: item.id === row.id,
+              };
+            }
+          }),
+        );
+        if (!cancelled) setRevisionItems(loaded);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setRevisionItems([]);
+        setRevisionGalleryError(
+          err instanceof Error ? err.message : t('ai.imageWizard.step4.revisionGalleryLoadFailed'),
+        );
+      });
+    return () => {
+      cancelled = true;
+      for (const objectUrl of objectUrls) URL.revokeObjectURL(objectUrl);
+    };
+  }, [token, workspaceSlug, row, row.id, row.updated_at, row.image_status, isImageEdit, t]);
 
   async function runGenerateBrief(editInstruction?: string) {
     if (!token) return;
@@ -331,6 +435,8 @@ export function Step4Brief({
           onNewImage={onNewImage}
         />
       ) : null}
+
+      <ImageRevisionGallery items={revisionItems} loadError={revisionGalleryError} />
 
       {showBriefPlan && !isGeneratingImage && !isFinished && row.brief_versions.length > 0 ? (
         <BriefRefineComposer

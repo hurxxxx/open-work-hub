@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react';
 import { Button, Dialog } from '@aidoo/ui';
 import { useConfirm } from '@aidoo/ui/feedback/confirm-dialog';
-import { ImageIcon, Loader2, Trash2 } from 'lucide-react';
+import { Download, ImageIcon, Loader2, Trash2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 import { useAuth } from '@/src/platform/auth/auth-provider';
 import {
   deleteImageGeneration,
+  downloadGeneratedImageBlob,
   listImageGenerations,
   type ImageGeneration,
 } from '../../api/image-wizard-api';
@@ -18,6 +19,17 @@ const STATUS_TONE: Record<string, string> = {
   queued: 'text-app-ink/60',
   idle: 'text-app-ink/40',
 };
+
+function getGallerySummary(item: ImageGeneration): string {
+  const editInstruction =
+    typeof item.details?.source_image_edit_instruction === 'string'
+      ? item.details.source_image_edit_instruction.trim()
+      : '';
+  if (editInstruction) return editInstruction;
+  const latestBrief = item.brief_versions[item.brief_versions.length - 1];
+  if (!latestBrief || latestBrief.internal) return '';
+  return latestBrief.text;
+}
 
 interface MyImagesSlideOverProps {
   open: boolean;
@@ -38,6 +50,7 @@ export function MyImagesSlideOver({
   const { token } = useAuth();
   const { confirm, confirmDialog } = useConfirm();
   const [items, setItems] = useState<ImageGeneration[]>([]);
+  const [thumbnailUrls, setThumbnailUrls] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -45,7 +58,7 @@ export function MyImagesSlideOver({
     if (!open || !token) return;
     let cancelled = false;
     setLoading(true);
-    listImageGenerations(token, workspaceSlug, { limit: 50 })
+    listImageGenerations(token, workspaceSlug, { limit: 100 })
       .then((response) => {
         if (cancelled) return;
         setItems(response.items);
@@ -62,6 +75,41 @@ export function MyImagesSlideOver({
       cancelled = true;
     };
   }, [open, token, workspaceSlug, onCountChange]);
+
+  useEffect(() => {
+    if (!open || !token || items.length === 0) {
+      setThumbnailUrls({});
+      return;
+    }
+    let cancelled = false;
+    const objectUrls: string[] = [];
+    const succeeded = items.filter(
+      (item) => item.image_status === 'succeeded' && item.image_storage_key,
+    );
+    Promise.all(
+      succeeded.map(async (item) => {
+        try {
+          const blob = await downloadGeneratedImageBlob(token, workspaceSlug, item.id);
+          if (cancelled) return null;
+          const objectUrl = URL.createObjectURL(blob);
+          objectUrls.push(objectUrl);
+          return [item.id, objectUrl] as const;
+        } catch {
+          return null;
+        }
+      }),
+    ).then((entries) => {
+      if (cancelled) return;
+      const loadedEntries = entries.filter(
+        (entry): entry is readonly [string, string] => entry !== null,
+      );
+      setThumbnailUrls(Object.fromEntries(loadedEntries));
+    });
+    return () => {
+      cancelled = true;
+      for (const objectUrl of objectUrls) URL.revokeObjectURL(objectUrl);
+    };
+  }, [open, token, workspaceSlug, items]);
 
   async function handleDelete(generationId: string) {
     if (!token) return;
@@ -121,13 +169,30 @@ export function MyImagesSlideOver({
         ) : (
           <ul className="divide-y divide-app-border rounded-md border border-app-border">
             {items.map((item) => {
-              const latestBrief = item.brief_versions[item.brief_versions.length - 1];
+              const summary = getGallerySummary(item);
+              const thumbnailUrl = thumbnailUrls[item.id];
               const tone = STATUS_TONE[item.image_status] ?? 'text-app-ink/40';
               return (
                 <li
                   key={item.id}
                   className="flex items-start justify-between gap-3 px-3 py-3 hover:bg-app-surface-hover"
                 >
+                  <button
+                    type="button"
+                    onClick={() => onPickGeneration(item.id)}
+                    className="flex h-20 w-24 shrink-0 items-center justify-center overflow-hidden rounded-md border border-app-border bg-app-surface-sidebar text-app-ink/30"
+                    aria-label={t('ai.imageWizard.gallery.openImage')}
+                  >
+                    {thumbnailUrl ? (
+                      <img
+                        src={thumbnailUrl}
+                        alt={t('ai.imageWizard.gallery.thumbnailAlt')}
+                        className="h-full w-full object-contain"
+                      />
+                    ) : (
+                      <ImageIcon size={18} />
+                    )}
+                  </button>
                   <button
                     type="button"
                     onClick={() => onPickGeneration(item.id)}
@@ -146,12 +211,22 @@ export function MyImagesSlideOver({
                       })}{' '}
                       · {new Date(item.created_at).toLocaleString()}
                     </p>
-                    {latestBrief ? (
+                    {summary ? (
                       <p className="app-text-caption mt-1 line-clamp-2 text-app-ink/50">
-                        {latestBrief.text}
+                        {summary}
                       </p>
                     ) : null}
                   </button>
+                  {thumbnailUrl ? (
+                    <a
+                      href={thumbnailUrl}
+                      download={`generated-image-${item.id}.png`}
+                      className="shrink-0 rounded-md border border-app-border p-2 text-app-ink/50 hover:border-app-accent hover:text-app-accent"
+                      aria-label={t('ai.imageWizard.gallery.downloadImage')}
+                    >
+                      <Download size={14} />
+                    </a>
+                  ) : null}
                   <button
                     type="button"
                     onClick={() => handleDelete(item.id)}

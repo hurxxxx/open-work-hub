@@ -50,6 +50,7 @@ export interface BriefVersion {
   text: string;
   created_at: string;
   edit_instruction: string | null;
+  internal?: boolean;
 }
 
 export interface ImageGeneration {
