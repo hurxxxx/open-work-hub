@@ -23,6 +23,8 @@ interface Step4BriefProps {
   onRowReplaced: (next: ImageGeneration) => void;
   onClone: () => void;
   onDiscard: () => void;
+  onImageEdit: (instruction: string) => Promise<void>;
+  onNewImage: () => void;
 }
 
 export function Step4Brief({
@@ -31,10 +33,12 @@ export function Step4Brief({
   onRowReplaced,
   onClone,
   onDiscard,
+  onImageEdit,
+  onNewImage,
 }: Step4BriefProps) {
   const { t } = useTranslation('apps');
   const { token } = useAuth();
-  const [busy, setBusy] = useState<'brief' | 'approve' | null>(null);
+  const [busy, setBusy] = useState<'brief' | 'approve' | 'image-edit' | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
   const [imageLoadError, setImageLoadError] = useState<string | null>(null);
@@ -138,6 +142,18 @@ export function Step4Brief({
     }
   }
 
+  async function runImageEdit(instruction: string) {
+    setBusy('image-edit');
+    setError(null);
+    try {
+      await onImageEdit(instruction);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t('ai.imageWizard.errors.editImageFailed'));
+    } finally {
+      setBusy(null);
+    }
+  }
+
   const isGeneratingImage = row.image_status === 'queued' || row.image_status === 'running';
   const isFinished = row.image_status === 'succeeded' || row.image_status === 'failed';
   const composerDisabled = row.brief_status === 'approved' || isGeneratingImage || isFinished;
@@ -211,8 +227,11 @@ export function Step4Brief({
           loading={!downloadUrl && !imageLoadError && row.image_status === 'succeeded'}
           loadError={imageLoadError}
           failureReason={row.image_status === 'failed' ? row.failure_reason : null}
+          editingImage={busy === 'image-edit'}
           onClone={onClone}
           onDiscard={onDiscard}
+          onEditImage={runImageEdit}
+          onNewImage={onNewImage}
         />
       ) : null}
 

@@ -8,7 +8,15 @@ import {
   resolveDefaultWorkspaceAppPath,
   resolveShellWorkspaceSlug,
 } from '@/src/platform/workspaces/workspace-utils';
-import { listImageGenerations } from '../../api/image-wizard-api';
+import {
+  createImageGeneration,
+  deleteImageGeneration,
+  downloadGeneratedImageBlob,
+  getImageGeneration,
+  listImageGenerations,
+  type ImageGeneration,
+  uploadReferenceImage,
+} from '../../api/image-wizard-api';
 import { MyImagesSlideOver } from './MyImagesSlideOver';
 import { Step1Templates } from './steps/Step1Templates';
 import { Step2Context } from './steps/Step2Context';
@@ -37,6 +45,17 @@ const DEFAULT_LAYOUT = {
   aspect: '1024x1024' as AspectId,
 };
 const DEFAULT_DETAILS = { audience: '', notes: '' };
+const IMAGE_EDIT_NOTES_MAX = 2000;
+
+function buildImageEditNotes(sourceNotes: string | undefined, editBlock: string): string {
+  if (editBlock.length >= IMAGE_EDIT_NOTES_MAX) {
+    return editBlock.slice(0, IMAGE_EDIT_NOTES_MAX);
+  }
+  const existing = (sourceNotes || '').trim();
+  const roomForExisting = IMAGE_EDIT_NOTES_MAX - editBlock.length - 2;
+  const trimmedExisting = existing.slice(0, Math.max(0, roomForExisting));
+  return [trimmedExisting, editBlock].filter(Boolean).join('\n\n');
+}
 
 export function ImageWizardToolView() {
   const { t } = useTranslation('apps');
@@ -199,6 +218,69 @@ export function ImageWizardToolView() {
     );
   }
 
+  async function handleImageEdit(instruction: string) {
+    if (!token || !wizard.row) return;
+    const source = wizard.row;
+    const sourceBlob = await downloadGeneratedImageBlob(token, workspaceSlug, source.id);
+    let created: ImageGeneration | null = null;
+    try {
+      created = await createImageGeneration(token, workspaceSlug, {
+        template_id: source.template_id,
+        use_case: source.use_case,
+        use_case_other: source.use_case_other,
+        style: source.style,
+        layout: source.layout,
+        details: {
+          audience: source.details?.audience || '',
+          notes: buildImageEditNotes(
+            source.details?.notes,
+            [
+              t('ai.imageWizard.step4.editImageNotesRequest', {
+                instruction: instruction.trim(),
+              }),
+              t('ai.imageWizard.step4.editImageNotesReference'),
+            ].join('\n'),
+          ),
+        },
+        context_refs: source.context_refs,
+      });
+      const sourceFile = new File([sourceBlob], `image-edit-source-${source.id}.png`, {
+        type: sourceBlob.type || 'image/png',
+      });
+      const createdId = created.id;
+      await uploadReferenceImage(token, workspaceSlug, createdId, sourceFile, 'composition');
+      const refreshed = await getImageGeneration(token, workspaceSlug, createdId);
+      wizard.applyServer(refreshed);
+      setSearchParams(
+        (current) => {
+          const params = new URLSearchParams(current);
+          params.set('gen', createdId);
+          params.set('step', '4');
+          return params;
+        },
+        { replace: false },
+      );
+    } catch (error) {
+      if (created) {
+        await deleteImageGeneration(token, workspaceSlug, created.id).catch(() => undefined);
+      }
+      throw error;
+    }
+  }
+
+  async function handleNewImage() {
+    await flushWizard();
+    setSearchParams(
+      (current) => {
+        const params = new URLSearchParams(current);
+        params.delete('gen');
+        params.set('step', '1');
+        return params;
+      },
+      { replace: false },
+    );
+  }
+
   function handleDiscard() {
     updateUrl({ gen: null, step: 1 });
   }
@@ -327,6 +409,8 @@ export function ImageWizardToolView() {
           onRowReplaced={wizard.applyServer}
           onClone={() => void handleClone()}
           onDiscard={handleDiscard}
+          onImageEdit={handleImageEdit}
+          onNewImage={() => void handleNewImage()}
         />
       );
     }
