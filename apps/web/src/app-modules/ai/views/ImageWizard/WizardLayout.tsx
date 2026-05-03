@@ -1,5 +1,5 @@
 import { useTranslation } from 'react-i18next';
-import { Check, ImageIcon, Loader2, AlertTriangle } from 'lucide-react';
+import { AlertTriangle, Check, ImageIcon, Loader2, Plus } from 'lucide-react';
 
 import type { AutosaveState, StepId } from './wizard-state';
 import { WizardStepper } from './WizardStepper';
@@ -10,6 +10,7 @@ interface WizardLayoutProps {
   autosave: AutosaveState;
   myImagesCount: number;
   onJumpStep: (step: StepId) => void;
+  onNewImage: () => void;
   onOpenMyImages: () => void;
   children: React.ReactNode;
   footer: React.ReactNode;
@@ -21,6 +22,7 @@ export function WizardLayout({
   autosave,
   myImagesCount,
   onJumpStep,
+  onNewImage,
   onOpenMyImages,
   children,
   footer,
@@ -29,8 +31,18 @@ export function WizardLayout({
   return (
     <div className="flex min-h-full flex-col bg-app-surface">
       <header className="sticky top-0 z-10 flex flex-col gap-2 border-b border-app-border bg-app-surface/95 px-6 py-3 backdrop-blur">
-        <div className="flex items-center justify-between">
-          <h1 className="app-text-heading-3 text-app-ink">{t('ai.imageWizard.title')}</h1>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-wrap items-center gap-3">
+            <h1 className="app-text-heading-3 text-app-ink">{t('ai.imageWizard.title')}</h1>
+            <button
+              type="button"
+              onClick={onNewImage}
+              className="inline-flex items-center gap-1.5 rounded-md bg-app-accent px-3 py-1.5 app-text-control-sm text-app-accent-fg transition-colors hover:bg-app-accent-hover"
+            >
+              <Plus size={14} />
+              {t('ai.imageWizard.step4.newImageAction')}
+            </button>
+          </div>
           <div className="flex items-center gap-3">
             <AutosaveIndicator state={autosave} />
             <button

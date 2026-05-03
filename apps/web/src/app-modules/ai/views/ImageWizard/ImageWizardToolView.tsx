@@ -469,7 +469,6 @@ export function ImageWizardToolView() {
           onClone={() => void handleClone()}
           onDiscard={handleDiscard}
           onImageEdit={handleImageEdit}
-          onNewImage={() => void handleNewImage()}
         />
       );
     }
@@ -503,6 +502,7 @@ export function ImageWizardToolView() {
         autosave={wizard.autosave}
         myImagesCount={myImagesCount}
         onJumpStep={handleJumpStep}
+        onNewImage={() => void handleNewImage()}
         onOpenMyImages={() => setMyImagesOpen(true)}
         footer={footer}
       >

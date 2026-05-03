@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Loader2, Plus, Sparkles } from 'lucide-react';
+import { Loader2, Sparkles } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 import { useAuth } from '@/src/platform/auth/auth-provider';
@@ -63,7 +63,6 @@ interface Step4BriefProps {
   onClone: () => void;
   onDiscard: () => void;
   onImageEdit: (instruction: string) => Promise<void>;
-  onNewImage: () => void;
 }
 
 export function Step4Brief({
@@ -73,7 +72,6 @@ export function Step4Brief({
   onClone,
   onDiscard,
   onImageEdit,
-  onNewImage,
 }: Step4BriefProps) {
   const { t } = useTranslation('apps');
   const { token } = useAuth();
@@ -335,14 +333,6 @@ export function Step4Brief({
               : t('ai.imageWizard.steps.step4.description')}
           </p>
         </div>
-        <button
-          type="button"
-          onClick={onNewImage}
-          className="inline-flex shrink-0 items-center justify-center gap-1 rounded-md border border-app-border px-3 py-2 app-text-control-sm text-app-ink hover:border-app-accent hover:text-app-accent"
-        >
-          <Plus size={14} />
-          {t('ai.imageWizard.step4.newImageAction')}
-        </button>
       </header>
 
       {error ? (
