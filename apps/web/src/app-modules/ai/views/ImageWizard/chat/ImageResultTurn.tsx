@@ -7,6 +7,8 @@ interface ImageResultTurnProps {
   loading: boolean;
   loadError: string | null;
   failureReason: string | null;
+  sourceImageUrl: string | null;
+  sourceImageLoadError: string | null;
   editingImage: boolean;
   onClone: () => void;
   onDiscard: () => void;
@@ -19,6 +21,8 @@ export function ImageResultTurn({
   loading,
   loadError,
   failureReason,
+  sourceImageUrl,
+  sourceImageLoadError,
   editingImage,
   onClone,
   onDiscard,
@@ -82,11 +86,41 @@ export function ImageResultTurn({
   if (!imageUrl) return null;
   return (
     <article className="space-y-3 rounded-lg border border-app-border bg-app-surface p-4 shadow-sm">
-      <img
-        src={imageUrl}
-        alt={t('ai.imageWizard.step4.altText')}
-        className="max-h-[480px] w-full rounded-md border border-app-border object-contain"
-      />
+      {sourceImageUrl ? (
+        <div className="grid gap-3 lg:grid-cols-2">
+          <figure className="space-y-2">
+            <figcaption className="app-text-caption font-medium text-app-ink/60">
+              {t('ai.imageWizard.step4.sourceImageLabel')}
+            </figcaption>
+            <img
+              src={sourceImageUrl}
+              alt={t('ai.imageWizard.step4.sourceImageAltText')}
+              className="max-h-[420px] w-full rounded-md border border-app-border object-contain"
+            />
+          </figure>
+          <figure className="space-y-2">
+            <figcaption className="app-text-caption font-medium text-app-ink/60">
+              {t('ai.imageWizard.step4.editedImageLabel')}
+            </figcaption>
+            <img
+              src={imageUrl}
+              alt={t('ai.imageWizard.step4.altText')}
+              className="max-h-[420px] w-full rounded-md border border-app-border object-contain"
+            />
+          </figure>
+        </div>
+      ) : (
+        <img
+          src={imageUrl}
+          alt={t('ai.imageWizard.step4.altText')}
+          className="max-h-[480px] w-full rounded-md border border-app-border object-contain"
+        />
+      )}
+      {sourceImageLoadError ? (
+        <p className="app-text-caption text-[var(--ui-color-danger)]">
+          {sourceImageLoadError}
+        </p>
+      ) : null}
       <div className="flex flex-wrap gap-2">
         <a
           href={imageUrl}

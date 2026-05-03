@@ -42,8 +42,14 @@ export function Step4Brief({
   const [error, setError] = useState<string | null>(null);
   const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
   const [imageLoadError, setImageLoadError] = useState<string | null>(null);
+  const [sourceImageUrl, setSourceImageUrl] = useState<string | null>(null);
+  const [sourceImageLoadError, setSourceImageLoadError] = useState<string | null>(null);
   const requestedInitialBriefFor = useRef<string | null>(null);
   const pollTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const sourceGenerationId =
+    typeof row.details?.source_generation_id === 'string'
+      ? row.details.source_generation_id
+      : '';
 
   // Auto-request the initial image plan on entering step 4 if there are none yet.
   useEffect(() => {
@@ -112,6 +118,36 @@ export function Step4Brief({
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
   }, [token, workspaceSlug, row.id, row.image_status, t]);
+
+  // If this generation is an edit, load the source result so the current view
+  // reads as one comparison flow instead of a disconnected new job.
+  useEffect(() => {
+    if (!token || !sourceGenerationId) {
+      setSourceImageUrl(null);
+      setSourceImageLoadError(null);
+      return;
+    }
+    let cancelled = false;
+    let objectUrl: string | null = null;
+    setSourceImageLoadError(null);
+    downloadGeneratedImageBlob(token, workspaceSlug, sourceGenerationId)
+      .then((blob) => {
+        if (cancelled) return;
+        objectUrl = URL.createObjectURL(blob);
+        setSourceImageUrl(objectUrl);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setSourceImageUrl(null);
+        setSourceImageLoadError(
+          err instanceof Error ? err.message : t('ai.imageWizard.step4.sourceImageLoadFailed'),
+        );
+      });
+    return () => {
+      cancelled = true;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [token, workspaceSlug, sourceGenerationId, t]);
 
   async function runGenerateBrief(editInstruction?: string) {
     if (!token) return;
@@ -219,6 +255,28 @@ export function Step4Brief({
         </div>
       ) : null}
 
+      {sourceImageUrl && !isFinished ? (
+        <article className="space-y-2 rounded-lg border border-app-border bg-app-surface p-4 shadow-sm">
+          <h3 className="app-text-caption font-medium text-app-ink/60">
+            {t('ai.imageWizard.step4.sourceImageLabel')}
+          </h3>
+          <img
+            src={sourceImageUrl}
+            alt={t('ai.imageWizard.step4.sourceImageAltText')}
+            className="max-h-[360px] w-full rounded-md border border-app-border object-contain"
+          />
+        </article>
+      ) : null}
+
+      {sourceImageLoadError && !isFinished ? (
+        <div
+          role="alert"
+          className="app-text-caption rounded-md border border-[var(--ui-color-danger)]/30 bg-[var(--ui-color-danger)]/10 px-3 py-2 text-[var(--ui-color-danger)]"
+        >
+          {sourceImageLoadError}
+        </div>
+      ) : null}
+
       {isGeneratingImage ? <PendingTurn status={row.image_status as 'queued' | 'running'} /> : null}
 
       {isFinished ? (
@@ -227,6 +285,8 @@ export function Step4Brief({
           loading={!downloadUrl && !imageLoadError && row.image_status === 'succeeded'}
           loadError={imageLoadError}
           failureReason={row.image_status === 'failed' ? row.failure_reason : null}
+          sourceImageUrl={sourceImageUrl}
+          sourceImageLoadError={sourceImageLoadError}
           editingImage={busy === 'image-edit'}
           onClone={onClone}
           onDiscard={onDiscard}

@@ -241,6 +241,8 @@ export function ImageWizardToolView() {
               t('ai.imageWizard.step4.editImageNotesReference'),
             ].join('\n'),
           ),
+          source_generation_id: source.id,
+          source_image_edit_instruction: instruction.trim(),
         },
         context_refs: source.context_refs,
       });

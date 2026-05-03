@@ -33,6 +33,8 @@ class DetailsPayload(BaseModel):
 
     audience: str = Field(default="", max_length=200)
     notes: str = Field(default="", max_length=2000)
+    source_generation_id: str = Field(default="", max_length=64)
+    source_image_edit_instruction: str = Field(default="", max_length=2000)
 
 
 class ContextRefSnapshot(BaseModel):
