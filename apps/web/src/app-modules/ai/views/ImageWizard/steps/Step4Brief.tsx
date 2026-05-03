@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Loader2, Sparkles } from 'lucide-react';
+import { Loader2, Plus, Sparkles } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 import { useAuth } from '@/src/platform/auth/auth-provider';
@@ -322,17 +322,27 @@ export function Step4Brief({
 
   return (
     <div className="space-y-4">
-      <header className="space-y-1">
-        <h2 className="app-text-heading-2 text-app-ink">
-          {isImageEdit
-            ? t('ai.imageWizard.steps.step4.editHeading')
-            : t('ai.imageWizard.steps.step4.heading')}
-        </h2>
-        <p className="app-text-body text-app-ink/60">
-          {isImageEdit
-            ? t('ai.imageWizard.steps.step4.editDescription')
-            : t('ai.imageWizard.steps.step4.description')}
-        </p>
+      <header className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="space-y-1">
+          <h2 className="app-text-heading-2 text-app-ink">
+            {isImageEdit
+              ? t('ai.imageWizard.steps.step4.editHeading')
+              : t('ai.imageWizard.steps.step4.heading')}
+          </h2>
+          <p className="app-text-body text-app-ink/60">
+            {isImageEdit
+              ? t('ai.imageWizard.steps.step4.editDescription')
+              : t('ai.imageWizard.steps.step4.description')}
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={onNewImage}
+          className="inline-flex shrink-0 items-center justify-center gap-1 rounded-md border border-app-border px-3 py-2 app-text-control-sm text-app-ink hover:border-app-accent hover:text-app-accent"
+        >
+          <Plus size={14} />
+          {t('ai.imageWizard.step4.newImageAction')}
+        </button>
       </header>
 
       {error ? (
@@ -432,7 +442,6 @@ export function Step4Brief({
           onClone={onClone}
           onDiscard={onDiscard}
           onEditImage={runImageEdit}
-          onNewImage={onNewImage}
         />
       ) : null}
 

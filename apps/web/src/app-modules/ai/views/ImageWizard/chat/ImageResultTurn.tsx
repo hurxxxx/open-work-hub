@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { Copy, Download, Loader2, Plus, Send, Trash2 } from 'lucide-react';
+import { Copy, Download, Expand, Loader2, Send, Trash2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { ImageLightbox } from './ImageLightbox';
 
 interface ImageResultTurnProps {
   imageUrl: string | null;
@@ -13,7 +14,6 @@ interface ImageResultTurnProps {
   onClone: () => void;
   onDiscard: () => void;
   onEditImage: (instruction: string) => Promise<void>;
-  onNewImage: () => void;
 }
 
 export function ImageResultTurn({
@@ -27,10 +27,15 @@ export function ImageResultTurn({
   onClone,
   onDiscard,
   onEditImage,
-  onNewImage,
 }: ImageResultTurnProps) {
   const { t } = useTranslation('apps');
   const [editText, setEditText] = useState('');
+  const [preview, setPreview] = useState<{
+    imageUrl: string;
+    alt: string;
+    title: string;
+    downloadName: string;
+  } | null>(null);
 
   async function submitEdit() {
     const trimmed = editText.trim();
@@ -86,35 +91,95 @@ export function ImageResultTurn({
   if (!imageUrl) return null;
   return (
     <article className="space-y-3 rounded-lg border border-app-border bg-app-surface p-4 shadow-sm">
+      {preview ? (
+        <ImageLightbox
+          imageUrl={preview.imageUrl}
+          alt={preview.alt}
+          title={preview.title}
+          downloadName={preview.downloadName}
+          onClose={() => setPreview(null)}
+        />
+      ) : null}
       {sourceImageUrl ? (
         <div className="grid gap-3 lg:grid-cols-2">
           <figure className="space-y-2">
             <figcaption className="app-text-caption font-medium text-app-ink/60">
               {t('ai.imageWizard.step4.sourceImageLabel')}
             </figcaption>
-            <img
-              src={sourceImageUrl}
-              alt={t('ai.imageWizard.step4.sourceImageAltText')}
-              className="max-h-[420px] w-full rounded-md border border-app-border object-contain"
-            />
+            <button
+              type="button"
+              onClick={() =>
+                setPreview({
+                  imageUrl: sourceImageUrl,
+                  alt: t('ai.imageWizard.step4.sourceImageAltText'),
+                  title: t('ai.imageWizard.step4.sourceImageLabel'),
+                  downloadName: 'generated-image-source.png',
+                })
+              }
+              className="group relative block w-full"
+              aria-label={t('ai.imageWizard.step4.openLargePreview')}
+            >
+              <img
+                src={sourceImageUrl}
+                alt={t('ai.imageWizard.step4.sourceImageAltText')}
+                className="max-h-[420px] w-full rounded-md border border-app-border object-contain"
+              />
+              <span className="absolute right-2 top-2 inline-flex h-8 w-8 items-center justify-center rounded-md bg-black/45 text-white opacity-0 transition-opacity group-hover:opacity-100">
+                <Expand size={15} />
+              </span>
+            </button>
           </figure>
           <figure className="space-y-2">
             <figcaption className="app-text-caption font-medium text-app-ink/60">
               {t('ai.imageWizard.step4.editedImageLabel')}
             </figcaption>
-            <img
-              src={imageUrl}
-              alt={t('ai.imageWizard.step4.altText')}
-              className="max-h-[420px] w-full rounded-md border border-app-border object-contain"
-            />
+            <button
+              type="button"
+              onClick={() =>
+                setPreview({
+                  imageUrl,
+                  alt: t('ai.imageWizard.step4.altText'),
+                  title: t('ai.imageWizard.step4.editedImageLabel'),
+                  downloadName: 'generated-image.png',
+                })
+              }
+              className="group relative block w-full"
+              aria-label={t('ai.imageWizard.step4.openLargePreview')}
+            >
+              <img
+                src={imageUrl}
+                alt={t('ai.imageWizard.step4.altText')}
+                className="max-h-[420px] w-full rounded-md border border-app-border object-contain"
+              />
+              <span className="absolute right-2 top-2 inline-flex h-8 w-8 items-center justify-center rounded-md bg-black/45 text-white opacity-0 transition-opacity group-hover:opacity-100">
+                <Expand size={15} />
+              </span>
+            </button>
           </figure>
         </div>
       ) : (
-        <img
-          src={imageUrl}
-          alt={t('ai.imageWizard.step4.altText')}
-          className="max-h-[480px] w-full rounded-md border border-app-border object-contain"
-        />
+        <button
+          type="button"
+          onClick={() =>
+            setPreview({
+              imageUrl,
+              alt: t('ai.imageWizard.step4.altText'),
+              title: t('ai.imageWizard.step4.altText'),
+              downloadName: 'generated-image.png',
+            })
+          }
+          className="group relative block w-full"
+          aria-label={t('ai.imageWizard.step4.openLargePreview')}
+        >
+          <img
+            src={imageUrl}
+            alt={t('ai.imageWizard.step4.altText')}
+            className="max-h-[480px] w-full rounded-md border border-app-border object-contain"
+          />
+          <span className="absolute right-2 top-2 inline-flex h-8 w-8 items-center justify-center rounded-md bg-black/45 text-white opacity-0 transition-opacity group-hover:opacity-100">
+            <Expand size={15} />
+          </span>
+        </button>
       )}
       {sourceImageLoadError ? (
         <p className="app-text-caption text-[var(--ui-color-danger)]">
@@ -132,14 +197,6 @@ export function ImageResultTurn({
           <Download size={14} />
           {t('ai.imageWizard.step4.downloadAction')}
         </a>
-        <button
-          type="button"
-          onClick={onNewImage}
-          className="flex items-center gap-1 rounded-md border border-app-border px-3 py-2 app-text-control-sm text-app-ink hover:border-app-accent hover:text-app-accent"
-        >
-          <Plus size={14} />
-          {t('ai.imageWizard.step4.newImageAction')}
-        </button>
         <button
           type="button"
           onClick={onDiscard}

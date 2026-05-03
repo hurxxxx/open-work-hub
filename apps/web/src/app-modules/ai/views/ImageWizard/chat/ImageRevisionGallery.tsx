@@ -1,5 +1,7 @@
-import { Download, ImageIcon } from 'lucide-react';
+import { useState } from 'react';
+import { Download, Expand, ImageIcon } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { ImageLightbox } from './ImageLightbox';
 
 export interface ImageRevisionGalleryItem {
   id: string;
@@ -16,11 +18,26 @@ interface ImageRevisionGalleryProps {
 
 export function ImageRevisionGallery({ items, loadError }: ImageRevisionGalleryProps) {
   const { t } = useTranslation('apps');
+  const [preview, setPreview] = useState<{
+    imageUrl: string;
+    alt: string;
+    title: string;
+    downloadName: string;
+  } | null>(null);
 
   if (items.length === 0 && !loadError) return null;
 
   return (
     <section className="space-y-3 rounded-lg border border-app-border bg-app-surface p-4 shadow-sm">
+      {preview ? (
+        <ImageLightbox
+          imageUrl={preview.imageUrl}
+          alt={preview.alt}
+          title={preview.title}
+          downloadName={preview.downloadName}
+          onClose={() => setPreview(null)}
+        />
+      ) : null}
       <div className="space-y-1">
         <h3 className="app-text-heading-3 text-app-ink">
           {t('ai.imageWizard.step4.revisionGalleryTitle')}
@@ -40,13 +57,33 @@ export function ImageRevisionGallery({ items, loadError }: ImageRevisionGalleryP
               className="overflow-hidden rounded-md border border-app-border bg-app-surface-sidebar"
             >
               {item.imageUrl ? (
-                <a href={item.imageUrl} target="_blank" rel="noreferrer" className="block">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const title = t('ai.imageWizard.step4.revisionLabel', {
+                      index: index + 1,
+                    });
+                    setPreview({
+                      imageUrl: item.imageUrl ?? '',
+                      alt: t('ai.imageWizard.step4.revisionImageAlt', {
+                        index: index + 1,
+                      }),
+                      title,
+                      downloadName: `generated-image-${index + 1}.png`,
+                    });
+                  }}
+                  className="group relative block w-full"
+                  aria-label={t('ai.imageWizard.step4.openLargePreview')}
+                >
                   <img
                     src={item.imageUrl}
                     alt={t('ai.imageWizard.step4.revisionImageAlt', { index: index + 1 })}
                     className="h-40 w-full object-contain"
                   />
-                </a>
+                  <span className="absolute right-2 top-2 inline-flex h-8 w-8 items-center justify-center rounded-md bg-black/45 text-white opacity-0 transition-opacity group-hover:opacity-100">
+                    <Expand size={15} />
+                  </span>
+                </button>
               ) : (
                 <div className="flex h-40 items-center justify-center text-app-ink/30">
                   <ImageIcon size={22} />
