@@ -276,10 +276,17 @@ class Settings(BaseSettings):
             "DOOWON_WORKER_IMAGE_SUPERVISOR_MODEL",
         ),
     )
+    image_agent_web_search_enabled: bool = Field(
+        default=True,
+        validation_alias=AliasChoices(
+            "DOOWON_IMAGE_AGENT_WEB_SEARCH_ENABLED",
+            "DOOWON_WORKER_IMAGE_AGENT_WEB_SEARCH_ENABLED",
+        ),
+    )
     image_agent_max_iterations: int = Field(
-        default=2,
+        default=10,
         ge=1,
-        le=8,
+        le=20,
         validation_alias=AliasChoices(
             "DOOWON_IMAGE_AGENT_MAX_ITER",
             "DOOWON_WORKER_IMAGE_AGENT_MAX_ITER",

@@ -462,14 +462,23 @@ async def _run_agent(
     style: dict[str, Any],
     layout: dict[str, Any],
     reference_images: list[tuple[str, str, bytes]],
-    max_iterations: int,
+    max_turns: int,
     supervisor_model: str,
     image_model: str,
     api_key: str,
     base_url: str,
+    enable_web_search: bool,
 ) -> Any:
     # Local import so plain DB-only tests can run without the SDK installed.
-    from agents import Agent, ImageGenerationTool, OpenAIProvider, RunConfig, Runner
+    from agents import (
+        Agent,
+        ImageGenerationTool,
+        ModelSettings,
+        OpenAIProvider,
+        RunConfig,
+        Runner,
+        WebSearchTool,
+    )
 
     size = _normalize_size(str((layout or {}).get("aspect") or ""))
     background = _normalize_background_for_model(
@@ -493,7 +502,12 @@ async def _run_agent(
         name="infographic-illustrator",
         instructions=ILLUSTRATOR_SYSTEM_PROMPT,
         model=supervisor_model,
-        tools=[tool],
+        model_settings=ModelSettings(tool_choice="auto"),
+        tools=(
+            [WebSearchTool(search_context_size="high"), tool]
+            if enable_web_search
+            else [tool]
+        ),
     )
     input_items = _build_agent_input_items(
         brief_text=brief_text,
@@ -513,7 +527,7 @@ async def _run_agent(
     return await Runner.run(
         agent,
         input=input_items,
-        max_turns=max_iterations + 1,
+        max_turns=max_turns,
         run_config=run_config,
     )
 
@@ -575,11 +589,12 @@ def generate_image(self, generation_id: str) -> str:
                     style=row.style or {},
                     layout=row.layout or {},
                     reference_images=reference_images,
-                    max_iterations=settings.image_agent_max_iterations,
+                    max_turns=settings.image_agent_max_iterations,
                     supervisor_model=settings.image_supervisor_model,
                     image_model=settings.image_model,
                     api_key=api_key,
                     base_url=settings.image_base_url,
+                    enable_web_search=settings.image_agent_web_search_enabled,
                 ),
                 timeout=settings.image_request_timeout_seconds,
             )

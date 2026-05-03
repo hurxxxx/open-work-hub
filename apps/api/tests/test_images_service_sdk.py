@@ -154,3 +154,4 @@ def test_build_direct_edit_prompt_uses_instruction_without_placeholders() -> Non
     assert "배경을 더 밝게" in prompt
     assert "<metric>" not in prompt
     assert "composition 참고 이미지" in prompt
+    assert "사용 가능한 도구" in prompt

@@ -280,6 +280,8 @@ def build_direct_edit_prompt(*, edit_instruction: str, style: dict[str, Any]) ->
         f"반영하세요. {style_summary}\n"
         "화면 텍스트: 원본의 텍스트를 유지하고, 사용자가 명시적으로 요청한 텍스트 변경만 "
         "적용하세요.\n"
+        "정보 보강: 요청을 수행하는 데 필요한 정보가 제공되지 않았거나 최신성/사실 확인이 "
+        "필요하면 사용 가능한 도구로 확인하고, 확인된 값만 반영하세요.\n"
         "주의: 숫자, 이름, 날짜, 로고, 사실관계는 임의로 새로 만들지 마세요."
     )
 
@@ -295,7 +297,10 @@ ILLUSTRATOR_SYSTEM_PROMPT = (
     "guidance only - do not copy them literally unless their role is "
     "'composition'. If a template sample reference image is present, use it for "
     "layout, polish, hierarchy, and visual style only; do not copy its filler "
-    "text, numbers, logos, or sample facts. Never render placeholder tokens, "
+    "text, numbers, logos, or sample facts. Use available tools autonomously "
+    "before calling image_generation when the approved plan or edit instruction "
+    "needs information that is missing, stale, or externally verifiable. Never "
+    "render placeholder tokens, "
     "angle-bracket labels, or "
     "raw template words for metrics, statuses, priorities, description text, "
     "or internal template IDs. If the approved plan includes exact metrics, "
