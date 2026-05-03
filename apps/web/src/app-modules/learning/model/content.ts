@@ -3,10 +3,26 @@
 // courses added under `learning/<course-slug>/` are picked up with no
 // loader changes. The top-level `README.md` is excluded since it is a
 // content-author guide, not a lesson body.
-const modules = import.meta.glob('../../../../../../learning/**/*.md', {
-  query: '?raw',
-  import: 'default',
-}) as Record<string, () => Promise<string>>;
+const modules = import.meta.glob(
+  [
+    '../../../../../../learning/**/*.md',
+    '!../../../../../../learning/README.md',
+    '!../../../../../../learning/**/assets/**/*.md',
+  ],
+  {
+    query: '?raw',
+    import: 'default',
+  },
+) as Record<string, () => Promise<string>>;
+
+const assetModules = import.meta.glob(
+  '../../../../../../learning/**/assets/**/*.{gif,jpeg,jpg,png,svg,webp}',
+  {
+    query: '?url',
+    import: 'default',
+    eager: true,
+  },
+) as Record<string, string>;
 
 // Keys are keyed by path relative to `learning/` (e.g.
 // `vibe-coding-foundations/01-오리엔테이션.md`) so the manifest can
@@ -24,6 +40,14 @@ for (const [absPath, loadBody] of Object.entries(modules)) {
   byRelativePath[relative] = loadBody;
 }
 
+const assetByRelativePath: Record<string, string> = {};
+for (const [absPath, assetUrl] of Object.entries(assetModules)) {
+  const markerIndex = absPath.lastIndexOf(LEARNING_DIR_MARKER);
+  if (markerIndex < 0) continue;
+  const relative = absPath.slice(markerIndex + LEARNING_DIR_MARKER.length);
+  assetByRelativePath[relative] = assetUrl;
+}
+
 export async function loadLessonBody(file: string): Promise<string | null> {
   const loadBody = byRelativePath[file];
   if (!loadBody) return null;
@@ -32,4 +56,32 @@ export async function loadLessonBody(file: string): Promise<string | null> {
 
 export function listAvailableLessonFiles(): string[] {
   return Object.keys(byRelativePath).sort();
+}
+
+const ABSOLUTE_OR_SPECIAL_SRC = /^(?:[a-z][a-z\d+.-]*:|\/\/|\/)/i;
+
+function normalizeRelativePath(path: string): string {
+  const segments: string[] = [];
+  for (const segment of path.split('/')) {
+    if (!segment || segment === '.') continue;
+    if (segment === '..') {
+      segments.pop();
+      continue;
+    }
+    segments.push(segment);
+  }
+  return segments.join('/');
+}
+
+export function resolveLessonAsset(lessonFile: string, src: string | undefined): string | undefined {
+  if (!src || ABSOLUTE_OR_SPECIAL_SRC.test(src)) return src;
+
+  const suffixStart = src.search(/[?#]/);
+  const pathPart = suffixStart >= 0 ? src.slice(0, suffixStart) : src;
+  const suffix = suffixStart >= 0 ? src.slice(suffixStart) : '';
+  const lessonDir = lessonFile.slice(0, lessonFile.lastIndexOf('/') + 1);
+  const resolvedPath = normalizeRelativePath(`${lessonDir}${pathPart}`);
+  const assetUrl = assetByRelativePath[resolvedPath];
+
+  return assetUrl ? `${assetUrl}${suffix}` : src;
 }

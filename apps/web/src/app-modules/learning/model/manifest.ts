@@ -32,6 +32,7 @@ export interface LearningCourse {
 }
 
 const VCF = 'vibe-coding-foundations';
+const DSB = 'database-storage-basics';
 const SLJ = 'service-launch-journey';
 
 export const LEARNING_COURSES: LearningCourse[] = [
@@ -100,6 +101,42 @@ export const LEARNING_COURSES: LearningCourse[] = [
         title: '부록',
         lessons: [
           { id: 'vcf-appendix-a-glossary', slug: 'appendix-a-glossary', title: '부록 A — 용어 사전', file: `${VCF}/A-용어사전.md` },
+        ],
+      },
+    ],
+  },
+  {
+    slug: DSB,
+    title: '데이터베이스 입문 — 저장소를 고르는 법',
+    description:
+      'SQL, NoSQL, 캐시, 검색, 벡터 DB, 객체 저장소까지 초보자 눈높이로 비교하며 처음 서비스의 저장소 선택 기준을 익힙니다.',
+    parts: [
+      {
+        slug: 'intro',
+        title: '시작하기',
+        lessons: [
+          { id: 'dsb-000-index', slug: '00-index', title: '목차', file: `${DSB}/00-index.md` },
+        ],
+      },
+      {
+        slug: 'storage-types',
+        title: '저장소 종류 이해',
+        lessons: [
+          { id: 'dsb-001-why-database', slug: '01-why-database', title: '데이터베이스가 필요한 이유', file: `${DSB}/01-데이터베이스가-필요한-이유.md` },
+          { id: 'dsb-002-relational-sql', slug: '02-relational-sql', title: '관계형 DB와 SQL', file: `${DSB}/02-관계형-DB와-SQL.md` },
+          { id: 'dsb-003-document-nosql', slug: '03-document-nosql', title: 'Document DB와 NoSQL', file: `${DSB}/03-Document-DB와-NoSQL.md` },
+          { id: 'dsb-004-key-value-cache', slug: '04-key-value-cache', title: 'Key-Value와 캐시', file: `${DSB}/04-Key-Value와-캐시.md` },
+          { id: 'dsb-005-column-analytics', slug: '05-column-analytics', title: 'Wide-column, columnar, 분석용 저장소', file: `${DSB}/05-Wide-column-columnar-분석용-저장소.md` },
+          { id: 'dsb-006-graph-time-series', slug: '06-graph-time-series', title: 'Graph DB와 Time-series DB', file: `${DSB}/06-Graph-DB와-Time-series-DB.md` },
+          { id: 'dsb-007-distributed-cloud', slug: '07-distributed-cloud', title: 'Distributed DB와 클라우드 DB', file: `${DSB}/07-Distributed-DB와-클라우드-DB.md` },
+          { id: 'dsb-008-search-vector-object', slug: '08-search-vector-object', title: 'Search DB, Vector DB, Object Storage', file: `${DSB}/08-Search-Vector-Object-Storage.md` },
+        ],
+      },
+      {
+        slug: 'decision',
+        title: '선택 기준',
+        lessons: [
+          { id: 'dsb-009-selection-checklist', slug: '09-selection-checklist', title: '처음 서비스에서 DB를 고르는 체크리스트', file: `${DSB}/09-처음-서비스에서-DB를-고르는-체크리스트.md` },
         ],
       },
     ],

@@ -139,6 +139,19 @@
     @apply text-app-ink/50 dark:text-app-ink/60;
   }
 
+  .learning-markdown-logo {
+    display: inline-block;
+    width: auto;
+    max-width: 11rem;
+    max-height: 2.5rem;
+    margin: 0.25rem 0.75rem 0.25rem 0;
+    vertical-align: middle;
+  }
+
+  td .learning-markdown-logo {
+    max-height: 2.25rem;
+  }
+
   /*
    * Learning page-note typography helpers. Stackable:
    *

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { motion } from 'motion/react';
 import { useTranslation } from 'react-i18next';
 import { Link, Navigate, useParams } from 'react-router-dom';
-import ReactMarkdown from 'react-markdown';
+import ReactMarkdown, { type Components } from 'react-markdown';
 import rehypeHighlight from 'rehype-highlight';
 import remarkGfm from 'remark-gfm';
 import {
@@ -20,7 +20,7 @@ import {
   type LearningCourse,
   type LearningLesson,
 } from '../model/manifest';
-import { loadLessonBody } from '../model/content';
+import { loadLessonBody, resolveLessonAsset } from '../model/content';
 import { useAuth } from '@/src/platform/auth/auth-provider';
 import { normalizeTimeZone } from '@/src/platform/time/time-utils';
 import { LearningPageNotesPanel } from './learning-notes/LearningPageNotesPanel';
@@ -154,6 +154,23 @@ function LessonLayout({
     ? ''
     : 'xl:col-start-2 xl:row-start-1 xl:sticky xl:top-6 xl:self-start xl:max-h-[calc(100vh-3rem)] xl:overflow-y-auto';
 
+  const markdownComponents: Components = {
+    img({ src, alt, ...props }) {
+      const className = src?.includes('assets/logos/')
+        ? 'learning-markdown-logo'
+        : undefined;
+      return (
+        <img
+          {...props}
+          src={resolveLessonAsset(lesson.file, src)}
+          alt={alt ?? ''}
+          className={className}
+          loading="lazy"
+        />
+      );
+    },
+  };
+
   return (
     <motion.div
       ref={rootRef}
@@ -200,7 +217,11 @@ function LessonLayout({
               data-testid={`learning-lesson-body-${lesson.slug}`}
               className="app-markdown prose prose-base max-w-none dark:prose-invert lg:prose-lg"
             >
-              <ReactMarkdown remarkPlugins={REMARK_PLUGINS} rehypePlugins={REHYPE_PLUGINS}>
+              <ReactMarkdown
+                remarkPlugins={REMARK_PLUGINS}
+                rehypePlugins={REHYPE_PLUGINS}
+                components={markdownComponents}
+              >
                 {body}
               </ReactMarkdown>
             </div>

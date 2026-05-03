@@ -24,6 +24,7 @@ const manifestHarness = vi.hoisted(() => ({
 
 const contentHarness = vi.hoisted(() => ({
   bodies: {} as Record<string, string>,
+  assets: {} as Record<string, string>,
 }));
 
 vi.mock('../model/manifest', async () => {
@@ -52,6 +53,8 @@ vi.mock('../model/manifest', async () => {
 vi.mock('../model/content', () => ({
   loadLessonBody: async (file: string) => contentHarness.bodies[file] ?? null,
   listAvailableLessonFiles: () => Object.keys(contentHarness.bodies),
+  resolveLessonAsset: (_lessonFile: string, src: string | undefined) =>
+    src ? (contentHarness.assets[src] ?? src) : src,
 }));
 
 function LocationProbe() {
@@ -110,6 +113,7 @@ describe('LearningCourseView', () => {
       's.md': '# 두 번째 레슨 본문\n\n내용 2.',
       't.md': '# 세 번째 레슨 본문\n\n내용 3.',
     };
+    contentHarness.assets = {};
   });
 
   it('renders the selected lesson body and wires prev/next across part boundaries', async () => {
@@ -164,6 +168,27 @@ describe('LearningCourseView', () => {
     await screen.findByTestId('learning-lesson-body-second');
 
     expect(screen.getByTestId('learning-page-notes-panel-tc-002')).toBeTruthy();
+  });
+
+  it('resolves relative markdown image assets and leaves external image URLs alone', async () => {
+    contentHarness.bodies['s.md'] = [
+      '# 이미지 레슨',
+      '',
+      '![상대 이미지](assets/diagram.png)',
+      '![외부 이미지](https://example.com/logo.svg)',
+    ].join('\n');
+    contentHarness.assets['assets/diagram.png'] = '/assets/diagram.hashed.png';
+
+    renderAt('/w/hq/learning/course/second');
+    await screen.findByTestId('learning-lesson-body-second');
+
+    expect(screen.getByAltText('상대 이미지').getAttribute('src')).toBe(
+      '/assets/diagram.hashed.png',
+    );
+    expect(screen.getByAltText('상대 이미지').getAttribute('loading')).toBe('lazy');
+    expect(screen.getByAltText('외부 이미지').getAttribute('src')).toBe(
+      'https://example.com/logo.svg',
+    );
   });
 
   // Course/part/lesson navigation has moved to the app sub-sidebar
