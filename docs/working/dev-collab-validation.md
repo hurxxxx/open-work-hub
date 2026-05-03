@@ -36,6 +36,32 @@
 - API listens on `127.0.0.1:8000` with `DOOWON_API_INSTANCE_ID=remote-api`.
 - Web listens on `0.0.0.0:4200` through Vite and proxies `/api` to `127.0.0.1:8000`.
 
+### Docker Host Networking on VM
+
+Verified on 2026-05-03:
+
+- The VM Docker daemon exposes the built-in host network:
+  `sudo -n docker network inspect host --format '{{.Name}} {{.Driver}} {{.Scope}}'`
+  returns `host host local`.
+- A container started with `--network host` can bind directly on the VM loopback
+  interface and be reached from the host without `-p` port publishing. The smoke
+  check used an Alpine container listening on `127.0.0.1:59999` and `curl
+  http://127.0.0.1:59999/` returned `ok`.
+- `AIDOO_ENV_PROFILE=vm` selects `compose.dev.host.yml`; all infra services in
+  that compose file use `network_mode: host`.
+- Because host networking ignores Docker port publishing, infra containers must
+  explicitly listen on the configured host ports:
+  - Postgres runs with `postgres -c port=$DOOWON_DEV_POSTGRES_PORT`.
+  - Redis runs with `redis-server --port $DOOWON_DEV_REDIS_PORT`.
+  - MinIO uses `--address :$DOOWON_DEV_MINIO_PORT` and
+    `--console-address :$DOOWON_DEV_MINIO_CONSOLE_PORT`.
+- API pytest Docker fixtures follow the same convention when
+  `AIDOO_ENV_PROFILE=vm` or `AIDOO_TEST_DOCKER_NETWORK=host` is set: they pass
+  `--network host`, skip `-p`, and start each service on the selected host port.
+- The current user cannot access `/var/run/docker.sock` directly on this VM, so
+  VM commands should either run through the repo helpers (`dev_docker`) or use
+  `sudo -n docker`.
+
 Use this runner for the current public preview:
 
 - `pnpm vm:app:deploy` builds web, restarts API/web, and prints route checks.

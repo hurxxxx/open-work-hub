@@ -366,121 +366,125 @@ export function RecordingView() {
         </Button>
       </header>
 
-      <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[360px_minmax(0,1fr)]">
-        <section className="border-b border-app-border bg-app-surface px-6 py-6 lg:border-b-0 lg:border-r">
-          <div className="space-y-5">
-            <div>
-              <p className="app-text-title-sm text-app-ink">{t('apps:recording.quick.title')}</p>
-              <p className="app-text-caption mt-1 text-app-ink/60">
-                {browserSupported
-                  ? t('apps:recording.quick.browserSupported')
-                  : t('apps:recording.quick.browserUnsupported')}
-              </p>
-            </div>
+      <main className="min-h-0 flex-1 overflow-y-auto px-6 py-6">
+        <div className="mx-auto w-full max-w-6xl space-y-6">
+          <section className="border-b border-app-border pb-6">
+            <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_220px] lg:items-end">
+              <div className="space-y-4">
+                <div>
+                  <p className="app-text-title-sm text-app-ink">{t('apps:recording.quick.title')}</p>
+                  <p className="app-text-caption mt-1 text-app-ink/60">
+                    {browserSupported
+                      ? t('apps:recording.quick.browserSupported')
+                      : t('apps:recording.quick.browserUnsupported')}
+                  </p>
+                </div>
 
-            <label className="block">
-              <span className="app-text-caption mb-1 block text-app-ink/60">
-                {t('apps:recording.quick.titleLabel')}
-              </span>
-              <input
-                value={titleDraft}
-                onChange={(event) => setTitleDraft(event.target.value)}
-                disabled={isRecording || isWorking}
-                placeholder={t('apps:recording.quick.titlePlaceholder')}
-                className="w-full rounded-md border border-app-border bg-app-surface-raised px-3 py-2 text-sm text-app-ink outline-none transition-colors placeholder:text-app-ink/35 focus:border-app-accent"
-              />
-            </label>
+                <label className="block max-w-2xl">
+                  <span className="app-text-caption mb-1 block text-app-ink/60">
+                    {t('apps:recording.quick.titleLabel')}
+                  </span>
+                  <input
+                    value={titleDraft}
+                    onChange={(event) => setTitleDraft(event.target.value)}
+                    disabled={isRecording || isWorking}
+                    placeholder={t('apps:recording.quick.titlePlaceholder')}
+                    className="w-full rounded-md border border-app-border bg-app-surface-raised px-3 py-2 text-sm text-app-ink outline-none transition-colors placeholder:text-app-ink/35 focus:border-app-accent"
+                  />
+                </label>
 
-            <div className="flex flex-col items-center gap-4 py-4">
-              <button
-                type="button"
-                onClick={() => (isRecording ? handleStop() : void handleStart())}
-                disabled={!browserSupported || isWorking}
-                aria-label={isRecording ? t('apps:recording.quick.stop') : t('apps:recording.quick.start')}
-                className="flex h-32 w-32 items-center justify-center rounded-full border border-app-accent/30 bg-app-accent text-app-accent-fg shadow-sm transition-transform hover:scale-[1.02] hover:bg-app-accent-hover disabled:scale-100 disabled:opacity-60"
-              >
-                {isWorking ? (
-                  <Loader2 size={34} className="animate-spin" />
-                ) : isRecording ? (
-                  <Square size={34} />
-                ) : (
-                  <Mic size={38} />
-                )}
-              </button>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    variant="secondary"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={isRecording || isWorking}
+                  >
+                    <Upload size={14} className="mr-1" />
+                    {t('apps:recording.quick.uploadAudio')}
+                  </Button>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="audio/*"
+                    className="hidden"
+                    onChange={handleFileSelect}
+                  />
+                </div>
+              </div>
 
-              <div className="text-center">
-                <p className="app-text-title-md tabular-nums text-app-ink">
-                  {formatElapsed(elapsedSec)}
-                </p>
-                <p className="app-text-caption text-app-ink/60">
-                  {t(`apps:recording.quick.state.${recorderState}`)}
-                </p>
+              <div className="flex items-center gap-4 lg:flex-col lg:items-center">
+                <button
+                  type="button"
+                  onClick={() => (isRecording ? handleStop() : void handleStart())}
+                  disabled={!browserSupported || isWorking}
+                  aria-label={isRecording ? t('apps:recording.quick.stop') : t('apps:recording.quick.start')}
+                  className="flex h-28 w-28 shrink-0 items-center justify-center rounded-full border border-app-accent/30 bg-app-accent text-app-accent-fg shadow-sm transition-transform hover:scale-[1.02] hover:bg-app-accent-hover disabled:scale-100 disabled:opacity-60"
+                >
+                  {isWorking ? (
+                    <Loader2 size={30} className="animate-spin" />
+                  ) : isRecording ? (
+                    <Square size={30} />
+                  ) : (
+                    <Mic size={34} />
+                  )}
+                </button>
+
+                <div className="min-w-0 lg:text-center">
+                  <p className="app-text-title-md tabular-nums text-app-ink">
+                    {formatElapsed(elapsedSec)}
+                  </p>
+                  <p className="app-text-caption text-app-ink/60">
+                    {t(`apps:recording.quick.state.${recorderState}`)}
+                  </p>
+                </div>
               </div>
             </div>
+          </section>
 
-            <div className="flex flex-wrap gap-2">
-              <Button
-                variant="secondary"
-                onClick={() => fileInputRef.current?.click()}
-                disabled={isRecording || isWorking}
-              >
-                <Upload size={14} className="mr-1" />
-                {t('apps:recording.quick.uploadAudio')}
-              </Button>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="audio/*"
-                className="hidden"
-                onChange={handleFileSelect}
-              />
+          <section>
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <div>
+                <p className="app-text-title-sm text-app-ink">{t('apps:recording.list.title')}</p>
+                <p className="app-text-caption text-app-ink/60">
+                  {t('apps:recording.list.count', { count: items.length })}
+                </p>
+              </div>
+              {loading ? <Loader2 size={18} className="animate-spin text-app-ink/40" /> : null}
             </div>
-          </div>
-        </section>
 
-        <section className="min-h-0 overflow-y-auto px-6 py-6">
-          <div className="mb-4 flex items-center justify-between gap-3">
-            <div>
-              <p className="app-text-title-sm text-app-ink">{t('apps:recording.list.title')}</p>
-              <p className="app-text-caption text-app-ink/60">
-                {t('apps:recording.list.count', { count: items.length })}
-              </p>
-            </div>
-            {loading ? <Loader2 size={18} className="animate-spin text-app-ink/40" /> : null}
-          </div>
+            {error ? (
+              <div className="mb-4 flex items-start gap-2 rounded-md border border-[var(--ui-color-danger)]/30 bg-[var(--ui-color-danger)]/5 px-3 py-2 text-sm text-[var(--ui-color-danger)]">
+                <AlertCircle size={16} className="mt-0.5 shrink-0" />
+                <span>{error}</span>
+              </div>
+            ) : null}
 
-          {error ? (
-            <div className="mb-4 flex items-start gap-2 rounded-md border border-[var(--ui-color-danger)]/30 bg-[var(--ui-color-danger)]/5 px-3 py-2 text-sm text-[var(--ui-color-danger)]">
-              <AlertCircle size={16} className="mt-0.5 shrink-0" />
-              <span>{error}</span>
-            </div>
-          ) : null}
-
-          {items.length === 0 && !loading ? (
-            <div className="flex h-64 flex-col items-center justify-center gap-2 text-app-ink/60">
-              <AudioWaveform size={30} className="text-app-ink/30" />
-              <p className="app-text-body">{t('apps:recording.list.empty')}</p>
-            </div>
-          ) : (
-            <div className="grid gap-3">
-              {items.map((recording) => (
-                <RecordingListItem
-                  key={recording.id}
-                  busy={busyId === recording.id}
-                  locale={i18n.language}
-                  playbackUrl={playbackUrls[recording.id]}
-                  recording={recording}
-                  detailHref={buildWorkspaceAppPath(workspaceSlug, 'recording', recording.id)}
-                  timeZone={timeZone}
-                  onDelete={() => void handleDelete(recording)}
-                  onPlay={() => void handlePlayback(recording)}
-                  onRetry={() => void handleRetry(recording)}
-                />
-              ))}
-            </div>
-          )}
-        </section>
-      </div>
+            {items.length === 0 && !loading ? (
+              <div className="flex h-64 flex-col items-center justify-center gap-2 text-app-ink/60">
+                <AudioWaveform size={30} className="text-app-ink/30" />
+                <p className="app-text-body">{t('apps:recording.list.empty')}</p>
+              </div>
+            ) : (
+              <div className="grid gap-3">
+                {items.map((recording) => (
+                  <RecordingListItem
+                    key={recording.id}
+                    busy={busyId === recording.id}
+                    locale={i18n.language}
+                    playbackUrl={playbackUrls[recording.id]}
+                    recording={recording}
+                    detailHref={buildWorkspaceAppPath(workspaceSlug, 'recording', recording.id)}
+                    timeZone={timeZone}
+                    onDelete={() => void handleDelete(recording)}
+                    onPlay={() => void handlePlayback(recording)}
+                    onRetry={() => void handleRetry(recording)}
+                  />
+                ))}
+              </div>
+            )}
+          </section>
+        </div>
+      </main>
 
       {confirmDialog}
     </div>
