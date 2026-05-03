@@ -191,7 +191,7 @@ def _run_brief_agent(
     return Runner.run_sync(
         agent,
         input=input_text,
-        max_turns=4,
+        max_turns=10,
         run_config=run_config,
     )
 

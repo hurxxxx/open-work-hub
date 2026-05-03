@@ -65,7 +65,7 @@ def test_run_brief_agent_uses_agents_sdk_provider(monkeypatch) -> None:
     assert captured["agent"].model_settings.tool_choice == "auto"
     assert [tool.name for tool in captured["agent"].tools] == ["web_search"]
     assert captured["input"] == "brief context"
-    assert captured["max_turns"] == 4
+    assert captured["max_turns"] == 10
     assert type(captured["run_config"].model_provider).__name__ == "OpenAIProvider"
     assert captured["run_config"].workflow_name == "AIDOO Image Plan"
 
