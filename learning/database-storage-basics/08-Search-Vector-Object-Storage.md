@@ -2,7 +2,7 @@
 
 > **한 줄 요약.** 키워드 검색, 의미 기반 AI 검색, 큰 파일 저장은 일반 DB의 보조 저장소로 분리해서 생각하는 편이 안전하다.
 
-영상에는 직접 나오지 않지만, 현대 서비스에서 초보자가 자주 만나는 저장소가 세 가지 더 있습니다. Search DB, Vector DB, Object Storage입니다.
+현대 서비스에서 초보자가 자주 만나는 보조 저장소가 세 가지 더 있습니다. Search DB, Vector DB, Object Storage입니다.
 
 ## Search DB
 
@@ -63,4 +63,3 @@ Vector DB는 텍스트나 이미지를 숫자 배열인 embedding으로 바꾼 �
 OpenSearch, pgvector, Qdrant, MinIO/S3를 각각 어떤 역할로 둘지 설명하고,
 원본 DB와 보조 인덱스의 동기화 실패 시 복구 방법도 포함해 줘.
 ```
-

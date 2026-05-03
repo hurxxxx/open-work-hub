@@ -142,14 +142,26 @@
   .learning-markdown-logo {
     display: inline-block;
     width: auto;
-    max-width: 11rem;
-    max-height: 2.5rem;
+    max-width: 12rem;
+    max-height: 2.75rem;
     margin: 0.25rem 0.75rem 0.25rem 0;
+    padding: 0.45rem 0.65rem;
+    border: 1px solid rgba(15, 23, 42, 0.12);
+    border-radius: 0.375rem;
+    background: #fff;
+    object-fit: contain;
     vertical-align: middle;
+    box-sizing: content-box;
   }
 
   td .learning-markdown-logo {
     max-height: 2.25rem;
+    margin: 0.125rem 0;
+  }
+
+  :where(.dark, .dark *) .learning-markdown-logo {
+    border-color: rgba(255, 255, 255, 0.18);
+    background: #fff;
   }
 
   /*

@@ -2,7 +2,7 @@
 
 > **한 줄 요약.** 데이터베이스 선택은 제품 이름 맞히기가 아니라 **데이터의 모양, 질문 방식, 지켜야 할 약속**을 맞추는 일이다.
 
-이 과정은 YouTube 영상 [Every Database Explained in 5 Minutes](https://www.youtube.com/watch?v=7a80SSm-1y4)를 출발점으로 삼아, 처음 서비스를 만드는 사람이 데이터 저장소를 큰 그림으로 이해하도록 재구성했습니다. 영상에 나온 SQL, NoSQL, Key-Value, Column, Graph, Time-series, Distributed DB에 더해 검색 DB, 벡터 DB, 객체 저장소까지 함께 봅니다.
+이 과정은 처음 서비스를 만드는 사람이 데이터 저장소를 큰 그림으로 이해하도록 구성했습니다. SQL, NoSQL, Key-Value, Column, Graph, Time-series, Distributed DB에 더해 검색 DB, 벡터 DB, 객체 저장소까지 함께 봅니다.
 
 ![데이터베이스 종류 지도](assets/diagrams/01-database-map.png)
 
@@ -33,17 +33,25 @@
 | 8 | Search DB, Vector DB, Object Storage | 검색, AI 검색, 파일 저장은 왜 DB와 다르게 본다 |
 | 9 | DB 선택 체크리스트 | 처음 서비스에서는 무엇부터 고르면 되는가 |
 
-## 대표 로고 모음
+## 대표 데이터베이스 모음
 
-아래 로고는 공식 브랜드 페이지, 공식 아이콘 패키지, Apache 저장소, SQLite 공식 사이트 등에서 가져온 자산입니다. 사용 조건은 `assets/ATTRIBUTION.md`에 따로 기록했습니다.
+아래 로고는 공식 브랜드 페이지, 공식 아이콘 패키지, Apache 저장소, SQLite 공식 사이트 등에서 가져온 자산입니다. 사용 조건은 `assets/ATTRIBUTION.md`에 따로 기록했습니다. 로고는 다크모드에서도 보이도록 밝은 배경 타일 안에 표시합니다.
 
-| 계열 | 대표 제품 |
-| --- | --- |
-| 관계형 DB | ![PostgreSQL](assets/logos/postgresql.svg) ![SQLite](assets/logos/sqlite.svg) ![Google Cloud SQL](assets/logos/google-cloud-sql.svg) |
-| 문서/NoSQL | ![MongoDB](assets/logos/mongodb.png) ![Firebase](assets/logos/firebase.svg) |
-| Key-Value/캐시 | ![Redis](assets/logos/redis.png) ![Amazon DynamoDB](assets/logos/amazon-dynamodb.svg) |
-| Wide-column/분산 | ![Apache Cassandra](assets/logos/cassandra.svg) ![Google Cloud Spanner](assets/logos/google-cloud-spanner.svg) |
-| 검색/벡터/파일 | ![OpenSearch](assets/logos/opensearch.svg) ![Qdrant](assets/logos/qdrant.svg) ![MinIO](assets/logos/minio.svg) ![Amazon S3](assets/logos/amazon-s3.svg) |
+| 계열 | 데이터베이스 | 로고 |
+| --- | --- | --- |
+| 관계형 DB | PostgreSQL | ![PostgreSQL](assets/logos/postgresql.svg) |
+| 관계형 DB | SQLite | ![SQLite](assets/logos/sqlite.svg) |
+| 관계형 DB | Google Cloud SQL | ![Google Cloud SQL](assets/logos/google-cloud-sql.svg) |
+| 문서/NoSQL | MongoDB | ![MongoDB](assets/logos/mongodb.png) |
+| 문서/NoSQL | Firebase | ![Firebase](assets/logos/firebase.svg) |
+| Key-Value/캐시 | Redis | ![Redis](assets/logos/redis.png) |
+| Key-Value/캐시 | Amazon DynamoDB | ![Amazon DynamoDB](assets/logos/amazon-dynamodb.svg) |
+| Wide-column/분산 | Apache Cassandra | ![Apache Cassandra](assets/logos/cassandra.svg) |
+| Wide-column/분산 | Google Cloud Spanner | ![Google Cloud Spanner](assets/logos/google-cloud-spanner.svg) |
+| 검색/벡터/파일 | OpenSearch | ![OpenSearch](assets/logos/opensearch.svg) |
+| 검색/벡터/파일 | Qdrant | ![Qdrant](assets/logos/qdrant.svg) |
+| 검색/벡터/파일 | MinIO | ![MinIO](assets/logos/minio.svg) |
+| 검색/벡터/파일 | Amazon S3 | ![Amazon S3](assets/logos/amazon-s3.svg) |
 
 ## 수업에서 계속 묻는 질문
 

@@ -2,7 +2,7 @@
 
 > **한 줄 요약.** 많은 데이터를 빠르게 분석하려면, 데이터를 행 중심으로 볼지 열 중심으로 볼지부터 달라진다.
 
-영상에서는 column-based database를 "많은 데이터에서 특정 열만 빠르게 읽는 구조"로 설명합니다. 여기서 초보자가 헷갈리는 지점이 있습니다. Wide-column DB와 columnar analytics DB는 이름은 비슷하지만 목적이 다릅니다.
+Column-based database는 많은 데이터에서 특정 열만 빠르게 읽는 구조입니다. 여기서 초보자가 헷갈리는 지점이 있습니다. Wide-column DB와 columnar analytics DB는 이름은 비슷하지만 목적이 다릅니다.
 
 ![행 저장, 열 저장, Wide-column 비교](assets/diagrams/06-column-storage.png)
 
@@ -48,4 +48,3 @@
 관리자 화면에서는 날짜별 클릭 수, 기능별 사용량, 전환율을 봐야 해.
 PostgreSQL만으로 시작할 수 있는 기준과, BigQuery/ClickHouse 같은 분석 저장소로 분리해야 하는 신호를 알려 줘.
 ```
-
