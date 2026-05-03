@@ -4,7 +4,7 @@ from datetime import UTC, datetime, time
 from typing import Any
 import uuid
 
-from sqlalchemy import select
+from sqlalchemy import inspect, select
 from sqlalchemy.orm import Session, selectinload
 
 from aidoo_api.domains.auth.models import Team, Workspace
@@ -12,6 +12,7 @@ from aidoo_api.domains.docs.models import DocMeetingAccess, NativeDoc
 from aidoo_api.domains.meeting.models import Meeting, MeetingAttendee, MeetingRecording
 from aidoo_api.domains.pms.models import Issue, IssueComment, IssueLabel, IssueUserAccess, TaskList, TaskListStatus
 from aidoo_api.domains.planner.models import PlannerEvent
+from aidoo_api.domains.recording.models import Recording, RecordingContainer
 from aidoo_api.domains.search.schemas import SearchEntityType
 
 
@@ -199,11 +200,8 @@ def _meeting_rows(db: Session, workspace: Workspace) -> list[dict[str, Any]]:
 
 
 def _meeting_row(db: Session, *, workspace: Workspace, meeting: Meeting) -> dict[str, Any]:
-    recording = db.scalar(
-        select(MeetingRecording)
-        .where(MeetingRecording.meeting_id == meeting.id)
-        .order_by(MeetingRecording.sequence_no.desc(), MeetingRecording.created_at.desc())
-    )
+    recording = _latest_meeting_recording_for_search(db, meeting=meeting)
+    recording_summary = (getattr(recording, "summary_text", None) or "").strip()
     attendees = [
         _person("participant", attendee.user_id, getattr(attendee.user, "full_name", None))
         for attendee in meeting.attendees
@@ -212,7 +210,7 @@ def _meeting_row(db: Session, *, workspace: Workspace, meeting: Meeting) -> dict
         part
         for part in [
             meeting.agenda,
-            recording.summary_text if recording else "",
+            recording_summary,
             recording.transcript_text if recording else "",
         ]
         if part
@@ -222,7 +220,7 @@ def _meeting_row(db: Session, *, workspace: Workspace, meeting: Meeting) -> dict
         entity_type=SearchEntityType.MEETING,
         entity_id=meeting.id,
         title=meeting.title,
-        summary=_trim(recording.summary_text if recording else meeting.agenda, 240),
+        summary=_trim(recording_summary or meeting.agenda, 240),
         body=body,
         keywords=" ".join([meeting.status, getattr(meeting.organizer, "full_name", "") or ""]),
         status=meeting.status,
@@ -240,6 +238,43 @@ def _meeting_row(db: Session, *, workspace: Workspace, meeting: Meeting) -> dict
         metadata={"attendee_count": len(meeting.attendees)},
         source_updated_at=meeting.updated_at,
     )
+
+
+def _latest_meeting_recording_for_search(
+    db: Session,
+    *,
+    meeting: Meeting,
+) -> Recording | MeetingRecording | None:
+    if _canonical_recording_tables_available(db):
+        recording = db.scalar(
+            select(Recording)
+            .join(RecordingContainer)
+            .where(
+                Recording.workspace_id == meeting.workspace_id,
+                Recording.trashed_at.is_(None),
+                RecordingContainer.container_app == "meeting",
+                RecordingContainer.container_type == "meeting",
+                RecordingContainer.container_id == meeting.id,
+            )
+            .order_by(RecordingContainer.sort_order.desc(), Recording.started_at.desc())
+        )
+        if recording is not None:
+            return recording
+    return db.scalar(
+        select(MeetingRecording)
+        .where(MeetingRecording.meeting_id == meeting.id)
+        .order_by(MeetingRecording.sequence_no.desc(), MeetingRecording.created_at.desc())
+    )
+
+
+def _canonical_recording_tables_available(db: Session) -> bool:
+    try:
+        inspector = inspect(db.get_bind())
+        return inspector.has_table(Recording.__tablename__) and inspector.has_table(
+            RecordingContainer.__tablename__
+        )
+    except Exception:  # noqa: BLE001
+        return False
 
 
 def _pms_issue_rows(db: Session, workspace: Workspace) -> list[dict[str, Any]]:

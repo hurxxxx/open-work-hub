@@ -1,11 +1,12 @@
 from __future__ import annotations
 
-from sqlalchemy import select
+from sqlalchemy import inspect, select
 from sqlalchemy.orm import Session, selectinload
 
 from aidoo_api.domains.meeting.models import Meeting, MeetingAttendee, MeetingRecording
 from aidoo_api.domains.rag.contracts import RagProjection
 from aidoo_api.domains.rag.projection import build_projection
+from aidoo_api.domains.recording.models import Recording, RecordingContainer
 
 
 MEETING_RESOURCE_TYPE = "meeting"
@@ -29,20 +30,14 @@ def load_meeting_projection(
     )
     if meeting is None:
         return None
-    latest_recording = db.scalar(
-        select(MeetingRecording)
-        .where(
-            MeetingRecording.meeting_id == meeting.id,
-        )
-        .order_by(MeetingRecording.sequence_no.desc(), MeetingRecording.created_at.desc())
-    )
+    latest_recording = _latest_meeting_recording_for_projection(db, meeting=meeting)
     return build_meeting_projection(meeting, latest_recording=latest_recording)
 
 
 def build_meeting_projection(
     meeting: Meeting,
     *,
-    latest_recording: MeetingRecording | None = None,
+    latest_recording: Recording | MeetingRecording | None = None,
 ) -> RagProjection:
     attendee_names = [
         attendee.user.full_name.strip()
@@ -50,7 +45,13 @@ def build_meeting_projection(
         if attendee.user is not None and attendee.user.full_name.strip()
     ]
     transcript_excerpt = (latest_recording.transcript_text or "").strip()[:8000] if latest_recording else ""
-    recording_summary = (latest_recording.summary_text or "").strip()[:4000] if latest_recording else ""
+    recording_summary = (getattr(latest_recording, "summary_text", None) or "").strip()[:4000]
+    linked_doc_id = (
+        getattr(latest_recording, "minutes_doc_id", None)
+        or getattr(latest_recording, "linked_doc_id", None)
+        if latest_recording is not None
+        else None
+    )
     text_sections = [
         meeting.title.strip(),
         (meeting.agenda or "").strip(),
@@ -78,9 +79,46 @@ def build_meeting_projection(
             "task_link_count": len(meeting.task_links),
             "doc_link_count": len(meeting.doc_links),
             "latest_recording_id": latest_recording.id if latest_recording is not None else None,
-            "linked_doc_id": latest_recording.linked_doc_id if latest_recording is not None else None,
+            "linked_doc_id": linked_doc_id,
         },
     )
+
+
+def _latest_meeting_recording_for_projection(
+    db: Session,
+    *,
+    meeting: Meeting,
+) -> Recording | MeetingRecording | None:
+    if _canonical_recording_tables_available(db):
+        recording = db.scalar(
+            select(Recording)
+            .join(RecordingContainer)
+            .where(
+                Recording.workspace_id == meeting.workspace_id,
+                Recording.trashed_at.is_(None),
+                RecordingContainer.container_app == "meeting",
+                RecordingContainer.container_type == "meeting",
+                RecordingContainer.container_id == meeting.id,
+            )
+            .order_by(RecordingContainer.sort_order.desc(), Recording.started_at.desc())
+        )
+        if recording is not None:
+            return recording
+    return db.scalar(
+        select(MeetingRecording)
+        .where(MeetingRecording.meeting_id == meeting.id)
+        .order_by(MeetingRecording.sequence_no.desc(), MeetingRecording.created_at.desc())
+    )
+
+
+def _canonical_recording_tables_available(db: Session) -> bool:
+    try:
+        inspector = inspect(db.get_bind())
+        return inspector.has_table(Recording.__tablename__) and inspector.has_table(
+            RecordingContainer.__tablename__
+        )
+    except Exception:  # noqa: BLE001
+        return False
 
 
 def _build_visibility_refs(meeting: Meeting) -> list[str]:

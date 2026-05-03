@@ -8,11 +8,11 @@
     "dev": {
       "executor": "nx:run-commands",
       "options": {
-        "cwd": "apps/worker",
-        "commands": [
-          "uv run --python 3.12 celery -A aidoo_worker.celery_app:celery_app worker --loglevel=info",
-          "uv run --python 3.12 celery -A aidoo_worker.celery_app:celery_app beat --loglevel=info"
-        ],
+      "cwd": "apps/worker",
+      "commands": [
+        "uv run --python 3.12 celery -A aidoo_worker.celery_app:celery_app worker --loglevel=info -Q celery,meeting_transcribe,rag_sync_realtime,rag_sync_backfill,rag_visibility_recompute,search_index_realtime",
+        "uv run --python 3.12 celery -A aidoo_worker.celery_app:celery_app beat --loglevel=info"
+      ],
         "parallel": true
       }
     },

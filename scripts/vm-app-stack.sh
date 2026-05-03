@@ -14,6 +14,7 @@ API_INSTANCE_ID="${DOOWON_VM_API_INSTANCE_ID:-remote-api}"
 RUNTIME_DIR="${DOOWON_VM_RUNTIME_DIR:-$ROOT_DIR/.dev}"
 PID_DIR="$RUNTIME_DIR/pids"
 LOG_DIR="$RUNTIME_DIR/logs"
+WORKER_QUEUES="${DOOWON_VM_WORKER_QUEUES:-celery,meeting_transcribe,rag_sync_realtime,rag_sync_backfill,rag_visibility_recompute,search_index_realtime}"
 
 mkdir -p "$PID_DIR" "$LOG_DIR"
 
@@ -164,17 +165,49 @@ start_web() {
   wait_for_url "http://127.0.0.1:$WEB_PORT/" "web"
 }
 
+start_worker() {
+  local worker_pid beat_pid
+  worker_pid="$(cat "$PID_DIR/worker.pid" 2>/dev/null || true)"
+  if [[ -n "$worker_pid" ]] && kill -0 "$worker_pid" 2>/dev/null; then
+    echo "[vm] reusing worker pid=$worker_pid"
+  else
+    : >"$LOG_DIR/worker.log"
+    ROOT_DIR="$ROOT_DIR" WORKER_QUEUES="$WORKER_QUEUES" setsid bash -lc '
+      cd "$ROOT_DIR/apps/worker"
+      exec uv run --python 3.12 python -m celery -A aidoo_worker.celery_app:celery_app worker --loglevel=info -Q "$WORKER_QUEUES"
+    ' >>"$LOG_DIR/worker.log" 2>&1 &
+    echo "$!" >"$PID_DIR/worker.pid"
+    echo "[vm] started worker pid=$(cat "$PID_DIR/worker.pid") queues=$WORKER_QUEUES"
+  fi
+
+  beat_pid="$(cat "$PID_DIR/worker-beat.pid" 2>/dev/null || true)"
+  if [[ -n "$beat_pid" ]] && kill -0 "$beat_pid" 2>/dev/null; then
+    echo "[vm] reusing worker beat pid=$beat_pid"
+  else
+    : >"$LOG_DIR/worker-beat.log"
+    ROOT_DIR="$ROOT_DIR" RUNTIME_DIR="$RUNTIME_DIR" setsid bash -lc '
+      cd "$ROOT_DIR/apps/worker"
+      exec uv run --python 3.12 python -m celery -A aidoo_worker.celery_app:celery_app beat --loglevel=info --schedule "$RUNTIME_DIR/celerybeat-schedule.db"
+    ' >>"$LOG_DIR/worker-beat.log" 2>&1 &
+    echo "$!" >"$PID_DIR/worker-beat.pid"
+    echo "[vm] started worker beat pid=$(cat "$PID_DIR/worker-beat.pid")"
+  fi
+}
+
 stop_stack() {
+  stop_group_for_pid "$(cat "$PID_DIR/worker-beat.pid" 2>/dev/null || true)" "worker-beat"
+  stop_group_for_pid "$(cat "$PID_DIR/worker.pid" 2>/dev/null || true)" "worker"
   stop_group_for_pid "$(cat "$PID_DIR/web-$WEB_PORT.pid" 2>/dev/null || true)" "web"
   stop_group_for_pid "$(listening_pid "$WEB_PORT")" "web"
   stop_group_for_pid "$(cat "$PID_DIR/api-$API_PORT.pid" 2>/dev/null || true)" "api"
   stop_group_for_pid "$(listening_pid "$API_PORT")" "api"
-  rm -f "$PID_DIR/web-$WEB_PORT.pid" "$PID_DIR/api-$API_PORT.pid"
+  rm -f "$PID_DIR/web-$WEB_PORT.pid" "$PID_DIR/api-$API_PORT.pid" "$PID_DIR/worker.pid" "$PID_DIR/worker-beat.pid"
 }
 
 start_stack() {
   start_infra
   start_api
+  start_worker
   start_web
 }
 
@@ -194,6 +227,8 @@ status_stack() {
   echo "[vm] ports"
   echo "  api:$API_PORT pid=$(listening_pid "$API_PORT")"
   echo "  web:$WEB_PORT pid=$(listening_pid "$WEB_PORT")"
+  echo "  worker pid=$(cat "$PID_DIR/worker.pid" 2>/dev/null || true) queues=$WORKER_QUEUES"
+  echo "  worker-beat pid=$(cat "$PID_DIR/worker-beat.pid" 2>/dev/null || true)"
   echo
   echo "[vm] checks"
   echo "  api health: $(status_code "http://127.0.0.1:$API_PORT/healthz")"
@@ -222,7 +257,7 @@ case "$COMMAND" in
     status_stack
     ;;
   log|logs)
-    tail -F "$LOG_DIR/api-$API_PORT.log" "$LOG_DIR/web-$WEB_PORT.log"
+    tail -F "$LOG_DIR/api-$API_PORT.log" "$LOG_DIR/web-$WEB_PORT.log" "$LOG_DIR/worker.log" "$LOG_DIR/worker-beat.log"
     ;;
   *)
     echo "Usage: $0 {start|stop|restart|deploy|status|log}" >&2

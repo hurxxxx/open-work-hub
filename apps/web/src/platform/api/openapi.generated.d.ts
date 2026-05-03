@@ -2893,6 +2893,75 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/workspaces/{workspace_slug}/recording/recordings/staging": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Recording Staging */
+        get: operations["recording_list_recording_staging_get"];
+        put?: never;
+        /** Init Recording Staging */
+        post: operations["recording_init_recording_staging_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_slug}/recording/recordings/staging/{staging_id}/chunks/{seq}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Upload Recording Chunk */
+        put: operations["recording_upload_recording_chunk_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_slug}/recording/recordings/staging/{staging_id}/complete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Complete Recording Staging */
+        post: operations["recording_complete_recording_staging_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_slug}/recording/recordings/staging/{staging_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Discard Recording Staging */
+        delete: operations["recording_discard_recording_staging_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/workspaces/{workspace_slug}/recording/recordings/import": {
         parameters: {
             query?: never;
@@ -3803,6 +3872,11 @@ export interface components {
              * @enum {string}
              */
             source: "quick_record" | "manual_upload";
+        };
+        /** Body_recording_upload_recording_chunk_put */
+        Body_recording_upload_recording_chunk_put: {
+            /** File */
+            file: string;
         };
         /** BootstrapStatusResponse */
         BootstrapStatusResponse: {
@@ -6427,6 +6501,86 @@ export interface components {
         RecordingUpdateRequest: {
             /** Title */
             title?: string | null;
+        };
+        /** RecordingUploadChunkAck */
+        RecordingUploadChunkAck: {
+            /** Seq */
+            seq: number;
+            /** Bytes Received */
+            bytes_received: number;
+            /** Highest Seq */
+            highest_seq: number;
+        };
+        /** RecordingUploadCompleteRequest */
+        RecordingUploadCompleteRequest: {
+            /** Title */
+            title?: string | null;
+            /** Duration Sec Estimate */
+            duration_sec_estimate?: number | null;
+            /**
+             * Source
+             * @default quick_record
+             * @enum {string}
+             */
+            source: "quick_record" | "live_recording";
+        };
+        /** RecordingUploadInitRequest */
+        RecordingUploadInitRequest: {
+            /** Idempotency Key */
+            idempotency_key: string;
+            /** Mime Type */
+            mime_type: string;
+            /** Title */
+            title?: string | null;
+            /** Initial Container App */
+            initial_container_app?: string | null;
+            /** Initial Container Type */
+            initial_container_type?: string | null;
+            /** Initial Container Id */
+            initial_container_id?: string | null;
+            /** Linked Task Id */
+            linked_task_id?: string | null;
+        };
+        /** RecordingUploadOut */
+        RecordingUploadOut: {
+            /** Id */
+            id: string;
+            /** Workspace Id */
+            workspace_id: string;
+            /** Uploaded By Id */
+            uploaded_by_id: string;
+            /** Idempotency Key */
+            idempotency_key: string;
+            /** Status */
+            status: string;
+            /** Mime Type */
+            mime_type: string;
+            /** Bytes Received */
+            bytes_received: number;
+            /** Chunk Count */
+            chunk_count: number;
+            /** Highest Seq */
+            highest_seq: number;
+            /** Initial Container App */
+            initial_container_app: string | null;
+            /** Initial Container Type */
+            initial_container_type: string | null;
+            /** Initial Container Id */
+            initial_container_id: string | null;
+            /** Linked Task Id */
+            linked_task_id?: string | null;
+            /**
+             * Started At
+             * Format: date-time
+             */
+            started_at: string;
+            /**
+             * Last Chunk At
+             * Format: date-time
+             */
+            last_chunk_at: string;
+            /** Completed At */
+            completed_at: string | null;
         };
         /** ResetPasswordRequest */
         ResetPasswordRequest: {
@@ -19069,6 +19223,264 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["RecordingListResponse"];
                 };
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Access denied. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    recording_list_recording_staging_get: {
+        parameters: {
+            query?: {
+                initial_container_app?: string | null;
+                initial_container_type?: string | null;
+                initial_container_id?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecordingUploadOut"][];
+                };
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Access denied. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    recording_init_recording_staging_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RecordingUploadInitRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecordingUploadOut"];
+                };
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Access denied. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    recording_upload_recording_chunk_put: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Chunk-Sha256"?: string | null;
+            };
+            path: {
+                staging_id: string;
+                seq: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_recording_upload_recording_chunk_put"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecordingUploadChunkAck"];
+                };
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Access denied. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    recording_complete_recording_staging_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                staging_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RecordingUploadCompleteRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecordingOut"];
+                };
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Access denied. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    recording_discard_recording_staging_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                staging_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Authentication required. */
             401: {

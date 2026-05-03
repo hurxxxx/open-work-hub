@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Literal
 
-from fastapi import APIRouter, Depends, Form, Query, UploadFile, status
+from fastapi import APIRouter, Depends, Form, Header, Query, Response, UploadFile, status
 from sqlalchemy.orm import Session
 
 from aidoo_api.core.db import get_db_session
@@ -16,6 +16,10 @@ from aidoo_api.domains.recording.schemas import (
     RecordingOut,
     RecordingPlaybackResponse,
     RecordingUpdateRequest,
+    RecordingUploadChunkAck,
+    RecordingUploadCompleteRequest,
+    RecordingUploadInitRequest,
+    RecordingUploadOut,
 )
 
 
@@ -45,6 +49,101 @@ def list_recordings(
         container_type=container_type,
         container_id=container_id,
     )
+
+
+@router.post(
+    "/recordings/staging",
+    response_model=RecordingUploadOut,
+    status_code=status.HTTP_201_CREATED,
+)
+def init_recording_staging(
+    payload: RecordingUploadInitRequest,
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+    workspace: Workspace = Depends(require_current_workspace),
+) -> RecordingUploadOut:
+    return recording_service.init_staging(
+        db,
+        workspace=workspace,
+        user=current_user,
+        payload=payload,
+    )
+
+
+@router.put(
+    "/recordings/staging/{staging_id}/chunks/{seq}",
+    response_model=RecordingUploadChunkAck,
+)
+async def upload_recording_chunk(
+    staging_id: str,
+    seq: int,
+    file: UploadFile,
+    x_chunk_sha256: str | None = Header(default=None, alias="X-Chunk-Sha256"),
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+    workspace: Workspace = Depends(require_current_workspace),
+) -> RecordingUploadChunkAck:
+    return await recording_service.upload_chunk(
+        db,
+        workspace=workspace,
+        user=current_user,
+        staging_id=staging_id,
+        seq=seq,
+        upload=file,
+        chunk_sha256=x_chunk_sha256,
+    )
+
+
+@router.post("/recordings/staging/{staging_id}/complete", response_model=RecordingOut)
+def complete_recording_staging(
+    staging_id: str,
+    payload: RecordingUploadCompleteRequest,
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+    workspace: Workspace = Depends(require_current_workspace),
+) -> RecordingOut:
+    return recording_service.complete_staging(
+        db,
+        workspace=workspace,
+        user=current_user,
+        staging_id=staging_id,
+        payload=payload,
+    )
+
+
+@router.get("/recordings/staging", response_model=list[RecordingUploadOut])
+def list_recording_staging(
+    initial_container_app: str | None = Query(default=None, min_length=1, max_length=64),
+    initial_container_type: str | None = Query(default=None, min_length=1, max_length=64),
+    initial_container_id: str | None = Query(default=None, min_length=1, max_length=128),
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+    workspace: Workspace = Depends(require_current_workspace),
+) -> list[RecordingUploadOut]:
+    return recording_service.list_my_staging(
+        db,
+        workspace=workspace,
+        user=current_user,
+        initial_container_app=initial_container_app,
+        initial_container_type=initial_container_type,
+        initial_container_id=initial_container_id,
+    )
+
+
+@router.delete("/recordings/staging/{staging_id}", status_code=status.HTTP_204_NO_CONTENT)
+def discard_recording_staging(
+    staging_id: str,
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+    workspace: Workspace = Depends(require_current_workspace),
+) -> Response:
+    recording_service.discard_staging(
+        db,
+        workspace=workspace,
+        user=current_user,
+        staging_id=staging_id,
+    )
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.post("/recordings/import", response_model=RecordingOut, status_code=status.HTTP_201_CREATED)

@@ -43,7 +43,6 @@ from aidoo_api.domains.meeting.models import (
     MeetingAttendee,
     MeetingDocLink,
     MeetingFileAttachment,
-    MeetingRecording,
     MeetingTaskLink,
 )
 from aidoo_api.domains.meeting.permissions import (
@@ -64,7 +63,6 @@ from aidoo_api.domains.meeting.schemas import (
     MeetingFileAttachmentOut,
     MeetingListItem,
     MeetingListResponse,
-    MeetingRecordingOut,
     MeetingTaskLinkOut,
     MeetingUpdateRequest,
     MeetingWhiteboardLinkOut,
@@ -80,6 +78,7 @@ from aidoo_api.domains.pms.access_grants import (
 from aidoo_api.domains.pms.models import Issue, IssueUserAccess
 from aidoo_api.domains.planner.models import PlannerEvent
 from aidoo_api.domains.rag.contracts import RagSyncOperation
+from aidoo_api.domains.recording import service as recording_service
 from aidoo_api.domains.whiteboard.models import Whiteboard, WhiteboardContainer
 
 
@@ -576,18 +575,6 @@ def _serialize_whiteboard_link(
     )
 
 
-def _serialize_recording(recording) -> MeetingRecordingOut:
-    return MeetingRecordingOut.model_validate(recording)
-
-
-def _recording_sort_key(recording: MeetingRecording) -> tuple[int, datetime, str]:
-    return (
-        recording.sequence_no or 0,
-        recording.created_at,
-        recording.id,
-    )
-
-
 def _utc_iso(value: datetime) -> str:
     if value.tzinfo is None:
         return value.replace(tzinfo=UTC).isoformat()
@@ -628,8 +615,8 @@ def _serialize_meeting(db: Session, meeting: Meeting) -> MeetingDetail:
             _serialize_file_attachment(att)
             for att in sorted(meeting.file_attachments, key=lambda a: a.created_at)
         ],
-        recordings=[_serialize_recording(r) for r in sorted(meeting.recordings, key=_recording_sort_key)],
-        active_recording_lock=_resolve_active_recording_lock(meeting),
+        recordings=recording_service.list_meeting_recording_outs(db, meeting=meeting),
+        active_recording_lock=recording_service.resolve_active_recording_lock(db, meeting=meeting),
         created_at=meeting.created_at,
         updated_at=meeting.updated_at,
     )
@@ -1137,19 +1124,16 @@ def build_meeting_scope_prompt(
         user=user,
         meeting_id=meeting_id,
     )
-    latest_recording = db.scalar(
-        select(MeetingRecording)
-        .where(
-            MeetingRecording.meeting_id == meeting.id,
-            MeetingRecording.summary_text.is_not(None),
-            MeetingRecording.transcript_text.is_not(None),
-        )
-        .order_by(MeetingRecording.sequence_no.desc(), MeetingRecording.created_at.desc())
+    latest_recording = recording_service.latest_meeting_recording(
+        db,
+        workspace_id=meeting.workspace_id,
+        meeting_id=meeting.id,
+        require_transcript=True,
     )
     summary = ""
     transcript_excerpt = ""
     if latest_recording is not None:
-        summary = (latest_recording.summary_text or "").strip()[:4000]
+        summary = ""
         transcript_excerpt = (latest_recording.transcript_text or "").strip()[:8000]
     agenda = (meeting.agenda or "").strip()[:2000]
     lines = [

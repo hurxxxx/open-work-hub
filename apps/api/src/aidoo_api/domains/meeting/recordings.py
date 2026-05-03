@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import hashlib
 import os
 import re
 import socket
@@ -18,9 +17,7 @@ from sqlalchemy.orm import Session
 
 from aidoo_api.core.i18n import localized_http_exception
 from aidoo_api.core.settings import get_settings
-from aidoo_api.core.storage import get_minio_client
 from aidoo_api.domains.auth.models import User, Workspace
-from aidoo_api.domains.auth.security import new_id
 from aidoo_api.domains.meeting import service as meeting_service
 from aidoo_api.domains.meeting.models import (
     Meeting,
@@ -30,6 +27,11 @@ from aidoo_api.domains.meeting.models import (
 )
 from aidoo_api.domains.meeting.permissions import ensure_meeting_participant
 from aidoo_api.domains.pms.access import _ensure_issue_readable as ensure_issue_readable
+from aidoo_api.domains.recording import service as canonical_recording_service
+from aidoo_api.domains.recording.schemas import (
+    RecordingUploadCompleteRequest as CanonicalRecordingCompleteRequest,
+    RecordingUploadInitRequest as CanonicalRecordingStagingInitRequest,
+)
 from aidoo_api.domains.meeting.schemas import (
     MeetingDetail,
     RecordingChunkAck,
@@ -134,6 +136,42 @@ def _cleanup_spool_dir(spool_path: str | None) -> None:
 
 def _serialize_staging(staging: MeetingRecordingStaging) -> RecordingStagingItem:
     return RecordingStagingItem.model_validate(staging)
+
+
+def _serialize_canonical_staging(staging, *, meeting_id: str) -> RecordingStagingItem:
+    return RecordingStagingItem(
+        id=staging.id,
+        meeting_id=meeting_id,
+        uploaded_by_id=staging.uploaded_by_id,
+        idempotency_key=staging.idempotency_key,
+        status=staging.status,
+        mime_type=staging.mime_type,
+        bytes_received=staging.bytes_received,
+        chunk_count=staging.chunk_count,
+        highest_seq=staging.highest_seq,
+        linked_task_id=staging.linked_task_id,
+        started_at=staging.started_at,
+        last_chunk_at=staging.last_chunk_at,
+        completed_at=staging.completed_at,
+    )
+
+
+def _ensure_canonical_staging_for_meeting(db: Session, *, workspace: Workspace, meeting_id: str, staging_id: str):
+    staging = canonical_recording_service._load_staging_or_404(  # noqa: SLF001
+        db,
+        workspace=workspace,
+        staging_id=staging_id,
+    )
+    if (
+        staging.initial_container_app != "meeting"
+        or staging.initial_container_type != "meeting"
+        or staging.initial_container_id != meeting_id
+    ):
+        raise localized_http_exception(
+            status_code=status.HTTP_404_NOT_FOUND,
+            code="meeting.recording_staging_not_found",
+        )
+    return staging
 
 
 def _meeting_task_link_exists(db: Session, *, meeting_id: str, issue_id: str) -> bool:
@@ -308,79 +346,22 @@ def init_staging(
 ) -> RecordingStagingItem:
     meeting = meeting_service._load_meeting(db, workspace, meeting_id)
     ensure_meeting_participant(db, user, meeting)
-    mime_type = _require_allowed_mime(payload.mime_type)
     _validate_linked_task_id(db, meeting=meeting, user=user, linked_task_id=payload.linked_task_id)
-
-    # Idempotent resume: same user + same idempotency key → return existing row.
-    # This must come BEFORE the cross-user lock check so that retrying a request
-    # the user already owns never trips the "someone else is recording" guard.
-    existing = db.scalar(
-        select(MeetingRecordingStaging).where(
-            MeetingRecordingStaging.meeting_id == meeting.id,
-            MeetingRecordingStaging.uploaded_by_id == user.id,
-            MeetingRecordingStaging.idempotency_key == payload.idempotency_key,
-            MeetingRecordingStaging.completed_at.is_(None),
-        )
+    staging = canonical_recording_service.init_staging(
+        db,
+        workspace=workspace,
+        user=user,
+        payload=CanonicalRecordingStagingInitRequest(
+            idempotency_key=payload.idempotency_key,
+            mime_type=payload.mime_type,
+            initial_container_app="meeting",
+            initial_container_type="meeting",
+            initial_container_id=meeting.id,
+            linked_task_id=payload.linked_task_id,
+            title=meeting.title,
+        ),
     )
-    if existing is not None:
-        return _serialize_staging(existing)
-
-    # Single-recorder lock: only one user may have an active staging on a
-    # meeting at any time. We serialize concurrent inits by acquiring a row
-    # lock on the meeting before inspecting active staging rows.
-    #
-    # Stale stagings (recorder crashed / network died → no chunk for >
-    # RECORDING_STALE_AFTER_SECONDS) are treated as released so other users
-    # can take over. The abandoned row stays in the DB; only the lock relaxes.
-    db.execute(
-        select(Meeting.id).where(Meeting.id == meeting.id).with_for_update()
-    )
-    stale_cutoff = _utcnow() - timedelta(seconds=RECORDING_STALE_AFTER_SECONDS)
-    other_active = db.scalar(
-        select(MeetingRecordingStaging).where(
-            MeetingRecordingStaging.meeting_id == meeting.id,
-            MeetingRecordingStaging.uploaded_by_id != user.id,
-            MeetingRecordingStaging.completed_at.is_(None),
-            MeetingRecordingStaging.last_chunk_at >= stale_cutoff,
-        )
-    )
-    if other_active is not None:
-        recorder_name = (
-            other_active.uploaded_by.full_name
-            if other_active.uploaded_by is not None
-            else "다른 사용자"
-        )
-        raise localized_http_exception(
-            status_code=status.HTTP_409_CONFLICT,
-            code="meeting.recording_in_progress",
-            recorder_name=recorder_name,
-            active_recorder_id=other_active.uploaded_by_id,
-            active_recorder_name=recorder_name,
-            active_staging_id=other_active.id,
-        )
-
-    staging_id = new_id()
-    started_at = _utcnow()
-    spool_dir = _spool_dir_for_recording(staging_id)
-    spool_dir.mkdir(parents=True, exist_ok=True)
-    staging = MeetingRecordingStaging(
-        id=staging_id,
-        meeting_id=meeting.id,
-        uploaded_by_id=user.id,
-        idempotency_key=payload.idempotency_key,
-        status="recording",
-        spool_path=str(spool_dir),
-        storage_key=_storage_key_for_recording(meeting.id, staging_id, mime_type, started_at=started_at),
-        mime_type=mime_type,
-        linked_task_id=payload.linked_task_id,
-        chunks_meta={},
-        started_at=started_at,
-        last_chunk_at=started_at,
-    )
-    db.add(staging)
-    db.commit()
-    db.refresh(staging)
-    return _serialize_staging(staging)
+    return _serialize_canonical_staging(staging, meeting_id=meeting.id)
 
 
 async def upload_chunk(
@@ -394,53 +375,23 @@ async def upload_chunk(
     upload: UploadFile,
     chunk_sha256: str | None,
 ) -> RecordingChunkAck:
-    if seq < 0:
-        raise localized_http_exception(status_code=status.HTTP_400_BAD_REQUEST, code="meeting.chunk_sequence_non_negative")
-
     meeting = meeting_service._load_meeting(db, workspace, meeting_id)
     ensure_meeting_participant(db, user, meeting)
-    staging = _load_staging_or_404(db, meeting_id=meeting.id, staging_id=staging_id)
-    if staging.uploaded_by_id != user.id:
-        raise localized_http_exception(status_code=status.HTTP_403_FORBIDDEN, code="meeting.uploader_resume_required")
-    if staging.completed_at is not None or staging.status == "promoted":
-        raise localized_http_exception(status_code=status.HTTP_409_CONFLICT, code="meeting.recording_staging_finalized")
-
-    data = await upload.read()
-    if not data:
-        raise localized_http_exception(status_code=status.HTTP_400_BAD_REQUEST, code="meeting.empty_recording_chunk")
-
-    digest = hashlib.sha256(data).hexdigest()
-    if chunk_sha256 and chunk_sha256 != digest:
-        raise localized_http_exception(status_code=status.HTTP_409_CONFLICT, code="meeting.chunk_checksum_mismatch")
-
-    settings = get_settings()
-    if staging.bytes_received + len(data) > settings.recording_max_size_bytes:
-        raise localized_http_exception(
-            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-            code="meeting.recording_size_limit_exceeded",
-        )
-
-    meta = dict(staging.chunks_meta or {})
-    existing = meta.get(str(seq))
-    if existing is not None:
-        if existing.get("sha256") != digest or int(existing.get("size", -1)) != len(data):
-            raise localized_http_exception(status_code=status.HTTP_409_CONFLICT, code="meeting.chunk_payload_conflict")
-        return RecordingChunkAck(seq=seq, bytes_received=staging.bytes_received, highest_seq=staging.highest_seq)
-
-    _fsync_path(_chunk_path(staging.spool_path, seq), data)
-    meta[str(seq)] = {
-        "size": len(data),
-        "sha256": digest,
-        "stored_at": _utcnow().isoformat(),
-    }
-    staging.chunks_meta = meta
-    staging.bytes_received += len(data)
-    staging.chunk_count += 1
-    staging.highest_seq = max(staging.highest_seq, seq)
-    staging.last_chunk_at = _utcnow()
-    db.add(staging)
-    db.commit()
-    return RecordingChunkAck(seq=seq, bytes_received=staging.bytes_received, highest_seq=staging.highest_seq)
+    _ensure_canonical_staging_for_meeting(
+        db,
+        workspace=workspace,
+        meeting_id=meeting.id,
+        staging_id=staging_id,
+    )
+    return await canonical_recording_service.upload_chunk(
+        db,
+        workspace=workspace,
+        user=user,
+        staging_id=staging_id,
+        seq=seq,
+        upload=upload,
+        chunk_sha256=chunk_sha256,
+    )
 
 
 def list_my_staging(
@@ -452,18 +403,15 @@ def list_my_staging(
 ) -> list[RecordingStagingItem]:
     meeting = meeting_service._load_meeting(db, workspace, meeting_id)
     ensure_meeting_participant(db, user, meeting)
-    cutoff = _utcnow() - timedelta(hours=get_settings().recording_staging_retention_hours)
-    items = db.scalars(
-        select(MeetingRecordingStaging)
-        .where(
-            MeetingRecordingStaging.meeting_id == meeting.id,
-            MeetingRecordingStaging.uploaded_by_id == user.id,
-            MeetingRecordingStaging.completed_at.is_(None),
-            MeetingRecordingStaging.started_at >= cutoff,
-        )
-        .order_by(MeetingRecordingStaging.started_at.asc())
-    ).all()
-    return [_serialize_staging(item) for item in items]
+    items = canonical_recording_service.list_my_staging(
+        db,
+        workspace=workspace,
+        user=user,
+        initial_container_app="meeting",
+        initial_container_type="meeting",
+        initial_container_id=meeting.id,
+    )
+    return [_serialize_canonical_staging(item, meeting_id=meeting.id) for item in items]
 
 
 def discard_staging(
@@ -476,14 +424,18 @@ def discard_staging(
 ) -> None:
     meeting = meeting_service._load_meeting(db, workspace, meeting_id)
     ensure_meeting_participant(db, user, meeting)
-    staging = _load_staging_or_404(db, meeting_id=meeting.id, staging_id=staging_id)
-    if staging.uploaded_by_id != user.id:
-        raise localized_http_exception(status_code=status.HTTP_403_FORBIDDEN, code="meeting.uploader_discard_required")
-    if staging.promoted_recording_id:
-        raise localized_http_exception(status_code=status.HTTP_409_CONFLICT, code="meeting.finalized_staging_discard_denied")
-    _cleanup_spool_dir(staging.spool_path)
-    db.delete(staging)
-    db.commit()
+    _ensure_canonical_staging_for_meeting(
+        db,
+        workspace=workspace,
+        meeting_id=meeting.id,
+        staging_id=staging_id,
+    )
+    canonical_recording_service.discard_staging(
+        db,
+        workspace=workspace,
+        user=user,
+        staging_id=staging_id,
+    )
 
 
 def _assert_contiguous_chunks(staging: MeetingRecordingStaging) -> list[int]:
@@ -519,68 +471,23 @@ def complete_staging(
 ):
     meeting = meeting_service._load_meeting(db, workspace, meeting_id)
     ensure_meeting_participant(db, user, meeting)
-    staging = _load_staging_or_404(db, meeting_id=meeting.id, staging_id=staging_id)
-    if staging.uploaded_by_id != user.id:
-        raise localized_http_exception(status_code=status.HTTP_403_FORBIDDEN, code="meeting.uploader_finalize_required")
-
-    if staging.promoted_recording_id:
-        fresh = meeting_service._load_meeting(db, workspace, meeting.id)
-        return meeting_service._serialize_meeting(db, fresh)
-
-    staging.status = "assembling"
-    staging.duration_sec_estimate = payload.duration_sec_estimate
-    db.add(staging)
-    db.commit()
-
-    assembled_path = _assemble_chunks(staging)
-
-    staging = _load_staging_or_404(db, meeting_id=meeting.id, staging_id=staging_id)
-    if staging.promoted_recording_id:
-        fresh = meeting_service._load_meeting(db, workspace, meeting.id)
-        return meeting_service._serialize_meeting(db, fresh)
-
-    staging.status = "uploading"
-    db.add(staging)
-    db.commit()
-
-    settings = get_settings()
-    client = get_minio_client()
-    client.fput_object(
-        settings.minio_bucket,
-        staging.storage_key,
-        str(assembled_path),
-        content_type=staging.mime_type,
+    _ensure_canonical_staging_for_meeting(
+        db,
+        workspace=workspace,
+        meeting_id=meeting.id,
+        staging_id=staging_id,
     )
-
-    recording = db.get(MeetingRecording, staging.id)
-    if recording is None:
-        sequence_no = _next_recording_sequence_no(db, meeting_id=meeting.id)
-        recording = MeetingRecording(
-            id=staging.id,
-            meeting_id=meeting.id,
-            storage_key=staging.storage_key,
-            duration_sec=payload.duration_sec_estimate,
-            file_size=staging.bytes_received,
-            mime_type=staging.mime_type,
-            idempotency_key=staging.idempotency_key,
-            uploaded_by_id=user.id,
+    canonical_recording_service.complete_staging(
+        db,
+        workspace=workspace,
+        user=user,
+        staging_id=staging_id,
+        payload=CanonicalRecordingCompleteRequest(
+            title=meeting.title,
+            duration_sec_estimate=payload.duration_sec_estimate,
             source="live_recording",
-            transcription_status="pending",
-            sequence_no=sequence_no,
-            progress_pct=10,
-            linked_task_id=staging.linked_task_id,
-        )
-        db.add(recording)
-        db.flush()
-
-    staging.promoted_recording_id = recording.id
-    staging.completed_at = _utcnow()
-    staging.status = "promoted"
-    db.add(staging)
-    db.add(recording)
-    db.commit()
-    _enqueue_pipeline_or_mark_failed(db, recording=recording)
-    _cleanup_spool_dir(staging.spool_path)
+        ),
+    )
     fresh = meeting_service._load_meeting(db, workspace, meeting.id)
     return meeting_service._serialize_meeting(db, fresh)
 
@@ -596,51 +503,22 @@ def import_recording(
 ):
     meeting = meeting_service._load_meeting(db, workspace, meeting_id)
     ensure_meeting_participant(db, user, meeting)
-    mime_type = _require_allowed_mime(upload.content_type)
     _validate_linked_task_id(db, meeting=meeting, user=user, linked_task_id=linked_task_id)
-    data = upload.file.read()
-    if not data:
-        raise localized_http_exception(status_code=status.HTTP_400_BAD_REQUEST, code="meeting.uploaded_recording_empty")
-    settings = get_settings()
-    if len(data) > settings.recording_max_size_bytes:
-        raise localized_http_exception(
-            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-            code="meeting.recording_size_limit_exceeded",
-        )
-
-    recording_id = new_id()
-    started_at = _utcnow()
-    sequence_no = _next_recording_sequence_no(db, meeting_id=meeting.id)
-    storage_key = _storage_key_for_recording(meeting.id, recording_id, mime_type, started_at=started_at)
-    from io import BytesIO
-
-    get_minio_client().put_object(
-        settings.minio_bucket,
-        storage_key,
-        BytesIO(data),
-        length=len(data),
-        content_type=mime_type,
-    )
-
-    recording = MeetingRecording(
-        id=recording_id,
-        meeting_id=meeting.id,
-        storage_key=storage_key,
+    canonical_recording_service.import_recording(
+        db,
+        workspace=workspace,
+        user=user,
+        upload=upload,
+        title=meeting.title,
+        started_at=None,
+        ended_at=None,
         duration_sec=None,
-        file_size=len(data),
-        mime_type=mime_type,
-        idempotency_key=new_id(),
-        uploaded_by_id=user.id,
         source="manual_upload",
-        transcription_status="pending",
-        sequence_no=sequence_no,
-        progress_pct=10,
+        initial_container_app="meeting",
+        initial_container_type="meeting",
+        initial_container_id=meeting.id,
         linked_task_id=linked_task_id,
-        created_at=started_at,
     )
-    db.add(recording)
-    db.commit()
-    _enqueue_pipeline_or_mark_failed(db, recording=recording)
     fresh = meeting_service._load_meeting(db, workspace, meeting.id)
     return meeting_service._serialize_meeting(db, fresh)
 
@@ -655,15 +533,25 @@ def get_recording_playback(
 ) -> RecordingPlaybackResponse:
     meeting = meeting_service._load_meeting(db, workspace, meeting_id)
     ensure_meeting_participant(db, user, meeting)
-    recording = _load_recording_or_404(db, meeting_id=meeting.id, recording_id=recording_id)
-    if recording.transcription_status == "cancelled":
-        raise localized_http_exception(status_code=status.HTTP_404_NOT_FOUND, code="meeting.recording_unavailable")
-    expires_at = _utcnow() + timedelta(hours=1)
-    url = (
-        f"/api/v1/workspaces/{workspace.key}/meeting/meetings/{meeting.id}"
-        f"/recordings/{recording.id}/media"
+    canonical_recording_service.load_meeting_recording_or_404(
+        db,
+        workspace=workspace,
+        meeting_id=meeting.id,
+        recording_id=recording_id,
     )
-    return RecordingPlaybackResponse(url=url, expires_at=expires_at)
+    playback = canonical_recording_service.get_recording_playback(
+        db,
+        workspace=workspace,
+        user=user,
+        recording_id=recording_id,
+    )
+    return RecordingPlaybackResponse(
+        url=(
+            f"/api/v1/workspaces/{workspace.key}/meeting/meetings/{meeting.id}"
+            f"/recordings/{recording_id}/media"
+        ),
+        expires_at=playback.expires_at,
+    )
 
 
 def stream_recording_media(
@@ -676,28 +564,17 @@ def stream_recording_media(
 ) -> StreamingResponse:
     meeting = meeting_service._load_meeting(db, workspace, meeting_id)
     ensure_meeting_participant(db, user, meeting)
-    recording = _load_recording_or_404(db, meeting_id=meeting.id, recording_id=recording_id)
-    if recording.transcription_status == "cancelled":
-        raise localized_http_exception(status_code=status.HTTP_404_NOT_FOUND, code="meeting.recording_unavailable")
-
-    settings = get_settings()
-    client = get_minio_client()
-    obj = client.get_object(settings.minio_bucket, recording.storage_key)
-
-    def body():
-        try:
-            yield from obj.stream(1024 * 1024)
-        finally:
-            obj.close()
-            obj.release_conn()
-
-    return StreamingResponse(
-        body(),
-        media_type=recording.mime_type,
-        headers={
-            "Content-Disposition": f'inline; filename="{_download_filename_for_recording(recording)}"',
-            "Cache-Control": "private, max-age=3600",
-        },
+    canonical_recording_service.load_meeting_recording_or_404(
+        db,
+        workspace=workspace,
+        meeting_id=meeting.id,
+        recording_id=recording_id,
+    )
+    return canonical_recording_service.stream_recording_media(
+        db,
+        workspace=workspace,
+        user=user,
+        recording_id=recording_id,
     )
 
 
@@ -711,16 +588,13 @@ def retry_recording(
 ):
     meeting = meeting_service._load_meeting(db, workspace, meeting_id)
     ensure_meeting_participant(db, user, meeting)
-    recording = _load_recording_or_404(db, meeting_id=meeting.id, recording_id=recording_id)
-    if recording.transcription_status != "failed":
-        raise localized_http_exception(status_code=status.HTTP_409_CONFLICT, code="meeting.only_failed_recordings_retry")
-    recording.transcription_status = "pending"
-    recording.progress_pct = 10
-    recording.failure_reason = None
-    recording.celery_task_id = None
-    db.add(recording)
-    db.commit()
-    _enqueue_pipeline_or_mark_failed(db, recording=recording)
+    canonical_recording_service.retry_meeting_recording(
+        db,
+        workspace=workspace,
+        user=user,
+        meeting=meeting,
+        recording_id=recording_id,
+    )
     fresh = meeting_service._load_meeting(db, workspace, meeting.id)
     return meeting_service._serialize_meeting(db, fresh)
 
@@ -745,52 +619,13 @@ def delete_recording(
     """
     meeting = meeting_service._load_meeting(db, workspace, meeting_id)
     ensure_meeting_participant(db, user, meeting)
-
-    recording = db.scalar(
-        select(MeetingRecording).where(
-            MeetingRecording.id == recording_id,
-            MeetingRecording.meeting_id == meeting.id,
-        )
+    canonical_recording_service.archive_meeting_recording(
+        db,
+        workspace=workspace,
+        user=user,
+        meeting=meeting,
+        recording_id=recording_id,
     )
-    if recording is None:
-        raise localized_http_exception(
-            status_code=status.HTTP_404_NOT_FOUND,
-            code="meeting.recording_not_found",
-        )
-
-    if recording.uploaded_by_id != user.id and meeting.organizer_id != user.id:
-        raise localized_http_exception(
-            status_code=status.HTTP_403_FORBIDDEN,
-            code="meeting.recording_delete_permission",
-        )
-
-    if recording.celery_task_id:
-        revoke_recording_task(recording.celery_task_id)
-
-    settings = get_settings()
-    client = get_minio_client()
-    try:
-        client.remove_object(settings.minio_bucket, recording.storage_key)
-    except Exception:
-        # The DB row deletion is the source of truth for "deleted". If the
-        # blob removal fails, the orphan-media sweeper will pick it up later.
-        pass
-
-    # The promoted staging row still has a FK on this recording. Clean up the
-    # staging artifact entirely (spool dir + DB row) so the FK is gone before
-    # we delete the recording itself. The staging is a transient upload
-    # artifact; once the recording is removed, there's no reason to keep it.
-    promoted_stagings = db.scalars(
-        select(MeetingRecordingStaging).where(
-            MeetingRecordingStaging.promoted_recording_id == recording.id,
-        )
-    ).all()
-    for staging in promoted_stagings:
-        _cleanup_spool_dir(staging.spool_path)
-        db.delete(staging)
-    db.flush()
-
-    db.delete(recording)
     from aidoo_api.domains.meeting.rag_sync import enqueue_meeting_rag_sync
     from aidoo_api.domains.rag.contracts import RagSyncOperation
 
@@ -806,43 +641,52 @@ def delete_recording(
 
 
 def cleanup_meeting_recordings(db: Session, *, meeting: Meeting) -> None:
-    settings = get_settings()
-    client = get_minio_client()
-    recordings = db.scalars(
-        select(MeetingRecording).where(MeetingRecording.meeting_id == meeting.id)
-    ).all()
-    staging_rows = db.scalars(
-        select(MeetingRecordingStaging).where(MeetingRecordingStaging.meeting_id == meeting.id)
-    ).all()
+    from aidoo_api.domains.recording.models import Recording, RecordingContainer, RecordingStaging
 
+    recordings = db.scalars(
+        select(Recording)
+        .join(RecordingContainer)
+        .where(
+            RecordingContainer.container_app == "meeting",
+            RecordingContainer.container_type == "meeting",
+            RecordingContainer.container_id == meeting.id,
+            Recording.trashed_at.is_(None),
+        )
+    ).all()
     for recording in recordings:
         if recording.celery_task_id:
-            revoke_recording_task(recording.celery_task_id)
-        try:
-            client.remove_object(settings.minio_bucket, recording.storage_key)
-        except Exception:
-            pass
-        recording.transcription_status = "cancelled"
+            canonical_recording_service.revoke_recording_task(recording.celery_task_id)
+        recording.trashed_at = _utcnow()
+        recording.updated_at = recording.trashed_at
         db.add(recording)
 
+    staging_rows = db.scalars(
+        select(RecordingStaging).where(
+            RecordingStaging.initial_container_app == "meeting",
+            RecordingStaging.initial_container_type == "meeting",
+            RecordingStaging.initial_container_id == meeting.id,
+            RecordingStaging.completed_at.is_(None),
+        )
+    ).all()
     for staging in staging_rows:
-        _cleanup_spool_dir(staging.spool_path)
+        canonical_recording_service._cleanup_spool_dir(staging.spool_path)  # noqa: SLF001
         db.delete(staging)
-
     db.flush()
 
 
 def cleanup_stale_staging_once(db: Session) -> dict[str, int]:
+    from aidoo_api.domains.recording.models import RecordingStaging
+
     cutoff = _utcnow() - timedelta(hours=get_settings().recording_staging_retention_hours)
     rows = db.scalars(
-        select(MeetingRecordingStaging).where(
-            MeetingRecordingStaging.completed_at.is_(None),
-            MeetingRecordingStaging.last_chunk_at < cutoff,
+        select(RecordingStaging).where(
+            RecordingStaging.completed_at.is_(None),
+            RecordingStaging.last_chunk_at < cutoff,
         )
     ).all()
     deleted = 0
     for staging in rows:
-        _cleanup_spool_dir(staging.spool_path)
+        canonical_recording_service._cleanup_spool_dir(staging.spool_path)  # noqa: SLF001
         db.delete(staging)
         deleted += 1
     db.commit()
@@ -859,8 +703,13 @@ def fetch_local_recording_blob(
 ) -> bytes:
     meeting = meeting_service._load_meeting(db, workspace, meeting_id)
     ensure_meeting_participant(db, user, meeting)
-    staging = _load_staging_or_404(db, meeting_id=meeting.id, staging_id=staging_id)
+    staging = _ensure_canonical_staging_for_meeting(
+        db,
+        workspace=workspace,
+        meeting_id=meeting.id,
+        staging_id=staging_id,
+    )
     if staging.uploaded_by_id != user.id:
         raise localized_http_exception(status_code=status.HTTP_403_FORBIDDEN, code="meeting.uploader_read_staging_required")
-    assembled_path = _assemble_chunks(staging)
+    assembled_path = canonical_recording_service._assemble_chunks(staging)  # noqa: SLF001
     return assembled_path.read_bytes()

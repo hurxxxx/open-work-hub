@@ -61,6 +61,51 @@ class RecordingListResponse(BaseModel):
     items: list[RecordingOut]
 
 
+class RecordingUploadInitRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    idempotency_key: str = Field(..., min_length=1, max_length=80)
+    mime_type: str = Field(..., min_length=1, max_length=120)
+    title: str | None = Field(default=None, max_length=200)
+    initial_container_app: str | None = Field(default=None, min_length=1, max_length=64)
+    initial_container_type: str | None = Field(default=None, min_length=1, max_length=64)
+    initial_container_id: str | None = Field(default=None, min_length=1, max_length=128)
+    linked_task_id: str | None = Field(default=None, max_length=36)
+
+
+class RecordingUploadOut(BaseModel):
+    id: str
+    workspace_id: str
+    uploaded_by_id: str
+    idempotency_key: str
+    status: str
+    mime_type: str
+    bytes_received: int
+    chunk_count: int
+    highest_seq: int
+    initial_container_app: str | None
+    initial_container_type: str | None
+    initial_container_id: str | None
+    linked_task_id: str | None = None
+    started_at: datetime
+    last_chunk_at: datetime
+    completed_at: datetime | None
+
+
+class RecordingUploadChunkAck(BaseModel):
+    seq: int
+    bytes_received: int
+    highest_seq: int
+
+
+class RecordingUploadCompleteRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    title: str | None = Field(default=None, max_length=200)
+    duration_sec_estimate: int | None = Field(default=None, ge=0)
+    source: Literal["quick_record", "live_recording"] = "quick_record"
+
+
 class RecordingUpdateRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

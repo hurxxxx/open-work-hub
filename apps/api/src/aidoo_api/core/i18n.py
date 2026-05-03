@@ -1323,6 +1323,54 @@ MESSAGES: dict[str, dict[str, str]] = {
         "ko-KR": "녹음 길이는 0 이상이어야 합니다.",
         "en-US": "Recording duration must be non-negative.",
     },
+    "recording.staging_not_found": {
+        "ko-KR": "녹음 업로드 세션을 찾을 수 없습니다.",
+        "en-US": "Recording upload session not found.",
+    },
+    "recording.chunk_sequence_non_negative": {
+        "ko-KR": "청크 순번은 0 이상이어야 합니다.",
+        "en-US": "Chunk sequence must be non-negative.",
+    },
+    "recording.uploader_resume_required": {
+        "ko-KR": "업로더만 이 녹음 업로드를 이어갈 수 있습니다.",
+        "en-US": "Only the uploader can resume this recording upload.",
+    },
+    "recording.staging_finalized": {
+        "ko-KR": "이미 완료된 녹음 업로드입니다.",
+        "en-US": "This recording upload is already finalized.",
+    },
+    "recording.empty_chunk": {
+        "ko-KR": "녹음 청크가 비어 있습니다.",
+        "en-US": "Recording chunk is empty.",
+    },
+    "recording.chunk_checksum_mismatch": {
+        "ko-KR": "녹음 청크 체크섬이 일치하지 않습니다.",
+        "en-US": "Recording chunk checksum does not match.",
+    },
+    "recording.chunk_payload_conflict": {
+        "ko-KR": "같은 순번의 녹음 청크 내용이 다릅니다.",
+        "en-US": "Recording chunk payload conflicts with an existing chunk.",
+    },
+    "recording.uploader_discard_required": {
+        "ko-KR": "업로더만 이 녹음 업로드를 폐기할 수 있습니다.",
+        "en-US": "Only the uploader can discard this recording upload.",
+    },
+    "recording.finalized_staging_discard_denied": {
+        "ko-KR": "완료된 녹음 업로드는 폐기할 수 없습니다.",
+        "en-US": "Finalized recording uploads cannot be discarded.",
+    },
+    "recording.no_chunks_to_finalize": {
+        "ko-KR": "완료할 녹음 청크가 없습니다.",
+        "en-US": "No recording chunks are available to finalize.",
+    },
+    "recording.chunks_incomplete": {
+        "ko-KR": "녹음 청크가 누락되어 완료할 수 없습니다.",
+        "en-US": "Recording chunks are incomplete.",
+    },
+    "recording.uploader_finalize_required": {
+        "ko-KR": "업로더만 이 녹음 업로드를 완료할 수 있습니다.",
+        "en-US": "Only the uploader can finalize this recording upload.",
+    },
 }
 
 

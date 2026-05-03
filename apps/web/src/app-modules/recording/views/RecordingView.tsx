@@ -7,7 +7,7 @@ import {
   type ChangeEvent,
   type ReactNode,
 } from 'react';
-import { useParams, useSearchParams } from 'react-router-dom';
+import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
   AlertCircle,
@@ -27,6 +27,7 @@ import { Button, useConfirm } from '@aidoo/ui';
 
 import { useAuth } from '@/src/platform/auth/auth-provider';
 import { normalizeTimeZone } from '@/src/platform/time/time-utils';
+import { buildWorkspaceAppPath } from '@/src/platform/workspaces/workspace-utils';
 import {
   deleteRecording,
   fetchRecordingPlaybackBlobUrl,
@@ -469,6 +470,7 @@ export function RecordingView() {
                   locale={i18n.language}
                   playbackUrl={playbackUrls[recording.id]}
                   recording={recording}
+                  detailHref={buildWorkspaceAppPath(workspaceSlug, 'recording', recording.id)}
                   timeZone={timeZone}
                   onDelete={() => void handleDelete(recording)}
                   onPlay={() => void handlePlayback(recording)}
@@ -490,6 +492,7 @@ function RecordingListItem({
   locale,
   playbackUrl,
   recording,
+  detailHref,
   timeZone,
   onDelete,
   onPlay,
@@ -499,6 +502,7 @@ function RecordingListItem({
   locale: string;
   playbackUrl: string | undefined;
   recording: Recording;
+  detailHref: string;
   timeZone: string;
   onDelete: () => void;
   onPlay: () => void;
@@ -568,6 +572,12 @@ function RecordingListItem({
             {busy && !playbackUrl ? <Loader2 size={14} className="mr-1 animate-spin" /> : <Play size={14} className="mr-1" />}
             {t('apps:recording.actions.play')}
           </Button>
+          <Link
+            to={detailHref}
+            className="inline-flex h-[var(--ui-density-dense)] items-center justify-center rounded-[var(--ui-radius-sm)] border border-[var(--ui-color-border)] bg-ui-surface-raised px-2.5 text-[0.84rem] font-semibold text-[var(--ui-color-ink)] transition-colors hover:bg-ui-surface-subtle"
+          >
+            {t('apps:recording.actions.openDetail')}
+          </Link>
           <Button variant="secondary" onClick={onDelete} disabled={busy}>
             <Trash2 size={14} className="mr-1" />
             {t('common:actions.delete')}

@@ -22,5 +22,5 @@ export const recordingManifest: AppModuleManifest = {
       pathSuffix: '?view=mine',
     },
   ],
-  workspaceRoutePaths: ['/w/:workspaceSlug/recording'],
+  workspaceRoutePaths: ['/w/:workspaceSlug/recording', '/w/:workspaceSlug/recording/:recordingId'],
 };

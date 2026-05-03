@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import hashlib
+import os
+import shutil
 import socket
 from datetime import UTC, datetime, timedelta
 from functools import lru_cache
@@ -10,7 +13,7 @@ from urllib.parse import urlparse
 from celery import Celery, chain
 from fastapi import HTTPException, Response, UploadFile, status
 from fastapi.responses import StreamingResponse
-from sqlalchemy import or_, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
 from aidoo_api.core.i18n import localized_http_exception
@@ -24,16 +27,20 @@ from aidoo_api.domains.docs.registry import (
     project_container_access,
 )
 from aidoo_api.domains.docs.service import can_read_native_doc_for_rag
-from aidoo_api.domains.meeting.models import Meeting
+from aidoo_api.domains.meeting.models import Meeting, MeetingTaskLink
 from aidoo_api.domains.meeting.permissions import is_organizer, is_participant
 from aidoo_api.domains.pms.access import _ensure_issue_readable, ensure_issue_attachable
-from aidoo_api.domains.recording.models import Recording, RecordingContainer
+from aidoo_api.domains.recording.models import Recording, RecordingContainer, RecordingStaging
 from aidoo_api.domains.recording.schemas import (
     RecordingContainerCreateRequest,
     RecordingListResponse,
     RecordingOut,
     RecordingPlaybackResponse,
     RecordingUpdateRequest,
+    RecordingUploadChunkAck,
+    RecordingUploadCompleteRequest,
+    RecordingUploadInitRequest,
+    RecordingUploadOut,
 )
 
 
@@ -49,6 +56,9 @@ _AUDIO_EXTENSIONS = {
     "audio/flac": ".flac",
 }
 ENQUEUE_FAILURE_REASON = "Background processing queue is unavailable. Raw audio was saved; retry later."
+RECORDING_STALE_AFTER_SECONDS = 60
+_STAGING_META_LINKED_TASK_ID = "__linked_task_id"
+_STAGING_META_TITLE = "__title"
 
 
 def _utcnow() -> datetime:
@@ -291,6 +301,43 @@ def _extension_for_mime(mime_type: str) -> str:
     return _AUDIO_EXTENSIONS.get(mime_type, Path(mime_type.split("/", 1)[-1]).suffix or ".bin")
 
 
+def _recording_spool_root() -> Path:
+    path = Path(get_settings().recording_spool_dir).expanduser().resolve()
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def _spool_dir_for_recording(staging_id: str) -> Path:
+    return _recording_spool_root() / staging_id
+
+
+def _chunk_path(spool_path: str, seq: int) -> Path:
+    return Path(spool_path) / f"{seq:08d}.chunk"
+
+
+def _assembled_path(spool_path: str) -> Path:
+    return Path(spool_path) / "assembled.bin"
+
+
+def _fsync_path(path: Path, data: bytes) -> None:
+    tmp_path = path.with_suffix(path.suffix + ".tmp")
+    tmp_path.parent.mkdir(parents=True, exist_ok=True)
+    with tmp_path.open("wb") as handle:
+        handle.write(data)
+        handle.flush()
+        os.fsync(handle.fileno())
+    os.replace(tmp_path, path)
+
+
+def _cleanup_spool_dir(spool_path: str | None) -> None:
+    if not spool_path:
+        return
+    try:
+        shutil.rmtree(spool_path, ignore_errors=True)
+    except Exception:
+        pass
+
+
 def _default_title(started_at: datetime) -> str:
     return f"Recording {started_at:%Y-%m-%d %H:%M:%S UTC}"
 
@@ -423,6 +470,548 @@ def _processing_filter():
         Recording.minutes_doc_status == "creating",
         Recording.meeting_insight_status.in_(["pending", "extracting"]),
     )
+
+
+def _staging_linked_task_id(staging: RecordingStaging) -> str | None:
+    value = (staging.chunks_meta or {}).get(_STAGING_META_LINKED_TASK_ID)
+    return value if isinstance(value, str) and value.strip() else None
+
+
+def _staging_title(staging: RecordingStaging) -> str | None:
+    value = (staging.chunks_meta or {}).get(_STAGING_META_TITLE)
+    return value if isinstance(value, str) and value.strip() else None
+
+
+def _serialize_staging(staging: RecordingStaging) -> RecordingUploadOut:
+    return RecordingUploadOut(
+        id=staging.id,
+        workspace_id=staging.workspace_id,
+        uploaded_by_id=staging.uploaded_by_id,
+        idempotency_key=staging.idempotency_key,
+        status=staging.status,
+        mime_type=staging.mime_type,
+        bytes_received=staging.bytes_received,
+        chunk_count=staging.chunk_count,
+        highest_seq=staging.highest_seq,
+        initial_container_app=staging.initial_container_app,
+        initial_container_type=staging.initial_container_type,
+        initial_container_id=staging.initial_container_id,
+        linked_task_id=_staging_linked_task_id(staging),
+        started_at=staging.started_at,
+        last_chunk_at=staging.last_chunk_at,
+        completed_at=staging.completed_at,
+    )
+
+
+def staging_is_stale(staging: RecordingStaging, *, now: datetime | None = None) -> bool:
+    if staging.completed_at is not None:
+        return True
+    reference = now or _utcnow()
+    threshold = reference - timedelta(seconds=RECORDING_STALE_AFTER_SECONDS)
+    return staging.last_chunk_at < threshold
+
+
+def _load_staging_or_404(db: Session, *, workspace: Workspace, staging_id: str) -> RecordingStaging:
+    staging = db.scalar(
+        select(RecordingStaging).where(
+            RecordingStaging.id == staging_id,
+            RecordingStaging.workspace_id == workspace.id,
+        )
+    )
+    if staging is None:
+        raise localized_http_exception(
+            status_code=status.HTTP_404_NOT_FOUND,
+            code="recording.staging_not_found",
+        )
+    return staging
+
+
+def _normalize_initial_container(payload: RecordingUploadInitRequest) -> tuple[str, str, str] | None:
+    values = [
+        payload.initial_container_app,
+        payload.initial_container_type,
+        payload.initial_container_id,
+    ]
+    if not any(values):
+        return None
+    if not all(values):
+        raise localized_http_exception(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            code="recording.container_attach_required",
+        )
+    return (
+        str(payload.initial_container_app),
+        str(payload.initial_container_type),
+        str(payload.initial_container_id),
+    )
+
+
+def _validate_meeting_linked_task(
+    db: Session,
+    *,
+    user: User,
+    meeting_id: str,
+    linked_task_id: str | None,
+) -> None:
+    if linked_task_id is None:
+        return
+    _ensure_issue_readable(db, user, linked_task_id)
+    exists = db.scalar(
+        select(MeetingTaskLink.id).where(
+            MeetingTaskLink.meeting_id == meeting_id,
+            MeetingTaskLink.issue_id == linked_task_id,
+        )
+    )
+    if exists is None:
+        raise localized_http_exception(
+            status_code=status.HTTP_403_FORBIDDEN,
+            code="meeting.linked_task_attached_required",
+        )
+
+
+def _next_container_sort_order(
+    db: Session,
+    *,
+    container_app: str,
+    container_type: str,
+    container_id: str,
+) -> int:
+    if container_app == "meeting" and container_type == "meeting":
+        db.execute(select(Meeting.id).where(Meeting.id == container_id).with_for_update())
+    current_max = db.scalar(
+        select(func.max(RecordingContainer.sort_order)).where(
+            RecordingContainer.container_app == container_app,
+            RecordingContainer.container_type == container_type,
+            RecordingContainer.container_id == container_id,
+        )
+    )
+    return int(current_max or 0) + 1
+
+
+def _container_for_recording(
+    db: Session,
+    *,
+    recording_id: str,
+    container_app: str,
+    container_type: str,
+    container_id: str,
+    added_by_id: str,
+    is_primary: bool = True,
+    sort_order: int | None = None,
+) -> RecordingContainer:
+    if sort_order is None:
+        sort_order = _next_container_sort_order(
+            db,
+            container_app=container_app,
+            container_type=container_type,
+            container_id=container_id,
+        )
+    return RecordingContainer(
+        id=new_id(),
+        recording_id=recording_id,
+        container_app=container_app,
+        container_type=container_type,
+        container_id=container_id,
+        is_primary=is_primary,
+        sort_order=sort_order,
+        added_by_id=added_by_id,
+    )
+
+
+def init_staging(
+    db: Session,
+    *,
+    workspace: Workspace,
+    user: User,
+    payload: RecordingUploadInitRequest,
+) -> RecordingUploadOut:
+    mime_type = _require_allowed_mime(payload.mime_type)
+    initial_container = _normalize_initial_container(payload)
+    linked_task_id = payload.linked_task_id.strip() if payload.linked_task_id else None
+
+    if initial_container is not None:
+        container_app, container_type, container_id = initial_container
+        if not _container_attach_allowed(
+            db,
+            user=user,
+            workspace=workspace,
+            container_app=container_app,
+            container_type=container_type,
+            container_id=container_id,
+        ):
+            raise localized_http_exception(
+                status_code=status.HTTP_403_FORBIDDEN,
+                code="recording.container_attach_required",
+            )
+        if container_app == "meeting" and container_type == "meeting":
+            _validate_meeting_linked_task(
+                db,
+                user=user,
+                meeting_id=container_id,
+                linked_task_id=linked_task_id,
+            )
+
+    existing = db.scalar(
+        select(RecordingStaging).where(
+            RecordingStaging.workspace_id == workspace.id,
+            RecordingStaging.uploaded_by_id == user.id,
+            RecordingStaging.idempotency_key == payload.idempotency_key,
+            RecordingStaging.completed_at.is_(None),
+        )
+    )
+    if existing is not None:
+        return _serialize_staging(existing)
+
+    if (
+        initial_container is not None
+        and initial_container[0] == "meeting"
+        and initial_container[1] == "meeting"
+    ):
+        meeting_id = initial_container[2]
+        db.execute(select(Meeting.id).where(Meeting.id == meeting_id).with_for_update())
+        stale_cutoff = _utcnow() - timedelta(seconds=RECORDING_STALE_AFTER_SECONDS)
+        other_active = db.scalar(
+            select(RecordingStaging)
+            .options(selectinload(RecordingStaging.uploaded_by))
+            .where(
+                RecordingStaging.workspace_id == workspace.id,
+                RecordingStaging.initial_container_app == "meeting",
+                RecordingStaging.initial_container_type == "meeting",
+                RecordingStaging.initial_container_id == meeting_id,
+                RecordingStaging.uploaded_by_id != user.id,
+                RecordingStaging.completed_at.is_(None),
+                RecordingStaging.last_chunk_at >= stale_cutoff,
+            )
+        )
+        if other_active is not None:
+            recorder_name = (
+                other_active.uploaded_by.full_name
+                if other_active.uploaded_by is not None
+                else "다른 사용자"
+            )
+            raise localized_http_exception(
+                status_code=status.HTTP_409_CONFLICT,
+                code="meeting.recording_in_progress",
+                recorder_name=recorder_name,
+                active_recorder_id=other_active.uploaded_by_id,
+                active_recorder_name=recorder_name,
+                active_staging_id=other_active.id,
+            )
+
+    staging_id = new_id()
+    started_at = _utcnow()
+    spool_dir = _spool_dir_for_recording(staging_id)
+    spool_dir.mkdir(parents=True, exist_ok=True)
+    meta: dict[str, str] = {}
+    if linked_task_id:
+        meta[_STAGING_META_LINKED_TASK_ID] = linked_task_id
+    title = payload.title.strip() if payload.title else ""
+    if title:
+        meta[_STAGING_META_TITLE] = title
+    staging = RecordingStaging(
+        id=staging_id,
+        workspace_id=workspace.id,
+        uploaded_by_id=user.id,
+        idempotency_key=payload.idempotency_key,
+        status="recording",
+        spool_path=str(spool_dir),
+        storage_key=_storage_key_for_recording(
+            workspace=workspace,
+            user=user,
+            recording_id=staging_id,
+            mime_type=mime_type,
+            started_at=started_at,
+        ),
+        mime_type=mime_type,
+        chunks_meta=meta,
+        started_at=started_at,
+        last_chunk_at=started_at,
+        initial_container_app=initial_container[0] if initial_container else None,
+        initial_container_type=initial_container[1] if initial_container else None,
+        initial_container_id=initial_container[2] if initial_container else None,
+    )
+    db.add(staging)
+    db.commit()
+    db.refresh(staging)
+    return _serialize_staging(staging)
+
+
+async def upload_chunk(
+    db: Session,
+    *,
+    workspace: Workspace,
+    user: User,
+    staging_id: str,
+    seq: int,
+    upload: UploadFile,
+    chunk_sha256: str | None,
+) -> RecordingUploadChunkAck:
+    if seq < 0:
+        raise localized_http_exception(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            code="recording.chunk_sequence_non_negative",
+        )
+    staging = _load_staging_or_404(db, workspace=workspace, staging_id=staging_id)
+    if staging.uploaded_by_id != user.id:
+        raise localized_http_exception(
+            status_code=status.HTTP_403_FORBIDDEN,
+            code="recording.uploader_resume_required",
+        )
+    if staging.completed_at is not None or staging.status == "promoted":
+        raise localized_http_exception(
+            status_code=status.HTTP_409_CONFLICT,
+            code="recording.staging_finalized",
+        )
+
+    data = await upload.read()
+    if not data:
+        raise localized_http_exception(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            code="recording.empty_chunk",
+        )
+
+    digest = hashlib.sha256(data).hexdigest()
+    if chunk_sha256 and chunk_sha256 != digest:
+        raise localized_http_exception(
+            status_code=status.HTTP_409_CONFLICT,
+            code="recording.chunk_checksum_mismatch",
+        )
+
+    settings = get_settings()
+    if staging.bytes_received + len(data) > settings.recording_max_size_bytes:
+        raise localized_http_exception(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            code="recording.size_limit_exceeded",
+        )
+
+    meta = dict(staging.chunks_meta or {})
+    existing = meta.get(str(seq))
+    if existing is not None:
+        if not isinstance(existing, dict) or existing.get("sha256") != digest or int(existing.get("size", -1)) != len(data):
+            raise localized_http_exception(
+                status_code=status.HTTP_409_CONFLICT,
+                code="recording.chunk_payload_conflict",
+            )
+        return RecordingUploadChunkAck(
+            seq=seq,
+            bytes_received=staging.bytes_received,
+            highest_seq=staging.highest_seq,
+        )
+
+    _fsync_path(_chunk_path(staging.spool_path, seq), data)
+    meta[str(seq)] = {
+        "size": len(data),
+        "sha256": digest,
+        "stored_at": _utcnow().isoformat(),
+    }
+    staging.chunks_meta = meta
+    staging.bytes_received += len(data)
+    staging.chunk_count += 1
+    staging.highest_seq = max(staging.highest_seq, seq)
+    staging.last_chunk_at = _utcnow()
+    db.add(staging)
+    db.commit()
+    return RecordingUploadChunkAck(
+        seq=seq,
+        bytes_received=staging.bytes_received,
+        highest_seq=staging.highest_seq,
+    )
+
+
+def list_my_staging(
+    db: Session,
+    *,
+    workspace: Workspace,
+    user: User,
+    initial_container_app: str | None = None,
+    initial_container_type: str | None = None,
+    initial_container_id: str | None = None,
+) -> list[RecordingUploadOut]:
+    cutoff = _utcnow() - timedelta(hours=get_settings().recording_staging_retention_hours)
+    query = select(RecordingStaging).where(
+        RecordingStaging.workspace_id == workspace.id,
+        RecordingStaging.uploaded_by_id == user.id,
+        RecordingStaging.completed_at.is_(None),
+        RecordingStaging.started_at >= cutoff,
+    )
+    if initial_container_app is not None:
+        query = query.where(RecordingStaging.initial_container_app == initial_container_app)
+    if initial_container_type is not None:
+        query = query.where(RecordingStaging.initial_container_type == initial_container_type)
+    if initial_container_id is not None:
+        query = query.where(RecordingStaging.initial_container_id == initial_container_id)
+    rows = db.scalars(query.order_by(RecordingStaging.started_at.asc())).all()
+    return [_serialize_staging(item) for item in rows]
+
+
+def discard_staging(
+    db: Session,
+    *,
+    workspace: Workspace,
+    user: User,
+    staging_id: str,
+) -> None:
+    staging = _load_staging_or_404(db, workspace=workspace, staging_id=staging_id)
+    if staging.uploaded_by_id != user.id:
+        raise localized_http_exception(
+            status_code=status.HTTP_403_FORBIDDEN,
+            code="recording.uploader_discard_required",
+        )
+    if staging.promoted_recording_id:
+        raise localized_http_exception(
+            status_code=status.HTTP_409_CONFLICT,
+            code="recording.finalized_staging_discard_denied",
+        )
+    _cleanup_spool_dir(staging.spool_path)
+    db.delete(staging)
+    db.commit()
+
+
+def _chunk_sequences(staging: RecordingStaging) -> list[int]:
+    return sorted(int(seq) for seq in (staging.chunks_meta or {}).keys() if str(seq).isdigit())
+
+
+def _assert_contiguous_chunks(staging: RecordingStaging) -> list[int]:
+    if staging.highest_seq < 0:
+        raise localized_http_exception(
+            status_code=status.HTTP_409_CONFLICT,
+            code="recording.no_chunks_to_finalize",
+        )
+    seqs = _chunk_sequences(staging)
+    expected = list(range(seqs[0], seqs[-1] + 1)) if seqs else []
+    if not seqs or seqs != expected:
+        raise localized_http_exception(
+            status_code=status.HTTP_409_CONFLICT,
+            code="recording.chunks_incomplete",
+        )
+    return seqs
+
+
+def _assemble_chunks(staging: RecordingStaging) -> Path:
+    assembled_path = _assembled_path(staging.spool_path)
+    seqs = _assert_contiguous_chunks(staging)
+    with assembled_path.open("wb") as output:
+        for seq in seqs:
+            with _chunk_path(staging.spool_path, seq).open("rb") as handle:
+                shutil.copyfileobj(handle, output)
+        output.flush()
+        os.fsync(output.fileno())
+    return assembled_path
+
+
+def complete_staging(
+    db: Session,
+    *,
+    workspace: Workspace,
+    user: User,
+    staging_id: str,
+    payload: RecordingUploadCompleteRequest,
+) -> RecordingOut:
+    staging = _load_staging_or_404(db, workspace=workspace, staging_id=staging_id)
+    if staging.uploaded_by_id != user.id:
+        raise localized_http_exception(
+            status_code=status.HTTP_403_FORBIDDEN,
+            code="recording.uploader_finalize_required",
+        )
+    if staging.promoted_recording_id:
+        recording = _load_recording_or_404(db, staging.promoted_recording_id)
+        return RecordingOut.model_validate(recording)
+
+    staging.status = "assembling"
+    staging.duration_sec_estimate = payload.duration_sec_estimate
+    db.add(staging)
+    db.commit()
+    assembled_path = _assemble_chunks(staging)
+
+    staging = _load_staging_or_404(db, workspace=workspace, staging_id=staging_id)
+    if staging.promoted_recording_id:
+        recording = _load_recording_or_404(db, staging.promoted_recording_id)
+        return RecordingOut.model_validate(recording)
+
+    staging.status = "uploading"
+    db.add(staging)
+    db.commit()
+
+    settings = get_settings()
+    get_minio_client().fput_object(
+        settings.minio_bucket,
+        staging.storage_key,
+        str(assembled_path),
+        content_type=staging.mime_type,
+    )
+
+    title = (payload.title or _staging_title(staging) or "").strip()
+    recording = Recording(
+        id=staging.id,
+        workspace_id=workspace.id,
+        owner_id=user.id,
+        title=title or _default_title(staging.started_at),
+        started_at=staging.started_at,
+        ended_at=_utcnow(),
+        duration_sec=payload.duration_sec_estimate,
+        source=payload.source,
+        storage_key=staging.storage_key,
+        file_size=staging.bytes_received,
+        mime_type=staging.mime_type,
+        audio_status="saved",
+        transcript_status="pending",
+        raw_transcript_doc_status="pending",
+        minutes_doc_status="pending",
+        meeting_insight_status="none",
+        progress_pct=0,
+    )
+    db.add(recording)
+    db.flush()
+
+    primary_container_id: str | None = None
+    if (
+        staging.initial_container_app
+        and staging.initial_container_type
+        and staging.initial_container_id
+    ):
+        container = _container_for_recording(
+            db,
+            recording_id=recording.id,
+            container_app=staging.initial_container_app,
+            container_type=staging.initial_container_type,
+            container_id=staging.initial_container_id,
+            added_by_id=user.id,
+            is_primary=True,
+        )
+        primary_container_id = container.id
+        db.add(container)
+    linked_task_id = _staging_linked_task_id(staging)
+    if (
+        linked_task_id
+        and staging.initial_container_app == "meeting"
+        and staging.initial_container_type == "meeting"
+    ):
+        db.add(
+            _container_for_recording(
+                db,
+                recording_id=recording.id,
+                container_app="pms",
+                container_type="issue",
+                container_id=linked_task_id,
+                added_by_id=user.id,
+                is_primary=False,
+                sort_order=0,
+            )
+        )
+
+    staging.promoted_recording_id = recording.id
+    staging.completed_at = _utcnow()
+    staging.status = "promoted"
+    db.add(staging)
+    db.add(recording)
+    db.commit()
+    if primary_container_id:
+        db.expire(recording, ["containers"])
+    fresh = _load_recording_or_404(db, recording.id)
+    _enqueue_pipeline_or_mark_failed(db, recording=fresh)
+    _cleanup_spool_dir(staging.spool_path)
+    fresh = _load_recording_or_404(db, recording.id)
+    return RecordingOut.model_validate(fresh)
 
 
 def list_recordings(
@@ -562,6 +1151,10 @@ def import_recording(
     ended_at: datetime | None,
     duration_sec: int | None,
     source: str = "quick_record",
+    initial_container_app: str | None = None,
+    initial_container_type: str | None = None,
+    initial_container_id: str | None = None,
+    linked_task_id: str | None = None,
 ) -> RecordingOut:
     mime_type = _require_allowed_mime(upload.content_type)
     resolved_started_at = _as_utc_naive(started_at) if started_at else _utcnow()
@@ -586,6 +1179,36 @@ def import_recording(
             status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
             code="recording.size_limit_exceeded",
         )
+    initial_container: tuple[str, str, str] | None = None
+    if any([initial_container_app, initial_container_type, initial_container_id]):
+        if not (initial_container_app and initial_container_type and initial_container_id):
+            raise localized_http_exception(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                code="recording.container_attach_required",
+            )
+        if not _container_attach_allowed(
+            db,
+            user=user,
+            workspace=workspace,
+            container_app=initial_container_app,
+            container_type=initial_container_type,
+            container_id=initial_container_id,
+        ):
+            raise localized_http_exception(
+                status_code=status.HTTP_403_FORBIDDEN,
+                code="recording.container_attach_required",
+            )
+        normalized_linked_task_id = linked_task_id.strip() if linked_task_id else None
+        if initial_container_app == "meeting" and initial_container_type == "meeting":
+            _validate_meeting_linked_task(
+                db,
+                user=user,
+                meeting_id=initial_container_id,
+                linked_task_id=normalized_linked_task_id,
+            )
+        initial_container = (initial_container_app, initial_container_type, initial_container_id)
+    else:
+        normalized_linked_task_id = linked_task_id.strip() if linked_task_id else None
 
     recording_id = new_id()
     storage_key = _storage_key_for_recording(
@@ -625,6 +1248,36 @@ def import_recording(
         progress_pct=0,
     )
     db.add(recording)
+    if initial_container is not None:
+        db.flush()
+        db.add(
+            _container_for_recording(
+                db,
+                recording_id=recording.id,
+                container_app=initial_container[0],
+                container_type=initial_container[1],
+                container_id=initial_container[2],
+                added_by_id=user.id,
+                is_primary=True,
+            )
+        )
+        if (
+            normalized_linked_task_id
+            and initial_container[0] == "meeting"
+            and initial_container[1] == "meeting"
+        ):
+            db.add(
+                _container_for_recording(
+                    db,
+                    recording_id=recording.id,
+                    container_app="pms",
+                    container_type="issue",
+                    container_id=normalized_linked_task_id,
+                    added_by_id=user.id,
+                    is_primary=False,
+                    sort_order=0,
+                )
+            )
     db.commit()
     fresh = _load_recording_or_404(db, recording_id)
     _enqueue_pipeline_or_mark_failed(db, recording=fresh)
@@ -791,6 +1444,257 @@ def delete_container(
     db.commit()
     fresh = _load_recording_or_404(db, recording.id)
     return RecordingOut.model_validate(fresh)
+
+
+def _meeting_recording_status(recording: Recording) -> str:
+    if (
+        recording.audio_status == "failed"
+        or recording.transcript_status == "failed"
+        or recording.raw_transcript_doc_status == "failed"
+        or recording.minutes_doc_status == "failed"
+        or recording.meeting_insight_status == "failed"
+    ):
+        return "failed"
+    if recording.minutes_doc_status == "done":
+        return "done"
+    if recording.minutes_doc_status == "creating":
+        return "generating_doc"
+    if recording.transcript_status == "done":
+        return "summarizing"
+    if recording.transcript_status == "transcribing":
+        return "transcribing"
+    return "pending"
+
+
+def _linked_task_id(recording: Recording) -> str | None:
+    for container in recording.containers:
+        if container.container_app == "pms" and container.container_type in {"issue", "task"}:
+            return container.container_id
+    return None
+
+
+def _meeting_container(recording: Recording, *, meeting_id: str) -> RecordingContainer | None:
+    return next(
+        (
+            container
+            for container in recording.containers
+            if container.container_app == "meeting"
+            and container.container_type == "meeting"
+            and container.container_id == meeting_id
+        ),
+        None,
+    )
+
+
+def list_meeting_recording_outs(db: Session, *, meeting: Meeting) -> list:
+    from aidoo_api.domains.meeting.schemas import MeetingRecordingOut
+
+    recordings = db.scalars(
+        select(Recording)
+        .join(RecordingContainer)
+        .options(selectinload(Recording.containers))
+        .where(
+            Recording.workspace_id == meeting.workspace_id,
+            Recording.trashed_at.is_(None),
+            RecordingContainer.container_app == "meeting",
+            RecordingContainer.container_type == "meeting",
+            RecordingContainer.container_id == meeting.id,
+        )
+        .order_by(RecordingContainer.sort_order.asc(), Recording.started_at.asc(), Recording.id.asc())
+    ).unique().all()
+    items = []
+    for recording in recordings:
+        container = _meeting_container(recording, meeting_id=meeting.id)
+        if container is None:
+            continue
+        items.append(
+            MeetingRecordingOut(
+                id=recording.id,
+                meeting_id=meeting.id,
+                uploaded_by_id=recording.owner_id,
+                storage_key=recording.storage_key or "",
+                duration_sec=recording.duration_sec,
+                source=recording.source,
+                transcription_status=_meeting_recording_status(recording),
+                sequence_no=container.sort_order,
+                progress_pct=recording.progress_pct,
+                file_size=recording.file_size,
+                mime_type=recording.mime_type,
+                failure_reason=recording.failure_reason,
+                linked_doc_id=recording.minutes_doc_id,
+                linked_task_id=_linked_task_id(recording),
+                transcript_extracted=bool((recording.transcript_text or "").strip()),
+                summary_generated=recording.minutes_doc_status == "done",
+                transcribe_started_at=recording.transcribe_started_at,
+                transcribe_completed_at=recording.transcribe_completed_at,
+                created_at=recording.created_at,
+            )
+        )
+    return items
+
+
+def resolve_active_recording_lock(db: Session, *, meeting: Meeting):
+    from aidoo_api.domains.meeting.schemas import ActiveRecordingLockOut
+
+    rows = db.scalars(
+        select(RecordingStaging)
+        .options(selectinload(RecordingStaging.uploaded_by))
+        .where(
+            RecordingStaging.workspace_id == meeting.workspace_id,
+            RecordingStaging.initial_container_app == "meeting",
+            RecordingStaging.initial_container_type == "meeting",
+            RecordingStaging.initial_container_id == meeting.id,
+            RecordingStaging.completed_at.is_(None),
+        )
+        .order_by(RecordingStaging.started_at.asc())
+    ).all()
+    active = next((row for row in rows if not staging_is_stale(row)), None)
+    if active is None:
+        return None
+    user_name = active.uploaded_by.full_name if active.uploaded_by is not None else ""
+    return ActiveRecordingLockOut(
+        staging_id=active.id,
+        user_id=active.uploaded_by_id,
+        user_name=user_name,
+        started_at=active.started_at,
+        last_active_at=active.last_chunk_at,
+    )
+
+
+def load_meeting_recording_or_404(
+    db: Session,
+    *,
+    workspace: Workspace,
+    meeting_id: str,
+    recording_id: str,
+) -> Recording:
+    recording = db.scalar(
+        select(Recording)
+        .join(RecordingContainer)
+        .options(selectinload(Recording.containers))
+        .where(
+            Recording.id == recording_id,
+            Recording.workspace_id == workspace.id,
+            Recording.trashed_at.is_(None),
+            RecordingContainer.container_app == "meeting",
+            RecordingContainer.container_type == "meeting",
+            RecordingContainer.container_id == meeting_id,
+        )
+    )
+    if recording is None:
+        raise localized_http_exception(
+            status_code=status.HTTP_404_NOT_FOUND,
+            code="meeting.recording_not_found",
+        )
+    return recording
+
+
+def latest_meeting_recording(
+    db: Session,
+    *,
+    workspace_id: str,
+    meeting_id: str,
+    require_transcript: bool = False,
+) -> Recording | None:
+    query = (
+        select(Recording)
+        .join(RecordingContainer)
+        .options(selectinload(Recording.containers))
+        .where(
+            Recording.workspace_id == workspace_id,
+            Recording.trashed_at.is_(None),
+            RecordingContainer.container_app == "meeting",
+            RecordingContainer.container_type == "meeting",
+            RecordingContainer.container_id == meeting_id,
+        )
+        .order_by(RecordingContainer.sort_order.desc(), Recording.started_at.desc())
+    )
+    if require_transcript:
+        query = query.where(Recording.transcript_text.is_not(None))
+    return db.scalar(query)
+
+
+def retry_meeting_recording(
+    db: Session,
+    *,
+    workspace: Workspace,
+    user: User,
+    meeting: Meeting,
+    recording_id: str,
+) -> RecordingOut:
+    recording = load_meeting_recording_or_404(
+        db,
+        workspace=workspace,
+        meeting_id=meeting.id,
+        recording_id=recording_id,
+    )
+    if recording.owner_id != user.id and meeting.organizer_id != user.id:
+        raise localized_http_exception(
+            status_code=status.HTTP_403_FORBIDDEN,
+            code="recording.owner_required",
+        )
+    if recording.audio_status != "saved" or not recording.storage_key:
+        raise localized_http_exception(
+            status_code=status.HTTP_409_CONFLICT,
+            code="recording.audio_unavailable",
+        )
+    if _meeting_recording_status(recording) != "failed":
+        raise localized_http_exception(
+            status_code=status.HTTP_409_CONFLICT,
+            code="meeting.only_failed_recordings_retry",
+        )
+    if recording.celery_task_id:
+        revoke_recording_task(recording.celery_task_id)
+    recording.celery_task_id = None
+    recording.failure_reason = None
+    if recording.transcript_status != "done":
+        recording.transcript_status = "pending"
+        recording.transcribe_started_at = None
+        recording.transcribe_completed_at = None
+        recording.progress_pct = 0
+    else:
+        recording.progress_pct = max(recording.progress_pct, 60)
+    if recording.raw_transcript_doc_status != "done":
+        recording.raw_transcript_doc_status = "pending"
+        recording.raw_transcript_doc_id = None
+    if recording.minutes_doc_status != "done":
+        recording.minutes_doc_status = "pending"
+        recording.minutes_doc_id = None
+    recording.meeting_insight_status = "none"
+    recording.updated_at = _utcnow()
+    db.add(recording)
+    db.commit()
+    fresh = _load_recording_or_404(db, recording.id)
+    _enqueue_pipeline_or_mark_failed(db, recording=fresh)
+    fresh = _load_recording_or_404(db, recording.id)
+    return RecordingOut.model_validate(fresh)
+
+
+def archive_meeting_recording(
+    db: Session,
+    *,
+    workspace: Workspace,
+    user: User,
+    meeting: Meeting,
+    recording_id: str,
+) -> None:
+    recording = load_meeting_recording_or_404(
+        db,
+        workspace=workspace,
+        meeting_id=meeting.id,
+        recording_id=recording_id,
+    )
+    if recording.owner_id != user.id and meeting.organizer_id != user.id:
+        raise localized_http_exception(
+            status_code=status.HTTP_403_FORBIDDEN,
+            code="meeting.recording_delete_permission",
+        )
+    if recording.celery_task_id:
+        revoke_recording_task(recording.celery_task_id)
+    recording.trashed_at = _utcnow()
+    recording.updated_at = recording.trashed_at
+    db.add(recording)
+    db.commit()
 
 
 def get_recording_playback(

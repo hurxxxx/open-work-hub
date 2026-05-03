@@ -563,6 +563,12 @@ Meeting compatibility route가 `recording.service`를 호출하도록 바꾸는 
 - meeting wrapper의 녹음 순번(`sequence_no`)과 시작시각 기반 object key
 - Meeting별 single-recorder lock이 `RecordingStaging.initial_container_*` 기준으로 동작
 
+현재 반영:
+
+- Meeting staging/import/playback/retry/delete wrapper는 canonical Recording service를 사용한다.
+- Meeting detail의 recording list와 active recording lock은 canonical `RecordingContainer`/`RecordingStaging` 기준으로 직렬화한다.
+- 기존 Meeting recording backfill과 dual-write는 적용하지 않는다.
+
 ### PR 5 - Web shared recorder boundary and recovery
 
 - `apps/web/src/app-modules/recording/` 추가.
@@ -591,6 +597,12 @@ Meeting compatibility route가 `recording.service`를 호출하도록 바꾸는 
 - 녹음 시작/종료
 - reload 후 recovery
 - 회의/태스크 attach
+
+현재 반영:
+
+- Recording detail route와 attach/detach 관리 UX를 추가했다.
+- Recording API client에 canonical staging/chunk upload 함수와 container attach/detach 함수를 공개했다.
+- VM/dev worker 실행 queue에 `meeting_transcribe`, RAG, search realtime queue를 포함하도록 고정했다.
 
 ### PR 7 - Search/RAG and polish
 

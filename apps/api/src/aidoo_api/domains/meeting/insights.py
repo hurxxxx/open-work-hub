@@ -8,7 +8,7 @@ from typing import Any, Literal
 
 from fastapi import status
 from pydantic import BaseModel, Field, ValidationError
-from sqlalchemy import select
+from sqlalchemy import inspect, select
 from sqlalchemy.orm import Session, selectinload
 
 from aidoo_api.core.i18n import localized_http_exception
@@ -25,6 +25,7 @@ from aidoo_api.domains.meeting.models import (
 )
 from aidoo_api.domains.meeting.schemas import MeetingAvailabilityResponse
 from aidoo_api.domains.planner.service import parse_iso_or_date
+from aidoo_api.domains.recording.models import Recording, RecordingContainer
 
 
 logger = logging.getLogger(__name__)
@@ -106,14 +107,22 @@ def _meeting_service():
     return meeting_service
 
 
-def _meeting_context_block(meeting: Meeting, recording: MeetingRecording) -> str:
+def _recording_transcript(recording: MeetingRecording | Recording) -> str:
+    return (recording.transcript_text or "").strip()
+
+
+def _recording_summary(recording: MeetingRecording | Recording) -> str:
+    return (getattr(recording, "summary_text", None) or "").strip()
+
+
+def _meeting_context_block(meeting: Meeting, recording: MeetingRecording | Recording) -> str:
     attendee_names = ", ".join(
         attendee.user.full_name
         for attendee in meeting.attendees
         if attendee.user is not None
     )
-    transcript = (recording.transcript_text or "").strip()
-    summary = (recording.summary_text or "").strip()
+    transcript = _recording_transcript(recording)
+    summary = _recording_summary(recording)
     transcript_excerpt = transcript[:12000]
     return (
         f"회의 제목: {meeting.title}\n"
@@ -125,7 +134,7 @@ def _meeting_context_block(meeting: Meeting, recording: MeetingRecording) -> str
     )
 
 
-def _insight_prompt(insight_type: InsightType, meeting: Meeting, recording: MeetingRecording) -> list[dict[str, str]]:
+def _insight_prompt(insight_type: InsightType, meeting: Meeting, recording: MeetingRecording | Recording) -> list[dict[str, str]]:
     context_block = _meeting_context_block(meeting, recording)
     if insight_type == "action":
         system = (
@@ -192,7 +201,54 @@ def _serialize_insight(insight: MeetingInsight) -> dict[str, Any]:
     }
 
 
-def _load_latest_ready_recording(db: Session, *, meeting_id: str) -> MeetingRecording | None:
+def _canonical_recording_tables_available(db: Session) -> bool:
+    try:
+        inspector = inspect(db.get_bind())
+        return inspector.has_table(Recording.__tablename__) and inspector.has_table(
+            RecordingContainer.__tablename__
+        )
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def _latest_canonical_meeting_recording(
+    db: Session,
+    *,
+    workspace_id: str,
+    meeting_id: str,
+    require_transcript: bool = False,
+) -> Recording | None:
+    if not _canonical_recording_tables_available(db):
+        return None
+    query = (
+        select(Recording)
+        .join(RecordingContainer)
+        .options(selectinload(Recording.containers))
+        .where(
+            Recording.workspace_id == workspace_id,
+            Recording.trashed_at.is_(None),
+            RecordingContainer.container_app == "meeting",
+            RecordingContainer.container_type == "meeting",
+            RecordingContainer.container_id == meeting_id,
+        )
+        .order_by(RecordingContainer.sort_order.desc(), Recording.started_at.desc())
+    )
+    if require_transcript:
+        query = query.where(Recording.transcript_text.is_not(None))
+    return db.scalar(query)
+
+
+def _load_latest_ready_recording(db: Session, *, meeting_id: str) -> MeetingRecording | Recording | None:
+    meeting = db.get(Meeting, meeting_id)
+    if meeting is not None:
+        recording = _latest_canonical_meeting_recording(
+            db,
+            workspace_id=meeting.workspace_id,
+            meeting_id=meeting.id,
+            require_transcript=True,
+        )
+        if recording is not None:
+            return recording
     return db.scalar(
         select(MeetingRecording)
         .where(
@@ -202,6 +258,50 @@ def _load_latest_ready_recording(db: Session, *, meeting_id: str) -> MeetingReco
         )
         .order_by(MeetingRecording.sequence_no.desc(), MeetingRecording.created_at.desc())
     )
+
+
+def _load_ready_recording_context(
+    db: Session,
+    *,
+    recording_id: str,
+) -> tuple[MeetingRecording | Recording, str, str | None]:
+    if _canonical_recording_tables_available(db):
+        recording = db.scalar(
+            select(Recording).where(Recording.id == recording_id).options(selectinload(Recording.containers))
+        )
+        if recording is not None:
+            meeting_container = next(
+                (
+                    container
+                    for container in recording.containers
+                    if container.container_app == "meeting" and container.container_type == "meeting"
+                ),
+                None,
+            )
+            if meeting_container is None:
+                raise localized_http_exception(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    code="meeting.recording_not_found",
+                )
+            if not recording.transcript_text:
+                raise localized_http_exception(
+                    status_code=status.HTTP_409_CONFLICT,
+                    code="meeting.recording_summary_unavailable",
+                )
+            return recording, meeting_container.container_id, None
+
+    legacy = db.scalar(select(MeetingRecording).where(MeetingRecording.id == recording_id))
+    if legacy is None:
+        raise localized_http_exception(
+            status_code=status.HTTP_404_NOT_FOUND,
+            code="meeting.recording_not_found",
+        )
+    if not legacy.summary_text or not legacy.transcript_text:
+        raise localized_http_exception(
+            status_code=status.HTTP_409_CONFLICT,
+            code="meeting.recording_summary_unavailable",
+        )
+    return legacy, legacy.meeting_id, legacy.id
 
 
 def _load_existing_draft_insights(
@@ -296,20 +396,14 @@ def extract_and_persist_meeting_insights(
     insight_types: tuple[InsightType, ...] = ("action", "decision", "followup_schedule"),
     created_by_run_id: str | None = None,
 ) -> dict[InsightType, list[MeetingInsight]]:
-    recording = db.scalar(
-        select(MeetingRecording).where(MeetingRecording.id == recording_id)
+    recording, meeting_id, insight_recording_id = _load_ready_recording_context(
+        db,
+        recording_id=recording_id,
     )
-    if recording is None:
-        raise localized_http_exception(status_code=status.HTTP_404_NOT_FOUND, code="meeting.recording_not_found")
-    if not recording.summary_text or not recording.transcript_text:
-        raise localized_http_exception(
-            status_code=status.HTTP_409_CONFLICT,
-            code="meeting.recording_summary_unavailable",
-        )
 
     meeting = db.scalar(
         select(Meeting)
-        .where(Meeting.id == recording.meeting_id)
+        .where(Meeting.id == meeting_id)
         .options(selectinload(Meeting.attendees).selectinload(MeetingAttendee.user))
     )
     if meeting is None:
@@ -318,10 +412,10 @@ def extract_and_persist_meeting_insights(
     created_counts: dict[str, int] = {}
     results: dict[InsightType, list[MeetingInsight]] = {}
     for insight_type in insight_types:
-        if not refresh:
+        if not refresh and insight_recording_id is not None:
             existing_for_recording = _load_existing_recording_insights(
                 db,
-                recording_id=recording.id,
+                recording_id=insight_recording_id,
                 insight_type=insight_type,
             )
             if existing_for_recording:
@@ -387,7 +481,7 @@ def extract_and_persist_meeting_insights(
             insight = MeetingInsight(
                 id=new_id(),
                 meeting_id=meeting.id,
-                recording_id=recording.id,
+                recording_id=insight_recording_id,
                 workspace_id=meeting.workspace_id,
                 insight_type=insight_type,
                 payload_json=payload_json,
