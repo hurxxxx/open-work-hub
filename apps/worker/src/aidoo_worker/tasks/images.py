@@ -47,6 +47,7 @@ from aidoo_api.domains.images.models import ImageGeneration  # noqa: E402
 from aidoo_api.domains.images.prompt import (  # noqa: E402
     ILLUSTRATOR_SYSTEM_PROMPT,
     build_agent_prompt,
+    sanitize_image_plan_text,
 )
 
 
@@ -390,6 +391,10 @@ def generate_image(self, generation_id: str) -> str:
             brief_text = str(last.get("text") or "").strip()
         if not brief_text:
             _mark_failed(session, generation_id, "Brief text is empty")
+            raise Ignore()
+        brief_text = sanitize_image_plan_text(brief_text)
+        if not brief_text:
+            _mark_failed(session, generation_id, "Image plan is empty")
             raise Ignore()
 
         reference_images = _download_reference_images(row)

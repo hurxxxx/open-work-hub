@@ -49,7 +49,7 @@ export function WizardFooter({
             type="button"
             onClick={onNext}
             disabled={nextDisabled}
-            className="flex items-center gap-1 rounded-md bg-app-accent px-4 py-2 app-text-control-sm font-medium text-white transition-colors hover:opacity-90 disabled:border disabled:border-app-border disabled:bg-app-surface-sidebar disabled:text-app-ink/65 disabled:opacity-100"
+            className="flex items-center gap-1 rounded-md bg-app-ink px-4 py-2 app-text-control-sm font-medium text-app-surface transition-colors hover:bg-app-ink/90 disabled:border disabled:border-app-border disabled:bg-app-surface-sidebar disabled:text-app-ink/65 disabled:opacity-100"
           >
             {nextLabel ?? t('ai.imageWizard.wizard.next')}
             <ArrowRight size={14} />

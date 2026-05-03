@@ -36,7 +36,7 @@ export function WizardStepper({ current, highest, onJump }: WizardStepperProps) 
               <span
                 className={`flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-semibold ${
                   isCurrent
-                    ? 'bg-app-accent text-white'
+                    ? 'bg-app-ink text-app-surface'
                     : isCompleted
                       ? 'bg-app-accent/30 text-app-accent'
                       : 'bg-app-surface-hover text-app-ink/40'

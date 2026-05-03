@@ -1,36 +1,82 @@
-"""Pure prompt-construction helpers for the image-wizard brief + agent input.
+"""Pure prompt-construction helpers for the image-wizard plan + agent input.
 
 Kept side-effect free so unit tests don't need DB or LLM access.
 """
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 
-# --- Brief generation (OpenAI Agents SDK) ----------------------------------
+# --- Plan generation (OpenAI Agents SDK) -----------------------------------
+
+_ANGLE_TOKEN_RE = re.compile(r"<\s*([^<>]{1,80})\s*>")
+_DROP_PLACEHOLDER_VALUES = {
+    "metric",
+    "metrics",
+    "status",
+    "priority",
+    "client",
+    "label",
+    "title",
+    "description",
+    "copy",
+    "text",
+    "설명 텍스트",
+}
+
+
+def _is_placeholder_value(value: str) -> bool:
+    normalized = re.sub(r"\s+", " ", value.strip()).lower()
+    return normalized in _DROP_PLACEHOLDER_VALUES or normalized.startswith("placeholder")
+
+
+def sanitize_image_plan_text(text: str) -> str:
+    """Remove placeholder tokens before a plan is shown or sent to image generation."""
+
+    def replace_angle_token(match: re.Match[str]) -> str:
+        inner = re.sub(r"\s+", " ", match.group(1).strip())
+        if not inner or _is_placeholder_value(inner):
+            return ""
+        return inner
+
+    cleaned = _ANGLE_TOKEN_RE.sub(replace_angle_token, text or "")
+    lines: list[str] = []
+    for raw_line in cleaned.splitlines():
+        line = re.sub(r"\s+", " ", raw_line).strip()
+        if not line:
+            continue
+        stripped = line.lstrip("-* ").strip()
+        if not stripped:
+            continue
+        if re.match(r"^[^:：]{1,48}[:：]\s*$", stripped):
+            continue
+        if _is_placeholder_value(stripped):
+            continue
+        lines.append(line)
+    return "\n".join(lines).strip()
+
 
 BRIEF_SYSTEM_PROMPT = (
-    "You are a senior infographic designer preparing a brief for an "
-    "illustrator and for a human reviewer. Produce a concise, readable brief "
-    "in plain text, at most 300 words, with the following sections (each on "
-    "its own line, in this order):\n\n"
-    "제목: <short title>\n"
-    "화면 구성: <what the viewer will see and where>\n"
-    "핵심 요소: <bullet list of concrete visual elements, each line starting with '- '>\n"
-    "색상: <palette description tied to the requested style>\n"
-    "글자 스타일: <typeface vibe and emphasis>\n"
-    "주의사항: <anything the illustrator should avoid or be careful about>\n\n"
+    "You are a senior image-planning agent preparing a short plan for a human "
+    "reviewer and an illustrator agent. Produce plain text, at most 160 words, "
+    "with the following sections in this exact order:\n\n"
+    "제목: a short natural title\n"
+    "목표: what the image should communicate\n"
+    "구성: what the viewer will see and where\n"
+    "화면에 넣을 텍스트: exact visible text to render, or '없음'\n"
+    "스타일: palette, visual style, and typography direction\n"
+    "확인 필요: any missing fact the human may want to supply, or '없음'\n\n"
     "Hard rules:\n"
-    "- Do NOT invent numbers, names, dates, percentages, or facts. Only use "
-    "what appears in the provided context. If the user did not provide a "
-    "number, write a placeholder like <metric>, never make one up.\n"
+    "- Never invent numbers, names, dates, percentages, logos, or facts.\n"
+    "- Never output placeholder tokens or angle-bracket text. Forbidden "
+    "examples: <metric>, <status>, <priority>, <설명 텍스트>, <클라이언트>.\n"
+    "- If an exact value is missing, omit it from visible text and mention the "
+    "missing fact under 확인 필요 in natural language.\n"
     "- Do NOT expose internal layout IDs, template IDs, status codes, or "
-    "developer terms such as top_title_grid or status_report. Translate them "
-    "into ordinary visual language.\n"
-    "- Do NOT include any preamble, explanation, JSON, or markdown - only the "
-    "six sections above.\n"
-    "- Keep 핵심 요소 to at most 7 bullets.\n"
+    "developer terms such as top_title_grid or status_report.\n"
+    "- Do NOT include any preamble, explanation, JSON, or markdown.\n"
     "- Write in the same language the user wrote the audience/notes in; if "
     "unclear, default to Korean."
 )
@@ -181,17 +227,17 @@ def build_brief_messages(
 
     if prior_brief and edit_instruction:
         user_message += (
-            "\n\n[이전 브리프]\n"
+            "\n\n[이전 계획]\n"
             + prior_brief.strip()
             + "\n\n[수정 요청]\n"
             + edit_instruction.strip()
-            + "\n\n위 수정 요청을 반영해서 동일한 형식으로 전체 브리프를 다시 출력하세요."
+            + "\n\n위 수정 요청을 반영해서 동일한 형식으로 전체 계획을 다시 출력하세요."
         )
     elif edit_instruction:
         user_message += (
             "\n\n[수정 요청]\n"
             + edit_instruction.strip()
-            + "\n\n위 수정 요청을 반영해서 브리프를 출력하세요."
+            + "\n\n위 수정 요청을 반영해서 계획을 출력하세요."
         )
 
     return [
@@ -204,13 +250,16 @@ def build_brief_messages(
 
 ILLUSTRATOR_SYSTEM_PROMPT = (
     "You are an infographic illustrator agent. The user has approved an image "
-    "brief and (optionally) supplied reference images with explicit roles "
+    "plan and (optionally) supplied reference images with explicit roles "
     "('style', 'composition', or 'content'). You must call the image_generation "
-    "tool to produce the final image. Honor the brief's title, layout, key "
-    "elements, colors, typography, and notes sections precisely, regardless of "
-    "whether the section labels are in Korean or English. Reference images are "
-    "guidance only — do not copy them literally unless their role is "
-    "'composition'. Output exactly one image. Do not write commentary."
+    "tool to produce the final image. Honor the approved plan's goal, "
+    "composition, visible text, style, and cautions. Reference images are "
+    "guidance only - do not copy them literally unless their role is "
+    "'composition'. Never render placeholder tokens, angle-bracket labels, or "
+    "raw template words for metrics, statuses, priorities, description text, "
+    "or internal template IDs. If a value is missing, omit the text or use "
+    "unlabeled visual structure. Output exactly one image. Do not write "
+    "commentary."
 )
 
 
@@ -223,6 +272,7 @@ def build_agent_prompt(
 ) -> str:
     """Build the text portion of the agent input, excluding image attachments."""
 
+    plan_text = sanitize_image_plan_text(brief_text)
     style_summary = _format_style(style or {})
     layout_summary = _format_layout(layout or {})
     refs = (
@@ -231,15 +281,19 @@ def build_agent_prompt(
         else "(참고 이미지 없음)"
     )
     body = (
-        "[승인된 브리프]\n"
-        f"{brief_text.strip()}\n\n"
+        "[승인된 이미지 계획]\n"
+        f"{plan_text}\n\n"
         "[스타일 메타]\n"
         f"{style_summary}\n\n"
         "[레이아웃 메타]\n"
         f"{layout_summary}\n\n"
         f"[참고 이미지 역할 순서] {refs}\n\n"
-        "위 브리프를 충실히 반영해 한 장의 이미지를 생성하세요. "
-        "브리프에 명시되지 않은 숫자/이름/로고는 임의로 추가하지 마세요. "
+        "[금지 규칙]\n"
+        "꺾쇠괄호로 감싼 텍스트, 누락값 표기, 내부 템플릿 ID/코드명, "
+        "임시 라벨은 이미지 안에 렌더링하지 마세요.\n\n"
+        "위 계획을 충실히 반영해 한 장의 이미지를 생성하세요. "
+        "계획에 명시되지 않은 숫자/이름/로고는 임의로 추가하지 마세요. "
+        "금지 텍스트와 꺾쇠괄호 텍스트는 이미지 안에 절대 렌더링하지 마세요. "
         "최종 결과는 이미지 한 장만 반환하고 추가 설명 텍스트는 출력하지 마세요."
     )
     return body

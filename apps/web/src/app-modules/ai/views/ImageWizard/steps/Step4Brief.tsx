@@ -41,7 +41,7 @@ export function Step4Brief({
   const requestedInitialBriefFor = useRef<string | null>(null);
   const pollTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Auto-request the initial brief on entering step 4 if there are none yet.
+  // Auto-request the initial image plan on entering step 4 if there are none yet.
   useEffect(() => {
     if (!token) return;
     if (requestedInitialBriefFor.current === row.id) return;

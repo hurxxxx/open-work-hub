@@ -1416,16 +1416,16 @@ MESSAGES: dict[str, dict[str, str]] = {
         "en-US": "Reference image not found.",
     },
     "images.brief_failed": {
-        "ko-KR": "브리프 생성에 실패했습니다.",
-        "en-US": "Failed to generate the brief.",
+        "ko-KR": "이미지 계획 생성에 실패했습니다.",
+        "en-US": "Failed to generate the image plan.",
     },
     "images.brief_empty": {
-        "ko-KR": "LLM이 빈 브리프를 반환했습니다.",
-        "en-US": "The LLM returned an empty brief.",
+        "ko-KR": "LLM이 빈 이미지 계획을 반환했습니다.",
+        "en-US": "The LLM returned an empty image plan.",
     },
     "images.brief_not_ready": {
-        "ko-KR": "승인하려면 먼저 브리프를 생성해야 합니다.",
-        "en-US": "Generate a brief before approving.",
+        "ko-KR": "승인하려면 먼저 이미지 계획을 생성해야 합니다.",
+        "en-US": "Generate an image plan before approving.",
     },
     "images.already_running": {
         "ko-KR": "이미지 생성이 이미 진행 중입니다.",

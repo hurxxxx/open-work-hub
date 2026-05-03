@@ -3,6 +3,11 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 from aidoo_api.domains.images import service
+from aidoo_api.domains.images.prompt import (
+    BRIEF_SYSTEM_PROMPT,
+    build_agent_prompt,
+    sanitize_image_plan_text,
+)
 
 
 def test_brief_input_skips_system_message() -> None:
@@ -46,4 +51,41 @@ def test_run_brief_agent_uses_agents_sdk_provider(monkeypatch) -> None:
     assert captured["input"] == "brief context"
     assert captured["max_turns"] == 1
     assert type(captured["run_config"].model_provider).__name__ == "OpenAIProvider"
-    assert captured["run_config"].workflow_name == "AIDOO Image Brief"
+    assert captured["run_config"].workflow_name == "AIDOO Image Plan"
+
+
+def test_image_plan_prompt_forbids_placeholder_tokens() -> None:
+    assert "write a placeholder" not in BRIEF_SYSTEM_PROMPT
+    assert "Never output placeholder tokens" in BRIEF_SYSTEM_PROMPT
+
+
+def test_sanitize_image_plan_text_removes_placeholder_tokens() -> None:
+    text = sanitize_image_plan_text(
+        "제목: <title>\n"
+        "구성: <클라이언트>와 <서비스 계층>\n"
+        "- <metric>\n"
+        "- 실제 항목\n"
+        "화면에 넣을 텍스트: <설명 텍스트>"
+    )
+
+    assert "<" not in text
+    assert ">" not in text
+    assert "metric" not in text
+    assert "설명 텍스트" not in text
+    assert "클라이언트와 서비스 계층" in text
+    assert "실제 항목" in text
+
+
+def test_build_agent_prompt_sanitizes_approved_plan() -> None:
+    prompt = build_agent_prompt(
+        brief_text="구성: <클라이언트> <metric>\n화면에 넣을 텍스트: 없음",
+        style={"chips": [], "palette": "", "background": "", "quality": "high"},
+        layout={"layout_id": "top_title_grid", "aspect": "1024x1024"},
+        reference_roles=[],
+    )
+
+    approved_block = prompt.split("[스타일 메타]", 1)[0]
+    assert "[승인된 이미지 계획]" in approved_block
+    assert "<metric>" not in approved_block
+    assert "metric" not in approved_block
+    assert "클라이언트" in approved_block

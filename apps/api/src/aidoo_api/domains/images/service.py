@@ -28,7 +28,11 @@ from aidoo_api.domains.auth.security import new_id
 from aidoo_api.domains.docs.models import NativeDoc, NativeDocPage
 from aidoo_api.domains.docs.service import can_read_native_doc_for_rag
 from aidoo_api.domains.images.models import ImageGeneration, utcnow_naive
-from aidoo_api.domains.images.prompt import BRIEF_SYSTEM_PROMPT, build_brief_messages
+from aidoo_api.domains.images.prompt import (
+    BRIEF_SYSTEM_PROMPT,
+    build_brief_messages,
+    sanitize_image_plan_text,
+)
 from aidoo_api.domains.images.schemas import (
     BriefRequest,
     BriefVersionOut,
@@ -166,7 +170,7 @@ def _run_brief_agent(
     )
     run_config = RunConfig(
         model_provider=OpenAIProvider(api_key=api_key, base_url=base_url),
-        workflow_name="AIDOO Image Brief",
+        workflow_name="AIDOO Image Plan",
         trace_metadata={
             "source": "images.brief",
             "workspace_id": workspace_id,
@@ -702,7 +706,7 @@ def generate_brief(
             code="images.brief_failed",
         ) from exc
 
-    text = _extract_agent_text(response)
+    text = sanitize_image_plan_text(_extract_agent_text(response))
     if not text:
         raise localized_http_exception(status_code=502, code="images.brief_empty")
 

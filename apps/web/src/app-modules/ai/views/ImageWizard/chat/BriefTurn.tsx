@@ -3,34 +3,92 @@ import { useTranslation } from 'react-i18next';
 
 import type { BriefVersion } from '../../../api/image-wizard-api';
 
-type BriefSectionKey = 'title' | 'layout' | 'elements' | 'colors' | 'typography' | 'notes';
+type BriefSectionKey = 'title' | 'goal' | 'composition' | 'visibleText' | 'style' | 'review';
 
 interface ParsedBrief {
   sections: Record<BriefSectionKey, string[]>;
   fallback: string[];
 }
 
-const SECTION_ORDER: BriefSectionKey[] = [
-  'layout',
-  'elements',
-  'colors',
-  'typography',
-  'notes',
-];
+const SECTION_ORDER: BriefSectionKey[] = ['goal', 'composition', 'visibleText', 'style', 'review'];
 
 const SECTION_LABEL_ALIASES: Record<BriefSectionKey, string[]> = {
   title: ['TITLE', '\uc81c\ubaa9'],
-  layout: ['LAYOUT', '\ud654\uba74 \uad6c\uc131', '\uad6c\uc131', '\ub808\uc774\uc544\uc6c3'],
-  elements: [
+  goal: ['GOAL', 'OBJECTIVE', '\ubaa9\ud45c'],
+  composition: [
+    'COMPOSITION',
+    'LAYOUT',
     'KEY ELEMENTS',
     'KEY ELEMENT',
+    '\ud654\uba74 \uad6c\uc131',
+    '\uad6c\uc131',
+    '\ub808\uc774\uc544\uc6c3',
     '\ud575\uc2ec \uc694\uc18c',
     '\uc8fc\uc694 \uc694\uc18c',
   ],
-  colors: ['COLORS', 'COLOR', '\uc0c9\uc0c1', '\uceec\ub7ec'],
-  typography: ['TYPOGRAPHY', '\uae00\uc790 \uc2a4\ud0c0\uc77c', '\ud0c0\uc774\ud3ec\uadf8\ub798\ud53c'],
-  notes: ['NOTES', 'NOTE', '\uc8fc\uc758\uc0ac\ud56d', '\uba54\ubaa8'],
+  visibleText: [
+    'VISIBLE TEXT',
+    'COPY',
+    '\ud654\uba74\uc5d0 \ub123\uc744 \ud14d\uc2a4\ud2b8',
+    '\ud45c\uc2dc \ud14d\uc2a4\ud2b8',
+  ],
+  style: [
+    'STYLE',
+    'COLORS',
+    'COLOR',
+    'TYPOGRAPHY',
+    '\uc2a4\ud0c0\uc77c',
+    '\uc0c9\uc0c1',
+    '\uceec\ub7ec',
+    '\uae00\uc790 \uc2a4\ud0c0\uc77c',
+    '\ud0c0\uc774\ud3c4\uadf8\ub798\ud53c',
+  ],
+  review: [
+    'NEEDS REVIEW',
+    'REVIEW',
+    'NOTES',
+    'NOTE',
+    '\ud655\uc778 \ud544\uc694',
+    '\uc8fc\uc758\uc0ac\ud56d',
+    '\uba54\ubaa8',
+  ],
 };
+
+const PLACEHOLDER_VALUES = new Set([
+  'metric',
+  'metrics',
+  'status',
+  'priority',
+  'client',
+  'label',
+  'title',
+  'description',
+  'copy',
+  'text',
+  '\uc124\uba85 \ud14d\uc2a4\ud2b8',
+]);
+
+function cleanPlaceholderText(value: string): string {
+  return value
+    .replace(/<\s*([^<>]{1,80})\s*>/g, (_match, inner: string) => {
+      const label = inner.trim().replace(/\s+/g, ' ');
+      if (PLACEHOLDER_VALUES.has(label.toLowerCase())) return '';
+      return label;
+    })
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function emptySections(): Record<BriefSectionKey, string[]> {
+  return {
+    title: [],
+    goal: [],
+    composition: [],
+    visibleText: [],
+    style: [],
+    review: [],
+  };
+}
 
 function normalizeLabel(value: string): string {
   return value.trim().replace(/\s+/g, ' ').toUpperCase();
@@ -47,26 +105,19 @@ function sectionKeyForLabel(label: string): BriefSectionKey | null {
 }
 
 function parseBrief(text: string): ParsedBrief {
-  const sections: Record<BriefSectionKey, string[]> = {
-    title: [],
-    layout: [],
-    elements: [],
-    colors: [],
-    typography: [],
-    notes: [],
-  };
+  const sections = emptySections();
   const fallback: string[] = [];
   let current: BriefSectionKey | null = null;
 
   for (const rawLine of text.split(/\r?\n/)) {
-    const line = rawLine.trim();
+    const line = cleanPlaceholderText(rawLine);
     if (!line) continue;
     const match = line.match(/^([^:：]{1,48})[:：]\s*(.*)$/);
     if (match) {
       const key = sectionKeyForLabel(match[1]);
       if (key) {
         current = key;
-        const value = match[2]?.trim();
+        const value = cleanPlaceholderText(match[2] || '');
         if (value) sections[key].push(value);
         continue;
       }
@@ -138,6 +189,11 @@ export function BriefTurn({
   const parsed = parseBrief(version.text);
   const title = parsed.sections.title[0] || parsed.fallback[0] || `v${index + 1}`;
   const hasParsedSections = SECTION_ORDER.some((section) => parsed.sections[section].length > 0);
+  const fallbackText = version.text
+    .split(/\r?\n/)
+    .map(cleanPlaceholderText)
+    .filter(Boolean)
+    .join('\n');
 
   return (
     <article className="rounded-lg border border-app-border bg-app-surface p-4 shadow-sm">
@@ -163,7 +219,7 @@ export function BriefTurn({
         </div>
       ) : (
         <pre className="app-text-body whitespace-pre-wrap break-words font-sans text-app-ink">
-          {version.text}
+          {fallbackText}
         </pre>
       )}
       <div className="mt-3 flex items-center justify-end">
@@ -171,9 +227,9 @@ export function BriefTurn({
           type="button"
           onClick={onApprove}
           disabled={approveDisabled || approving}
-          className={`flex items-center gap-1.5 rounded-md px-4 py-2 app-text-control-sm font-medium transition-colors disabled:opacity-50 ${
+          className={`flex items-center gap-1.5 rounded-md px-4 py-2 app-text-control-sm font-medium transition-colors ${
             isLatest
-              ? 'bg-app-accent text-white hover:opacity-90 disabled:border disabled:border-app-border disabled:bg-app-surface-sidebar disabled:text-app-ink/70 disabled:opacity-100'
+              ? 'bg-app-ink text-app-surface hover:bg-app-ink/90 disabled:border disabled:border-app-border disabled:bg-app-surface-sidebar disabled:text-app-ink/70 disabled:opacity-100'
               : 'border border-app-border text-app-ink hover:border-app-accent hover:text-app-accent disabled:text-app-ink/55 disabled:opacity-100'
           }`}
         >

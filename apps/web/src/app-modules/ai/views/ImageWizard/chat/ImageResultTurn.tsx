@@ -77,7 +77,7 @@ export function ImageResultTurn({
           target="_blank"
           rel="noreferrer"
           download="generated-image.png"
-          className="flex items-center gap-1 rounded-md bg-app-accent px-3 py-2 app-text-control-sm font-medium text-white hover:opacity-90"
+          className="flex items-center gap-1 rounded-md bg-app-ink px-3 py-2 app-text-control-sm font-medium text-app-surface hover:bg-app-ink/90"
         >
           <Download size={14} />
           {t('ai.imageWizard.step4.downloadAction')}
