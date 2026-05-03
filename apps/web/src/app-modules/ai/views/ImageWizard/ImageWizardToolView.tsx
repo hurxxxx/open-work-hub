@@ -98,6 +98,47 @@ const LARGE_EDIT_PATTERNS = [
   /\uC544\uC608/,
   /\uC804\uCCB4\s*(\uC2A4\uD0C0\uC77C|\uAD6C\uB3C4|\uB808\uC774\uC544\uC6C3|\uCEE8\uC149)/,
 ];
+const INFORMATION_GATHERING_PATTERNS = [
+  /\uAC80\uC0C9/,
+  /\uCC3E\uC544/,
+  /\uC870\uC0AC/,
+  /\uB9AC\uC11C\uCE58/,
+  /\uC790\uB8CC/,
+  /\uB370\uC774\uD130/,
+  /\uC218\uCE58/,
+  /\uC9C0\uD45C/,
+  /\uD1B5\uACC4/,
+  /\uCD5C\uC2E0/,
+  /\uD604\uC7AC/,
+  /\uCD5C\uADFC/,
+  /\uC62C\uD574/,
+  /\uC791\uB144/,
+  /\uC9C0\uB09C\uD574/,
+  /\uC804\uB144/,
+  /\uBE44\uAD50/,
+  /\uBD84\uC11D/,
+  /\uC694\uC57D/,
+  /\uADFC\uAC70/,
+  /\uCD9C\uCC98/,
+  /\uBCF4\uACE0\uC11C/,
+  /\uACF5\uC2DC/,
+  /\uBB38\uC11C/,
+  /\uC815\uBCF4/,
+  /\uB0B4\uC6A9/,
+  /\uC0AC\uC2E4/,
+  /\uC0AC\uC591/,
+  /\uC2A4\uD399/,
+  /\uAC00\uACA9/,
+  /\uC2DC\uC7A5/,
+  /\uC815\uCC45/,
+  /\uADDC\uC815/,
+  /\uBC95/,
+  /\uC77C\uC815/,
+  /\uB0A0\uC528/,
+  /\b(search|find|lookup|research|source|cite|citation|data|metric|stat|stats)\b/,
+  /\b(latest|current|recent|today|yesterday|this year|last year)\b/,
+  /\b(compare|analysis|analyze|summarize|report|filing|spec|price|market)\b/,
+];
 
 function normalizeUserTemplateStyle(style: ImageGeneration['style']): TemplatePreset['preset']['style'] {
   const chips = (style.chips ?? []).filter((chip): chip is StyleShape =>
@@ -136,9 +177,10 @@ function buildImageEditNotes(sourceNotes: string | undefined, editBlock: string)
   return [trimmedExisting, editBlock].filter(Boolean).join('\n\n');
 }
 
-function shouldReviewImageEditInstruction(instruction: string): boolean {
+export function shouldReviewImageEditInstruction(instruction: string): boolean {
   const normalized = instruction.trim().toLowerCase();
   if (!normalized) return false;
+  if (INFORMATION_GATHERING_PATTERNS.some((pattern) => pattern.test(normalized))) return true;
   if (LARGE_EDIT_PATTERNS.some((pattern) => pattern.test(normalized))) return true;
   const hasAmbiguousTerm = AMBIGUOUS_EDIT_TERMS.some((term) => normalized.includes(term));
   if (!hasAmbiguousTerm) return false;
