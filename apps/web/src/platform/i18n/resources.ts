@@ -1166,7 +1166,7 @@ export const resources = {
             openLargePreview: '이미지 크게 보기',
             closePreview: '크게 보기 닫기',
             cloneAction: '복제해서 수정',
-            newImageAction: '새 이미지 만들기',
+            newImageAction: '새 이미지',
             editImagePromptLabel: '이미지 수정 요청',
             editImagePromptPlaceholder: '예) 제목은 유지하고 배경을 더 밝게, 오른쪽 카드만 강조해줘 (Cmd+Enter로 보내기)',
             editImageAction: '수정본 만들기',

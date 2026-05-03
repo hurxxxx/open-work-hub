@@ -32,19 +32,19 @@ export function WizardLayout({
     <div className="flex min-h-full flex-col bg-app-surface">
       <header className="sticky top-0 z-10 flex flex-col gap-2 border-b border-app-border bg-app-surface/95 px-6 py-3 backdrop-blur">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex flex-wrap items-center gap-3">
-            <h1 className="app-text-heading-3 text-app-ink">{t('ai.imageWizard.title')}</h1>
-            <button
-              type="button"
-              onClick={onNewImage}
-              className="inline-flex items-center gap-1.5 rounded-md bg-app-accent px-3 py-1.5 app-text-control-sm text-app-accent-fg transition-colors hover:bg-app-accent-hover"
-            >
-              <Plus size={14} />
-              {t('ai.imageWizard.step4.newImageAction')}
-            </button>
-          </div>
+          <h1 className="app-text-heading-3 text-app-ink">{t('ai.imageWizard.title')}</h1>
           <div className="flex items-center gap-3">
             <AutosaveIndicator state={autosave} />
+            {step > 1 ? (
+              <button
+                type="button"
+                onClick={onNewImage}
+                className="flex items-center gap-1.5 rounded-full border border-app-border px-3 py-1 app-text-control-sm text-app-ink hover:border-app-accent hover:text-app-accent"
+              >
+                <Plus size={13} />
+                {t('ai.imageWizard.step4.newImageAction')}
+              </button>
+            ) : null}
             <button
               type="button"
               onClick={onOpenMyImages}
