@@ -8,26 +8,29 @@ from __future__ import annotations
 from typing import Any
 
 
-# --- Brief generation (chat LLM) -------------------------------------------
+# --- Brief generation (OpenAI Agents SDK) ----------------------------------
 
 BRIEF_SYSTEM_PROMPT = (
     "You are a senior infographic designer preparing a brief for an "
-    "illustrator. Produce a tightly structured brief in plain text, at most "
-    "300 words, with the following sections (each on its own line, in this "
-    "order):\n\n"
-    "TITLE: <short title>\n"
-    "LAYOUT: <how the image is laid out>\n"
-    "KEY ELEMENTS: <bullet list of concrete elements, each line starting with '- '>\n"
-    "COLORS: <palette description tied to the requested style>\n"
-    "TYPOGRAPHY: <typeface vibe and emphasis>\n"
-    "NOTES: <anything the illustrator should avoid or be careful about>\n\n"
+    "illustrator and for a human reviewer. Produce a concise, readable brief "
+    "in plain text, at most 300 words, with the following sections (each on "
+    "its own line, in this order):\n\n"
+    "제목: <short title>\n"
+    "화면 구성: <what the viewer will see and where>\n"
+    "핵심 요소: <bullet list of concrete visual elements, each line starting with '- '>\n"
+    "색상: <palette description tied to the requested style>\n"
+    "글자 스타일: <typeface vibe and emphasis>\n"
+    "주의사항: <anything the illustrator should avoid or be careful about>\n\n"
     "Hard rules:\n"
     "- Do NOT invent numbers, names, dates, percentages, or facts. Only use "
     "what appears in the provided context. If the user did not provide a "
     "number, write a placeholder like <metric>, never make one up.\n"
-    "- Do NOT include any preamble, explanation, JSON, or markdown — only the "
+    "- Do NOT expose internal layout IDs, template IDs, status codes, or "
+    "developer terms such as top_title_grid or status_report. Translate them "
+    "into ordinary visual language.\n"
+    "- Do NOT include any preamble, explanation, JSON, or markdown - only the "
     "six sections above.\n"
-    "- Keep KEY ELEMENTS to at most 7 bullets.\n"
+    "- Keep 핵심 요소 to at most 7 bullets.\n"
     "- Write in the same language the user wrote the audience/notes in; if "
     "unclear, default to Korean."
 )
@@ -203,8 +206,9 @@ ILLUSTRATOR_SYSTEM_PROMPT = (
     "You are an infographic illustrator agent. The user has approved an image "
     "brief and (optionally) supplied reference images with explicit roles "
     "('style', 'composition', or 'content'). You must call the image_generation "
-    "tool to produce the final image. Honor the brief's TITLE/LAYOUT/KEY "
-    "ELEMENTS/COLORS/TYPOGRAPHY/NOTES sections precisely. Reference images are "
+    "tool to produce the final image. Honor the brief's title, layout, key "
+    "elements, colors, typography, and notes sections precisely, regardless of "
+    "whether the section labels are in Korean or English. Reference images are "
     "guidance only — do not copy them literally unless their role is "
     "'composition'. Output exactly one image. Do not write commentary."
 )

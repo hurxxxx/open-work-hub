@@ -235,3 +235,26 @@ def get_download_url(
         user=current_user,
         generation_id=generation_id,
     )
+
+
+@router.get("/generations/{generation_id}/download/content")
+def download_image_content(
+    generation_id: str,
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(require_current_user),
+    workspace: Workspace = Depends(require_current_workspace),
+) -> Response:
+    data, content_type = images_service.read_result_image(
+        db,
+        workspace=workspace,
+        user=current_user,
+        generation_id=generation_id,
+    )
+    return Response(
+        content=data,
+        media_type=content_type,
+        headers={
+            "Cache-Control": "private, max-age=60",
+            "Content-Disposition": f'inline; filename="image-generation-{generation_id}.png"',
+        },
+    )

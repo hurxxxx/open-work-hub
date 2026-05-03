@@ -812,3 +812,41 @@ def presign_download(
         url=url,
         expires_at=utcnow_naive() + expires,
     )
+
+
+def read_result_image(
+    db: Session,
+    *,
+    workspace: Workspace,
+    user: User,
+    generation_id: str,
+) -> tuple[bytes, str]:
+    _require_enabled()
+    row = _load(db, workspace=workspace, user=user, generation_id=generation_id)
+    if row.image_status != "succeeded" or not row.image_storage_key:
+        raise localized_http_exception(status_code=409, code="images.not_ready")
+    if not _is_owned_result_key(row, row.image_storage_key):
+        logger.warning(
+            "images.download: refusing unexpected result key generation=%s key=%s",
+            row.id,
+            row.image_storage_key,
+        )
+        raise localized_http_exception(status_code=409, code="images.not_ready")
+
+    settings = get_settings()
+    try:
+        response = get_minio_client().get_object(
+            settings.minio_bucket,
+            row.image_storage_key,
+        )
+        try:
+            return response.read(), "image/png"
+        finally:
+            try:
+                response.close()
+                response.release_conn()
+            except Exception:
+                pass
+    except Exception as exc:
+        logger.warning("images.download: storage read failed for %s", row.id, exc_info=True)
+        raise localized_http_exception(status_code=409, code="images.not_ready") from exc

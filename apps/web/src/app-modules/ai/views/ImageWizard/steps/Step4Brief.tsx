@@ -5,8 +5,8 @@ import { useTranslation } from 'react-i18next';
 import { useAuth } from '@/src/platform/auth/auth-provider';
 import {
   approveImageGeneration,
+  downloadGeneratedImageBlob,
   generateBrief,
-  getImageDownloadUrl,
   getImageGeneration,
   type ImageGeneration,
 } from '../../../api/image-wizard-api';
@@ -37,6 +37,7 @@ export function Step4Brief({
   const [busy, setBusy] = useState<'brief' | 'approve' | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
+  const [imageLoadError, setImageLoadError] = useState<string | null>(null);
   const requestedInitialBriefFor = useRef<string | null>(null);
   const pollTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -78,26 +79,35 @@ export function Step4Brief({
     };
   }, [token, workspaceSlug, row.id, row.image_status, onRowReplaced]);
 
-  // Resolve presigned download URL once succeeded.
+  // Fetch the generated image through the authenticated API. The MinIO URL is
+  // internal to the VM and cannot be used directly from the public HTTPS page.
   useEffect(() => {
     if (!token || row.image_status !== 'succeeded' || !row.id) {
       setDownloadUrl(null);
+      setImageLoadError(null);
       return;
     }
     let cancelled = false;
-    getImageDownloadUrl(token, workspaceSlug, row.id)
-      .then((response) => {
+    let objectUrl: string | null = null;
+    setImageLoadError(null);
+    downloadGeneratedImageBlob(token, workspaceSlug, row.id)
+      .then((blob) => {
         if (cancelled) return;
-        setDownloadUrl(response.url);
+        objectUrl = URL.createObjectURL(blob);
+        setDownloadUrl(objectUrl);
       })
-      .catch(() => {
+      .catch((err) => {
         if (cancelled) return;
         setDownloadUrl(null);
+        setImageLoadError(
+          err instanceof Error ? err.message : t('ai.imageWizard.step4.imageLoadFailed'),
+        );
       });
     return () => {
       cancelled = true;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
-  }, [token, workspaceSlug, row.id, row.image_status]);
+  }, [token, workspaceSlug, row.id, row.image_status, t]);
 
   async function runGenerateBrief(editInstruction?: string) {
     if (!token) return;
@@ -198,6 +208,8 @@ export function Step4Brief({
       {isFinished ? (
         <ImageResultTurn
           imageUrl={downloadUrl}
+          loading={!downloadUrl && !imageLoadError && row.image_status === 'succeeded'}
+          loadError={imageLoadError}
           failureReason={row.image_status === 'failed' ? row.failure_reason : null}
           onClone={onClone}
           onDiscard={onDiscard}

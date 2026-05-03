@@ -295,3 +295,30 @@ export function getImageDownloadUrl(
     workspaceSlug,
   );
 }
+
+export async function downloadGeneratedImageBlob(
+  token: string,
+  workspaceSlug: string,
+  generationId: string,
+): Promise<Blob> {
+  const response = await fetch(
+    rewriteWorkspaceApiPath(
+      `/api/v1/images/generations/${generationId}/download/content`,
+      workspaceSlug,
+    ),
+    {
+      headers: jsonHeaders(token),
+      cache: 'no-store',
+    },
+  );
+  if (!response.ok) {
+    const payload = await response.json().catch(() => null);
+    throw new ImageWizardApiError(
+      response.status,
+      typeof payload?.detail === 'string'
+        ? payload.detail
+        : response.statusText || String(response.status),
+    );
+  }
+  return response.blob();
+}

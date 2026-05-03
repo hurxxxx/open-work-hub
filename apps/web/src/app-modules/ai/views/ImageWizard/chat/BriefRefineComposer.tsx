@@ -43,7 +43,7 @@ export function BriefRefineComposer({ disabled, busy, onSend }: BriefRefineCompo
           type="button"
           onClick={submit}
           disabled={disabled || busy || !text.trim()}
-          className="flex items-center gap-1 rounded-md bg-app-accent px-3 py-2 app-text-control-sm font-medium text-white transition-colors hover:opacity-90 disabled:opacity-50"
+          className="flex items-center gap-1 rounded-md bg-app-accent px-3 py-2 app-text-control-sm font-medium text-white transition-colors hover:opacity-90 disabled:border disabled:border-app-border disabled:bg-app-surface-sidebar disabled:text-app-ink/65 disabled:opacity-100"
         >
           {busy ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
           {t('ai.imageWizard.step4.sendRefinement')}
