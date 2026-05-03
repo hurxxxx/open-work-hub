@@ -970,6 +970,8 @@ export const resources = {
               title: '계획 & 생성',
               heading: '이미지 계획 확인',
               description: 'LLM이 정리한 짧은 계획만 확인하세요. 그대로 진행하거나 필요한 부분만 수정할 수 있습니다.',
+              editHeading: '이미지 수정',
+              editDescription: '이전 이미지를 기준으로 수정본을 생성합니다. 큰 변경이나 모호한 요청은 먼저 짧은 계획을 확인합니다.',
             },
           },
           gallery: {
@@ -1153,6 +1155,7 @@ export const resources = {
             },
             pendingQueued: '이미지 생성 대기 중...',
             pendingRunning: '이미지 생성 중...',
+            startingImageEdit: '수정본 생성을 시작하는 중...',
             failed: '생성에 실패했습니다.',
             imageLoading: '생성된 이미지를 불러오는 중...',
             imageLoadFailed: '생성된 이미지를 불러오지 못했습니다.',
@@ -3330,6 +3333,8 @@ export const resources = {
               title: 'Plan & generate',
               heading: 'Review the image plan',
               description: 'Review the short LLM plan, then generate or tweak only what needs changing.',
+              editHeading: 'Edit image',
+              editDescription: 'A new version is generated from the previous image. Broad or ambiguous edits still show a short plan first.',
             },
           },
           gallery: {
@@ -3513,6 +3518,7 @@ export const resources = {
             },
             pendingQueued: 'Queued for image generation...',
             pendingRunning: 'Generating image...',
+            startingImageEdit: 'Starting the edited image...',
             failed: 'Generation failed.',
             imageLoading: 'Loading generated image...',
             imageLoadFailed: 'Could not load the generated image.',

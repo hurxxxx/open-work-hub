@@ -9,6 +9,7 @@ import {
   resolveShellWorkspaceSlug,
 } from '@/src/platform/workspaces/workspace-utils';
 import {
+  approveImageGeneration,
   createImageGeneration,
   deleteImageGeneration,
   downloadGeneratedImageBlob,
@@ -46,6 +47,48 @@ const DEFAULT_LAYOUT = {
 };
 const DEFAULT_DETAILS = { audience: '', notes: '' };
 const IMAGE_EDIT_NOTES_MAX = 2000;
+const AMBIGUOUS_EDIT_TERMS = [
+  '\uC88B\uAC8C',
+  '\uC608\uC058\uAC8C',
+  '\uACE0\uAE09\uC2A4\uB7FD',
+  '\uC790\uC5F0\uC2A4\uB7FD',
+  '\uC138\uB828',
+  '\uD604\uB300\uC801',
+  '\uAC1C\uC120',
+  '\uBA4B\uC9C0\uAC8C',
+  '\uAE54\uB054\uD558\uAC8C',
+  '\uC54C\uC544\uC11C',
+];
+const CONCRETE_EDIT_TERMS = [
+  '\uBC30\uACBD',
+  '\uC0C9',
+  '\uD14D\uC2A4\uD2B8',
+  '\uBB38\uAD6C',
+  '\uC81C\uBAA9',
+  '\uB85C\uACE0',
+  '\uC81C\uAC70',
+  '\uC0AD\uC81C',
+  '\uCD94\uAC00',
+  '\uBC1D',
+  '\uC5B4\uB461',
+  '\uAC15\uC870',
+  '\uC67C\uCABD',
+  '\uC624\uB978\uCABD',
+  '\uC704',
+  '\uC544\uB798',
+  '\uD06C\uAC8C',
+  '\uC791\uAC8C',
+  '\uD45C\uC815',
+];
+const LARGE_EDIT_PATTERNS = [
+  /\uC644\uC804\uD788/,
+  /\uC804\uBD80/,
+  /\uCC98\uC74C\uBD80\uD130/,
+  /\uAC08\uC544\uC5CE/,
+  /\uC0C8 \uC774\uBBF8\uC9C0\uCC98\uB7FC/,
+  /\uC544\uC608/,
+  /\uC804\uCCB4\s*(\uC2A4\uD0C0\uC77C|\uAD6C\uB3C4|\uB808\uC774\uC544\uC6C3|\uCEE8\uC149)/,
+];
 
 function buildImageEditNotes(sourceNotes: string | undefined, editBlock: string): string {
   if (editBlock.length >= IMAGE_EDIT_NOTES_MAX) {
@@ -55,6 +98,15 @@ function buildImageEditNotes(sourceNotes: string | undefined, editBlock: string)
   const roomForExisting = IMAGE_EDIT_NOTES_MAX - editBlock.length - 2;
   const trimmedExisting = existing.slice(0, Math.max(0, roomForExisting));
   return [trimmedExisting, editBlock].filter(Boolean).join('\n\n');
+}
+
+function shouldReviewImageEditInstruction(instruction: string): boolean {
+  const normalized = instruction.trim().toLowerCase();
+  if (!normalized) return false;
+  if (LARGE_EDIT_PATTERNS.some((pattern) => pattern.test(normalized))) return true;
+  const hasAmbiguousTerm = AMBIGUOUS_EDIT_TERMS.some((term) => normalized.includes(term));
+  if (!hasAmbiguousTerm) return false;
+  return !CONCRETE_EDIT_TERMS.some((term) => normalized.includes(term));
 }
 
 export function ImageWizardToolView() {
@@ -221,6 +273,8 @@ export function ImageWizardToolView() {
   async function handleImageEdit(instruction: string) {
     if (!token || !wizard.row) return;
     const source = wizard.row;
+    const trimmedInstruction = instruction.trim();
+    const requiresPlan = shouldReviewImageEditInstruction(trimmedInstruction);
     const sourceBlob = await downloadGeneratedImageBlob(token, workspaceSlug, source.id);
     let created: ImageGeneration | null = null;
     try {
@@ -236,13 +290,14 @@ export function ImageWizardToolView() {
             source.details?.notes,
             [
               t('ai.imageWizard.step4.editImageNotesRequest', {
-                instruction: instruction.trim(),
+                instruction: trimmedInstruction,
               }),
               t('ai.imageWizard.step4.editImageNotesReference'),
             ].join('\n'),
           ),
           source_generation_id: source.id,
-          source_image_edit_instruction: instruction.trim(),
+          source_image_edit_instruction: trimmedInstruction,
+          source_image_requires_plan: requiresPlan,
         },
         context_refs: source.context_refs,
       });
@@ -251,8 +306,10 @@ export function ImageWizardToolView() {
       });
       const createdId = created.id;
       await uploadReferenceImage(token, workspaceSlug, createdId, sourceFile, 'composition');
-      const refreshed = await getImageGeneration(token, workspaceSlug, createdId);
-      wizard.applyServer(refreshed);
+      const next = requiresPlan
+        ? await getImageGeneration(token, workspaceSlug, createdId)
+        : await approveImageGeneration(token, workspaceSlug, createdId);
+      wizard.applyServer(next);
       setSearchParams(
         (current) => {
           const params = new URLSearchParams(current);

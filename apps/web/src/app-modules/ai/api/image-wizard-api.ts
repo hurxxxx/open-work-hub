@@ -23,6 +23,7 @@ export interface DetailsPayload {
   notes: string;
   source_generation_id?: string;
   source_image_edit_instruction?: string;
+  source_image_requires_plan?: boolean;
 }
 
 export interface ContextRefSnapshot {

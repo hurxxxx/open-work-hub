@@ -45,15 +45,24 @@ export function Step4Brief({
   const [sourceImageUrl, setSourceImageUrl] = useState<string | null>(null);
   const [sourceImageLoadError, setSourceImageLoadError] = useState<string | null>(null);
   const requestedInitialBriefFor = useRef<string | null>(null);
+  const requestedDirectEditFor = useRef<string | null>(null);
   const pollTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const sourceGenerationId =
     typeof row.details?.source_generation_id === 'string'
       ? row.details.source_generation_id
       : '';
+  const sourceImageEditInstruction =
+    typeof row.details?.source_image_edit_instruction === 'string'
+      ? row.details.source_image_edit_instruction
+      : '';
+  const imageEditRequiresPlan = row.details?.source_image_requires_plan === true;
+  const isImageEdit = Boolean(sourceGenerationId && sourceImageEditInstruction);
+  const shouldSkipPlanForImageEdit = isImageEdit && !imageEditRequiresPlan;
 
   // Auto-request the initial image plan on entering step 4 if there are none yet.
   useEffect(() => {
     if (!token) return;
+    if (shouldSkipPlanForImageEdit) return;
     if (requestedInitialBriefFor.current === row.id) return;
     if (row.brief_versions.length > 0) {
       requestedInitialBriefFor.current = row.id;
@@ -63,7 +72,19 @@ export function Step4Brief({
     requestedInitialBriefFor.current = row.id;
     void runGenerateBrief();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token, row.id]);
+  }, [token, row.id, shouldSkipPlanForImageEdit]);
+
+  // Most image edits are concrete enough to run immediately. If a user lands
+  // on an unqueued direct edit draft, approve and dispatch it without showing
+  // the internal execution prompt as a human plan.
+  useEffect(() => {
+    if (!token || !shouldSkipPlanForImageEdit) return;
+    if (requestedDirectEditFor.current === row.id) return;
+    if (row.image_status !== 'idle' || row.brief_status === 'approved') return;
+    requestedDirectEditFor.current = row.id;
+    void runApprove();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token, row.id, row.image_status, row.brief_status, shouldSkipPlanForImageEdit]);
 
   // Poll while generating.
   useEffect(() => {
@@ -192,16 +213,21 @@ export function Step4Brief({
 
   const isGeneratingImage = row.image_status === 'queued' || row.image_status === 'running';
   const isFinished = row.image_status === 'succeeded' || row.image_status === 'failed';
+  const showBriefPlan = !shouldSkipPlanForImageEdit;
   const composerDisabled = row.brief_status === 'approved' || isGeneratingImage || isFinished;
 
   return (
     <div className="space-y-4">
       <header className="space-y-1">
         <h2 className="app-text-heading-2 text-app-ink">
-          {t('ai.imageWizard.steps.step4.heading')}
+          {isImageEdit
+            ? t('ai.imageWizard.steps.step4.editHeading')
+            : t('ai.imageWizard.steps.step4.heading')}
         </h2>
         <p className="app-text-body text-app-ink/60">
-          {t('ai.imageWizard.steps.step4.description')}
+          {isImageEdit
+            ? t('ai.imageWizard.steps.step4.editDescription')
+            : t('ai.imageWizard.steps.step4.description')}
         </p>
       </header>
 
@@ -223,21 +249,32 @@ export function Step4Brief({
         </div>
       ) : null}
 
-      <div className="space-y-3">
-        {row.brief_versions.map((version, idx) => (
-          <BriefTurn
-            key={`${version.created_at}-${idx}`}
-            version={version}
-            index={idx}
-            isLatest={idx === row.brief_versions.length - 1}
-            approving={busy === 'approve' && idx === row.brief_versions.length - 1}
-            approveDisabled={composerDisabled}
-            onApprove={runApprove}
-          />
-        ))}
-      </div>
+      {shouldSkipPlanForImageEdit && !isGeneratingImage && !isFinished && !error ? (
+        <div className="flex items-center gap-3 rounded-lg border border-app-border bg-app-surface-sidebar p-4 text-app-ink/60">
+          <Loader2 size={16} className="animate-spin text-app-accent" />
+          <span className="app-text-control-sm">
+            {t('ai.imageWizard.step4.startingImageEdit')}
+          </span>
+        </div>
+      ) : null}
 
-      {row.brief_versions.length > 0 && !isGeneratingImage && !isFinished ? (
+      {showBriefPlan ? (
+        <div className="space-y-3">
+          {row.brief_versions.map((version, idx) => (
+            <BriefTurn
+              key={`${version.created_at}-${idx}`}
+              version={version}
+              index={idx}
+              isLatest={idx === row.brief_versions.length - 1}
+              approving={busy === 'approve' && idx === row.brief_versions.length - 1}
+              approveDisabled={composerDisabled}
+              onApprove={runApprove}
+            />
+          ))}
+        </div>
+      ) : null}
+
+      {showBriefPlan && row.brief_versions.length > 0 && !isGeneratingImage && !isFinished ? (
         <div className="flex justify-end">
           <button
             type="button"
@@ -295,7 +332,7 @@ export function Step4Brief({
         />
       ) : null}
 
-      {!isGeneratingImage && !isFinished && row.brief_versions.length > 0 ? (
+      {showBriefPlan && !isGeneratingImage && !isFinished && row.brief_versions.length > 0 ? (
         <BriefRefineComposer
           disabled={composerDisabled}
           busy={busy === 'brief'}

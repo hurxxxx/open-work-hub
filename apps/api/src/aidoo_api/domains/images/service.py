@@ -30,6 +30,7 @@ from aidoo_api.domains.docs.service import can_read_native_doc_for_rag
 from aidoo_api.domains.images.models import ImageGeneration, utcnow_naive
 from aidoo_api.domains.images.prompt import (
     BRIEF_SYSTEM_PROMPT,
+    build_direct_edit_prompt,
     build_brief_messages,
     sanitize_image_plan_text,
 )
@@ -734,6 +735,35 @@ def generate_brief(
 # --- Approve + dispatch ----------------------------------------------------
 
 
+def _prepare_direct_edit_brief(row: ImageGeneration) -> None:
+    """Create an internal prompt for edit jobs that intentionally skip review."""
+
+    if row.brief_versions:
+        return
+    details = row.details if isinstance(row.details, dict) else {}
+    if details.get("source_image_requires_plan"):
+        return
+    source_generation_id = str(details.get("source_generation_id") or "").strip()
+    edit_instruction = str(details.get("source_image_edit_instruction") or "").strip()
+    if not source_generation_id or not edit_instruction:
+        return
+    text = build_direct_edit_prompt(
+        edit_instruction=edit_instruction,
+        style=row.style or {},
+    )
+    if not text:
+        return
+    row.brief_versions = [
+        {
+            "text": text,
+            "created_at": datetime.now(UTC).replace(tzinfo=None).isoformat(),
+            "edit_instruction": edit_instruction,
+            "internal": True,
+        }
+    ]
+    row.brief_status = "ready"
+
+
 def approve_and_dispatch(
     db: Session,
     *,
@@ -743,6 +773,7 @@ def approve_and_dispatch(
 ) -> ImageGenerationOut:
     _require_enabled()
     row = _load(db, workspace=workspace, user=user, generation_id=generation_id)
+    _prepare_direct_edit_brief(row)
     if not (row.brief_versions or []):
         raise localized_http_exception(status_code=409, code="images.brief_not_ready")
     if row.image_status in {"queued", "running"}:

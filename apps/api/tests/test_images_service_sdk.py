@@ -5,6 +5,7 @@ from types import SimpleNamespace
 from aidoo_api.domains.images import service
 from aidoo_api.domains.images.prompt import (
     BRIEF_SYSTEM_PROMPT,
+    build_direct_edit_prompt,
     build_agent_prompt,
     sanitize_image_plan_text,
 )
@@ -89,3 +90,15 @@ def test_build_agent_prompt_sanitizes_approved_plan() -> None:
     assert "<metric>" not in approved_block
     assert "metric" not in approved_block
     assert "클라이언트" in approved_block
+
+
+def test_build_direct_edit_prompt_uses_instruction_without_placeholders() -> None:
+    prompt = build_direct_edit_prompt(
+        edit_instruction="배경을 더 밝게 하고 <metric>은 넣지 마세요",
+        style={"chips": ["corporate"], "palette": "auto", "background": "auto"},
+    )
+
+    assert "수정 요청:" in prompt
+    assert "배경을 더 밝게" in prompt
+    assert "<metric>" not in prompt
+    assert "composition 참고 이미지" in prompt

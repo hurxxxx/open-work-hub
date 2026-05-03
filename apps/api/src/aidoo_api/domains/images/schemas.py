@@ -35,6 +35,7 @@ class DetailsPayload(BaseModel):
     notes: str = Field(default="", max_length=2000)
     source_generation_id: str = Field(default="", max_length=64)
     source_image_edit_instruction: str = Field(default="", max_length=2000)
+    source_image_requires_plan: bool = False
 
 
 class ContextRefSnapshot(BaseModel):

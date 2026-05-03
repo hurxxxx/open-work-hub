@@ -246,6 +246,26 @@ def build_brief_messages(
     ]
 
 
+def build_direct_edit_prompt(*, edit_instruction: str, style: dict[str, Any]) -> str:
+    """Build the internal prompt used when an image edit skips human plan review."""
+
+    instruction = sanitize_image_plan_text(edit_instruction)
+    style_summary = _format_style(style or {})
+    if not instruction:
+        return ""
+    return (
+        "수정 요청: "
+        f"{instruction}\n"
+        "기준 이미지: 첨부된 composition 참고 이미지를 이전 결과물로 보고, 사용자가 "
+        "요청하지 않은 구도, 주요 내용, 텍스트, 브랜드 느낌은 가능한 유지하세요.\n"
+        "스타일: 기존 이미지의 시각 톤을 유지하되 아래 스타일 메타와 충돌하지 않게 "
+        f"반영하세요. {style_summary}\n"
+        "화면 텍스트: 원본의 텍스트를 유지하고, 사용자가 명시적으로 요청한 텍스트 변경만 "
+        "적용하세요.\n"
+        "주의: 숫자, 이름, 날짜, 로고, 사실관계는 임의로 새로 만들지 마세요."
+    )
+
+
 # --- Image generation (OpenAI Agents SDK) ----------------------------------
 
 ILLUSTRATOR_SYSTEM_PROMPT = (
