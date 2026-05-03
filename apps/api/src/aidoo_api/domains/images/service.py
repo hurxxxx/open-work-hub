@@ -158,16 +158,25 @@ def _run_brief_agent(
     workspace_id: str,
     user_id: str,
     generation_id: str,
+    enable_web_search: bool,
 ) -> Any:
     # Local import so DB-only tests can import the service without initializing
     # the SDK until the image feature is actually used.
-    from agents import Agent, ModelSettings, OpenAIProvider, RunConfig, Runner
+    from agents import (
+        Agent,
+        ModelSettings,
+        OpenAIProvider,
+        RunConfig,
+        Runner,
+        WebSearchTool,
+    )
 
     agent = Agent(
         name="image-brief-designer",
         instructions=BRIEF_SYSTEM_PROMPT,
         model=model,
-        model_settings=ModelSettings(max_tokens=2200),
+        model_settings=ModelSettings(max_tokens=2600, tool_choice="auto"),
+        tools=[WebSearchTool(search_context_size="high")] if enable_web_search else [],
     )
     run_config = RunConfig(
         model_provider=OpenAIProvider(api_key=api_key, base_url=base_url),
@@ -182,7 +191,7 @@ def _run_brief_agent(
     return Runner.run_sync(
         agent,
         input=input_text,
-        max_turns=1,
+        max_turns=4,
         run_config=run_config,
     )
 
@@ -753,6 +762,7 @@ def generate_brief(
         context_refs=hydrated,
         reference_image_count=reference_image_count,
         template_name=row.template_id or None,
+        current_date=datetime.now(UTC).date().isoformat(),
         prior_brief=prior_brief,
         edit_instruction=edit_instruction,
     )
@@ -771,6 +781,7 @@ def generate_brief(
             workspace_id=workspace.id,
             user_id=user.id,
             generation_id=row.id,
+            enable_web_search=settings.image_brief_web_search_enabled,
         )
     except OpenAIError as exc:
         logger.warning("images.brief: OpenAI SDK error: %s", exc)

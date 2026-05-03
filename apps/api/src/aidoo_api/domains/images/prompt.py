@@ -62,16 +62,29 @@ def sanitize_image_plan_text(text: str) -> str:
 
 BRIEF_SYSTEM_PROMPT = (
     "You are a senior image-planning agent preparing a short plan for a human "
-    "reviewer and an illustrator agent. Produce plain text, at most 160 words, "
+    "reviewer and an illustrator agent. Produce plain text, at most 220 words, "
     "with the following sections in this exact order:\n\n"
     "제목: a short natural title\n"
     "목표: what the image should communicate\n"
     "구성: what the viewer will see and where\n"
     "화면에 넣을 텍스트: exact visible text to render, or '없음'\n"
     "스타일: palette, visual style, and typography direction\n"
-    "확인 필요: any missing fact the human may want to supply, or '없음'\n\n"
+    "확인 필요: any missing fact, source caveat, or human check needed, or '없음'\n\n"
     "Hard rules:\n"
+    "- Act like an autonomous planning agent. First infer what information the "
+    "image needs from the user's request, selected template, style, attached "
+    "context, and current date. Use available tools when the provided context "
+    "is not enough to make the plan accurate, specific, or current.\n"
+    "- Do not treat templates as content. Templates only guide layout, visual "
+    "hierarchy, and polish; the actual subject matter must come from the "
+    "user request, attached context, or tool results.\n"
     "- Never invent numbers, names, dates, percentages, logos, or facts.\n"
+    "- If the requested image depends on concrete facts, figures, names, dates, "
+    "labels, quotes, product attributes, or other verifiable details, gather "
+    "or derive them before drafting when possible, then include the useful "
+    "ones as exact visible text with units/periods/context. Do not leave "
+    "generic panels, blank chart lines, or placeholder-like template content "
+    "when concrete information is available.\n"
     "- Never output placeholder tokens or angle-bracket text. Forbidden "
     "examples: <metric>, <status>, <priority>, <설명 텍스트>, <클라이언트>.\n"
     "- If an exact value is missing, omit it from visible text and mention the "
@@ -204,6 +217,7 @@ def build_brief_messages(
     context_refs: list[dict[str, Any]],
     reference_image_count: int,
     template_name: str | None = None,
+    current_date: str | None = None,
     prior_brief: str | None = None,
     edit_instruction: str | None = None,
 ) -> list[dict[str, str]]:
@@ -215,6 +229,7 @@ def build_brief_messages(
         blocks.append(f"[Template]\n{template_summary}")
     blocks.extend(
         [
+            f"현재 날짜: {current_date or '(미지정)'}",
             f"사용처: {_format_use_case(use_case, use_case_other)}",
             _format_style(style or {}),
             _format_layout(layout or {}),
@@ -283,8 +298,11 @@ ILLUSTRATOR_SYSTEM_PROMPT = (
     "text, numbers, logos, or sample facts. Never render placeholder tokens, "
     "angle-bracket labels, or "
     "raw template words for metrics, statuses, priorities, description text, "
-    "or internal template IDs. If a value is missing, omit the text or use "
-    "unlabeled visual structure. Output exactly one image. Do not write "
+    "or internal template IDs. If the approved plan includes exact metrics, "
+    "years, percentages, amounts, or units, render them as readable text in "
+    "cards, tables, or labels rather than replacing them with generic chart "
+    "marks. If a value is missing, omit the text or use unlabeled visual "
+    "structure. Output exactly one image. Do not write "
     "commentary."
 )
 
@@ -328,6 +346,8 @@ def build_agent_prompt(
         "꺾쇠괄호로 감싼 텍스트, 누락값 표기, 내부 템플릿 ID/코드명, "
         "임시 라벨은 이미지 안에 렌더링하지 마세요.\n\n"
         "위 계획을 충실히 반영해 한 장의 이미지를 생성하세요. "
+        "계획에 포함된 연도, 금액, 비율, 증감률, 단위는 카드/표/라벨 안에 "
+        "읽을 수 있는 텍스트로 넣고, 일반적인 선이나 막대 자리표시자로 대체하지 마세요. "
         "계획에 명시되지 않은 숫자/이름/로고는 임의로 추가하지 마세요. "
         "금지 텍스트와 꺾쇠괄호 텍스트는 이미지 안에 절대 렌더링하지 마세요. "
         "최종 결과는 이미지 한 장만 반환하고 추가 설명 텍스트는 출력하지 마세요."

@@ -638,6 +638,13 @@ class Settings(BaseSettings):
             "DOOWON_API_IMAGE_SUPERVISOR_MODEL",
         ),
     )
+    image_brief_web_search_enabled: bool = Field(
+        default=True,
+        validation_alias=AliasChoices(
+            "DOOWON_IMAGE_BRIEF_WEB_SEARCH_ENABLED",
+            "DOOWON_API_IMAGE_BRIEF_WEB_SEARCH_ENABLED",
+        ),
+    )
     image_agent_max_iterations: int = Field(
         default=2,
         ge=1,

@@ -57,12 +57,15 @@ def test_run_brief_agent_uses_agents_sdk_provider(monkeypatch) -> None:
         workspace_id="workspace-1",
         user_id="user-1",
         generation_id="generation-1",
+        enable_web_search=True,
     )
 
     assert service._extract_agent_text(result) == "TITLE: SDK brief"
     assert captured["agent"].model == "gpt-5.5"
+    assert captured["agent"].model_settings.tool_choice == "auto"
+    assert [tool.name for tool in captured["agent"].tools] == ["web_search"]
     assert captured["input"] == "brief context"
-    assert captured["max_turns"] == 1
+    assert captured["max_turns"] == 4
     assert type(captured["run_config"].model_provider).__name__ == "OpenAIProvider"
     assert captured["run_config"].workflow_name == "AIDOO Image Plan"
 
@@ -70,6 +73,9 @@ def test_run_brief_agent_uses_agents_sdk_provider(monkeypatch) -> None:
 def test_image_plan_prompt_forbids_placeholder_tokens() -> None:
     assert "write a placeholder" not in BRIEF_SYSTEM_PROMPT
     assert "Never output placeholder tokens" in BRIEF_SYSTEM_PROMPT
+    assert "Act like an autonomous planning agent" in BRIEF_SYSTEM_PROMPT
+    assert "Use available tools when the provided context is not enough" in BRIEF_SYSTEM_PROMPT
+    assert "Do not treat templates as content" in BRIEF_SYSTEM_PROMPT
 
 
 def test_brief_messages_describe_template_without_raw_id() -> None:
@@ -82,9 +88,11 @@ def test_brief_messages_describe_template_without_raw_id() -> None:
         context_refs=[],
         reference_image_count=0,
         template_name="meeting_deck_kpi",
+        current_date="2026-05-03",
     )
 
     user_message = messages[1]["content"]
+    assert "현재 날짜: 2026-05-03" in user_message
     assert "KPI slide" in user_message
     assert "template sample image" in user_message
     assert "meeting_deck_kpi" not in user_message
@@ -133,6 +141,7 @@ def test_build_agent_prompt_calls_out_template_sample_reference() -> None:
     assert "[템플릿 샘플 이미지]" in prompt
     assert "임시 문구" in prompt
     assert "template composition" in prompt
+    assert "자리표시자로 대체하지 마세요" in prompt
 
 
 def test_build_direct_edit_prompt_uses_instruction_without_placeholders() -> None:
