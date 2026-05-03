@@ -614,7 +614,7 @@ class Settings(BaseSettings):
             "DEEPINFRA_TIMEOUT",
         ),
     )
-    # Image generation — wizard-driven OpenAI image API via Codex/Agents SDK.
+    # Image generation — wizard-driven OpenAI image API via the OpenAI Agents SDK.
     image_enabled: bool = Field(
         default=False,
         validation_alias=AliasChoices("DOOWON_IMAGE_ENABLED", "DOOWON_API_IMAGE_ENABLED"),
@@ -632,7 +632,7 @@ class Settings(BaseSettings):
         validation_alias=AliasChoices("DOOWON_IMAGE_MODEL", "DOOWON_API_IMAGE_MODEL"),
     )
     image_supervisor_model: str = Field(
-        default="gpt-5",
+        default="gpt-5.5",
         validation_alias=AliasChoices(
             "DOOWON_IMAGE_SUPERVISOR_MODEL",
             "DOOWON_API_IMAGE_SUPERVISOR_MODEL",

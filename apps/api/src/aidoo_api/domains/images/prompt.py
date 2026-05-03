@@ -197,7 +197,7 @@ def build_brief_messages(
     ]
 
 
-# --- Image generation (Codex/Agents SDK) -----------------------------------
+# --- Image generation (OpenAI Agents SDK) ----------------------------------
 
 ILLUSTRATOR_SYSTEM_PROMPT = (
     "You are an infographic illustrator agent. The user has approved an image "

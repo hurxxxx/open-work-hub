@@ -270,7 +270,7 @@ class Settings(BaseSettings):
         ),
     )
     image_supervisor_model: str = Field(
-        default="gpt-5",
+        default="gpt-5.5",
         validation_alias=AliasChoices(
             "DOOWON_IMAGE_SUPERVISOR_MODEL",
             "DOOWON_WORKER_IMAGE_SUPERVISOR_MODEL",

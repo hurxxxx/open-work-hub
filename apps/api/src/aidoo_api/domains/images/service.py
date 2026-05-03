@@ -1,6 +1,6 @@
 """Service layer for the image-wizard feature.
 
-Owns CRUD on `ImageGeneration`, brief composition via the chat LLM pool,
+Owns CRUD on `ImageGeneration`, brief composition via the OpenAI Agents SDK,
 reference-image upload to MinIO, and Celery dispatch of the actual image
 generation task.
 """
@@ -8,6 +8,7 @@ generation task.
 from __future__ import annotations
 
 import logging
+import os
 from datetime import UTC, datetime, timedelta
 from functools import lru_cache
 from io import BytesIO
@@ -20,7 +21,6 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from aidoo_api.core.i18n import localized_http_exception
-from aidoo_api.core.llm import LlmTaskContext, complete_chat
 from aidoo_api.core.settings import get_settings
 from aidoo_api.core.storage import ensure_bucket, get_minio_client
 from aidoo_api.domains.auth.models import Team, User, Workspace
@@ -28,7 +28,7 @@ from aidoo_api.domains.auth.security import new_id
 from aidoo_api.domains.docs.models import NativeDoc, NativeDocPage
 from aidoo_api.domains.docs.service import can_read_native_doc_for_rag
 from aidoo_api.domains.images.models import ImageGeneration, utcnow_naive
-from aidoo_api.domains.images.prompt import build_brief_messages
+from aidoo_api.domains.images.prompt import BRIEF_SYSTEM_PROMPT, build_brief_messages
 from aidoo_api.domains.images.schemas import (
     BriefRequest,
     BriefVersionOut,
@@ -57,7 +57,6 @@ _ALLOWED_REFERENCE_CONTENT_TYPES: tuple[str, ...] = (
     "image/jpeg",
     "image/webp",
 )
-_BRIEF_TASK_KIND = "batch_generation"
 _GENERATE_IMAGE_TASK_NAME = "images.generate_image"
 
 
@@ -118,6 +117,69 @@ def _get_celery_client() -> Celery:
         },
     )
     return celery_client
+
+
+def _image_api_key() -> str:
+    settings = get_settings()
+    return settings.image_api_key.strip() or os.environ.get("OPENAI_API_KEY", "").strip()
+
+
+def _brief_input_from_messages(messages: list[dict[str, str]]) -> str:
+    blocks: list[str] = []
+    for message in messages:
+        if message.get("role") == "system":
+            continue
+        content = str(message.get("content") or "").strip()
+        if content:
+            blocks.append(content)
+    return "\n\n".join(blocks).strip()
+
+
+def _extract_agent_text(result: Any) -> str:
+    final_output = getattr(result, "final_output", None)
+    if isinstance(final_output, str):
+        return final_output.strip()
+    if final_output is not None:
+        return str(final_output).strip()
+    return ""
+
+
+def _run_brief_agent(
+    *,
+    input_text: str,
+    model: str,
+    api_key: str,
+    base_url: str,
+    workspace_id: str,
+    user_id: str,
+    generation_id: str,
+) -> Any:
+    # Local import so DB-only tests can import the service without initializing
+    # the SDK until the image feature is actually used.
+    from agents import Agent, ModelSettings, OpenAIProvider, RunConfig, Runner
+
+    agent = Agent(
+        name="image-brief-designer",
+        instructions=BRIEF_SYSTEM_PROMPT,
+        model=model,
+        model_settings=ModelSettings(max_tokens=2200),
+    )
+    run_config = RunConfig(
+        model_provider=OpenAIProvider(api_key=api_key, base_url=base_url),
+        workflow_name="AIDOO Image Brief",
+        trace_metadata={
+            "source": "images.brief",
+            "workspace_id": workspace_id,
+            "actor_user_id": user_id,
+            "generation_id": generation_id,
+        },
+    )
+    return Runner.run_sync(
+        agent,
+        input=input_text,
+        max_turns=1,
+        run_config=run_config,
+    )
 
 
 def _flatten_doc_text(pages: list[NativeDocPage], *, max_chars: int = 1500) -> str:
@@ -612,35 +674,35 @@ def generate_brief(
         edit_instruction=edit_instruction,
     )
 
-    context = LlmTaskContext(
-        source="images.brief",
-        actor_user_id=user.id,
-        workspace_id=workspace.id,
-        task_kind=_BRIEF_TASK_KIND,
-    )
+    settings = get_settings()
+    api_key = _image_api_key()
+    if not api_key:
+        raise localized_http_exception(status_code=502, code="images.brief_failed")
+
     try:
-        response, _decision, _config = complete_chat(
-            context,
-            db,
-            messages=messages,
-            temperature=0.4,
-            max_tokens=1500,
-            reasoning_effort="none",
+        response = _run_brief_agent(
+            input_text=_brief_input_from_messages(messages),
+            model=settings.image_supervisor_model,
+            api_key=api_key,
+            base_url=settings.image_base_url,
+            workspace_id=workspace.id,
+            user_id=user.id,
+            generation_id=row.id,
         )
     except OpenAIError as exc:
-        logger.warning("images.brief: LLM error: %s", exc)
+        logger.warning("images.brief: OpenAI SDK error: %s", exc)
+        raise localized_http_exception(
+            status_code=502,
+            code="images.brief_failed",
+        ) from exc
+    except Exception as exc:
+        logger.warning("images.brief: Agents SDK error", exc_info=True)
         raise localized_http_exception(
             status_code=502,
             code="images.brief_failed",
         ) from exc
 
-    text = ""
-    choices = getattr(response, "choices", None) or []
-    if choices:
-        message = getattr(choices[0], "message", None)
-        content = getattr(message, "content", None) if message is not None else None
-        if isinstance(content, str):
-            text = content.strip()
+    text = _extract_agent_text(response)
     if not text:
         raise localized_http_exception(status_code=502, code="images.brief_empty")
 

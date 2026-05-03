@@ -1,4 +1,4 @@
-"""Worker task: drive OpenAI image generation via the Codex / Agents SDK.
+"""Worker task: drive OpenAI image generation via the OpenAI Agents SDK.
 
 Triggered by ``POST /workspaces/{slug}/images/generations/{id}/approve``. The
 agent receives the approved brief + reference images (if any) and emits one
@@ -86,7 +86,7 @@ def _minio_client():
 
 def _api_key() -> str:
     settings = get_settings()
-    return settings.image_api_key.strip()
+    return settings.image_api_key.strip() or os.environ.get("OPENAI_API_KEY", "").strip()
 
 
 def _normalize_size(value: str) -> str:
@@ -298,9 +298,11 @@ async def _run_agent(
     max_iterations: int,
     supervisor_model: str,
     image_model: str,
+    api_key: str,
+    base_url: str,
 ) -> Any:
     # Local import so plain DB-only tests can run without the SDK installed.
-    from agents import Agent, ImageGenerationTool, Runner
+    from agents import Agent, ImageGenerationTool, OpenAIProvider, RunConfig, Runner
 
     size = _normalize_size(str((layout or {}).get("aspect") or ""))
     background = _normalize_background_for_model(
@@ -332,10 +334,20 @@ async def _run_agent(
         layout=layout,
         reference_images=reference_images,
     )
+    run_config = RunConfig(
+        model_provider=OpenAIProvider(api_key=api_key, base_url=base_url),
+        workflow_name="AIDOO Image Generation",
+        trace_metadata={
+            "source": "images.generate",
+            "image_model": image_model,
+            "supervisor_model": supervisor_model,
+        },
+    )
     return await Runner.run(
         agent,
         input=input_items,
         max_turns=max_iterations + 1,
+        run_config=run_config,
     )
 
 
@@ -360,14 +372,6 @@ def generate_image(self, generation_id: str) -> str:
         with _db_session() as session:
             _mark_failed(session, generation_id, "No image API key configured")
         raise Ignore()
-
-    # The Agents SDK reads OPENAI_API_KEY (and OPENAI_BASE_URL) from the
-    # environment by default. Wire those for the duration of this task.
-    prior_key = os.environ.get("OPENAI_API_KEY")
-    prior_base = os.environ.get("OPENAI_BASE_URL")
-    os.environ["OPENAI_API_KEY"] = api_key
-    if settings.image_base_url:
-        os.environ["OPENAI_BASE_URL"] = settings.image_base_url
 
     session = _db_session()
     try:
@@ -400,6 +404,8 @@ def generate_image(self, generation_id: str) -> str:
                     max_iterations=settings.image_agent_max_iterations,
                     supervisor_model=settings.image_supervisor_model,
                     image_model=settings.image_model,
+                    api_key=api_key,
+                    base_url=settings.image_base_url,
                 ),
                 timeout=settings.image_request_timeout_seconds,
             )
@@ -455,11 +461,3 @@ def generate_image(self, generation_id: str) -> str:
         raise self.retry(exc=exc, countdown=min(120, 2 ** (self.request.retries + 1)))
     finally:
         session.close()
-        if prior_key is None:
-            os.environ.pop("OPENAI_API_KEY", None)
-        else:
-            os.environ["OPENAI_API_KEY"] = prior_key
-        if prior_base is None:
-            os.environ.pop("OPENAI_BASE_URL", None)
-        else:
-            os.environ["OPENAI_BASE_URL"] = prior_base
