@@ -145,6 +145,12 @@ export function shouldReviewImageEditInstruction(instruction: string): boolean {
   return !CONCRETE_EDIT_TERMS.some((term) => normalized.includes(term));
 }
 
+export function shouldStartNewGenerationForTemplatePick(
+  row: Pick<ImageGeneration, 'brief_status'> | null,
+): boolean {
+  return row?.brief_status === 'approved';
+}
+
 export function ImageWizardToolView() {
   const { t } = useTranslation('apps');
   const { user, token } = useAuth();
@@ -314,23 +320,18 @@ export function ImageWizardToolView() {
   );
 
   async function handleTemplatePick(template: TemplatePreset) {
-    if (!wizard.row) {
-      const created = await wizard.startNew({
-        template_id: template.id,
-        use_case: template.preset.use_case,
-        style: template.preset.style,
-        layout: template.preset.layout,
-      });
+    const payload = {
+      template_id: template.id,
+      use_case: template.preset.use_case,
+      style: template.preset.style,
+      layout: template.preset.layout,
+    };
+    if (!wizard.row || shouldStartNewGenerationForTemplatePick(wizard.row)) {
+      const created = await wizard.startNew(payload);
       updateUrl({ gen: created.id, step: 2 });
       return;
-    } else {
-      wizard.update({
-        template_id: template.id,
-        use_case: template.preset.use_case,
-        style: template.preset.style,
-        layout: template.preset.layout,
-      });
     }
+    wizard.update(payload);
     updateUrl({ step: 2 });
   }
 

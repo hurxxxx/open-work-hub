@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
-import { shouldReviewImageEditInstruction } from './ImageWizardToolView';
+import {
+  shouldReviewImageEditInstruction,
+  shouldStartNewGenerationForTemplatePick,
+} from './ImageWizardToolView';
 
 describe('shouldReviewImageEditInstruction', () => {
   it('keeps information gathering in the agent path instead of keyword-routing to review', () => {
@@ -12,5 +15,14 @@ describe('shouldReviewImageEditInstruction', () => {
   it('allows direct edits for concrete visual-only changes', () => {
     expect(shouldReviewImageEditInstruction('배경을 더 밝게 하고 오른쪽 카드만 강조해줘')).toBe(false);
     expect(shouldReviewImageEditInstruction('제목은 유지하고 로고를 제거해줘')).toBe(false);
+  });
+});
+
+describe('shouldStartNewGenerationForTemplatePick', () => {
+  it('forks template picks from approved generations', () => {
+    expect(shouldStartNewGenerationForTemplatePick(null)).toBe(false);
+    expect(shouldStartNewGenerationForTemplatePick({ brief_status: 'drafting' })).toBe(false);
+    expect(shouldStartNewGenerationForTemplatePick({ brief_status: 'ready' })).toBe(false);
+    expect(shouldStartNewGenerationForTemplatePick({ brief_status: 'approved' })).toBe(true);
   });
 });
