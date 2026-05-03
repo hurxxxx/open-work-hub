@@ -48,6 +48,7 @@ NN-<kebab-slug>.md
 | [`03-phase6-evidence-runtime-implementation.md`](./03-phase6-evidence-runtime-implementation.md) | 실행 기록/보류 계획 | AI manager/runtime spike 완료, Meeting Work Intelligence로 후속 전환 |
 | [`04-whiteboard-app-implementation.md`](./04-whiteboard-app-implementation.md) | 실행 계획 | Excalidraw 기반 Whiteboard 앱 (Docs 동등 first-class entity) 구현 계획 |
 | [`05-meeting-work-intelligence.md`](./05-meeting-work-intelligence.md) | 실행 계획 | 회의록/채팅 원문을 업무 항목으로 전환하는 local-first vertical slice |
+| [`07-live-meeting-cockpit.md`](./07-live-meeting-cockpit.md) | 실행 계획 (전체 비전) | 회의 라이브 보조석 — 청크 ASR + 라이브 노트 정리 + 의도 감지 웹/사내문서 카드. Phase 1–5 분할 실행 |
 
 완료된 플랜은 [`docs/planning-log.md`](../docs/planning-log.md)에서 확인.
 

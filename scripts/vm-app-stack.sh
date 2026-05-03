@@ -14,7 +14,7 @@ API_INSTANCE_ID="${DOOWON_VM_API_INSTANCE_ID:-remote-api}"
 RUNTIME_DIR="${DOOWON_VM_RUNTIME_DIR:-$ROOT_DIR/.dev}"
 PID_DIR="$RUNTIME_DIR/pids"
 LOG_DIR="$RUNTIME_DIR/logs"
-WORKER_QUEUES="${DOOWON_VM_WORKER_QUEUES:-celery,meeting_transcribe,rag_sync_realtime,rag_sync_backfill,rag_visibility_recompute,search_index_realtime}"
+WORKER_QUEUES="${DOOWON_VM_WORKER_QUEUES:-celery,meeting_transcribe,image_generation,rag_sync_realtime,rag_sync_backfill,rag_visibility_recompute,search_index_realtime}"
 
 mkdir -p "$PID_DIR" "$LOG_DIR"
 

@@ -53,6 +53,7 @@ export interface ImageGeneration {
   id: string;
   workspace_id: string;
   owner_id: string;
+  template_id: string | null;
   use_case: string;
   use_case_other: string;
   style: StylePayload;
@@ -79,6 +80,7 @@ export interface ImageGenerationListResponse {
 }
 
 export interface ImageGenerationCreatePayload {
+  template_id?: string | null;
   use_case?: string;
   use_case_other?: string;
   style?: Partial<StylePayload>;
@@ -88,6 +90,7 @@ export interface ImageGenerationCreatePayload {
 }
 
 export interface ImageGenerationPatchPayload {
+  template_id?: string | null;
   use_case?: string;
   use_case_other?: string;
   style?: Partial<StylePayload>;

@@ -19,6 +19,7 @@ from typing import Any
 from urllib.parse import urlparse
 
 from celery.exceptions import Ignore
+from sqlalchemy import select
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
@@ -55,6 +56,7 @@ logger = logging.getLogger(__name__)
 _VALID_SIZES = {"1024x1024", "1024x1536", "1536x1024", "auto"}
 _VALID_BACKGROUNDS = {"transparent", "opaque", "auto"}
 _VALID_QUALITIES = {"low", "medium", "high", "auto"}
+_ALLOWED_REFERENCE_CONTENT_TYPES = {"image/png", "image/jpeg", "image/webp"}
 
 
 def _utcnow() -> datetime:
@@ -101,6 +103,14 @@ def _normalize_background(value: str) -> str:
     return cleaned if cleaned in _VALID_BACKGROUNDS else "auto"
 
 
+def _normalize_background_for_model(value: str, *, image_model: str) -> str:
+    background = _normalize_background(value)
+    if background == "transparent" and image_model.startswith("gpt-image-2"):
+        logger.info("images.generate: coercing transparent background to auto for %s", image_model)
+        return "auto"
+    return background
+
+
 def _normalize_quality(value: str) -> str:
     cleaned = (value or "").strip().lower()
     return cleaned if cleaned in _VALID_QUALITIES else "high"
@@ -140,6 +150,46 @@ def _mark_retrying(session: Session, generation_id: str, reason: str) -> None:
     session.commit()
 
 
+def _claim_generation(
+    session: Session,
+    *,
+    generation_id: str,
+    task_id: str | None,
+) -> ImageGeneration | None:
+    row = session.scalar(
+        select(ImageGeneration)
+        .where(ImageGeneration.id == generation_id)
+        .with_for_update()
+    )
+    if row is None or row.trashed_at is not None:
+        return None
+    if row.image_status == "running":
+        if task_id and row.celery_task_id == task_id:
+            row.failure_reason = None
+            row.updated_at = _utcnow()
+            session.add(row)
+            session.commit()
+            return row
+        return None
+    if row.image_status != "queued":
+        return None
+    if row.celery_task_id and task_id and row.celery_task_id != task_id:
+        logger.info(
+            "images.generate: ignoring stale task generation=%s row_task=%s task=%s",
+            generation_id,
+            row.celery_task_id,
+            task_id,
+        )
+        return None
+    row.image_status = "running"
+    row.celery_task_id = task_id or row.celery_task_id
+    row.failure_reason = None
+    row.updated_at = _utcnow()
+    session.add(row)
+    session.commit()
+    return row
+
+
 def _download_reference_images(
     row: ImageGeneration,
 ) -> list[tuple[str, str, bytes]]:
@@ -158,7 +208,7 @@ def _download_reference_images(
             continue
         role = str(ref.get("role") or "style")
         content_type = str(ref.get("content_type") or "image/png")
-        if not content_type.startswith("image/"):
+        if content_type not in _ALLOWED_REFERENCE_CONTENT_TYPES:
             logger.warning("images.generate: skipping non-image reference %s", key)
             continue
         try:
@@ -253,7 +303,10 @@ async def _run_agent(
     from agents import Agent, ImageGenerationTool, Runner
 
     size = _normalize_size(str((layout or {}).get("aspect") or ""))
-    background = _normalize_background(str((style or {}).get("background") or ""))
+    background = _normalize_background_for_model(
+        str((style or {}).get("background") or ""),
+        image_model=image_model,
+    )
     quality = _normalize_quality(str((style or {}).get("quality") or ""))
 
     tool = ImageGenerationTool(
@@ -318,18 +371,10 @@ def generate_image(self, generation_id: str) -> str:
 
     session = _db_session()
     try:
-        row = _load(session, generation_id)
+        task_id = getattr(self.request, "id", None)
+        row = _claim_generation(session, generation_id=generation_id, task_id=task_id)
         if row is None:
             raise Ignore()
-        if row.image_status not in {"queued", "failed"}:
-            # Already running or done — nothing to do.
-            return row.id
-
-        row.image_status = "running"
-        row.failure_reason = None
-        row.updated_at = _utcnow()
-        session.add(row)
-        session.commit()
 
         versions = list(row.brief_versions or [])
         if not versions:
@@ -365,6 +410,12 @@ def generate_image(self, generation_id: str) -> str:
             _mark_failed(session, generation_id, "Agent did not return an image")
             raise Ignore()
 
+        row = session.get(ImageGeneration, generation_id)
+        if row is None or row.trashed_at is not None:
+            raise Ignore()
+        if task_id and row.celery_task_id and row.celery_task_id != task_id:
+            raise Ignore()
+
         storage_key = f"images/results/{row.workspace_id}/{row.id}.png"
         try:
             _minio_client().put_object(
@@ -374,9 +425,9 @@ def generate_image(self, generation_id: str) -> str:
                 length=len(image_bytes),
                 content_type="image/png",
             )
-        except Exception as exc:
+        except Exception:
             logger.exception("images.generate: storage put failed for %s", generation_id)
-            _mark_failed(session, generation_id, f"Storage upload failed: {exc}")
+            _mark_failed(session, generation_id, "Storage upload failed")
             raise Ignore()
 
         row = session.get(ImageGeneration, generation_id)
@@ -398,9 +449,9 @@ def generate_image(self, generation_id: str) -> str:
     except Exception as exc:
         logger.exception("images.generate: unexpected error for %s", generation_id)
         if self.request.retries >= self.max_retries:
-            _mark_failed(session, generation_id, str(exc))
+            _mark_failed(session, generation_id, "Image generation failed")
             raise Ignore()
-        _mark_retrying(session, generation_id, str(exc))
+        _mark_retrying(session, generation_id, "Retrying image generation")
         raise self.retry(exc=exc, countdown=min(120, 2 ** (self.request.retries + 1)))
     finally:
         session.close()

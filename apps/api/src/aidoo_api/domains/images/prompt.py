@@ -152,22 +152,28 @@ def build_brief_messages(
     details: dict[str, Any],
     context_refs: list[dict[str, Any]],
     reference_image_count: int,
+    template_name: str | None = None,
     prior_brief: str | None = None,
     edit_instruction: str | None = None,
 ) -> list[dict[str, str]]:
     audience = str((details or {}).get("audience") or "").strip()
     notes = str((details or {}).get("notes") or "").strip()
-    blocks: list[str] = [
-        f"사용처: {_format_use_case(use_case, use_case_other)}",
-        _format_style(style or {}),
-        _format_layout(layout or {}),
-        f"청중/톤: {audience or '(미지정)'}",
-        f"기타 메모: {notes or '(없음)'}",
-        f"참고 이미지 수: {reference_image_count}장",
-        "",
-        "[컨텍스트]",
-        _format_context_block(context_refs or []),
-    ]
+    blocks: list[str] = []
+    if template_name and template_name.strip():
+        blocks.append(f"템플릿: {template_name.strip()}")
+    blocks.extend(
+        [
+            f"사용처: {_format_use_case(use_case, use_case_other)}",
+            _format_style(style or {}),
+            _format_layout(layout or {}),
+            f"청중/톤: {audience or '(미지정)'}",
+            f"기타 메모: {notes or '(없음)'}",
+            f"참고 이미지 수: {reference_image_count}장",
+            "",
+            "[컨텍스트]",
+            _format_context_block(context_refs or []),
+        ]
+    )
     user_message = "\n".join(blocks)
 
     if prior_brief and edit_instruction:

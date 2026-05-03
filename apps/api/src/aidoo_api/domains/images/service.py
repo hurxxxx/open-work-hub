@@ -41,6 +41,7 @@ from aidoo_api.domains.images.schemas import (
     ReferenceImageUploadOut,
 )
 from aidoo_api.domains.meeting.models import Meeting
+from aidoo_api.domains.meeting.service import can_read_meeting_for_rag
 from aidoo_api.domains.pms.access import can_read_issue_for_rag, has_list_access
 from aidoo_api.domains.pms.models import Issue, TaskList
 
@@ -50,6 +51,12 @@ logger = logging.getLogger(__name__)
 
 _VALID_ROLES: tuple[str, ...] = ("style", "composition", "content")
 _VALID_KINDS: tuple[str, ...] = ("meeting", "task", "doc")
+_IMAGE_GENERATION_QUEUE = "image_generation"
+_ALLOWED_REFERENCE_CONTENT_TYPES: tuple[str, ...] = (
+    "image/png",
+    "image/jpeg",
+    "image/webp",
+)
 _BRIEF_TASK_KIND = "batch_generation"
 _GENERATE_IMAGE_TASK_NAME = "images.generate_image"
 
@@ -159,6 +166,13 @@ def _hydrate_context_refs(
         accessible = False
         snapshot: dict[str, Any] = {}
         if kind == "meeting":
+            if not can_read_meeting_for_rag(
+                db,
+                user=user,
+                workspace_id=workspace.id,
+                meeting_id=ref_id,
+            ):
+                continue
             meeting = db.scalar(
                 select(Meeting).where(
                     Meeting.id == ref_id,
@@ -282,6 +296,16 @@ def _is_owned_result_key(row: ImageGeneration, key: str) -> bool:
     return key == f"images/results/{row.workspace_id}/{row.id}.png"
 
 
+def _detect_reference_content_type(data: bytes) -> str:
+    if data.startswith(b"\x89PNG\r\n\x1a\n"):
+        return "image/png"
+    if data.startswith(b"\xff\xd8\xff"):
+        return "image/jpeg"
+    if len(data) >= 12 and data[:4] == b"RIFF" and data[8:12] == b"WEBP":
+        return "image/webp"
+    raise localized_http_exception(status_code=422, code="images.invalid_content_type")
+
+
 def _owned_reference_count(row: ImageGeneration) -> int:
     return sum(
         1
@@ -312,6 +336,7 @@ def create_generation(
         id=new_id(),
         workspace_id=workspace.id,
         owner_id=user.id,
+        template_id=payload.template_id,
         use_case=payload.use_case,
         use_case_other=payload.use_case_other,
         style=payload.style.model_dump(),
@@ -337,6 +362,9 @@ def patch_generation(
     row = _load(db, workspace=workspace, user=user, generation_id=generation_id)
     if row.brief_status == "approved":
         raise localized_http_exception(status_code=409, code="images.locked_after_approval")
+    if "template_id" in payload.model_fields_set:
+        row.template_id = payload.template_id or None
+        _mark_brief_drafting(row)
     if payload.use_case is not None:
         row.use_case = payload.use_case
         _mark_brief_drafting(row)
@@ -458,7 +486,13 @@ def upload_reference_image(
         raise localized_http_exception(status_code=422, code="images.empty_upload")
     if len(data) > settings.image_reference_max_bytes:
         raise localized_http_exception(status_code=413, code="images.upload_too_large")
-    if not (content_type or "").startswith("image/"):
+    detected_content_type = _detect_reference_content_type(data)
+    declared_content_type = (content_type or "").split(";", 1)[0].strip().lower()
+    if (
+        declared_content_type
+        and declared_content_type != "application/octet-stream"
+        and declared_content_type not in _ALLOWED_REFERENCE_CONTENT_TYPES
+    ):
         raise localized_http_exception(status_code=422, code="images.invalid_content_type")
 
     row = _load(db, workspace=workspace, user=user, generation_id=generation_id)
@@ -482,7 +516,7 @@ def upload_reference_image(
             storage_key,
             BytesIO(data),
             length=len(data),
-            content_type=content_type,
+            content_type=detected_content_type,
         )
     except Exception as exc:
         logger.exception("images.upload_reference: storage put failed")
@@ -491,7 +525,7 @@ def upload_reference_image(
     entry = {
         "storage_key": storage_key,
         "role": role,
-        "content_type": content_type,
+        "content_type": detected_content_type,
         "size_bytes": len(data),
         "original_name": original_name[:200],
     }
@@ -573,6 +607,7 @@ def generate_brief(
         details=row.details or {},
         context_refs=hydrated,
         reference_image_count=reference_image_count,
+        template_name=row.template_id or None,
         prior_brief=prior_brief,
         edit_instruction=edit_instruction,
     )
@@ -663,7 +698,7 @@ def approve_and_dispatch(
         async_result = _get_celery_client().send_task(
             _GENERATE_IMAGE_TASK_NAME,
             args=[row.id],
-            queue="meeting_transcribe",
+            queue=_IMAGE_GENERATION_QUEUE,
         )
         row.celery_task_id = getattr(async_result, "id", None)
         db.add(row)
@@ -671,7 +706,7 @@ def approve_and_dispatch(
     except Exception as exc:
         logger.exception("images.approve: failed to dispatch celery task")
         row.image_status = "failed"
-        row.failure_reason = f"dispatch failed: {exc}"[:500]
+        row.failure_reason = "Dispatch failed"
         row.updated_at = utcnow_naive()
         db.add(row)
         db.commit()
@@ -696,6 +731,13 @@ def presign_download(
     _require_enabled()
     row = _load(db, workspace=workspace, user=user, generation_id=generation_id)
     if row.image_status != "succeeded" or not row.image_storage_key:
+        raise localized_http_exception(status_code=409, code="images.not_ready")
+    if not _is_owned_result_key(row, row.image_storage_key):
+        logger.warning(
+            "images.download: refusing unexpected result key generation=%s key=%s",
+            row.id,
+            row.image_storage_key,
+        )
         raise localized_http_exception(status_code=409, code="images.not_ready")
     settings = get_settings()
     expires = timedelta(minutes=15)

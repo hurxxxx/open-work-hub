@@ -41,6 +41,7 @@ class ImageGeneration(Base):
     )
     owner_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True, nullable=False)
 
+    template_id: Mapped[str | None] = mapped_column(String(80), nullable=True)
     use_case: Mapped[str] = mapped_column(String(64), default="", nullable=False)
     use_case_other: Mapped[str] = mapped_column(String(200), default="", nullable=False)
 

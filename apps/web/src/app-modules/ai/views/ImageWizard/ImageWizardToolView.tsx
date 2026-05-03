@@ -1,5 +1,6 @@
-import { useCallback, useMemo } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Loader2 } from 'lucide-react';
+import { Navigate, useSearchParams } from 'react-router-dom';
 
 import { useAuth } from '@/src/platform/auth/auth-provider';
 import {
@@ -7,84 +8,386 @@ import {
   resolveDefaultWorkspaceAppPath,
   resolveShellWorkspaceSlug,
 } from '@/src/platform/workspaces/workspace-utils';
-import { ImageWizardView } from './ImageWizardView';
-import { ImageWizardGalleryView } from './ImageWizardGalleryView';
+import { listImageGenerations } from '../../api/image-wizard-api';
+import { MyImagesSlideOver } from './MyImagesSlideOver';
+import { Step1Templates } from './steps/Step1Templates';
+import { Step2Context } from './steps/Step2Context';
+import { Step3Refine } from './steps/Step3Refine';
+import { Step4Brief } from './steps/Step4Brief';
+import { StepSummary } from './StepSummary';
+import { WizardFooter } from './WizardFooter';
+import { WizardLayout } from './WizardLayout';
+import { useWizardState, type StepId } from './wizard-state';
+import { LAYOUT_OPTIONS, type AspectId, type LayoutId } from './layout-wireframes';
+import {
+  getTemplate,
+  TEMPLATE_PRESETS,
+  type TemplatePreset,
+} from './templates/template-presets';
+import { useTranslation } from 'react-i18next';
+
+const DEFAULT_STYLE = {
+  chips: [] as string[],
+  palette: 'auto',
+  background: 'auto',
+  quality: 'high',
+};
+const DEFAULT_LAYOUT = {
+  layout_id: LAYOUT_OPTIONS[0] as LayoutId,
+  aspect: '1024x1024' as AspectId,
+};
+const DEFAULT_DETAILS = { audience: '', notes: '' };
 
 export function ImageWizardToolView() {
-  const { user } = useAuth();
-  const navigate = useNavigate();
+  const { t } = useTranslation('apps');
+  const { user, token } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
 
   const workspaceSlug = useMemo(
-    () =>
-      searchParams.get('workspace')
-      || resolveShellWorkspaceSlug(user, null)
-      || '',
+    () => searchParams.get('workspace') || resolveShellWorkspaceSlug(user, null) || '',
     [searchParams, user],
   );
-
-  const view = searchParams.get('view') === 'gallery' ? 'gallery' : 'wizard';
   const generationId = searchParams.get('gen');
+  const stepParam = parseInt(searchParams.get('step') || '1', 10);
+  const step = (Math.min(Math.max(1, isNaN(stepParam) ? 1 : stepParam), 4) as StepId);
 
-  const newWizardHref = useMemo(() => {
-    const params = new URLSearchParams();
-    if (workspaceSlug) params.set('workspace', workspaceSlug);
-    return `/tool/image-wizard${params.toString() ? `?${params.toString()}` : ''}`;
-  }, [workspaceSlug]);
+  const [myImagesOpen, setMyImagesOpen] = useState(false);
+  const [myImagesCount, setMyImagesCount] = useState(0);
+  const [transitioningStep, setTransitioningStep] = useState(false);
 
-  const buildDetailHref = useCallback(
-    (gen: string) => {
-      const params = new URLSearchParams();
-      if (workspaceSlug) params.set('workspace', workspaceSlug);
-      params.set('gen', gen);
-      return `/tool/image-wizard?${params.toString()}`;
+  const updateUrl = useCallback(
+    (next: { gen?: string | null; step?: StepId }) => {
+      setSearchParams(
+        (current) => {
+          const params = new URLSearchParams(current);
+          if ('gen' in next) {
+            if (next.gen) params.set('gen', next.gen);
+            else params.delete('gen');
+          }
+          if (next.step) params.set('step', String(next.step));
+          return params;
+        },
+        { replace: true },
+      );
     },
-    [workspaceSlug],
+    [setSearchParams],
   );
 
   const handleGenerationCreated = useCallback(
-    (id: string) => {
-      const params = new URLSearchParams(searchParams);
-      params.set('gen', id);
-      setSearchParams(params, { replace: true });
-    },
-    [searchParams, setSearchParams],
+    (id: string) => updateUrl({ gen: id }),
+    [updateUrl],
   );
+
+  const wizard = useWizardState({
+    workspaceSlug,
+    generationId,
+    onIdChange: handleGenerationCreated,
+  });
+  const flushWizard = wizard.flush;
+
+  // Light count refresh for the My-Images pill.
+  useEffect(() => {
+    if (!token || !workspaceSlug) return;
+    let cancelled = false;
+    listImageGenerations(token, workspaceSlug, { limit: 50 })
+      .then((response) => {
+        if (cancelled) return;
+        setMyImagesCount(response.items.length);
+      })
+      .catch(() => {
+        // ignore
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [token, workspaceSlug, generationId]);
+
+  // After the wizard creates a row mid-flow, advance step 1 → 2 once row exists.
+  // For Step1's pick handlers, advancement is explicit.
+
+  const highest = useMemo<StepId>(() => {
+    if (!wizard.row) return 1;
+    if (wizard.row.brief_versions.length > 0 || wizard.row.brief_status !== 'drafting') return 4;
+    if (
+      wizard.row.context_refs.length > 0
+      || wizard.row.details?.audience
+    ) {
+      return Math.max(step, 3) as StepId;
+    }
+    if (wizard.row.template_id || wizard.row.use_case) return Math.max(step, 2) as StepId;
+    return 1;
+  }, [wizard.row, step]);
+
+  const goToStep = useCallback(
+    async (next: StepId) => {
+      if (next === 4) {
+        setTransitioningStep(true);
+        try {
+          await flushWizard();
+        } finally {
+          setTransitioningStep(false);
+        }
+      }
+      updateUrl({ step: next });
+    },
+    [flushWizard, updateUrl],
+  );
+
+  const handleJumpStep = useCallback(
+    (next: StepId) => {
+      if (next > highest) return;
+      void goToStep(next);
+    },
+    [goToStep, highest],
+  );
+
+  async function handleTemplatePick(template: TemplatePreset) {
+    if (!wizard.row) {
+      const created = await wizard.startNew({
+        template_id: template.id,
+        use_case: template.preset.use_case,
+        style: template.preset.style,
+        layout: template.preset.layout,
+      });
+      updateUrl({ gen: created.id, step: 2 });
+      return;
+    } else {
+      wizard.update({
+        template_id: template.id,
+        use_case: template.preset.use_case,
+        style: template.preset.style,
+        layout: template.preset.layout,
+      });
+    }
+    updateUrl({ step: 2 });
+  }
+
+  async function handleBlankPick() {
+    if (!wizard.row) {
+      const created = await wizard.startNew({
+        template_id: null,
+        use_case: '',
+        style: DEFAULT_STYLE,
+        layout: DEFAULT_LAYOUT,
+        details: DEFAULT_DETAILS,
+      });
+      updateUrl({ gen: created.id, step: 2 });
+      return;
+    }
+    updateUrl({ step: 2 });
+  }
+
+  async function handleClone() {
+    if (!wizard.row) return;
+    const created = await wizard.startNew({
+      template_id: wizard.row.template_id,
+      use_case: wizard.row.use_case,
+      use_case_other: wizard.row.use_case_other,
+      style: wizard.row.style,
+      layout: wizard.row.layout,
+      details: wizard.row.details,
+      context_refs: wizard.row.context_refs,
+    });
+    setSearchParams(
+      (current) => {
+        const params = new URLSearchParams(current);
+        params.set('gen', created.id);
+        params.set('step', '4');
+        return params;
+      },
+      { replace: false },
+    );
+  }
+
+  function handleDiscard() {
+    updateUrl({ gen: null, step: 1 });
+  }
 
   if (!workspaceSlug) {
     const fallback =
       resolveDefaultWorkspaceAppPath(user, 'ai')
       || buildWorkspaceAppPath(resolveShellWorkspaceSlug(user, null) ?? '', 'ai');
-    if (fallback) {
-      navigate(fallback, { replace: true });
-    }
-    return null;
+    return fallback ? <Navigate to={fallback} replace /> : null;
   }
 
-  if (view === 'gallery') {
+  if (wizard.loading) {
     return (
-      <div className="px-6 py-6">
-        <ImageWizardGalleryView
-          workspaceSlug={workspaceSlug}
-          newWizardHref={newWizardHref}
-          buildDetailHref={buildDetailHref}
-          onChanged={() => {
-            // No-op; the gallery refetches on mount.
-          }}
-        />
+      <div className="flex h-32 items-center justify-center text-app-ink/40">
+        <Loader2 size={16} className="animate-spin" />
       </div>
     );
   }
 
-  return (
-    <div className="px-6 py-6">
-      <ImageWizardView
-        workspaceSlug={workspaceSlug}
-        generationId={generationId}
-        onGenerationCreated={handleGenerationCreated}
-      />
+  const row = wizard.row;
+  const templateName = row?.template_id
+    ? t(`ai.imageWizard.templates.${row.template_id}.name`, { defaultValue: row.template_id })
+    : null;
+
+  const summaries = (
+    <div className="space-y-2 mb-4">
+      {step > 1 ? (
+        <StepSummary
+          stepNumber={1}
+          title={t('ai.imageWizard.steps.step1.title')}
+          value={
+            row?.template_id
+              ? templateName
+              : row
+                ? t('ai.imageWizard.gallery.startBlank')
+                : null
+          }
+          onEdit={() => handleJumpStep(1)}
+        />
+      ) : null}
+      {step > 2 ? (
+        <StepSummary
+          stepNumber={2}
+          title={t('ai.imageWizard.steps.step2.title')}
+          value={(() => {
+            const audience = row?.details?.audience?.trim();
+            const refsCount = row?.context_refs?.length ?? 0;
+            if (!audience && refsCount === 0) {
+              return t('ai.imageWizard.wizard.noneSelected');
+            }
+            const parts: string[] = [];
+            if (audience) parts.push(audience);
+            if (refsCount > 0) {
+              parts.push(t('ai.imageWizard.context.attachedCount', { count: refsCount }));
+            }
+            return parts.join(' · ');
+          })()}
+          onEdit={() => handleJumpStep(2)}
+        />
+      ) : null}
+      {step > 3 ? (
+        <StepSummary
+          stepNumber={3}
+          title={t('ai.imageWizard.steps.step3.title')}
+          value={(() => {
+            if (!row) return null;
+            const styleChips = row.style.chips
+              ?.slice(0, 2)
+              .map((chip) =>
+                t(`ai.imageWizard.style.chips.${chip}`, { defaultValue: chip }),
+              )
+              .join(' · ');
+            const aspectLabel = t(`ai.imageWizard.layout.aspect.${row.layout.aspect}`, {
+              defaultValue: row.layout.aspect,
+            });
+            return [styleChips || t('ai.imageWizard.style.empty'), aspectLabel]
+              .filter(Boolean)
+              .join(' · ');
+          })()}
+          onEdit={() => handleJumpStep(3)}
+        />
+      ) : null}
     </div>
+  );
+
+  const stepBody = (() => {
+    if (step === 1) {
+      return (
+        <Step1Templates
+          selectedTemplateId={row?.template_id ?? null}
+          onPickTemplate={(template) => void handleTemplatePick(template)}
+          onPickBlank={() => void handleBlankPick()}
+        />
+      );
+    }
+    if (step === 2 && row) {
+      return (
+        <Step2Context
+          workspaceSlug={workspaceSlug}
+          details={row.details ?? DEFAULT_DETAILS}
+          contextRefs={row.context_refs ?? []}
+          onChangeDetails={(details) => wizard.update({ details })}
+          onChangeContextRefs={(context_refs) => wizard.update({ context_refs })}
+        />
+      );
+    }
+    if (step === 3 && row) {
+      return (
+        <Step3Refine
+          workspaceSlug={workspaceSlug}
+          generationId={row.id}
+          style={row.style ?? DEFAULT_STYLE}
+          layout={row.layout ?? DEFAULT_LAYOUT}
+          references={row.reference_image_keys ?? []}
+          onChangeStyle={(style) => wizard.update({ style })}
+          onChangeLayout={(layout) => wizard.update({ layout })}
+          onReferencesChange={(refs) => wizard.applyServer({ ...row, reference_image_keys: refs })}
+        />
+      );
+    }
+    if (step === 4 && row) {
+      return (
+        <Step4Brief
+          workspaceSlug={workspaceSlug}
+          row={row}
+          onRowReplaced={wizard.applyServer}
+          onClone={() => void handleClone()}
+          onDiscard={handleDiscard}
+        />
+      );
+    }
+    return null;
+  })();
+
+  const footer = (
+    <WizardFooter
+      onPrev={step > 1 ? () => void goToStep((step - 1) as StepId) : undefined}
+      onNext={
+        step < 4
+          ? () => void goToStep((step + 1) as StepId)
+          : undefined
+      }
+      onSkip={step === 2 || step === 3 ? () => void goToStep(4) : undefined}
+      nextDisabled={
+        (step === 1 && !row)
+        || transitioningStep
+        || wizard.autosave === 'pending'
+        || wizard.autosave === 'saving'
+      }
+      hidden={false}
+    />
+  );
+
+  return (
+    <>
+      <WizardLayout
+        step={step}
+        highest={highest}
+        autosave={wizard.autosave}
+        myImagesCount={myImagesCount}
+        onJumpStep={handleJumpStep}
+        onOpenMyImages={() => setMyImagesOpen(true)}
+        footer={footer}
+      >
+        {step > 1 ? summaries : null}
+        {wizard.error ? (
+          <div
+            role="alert"
+            className="mb-3 rounded-md border border-[var(--ui-color-danger)]/30 bg-[var(--ui-color-danger)]/10 px-3 py-2 app-text-body text-[var(--ui-color-danger)]"
+          >
+            {wizard.error}
+          </div>
+        ) : null}
+        {stepBody}
+      </WizardLayout>
+      <MyImagesSlideOver
+        open={myImagesOpen}
+        onClose={() => setMyImagesOpen(false)}
+        workspaceSlug={workspaceSlug}
+        onPickGeneration={(id) => {
+          setMyImagesOpen(false);
+          updateUrl({ gen: id, step: 4 });
+        }}
+        onCountChange={setMyImagesCount}
+      />
+    </>
   );
 }
 
+// Re-export presets so other modules (and tests) can introspect.
+export { TEMPLATE_PRESETS, getTemplate };
 export default ImageWizardToolView;
