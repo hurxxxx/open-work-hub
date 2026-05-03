@@ -8,8 +8,14 @@ const AIView = lazy(() => import('./views/AIView').then((module) => ({ default: 
 const RagSearchView = lazy(() =>
   import('./views/RagSearchView').then((module) => ({ default: module.RagSearchView })),
 );
+const ImageWizardToolView = lazy(() =>
+  import('./views/ImageWizard/ImageWizardToolView').then((module) => ({
+    default: module.ImageWizardToolView,
+  })),
+);
 
 export const ragSearchToolElement = lazyRoute(<RagSearchView />);
+export const imageWizardToolElement = lazyRoute(<ImageWizardToolView />);
 
 export const aiWorkspaceRoutes: WorkspaceRouteDefinition[] = [
   {

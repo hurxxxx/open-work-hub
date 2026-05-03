@@ -37,6 +37,7 @@ const WORKSPACE_API_PREFIXES = [
   '/api/v1/docs',
   '/api/v1/whiteboard',
   '/api/v1/drafts',
+  '/api/v1/images',
   '/api/v1/meeting',
   '/api/v1/planner',
   '/api/v1/recording',
@@ -296,12 +297,13 @@ export function resolveToolInvocationHref(
   if (item.linkAppId && item.linkAppId !== item.appId) {
     return resolveNavItemHref(item, currentWorkspaceSlug, user);
   }
-  if (item.id === 'search') {
+  if (item.id === 'search' || item.id === 'image-wizard') {
     const workspaceSlug = currentWorkspaceSlug ?? resolveShellWorkspaceSlug(user, null);
+    const toolPath = `/tool/${item.id}`;
     if (!workspaceSlug) {
-      return '/tool/search';
+      return toolPath;
     }
-    return `/tool/search?workspace=${encodeURIComponent(workspaceSlug)}`;
+    return `${toolPath}?workspace=${encodeURIComponent(workspaceSlug)}`;
   }
   return `/tool/${item.id}`;
 }
@@ -324,7 +326,7 @@ export function resolveNavItemHref(
   if (item.comingSoon) {
     return `/tool/${item.id}`;
   }
-  if (item.id === 'search') {
+  if (item.id === 'search' || item.id === 'image-wizard') {
     return resolveToolInvocationHref(item, currentWorkspaceSlug, user);
   }
   const targetApp = (item.linkAppId ?? item.appId) as

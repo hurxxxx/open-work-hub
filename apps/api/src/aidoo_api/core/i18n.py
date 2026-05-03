@@ -1371,6 +1371,74 @@ MESSAGES: dict[str, dict[str, str]] = {
         "ko-KR": "업로더만 이 녹음 업로드를 완료할 수 있습니다.",
         "en-US": "Only the uploader can finalize this recording upload.",
     },
+    "images.feature_disabled": {
+        "ko-KR": "이미지 위저드 기능이 비활성화되어 있습니다.",
+        "en-US": "The image wizard feature is not enabled.",
+    },
+    "images.not_found": {
+        "ko-KR": "이미지 작업을 찾을 수 없습니다.",
+        "en-US": "Image generation not found.",
+    },
+    "images.forbidden": {
+        "ko-KR": "이 이미지 작업에 접근할 권한이 없습니다.",
+        "en-US": "You do not have access to this image generation.",
+    },
+    "images.locked_after_approval": {
+        "ko-KR": "승인된 작업은 더 이상 수정할 수 없습니다.",
+        "en-US": "Approved generations can no longer be modified.",
+    },
+    "images.invalid_role": {
+        "ko-KR": "참고 이미지 역할이 올바르지 않습니다.",
+        "en-US": "Reference image role is invalid.",
+    },
+    "images.empty_upload": {
+        "ko-KR": "업로드된 파일이 비어 있습니다.",
+        "en-US": "Uploaded file is empty.",
+    },
+    "images.upload_too_large": {
+        "ko-KR": "이미지 파일이 허용된 크기를 초과합니다.",
+        "en-US": "Image file exceeds the allowed size.",
+    },
+    "images.invalid_content_type": {
+        "ko-KR": "이미지 파일만 업로드할 수 있습니다.",
+        "en-US": "Only image files are allowed.",
+    },
+    "images.too_many_refs": {
+        "ko-KR": "참고 이미지 개수 한도를 초과했습니다.",
+        "en-US": "Reference image limit reached.",
+    },
+    "images.upload_failed": {
+        "ko-KR": "참고 이미지를 저장하지 못했습니다.",
+        "en-US": "Failed to store the reference image.",
+    },
+    "images.ref_not_found": {
+        "ko-KR": "참고 이미지를 찾을 수 없습니다.",
+        "en-US": "Reference image not found.",
+    },
+    "images.brief_failed": {
+        "ko-KR": "브리프 생성에 실패했습니다.",
+        "en-US": "Failed to generate the brief.",
+    },
+    "images.brief_empty": {
+        "ko-KR": "LLM이 빈 브리프를 반환했습니다.",
+        "en-US": "The LLM returned an empty brief.",
+    },
+    "images.brief_not_ready": {
+        "ko-KR": "승인하려면 먼저 브리프를 생성해야 합니다.",
+        "en-US": "Generate a brief before approving.",
+    },
+    "images.already_running": {
+        "ko-KR": "이미지 생성이 이미 진행 중입니다.",
+        "en-US": "Image generation is already in progress.",
+    },
+    "images.dispatch_failed": {
+        "ko-KR": "이미지 생성을 큐에 전달하지 못했습니다.",
+        "en-US": "Failed to dispatch the image generation task.",
+    },
+    "images.not_ready": {
+        "ko-KR": "이미지가 아직 준비되지 않았습니다.",
+        "en-US": "Image is not ready yet.",
+    },
 }
 
 

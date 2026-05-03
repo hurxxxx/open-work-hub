@@ -614,6 +614,58 @@ class Settings(BaseSettings):
             "DEEPINFRA_TIMEOUT",
         ),
     )
+    # Image generation — wizard-driven OpenAI image API via Codex/Agents SDK.
+    image_enabled: bool = Field(
+        default=False,
+        validation_alias=AliasChoices("DOOWON_IMAGE_ENABLED", "DOOWON_API_IMAGE_ENABLED"),
+    )
+    image_api_key: str = Field(
+        default="",
+        validation_alias=AliasChoices("DOOWON_IMAGE_API_KEY", "DOOWON_API_IMAGE_API_KEY"),
+    )
+    image_base_url: str = Field(
+        default="https://api.openai.com/v1",
+        validation_alias=AliasChoices("DOOWON_IMAGE_BASE_URL", "DOOWON_API_IMAGE_BASE_URL"),
+    )
+    image_model: str = Field(
+        default="gpt-image-2",
+        validation_alias=AliasChoices("DOOWON_IMAGE_MODEL", "DOOWON_API_IMAGE_MODEL"),
+    )
+    image_supervisor_model: str = Field(
+        default="gpt-5",
+        validation_alias=AliasChoices(
+            "DOOWON_IMAGE_SUPERVISOR_MODEL",
+            "DOOWON_API_IMAGE_SUPERVISOR_MODEL",
+        ),
+    )
+    image_agent_max_iterations: int = Field(
+        default=2,
+        ge=1,
+        le=8,
+        validation_alias=AliasChoices(
+            "DOOWON_IMAGE_AGENT_MAX_ITER",
+            "DOOWON_API_IMAGE_AGENT_MAX_ITER",
+        ),
+    )
+    image_max_reference_uploads: int = Field(
+        default=4,
+        ge=1,
+        le=12,
+        validation_alias=AliasChoices(
+            "DOOWON_IMAGE_MAX_REFS",
+            "DOOWON_API_IMAGE_MAX_REFS",
+        ),
+    )
+    image_reference_max_bytes: int = Field(
+        default=8 * 1024 * 1024,
+        ge=64 * 1024,
+        le=64 * 1024 * 1024,
+        validation_alias=AliasChoices(
+            "DOOWON_IMAGE_REFERENCE_MAX_BYTES",
+            "DOOWON_API_IMAGE_REFERENCE_MAX_BYTES",
+        ),
+    )
+
     otel_enabled: bool = Field(
         default=True,
         validation_alias=AliasChoices(

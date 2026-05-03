@@ -95,6 +95,13 @@ WORKSPACE_APP_CATALOG: tuple[WorkspaceAppCatalogItem, ...] = (
                 path_suffix="?tab=recordings",
             ),
             WorkspaceNavCatalogItem(
+                id="image-wizard",
+                app_id="ai",
+                title="이미지 위저드",
+                category="Assistants",
+                icon_key="image",
+            ),
+            WorkspaceNavCatalogItem(
                 id="email-assistant",
                 app_id="ai",
                 title="메일 작성 도우미",

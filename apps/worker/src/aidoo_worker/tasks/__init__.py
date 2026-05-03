@@ -3,6 +3,7 @@
 from aidoo_worker.tasks import (  # noqa: F401
     documents,
     drafts,
+    images,
     media,
     meeting,
     ocr,

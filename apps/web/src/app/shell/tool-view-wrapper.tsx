@@ -2,7 +2,7 @@ import { Navigate, useLocation, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 
 import { getNavItem } from '@/src/app/shell/app-registry';
-import { ragSearchToolElement } from '@/src/app-modules/ai/routes';
+import { imageWizardToolElement, ragSearchToolElement } from '@/src/app-modules/ai/routes';
 import { docsToolElement } from '@/src/app-modules/docs/routes';
 import { pmsToolElement } from '@/src/app-modules/pms/routes';
 import { whiteboardToolElement } from '@/src/app-modules/whiteboard/routes';
@@ -107,6 +107,13 @@ export function ToolViewWrapper() {
       );
     }
     return ragSearchToolElement;
+  }
+
+  if (toolId === 'image-wizard') {
+    if (!isWorkspaceAppEnabled(enabledBootstrapApps, 'ai')) {
+      return <AccessDeniedView description={t('shell:gates.appDisabled')} />;
+    }
+    return imageWizardToolElement;
   }
 
   if (item.comingSoon) {
