@@ -1,6 +1,5 @@
 import {
   useEffect,
-  useRef,
   useState,
   type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent as ReactMouseEvent,
@@ -88,29 +87,9 @@ export function LearningImagePreviewSurface({
   className?: string;
   testId?: string;
 }) {
-  const { t } = useTranslation('apps');
-  const rootRef = useRef<HTMLDivElement>(null);
   const [previewImage, setPreviewImage] = useState<LearningImagePreview | null>(
     null,
   );
-
-  useEffect(() => {
-    const root = rootRef.current;
-    if (!root) return;
-    root.querySelectorAll('img').forEach((image) => {
-      image.setAttribute('tabindex', '0');
-      image.setAttribute('role', 'button');
-      image.setAttribute('title', t('learning.openImagePreview'));
-      if (!image.getAttribute('aria-label')) {
-        image.setAttribute(
-          'aria-label',
-          image.alt?.trim()
-            ? t('learning.openImagePreviewWithName', { name: image.alt.trim() })
-            : t('learning.openImagePreview'),
-        );
-      }
-    });
-  });
 
   const openPreview = (image: HTMLImageElement) => {
     const src = image.currentSrc || image.src || image.getAttribute('src');
@@ -141,7 +120,6 @@ export function LearningImagePreviewSurface({
   return (
     <>
       <div
-        ref={rootRef}
         className={
           className
             ? `learning-image-preview-surface ${className}`
