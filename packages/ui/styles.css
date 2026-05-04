@@ -65,6 +65,7 @@
 
   /* ── Z-index ── */
   --ui-z-drawer: 40;
+  --ui-z-dialog-elevated: 60;
   --ui-z-popover: 70;
   --ui-z-toast: 80;
 

@@ -227,6 +227,7 @@ export function DocsViewerModal({
       closeLabel={t('common:actions.close')}
       fullSize
       embedded
+      layer="elevated"
     >
       <div className="flex min-h-0 flex-1 flex-col bg-app-bg">
         <header className="flex min-h-12 items-center justify-between gap-3 border-b border-app-border bg-app-surface-sidebar px-4">

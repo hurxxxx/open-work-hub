@@ -21,6 +21,7 @@ describe('shared ui', () => {
       <DataTable
         columns={[{ accessorKey: 'name', header: 'Name' }]}
         rows={[] as Array<{ name: string }>}
+        emptyState="No results"
       />,
     );
 
@@ -69,6 +70,16 @@ describe('shared ui', () => {
     expect(errorSpy).not.toHaveBeenCalled();
 
     errorSpy.mockRestore();
+  });
+
+  it('can render dialogs on the elevated layer', () => {
+    const { getByRole } = render(
+      <Dialog open onOpenChange={() => undefined} title="Nested document" layer="elevated">
+        <div>Document body</div>
+      </Dialog>,
+    );
+
+    expect(getByRole('dialog').className).toContain('z-[var(--ui-z-dialog-elevated)]');
   });
 
   it('shows toast notifications through the shared provider', () => {

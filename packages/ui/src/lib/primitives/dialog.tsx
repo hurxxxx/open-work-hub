@@ -41,6 +41,11 @@ export interface DialogProps {
    * work in either mode.
    */
   dismissOnInteractOutside?: boolean;
+  /**
+   * Renders the dialog above app-level overlays that use the default drawer
+   * layer, while still keeping popovers and toasts above the dialog.
+   */
+  layer?: 'default' | 'elevated';
 }
 
 export function Dialog({
@@ -55,6 +60,7 @@ export function Dialog({
   fullSize = false,
   embedded = false,
   dismissOnInteractOutside = true,
+  layer = 'default',
 }: DialogProps) {
   const blockOutside = dismissOnInteractOutside
     ? undefined
@@ -64,13 +70,25 @@ export function Dialog({
   const accessibilityProps = description
     ? {}
     : ({ 'aria-describedby': undefined } as const);
+  const overlayLayerClass = layer === 'elevated'
+    ? 'z-[calc(var(--ui-z-dialog-elevated)-1)]'
+    : 'z-[calc(var(--ui-z-drawer)-1)]';
+  const contentLayerClass = layer === 'elevated'
+    ? 'z-[var(--ui-z-dialog-elevated)]'
+    : 'z-[var(--ui-z-drawer)]';
   return (
     <DialogPrimitive.Root open={open} onOpenChange={onOpenChange}>
       <DialogPrimitive.Portal>
-        <DialogPrimitive.Overlay className="fixed inset-0 z-[calc(var(--ui-z-drawer)-1)] bg-slate-950/32 backdrop-blur-sm" />
+        <DialogPrimitive.Overlay
+          className={cn(
+            'fixed inset-0 bg-slate-950/32 backdrop-blur-sm',
+            overlayLayerClass,
+          )}
+        />
         <DialogPrimitive.Content
           className={cn(
-            'fixed left-1/2 top-1/2 z-[var(--ui-z-drawer)] -translate-x-1/2 -translate-y-1/2',
+            'fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2',
+            contentLayerClass,
             'flex flex-col rounded-[var(--ui-radius-lg)] border border-[var(--ui-color-border)] bg-ui-surface-raised shadow-[var(--ui-shadow-lg)] outline-none overflow-hidden',
             fullSize
               ? 'h-[92vh] w-[96vw] max-w-[1600px]'
