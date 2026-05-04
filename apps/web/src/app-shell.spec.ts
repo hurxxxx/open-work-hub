@@ -74,6 +74,33 @@ describe('resolveShellState', () => {
     });
   });
 
+  it('uses recording query filters for the active recording navigation item', () => {
+    expect(resolveShellState('/w/delivery-hub/recording', buildUser())).toEqual({
+      activeAppId: 'recording',
+      activeNavItemId: 'recording-quick',
+    });
+    expect(resolveShellState('/w/delivery-hub/recording?view=mine', buildUser())).toEqual({
+      activeAppId: 'recording',
+      activeNavItemId: 'recording-mine',
+    });
+    expect(resolveShellState('/w/delivery-hub/recording?view=mine&category=meeting', buildUser())).toEqual({
+      activeAppId: 'recording',
+      activeNavItemId: 'recording-meeting',
+    });
+    expect(resolveShellState('/w/delivery-hub/recording?view=processing', buildUser())).toEqual({
+      activeAppId: 'recording',
+      activeNavItemId: 'recording-processing',
+    });
+    expect(resolveShellState('/w/delivery-hub/recording?view=failed', buildUser())).toEqual({
+      activeAppId: 'recording',
+      activeNavItemId: 'recording-failed',
+    });
+    expect(resolveShellState('/w/delivery-hub/recording?view=archived', buildUser())).toEqual({
+      activeAppId: 'recording',
+      activeNavItemId: 'recording-archived',
+    });
+  });
+
   it('legacy /meeting path no longer activates the meeting shell', () => {
     expect(resolveShellState('/meeting', buildUser())).toEqual({
       activeAppId: 'home',

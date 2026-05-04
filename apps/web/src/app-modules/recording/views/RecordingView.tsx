@@ -17,6 +17,7 @@ import {
   MoreHorizontal,
   Play,
   RefreshCw,
+  Search,
   Square,
   Upload,
 } from 'lucide-react';
@@ -33,10 +34,14 @@ import {
   listRecordings,
   retryRecording,
   type Recording,
+  type RecordingContainer,
+  type RecordingViewFilter,
 } from '../api/recording-api';
 import { RecordingStageRail } from './RecordingStageRail';
 
 type RecorderState = 'idle' | 'requesting' | 'recording' | 'stopping' | 'uploading' | 'saved';
+type RecordingCategoryFilter = 'all' | 'meeting' | 'task' | 'unlinked';
+type RecordingSort = 'latest' | 'oldest' | 'title';
 
 const RECORDER_MIME_TYPES = [
   'audio/webm;codecs=opus',
@@ -83,10 +88,104 @@ function titleFor(recording: Recording, fallback: string): string {
 
 function hasFailedStage(recording: Recording): boolean {
   return [
+    recording.audio_status,
     recording.transcript_status,
     recording.raw_transcript_doc_status,
     recording.minutes_doc_status,
+    recording.meeting_insight_status,
   ].some((status) => status === 'failed');
+}
+
+function normalizeViewFilter(value: string | null): RecordingViewFilter {
+  if (
+    value === 'needs_review'
+    || value === 'processing'
+    || value === 'failed'
+    || value === 'archived'
+  ) {
+    return value;
+  }
+  return 'mine';
+}
+
+function normalizeCategoryFilter(value: string | null): RecordingCategoryFilter {
+  return value === 'meeting' || value === 'task' || value === 'unlinked' ? value : 'all';
+}
+
+function listTitleKey(view: RecordingViewFilter, category: RecordingCategoryFilter): string {
+  if (view === 'processing') return 'apps:recording.views.processing';
+  if (view === 'failed') return 'apps:recording.views.failed';
+  if (view === 'archived') return 'apps:recording.views.archived';
+  if (category === 'meeting') return 'apps:recording.views.meeting';
+  if (category === 'task') return 'apps:recording.views.task';
+  if (category === 'unlinked') return 'apps:recording.views.unlinked';
+  return 'apps:recording.views.mine';
+}
+
+function recordingContainers(recording: Recording): RecordingContainer[] {
+  return recording.containers ?? [];
+}
+
+function isMeetingContainer(container: RecordingContainer): boolean {
+  return container.container_app === 'meeting' && container.container_type === 'meeting';
+}
+
+function isTaskContainer(container: RecordingContainer): boolean {
+  return container.container_app === 'pms' && ['issue', 'task'].includes(container.container_type);
+}
+
+function recordingMatchesCategory(recording: Recording, category: RecordingCategoryFilter): boolean {
+  if (category === 'all') return true;
+  const containers = recordingContainers(recording);
+  if (category === 'meeting') return containers.some(isMeetingContainer);
+  if (category === 'task') return containers.some(isTaskContainer);
+  return !containers.some((container) => isMeetingContainer(container) || isTaskContainer(container));
+}
+
+function searchableRecordingText(recording: Recording): string {
+  return [
+    recording.title,
+    recording.mime_type,
+    ...recordingContainers(recording).flatMap((container) => [
+      container.container_title ?? '',
+      container.container_app,
+      container.container_type,
+    ]),
+  ].join(' ');
+}
+
+function compareRecordings(
+  left: Recording,
+  right: Recording,
+  sort: RecordingSort,
+  locale: string,
+): number {
+  if (sort === 'title') {
+    return titleFor(left, '').localeCompare(titleFor(right, ''), locale, { sensitivity: 'base' });
+  }
+  const leftTime = new Date(left.started_at).getTime();
+  const rightTime = new Date(right.started_at).getTime();
+  return sort === 'oldest' ? leftTime - rightTime : rightTime - leftTime;
+}
+
+function connectionChips(recording: Recording): Array<{
+  id: string;
+  labelKey: string;
+  title: string | null;
+}> {
+  const chips = recordingContainers(recording)
+    .filter((container) => isMeetingContainer(container) || isTaskContainer(container))
+    .map((container) => ({
+      id: container.id,
+      labelKey: isMeetingContainer(container)
+        ? 'apps:recording.filters.categories.meeting'
+        : 'apps:recording.filters.categories.task',
+      title: container.container_title ?? null,
+    }));
+
+  return chips.length > 0
+    ? chips
+    : [{ id: 'unlinked', labelKey: 'apps:recording.filters.categories.unlinked', title: null }];
 }
 
 export function RecordingView() {
@@ -95,13 +194,17 @@ export function RecordingView() {
   const { workspaceSlug } = useParams();
   const [searchParams] = useSearchParams();
   const timeZone = normalizeTimeZone(user?.time_zone);
-  const view = searchParams.get('view') === 'archived' ? 'archived' : 'mine';
+  const view = normalizeViewFilter(searchParams.get('view'));
+  const category = normalizeCategoryFilter(searchParams.get('category'));
+  const showQuickRecorder = !searchParams.has('view') && !searchParams.has('category');
   const { confirm, confirmDialog } = useConfirm();
 
   const [items, setItems] = useState<Recording[]>([]);
   const [loading, setLoading] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [query, setQuery] = useState('');
+  const [sort, setSort] = useState<RecordingSort>('latest');
   const [titleDraft, setTitleDraft] = useState('');
   const [recorderState, setRecorderState] = useState<RecorderState>('idle');
   const [elapsedSec, setElapsedSec] = useState(0);
@@ -122,6 +225,20 @@ export function RecordingView() {
   const isRecording = recorderState === 'recording';
   const isWorking = ['requesting', 'stopping', 'uploading'].includes(recorderState);
   const showRecorderState = recorderState !== 'idle' || elapsedSec > 0;
+  const visibleItems = useMemo(() => {
+    const normalizedQuery = query.trim().toLocaleLowerCase(i18n.language);
+    return [...items]
+      .filter((recording) => recordingMatchesCategory(recording, category))
+      .filter((recording) => (
+        normalizedQuery
+          ? searchableRecordingText(recording).toLocaleLowerCase(i18n.language).includes(normalizedQuery)
+          : true
+      ))
+      .sort((left, right) => compareRecordings(left, right, sort, i18n.language));
+  }, [category, i18n.language, items, query, sort]);
+  const listCountLabel = visibleItems.length === items.length
+    ? t('apps:recording.list.count', { count: items.length })
+    : t('apps:recording.list.filteredCount', { shown: visibleItems.length, total: items.length });
 
   const refresh = useCallback(async () => {
     if (!token || !workspaceSlug) return;
@@ -361,93 +478,122 @@ export function RecordingView() {
       </header>
 
       <main className="min-h-0 flex-1 overflow-y-auto px-6 py-6">
-        <div className="mx-auto w-full max-w-4xl space-y-8">
-          <section className="border-b border-app-border pb-8">
-            <div className="mx-auto flex w-full max-w-xl flex-col items-center gap-4">
-              <p className="app-text-title-sm self-start text-app-ink">{t('apps:recording.quick.title')}</p>
+        <div className="mx-auto w-full max-w-5xl space-y-8">
+          {showQuickRecorder ? (
+            <section className="border-b border-app-border pb-8">
+              <div className="mx-auto flex w-full max-w-xl flex-col items-center gap-4">
+                <p className="app-text-title-sm self-start text-app-ink">{t('apps:recording.quick.title')}</p>
 
-              <button
-                ref={micButtonRef}
-                type="button"
-                onClick={() => (isRecording ? handleStop() : void handleStart())}
-                disabled={!browserSupported || isWorking}
-                aria-label={isRecording ? t('apps:recording.quick.stop') : t('apps:recording.quick.start')}
-                className={`flex h-32 w-32 shrink-0 items-center justify-center rounded-full border shadow-sm transition-all hover:scale-[1.02] disabled:scale-100 disabled:opacity-60 ${
-                  isRecording
-                    ? 'border-[var(--ui-color-danger)]/40 bg-[var(--ui-color-danger)]/10 text-[var(--ui-color-danger)]'
-                    : 'border-app-accent/30 bg-app-accent text-app-accent-fg hover:bg-app-accent-hover'
-                }`}
-              >
-                {isWorking ? (
-                  <Loader2 size={36} className="animate-spin" />
-                ) : isRecording ? (
-                  <Square size={36} />
-                ) : (
-                  <Mic size={42} />
-                )}
-              </button>
-
-              {showRecorderState ? (
-                <div className="text-center">
-                  <p className="app-text-title-md tabular-nums text-app-ink">
-                    {formatElapsed(elapsedSec)}
-                  </p>
-                  <p className="app-text-caption text-app-ink/60">
-                    {t(`apps:recording.quick.state.${recorderState}`)}
-                  </p>
-                </div>
-              ) : (
-                <p className="app-text-caption text-center text-app-ink/55">
-                  {browserSupported
-                    ? t('apps:recording.quick.browserSupported')
-                    : t('apps:recording.quick.browserUnsupported')}
-                </p>
-              )}
-
-              <div className="mt-2 w-full border-t border-app-border pt-4">
-                <label className="block">
-                  <span className="app-text-caption mb-1 block text-app-ink/60">
-                    {t('apps:recording.quick.titleLabel')}
-                  </span>
-                  <input
-                    value={titleDraft}
-                    onChange={(event) => setTitleDraft(event.target.value)}
-                    disabled={isRecording || isWorking}
-                    placeholder={t('apps:recording.quick.titlePlaceholder')}
-                    className="w-full rounded-md border border-app-border bg-app-surface-raised px-3 py-2 text-sm text-app-ink outline-none transition-colors placeholder:text-app-ink/35 focus:border-app-accent disabled:opacity-60"
-                  />
-                </label>
-              </div>
-
-              <div className="self-start">
-                <Button
-                  variant="secondary"
-                  onClick={() => fileInputRef.current?.click()}
-                  disabled={isRecording || isWorking}
+                <button
+                  ref={micButtonRef}
+                  type="button"
+                  onClick={() => (isRecording ? handleStop() : void handleStart())}
+                  disabled={!browserSupported || isWorking}
+                  aria-label={isRecording ? t('apps:recording.quick.stop') : t('apps:recording.quick.start')}
+                  className={`flex h-32 w-32 shrink-0 items-center justify-center rounded-full border shadow-sm transition-all hover:scale-[1.02] disabled:scale-100 disabled:opacity-60 ${
+                    isRecording
+                      ? 'border-[var(--ui-color-danger)]/40 bg-[var(--ui-color-danger)]/10 text-[var(--ui-color-danger)]'
+                      : 'border-app-accent/30 bg-app-accent text-app-accent-fg hover:bg-app-accent-hover'
+                  }`}
                 >
-                  <Upload size={14} className="mr-1" />
-                  {t('apps:recording.quick.uploadAudio')}
-                </Button>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept="audio/*"
-                  className="hidden"
-                  onChange={handleFileSelect}
-                />
+                  {isWorking ? (
+                    <Loader2 size={36} className="animate-spin" />
+                  ) : isRecording ? (
+                    <Square size={36} />
+                  ) : (
+                    <Mic size={42} />
+                  )}
+                </button>
+
+                {showRecorderState ? (
+                  <div className="text-center">
+                    <p className="app-text-title-md tabular-nums text-app-ink">
+                      {formatElapsed(elapsedSec)}
+                    </p>
+                    <p className="app-text-caption text-app-ink/60">
+                      {t(`apps:recording.quick.state.${recorderState}`)}
+                    </p>
+                  </div>
+                ) : (
+                  <p className="app-text-caption text-center text-app-ink/55">
+                    {browserSupported
+                      ? t('apps:recording.quick.browserSupported')
+                      : t('apps:recording.quick.browserUnsupported')}
+                  </p>
+                )}
+
+                <div className="mt-2 w-full border-t border-app-border pt-4">
+                  <label className="block">
+                    <span className="app-text-caption mb-1 block text-app-ink/60">
+                      {t('apps:recording.quick.titleLabel')}
+                    </span>
+                    <input
+                      value={titleDraft}
+                      onChange={(event) => setTitleDraft(event.target.value)}
+                      disabled={isRecording || isWorking}
+                      placeholder={t('apps:recording.quick.titlePlaceholder')}
+                      className="w-full rounded-md border border-app-border bg-app-surface-raised px-3 py-2 text-sm text-app-ink outline-none transition-colors placeholder:text-app-ink/35 focus:border-app-accent disabled:opacity-60"
+                    />
+                  </label>
+                </div>
+
+                <div className="self-start">
+                  <Button
+                    variant="secondary"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={isRecording || isWorking}
+                  >
+                    <Upload size={14} className="mr-1" />
+                    {t('apps:recording.quick.uploadAudio')}
+                  </Button>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="audio/*"
+                    className="hidden"
+                    onChange={handleFileSelect}
+                  />
+                </div>
               </div>
-            </div>
-          </section>
+            </section>
+          ) : null}
 
           <section>
             <div className="mb-4 flex items-center justify-between gap-3">
               <div>
-                <p className="app-text-title-sm text-app-ink">{t('apps:recording.list.title')}</p>
+                <p className="app-text-title-sm text-app-ink">{t(listTitleKey(view, category))}</p>
                 <p className="app-text-caption text-app-ink/60">
-                  {t('apps:recording.list.count', { count: items.length })}
+                  {listCountLabel}
                 </p>
               </div>
               {loading ? <Loader2 size={18} className="animate-spin text-app-ink/40" /> : null}
+            </div>
+
+            <div className="mb-4 flex flex-col gap-3 rounded-md border border-app-border bg-app-surface px-3 py-3 sm:flex-row sm:items-center">
+              <label className="relative min-w-0 flex-1">
+                <span className="sr-only">{t('apps:recording.filters.searchLabel')}</span>
+                <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-app-ink/35" />
+                <input
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
+                  placeholder={t('apps:recording.filters.searchPlaceholder')}
+                  className="h-9 w-full rounded-md border border-app-border bg-app-surface-raised py-2 pl-9 pr-3 text-sm text-app-ink outline-none transition-colors placeholder:text-app-ink/35 focus:border-app-accent"
+                />
+              </label>
+              <label className="flex shrink-0 items-center gap-2">
+                <span className="app-text-caption text-app-ink/55">
+                  {t('apps:recording.filters.sortLabel')}
+                </span>
+                <select
+                  value={sort}
+                  onChange={(event) => setSort(event.target.value as RecordingSort)}
+                  className="h-9 rounded-md border border-app-border bg-app-surface-raised px-2 text-sm text-app-ink outline-none transition-colors focus:border-app-accent"
+                >
+                  <option value="latest">{t('apps:recording.filters.sort.latest')}</option>
+                  <option value="oldest">{t('apps:recording.filters.sort.oldest')}</option>
+                  <option value="title">{t('apps:recording.filters.sort.title')}</option>
+                </select>
+              </label>
             </div>
 
             {error ? (
@@ -466,14 +612,39 @@ export function RecordingView() {
                     {t('apps:recording.list.emptyBody')}
                   </p>
                 </div>
-                <Button variant="secondary" onClick={focusRecorder}>
-                  <Mic size={14} className="mr-1" />
-                  {t('apps:recording.quick.start')}
-                </Button>
+                {showQuickRecorder ? (
+                  <Button variant="secondary" onClick={focusRecorder}>
+                    <Mic size={14} className="mr-1" />
+                    {t('apps:recording.quick.start')}
+                  </Button>
+                ) : (
+                  <Link
+                    to={buildWorkspaceAppPath(workspaceSlug, 'recording')}
+                    className="inline-flex h-[var(--ui-density-dense)] items-center justify-center rounded-[var(--ui-radius-sm)] border border-app-border bg-app-surface-raised px-2.5 text-[0.84rem] font-semibold text-app-ink transition-colors hover:bg-app-surface-subtle"
+                  >
+                    <Mic size={14} className="mr-1" />
+                    {t('apps:recording.quick.start')}
+                  </Link>
+                )}
+              </div>
+            ) : visibleItems.length === 0 && !loading ? (
+              <div className="flex h-56 flex-col items-center justify-center gap-3 rounded-md border border-dashed border-app-border bg-app-surface/40 px-6 text-center">
+                <Search size={34} className="text-app-ink/25" />
+                <div>
+                  <p className="app-text-title-sm text-app-ink">{t('apps:recording.filters.emptyTitle')}</p>
+                  <p className="app-text-caption mt-1 text-app-ink/55">
+                    {t('apps:recording.filters.emptyBody')}
+                  </p>
+                </div>
+                {query ? (
+                  <Button variant="secondary" onClick={() => setQuery('')}>
+                    {t('apps:recording.filters.clearSearch')}
+                  </Button>
+                ) : null}
               </div>
             ) : (
               <div className="grid gap-3">
-                {items.map((recording) => (
+                {visibleItems.map((recording) => (
                   <RecordingListItem
                     key={recording.id}
                     busy={busyId === recording.id}
@@ -521,6 +692,7 @@ function RecordingListItem({
 }) {
   const { t } = useTranslation(['apps', 'common']);
   const retryable = hasFailedStage(recording);
+  const chips = connectionChips(recording);
 
   const overflowItems = [
     ...(retryable
@@ -570,12 +742,28 @@ function RecordingListItem({
             ) : null}
             <span className="app-text-caption">{formatBytes(recording.file_size)}</span>
           </div>
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {chips.map((chip) => (
+              <span
+                key={chip.id}
+                className="app-text-caption inline-flex max-w-full items-center rounded-full border border-app-border bg-app-surface-raised px-2 py-0.5 text-app-ink/65"
+                title={chip.title ?? undefined}
+              >
+                <span className="shrink-0">{t(chip.labelKey)}</span>
+                {chip.title ? (
+                  <span className="ml-1 min-w-0 truncate text-app-ink">
+                    {chip.title}
+                  </span>
+                ) : null}
+              </span>
+            ))}
+          </div>
           <div className="mt-3">
             <RecordingStageRail recording={recording} compact />
           </div>
           {recording.failure_reason ? (
             <p className="app-text-caption mt-2 max-w-2xl text-[var(--ui-color-danger)]">
-              {recording.failure_reason}
+              {t('apps:recording.status.failureHelp')}
             </p>
           ) : null}
         </div>

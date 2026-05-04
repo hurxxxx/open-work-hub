@@ -379,13 +379,13 @@ function AuthenticatedShell() {
 
   useEffect(() => {
     const nextState = resolveShellState(
-      location.pathname,
+      `${location.pathname}${location.search}`,
       currentUser,
       enabledWorkspaceAppIds ?? undefined,
     );
     setActiveAppId(nextState.activeAppId);
     setActiveNavItemId(nextState.activeNavItemId);
-  }, [currentUser, enabledWorkspaceAppIds, location.pathname]);
+  }, [currentUser, enabledWorkspaceAppIds, location.pathname, location.search]);
 
   useEffect(() => {
     if (!currentUser) {

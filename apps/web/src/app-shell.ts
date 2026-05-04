@@ -29,6 +29,35 @@ const HOME_SHELL_STATE: ShellState = {
   activeNavItemId: '',
 };
 
+function getPathname(path: string): string {
+  const end = path.search(/[?#]/);
+  return end >= 0 ? path.slice(0, end) || '/' : path;
+}
+
+function getSearchParams(path: string): URLSearchParams {
+  const start = path.indexOf('?');
+  if (start < 0) {
+    return new URLSearchParams();
+  }
+  const end = path.indexOf('#', start);
+  return new URLSearchParams(path.slice(start + 1, end >= 0 ? end : undefined));
+}
+
+function resolveRecordingNavItemId(path: string): string {
+  const params = getSearchParams(path);
+  const view = params.get('view');
+  const category = params.get('category');
+
+  if (view === 'archived') return 'recording-archived';
+  if (view === 'failed') return 'recording-failed';
+  if (view === 'processing') return 'recording-processing';
+  if (category === 'meeting') return 'recording-meeting';
+  if (category === 'task') return 'recording-task';
+  if (category === 'unlinked') return 'recording-unlinked';
+  if (view === 'mine' || view === 'needs_review') return 'recording-mine';
+  return 'recording-quick';
+}
+
 function canShowAppChrome(
   user: AuthUser | null | undefined,
   appId: 'ai' | 'pms' | 'docs' | 'whiteboard' | 'planner' | 'meeting' | 'recording' | 'learning' | 'settings',
@@ -71,122 +100,126 @@ export function resolveShellState(
   user: AuthUser | null | undefined,
   enabledWorkspaceAppIds?: readonly string[],
 ): ShellState {
-  const workspaceSlug = getWorkspaceSlugFromPath(path);
+  const pathname = getPathname(path);
+  const workspaceSlug = getWorkspaceSlugFromPath(pathname);
 
-  if (path === '/') {
+  if (pathname === '/') {
     return HOME_SHELL_STATE;
   }
 
-  if (/^\/w\/[^/]+\/home(?:\/|$)/.test(path)) {
+  if (/^\/w\/[^/]+\/home(?:\/|$)/.test(pathname)) {
     return HOME_SHELL_STATE;
   }
 
-  if (/^\/w\/[^/]+\/ai(?:\/|$)/.test(path)) {
+  if (/^\/w\/[^/]+\/ai(?:\/|$)/.test(pathname)) {
     return canShowAppChrome(user, 'ai', workspaceSlug, enabledWorkspaceAppIds)
       ? { activeAppId: 'ai', activeNavItemId: 'chatbot' }
       : HOME_SHELL_STATE;
   }
 
-  if (/^\/w\/[^/]+\/pms\/assigned(?:\/|$)/.test(path)) {
+  if (/^\/w\/[^/]+\/pms\/assigned(?:\/|$)/.test(pathname)) {
     return canShowAppChrome(user, 'pms', workspaceSlug, enabledWorkspaceAppIds)
       ? { activeAppId: 'pms', activeNavItemId: 'pms-tasks-assigned' }
       : HOME_SHELL_STATE;
   }
 
-  if (/^\/w\/[^/]+\/pms\/today(?:\/|$)/.test(path)) {
+  if (/^\/w\/[^/]+\/pms\/today(?:\/|$)/.test(pathname)) {
     return canShowAppChrome(user, 'pms', workspaceSlug, enabledWorkspaceAppIds)
       ? { activeAppId: 'pms', activeNavItemId: 'pms-tasks-today' }
       : HOME_SHELL_STATE;
   }
 
-  if (/^\/w\/[^/]+\/pms\/personal(?:\/|$)/.test(path)) {
+  if (/^\/w\/[^/]+\/pms\/personal(?:\/|$)/.test(pathname)) {
     return canShowAppChrome(user, 'pms', workspaceSlug, enabledWorkspaceAppIds)
       ? { activeAppId: 'pms', activeNavItemId: 'pms-tasks-personal' }
       : HOME_SHELL_STATE;
   }
 
-  if (/^\/w\/[^/]+\/pms(?:\/|$)/.test(path)) {
+  if (/^\/w\/[^/]+\/pms(?:\/|$)/.test(pathname)) {
     return canShowAppChrome(user, 'pms', workspaceSlug, enabledWorkspaceAppIds)
       ? { activeAppId: 'pms', activeNavItemId: '' }
       : HOME_SHELL_STATE;
   }
 
-  if (path.startsWith('/docs/shared/')) {
+  if (pathname.startsWith('/docs/shared/')) {
     return canShowAppChrome(user, 'docs')
       ? { activeAppId: 'docs', activeNavItemId: '' }
       : HOME_SHELL_STATE;
   }
 
-  if (path.startsWith('/whiteboard/shared/')) {
+  if (pathname.startsWith('/whiteboard/shared/')) {
     return canShowAppChrome(user, 'whiteboard')
       ? { activeAppId: 'whiteboard', activeNavItemId: '' }
       : HOME_SHELL_STATE;
   }
 
-  if (/^\/w\/[^/]+\/docs(?:\/|$)/.test(path)) {
+  if (/^\/w\/[^/]+\/docs(?:\/|$)/.test(pathname)) {
     return canShowAppChrome(user, 'docs', workspaceSlug, enabledWorkspaceAppIds)
       ? { activeAppId: 'docs', activeNavItemId: 'docs-all' }
       : HOME_SHELL_STATE;
   }
 
-  if (/^\/w\/[^/]+\/whiteboard(?:\/|$)/.test(path)) {
+  if (/^\/w\/[^/]+\/whiteboard(?:\/|$)/.test(pathname)) {
     return canShowAppChrome(user, 'whiteboard', workspaceSlug, enabledWorkspaceAppIds)
       ? { activeAppId: 'whiteboard', activeNavItemId: 'whiteboard-all' }
       : HOME_SHELL_STATE;
   }
 
-  if (/^\/w\/[^/]+\/planner(?:\/|$)/.test(path)) {
+  if (/^\/w\/[^/]+\/planner(?:\/|$)/.test(pathname)) {
     return canShowAppChrome(user, 'planner', workspaceSlug, enabledWorkspaceAppIds)
       ? { activeAppId: 'planner', activeNavItemId: '' }
       : HOME_SHELL_STATE;
   }
 
-  if (/^\/w\/[^/]+\/meeting(?:\/|$)/.test(path)) {
+  if (/^\/w\/[^/]+\/meeting(?:\/|$)/.test(pathname)) {
     return canShowAppChrome(user, 'meeting', workspaceSlug, enabledWorkspaceAppIds)
       ? { activeAppId: 'meeting', activeNavItemId: 'meeting-upcoming' }
       : HOME_SHELL_STATE;
   }
 
-  if (/^\/w\/[^/]+\/recording(?:\/|$)/.test(path)) {
+  if (/^\/w\/[^/]+\/recording(?:\/|$)/.test(pathname)) {
     return canShowAppChrome(user, 'recording', workspaceSlug, enabledWorkspaceAppIds)
-      ? { activeAppId: 'recording', activeNavItemId: 'recording-quick' }
+      ? {
+          activeAppId: 'recording',
+          activeNavItemId: resolveRecordingNavItemId(path),
+        }
       : HOME_SHELL_STATE;
   }
 
-  if (/^\/w\/[^/]+\/learning(?:\/|$)/.test(path)) {
+  if (/^\/w\/[^/]+\/learning(?:\/|$)/.test(pathname)) {
     return canShowAppChrome(user, 'learning', workspaceSlug, enabledWorkspaceAppIds)
       ? { activeAppId: 'learning', activeNavItemId: 'learning-home' }
       : HOME_SHELL_STATE;
   }
 
-  if (/^\/w\/[^/]+\/settings(?:\/|$)/.test(path)) {
+  if (/^\/w\/[^/]+\/settings(?:\/|$)/.test(pathname)) {
     return HOME_SHELL_STATE;
   }
 
-  if (path === '/admin' || path.startsWith('/admin/')) {
+  if (pathname === '/admin' || pathname.startsWith('/admin/')) {
     if (!canShowAppChrome(user, 'settings')) {
       return HOME_SHELL_STATE;
     }
 
-    if (path === '/admin' || path === '/admin/') {
+    if (pathname === '/admin' || pathname === '/admin/') {
       return {
         activeAppId: 'settings',
         activeNavItemId: 'settings-people',
       };
     }
 
-    const slug = path.split('/')[2];
+    const slug = pathname.split('/')[2];
     return {
       activeAppId: 'settings',
       activeNavItemId: `settings-${slug === 'users' ? 'people' : slug === 'groups' || slug === 'feature-access' ? 'security' : slug}`,
     };
   }
 
-  if (!path.startsWith('/tool/')) {
+  if (!pathname.startsWith('/tool/')) {
     return HOME_SHELL_STATE;
   }
 
-  const toolId = path.split('/')[2] ?? '';
+  const toolId = pathname.split('/')[2] ?? '';
   if (
     toolId === 'pms-space-team'
     || toolId.startsWith('pms-list-')

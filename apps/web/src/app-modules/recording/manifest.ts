@@ -1,4 +1,13 @@
-import { ListMusic, Mic } from 'lucide-react';
+import {
+  AlertTriangle,
+  Archive,
+  CheckCircle2,
+  Clock3,
+  Inbox,
+  ListMusic,
+  Mic,
+  Users,
+} from 'lucide-react';
 
 import type { AppModuleManifest } from '@/src/app/shell/navigation-types';
 
@@ -20,6 +29,54 @@ export const recordingManifest: AppModuleManifest = {
       category: 'Recordings',
       appId: 'recording',
       pathSuffix: '?view=mine',
+    },
+    {
+      id: 'recording-meeting',
+      title: 'recording-meeting',
+      icon: Users,
+      category: 'Recording Categories',
+      appId: 'recording',
+      pathSuffix: '?view=mine&category=meeting',
+    },
+    {
+      id: 'recording-task',
+      title: 'recording-task',
+      icon: CheckCircle2,
+      category: 'Recording Categories',
+      appId: 'recording',
+      pathSuffix: '?view=mine&category=task',
+    },
+    {
+      id: 'recording-unlinked',
+      title: 'recording-unlinked',
+      icon: Inbox,
+      category: 'Recording Categories',
+      appId: 'recording',
+      pathSuffix: '?view=mine&category=unlinked',
+    },
+    {
+      id: 'recording-processing',
+      title: 'recording-processing',
+      icon: Clock3,
+      category: 'Recording Status',
+      appId: 'recording',
+      pathSuffix: '?view=processing',
+    },
+    {
+      id: 'recording-failed',
+      title: 'recording-failed',
+      icon: AlertTriangle,
+      category: 'Recording Status',
+      appId: 'recording',
+      pathSuffix: '?view=failed',
+    },
+    {
+      id: 'recording-archived',
+      title: 'recording-archived',
+      icon: Archive,
+      category: 'Recording Status',
+      appId: 'recording',
+      pathSuffix: '?view=archived',
     },
   ],
   workspaceRoutePaths: ['/w/:workspaceSlug/recording', '/w/:workspaceSlug/recording/:recordingId'],
