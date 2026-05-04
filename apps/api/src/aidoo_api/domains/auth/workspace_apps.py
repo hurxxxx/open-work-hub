@@ -326,6 +326,7 @@ WORKSPACE_APP_CATALOG: tuple[WorkspaceAppCatalogItem, ...] = (
                 title="타임라인",
                 category="Schedule",
                 icon_key="activity",
+                path_suffix="?view=timeline",
             ),
         ),
     ),

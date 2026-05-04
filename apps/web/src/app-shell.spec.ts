@@ -74,6 +74,19 @@ describe('resolveShellState', () => {
     });
   });
 
+  it('uses planner query views for the active planner navigation item', () => {
+    expect(resolveShellState('/w/delivery-hub/planner', buildUser())).toEqual({
+      activeAppId: 'planner',
+      activeNavItemId: 'planner-calendar',
+    });
+    expect(
+      resolveShellState('/w/delivery-hub/planner?view=timeline', buildUser()),
+    ).toEqual({
+      activeAppId: 'planner',
+      activeNavItemId: 'planner-timeline',
+    });
+  });
+
   it('uses recording query filters for the active recording navigation item', () => {
     expect(resolveShellState('/w/delivery-hub/recording', buildUser())).toEqual({
       activeAppId: 'recording',

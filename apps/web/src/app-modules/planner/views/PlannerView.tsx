@@ -1,7 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { motion } from 'motion/react';
-import { ChevronLeft, ChevronRight, Plus } from 'lucide-react';
+import {
+  Activity,
+  CalendarDays,
+  ChevronLeft,
+  ChevronRight,
+  Plus,
+} from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { cn } from '@/src/lib/utils';
 import { getKoreanHolidayNames } from '@/src/lib/korean-holidays';
@@ -21,8 +27,26 @@ import { MeetingCreateModal } from '@/src/app-modules/meeting';
 import { MeetingPreviewModal } from './calendar/MeetingPreviewModal';
 import { PlannerEventModal } from './PlannerEventModal';
 import { PlannerEventChoicePopover } from './PlannerEventChoicePopover';
+import { PlannerTimelineView } from './PlannerTimelineView';
 
 type PlannerViewMode = 'Month' | 'Week' | 'Day' | 'Agenda';
+type PlannerSurfaceMode = 'calendar' | 'timeline';
+const TIMELINE_RANGE_OPTIONS = [14, 28, 56] as const;
+type TimelineRangeDays = (typeof TIMELINE_RANGE_OPTIONS)[number];
+
+const DEFAULT_TIMELINE_RANGE_DAYS: TimelineRangeDays = 28;
+const TIMELINE_RANGE_STORAGE_KEY = 'aidoo:planner-timeline-range-days';
+
+const SURFACE_MODE_LABEL_KEYS: Record<PlannerSurfaceMode, string> = {
+  calendar: 'planner.surfaces.calendar',
+  timeline: 'planner.surfaces.timeline',
+};
+
+const TIMELINE_RANGE_LABEL_KEYS: Record<TimelineRangeDays, string> = {
+  14: 'planner.timeline.rangeOptions.twoWeeks',
+  28: 'planner.timeline.rangeOptions.fourWeeks',
+  56: 'planner.timeline.rangeOptions.eightWeeks',
+};
 
 const VIEW_MODE_LABEL_KEYS: Record<PlannerViewMode, string> = {
   Month: 'planner.viewModes.month',
@@ -76,11 +100,49 @@ function startOfWeek(date: Date): Date {
   return addDays(startOfLocalDay(date), -startOfLocalDay(date).getDay());
 }
 
+function isTimelineRangeDays(value: number): value is TimelineRangeDays {
+  return TIMELINE_RANGE_OPTIONS.includes(value as TimelineRangeDays);
+}
+
+function readTimelineRangeDays(): TimelineRangeDays {
+  if (typeof window === 'undefined') {
+    return DEFAULT_TIMELINE_RANGE_DAYS;
+  }
+
+  try {
+    const rawValue = window.localStorage.getItem(TIMELINE_RANGE_STORAGE_KEY);
+    const parsedValue = rawValue ? Number(rawValue) : NaN;
+    return isTimelineRangeDays(parsedValue)
+      ? parsedValue
+      : DEFAULT_TIMELINE_RANGE_DAYS;
+  } catch {
+    return DEFAULT_TIMELINE_RANGE_DAYS;
+  }
+}
+
+function persistTimelineRangeDays(days: TimelineRangeDays) {
+  try {
+    window.localStorage.setItem(TIMELINE_RANGE_STORAGE_KEY, String(days));
+  } catch {
+    // Ignore storage failures; the selected range still applies in memory.
+  }
+}
+
 function buildInitialPlannerRange(
   currentDate: Date,
   viewMode: PlannerViewMode,
+  surfaceMode: PlannerSurfaceMode,
+  timelineRangeDays = DEFAULT_TIMELINE_RANGE_DAYS,
 ): { currentDate: Date; rangeStart: string; rangeEnd: string } {
   const current = startOfLocalDay(currentDate);
+  if (surfaceMode === 'timeline') {
+    const rangeStart = startOfWeek(current);
+    return {
+      currentDate: current,
+      rangeStart: formatLocalYmd(rangeStart),
+      rangeEnd: formatLocalYmd(addDays(rangeStart, timelineRangeDays)),
+    };
+  }
   if (viewMode === 'Month') {
     const monthStart = new Date(current.getFullYear(), current.getMonth(), 1);
     const rangeStart = startOfWeek(monthStart);
@@ -106,7 +168,50 @@ function buildInitialPlannerRange(
   };
 }
 
-function formatPlannerHeading(viewMode: PlannerViewMode, currentDate: Date, locale: string): string {
+function parseLocalYmd(value: string): Date | null {
+  const [year, month, day] = value.split('-').map(Number);
+  if (!year || !month || !day) {
+    return null;
+  }
+  return new Date(year, month - 1, day);
+}
+
+function formatTimelineHeading(
+  rangeStart: string,
+  rangeEnd: string,
+  locale: string,
+): string {
+  const start = parseLocalYmd(rangeStart);
+  const exclusiveEnd = parseLocalYmd(rangeEnd);
+  if (!start || !exclusiveEnd) {
+    return '';
+  }
+  const end = addDays(exclusiveEnd, -1);
+  const formatter = new Intl.DateTimeFormat(locale, {
+    day: 'numeric',
+    month: 'short',
+    year: start.getFullYear() === end.getFullYear() ? undefined : 'numeric',
+  });
+  const startLabel = formatter.format(start);
+  const endLabel = new Intl.DateTimeFormat(locale, {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  }).format(end);
+  return `${startLabel} - ${endLabel}`;
+}
+
+function formatPlannerHeading(
+  viewMode: PlannerViewMode,
+  currentDate: Date,
+  locale: string,
+  surfaceMode: PlannerSurfaceMode,
+  rangeStart: string,
+  rangeEnd: string,
+): string {
+  if (surfaceMode === 'timeline') {
+    return formatTimelineHeading(rangeStart, rangeEnd, locale);
+  }
   if (viewMode === 'Day') {
     return new Intl.DateTimeFormat(locale, {
       day: 'numeric',
@@ -197,9 +302,9 @@ function DatePickerPopover({
               i === 0 ? 'text-red-500' : 'text-gray-500',
             )}
           >
-            {new Intl.DateTimeFormat(i18n.language, { weekday: 'narrow' }).format(
-              new Date(2026, 1, i + 1),
-            )}
+            {new Intl.DateTimeFormat(i18n.language, {
+              weekday: 'narrow',
+            }).format(new Date(2026, 1, i + 1))}
           </div>
         ))}
       </div>
@@ -219,7 +324,11 @@ function DatePickerPopover({
             day === selectedDate;
           const cellDate = new Date(pickerYear, pickerMonth, day);
           const isSunday = cellDate.getDay() === 0;
-          const holidayNames = getKoreanHolidayNames(pickerYear, pickerMonth, day);
+          const holidayNames = getKoreanHolidayNames(
+            pickerYear,
+            pickerMonth,
+            day,
+          );
           return (
             <button
               type="button"
@@ -262,7 +371,9 @@ interface PlannerEventDraftRange {
   allDay: boolean;
 }
 
-function buildDefaultPlannerEventRange(currentDate: Date): PlannerEventDraftRange {
+function buildDefaultPlannerEventRange(
+  currentDate: Date,
+): PlannerEventDraftRange {
   const start = new Date(
     currentDate.getFullYear(),
     currentDate.getMonth(),
@@ -285,12 +396,23 @@ export const PlannerView = () => {
   const timeZone = normalizeTimeZone(user?.time_zone);
   const { workspaceSlug } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
+  const surfaceMode: PlannerSurfaceMode =
+    searchParams.get('view') === 'timeline' ? 'timeline' : 'calendar';
+  const [timelineRangeDays, setTimelineRangeDaysState] =
+    useState<TimelineRangeDays>(() => readTimelineRangeDays());
   const [viewMode, setViewMode] = useState<PlannerViewMode>('Month');
   const [calendarState, setCalendarState] = useState(() =>
-    buildInitialPlannerRange(today, 'Month'),
+    buildInitialPlannerRange(
+      today,
+      'Month',
+      surfaceMode,
+      timelineRangeDays,
+    ),
   );
 
   const calendarRef = useRef<UnifiedCalendarHandle | null>(null);
+  const previousSurfaceMode = useRef(surfaceMode);
+  const previousTimelineRangeDays = useRef(timelineRangeDays);
 
   const { events, loading, error, refresh } = useCalendarEvents({
     workspaceSlug,
@@ -310,21 +432,23 @@ export const PlannerView = () => {
   const createMenuRef = useRef<HTMLDivElement>(null);
   const [plannerEventModalOpen, setPlannerEventModalOpen] = useState(false);
   const [plannerEventId, setPlannerEventId] = useState<string | null>(null);
-  const [plannerEventRange, setPlannerEventRange] = useState<PlannerEventDraftRange | null>(null);
+  const [plannerEventRange, setPlannerEventRange] =
+    useState<PlannerEventDraftRange | null>(null);
   const [meetingCreateOpen, setMeetingCreateOpen] = useState(false);
-  const [meetingCreateRange, setMeetingCreateRange] = useState<PlannerEventDraftRange | null>(null);
-  const [creationChoice, setCreationChoice] = useState<
-    | {
-        range: PlannerEventDraftRange;
-        anchor: { x: number; y: number } | null;
-      }
-    | null
-  >(null);
+  const [meetingCreateRange, setMeetingCreateRange] =
+    useState<PlannerEventDraftRange | null>(null);
+  const [creationChoice, setCreationChoice] = useState<{
+    range: PlannerEventDraftRange;
+    anchor: { x: number; y: number } | null;
+  } | null>(null);
 
   useEffect(() => {
     if (!pickerOpen) return;
     function onMouseDown(event: MouseEvent) {
-      if (pickerRef.current && !pickerRef.current.contains(event.target as Node)) {
+      if (
+        pickerRef.current &&
+        !pickerRef.current.contains(event.target as Node)
+      ) {
         setPickerOpen(false);
       }
     }
@@ -342,7 +466,10 @@ export const PlannerView = () => {
   useEffect(() => {
     if (!createMenuOpen) return;
     function onMouseDown(event: MouseEvent) {
-      if (createMenuRef.current && !createMenuRef.current.contains(event.target as Node)) {
+      if (
+        createMenuRef.current &&
+        !createMenuRef.current.contains(event.target as Node)
+      ) {
         setCreateMenuOpen(false);
       }
     }
@@ -357,6 +484,26 @@ export const PlannerView = () => {
     };
   }, [createMenuOpen]);
 
+  useEffect(() => {
+    if (
+      previousSurfaceMode.current === surfaceMode &&
+      previousTimelineRangeDays.current === timelineRangeDays
+    ) {
+      return;
+    }
+    previousSurfaceMode.current = surfaceMode;
+    previousTimelineRangeDays.current = timelineRangeDays;
+    setPickerOpen(false);
+    setCalendarState((current) =>
+      buildInitialPlannerRange(
+        current.currentDate,
+        viewMode,
+        surfaceMode,
+        timelineRangeDays,
+      ),
+    );
+  }, [surfaceMode, timelineRangeDays, viewMode]);
+
   // When the popover opens, sync its cursor to whatever the main view is showing.
   const openPicker = () => {
     setPickerYear(calendarState.currentDate.getFullYear());
@@ -369,24 +516,83 @@ export const PlannerView = () => {
     calendarRef.current?.changeView(VIEW_MODE_TO_FC[mode]);
   };
 
+  const setSurfaceMode = (mode: PlannerSurfaceMode) => {
+    if (mode === surfaceMode) {
+      return;
+    }
+    const nextParams = new URLSearchParams(searchParams);
+    if (mode === 'timeline') {
+      nextParams.set('view', 'timeline');
+    } else {
+      nextParams.delete('view');
+    }
+    setSearchParams(nextParams, { replace: true });
+  };
+
+  const selectTimelineRangeDays = (days: TimelineRangeDays) => {
+    setTimelineRangeDaysState(days);
+    persistTimelineRangeDays(days);
+  };
+
   const goToPreviousPeriod = () => {
+    if (surfaceMode === 'timeline') {
+      setCalendarState((current) =>
+        buildInitialPlannerRange(
+          addDays(current.currentDate, -timelineRangeDays),
+          viewMode,
+          'timeline',
+          timelineRangeDays,
+        ),
+      );
+      setPickerOpen(false);
+      return;
+    }
     calendarRef.current?.prev();
   };
 
   const goToNextPeriod = () => {
+    if (surfaceMode === 'timeline') {
+      setCalendarState((current) =>
+        buildInitialPlannerRange(
+          addDays(current.currentDate, timelineRangeDays),
+          viewMode,
+          'timeline',
+          timelineRangeDays,
+        ),
+      );
+      setPickerOpen(false);
+      return;
+    }
     calendarRef.current?.next();
   };
 
   const goToToday = () => {
+    if (surfaceMode === 'timeline') {
+      setCalendarState(
+        buildInitialPlannerRange(
+          new Date(),
+          viewMode,
+          'timeline',
+          timelineRangeDays,
+        ),
+      );
+      setPickerOpen(false);
+      return;
+    }
     calendarRef.current?.today();
     setPickerOpen(false);
   };
-  const openPlannerEventCreate = useCallback((range?: PlannerEventDraftRange) => {
-    setPlannerEventId(null);
-    setPlannerEventRange(range ?? buildDefaultPlannerEventRange(calendarState.currentDate));
-    setPlannerEventModalOpen(true);
-    setCreateMenuOpen(false);
-  }, [calendarState.currentDate]);
+  const openPlannerEventCreate = useCallback(
+    (range?: PlannerEventDraftRange) => {
+      setPlannerEventId(null);
+      setPlannerEventRange(
+        range ?? buildDefaultPlannerEventRange(calendarState.currentDate),
+      );
+      setPlannerEventModalOpen(true);
+      setCreateMenuOpen(false);
+    },
+    [calendarState.currentDate],
+  );
   const openPlannerEventEdit = useCallback((eventId: string) => {
     setPlannerEventId(eventId);
     setPlannerEventRange(null);
@@ -422,10 +628,19 @@ export const PlannerView = () => {
       setMeetingCreateOpen(true);
     }
     window.addEventListener('planner:create-event', handlePlannerCreateEvent);
-    window.addEventListener('planner:create-meeting', handlePlannerCreateMeeting);
+    window.addEventListener(
+      'planner:create-meeting',
+      handlePlannerCreateMeeting,
+    );
     return () => {
-      window.removeEventListener('planner:create-event', handlePlannerCreateEvent);
-      window.removeEventListener('planner:create-meeting', handlePlannerCreateMeeting);
+      window.removeEventListener(
+        'planner:create-event',
+        handlePlannerCreateEvent,
+      );
+      window.removeEventListener(
+        'planner:create-meeting',
+        handlePlannerCreateMeeting,
+      );
     };
   }, [openPlannerEventCreate]);
 
@@ -451,9 +666,9 @@ export const PlannerView = () => {
         const nextRangeStart = formatLocalYmd(nextState.rangeStart);
         const nextRangeEnd = formatLocalYmd(nextState.rangeEnd);
         if (
-          current.currentDate.getTime() === nextCurrentDate.getTime()
-          && current.rangeStart === nextRangeStart
-          && current.rangeEnd === nextRangeEnd
+          current.currentDate.getTime() === nextCurrentDate.getTime() &&
+          current.rangeStart === nextRangeStart &&
+          current.rangeEnd === nextRangeEnd
         ) {
           return current;
         }
@@ -485,7 +700,9 @@ export const PlannerView = () => {
       setActionError(t('planner.taskLocationMissing'));
       return;
     }
-    navigate(`/tool/pms-list-${listId}?issue=${encodeURIComponent(event.sourceId)}`);
+    navigate(
+      `/tool/pms-list-${listId}?issue=${encodeURIComponent(event.sourceId)}`,
+    );
   };
 
   const handleEventDrop = async (
@@ -560,7 +777,9 @@ export const PlannerView = () => {
     } catch (err) {
       revert();
       setActionError(
-        err instanceof Error ? err.message : t('planner.taskScheduleMoveFailed'),
+        err instanceof Error
+          ? err.message
+          : t('planner.taskScheduleMoveFailed'),
       );
     }
   };
@@ -612,7 +831,9 @@ export const PlannerView = () => {
       } catch (err) {
         revert();
         setActionError(
-          err instanceof Error ? err.message : t('planner.taskScheduleMoveFailed'),
+          err instanceof Error
+            ? err.message
+            : t('planner.taskScheduleMoveFailed'),
         );
       }
       return;
@@ -656,12 +877,15 @@ export const PlannerView = () => {
     closePlannerEventModal();
     refresh();
   }, [closePlannerEventModal, refresh]);
-  const handleMeetingCreated = useCallback((meetingId: string) => {
-    setMeetingCreateOpen(false);
-    setMeetingCreateRange(null);
-    setPreviewMeetingId(meetingId);
-    refresh();
-  }, [refresh]);
+  const handleMeetingCreated = useCallback(
+    (meetingId: string) => {
+      setMeetingCreateOpen(false);
+      setMeetingCreateRange(null);
+      setPreviewMeetingId(meetingId);
+      refresh();
+    },
+    [refresh],
+  );
 
   return (
     <motion.div
@@ -669,25 +893,71 @@ export const PlannerView = () => {
       animate={{ opacity: 1 }}
       className="p-8 h-full flex flex-col space-y-6 relative"
     >
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <h1 className="app-text-title-lg text-app-ink">{t('planner.planner')}</h1>
-          <div className="flex items-center bg-app-surface-sidebar border border-app-border rounded-md p-1">
-            {(['Month', 'Week', 'Day', 'Agenda'] as const).map((mode) => (
-              <button
-                key={mode}
-                onClick={() => setMode(mode)}
-                className={cn(
-                  'app-text-control-sm rounded px-3 py-1 transition-all',
-                  viewMode === mode
-                    ? 'bg-app-surface-hover text-app-ink shadow-sm'
-                    : 'text-gray-500 hover:text-app-ink',
-                )}
-              >
-                {t(VIEW_MODE_LABEL_KEYS[mode])}
-              </button>
-            ))}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <h1 className="app-text-title-lg text-app-ink">
+            {t('planner.planner')}
+          </h1>
+          <div className="flex items-center rounded-md border border-app-border bg-app-surface-sidebar p-1">
+            {(['calendar', 'timeline'] as const).map((mode) => {
+              const Icon = mode === 'calendar' ? CalendarDays : Activity;
+              return (
+                <button
+                  key={mode}
+                  type="button"
+                  onClick={() => setSurfaceMode(mode)}
+                  aria-pressed={surfaceMode === mode}
+                  className={cn(
+                    'app-text-control-sm flex items-center gap-1.5 rounded px-3 py-1 transition-all',
+                    surfaceMode === mode
+                      ? 'bg-app-surface-hover text-app-ink shadow-sm'
+                      : 'text-gray-500 hover:text-app-ink',
+                  )}
+                >
+                  <Icon size={14} />
+                  <span>{t(SURFACE_MODE_LABEL_KEYS[mode])}</span>
+                </button>
+              );
+            })}
           </div>
+          {surfaceMode === 'calendar' ? (
+            <div className="flex items-center bg-app-surface-sidebar border border-app-border rounded-md p-1">
+              {(['Month', 'Week', 'Day', 'Agenda'] as const).map((mode) => (
+                <button
+                  key={mode}
+                  type="button"
+                  onClick={() => setMode(mode)}
+                  className={cn(
+                    'app-text-control-sm rounded px-3 py-1 transition-all',
+                    viewMode === mode
+                      ? 'bg-app-surface-hover text-app-ink shadow-sm'
+                      : 'text-gray-500 hover:text-app-ink',
+                  )}
+                >
+                  {t(VIEW_MODE_LABEL_KEYS[mode])}
+                </button>
+              ))}
+            </div>
+          ) : (
+            <div className="flex items-center bg-app-surface-sidebar border border-app-border rounded-md p-1">
+              {TIMELINE_RANGE_OPTIONS.map((days) => (
+                <button
+                  key={days}
+                  type="button"
+                  onClick={() => selectTimelineRangeDays(days)}
+                  aria-pressed={timelineRangeDays === days}
+                  className={cn(
+                    'app-text-control-sm rounded px-3 py-1 transition-all',
+                    timelineRangeDays === days
+                      ? 'bg-app-surface-hover text-app-ink shadow-sm'
+                      : 'text-gray-500 hover:text-app-ink',
+                  )}
+                >
+                  {t(TIMELINE_RANGE_LABEL_KEYS[days])}
+                </button>
+              ))}
+            </div>
+          )}
           <button
             type="button"
             onClick={goToToday}
@@ -713,7 +983,14 @@ export const PlannerView = () => {
               aria-expanded={pickerOpen}
               className="app-text-control flex h-8 min-w-[180px] items-center justify-center rounded-md text-app-ink tabular-nums transition-colors hover:bg-app-surface-hover"
             >
-              {formatPlannerHeading(viewMode, calendarState.currentDate, i18n.language)}
+              {formatPlannerHeading(
+                viewMode,
+                calendarState.currentDate,
+                i18n.language,
+                surfaceMode,
+                calendarState.rangeStart,
+                calendarState.rangeEnd,
+              )}
             </button>
             <button
               type="button"
@@ -746,7 +1023,19 @@ export const PlannerView = () => {
                   setPickerOpen(false);
                 }}
                 onPickDate={(year, month, day) => {
-                  calendarRef.current?.gotoDate(new Date(year, month, day));
+                  const pickedDate = new Date(year, month, day);
+                  if (surfaceMode === 'timeline') {
+                    setCalendarState(
+                      buildInitialPlannerRange(
+                        pickedDate,
+                        viewMode,
+                        'timeline',
+                        timelineRangeDays,
+                      ),
+                    );
+                  } else {
+                    calendarRef.current?.gotoDate(pickedDate);
+                  }
                   setPickerOpen(false);
                 }}
               />
@@ -820,18 +1109,29 @@ export const PlannerView = () => {
                 </div>
               </div>
             ) : null}
-            <UnifiedCalendar
-              ref={calendarRef}
-              events={events}
-              initialView={VIEW_MODE_TO_FC[viewMode]}
-              initialDate={calendarState.currentDate}
-              onDatesSet={handleDatesSet}
-              onDateSelect={handleDateSelect}
-              onEventClick={handleEventClick}
-              onEventDrop={handleEventDrop}
-              onEventResize={handleEventResize}
-              timeZone={timeZone}
-            />
+            {surfaceMode === 'timeline' ? (
+              <PlannerTimelineView
+                events={events}
+                rangeStart={calendarState.rangeStart}
+                rangeEnd={calendarState.rangeEnd}
+                locale={i18n.language}
+                timeZone={timeZone}
+                onEventClick={handleEventClick}
+              />
+            ) : (
+              <UnifiedCalendar
+                ref={calendarRef}
+                events={events}
+                initialView={VIEW_MODE_TO_FC[viewMode]}
+                initialDate={calendarState.currentDate}
+                onDatesSet={handleDatesSet}
+                onDateSelect={handleDateSelect}
+                onEventClick={handleEventClick}
+                onEventDrop={handleEventDrop}
+                onEventResize={handleEventResize}
+                timeZone={timeZone}
+              />
+            )}
           </div>
         )}
       </div>

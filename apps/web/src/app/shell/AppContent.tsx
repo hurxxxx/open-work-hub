@@ -74,6 +74,10 @@ function isWhiteboardDetailPath(pathname: string): boolean {
   return /^\/w\/[^/]+\/whiteboard\/[^/]+\/?$/.test(pathname);
 }
 
+function isPlannerPath(pathname: string): boolean {
+  return /^\/w\/[^/]+\/planner\/?$/.test(pathname);
+}
+
 function getInitials(label: string, fallback: string): string {
   const initials = label
     .trim()
@@ -339,7 +343,7 @@ function AuthenticatedShell() {
     shellWorkspaceSlug,
   );
   const workspaceBootstrap = useWorkspaceBootstrap(auth.token, bootstrapWorkspaceSlug);
-  const hideSubSidebar = isWhiteboardDetailPath(location.pathname);
+  const hideSubSidebar = isWhiteboardDetailPath(location.pathname) || isPlannerPath(location.pathname);
   const canOpenMobileAppMenu = !hideSubSidebar && activeAppId !== 'home' && activeAppId !== 'profile';
   const enabledWorkspaceAppIds = useMemo(
     () => workspaceBootstrap.data

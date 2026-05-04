@@ -166,8 +166,15 @@ export function resolveShellState(
   }
 
   if (/^\/w\/[^/]+\/planner(?:\/|$)/.test(pathname)) {
+    const params = getSearchParams(path);
     return canShowAppChrome(user, 'planner', workspaceSlug, enabledWorkspaceAppIds)
-      ? { activeAppId: 'planner', activeNavItemId: '' }
+      ? {
+          activeAppId: 'planner',
+          activeNavItemId:
+            params.get('view') === 'timeline'
+              ? 'planner-timeline'
+              : 'planner-calendar',
+        }
       : HOME_SHELL_STATE;
   }
 

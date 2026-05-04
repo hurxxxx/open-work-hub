@@ -1,11 +1,20 @@
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+import type { CalendarEvent } from '@/src/platform/calendar/calendar-types';
 
 import { PlannerView } from './PlannerView';
 
 const plannerHarness = vi.hoisted(() => {
   const fixedToday = new Date(2026, 3, 2);
+  let calendarEvents: CalendarEvent[] = [];
   let calendarState = {
     view: 'dayGridMonth',
     currentDate: new Date(2026, 2, 15),
@@ -25,7 +34,7 @@ const plannerHarness = vi.hoisted(() => {
   const useCalendarEvents = vi.fn((options: unknown) => {
     void options;
     return {
-      events: [],
+      events: calendarEvents,
       loading: false,
       error: null,
       refresh: vi.fn(),
@@ -36,7 +45,8 @@ const plannerHarness = vi.hoisted(() => {
   const updatePlannerEvent = vi.fn();
 
   const cloneDate = (date: Date) => new Date(date.getTime());
-  const startOfDay = (date: Date) => new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  const startOfDay = (date: Date) =>
+    new Date(date.getFullYear(), date.getMonth(), date.getDate());
   const addDays = (date: Date, days: number) => {
     const next = startOfDay(date);
     next.setDate(next.getDate() + days);
@@ -48,8 +58,16 @@ const plannerHarness = vi.hoisted(() => {
     const currentDate = startOfDay(calendarState.currentDate);
     calendarState.currentDate = currentDate;
     if (calendarState.view === 'dayGridMonth') {
-      calendarState.rangeStart = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
-      calendarState.rangeEnd = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1);
+      calendarState.rangeStart = new Date(
+        currentDate.getFullYear(),
+        currentDate.getMonth(),
+        1,
+      );
+      calendarState.rangeEnd = new Date(
+        currentDate.getFullYear(),
+        currentDate.getMonth() + 1,
+        1,
+      );
       return;
     }
     if (calendarState.view === 'timeGridDay') {
@@ -63,7 +81,11 @@ const plannerHarness = vi.hoisted(() => {
 
   const emitDatesSet = () => {
     latestProps?.onDatesSet?.({
-      view: calendarState.view as 'dayGridMonth' | 'timeGridWeek' | 'timeGridDay' | 'listWeek',
+      view: calendarState.view as
+        | 'dayGridMonth'
+        | 'timeGridWeek'
+        | 'timeGridDay'
+        | 'listWeek',
       currentDate: cloneDate(calendarState.currentDate),
       rangeStart: cloneDate(calendarState.rangeStart),
       rangeEnd: cloneDate(calendarState.rangeEnd),
@@ -92,7 +114,12 @@ const plannerHarness = vi.hoisted(() => {
         ...next,
       };
     },
-    changeView(view: 'dayGridMonth' | 'timeGridWeek' | 'timeGridDay' | 'listWeek') {
+    setCalendarEvents(events: CalendarEvent[]) {
+      calendarEvents = events;
+    },
+    changeView(
+      view: 'dayGridMonth' | 'timeGridWeek' | 'timeGridDay' | 'listWeek',
+    ) {
       calendarState.view = view;
       syncRange();
       emitDatesSet();
@@ -129,7 +156,8 @@ const plannerHarness = vi.hoisted(() => {
       emitDatesSet();
     },
     gotoDate(date: Date | string) {
-      calendarState.currentDate = typeof date === 'string' ? new Date(date) : cloneDate(date);
+      calendarState.currentDate =
+        typeof date === 'string' ? new Date(date) : cloneDate(date);
       syncRange();
       emitDatesSet();
     },
@@ -143,7 +171,8 @@ vi.mock('@/src/platform/auth/auth-provider', () => ({
 }));
 
 vi.mock('@/src/platform/calendar/use-calendar-events', () => ({
-  useCalendarEvents: (options: unknown) => plannerHarness.useCalendarEvents(options),
+  useCalendarEvents: (options: unknown) =>
+    plannerHarness.useCalendarEvents(options),
 }));
 
 vi.mock('@/src/app-modules/meeting/public-api', () => ({
@@ -163,31 +192,40 @@ vi.mock('./calendar/MeetingPreviewModal', () => ({
 }));
 
 vi.mock('@/src/app-modules/meeting', () => ({
-  MeetingCreateModal: ({ isOpen }: { isOpen: boolean }) => (isOpen ? <div data-testid="mock-meeting-create-modal" /> : null),
+  MeetingCreateModal: ({ isOpen }: { isOpen: boolean }) =>
+    isOpen ? <div data-testid="mock-meeting-create-modal" /> : null,
 }));
 
 vi.mock('./PlannerEventModal', () => ({
-  PlannerEventModal: ({ isOpen }: { isOpen: boolean }) => (isOpen ? <div data-testid="mock-planner-event-modal" /> : null),
+  PlannerEventModal: ({ isOpen }: { isOpen: boolean }) =>
+    isOpen ? <div data-testid="mock-planner-event-modal" /> : null,
 }));
 
 vi.mock('@/src/components/calendar/UnifiedCalendar', async () => {
   const React = await import('react');
 
-  const MockUnifiedCalendar = React.forwardRef(function MockUnifiedCalendar(props: Record<string, unknown>, ref) {
+  const MockUnifiedCalendar = React.forwardRef(function MockUnifiedCalendar(
+    props: Record<string, unknown>,
+    ref,
+  ) {
     plannerHarness.setLatestProps(props as never);
 
     React.useEffect(() => {
       plannerHarness.emitDatesSet();
     }, [props]);
 
-    React.useImperativeHandle(ref, () => ({
-      changeView: plannerHarness.changeView,
-      prev: plannerHarness.prev,
-      next: plannerHarness.next,
-      today: plannerHarness.today,
-      gotoDate: plannerHarness.gotoDate,
-      getCurrentView: () => undefined,
-    }), []);
+    React.useImperativeHandle(
+      ref,
+      () => ({
+        changeView: plannerHarness.changeView,
+        prev: plannerHarness.prev,
+        next: plannerHarness.next,
+        today: plannerHarness.today,
+        gotoDate: plannerHarness.gotoDate,
+        getCurrentView: () => undefined,
+      }),
+      [],
+    );
 
     return <div data-testid="mock-calendar" />;
   });
@@ -197,9 +235,9 @@ vi.mock('@/src/components/calendar/UnifiedCalendar', async () => {
   };
 });
 
-function renderPlannerView() {
+function renderPlannerView(initialEntry = '/w/hq/planner') {
   return render(
-    <MemoryRouter initialEntries={['/w/hq/planner']}>
+    <MemoryRouter initialEntries={[initialEntry]}>
       <Routes>
         <Route path="/w/:workspaceSlug/planner" element={<PlannerView />} />
       </Routes>
@@ -213,6 +251,28 @@ function getLastCalendarRequest(): { from: string; to: string } {
   return call?.[0] as unknown as { from: string; to: string };
 }
 
+function startOfLocalDay(date: Date): Date {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+}
+
+function addDays(date: Date, days: number): Date {
+  const next = startOfLocalDay(date);
+  next.setDate(next.getDate() + days);
+  return next;
+}
+
+function startOfWeek(date: Date): Date {
+  return addDays(startOfLocalDay(date), -startOfLocalDay(date).getDay());
+}
+
+function formatYmd(date: Date): string {
+  return [
+    date.getFullYear(),
+    String(date.getMonth() + 1).padStart(2, '0'),
+    String(date.getDate()).padStart(2, '0'),
+  ].join('-');
+}
+
 describe('PlannerView', () => {
   beforeEach(() => {
     plannerHarness.useCalendarEvents.mockClear();
@@ -220,6 +280,8 @@ describe('PlannerView', () => {
     plannerHarness.updateIssue.mockClear();
     plannerHarness.updatePlannerEvent.mockClear();
     plannerHarness.resetCalendarState();
+    plannerHarness.setCalendarEvents([]);
+    window.localStorage.removeItem('aidoo:planner-timeline-range-days');
   });
 
   it('uses local YYYY-MM-DD ranges and opens planner event creation from the toolbar', async () => {
@@ -278,7 +340,9 @@ describe('PlannerView', () => {
     renderPlannerView();
 
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: '2026년 3월 10일' })).toBeTruthy();
+      expect(
+        screen.getByRole('button', { name: '2026년 3월 10일' }),
+      ).toBeTruthy();
     });
 
     fireEvent.click(screen.getByRole('button', { name: '2026년 3월 10일' }));
@@ -288,7 +352,9 @@ describe('PlannerView', () => {
       const lastCall = getLastCalendarRequest();
       expect(lastCall.from).toBe('2026-03-18');
       expect(lastCall.to).toBe('2026-03-19');
-      expect(screen.getByRole('button', { name: '2026년 3월 18일' })).toBeTruthy();
+      expect(
+        screen.getByRole('button', { name: '2026년 3월 18일' }),
+      ).toBeTruthy();
     });
   });
 
@@ -304,7 +370,9 @@ describe('PlannerView', () => {
     });
 
     await waitFor(() => {
-      expect(screen.getByRole('dialog', { name: '이벤트 또는 회의 생성' })).toBeTruthy();
+      expect(
+        screen.getByRole('dialog', { name: '이벤트 또는 회의 생성' }),
+      ).toBeTruthy();
     });
 
     fireEvent.click(screen.getByRole('button', { name: '이벤트' }));
@@ -323,6 +391,52 @@ describe('PlannerView', () => {
 
     await waitFor(() => {
       expect(screen.getByTestId('mock-meeting-create-modal')).toBeTruthy();
+    });
+  });
+
+  it('renders the roadmap timeline from the planner view query', async () => {
+    const rangeStart = startOfWeek(new Date());
+    const eventDay = addDays(rangeStart, 4);
+    plannerHarness.setCalendarEvents([
+      {
+        id: 'meeting-timeline-1',
+        title: '라인 증설 일정 점검',
+        start: `${formatYmd(eventDay)}T09:00:00+09:00`,
+        end: `${formatYmd(eventDay)}T10:00:00+09:00`,
+        allDay: false,
+        sourceType: 'meeting',
+        sourceId: 'meeting-1',
+        color: '#3b82f6',
+        metadata: {
+          meetingId: 'meeting-1',
+          attendeeCount: 3,
+        },
+      },
+    ]);
+
+    renderPlannerView('/w/hq/planner?view=timeline');
+
+    await waitFor(() => {
+      const lastCall = getLastCalendarRequest();
+      expect(lastCall.from).toBe(formatYmd(rangeStart));
+      expect(lastCall.to).toBe(formatYmd(addDays(rangeStart, 28)));
+    });
+
+    expect(screen.getByRole('button', { name: '타임라인' })).toBeTruthy();
+    expect(screen.getAllByText('라인 증설 일정 점검').length).toBeGreaterThan(
+      0,
+    );
+    expect(screen.queryByTestId('mock-calendar')).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: '8주' }));
+
+    await waitFor(() => {
+      const lastCall = getLastCalendarRequest();
+      expect(lastCall.from).toBe(formatYmd(rangeStart));
+      expect(lastCall.to).toBe(formatYmd(addDays(rangeStart, 56)));
+      expect(
+        window.localStorage.getItem('aidoo:planner-timeline-range-days'),
+      ).toBe('56');
     });
   });
 });
