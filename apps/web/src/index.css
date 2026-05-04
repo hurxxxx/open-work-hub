@@ -164,6 +164,30 @@
     background: #fff;
   }
 
+  .learning-image-preview-trigger {
+    display: inline-block;
+    max-width: 100%;
+    cursor: zoom-in;
+    vertical-align: middle;
+    border-radius: 0.375rem;
+  }
+
+  .learning-image-preview-trigger:focus-visible,
+  .learning-image-preview-surface img:focus-visible {
+    outline: 2px solid var(--ui-color-accent);
+    outline-offset: 3px;
+  }
+
+  .learning-image-preview-image {
+    max-width: 100%;
+    height: auto;
+    cursor: zoom-in;
+  }
+
+  .learning-image-preview-surface img {
+    cursor: zoom-in;
+  }
+
   /*
    * Learning page-note typography helpers. Stackable:
    *

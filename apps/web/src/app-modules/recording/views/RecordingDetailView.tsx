@@ -17,6 +17,7 @@ import {
 import { Button, useConfirm } from '@aidoo/ui';
 
 import { useAuth } from '@/src/platform/auth/auth-provider';
+import { DocsViewerModal } from '@/src/app-modules/docs/public-api';
 import { normalizeTimeZone } from '@/src/platform/time/time-utils';
 import { buildWorkspaceAppPath } from '@/src/platform/workspaces/workspace-utils';
 import type { MeetingListItem } from '@/src/app-modules/meeting/public-api';
@@ -59,6 +60,11 @@ function containerHref(workspaceSlug: string, container: RecordingContainer): st
   return null;
 }
 
+type DocPreviewTarget = {
+  docId: string;
+  label: string;
+};
+
 export function RecordingDetailView() {
   const { t, i18n } = useTranslation(['apps', 'common']);
   const { token, user } = useAuth();
@@ -77,6 +83,7 @@ export function RecordingDetailView() {
   const [titleStatus, setTitleStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
   const [meetingPickerOpen, setMeetingPickerOpen] = useState(false);
   const [taskPickerOpen, setTaskPickerOpen] = useState(false);
+  const [docPreview, setDocPreview] = useState<DocPreviewTarget | null>(null);
 
   const containers = useMemo(() => recording?.containers ?? [], [recording?.containers]);
   const meetingContainers = useMemo(
@@ -344,14 +351,14 @@ export function RecordingDetailView() {
                   <DocLink
                     docId={recording.raw_transcript_doc_id}
                     label={t('apps:recording.detail.rawTranscriptDoc')}
-                    workspaceSlug={workspaceSlug}
                     notReadyLabel={t('apps:recording.detail.notReady')}
+                    onOpen={(docId, label) => setDocPreview({ docId, label })}
                   />
                   <DocLink
                     docId={recording.minutes_doc_id}
                     label={t('apps:recording.detail.minutesDoc')}
-                    workspaceSlug={workspaceSlug}
                     notReadyLabel={t('apps:recording.detail.notReady')}
+                    onOpen={(docId, label) => setDocPreview({ docId, label })}
                   />
                 </div>
               </section>
@@ -423,6 +430,15 @@ export function RecordingDetailView() {
             workspaceSlug={workspaceSlug}
             excludeIssueIds={taskContainers.map((container) => container.container_id)}
             onPick={handleAttachTask}
+          />
+          <DocsViewerModal
+            open={docPreview !== null}
+            itemId={docPreview?.docId}
+            fallbackTitle={docPreview?.label}
+            workspaceSlug={workspaceSlug}
+            onOpenChange={(nextOpen) => {
+              if (!nextOpen) setDocPreview(null);
+            }}
           />
         </>
       ) : null}
@@ -499,17 +515,17 @@ function LinkedSubsection({
 function DocLink({
   docId,
   label,
-  workspaceSlug,
   notReadyLabel,
+  onOpen,
 }: {
   docId: string | null | undefined;
   label: string;
-  workspaceSlug: string;
   notReadyLabel: string;
+  onOpen: (docId: string, label: string) => void;
 }) {
   if (!docId) {
     return (
-      <div className="flex items-center gap-2 rounded border border-app-border bg-app-surface-raised px-3 py-2 text-sm text-app-ink/55">
+      <div className="flex w-full items-center gap-2 rounded border border-app-border bg-app-surface-raised px-3 py-2 text-sm text-app-ink/55">
         <FileText size={14} />
         <span>{label}</span>
         <span className="ml-auto app-text-caption">{notReadyLabel}</span>
@@ -517,13 +533,15 @@ function DocLink({
     );
   }
   return (
-    <Link
-      to={buildWorkspaceAppPath(workspaceSlug, 'docs', docId)}
-      className="flex items-center gap-2 rounded border border-app-border bg-app-surface-raised px-3 py-2 text-sm text-app-ink hover:bg-app-surface-subtle"
+    <button
+      type="button"
+      onClick={() => onOpen(docId, label)}
+      aria-haspopup="dialog"
+      className="flex w-full items-center gap-2 rounded border border-app-border bg-app-surface-raised px-3 py-2 text-left text-sm text-app-ink hover:bg-app-surface-subtle"
     >
       <FileText size={14} />
       <span>{label}</span>
-    </Link>
+    </button>
   );
 }
 
@@ -550,13 +568,15 @@ function ContainerRow({
   const shortId = container.container_id.length > 12
     ? `${container.container_id.slice(0, 8)}...${container.container_id.slice(-4)}`
     : container.container_id;
+  const displayTitle =
+    container.container_title?.trim() || `${appLabel} · ${shortId}`;
   const detachAriaLabel = t('recording.detail.detachItemLabel', {
-    item: `${appLabel} ${shortId}`,
+    item: displayTitle,
   });
   const content = (
     <div className="min-w-0">
       <p className="app-text-body line-clamp-1 text-app-ink" title={container.container_id}>
-        {appLabel} · {shortId}
+        {displayTitle}
       </p>
       <p className="app-text-caption line-clamp-1 text-app-ink/45">{typeLabel}</p>
     </div>

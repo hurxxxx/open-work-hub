@@ -14,6 +14,7 @@ from celery import Celery, chain
 from fastapi import HTTPException, Response, UploadFile, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy import func, or_, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
 from aidoo_api.core.i18n import localized_http_exception
@@ -21,6 +22,7 @@ from aidoo_api.core.settings import get_settings
 from aidoo_api.core.storage import get_minio_client
 from aidoo_api.domains.auth.models import User, Workspace
 from aidoo_api.domains.auth.security import new_id
+from aidoo_api.domains.docs.models import NativeDoc
 from aidoo_api.domains.docs.registry import (
     ContainerRef,
     container_access_allowed as docs_container_access_allowed,
@@ -30,6 +32,7 @@ from aidoo_api.domains.docs.service import can_read_native_doc_for_rag
 from aidoo_api.domains.meeting.models import Meeting, MeetingTaskLink
 from aidoo_api.domains.meeting.permissions import is_organizer, is_participant
 from aidoo_api.domains.pms.access import _ensure_issue_readable, ensure_issue_attachable
+from aidoo_api.domains.pms.models import Issue
 from aidoo_api.domains.recording.models import Recording, RecordingContainer, RecordingStaging
 from aidoo_api.domains.recording.schemas import (
     RecordingContainerCreateRequest,
@@ -88,6 +91,20 @@ def _load_recording_or_404(db: Session, recording_id: str) -> Recording:
     return recording
 
 
+def _load_recording_for_update_or_404(db: Session, recording_id: str) -> Recording:
+    recording = db.scalar(
+        select(Recording)
+        .options(selectinload(Recording.containers))
+        .where(Recording.id == recording_id)
+        .with_for_update()
+    )
+    if recording is None:
+        raise localized_http_exception(
+            status_code=status.HTTP_404_NOT_FOUND, code="recording.not_found"
+        )
+    return recording
+
+
 def _container_ref(container: RecordingContainer) -> ContainerRef:
     return ContainerRef(
         app=container.container_app,
@@ -110,7 +127,6 @@ def _meeting_container_access_allowed(
         select(Meeting).where(
             Meeting.id == container_id,
             Meeting.workspace_id == workspace.id,
-            Meeting.trashed_at.is_(None),
         )
     )
     return meeting is not None and is_participant(user, meeting)
@@ -231,7 +247,6 @@ def _container_detach_allowed(
             select(Meeting).where(
                 Meeting.id == container.container_id,
                 Meeting.workspace_id == workspace.id,
-                Meeting.trashed_at.is_(None),
             )
         )
         return meeting is not None and is_organizer(user, meeting)
@@ -501,6 +516,82 @@ def _serialize_staging(staging: RecordingStaging) -> RecordingUploadOut:
         last_chunk_at=staging.last_chunk_at,
         completed_at=staging.completed_at,
     )
+
+
+def _container_title_map(
+    db: Session,
+    containers: list[RecordingContainer],
+) -> dict[tuple[str, str, str], str]:
+    meeting_ids = {
+        item.container_id
+        for item in containers
+        if item.container_app == "meeting" and item.container_type == "meeting"
+    }
+    issue_ids = {
+        item.container_id
+        for item in containers
+        if item.container_app == "pms" and item.container_type in {"issue", "task"}
+    }
+    doc_ids = {
+        item.container_id
+        for item in containers
+        if item.container_app == "docs" and item.container_type in {"native_doc", "doc"}
+    }
+
+    titles: dict[tuple[str, str, str], str] = {}
+    if meeting_ids:
+        for meeting_id, title in db.execute(
+            select(Meeting.id, Meeting.title).where(Meeting.id.in_(meeting_ids))
+        ):
+            titles[("meeting", "meeting", meeting_id)] = title
+    if issue_ids:
+        for issue_id, title in db.execute(
+            select(Issue.id, Issue.title).where(Issue.id.in_(issue_ids))
+        ):
+            titles[("pms", "issue", issue_id)] = title
+            titles[("pms", "task", issue_id)] = title
+    if doc_ids:
+        for doc_id, title in db.execute(
+            select(NativeDoc.id, NativeDoc.title).where(NativeDoc.id.in_(doc_ids))
+        ):
+            titles[("docs", "native_doc", doc_id)] = title
+            titles[("docs", "doc", doc_id)] = title
+    return titles
+
+
+def _serialize_recording(
+    db: Session,
+    recording: Recording,
+    title_map: dict[tuple[str, str, str], str] | None = None,
+) -> RecordingOut:
+    out = RecordingOut.model_validate(recording)
+    resolved_title_map = (
+        title_map
+        if title_map is not None
+        else _container_title_map(db, list(recording.containers))
+    )
+    out.containers = [
+        container.model_copy(
+            update={
+                "container_title": resolved_title_map.get(
+                    (container.container_app, container.container_type, container.container_id)
+                )
+            }
+        )
+        for container in out.containers
+    ]
+    return out
+
+
+def _serialize_recordings(db: Session, recordings: list[Recording]) -> list[RecordingOut]:
+    title_map = _container_title_map(
+        db,
+        [container for recording in recordings for container in recording.containers],
+    )
+    return [
+        _serialize_recording(db, recording, title_map=title_map)
+        for recording in recordings
+    ]
 
 
 def staging_is_stale(staging: RecordingStaging, *, now: datetime | None = None) -> bool:
@@ -915,7 +1006,7 @@ def complete_staging(
         )
     if staging.promoted_recording_id:
         recording = _load_recording_or_404(db, staging.promoted_recording_id)
-        return RecordingOut.model_validate(recording)
+        return _serialize_recording(db, recording)
 
     staging.status = "assembling"
     staging.duration_sec_estimate = payload.duration_sec_estimate
@@ -926,7 +1017,7 @@ def complete_staging(
     staging = _load_staging_or_404(db, workspace=workspace, staging_id=staging_id)
     if staging.promoted_recording_id:
         recording = _load_recording_or_404(db, staging.promoted_recording_id)
-        return RecordingOut.model_validate(recording)
+        return _serialize_recording(db, recording)
 
     staging.status = "uploading"
     db.add(staging)
@@ -1011,7 +1102,7 @@ def complete_staging(
     _enqueue_pipeline_or_mark_failed(db, recording=fresh)
     _cleanup_spool_dir(staging.spool_path)
     fresh = _load_recording_or_404(db, recording.id)
-    return RecordingOut.model_validate(fresh)
+    return _serialize_recording(db, fresh)
 
 
 def list_recordings(
@@ -1080,7 +1171,7 @@ def list_recordings(
     recordings = db.scalars(
         query.order_by(Recording.started_at.desc(), Recording.created_at.desc())
     ).all()
-    return RecordingListResponse(items=[RecordingOut.model_validate(item) for item in recordings])
+    return RecordingListResponse(items=_serialize_recordings(db, recordings))
 
 
 def get_recording(
@@ -1092,7 +1183,7 @@ def get_recording(
 ) -> RecordingOut:
     recording = _load_recording_or_404(db, recording_id)
     _ensure_recording_access(db, workspace=workspace, user=user, recording=recording)
-    return RecordingOut.model_validate(recording)
+    return _serialize_recording(db, recording)
 
 
 def update_recording(
@@ -1115,7 +1206,7 @@ def update_recording(
     db.add(recording)
     db.commit()
     db.refresh(recording)
-    return RecordingOut.model_validate(recording)
+    return _serialize_recording(db, recording)
 
 
 def delete_recording(
@@ -1282,7 +1373,7 @@ def import_recording(
     fresh = _load_recording_or_404(db, recording_id)
     _enqueue_pipeline_or_mark_failed(db, recording=fresh)
     fresh = _load_recording_or_404(db, recording_id)
-    return RecordingOut.model_validate(fresh)
+    return _serialize_recording(db, fresh)
 
 
 def retry_recording(
@@ -1343,7 +1434,7 @@ def retry_recording(
     fresh = _load_recording_or_404(db, recording.id)
     _enqueue_pipeline_or_mark_failed(db, recording=fresh)
     fresh = _load_recording_or_404(db, recording.id)
-    return RecordingOut.model_validate(fresh)
+    return _serialize_recording(db, fresh)
 
 
 def create_container(
@@ -1354,12 +1445,13 @@ def create_container(
     recording_id: str,
     payload: RecordingContainerCreateRequest,
 ) -> RecordingOut:
-    recording = _load_recording_or_404(db, recording_id)
+    recording = _load_recording_for_update_or_404(db, recording_id)
     if recording.workspace_id != workspace.id:
         raise localized_http_exception(
             status_code=status.HTTP_404_NOT_FOUND, code="recording.not_found"
         )
     _ensure_recording_owner(user=user, recording=recording)
+    recording_pk = recording.id
     if not _container_attach_allowed(
         db,
         user=user,
@@ -1384,9 +1476,19 @@ def create_container(
     )
     if payload.is_primary:
         for item in recording.containers:
-            item.is_primary = False
-            db.add(item)
+            if item is not existing and item.is_primary:
+                item.is_primary = False
+                db.add(item)
+        db.flush()
     if existing is None:
+        sort_order = payload.sort_order
+        if sort_order is None:
+            sort_order = _next_container_sort_order(
+                db,
+                container_app=payload.container_app,
+                container_type=payload.container_type,
+                container_id=payload.container_id,
+            )
         existing = RecordingContainer(
             id=new_id(),
             recording_id=recording.id,
@@ -1394,18 +1496,37 @@ def create_container(
             container_type=payload.container_type,
             container_id=payload.container_id,
             is_primary=payload.is_primary,
-            sort_order=payload.sort_order,
+            sort_order=sort_order,
             added_by_id=user.id,
         )
     else:
-        existing.is_primary = payload.is_primary
-        existing.sort_order = payload.sort_order
+        if payload.is_primary:
+            existing.is_primary = True
+        if payload.sort_order is not None:
+            existing.sort_order = payload.sort_order
     db.add(existing)
     recording.updated_at = _utcnow()
     db.add(recording)
-    db.commit()
-    fresh = _load_recording_or_404(db, recording.id)
-    return RecordingOut.model_validate(fresh)
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        fresh = _load_recording_or_404(db, recording_pk)
+        duplicate = next(
+            (
+                item
+                for item in fresh.containers
+                if item.container_app == payload.container_app
+                and item.container_type == payload.container_type
+                and item.container_id == payload.container_id
+            ),
+            None,
+        )
+        if duplicate is None:
+            raise
+        return _serialize_recording(db, fresh)
+    fresh = _load_recording_or_404(db, recording_pk)
+    return _serialize_recording(db, fresh)
 
 
 def delete_container(
@@ -1443,7 +1564,7 @@ def delete_container(
     db.add(recording)
     db.commit()
     fresh = _load_recording_or_404(db, recording.id)
-    return RecordingOut.model_validate(fresh)
+    return _serialize_recording(db, fresh)
 
 
 def _meeting_recording_status(recording: Recording) -> str:
@@ -1522,6 +1643,8 @@ def list_meeting_recording_outs(db: Session, *, meeting: Meeting) -> list:
                 mime_type=recording.mime_type,
                 failure_reason=recording.failure_reason,
                 linked_doc_id=recording.minutes_doc_id,
+                raw_transcript_doc_id=recording.raw_transcript_doc_id,
+                minutes_doc_id=recording.minutes_doc_id,
                 linked_task_id=_linked_task_id(recording),
                 transcript_extracted=bool((recording.transcript_text or "").strip()),
                 summary_generated=recording.minutes_doc_status == "done",
@@ -1667,7 +1790,7 @@ def retry_meeting_recording(
     fresh = _load_recording_or_404(db, recording.id)
     _enqueue_pipeline_or_mark_failed(db, recording=fresh)
     fresh = _load_recording_or_404(db, recording.id)
-    return RecordingOut.model_validate(fresh)
+    return _serialize_recording(db, fresh)
 
 
 def archive_meeting_recording(

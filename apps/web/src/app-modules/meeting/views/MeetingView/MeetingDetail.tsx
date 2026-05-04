@@ -19,6 +19,7 @@ import { Button, Dialog, useConfirm } from '@aidoo/ui';
 import { useTranslation } from 'react-i18next';
 
 import { useAuth } from '@/src/platform/auth/auth-provider';
+import { DocsViewerModal } from '@/src/app-modules/docs/public-api';
 import { formatDateTime, normalizeTimeZone } from '@/src/platform/time/time-utils';
 import {
   RAIL_VISIBLE_STATUSES,
@@ -77,6 +78,11 @@ interface MeetingDetailProps {
   onDeleted: () => void;
   showCloseButton?: boolean;
 }
+
+type RecordingDocViewerTarget = {
+  docId: string;
+  title: string;
+};
 
 const STATUS_TRANSLATION_KEYS: Record<string, string> = {
   scheduled: 'meeting.scheduled',
@@ -145,6 +151,8 @@ export function MeetingDetail({
   const [error, setError] = useState<string | null>(null);
   const [taskPickerOpen, setTaskPickerOpen] = useState(false);
   const [docPickerOpen, setDocPickerOpen] = useState(false);
+  const [recordingDocViewer, setRecordingDocViewer] =
+    useState<RecordingDocViewerTarget | null>(null);
   const [editOpen, setEditOpen] = useState(false);
   const [addAttendeesOpen, setAddAttendeesOpen] = useState(false);
   const [whiteboardPickerOpen, setWhiteboardPickerOpen] = useState(false);
@@ -959,16 +967,7 @@ export function MeetingDetail({
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
                         <p className="app-text-body text-app-ink">
-                          {recording.linked_doc_id ? (
-                            <Link
-                              to={buildWorkspaceAppPath(workspaceSlug, 'docs', recording.linked_doc_id)}
-                              className="hover:text-app-accent hover:underline"
-                            >
-                              {recordingLabel}
-                            </Link>
-                          ) : (
-                            recordingLabel
-                          )}
+                          {recordingLabel}
                         </p>
                         <p className="app-text-caption text-app-ink/50">
                           {formatFileSize(recording.file_size)} · {recording.mime_type}
@@ -977,7 +976,37 @@ export function MeetingDetail({
                           {t('meeting.recordingStatus.audioSaved')} · {t(transcriptStatusKey(recording))}
                         </p>
                       </div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex flex-wrap items-center justify-end gap-2">
+                        {recording.raw_transcript_doc_id ? (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setRecordingDocViewer({
+                                docId: recording.raw_transcript_doc_id as string,
+                                title: t('meeting.detail.rawTranscriptDoc'),
+                              })
+                            }
+                            aria-haspopup="dialog"
+                            className="app-text-caption text-app-accent hover:underline"
+                          >
+                            {t('meeting.detail.rawTranscriptDoc')}
+                          </button>
+                        ) : null}
+                        {recording.minutes_doc_id ? (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setRecordingDocViewer({
+                                docId: recording.minutes_doc_id as string,
+                                title: t('meeting.detail.minutesDoc'),
+                              })
+                            }
+                            aria-haspopup="dialog"
+                            className="app-text-caption text-app-accent hover:underline"
+                          >
+                            {t('meeting.detail.minutesDoc')}
+                          </button>
+                        ) : null}
                         <button
                           type="button"
                           onClick={() => void handleRecordingPlayback(recording.id)}
@@ -1130,6 +1159,15 @@ export function MeetingDetail({
         onPick={handleAttachDoc}
         excludeDocIds={meeting.doc_links.map((link) => link.doc_id)}
         workspaceSlug={workspaceSlug}
+      />
+      <DocsViewerModal
+        open={recordingDocViewer !== null}
+        itemId={recordingDocViewer?.docId}
+        fallbackTitle={recordingDocViewer?.title}
+        workspaceSlug={workspaceSlug}
+        onOpenChange={(open) => {
+          if (!open) setRecordingDocViewer(null);
+        }}
       />
       <WhiteboardPickerModal
         isOpen={whiteboardPickerOpen}

@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -188,6 +188,28 @@ describe('LearningCourseView', () => {
     expect(screen.getByAltText('상대 이미지').getAttribute('loading')).toBe('lazy');
     expect(screen.getByAltText('외부 이미지').getAttribute('src')).toBe(
       'https://example.com/logo.svg',
+    );
+  });
+
+  it('opens markdown images in an in-place preview dialog', async () => {
+    contentHarness.bodies['s.md'] = [
+      '# 이미지 레슨',
+      '',
+      '![상대 이미지](assets/diagram.png)',
+    ].join('\n');
+    contentHarness.assets['assets/diagram.png'] = '/assets/diagram.hashed.png';
+
+    renderAt('/w/hq/learning/course/second');
+    await screen.findByTestId('learning-lesson-body-second');
+
+    fireEvent.click(screen.getByAltText('상대 이미지'));
+
+    const dialog = screen.getByRole('dialog', { name: '상대 이미지' });
+    expect(within(dialog).getByAltText('상대 이미지').getAttribute('src')).toBe(
+      '/assets/diagram.hashed.png',
+    );
+    expect(screen.getByTestId('location').textContent).toBe(
+      '/w/hq/learning/course/second',
     );
   });
 

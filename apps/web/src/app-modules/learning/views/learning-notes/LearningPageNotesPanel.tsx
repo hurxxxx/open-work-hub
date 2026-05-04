@@ -28,6 +28,7 @@ import type {
   LearningPageNoteListItem,
   LearningPageNoteVisibility,
 } from '../../api/types';
+import { LearningImagePreviewSurface } from '../LearningImagePreview';
 
 export interface LearningPageNotesPanelProps {
   token: string | null;
@@ -375,9 +376,9 @@ function MyNoteViewer({
         className="group relative rounded-lg py-0.5 transition-colors hover:bg-app-surface/40 focus-within:bg-app-surface/40"
         data-testid="learning-page-notes-my-viewer"
       >
-        <div className="learning-note-readable learning-note-dense app-markdown prose prose-sm max-w-none dark:prose-invert">
+        <LearningImagePreviewSurface className="learning-note-readable learning-note-dense app-markdown prose prose-sm max-w-none dark:prose-invert">
           <BlockViewer content={savedContent} />
-        </div>
+        </LearningImagePreviewSurface>
 
         <div
           className={
@@ -778,9 +779,9 @@ function OthersNoteCard({
                 <InlineError message={detail.error ?? t('learning.notesPanel.loadNoteFailed')} />
               ) : detail.note ? (
                 <div className="flex flex-col gap-2">
-                  <div className="learning-note-readable learning-note-dense app-markdown prose prose-sm max-w-none dark:prose-invert">
+                  <LearningImagePreviewSurface className="learning-note-readable learning-note-dense app-markdown prose prose-sm max-w-none dark:prose-invert">
                     <BlockViewer content={readerContent} />
-                  </div>
+                  </LearningImagePreviewSurface>
                   <div className="flex justify-end">
                     <button
                       type="button"
@@ -913,9 +914,9 @@ function FullscreenReadonlyViewer({
             <X size={14} />
           </button>
         </header>
-        <div className="learning-note-readable app-markdown prose prose-base max-w-none flex-1 overflow-y-auto pr-2 dark:prose-invert">
+        <LearningImagePreviewSurface className="learning-note-readable app-markdown prose prose-base max-w-none flex-1 overflow-y-auto pr-2 dark:prose-invert">
           <BlockViewer content={content} />
-        </div>
+        </LearningImagePreviewSurface>
       </motion.div>
     </div>,
     document.body,

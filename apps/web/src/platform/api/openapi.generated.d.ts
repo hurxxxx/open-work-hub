@@ -6105,6 +6105,10 @@ export interface components {
             failure_reason: string | null;
             /** Linked Doc Id */
             linked_doc_id: string | null;
+            /** Raw Transcript Doc Id */
+            raw_transcript_doc_id?: string | null;
+            /** Minutes Doc Id */
+            minutes_doc_id?: string | null;
             /** Linked Task Id */
             linked_task_id: string | null;
             /** Transcript Extracted */
@@ -6731,11 +6735,8 @@ export interface components {
              * @default false
              */
             is_primary: boolean;
-            /**
-             * Sort Order
-             * @default 0
-             */
-            sort_order: number;
+            /** Sort Order */
+            sort_order?: number | null;
         };
         /** RecordingContainerOut */
         RecordingContainerOut: {
@@ -6749,6 +6750,8 @@ export interface components {
             container_type: string;
             /** Container Id */
             container_id: string;
+            /** Container Title */
+            container_title?: string | null;
             /** Is Primary */
             is_primary: boolean;
             /** Sort Order */

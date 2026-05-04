@@ -20,6 +20,7 @@ class RecordingContainerOut(BaseModel):
     container_app: str
     container_type: str
     container_id: str
+    container_title: str | None = None
     is_primary: bool
     sort_order: int
     added_by_id: str
@@ -124,4 +125,4 @@ class RecordingContainerCreateRequest(BaseModel):
     container_type: str = Field(..., min_length=1, max_length=64)
     container_id: str = Field(..., min_length=1, max_length=128)
     is_primary: bool = False
-    sort_order: int = 0
+    sort_order: int | None = None

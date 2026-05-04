@@ -23,6 +23,10 @@ import {
 import { loadLessonBody, resolveLessonAsset } from '../model/content';
 import { useAuth } from '@/src/platform/auth/auth-provider';
 import { normalizeTimeZone } from '@/src/platform/time/time-utils';
+import {
+  LearningImagePreviewDialog,
+  type LearningImagePreview,
+} from './LearningImagePreview';
 import { LearningPageNotesPanel } from './learning-notes/LearningPageNotesPanel';
 
 const REMARK_PLUGINS = [remarkGfm];
@@ -108,6 +112,8 @@ function LessonLayout({
   const [wide, setWide] = useWideMode();
   const [body, setBody] = useState<string | null>(null);
   const [isBodyLoading, setIsBodyLoading] = useState(true);
+  const [previewImage, setPreviewImage] =
+    useState<LearningImagePreview | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
   const { token, user } = useAuth();
   const timeZone = normalizeTimeZone(user?.time_zone);
@@ -156,17 +162,47 @@ function LessonLayout({
 
   const markdownComponents: Components = {
     img({ src, alt, ...props }) {
+      const resolvedSrc = resolveLessonAsset(lesson.file, src);
       const className = src?.includes('assets/logos/')
         ? 'learning-markdown-logo'
         : undefined;
+      if (!resolvedSrc) {
+        return (
+          <img
+            {...props}
+            src={resolvedSrc}
+            alt={alt ?? ''}
+            className={className}
+            loading="lazy"
+          />
+        );
+      }
+      const imageAlt = alt ?? '';
       return (
-        <img
-          {...props}
-          src={resolveLessonAsset(lesson.file, src)}
-          alt={alt ?? ''}
-          className={className}
-          loading="lazy"
-        />
+        <button
+          type="button"
+          onClick={() => setPreviewImage({ src: resolvedSrc, alt: imageAlt })}
+          aria-label={
+            imageAlt
+              ? t('learning.openImagePreviewWithName', { name: imageAlt })
+              : t('learning.openImagePreview')
+          }
+          title={t('learning.openImagePreview')}
+          className="learning-image-preview-trigger"
+          data-testid="learning-image-preview-trigger"
+        >
+          <img
+            {...props}
+            src={resolvedSrc}
+            alt={imageAlt}
+            className={
+              className
+                ? `${className} learning-image-preview-image`
+                : 'learning-image-preview-image'
+            }
+            loading="lazy"
+          />
+        </button>
       );
     },
   };
@@ -280,12 +316,18 @@ function LessonLayout({
       >
         <LearningPageNotesPanel
           token={token}
-	          courseSlug={course.slug}
-	          lessonId={lesson.id}
-	          lessonTitle={lesson.title}
-	          timeZone={timeZone}
-	        />
+          courseSlug={course.slug}
+          lessonId={lesson.id}
+          lessonTitle={lesson.title}
+          timeZone={timeZone}
+        />
       </aside>
+      {previewImage ? (
+        <LearningImagePreviewDialog
+          image={previewImage}
+          onClose={() => setPreviewImage(null)}
+        />
+      ) : null}
     </motion.div>
   );
 }

@@ -149,6 +149,8 @@ class MeetingRecordingOut(BaseModel):
     mime_type: str
     failure_reason: str | None
     linked_doc_id: str | None
+    raw_transcript_doc_id: str | None = None
+    minutes_doc_id: str | None = None
     linked_task_id: str | None
     transcript_extracted: bool
     summary_generated: bool
