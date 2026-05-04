@@ -32,9 +32,7 @@ import {
   deleteMeetingFile,
   detachDocFromMeeting,
   detachTaskFromMeeting,
-  fetchRecordingPlaybackBlobUrl,
   getMeeting,
-  getRecordingPlaybackUrl,
   parseServerDateTime,
   deleteMeetingRecording,
   retryMeetingRecording,
@@ -435,19 +433,6 @@ export function MeetingDetail({
       setError(err instanceof Error ? err.message : t('meeting.detail.deleteMeetingFailed'));
       setBusy(false);
     }
-  }
-
-  async function loadRecordingPlayback(recordingId: string): Promise<string> {
-    if (!token) {
-      throw new Error(t('meeting.detail.playbackFailed'));
-    }
-    const playback = await getRecordingPlaybackUrl(
-      token,
-      workspaceSlug,
-      meetingId,
-      recordingId,
-    );
-    return fetchRecordingPlaybackBlobUrl(token, playback.url);
   }
 
   async function handleRetryRecording(recordingId: string) {
@@ -927,7 +912,6 @@ export function MeetingDetail({
                 workspaceSlug={workspaceSlug}
                 emptyText={t('meeting.detail.noRecordings')}
                 disabled={busy}
-                onLoadPlayback={loadRecordingPlayback}
                 onRetry={handleRetryRecording}
                 onDelete={handleDeleteRecording}
                 onError={(err) => {
@@ -952,6 +936,7 @@ export function MeetingDetail({
                     id: recording.id,
                     title: recordingLabel,
                     subtitle: `${formatFileSize(recording.file_size)} · ${recording.mime_type}`,
+                    detailHref: buildWorkspaceAppPath(workspaceSlug, 'recording', recording.id),
                     statusLine: `${t('meeting.recordingStatus.audioSaved')} · ${t(transcriptStatusKey(recording))}`,
                     rawTranscriptDocId: recording.raw_transcript_doc_id,
                     minutesDocId: recording.minutes_doc_id,

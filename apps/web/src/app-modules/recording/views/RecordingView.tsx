@@ -28,8 +28,6 @@ import { normalizeTimeZone } from '@/src/platform/time/time-utils';
 import { buildWorkspaceAppPath } from '@/src/platform/workspaces/workspace-utils';
 import {
   deleteRecording,
-  fetchRecordingPlaybackBlobUrl,
-  getRecordingPlaybackUrl,
   importRecording,
   listRecordings,
   retryRecording,
@@ -209,8 +207,6 @@ export function RecordingView() {
   const [recorderState, setRecorderState] = useState<RecorderState>('idle');
   const [elapsedSec, setElapsedSec] = useState(0);
   const [recordingStartedAt, setRecordingStartedAt] = useState<Date | null>(null);
-  const [playbackUrls, setPlaybackUrls] = useState<Record<string, string>>({});
-  const playbackUrlsRef = useRef<Record<string, string>>({});
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const chunksRef = useRef<Blob[]>([]);
@@ -277,11 +273,6 @@ export function RecordingView() {
         recorder.stop();
       }
       streamRef.current?.getTracks().forEach((track) => track.stop());
-      Object.values(playbackUrlsRef.current).forEach((url) => {
-        if (url.startsWith('blob:')) {
-          URL.revokeObjectURL(url);
-        }
-      });
     },
     [],
   );
@@ -386,27 +377,6 @@ export function RecordingView() {
     });
   }
 
-  async function handlePlayback(recording: Recording) {
-    if (!token || !workspaceSlug || playbackUrls[recording.id]) {
-      return;
-    }
-    setBusyId(recording.id);
-    setError(null);
-    try {
-      const playback = await getRecordingPlaybackUrl(token, workspaceSlug, recording.id);
-      const blobUrl = await fetchRecordingPlaybackBlobUrl(token, playback.url);
-      setPlaybackUrls((current) => {
-        const next = { ...current, [recording.id]: blobUrl };
-        playbackUrlsRef.current = next;
-        return next;
-      });
-    } catch (err) {
-      setError(err instanceof Error ? err.message : t('apps:recording.errors.playbackFailed'));
-    } finally {
-      setBusyId(null);
-    }
-  }
-
   async function handleDelete(recording: Recording) {
     if (!token || !workspaceSlug) return;
     const ok = await confirm({
@@ -423,16 +393,6 @@ export function RecordingView() {
     setError(null);
     try {
       await deleteRecording(token, workspaceSlug, recording.id);
-      const playbackUrl = playbackUrlsRef.current[recording.id];
-      if (playbackUrl?.startsWith('blob:')) {
-        URL.revokeObjectURL(playbackUrl);
-      }
-      setPlaybackUrls((current) => {
-        const next = { ...current };
-        delete next[recording.id];
-        playbackUrlsRef.current = next;
-        return next;
-      });
       await refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : t('apps:recording.errors.deleteFailed'));
@@ -649,12 +609,10 @@ export function RecordingView() {
                     key={recording.id}
                     busy={busyId === recording.id}
                     locale={i18n.language}
-                    playbackUrl={playbackUrls[recording.id]}
                     recording={recording}
                     detailHref={buildWorkspaceAppPath(workspaceSlug, 'recording', recording.id)}
                     timeZone={timeZone}
                     onDelete={() => void handleDelete(recording)}
-                    onPlay={() => void handlePlayback(recording)}
                     onRetry={() => void handleRetry(recording)}
                   />
                 ))}
@@ -672,22 +630,18 @@ export function RecordingView() {
 function RecordingListItem({
   busy,
   locale,
-  playbackUrl,
   recording,
   detailHref,
   timeZone,
   onDelete,
-  onPlay,
   onRetry,
 }: {
   busy: boolean;
   locale: string;
-  playbackUrl: string | undefined;
   recording: Recording;
   detailHref: string;
   timeZone: string;
   onDelete: () => void;
-  onPlay: () => void;
   onRetry: () => void;
 }) {
   const { t } = useTranslation(['apps', 'common']);
@@ -721,16 +675,16 @@ function RecordingListItem({
   ];
 
   return (
-    <article className="rounded-md border border-app-border bg-app-surface px-4 py-3">
-      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-        <div className="min-w-0 flex-1">
-          <div className="flex min-w-0 items-center gap-2">
+    <article className="rounded-md border border-app-border bg-app-surface px-3 py-2.5 transition-colors hover:bg-app-surface-hover/60">
+      <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_15rem_auto] lg:items-center">
+        <div className="min-w-0">
+          <div className="flex min-w-0 items-center gap-2.5">
             <AudioWaveform size={16} className="shrink-0 text-app-accent" />
             <h2 className="app-text-body truncate text-app-ink">
               {titleFor(recording, t('apps:recording.untitled'))}
             </h2>
           </div>
-          <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-app-ink/55">
+          <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-app-ink/55">
             <span className="app-text-caption inline-flex items-center gap-1">
               <Clock3 size={13} />
               {formatDateTime(recording.started_at, timeZone, locale)}
@@ -742,11 +696,11 @@ function RecordingListItem({
             ) : null}
             <span className="app-text-caption">{formatBytes(recording.file_size)}</span>
           </div>
-          <div className="mt-2 flex flex-wrap gap-1.5">
+          <div className="mt-1.5 flex flex-wrap gap-1.5">
             {chips.map((chip) => (
               <span
                 key={chip.id}
-                className="app-text-caption inline-flex max-w-full items-center rounded-full border border-app-border bg-app-surface-raised px-2 py-0.5 text-app-ink/65"
+                className="app-text-caption inline-flex max-w-full items-center rounded border border-app-border bg-app-surface-raised px-1.5 py-0.5 text-app-ink/65"
                 title={chip.title ?? undefined}
               >
                 <span className="shrink-0">{t(chip.labelKey)}</span>
@@ -758,9 +712,6 @@ function RecordingListItem({
               </span>
             ))}
           </div>
-          <div className="mt-3">
-            <RecordingStageRail recording={recording} compact />
-          </div>
           {recording.failure_reason ? (
             <p className="app-text-caption mt-2 max-w-2xl text-[var(--ui-color-danger)]">
               {t('apps:recording.status.failureHelp')}
@@ -768,15 +719,19 @@ function RecordingListItem({
           ) : null}
         </div>
 
-        <div className="flex shrink-0 items-center gap-2">
-          <Button variant="secondary" onClick={onPlay} disabled={busy || Boolean(playbackUrl)}>
-            {busy && !playbackUrl ? (
-              <Loader2 size={14} className="mr-1 animate-spin" />
-            ) : (
-              <Play size={14} className="mr-1" />
-            )}
-            {t('apps:recording.actions.play')}
-          </Button>
+        <div className="min-w-0">
+          <RecordingStageRail recording={recording} compact />
+        </div>
+
+        <div className="flex shrink-0 items-center gap-1.5">
+          <Link
+            to={detailHref}
+            aria-label={t('apps:recording.actions.play')}
+            title={t('apps:recording.actions.play')}
+            className="inline-flex h-[var(--ui-density-dense)] w-8 items-center justify-center rounded-[var(--ui-radius-sm)] border border-app-border bg-app-surface-raised text-app-ink transition-colors hover:bg-app-surface-subtle"
+          >
+            <Play size={14} />
+          </Link>
           <Link
             to={detailHref}
             className="inline-flex h-[var(--ui-density-dense)] items-center justify-center rounded-[var(--ui-radius-sm)] border border-app-accent bg-app-accent px-2.5 text-[0.84rem] font-semibold text-app-accent-fg transition-colors hover:bg-app-accent-hover"
@@ -798,8 +753,6 @@ function RecordingListItem({
           />
         </div>
       </div>
-
-      {playbackUrl ? <audio controls src={playbackUrl} className="mt-3 w-full" /> : null}
     </article>
   );
 }

@@ -2,10 +2,10 @@ import {
   useCallback,
   useEffect,
   useMemo,
-  useRef,
   useState,
   type ReactNode,
 } from 'react';
+import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
   AudioWaveform,
@@ -19,9 +19,8 @@ import {
 
 import { DocsViewerModal } from '@/src/app-modules/docs/public-api';
 import { useAuth } from '@/src/platform/auth/auth-provider';
+import { buildWorkspaceAppPath } from '@/src/platform/workspaces/workspace-utils';
 import {
-  fetchRecordingPlaybackBlobUrl,
-  getRecordingPlaybackUrl,
   listRecordings,
   retryRecording,
   type Recording,
@@ -35,6 +34,7 @@ export interface LinkedRecordingListItem {
   statusLine?: string | null;
   rawTranscriptDocId?: string | null;
   minutesDocId?: string | null;
+  detailHref?: string | null;
   canDelete?: boolean;
   canRetry?: boolean;
   progress?: ReactNode;
@@ -48,7 +48,6 @@ interface LinkedRecordingListProps {
   loading?: boolean;
   errorText?: string | null;
   disabled?: boolean;
-  onLoadPlayback: (recordingId: string) => Promise<string>;
   onRetry?: (recordingId: string) => Promise<void> | void;
   onDelete?: (recordingId: string) => Promise<void> | void;
   onError?: (error: unknown) => void;
@@ -103,7 +102,6 @@ export function LinkedRecordingList({
   loading = false,
   errorText = null,
   disabled = false,
-  onLoadPlayback,
   onRetry,
   onDelete,
   onError,
@@ -112,43 +110,7 @@ export function LinkedRecordingList({
   const [docViewer, setDocViewer] = useState<RecordingDocViewerTarget | null>(
     null,
   );
-  const [playbackUrls, setPlaybackUrls] = useState<Record<string, string>>({});
-  const playbackUrlsRef = useRef<Record<string, string>>({});
-  const [playbackBusyId, setPlaybackBusyId] = useState<string | null>(null);
   const [actionBusyId, setActionBusyId] = useState<string | null>(null);
-
-  useEffect(
-    () => () => {
-      Object.values(playbackUrlsRef.current).forEach((url) => {
-        if (url.startsWith('blob:')) {
-          URL.revokeObjectURL(url);
-        }
-      });
-    },
-    [],
-  );
-
-  const handlePlayback = useCallback(
-    async (recordingId: string) => {
-      if (playbackUrlsRef.current[recordingId]) {
-        return;
-      }
-      setPlaybackBusyId(recordingId);
-      try {
-        const blobUrl = await onLoadPlayback(recordingId);
-        setPlaybackUrls((current) => {
-          const next = { ...current, [recordingId]: blobUrl };
-          playbackUrlsRef.current = next;
-          return next;
-        });
-      } catch (error) {
-        onError?.(error);
-      } finally {
-        setPlaybackBusyId(null);
-      }
-    },
-    [onError, onLoadPlayback],
-  );
 
   const handleRetry = useCallback(
     async (recordingId: string) => {
@@ -171,16 +133,6 @@ export function LinkedRecordingList({
       setActionBusyId(recordingId);
       try {
         await onDelete(recordingId);
-        setPlaybackUrls((current) => {
-          const next = { ...current };
-          const removedUrl = next[recordingId];
-          if (removedUrl?.startsWith('blob:')) {
-            URL.revokeObjectURL(removedUrl);
-          }
-          delete next[recordingId];
-          playbackUrlsRef.current = next;
-          return next;
-        });
       } catch (error) {
         onError?.(error);
       } finally {
@@ -218,16 +170,15 @@ export function LinkedRecordingList({
     <>
       <ul className="space-y-2">
         {items.map((item) => {
-          const playbackUrl = playbackUrls[item.id];
-          const playbackBusy = playbackBusyId === item.id;
           const actionBusy = actionBusyId === item.id;
-          const isBusy = disabled || playbackBusy || actionBusy;
+          const isBusy = disabled || actionBusy;
+          const detailHref = item.detailHref ?? buildWorkspaceAppPath(workspaceSlug, 'recording', item.id);
           return (
             <li
               key={item.id}
-              className="rounded-md border border-app-border bg-app-surface-sidebar px-3 py-3"
+              className="rounded-md border border-app-border bg-app-surface-sidebar px-2.5 py-2 transition-colors hover:bg-app-surface-hover/60"
             >
-              <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div className="grid min-w-0 gap-2 md:grid-cols-[minmax(0,1fr)_auto] md:items-center">
                 <div className="min-w-0 flex-1">
                   <div className="flex min-w-0 items-center gap-2">
                     <AudioWaveform
@@ -248,9 +199,22 @@ export function LinkedRecordingList({
                       {item.statusLine}
                     </p>
                   ) : null}
+                  {item.doneLabel ? (
+                    <p className="app-text-caption mt-1 text-app-ink/60">
+                      {item.doneLabel}
+                    </p>
+                  ) : null}
                 </div>
 
                 <div className="flex shrink-0 flex-wrap items-center gap-1">
+                  <Link
+                    to={detailHref}
+                    aria-label={t('apps:recording.actions.play')}
+                    title={t('apps:recording.actions.play')}
+                    className={iconButtonClass()}
+                  >
+                    <Play size={15} />
+                  </Link>
                   {item.rawTranscriptDocId ? (
                     <button
                       type="button"
@@ -287,20 +251,6 @@ export function LinkedRecordingList({
                       <ScrollText size={15} />
                     </button>
                   ) : null}
-                  <button
-                    type="button"
-                    onClick={() => void handlePlayback(item.id)}
-                    aria-label={t('apps:recording.actions.play')}
-                    title={t('apps:recording.actions.play')}
-                    className={iconButtonClass()}
-                    disabled={isBusy || Boolean(playbackUrl)}
-                  >
-                    {playbackBusy ? (
-                      <Loader2 size={15} className="animate-spin" />
-                    ) : (
-                      <Play size={15} />
-                    )}
-                  </button>
                   {item.canRetry && onRetry ? (
                     <button
                       type="button"
@@ -336,16 +286,8 @@ export function LinkedRecordingList({
                 </div>
               </div>
 
-              {playbackUrl ? (
-                <audio controls src={playbackUrl} className="mt-3 w-full" />
-              ) : null}
               {item.progress ? (
-                <div className="mt-3">{item.progress}</div>
-              ) : null}
-              {item.doneLabel ? (
-                <p className="app-text-caption mt-3 text-app-ink/60">
-                  {item.doneLabel}
-                </p>
+                <div className="mt-2">{item.progress}</div>
               ) : null}
             </li>
           );
@@ -408,21 +350,6 @@ export function LinkedRecordingsForContainer({
     void refresh();
   }, [refresh]);
 
-  const loadPlayback = useCallback(
-    async (recordingId: string) => {
-      if (!token || !workspaceSlug) {
-        throw new Error(t('recording.errors.playbackFailed'));
-      }
-      const playback = await getRecordingPlaybackUrl(
-        token,
-        workspaceSlug,
-        recordingId,
-      );
-      return fetchRecordingPlaybackBlobUrl(token, playback.url);
-    },
-    [t, token, workspaceSlug],
-  );
-
   const retryLinkedRecording = useCallback(
     async (recordingId: string) => {
       if (!token || !workspaceSlug) {
@@ -442,13 +369,16 @@ export function LinkedRecordingsForContainer({
           id: recording.id,
           title: titleFor(recording, t('recording.untitled')),
           subtitle: `${formatBytes(recording.file_size)} · ${recording.mime_type}`,
+          detailHref: workspaceSlug
+            ? buildWorkspaceAppPath(workspaceSlug, 'recording', recording.id)
+            : null,
           rawTranscriptDocId: recording.raw_transcript_doc_id,
           minutesDocId: recording.minutes_doc_id,
           canRetry: isOwner && hasFailedStage(recording),
           progress: <RecordingStageRail recording={recording} compact />,
         };
       }),
-    [recordings, t, user?.id],
+    [recordings, t, user?.id, workspaceSlug],
   );
 
   if (!workspaceSlug) {
@@ -474,7 +404,6 @@ export function LinkedRecordingsForContainer({
         emptyText={emptyText ?? t('recording.linked.empty')}
         loading={loading}
         errorText={errorText}
-        onLoadPlayback={loadPlayback}
         onRetry={retryLinkedRecording}
         onError={(error) => {
           setErrorText(
