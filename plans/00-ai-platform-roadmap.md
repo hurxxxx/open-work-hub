@@ -560,6 +560,51 @@ Phase별 신규 영역:
 
 ---
 
+## Deferred Product Backlog — Live Meeting Cockpit
+
+현재 recording 앱은 회의 종료 후에만 가치를 준다 (배치 ASR → minutes_doc). 향후 **회의 중에 살아 움직이는 보조 화면**을 제품화 후보로 둔다. 본격 실행 플랜이 아니라 **아이디어 컨셉** 단계로만 보존한다.
+
+### 컨셉 한 줄
+3-pane 인-미팅 코크핏: (1) 라이브 전사 (2) LLM 이 점진 정리하는 라이브 노트 (3) "검색 의도" 감지 시 자동으로 뜨는 웹/사내문서 카드 패널.
+
+### 시장 포지셔닝
+- Otter / Fireflies / Granola / Fathom / Read AI / MS 365 Copilot 모두 **회의 종료 후 정리** 중심.
+- Granola 의 "사용자 메모 + AI 보강" 은 라이브가 아니라 종료 후 보강.
+- 가장 가까운 선례는 SalesCopilot 논문 (라이브 질문 감지 → DB 검색 → 카드).
+- **빈자리**: 인-미팅 라이브 웹검색 + 사내문서 검색을 사이드 카드로 동시에 제공하는 도구가 사실상 없음.
+
+### 핵심 컨셉 (구현 디테일은 킥오프 시 별도 플랜)
+1. **청크 윈도우 ASR** — 기존 1초 청크를 10–30초 슬라이딩 윈도우로 묶어 기존 배치 ASR (`core/asr.py`) 을 짧게 반복 호출. 신규 ASR 벤더 도입 회피.
+2. **라이브 노트 정리** — 속기 X. LLM 이 토픽/결정/액션 구조의 JSON state 를 점진 패치하고, BlockNote+Yjs 룸에 워커가 클라이언트로 붙어 적용. 사용자가 동시에 수기 메모 가능 (Granola 하이브리드, 단 라이브).
+3. **암묵적 의도 트리거** — 굴러가는 전사를 LLM 분류기가 ~15초 디바운스로 읽어 "검색 의도" `{intent, query, confidence}` 를 출력. confidence + dedupe-hash 윈도우로 스팸 방지.
+4. **카드 패널** — 웹 카드 (Tavily/Brave 같은 LLM-grounded search adapter) + 사내문서 카드 (기존 Qdrant + OpenSearch 를 RRF 융합) + 사용자 직접 질의 입력.
+5. **세션 종료 처리** — 합친 오디오로 기존 minutes 파이프라인 재실행. 라이브 노트 doc 은 그대로 유지/연결.
+6. **Privacy** — 워크스페이스 설정으로 외부 검색 활성화 명시 동의 (전사 외부 송출 게이트).
+
+### 재사용 가능한 기존 자산
+- 청크 업로드 staging API (`/recordings/staging/{id}/chunks/{seq}`) — 백엔드는 이미 존재, 라이브 경로에서 이걸 살리면 됨.
+- BlockNote + Yjs (whiteboard 와이어링 패턴 그대로).
+- Qdrant + OpenSearch + `RagQueryService` + `query_workspace_keyword_search`.
+- SSE-Starlette (`domains/ai/router.py:766` 패턴).
+- Celery + Redis pub/sub.
+
+### 킥오프 조건
+- recording 앱이 안정화되어 라이브 모드를 추가해도 기존 post-meeting 흐름이 회귀하지 않는 상태.
+- Phase 6 Meeting Work Intelligence 의 structured extraction contract 가 검증되어, 라이브 노트 패치 LLM 의 출력 스키마를 그 위에 정렬할 수 있을 때.
+- external egress policy / workspace 단위 검색 동의 모델이 Phase 7 admin 트랙에서 정리된 뒤. 외부 검색 어댑터를 켜기 전 정책 surface 가 먼저 있어야 함.
+
+### 자연 분할 (실제 착수 시)
+P1 라이브 전사 → P2 라이브 노트 → P3 의도+웹 카드 (시장 차별점) → P4 사내문서 카드 → P5 폴리싱 (화자 라벨, 컨센트 UX, 사후 카드 회의록).
+
+### 미해결 (킥오프 시 결정)
+- ASR 윈도우 dedup 토크나이저 (한국어/영어 혼합).
+- Yjs 워커 접속: `pycrdt-websocket` Python 라이브러리 vs Node 사이드카.
+- 호출어 우회 경로 ("검색해줘" 명시 키워드 시 디바운스 건너뛸지).
+- 컨센트 단위 (워크스페이스 단일 vs 미팅별 토글).
+- 라이브 노트 doc 과 minutes_doc 의 최종 관계 (대체 vs 별개 attach).
+
+---
+
 ## Phase 킥오프 프로토콜
 
 각 Phase 시작 시 다음 단계를 따른다.
