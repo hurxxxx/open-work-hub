@@ -149,6 +149,7 @@ export const AssignedToMeView = ({
             <TaskDetail
               issue={selectedIssue}
               spaceName={selectedTaskList?.team_name}
+              workspaceSlug={workspaceSlug}
               canEdit={taskListRoleAllows(selectedTaskList?.role, 'member')}
               onClose={handleClose}
               onUpdate={reloadAssignedIssues}

@@ -38,12 +38,24 @@ async function request<T>(
 export function listRecordings(
   token: string,
   workspaceSlug: string,
-  options: { view?: RecordingViewFilter } = {},
+  options: {
+    view?: RecordingViewFilter;
+    from?: string;
+    to?: string;
+    container_app?: string;
+    container_type?: string;
+    container_id?: string;
+  } = {},
 ): Promise<RecordingListResponse> {
   const params = new URLSearchParams();
   if (options.view) {
     params.set('view', options.view);
   }
+  if (options.from) params.set('from', options.from);
+  if (options.to) params.set('to', options.to);
+  if (options.container_app) params.set('container_app', options.container_app);
+  if (options.container_type) params.set('container_type', options.container_type);
+  if (options.container_id) params.set('container_id', options.container_id);
   const query = params.toString();
   return request<RecordingListResponse>(
     `/api/v1/recording/recordings${query ? `?${query}` : ''}`,

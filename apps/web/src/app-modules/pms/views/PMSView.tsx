@@ -564,7 +564,7 @@ export const PMSView = () => {
   if (!selectedTaskListId && !loading) {
     return (
       <div className="app-text-body flex h-full items-center justify-center text-gray-500">
-        No lists found.
+        {t('pms.overviewPage.noLists')}
       </div>
     );
   }
@@ -574,7 +574,7 @@ export const PMSView = () => {
       <header className="border-b border-app-border bg-app-bg px-4 pt-4 transition-colors lg:px-6 lg:pt-3">
         {/* Row 1: breadcrumb */}
         <nav className="app-text-caption mb-1.5 hidden min-w-0 items-center gap-1.5 text-gray-500 lg:flex">
-          <Link to={currentWorkspaceSlug ? `/w/${encodeURIComponent(currentWorkspaceSlug)}/pms` : pmsRoot} className="hover:text-app-ink transition-colors shrink-0">PMS</Link>
+          <Link to={currentWorkspaceSlug ? `/w/${encodeURIComponent(currentWorkspaceSlug)}/pms` : pmsRoot} className="hover:text-app-ink transition-colors shrink-0">{t('pms.title')}</Link>
           {selectedTaskList?.team_name ? (
             <>
               <span className="text-gray-600 shrink-0">/</span>
@@ -859,6 +859,7 @@ export const PMSView = () => {
                 taskListLabels={labels}
                 taskListStatuses={taskListStatuses}
                 spaceName={selectedTaskList?.team_name}
+                workspaceSlug={currentWorkspaceSlug}
                 canEdit={canEditTaskList}
                 onClose={clearSelectedIssue}
                 onUpdate={reloadIssues}

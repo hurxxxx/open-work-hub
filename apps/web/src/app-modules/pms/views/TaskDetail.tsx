@@ -22,9 +22,11 @@ import {
 import { Badge, Button, BlockEditor, BlockViewer } from '@aidoo/ui';
 import type { BlockContent } from '@aidoo/ui';
 import { useTranslation } from 'react-i18next';
+import { useParams } from 'react-router-dom';
 import { useAuth } from '@/src/platform/auth/auth-provider';
 import { useMediaUpload } from '@/src/platform/media/use-media-upload';
 import { linkMedia, extractMediaIds } from '@/src/platform/media/media-api';
+import { LinkedRecordingsForContainer } from '@/src/app-modules/recording/views/LinkedRecordingsList';
 import {
   getIssueDetail,
   updateIssue,
@@ -92,6 +94,7 @@ export const TaskDetail = ({
   taskListLabels = [],
   taskListStatuses,
   spaceName,
+  workspaceSlug: workspaceSlugProp = null,
   canEdit = true,
   onClose,
   onUpdate,
@@ -102,10 +105,13 @@ export const TaskDetail = ({
   taskListLabels?: PmsLabel[];
   taskListStatuses?: PmsTaskListStatus[];
   spaceName?: string | null;
+  workspaceSlug?: string | null;
   canEdit?: boolean;
   onClose: () => void;
   onUpdate?: () => void | Promise<void>;
 }) => {
+  const { workspaceSlug: routeWorkspaceSlug } = useParams();
+  const workspaceSlug = workspaceSlugProp ?? routeWorkspaceSlug ?? null;
   const { token } = useAuth();
   const { t } = useTranslation('apps');
   const { uploadFile, resolveFileUrl } = useMediaUpload();
@@ -1021,6 +1027,21 @@ export const TaskDetail = ({
             </div>
 
             <hr className="border-app-border" />
+
+            {workspaceSlug ? (
+              <>
+                <LinkedRecordingsForContainer
+                  workspaceSlug={workspaceSlug}
+                  containerApp="pms"
+                  containerType="issue"
+                  containerId={issue.id}
+                  title={t('recording.linked.title')}
+                  emptyText={t('recording.linked.empty')}
+                />
+
+                <hr className="border-app-border" />
+              </>
+            ) : null}
 
             {/* Attachments */}
             <div className="space-y-2">

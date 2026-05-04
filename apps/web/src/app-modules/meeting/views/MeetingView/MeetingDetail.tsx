@@ -19,7 +19,10 @@ import { Button, Dialog, useConfirm } from '@aidoo/ui';
 import { useTranslation } from 'react-i18next';
 
 import { useAuth } from '@/src/platform/auth/auth-provider';
-import { DocsViewerModal } from '@/src/app-modules/docs/public-api';
+import {
+  LinkedRecordingList,
+  type LinkedRecordingListItem,
+} from '@/src/app-modules/recording/views/LinkedRecordingsList';
 import { formatDateTime, normalizeTimeZone } from '@/src/platform/time/time-utils';
 import {
   RAIL_VISIBLE_STATUSES,
@@ -78,11 +81,6 @@ interface MeetingDetailProps {
   onDeleted: () => void;
   showCloseButton?: boolean;
 }
-
-type RecordingDocViewerTarget = {
-  docId: string;
-  title: string;
-};
 
 const STATUS_TRANSLATION_KEYS: Record<string, string> = {
   scheduled: 'meeting.scheduled',
@@ -151,8 +149,6 @@ export function MeetingDetail({
   const [error, setError] = useState<string | null>(null);
   const [taskPickerOpen, setTaskPickerOpen] = useState(false);
   const [docPickerOpen, setDocPickerOpen] = useState(false);
-  const [recordingDocViewer, setRecordingDocViewer] =
-    useState<RecordingDocViewerTarget | null>(null);
   const [editOpen, setEditOpen] = useState(false);
   const [addAttendeesOpen, setAddAttendeesOpen] = useState(false);
   const [whiteboardPickerOpen, setWhiteboardPickerOpen] = useState(false);
@@ -160,8 +156,6 @@ export function MeetingDetail({
   const [whiteboardEditorBoardId, setWhiteboardEditorBoardId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [uploading, setUploading] = useState(false);
-  const [playbackUrls, setPlaybackUrls] = useState<Record<string, string>>({});
-  const playbackUrlsRef = useRef<Record<string, string>>({});
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const refresh = useCallback(async () => {
@@ -443,39 +437,18 @@ export function MeetingDetail({
     }
   }
 
-  async function handleRecordingPlayback(recordingId: string) {
-    if (!token) return;
-    if (playbackUrls[recordingId]) {
-      return;
+  async function loadRecordingPlayback(recordingId: string): Promise<string> {
+    if (!token) {
+      throw new Error(t('meeting.detail.playbackFailed'));
     }
-    try {
-      const playback = await getRecordingPlaybackUrl(
-        token,
-        workspaceSlug,
-        meetingId,
-        recordingId,
-      );
-      const blobUrl = await fetchRecordingPlaybackBlobUrl(token, playback.url);
-      setPlaybackUrls((current) => {
-        const next = { ...current, [recordingId]: blobUrl };
-        playbackUrlsRef.current = next;
-        return next;
-      });
-    } catch (err) {
-      setError(err instanceof Error ? err.message : t('meeting.detail.playbackFailed'));
-    }
+    const playback = await getRecordingPlaybackUrl(
+      token,
+      workspaceSlug,
+      meetingId,
+      recordingId,
+    );
+    return fetchRecordingPlaybackBlobUrl(token, playback.url);
   }
-
-  useEffect(
-    () => () => {
-      Object.values(playbackUrlsRef.current).forEach((url) => {
-        if (url.startsWith('blob:')) {
-          URL.revokeObjectURL(url);
-        }
-      });
-    },
-    [],
-  );
 
   async function handleRetryRecording(recordingId: string) {
     if (!token) return;
@@ -949,112 +922,51 @@ export function MeetingDetail({
           {meeting.recordings.length === 0 ? (
             <EmptyRow text={t('meeting.detail.noRecordings')} />
           ) : (
-            <ul className="mt-3 space-y-2">
-              {meeting.recordings.map((recording) => {
-                const baseLabel =
-                  recording.source === 'manual_upload'
-                    ? t('meeting.detail.uploadedAudio')
-                    : t('meeting.detail.meetingRecording');
-                const recordingLabel = t('meeting.detail.recordingWithSequence', {
-                  label: baseLabel,
-                  sequence: recording.sequence_no,
-                });
-                return (
-                  <li
-                    key={recording.id}
-                    className="rounded-md border border-app-border bg-app-surface-sidebar px-3 py-3"
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <p className="app-text-body text-app-ink">
-                          {recordingLabel}
-                        </p>
-                        <p className="app-text-caption text-app-ink/50">
-                          {formatFileSize(recording.file_size)} · {recording.mime_type}
-                        </p>
-                        <p className="app-text-caption mt-1 text-app-ink/60">
-                          {t('meeting.recordingStatus.audioSaved')} · {t(transcriptStatusKey(recording))}
-                        </p>
-                      </div>
-                      <div className="flex flex-wrap items-center justify-end gap-2">
-                        {recording.raw_transcript_doc_id ? (
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setRecordingDocViewer({
-                                docId: recording.raw_transcript_doc_id as string,
-                                title: t('meeting.detail.rawTranscriptDoc'),
-                              })
-                            }
-                            aria-haspopup="dialog"
-                            className="app-text-caption text-app-accent hover:underline"
-                          >
-                            {t('meeting.detail.rawTranscriptDoc')}
-                          </button>
-                        ) : null}
-                        {recording.minutes_doc_id ? (
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setRecordingDocViewer({
-                                docId: recording.minutes_doc_id as string,
-                                title: t('meeting.detail.minutesDoc'),
-                              })
-                            }
-                            aria-haspopup="dialog"
-                            className="app-text-caption text-app-accent hover:underline"
-                          >
-                            {t('meeting.detail.minutesDoc')}
-                          </button>
-                        ) : null}
-                        <button
-                          type="button"
-                          onClick={() => void handleRecordingPlayback(recording.id)}
-                          className="app-text-caption text-app-accent hover:underline"
-                        >
-                          {t('meeting.detail.play')}
-                        </button>
-                        {user && (
-                          recording.uploaded_by_id === user.id
-                          || meeting.organizer_id === user.id
-                        ) ? (
-                          <button
-                            type="button"
-                            onClick={() => void handleDeleteRecording(recording.id)}
-                            disabled={busy}
-                            className="app-text-caption text-[var(--ui-color-danger)] hover:underline disabled:opacity-50"
-                          >
-                            {t('common:actions.delete')}
-                          </button>
-                        ) : null}
-                      </div>
-                    </div>
-                  {playbackUrls[recording.id] ? (
-                    <audio controls src={playbackUrls[recording.id]} className="mt-3 w-full" />
-                  ) : null}
-                  {RAIL_VISIBLE_STATUSES.has(recording.transcription_status) ? (
-                    <div className="mt-3">
-                      <RecordingProgressRail
-                        recording={recording}
-                        onRetry={
-                          recording.transcription_status === 'failed'
-                            ? () => {
-                                void handleRetryRecording(recording.id);
-                              }
-                            : undefined
-                        }
-                      />
-                    </div>
-                  ) : null}
-                  {recording.transcription_status === 'done' ? (
-                    <p className="app-text-caption mt-3 text-app-ink/60">
-                      {t('meeting.detail.minutesDone')}
-                    </p>
-                  ) : null}
-                  </li>
-                );
-              })}
-            </ul>
+            <div className="mt-3">
+              <LinkedRecordingList
+                workspaceSlug={workspaceSlug}
+                emptyText={t('meeting.detail.noRecordings')}
+                disabled={busy}
+                onLoadPlayback={loadRecordingPlayback}
+                onRetry={handleRetryRecording}
+                onDelete={handleDeleteRecording}
+                onError={(err) => {
+                  setError(err instanceof Error ? err.message : t('meeting.detail.playbackFailed'));
+                }}
+                items={meeting.recordings.map((recording): LinkedRecordingListItem => {
+                  const canManageRecording = Boolean(
+                    user && (
+                      recording.uploaded_by_id === user.id
+                      || meeting.organizer_id === user.id
+                    ),
+                  );
+                  const baseLabel =
+                    recording.source === 'manual_upload'
+                      ? t('meeting.detail.uploadedAudio')
+                      : t('meeting.detail.meetingRecording');
+                  const recordingLabel = t('meeting.detail.recordingWithSequence', {
+                    label: baseLabel,
+                    sequence: recording.sequence_no,
+                  });
+                  return {
+                    id: recording.id,
+                    title: recordingLabel,
+                    subtitle: `${formatFileSize(recording.file_size)} · ${recording.mime_type}`,
+                    statusLine: `${t('meeting.recordingStatus.audioSaved')} · ${t(transcriptStatusKey(recording))}`,
+                    rawTranscriptDocId: recording.raw_transcript_doc_id,
+                    minutesDocId: recording.minutes_doc_id,
+                    canDelete: canManageRecording,
+                    canRetry: canManageRecording && recording.transcription_status === 'failed',
+                    progress: RAIL_VISIBLE_STATUSES.has(recording.transcription_status) ? (
+                      <RecordingProgressRail recording={recording} />
+                    ) : null,
+                    doneLabel: recording.transcription_status === 'done'
+                      ? t('meeting.detail.minutesDone')
+                      : null,
+                  };
+                })}
+              />
+            </div>
           )}
           {recovery.error ? (
             <p className="app-text-caption mt-2 text-[var(--ui-color-danger)]">{recovery.error}</p>
@@ -1159,15 +1071,6 @@ export function MeetingDetail({
         onPick={handleAttachDoc}
         excludeDocIds={meeting.doc_links.map((link) => link.doc_id)}
         workspaceSlug={workspaceSlug}
-      />
-      <DocsViewerModal
-        open={recordingDocViewer !== null}
-        itemId={recordingDocViewer?.docId}
-        fallbackTitle={recordingDocViewer?.title}
-        workspaceSlug={workspaceSlug}
-        onOpenChange={(open) => {
-          if (!open) setRecordingDocViewer(null);
-        }}
       />
       <WhiteboardPickerModal
         isOpen={whiteboardPickerOpen}

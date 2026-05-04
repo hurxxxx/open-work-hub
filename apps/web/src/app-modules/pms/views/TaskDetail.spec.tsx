@@ -49,6 +49,10 @@ vi.mock('@/src/platform/auth/auth-provider', () => ({
   }),
 }));
 
+vi.mock('@/src/app-modules/recording/views/LinkedRecordingsList', () => ({
+  LinkedRecordingsForContainer: () => <div data-testid="linked-recordings" />,
+}));
+
 vi.mock('../api/pms-api', () => ({
   getIssueDetail: (...args: unknown[]) => mockGetIssueDetail(...args),
   listIssueActivityLogs: (...args: unknown[]) => mockListIssueActivityLogs(...args),

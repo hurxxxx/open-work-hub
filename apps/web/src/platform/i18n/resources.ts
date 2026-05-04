@@ -1507,6 +1507,10 @@ export const resources = {
           emptyTitle: '아직 녹음이 없어요',
           title: '내 녹음',
         },
+        linked: {
+          empty: '연결된 녹음이 없습니다.',
+          title: '연결된 녹음',
+        },
         quick: {
           browserSupported: '녹음을 마치면 원본 음성이 서버에 저장됩니다.',
           browserUnsupported: '이 브라우저에서는 녹음을 지원하지 않습니다. 음성 파일 업로드를 사용하세요.',
@@ -1887,6 +1891,7 @@ export const resources = {
         },
       },
       pms: {
+        title: 'PMS',
         actions: {
           exportCsv: 'CSV 내보내기',
           favorite: '즐겨찾기',
@@ -3937,6 +3942,10 @@ export const resources = {
           emptyTitle: 'No recordings yet',
           title: 'My Recordings',
         },
+        linked: {
+          empty: 'No linked recordings.',
+          title: 'Linked recordings',
+        },
         quick: {
           browserSupported: 'Original audio is saved to the server after recording stops.',
           browserUnsupported: 'This browser does not support recording. Upload an audio file instead.',
@@ -4323,6 +4332,7 @@ export const resources = {
         },
       },
       pms: {
+        title: 'PMS',
         actions: {
           exportCsv: 'Export CSV',
           favorite: 'Favorite',

@@ -1,0 +1,489 @@
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react';
+import { useTranslation } from 'react-i18next';
+import {
+  AudioWaveform,
+  FileText,
+  Loader2,
+  Play,
+  RefreshCw,
+  ScrollText,
+  Trash2,
+} from 'lucide-react';
+
+import { DocsViewerModal } from '@/src/app-modules/docs/public-api';
+import { useAuth } from '@/src/platform/auth/auth-provider';
+import {
+  fetchRecordingPlaybackBlobUrl,
+  getRecordingPlaybackUrl,
+  listRecordings,
+  retryRecording,
+  type Recording,
+} from '../api/recording-api';
+import { RecordingStageRail } from './RecordingStageRail';
+
+export interface LinkedRecordingListItem {
+  id: string;
+  title: string;
+  subtitle?: string | null;
+  statusLine?: string | null;
+  rawTranscriptDocId?: string | null;
+  minutesDocId?: string | null;
+  canDelete?: boolean;
+  canRetry?: boolean;
+  progress?: ReactNode;
+  doneLabel?: ReactNode;
+}
+
+interface LinkedRecordingListProps {
+  items: LinkedRecordingListItem[];
+  workspaceSlug: string;
+  emptyText: string;
+  loading?: boolean;
+  errorText?: string | null;
+  disabled?: boolean;
+  onLoadPlayback: (recordingId: string) => Promise<string>;
+  onRetry?: (recordingId: string) => Promise<void> | void;
+  onDelete?: (recordingId: string) => Promise<void> | void;
+  onError?: (error: unknown) => void;
+}
+
+interface LinkedRecordingsForContainerProps {
+  workspaceSlug: string | null | undefined;
+  containerApp: string;
+  containerType: string;
+  containerId: string;
+  title?: string;
+  emptyText?: string;
+  showHeader?: boolean;
+}
+
+type RecordingDocViewerTarget = {
+  docId: string;
+  title: string;
+};
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function hasFailedStage(recording: Recording): boolean {
+  return [
+    recording.transcript_status,
+    recording.raw_transcript_doc_status,
+    recording.minutes_doc_status,
+  ].some((status) => status === 'failed');
+}
+
+function titleFor(recording: Recording, fallback: string): string {
+  return recording.title?.trim() || fallback;
+}
+
+function iconButtonClass(tone: 'default' | 'danger' = 'default'): string {
+  return [
+    'inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border transition-colors',
+    tone === 'danger'
+      ? 'border-[var(--ui-color-danger)]/35 text-[var(--ui-color-danger)] hover:bg-[var(--ui-color-danger)]/10 disabled:opacity-50'
+      : 'border-app-border bg-app-surface text-app-ink/70 hover:border-app-ink/30 hover:bg-app-surface-hover hover:text-app-ink disabled:opacity-50',
+  ].join(' ');
+}
+
+export function LinkedRecordingList({
+  items,
+  workspaceSlug,
+  emptyText,
+  loading = false,
+  errorText = null,
+  disabled = false,
+  onLoadPlayback,
+  onRetry,
+  onDelete,
+  onError,
+}: LinkedRecordingListProps) {
+  const { t } = useTranslation(['apps', 'common']);
+  const [docViewer, setDocViewer] = useState<RecordingDocViewerTarget | null>(
+    null,
+  );
+  const [playbackUrls, setPlaybackUrls] = useState<Record<string, string>>({});
+  const playbackUrlsRef = useRef<Record<string, string>>({});
+  const [playbackBusyId, setPlaybackBusyId] = useState<string | null>(null);
+  const [actionBusyId, setActionBusyId] = useState<string | null>(null);
+
+  useEffect(
+    () => () => {
+      Object.values(playbackUrlsRef.current).forEach((url) => {
+        if (url.startsWith('blob:')) {
+          URL.revokeObjectURL(url);
+        }
+      });
+    },
+    [],
+  );
+
+  const handlePlayback = useCallback(
+    async (recordingId: string) => {
+      if (playbackUrlsRef.current[recordingId]) {
+        return;
+      }
+      setPlaybackBusyId(recordingId);
+      try {
+        const blobUrl = await onLoadPlayback(recordingId);
+        setPlaybackUrls((current) => {
+          const next = { ...current, [recordingId]: blobUrl };
+          playbackUrlsRef.current = next;
+          return next;
+        });
+      } catch (error) {
+        onError?.(error);
+      } finally {
+        setPlaybackBusyId(null);
+      }
+    },
+    [onError, onLoadPlayback],
+  );
+
+  const handleRetry = useCallback(
+    async (recordingId: string) => {
+      if (!onRetry) return;
+      setActionBusyId(recordingId);
+      try {
+        await onRetry(recordingId);
+      } catch (error) {
+        onError?.(error);
+      } finally {
+        setActionBusyId(null);
+      }
+    },
+    [onError, onRetry],
+  );
+
+  const handleDelete = useCallback(
+    async (recordingId: string) => {
+      if (!onDelete) return;
+      setActionBusyId(recordingId);
+      try {
+        await onDelete(recordingId);
+        setPlaybackUrls((current) => {
+          const next = { ...current };
+          const removedUrl = next[recordingId];
+          if (removedUrl?.startsWith('blob:')) {
+            URL.revokeObjectURL(removedUrl);
+          }
+          delete next[recordingId];
+          playbackUrlsRef.current = next;
+          return next;
+        });
+      } catch (error) {
+        onError?.(error);
+      } finally {
+        setActionBusyId(null);
+      }
+    },
+    [onDelete, onError],
+  );
+
+  if (loading) {
+    return (
+      <div className="flex min-h-20 items-center justify-center rounded-md border border-app-border bg-app-surface-sidebar text-app-ink/45">
+        <Loader2 size={18} className="animate-spin" />
+      </div>
+    );
+  }
+
+  if (errorText) {
+    return (
+      <div className="app-text-body rounded-md border border-[var(--ui-color-danger)]/30 bg-[var(--ui-color-danger)]/5 px-3 py-2 text-[var(--ui-color-danger)]">
+        {errorText}
+      </div>
+    );
+  }
+
+  if (items.length === 0) {
+    return (
+      <div className="app-text-body rounded-md border border-dashed border-app-border px-3 py-4 text-center text-app-ink/45">
+        {emptyText}
+      </div>
+    );
+  }
+
+  return (
+    <>
+      <ul className="space-y-2">
+        {items.map((item) => {
+          const playbackUrl = playbackUrls[item.id];
+          const playbackBusy = playbackBusyId === item.id;
+          const actionBusy = actionBusyId === item.id;
+          const isBusy = disabled || playbackBusy || actionBusy;
+          return (
+            <li
+              key={item.id}
+              className="rounded-md border border-app-border bg-app-surface-sidebar px-3 py-3"
+            >
+              <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div className="min-w-0 flex-1">
+                  <div className="flex min-w-0 items-center gap-2">
+                    <AudioWaveform
+                      size={15}
+                      className="shrink-0 text-app-accent"
+                    />
+                    <p className="app-text-body min-w-0 truncate text-app-ink">
+                      {item.title}
+                    </p>
+                  </div>
+                  {item.subtitle ? (
+                    <p className="app-text-caption mt-1 break-words text-app-ink/50">
+                      {item.subtitle}
+                    </p>
+                  ) : null}
+                  {item.statusLine ? (
+                    <p className="app-text-caption mt-1 break-words text-app-ink/60">
+                      {item.statusLine}
+                    </p>
+                  ) : null}
+                </div>
+
+                <div className="flex shrink-0 flex-wrap items-center gap-1">
+                  {item.rawTranscriptDocId ? (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setDocViewer({
+                          docId: item.rawTranscriptDocId as string,
+                          title: t('apps:recording.detail.rawTranscriptDoc'),
+                        })
+                      }
+                      aria-haspopup="dialog"
+                      aria-label={t('apps:recording.detail.rawTranscriptDoc')}
+                      title={t('apps:recording.detail.rawTranscriptDoc')}
+                      className={iconButtonClass()}
+                      disabled={isBusy}
+                    >
+                      <FileText size={15} />
+                    </button>
+                  ) : null}
+                  {item.minutesDocId ? (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setDocViewer({
+                          docId: item.minutesDocId as string,
+                          title: t('apps:recording.detail.minutesDoc'),
+                        })
+                      }
+                      aria-haspopup="dialog"
+                      aria-label={t('apps:recording.detail.minutesDoc')}
+                      title={t('apps:recording.detail.minutesDoc')}
+                      className={iconButtonClass()}
+                      disabled={isBusy}
+                    >
+                      <ScrollText size={15} />
+                    </button>
+                  ) : null}
+                  <button
+                    type="button"
+                    onClick={() => void handlePlayback(item.id)}
+                    aria-label={t('apps:recording.actions.play')}
+                    title={t('apps:recording.actions.play')}
+                    className={iconButtonClass()}
+                    disabled={isBusy || Boolean(playbackUrl)}
+                  >
+                    {playbackBusy ? (
+                      <Loader2 size={15} className="animate-spin" />
+                    ) : (
+                      <Play size={15} />
+                    )}
+                  </button>
+                  {item.canRetry && onRetry ? (
+                    <button
+                      type="button"
+                      onClick={() => void handleRetry(item.id)}
+                      aria-label={t('apps:recording.actions.retry')}
+                      title={t('apps:recording.actions.retry')}
+                      className={iconButtonClass('danger')}
+                      disabled={isBusy}
+                    >
+                      {actionBusy ? (
+                        <Loader2 size={15} className="animate-spin" />
+                      ) : (
+                        <RefreshCw size={15} />
+                      )}
+                    </button>
+                  ) : null}
+                  {item.canDelete && onDelete ? (
+                    <button
+                      type="button"
+                      onClick={() => void handleDelete(item.id)}
+                      aria-label={t('common:actions.delete')}
+                      title={t('common:actions.delete')}
+                      className={iconButtonClass('danger')}
+                      disabled={isBusy}
+                    >
+                      {actionBusy ? (
+                        <Loader2 size={15} className="animate-spin" />
+                      ) : (
+                        <Trash2 size={15} />
+                      )}
+                    </button>
+                  ) : null}
+                </div>
+              </div>
+
+              {playbackUrl ? (
+                <audio controls src={playbackUrl} className="mt-3 w-full" />
+              ) : null}
+              {item.progress ? (
+                <div className="mt-3">{item.progress}</div>
+              ) : null}
+              {item.doneLabel ? (
+                <p className="app-text-caption mt-3 text-app-ink/60">
+                  {item.doneLabel}
+                </p>
+              ) : null}
+            </li>
+          );
+        })}
+      </ul>
+      <DocsViewerModal
+        open={docViewer !== null}
+        itemId={docViewer?.docId}
+        fallbackTitle={docViewer?.title}
+        workspaceSlug={workspaceSlug}
+        onOpenChange={(open) => {
+          if (!open) setDocViewer(null);
+        }}
+      />
+    </>
+  );
+}
+
+export function LinkedRecordingsForContainer({
+  workspaceSlug,
+  containerApp,
+  containerType,
+  containerId,
+  title,
+  emptyText,
+  showHeader = true,
+}: LinkedRecordingsForContainerProps) {
+  const { t } = useTranslation('apps');
+  const { token, user } = useAuth();
+  const [recordings, setRecordings] = useState<Recording[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [errorText, setErrorText] = useState<string | null>(null);
+
+  const refresh = useCallback(async () => {
+    if (!token || !workspaceSlug) {
+      return;
+    }
+    setLoading(true);
+    setErrorText(null);
+    try {
+      const response = await listRecordings(token, workspaceSlug, {
+        container_app: containerApp,
+        container_type: containerType,
+        container_id: containerId,
+      });
+      setRecordings(response.items);
+    } catch (error) {
+      setRecordings([]);
+      setErrorText(
+        error instanceof Error
+          ? error.message
+          : t('recording.errors.loadFailed'),
+      );
+    } finally {
+      setLoading(false);
+    }
+  }, [containerApp, containerId, containerType, t, token, workspaceSlug]);
+
+  useEffect(() => {
+    void refresh();
+  }, [refresh]);
+
+  const loadPlayback = useCallback(
+    async (recordingId: string) => {
+      if (!token || !workspaceSlug) {
+        throw new Error(t('recording.errors.playbackFailed'));
+      }
+      const playback = await getRecordingPlaybackUrl(
+        token,
+        workspaceSlug,
+        recordingId,
+      );
+      return fetchRecordingPlaybackBlobUrl(token, playback.url);
+    },
+    [t, token, workspaceSlug],
+  );
+
+  const retryLinkedRecording = useCallback(
+    async (recordingId: string) => {
+      if (!token || !workspaceSlug) {
+        throw new Error(t('recording.errors.retryFailed'));
+      }
+      await retryRecording(token, workspaceSlug, recordingId);
+      await refresh();
+    },
+    [refresh, t, token, workspaceSlug],
+  );
+
+  const linkedItems = useMemo<LinkedRecordingListItem[]>(
+    () =>
+      recordings.map((recording) => {
+        const isOwner = user?.id === recording.owner_id;
+        return {
+          id: recording.id,
+          title: titleFor(recording, t('recording.untitled')),
+          subtitle: `${formatBytes(recording.file_size)} · ${recording.mime_type}`,
+          rawTranscriptDocId: recording.raw_transcript_doc_id,
+          minutesDocId: recording.minutes_doc_id,
+          canRetry: isOwner && hasFailedStage(recording),
+          progress: <RecordingStageRail recording={recording} compact />,
+        };
+      }),
+    [recordings, t, user?.id],
+  );
+
+  if (!workspaceSlug) {
+    return null;
+  }
+
+  return (
+    <div className="space-y-2">
+      {showHeader ? (
+        <div className="flex items-center gap-2">
+          <AudioWaveform size={14} className="text-app-ink/50" />
+          <h3 className="app-text-title-md text-app-ink">
+            {title ?? t('recording.linked.title')}
+          </h3>
+          <span className="app-text-caption text-app-ink/40">
+            {recordings.length}
+          </span>
+        </div>
+      ) : null}
+      <LinkedRecordingList
+        items={linkedItems}
+        workspaceSlug={workspaceSlug}
+        emptyText={emptyText ?? t('recording.linked.empty')}
+        loading={loading}
+        errorText={errorText}
+        onLoadPlayback={loadPlayback}
+        onRetry={retryLinkedRecording}
+        onError={(error) => {
+          setErrorText(
+            error instanceof Error
+              ? error.message
+              : t('recording.errors.loadFailed'),
+          );
+        }}
+      />
+    </div>
+  );
+}
