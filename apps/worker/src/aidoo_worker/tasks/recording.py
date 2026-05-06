@@ -115,6 +115,7 @@ def _heartbeat(
 
 
 def _mark_failed(session: Session, recording_id: str, reason: str, *, stage: str) -> None:
+    session.rollback()
     recording = session.get(Recording, recording_id)
     if recording is None:
         return
@@ -303,7 +304,6 @@ def _attach_minutes_doc_to_meeting(session: Session, *, recording: Recording, do
         select(Meeting).where(
             Meeting.id == meeting_id,
             Meeting.workspace_id == recording.workspace_id,
-            Meeting.trashed_at.is_(None),
         )
     )
     if meeting is None:
